@@ -12,9 +12,9 @@ records where the implementations differ.
 
 **The snapshot.** `TerminalStateOf` (`internal/session/session.go`) serializes the
 daemon emulator's visible grid, the normal screen underneath it when the
-alternate one is active, cursor position, the pen, DEC modes, the scroll region,
-the character set selection, the kitty keyboard stack, the alternate-screen flag
-and up to 1000 scrollback rows. `ApplyTerminalState` reads it back, and
+alternate one is active, cursor position, the cursor shape, the pen, DEC modes,
+the scroll region, the character set selection, the kitty keyboard stack, the
+alternate-screen flag and up to 1000 scrollback rows. `ApplyTerminalState` reads it back, and
 `OS.restoreTerminalContent` (`internal/app/session.go`) is the window around
 that. It is a snapshot of *now*: applying it is idempotent and carries no
 history.
@@ -54,7 +54,8 @@ For every route, once the route has completed and the pane is quiet:
    cell. A client may hold less history than the daemon; it may never hold
    history the daemon does not have, and it may never hold a line the daemon
    does not have at that offset.
-3. **Cursor.** The client's cursor is at the daemon's cursor.
+3. **Cursor.** The client's cursor is at the daemon's cursor, in the shape the
+   guest asked for.
 4. **Modes.** Alternate-screen flag, DEC modes and the kitty keyboard stack match.
 5. **No duplication.** Content the pane produced once appears once.
 6. **What paints the next byte.** The pen, the scroll region and the character
@@ -235,6 +236,13 @@ Two things had to be true for that rule to hold, and neither was:
   nothing, stale on one that survived a workspace switch. This is the half of the
   colour report that shows up on new output rather than on restored content,
   which is why it looked random.
+- **The cursor shape is carried.** A shell's prompt or an editor changing mode
+  sets it once with DECSCUSR and never repeats it, so it is long out of the
+  output buffer's reach by the time anyone reattaches. Without it every restored
+  pane came back as a block whatever the guest asked for. It travels as the
+  DECSCUSR parameter the guest would have sent, so zero means the snapshot does
+  not say and the client leaves the pane on its default rather than forcing a
+  blinking block onto it, which is what an older daemon's snapshot gets.
 - **The scroll region is carried, and only when a guest set one.** A region that
   is simply the whole screen says nothing, and sending it pinned a pane that had
   been resized since to whatever size the daemon was when the snapshot was taken.

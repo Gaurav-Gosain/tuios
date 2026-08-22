@@ -1633,6 +1633,12 @@ func TerminalStateOf(t vt.Terminal, width, height, maxScrollback, have int) *Ter
 	ids, gl, gr := t.Charsets()
 	state.Charsets = []int{int(ids[0]), int(ids[1]), int(ids[2]), int(ids[3]), gl, gr}
 
+	// The cursor shape is set once, by a shell's prompt or by an editor
+	// changing mode, and is long out of the output buffer's reach by the time
+	// anyone reattaches. Without it here a pane that asked for a bar comes back
+	// as a block, because that is what a fresh emulator is.
+	state.CursorShape = decscusrParam(t.CursorStyle())
+
 	// Capture visible screen with full styling
 	for y := range height {
 		state.Screen[y] = make([]CellState, width)
@@ -1766,6 +1772,9 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 		}
 		t.RestoreCharsets(ids, state.Charsets[4], state.Charsets[5])
 	}
+	if state.CursorShape > 0 {
+		t.RestoreCursorStyle(decscusrStyle(state.CursorShape))
+	}
 
 	// The scrollback goes back first, and it is the main screen's either way:
 	// the alternate screen keeps none, and both sides read the same buffer.
@@ -1887,6 +1896,22 @@ func (p *PTY) CaptureContent(scrollback, ansi bool) string {
 	return content
 }
 
+// decscusrParam encodes a cursor shape as the DECSCUSR parameter a guest would
+// have sent to ask for it, which is how it travels. Never zero: zero on the
+// wire means the snapshot did not carry a shape.
+func decscusrParam(style vt.CursorStyle, steady bool) int {
+	n := int(style)*2 + 1
+	if steady {
+		n++
+	}
+	return n
+}
+
+// decscusrStyle is the inverse, for a parameter a snapshot actually carried.
+func decscusrStyle(n int) (vt.CursorStyle, bool) {
+	return vt.CursorStyle((n - 1) / 2), n%2 == 0
+}
+
 // TerminalState represents the serializable state of a terminal.
 type TerminalState struct {
 	// Seq is the stream position this snapshot was taken at: the emulator here
@@ -1909,7 +1934,14 @@ type TerminalState struct {
 	// designator byte, followed by the GL and GR slots. A program that draws
 	// boxes selects the DEC line-drawing set once and then sends the box
 	// characters as plain letters.
-	Charsets      []int         `json:"charsets,omitempty"`
+	Charsets []int `json:"charsets,omitempty"`
+	// CursorShape is the shape the guest asked for, as the DECSCUSR parameter
+	// that asks for it: 1 blinking block, 2 steady block, and so on up to 6 for
+	// a steady bar. The guest's own spelling rather than a pair of fields
+	// because zero then means "this snapshot does not say", which is what a
+	// client restoring from an older daemon gets, and it leaves the pane on the
+	// default instead of forcing a blinking block onto it.
+	CursorShape   int           `json:"cursor_shape,omitempty"`
 	Modes         map[int]bool  `json:"modes,omitempty"`           // Terminal modes (mouse tracking, bracketed paste, etc.)
 	KittyKbdStack []int         `json:"kitty_kbd_stack,omitempty"` // Kitty keyboard protocol flag stack, base entry first
 	Screen        [][]CellState `json:"screen"`
