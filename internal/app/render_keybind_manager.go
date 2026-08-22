@@ -519,8 +519,8 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 		add(head.Render(armed))
 	case key == "":
 		add(overlay.Style(bg).Render(" "))
-		add(head.Render("  Press r to record a key and see what tuios already does with it."))
-		add(head.Render("  To bind one, pick an action on the Bindings tab and press r there."))
+		add(head.Render("  Press ctrl+r to record a key and see what tuios already does with it."))
+		add(head.Render("  To bind one, pick an action on the Bindings tab and press ctrl+r there."))
 	default:
 		add(overlay.Style(bg).Render(" "))
 		add(overlay.KeyBadge(key, pal) + overlay.Style(bg).Render("  ") +
@@ -590,7 +590,15 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 			if o.What == "Host keyboard" {
 				continue // already covered by the ambiguity block above
 			}
-			add(head.Render("  " + glyphs.bullet + " " + overlay.Truncate(o.Detail, max(width-6, 10))))
+			// Wrapped, not truncated: these are sentences that carry a fact
+			// about the pane, and half of one says only that something was cut.
+			for i, l := range wrapPlain(o.Detail, max(width-6, 10)) {
+				lead := "  " + glyphs.bullet + " "
+				if i > 0 {
+					lead = "    "
+				}
+				add(head.Render(lead + l))
+			}
 		}
 	}
 

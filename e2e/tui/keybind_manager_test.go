@@ -147,3 +147,32 @@ func TestKeybindRecorderCapturesRatherThanRuns(t *testing.T) {
 		t.Fatalf("overlay stayed open after the recorder disarmed: %v\n%s", err, term.Snapshot())
 	}
 }
+
+// The observed tier has to be read from the pane rather than inferred. The
+// harness runs /bin/sh in every window, so opening the overlay over a live pane
+// must name it.
+//
+// This is the one tier that cannot be checked from the config alone: it goes
+// through TIOCGPGRP and /proc, and its failure mode is a report that quietly
+// says nothing about the pane rather than one that errors.
+func TestKeybindManagerReadsTheLivePane(t *testing.T) {
+	term, _ := start(t, startOpts{})
+	waitBoot(t, term)
+	newWindow(t, term)
+	openKeybindManager(t, term)
+
+	// The recorder's panel is where the observed block is drawn.
+	for range 3 {
+		if err := term.SendKeys(tuitest.Tab); err != nil {
+			t.Fatalf("send tab: %v", err)
+		}
+	}
+	if err := term.WaitForText("OBSERVED IN THIS PANE", uiTimeout); err != nil {
+		t.Fatalf("the overlay never reported anything observed about the pane: %v\n%s", err, term.Snapshot())
+	}
+	t.Logf("keybind manager, observed block over a live pane:\n%s", term.Snapshot())
+
+	if !strings.Contains(term.Screen().Text(), "is the foreground process") {
+		t.Errorf("the pane runs a shell and the overlay must name it\n%s", term.Snapshot())
+	}
+}
