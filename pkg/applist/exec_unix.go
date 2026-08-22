@@ -41,9 +41,16 @@ func executable(info fs.FileInfo) bool {
 	return mode&0o001 != 0
 }
 
-// Argv is the argv that runs e as a pane's own process. On unix the listed
-// path is directly executable, so it is the whole command.
+// Argv is the argv that runs e as a pane's own process.
+//
+// An entry carrying an Exec is run by it verbatim. Its Path is the .desktop
+// file, which is not a program, and its arguments are part of what the entry
+// means: dropping them runs something else. Otherwise the listed path is
+// directly executable on unix, so it is the whole command.
 func (e Entry) Argv() []string {
+	if len(e.Exec) > 0 {
+		return e.Exec
+	}
 	return []string{e.Path}
 }
 
@@ -55,11 +62,35 @@ func (e Entry) Argv() []string {
 // shell's own $PATH rule, so the name that won here is the name the shell wins
 // with. A name a shell would re-read (a space, a quote, a glob character) is
 // not worth guessing at, so those fall back to the single-quoted absolute path.
+//
+// An entry carrying an Exec has no such short form. There is no name a shell
+// would resolve to that argv, so the line is the argv itself, quoted element by
+// element so the shell re-reads exactly the words the entry asked for.
 func (e Entry) CommandLine() string {
+	if len(e.Exec) > 0 {
+		return shellLine(e.Exec)
+	}
 	if shellSafe(e.Name) {
 		return e.Name
 	}
 	return shellQuote(e.Path)
+}
+
+// shellLine writes an argv as one POSIX shell command line, quoting every
+// element that would not mean itself.
+func shellLine(argv []string) string {
+	var b strings.Builder
+	for i, arg := range argv {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		if shellSafe(arg) {
+			b.WriteString(arg)
+			continue
+		}
+		b.WriteString(shellQuote(arg))
+	}
+	return b.String()
 }
 
 // shellSafe reports whether s means itself to a POSIX shell.

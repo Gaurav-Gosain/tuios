@@ -1,10 +1,16 @@
 // Package applist enumerates the programs a launcher can run.
 //
-// The one source it implements is $PATH, because that is the set a shell would
-// run and a launcher that disagrees with the shell is lying about what typing a
-// name will do. Entry is deliberately source-agnostic so a caller with another
-// source, such as a GUI launcher reading .desktop files, can merge its own
-// entries into the same list and rank them with the same matcher.
+// There are two sources. $PATH is the set a shell would run, and a launcher
+// that disagrees with the shell is lying about what typing a name will do.
+// .desktop files are the set the user's desktop already offers, and they carry
+// what a $PATH listing cannot: the name a person knows the program by, an
+// icon, a line of description, and an argv that may hold arguments the
+// basename never reveals.
+//
+// Merge folds the second source into the first and returns the one list a
+// launcher ranks. Entry stays source-agnostic so both halves go through the
+// same matcher, and so a caller with a third source can join them the same
+// way.
 package applist
 
 import (
@@ -16,38 +22,36 @@ import (
 	"time"
 )
 
-// SourcePath names the $PATH source on an Entry.
+// SourcePath names the $PATH source on an Entry and SourceDesktop the
+// .desktop one, so a merged row can say where it came from.
 //
-// Source exists because there is more than one place a launchable thing can
-// come from, and one of them is a decision worth writing down: a .desktop entry
-// with Terminal=true declares that it must run inside a terminal emulator.
-// tuios is one, so those entries are things tuios can run natively and a GUI
-// launcher cannot without spawning a terminal first. They are still not
-// surfaced in the tuios palette, for three reasons.
-//
-// Almost every such entry's Exec is a program already on $PATH, so listing both
-// puts the same program in the list twice under two names. The palette's whole
-// job is that the right row is first, and near-synonyms work directly against
-// that; the cost is paid on every query while the benefit reaches only the
-// handful of entries that carry arguments or a name the basename does not
-// reveal.
+// Why both are in one list is worth writing down, because the obvious way to
+// do it is wrong. Almost every desktop entry's Exec is a program already on
+// $PATH, so appending one source to the other puts the same program in the
+// list twice under two names. The palette's whole job is that the right row is
+// first, and near-synonyms work directly against that. Merge's supersession
+// rule is what buys the human name and the icon without paying that price: a
+// desktop entry that runs a $PATH program replaces that program's row instead
+// of sitting next to it.
 //
 // A correct reading of a .desktop file is not small: Exec field codes, TryExec,
 // NoDisplay, Hidden, OnlyShowIn, localised Name keys and Actions. Half of that
 // produces rows that fail when activated, which is worse than a row that is not
-// there.
+// there. desktop.go implements the whole of it and drops what it cannot honour,
+// so a merged row is one that runs.
 //
-// And it is Linux and BSD only. $PATH means the same thing on every platform
-// tuios builds for, so the palette's contents stay explicable; desktop entries
-// would make them depend on the host.
+// Desktop entries are Linux and BSD only, which is why that half of the package
+// is unix-only and Merge does not exist elsewhere. $PATH means the same thing on
+// every platform tuios builds for, so a Windows list is the $PATH list and stays
+// as explicable as it was.
 //
-// The seam is here rather than the parser because the GUI launcher has to parse
-// .desktop files anyway, having no other source. When it does, it can hand
-// Entry values back with its own Source and tuios can merge them without a
-// second parser existing. The rule that would make that worth doing: admit a
-// Terminal=true entry only when its Exec does not resolve to a $PATH entry of
-// the same name, so it is additive rather than a synonym.
-const SourcePath = "path"
+// One property of a desktop entry is tuios-specific: Terminal=true declares that
+// the program must run inside a terminal emulator. tuios is one, so those are
+// entries it hosts natively where a GUI launcher has to spawn a terminal first.
+const (
+	SourcePath    = "path"
+	SourceDesktop = "desktop"
+)
 
 // Entry is one launchable program.
 type Entry struct {
@@ -62,6 +66,58 @@ type Entry struct {
 	// Source names where the entry came from, so a merged list can say. Empty
 	// means SourcePath.
 	Source string
+
+	// The fields below come from a .desktop file and are empty on a $PATH
+	// entry, which has nothing but a name and a path to offer.
+
+	// Display is the human name, such as "Firefox Web Browser". It is the name
+	// the user knows the program by, which the basename often is not.
+	Display string
+	// Detail is GenericName, else Comment: the row's second piece of text. It
+	// is what tells two entries with similar names apart.
+	Detail string
+	// Icon is the Icon= value, a themed name or an absolute path, left
+	// unresolved because resolving it needs an IconFinder and the pixel size
+	// the caller is drawing at.
+	Icon string
+	// Exec is Exec= tokenized to an argv, when the entry carries one. It is the
+	// only way to run such an entry: Path is the .desktop file, not a program,
+	// and the arguments are part of what the entry means.
+	Exec []string
+	// Cwd is the Path= value, the directory the program wants to be started in.
+	// Empty means the launcher's own.
+	Cwd string
+	// Terminal reports Terminal=true: the entry has no window of its own and
+	// needs a terminal emulator around it. tuios is one.
+	Terminal bool
+	// Keywords are the entry's Keywords=, words a person might search by that
+	// appear in no other field. They feed Aliases.
+	Keywords []string
+}
+
+// Label is what a launcher shows and matches against.
+//
+// Display wins when there is one because it is the name on the user's menus
+// and the one they will type; Name is the fallback and is all a $PATH entry
+// has.
+func (e Entry) Label() string {
+	if e.Display != "" {
+		return e.Display
+	}
+	return e.Name
+}
+
+// Aliases are the extra strings a query may match, beyond Label.
+//
+// Someone after Firefox may type the binary name, or a word from the entry's
+// Keywords such as "browser", and neither is the label. Matching those too
+// keeps the row reachable by whichever name the person happens to know.
+func (e Entry) Aliases() []string {
+	var out []string
+	if e.Display != "" && e.Name != "" && e.Name != e.Display {
+		out = append(out, e.Name)
+	}
+	return append(out, e.Keywords...)
 }
 
 // Dirs returns the $PATH entries in order.
