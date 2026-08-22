@@ -88,11 +88,19 @@ func main() {
 		fmt.Printf("FRAMELOOP-ERR %v\n", err)
 		return
 	}
+	// Appended, not overwritten: the harness wants every size this app was ever
+	// given, because the question it asks of tuios is whether the host was ever
+	// told a rectangle the guest was not.
 	report := func(c, r, x, y int) {
 		if geomFile == "" {
 			return
 		}
-		_ = os.WriteFile(geomFile, fmt.Appendf(nil, "%d %d %d %d\n", c, r, x, y), 0o644)
+		f, err := os.OpenFile(geomFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return
+		}
+		defer func() { _ = f.Close() }()
+		_, _ = fmt.Fprintf(f, "%d %d %d %d\n", c, r, x, y)
 	}
 	if xpx == 0 || ypx == 0 {
 		fmt.Printf("FRAMELOOP-ERR no pixel size\n")

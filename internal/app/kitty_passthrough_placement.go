@@ -116,10 +116,22 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		// held c=118,r=38 while every frame arriving was 780px wide, a 1.51x
 		// horizontal stretch that lasted until a click (press sets the flag,
 		// release clears it on every window) let the correct c=78,r=38 out.
+		// Keyed on the CONTENT rectangle, not the outer one. The two do not
+		// move together: a press on a tiled pane untiles it for the length of
+		// the gesture (beginWindowDrag), which leaves the outer rectangle
+		// exactly where it was and takes a border's worth off every edge of the
+		// content. Watching the outer rectangle sees nothing happen, so the
+		// hold never arms and the placement is recomputed against a content
+		// area two cells narrower and two shorter than the bitmap the host is
+		// holding - the image jumps a cell and loses its right-hand and bottom
+		// edges for the length of a click. The content rectangle is also the
+		// one the guest is told about and the one the placement is measured in,
+		// so it is the rectangle whose movement matters here.
+		cw, chh := paneContentCells(info)
 		prev, seen := kp.resizeFreezeSize[windowID]
-		kp.resizeFreezeSize[windowID] = [2]int{info.Width, info.Height}
+		kp.resizeFreezeSize[windowID] = [2]int{cw, chh}
 		frozen[windowID] = info.IsBeingManipulated && seen &&
-			(prev[0] != info.Width || prev[1] != info.Height)
+			(prev[0] != cw || prev[1] != chh)
 	}
 	for windowID, placements := range kp.placements {
 		if len(placements) > 0 {
@@ -242,13 +254,18 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		// with the window. The change detection below (posChanged check)
 		// ensures we only re-place if the position actually changed.
 
-		// Calculate viewport dimensions (accounting for window borders).
-		// For tiled/borderless windows BorderOffset=0, so content area is full
-		// Width×Height. For floating windows with a border, it's 1, so content
-		// is (Width-2)×(Height-2).
+		// The viewport is the cells the guest was told it has, not the window
+		// rectangle less its border allowance. Those agree in a settled layout
+		// and part company exactly when this matters: a pane is given a new
+		// rectangle a frame or many frames before the guest is told about it (a
+		// live resize defers the announcement to the end of the gesture; a press
+		// on a tiled pane drops its borderless allowance without moving the
+		// rectangle). Measuring against the rectangle re-clips the image against
+		// a viewport it was never drawn for, and re-emits a placement for it,
+		// which is how a pane nobody touched changes shape because something
+		// else on screen did.
 		viewportTop := info.ScrollbackLen - info.ScrollOffset
-		viewportHeight := info.Height - 2*info.ContentOffsetY
-		viewportWidth := info.Width - 2*info.ContentOffsetX
+		viewportWidth, viewportHeight := paneContentCells(info)
 
 		// Collect IDs to delete (for altscreen cleanup)
 		var idsToDelete []uint32
@@ -580,7 +597,19 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	// at daemon cellH=20 → 380/19=20). Using the client's cellHeight would
 	// produce source regions that overflow the image and xterm-addon-image
 	// rejects them.
-	isClipping := p.ClipTop > 0 || p.ClipBottom > 0 || visibleCols < p.Cols
+	// imageCols is the image's own width in cells. p.Cols may already have been
+	// capped to the pane, and dividing the image's pixels by a capped cell
+	// count answers a question nobody asked: it says how wide a cell would have
+	// to be for the image to fit, not how wide the cells actually are.
+	imageCols := p.ImageCols
+	if imageCols <= 0 {
+		imageCols = p.Cols
+	}
+	// Showing fewer cells than the image has needs a source rectangle whichever
+	// axis is short. Without one the cell count still narrows and kitty scales
+	// the whole bitmap into it, which on one axis alone is the stretch.
+	isClipping := p.ClipTop > 0 || p.ClipBottom > 0 ||
+		visibleCols < imageCols || visibleRows < p.Rows
 	pixelsPerRow := cellHeight
 	switch {
 	case p.Rows > 0 && p.ImagePixelHeight > 0:
@@ -590,10 +619,10 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	}
 	pixelsPerCol := caps.CellWidth
 	switch {
-	case p.Cols > 0 && p.ImagePixelWidth > 0:
-		pixelsPerCol = p.ImagePixelWidth / p.Cols
-	case p.Cols > 0 && p.SourceWidth > 0:
-		pixelsPerCol = p.SourceWidth / p.Cols
+	case imageCols > 0 && p.ImagePixelWidth > 0:
+		pixelsPerCol = p.ImagePixelWidth / imageCols
+	case imageCols > 0 && p.SourceWidth > 0:
+		pixelsPerCol = p.SourceWidth / imageCols
 	}
 	switch {
 	case isClipping:
@@ -601,10 +630,14 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 		srcY := p.SourceY + p.ClipTop*pixelsPerRow
 		srcW := p.SourceWidth
 		if srcW == 0 && pixelsPerCol > 0 {
-			srcW = p.Cols * pixelsPerCol
+			srcW = imageCols * pixelsPerCol
 		}
-		// Horizontal crop: if columns were clamped, crop source width
-		if visibleCols < p.Cols && pixelsPerCol > 0 {
+		// The width shown is measured against the image's own cell footprint,
+		// not against the already-capped p.Cols. Comparing with the capped one
+		// made this a no-op in the case that matters: an image wider than its
+		// pane has p.Cols == visibleCols == the pane, so no crop was emitted
+		// and kitty scaled the full bitmap width into the pane instead.
+		if visibleCols < imageCols && pixelsPerCol > 0 {
 			srcW = visibleCols * pixelsPerCol
 		}
 		srcH := visibleRows * pixelsPerRow

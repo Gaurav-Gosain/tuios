@@ -63,19 +63,27 @@ func settlePhase(host *kittyHost, name string, d time.Duration) func([]byte) []w
 	return func(stream []byte) []wireCmd { return phaseCmds(stream, name) }
 }
 
-// checkRect says the pane's rectangle did not move. None of the perturbations
-// resize the image pane, so every command in a phase must describe the same
-// cells the guest was given. A rectangle that shrinks for a frame and comes
-// back is the image jumping and re-cropping on screen.
-func checkRect(t *testing.T, cmds []wireCmd, phase string, cols, rows int) {
+// checkAgrees is the invariant this pane's whole geometry story reduces to: the
+// host must never be told a rectangle the guest was not.
+//
+// It is stated as agreement rather than as a fixed size on purpose. A fixed
+// size cannot survive a resize, and cannot tell a pane that legitimately
+// changed shape from one whose placement drifted away from its bitmap. The
+// guest draws to whatever it was last told, so a rectangle it was never told is
+// a rectangle no bitmap it will ever send can fill, and the difference is the
+// scale factor kitty applies - the stretch.
+//
+// The guest reports every size it is given, so the set is ground truth rather
+// than a restatement of tuios's own belief.
+func checkAgrees(t *testing.T, cmds []wireCmd, phase string, told map[[2]int]bool) {
 	t.Helper()
 	seen := map[string]int{}
 	var order []string
 	for _, c := range cmds {
-		if c.cols == cols && c.rows == rows {
+		if told[[2]int{c.cols, c.rows}] {
 			continue
 		}
-		k := fmt.Sprintf("%dx%d cells, want %dx%d: %q", c.cols, c.rows, cols, rows, c.params)
+		k := fmt.Sprintf("%dx%d cells: %q", c.cols, c.rows, c.params)
 		if seen[k] == 0 {
 			order = append(order, k)
 		}
@@ -88,8 +96,8 @@ func checkRect(t *testing.T, cmds []wireCmd, phase string, cols, rows int) {
 	for _, k := range order {
 		fmt.Fprintf(&b, "  x%d  %s\n", seen[k], k)
 	}
-	t.Errorf("phase %q: the image pane was not resized, but the host was given a "+
-		"different rectangle for it:\n%s", phase, b.String())
+	t.Errorf("phase %q: the host was told to draw the image in a rectangle the "+
+		"guest was never given, so no frame it sends can fill it:\n%s", phase, b.String())
 }
 
 // checkLive says the stream is still reaching the host. A placement that was
@@ -124,7 +132,7 @@ func TestKittyPlacementStressUnderPerturbation(t *testing.T) {
 	time.Sleep(400 * time.Millisecond)
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo IMAGEPANE", "IMAGEPANE", shellTimeout)
-	cols, rows, xpx, ypx := startFrameloop(t, term, 300)
+	geom, cols, rows, xpx, ypx := startFrameloop(t, term, 0)
 	t.Logf("left pane: %dx%d cells, %dx%d px", cols, rows, xpx, ypx)
 	leaveTerminalMode(t, term)
 
@@ -187,13 +195,22 @@ func TestKittyPlacementStressUnderPerturbation(t *testing.T) {
 			t.Fatalf("write capture: %v", err)
 		}
 	}
+	// Every size the guest was ever told it had. A perturbation that resizes the
+	// pane is legitimate and lands here; what may not happen is the host being
+	// told something outside this set.
+	told := map[[2]int]bool{}
+	for _, sz := range announcedSizes(geom) {
+		told[[2]int{sz[0], sz[1]}] = true
+	}
+	t.Logf("sizes the guest was given: %v", told)
+
 	cw, ch := xpx/cols, ypx/rows
 	total := 0
 	for _, c := range checks {
 		got := c.get(stream)
 		total += len(got)
 		checkLive(t, term, got, c.name)
-		checkRect(t, got, c.name, cols, rows)
+		checkAgrees(t, got, c.name, told)
 	}
 	reportScaleFaults(t, scaleFaults(stream, cw, ch), total)
 }

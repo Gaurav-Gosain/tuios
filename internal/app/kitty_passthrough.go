@@ -177,10 +177,13 @@ type pendingDirectTransmit struct {
 	// chunk's PlacementResult is returned correctly for whitespace reservation.
 	AndPlace bool
 	// Position info from the first chunk (a=T command)
-	WindowX        int
-	WindowY        int
-	WindowWidth    int
-	WindowHeight   int
+	WindowX int
+	WindowY int
+	// ContentCols/ContentRows are the cells the guest had been told it has when
+	// the first chunk arrived, which is the box the bitmap being assembled was
+	// drawn for.
+	ContentCols    int
+	ContentRows    int
 	ContentOffsetX int
 	ContentOffsetY int
 	CursorX        int
@@ -200,10 +203,18 @@ type PassthroughPlacement struct {
 	HostX        int
 	HostY        int
 	Cols         int
-	Rows         int  // Original image rows (before any capping)
-	DisplayRows  int  // Capped rows for initial display
-	Hidden       bool // True when placement is completely out of view
-	DataDirty    bool // Image data was re-transmitted, so the placement must be re-sent
+	Rows         int // Original image rows (before any capping)
+	DisplayRows  int // Capped rows for initial display
+	// ImageCols is the image's own width in cells, BEFORE it was capped to the
+	// pane. Cols is the capped one, and the two are not interchangeable: the
+	// image's pixels were divided into ImageCols, so that is the number a
+	// pixels-per-cell has to be derived from, and the difference between them
+	// is exactly how much of the image does not fit and must be cropped away
+	// rather than squeezed in. Rows is already the uncapped count (DisplayRows
+	// is its capped twin), so there is no ImageRows to go with this.
+	ImageCols int
+	Hidden    bool // True when placement is completely out of view
+	DataDirty bool // Image data was re-transmitted, so the placement must be re-sent
 
 	// Source clipping parameters (pixels) - preserved for re-placement
 	SourceX      int
@@ -297,12 +308,19 @@ type remoteVideoJob struct {
 }
 
 type WindowPositionInfo struct {
-	WindowX            int
-	WindowY            int
-	ContentOffsetX     int
-	ContentOffsetY     int
-	Width              int
-	Height             int
+	WindowX        int
+	WindowY        int
+	ContentOffsetX int
+	ContentOffsetY int
+	Width          int
+	Height         int
+	// ContentWidth/ContentHeight are the cells the guest has been told it has.
+	// Every measurement of an image against its pane uses these rather than
+	// Width and Height less the border allowance, because the guest draws to
+	// what it was told and a bitmap can only match that. See
+	// terminal.GeometrySnapshot.
+	ContentWidth       int
+	ContentHeight      int
 	Visible            bool
 	ScrollbackLen      int  // Total scrollback lines
 	ScrollOffset       int  // Current scroll offset (0 = at bottom)

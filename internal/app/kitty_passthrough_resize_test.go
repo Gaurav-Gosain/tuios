@@ -36,7 +36,7 @@ func placementHarness(t *testing.T, screenW, screenH, border int) (*KittyPassthr
 	t.Cleanup(func() { _ = em.Close() })
 	em.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		cur := em.CursorPosition()
-		kp.ForwardCommand(cmd, rawData, winID, 0, 0, screenW, screenH, border, border,
+		kp.ForwardCommand(cmd, rawData, winID, 0, 0, screenW-2*border, screenH-2*border, border, border,
 			cur.X, cur.Y, em.ScrollbackLen(), em.IsAltScreen(), func([]byte) {})
 	})
 	// Alt screen + a frame that fills the pane exactly (contentW*cellW x
@@ -48,7 +48,9 @@ func placementHarness(t *testing.T, screenW, screenH, border int) (*KittyPassthr
 
 	info := &WindowPositionInfo{
 		WindowX: 0, WindowY: 0, ContentOffsetX: border, ContentOffsetY: border,
-		Width: screenW, Height: screenH, Visible: true,
+		Width: screenW, Height: screenH,
+		ContentWidth: screenW - 2*border, ContentHeight: screenH - 2*border,
+		Visible:     true,
 		ScreenWidth: screenW, ScreenHeight: screenH,
 		IsAltScreen: em.IsAltScreen(), ScrollbackLen: em.ScrollbackLen(),
 	}
@@ -102,7 +104,11 @@ func TestResizeCoalescesPlacementChurn(t *testing.T) {
 	// Prime: one refresh places the image at the starting size.
 	_ = refresh()
 
-	// Drag-resize: the window shrinks each tick, IsBeingManipulated set.
+	// Drag-resize: the window's rectangle shrinks every tick while the guest is
+	// told nothing, because the PTY resize is deferred until the gesture settles
+	// (resize_deferral.go). ContentWidth/ContentHeight are what the guest has
+	// been told, so they deliberately do not move here: the image is still the
+	// size they name, and there is nothing to re-place it against.
 	info.IsBeingManipulated = true
 	sizes := [][2]int{{110, 38}, {100, 36}, {90, 34}, {80, 32}, {70, 30}}
 	churn := 0
@@ -116,9 +122,11 @@ func TestResizeCoalescesPlacementChurn(t *testing.T) {
 			"must hold the frame during an interactive resize (flicker)", churn, len(sizes))
 	}
 
-	// Settle: gesture ends, the pane keeps its final size. Exactly one re-place
-	// must bring the image to the settled geometry - no leftover stale image.
+	// Settle: the gesture ends and the guest is finally told its new size, which
+	// is the first moment the image can be measured against anything new.
+	// Exactly one re-place must bring it to the settled geometry.
 	info.IsBeingManipulated = false
+	info.ContentWidth, info.ContentHeight = 70-2, 30-2
 	settle := refresh()
 	if countCmd(settle, "a=p") != 1 {
 		t.Fatalf("after resize settled, expected exactly one a=p, got %d (%q)",

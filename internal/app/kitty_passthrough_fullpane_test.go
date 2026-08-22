@@ -54,7 +54,7 @@ func feedTBFrameBorder(t *testing.T, stream []byte, screenW, screenH, border int
 	em.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		cur := em.CursorPosition()
 		kp.ForwardCommand(cmd, rawData, winID,
-			winX, winY, winW, winH, border, border,
+			winX, winY, winW-2*border, winH-2*border, border, border,
 			cur.X, cur.Y, em.ScrollbackLen(), em.IsAltScreen(),
 			func([]byte) {})
 	})

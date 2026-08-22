@@ -135,22 +135,38 @@ var (
 // the geometry it was actually given. The geometry comes back through a file
 // because the app takes the alt screen the moment it starts, so a marker
 // printed to the grid is gone before a poll can read it.
-func startFrameloop(t *testing.T, term *tuitest.Terminal, repaintMS int) (cols, rows, xpx, ypx int) {
+func startFrameloop(t *testing.T, term *tuitest.Terminal, repaintMS int) (geom string, cols, rows, xpx, ypx int) {
 	t.Helper()
 	bin := buildFrameloop(t)
-	geom := filepath.Join(t.TempDir(), "geom")
+	geom = filepath.Join(t.TempDir(), "geom")
 	typeLine(t, term, fmt.Sprintf("%s %s 20 %d", bin, geom, repaintMS))
 	deadline := time.Now().Add(shellTimeout)
 	for time.Now().Before(deadline) {
-		if b, err := os.ReadFile(geom); err == nil {
-			if n, _ := fmt.Sscan(string(b), &cols, &rows, &xpx, &ypx); n == 4 && xpx > 0 {
-				return cols, rows, xpx, ypx
-			}
+		if sizes := announcedSizes(geom); len(sizes) > 0 {
+			s := sizes[0]
+			return geom, s[0], s[1], s[2], s[3]
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("the graphics app never reported its geometry\n%s", term.Snapshot())
-	return 0, 0, 0, 0
+	return "", 0, 0, 0, 0
+}
+
+// announcedSizes is every size the guest has been told it has, in order, as
+// cols/rows/xpixels/ypixels.
+func announcedSizes(geom string) [][4]int {
+	b, err := os.ReadFile(geom)
+	if err != nil {
+		return nil
+	}
+	var out [][4]int
+	for _, line := range strings.Split(string(b), "\n") {
+		var s [4]int
+		if n, _ := fmt.Sscan(line, &s[0], &s[1], &s[2], &s[3]); n == 4 && s[2] > 0 {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // graphicsRE matches one kitty APC command on the wire, params and payload
@@ -247,7 +263,7 @@ func TestKittyLeftPaneImageSurvivesRightPaneFlood(t *testing.T) {
 	time.Sleep(400 * time.Millisecond)
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo IMAGEPANE", "IMAGEPANE", shellTimeout)
-	cols, rows, xpx, ypx := startFrameloop(t, term, 0)
+	_, cols, rows, xpx, ypx := startFrameloop(t, term, 0)
 	t.Logf("left pane: %dx%d cells, %dx%d px (%d x %d px per cell)",
 		cols, rows, xpx, ypx, xpx/cols, ypx/rows)
 	leaveTerminalMode(t, term)

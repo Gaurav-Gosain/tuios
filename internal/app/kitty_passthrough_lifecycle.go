@@ -142,7 +142,7 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 		result := kp.ForwardCommand(
 			cmd, rawData, win.ID,
 			geo.X, geo.Y,
-			geo.Width, geo.Height,
+			geo.ContentW, geo.ContentH,
 			geo.BorderOffset, geo.BorderOffset,
 			cursorPos.X, cursorPos.Y,
 			scrollbackLen,

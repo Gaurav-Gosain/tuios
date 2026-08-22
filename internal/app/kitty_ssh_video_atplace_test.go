@@ -58,7 +58,7 @@ func TestRemoteVideoSelfPlacesWithAT(t *testing.T) {
 
 	const winID = "window-0000-0000-0000-000000000000"
 	send := func() {
-		kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, false, func([]byte) {})
+		kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
 	}
 
 	send() // frame 1: establishes the id (non-reused, goes to pendingOutput)
@@ -105,7 +105,7 @@ func TestInlineOverlayVideoStaysTransmitOnly(t *testing.T) {
 
 	const winID = "window-0000-0000-0000-000000000000"
 	for range 2 {
-		kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, false, func([]byte) {})
+		kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
 	}
 	// Let any async frame land.
 	time.Sleep(200 * time.Millisecond)
@@ -158,8 +158,8 @@ func TestRemoteVideoFrameIsCompressed(t *testing.T) {
 	host := &recWriter{}
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
-	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, false, func([]byte) {})
-	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, false, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
 	if !waitUntil(func() bool { return host.has("o=z") }, 2*time.Second) {
 		t.Fatal("remote video frame was not compressed (no o=z); the ssh link gets raw RGBA")
 	}
@@ -179,8 +179,8 @@ func TestRemoteVideoClearedOnLeavingAltScreen(t *testing.T) {
 
 	const winID = "window-0000-0000-0000-000000000000"
 	// Two frames on the alt screen (isAltScreen=true): the second self-places.
-	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
-	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
 	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
 		t.Fatal("video was never placed")
 	}
@@ -257,7 +257,7 @@ func TestRemoteVideoSkipsUnchangedFrames(t *testing.T) {
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
 	send := func() {
-		kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, false, func([]byte) {})
+		kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
 	}
 
 	send() // frame 1: establishes the id
@@ -292,8 +292,8 @@ func TestRemoteVideoCountsInHasPlacements(t *testing.T) {
 	host := &recWriter{}
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
-	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
-	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
 	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
 		t.Fatal("video never placed")
 	}
@@ -315,7 +315,7 @@ func TestOverlayHidesAndRestoresRemoteVideo(t *testing.T) {
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
 	send := func() {
-		kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
+		kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
 	}
 
 	send() // establish
@@ -357,8 +357,8 @@ func TestOverlayCloseReshowsWithoutNewFrame(t *testing.T) {
 	host := &recWriter{}
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
-	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
-	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
 	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
 		t.Fatal("video never placed")
 	}
@@ -384,8 +384,8 @@ func TestVideoFollowsWindowMove(t *testing.T) {
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
 	// Placed with the window at X=0.
-	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
-	kp.ForwardCommand(cmd, raw, winID, 0, 0, 183, 42, 1, 1, 0, 0, 0, true, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
+	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
 	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
 		t.Fatal("video never placed")
 	}
