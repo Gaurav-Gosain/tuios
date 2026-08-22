@@ -117,6 +117,12 @@ func waitCursorShape(t *testing.T, stream *hostStream, want cursorShape, what st
 		what, got, want, cursorTrail(stream.bytes()))
 }
 
+// decscusrCount is how many cursor shapes the host was sent in the given slice
+// of the stream.
+func decscusrCount(stream []byte) int {
+	return len(decscusrRE.FindAllIndex(stream, -1))
+}
+
 // barPane puts the focused pane's shell into a steady bar cursor, the shape fish
 // and vim's insert mode ask for and the one the report says is lost.
 func barPane(t *testing.T, term *tuitest.Terminal, marker string) {
@@ -160,8 +166,18 @@ func TestCursorShapeSurvivesNeighbourAndSwitches(t *testing.T) {
 
 	stream.mark("neighbour")
 	// Long enough for the neighbour to write several times.
+	before := decscusrCount(stream.bytes())
 	time.Sleep(time.Second)
 	waitCursorShape(t, stream, shapeBar, "while the neighbouring pane is writing")
+
+	// Holding the shape by sending it on every frame would be correct on screen
+	// and wrong on the wire: this pane repaints for each of the neighbour's
+	// writes, and tuios counts bytes per frame. The shape has not changed, so
+	// the host should hear nothing about it.
+	if n := decscusrCount(stream.bytes()) - before; n > 2 {
+		t.Errorf("the host was sent %d cursor shapes in a second of a neighbour writing, want at most 2:\n%s",
+			n, cursorTrail(stream.bytes()))
+	}
 
 	stream.mark("mode-switch")
 	leaveTerminalMode(t, term)
