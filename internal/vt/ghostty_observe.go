@@ -136,6 +136,7 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 		if !blink {
 			style--
 		}
+		t.cursorStyle, t.cursorSteady = CursorStyle(style), !blink
 		t.queue(func(cb Callbacks) {
 			if cb.CursorStyle != nil {
 				cb.CursorStyle(CursorStyle(style), blink)
