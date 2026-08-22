@@ -308,6 +308,10 @@ func (r *KeybindRegistry) Report(facts PaneFacts) KeybindReport {
 
 	seen := map[string]bool{}
 	for _, b := range rep.Bindings {
+		// Only the surprising spelling: see AmbiguitySurprises.
+		if !AmbiguitySurprises(b.Key) {
+			continue
+		}
 		partners := AmbiguityPartners(b.Key)
 		if len(partners) == 0 {
 			continue

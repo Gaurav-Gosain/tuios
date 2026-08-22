@@ -279,7 +279,43 @@ Shows a comparison of default and custom keybindings.`,
 		},
 	}
 
-	keybindsCmd.AddCommand(keybindsListCmd, keybindsCustomCmd)
+	var (
+		keybindsJSON  bool
+		keybindsGuest string
+	)
+
+	keybindsDoctorCmd := &cobra.Command{
+		Use:   "doctor",
+		Short: "Report keybind conflicts",
+		Long: `Report every key claimed twice, every key tuios takes from the pane,
+and every one of those a common program wants.
+
+Each finding carries the evidence it rests on: certain (tuios's own routing),
+observed (read from a pane), or reference (a curated list of program defaults,
+not detection). --json emits the same analysis the keybind overlay draws.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return keybindsDoctor(keybindsJSON, keybindsGuest)
+		},
+	}
+	keybindsDoctorCmd.Flags().BoolVar(&keybindsJSON, "json", false, "emit the report as JSON")
+	keybindsDoctorCmd.Flags().StringVar(&keybindsGuest, "guest", "", "treat this program as the one running in the pane")
+
+	keybindsExplainCmd := &cobra.Command{
+		Use:   "explain <key>",
+		Short: "Say what tuios does with one key",
+		Long: `Print every scope the key acts in, whether the pane's program would
+receive it, the terminal-level pair it belongs to, and which common programs
+bind it. This is what the overlay's recorder shows, for a caller that cannot
+press anything.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return keybindsExplain(args[0], keybindsJSON, keybindsGuest)
+		},
+	}
+	keybindsExplainCmd.Flags().BoolVar(&keybindsJSON, "json", false, "emit the answer as JSON")
+	keybindsExplainCmd.Flags().StringVar(&keybindsGuest, "guest", "", "treat this program as the one running in the pane")
+
+	keybindsCmd.AddCommand(keybindsListCmd, keybindsCustomCmd, keybindsDoctorCmd, keybindsExplainCmd)
 
 	tapeCmd := &cobra.Command{
 		Use:   "tape",

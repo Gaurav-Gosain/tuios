@@ -66,6 +66,21 @@ func AmbiguityFor(key string) (Ambiguity, bool) {
 	return Ambiguity{}, false
 }
 
+// AmbiguitySurprises reports whether key is the spelling of its pair that
+// catches people out.
+//
+// Both halves of a pair are equally ambiguous, but only one of them is worth
+// warning about unprompted. Someone who binds Esc knows they bound Esc; being
+// told it is also Ctrl+[ is noise, and with Esc, Tab and Enter bound in nine
+// scopes it is fourteen rows of noise in the default config. Someone who binds
+// Ctrl+I and finds Tab stops working has hit the actual bug.
+//
+// The recorder still answers in both directions, because there the user pressed
+// the key and is asking.
+func AmbiguitySurprises(key string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(key)), "ctrl+")
+}
+
 // AmbiguityPartners returns the other names in key's pair, excluding key
 // itself, or nil when it is in no pair.
 func AmbiguityPartners(key string) []string {

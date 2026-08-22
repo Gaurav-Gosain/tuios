@@ -23,6 +23,10 @@ const (
 	// description starts. Wide enough for "ctrl+b shift+tab" unabbreviated,
 	// because a truncated chord is not a chord.
 	keybindKeyColumn = 20
+	// keybindScopeColumn is the recorder's scope column. Two cells wider than
+	// the longest scope name ("workspace prefix"), which ran straight into the
+	// text beside it at its natural width.
+	keybindScopeColumn = 18
 )
 
 // keybindHints is the footer, shared by the renderer and the sizing helper so
@@ -31,7 +35,7 @@ var keybindHints = []overlay.Hint{
 	{Key: "tab", Label: "section"},
 	{Key: "↑↓", Label: "move"},
 	{Key: "/", Label: "filter"},
-	{Key: "r", Label: "record"},
+	{Key: "ctrl+r", Label: "record"},
 	{Key: "esc", Label: "close"},
 }
 
@@ -305,9 +309,12 @@ func (m *OS) keybindConflictRow(i int, selected bool, pal overlay.Palette, width
 
 	// The word "dead" is what makes this legible without colour: the count of
 	// losers alone reads as a quantity, not as a problem.
+	// Kept short enough to survive the description column: the detail box under
+	// the list carries the whole sentence, and a row that truncates its own
+	// verdict is a row that says nothing.
 	text := lipgloss.Sprintf("runs %s %s %d dead", c.Winner, glyphs.bullet, len(c.Losers))
 	if c.CrossSection {
-		text += " (across tables)"
+		text += lipgloss.Sprintf(" %s 2 tables", glyphs.bullet)
 	}
 	scope := scopeShortName(c.Scope)
 	scopeW := lipgloss.Width(scope) + 1
@@ -492,17 +499,17 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int) []string
 				text = a.Desc + " (dead: " + a.ShadowedBy + " owns the key)"
 			}
 			add(body.Render("  "+mark+" ") +
-				label.Render(overlay.Fill(scopeShortName(a.Scope), 16, bg)) +
-				body.Render(overlay.Truncate(text, max(width-20, 8))))
+				label.Render(overlay.Fill(scopeShortName(a.Scope), keybindScopeColumn, bg)) +
+				body.Render(overlay.Truncate(text, max(width-keybindScopeColumn-4, 8))))
 		}
 		if fate.SwallowedInTerminal {
 			add(overlay.Style(bg).Foreground(overlay.ReadableAt(pal.Warning, bg, overlay.MarkFloor)).
 				Render("  "+glyphs.clash+" ") +
-				label.Render(overlay.Fill("pane", 16, bg)) +
-				body.Render(overlay.Truncate("withheld: "+fate.SwallowReason, max(width-20, 8))))
+				label.Render(overlay.Fill("pane", keybindScopeColumn, bg)) +
+				body.Render(overlay.Truncate("withheld: "+fate.SwallowReason, max(width-keybindScopeColumn-4, 8))))
 		} else {
 			add(body.Render("  "+glyphs.ok+" ") +
-				label.Render(overlay.Fill("pane", 16, bg)) +
+				label.Render(overlay.Fill("pane", keybindScopeColumn, bg)) +
 				head.Render("forwarded to the program running here"))
 		}
 

@@ -477,3 +477,41 @@ func TestSummaryCountsWhatItFound(t *testing.T) {
 		t.Errorf("summary should count the collision, got %q", got)
 	}
 }
+
+// Both halves of a pair are ambiguous, but only the control-code spelling is
+// worth an unprompted warning. Esc, Tab and Enter are bound in nine scopes, and
+// reporting those would bury the one row that matters.
+func TestReportFlagsOnlyTheSurprisingSpelling(t *testing.T) {
+	clean := registryFor(t, nil).Report(PaneFacts{})
+	for _, a := range clean.Ambiguous {
+		t.Errorf("the defaults bind esc/tab/enter, not ctrl+[, so nothing should be flagged: %+v", a)
+	}
+
+	dirty := registryFor(t, func(c *UserConfig) {
+		c.Keybindings.TerminalMode["custom_jump"] = []string{"ctrl+i"}
+	}).Report(PaneFacts{})
+	var found bool
+	for _, a := range dirty.Ambiguous {
+		if a.Key == "ctrl+i" {
+			found = true
+			if len(a.Partners) != 1 || a.Partners[0] != "tab" {
+				t.Errorf("partners = %v, want [tab]", a.Partners)
+			}
+		}
+	}
+	if !found {
+		t.Error("binding ctrl+i also binds tab and must be flagged")
+	}
+}
+
+// The recorder answers in both directions: there the user pressed the key and
+// is asking, so telling them Tab is also Ctrl+I is the answer, not noise.
+func TestFateAnswersAmbiguityFromEitherSide(t *testing.T) {
+	r := registryFor(t, nil)
+	if got := r.Fate("tab", PaneFacts{}).Ambiguity; !strings.Contains(got, "ctrl+i") {
+		t.Errorf("pressing tab in the recorder must mention ctrl+i, got %q", got)
+	}
+	if got := r.Fate("ctrl+i", PaneFacts{}).Ambiguity; !strings.Contains(got, "tab") {
+		t.Errorf("pressing ctrl+i in the recorder must mention tab, got %q", got)
+	}
+}
