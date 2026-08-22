@@ -9,6 +9,14 @@ import (
 // getRealCursor returns a real terminal cursor for the focused window,
 // or nil to hide the cursor. This enables native cursor shape support
 // (block/bar/underline) from vi-mode and other applications.
+//
+// Everything here is read from the focused window's emulator on the frame it is
+// used, so the shape the host is shown is the shape that window's guest asked
+// for and nothing else. That is the whole mechanism: a mode change, a workspace
+// switch and a reattach all repaint, a repaint calls this, and Bubble Tea emits
+// DECSCUSR only when the answer differs from the last frame's. No path has to
+// remember to re-emit anything, and an unfocused pane cannot reach the host
+// cursor at all.
 func (m *OS) getRealCursor() *tea.Cursor {
 	// Only show real cursor in terminal mode with valid focused window
 	if m.Mode != TerminalMode || m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
@@ -34,9 +42,9 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	}
 
 	// Hide during copy mode, scrollback, or when VT hides cursor.
-	// IsCursorHidden and CursorPosition read emulator state that the PTY and
-	// daemon output goroutines mutate under the window's I/O lock, so both
-	// reads take the read side of it.
+	// IsCursorHidden, CursorPosition and CursorStyle read emulator state that
+	// the PTY and daemon output goroutines mutate under the window's I/O lock,
+	// so all three reads take the read side of it.
 	// An implicit copy-mode session that is sitting at the bottom (a
 	// drag-selection over live output) is not a reason to hide the shell's
 	// cursor; being scrolled back still is, and that is the second condition.
@@ -51,8 +59,9 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	// did acquire is at most one frame stale and converges the moment the
 	// burst ends, which is the same trade the compositor already makes for
 	// pane content.
-	var hidden bool
+	var hidden, steady bool
 	var pos uv.Position
+	var style vt.CursorStyle
 	if window.TryRLockIO() {
 		if window.Terminal == nil {
 			// Re-check under the lock: Close() nils Terminal while holding it.
@@ -61,10 +70,13 @@ func (m *OS) getRealCursor() *tea.Cursor {
 		}
 		hidden = window.Terminal.IsCursorHidden()
 		pos = window.Terminal.CursorPosition()
+		style, steady = window.Terminal.CursorStyle()
 		window.RUnlockIO()
 		window.CachedCursor, window.CachedCursorHidden = pos, hidden
+		window.CachedCursorStyle, window.CachedCursorSteady = style, steady
 	} else {
 		hidden, pos = window.CachedCursorHidden, window.CachedCursor
+		style, steady = window.CachedCursorStyle, window.CachedCursorSteady
 	}
 
 	if hidden {
@@ -87,8 +99,8 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	screenY := window.Y + borderOffset + pos.Y
 
 	cursor := tea.NewCursor(screenX, screenY)
-	cursor.Shape = mapCursorStyle(window.CursorStyle())
-	cursor.Blink = window.CursorBlink()
+	cursor.Shape = mapCursorStyle(style)
+	cursor.Blink = !steady
 	return cursor
 }
 

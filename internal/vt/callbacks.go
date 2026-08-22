@@ -33,10 +33,6 @@ type Callbacks struct {
 	// cursor visibility changes.
 	CursorVisibility func(visible bool)
 
-	// CursorStyle callback. When set, this function is called when the cursor
-	// style changes.
-	CursorStyle func(style CursorStyle, blink bool)
-
 	// CursorColor callback. When set, this function is called when the cursor
 	// color changes. Nil indicates the default terminal color.
 	CursorColor func(color color.Color)

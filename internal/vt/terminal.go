@@ -45,8 +45,10 @@ type Terminal interface {
 	CursorPosition() uv.Position
 	IsCursorHidden() bool
 	CursorPen() (uv.Style, uv.Link)
+	CursorStyle() (style CursorStyle, steady bool)
 	RestoreCursorPosition(x, y int)
 	RestoreCursorPen(pen uv.Style, link uv.Link)
+	RestoreCursorStyle(style CursorStyle, steady bool)
 
 	// Screen and mode state. The Restore* half of each pair exists for the
 	// same snapshot priming as SetCell.

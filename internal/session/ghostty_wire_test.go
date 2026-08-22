@@ -65,6 +65,7 @@ var wireStreams = []struct {
 	{"charset", "\x1b(0lqk\x1b(B"},
 	{"wide", "日本語\r\nnext 中"},
 	{"kitty-kbd", "\x1b[>5utext"},
+	{"cursor-shape", "\x1b[6 q$ "},
 }
 
 // TestGhosttyWireFromPure: pure daemon snapshot restored into a ghostty

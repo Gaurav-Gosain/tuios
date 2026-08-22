@@ -2,7 +2,6 @@
 package app
 
 import (
-	"bytes"
 	"maps"
 	"time"
 
@@ -12,47 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
-
-// passThroughCursorStyle detects DECSCUSR (cursor style) sequences in the data
-// and re-emits them to the host through the serialized writer.
-// The VT emulator absorbs these sequences, so we need to re-emit them.
-// DECSCUSR format: CSI Ps SP q (ESC [ Ps SPACE q) where Ps is optional (0-6)
-func (m *OS) passThroughCursorStyle(data []byte) {
-	// Look for DECSCUSR pattern: \x1b[N q where N is 0-6 (or no digit)
-	idx := 0
-	for idx < len(data) {
-		// Find ESC [
-		escIdx := bytes.Index(data[idx:], []byte("\x1b["))
-		if escIdx == -1 {
-			break
-		}
-		escIdx += idx
-
-		// Check if this could be DECSCUSR
-		// Need at least ESC [ SP q (4 bytes from escIdx)
-		if escIdx+4 > len(data) {
-			idx = escIdx + 1
-			continue
-		}
-
-		// Check for pattern: optional digit(s) followed by space and 'q'
-		numEnd := escIdx + 2
-		for numEnd < len(data) && data[numEnd] >= '0' && data[numEnd] <= '9' {
-			numEnd++
-		}
-
-		// Check if followed by " q" (space then q)
-		if numEnd+1 < len(data) && data[numEnd] == ' ' && data[numEnd+1] == 'q' {
-			// Found DECSCUSR sequence - write it to stdout
-			seq := data[escIdx : numEnd+2]
-			m.WriteHost(seq)
-			idx = numEnd + 2
-			continue
-		}
-
-		idx = escIdx + 1
-	}
-}
 
 // BuildSessionState creates a serializable SessionState from the current OS state.
 // This is called progressively during Update() to sync state to the daemon.
@@ -1276,7 +1234,6 @@ func (m *OS) subscribeToPTY(window *terminal.Window, fromSeq int64) {
 	m.DaemonClient.OnPTYResized(ptyID, window.ResizeFromStream)
 	window.SetStreamOwnsSize(true)
 	err := m.DaemonClient.SubscribePTY(ptyID, fromSeq, func(data []byte) {
-		m.passThroughCursorStyle(data)
 		window.WriteOutputAsync(data)
 	})
 	if err != nil {

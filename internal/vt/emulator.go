@@ -43,6 +43,11 @@ type Emulator struct {
 	scrs [2]Screen
 	scr  *Screen
 
+	// The shape DECSCUSR asked for. See CursorStyle for why it lives here
+	// rather than on a Screen.
+	cursorStyle  CursorStyle
+	cursorSteady bool
+
 	// Character sets, and the designator byte each was selected by. The sets
 	// themselves are maps and cannot be compared back to the set they came
 	// from, so a snapshot names them from here.
@@ -196,6 +201,7 @@ func NewEmulator(w, h int) *Emulator {
 	t.resetModes()
 	t.charsetIDs = defaultCharsetIDs
 	t.tabstops = uv.DefaultTabStops(w)
+	t.cursorStyle, t.cursorSteady = defaultCursorStyle, defaultCursorSteady
 
 	// Initialize handler maps upfront to avoid nil checks during registration
 	t.ccHandlers = make(map[byte][]CcHandler)
@@ -670,6 +676,23 @@ func (e *Emulator) CursorPen() (uv.Style, uv.Link) {
 func (e *Emulator) RestoreCursorPen(pen uv.Style, link uv.Link) {
 	e.scr.cur.Pen = pen
 	e.scr.cur.Link = link
+}
+
+// CursorStyle returns the shape DECSCUSR last asked for, and whether it is
+// steady (not blinking). It reads the terminal-level copy rather than the
+// active screen's, because DECSCUSR is a property of the terminal: a guest that
+// asks for a bar and then enters the alternate screen still wants a bar. The
+// per-screen Cursor.Style is left alone so DECSC/DECRC keep behaving as they
+// did.
+func (e *Emulator) CursorStyle() (CursorStyle, bool) {
+	return e.cursorStyle, e.cursorSteady
+}
+
+// RestoreCursorStyle puts back the shape a snapshot was taken under. A pane the
+// client is rebuilding from the daemon has emitted its DECSCUSR long ago, so
+// without this the pane comes back as a block whatever the guest asked for.
+func (e *Emulator) RestoreCursorStyle(style CursorStyle, steady bool) {
+	e.cursorStyle, e.cursorSteady = style, steady
 }
 
 // GetModes returns a copy of the current terminal DEC private modes.

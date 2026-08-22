@@ -159,6 +159,24 @@ func (t *GhosttyTerminal) RestoreCursorPen(pen uv.Style, link uv.Link) {
 	r.hasPen = true
 }
 
+// CursorStyle returns the shape DECSCUSR last asked for, and whether it is
+// steady. The scanner records it as the sequence goes past, so unlike most of
+// this file it needs no restore to be flushed first.
+func (t *GhosttyTerminal) CursorStyle() (CursorStyle, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.cursorStyle, t.cursorSteady
+}
+
+// RestoreCursorStyle puts back the shape a snapshot was taken under. It writes
+// straight through rather than joining the pending restore, because nothing in
+// libghostty holds this and there is no sequence to synthesize.
+func (t *GhosttyTerminal) RestoreCursorStyle(style CursorStyle, steady bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.cursorStyle, t.cursorSteady = style, steady
+}
+
 func (t *GhosttyTerminal) RestoreKittyKeyboardState(stack []int) {
 	if len(stack) == 0 {
 		return

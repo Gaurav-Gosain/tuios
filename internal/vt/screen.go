@@ -267,12 +267,8 @@ func (s *Screen) setCursorHidden(hidden bool) {
 
 // setCursorStyle sets the cursor style.
 func (s *Screen) setCursorStyle(style CursorStyle, blink bool) {
-	changed := s.cur.Style != style || s.cur.Steady != !blink
 	s.cur.Style = style
 	s.cur.Steady = !blink
-	if changed && s.cb.CursorStyle != nil {
-		s.cb.CursorStyle(style, !blink)
-	}
 }
 
 // cursorPen returns the cursor pen.

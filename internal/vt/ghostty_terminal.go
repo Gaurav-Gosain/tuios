@@ -39,6 +39,11 @@ type GhosttyTerminal struct {
 	curX, curY int
 	curHidden  bool
 
+	// The shape DECSCUSR asked for, observed by the scanner. libghostty's own
+	// CursorStyle() is the SGR pen, not this.
+	cursorStyle  CursorStyle
+	cursorSteady bool
+
 	// bufs shadow the two screens in uv cells; bufs[0] is main. active
 	// mirrors which one libghostty is drawing to.
 	bufs   [2]*uv.Buffer
@@ -145,6 +150,8 @@ func NewGhosttyTerminal(w, h int) *GhosttyTerminal {
 		sixelMain:       NewSixelState(),
 		sixelAlt:        NewSixelState(),
 		semanticMarkers: NewSemanticMarkerList(maxSemanticMarkers),
+		cursorStyle:     defaultCursorStyle,
+		cursorSteady:    defaultCursorSteady,
 	}
 	t.bufs[0] = uv.NewBuffer(w, h)
 	t.bufs[1] = uv.NewBuffer(w, h)

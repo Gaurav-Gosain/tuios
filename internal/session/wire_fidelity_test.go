@@ -97,6 +97,13 @@ var wireShapes = []struct {
 		out:  "\x1b(0lqqqk\r\nx   x\r\nmqqqj\r\n",
 	},
 	{
+		// The shape a shell or an editor asks for once and never repeats. It is
+		// long out of the output buffer's reach by the time anyone reattaches,
+		// so a snapshot that does not carry it hands every pane a block.
+		name: "cursor-shape",
+		out:  "\x1b[6 q$ ",
+	},
+	{
 		name: "wide-runes",
 		out:  "\x1b[35m日本語\x1b[m ascii\r\n",
 	},
@@ -237,6 +244,12 @@ func compareEmulators(t *testing.T, want, got vt.Terminal) {
 	}
 	if g, w := got.ScrollRegion(), want.ScrollRegion(); g != w {
 		t.Errorf("scroll region: client %v, daemon %v: the next line this pane scrolls takes the wrong rows with it", g, w)
+	}
+	gs, gsteady := got.CursorStyle()
+	ws, wsteady := want.CursorStyle()
+	if gs != ws || gsteady != wsteady {
+		t.Errorf("cursor shape: client style %d steady %v, daemon style %d steady %v: the pane comes back with a cursor the guest did not ask for",
+			gs, gsteady, ws, wsteady)
 	}
 	gi, ggl, ggr := got.Charsets()
 	wi, wgl, wgr := want.Charsets()

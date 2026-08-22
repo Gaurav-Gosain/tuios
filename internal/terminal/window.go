@@ -2,7 +2,6 @@
 package terminal
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"image/color"
@@ -24,10 +23,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
-// passThroughCursorStyle detects DECSCUSR (cursor style) sequences in the data
-// and re-emits them to the host through the writer the frames go through.
-// The VT emulator absorbs these sequences, so we need to re-emit them.
-// DECSCUSR format: CSI Ps SP q (ESC [ Ps SPACE q) where Ps is optional (0-6)
 // ioMu guards the emulator cell buffer: the PTY reader and the daemon output
 // path write it, Resize reallocates it, and the renderer reads it.
 //
@@ -89,18 +84,6 @@ func (w *Window) ProcessExited() bool { return w.processExited.Load() }
 // SetProcessExited records whether the window's process has exited.
 func (w *Window) SetProcessExited(exited bool) { w.processExited.Store(exited) }
 
-// CursorStyle returns the current cursor style.
-func (w *Window) CursorStyle() vt.CursorStyle { return vt.CursorStyle(w.cursorStyle.Load()) }
-
-// SetCursorStyle records the current cursor style.
-func (w *Window) SetCursorStyle(style vt.CursorStyle) { w.cursorStyle.Store(int32(style)) }
-
-// CursorBlink reports whether the cursor should blink.
-func (w *Window) CursorBlink() bool { return w.cursorBlink.Load() }
-
-// SetCursorBlink records whether the cursor should blink.
-func (w *Window) SetCursorBlink(blink bool) { w.cursorBlink.Store(blink) }
-
 // Title returns the current window title.
 func (w *Window) Title() string {
 	if p := w.title.Load(); p != nil {
@@ -128,36 +111,6 @@ func (w *Window) clipboard() string {
 
 // setClipboard records the last clipboard content set via OSC 52.
 func (w *Window) setClipboard(content string) { w.clipboardContent.Store(&content) }
-
-func passThroughCursorStyle(data []byte) {
-	// Fast path: DECSCUSR sequences contain " q" (space-q). If neither
-	// byte is present, skip the scan entirely. This avoids O(n) work on
-	// the vast majority of PTY output chunks at 300+ fps.
-	if !bytes.Contains(data, []byte(" q")) {
-		return
-	}
-	idx := 0
-	for idx < len(data) {
-		escIdx := bytes.Index(data[idx:], []byte("\x1b["))
-		if escIdx == -1 {
-			break
-		}
-		escIdx += idx
-		if escIdx+4 > len(data) {
-			break
-		}
-		numEnd := escIdx + 2
-		for numEnd < len(data) && data[numEnd] >= '0' && data[numEnd] <= '9' {
-			numEnd++
-		}
-		if numEnd+1 < len(data) && data[numEnd] == ' ' && data[numEnd+1] == 'q' {
-			writeHost(data[escIdx : numEnd+2])
-			idx = numEnd + 2
-			continue
-		}
-		idx = escIdx + 1
-	}
-}
 
 // Cache for local terminal environment variables (detect once, reuse for local windows)
 // SSH sessions will detect per-connection based on their environment
@@ -203,13 +156,16 @@ type Window struct {
 	// CachedContent. They are written only where CachedContent is, so a
 	// rectangle can never be read against a frame it does not describe.
 	CachedContentCols, CachedContentRows int
-	// CachedCursor is where this window's cursor was the last time the render
-	// loop could read it. Reading the live one needs the I/O lock, which a
-	// pane flooding output holds in a near-continuous burst, and the frame
-	// that would block on it is the same frame carrying the user's keystroke
-	// echo. Serving a cursor one frame old costs nothing anyone can see.
+	// CachedCursor is what this window's cursor was the last time the render
+	// loop could read it: where it is, whether it is hidden, and the shape the
+	// guest asked for. Reading the live one needs the I/O lock, which a pane
+	// flooding output holds in a near-continuous burst, and the frame that
+	// would block on it is the same frame carrying the user's keystroke echo.
+	// Serving a cursor one frame old costs nothing anyone can see.
 	CachedCursor       uv.Position
 	CachedCursorHidden bool
+	CachedCursorStyle  vt.CursorStyle
+	CachedCursorSteady bool
 	// SyncHoldContent is the last frame this window rendered from a guest that
 	// was not mid-update, kept solely so the synchronized-output hold (DEC 2026)
 	// has something complete to present. Every other cache here is invalidated
@@ -304,10 +260,6 @@ type Window struct {
 	// Floating pane support
 	IsFloating bool // True when window is floating (not in BSP tiling)
 	IsPinned   bool // True when floating pane persists across workspace switches
-	// Cursor style tracking for passthrough to parent terminal.
-	// Written by the VT callback on the PTY goroutine, read on the UI goroutine.
-	cursorStyle atomic.Int32 // Current cursor style (block, underline, bar)
-	cursorBlink atomic.Bool  // Whether cursor should blink
 	// Cell dimensions in pixels (for TIOCGWINSZ pixel reporting to child processes)
 	CellPixelWidth  int
 	CellPixelHeight int
@@ -545,6 +497,10 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		CachedLayer:        nil,
 		IsBeingManipulated: false,
 	}
+	// The cursor cache is served whenever the render loop cannot take the I/O
+	// lock, including on the very first frame, so it starts on what the fresh
+	// emulator reports rather than on a zero value that means a blinking block.
+	window.CachedCursorStyle, window.CachedCursorSteady = terminal.CursorStyle()
 	window.SetTitle(title)
 
 	// Apply theme colors to the terminal (only if theming is enabled)
@@ -568,12 +524,6 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 			if !window.suppressCallbacks.Load() {
 				window.SetAltScreen(enabled)
 			}
-		},
-		CursorStyle: func(style vt.CursorStyle, steady bool) {
-			// Note: the callback receives "steady" value (true = NOT blinking)
-			// despite the parameter being named "blink" in the Callbacks struct
-			window.SetCursorStyle(style)
-			window.SetCursorBlink(!steady) // Invert: steady=false means blinking=true
 		},
 		Title: func(title string) {
 			// Update window title from terminal escape sequence
@@ -764,6 +714,8 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 		coalesceWake:       make(chan struct{}, 1),
 		// suppressCallbacks defaults to false (zero value)
 	}
+	// See NewWindow: the cursor cache must not start on a zero value.
+	window.CachedCursorStyle, window.CachedCursorSteady = terminal.CursorStyle()
 	window.SetTitle(title)
 
 	// Start output writer goroutine to serialize writes
@@ -791,12 +743,6 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 			if !window.suppressCallbacks.Load() {
 				window.SetAltScreen(enabled)
 			}
-		},
-		CursorStyle: func(style vt.CursorStyle, steady bool) {
-			// Note: the callback receives "steady" value (true = NOT blinking)
-			// despite the parameter being named "blink" in the Callbacks struct
-			window.SetCursorStyle(style)
-			window.SetCursorBlink(!steady) // Invert: steady=false means blinking=true
 		},
 		Title: func(title string) {
 			// Update window title from terminal escape sequence

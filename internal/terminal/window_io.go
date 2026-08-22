@@ -671,10 +671,6 @@ func (w *Window) handleIOOperations() {
 						}
 					}
 
-					// Pass through cursor style sequences to parent terminal
-					// The VT emulator absorbs DECSCUSR, so we re-emit them
-					passThroughCursorStyle(buf[:n])
-
 					// Terminal.Write mutates the cell buffer, so it needs the
 					// exclusive lock, not the shared read lock the renderer uses
 					// (two RLock holders do not exclude each other).
