@@ -153,14 +153,35 @@ END {
 	pbot = VH - 44
 	dy = VH - 34
 
+	# The reveal replays history at the axis's own rate: a linear sweep of x is
+	# linear elapsed time, so the flat months crawl and the August cliff snaps
+	# in, which is the honest shape of the data. It runs once and freezes on
+	# the finished chart, because a README image spends its life as a still.
+	dur = 5
+
 	printf "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 %d %d\" width=\"%d\" height=\"%d\" role=\"img\" aria-label=\"%s star history: %s stars\">\n", VW, VH, VW, VH, repo, comma(n)
 	printf "<defs><linearGradient id=\"fade\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">"
 	printf "<stop offset=\"0\" stop-color=\"%s\" stop-opacity=\"0.30\"/>", ACCENT
 	printf "<stop offset=\"1\" stop-color=\"%s\" stop-opacity=\"0.04\"/>", ACCENT
-	printf "</linearGradient></defs>\n"
+	printf "</linearGradient>"
+	# SMIL on the clip rect rather than CSS, because attribute animation inside
+	# a clipPath is the portable form; the rect's resting width is the full
+	# plot, so stripping the animation leaves the finished chart, not a blank.
+	printf "<clipPath id=\"rv\"><rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\">", L, T - 4, W, B - T + 8
+	printf "<animate attributeName=\"width\" from=\"0\" to=\"%d\" dur=\"%ds\" fill=\"freeze\"/></rect></clipPath></defs>\n", W, dur
 	# No webfont: an SVG in a README cannot fetch one, so the stack asks for
 	# whatever monospace the reader's platform draws its terminals in.
-	printf "<style>text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style>\n"
+	#
+	# Annotations rest at opacity 1 and are faded in by a delayed animation
+	# with backwards fill, so each label arrives with the star it describes
+	# and every failure mode - style stripped, media query unmatched, reduced
+	# motion - falls back to the finished static chart. Reduced motion also
+	# lifts the clip, which is the one thing CSS can do about a SMIL sweep.
+	printf "<style>text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}"
+	printf "@keyframes ap{from{opacity:0}}@keyframes bk{50%%{opacity:0}}"
+	printf "@media(prefers-reduced-motion:no-preference){.ap{animation:ap .5s ease-out backwards}"
+	printf ".ck{animation:ap .3s backwards,bk 1.2s steps(1) infinite;animation-delay:%ds}}", dur
+	printf "@media(prefers-reduced-motion:reduce){.rvg{clip-path:none}.odo{display:none}.ods{display:inline!important}}</style>\n"
 
 	# The pane: canvas fill under a rounded accent stroke, the way the focused
 	# window wears its border.
@@ -169,12 +190,83 @@ END {
 	# Title pill on the border row, half-circle ends like the powerline badge.
 	printf "<rect x=\"30\" y=\"%d\" width=\"116\" height=\"22\" rx=\"11\" fill=\"%s\"/>\n", ptop - 11, ACCENT
 	printf "<text x=\"88\" y=\"%d\" font-size=\"13\" font-weight=\"700\" fill=\"%s\" text-anchor=\"middle\">star-history</text>\n", ptop + 5, FG
-	# Window controls on the end the badge is not.
-	printf "<rect x=\"714\" y=\"%d\" width=\"56\" height=\"20\" rx=\"10\" fill=\"%s\"/>\n", ptop - 10, SURFACE
-	printf "<text x=\"730\" y=\"%d\" font-size=\"12\" fill=\"%s\" text-anchor=\"middle\">&#9633;</text>\n", ptop + 4, FGDIM
-	printf "<text x=\"754\" y=\"%d\" font-size=\"12\" fill=\"%s\" text-anchor=\"middle\">&#10005;</text>\n", ptop + 4, FGDIM
+	# Window controls on the end the badge is not: window_button_style dots,
+	# the macOS traffic light with close first, sitting straight on the border
+	# rather than in a pill of their own. The hexes are windowDot* from
+	# window_buttons.go, and on this canvas (charmtone Pepper) they measure
+	# 5.5:1, 9.7:1 and 7.3:1, already past the 3:1 floor readableDot enforces,
+	# so they arrive here unblended. Drawn a shade larger than a terminal
+	# cell's disc because the README scales the chart down and three 7px dots
+	# would smear into one.
+	printf "<rect x=\"712\" y=\"%d\" width=\"62\" height=\"16\" rx=\"8\" fill=\"%s\"/>\n", ptop - 8, CANVAS
+	printf "<circle cx=\"726\" cy=\"%d\" r=\"4.5\" fill=\"#ff5f57\"/>\n", ptop
+	printf "<circle cx=\"744\" cy=\"%d\" r=\"4.5\" fill=\"#febc2e\"/>\n", ptop
+	printf "<circle cx=\"762\" cy=\"%d\" r=\"4.5\" fill=\"#28c840\"/>\n", ptop
 
-	printf "<text x=\"34\" y=\"80\" font-size=\"30\" font-weight=\"700\" fill=\"%s\">%s<tspan dx=\"10\" font-size=\"13\" font-weight=\"500\" fill=\"%s\">stars</tspan></text>\n", FG, comma(n), FGDIM
+	# The count as an odometer: one clipped strip of glyphs per column,
+	# translated upward, which is how a mechanical counter actually works and
+	# costs a transform per digit instead of text per frame. The top reel does
+	# not spin: it clicks at the real moments the count crossed each of its
+	# increments, in step with the sweep passing the same milestones below.
+	# Lower reels spin whole decades at cascading speeds and stop dead. Every
+	# reel's resting transform is its final digit, so a stripped animation
+	# leaves the true count; reduced motion swaps the reels for the plain
+	# number, since CSS cannot pause SMIL.
+	sc = comma(n)
+	ncols = length(sc)
+	printf "<defs><clipPath id=\"oc\"><rect x=\"30\" y=\"52\" width=\"%d\" height=\"36\"/></clipPath></defs>\n", ncols * 18 + 8
+	printf "<g class=\"odo\" clip-path=\"url(#oc)\" font-size=\"30\" font-weight=\"700\" fill=\"%s\">\n", FG
+	digits_after = 0
+	for (ci = ncols; ci >= 1; ci--) {
+		if (substr(sc, ci, 1) != ",") { dpos[ci] = digits_after; digits_after++ }
+	}
+	colx = 34
+	for (ci = 1; ci <= ncols; ci++) {
+		c = substr(sc, ci, 1)
+		if (c == ",") {
+			printf "<text x=\"%d\" y=\"80\">,</text>\n", colx
+			colx += 18
+			continue
+		}
+		d = c + 0
+		if (ci == 1) {
+			# Most significant reel: a strip of 0..d stepped at the true
+			# crossing times of d*10^p stars, each step a fast ramp between
+			# holds so the digit clicks rather than drifts.
+			unit = 1
+			for (i = 1; i <= dpos[ci]; i++) unit *= 10
+			final = d
+			vals = "0 0"; kt = "0"; prevt = 0
+			for (j = 1; j <= d; j++) {
+				f = (day[j * unit] - dmin) / (dmax - dmin)
+				t0h = f - 0.015; if (t0h < prevt) t0h = prevt
+				vals = vals sprintf(";0 %d;0 %d", -34 * (j - 1), -34 * j)
+				kt = kt sprintf(";%.4f;%.4f", t0h, f)
+				prevt = f
+			}
+			vals = vals sprintf(";0 %d", -34 * d)
+			kt = kt ";1"
+			anim = sprintf("<animateTransform attributeName=\"transform\" type=\"translate\" values=\"%s\" keyTimes=\"%s\" dur=\"%ds\" fill=\"freeze\"/>", vals, kt, dur)
+		} else {
+			# Lower reels: whole decades plus the landing digit, linear and
+			# then stopped, faster the less significant the column.
+			reps = 0
+			if (dpos[ci] == 0) reps = 2
+			else if (dpos[ci] == 1) reps = 1
+			final = reps * 10 + d
+			anim = sprintf("<animateTransform attributeName=\"transform\" type=\"translate\" from=\"0 0\" to=\"0 %d\" dur=\"%ds\" fill=\"freeze\"/>", -34 * final, dur)
+		}
+		printf "<text x=\"%d\" transform=\"translate(0 %d)\">", colx, -34 * final
+		for (i = 0; i <= final; i++) {
+			if (i == 0) printf "<tspan x=\"%d\" y=\"80\">%d</tspan>", colx, i % 10
+			else printf "<tspan x=\"%d\" dy=\"34\">%d</tspan>", colx, i % 10
+		}
+		printf "%s</text>\n", anim
+		colx += 18
+	}
+	print "</g>"
+	printf "<text class=\"ods\" style=\"display:none\" x=\"34\" y=\"80\" font-size=\"30\" font-weight=\"700\" fill=\"%s\">%s</text>\n", FG, sc
+	printf "<text x=\"%d\" y=\"80\" font-size=\"13\" font-weight=\"500\" fill=\"%s\">stars</text>\n", ncols * 18 + 44, FGDIM
 
 	# Gridlines dotted in structure ink: quiet by the same 1.9:1 target the
 	# real chrome holds its rules to.
@@ -221,17 +313,22 @@ END {
 		tipy = yq
 	}
 	fill = fill sprintf(" L %d %d Z", R, B)
+	printf "<g class=\"rvg\" clip-path=\"url(#rv)\">\n"
 	printf "<path d=\"%s\" fill=\"url(#fade)\"/>\n", fill
 	printf "<path d=\"%s\" fill=\"none\" stroke=\"%s\" stroke-width=\"2\"/>\n", edge, ACCENT
+	print "</g>"
 
 	# A milestone at each gridline the curve has crossed: the crossing's exact
 	# point and date, marked with a four-point star because that is the mark
-	# this chart is about.
+	# this chart is about. Each fades in as the sweep reaches its column, so a
+	# label never floats over a plot that has not drawn its star yet.
 	for (m = step; m <= n; m += step) {
 		mx = px(day[m]); my = py(m)
-		printf "<path d=\"M %.1f %.1f l 1.8 4.2 4.2 1.8 -4.2 1.8 -1.8 4.2 -1.8 -4.2 -4.2 -1.8 4.2 -1.8 z\" fill=\"%s\"/>\n", mx, my - 6, HAZY
+		printf "<g class=\"ap\" style=\"animation-delay:%.2fs\">", dur * (mx - L) / W
+		printf "<path d=\"M %.1f %.1f l 1.8 4.2 4.2 1.8 -4.2 1.8 -1.8 4.2 -1.8 -4.2 -4.2 -1.8 4.2 -1.8 z\" fill=\"%s\"/>", mx, my - 6, HAZY
 		civil_from_days(int(day[m]))
-		printf "<text x=\"%.1f\" y=\"%.1f\" font-size=\"11\" fill=\"%s\" text-anchor=\"end\">%s &#183; %s %02d</text>\n", mx - 9, my - 9, FGDIM, fmtk(m), MON[CM], CD
+		printf "<text x=\"%.1f\" y=\"%.1f\" font-size=\"11\" fill=\"%s\" text-anchor=\"end\">%s &#183; %s %02d</text>", mx - 9, my - 9, FGDIM, fmtk(m), MON[CM], CD
+		print "</g>"
 	}
 
 	# The steepest 48 hours, found by two pointers over the sorted days. Only a
@@ -246,15 +343,16 @@ END {
 	if (best * 10 >= n && n >= 100) {
 		mx = (px(day[bj]) + px(day[bi])) / 2
 		my = (py(bj) + py(bi)) / 2
-		printf "<line x1=\"%.0f\" y1=\"%.0f\" x2=\"%.0f\" y2=\"%.0f\" stroke=\"%s\" stroke-width=\"1\"/>\n", mx - 26, my + 34, mx - 4, my + 4, JULEP
-		printf "<text x=\"%.0f\" y=\"%.0f\" font-size=\"12\" font-weight=\"700\" fill=\"%s\" text-anchor=\"end\">+%s in 48h</text>\n", mx - 20, my + 48, JULEP, comma(best)
+		printf "<g class=\"ap\" style=\"animation-delay:%.2fs\">", dur * (px(day[bi]) - L) / W
+		printf "<line x1=\"%.0f\" y1=\"%.0f\" x2=\"%.0f\" y2=\"%.0f\" stroke=\"%s\" stroke-width=\"1\"/>", mx - 26, my + 34, mx - 4, my + 4, JULEP
+		printf "<text x=\"%.0f\" y=\"%.0f\" font-size=\"12\" font-weight=\"700\" fill=\"%s\" text-anchor=\"end\">+%s in 48h</text>", mx - 20, my + 48, JULEP, comma(best)
+		print "</g>"
 	}
 
-	# The cursor after the last cell, blinking, because the history is still
-	# being written. SMIL rather than script: GitHub strips scripts but serves
-	# the file as an image, where declarative animation survives.
-	printf "<rect x=\"%d\" y=\"%d\" width=\"9\" height=\"16\" fill=\"%s\">", R + 3, tipy - 14, HAZY
-	printf "<animate attributeName=\"opacity\" values=\"1;1;0;0;1\" keyTimes=\"0;0.5;0.5;0.95;1\" dur=\"1.2s\" repeatCount=\"indefinite\"/></rect>\n"
+	# The cursor after the last cell, blinking once the sweep has written the
+	# history up to it. The blink lives in the reduced-motion media query with
+	# the fades, so a reader who asked for stillness gets a steady block.
+	printf "<rect class=\"ck\" x=\"%d\" y=\"%d\" width=\"9\" height=\"16\" fill=\"%s\"/>\n", R + 3, tipy - 14, HAZY
 
 	# The dock: workspace pills, the repo where the clock would go, and the
 	# mode pill saying the one thing a chart of a healthy repo should.
