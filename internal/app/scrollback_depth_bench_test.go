@@ -87,16 +87,10 @@ func BenchmarkScrollbackDepth(b *testing.B) {
 		if depth == 0 {
 			continue
 		}
-		b.Run(fmt.Sprintf("depth-%d/scrolled", depth), func(b *testing.B) {
-			win.EnterScrollbackMode()
-			win.ScrollUp(depth / 2)
-			defer win.ExitScrollbackMode()
-			b.ReportAllocs()
-			for b.Loop() {
-				win.MarkContentDirty()
-				_ = m.renderTerminal(win, true, true)
-			}
-		})
+		// The scrolled-pane variant is gone with the window-level scrollback
+		// mode it drove: that API had no caller outside this benchmark, so the
+		// dead-code sweep took it. Depth cost is still covered by the fetch
+		// benchmarks, which is where the flat-at-any-depth result came from.
 	}
 }
 
