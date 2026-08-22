@@ -27,6 +27,23 @@ jobs:
           # above, which is slower and makes the pin a lie.
           go-version-file: go.mod
 
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Cache libghostty-vt
+        uses: actions/cache@v4
+        with:
+          path: .ghostty-vt
+          key: ghostty-vt-${{ hashFiles('scripts/ghostty-lib.sh') }}-linux-windows
+
+      - name: Build libghostty-vt for the cgo targets
+        run: |
+          for t in x86_64-linux-gnu aarch64-linux-gnu x86_64-windows-gnu aarch64-windows-gnu; do
+            ./scripts/ghostty-lib.sh "$t"
+          done
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
@@ -37,3 +54,48 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+  # Darwin cannot be cross-compiled with cgo from Linux without macOS SDK
+  # hacks, so the ghostty-tagged darwin artifacts build natively on a mac
+  # runner and attach to the same release.
+  ghostty-darwin:
+    runs-on: macos-14
+    needs: goreleaser
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Cache libghostty-vt
+        uses: actions/cache@v4
+        with:
+          path: .ghostty-vt
+          key: ghostty-vt-${{ hashFiles('scripts/ghostty-lib.sh') }}-darwin
+
+      - name: Build and upload darwin ghostty binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+          ldflags="-s -w -X main.version=${version} -X main.commit=${GITHUB_SHA} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.builtBy=goreleaser"
+          for pair in "arm64 aarch64-macos" "amd64 x86_64-macos"; do
+            set -- $pair
+            arch="$1"; target="$2"
+            ./scripts/ghostty-lib.sh "$target"
+            CGO_ENABLED=1 GOARCH="$arch"               CC="$PWD/scripts/zigcc/$target"               PKG_CONFIG_PATH="$PWD/.ghostty-vt/$target/pkgconfig"               go build -tags ghostty -trimpath -ldflags "$ldflags" -o tuios ./cmd/tuios
+            tar czf "tuios-ghostty_${version}_Darwin_${arch}.tar.gz" tuios README.md LICENSE*
+            rm tuios
+          done
+          gh release upload "${GITHUB_REF_NAME}" tuios-ghostty_*.tar.gz --clobber

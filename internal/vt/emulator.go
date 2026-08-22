@@ -310,6 +310,13 @@ func (e *Emulator) Scrollback() *Scrollback {
 	return e.scrs[0].Scrollback()
 }
 
+// PushScrollbackLine appends a line to the main screen's scrollback. It exists
+// for snapshot restore, where history arrives as decoded lines rather than as
+// a byte stream.
+func (e *Emulator) PushScrollbackLine(line uv.Line) {
+	e.scrs[0].Scrollback().PushLine(line)
+}
+
 // ClearScrollback clears the scrollback buffer of the main screen.
 func (e *Emulator) ClearScrollback() {
 	e.scrs[0].ClearScrollback()
@@ -326,8 +333,25 @@ func (e *Emulator) SemanticMarkers() *SemanticMarkerList {
 }
 
 // extractCommandText extracts the command text between a B marker position
-// and a C marker position. Called at C-marker time before output overwrites the buffer.
+// and a C marker position, for OSC 133 command capture.
 func (e *Emulator) extractCommandText(bLine, bCol, cLine, _ int) string {
+	return extractCommandTextFrom(e, bLine, bCol, cLine)
+}
+
+// markerGridReader is the read surface extractCommandTextFrom needs. Both
+// emulator implementations satisfy it; the ghostty backend passes a wrapper
+// that reads without re-taking its lock.
+type markerGridReader interface {
+	Width() int
+	Height() int
+	ScrollbackLen() int
+	ScrollbackLine(index int) uv.Line
+	CellAt(x, y int) *uv.Cell
+}
+
+// extractCommandTextFrom extracts the command text between a B marker
+// position and a C marker position.
+func extractCommandTextFrom(e markerGridReader, bLine, bCol, cLine int) string {
 	sbLen := e.ScrollbackLen()
 	width := e.Width()
 	height := e.Height()

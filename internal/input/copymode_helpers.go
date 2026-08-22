@@ -99,7 +99,7 @@ func extractLineTextFromCells(cells []uv.Cell) string {
 }
 
 // extractScreenLineText builds text string from terminal screen line
-func extractScreenLineText(term *vt.Emulator, y int) string {
+func extractScreenLineText(term vt.Terminal, y int) string {
 	var result []rune
 	width := term.Width()
 	for x := range width {
@@ -121,7 +121,7 @@ func extractScreenLineText(term *vt.Emulator, y int) string {
 }
 
 // getScreenLineCells returns all cells for a screen line
-func getScreenLineCells(term *vt.Emulator, y int) []uv.Cell {
+func getScreenLineCells(term vt.Terminal, y int) []uv.Cell {
 	width := term.Width()
 	cells := make([]uv.Cell, width)
 

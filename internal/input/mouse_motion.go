@@ -19,7 +19,7 @@ import (
 //   - 1002 (button-event): only motion with a button held.
 //   - 1000/1001 (normal): none. Motion delivered to these apps comes back as
 //     phantom keypresses (issue #78).
-func guestWantsMotion(term *vt.Emulator, button tea.MouseButton) bool {
+func guestWantsMotion(term vt.Terminal, button tea.MouseButton) bool {
 	if term.HasAllMotionMode() {
 		return true
 	}

@@ -554,7 +554,7 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 
 // scrollbackSeam reports the oldest scrollback line the two sides disagree on,
 // as text, with the lines either side of it for context.
-func scrollbackSeam(st *session.TerminalState, term *vt.Emulator) string {
+func scrollbackSeam(st *session.TerminalState, term vt.Terminal) string {
 	daemon := func(i int) string { return stateRow(st.Scrollback[i]) }
 	client := func(i int) string { return strings.TrimRight(term.ScrollbackLine(i).String(), " ") }
 

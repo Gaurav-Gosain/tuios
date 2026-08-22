@@ -89,6 +89,104 @@ builds:
     flags:
       - -trimpath
 
+  # The ghostty builds link libghostty-vt (static, built by
+  # scripts/ghostty-lib.sh at a pinned commit) behind the ghostty build tag.
+  # One build per target because cgo needs a per-target compiler; zig is the
+  # cross C compiler for all of them. Pure-Go builds above stay the default
+  # and keep go install working with no toolchain.
+  - id: tuios-ghostty-linux-amd64
+    main: ./cmd/tuios
+    binary: tuios
+    tags:
+      - ghostty
+    env:
+      - CGO_ENABLED=1
+      - CC={{ .Env.PWD }}/scripts/zigcc/x86_64-linux-gnu
+      - PKG_CONFIG_PATH={{ .Env.PWD }}/.ghostty-vt/x86_64-linux-gnu/pkgconfig
+    goos:
+      - linux
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+    flags:
+      - -trimpath
+
+  - id: tuios-ghostty-linux-arm64
+    main: ./cmd/tuios
+    binary: tuios
+    tags:
+      - ghostty
+    env:
+      - CGO_ENABLED=1
+      - CC={{ .Env.PWD }}/scripts/zigcc/aarch64-linux-gnu
+      - PKG_CONFIG_PATH={{ .Env.PWD }}/.ghostty-vt/aarch64-linux-gnu/pkgconfig
+    goos:
+      - linux
+    goarch:
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+    flags:
+      - -trimpath
+
+  - id: tuios-ghostty-windows-amd64
+    main: ./cmd/tuios
+    binary: tuios
+    tags:
+      - ghostty
+    env:
+      - CGO_ENABLED=1
+      - CC={{ .Env.PWD }}/scripts/zigcc/x86_64-windows-gnu
+      - PKG_CONFIG_PATH={{ .Env.PWD }}/.ghostty-vt/x86_64-windows-gnu/pkgconfig
+    goos:
+      - windows
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+    flags:
+      - -trimpath
+
+  # The ghostty builds link libghostty-vt (static, built by
+  # scripts/ghostty-lib.sh at a pinned commit) behind the ghostty build tag.
+  # One build per target because cgo needs a per-target compiler; zig is the
+  # cross C compiler for all of them. Pure-Go builds above stay the default
+  # and keep go install working with no toolchain.
+  - id: tuios-ghostty-windows-arm64
+    main: ./cmd/tuios
+    binary: tuios
+    tags:
+      - ghostty
+    env:
+      - CGO_ENABLED=1
+      - CC={{ .Env.PWD }}/scripts/zigcc/aarch64-windows-gnu
+      - PKG_CONFIG_PATH={{ .Env.PWD }}/.ghostty-vt/aarch64-windows-gnu/pkgconfig
+    goos:
+      - windows
+    goarch:
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
+    flags:
+      - -trimpath
+
 archives:
   - id: tuios-archive
     name_template: >-
@@ -119,6 +217,23 @@ archives:
     files:
       - README.md
       - LICENSE*
+
+  - id: tuios-ghostty-archive
+    name_template: >-
+      {{ .ProjectName }}-ghostty_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    builds:
+      - tuios-ghostty-linux-amd64
+      - tuios-ghostty-linux-arm64
+      - tuios-ghostty-windows-amd64
+      - tuios-ghostty-windows-arm64
+    files:
+      - README.md
+      - LICENSE*
+
 
 checksum:
   name_template: "checksums.txt"

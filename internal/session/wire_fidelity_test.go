@@ -220,7 +220,7 @@ func TestWireFillsAClientOfADifferentSize(t *testing.T) {
 }
 
 // compareEmulators reports every way the two copies of a pane differ.
-func compareEmulators(t *testing.T, want, got *vt.Emulator) {
+func compareEmulators(t *testing.T, want, got vt.Terminal) {
 	t.Helper()
 
 	if got.IsAltScreen() != want.IsAltScreen() {
@@ -314,7 +314,7 @@ func cellSig(c *uv.Cell) string {
 		c.Link.URL, c.Link.Params)
 }
 
-func penSig(e *vt.Emulator) string {
+func penSig(e vt.Terminal) string {
 	pen, link := e.CursorPen()
 	return cellSig(&uv.Cell{Content: " ", Width: 1, Style: pen, Link: link})
 }

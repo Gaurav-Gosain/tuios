@@ -232,7 +232,7 @@ type PTY struct {
 
 	// Terminal emulator - maintains scrollback, screen state, cursor position
 	// This persists across client disconnect/reconnect
-	terminal *vt.Emulator
+	terminal vt.Terminal
 	// terminalMu guards the daemon-side VT emulator (p.terminal) and the
 	// p.width/p.height it is sized to. This is the daemon process; it is a
 	// different lock from app.OS.terminalMu and the two never coexist.
@@ -695,7 +695,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 
 	// Create VT emulator for persistent terminal state
 	// This maintains scrollback, screen content, cursor position across reconnects
-	terminal := vt.NewEmulator(width, height)
+	terminal := vt.New(width, height)
 	terminal.SetScrollbackMaxLines(10000) // Match default scrollback
 
 	// For a restored shell, seed the emulator with a one-line banner so the
@@ -1602,7 +1602,7 @@ func (p *PTY) GetTerminalState(maxScrollback, have int) *TerminalState {
 // have is how many scrollback rows the receiving emulator already holds; only
 // the rows past it are serialized, because only those can be used. See
 // GetTerminalState.
-func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback, have int) *TerminalState {
+func TerminalStateOf(t vt.Terminal, width, height, maxScrollback, have int) *TerminalState {
 	state := &TerminalState{
 		Width:         width,
 		Height:        height,
@@ -1700,7 +1700,7 @@ func TerminalStateOf(t *vt.Emulator, width, height, maxScrollback, have int) *Te
 //
 // The emulator may be fresh or may be one that survived a workspace switch and
 // already holds most of this, so every step is written to be idempotent.
-func ApplyTerminalState(t *vt.Emulator, state *TerminalState) {
+func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	if t == nil || state == nil {
 		return
 	}
@@ -1777,10 +1777,9 @@ func ApplyTerminalState(t *vt.Emulator, state *TerminalState) {
 	// sends a bounded window of its scrollback and a client keeps far more than
 	// that, so replacing the whole buffer would cut a long history down to the
 	// size of the window on every workspace switch.
-	sb := t.Scrollback()
-	if have := sb.Len(); have == 0 {
+	if have := t.ScrollbackLen(); have == 0 {
 		for _, row := range state.Scrollback {
-			sb.PushLine(stateToLine(t, row))
+			t.PushScrollbackLine(stateToLine(t, row))
 		}
 	} else if missing := state.ScrollbackLen - have; missing > 0 {
 		rows := state.Scrollback
@@ -1788,7 +1787,7 @@ func ApplyTerminalState(t *vt.Emulator, state *TerminalState) {
 			rows = rows[len(rows)-missing:]
 		}
 		for _, row := range rows {
-			sb.PushLine(stateToLine(t, row))
+			t.PushScrollbackLine(stateToLine(t, row))
 		}
 	}
 
@@ -1834,7 +1833,7 @@ func ApplyTerminalState(t *vt.Emulator, state *TerminalState) {
 }
 
 // stateToLine converts one serialized scrollback row to a line for t.
-func stateToLine(t *vt.Emulator, row []CellState) uv.Line {
+func stateToLine(t vt.Terminal, row []CellState) uv.Line {
 	line := make(uv.Line, len(row))
 	for x, cs := range row {
 		line[x] = *stateToCell(t, cs)
@@ -1962,7 +1961,7 @@ func styleToWire(s uv.Style, link uv.Link) StyleState {
 }
 
 // styleFromWire is styleToWire read back into the emulator that will hold it.
-func styleFromWire(t *vt.Emulator, ss StyleState) (uv.Style, uv.Link) {
+func styleFromWire(t vt.Terminal, ss StyleState) (uv.Style, uv.Link) {
 	return uv.Style{
 			Fg:             colorFromWire(t, ss.FgColor),
 			Bg:             colorFromWire(t, ss.BgColor),
@@ -2007,7 +2006,7 @@ func colorToWire(c color.Color) string {
 // colorFromWire is colorToWire read back. Palette entries are resolved through
 // the emulator that will hold them, so a restored cell is colored by the same
 // rule as a cell the guest writes live into that emulator.
-func colorFromWire(t *vt.Emulator, s string) color.Color {
+func colorFromWire(t vt.Terminal, s string) color.Color {
 	if s == "" {
 		return nil
 	}
@@ -2045,7 +2044,7 @@ func CellStateOf(cell *uv.Cell) CellState {
 }
 
 // stateToCell converts a CellState back to a VT cell for restoration into t.
-func stateToCell(t *vt.Emulator, cs CellState) *uv.Cell {
+func stateToCell(t vt.Terminal, cs CellState) *uv.Cell {
 	style, link := styleFromWire(t, cs.StyleState)
 	return &uv.Cell{Content: cs.Content, Width: cs.Width, Style: style, Link: link}
 }

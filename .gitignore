@@ -32,3 +32,4 @@ zz_*_test.go
 # Browser test dependencies and output, installed per machine by npm.
 /clienttests/node_modules
 /clienttests/test-results
+.ghostty-vt/
