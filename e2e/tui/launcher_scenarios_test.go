@@ -538,3 +538,69 @@ func TestLauncherIconsWithABusyNeighbour(t *testing.T) {
 		f.requireClean(t, fmt.Sprintf("close number %d over a busy neighbour", i+1))
 	}
 }
+
+// TestLauncherLeavesTheRightModeBehind pins the half of the two verbs that is
+// not about what runs.
+//
+// Tab hands the pane over ready to be typed into, because the user is about to
+// keep typing; Enter does not, because a program was started rather than a
+// command line begun. Getting this the wrong way round sends what the user
+// types next to the window manager instead of the shell, which is the "typed
+// into the wrong place" failure with no error to show for it.
+//
+// Both are asserted by what the next keystrokes do rather than by the mode
+// banner. The banner is a notification raised by the key that switches mode, so
+// it says nothing about a switch made on the launcher's behalf, and waiting for
+// it fails against a build where the mode is perfectly correct.
+func TestLauncherLeavesTheRightModeBehind(t *testing.T) {
+	dir := writeArgProbe(t)
+	term, _ := start(t, startOpts{
+		args: []string{"--standalone"},
+		env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+	})
+	waitBoot(t, term)
+
+	// Tab, then keep typing: the argument has to reach the shell's line editor
+	// and end up on the command that runs. This is the reason the key exists.
+	queryProbe(t, term)
+	if err := term.SendKeys(tuitest.Tab); err != nil {
+		t.Fatalf("tab: %v", err)
+	}
+	if err := term.WaitForText("$", shellTimeout); err != nil {
+		t.Fatalf("the pane's shell never started: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("EXTRA"); err != nil {
+		t.Fatalf("type an argument: %v", err)
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("run it: %v", err)
+	}
+	if err := term.WaitForText("ARG:EXTRA", shellTimeout); err != nil {
+		t.Fatalf("the argument typed after tab never reached the command: %v\n%s",
+			err, term.Snapshot())
+	}
+
+	// Enter is the other verb. It starts a program rather than a command line,
+	// so the client stays where the window manager can hear it: 'n' has to open
+	// a window rather than be typed at a shell.
+	leaveTerminalMode(t, term)
+	before := settledWindowCount(t, term)
+	queryProbe(t, term)
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("enter: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == before+1
+	}, shellTimeout); err != nil {
+		t.Fatalf("enter never opened the program's pane: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("n"); err != nil {
+		t.Fatalf("send 'n': %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == before+2
+	}, uiTimeout); err != nil {
+		t.Fatalf("enter left the client in terminal mode, so a window-manager key "+
+			"was typed at a shell instead: %v\n%s", err, term.Snapshot())
+	}
+}

@@ -184,3 +184,16 @@ func plantExitingApp(t *testing.T, base string) {
 	}
 	writeIconPNG(t, filepath.Join(data, "icons", "hicolor", "apps", "zzquit.png"), 200)
 }
+
+// writeArgProbe puts an executable on $PATH that reports its first argument, so
+// a test can prove that what was typed after the launcher closed reached the
+// command rather than merely appearing on screen.
+func writeArgProbe(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	script := "#!/bin/sh\necho ARG:$1\nexec sleep 30\n"
+	if err := os.WriteFile(filepath.Join(dir, probeName), []byte(script), 0o755); err != nil {
+		t.Fatalf("arg probe: %v", err)
+	}
+	return dir
+}
