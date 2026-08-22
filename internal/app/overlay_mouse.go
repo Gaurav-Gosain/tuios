@@ -354,7 +354,7 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		m.sessionSwitcherActivate(row.Idx)
 	case "workspace":
 		m.WorkspaceSwitcherSelected = row.Idx
-		m.workspaceSwitcherActivate(row.Idx)
+		m.WorkspaceSwitcherActivate(row.Idx)
 	case "aggregate":
 		// The picker used to return no hit rows at all, so the one overlay whose
 		// entire purpose is choosing a window was the one that could not be

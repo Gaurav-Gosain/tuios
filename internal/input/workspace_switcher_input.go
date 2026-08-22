@@ -18,10 +18,8 @@ func handleWorkspaceSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.
 		return o, nil
 
 	case "enter":
-		if target, ok := o.WorkspaceSwitcherTarget(o.WorkspaceSwitcherSelected); ok && !target.IsCurrent {
-			o.SwitchToWorkspace(target.Number)
-		}
-		o.CloseWorkspaceSwitcher()
+		// Same entry point as the mouse click, so the two cannot drift.
+		o.WorkspaceSwitcherActivate(o.WorkspaceSwitcherSelected)
 		return o, nil
 
 	case "up", "ctrl+p":
