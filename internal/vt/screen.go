@@ -635,7 +635,18 @@ func (s *Screen) blankWideRunesCutByMargins() {
 		}
 		for y := s.scroll.Min.Y; y < s.scroll.Max.Y; y++ {
 			if lead := s.buf.CellAt(x-1, y); lead != nil && lead.Width > 1 {
+				// Blanking the lead empties its whole old span, and the seam
+				// column may hold a freshly shifted cell rather than this
+				// lead's continuation; put such a cell back afterwards.
+				var keep *uv.Cell
+				if c := s.buf.CellAt(x, y); c != nil && (c.Width != 0 || c.Content != "") {
+					saved := *c
+					keep = &saved
+				}
 				s.buf.SetCell(x-1, y, nil)
+				if keep != nil {
+					s.buf.SetCell(x, y, keep)
+				}
 			}
 			if cont := s.buf.CellAt(x, y); cont != nil && cont.Width == 0 && cont.Content == "" {
 				s.buf.SetCell(x, y, nil)
