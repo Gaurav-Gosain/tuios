@@ -12,38 +12,41 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// dividerColumn returns the screen column holding the interior vertical divider
-// between two side-by-side panes: the column drawn with a vertical line glyph on
-// more rows than any other interior column.
-func dividerColumn(s tuitest.Screen) int {
-	lines := strings.Split(s.Text(), "\n")
-	if len(lines) == 0 {
-		return -1
-	}
+// borderColumns returns, in order, the screen columns tuios draws a full-height
+// vertical rule in: a pane's own border under separate borders, the divider
+// between two panes under shared borders. The height threshold keeps a stray
+// bar in a pane's text or in the dock from counting as one.
+func borderColumns(s tuitest.Screen) []int {
 	counts := map[int]int{}
-	for _, line := range lines {
+	widest := 0
+	for _, line := range strings.Split(s.Text(), "\n") {
 		col := 0
 		for _, r := range line {
-			if r == '│' || r == '┃' || r == '║' || r == '|' {
+			if r == '│' || r == '┃' || r == '║' {
 				counts[col]++
 			}
 			col++
 		}
+		widest = max(widest, col)
 	}
-	best, bestCol := 0, -1
-	for col, n := range counts {
-		// Skip the screen's own outer edges; only an interior divider matters.
-		if col <= 1 {
-			continue
-		}
-		if n > best {
-			best, bestCol = n, col
+	var cols []int
+	for col := range widest {
+		if counts[col] >= 10 {
+			cols = append(cols, col)
 		}
 	}
-	if best < 5 {
-		return -1
+	return cols
+}
+
+// borderRightOf returns the first border column to the right of col, or -1 when
+// the pane's right-hand boundary is the screen edge rather than a drawn rule.
+func borderRightOf(cols []int, col int) int {
+	for _, c := range cols {
+		if c > col {
+			return c
+		}
 	}
-	return bestCol
+	return -1
 }
 
 // placedRect is one a=p placement reduced to where it starts and how wide it is.
@@ -130,26 +133,27 @@ func TestKittyImageStopsAtPaneBorder(t *testing.T) {
 			}
 
 			got := lastPlacement(t, stream.bytes())
-			divider := dividerColumn(term.Screen())
-			t.Logf("pane=%dx%d placement col=%d row=%d c=%d rightEdge=%d divider=%d",
-				cols, rows, got.col, got.row, got.cols, got.col+got.cols-1, divider)
+			bars := borderColumns(term.Screen())
+			t.Logf("pane=%dx%d placement col=%d row=%d c=%d rightEdge=%d borders=%v",
+				cols, rows, got.col, got.row, got.cols, got.col+got.cols-1, bars)
 
 			if got.cols != cols {
 				t.Errorf("image drawn over %d columns in a pane the guest was told was %d wide "+
 					"(placed at col %d)", got.cols, cols, got.col)
 			}
-			// A full-pane image ends where the pane does: on the column tuios
-			// draws the divider in for the pane on the divider's left, and on
-			// the screen edge for the pane on its right. Landing anywhere else
-			// is either a gap the guest rendered pixels for or a column of the
-			// neighbour painted over.
-			wantEnd := 120
-			if divider >= 0 && got.col < divider {
-				wantEnd = divider
+			// A full-pane image ends where its pane does: on the first column
+			// tuios draws a rule in to its right, or on the screen edge when the
+			// pane is the last one. Landing short leaves a strip the guest
+			// rendered pixels for; landing beyond it paints over the rule and
+			// into the neighbour.
+			wantEnd := borderRightOf(bars, got.col)
+			if wantEnd < 0 {
+				wantEnd = 120
 			}
 			if got.col+got.cols != wantEnd {
-				t.Errorf("image spans columns %d..%d; its right edge should be the last column "+
-					"before %d (divider at %d)", got.col, got.col+got.cols-1, wantEnd, divider)
+				t.Errorf("image spans columns %d..%d; its right edge should be the column "+
+					"before %d, the pane's right-hand boundary (rules at %v)",
+					got.col, got.col+got.cols-1, wantEnd, bars)
 			}
 		})
 	}
