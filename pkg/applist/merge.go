@@ -70,10 +70,13 @@ func Merge(path []Entry, desktop []DesktopEntry) []Entry {
 			continue
 		}
 		seen[e.Name] = struct{}{}
-		out = append(out, e)
 		if name, sup := supersedes(d, byName); sup {
 			gone[name] = struct{}{}
+			// The row that replaces a program answers to that program's name,
+			// because that is the name the user has always typed.
+			e.Binary = name
 		}
+		out = append(out, e)
 	}
 
 	for _, p := range path {
@@ -143,6 +146,23 @@ func desktopName(d DesktopEntry) string {
 	return name
 }
 
+// genericLauncher names the programs a desktop entry runs something through
+// rather than is. Each is a common Exec prefix and each is a program a user
+// would be annoyed to lose from a list that claims to hold what a shell can
+// run, which is what superseding on one costs.
+//
+// The set is written out by hand because there is no property of a program that
+// says "I am a wrapper". It does not have to be complete: a name missing from
+// it costs one wrong supersession, which is what the list looked like before it
+// existed, rather than anything worse.
+var genericLauncher = map[string]bool{
+	"sh": true, "bash": true, "zsh": true, "fish": true, "dash": true,
+	"env": true, "xdg-open": true, "gio": true, "kioclient": true,
+	"flatpak": true, "snap": true, "appimagelauncher": true,
+	"sudo": true, "pkexec": true, "gtk-launch": true, "dbus-send": true,
+	"dbus-launch": true, "systemd-run": true, "nohup": true, "setsid": true,
+}
+
 // supersedes reports which $PATH name d takes the place of, if any.
 //
 // The match is on the basename of the program d actually runs, because that is
@@ -162,6 +182,15 @@ func supersedes(d DesktopEntry, byName map[string]Entry) (string, bool) {
 	}
 	argv0 := d.Argv[0]
 	name := filepath.Base(argv0)
+	if genericLauncher[name] {
+		// The entry runs through a wrapper rather than being that wrapper. An
+		// Exec of "sh -c ..." does not make the entry a replacement for /bin/sh,
+		// and "xdg-open heroic://..." does not make a game the replacement for
+		// xdg-open. Superseding here deletes a genuinely useful program from the
+		// list and hands its name to something unrelated, which is exactly what
+		// happened to sh and xdg-open on a real desktop.
+		return "", false
+	}
 	p, ok := byName[name]
 	if !ok {
 		return "", false
