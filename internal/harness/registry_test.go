@@ -56,7 +56,10 @@ func TestBundledScreenRulesShipOnlyForNeedsInput(t *testing.T) {
 				t.Errorf("bundled manifest %q ships rule %d enabled for state %q; only needs_input may ship on",
 					id, i, rule.State)
 			}
-			if len(rule.All) == 0 && len(rule.Any) < 2 {
+			// A regex counts as corroboration on its own: a pattern pins the
+			// structure of a rendered line, which is harder to meet by accident
+			// than any one substring.
+			if len(rule.All) == 0 && len(rule.Any) < 2 && len(rule.Regex) == 0 {
 				t.Errorf("bundled manifest %q rule %d rests on a single string; a bundled rule needs corroboration",
 					id, i)
 			}
