@@ -289,6 +289,11 @@ script that kills a session does not leave a user staring at a dead UI. The
 
 ## Verbs
 
+This catalog is deliberately partial: it documents the verbs whose semantics
+need prose. The daemon registers 35 verbs, and `tuios list-verbs` is the
+authoritative, always-current list, generated from the same tables the request
+validator uses.
+
 ### hello
 
 Handshake: report the protocol range this daemon serves. Params: `client`,

@@ -19,7 +19,8 @@ Built on the Charm stack (Bubble Tea v2, Lipgloss v2), TUIOS features event-driv
 Full documentation is available at **[tuios-docs](https://tuios.gaurav.zip)** (hosted) or in the [`docs/`](./docs/) folder.
 
 ### Quick Links
-- **[Getting Started](docs/KEYBINDINGS.md)** - Keybindings and quick reference
+- **[Getting Started](https://tuios.gaurav.zip/docs/getting-started)** - Install and first session
+- **[Keybindings](docs/KEYBINDINGS.md)** - Default keys and how to rebind them
 - **[BSP Tiling](docs/BSP_TILING.md)** - Tiling with preselection and split control
 - **[Layout Modes](docs/LAYOUT_MODES.md)** - BSP, master-stack and scrolling layouts, aggregate view, multifocus
 - **[Configuration](docs/CONFIGURATION.md)** - Customize keybindings, themes, and behavior
@@ -28,7 +29,6 @@ Full documentation is available at **[tuios-docs](https://tuios.gaurav.zip)** (h
 - **[CLI Reference](docs/CLI_REFERENCE.md)** - All command-line options
 - **[Tape Scripting](docs/TAPE_SCRIPTING.md)** - Automate workflows
 - **[Sessions](docs/SESSIONS.md)** - Daemon mode, attach/detach, and what survives
-- **[Multi-Client](docs/MULTI_CLIENT.md)** - Several clients on one session
 - **[Control Protocol](docs/protocol.md)** - JSON verb protocol for driving the daemon
 - **[Architecture](docs/ARCHITECTURE.md)** - Technical design
 
@@ -39,7 +39,6 @@ Full documentation is available at **[tuios-docs](https://tuios.gaurav.zip)** (h
 - [Installation](#installation)
 - [Features](#features)
 - [Quick Start](#quick-start)
-- [What's New in v0.7.0](#whats-new-in-v070)
 - [Architecture](#architecture)
 - [Performance](#performance)
 - [Development](#development)
@@ -54,6 +53,7 @@ Full documentation is available at **[tuios-docs](https://tuios.gaurav.zip)** (h
 
 **Homebrew (macOS/Linux):**
 ```bash
+brew tap Gaurav-Gosain/tap
 brew install tuios
 ```
 
@@ -107,7 +107,7 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 
 ### Scrollback & Copy Mode
 - **Vim-Style Copy Mode** - Navigate 10,000-line scrollback with hjkl, search with `/`, yank with `y`
-- **Mouse Wheel Scrollback** - Scroll wheel enters copy mode directly (no alt-screen)
+- **Mouse Wheel Scrollback** - The wheel scrolls history with no mode entered; typing or reaching the bottom returns to live output
 - **Interactive Scrollbar** - Click or drag the right border to jump to scroll position
 - **Selection Auto-Scroll** - Drag selection above/below pane to scroll
 - **Scrollback Browser** - OSC 133-aware command/output block navigation
@@ -121,7 +121,7 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 - **Shared Memory Support** - `t=s` passthrough for mpv `--vo-kitty-use-shm`
 - **Terminal Queries** - OSC 4 palette, OSC 10-12 colors, CSI 14/16/18t sizing, DA1/DA2
 - **Experimental** - Kitty text sizing protocol (OSC 66) - basic passthrough works but has known issues with scrollback and window repositioning
-- **Not Yet Supported** - Kitty animation protocol (a=f, a=a, a=c)
+- **Kitty Animation Protocol** - Frame transmission, composition, and control (a=f, a=a, a=c), with damage-patch streaming for animated guests
 
 ### Session Management
 - **Daemon Mode** - Persistent sessions with detach/reattach (like tmux)
@@ -133,13 +133,15 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 ### Automation
 - **Tape Scripting** - DSL for recording and replaying terminal workflows
 - **Tape Recording** - Record live sessions (<kbd>Prefix</kbd>+<kbd>T</kbd> <kbd>r</kbd>)
-- **Headless Execution** - Run scripts in CI/CD with `tuios tape run`
+- **Headless Execution** - `tuios tape exec` runs a tape against a running daemon session
 - **Layout Export** - Convert layouts to tape scripts for sharing
 
 ### Discovery & Navigation
-- **Which-Key Popup** - Hold the prefix key to see the chords available ([docs](docs/CONFIGURATION.md#whichkey_enabled))
+- **Which-Key Popup** - Hold the prefix key to see the chords available ([docs](docs/CONFIGURATION.md))
+- **App Launcher** - <kbd>Alt</kbd>+<kbd>Space</kbd> runs anything on `$PATH`, frecency-ranked, with desktop-entry names and icons
+- **Keybind Manager** - <kbd>Prefix</kbd>+<kbd>k</kbd> in-app, or `tuios keybinds doctor` and `tuios keybinds explain <key>` from the shell
 - **Aggregate View** - Searchable list of every window across every workspace, with previews ([docs](docs/LAYOUT_MODES.md#aggregate-view))
-- **Multifocus** - Broadcast typing to several panes at once, `Ctrl`+click to select ([docs](docs/LAYOUT_MODES.md#multifocus))
+- **Multifocus** - Broadcast typing to several panes at once, `Ctrl`+`Shift`+click to select ([docs](docs/LAYOUT_MODES.md#multifocus))
 
 ### More
 - **Showkeys Overlay** - Display pressed keys for presentations
@@ -207,51 +209,6 @@ tuios keybinds list          # View all keybindings
 
 See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show_clock`, `show_cpu`, `show_ram`, `shared_borders`, `window_button_style`, `window_button_position`, custom themes, and keybinding customization.
 
-## What's New in v0.7.0
-
-### Architecture Overhaul
-- **Event-driven rendering** - PTY output signals trigger renders instead of fixed-rate ticking. Near-zero CPU at idle.
-- **Graphics batched with render cycle** - Kitty commands flush after text content, preventing tearing.
-
-### Performance
-- **Kitty graphics flicker elimination** - Reuses image IDs so frames replace in-place without delete+re-place.
-- **Raw passthrough** - File-based kitty transmissions forward the path directly (no read+encode+chunk).
-- **Fast render path** - Unfocused panes use the emulator's built-in `Render()` bypassing cell-by-cell iteration.
-- **Hot path cleanup** - Removed `defer/recover` from style comparison (~20k calls/frame), fixed string builder leak.
-- **Visibility gating** - Minimized/off-workspace panes skip rendering entirely.
-- **Synchronized output** - Mode 2026 wrapping for all graphics output.
-
-### New Features
-- **Command palette** (<kbd>Ctrl</kbd>+<kbd>P</kbd>) - Fuzzy search across 30+ actions with ranked results.
-- **Pane zoom** (<kbd>z</kbd> in WM mode or <kbd>Prefix</kbd>+<kbd>z</kbd>) - Fullscreen toggle for the focused pane. Shared borders hidden when zoomed, dockbar shows Z indicator.
-- **Session switcher** (<kbd>Prefix</kbd>+<kbd>S</kbd>) - Browse and switch daemon sessions in-app.
-- **Layout templates** - Save/load window arrangements with CWD, startup commands, BSP tree, proportional scaling.
-- **Shared borders** (`--shared-borders`) - tmux-style thin separator lines between tiled panes.
-- **Smart auto-split** - Aspect-ratio-aware BSP splitting (opt-in via command palette).
-- **Interactive scrollbar** - Click/drag the right border to scroll. One box-drawing stroke at two weights, drawn in the pane's own ink dimmed to a measured contrast, so it recedes until it is looked for. Glyphs and tint are configurable ([`[appearance.scrollbar]`](docs/CONFIGURATION.md#the-appearancescrollbar-table)).
-- **Mouse wheel scrollback** - The wheel scrolls, with no mode entered and nothing announced. Typing or reaching the bottom returns to live output.
-- **Selection auto-scroll** - Drag selection above/below pane to scroll during visual mode.
-- **Dock stats opt-in** - Clock, CPU, RAM hidden by default (`--show-clock`, `--show-cpu`, `--show-ram`).
-
-### Terminal Protocol Support
-- **Kitty keyboard protocol** - Full CSI u support: push (`CSI > u`), pop (`CSI < u`), query (`CSI ? u`), set (`CSI = u`). Keys encoded in CSI u format when the protocol is active.
-- **Mode 2026 (synchronized output)** and **mode 2027 (unicode core)** tracked in the VT emulator.
-- **OSC 4** palette color query/set, **OSC 52** clipboard operations.
-- **DA1** now advertises sixel capability (attribute 4).
-- **Sixel passthrough** re-enabled with raw data passthrough and active area clearing on hide (experimental).
-
-### Bug Fixes
-- Images follow windows during drag and reposition on resize.
-- `ctrl+d` window close no longer requires double-press (race condition fix).
-- Visual line mode (`Shift+V`) highlights immediately.
-- Off-screen windows don't corrupt ANSI rendering.
-- Background windows stay fresh (no stale content on focus switch).
-- Tiling toggle immediately shows/hides borders.
-- Sixel images hidden during overlays and copy mode scrollback.
-
-### Dependencies
-- Bubble Tea v2.0.2, Lipgloss v2.0.2, Wish v2.0.0, Log v2.0.0 (all stable releases).
-
 ## Architecture
 
 TUIOS follows the Model-View-Update pattern on Bubble Tea v2. For details, see [Architecture Guide](docs/ARCHITECTURE.md).
@@ -286,6 +243,11 @@ cd tuios
 go build -o tuios ./cmd/tuios
 ./tuios
 ```
+
+To install a local build on your PATH instead, `./scripts/install.sh` builds
+and installs into `~/.local/bin`. It defaults to the
+[ghostty emulator backend](./docs/ghostty-vt.md); `./scripts/install.sh pure`
+installs the pure Go one, and `tuios --version` says which is installed.
 
 ```bash
 go test ./...              # Run tests

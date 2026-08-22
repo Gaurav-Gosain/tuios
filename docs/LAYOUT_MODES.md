@@ -135,7 +135,7 @@ hosts.
 
 | Input | Action |
 |---|---|
-| `Ctrl+Click` on a window | Add or remove that window from the multifocus set |
+| `Ctrl+Shift+Click` on a window | Add or remove that window from the multifocus set |
 | Palette: "Toggle Multifocus" | Add or remove the currently focused window |
 | Palette: "Clear Multifocus" | Empty the set |
 
@@ -159,7 +159,7 @@ Limitations:
   swapping panes around keeps the same windows selected. Closing a window
   removes it from the set.
 - **No key.** There is no default keybinding for either palette command; use
-  `Ctrl+Click` or the palette.
+  `Ctrl+Shift+Click` or the palette.
 
 ## Related Documentation
 

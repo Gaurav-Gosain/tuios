@@ -80,16 +80,21 @@ tuios/
 │   │   ├── handler.go      # Main input coordinator
 │   │   ├── keyboard.go     # Key event dispatch
 │   │   ├── mouse.go        # Mouse interactions
-│   │   ├── actions.go      # 40+ action handlers
+│   │   ├── actions.go      # Action handlers (75 here, 66 more in prefix_actions.go)
 │   │   └── copymode_*.go   # Vim-style copy mode (50+ motions)
 │   ├── terminal/           # Terminal window management
 │   │   ├── window.go       # Window struct, PTY lifecycle
 │   │   └── pty_*.go        # Platform-specific PTY (unix/windows)
-│   ├── vt/                 # Terminal emulation (ANSI/VT100)
+│   ├── vt/                 # Terminal emulation: pure Go, plus libghostty-vt behind -tags ghostty
 │   │   ├── emulator.go     # Parser state machine
 │   │   ├── screen.go       # Screen buffer management
-│   │   ├── csi_*.go        # CSI sequence handlers
 │   │   └── scrollback.go   # 10,000 line history
+│   ├── session/            # The daemon: sessions, PTYs, wire protocol, JSON verbs
+│   ├── harness/            # Agent harness manifests and detection
+│   ├── hooks/              # Shell hooks on window/session/agent events
+│   ├── scrollback/         # OSC 133 scrollback browser
+│   ├── overlay/            # Panel and dialog primitives for chrome
+│   ├── sessiontree/        # Sidebar session tree model
 │   ├── tape/               # Tape scripting automation
 │   │   ├── lexer.go        # Tokenizer
 │   │   ├── parser.go       # AST generation
@@ -100,6 +105,8 @@ tuios/
 │   ├── layout/             # Window tiling algorithms
 │   ├── pool/               # Memory pooling
 │   └── ui/                 # Animation system
+│                           # (plus sound, transcript, guestenv, perf, fuzz, testutil)
+├── pkg/                    # Embeddable facade (tuios), applist, fuzzy
 ├── docs/                   # Documentation
 │   ├── ARCHITECTURE.md     # Technical architecture diagrams
 │   ├── KEYBINDINGS.md      # Complete keybinding reference
@@ -131,9 +138,12 @@ Input routing: `internal/input/handler.go` → mode-specific handlers
 Leader key (`Ctrl+B` by default) activates prefix mode with sub-menus:
 - `Ctrl+B` then `w` → Workspace prefix
 - `Ctrl+B` then `m` → Minimize prefix
-- `Ctrl+B` then `t` → Tiling prefix
+- `Ctrl+B` then `t` → Window prefix
+- `Ctrl+B` then `L` → Layout prefix
 - `Ctrl+B` then `D` → Debug prefix
 - `Ctrl+B` then `T` → Tape manager prefix
+
+Tiling itself toggles on `Ctrl+B` `Space` (or bare `t` in window-management mode).
 
 ### Window Lifecycle
 
@@ -151,6 +161,8 @@ Leader key (`Ctrl+B` by default) activates prefix mode with sub-menus:
 - **Ultraviolet** (`github.com/charmbracelet/ultraviolet`) - Terminal emulation base
 - **Cobra** (`github.com/spf13/cobra`) - CLI commands
 - **xpty** (`github.com/charmbracelet/x/xpty`) - Cross-platform PTY
+- **libghostty-vt** (`go.mitchellh.com/libghostty`, behind `-tags ghostty`) - Alternative VT emulation backend; `scripts/install.sh` builds it (see `docs/ghostty-vt.md`)
+- **sip** (`github.com/Gaurav-Gosain/sip`) - WebGL terminal serving for `tuios-web`
 
 > **Note:** As of December 2025, the Charm stack packages have migrated from `github.com/charmbracelet/*` to `charm.land/*` module paths.
 
@@ -295,7 +307,7 @@ go run ./cmd/tuios tape play examples/demo.tape
 - Style cache in `internal/app/stylecache.go` - check hit rates with `Ctrl+B, D, c`
 - Object pools in `internal/pool/pool.go` reduce GC pressure
 - Viewport culling skips off-screen windows
-- Adaptive refresh: 60Hz focused, 30Hz background
+- Rendering is event-driven: idle sessions schedule no timer renders (see `docs/perf.md` for the measured baselines)
 
 ### Platform Differences
 
@@ -355,5 +367,7 @@ Releases are automated via GitHub Actions with GoReleaser:
 - **Contributing**: `docs/CONTRIBUTING.md` - Contribution guidelines
 - **Tape Scripting**: `docs/TAPE_SCRIPTING.md` - Automation script syntax
 - **Web Terminal**: `docs/WEB.md` - Web terminal documentation (tuios-web binary)
-- **Multi-Client**: `docs/MULTI_CLIENT.md` - Multi-client session guide
-- **Sip Library**: `docs/SIP_LIBRARY.md` - Future library for serving Bubble Tea apps as web apps
+- **VT Backends**: `docs/ghostty-vt.md` - The pure Go and libghostty-vt emulators, and how to build each
+- **Rehydration**: `docs/REHYDRATION.md` - The snapshot-vs-stream contract for pane content on attach
+- **Performance**: `docs/perf.md` - Measured baselines and the "measured and not changed" ledger
+- **Sip**: https://github.com/Gaurav-Gosain/sip - the library serving Bubble Tea apps as web apps (used by `cmd/tuios-web`)
