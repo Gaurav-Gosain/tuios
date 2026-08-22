@@ -548,7 +548,12 @@ var modes = []struct {
 	{"1048", "save and restore the cursor"},
 	{"1049", "alternate screen with cursor save"},
 	{"2004", "bracketed paste"},
+	{"1004", "focus reporting"},
 	{"2026", "synchronised output"},
+	// Grapheme clustering changes how wide a cluster is, so an emulator that
+	// honours it and one that does not lay the same text out differently. The
+	// ghostty differential harness turned that into its loudest finding.
+	{"2027", "grapheme clustering"},
 	{"2048", "in-band resize reports"},
 	{"9999", "a private mode nobody defines"},
 }
