@@ -47,6 +47,7 @@ a working negative control look like a broken one for half an hour.
 | Clipboard: every mouse release copies, so a bare single click clobbers the clipboard | n/a, injected | `deliberate := moved \|\| window.ClickCount >= 2` → `deliberate := true` in `internal/input/mouse_select.go` | `TestDoubleClickCopiesAWordAndTripleClickTheLine` ("the gesture wrote the clipboard more times than it should: got [\"b\"], want []") | **caught, and invisible before this change** |
 | Drag state never cleared on release, so one click freezes every pane forever | n/a, injected | drop `o.Dragging = false` from the copy-mode branch of `handleMouseRelease` | `TestClickInPaneDoesNotFreezeOutput` | **caught, and invisible before this change** |
 | Agent-state feature absent (no verb, no indicator) | whole feature | build `origin/main` and point `TUIOS_E2E_BIN` at it | `TestAgentStateIndicatorRenders` (fails at the set step: `Unknown command "set-agent-state"`) | **caught** |
+| Pane body one column wider than the renderer vouches for, with the wrap skipped | n/a, injected | append a space to every row of the cell loop's output in `internal/app/render_terminal.go` while still reporting `maxX` | `TestWideRunesKeepThePaneRectangleOnScreen` ("pane has no right border glyph beside its content at column 119, its body is not 78 columns wide"), `TestSkippingTheWrapDrawsTheSameScreenAsWrapping` | **caught** |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 
