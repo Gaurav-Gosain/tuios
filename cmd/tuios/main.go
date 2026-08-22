@@ -1321,6 +1321,38 @@ a restart.`,
 	listThemesCmd.Flags().BoolVar(&listThemesJSON, "json", false, "Output as JSON")
 	_ = listThemesCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var importThemeName string
+	var importThemeJSON bool
+	importThemeCmd := &cobra.Command{
+		Use:   "import-theme <file>",
+		Short: "Convert a terminal colour scheme into a tuios theme",
+		Long: `Read a kitty, ghostty, alacritty or wezterm colour scheme and write it into
+the tuios themes directory as a theme you can select.
+
+All four formats carry the same twenty colours in different punctuation, and the
+format is read from the file's content rather than its name. A scheme that sets
+only some of the twenty imports as far as it goes; the rest fall back to the
+xterm defaults.
+
+The theme is registered as it is written, so the name it prints can be selected
+straight away without a restart.`,
+		Example: `  # A kitty theme
+  tuios import-theme ~/.config/kitty/current-theme.conf
+
+  # Name it something other than the file
+  tuios import-theme ~/.config/ghostty/config --name mine
+
+  # Import it and put it on
+  tuios import-theme ~/gruvbox.toml --name gruvbox
+  tuios set-config appearance.theme gruvbox`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runImportTheme(args[0], importThemeName, importThemeJSON)
+		},
+	}
+	importThemeCmd.Flags().StringVar(&importThemeName, "name", "", "Theme id to write it under (default: the file's name)")
+	importThemeCmd.Flags().BoolVar(&importThemeJSON, "json", false, "Output as JSON")
+
 	var waitForSession string
 	var waitForWindow string
 	var waitForPattern string
@@ -1719,7 +1751,7 @@ Name a verb to describe only that verb.`,
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(splitWindowCmd, focusWindowCmd, moveWindowCmd, setWindowCmd)
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
-	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd)
+	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, importThemeCmd)
 
 	return rootCmd
 }

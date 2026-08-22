@@ -6,7 +6,60 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
+
+// runImportTheme converts a terminal's colour scheme into a tuios theme.
+//
+// It runs in this process rather than over the socket because the file it reads
+// is the caller's, at the caller's path, and a daemon on the other end of a
+// socket has no business opening it. What it writes lands in the themes
+// directory, which the daemon re-reads on demand, so the imported theme is
+// selectable straight afterwards without a restart.
+func runImportTheme(path, id string, jsonOutput bool) error {
+	t, format, err := theme.Import(path, id)
+	if err != nil {
+		return err
+	}
+	written, err := theme.WriteTheme(t)
+	if err != nil {
+		return err
+	}
+	pal, _ := theme.Describe(t.ID)
+
+	if jsonOutput {
+		out, err := json.MarshalIndent(map[string]any{
+			"id":      t.ID,
+			"format":  string(format),
+			"file":    written,
+			"palette": pal,
+		}, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(out))
+		return nil
+	}
+
+	fmt.Printf("read %s as a %s colour scheme\nwrote %s\n\n", path, format, written)
+	printThemePalette(os.Stdout, themePalette{
+		ID: pal.ID, DisplayName: pal.DisplayName, Dark: pal.Dark, Bg: pal.Bg,
+		Swatches: toCLISwatches(pal.Swatches), Illegible: pal.Illegible,
+	})
+	fmt.Printf("\nSelect it with: tuios set-config appearance.theme %s\n", t.ID)
+	return nil
+}
+
+// toCLISwatches converts the theme package's rows into the shape the printer
+// shares with the socket path, which decodes them from JSON.
+func toCLISwatches(in []theme.Swatch) []themeSwatch {
+	out := make([]themeSwatch, len(in))
+	for i, s := range in {
+		out[i] = themeSwatch{Name: s.Name, Hex: s.Hex, Ratio: s.Ratio, Floor: s.Floor, Passes: s.Passes}
+	}
+	return out
+}
 
 // themeSwatch is one measured colour of a theme as list-themes reports it.
 type themeSwatch struct {
