@@ -10,20 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
-// CreateMinimizeAnimation creates a minimize animation for the window at index i
-func (m *OS) CreateMinimizeAnimation(i int) *ui.Animation {
-	if i < 0 || i >= len(m.Windows) {
-		return nil
-	}
-
-	window := m.Windows[i]
-
-	// Calculate dock position for this window
-	dockX, dockY := m.calculateDockPosition(i)
-
-	return ui.NewMinimizeAnimation(window, dockX, dockY, config.GetAnimationDuration())
-}
-
 // CreateRestoreAnimation creates a restore animation for the window at index i
 func (m *OS) CreateRestoreAnimation(i int) *ui.Animation {
 	if i < 0 || i >= len(m.Windows) {

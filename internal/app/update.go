@@ -749,8 +749,8 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Handle script playback if in script mode
 		cmds := []tea.Cmd{TickCmd()}
 		if m.ScriptMode && !m.ScriptPaused && m.ScriptPlayer != nil {
-			player, ok := m.ScriptPlayer.(*tape.Player)
-			if ok && !player.IsFinished() {
+			player := m.ScriptPlayer
+			if !player.IsFinished() {
 				// Wait for animations to complete before executing next command
 				// This ensures visual consistency during script playback
 				if m.HasActiveAnimations() {
@@ -805,7 +805,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 						player.Advance()
 					}
 				}
-			} else if ok && player.IsFinished() {
+			} else if player.IsFinished() {
 				// Script just finished - record the time if not already set
 				if m.ScriptFinishedTime.IsZero() {
 					m.ScriptFinishedTime = time.Now()
@@ -1054,7 +1054,6 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		tea.MouseReleaseMsg, tea.MouseWheelMsg, tea.ClipboardMsg,
 		tea.PasteMsg, tea.PasteStartMsg, tea.PasteEndMsg:
 		// Reset idle counter on any user input to restore full tick rate
-		m.idleFrames = 0
 		// A resize drag is live only while the pointer is still reporting. This
 		// is what lets the deferral in resize_deferral.go expire when a mouse
 		// release is lost, without a timeout that would cut short a slow drag:
@@ -1460,7 +1459,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case ScriptCommandMsg:
 		// Execute tape command through the executor
-		if executor, ok := m.ScriptExecutor.(*tape.CommandExecutor); ok {
+		if executor := m.ScriptExecutor; executor != nil {
 			if err := executor.Execute(msg.Command); err != nil {
 				// Log error but continue playback
 				m.ShowNotification(fmt.Sprintf("Script error: %v", err), "error", config.NotificationDuration)

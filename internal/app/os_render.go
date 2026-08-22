@@ -40,7 +40,6 @@ func (m *OS) markZenDirty() {
 func (m *OS) MarkTerminalsWithNewContent() bool {
 	// Fast path: no windows
 	if len(m.Windows) == 0 {
-		m.HasActiveTerminals = false
 		return false
 	}
 
@@ -113,7 +112,6 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 		}
 	}
 
-	m.HasActiveTerminals = activeTerminals > 0
 	return hasChanges
 }
 

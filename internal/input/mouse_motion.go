@@ -30,8 +30,6 @@ func guestWantsMotion(term vt.Terminal, button tea.MouseButton) bool {
 func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	mouse := msg.Mouse()
 
-	o.X = mouse.X
-	o.Y = mouse.Y
 	o.LastMouseX = mouse.X
 	o.LastMouseY = mouse.Y
 

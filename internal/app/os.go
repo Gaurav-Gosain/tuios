@@ -132,8 +132,6 @@ type OS struct {
 	FocusedWindow       int
 	Width               int
 	Height              int
-	X                   int
-	Y                   int
 	Mode                Mode
 	// terminalMu guards the m.Windows slice and the per-window dirty flags and
 	// render caches against the UI goroutine's render pass. It does NOT guard
@@ -154,26 +152,24 @@ type OS struct {
 	//
 	//   NEVER BLOCK WHILE HOLDING IT: it is taken on the UI goroutine every
 	//   frame, so any block here is a visible stall.
-	terminalMu         sync.RWMutex
-	LastMouseX         int
-	LastMouseY         int
-	HasActiveTerminals bool
-	idleFrames         int // Consecutive frames with no content changes (for adaptive tick)
-	ShowHelp           bool
-	InteractionMode    bool                       // True when actively dragging/resizing
-	MouseSnapping      bool                       // Enable/disable mouse snapping
-	WindowExitChan     chan string                // Channel to signal window closure
-	windowExits        windowExitQueue            // Overflow for exits WindowExitChan could not take
-	PTYDataChan        chan struct{}              // Signaled by PTY readers when new output arrives (buffered 1, coalescing)
-	StateSyncChan      chan *session.SessionState // Channel for thread-safe state sync from callbacks
-	ClientEventChan    chan ClientEvent           // Channel for thread-safe client join/leave notifications
-	Animations         []*ui.Animation            // Active animations
-	CPUHistory         []float64                  // CPU usage history for graph
-	LastCPUUpdate      time.Time                  // Last time CPU was updated
-	RAMUsage           float64                    // Cached RAM usage percentage
-	LastRAMUpdate      time.Time                  // Last time RAM was updated
-	AutoTiling         bool                       // Automatic tiling mode enabled
-	MasterRatio        float64                    // Master window width ratio for tiling (0.3-0.7)
+	terminalMu      sync.RWMutex
+	LastMouseX      int
+	LastMouseY      int
+	ShowHelp        bool
+	InteractionMode bool                       // True when actively dragging/resizing
+	MouseSnapping   bool                       // Enable/disable mouse snapping
+	WindowExitChan  chan string                // Channel to signal window closure
+	windowExits     windowExitQueue            // Overflow for exits WindowExitChan could not take
+	PTYDataChan     chan struct{}              // Signaled by PTY readers when new output arrives (buffered 1, coalescing)
+	StateSyncChan   chan *session.SessionState // Channel for thread-safe state sync from callbacks
+	ClientEventChan chan ClientEvent           // Channel for thread-safe client join/leave notifications
+	Animations      []*ui.Animation            // Active animations
+	CPUHistory      []float64                  // CPU usage history for graph
+	LastCPUUpdate   time.Time                  // Last time CPU was updated
+	RAMUsage        float64                    // Cached RAM usage percentage
+	LastRAMUpdate   time.Time                  // Last time RAM was updated
+	AutoTiling      bool                       // Automatic tiling mode enabled
+	MasterRatio     float64                    // Master window width ratio for tiling (0.3-0.7)
 	// TouchClient marks a session whose pointer is a finger. It is per session
 	// rather than a config global because one server holds several at once and
 	// a phone attaching must not change what the desktop beside it can hit.
@@ -419,12 +415,12 @@ type OS struct {
 	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys
 	KeyHistoryMaxSize int        // Maximum number of keys to display (default: 5)
 	// Tape scripting support
-	ScriptPlayer       any       // *tape.Player - script playback engine
-	ScriptMode         bool      // True when running a tape script
-	ScriptPaused       bool      // True when script playback is paused
-	ScriptExecutor     any       // *tape.CommandExecutor - executes tape commands
-	ScriptSleepUntil   time.Time // When to resume after a sleep command
-	ScriptFinishedTime time.Time // When the script finished (for auto-hide)
+	ScriptPlayer       *tape.Player          // script playback engine
+	ScriptMode         bool                  // True when running a tape script
+	ScriptPaused       bool                  // True when script playback is paused
+	ScriptExecutor     *tape.CommandExecutor // executes tape commands
+	ScriptSleepUntil   time.Time             // When to resume after a sleep command
+	ScriptFinishedTime time.Time             // When the script finished (for auto-hide)
 	// WaitUntilRegex playback state. When ScriptWaitRegex is non-nil, playback
 	// blocks until the focused window's screen matches it or ScriptWaitDeadline
 	// passes, whichever comes first.
