@@ -455,6 +455,7 @@ func DefaultConfig() *UserConfig {
 				"prefix_close_window":  {"x"},
 				"prefix_rename_window": {"r"},
 				"prefix_settings":      {","},
+				"prefix_keybinds":      {"k"},
 				"prefix_next_window":   {"n", "tab"},
 				"prefix_prev_window":   {"p", "shift+tab"},
 				"prefix_select_0":      {"0"},

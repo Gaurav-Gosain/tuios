@@ -173,6 +173,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.SettingsSelected = idx
 	case "palette":
 		m.CommandPaletteSelected = idx
+	case "keybinds":
+		m.KeybindMove(idx - m.KeybindSelected())
 	case "themepicker":
 		if idx != m.ThemePickerSelected {
 			m.ThemePickerMove(idx - m.ThemePickerSelected)
@@ -224,6 +226,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		}
 	case "palette":
 		m.PaletteMove(wheelDelta(up))
+	case "keybinds":
+		m.KeybindMove(wheelDelta(up))
 	case "themepicker":
 		m.ThemePickerMove(wheelDelta(up))
 	case "session":
@@ -270,6 +274,8 @@ func (m *OS) setOverlayTab(kind string, i int) {
 		m.SettingsCategory = i
 		m.SettingsSelected = 0
 		m.SettingsScroll = 0
+	case "keybinds":
+		m.KeybindSetTab(i)
 	}
 }
 
@@ -282,6 +288,8 @@ func (m *OS) stepOverlayTab(kind string, delta int) {
 		m.setOverlayTab(kind, m.HelpCategory+delta)
 	case "settings":
 		m.setOverlayTab(kind, m.SettingsCategory+delta)
+	case "keybinds":
+		m.setOverlayTab(kind, m.KeybindTab+delta)
 	}
 }
 
@@ -319,6 +327,11 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "palette":
 		m.CommandPaletteSelected = row.Idx
 		return m.ActivateCommandPalette()
+	case "keybinds":
+		// Selecting only. Every row here is a finding to read, and the detail box
+		// under the list is the thing a click is asking for; there is no action to
+		// activate and nothing a stray click could change.
+		m.KeybindMove(row.Idx - m.KeybindSelected())
 	case "themepicker":
 		m.ThemePickerSelected = row.Idx
 		return m.ThemePickerApplySelection()
@@ -404,6 +417,8 @@ func (m *OS) closeOverlay(kind string) {
 		m.HelpScrollOffset = 0
 	case "settings":
 		m.CloseSettings()
+	case "keybinds":
+		m.CloseKeybindManager()
 	case "palette":
 		m.CloseCommandPalette()
 	case "themepicker":

@@ -570,6 +570,15 @@ type OS struct {
 	SettingsEditing    bool   // true while a text setting is being edited inline
 	SettingsEditBuffer string // in-progress text for the setting being edited
 
+	// Keybind manager overlay state. ShowKeybindManager and KeybindTab are
+	// exported because the renderer and the input handler live in other
+	// packages; everything else belongs to the overlay alone (see
+	// keybind_manager.go) and is reached through methods, so the recorder's
+	// armed flag cannot be set from anywhere that would not also disarm it.
+	ShowKeybindManager bool
+	KeybindTab         int
+	keybinds           keybindManager
+
 	// Theme picker overlay state.
 	ShowThemePicker     bool
 	ThemePickerQuery    string

@@ -33,6 +33,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return handleThemePickerInput(msg, o)
 	}
 
+	// Handle the keybind manager (opens over settings, like the theme picker)
+	if o.ShowKeybindManager {
+		return handleKeybindManagerInput(msg, o)
+	}
+
 	// Handle settings overlay
 	if o.ShowSettings {
 		return handleSettingsInput(msg, o)

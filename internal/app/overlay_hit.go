@@ -36,7 +36,7 @@ type overlayPanelHit struct {
 // only be opened over the rail, with no other panel to lose a tie against. Now
 // that a settings row opens it, the tie was with the panel it was drawn on top
 // of, and every click inside the picker went to the settings row behind it.
-var overlayKindOrder = []string{"help", "palette", "session", "workspace", "layout", "aggregate", "settings", "themepicker", "accent", "quit", "sessionclose"}
+var overlayKindOrder = []string{"help", "palette", "session", "workspace", "layout", "aggregate", "settings", "keybinds", "themepicker", "accent", "quit", "sessionclose"}
 
 // openOverlayKinds returns the set of draggable overlay kinds currently shown.
 func (m *OS) openOverlayKinds() map[string]bool {
@@ -61,6 +61,9 @@ func (m *OS) openOverlayKinds() map[string]bool {
 	}
 	if m.ShowSettings {
 		open["settings"] = true
+	}
+	if m.ShowKeybindManager {
+		open["keybinds"] = true
 	}
 	if m.ShowThemePicker {
 		open["themepicker"] = true
