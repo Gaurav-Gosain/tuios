@@ -31,6 +31,12 @@ tuios --preview-theme dracula        # print the theme's 16 ANSI colors
 tuios --theme $(tuios --list-themes | fzf --preview 'tuios --preview-theme {}')
 ```
 
+Against a running daemon, `tuios list-themes` (the subcommand, not the flag)
+lists everything the daemon can apply, filterable and with `--json`, re-reading
+the themes directory on each call. `tuios import-theme <file>` converts a kitty,
+ghostty, alacritty, or wezterm colour scheme into a theme file here, sniffing
+the format from the file's content.
+
 In the running app, the command palette (`Ctrl+P`) has a **Theme Picker** entry,
 and the settings page (`Ctrl+B` `,`) has a Theme row that opens the same picker.
 The picker is searchable and shows a color swatch for each theme; cancelling
@@ -125,9 +131,10 @@ want. Define the bright variants explicitly.
 
 ## Limitations
 
-- **Startup only.** New or edited theme files are picked up on the next launch,
-  not live. Switching between already-registered themes from the picker or the
-  settings page does apply immediately.
+- **Selection re-reads the directory.** Switching themes applies immediately,
+  and selecting a theme id that is not yet registered re-scans the themes
+  directory before failing, so "write the file, then select it" works without a
+  restart. The in-app picker's list is built when it opens.
 - **Flat directory.** Only `*.json` files directly under the themes directory
   are loaded; subdirectories are ignored.
 - **No validation beyond parsing.** A syntactically valid file with meaningless

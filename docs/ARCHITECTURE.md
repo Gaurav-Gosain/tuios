@@ -17,6 +17,16 @@ This document provides a comprehensive overview of TUIOS's internal architecture
 
 TUIOS follows a layered architecture built on the Model-View-Update (MVU) pattern provided by Bubble Tea v2. The application is organized into distinct layers that handle user interaction, window management, terminal emulation, and rendering.
 
+Two things this page's diagrams predate, documented elsewhere:
+
+- **The daemon.** In daemon mode the PTYs and emulators live in a separate
+  daemon process (`internal/session`), and clients render what the daemon
+  streams. The wire contract is in [protocol.md](protocol.md) and the
+  attach/repaint contract in [REHYDRATION.md](REHYDRATION.md).
+- **Two VT backends.** The emulator behind the `vt.Terminal` interface is
+  either the pure Go implementation or libghostty-vt behind `-tags ghostty`;
+  see [ghostty-vt.md](ghostty-vt.md).
+
 ## System Architecture
 
 ```mermaid
@@ -434,7 +444,7 @@ graph TD
 6. **Object Pooling**: String builders, byte buffers, and layer objects pooled
 7. **Z-Index Sorting**: Windows stacked by priority (focused, animating, minimized)
 8. **Frame Skipping**: No render when no changes and no animations
-9. **Adaptive Refresh**: 60Hz base rate, 30Hz during interactions, 20Hz for background windows
+9. **Event-Driven Refresh**: renders are scheduled by state changes, not a timer; an idle session schedules none (see [perf.md](perf.md))
 
 ## Multi-Client Architecture
 
@@ -615,7 +625,7 @@ This ensures:
 
 **Memory Management:**
 
-- Style cache hit rate: 40-60%
+- Style cache: reduces per-frame style allocations
 - Object pool reuse: Reduces GC pressure
 - Scrollback limit: 10,000 lines per window
 - Content caching: Prevents redundant terminal parsing
@@ -625,7 +635,6 @@ This ensures:
 - Per-window PTY polling goroutines
 - Context-based cancellation for cleanup
 - Mutex-protected shared state, atomic HasMouseMode/HasAllMotionMode/KittyKeyboardFlags for thread safety
-- Background window throttling (20Hz vs 60Hz)
 
 ## Related Documentation
 

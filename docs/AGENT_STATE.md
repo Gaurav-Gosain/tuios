@@ -331,7 +331,7 @@ wired up outside tuios.
 A state change can raise a notification, an audible cue or a bell, a clickable
 dock message, and a shell command of your choosing. What fires, for which
 transitions, and when it is held back is the `[notifications.agent]` table; see
-[CONFIGURATION.md](CONFIGURATION.md#the-notificationsagent-table) for the keys
+[the configuration reference](https://tuios.gaurav.zip/docs/configuration#notifications) for the keys
 and [HOOKS.md](HOOKS.md) for the command contract.
 
 Two things are worth knowing here rather than there. The notification is an

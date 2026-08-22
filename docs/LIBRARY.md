@@ -19,7 +19,7 @@ import (
     "log"
 
     "github.com/Gaurav-Gosain/tuios/pkg/tuios"
-    tea "github.com/charmbracelet/bubbletea/v2"
+    tea "charm.land/bubbletea/v2"
 )
 
 func main() {
@@ -113,6 +113,8 @@ Set the window border style. Valid values:
 - `"double"`
 - `"hidden"`
 - `"block"`
+- `"outer-half-block"`
+- `"inner-half-block"`
 - `"ascii"`
 
 ```go
@@ -142,7 +144,7 @@ tuios.WithHideWindowButtons(true)
 
 How the window controls are drawn: `"pill"` (glyphs on a filled pill) or
 `"dots"` (macOS traffic lights, which name themselves on hover). See
-[CONFIGURATION.md](CONFIGURATION.md#window_button_style).
+[the configuration reference](https://tuios.gaurav.zip/docs/configuration).
 
 ```go
 tuios.WithWindowButtonStyle("dots")
@@ -152,7 +154,7 @@ tuios.WithWindowButtonStyle("dots")
 
 Which end of the title bar the window controls sit on: `"right"` (default) or
 `"left"`, the way macOS does it. See
-[CONFIGURATION.md](CONFIGURATION.md#window_button_position).
+[the configuration reference](https://tuios.gaurav.zip/docs/configuration).
 
 ```go
 tuios.WithWindowButtonPosition("left")
@@ -182,6 +184,12 @@ Enable SSH mode for running over SSH connections.
 tuios.WithSSHMode(true)
 ```
 
+### NewForPTY
+
+`tuios.NewForPTY` builds an instance bound to an existing PTY rather than the
+process's own terminal; see the doc comment in `pkg/tuios/tuios.go` for the
+contract.
+
 ### WithUserConfig(cfg *config.UserConfig)
 
 Provide a custom user configuration instead of loading from file.
@@ -205,7 +213,7 @@ import (
 
     "github.com/Gaurav-Gosain/sip"
     "github.com/Gaurav-Gosain/tuios/pkg/tuios"
-    tea "github.com/charmbracelet/bubbletea/v2"
+    tea "charm.land/bubbletea/v2"
 )
 
 func main() {
@@ -240,9 +248,9 @@ import (
     "context"
 
     "github.com/Gaurav-Gosain/tuios/pkg/tuios"
-    tea "github.com/charmbracelet/bubbletea/v2"
-    "github.com/charmbracelet/wish/v2"
-    "github.com/charmbracelet/wish/v2/bubbletea"
+    tea "charm.land/bubbletea/v2"
+    "charm.land/wish/v2"
+    "charm.land/wish/v2/bubbletea"
 )
 
 func main() {
@@ -345,4 +353,4 @@ func (m *MyApp) View() string {
 - [Keybindings](KEYBINDINGS.md) - Keyboard shortcuts
 - [Configuration](CONFIGURATION.md) - Config file options
 - [Web Terminal](WEB.md) - Browser-based access
-- [Sip Library](SIP_LIBRARY.md) - Web serving library
+- [sip](https://github.com/Gaurav-Gosain/sip) - the web serving library behind `tuios-web`
