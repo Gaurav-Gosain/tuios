@@ -37,6 +37,10 @@ go build -o tuios ./cmd/tuios
 
 # Run tests
 go test ./...
+
+# Or build and install onto your PATH, ghostty backend by default
+# (see docs/ghostty-vt.md); `pure` installs the pure Go emulator instead
+./scripts/install.sh
 ```
 
 ### Alternative Development Environments

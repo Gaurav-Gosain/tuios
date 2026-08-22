@@ -45,7 +45,7 @@ func TestVersionFallsBackToEmbeddedStamps(t *testing.T) {
 			rev:          "def456",
 			when:         "2025-01-01T00:00:00Z",
 			dirty:        true,
-			wantContains: []string{"dev (dirty)", "Commit: def456 (dirty)", "Built: 2025-01-01T00:00:00Z"},
+			wantContains: []string{"Commit: def456-dirty", "Built: 2025-01-01T00:00:00Z"},
 		},
 		{
 			name:            "nothing to fall back to leaves the placeholders",

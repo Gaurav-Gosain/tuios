@@ -24,21 +24,20 @@ func formatVersion(v, commit, date, builtBy, rev, when string, dirty bool) strin
 	if commit == "none" && rev != "" {
 		commit = rev
 		if dirty {
-			commit += " (dirty)"
+			commit += "-dirty"
 		}
 	}
 	if date == "unknown" && when != "" {
 		date = when
-	}
-	if v == "dev" && dirty {
-		v = "dev (dirty)"
 	}
 	return fmt.Sprintf("%s [%s backend]\nCommit: %s\nBuilt: %s\nBy: %s", v, vt.Backend, commit, date, builtBy)
 }
 
 // vcsBuildInfo reads the stamps the go command embeds in any binary built from
 // a checkout. Every field comes back empty for -buildvcs=false and for a build
-// from an unpacked source tarball.
+// from an unpacked source tarball. It is the fallback rather than the source of
+// truth because in a linked worktree the go command stamps the main checkout's
+// HEAD; scripts/install.sh passes the real one.
 func vcsBuildInfo() (rev, when string, dirty bool) {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
