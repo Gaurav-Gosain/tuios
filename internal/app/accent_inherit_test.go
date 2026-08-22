@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -180,7 +181,7 @@ func TestAccentEntryPointsSeedIdentically(t *testing.T) {
 	if m.AccentPickerTargetID != "aaaaaaaa1111" {
 		t.Fatalf("the rail's accent key targeted %q", m.AccentPickerTargetID)
 	}
-	if got := m.AccentPicker; got != direct {
+	if got := m.AccentPicker; !reflect.DeepEqual(got, direct) {
 		t.Errorf("the rail's accent key seeded %+v, want the same state as the menu (%+v)", got, direct)
 	}
 }

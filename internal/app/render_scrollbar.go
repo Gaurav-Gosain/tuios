@@ -290,7 +290,7 @@ func scrollbarQuietInk(ground color.Color, want float64) color.Color {
 // skips the floor: measurement was overridden on purpose.
 func (m *OS) scrollbarInk(window *terminal.Window, focused bool, ground color.Color) (thumb, track color.Color) {
 	track = theme.UI().FgMute
-	switch config.ScrollbarTint {
+	switch config.ScrollbarTintResolved() {
 	case config.ScrollbarTintQuiet:
 		return scrollbarQuietInk(ground, scrollbarQuietThumbContrast),
 			scrollbarQuietInk(ground, scrollbarQuietTrackContrast)

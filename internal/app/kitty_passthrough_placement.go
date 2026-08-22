@@ -398,7 +398,10 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				// Re-place only if position/clipping changed. Real kitty
 				// and our sip overlay both treat a=p with the same (i, p)
 				// as an in-place update of the existing placement.
-				posChanged := p.Hidden || p.HostX != newHostX || p.HostY != newHostY ||
+				// DataDirty is the streaming case: the position is unchanged
+				// but the image behind it was replaced, and the host will not
+				// redraw a placement whose image was swapped underneath it.
+				posChanged := p.Hidden || p.DataDirty || p.HostX != newHostX || p.HostY != newHostY ||
 					p.ClipTop != clipTop || p.ClipBottom != clipBottom ||
 					p.MaxShowable != maxShowableRows || p.MaxShowableCols != maxShowableCols
 				if posChanged {
@@ -410,6 +413,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 					p.MaxShowableCols = maxShowableCols
 					kp.placeOne(p)
 				}
+				p.DataDirty = false
 				p.Hidden = false
 			}
 		}

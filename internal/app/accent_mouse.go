@@ -51,6 +51,8 @@ func (m *OS) accentPickerPress(lx, ly int) (bool, tea.Cmd) {
 		m.AccentPickerSliderAt(accentChannel(hit.Col), lx-hit.Rect.X0, hit.Rect.X1-hit.Rect.X0)
 	case accentHitANSI:
 		m.AccentPickerSlot(hit.Col)
+	case accentHitNamed:
+		m.AccentPickerNamed(hit.Col)
 	case accentHitHex:
 		m.AccentPickerFocusHex()
 	case accentHitHarmony:

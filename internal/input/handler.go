@@ -25,13 +25,15 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		result, cmd = HandleKeyPress(msg, o)
 	case tea.KeyReleaseMsg:
 		// Releases only arrive once the host has been asked for event types, and
-		// the only thing tuios does with one is end a hold. Everything else
-		// deliberately ignores them: acting on a release as well as a press would
-		// run every binding twice.
-		if !o.ReleaseHoldKey(tea.KeyPressMsg(msg.Key())) {
-			return o, nil
+		// tuios itself does one thing with one: end a hold. No binding acts on a
+		// release, because acting on a release as well as a press would run every
+		// binding twice. What is left goes to a pane that asked for releases.
+		if o.ReleaseHoldKey(tea.KeyPressMsg(msg.Key())) {
+			result, cmd = o, nil
+			break
 		}
-		result, cmd = o, nil
+		forwardKeyReleaseToFocused(msg, o)
+		return o, nil
 	case tea.PasteStartMsg:
 		return o, nil
 	case tea.PasteEndMsg:

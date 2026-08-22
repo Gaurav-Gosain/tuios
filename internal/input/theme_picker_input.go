@@ -10,9 +10,9 @@ import (
 func handleThemePickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	switch keyStr := msg.String(); keyStr {
 	case "esc":
-		o.CancelThemePicker()
+		return o, o.CancelThemePicker()
 	case "enter":
-		o.ThemePickerApplySelection()
+		return o, o.ThemePickerApplySelection()
 	case "up", "ctrl+p":
 		o.ThemePickerMove(-1)
 	case "down", "ctrl+n":

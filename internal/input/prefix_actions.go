@@ -495,9 +495,9 @@ func handleDebugCache(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleDebugShowkeys(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.ToggleShowKeys()
+	save := o.ToggleShowKeys()
 	toggleNotify(o, "Showkeys", o.ShowKeys)
-	return o, nil
+	return o, save
 }
 
 func handleDebugAnimations(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

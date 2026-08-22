@@ -2,6 +2,7 @@ package app
 
 import (
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // keyboardEnhancements is what tuios asks the host terminal for through the
@@ -22,6 +23,26 @@ func (m *OS) keyboardEnhancements() tea.KeyboardEnhancements {
 		// parses.
 		ReportAlternateKeys: true,
 	}
+	// A pane that pushed the event-type flag is asking to be told when a key
+	// comes up, and tuios cannot pass on what it never receives: unless the host
+	// is asked for releases too, the pane sees an endless press. That is fatal
+	// for a compositor in a pane, whose Wayland clients hold the key down and let
+	// xkb repeat it until a release arrives, and it is why the request tracks the
+	// focused pane rather than being fixed at startup.
+	paneFlags := m.PaneKeyboardFlags()
+	if paneFlags&ansi.KittyReportEventTypes != 0 {
+		enhancements.ReportEventTypes = true
+		// A terminal only reports the release of a key it sends as an escape
+		// code, so Enter and Tab and every plain character come up silently
+		// unless all keys are asked for as well. Associated text comes with that
+		// or the character the user typed is lost on its way to the pane. Both
+		// ride on the pane's own request, so a session with no such pane focused
+		// is left exactly as it was.
+		if paneFlags&ansi.KittyReportAllKeysAsEscapeCodes != 0 {
+			enhancements.ReportAllKeysAsEscapeCodes = true
+			enhancements.ReportAssociatedText = true
+		}
+	}
 	if !m.HoldModeAvailable() {
 		return enhancements
 	}
@@ -36,6 +57,16 @@ func (m *OS) keyboardEnhancements() tea.KeyboardEnhancements {
 		enhancements.ReportAssociatedText = true
 	}
 	return enhancements
+}
+
+// PaneKeyboardFlags returns the kitty keyboard protocol flags the focused pane
+// has in effect, or zero when no pane is focused or none were pushed.
+func (m *OS) PaneKeyboardFlags() int {
+	window := m.GetFocusedWindow()
+	if window == nil || window.Terminal == nil {
+		return 0
+	}
+	return window.Terminal.KittyKeyboardFlags()
 }
 
 // NoteKeyboardEnhancements records what the host answered the enhancement query

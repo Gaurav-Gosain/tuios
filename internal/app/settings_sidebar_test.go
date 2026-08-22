@@ -48,7 +48,7 @@ func TestSidebarSettingsApplyLiveAndPersist(t *testing.T) {
 			m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
 
 			focusSetting(t, m, tc.category, tc.label)
-			m.SettingsAdjust(1)
+			runSave(t, m.SettingsAdjust(1))
 
 			if *tc.global {
 				t.Errorf("%s: the global is still true, so the change never applied live", tc.label)

@@ -134,7 +134,9 @@ want. Define the bright variants explicitly.
   colors loads happily. Use `tuios --preview-theme <id>` to check the result.
 - **Border color overrides are separate.** `border_focused_color` and
   `border_unfocused_color` in `[appearance]` override the theme's border colors
-  and are not part of the theme file.
+  and are not part of the theme file. Both rows in the settings page open a
+  colour picker, seeded on the colour the border is currently drawn in; clearing
+  one there unsets the override and hands the border back to the theme.
 - **Some overlays are not themed.** The which-key popup, in particular, draws
   with fixed colors regardless of the active theme.
 

@@ -692,10 +692,17 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	}
 	if existing := kp.placements[windowID][hostID]; existing != nil {
 		// A stream re-transmitting the same image id has its placement
-		// already on the host, at a size this path has checked; recreating it
-		// hidden made the render pass delete and re-place it on every guest
-		// frame, which is churn the host has to draw and the pane can flicker
-		// on. Refresh the geometry in place and leave the visibility alone.
+		// already on the host, at a size this path has checked, so the entry is
+		// refreshed in place rather than rebuilt for every guest frame.
+		//
+		// The placement still has to be re-sent. Transmitting an image id the
+		// host already holds replaces the stored image, and the placement drawn
+		// from the old data does not follow: without a fresh a=p the pane holds
+		// the first frame and every frame after it is stored and never shown,
+		// which is a whole compositor-in-a-pane frozen on its first paint. So
+		// the data is marked dirty and the render pass re-places it, without the
+		// delete that rebuilding the entry used to imply.
+		existing.DataDirty = true
 		existing.GuestX = cursorX
 		existing.AbsoluteLine = scrollbackLen + cursorY
 		existing.HostX = hostX
