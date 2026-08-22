@@ -11,8 +11,8 @@ id             = "devin"
 display_name   = "Devin"
 priority       = 50
 
-# Cognition's installer (cli.devin.ai) puts a native binary at
-# ~/.local/bin/devin; there is no real npm or pip channel.
+# Cognition's installer (cli.devin.ai) ships a native binary named devin;
+# there is no real npm or pip channel.
 [detect]
 comm  = ["devin"]
 argv0 = ["devin"]

@@ -11,17 +11,18 @@ id             = "antigravity"
 display_name   = "Antigravity"
 priority       = 50
 
-# Google Antigravity's CLI installs a native binary named agy into
-# ~/.local/bin (antigravity.google/docs/cli/install); there is no npm or pip
-# channel, so the name is the whole identity.
+# Google Antigravity's CLI is a native binary named agy; there is no npm or
+# pip channel, so the name is the whole identity.
 [detect]
 comm  = ["agy"]
 argv0 = ["agy"]
 
-# "agy" is three letters, so the bare name only counts from the documented
-# install location.
+# "agy" is three letters, so the bare name only counts when the executable
+# really is a binary named agy sitting in a bin directory. That still refuses
+# a shell function, an alias, or a renamed process, which is what the
+# corroboration policy is for.
 [detect.require]
-exe_glob = ["**/.local/bin/agy", "**/agy/bin/agy"]
+exe_glob = ["**/bin/agy"]
 
 [screen]
 enabled   = true
