@@ -1,7 +1,6 @@
 package terminal
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -724,26 +723,6 @@ func (w *Window) handleIOOperations() {
 						if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 							_, _ = f.WriteString(debugMsg)
 							_ = f.Close()
-						}
-					}
-
-					// Fix incorrect CPR responses from VT library for nushell compatibility
-					// The VT library responds to ESC[6n queries but returns stale/incorrect cursor positions
-					// This causes nushell to incorrectly clear the screen thinking it's at the wrong position
-					// We detect CPR responses (ESC[{row};{col}R) and replace with actual cursor position
-					if len(data) >= 6 && data[0] == '\x1b' && data[1] == '[' && data[len(data)-1] == 'R' {
-						// This looks like a CPR response, check if it contains semicolon
-						if bytes.Contains(data, []byte(";")) {
-							w.ioMu.RLock()
-							if w.Terminal != nil {
-								pos := w.Terminal.CursorPosition()
-								// Get the actual current cursor position (1-indexed for terminal protocol)
-								actualY := pos.Y + 1
-								actualX := pos.X + 1
-								// Replace with corrected cursor position
-								data = fmt.Appendf(nil, "\x1b[%d;%dR", actualY, actualX)
-							}
-							w.ioMu.RUnlock()
 						}
 					}
 
