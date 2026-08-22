@@ -15,16 +15,6 @@ import (
 // and two padding cells on each side.
 const dialogChrome = 6
 
-// dialogWidth returns the total width to draw a centered bordered dialog at,
-// given the width it would prefer. Never wider than the screen.
-func (m *OS) dialogWidth(preferred int) int {
-	rw := m.GetRenderWidth()
-	if rw <= 0 {
-		return preferred // size not known yet; the caller's preference stands
-	}
-	return max(min(preferred, rw), dialogChrome+2)
-}
-
 // dialogRows returns how many scrolling content rows a centered dialog can show
 // given the rows it spends on everything else.
 func (m *OS) dialogRows(preferred, chrome int) int {
@@ -33,16 +23,6 @@ func (m *OS) dialogRows(preferred, chrome int) int {
 		return preferred
 	}
 	return max(min(preferred, rh-chrome), minPanelRows)
-}
-
-// dialogContentRows is the tallest a content-sized dialog's body may be before
-// the box around it would reach past the top or bottom of the screen.
-func (m *OS) dialogContentRows() int {
-	rh := m.GetRenderHeight()
-	if rh <= 0 {
-		return 1 << 20 // size not known yet; do not drop anything
-	}
-	return max(rh-4, 1) // border and padding, top and bottom
 }
 
 // squeezeLines shortens a dialog body to rows lines. The blank spacer lines go

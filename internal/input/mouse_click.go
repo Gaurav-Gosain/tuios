@@ -1,9 +1,6 @@
 package input
 
 import (
-	"fmt"
-	"os"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -295,17 +292,6 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	clickedWindow := o.Windows[clickedWindowIndex]
-
-	leftMost := clickedWindow.X + clickedWindow.Width
-
-	// DEBUG: Log click attempts
-	if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
-		if f, err := os.OpenFile("/tmp/tuios-mouse-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
-			_, _ = fmt.Fprintf(f, "[CLICK] X=%d Y=%d, Window X=%d Y=%d W=%d H=%d, leftMost=%d\n",
-				X, Y, clickedWindow.X, clickedWindow.Y, clickedWindow.Width, clickedWindow.Height, leftMost)
-			_ = f.Close()
-		}
-	}
 
 	// Window controls come first, before mode switching or focus changes.
 	//

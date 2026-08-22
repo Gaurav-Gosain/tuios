@@ -17,7 +17,6 @@ const (
 	SplitNone       SplitType = iota // Leaf node (contains a window)
 	SplitVertical                    // Left/Right children (vertical divider)
 	SplitHorizontal                  // Top/Bottom children (horizontal divider)
-	SplitStacked                     // Stacked children (only active child visible, others show as title bars)
 )
 
 // String returns a string representation of the split type
@@ -29,8 +28,6 @@ func (s SplitType) String() string {
 		return "vertical"
 	case SplitHorizontal:
 		return "horizontal"
-	case SplitStacked:
-		return "stacked"
 	default:
 		return "unknown"
 	}
@@ -102,14 +99,13 @@ type Rect struct {
 // Internal nodes have Left and Right children and define a split.
 // Leaf nodes have a WindowID and represent an actual window.
 type TileNode struct {
-	ID                uint64    // Unique identifier for the node
-	Parent            *TileNode // Parent node (nil for root)
-	Left              *TileNode // Left/Top child (nil for leaf nodes)
-	Right             *TileNode // Right/Bottom child (nil for leaf nodes)
-	WindowID          int       // Window ID (-1 for internal nodes)
-	SplitType         SplitType // How this node splits its space
-	SplitRatio        float64   // Position of split (0.0-1.0), 0.5 = middle
-	StackedActiveLeft bool      // For SplitStacked: true = left child is active (gets content area)
+	ID         uint64    // Unique identifier for the node
+	Parent     *TileNode // Parent node (nil for root)
+	Left       *TileNode // Left/Top child (nil for leaf nodes)
+	Right      *TileNode // Right/Bottom child (nil for leaf nodes)
+	WindowID   int       // Window ID (-1 for internal nodes)
+	SplitType  SplitType // How this node splits its space
+	SplitRatio float64   // Position of split (0.0-1.0), 0.5 = middle
 }
 
 // newNodeID generates a unique node ID
@@ -465,20 +461,6 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 // the layout does not agree with puts the divider somewhere the drag did not
 // ask for.
 func childBounds(node *TileNode, bounds Rect, gap int) (leftBounds, rightBounds Rect) {
-	if node.SplitType == SplitStacked {
-		// Stacked: the active child gets the content area, the inactive one is
-		// reduced to a single title bar row.
-		const titleBarHeight = 1
-		if node.StackedActiveLeft {
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: bounds.H - titleBarHeight}
-			rightBounds = Rect{X: bounds.X, Y: bounds.Y + bounds.H - titleBarHeight, W: bounds.W, H: titleBarHeight}
-		} else {
-			leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: titleBarHeight}
-			rightBounds = Rect{X: bounds.X, Y: bounds.Y + titleBarHeight, W: bounds.W, H: bounds.H - titleBarHeight}
-		}
-		return leftBounds, rightBounds
-	}
-
 	// The reserved cell between the two children is the drawn separator's, so
 	// the far child starts one past the divider line.
 	if node.SplitType == SplitVertical {
@@ -539,14 +521,10 @@ func (t *BSPTree) ResizeSplit(windowID int, e ResizeEdge, pos int, bounds Rect, 
 	}
 
 	// Walk up to the nearest ancestor that splits on this axis with the window's
-	// subtree on the near side of the divider. Stacked ancestors have no
-	// draggable divider, so they are skipped rather than treated as the split.
+	// subtree on the near side of the divider.
 	var node *TileNode
 	for cur := leaf; cur.Parent != nil; cur = cur.Parent {
 		p := cur.Parent
-		if p.SplitType == SplitStacked {
-			continue
-		}
 		if (p.SplitType == SplitVertical) != e.vertical() {
 			continue
 		}
@@ -611,15 +589,6 @@ func minExtent(node *TileNode, vertical bool, gap int) int {
 	left := minExtent(node.Left, vertical, gap)
 	right := minExtent(node.Right, vertical, gap)
 
-	if node.SplitType == SplitStacked {
-		if vertical {
-			return max(left, right)
-		}
-		// The inactive child is collapsed to a title bar row on top of the
-		// active child's content.
-		return max(left, right) + 1
-	}
-
 	if (node.SplitType == SplitVertical) != vertical {
 		// Split runs the other way: both children span the full extent.
 		return max(left, right)
@@ -677,24 +646,6 @@ func (t *BSPTree) SyncRatiosFromGeometry(windows map[int]Rect, bounds Rect, gap 
 // other axis. Nested bounds must account for it too.
 func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[int]Rect, gap int) {
 	if node == nil || node.IsLeaf() {
-		return
-	}
-
-	if node.SplitType == SplitStacked {
-		// Stacked nodes ignore SplitRatio; mirror applyLayoutRecursive's bounds so
-		// descendants still resolve against the rectangle they were laid out in.
-		const titleBarHeight = 1
-		content := Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: bounds.H - titleBarHeight}
-		title := Rect{X: bounds.X, Y: bounds.Y + bounds.H - titleBarHeight, W: bounds.W, H: titleBarHeight}
-		if node.StackedActiveLeft {
-			t.syncRatiosRecursive(node.Left, content, windows, gap)
-			t.syncRatiosRecursive(node.Right, title, windows, gap)
-		} else {
-			title.Y = bounds.Y
-			content.Y = bounds.Y + titleBarHeight
-			t.syncRatiosRecursive(node.Left, title, windows, gap)
-			t.syncRatiosRecursive(node.Right, content, windows, gap)
-		}
 		return
 	}
 
@@ -988,25 +939,20 @@ func (t *BSPTree) collectSplitsRecursive(node *TileNode, bounds Rect, splits *[]
 	// dragging will not move.
 	leftBounds, rightBounds := childBounds(node, bounds, gap)
 
-	// A stacked node splits by raising one child's title bar, not by a
-	// separator, and ResizeSplit will not move one. Emitting a line for it
-	// would advertise a divider that cannot be dragged.
-	if node.SplitType != SplitStacked {
-		if node.SplitType == SplitVertical {
-			*splits = append(*splits, SplitLine{
-				Vertical: true,
-				Pos:      bounds.X + leftBounds.W,
-				From:     bounds.Y,
-				To:       bounds.Y + bounds.H - 1,
-			})
-		} else {
-			*splits = append(*splits, SplitLine{
-				Vertical: false,
-				Pos:      bounds.Y + leftBounds.H,
-				From:     bounds.X,
-				To:       bounds.X + bounds.W - 1,
-			})
-		}
+	if node.SplitType == SplitVertical {
+		*splits = append(*splits, SplitLine{
+			Vertical: true,
+			Pos:      bounds.X + leftBounds.W,
+			From:     bounds.Y,
+			To:       bounds.Y + bounds.H - 1,
+		})
+	} else {
+		*splits = append(*splits, SplitLine{
+			Vertical: false,
+			Pos:      bounds.Y + leftBounds.H,
+			From:     bounds.X,
+			To:       bounds.X + bounds.W - 1,
+		})
 	}
 
 	t.collectSplitsRecursive(node.Left, leftBounds, splits, gap)
@@ -1077,48 +1023,6 @@ func collectWindowIDs(node *TileNode, ids *[]int) {
 	}
 	collectWindowIDs(node.Left, ids)
 	collectWindowIDs(node.Right, ids)
-}
-
-// Clone creates a deep copy of the tree
-func (t *BSPTree) Clone() *BSPTree {
-	if t == nil {
-		return nil
-	}
-
-	newTree := &BSPTree{
-		WindowToNode: make(map[int]*TileNode),
-		AutoScheme:   t.AutoScheme,
-		DefaultRatio: t.DefaultRatio,
-	}
-
-	if t.Root != nil {
-		newTree.Root = cloneNode(t.Root, nil, newTree.WindowToNode)
-	}
-
-	return newTree
-}
-
-func cloneNode(node *TileNode, parent *TileNode, windowMap map[int]*TileNode) *TileNode {
-	if node == nil {
-		return nil
-	}
-
-	newNode := &TileNode{
-		ID:         newNodeID(),
-		Parent:     parent,
-		WindowID:   node.WindowID,
-		SplitType:  node.SplitType,
-		SplitRatio: node.SplitRatio,
-	}
-
-	if node.IsLeaf() {
-		windowMap[node.WindowID] = newNode
-	} else {
-		newNode.Left = cloneNode(node.Left, newNode, windowMap)
-		newNode.Right = cloneNode(node.Right, newNode, windowMap)
-	}
-
-	return newNode
 }
 
 // SerializedNode represents a BSP tree node in a serializable format

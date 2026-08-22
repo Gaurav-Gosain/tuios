@@ -274,13 +274,12 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	prw := app.NewPostRenderWriter(os.Stdout)
 
 	initialOS := app.NewOS(app.OSOptions{
-		KeybindRegistry:           keybindRegistry,
-		UserConfig:                userConfig,
-		ShowKeys:                  showKeys,
-		IsDaemonSession:           true,
-		DaemonClient:              client,
-		SessionName:               client.SessionName(),
-		EnableGraphicsPassthrough: true,
+		KeybindRegistry: keybindRegistry,
+		UserConfig:      userConfig,
+		ShowKeys:        showKeys,
+		IsDaemonSession: true,
+		DaemonClient:    client,
+		SessionName:     client.SessionName(),
 		// One writer for the terminal: frames, kitty and sixel sequences all
 		// serialize on it. Left nil, the passthroughs open their own /dev/tty
 		// and nothing can order their writes against a frame.
@@ -390,13 +389,6 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	client.OnSessionResize(func(width, height, clientCount int) {
 		go func() {
 			p.Send(app.SessionResizeMsg{Width: width, Height: height, ClientCount: clientCount})
-		}()
-	})
-
-	// Handle force refresh
-	client.OnForceRefresh(func(reason string) {
-		go func() {
-			p.Send(app.ForceRefreshMsg{Reason: reason})
 		}()
 	})
 

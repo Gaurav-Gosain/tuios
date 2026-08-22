@@ -303,7 +303,7 @@ func runWebServer() error {
 		ScrollbackLines:      scrollbackLines,
 		NoAnimations:         noAnimations,
 		ThemeName:            themeName,
-	}, userConfig)
+	})
 
 	// Create sip server
 	sipConfig := sip.DefaultConfig()
@@ -556,17 +556,16 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch
 	// kittySupport enabled, so APC sequences we forward here are rendered
 	// by the browser terminal.
 	tuiosInstance := app.NewOS(app.OSOptions{
-		KeybindRegistry:           keybindRegistry,
-		UserConfig:                userConfig,
-		ConfigReadOnly:            true,
-		BrowserClient:             true,
-		ShowKeys:                  showKeys,
-		Width:                     width,
-		Height:                    height,
-		EnableGraphicsPassthrough: true,
-		ForceGraphicsEnabled:      true,
-		GraphicsOutput:            graphicsOut,
-		TouchClient:               touch,
+		KeybindRegistry:      keybindRegistry,
+		UserConfig:           userConfig,
+		ConfigReadOnly:       true,
+		BrowserClient:        true,
+		ShowKeys:             showKeys,
+		Width:                width,
+		Height:               height,
+		ForceGraphicsEnabled: true,
+		GraphicsOutput:       graphicsOut,
+		TouchClient:          touch,
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
@@ -637,20 +636,19 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 	// force-enabled and routed through the sip PTY slave so kitty/sixel
 	// sequences reach the browser's xterm.js image addon (sip v0.1.12+).
 	tuiosInstance := app.NewOS(app.OSOptions{
-		KeybindRegistry:           keybindRegistry,
-		UserConfig:                userConfig,
-		ConfigReadOnly:            true,
-		BrowserClient:             true,
-		ShowKeys:                  showKeys,
-		Width:                     width,
-		Height:                    height,
-		IsDaemonSession:           true,
-		DaemonClient:              client,
-		SessionName:               sessionName,
-		EnableGraphicsPassthrough: true,
-		ForceGraphicsEnabled:      true,
-		GraphicsOutput:            graphicsOut,
-		TouchClient:               touch,
+		KeybindRegistry:      keybindRegistry,
+		UserConfig:           userConfig,
+		ConfigReadOnly:       true,
+		BrowserClient:        true,
+		ShowKeys:             showKeys,
+		Width:                width,
+		Height:               height,
+		IsDaemonSession:      true,
+		DaemonClient:         client,
+		SessionName:          sessionName,
+		ForceGraphicsEnabled: true,
+		GraphicsOutput:       graphicsOut,
+		TouchClient:          touch,
 	})
 
 	// Restore state from daemon if available
@@ -730,19 +728,6 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 			case m.ClientEventChan <- app.ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height}:
 			default:
 				log.Printf("[WEB] Warning: ClientEventChan full, dropping session resize event")
-			}
-		}
-	})
-
-	// Handle force refresh (also on the read-loop goroutine; MarkAllDirty must run
-	// on the program goroutine).
-	client.OnForceRefresh(func(reason string) {
-		log.Printf("[WEB] Force refresh requested: %s", reason)
-		if m.ClientEventChan != nil {
-			select {
-			case m.ClientEventChan <- app.ClientEvent{Type: "refresh", Reason: reason}:
-			default:
-				log.Printf("[WEB] Warning: ClientEventChan full, dropping force refresh event")
 			}
 		}
 	})

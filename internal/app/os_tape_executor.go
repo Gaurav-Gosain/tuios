@@ -391,12 +391,10 @@ func (m *OS) GetSessionInfoData() map[string]any {
 	if m.ScriptMode {
 		info["script_mode"] = true
 		info["script_paused"] = m.ScriptPaused
-		if m.ScriptPlayer != nil {
-			if player, ok := m.ScriptPlayer.(*tape.Player); ok {
-				info["script_progress"] = player.Progress()
-				info["script_current"] = player.CurrentIndex()
-				info["script_total"] = player.TotalCommands()
-			}
+		if player := m.ScriptPlayer; player != nil {
+			info["script_progress"] = player.Progress()
+			info["script_current"] = player.CurrentIndex()
+			info["script_total"] = player.TotalCommands()
 		}
 	} else {
 		info["script_mode"] = false

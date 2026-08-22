@@ -36,9 +36,9 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 			cs.clientID, payload.CellWidth, payload.CellHeight, payload.KittyGraphics, payload.SixelGraphics, payload.TerminalName)
 	}
 
-	// Negotiate codec based on client preference
-	cs.codec = NegotiateCodec(payload.PreferredCodec)
-	LogBasic("Client %s negotiated codec: %s", cs.clientID, cs.codec.Type())
+	// gob is the only payload codec; PreferredCodec stays in the handshake
+	// for wire stability but cannot select anything else.
+	cs.codec = DefaultCodec()
 
 	sessions := d.manager.ListSessions()
 	names := make([]string, len(sessions))
@@ -326,17 +326,13 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 		return nil
 	}
 
-	// Try binary format first (36-byte PTY ID + data)
+	// MsgInput is always the binary format (36-byte PTY ID + data); the gob
+	// InputPayload fallback misparsed any gob payload of 36 bytes or more as
+	// a PTY id, and no current client sends one.
 	ptyID, data, err := ParseBinaryPTYMessage(msg.Payload)
 	if err != nil {
-		// Fall back to codec format
-		var payload InputPayload
-		if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
-			debugLog("[DEBUG] handleInput: failed to parse payload: %v", err)
-			return nil
-		}
-		ptyID = payload.PTYID
-		data = payload.Data
+		debugLog("[DEBUG] handleInput: failed to parse payload: %v", err)
+		return nil
 	}
 
 	if ptyID != "" {
@@ -468,46 +464,6 @@ func (d *Daemon) handleClosePTY(cs *connState, msg *Message) error {
 	}
 
 	return d.sendMessage(cs, MsgPTYClosed, &ClosePTYPayload{PTYID: payload.PTYID})
-}
-
-func (d *Daemon) handleListPTYs(cs *connState) error {
-	if cs.sessionID == "" {
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
-	}
-
-	session := d.manager.GetSessionByID(cs.sessionID)
-	if session == nil {
-		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
-	}
-
-	ptyIDs := session.ListPTYIDs()
-	ptys := make([]PTYInfo, 0, len(ptyIDs))
-
-	for _, id := range ptyIDs {
-		pty := session.GetPTY(id)
-		if pty != nil {
-			ptys = append(ptys, PTYInfo{
-				ID:     pty.ID,
-				Exited: pty.IsExited(),
-			})
-		}
-	}
-
-	return d.sendMessage(cs, MsgPTYList, &PTYListPayload{PTYs: ptys})
-}
-
-func (d *Daemon) handleGetState(cs *connState) error {
-	if cs.sessionID == "" {
-		return d.sendError(cs, ErrCodeNotAttached, "not attached to any session")
-	}
-
-	session := d.manager.GetSessionByID(cs.sessionID)
-	if session == nil {
-		return d.sendError(cs, ErrCodeSessionNotFound, "session not found")
-	}
-
-	state := session.GetState()
-	return d.sendMessage(cs, MsgStateData, state)
 }
 
 func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {

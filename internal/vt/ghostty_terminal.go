@@ -10,7 +10,6 @@ import (
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
 	gh "go.mitchellh.com/libghostty"
 )
 
@@ -114,7 +113,6 @@ type GhosttyTerminal struct {
 
 	// tuios graphics state, owned here exactly as the pure emulator owns it.
 	kittyMain, kittyAlt  *KittyState
-	sixelMain, sixelAlt  *SixelState
 	semanticMarkers      *SemanticMarkerList
 	kittyPassthroughFunc func(cmd *KittyCommand, rawData []byte)
 	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
@@ -147,8 +145,6 @@ func NewGhosttyTerminal(w, h int) *GhosttyTerminal {
 		kittyKbd:        newKittyKeyboardState(),
 		kittyMain:       NewKittyState(),
 		kittyAlt:        NewKittyState(),
-		sixelMain:       NewSixelState(),
-		sixelAlt:        NewSixelState(),
 		semanticMarkers: NewSemanticMarkerList(maxSemanticMarkers),
 		cursorStyle:     defaultCursorStyle,
 		cursorSteady:    defaultCursorSteady,
@@ -580,17 +576,6 @@ func (t *GhosttyTerminal) BracketedPasteEnabled() bool {
 	}
 	v, _ := t.term.Mode(gh.ModeBracketedPaste)
 	return v
-}
-
-// Paste feeds text to the guest, bracketed when mode 2004 is set.
-func (t *GhosttyTerminal) Paste(text string) {
-	if t.BracketedPasteEnabled() {
-		_, _ = io.WriteString(t.pipe, ansi.BracketedPasteStart)
-		_, _ = io.WriteString(t.pipe, text)
-		_, _ = io.WriteString(t.pipe, ansi.BracketedPasteEnd)
-		return
-	}
-	_, _ = io.WriteString(t.pipe, text)
 }
 
 // ghosttyProgressState maps libghostty progress states onto the pure

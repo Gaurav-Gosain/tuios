@@ -15,20 +15,11 @@ import (
 // It receives the command payload and returns success/error.
 type RemoteCommandHandler func(payload *RemoteCommandPayload) error
 
-// QueryWindowsHandler is a callback for handling window queries from the CLI.
-// It receives the query payload and should return a WindowListPayload.
-type QueryWindowsHandler func(requestID string) *WindowListPayload
-
-// QuerySessionHandler is a callback for handling session queries from the CLI.
-// It receives the query payload and should return a SessionInfoPayload.
-type QuerySessionHandler func(requestID string) *SessionInfoPayload
-
 // Multi-client handler types
 type StateSyncHandler func(state *SessionState, triggerType, sourceID string)
 type ClientJoinedHandler func(clientID string, clientCount int, width, height int)
 type ClientLeftHandler func(clientID string, clientCount int)
 type SessionResizeHandler func(width, height, clientCount int)
-type ForceRefreshHandler func(reason string)
 
 // SessionEndedHandler is called when the daemon reports that the attached
 // session was terminated. It runs on the read-loop goroutine, so the handler
@@ -91,17 +82,11 @@ type TUIClient struct {
 	remoteCommandHandler RemoteCommandHandler
 	remoteCommandMu      sync.RWMutex
 
-	// Query handlers - called when the CLI queries for information
-	queryWindowsHandler QueryWindowsHandler
-	querySessionHandler QuerySessionHandler
-	queryHandlersMu     sync.RWMutex
-
 	// Multi-client handlers
 	stateSyncHandler     StateSyncHandler
 	clientJoinedHandler  ClientJoinedHandler
 	clientLeftHandler    ClientLeftHandler
 	sessionResizeHandler SessionResizeHandler
-	forceRefreshHandler  ForceRefreshHandler
 	disconnectHandler    DisconnectHandler
 	sessionEndedHandler  SessionEndedHandler
 	sessionEndedOnce     sync.Once // gates the single session-ended notification
@@ -247,7 +232,7 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 	}
 
 	// Update codec based on what server negotiated
-	c.codec = NegotiateCodec(welcome.Codec)
+	c.codec = DefaultCodec()
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
 	infos := make([]SessionInfo, 0, len(welcome.SessionNames))
@@ -580,20 +565,6 @@ func (c *TUIClient) OnRemoteCommand(handler RemoteCommandHandler) {
 	c.remoteCommandMu.Unlock()
 }
 
-// OnQueryWindows registers a handler for window list queries.
-func (c *TUIClient) OnQueryWindows(handler QueryWindowsHandler) {
-	c.queryHandlersMu.Lock()
-	c.queryWindowsHandler = handler
-	c.queryHandlersMu.Unlock()
-}
-
-// OnQuerySession registers a handler for session info queries.
-func (c *TUIClient) OnQuerySession(handler QuerySessionHandler) {
-	c.queryHandlersMu.Lock()
-	c.querySessionHandler = handler
-	c.queryHandlersMu.Unlock()
-}
-
 // OnStateSync registers a handler for state sync messages from other clients.
 func (c *TUIClient) OnStateSync(handler StateSyncHandler) {
 	c.multiClientMu.Lock()
@@ -620,13 +591,6 @@ func (c *TUIClient) OnClientLeft(handler ClientLeftHandler) {
 func (c *TUIClient) OnSessionResize(handler SessionResizeHandler) {
 	c.multiClientMu.Lock()
 	c.sessionResizeHandler = handler
-	c.multiClientMu.Unlock()
-}
-
-// OnForceRefresh registers a handler for force refresh messages.
-func (c *TUIClient) OnForceRefresh(handler ForceRefreshHandler) {
-	c.multiClientMu.Lock()
-	c.forceRefreshHandler = handler
 	c.multiClientMu.Unlock()
 }
 
@@ -667,24 +631,6 @@ func (c *TUIClient) handleDisconnect(err error) {
 			handler(err)
 		}
 	})
-}
-
-// SendWindowList sends a window list response back to the daemon.
-func (c *TUIClient) SendWindowList(payload *WindowListPayload) error {
-	msg, err := NewMessageWithCodec(MsgWindowList, payload, c.codec)
-	if err != nil {
-		return err
-	}
-	return c.send(msg)
-}
-
-// SendSessionInfo sends a session info response back to the daemon.
-func (c *TUIClient) SendSessionInfo(payload *SessionInfoPayload) error {
-	msg, err := NewMessageWithCodec(MsgSessionInfo, payload, c.codec)
-	if err != nil {
-		return err
-	}
-	return c.send(msg)
 }
 
 // SendCommandResult sends the result of a remote command execution back to the daemon.
@@ -932,19 +878,10 @@ func (c *TUIClient) readLoop() {
 func (c *TUIClient) handleMessage(msg *Message) {
 	switch msg.Type {
 	case MsgPTYOutput:
-		// Try binary format first (optimized path from daemon)
-		var ptyID string
-		var data []byte
+		// MsgPTYOutput is always the binary format (36-byte PTY ID + data).
 		ptyID, data, err := ParseBinaryPTYMessage(msg.Payload)
 		if err != nil || ptyID == "" {
-			// Fall back to codec format
-			var payload PTYOutputPayload
-			if err := msg.ParsePayloadWithCodec(&payload, c.codec); err == nil && payload.PTYID != "" {
-				ptyID = payload.PTYID
-				data = payload.Data
-			} else {
-				return
-			}
+			return
 		}
 
 		c.ptyHandlersMu.RLock()
@@ -1048,44 +985,6 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			debugLog("[REMOTE] No handler registered for remote commands")
 		}
 
-	case MsgQueryWindows:
-		// Query for window list
-		var payload QueryWindowsPayload
-		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
-			debugLog("[QUERY] Failed to parse query windows: %v", err)
-			return
-		}
-
-		c.queryHandlersMu.RLock()
-		handler := c.queryWindowsHandler
-		c.queryHandlersMu.RUnlock()
-
-		if handler != nil {
-			result := handler(payload.RequestID)
-			if result != nil {
-				_ = c.SendWindowList(result)
-			}
-		}
-
-	case MsgQuerySession:
-		// Query for session info
-		var payload QuerySessionPayload
-		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
-			debugLog("[QUERY] Failed to parse query session: %v", err)
-			return
-		}
-
-		c.queryHandlersMu.RLock()
-		handler := c.querySessionHandler
-		c.queryHandlersMu.RUnlock()
-
-		if handler != nil {
-			result := handler(payload.RequestID)
-			if result != nil {
-				_ = c.SendSessionInfo(result)
-			}
-		}
-
 	case MsgStateSync:
 		// Another client updated the session state
 		var payload StateSyncPayload
@@ -1150,21 +1049,6 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			handler(payload.Width, payload.Height, payload.ClientCount)
 		}
 
-	case MsgForceRefresh:
-		// Force a re-render
-		var payload ForceRefreshPayload
-		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
-			debugLog("[MULTICLIENT] Failed to parse force refresh: %v", err)
-			return
-		}
-
-		c.multiClientMu.RLock()
-		handler := c.forceRefreshHandler
-		c.multiClientMu.RUnlock()
-
-		if handler != nil {
-			handler(payload.Reason)
-		}
 	}
 }
 

@@ -269,10 +269,8 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	}
 
 	checkEnum("border_style", cfg.Appearance.BorderStyle, BorderStyles)
-	checkEnum("dockbar_position", cfg.Appearance.DockbarPosition,
-		[]string{"bottom", "top", "hidden"})
-	checkEnum("sidebar.position", cfg.Appearance.Sidebar.Position,
-		[]string{"left", "right", "hidden"})
+	checkEnum("dockbar_position", cfg.Appearance.DockbarPosition, DockbarPositions)
+	checkEnum("sidebar.position", cfg.Appearance.Sidebar.Position, SidebarPositions)
 	if cfg.Appearance.Sidebar.Workspaces != "" {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "appearance.sidebar.workspaces",
@@ -284,10 +282,8 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("window_button_style", cfg.Appearance.WindowButtonStyle, WindowButtonStyles)
 	checkEnum("window_button_position", cfg.Appearance.WindowButtonPosition, WindowButtonPositions)
 	checkEnum("scrollbar.style", cfg.Appearance.Scrollbar.Style, ScrollbarStyles)
-	checkEnum("whichkey_position", cfg.Appearance.WhichKeyPosition,
-		[]string{"bottom-right", "bottom-left", "top-right", "top-left", "center"})
-	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition,
-		[]string{"bottom", "top", "hidden"})
+	checkEnum("whichkey_position", cfg.Appearance.WhichKeyPosition, WhichKeyPositions)
+	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition, WindowTitlePositions)
 	validateTitleFormat(cfg.Appearance.WindowTitleFormat, result)
 	validateBorderColors(cfg, result)
 	validateScrollbar(cfg, result)

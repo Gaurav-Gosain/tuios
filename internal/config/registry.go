@@ -248,50 +248,6 @@ func (r *KeybindRegistry) GetConfig() *UserConfig {
 	return r.config
 }
 
-// IsActionExplicitlyConfigured checks if an action has explicit keybindings in the user config
-// (not just auto-filled defaults). This is used to determine if hard-coded fallbacks should be disabled.
-func (r *KeybindRegistry) IsActionExplicitlyConfigured(action string) bool {
-	// Check if the action exists in any section of the user's config
-	// If it does, it means the user explicitly configured it (even if to empty keys)
-
-	// Map action names to their sections
-	actionToSection := map[string]string{
-		"new_window":      "window_management",
-		"close_window":    "window_management",
-		"rename_window":   "window_management",
-		"minimize_window": "window_management",
-		"restore_all":     "window_management",
-		"next_window":     "window_management",
-		"prev_window":     "window_management",
-		// Add more as needed
-	}
-
-	section := actionToSection[action]
-	if section == "" {
-		return false
-	}
-
-	// Check if the section exists in the config and has this action
-	var sectionMap map[string][]string
-	switch section {
-	case "window_management":
-		sectionMap = r.config.Keybindings.WindowManagement
-	case "workspaces":
-		sectionMap = r.config.Keybindings.Workspaces
-	case "layout":
-		sectionMap = r.config.Keybindings.Layout
-	case "mode_control":
-		sectionMap = r.config.Keybindings.ModeControl
-	case "system":
-		sectionMap = r.config.Keybindings.System
-	default:
-		return false
-	}
-
-	_, exists := sectionMap[action]
-	return exists
-}
-
 // ActionDescriptions maps action names to their descriptions for help menu generation.
 var ActionDescriptions = map[string]string{
 	// Window Management

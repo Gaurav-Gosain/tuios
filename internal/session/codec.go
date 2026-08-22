@@ -4,7 +4,6 @@ package session
 import (
 	"bytes"
 	"encoding/gob"
-	"encoding/json"
 	"fmt"
 )
 
@@ -14,7 +13,8 @@ type CodecType uint8
 const (
 	// CodecGob is the default binary encoding - fast and efficient for Go-to-Go communication.
 	CodecGob CodecType = iota
-	// CodecJSON is optional text encoding - for external clients and debugging.
+	// CodecJSON is reserved: the JSON payload codec was removed (no client
+	// could negotiate it), but the wire codec byte keeps its value.
 	CodecJSON
 )
 
@@ -27,16 +27,6 @@ func (c CodecType) String() string {
 		return "json"
 	default:
 		return fmt.Sprintf("unknown(%d)", c)
-	}
-}
-
-// ParseCodecType parses a string into a CodecType.
-func ParseCodecType(s string) CodecType {
-	switch s {
-	case "json", "JSON":
-		return CodecJSON
-	default:
-		return CodecGob
 	}
 }
 
@@ -79,46 +69,13 @@ func (c *GobCodec) Decode(data []byte, v any) error {
 // Type returns CodecGob.
 func (c *GobCodec) Type() CodecType { return CodecGob }
 
-// JSONCodec implements JSON encoding for external clients.
-type JSONCodec struct{}
+// Singleton codec instance for reuse.
+var gobCodec = &GobCodec{}
 
-// Encode serializes a value using JSON encoding.
-func (c *JSONCodec) Encode(v any) ([]byte, error) {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return nil, fmt.Errorf("json encode: %w", err)
-	}
-	return data, nil
-}
-
-// Decode deserializes JSON-encoded bytes into a value.
-func (c *JSONCodec) Decode(data []byte, v any) error {
-	if len(data) == 0 {
-		return nil
-	}
-	if err := json.Unmarshal(data, v); err != nil {
-		return fmt.Errorf("json decode: %w", err)
-	}
-	return nil
-}
-
-// Type returns CodecJSON.
-func (c *JSONCodec) Type() CodecType { return CodecJSON }
-
-// Singleton codec instances for reuse.
-var (
-	gobCodec  = &GobCodec{}
-	jsonCodec = &JSONCodec{}
-)
-
-// GetCodec returns the codec for the given type.
-func GetCodec(t CodecType) Codec {
-	switch t {
-	case CodecJSON:
-		return jsonCodec
-	default:
-		return gobCodec
-	}
+// GetCodec returns the codec for a wire codec byte. gob is the only payload
+// codec; the byte survives on the wire for stability.
+func GetCodec(CodecType) Codec {
+	return gobCodec
 }
 
 // DefaultCodec returns the default codec (gob).
@@ -142,13 +99,10 @@ func init() {
 	gob.Register(ResizePayload{})
 	gob.Register(ErrorPayload{})
 	gob.Register(PTYInfo{})
-	gob.Register(PTYListPayload{})
 	gob.Register(CreatePTYPayload{})
 	gob.Register(PTYCreatedPayload{})
 	gob.Register(ClosePTYPayload{})
 	gob.Register(FocusPTYPayload{})
-	gob.Register(InputPayload{})
-	gob.Register(PTYOutputPayload{})
 	gob.Register(ResizePTYPayload{})
 	gob.Register(PTYResizedPayload{})
 	gob.Register(SubscribePTYPayload{})
@@ -175,12 +129,8 @@ func init() {
 	// Remote command payloads
 	gob.Register(ExecuteCommandPayload{})
 	gob.Register(SendKeysPayload{})
-	gob.Register(SetConfigPayload{})
 	gob.Register(RemoteCommandPayload{})
 	gob.Register(CommandResultPayload{})
 	gob.Register(GetLogsPayload{})
 	gob.Register(LogsDataPayload{})
-	gob.Register(WindowListPayload{})
-	gob.Register(QueryWindowsPayload{})
-	gob.Register(QuerySessionPayload{})
 }

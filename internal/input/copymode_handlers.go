@@ -627,46 +627,6 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	fx.InvalidateCache()
 }
 
-// HandleCopyModeMouseClick handles mouse clicks in copy mode
-func HandleCopyModeMouseClick(cm *terminal.CopyMode, window *terminal.Window, clickX, clickY int) {
-	// Convert window-relative coordinates (with border) to terminal coordinates
-	terminalX, terminalY, inContent := window.ScreenToTerminal(clickX, clickY)
-
-	// Check bounds
-	if !inContent {
-		return // Click outside terminal content area
-	}
-
-	// The lock covers the cell-buffer traversal only; InvalidateCache runs
-	// after the unlock so nothing reachable from the locked region can take
-	// the I/O lock a second time.
-	func() {
-		window.RLockIO()
-		defer window.RUnlockIO()
-
-		// Move cursor to clicked position
-		cm.CursorX = terminalX
-		cm.CursorY = terminalY
-
-		// Adjust cursor to avoid landing on continuation cells of wide characters
-		// Move left until we find a cell with Width > 0
-		for cm.CursorX > 0 {
-			cell := getCellAtCursor(cm, window)
-			if cell == nil || cell.Width > 0 {
-				break
-			}
-			cm.CursorX--
-		}
-
-		// If in visual mode, update selection end
-		if cm.State == terminal.CopyModeVisualChar || cm.State == terminal.CopyModeVisualLine {
-			updateVisualEnd(cm, window)
-		}
-	}()
-
-	window.InvalidateCache()
-}
-
 // HandleCopyModeMouseDrag handles mouse drag start in copy mode (initiates visual selection)
 func HandleCopyModeMouseDrag(cm *terminal.CopyMode, window *terminal.Window, startX, startY int) {
 	// Convert window-relative coordinates to terminal coordinates
@@ -677,7 +637,7 @@ func HandleCopyModeMouseDrag(cm *terminal.CopyMode, window *terminal.Window, sta
 		return
 	}
 
-	// Lock scoped to the traversal; see HandleCopyModeMouseClick.
+	// Lock scoped to the cell-buffer traversal; InvalidateCache runs outside it.
 	func() {
 		window.RLockIO()
 		defer window.RUnlockIO()
@@ -717,7 +677,7 @@ func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, m
 		return 0
 	}
 
-	// Lock scoped to the traversal; see HandleCopyModeMouseClick.
+	// Lock scoped to the cell-buffer traversal; InvalidateCache runs outside it.
 	scrollDir := func() int {
 		window.RLockIO()
 		defer window.RUnlockIO()
@@ -735,12 +695,12 @@ func HandleCopyModeMouseMotion(cm *terminal.CopyMode, window *terminal.Window, m
 			if mouseY < contentTop {
 				dir = -1
 				for range 3 {
-					MoveUp(cm, window)
+					moveUp(cm, window)
 				}
 			} else if mouseY >= contentBottom {
 				dir = 1
 				for range 3 {
-					MoveDown(cm, window)
+					moveDown(cm, window)
 				}
 			}
 			updateVisualEnd(cm, window)

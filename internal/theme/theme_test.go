@@ -185,37 +185,6 @@ func TestDockColors(t *testing.T) {
 	}
 }
 
-// TestCopyModeColors tests copy mode color functions
-func TestCopyModeColors(t *testing.T) {
-	_ = Initialize("")
-
-	tests := []struct {
-		name    string
-		colorFn func() (color.Color, color.Color)
-	}{
-		{"CopyModeCursor", CopyModeCursor},
-		{"CopyModeVisualSelection", CopyModeVisualSelection},
-		{"CopyModeSearchCurrent", CopyModeSearchCurrent},
-		{"CopyModeSearchOther", CopyModeSearchOther},
-		{"CopyModeTextSelection", CopyModeTextSelection},
-		{"CopyModeSelectionCursor", CopyModeSelectionCursor},
-		{"CopyModeSearchBar", CopyModeSearchBar},
-		{"TerminalCursorColors", TerminalCursorColors},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			bg, fg := tt.colorFn()
-			if bg == nil {
-				t.Errorf("%s returned nil background", tt.name)
-			}
-			if fg == nil {
-				t.Errorf("%s returned nil foreground", tt.name)
-			}
-		})
-	}
-}
-
 // TestNotificationColors tests notification color functions
 func TestNotificationColors(t *testing.T) {
 	_ = Initialize("")

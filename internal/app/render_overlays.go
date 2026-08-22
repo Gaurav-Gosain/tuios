@@ -8,7 +8,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -396,14 +395,12 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				progress = (currentCmd * 100) / totalCmds
 			}
 			isFinished = !m.ScriptFinishedTime.IsZero()
-		} else if m.ScriptPlayer != nil {
+		} else if player := m.ScriptPlayer; player != nil {
 			// Local script playback (tape play)
-			if player, ok := m.ScriptPlayer.(*tape.Player); ok {
-				progress = player.Progress()
-				currentCmd = player.CurrentIndex()
-				totalCmds = player.TotalCommands()
-				isFinished = player.IsFinished()
-			}
+			progress = player.Progress()
+			currentCmd = player.CurrentIndex()
+			totalCmds = player.TotalCommands()
+			isFinished = player.IsFinished()
 		}
 
 		if totalCmds > 0 {

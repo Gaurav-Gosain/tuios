@@ -240,10 +240,10 @@ const themeNone = "none"
 
 var (
 	borderStyleOptions     = config.BorderStyles
-	positionOptions        = []string{"bottom", "top", "hidden"}
-	whichKeyPosOptions     = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
+	positionOptions        = config.DockbarPositions
+	whichKeyPosOptions     = config.WhichKeyPositions
 	fpsOptions             = []string{"30", "60", "90", "120", "144", "unlimited"}
-	sidebarPositionOptions = []string{"left", "right", "hidden"}
+	sidebarPositionOptions = config.SidebarPositions
 	scrollbarStyleOptions  = config.ScrollbarStyles
 	windowButtonOptions    = config.WindowButtonStyles
 	windowButtonPosOptions = config.WindowButtonPositions

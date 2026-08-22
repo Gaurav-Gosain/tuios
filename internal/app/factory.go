@@ -62,9 +62,6 @@ type OSOptions struct {
 	// SSHSession is the SSH session reference (nil in local mode).
 	SSHSession ssh.Session
 
-	// EnableGraphicsPassthrough enables Kitty/Sixel graphics passthrough.
-	EnableGraphicsPassthrough bool
-
 	// ForceGraphicsEnabled skips capability detection for the graphics
 	// passthroughs. Use this in web mode where stdin isn't a real TTY so
 	// GetHostCapabilities can't detect terminal support, but the browser
@@ -154,18 +151,18 @@ func NewOS(opts OSOptions) *OS {
 	os.desktopApps = newDesktopCache()
 	os.launchHistory = applist.LoadFrecency(applist.DefaultPath())
 
-	// Initialize graphics passthrough if enabled
-	if opts.EnableGraphicsPassthrough {
-		os.KittyPassthrough = NewKittyPassthroughWithOptions(KittyPassthroughOptions{
-			ForceEnable:  opts.ForceGraphicsEnabled,
-			Output:       opts.GraphicsOutput,
-			RemoteClient: opts.GraphicsRemoteClient,
-		})
-		os.SixelPassthrough = NewSixelPassthroughWithOptions(SixelPassthroughOptions{
-			ForceEnable: opts.ForceGraphicsEnabled,
-			Output:      opts.GraphicsOutput,
-		})
-	}
+	// Initialize graphics passthrough. The passthroughs decide for themselves
+	// whether the host can display anything; a pane's emulator never emulates
+	// graphics locally.
+	os.KittyPassthrough = NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+		ForceEnable:  opts.ForceGraphicsEnabled,
+		Output:       opts.GraphicsOutput,
+		RemoteClient: opts.GraphicsRemoteClient,
+	})
+	os.SixelPassthrough = NewSixelPassthroughWithOptions(SixelPassthroughOptions{
+		ForceEnable: opts.ForceGraphicsEnabled,
+		Output:      opts.GraphicsOutput,
+	})
 
 	// Tell the terminal package what tuios can forward, so shells spawned
 	// locally advertise a terminal identity their image tools recognise. The

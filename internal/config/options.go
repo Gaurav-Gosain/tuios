@@ -52,15 +52,14 @@ const (
 	OptionString = "string"
 )
 
-// Enum sets that validation.go spells inline rather than exporting. They are
-// named here so the registry and the validator can be read against each other.
+// The enum sets shared by the registry, the validator and the settings page,
+// so one spelling serves all three.
 var (
-	dockbarPositions     = []string{"bottom", "top", "hidden"}
-	sidebarPositions     = []string{"left", "right", "hidden"}
-	whichKeyPositions    = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
-	windowTitlePositions = []string{"bottom", "top", "hidden"}
+	DockbarPositions     = []string{"bottom", "top", "hidden"}
+	SidebarPositions     = []string{"left", "right", "hidden"}
+	WhichKeyPositions    = []string{"bottom-right", "bottom-left", "top-right", "top-left", "center"}
+	WindowTitlePositions = []string{"bottom", "top", "hidden"}
 	daemonLogLevels      = []string{"off", "errors", "basic", "messages", "verbose", "trace"}
-	daemonCodecs         = []string{"gob", "json"}
 )
 
 // optionSpecs is the registry, hand-written so each entry can say what the
@@ -126,11 +125,6 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 	{
-		Path: "appearance.focus_follows_mouse_in_terminal", Type: OptionBool, Section: "appearance",
-		Description: "Also hover-focus while in terminal mode",
-		Default:     "false",
-	},
-	{
 		Path: "appearance.alt_drag", Type: OptionBool, Section: "appearance",
 		Description: "Alt plus left-drag moves a pane",
 		Default:     "true",
@@ -168,12 +162,12 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.whichkey_position", Type: OptionString, Section: "appearance",
 		Description: "Corner the which-key popup opens in (empty: bottom-right)",
-		Accepted:    whichKeyPositions, Default: "",
+		Accepted:    WhichKeyPositions, Default: "",
 	},
 	{
 		Path: "appearance.window_title_position", Type: OptionString, Section: "appearance",
 		Description: "Edge of the pane the title is drawn on (empty: bottom)",
-		Accepted:    windowTitlePositions, Default: "",
+		Accepted:    WindowTitlePositions, Default: "",
 	},
 	{
 		Path: "appearance.theme", Type: OptionString, Section: "appearance",
@@ -233,7 +227,7 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.sidebar_position", Type: OptionString, Section: "appearance",
 		Description: "Edge the session rail sits on",
-		Accepted:    sidebarPositions, Default: "",
+		Accepted:    SidebarPositions, Default: "",
 		Deprecated: "folded into [appearance.sidebar] on load; set appearance.sidebar.position",
 	},
 	{
@@ -265,7 +259,7 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.dockbar_position", Type: OptionString, Section: "dock",
 		Description: "Edge the dock sits on, or hidden",
-		Accepted:    dockbarPositions, Default: "bottom",
+		Accepted:    DockbarPositions, Default: "bottom",
 	},
 	{
 		Path: "appearance.dock_workspace_tabs", Type: OptionBool, Section: "dock",
@@ -341,7 +335,7 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.sidebar.position", Type: OptionString, Section: "sidebar",
 		Description: "Edge the rail sits on, or hidden",
-		Accepted:    sidebarPositions, Default: "left",
+		Accepted:    SidebarPositions, Default: "left",
 	},
 	{
 		Path: "appearance.sidebar.width", Type: OptionInt, Section: "sidebar",
@@ -413,16 +407,6 @@ var optionSpecs = []Option{
 		Path: "daemon.log_level", Type: OptionString, Section: "daemon",
 		Description: "How much the daemon logs",
 		Accepted:    daemonLogLevels, Default: "off",
-	},
-	{
-		Path: "daemon.default_codec", Type: OptionString, Section: "daemon",
-		Description: "Wire codec for the daemon protocol",
-		Accepted:    daemonCodecs, Default: "gob",
-	},
-	{
-		Path: "daemon.socket_path", Type: OptionString, Section: "daemon",
-		Description: "Socket path; empty uses $XDG_RUNTIME_DIR/tuios/daemon.sock",
-		Default:     "",
 	},
 	{
 		Path: "daemon.agent_autodetect", Type: OptionBool, Section: "daemon",

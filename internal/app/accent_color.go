@@ -203,13 +203,6 @@ func rgbToHSL(c color.RGBA) (h, s, l float64) {
 	return h, math.Min(s, 1), l
 }
 
-// rotateHue returns c with its hue turned by deg, keeping saturation and
-// lightness. This is how the harmony chips are built.
-func rotateHue(c color.RGBA, deg float64) color.RGBA {
-	h, s, l := rgbToHSL(c)
-	return hslToRGB(h+deg, s, l)
-}
-
 // accentProfile caches the probed colour profile. Zero is colorprofile.Unknown,
 // which is what "not probed yet" looks like. Atomic because every session's
 // render goroutine reads it.

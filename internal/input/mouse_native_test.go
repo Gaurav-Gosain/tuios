@@ -139,12 +139,6 @@ func TestFocusFollowsMouse(t *testing.T) {
 		config.FocusFollowsMouse = v
 		t.Cleanup(func() { config.FocusFollowsMouse = prev })
 	}
-	setFFMTerminal := func(t *testing.T, v bool) {
-		t.Helper()
-		prev := config.FocusFollowsMouseInTerminal
-		config.FocusFollowsMouseInTerminal = v
-		t.Cleanup(func() { config.FocusFollowsMouseInTerminal = prev })
-	}
 
 	t.Run("on: motion over pane b focuses it", func(t *testing.T) {
 		setFFM(t, true)
@@ -176,20 +170,6 @@ func TestFocusFollowsMouse(t *testing.T) {
 		o, _ = handleMouseMotion(tea.MouseMotionMsg{X: 60, Y: 10}, o)
 		if o.FocusedWindow != 1 {
 			t.Errorf("focus = %d, want the hovered pane (1)", o.FocusedWindow)
-		}
-	})
-
-	t.Run("on: terminal toggle glides between panes in terminal mode", func(t *testing.T) {
-		setFFM(t, true)
-		setFFMTerminal(t, true)
-		o := twoPaneOS(t)
-		o.Mode = app.TerminalMode
-		o, _ = handleMouseMotion(tea.MouseMotionMsg{X: 60, Y: 10}, o)
-		if o.FocusedWindow != 1 {
-			t.Errorf("focus = %d, want pane b (1)", o.FocusedWindow)
-		}
-		if o.Mode != app.TerminalMode {
-			t.Error("gliding between panes left terminal mode")
 		}
 	})
 

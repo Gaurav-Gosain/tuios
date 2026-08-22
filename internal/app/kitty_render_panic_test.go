@@ -27,13 +27,12 @@ func TestGetKittyGraphicsCmdSurvivesHostWritePanic(t *testing.T) {
 	})
 
 	m := NewOS(OSOptions{
-		UserConfig:                config.DefaultConfig(),
-		Width:                     183,
-		Height:                    42,
-		IsDaemonSession:           true,
-		EnableGraphicsPassthrough: true,
-		GraphicsOutput:            panicWriter{},
-		GraphicsRemoteClient:      true,
+		UserConfig:           config.DefaultConfig(),
+		Width:                183,
+		Height:               42,
+		IsDaemonSession:      true,
+		GraphicsOutput:       panicWriter{},
+		GraphicsRemoteClient: true,
 	})
 
 	win := newTestWindow(t, "panicwin-0001", 183, 42)

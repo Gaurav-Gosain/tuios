@@ -254,11 +254,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		var idsToDelete []uint32
 
 		for hostID, p := range placements {
-			// Skip placements that are still receiving chunked data
-			if p.Streaming {
-				continue
-			}
-
 			// Handle screen mode mismatch:
 			// - Images placed on normal screen should be hidden when altscreen is active
 			// - Images placed on altscreen should be DELETED when back to normal screen

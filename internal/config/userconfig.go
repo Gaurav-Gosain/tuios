@@ -112,9 +112,7 @@ type TapeConfig struct {
 
 // DaemonConfig holds daemon-related settings
 type DaemonConfig struct {
-	LogLevel     string `toml:"log_level"`     // Debug log level: off, errors, basic, messages, verbose, trace (default: off)
-	DefaultCodec string `toml:"default_codec"` // Default protocol codec: gob, json (default: gob)
-	SocketPath   string `toml:"socket_path"`   // Custom socket path (default: $XDG_RUNTIME_DIR/tuios/daemon.sock)
+	LogLevel string `toml:"log_level"` // Debug log level: off, errors, basic, messages, verbose, trace (default: off)
 	// AgentAutoDetect toggles automatic detection of a pane's foreground AI-agent
 	// CLI (claude, codex, aider, ...), which sets the pane's agent-state glyph
 	// without set-agent-state. Nil means enabled (the default); set to false to
@@ -130,33 +128,32 @@ type DaemonConfig struct {
 
 // AppearanceConfig holds appearance-related settings
 type AppearanceConfig struct {
-	BorderStyle                 string  `toml:"border_style"`                    // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
-	ZenMode                     string  `toml:"zen_mode"`                        // Zen mode: disabled, always, mouse (default: disabled)
-	HideWindowButtons           bool    `toml:"hide_window_buttons"`             // Hide window control buttons (minimize, maximize, close)
-	WindowButtonStyle           string  `toml:"window_button_style"`             // Window control style: pill, dots (default: pill)
-	WindowButtonPosition        string  `toml:"window_button_position"`          // Which end of the title bar the window controls sit on: right, left (default: right)
-	HideScrollbar               bool    `toml:"hide_scrollbar"`                  // Hide the window scrollbar thumb on the border
-	ScrollbackLines             int     `toml:"scrollback_lines"`                // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
-	ScrollLines                 int     `toml:"scroll_lines"`                    // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
-	CopyOnSelect                *bool   `toml:"copy_on_select"`                  // Copy a mouse selection to the clipboard on release (default: true)
-	FocusFollowsMouse           *bool   `toml:"focus_follows_mouse"`             // Focus the pane under the cursor as the mouse moves (default: false)
-	FocusFollowsMouseInTerminal *bool   `toml:"focus_follows_mouse_in_terminal"` // Also hover-focus while in terminal mode (default: false)
-	AltDrag                     *bool   `toml:"alt_drag"`                        // Alt + left-drag moves a pane (default: true)
-	ClickToType                 string  `toml:"click_to_type"`                   // What a click on a pane's content does in window-management mode: single, double, off (default: single)
-	WordCharacters              *string `toml:"word_characters"`                 // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
-	DockbarPosition             string  `toml:"dockbar_position"`                // Dockbar position: bottom, top, hidden
-	PreferredShell              string  `toml:"preferred_shell"`                 // Preferred shell: if empty, auto-detect based on platform.
-	AnimationsEnabled           *bool   `toml:"animations_enabled"`              // Enable UI animations (default: true). Set to false for instant transitions.
-	ConfirmQuit                 *bool   `toml:"confirm_quit"`                    // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
-	WhichKeyEnabled             *bool   `toml:"whichkey_enabled"`                // Show which-key popup after pressing leader key (default: true)
-	WhichKeyPosition            string  `toml:"whichkey_position"`               // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
-	WindowTitlePosition         string  `toml:"window_title_position"`           // Window title position: bottom, top, hidden (default: bottom). Shows CustomName if set, else terminal title.
-	HideClock                   bool    `toml:"hide_clock"`                      // Hide the clock overlay (deprecated, use show_clock)
-	ShowClock                   bool    `toml:"show_clock"`                      // Show the clock overlay (default: false)
-	ShowCPU                     bool    `toml:"show_cpu"`                        // Show CPU graph in dock (default: false)
-	ShowRAM                     bool    `toml:"show_ram"`                        // Show RAM usage in dock (default: false)
-	Theme                       string  `toml:"theme"`                           // Color theme name (e.g., dracula, nord, my-custom-theme)
-	SharedBorders               *bool   `toml:"shared_borders"`                  // Share borders between adjacent tiled windows (default: false)
+	BorderStyle          string  `toml:"border_style"`           // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
+	ZenMode              string  `toml:"zen_mode"`               // Zen mode: disabled, always, mouse (default: disabled)
+	HideWindowButtons    bool    `toml:"hide_window_buttons"`    // Hide window control buttons (minimize, maximize, close)
+	WindowButtonStyle    string  `toml:"window_button_style"`    // Window control style: pill, dots (default: pill)
+	WindowButtonPosition string  `toml:"window_button_position"` // Which end of the title bar the window controls sit on: right, left (default: right)
+	HideScrollbar        bool    `toml:"hide_scrollbar"`         // Hide the window scrollbar thumb on the border
+	ScrollbackLines      int     `toml:"scrollback_lines"`       // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
+	ScrollLines          int     `toml:"scroll_lines"`           // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
+	CopyOnSelect         *bool   `toml:"copy_on_select"`         // Copy a mouse selection to the clipboard on release (default: true)
+	FocusFollowsMouse    *bool   `toml:"focus_follows_mouse"`    // Focus the pane under the cursor as the mouse moves (default: false)
+	AltDrag              *bool   `toml:"alt_drag"`               // Alt + left-drag moves a pane (default: true)
+	ClickToType          string  `toml:"click_to_type"`          // What a click on a pane's content does in window-management mode: single, double, off (default: single)
+	WordCharacters       *string `toml:"word_characters"`        // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
+	DockbarPosition      string  `toml:"dockbar_position"`       // Dockbar position: bottom, top, hidden
+	PreferredShell       string  `toml:"preferred_shell"`        // Preferred shell: if empty, auto-detect based on platform.
+	AnimationsEnabled    *bool   `toml:"animations_enabled"`     // Enable UI animations (default: true). Set to false for instant transitions.
+	ConfirmQuit          *bool   `toml:"confirm_quit"`           // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
+	WhichKeyEnabled      *bool   `toml:"whichkey_enabled"`       // Show which-key popup after pressing leader key (default: true)
+	WhichKeyPosition     string  `toml:"whichkey_position"`      // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
+	WindowTitlePosition  string  `toml:"window_title_position"`  // Window title position: bottom, top, hidden (default: bottom). Shows CustomName if set, else terminal title.
+	HideClock            bool    `toml:"hide_clock"`             // Hide the clock overlay (deprecated, use show_clock)
+	ShowClock            bool    `toml:"show_clock"`             // Show the clock overlay (default: false)
+	ShowCPU              bool    `toml:"show_cpu"`               // Show CPU graph in dock (default: false)
+	ShowRAM              bool    `toml:"show_ram"`               // Show RAM usage in dock (default: false)
+	Theme                string  `toml:"theme"`                  // Color theme name (e.g., dracula, nord, my-custom-theme)
+	SharedBorders        *bool   `toml:"shared_borders"`         // Share borders between adjacent tiled windows (default: false)
 	// Customization
 	BorderFocusedColor     string `toml:"border_focused_color"`      // Hex color for focused pane border (e.g., "#89b4fa")
 	BorderUnfocusedColor   string `toml:"border_unfocused_color"`    // Hex color for unfocused pane border (e.g., "#585b70")
@@ -381,9 +378,7 @@ func DefaultConfig() *UserConfig {
 			},
 		},
 		Daemon: DaemonConfig{
-			LogLevel:     "off",
-			DefaultCodec: "gob",
-			SocketPath:   "", // Empty means use default XDG path
+			LogLevel: "off",
 		},
 		Startup: StartupConfig{
 			OpenDefaultWindow:   false,
@@ -1089,16 +1084,12 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	}
 
 	// WindowTitlePosition defaults to bottom
-	// Only apply from config if not already set via flag (run.go applies flags separately)
-	if cfg.Appearance.WindowTitlePosition != "" && WindowTitlePosition == "bottom" {
+	if cfg.Appearance.WindowTitlePosition != "" {
 		WindowTitlePosition = cfg.Appearance.WindowTitlePosition
 	}
 
 	// HideClock defaults to false
-	// Only apply from config if not already set via flag (run.go applies flags separately)
-	if !HideClock {
-		HideClock = cfg.Appearance.HideClock
-	}
+	HideClock = cfg.Appearance.HideClock
 
 	// WindowTitleFormat defaults to empty, meaning the title is shown as-is.
 	// An empty string in the config also clears a previously set format on
@@ -1119,12 +1110,6 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// settings page survives a reload just as turning it on does.
 	if cfg.Appearance.FocusFollowsMouse != nil {
 		FocusFollowsMouse = *cfg.Appearance.FocusFollowsMouse
-	}
-
-	// FocusFollowsMouseInTerminal gates hover-focus in terminal mode; a pointer so
-	// an explicit false in the settings page survives a reload.
-	if cfg.Appearance.FocusFollowsMouseInTerminal != nil {
-		FocusFollowsMouseInTerminal = *cfg.Appearance.FocusFollowsMouseInTerminal
 	}
 
 	// AltDrag defaults to true; a pointer so an explicit false in the config
@@ -1218,10 +1203,6 @@ func fillMissingDaemon(cfg, defaultCfg *UserConfig) {
 	if cfg.Daemon.LogLevel == "" {
 		cfg.Daemon.LogLevel = defaultCfg.Daemon.LogLevel
 	}
-	if cfg.Daemon.DefaultCodec == "" {
-		cfg.Daemon.DefaultCodec = defaultCfg.Daemon.DefaultCodec
-	}
-	// SocketPath defaults to empty (use XDG default), so we don't override it
 }
 
 // migrateLegacySidebar folds the flat appearance.sidebar_* keys into the

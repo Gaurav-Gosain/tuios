@@ -337,9 +337,8 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer,
 		// say the terminal can render them, so this is a no-op for a plain
 		// client. RemoteClient forces file-medium transmissions to be
 		// re-encoded as direct data, since the client cannot read server paths.
-		EnableGraphicsPassthrough: true,
-		GraphicsOutput:            graphicsOut,
-		GraphicsRemoteClient:      true,
+		GraphicsOutput:       graphicsOut,
+		GraphicsRemoteClient: true,
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
@@ -404,16 +403,15 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 
 	// Create TUIOS instance connected to daemon
 	tuiosInstance := app.NewOS(app.OSOptions{
-		KeybindRegistry:           keybindRegistry,
-		UserConfig:                userConfig,
-		Width:                     width,
-		Height:                    height,
-		IsSSHMode:                 true,
-		SSHSession:                sshSession,
-		IsDaemonSession:           true,
-		DaemonClient:              client,
-		SessionName:               sessionName,
-		EnableGraphicsPassthrough: true,
+		KeybindRegistry: keybindRegistry,
+		UserConfig:      userConfig,
+		Width:           width,
+		Height:          height,
+		IsSSHMode:       true,
+		SSHSession:      sshSession,
+		IsDaemonSession: true,
+		DaemonClient:    client,
+		SessionName:     sessionName,
 		// Route graphics to the SSH session (through the serialized writer
 		// shared with the renderer) so kitty/sixel APCs reach the client's
 		// terminal, and re-encode file-medium transmissions as direct data
@@ -499,19 +497,6 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 			case m.ClientEventChan <- app.ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height}:
 			default:
 				log.Printf("[SSH] Warning: ClientEventChan full, dropping session resize event")
-			}
-		}
-	})
-
-	// Handle force refresh (also on the read-loop goroutine; MarkAllDirty must run
-	// on the program goroutine).
-	client.OnForceRefresh(func(reason string) {
-		log.Printf("[SSH] Force refresh requested: %s", reason)
-		if m.ClientEventChan != nil {
-			select {
-			case m.ClientEventChan <- app.ClientEvent{Type: "refresh", Reason: reason}:
-			default:
-				log.Printf("[SSH] Warning: ClientEventChan full, dropping force refresh event")
 			}
 		}
 	})

@@ -16,26 +16,6 @@ func cellContent(cell *uv.Cell) string {
 	return ""
 }
 
-// MoveLeft moves cursor left
-func MoveLeft(cm *terminal.CopyMode, window *terminal.Window) {
-	moveLeft(cm, window)
-}
-
-// MoveRight moves cursor right
-func MoveRight(cm *terminal.CopyMode, window *terminal.Window) {
-	moveRight(cm, window)
-}
-
-// MoveUp moves cursor up
-func MoveUp(cm *terminal.CopyMode, window *terminal.Window) {
-	moveUp(cm, window)
-}
-
-// MoveDown moves cursor down
-func MoveDown(cm *terminal.CopyMode, window *terminal.Window) {
-	moveDown(cm, window)
-}
-
 // Internal movement functions
 
 func moveLeft(cm *terminal.CopyMode, window *terminal.Window) {

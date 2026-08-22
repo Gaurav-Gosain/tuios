@@ -43,7 +43,6 @@ type SixelPassthroughPlacement struct {
 	WindowID     string
 	AbsoluteLine int // Absolute line in scrollback where image starts
 	GuestX       int // Column position in guest terminal
-	GuestY       int // Row position in guest terminal (at placement time)
 
 	// Image dimensions
 	Width  int // Pixel width
@@ -63,21 +62,11 @@ type SixelPassthroughPlacement struct {
 	PlacedAtY int
 	IsPlaced  bool
 
-	// Clipping state
-	ClipTop    int
-	ClipBottom int
-	ClipLeft   int
-	ClipRight  int
-
 	// The raw sixel data for re-rendering
 	RawSequence []byte
 
 	// Track which screen the image was placed on
 	PlacedOnAltScreen bool
-
-	// Sixel parameters
-	AspectRatio    int
-	BackgroundMode int
 }
 
 // SixelPassthroughOptions configures a SixelPassthrough instance.
@@ -152,7 +141,6 @@ func (sp *SixelPassthrough) ForwardCommand(
 		WindowID:          windowID,
 		AbsoluteLine:      absLine,
 		GuestX:            cursorX,
-		GuestY:            cursorY,
 		Width:             cmd.Width,
 		Height:            cmd.Height,
 		Rows:              rows,
@@ -160,8 +148,6 @@ func (sp *SixelPassthrough) ForwardCommand(
 		Hidden:            true, // Start hidden, RefreshAllPlacements will determine visibility
 		RawSequence:       cmd.RawSequence,
 		PlacedOnAltScreen: isAltScreen,
-		AspectRatio:       cmd.AspectRatio,
-		BackgroundMode:    cmd.BackgroundMode,
 	}
 
 	sp.placements[windowID] = append(sp.placements[windowID], placement)
@@ -174,29 +160,6 @@ func (sp *SixelPassthrough) ClearWindow(windowID string) {
 
 	delete(sp.placements, windowID)
 	sixelPassthroughLog("ClearWindow: windowID=%s", windowID[:min(8, len(windowID))])
-}
-
-// ClearAltScreenPlacements removes placements that were made on the alt screen.
-// Called when transitioning from alt screen to normal screen.
-func (sp *SixelPassthrough) ClearAltScreenPlacements(windowID string) {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-
-	placements := sp.placements[windowID]
-	if len(placements) == 0 {
-		return
-	}
-
-	var remaining []*SixelPassthroughPlacement
-	for _, p := range placements {
-		if !p.PlacedOnAltScreen {
-			remaining = append(remaining, p)
-		}
-	}
-
-	sp.placements[windowID] = remaining
-	sixelPassthroughLog("ClearAltScreenPlacements: windowID=%s, removed=%d",
-		windowID[:min(8, len(windowID))], len(placements)-len(remaining))
 }
 
 // RefreshAllPlacements updates visibility and positions for all placements.
@@ -406,17 +369,6 @@ func (sp *SixelPassthrough) placeSixel(p *SixelPassthroughPlacement, _, _ int) {
 	sp.pendingOutput = append(sp.pendingOutput, buf...)
 }
 
-// FlushOutput writes any pending output to the host terminal.
-func (sp *SixelPassthrough) FlushOutput() {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-
-	if len(sp.pendingOutput) > 0 {
-		_, _ = sp.hostOut.Write(sp.pendingOutput)
-		sp.pendingOutput = sp.pendingOutput[:0]
-	}
-}
-
 // HideAllPlacements hides all sixel placements and queues clear commands.
 func (sp *SixelPassthrough) HideAllPlacements() {
 	sp.mu.Lock()
@@ -446,20 +398,6 @@ func (sp *SixelPassthrough) FlushPending() []byte {
 	return result
 }
 
-// GetSixelGraphicsCmd returns pending sixel output and clears the buffer.
-func (sp *SixelPassthrough) GetSixelGraphicsCmd() string {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-
-	if len(sp.pendingOutput) == 0 {
-		return ""
-	}
-
-	result := string(sp.pendingOutput)
-	sp.pendingOutput = sp.pendingOutput[:0]
-	return result
-}
-
 // PlacementCount returns the total number of placements across all windows.
 func (sp *SixelPassthrough) PlacementCount() int {
 	sp.mu.Lock()
@@ -470,26 +408,6 @@ func (sp *SixelPassthrough) PlacementCount() int {
 		count += len(placements)
 	}
 	return count
-}
-
-// ClearScrolledOut removes placements that have scrolled past a certain line.
-func (sp *SixelPassthrough) ClearScrolledOut(windowID string, minLine int) {
-	sp.mu.Lock()
-	defer sp.mu.Unlock()
-
-	placements := sp.placements[windowID]
-	if len(placements) == 0 {
-		return
-	}
-
-	var remaining []*SixelPassthroughPlacement
-	for _, p := range placements {
-		if p.AbsoluteLine+p.Rows > minLine {
-			remaining = append(remaining, p)
-		}
-	}
-
-	sp.placements[windowID] = remaining
 }
 
 // setupSixelPassthrough configures sixel passthrough for a window.

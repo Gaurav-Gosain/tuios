@@ -23,12 +23,6 @@ type Scrollback struct {
 	tail int
 	// full indicates whether the ring buffer is at capacity
 	full bool
-	// lastWidthCaptured tracks the terminal width when lines were last added
-	// Used for detecting when reflow is needed on resize
-	lastWidthCaptured int
-	// softWrapped indicates which lines are soft-wrapped (not hard breaks)
-	// A soft-wrapped line can be reflowed to a different width
-	softWrapped []bool
 	// onTrim is called when oldest lines are overwritten by the ring buffer.
 	// The argument is the number of lines trimmed (always 1 per overwrite).
 	onTrim func(int)
@@ -41,23 +35,22 @@ func NewScrollback(maxLines int) *Scrollback {
 		maxLines = DefaultScrollbackSize
 	}
 	return &Scrollback{
-		lines:             make([]uv.Line, maxLines), // Pre-allocate full ring buffer
-		maxLines:          maxLines,
-		head:              0,
-		tail:              0,
-		full:              false,
-		lastWidthCaptured: 0,
-		softWrapped:       make([]bool, maxLines), // Track which lines are soft-wrapped
+		lines:    make([]uv.Line, maxLines), // Pre-allocate full ring buffer
+		maxLines: maxLines,
+		head:     0,
+		tail:     0,
+		full:     false,
 	}
 }
 
 // PushLine adds a line to the scrollback buffer. If the buffer is full,
 // the oldest line is removed (by overwriting it in the ring buffer).
 // This is now an O(1) operation instead of O(n).
-// The isSoftWrapped parameter indicates if this line is a soft-wrap (can be
-// reflowed to a different width) or a hard break (actual newline from output).
 func (sb *Scrollback) PushLine(line uv.Line) {
-	sb.PushLineWithWrap(line, true) // Default to soft-wrapped for backwards compatibility
+	// Make a copy of the line to avoid aliasing issues
+	lineCopy := make(uv.Line, len(line))
+	copy(lineCopy, line)
+	sb.pushOwned(lineCopy)
 }
 
 // SetOnTrim sets a callback that fires when the ring buffer overwrites oldest lines.
@@ -65,30 +58,17 @@ func (sb *Scrollback) SetOnTrim(fn func(int)) {
 	sb.onTrim = fn
 }
 
-// PushLineWithWrap adds a line with wrap information for soft-wrap support.
-func (sb *Scrollback) PushLineWithWrap(line uv.Line, isSoftWrapped bool) {
-	if len(line) == 0 {
-		return
-	}
-
-	// Make a copy of the line to avoid aliasing issues
-	lineCopy := make(uv.Line, len(line))
-	copy(lineCopy, line)
-
-	sb.PushLineOwned(lineCopy, isSoftWrapped)
-}
-
-// PushLineOwned is PushLineWithWrap for a line the caller has just allocated
-// and will not touch again, so the ring takes it as is.
+// PushLineOwned is PushLine for a line the caller has just allocated and will
+// not touch again, so the ring takes it as is.
 //
-// The defensive copy in PushLineWithWrap exists because most callers hand over
-// a row of the live screen buffer, which keeps being written. The scroll path
-// does not: extractLine allocates a fresh line per scrolled row and drops its
-// only reference here, so copying it again doubled the cost of retaining a
-// line, and at 112 bytes per cell and terminal width per line that was the bulk
-// of everything the write path allocated.
-func (sb *Scrollback) PushLineOwned(line uv.Line, isSoftWrapped bool) {
-	sb.pushOwned(line, isSoftWrapped)
+// The defensive copy in PushLine exists because most callers hand over a row
+// of the live screen buffer, which keeps being written. The scroll path does
+// not: extractLine allocates a fresh line per scrolled row and drops its only
+// reference here, so copying it again doubled the cost of retaining a line,
+// and at 112 bytes per cell and terminal width per line that was the bulk of
+// everything the write path allocated.
+func (sb *Scrollback) PushLineOwned(line uv.Line) {
+	sb.pushOwned(line)
 }
 
 // PushLineOwnedRecycle is PushLineOwned that also hands back the line the ring
@@ -98,11 +78,11 @@ func (sb *Scrollback) PushLineOwned(line uv.Line, isSoftWrapped bool) {
 // evicted yet. The returned slice is unreachable through the scrollback once
 // this call returns: head has already moved past it. Callers must treat it as
 // uninitialised storage, since it still holds the evicted line's cells.
-func (sb *Scrollback) PushLineOwnedRecycle(line uv.Line, isSoftWrapped bool) uv.Line {
-	return sb.pushOwned(line, isSoftWrapped)
+func (sb *Scrollback) PushLineOwnedRecycle(line uv.Line) uv.Line {
+	return sb.pushOwned(line)
 }
 
-func (sb *Scrollback) pushOwned(line uv.Line, isSoftWrapped bool) uv.Line {
+func (sb *Scrollback) pushOwned(line uv.Line) uv.Line {
 	if len(line) == 0 {
 		return nil
 	}
@@ -118,7 +98,6 @@ func (sb *Scrollback) pushOwned(line uv.Line, isSoftWrapped bool) uv.Line {
 
 	// Insert at tail position
 	sb.lines[sb.tail] = lineCopy
-	sb.softWrapped[sb.tail] = isSoftWrapped
 
 	// Advance tail (wraps around at maxLines)
 	sb.tail = (sb.tail + 1) % sb.maxLines
@@ -195,42 +174,11 @@ func (sb *Scrollback) Clear() {
 	// Nil out the lines to help GC, but keep the slice
 	for i := range sb.lines {
 		sb.lines[i] = nil
-		sb.softWrapped[i] = false
 	}
 	// Notify marker list so stale markers are removed
 	if sb.onTrim != nil && count > 0 {
 		sb.onTrim(count)
 	}
-}
-
-// Reflow reconstructs scrollback lines for a different terminal width.
-// This handles the case where the terminal was resized and scrollback
-// lines need to be re-wrapped to match the new width.
-// This is a complex operation that should be called sparingly (only on resize).
-func (sb *Scrollback) Reflow(newWidth int) {
-	if newWidth <= 0 {
-		return
-	}
-
-	// Whatever else a resize does or declines to do, it cannot leave a
-	// double-width rune straddling the new last column.
-	sb.blankWideRunesCutByTheEdge(newWidth)
-
-	if sb.lastWidthCaptured == 0 || newWidth == sb.lastWidthCaptured {
-		return // No reflow needed if width hasn't changed or is invalid
-	}
-
-	// For now, we mark that a width change happened but don't reflow lines
-	// This is because reflowing lines while preserving ANSI styles is complex
-	// and may not be worth the performance cost for every resize
-	// Instead, applications should handle their own reflow via SIGWINCH
-	//
-	// TODO: Future optimization - implement intelligent reflow that:
-	// 1. Groups soft-wrapped lines back together
-	// 2. Re-wraps them at the new width
-	// 3. Preserves ANSI color/style information through the rewrap
-	// For now, just update the recorded width to prevent flickering
-	sb.lastWidthCaptured = newWidth
 }
 
 // blankWideRunesCutByTheEdge clears a double-width rune left holding the last
@@ -261,20 +209,6 @@ func (sb *Scrollback) blankWideRunesCutByTheEdge(newWidth int) {
 	}
 }
 
-// SetCaptureWidth sets the terminal width at which scrollback lines are being captured.
-// Should be called from the emulator when processing output.
-func (sb *Scrollback) SetCaptureWidth(width int) {
-	if width > 0 && width != sb.lastWidthCaptured {
-		// Width changed - could trigger reflow if implemented
-		sb.lastWidthCaptured = width
-	}
-}
-
-// CaptureWidth returns the terminal width at which scrollback was captured.
-func (sb *Scrollback) CaptureWidth() int {
-	return sb.lastWidthCaptured
-}
-
 // MaxLines returns the maximum number of lines this scrollback can hold.
 func (sb *Scrollback) MaxLines() int {
 	return sb.maxLines
@@ -296,7 +230,6 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 	if oldLen == 0 {
 		// Empty buffer, just resize
 		sb.lines = make([]uv.Line, maxLines)
-		sb.softWrapped = make([]bool, maxLines)
 		sb.maxLines = maxLines
 		sb.head = 0
 		sb.tail = 0
@@ -306,7 +239,6 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 
 	// Create new ring buffer and copy existing lines
 	newLines := make([]uv.Line, maxLines)
-	newSoftWrapped := make([]bool, maxLines)
 	newLen := min(oldLen, maxLines)
 
 	// Copy the most recent newLen lines
@@ -314,11 +246,9 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 	for i := range newLen {
 		physicalIndex := (sb.head + startIndex + i) % sb.maxLines
 		newLines[i] = sb.lines[physicalIndex]
-		newSoftWrapped[i] = sb.softWrapped[physicalIndex]
 	}
 
 	sb.lines = newLines
-	sb.softWrapped = newSoftWrapped
 	sb.maxLines = maxLines
 	sb.head = 0
 	sb.tail = newLen % maxLines

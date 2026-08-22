@@ -62,46 +62,6 @@ func (w *Window) SetScrollbackMaxLines(maxLines int) {
 	}
 }
 
-// EnterScrollbackMode enters scrollback viewing mode.
-func (w *Window) EnterScrollbackMode() {
-	w.ScrollbackMode = true
-	w.ScrollbackOffset = 0 // Start at the bottom (most recent scrollback)
-	w.InvalidateCache()
-}
-
-// ExitScrollbackMode exits scrollback viewing mode.
-func (w *Window) ExitScrollbackMode() {
-	w.ScrollbackMode = false
-	w.ScrollbackOffset = 0
-	w.InvalidateCache()
-}
-
-// ScrollUp scrolls up in the scrollback buffer.
-func (w *Window) ScrollUp(lines int) {
-	if !w.ScrollbackMode || w.Terminal == nil {
-		return
-	}
-
-	maxOffset := w.ScrollbackLen()
-	w.ScrollbackOffset = min(w.ScrollbackOffset+lines, maxOffset)
-	w.InvalidateCache()
-}
-
-// ScrollDown scrolls down in the scrollback buffer.
-func (w *Window) ScrollDown(lines int) {
-	if !w.ScrollbackMode {
-		return
-	}
-
-	w.ScrollbackOffset = max(w.ScrollbackOffset-lines, 0)
-	if w.ScrollbackOffset == 0 {
-		// If we scrolled all the way down, exit scrollback mode
-		w.ExitScrollbackMode()
-	} else {
-		w.InvalidateCache()
-	}
-}
-
 // EnterCopyMode enters vim-style copy/scrollback mode.
 // This replaces both ScrollbackMode and SelectionMode with a unified vim interface.
 func (w *Window) EnterCopyMode() {

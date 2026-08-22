@@ -9,7 +9,6 @@ import (
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/ultraviolet/screen"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/ansi/parser"
 )
@@ -150,10 +149,6 @@ type Emulator struct {
 	// Kitty graphics passthrough callback
 	kittyPassthroughFunc func(cmd *KittyCommand, rawData []byte)
 
-	// Sixel graphics state for main and alt screens
-	sixelMain *SixelState
-	sixelAlt  *SixelState
-
 	// Sixel graphics passthrough callback
 	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
 
@@ -221,8 +216,6 @@ func NewEmulator(w, h int) *Emulator {
 	t.kittyAlt = NewKittyState()
 	t.registerKittyGraphicsHandler()
 
-	t.sixelMain = NewSixelState()
-	t.sixelAlt = NewSixelState()
 	t.registerSixelGraphicsHandler()
 
 	t.kittyKbd = newKittyKeyboardState()
@@ -238,11 +231,6 @@ func NewEmulator(w, h int) *Emulator {
 	}
 
 	return t
-}
-
-// SetLogger sets the terminal's logger.
-func (e *Emulator) SetLogger(l Logger) {
-	e.logger = l
 }
 
 // SetCallbacks sets the terminal's callbacks.
@@ -262,9 +250,9 @@ func (e *Emulator) SetScreenClearFunc(f func()) {
 	e.cb.ScreenClear = f
 }
 
-// Touched returns the touched lines in the current screen buffer.
-func (e *Emulator) Touched() []*uv.LineData {
-	return e.scr.Touched()
+// SetLogger sets the terminal's logger.
+func (e *Emulator) SetLogger(l Logger) {
+	e.logger = l
 }
 
 // String returns a string representation of the underlying screen buffer.
@@ -445,36 +433,6 @@ func (e *Emulator) SetScrollbackMaxLines(maxLines int) {
 // change than making the answer true.
 func (e *Emulator) WidthMethod() uv.WidthMethod {
 	return ansi.GraphemeWidth
-}
-
-// Draw implements the [uv.Drawable] interface.
-func (e *Emulator) Draw(scr uv.Screen, area uv.Rectangle) {
-	bg := uv.EmptyCell
-	bg.Style.Bg = e.bgColor
-	screen.FillArea(scr, &bg, area)
-	for y := range e.Touched() {
-		if y < 0 || y >= e.Height() {
-			continue
-		}
-		for x := 0; x < e.Width(); {
-			w := 1
-			cell := e.CellAt(x, y)
-			if cell != nil {
-				cell = cell.Clone()
-				if cell.Width > 1 {
-					w = cell.Width
-				}
-				if cell.Style.Bg == nil && e.bgColor != nil {
-					cell.Style.Bg = e.bgColor
-				}
-				if cell.Style.Fg == nil && e.fgColor != nil {
-					cell.Style.Fg = e.fgColor
-				}
-				scr.SetCell(x+area.Min.X, y+area.Min.Y, cell)
-			}
-			x += w
-		}
-	}
 }
 
 // Height returns the height of the terminal.
@@ -949,9 +907,11 @@ func (e *Emulator) Resize(width int, height int) {
 		x = width - 1
 	}
 
-	// Trigger scrollback reflow when width changes to handle soft-wrapping
+	// A resize cannot leave a double-width rune straddling the new last
+	// column of a scrollback line; the render path would paint it one column
+	// into the pane next door.
 	if width != e.Width() && e.Scrollback() != nil {
-		e.Scrollback().Reflow(width)
+		e.Scrollback().blankWideRunesCutByTheEdge(width)
 	}
 
 	e.scrs[0].Resize(width, height)
@@ -1023,30 +983,6 @@ func (e *Emulator) WriteString(s string) (n int, err error) {
 // This can be used to send input to the terminal.
 func (e *Emulator) InputPipe() io.Writer {
 	return e.pipe
-}
-
-// Paste pastes text into the terminal.
-// If bracketed paste mode is enabled, the text is bracketed with the
-// appropriate escape sequences.
-func (e *Emulator) Paste(text string) {
-	if e.isModeSet(ansi.ModeBracketedPaste) {
-		_, _ = io.WriteString(e.pipe, ansi.BracketedPasteStart)
-		defer io.WriteString(e.pipe, ansi.BracketedPasteEnd) //nolint:errcheck
-	}
-
-	_, _ = io.WriteString(e.pipe, text)
-}
-
-// SendText sends arbitrary text to the terminal.
-func (e *Emulator) SendText(text string) {
-	_, _ = io.WriteString(e.pipe, text)
-}
-
-// SendKeys sends multiple keys to the terminal.
-func (e *Emulator) SendKeys(keys ...uv.KeyEvent) {
-	for _, k := range keys {
-		e.SendKey(k)
-	}
 }
 
 // ForegroundColor returns the terminal's foreground color. This returns nil if
@@ -1242,12 +1178,6 @@ func (e *Emulator) resetTabStops() {
 	e.tabstops = uv.DefaultTabStops(e.Width())
 }
 
-func (e *Emulator) logf(format string, v ...any) {
-	if e.logger != nil {
-		e.logger.Printf(format, v...)
-	}
-}
-
 // WriteResponse writes data to the emulator's response pipe.
 // This allows external code (e.g., daemon-side Kitty query handlers)
 // to inject responses that will be forwarded to the PTY.
@@ -1265,10 +1195,6 @@ func (e *Emulator) registerKittyGraphicsHandler() {
 		if err != nil || cmd == nil {
 			return false
 		}
-		if !cmd.More {
-			e.logf("KITTY APC: m=0 chunk received, action=%c", cmd.Action)
-		}
-
 		// Build complete APC sequence: ESC _ G<params>;<payload> ESC \
 		// APC terminator is ESC \ (0x1b 0x5c), not just \
 		rawData := make([]byte, len(data)+4)
@@ -1283,14 +1209,20 @@ func (e *Emulator) registerKittyGraphicsHandler() {
 			return true
 		}
 
-		state := e.kittyMain
-		if e.IsAltScreen() {
-			state = e.kittyAlt
+		// No passthrough is a test-only situation: every production entry
+		// point installs one before any guest runs. Queries still deserve an
+		// answer so a probing guest does not hang.
+		if cmd.Action == KittyActionQuery {
+			_, _ = e.pipe.Write(BuildKittyResponse(true, cmd.ImageID, ""))
 		}
-
-		handler := NewKittyGraphicsHandler(e.scr, state, e.pipe)
-		return handler.HandleCommand(cmd)
+		return true
 	})
+}
+
+func (e *Emulator) logf(format string, v ...any) {
+	if e.logger != nil {
+		e.logger.Printf(format, v...)
+	}
 }
 
 func (e *Emulator) SetKittyPassthroughFunc(fn func(cmd *KittyCommand, rawData []byte)) {
@@ -1362,46 +1294,18 @@ func (e *Emulator) registerSixelGraphicsHandler() {
 			absLine = cursorY
 		}
 
-		// If passthrough is enabled, forward to host terminal
+		// Reserve space for the image (move cursor down), whether or not a
+		// passthrough is installed: no passthrough is a test-only situation,
+		// and the cursor still moves past where the image would sit.
 		if e.sixelPassthroughFunc != nil {
 			e.sixelPassthroughFunc(cmd, cursorX, cursorY, absLine)
-			// Reserve space for the image (move cursor down)
-			cellWidth, cellHeight := e.CellSize()
-			rows := cmd.RowsForHeight(cellHeight)
-			cols := cmd.ColsForWidth(cellWidth)
-			if rows > 0 {
-				e.ReserveImageSpace(rows, cols)
-			}
-			return true
 		}
-
-		// Local handling: store placement in state
-		state := e.sixelMain
-		if e.IsAltScreen() {
-			state = e.sixelAlt
-		}
-
 		cellWidth, cellHeight := e.CellSize()
-		placement := &SixelPlacement{
-			AbsoluteLine:   absLine,
-			ScreenX:        cursorX,
-			Width:          cmd.Width,
-			Height:         cmd.Height,
-			Rows:           cmd.RowsForHeight(cellHeight),
-			Cols:           cmd.ColsForWidth(cellWidth),
-			Data:           cmd.Data,
-			RawSequence:    cmd.RawSequence,
-			AspectRatio:    cmd.AspectRatio,
-			BackgroundMode: cmd.BackgroundMode,
+		rows := cmd.RowsForHeight(cellHeight)
+		cols := cmd.ColsForWidth(cellWidth)
+		if rows > 0 {
+			e.ReserveImageSpace(rows, cols)
 		}
-
-		state.AddPlacement(placement)
-
-		// Reserve space for the image
-		if placement.Rows > 0 {
-			e.ReserveImageSpace(placement.Rows, placement.Cols)
-		}
-
 		return true
 	})
 }
@@ -1412,11 +1316,4 @@ func (e *Emulator) SetSixelPassthroughFunc(fn func(cmd *SixelCommand, cursorX, c
 
 func (e *Emulator) SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, scale, textLen int)) {
 	e.textSizingFunc = fn
-}
-
-func (e *Emulator) SixelState() *SixelState {
-	if e.IsAltScreen() {
-		return e.sixelAlt
-	}
-	return e.sixelMain
 }
