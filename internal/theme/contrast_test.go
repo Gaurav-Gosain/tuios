@@ -119,14 +119,14 @@ func TestQuietInkClearsItsGrounds(t *testing.T) {
 func TestNotificationInkHoldsAcrossThemes(t *testing.T) {
 	for _, name := range []string{"", "catppuccin_mocha", "builtin_solarized_light"} {
 		_ = Initialize(name)
-		bg := NotificationBg()
-		if got := ContrastRatio(NotificationFg(), bg); got < ContrastFloor {
-			t.Errorf("theme %q: message text measures %.2f:1 on its block, want at least %.1f:1", name, got, ContrastFloor)
+		bg := NotificationGround()
+		if got := ContrastRatio(Readable(UI().Fg, bg), bg); got < ContrastFloor {
+			t.Errorf("theme %q: message text measures %.2f:1 on its ground, want at least %.1f:1", name, got, ContrastFloor)
 		}
 		for _, sev := range []string{"error", "warning", "success", "info"} {
 			ink := ReadableAt(NotificationSeverity(sev), bg, MarkFloor)
 			if got := ContrastRatio(ink, bg); got < MarkFloor {
-				t.Errorf("theme %q: %s mark measures %.2f:1 on its block, want at least %.1f:1", name, sev, got, MarkFloor)
+				t.Errorf("theme %q: %s mark measures %.2f:1 on its ground, want at least %.1f:1", name, sev, got, MarkFloor)
 			}
 		}
 	}

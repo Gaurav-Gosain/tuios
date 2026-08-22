@@ -228,8 +228,7 @@ func TestNotificationColors(t *testing.T) {
 		{"NotificationWarning", NotificationWarning},
 		{"NotificationSuccess", NotificationSuccess},
 		{"NotificationInfo", NotificationInfo},
-		{"NotificationBg", NotificationBg},
-		{"NotificationFg", NotificationFg},
+		{"NotificationGround", NotificationGround},
 	}
 
 	for _, tt := range tests {

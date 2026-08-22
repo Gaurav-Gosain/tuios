@@ -324,9 +324,6 @@ func TestNotificationTruncationCutsTheMessageNotTheSeverity(t *testing.T) {
 			if cap := notifCap(sev); !strings.Contains(plain, cap) {
 				t.Errorf("width %d, %s: truncation took the severity cap: %q", width, sev, plain)
 			}
-			if !strings.Contains(plain, config.GetDockPillRightChar()) {
-				t.Errorf("width %d, %s: truncation took the closing cap: %q", width, sev, plain)
-			}
 			if !strings.Contains(plain, "...") {
 				t.Errorf("width %d, %s: a cut message should say it was cut: %q", width, sev, plain)
 			}

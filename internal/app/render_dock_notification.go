@@ -17,24 +17,25 @@ import (
 // the workspace, three rows tall, and landed exactly where a freshly split
 // pane's first output goes.
 //
-// The cap and the severity rail both wanted the left cell, so here they are the
-// same cell: a partial block flush against the block's dark body, opening it
-// the way the dock's own powerline caps open the mode pill, and inked two
-// eighths for info and success, four for a warning, six for an error. The
-// weight is a channel that survives greyscale and a theme with no contrast to
-// spare, which colour alone does not.
+// The block wears no fill. It used to sit on the chrome's Surface step, and
+// that slab was the largest ink object in the bar while the words inside it
+// were the information: structure drawn at the weight of content, the same
+// shape of problem the rail's edges had. The bar's own ground does the job for
+// free, and it does it better for the marks, which no longer have to be lifted
+// toward the text colour to clear the mark floor on a raised grey: info blue
+// measures 3.16:1 on the bare canvas against 2.20:1 on the old fill, so
+// dropping the slab bought back the hue. What separates the message from the
+// dock items beside it is that they are filled pills and it is not, plus the
+// cap on its left and the lit rule above its span.
 //
-// That weight is why the body behind the cap is the dark surface and not a
-// severity fill. A sliver only reads as a weight against something that is not
-// the same colour; against a solid severity field all it changes is where the
-// field starts, with nothing to compare it against, and an error stops being
-// distinguishable from an info. This design therefore carries less colour than
-// a filled pill would, deliberately.
+// The cap is a freestanding partial block in the severity's ink, two eighths
+// for info and success, four for a warning, six for an error. The weight is a
+// channel that survives greyscale and a theme with no contrast to spare, which
+// colour alone does not, and the sliver doubles as the block's opening edge.
 //
-// Naming goes to the mark, a Nerd Font severity glyph sitting on the surface in
-// the severity colour rather than knocked out of a coloured chip, so the
-// message itself is never on a coloured ground and stays as legible as the rest
-// of the dock.
+// Naming goes to the mark, a Nerd Font severity glyph in the severity colour
+// rather than knocked out of a coloured chip, so the message itself is never
+// on a coloured ground and stays as legible as the rest of the dock.
 //
 // Time is carried by the dock's own hairline, one row above: it lights in the
 // severity colour across exactly the block's span and burns down from the right
@@ -50,9 +51,9 @@ type notifBlock struct {
 	Rule  string // styled, replaces the right-hand end of the dock's hairline
 	Width int    // display width of both
 	// DismissW is how many of the trailing columns dismiss instead of
-	// activating: the meta (the esc affordance and the queue counter), the
-	// closing cap, and the column of bar past it. Everything to its left is the
-	// message itself, which is what a click follows.
+	// activating: the meta (the esc affordance and the queue counter) and the
+	// bare columns past it. Everything to its left is the message itself,
+	// which is what a click follows.
 	DismissW int
 }
 
@@ -181,37 +182,37 @@ func notifBudget(renderWidth int) int {
 // The counter takes the colour of the worst thing waiting, so an error that a
 // later info pushed out of the block still says so from underneath it.
 // Otherwise it is dim, because a queue of routine messages is not news.
-func (s notifStatus) notifMeta(surface lipgloss.Style) string {
-	// Dim against the block's own ground rather than a fixed grey. The grey it
+func (s notifStatus) notifMeta() string {
+	// Dim against the bar's own ground rather than a fixed grey. The grey it
 	// used to be was picked for one background and measured under 4.5:1 on two
 	// thirds of the themes.
-	bg := theme.NotificationBg()
+	bg := theme.NotificationGround()
 	dim := theme.Readable(theme.UI().FgDim, bg)
 
 	var parts []string
 	if s.msg.Sticky {
-		parts = append(parts, surface.Foreground(dim).Render("esc"))
+		parts = append(parts, lipgloss.NewStyle().Foreground(dim).Render("esc"))
 	}
 	if s.queued > 0 {
 		col := dim
 		if notifSeverityRank(s.worst) > notifSeverityRank(s.msg.Type) {
 			col = theme.Readable(theme.NotificationSeverity(s.worst), bg)
 		}
-		parts = append(parts, surface.Foreground(col).Render(fmt.Sprintf("+%d", s.queued)))
+		parts = append(parts, lipgloss.NewStyle().Foreground(col).Render(fmt.Sprintf("+%d", s.queued)))
 	}
 	if len(parts) == 0 {
 		return ""
 	}
-	return surface.Render("  ") + strings.Join(parts, surface.Render("  "))
+	return "  " + strings.Join(parts, "  ")
 }
 
 // notifChromeWidth is every column of the block that is not the message: the
-// cap, the space and the mark, the two spaces before the text, the space before
-// the closing cap, the closing cap itself, and one column of bar past it.
+// cap, the space and the mark, the two spaces before the text, and the two
+// columns of bare bar past the block's end.
 //
-// That last column is not decoration. Without it the block runs flush to the
-// right edge of the screen and the closing cap stops reading as a cap at all.
-const notifChromeWidth = 8
+// Those last columns are not decoration. Without them the message runs flush
+// into whatever holds the bar's right-hand end and stops reading as a block.
+const notifChromeWidth = 7
 
 // renderNotificationBlock builds the dock's message block and the run of
 // hairline above it, or reports false when nothing is live.
@@ -225,31 +226,26 @@ const notifChromeWidth = 8
 // Width is a hard contract, not an aspiration: the returned Width is what the
 // dock reserves, what the rule is drawn to, and what the block actually
 // measures. The old renderer clamped the message with MaxWidth after the fact,
-// which cut whatever happened to be last, and what was last was the closing cap.
+// which cut whatever happened to be last, and what was last was the block's
+// own trailing columns.
 func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) {
 	s, ok := m.notifStatus()
 	if !ok {
 		return notifBlock{}, false
 	}
 
-	// The severity is the theme's, so it is measured against the block's ground
+	// The severity is the theme's, so it is measured against the bar's ground
 	// before it is drawn on it. A mark carries its meaning in its weight as well
 	// as its colour, so it is held to the mark floor and keeps more of its hue.
-	bg := theme.NotificationBg()
+	bg := theme.NotificationGround()
 	sev := theme.ReadableAt(theme.NotificationSeverity(s.msg.Type), bg, theme.MarkFloor)
-	surface := lipgloss.NewStyle().Background(bg)
+	inked := lipgloss.NewStyle().Foreground(sev)
 
-	// The cap's foreground is the severity and its background is the block's
-	// dark body, so the weighted sliver is read against the body rather than
-	// against a field of its own colour.
-	lead := surface.Foreground(sev).Render(notifCap(s.msg.Type))
-	mark := surface.Foreground(sev).Render(" " + notifGlyph(s.msg.Type))
-
-	// The closing cap is the dock's usual trick, inverted: its foreground is
-	// the colour of the segment it closes and its background is whatever the
-	// segment sits on, which for the dock's right-hand end is the bar itself.
-	tail := lipgloss.NewStyle().Foreground(theme.NotificationBg()).
-		Render(config.GetDockPillRightChar())
+	// The cap is a freestanding sliver on the bare bar: its weight still reads
+	// as two, four or six eighths of a cell of ink, and it is the block's whole
+	// left edge now that there is no fill to open.
+	lead := inked.Render(notifCap(s.msg.Type))
+	mark := inked.Render(" " + notifGlyph(s.msg.Type))
 
 	budget := notifBudget(renderWidth)
 	if avail > 0 {
@@ -259,8 +255,8 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 		// butted straight against the dock items' truncation dots, which reads
 		// as one run-on shape rather than as a message arriving in the bar.
 		//
-		// Never below the chrome, though: a budget that cannot hold the cap,
-		// the mark and the closing cap would have the block quietly overrun it,
+		// Never below the chrome, though: a budget that cannot hold the cap
+		// and the mark would have the block quietly overrun it,
 		// and a contract that is broken in the tight case is not a contract. A
 		// dock with fewer columns than that free is already overfull, and the
 		// bar's own one-screen backstop is what handles it.
@@ -270,11 +266,11 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 	// The meta gives way before the message does only when it has to: the
 	// counter outranks the esc affordance, because a buried error is news and a
 	// dismissal hint the user has seen before is not.
-	meta := s.notifMeta(surface)
+	meta := s.notifMeta()
 	if notifChromeWidth+lipgloss.Width(meta) > budget {
 		bare := s
 		bare.msg.Sticky = false
-		meta = bare.notifMeta(surface)
+		meta = bare.notifMeta()
 	}
 	if notifChromeWidth+lipgloss.Width(meta) > budget {
 		meta = ""
@@ -282,25 +278,25 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 
 	room := budget - notifChromeWidth - lipgloss.Width(meta)
 	text := notifFit(s.msg.Message, room)
-	bodyStyle := surface.Foreground(theme.NotificationFg())
+	bodyStyle := lipgloss.NewStyle().Foreground(theme.Readable(theme.UI().Fg, bg))
 	if s.msg.Target != nil {
 		// Underline is the one link mark everyone reads without being taught,
 		// costs no columns, and never appears on a message with nowhere to go,
 		// so its absence says something too.
 		bodyStyle = bodyStyle.Underline(true)
 	}
-	body := surface.Render("  ") + bodyStyle.Render(text)
+	body := "  " + bodyStyle.Render(text)
 
-	// The final column is bare bar, not surface: it is the gap between the
-	// closing cap and the edge of the screen.
-	block := lead + mark + body + meta + surface.Render(" ") + tail + " "
+	// The last two columns are bare bar: the gap that keeps the message off
+	// whatever holds the right-hand end of the screen.
+	block := lead + mark + body + meta + "  "
 	width := lipgloss.Width(block)
 
 	return notifBlock{
 		Text:     block,
 		Rule:     notifBurnRule(s, width),
 		Width:    width,
-		DismissW: lipgloss.Width(meta) + 3, // meta, the closing cap and its space, the bar column
+		DismissW: lipgloss.Width(meta) + 2, // meta and the bar columns after it
 	}, true
 }
 

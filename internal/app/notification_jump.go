@@ -23,7 +23,7 @@ type notifHitZones struct {
 	// X0 is the block's first column and X1 the column past its last, so the
 	// pair is the block's extent and the burn rule above it is drawn to the same
 	// span. DismissX0 opens the right-hand zone (the counter, the esc affordance
-	// and the closing cap). All absolute.
+	// and the bare trailing columns). All absolute.
 	X0, X1, DismissX0, Y int
 }
 
