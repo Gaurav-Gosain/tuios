@@ -205,13 +205,15 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return m, cmd
 	}
 
-	// Emergency/safety keybindings that bypass the config system
-	// Only Ctrl+C is kept as emergency quit
+	// Ctrl+C is the last resort, and it is a fallback rather than an override:
+	// the registry dispatch above has already had the key, so a user who binds
+	// ctrl+c to something of their own gets it. What is not configurable is
+	// ctrl+c doing nothing, which is the point of keeping it.
 	switch key {
 	case "ctrl+c":
-		// Emergency quit: same routing as the quit keybinding, so in a daemon
-		// session it opens the quit menu (detach is the default) rather than
-		// silently killing anything.
+		// Same routing as the quit keybinding, so in a daemon session it opens
+		// the quit menu (detach is the default) rather than silently killing
+		// anything.
 		return requestQuit(o)
 
 	default:

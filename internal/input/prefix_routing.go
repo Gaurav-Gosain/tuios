@@ -54,8 +54,9 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// ctrl+c cancels a prefix everywhere. It is deliberately not configurable:
-	// it is the way out when a chord was started by accident.
+	// ctrl+c cancels a prefix everywhere: the way out when a chord was started by
+	// accident. Checked after the prefix lookup above, so a ctrl+c the user bound
+	// to a prefix action still runs; what cannot be taken away is the escape.
 	if msg.String() == "ctrl+c" {
 		return o, nil
 	}
