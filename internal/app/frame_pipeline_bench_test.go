@@ -120,8 +120,13 @@ func floodOS(tb testing.TB, n, cols, rows int) *OS {
 //     that bounds the client's frame rate. It should be about the sum, and
 //     saying so is the check that the three parts are the whole thing.
 //
-// The pane count is the axis that matters: one pane is the fullscreen case the
-// flood profile was taken in, and nine is a split the maintainer actually uses.
+// The pane count is the axis that matters, and it is an axis nothing measured
+// before: one pane is the fullscreen case the flood profile was taken in, two
+// is the common split, nine is a grid the maintainer actually uses, and twenty
+// is the question of whether any of this is per-pane or per-cell. The screen is
+// the same size in all four, so a cost that tracks cells stays flat across them
+// and a cost that tracks panes climbs.
+//
 // Every pane is repainted every frame, which is the worst case rather than the
 // common one, and the emit half is where that shows most: a diff against a
 // frame that changed everywhere has nothing to skip.
@@ -129,7 +134,7 @@ func floodOS(tb testing.TB, n, cols, rows int) *OS {
 // Benchmark only, so it costs a normal CI test run nothing. Under -bench it is
 // a few seconds per case at the default -benchtime.
 func BenchmarkClientFrame(b *testing.B) {
-	for _, n := range []int{1, 9} {
+	for _, n := range []int{1, 2, 9, 20} {
 		m := floodOS(b, n, realCols, realRows)
 		rng := rand.New(rand.NewSource(2))
 		sink := newFrameSink(realCols, realRows)
