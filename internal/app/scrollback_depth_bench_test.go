@@ -87,10 +87,22 @@ func BenchmarkScrollbackDepth(b *testing.B) {
 		if depth == 0 {
 			continue
 		}
-		// The scrolled-pane variant is gone with the window-level scrollback
-		// mode it drove: that API had no caller outside this benchmark, so the
-		// dead-code sweep took it. Depth cost is still covered by the fetch
-		// benchmarks, which is where the flat-at-any-depth result came from.
+		// Scrolled back, which is the case the flat-at-any-depth claim is
+		// about: a pane showing history costs the same wherever in history it
+		// is looking. Copy mode is how a pane gets scrollback on screen now,
+		// so the depth goes through its offset rather than the window-level
+		// scrollback mode the dead-code sweep removed.
+		b.Run(fmt.Sprintf("depth-%d/scrolled", depth), func(b *testing.B) {
+			win.EnterCopyMode()
+			win.CopyMode.ScrollOffset = depth / 2
+			win.ScrollbackOffset = depth / 2
+			defer win.ExitCopyMode()
+			b.ReportAllocs()
+			for b.Loop() {
+				win.MarkContentDirty()
+				_ = m.renderTerminal(win, true, true)
+			}
+		})
 	}
 }
 
