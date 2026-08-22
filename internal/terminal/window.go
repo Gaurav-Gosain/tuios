@@ -497,6 +497,10 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		CachedLayer:        nil,
 		IsBeingManipulated: false,
 	}
+	// The cursor cache is served whenever the render loop cannot take the I/O
+	// lock, including on the very first frame, so it starts on what the fresh
+	// emulator reports rather than on a zero value that means a blinking block.
+	window.CachedCursorStyle, window.CachedCursorSteady = terminal.CursorStyle()
 	window.SetTitle(title)
 
 	// Apply theme colors to the terminal (only if theming is enabled)
@@ -710,6 +714,8 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 		coalesceWake:       make(chan struct{}, 1),
 		// suppressCallbacks defaults to false (zero value)
 	}
+	// See NewWindow: the cursor cache must not start on a zero value.
+	window.CachedCursorStyle, window.CachedCursorSteady = terminal.CursorStyle()
 	window.SetTitle(title)
 
 	// Start output writer goroutine to serialize writes
