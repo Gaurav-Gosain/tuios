@@ -340,7 +340,19 @@ type KeybindingsConfig struct {
 	WorkspacePrefix  map[string][]string `toml:"workspace_prefix"`
 	DebugPrefix      map[string][]string `toml:"debug_prefix"`
 	TapePrefix       map[string][]string `toml:"tape_prefix"`
+	LayoutPrefix     map[string][]string `toml:"layout_prefix"`
 	TerminalMode     map[string][]string `toml:"terminal_mode"` // Direct keybinds in terminal mode (no prefix required)
+	// Global binds are consulted in window mode and in terminal mode alike, so
+	// the palette and the launcher answer to one key wherever the user is. They
+	// are a section of their own rather than entries in terminal_mode because
+	// they are not terminal-mode-only, and rather than literals in the input
+	// path because a key nobody can rebind is a key nobody can inspect.
+	Global map[string][]string `toml:"global"`
+	// Script binds are live only while a .tape is playing back. Its own section
+	// because it is its own keyboard context: sharing ctrl+p with the palette by
+	// default is not a conflict, since only one of the two contexts is ever
+	// active.
+	Script map[string][]string `toml:"script"`
 	// Sidebar binds are looked up only while the rail owns the keyboard
 	// (SidebarFocused), through GetSidebarAction. They are deliberately kept out
 	// of buildMappings: that flattens sections into the global keymap, which would
@@ -421,6 +433,11 @@ func DefaultConfig() *UserConfig {
 				"enter_window_mode":   {"esc"},
 				"toggle_help":         {"?"},
 				"quit":                {"q"},
+				// "," is resize_master_shrink_left by default too. mode_control is
+				// consulted after layout, so settings wins and the doctor reports
+				// the resize bind as dead, which is the honest description of what
+				// the input path was already doing behind a literal.
+				"open_settings": {","},
 				// hold_window_mode is deliberately absent rather than present and
 				// empty: an action with no keys warns at load, and this one is
 				// opt-in. Holding a modifier key is only reportable under the
@@ -556,8 +573,25 @@ func DefaultConfig() *UserConfig {
 				"tape_prefix_stop":    {"s"},
 				"tape_prefix_cancel":  {"esc"},
 			},
+			LayoutPrefix: map[string][]string{
+				"layout_prefix_load":   {"l"},
+				"layout_prefix_save":   {"s"},
+				"layout_prefix_cancel": {"esc"},
+			},
 			TerminalMode: getDefaultTerminalModeKeybinds(),
 			Sidebar:      getDefaultSidebarKeybinds(),
+			Global: map[string][]string{
+				// ctrl+p is fish's history-back and vim's keyword completion, and
+				// alt+space is readline's set-mark. Both are taken on purpose and
+				// both live here rather than in the input path so a user who wants
+				// them back can have them: set the action to [] and the key is
+				// forwarded again.
+				"command_palette": {"ctrl+p"},
+				"launcher":        {"alt+space"},
+			},
+			Script: map[string][]string{
+				"script_pause": {"ctrl+p"},
+			},
 		},
 	}
 	return cfg
@@ -621,6 +655,9 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 			"terminal_focus_right": {"alt+right"},
 			"terminal_focus_up":    {"alt+up"},
 			"terminal_focus_down":  {"alt+down"},
+			"terminal_scroll_up":   {"shift+up"},
+			"terminal_scroll_down": {"shift+down"},
+			"terminal_paste_host":  {"ctrl+shift+v", "super+v", "super+shift+v"},
 		}
 	}
 	return map[string][]string{
@@ -636,6 +673,11 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 		"terminal_focus_right": {"alt+right"},
 		"terminal_focus_up":    {"alt+up"},
 		"terminal_focus_down":  {"alt+down"},
+		"terminal_scroll_up":   {"shift+up"},
+		"terminal_scroll_down": {"shift+down"},
+		// Plain ctrl+v is deliberately not here: it has to reach the pane as 0x16
+		// for vim's visual block, which is the tmux and zellij convention.
+		"terminal_paste_host": {"ctrl+shift+v", "super+v", "super+shift+v"},
 	}
 }
 
@@ -699,27 +741,32 @@ func getDefaultWorkspaceKeybinds() map[string][]string {
 func getDefaultLayoutKeybinds() map[string][]string {
 	// Base layout keybindings (common to all platforms)
 	layout := map[string][]string{
-		"snap_left":                 {"h"},
-		"snap_right":                {"l"},
-		"snap_fullscreen":           {"f"},
-		"unsnap":                    {"u"},
-		"snap_corner_1":             {"1"},
-		"snap_corner_2":             {"2"},
-		"snap_corner_3":             {"3"},
-		"snap_corner_4":             {"4"},
-		"toggle_tiling":             {"t"},
-		"swap_left":                 {"H", "ctrl+left"},
-		"swap_right":                {"L", "ctrl+right"},
-		"swap_up":                   {"K", "ctrl+up"},
-		"swap_down":                 {"J", "ctrl+down"},
-		"resize_master_shrink":      {"<", "shift+,"},
-		"resize_master_grow":        {">", "shift+."},
-		"resize_height_shrink":      {"{", "shift+["},
-		"resize_height_grow":        {"}", "shift+]"},
-		"resize_master_shrink_left": {","},
-		"resize_master_grow_left":   {"."},
-		"resize_height_shrink_top":  {"["},
-		"resize_height_grow_top":    {"]"},
+		"snap_left":            {"h"},
+		"snap_right":           {"l"},
+		"snap_fullscreen":      {"f"},
+		"unsnap":               {"u"},
+		"snap_corner_1":        {"1"},
+		"snap_corner_2":        {"2"},
+		"snap_corner_3":        {"3"},
+		"snap_corner_4":        {"4"},
+		"toggle_tiling":        {"t"},
+		"swap_left":            {"H", "ctrl+left"},
+		"swap_right":           {"L", "ctrl+right"},
+		"swap_up":              {"K", "ctrl+up"},
+		"swap_down":            {"J", "ctrl+down"},
+		"resize_master_shrink": {"<", "shift+,"},
+		"resize_master_grow":   {">", "shift+."},
+		"resize_height_shrink": {"{", "shift+["},
+		"resize_height_grow":   {"}", "shift+]"},
+		// resize_master_shrink_left is deliberately absent rather than present and
+		// empty: "," is open_settings, and has been since the settings shortcut
+		// was a literal checked ahead of the registry, so this binding was
+		// already dead. Leaving it in the defaults would put a conflict warning
+		// on every fresh config for a key that never worked. Bind it to a free
+		// key to get it back.
+		"resize_master_grow_left":  {"."},
+		"resize_height_shrink_top": {"["},
+		"resize_height_grow_top":   {"]"},
 		// BSP tiling
 		"split_horizontal": {"-"},
 		"split_vertical":   {"|", "\\"},
@@ -1233,6 +1280,28 @@ func migrateLegacyKeybinds(cfg *UserConfig) {
 	cfg.Keybindings.PrefixMode["prefix_exit_mode"] = []string{"esc"}
 }
 
+// migrateSettingsComma takes "," off resize_master_shrink_left in a config
+// written while the settings shortcut was a literal in the input path.
+//
+// That literal was checked ahead of the registry, so the layout binding it
+// shadowed had not run since the shortcut landed. Now that settings is
+// open_settings in mode_control the two are a visible clash, and a user who
+// never chose either would get a startup warning about a key that had already
+// stopped working. Removing the dead claim leaves the config saying what the
+// program was already doing.
+//
+// Only the exact stale default is touched. A user who put "," on the resize
+// action themselves has it alongside their own keys, and taking someone's
+// deliberate binding away to quiet a warning would be the worse bug.
+func migrateSettingsComma(cfg *UserConfig) {
+	if _, ok := cfg.Keybindings.ModeControl["open_settings"]; ok {
+		return // written by a version that knew about open_settings
+	}
+	if keys := cfg.Keybindings.Layout["resize_master_shrink_left"]; len(keys) == 1 && keys[0] == "," {
+		delete(cfg.Keybindings.Layout, "resize_master_shrink_left")
+	}
+}
+
 // fillMissingKeybinds fills in any missing keybindings with defaults
 func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// Initialize nil maps
@@ -1275,14 +1344,24 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.TapePrefix == nil {
 		cfg.Keybindings.TapePrefix = make(map[string][]string)
 	}
+	if cfg.Keybindings.LayoutPrefix == nil {
+		cfg.Keybindings.LayoutPrefix = make(map[string][]string)
+	}
 	if cfg.Keybindings.TerminalMode == nil {
 		cfg.Keybindings.TerminalMode = make(map[string][]string)
+	}
+	if cfg.Keybindings.Global == nil {
+		cfg.Keybindings.Global = make(map[string][]string)
+	}
+	if cfg.Keybindings.Script == nil {
+		cfg.Keybindings.Script = make(map[string][]string)
 	}
 	if cfg.Keybindings.Sidebar == nil {
 		cfg.Keybindings.Sidebar = make(map[string][]string)
 	}
 
 	migrateLegacyKeybinds(cfg)
+	migrateSettingsComma(cfg)
 
 	// Set default leader key if not specified
 	if cfg.Keybindings.LeaderKey == "" {
@@ -1303,7 +1382,13 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.WorkspacePrefix, defaultCfg.Keybindings.WorkspacePrefix)
 	fillMapDefaults(cfg.Keybindings.DebugPrefix, defaultCfg.Keybindings.DebugPrefix)
 	fillMapDefaults(cfg.Keybindings.TapePrefix, defaultCfg.Keybindings.TapePrefix)
+	fillMapDefaults(cfg.Keybindings.LayoutPrefix, defaultCfg.Keybindings.LayoutPrefix)
 	fillMapDefaults(cfg.Keybindings.TerminalMode, defaultCfg.Keybindings.TerminalMode)
+	// A config written before the global and script sections existed has neither,
+	// so without this the palette and the launcher would come back unbound for
+	// every existing user rather than keeping the keys they already had.
+	fillMapDefaults(cfg.Keybindings.Global, defaultCfg.Keybindings.Global)
+	fillMapDefaults(cfg.Keybindings.Script, defaultCfg.Keybindings.Script)
 	// A config written before the rail scope existed has no sidebar section. Left
 	// unfilled it resolves every rail key to nothing, and since the scope swallows
 	// unbound keys that traps the keyboard in the rail with no way out.
@@ -1341,8 +1426,11 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 		{c.WorkspacePrefix, d.WorkspacePrefix},
 		{c.DebugPrefix, d.DebugPrefix},
 		{c.TapePrefix, d.TapePrefix},
+		{c.LayoutPrefix, d.LayoutPrefix},
 		{c.TerminalMode, d.TerminalMode},
 		{c.Sidebar, d.Sidebar},
+		{c.Global, d.Global},
+		{c.Script, d.Script},
 	}
 }
 

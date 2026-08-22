@@ -53,6 +53,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return handleCommandPaletteInput(msg, o)
 	}
 
+	// Handle launcher overlay
+	if o.ShowLauncher {
+		return handleLauncherInput(msg, o)
+	}
+
 	// Handle session switcher overlay
 	if o.ShowSessionSwitcher {
 		return handleSessionSwitcherInput(msg, o)
@@ -178,14 +183,6 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return o, nil
 	}
 
-	// Settings: comma opens the settings page directly in window mode. Checked
-	// before the config dispatch because the default keybinds map "," to a
-	// tiling resize action, which would otherwise swallow it.
-	if key == "," {
-		o.OpenSettings()
-		return o, nil
-	}
-
 	// Try config-based dispatch first (if registry is available)
 	if o.KeybindRegistry != nil {
 		action := lookupAction(msg, o.KeybindRegistry.GetAction)
@@ -203,19 +200,20 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return o, nil
 	}
 
-	// Command palette: ctrl+p. Matched on the decoded key event, not the raw
-	// string, so it fires under every Kitty keyboard encoding (see isCtrlP).
-	if isCtrlP(msg) {
-		return o, o.OpenCommandPalette()
+	// The global scope (palette, launcher) acts here and in terminal mode alike.
+	if m, cmd, ok := handleGlobalBinds(msg, o); ok {
+		return m, cmd
 	}
 
-	// Emergency/safety keybindings that bypass the config system
-	// Only Ctrl+C is kept as emergency quit
+	// Ctrl+C is the last resort, and it is a fallback rather than an override:
+	// the registry dispatch above has already had the key, so a user who binds
+	// ctrl+c to something of their own gets it. What is not configurable is
+	// ctrl+c doing nothing, which is the point of keeping it.
 	switch key {
 	case "ctrl+c":
-		// Emergency quit: same routing as the quit keybinding, so in a daemon
-		// session it opens the quit menu (detach is the default) rather than
-		// silently killing anything.
+		// Same routing as the quit keybinding, so in a daemon session it opens
+		// the quit menu (detach is the default) rather than silently killing
+		// anything.
 		return requestQuit(o)
 
 	default:

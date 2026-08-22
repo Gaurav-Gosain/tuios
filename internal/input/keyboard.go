@@ -2,56 +2,39 @@
 package input
 
 import (
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-func handleNumberKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	num := int(msg.String()[0] - '0')
-
-	if o.AutoTiling || strings.HasPrefix(msg.String(), "ctrl+") {
-		// Select window by index in current workspace
-		if o.AutoTiling {
-			// Count only visible windows in current workspace
-			visibleIndex := 0
-			for i, win := range o.Windows {
-				if win.Workspace == o.CurrentWorkspace && !win.Minimized {
-					visibleIndex++
-					if visibleIndex == num {
-						o.FocusWindow(i)
-						break
-					}
-				}
-			}
-		} else {
-			// Normal selection with Ctrl (windows in current workspace)
-			windowsInWorkspace := 0
-			for i, win := range o.Windows {
-				if win.Workspace == o.CurrentWorkspace {
-					windowsInWorkspace++
-					if windowsInWorkspace == num {
-						o.FocusWindow(i)
-						break
-					}
-				}
-			}
+// selectWindowByIndex focuses the num-th window of the current workspace, where
+// num is 1-based and comes from the action name rather than from the key.
+//
+// It used to read the digit back out of msg.String(), which made the action a
+// lie: select_window_3 rebound to f3 parsed 'f' as a digit and focused nothing,
+// and there was no way to tell that from the window simply not existing. An
+// action that only works on the key it happens to ship with is not a binding.
+//
+// The same function also used to fall through to corner-snapping when the key
+// carried no ctrl and tiling was off, which is snap_corner_N's job and is
+// registered as such. Reaching it from here meant a user who unbound corner
+// snap got corner snap anyway, from the action they had bound instead.
+func selectWindowByIndex(num int, o *app.OS) {
+	// With tiling on, the index counts what is on screen, so the numbers match
+	// what the user can see rather than a list that includes hidden panes.
+	count := 0
+	for i, win := range o.Windows {
+		if win.Workspace != o.CurrentWorkspace {
+			continue
 		}
-	} else if num <= 4 && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
-		// Corner snapping (only for 1-4)
-		switch num {
-		case 1:
-			o.Snap(o.FocusedWindow, app.SnapTopLeft)
-		case 2:
-			o.Snap(o.FocusedWindow, app.SnapTopRight)
-		case 3:
-			o.Snap(o.FocusedWindow, app.SnapBottomLeft)
-		case 4:
-			o.Snap(o.FocusedWindow, app.SnapBottomRight)
+		if o.AutoTiling && win.Minimized {
+			continue
+		}
+		count++
+		if count == num {
+			o.FocusWindow(i)
+			return
 		}
 	}
-	return o, nil
 }
 
 // The arrow keys belong to whatever overlay is up. Help scrolling is handled in

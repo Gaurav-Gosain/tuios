@@ -34,21 +34,25 @@ func handleToggleFocusSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // the whole point of the scope is that pane bindings do not fire here.
 func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key := msg.String()
-	// esc always leaves the rail, whatever the config says. The scope swallows
-	// unbound keys, so a config that resolves no rail action (one written before
-	// this section existed, or a rebound exit) would otherwise trap the keyboard
-	// here with no way back to the panes.
-	if key == "esc" {
-		o.ExitSidebarFocus()
-		return o, nil
-	}
 	if o.KeybindRegistry == nil {
 		o.ExitSidebarFocus()
 		return o, nil
 	}
 	action := lookupAction(msg, o.KeybindRegistry.GetSidebarAction)
 	if action == "" {
-		return o, nil // consumed: the rail owns the keyboard
+		// esc leaves the rail when nothing else claims it. The scope swallows
+		// unbound keys, so a config that resolves no rail action (one written
+		// before this section existed, or a rebound exit) would otherwise trap
+		// the keyboard here with no way back to the panes.
+		//
+		// Checked after the lookup, not before it. Before, a user who put esc on
+		// a rail action of their own had it silently overridden, which is the
+		// same bug as hardcoding the key: the config said one thing and the
+		// program did another, with nothing to tell them apart.
+		if key == "esc" {
+			o.ExitSidebarFocus()
+		}
+		return o, nil // consumed either way: the rail owns the keyboard
 	}
 
 	// Workspace/session jumps share a numeric suffix.

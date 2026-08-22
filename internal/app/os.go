@@ -510,21 +510,43 @@ type OS struct {
 	// BuildSessionTree does a blocking daemon round trip in daemon mode, and the
 	// palette renders every frame it is on screen.
 	PaletteSessionItems []CommandPaletteItem
-	// PaletteAppItems holds one row per program on $PATH, rebuilt when a scan
-	// lands rather than per open: the scan is asynchronous and the rows outlive
-	// any one palette.
-	PaletteAppItems []CommandPaletteItem
 	// PaletteItems is the merged list the filter and the renderer read. Merging
 	// is cached because the renderer rebuilds the filtered list every frame, and
 	// with a few thousand programs on $PATH rebuilding the merge that often is
 	// the difference between a palette that costs nothing to leave open and one
 	// that does not.
 	PaletteItems []CommandPaletteItem
+	// Launcher overlay: the programs a session can start, which is a separate
+	// list from the palette's commands (see launcher.go for why).
+	ShowLauncher     bool
+	LauncherQuery    string
+	LauncherSelected int
+	LauncherScroll   int
+	// LauncherItems holds one row per known program, rebuilt when a scan lands
+	// rather than per frame: with a few thousand programs on $PATH, rebuilding
+	// per frame is the difference between an overlay that costs nothing to
+	// leave open and one that does not.
+	LauncherItems []LauncherItem
+	// launcherIcons holds the decoded app icons and what is currently drawn on
+	// the host. Nil until the launcher first needs one.
+	launcherIcons *launcherIcons
+	// launcherIconCells is where the last frame put each row's icon, in
+	// panel-relative cells, for the flush that follows the frame.
+	launcherIconCells []launcherIconPlacement
 	// pathApps caches the $PATH scan across opens, refreshing only the
 	// directories whose mtime moved.
 	pathApps *applist.Cache
+	// desktopApps caches the .desktop scan across opens, reparsing only the
+	// files whose mtime moved. Nil on a platform that has no such thing.
+	desktopApps *desktopCache
+	// launcherSource is the two caches merged into the one list the launcher
+	// ranks, refreshed when a scan lands.
+	launcherSource []applist.Entry
 	// launchHistory ranks programs by how recently and often they were run.
 	launchHistory *applist.Frecency
+	// pendingSeeds holds command lines waiting for the daemon-created panes
+	// they are to be typed into.
+	pendingSeeds []pendingSeed
 	// Session switcher overlay
 	ShowSessionSwitcher          bool
 	SessionSwitcherQuery         string

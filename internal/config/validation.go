@@ -95,7 +95,12 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateSection("workspace_prefix", cfg.Keybindings.WorkspacePrefix)
 	validateSection("debug_prefix", cfg.Keybindings.DebugPrefix)
 	validateSection("tape_prefix", cfg.Keybindings.TapePrefix)
+	validateSection("tape_prefix", cfg.Keybindings.TapePrefix)
+	validateSection("layout_prefix", cfg.Keybindings.LayoutPrefix)
 	validateSection("terminal_mode", cfg.Keybindings.TerminalMode)
+	validateSection("sidebar", cfg.Keybindings.Sidebar)
+	validateSection("global", cfg.Keybindings.Global)
+	validateSection("script", cfg.Keybindings.Script)
 
 	// Validate enum appearance options (warn on unknown values; they fall back to defaults)
 	validateAppearanceEnums(cfg, result)

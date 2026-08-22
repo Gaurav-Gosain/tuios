@@ -36,19 +36,16 @@ const (
 )
 
 // hardcodedTerminalKeys are the keys terminal mode takes out of the stream
-// without going through the registry. They are listed here rather than derived
-// because they are literals in the input path, and a report that only covered
-// the configurable ones would tell the user their ctrl+p reaches fish.
+// without going through the registry, listed by hand because a report that only
+// covered the configurable ones would tell the user their ctrl+p reaches fish.
+//
+// It is empty now, and staying empty is the point: the palette, the launcher,
+// the scrollback scroll and the host-paste chords all resolve through the
+// registry, so the report derives them. Anything added here is a key nobody can
+// rebind, and should be a binding instead.
 //
 // Keep in step with HandleTerminalModeKey and handleTerminalModeBinds.
-var hardcodedTerminalKeys = map[string]string{
-	"shift+up":      "Scroll into the pane's scrollback",
-	"shift+down":    "Scroll back down toward live output",
-	"ctrl+p":        "Open the command palette",
-	"ctrl+shift+v":  "Paste from the host clipboard",
-	"super+v":       "Paste from the host clipboard",
-	"super+shift+v": "Paste from the host clipboard",
-}
+var hardcodedTerminalKeys = map[string]string{}
 
 // Swallow is one key terminal mode takes before the pane's program can see it.
 type Swallow struct {
@@ -87,7 +84,9 @@ func (r *KeybindRegistry) TerminalModeSwallowed() []Swallow {
 	}
 	add(leader, "leader", "Start a prefix chord", "built-in")
 
-	for _, name := range []string{SectionTerminalMode} {
+	// The global scope acts in terminal mode too, so everything bound in it is
+	// withheld from the pane exactly like a terminal_mode bind.
+	for _, name := range []string{SectionGlobal, SectionTerminalMode} {
 		section := kb.section(name)
 		actions := make([]string, 0, len(section))
 		for action := range section {

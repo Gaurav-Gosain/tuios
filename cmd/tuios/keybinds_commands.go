@@ -36,6 +36,11 @@ func generateWorkspaceActions() []string {
 }
 
 func printKeybindingsTable(registry *config.KeybindRegistry) {
+	leader := registry.GetConfig().Keybindings.LeaderKey
+	if leader == "" {
+		leader = config.LeaderKey
+	}
+
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("12")).
@@ -48,6 +53,12 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 		Title   string
 		Actions []string
 	}{
+		{
+			Title: "Global",
+			Actions: []string{
+				"command_palette", "launcher",
+			},
+		},
 		{
 			Title: "Window Management",
 			Actions: []string{
@@ -134,7 +145,9 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 	note := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("8")).
 		Italic(true).
-		Render("Note: Ctrl+B is the prefix key (not configurable). Press Ctrl+B followed by another key for prefix commands.")
+		Render("Note: " + leader + " is the leader key. Press it followed by another key for prefix commands.\n" +
+			"Set keybindings.leader_key to move it, and an action to [] to unbind it.\n" +
+			"Run `tuios keybinds doctor` for every scope, including the ones not listed here.")
 	fmt.Println(note)
 	fmt.Println()
 }

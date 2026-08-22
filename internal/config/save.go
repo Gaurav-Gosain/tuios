@@ -12,6 +12,14 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// ConfigFileHeader is the comment block written at the top of a generated
+// config file. Exported so `tuios config reset` writes the same guidance a
+// first-run config gets; it used to keep its own shorter copy, so resetting
+// quietly threw away the notes on which keys cost you what.
+func ConfigFileHeader(configPath string) string {
+	return configFileHeader(configPath)
+}
+
 // configFileHeader is the comment block written at the top of a generated
 // config file. Kept as a constant so createDefaultConfig and SaveUserConfig
 // produce identical, well-documented files.
@@ -48,6 +56,16 @@ func configFileHeader(configPath string) string {
 	sb.WriteString("# KEYBINDINGS\n")
 	sb.WriteString("# ============================================================================\n")
 	sb.WriteString("# Set an action to [] to unbind it and hand the key back to the shell.\n")
+	sb.WriteString("# `tuios keybinds doctor` says which binding in each scope is live, what\n")
+	sb.WriteString("# clashes with what, and which keys never reach the program in the pane.\n")
+	sb.WriteString("#\n")
+	sb.WriteString("# [keybindings.global] acts in window mode and terminal mode alike. It binds\n")
+	sb.WriteString("# ctrl+p to the command palette and alt+space to the launcher, which costs\n")
+	sb.WriteString("# you fish's history-back and readline's set-mark. To move or drop either:\n")
+	sb.WriteString("#\n")
+	sb.WriteString("#   [keybindings.global]\n")
+	sb.WriteString("#   command_palette = [\"ctrl+shift+p\"]\n")
+	sb.WriteString("#   launcher = []\n")
 	sb.WriteString("#\n")
 	sb.WriteString("# [keybindings.terminal_mode] binds alt+arrows to move focus between panes.\n")
 	sb.WriteString("# In readline, fish and zsh, alt+left and alt+right move the cursor a word\n")

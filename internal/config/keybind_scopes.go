@@ -64,8 +64,11 @@ const (
 	SectionWorkspacePrefix  = "workspace_prefix"
 	SectionDebugPrefix      = "debug_prefix"
 	SectionTapePrefix       = "tape_prefix"
+	SectionLayoutPrefix     = "layout_prefix"
 	SectionTerminalMode     = "terminal_mode"
 	SectionSidebar          = "sidebar"
+	SectionGlobal           = "global"
+	SectionScript           = "script"
 )
 
 // Scope identifiers. Stable strings rather than an iota because they are part of
@@ -80,6 +83,9 @@ const (
 	ScopePrefixWorkspce = "prefix.workspace"
 	ScopePrefixDebug    = "prefix.debug"
 	ScopePrefixTape     = "prefix.tape"
+	ScopePrefixLayout   = "prefix.layout"
+	ScopeGlobal         = "global"
+	ScopeScript         = "script"
 )
 
 // Scopes returns every keyboard context, in the order a reader should meet
@@ -93,6 +99,14 @@ func Scopes(leader string) []Scope {
 		leader = LeaderKey
 	}
 	return []Scope{
+		{
+			// Global is listed first because it is consulted in both of the
+			// modes below and wins nothing from them: a key bound here acts
+			// wherever the user is, which is exactly why it must be visible.
+			ID: ScopeGlobal, Name: "Global",
+			Sections: []string{SectionGlobal},
+			Reaches:  ReachSteals,
+		},
 		{
 			ID: ScopeWindowMode, Name: "Window mode",
 			Sections: []string{
@@ -142,6 +156,18 @@ func Scopes(leader string) []Scope {
 			Sections: []string{SectionTapePrefix},
 			Reaches:  ReachChorded,
 		},
+		{
+			ID: ScopePrefixLayout, Name: "Layout prefix", Chord: leader + " L",
+			Sections: []string{SectionLayoutPrefix},
+			Reaches:  ReachChorded,
+		},
+		{
+			// Only live while a .tape is playing back, so sharing ctrl+p with the
+			// palette is not a conflict: the two contexts are never both active.
+			ID: ScopeScript, Name: "Script playback",
+			Sections: []string{SectionScript},
+			Reaches:  ReachModal,
+		},
 	}
 }
 
@@ -174,6 +200,12 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 		return k.DebugPrefix
 	case SectionTapePrefix:
 		return k.TapePrefix
+	case SectionLayoutPrefix:
+		return k.LayoutPrefix
+	case SectionGlobal:
+		return k.Global
+	case SectionScript:
+		return k.Script
 	case SectionTerminalMode:
 		return k.TerminalMode
 	case SectionSidebar:

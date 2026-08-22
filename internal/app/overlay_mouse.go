@@ -175,6 +175,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.CommandPaletteSelected = idx
 	case "keybinds":
 		m.KeybindMove(idx - m.KeybindSelected())
+	case "launcher":
+		m.LauncherSelected = idx
 	case "themepicker":
 		if idx != m.ThemePickerSelected {
 			m.ThemePickerMove(idx - m.ThemePickerSelected)
@@ -228,6 +230,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		m.PaletteMove(wheelDelta(up))
 	case "keybinds":
 		m.KeybindMove(wheelDelta(up))
+	case "launcher":
+		m.LauncherMove(wheelDelta(up))
 	case "themepicker":
 		m.ThemePickerMove(wheelDelta(up))
 	case "session":
@@ -332,6 +336,12 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		// under the list is the thing a click is asking for; there is no action to
 		// activate and nothing a stray click could change.
 		m.KeybindMove(row.Idx - m.KeybindSelected())
+	case "launcher":
+		// A click runs the row. Typing it out instead is a keyboard choice: the
+		// row has no second control to aim at, and inventing one would put a
+		// hit target on every line of a list a few thousand rows long.
+		m.LauncherSelected = row.Idx
+		return m.LauncherRun(row.Idx)
 	case "themepicker":
 		m.ThemePickerSelected = row.Idx
 		return m.ThemePickerApplySelection()
@@ -421,6 +431,8 @@ func (m *OS) closeOverlay(kind string) {
 		m.CloseKeybindManager()
 	case "palette":
 		m.CloseCommandPalette()
+	case "launcher":
+		m.CloseLauncher()
 	case "themepicker":
 		// Click-away leaves the previewed theme reverted, matching Esc.
 		m.CancelThemePicker()

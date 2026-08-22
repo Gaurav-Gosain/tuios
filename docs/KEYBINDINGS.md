@@ -28,6 +28,30 @@ TUIOS has two main modes:
 | `?` (Window Mode) or `Ctrl+B ?` (universal) | Toggle help overlay |
 | `q` (Window Mode) or `Ctrl+B q` (universal) | Quit TUIOS |
 
+### Global Keys
+
+These act in both modes, and they live in `[keybindings.global]`.
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+P` | Command palette |
+| `Alt+Space` | Launcher: run a program |
+
+Both are keys something else already wanted. `Ctrl+P` is history-back in fish
+and keyword completion in vim; `Alt+Space` is `set-mark` in readline. They are
+bindings rather than literals precisely so you can decide that trade for
+yourself:
+
+```toml
+[keybindings.global]
+command_palette = ["ctrl+shift+p"]
+launcher = []
+```
+
+An action set to `[]` is off, and the key reaches the program in the pane
+again. `tuios keybinds doctor` lists every key TUIOS takes from the pane, so
+you can see what you are paying before you change anything.
+
 ### Terminal Mode Keys
 
 These work while typing into a pane, without the leader key. They live in `[keybindings.terminal_mode]`.
@@ -37,6 +61,8 @@ These work while typing into a pane, without the leader key. They live in `[keyb
 | `Alt+N` / `Alt+P` | Next / previous window |
 | `Alt+Esc` | Leave Terminal Mode |
 | `Alt+←` `Alt+→` `Alt+↑` `Alt+↓` | Focus the pane in that direction |
+| `Shift+↑` / `Shift+↓` | Scroll the pane's scrollback one line |
+| `Ctrl+Shift+V`, `Super+V` | Paste from the host clipboard |
 
 Focus moves to the nearest pane whose facing edge lies in that direction and whose span overlaps the current pane's; ties go to the earlier pane. At the edge of the layout nothing happens, and focus does not wrap.
 
@@ -274,7 +300,8 @@ Press `Ctrl+B`, release, then press the command key (tmux-style).
 | `Ctrl+B` `S` | Session Switcher |
 | `Ctrl+B` `L` | Load Layout |
 | `Ctrl+B` `P` | Command Palette (alternative) |
-| `Ctrl+P` | Command Palette |
+| `Ctrl+P` | Command Palette (see [Global Keys](#global-keys)) |
+| `Alt+Space` | Launcher: run a program (see [Global Keys](#global-keys)) |
 | `Ctrl+B` `Ctrl+B` | Send literal Ctrl+B to terminal |
 
 ### Workspace Prefix (`Ctrl+B` `w`)
