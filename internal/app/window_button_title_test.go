@@ -171,7 +171,7 @@ func TestBottomTitleBarIsUnaffectedByTheButtonPosition(t *testing.T) {
 				Workspace: 1, CustomName: "editor",
 			}
 			m := &OS{Windows: []*terminal.Window{win}}
-			out := m.addToBorder(strings.Repeat(" ", win.Width), lipgloss.Color("#7dd3fc"), win, 1, false)
+			out := m.addToBorder(strings.Repeat(" ", win.Width), win.Width-2, lipgloss.Color("#7dd3fc"), win, 1, false)
 			lines := strings.Split(ansi.Strip(out), "\n")
 			rows = append(rows, lines[len(lines)-1])
 		})

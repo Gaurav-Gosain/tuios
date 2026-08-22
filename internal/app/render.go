@@ -393,6 +393,7 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 	// old-vs-new comparison.
 	return m.addToBorder(
 		box.BorderForeground(borderColorObj).Render(content),
+		window.ContentWidth(),
 		borderColorObj,
 		window,
 		m.workspacePosition(window),
