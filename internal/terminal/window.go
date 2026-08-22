@@ -191,6 +191,18 @@ type Window struct {
 	PositionDirty bool
 	CachedContent string
 	CachedLayer   *lipgloss.Layer
+	// RenderedCols and RenderedRows are the display geometry of the pane body
+	// the renderer produced last: the column count every one of its lines
+	// fills, and its line count. Zero means the renderer cannot vouch for the
+	// frame, which is how one it did not lay out over the whole grid is
+	// reported. The border box reads them to decide whether it still has to
+	// re-flow the body to the pane's rectangle, which costs a wrap and three
+	// width scans over a frame that is already exactly that shape.
+	RenderedCols, RenderedRows int
+	// CachedContentCols and CachedContentRows are the same geometry for
+	// CachedContent. They are written only where CachedContent is, so a
+	// rectangle can never be read against a frame it does not describe.
+	CachedContentCols, CachedContentRows int
 	// CachedCursor is where this window's cursor was the last time the render
 	// loop could read it. Reading the live one needs the I/O lock, which a
 	// pane flooding output holds in a near-continuous burst, and the frame

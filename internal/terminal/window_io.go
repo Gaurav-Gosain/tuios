@@ -911,6 +911,7 @@ func (w *Window) Close() {
 
 	// Clear caches to free memory
 	w.CachedContent = ""
+	w.CachedContentCols, w.CachedContentRows = 0, 0
 	w.SyncHoldContent = ""
 	w.CachedLayer = nil
 
