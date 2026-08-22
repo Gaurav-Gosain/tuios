@@ -140,7 +140,9 @@ func (m *OS) renderKeybindManager() (string, overlay.Geometry, []overlayRowHit) 
 	}
 
 	panel := overlay.Panel{
-		Glyph:     keybindPanelGlyph(),
+		// Written as an escape so the codepoint survives tooling that does not
+		// carry private-use glyphs. The panel drops it in ASCII mode itself.
+		Glyph:     "", // keyboard
 		Title:     "Keybinds",
 		Width:     width,
 		Tabs:      KeybindTabNames,
@@ -159,14 +161,6 @@ func (m *OS) renderKeybindManager() (string, overlay.Geometry, []overlayRowHit) 
 		rows[i].Rect.X1 = geo.Width
 	}
 	return content, geo, rows
-}
-
-// keybindPanelGlyph is the panel's title glyph, degrading for ASCII terminals.
-func keybindPanelGlyph() string {
-	if overlay.UseASCII() {
-		return ""
-	}
-	return "" // keyboard
 }
 
 // keybindListBody lays out the three list tabs: a filter line, the rows, a

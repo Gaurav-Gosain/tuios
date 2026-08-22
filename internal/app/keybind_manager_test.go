@@ -243,7 +243,7 @@ func TestOverlaySurvivesAMissingRegistry(t *testing.T) {
 	m.KeybindCapture("ctrl+g")
 	m.KeybindMove(1)
 	m.KeybindSetTab(KeybindTabGuests)
-	if got := m.KeybindConflictCount(); got != 0 {
-		t.Errorf("conflict count = %d with no registry, want 0", got)
+	if rows := m.FilteredKeybindRows(); len(rows) != 0 {
+		t.Errorf("a model with no registry has no bindings, got %d", len(rows))
 	}
 }

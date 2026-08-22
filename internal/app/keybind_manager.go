@@ -74,15 +74,6 @@ func (m *OS) OpenKeybindManager() {
 	m.KeybindTab = KeybindTabBindings
 }
 
-// OpenKeybindManagerAt opens the overlay on a named tab, so the conflict count
-// in the help footer can go straight to the conflicts.
-func (m *OS) OpenKeybindManagerAt(tab int) {
-	m.OpenKeybindManager()
-	if tab >= 0 && tab < keybindTabCount {
-		m.KeybindTab = tab
-	}
-}
-
 // CloseKeybindManager hides the overlay and drops the report, so a reopen reads
 // the pane again rather than showing what was true last time.
 func (m *OS) CloseKeybindManager() {
@@ -318,13 +309,4 @@ func (m *OS) KeybindCommitBinding() tea.Cmd {
 	m.keybinds.bound = key
 	m.ShowNotification("Bound "+key+" to "+action, "success", config.NotificationDuration)
 	return m.persistSettings()
-}
-
-// KeybindConflictCount is the headline number, for the help footer and the
-// dock. Cheap: it reads the config, not the pane.
-func (m *OS) KeybindConflictCount() int {
-	if m.KeybindRegistry == nil {
-		return 0
-	}
-	return len(m.KeybindRegistry.Collisions())
 }
