@@ -69,7 +69,7 @@ func main() {
 	if err := fang.Execute(
 		context.Background(),
 		rootCmd,
-		fang.WithVersion(fmt.Sprintf("%s\nCommit: %s\nBuilt: %s\nBy: %s", version, commit, date, builtBy)),
+		fang.WithVersion(versionReport()),
 		fang.WithErrorHandler(diagnosticErrorHandler),
 	); err != nil {
 		os.Exit(1)

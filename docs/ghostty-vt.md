@@ -19,7 +19,51 @@ together in one process; comparing them is the differential harness's job
 both and asserts screens, cursor, scrollback, modes and wire snapshots
 agree.
 
+## Installing a local build
+
+`scripts/install.sh` goes from a checkout to a `tuios` on your PATH. It
+builds the pinned library if that has not happened yet, passes
+`PKG_CONFIG_PATH` itself, and runs from any directory.
+
+```sh
+./scripts/install.sh            # ghostty backend (default)
+./scripts/install.sh pure       # the pure Go emulator
+```
+
+The default destination is `~/.local/bin`; override it with `--prefix DIR`
+or `$TUIOS_PREFIX`. Both backends install under the same name, so switching
+between them is one run of the script with the other name.
+
+Two things the script warns about, because either one makes a successful
+install look like it did nothing:
+
+- **Another `tuios` earlier on your PATH** shadowing what was just
+  installed. A `go install`ed binary in `~/go/bin` is the usual culprit.
+- **A running daemon**, which keeps serving the build it started from until
+  it is stopped. Pass `--kill-server` to have the script run
+  `tuios kill-server` for you, or `--keep-server` to be told and left alone;
+  with neither, it asks. Sessions are saved on the way out and restored when
+  the daemon next starts.
+
+Because the two builds install under one name, the binary is the only thing
+that can say which emulator it carries, and `tuios --version` does:
+
+```
+tuios version dev [ghostty backend]
+Commit: 4b825dc642cb6eb9a060e54bf8d69288fbee4904
+Built: 2026-08-22T13:41:07Z
+By: install.sh
+```
+
+The backend name comes from the build tag, not from anything the script
+injects, so it cannot disagree with what was compiled. The commit is stamped
+by the script because the stamps the go command embeds name the main
+checkout's HEAD when the build runs in a linked worktree.
+
 ## Building with the tag
+
+The script wraps this; run it directly when you want the build without the
+install.
 
 ```sh
 ./scripts/ghostty-lib.sh            # needs zig >= 0.16; caches in .ghostty-vt/
