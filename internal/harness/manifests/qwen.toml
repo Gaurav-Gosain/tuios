@@ -15,7 +15,8 @@ priority       = 50
 
 # npm @qwen-code/qwen-code is pure JS whose entry point is a generic
 # cli-entry.js, so the package path is the identity; the Homebrew formula runs
-# the same JS under its own node.
+# the same JS under its own node. Detection verified against a live pane; the
+# rules were not, because the dialogs sit behind a connected provider.
 [detect]
 comm      = ["qwen"]
 argv0     = ["qwen"]

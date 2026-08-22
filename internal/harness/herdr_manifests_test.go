@@ -23,6 +23,12 @@ func TestHerdrManifestsSpotTheirBlockers(t *testing.T) {
 			"  Waiting for approval",
 			"  [a] Allow all for this session   [d] Deny with feedback",
 		}},
+		// Captured from a live amp pane.
+		{"amp", "login prompt", []string{
+			"arch-btw% amp",
+			"No API key found. Starting login flow...",
+			"Would you like to log in to Amp? [(y)es, (n)o]:",
+		}},
 		{"antigravity", "permission prompt", []string{
 			"Requesting permission for: run_command",
 			"Do you want to proceed?",
@@ -43,10 +49,17 @@ func TestHerdrManifestsSpotTheirBlockers(t *testing.T) {
 		{"devin", "tool approval footer", []string{
 			"  Approve once   Select   Confirm   Esc cancel",
 		}},
-		{"copilot", "selection dialog", []string{
-			"  Select an option",
-			"  > 1. Continue",
-			"  Enter to select · Esc to cancel",
+		// Captured from a live copilot pane; the dialog the daemon classified
+		// needs_input end to end.
+		{"copilot", "folder trust dialog", []string{
+			"│ Do you trust the files in this folder?                                     │",
+			"│                                                                            │",
+			"│ ❯ 1. Yes                                                                   │",
+			"│   2. Yes, and remember this folder for future sessions                     │",
+			"│   3. No (Esc)                                                              │",
+			"│                                                                            │",
+			"│ ↑/↓ to navigate · enter to select · esc to cancel                          │",
+			"╰────────────────────────────────────────────────────────────────────────────╯",
 		}},
 		{"grok", "option dialog", []string{
 			"┃  1 (●) Yes, proceed",

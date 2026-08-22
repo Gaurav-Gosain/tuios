@@ -13,7 +13,9 @@ priority       = 50
 
 # npm @github/copilot is a node loader that spawns a platform binary named
 # copilot out of node_modules and stays resident above it, so both shapes run:
-# a node process whose run token is the loader, and a native child.
+# a node process whose run token is the loader, and a native child. Detection
+# and the selection rule below were verified against a live pane: copilot's
+# folder-trust dialog classified needs_input end to end.
 [detect]
 comm      = ["copilot"]
 argv0     = ["copilot", "github-copilot"]

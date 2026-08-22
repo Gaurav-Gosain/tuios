@@ -1381,6 +1381,12 @@ func ruleRefusals(r harness.RuleReport) []string {
 	for _, s := range r.Blocked {
 		out = append(out, "not: "+strconv.Quote(s)+" is on the screen and vetoes the rule")
 	}
+	for _, s := range r.MissingRegex {
+		out = append(out, "regex: "+strconv.Quote(s)+" matches nothing on the screen")
+	}
+	for _, s := range r.BlockedRegex {
+		out = append(out, "not_regex: "+strconv.Quote(s)+" matches the screen and vetoes the rule")
+	}
 	return out
 }
 

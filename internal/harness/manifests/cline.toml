@@ -15,7 +15,8 @@ priority       = 50
 
 # The npm package "cline" is a node shim that runs a platform binary out of
 # node_modules (comm "cline", or ".cline" from its cache); Homebrew installs
-# the binary directly.
+# the binary directly. Detection verified against a live pane; the rules were
+# not, because the approval prompts sit behind a signed-in session.
 [detect]
 comm      = ["cline", ".cline"]
 argv0     = ["cline"]

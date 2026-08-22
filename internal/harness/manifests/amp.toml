@@ -13,9 +13,9 @@ id             = "amp"
 display_name   = "Amp"
 priority       = 50
 
-# Amp's own installer puts a native binary at ~/.amp/bin/amp (verified on a real
-# install); the npm packages (@sourcegraph/amp, @ampcode/cli) run a platform
-# binary out of node_modules.
+# Amp's own installer puts a native binary at ~/.amp/bin/amp (detection
+# verified against a live pane); the npm packages (@sourcegraph/amp,
+# @ampcode/cli) run a platform binary out of node_modules.
 [detect]
 comm      = ["amp"]
 argv0     = ["amp", "amp-local"]
@@ -45,3 +45,12 @@ state    = "needs_input"
 priority = 300
 all      = ["approve"]
 any      = ["allow all for this session", "allow all for every session", "allow file for every session", "deny with feedback"]
+
+# tuios-authored, from a live pane: an unauthenticated amp stops on
+#   Would you like to log in to Amp? [(y)es, (n)o]:
+# and waits. herdr has no rule for it, but it is the same class of prompt as a
+# directory trust question: painted once, then silence.
+[[screen.rule]]
+state    = "needs_input"
+priority = 100
+all      = ["would you like to log in to amp?", "(y)es"]
