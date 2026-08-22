@@ -347,6 +347,8 @@ func (t *GhosttyTerminal) captureScreenLocked(idx int) {
 	if err := t.rs.Update(t.term); err != nil {
 		return
 	}
+	// Same rule as syncLocked: style IDs do not survive a snapshot.
+	clear(t.styleCache)
 	if err := t.rs.RowIterator(t.ri); err != nil {
 		return
 	}
