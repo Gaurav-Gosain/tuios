@@ -612,6 +612,7 @@ Event types:
 | `window-minimized` | A window was minimized. | `session`, `window`, `pty_id` |
 | `window-restored` | A minimized window was restored. | `session`, `window`, `pty_id` |
 | `workspace-switched` | The session's current workspace changed. | `session`, `workspace` |
+| `agent-state` | A window's agent state changed, whichever tier changed it. A pane ceasing to be an agent reports `none`. | `session`, `window`, `pty_id`, `state` |
 | `output` | A window produced output (activity signal only; the raw bytes still flow over the binary stream). | `session`, `window`, `pty_id`, `bytes` |
 | `bell` | A window rang the terminal bell. | `session`, `window`, `pty_id` |
 | `mode-changed` | A terminal mode toggled (for example alt-screen). | `session`, `window`, `mode`, `enabled` |
@@ -723,7 +724,8 @@ subscription and replaces a caller's capture-pane poll loop.
 Params: `condition` (required), `session`, `window`, `pattern` (regex, for
 `window-output`), `source` (`visible` or the default recent/scrollback content,
 for `window-output`), `idle` (quiet-period milliseconds, for `window-idle`;
-default 500), `timeout` (milliseconds; default 30000).
+default 500), `until` (agent state names, comma-separated, for `agent-state`),
+`timeout` (milliseconds; default 30000).
 
 Conditions:
 
@@ -734,6 +736,12 @@ Conditions:
 - `window-idle` resolves after the target window produces no output for `idle`
   milliseconds.
 - `session-exists` resolves when a session named `session` exists.
+- `agent-state` resolves when a window's agent state becomes one of the states
+  named in `until` (checked once immediately, so a pane already in the state
+  resolves at once). With `window` it watches that pane and fails with
+  `window_not_found` if the pane closes mid-wait; without `window` any window
+  in the session matches, which is the "tell me when any agent here needs
+  input" shape. The result names the `window` and the `state` that matched.
 
 Request:
 

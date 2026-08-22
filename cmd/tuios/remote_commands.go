@@ -1080,7 +1080,7 @@ func callAndReport(verb string, params map[string]any, report func(map[string]an
 // The read deadline is stretched past the requested timeout because the daemon
 // only answers once the wait resolves: a client deadline shorter than the wait
 // would report a connection failure for a wait that was still perfectly healthy.
-func runWaitFor(sessionName, windowTarget, condition, pattern string, idle, timeout int, jsonOutput bool) error {
+func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle, timeout int, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -1093,6 +1093,9 @@ func runWaitFor(sessionName, windowTarget, condition, pattern string, idle, time
 		"condition": condition,
 		"pattern":   pattern,
 		"timeout":   timeout,
+	}
+	if until != "" {
+		params["until"] = until
 	}
 	if idle > 0 {
 		params["idle"] = idle

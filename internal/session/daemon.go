@@ -299,6 +299,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 			Bytes:     ev.Bytes,
 			Mode:      ev.Mode,
 			Enabled:   ev.Enabled,
+			State:     ev.State,
 			Workspace: ev.Workspace,
 		})
 	})

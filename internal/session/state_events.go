@@ -25,6 +25,7 @@ type lifecycleWindow struct {
 	customName string
 	workspace  int
 	minimized  bool
+	agentState AgentState
 }
 
 // lifecycleSnapshot is a copy of the lifecycle-relevant parts of a SessionState.
@@ -57,6 +58,7 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 			customName: w.CustomName,
 			workspace:  w.Workspace,
 			minimized:  w.Minimized,
+			agentState: w.AgentState,
 		})
 	}
 	return snap
@@ -131,6 +133,19 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				Type:   evType,
 				Window: w.id,
 				PTYID:  w.ptyID,
+			})
+		}
+		// Diffed here rather than emitted by each writer because agent state has
+		// several: explicit reports, the screen tier, the stall heuristic and
+		// the foreground detector all set it, and every one already runs inside
+		// a state mutation. The event carries the wire spelling, so a pane
+		// ceasing to be an agent says "none" rather than vanishing silently.
+		if w.agentState != prev.agentState {
+			events = append(events, SessionEvent{
+				Type:   EventAgentState,
+				Window: w.id,
+				PTYID:  w.ptyID,
+				State:  w.agentState.Name(),
 			})
 		}
 	}
