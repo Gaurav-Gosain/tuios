@@ -98,6 +98,12 @@ type Entry struct {
 	// Keywords are the entry's Keywords=, words a person might search by that
 	// appear in no other field. They feed Aliases.
 	Keywords []string
+	// Binary is the $PATH program this entry took the place of, when it took
+	// one. Supersession removes that program's own row, so without carrying its
+	// name here the one thing a user has always typed would stop finding it,
+	// which is the single way this merge could make something harder to reach
+	// than leaving the two lists apart. It feeds Aliases.
+	Binary string
 }
 
 // Label is what a launcher shows and matches against.
@@ -121,6 +127,9 @@ func (e Entry) Aliases() []string {
 	var out []string
 	if e.Display != "" && e.Name != "" && e.Name != e.Display {
 		out = append(out, e.Name)
+	}
+	if e.Binary != "" && e.Binary != e.Name && e.Binary != e.Display {
+		out = append(out, e.Binary)
 	}
 	return append(out, e.Keywords...)
 }
