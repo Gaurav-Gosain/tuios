@@ -361,6 +361,44 @@ tuios get-config appearance.sidebar.position --json
 {"key":"appearance.sidebar.position","value":"left","source":"default","default":"left","option_type":"string"}
 ```
 
+## Checking the keybinds
+
+tuios is a multiplexer, so its bindings compete with whatever runs inside it.
+`keybinds doctor` reports both halves of that, and `--json` gives you the same
+analysis the keybind overlay draws.
+
+```sh
+tuios keybinds doctor
+tuios keybinds doctor --json | jq -r '.collisions[] | "\(.press) runs \(.winner)"'
+tuios keybinds explain ctrl+w --json
+```
+
+Every finding carries an `evidence` field, and it decides how much weight the
+finding takes:
+
+- `certain` comes from tuios's own registry and dispatch order. A key claimed
+  twice, or a key tuios withholds from the pane, is a fact about tuios.
+- `observed` was read from a pane at that moment: the foreground process name,
+  the alternate screen, the kitty keyboard flags the pane's program pushed. From
+  the CLI there is no pane, so this tier is empty and the report says nothing
+  about one.
+- `reference` is a curated list of what common programs bind by default. Nothing
+  is detected and nothing is asked. Treat it as a hint about where to look, never
+  as a statement about the user's actual vim config.
+
+Two conflicts are worth acting on. `collisions` are keys bound twice in one
+scope, where `winner` is the action that runs and everything in `losers` is
+dead; the `cross_section` ones are the ones the config file gives no hint of,
+because the tables look unrelated and the later one is copied over the earlier.
+`terminal_mode_swallowed` is every key that never reaches the program in a pane,
+which is the list to check before telling a user their editor is broken.
+
+`explain` answers for one key: every scope it acts in, whether the pane would
+have received it, and the terminal-level pair it belongs to. Ctrl+I and Tab are
+the same byte, as are Ctrl+M and Enter and Ctrl+[ and Esc, so binding one of
+those binds the other unless the host terminal grants key disambiguation. Do not
+suggest a binding on `ctrl+i`, `ctrl+m` or `ctrl+[` without saying so.
+
 ## Waiting instead of polling
 
 Do not capture in a loop with a sleep. The daemon watches its own events and will

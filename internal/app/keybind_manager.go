@@ -34,6 +34,11 @@ type keybindManager struct {
 	query    string
 	selected int
 	scroll   int
+	// filtered memoises FilteredKeybindRows against filteredFor, the query it
+	// was computed for. Invalidated by setting filtered to nil, which is what
+	// every path that changes the query or the report does.
+	filtered    []config.Binding
+	filteredFor string
 
 	// armed is whether the next key press is data rather than a command. It is
 	// one-shot: capturing a key disarms it, so there is always a key that means
@@ -163,17 +168,31 @@ func (m *OS) keybindRowCount() int {
 // FilteredKeybindRows is the Bindings tab's list: every binding, filtered by
 // the query.
 //
-// The query is matched against the key, the action and its description at once,
-// so "close" finds the action and "ctrl+b" finds the chord without the user
-// having to know which field they are searching.
+// Memoised against the query, because the renderer asks for this once to count
+// the rows and again for every row it draws. Recomputed per call it was a fuzzy
+// sweep over a few hundred candidates a dozen times a frame, for a list that
+// only changes when a keystroke changes the query.
 func (m *OS) FilteredKeybindRows() []config.Binding {
-	all := m.keybinds.report.Bindings
 	q := strings.ToLower(strings.TrimSpace(m.keybinds.query))
+	if m.keybinds.filtered != nil && m.keybinds.filteredFor == q {
+		return m.keybinds.filtered
+	}
+	m.keybinds.filteredFor = q
+	m.keybinds.filtered = m.filterKeybindRows(q)
+	return m.keybinds.filtered
+}
+
+// filterKeybindRows does the matching.
+//
+// The query runs against the chord, the action, its description and the scope
+// joined into one candidate, so "close" finds the action and "ctrl+b" finds the
+// chord without the user having to know which field they are searching. Fuzzy
+// rather than substring, so it behaves like the palette and the theme picker.
+func (m *OS) filterKeybindRows(q string) []config.Binding {
+	all := m.keybinds.report.Bindings
 	if q == "" {
 		return all
 	}
-	// Fuzzy-matched over a joined haystack rather than filtered by substring,
-	// so the manager searches the way the palette and the theme picker do.
 	hay := make([]string, len(all))
 	for i, b := range all {
 		hay[i] = b.Press + " " + b.Action + " " + b.Desc + " " + b.Scope
@@ -181,11 +200,10 @@ func (m *OS) FilteredKeybindRows() []config.Binding {
 	hits := fuzzy.Filter(q, hay)
 	out := make([]config.Binding, 0, len(hits))
 	for _, h := range hits {
-		for i, s := range hay {
-			if s == h.Text {
-				out = append(out, all[i])
-				break
-			}
+		// Hit.Index is the candidate's position in the input, so the binding it
+		// came from is a direct lookup rather than a search back through hay.
+		if h.Index >= 0 && h.Index < len(all) {
+			out = append(out, all[h.Index])
 		}
 	}
 	return out
@@ -227,6 +245,7 @@ func (m *OS) KeybindStepTab(delta int) {
 // top, since the row it pointed at is probably gone.
 func (m *OS) KeybindSetQuery(q string) {
 	m.keybinds.query = q
+	m.keybinds.filtered = nil
 	m.keybinds.selected = 0
 	m.keybinds.scroll = 0
 }
@@ -294,6 +313,7 @@ func (m *OS) KeybindCommitBinding() tea.Cmd {
 	// just created) rather than the state before it.
 	m.KeybindRegistry.Reload(m.UserConfig)
 	m.keybinds.report = m.buildKeybindReport()
+	m.keybinds.filtered = nil
 	m.KeybindCapture(key)
 	m.keybinds.bound = key
 	m.ShowNotification("Bound "+key+" to "+action, "success", config.NotificationDuration)
