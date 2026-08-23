@@ -892,6 +892,69 @@ tuios list-verbs capture-pane
 tuios list-verbs --json | jq '.verbs[].verb'
 ```
 
+### `tuios list-dock-components`
+
+List the dock's components: what the bar is made of, what each cell reads, and
+what each component's command last did.
+
+**Usage:**
+```bash
+tuios list-dock-components [flags]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `--json` - Output as JSON (default is human-readable table)
+
+**Example output:**
+```
+╭───────────────┬───────┬─────────┬──────────────────────────┬────────┬──────────────────────╮
+│ COMPONENT     │ SIDE  │ SOURCE  │ REFRESH                  │ STATE  │ READS                │
+├───────────────┼───────┼─────────┼──────────────────────────┼────────┼──────────────────────┤
+│ mode          │ left  │ builtin │ render                   │ drawn  │                      │
+│ workspaces    │ left  │ builtin │ render                   │ drawn  │                      │
+│ custom/branch │ left  │ custom  │ event:after-focus-change │ drawn  │ feat/dock-components │
+│ windows       │ center│ builtin │ render                   │ drawn  │                      │
+│ custom/k8s    │ right │ custom  │ interval 30s             │ failed │ exit 127: ...        │
+╰───────────────┴───────┴─────────┴──────────────────────────┴────────┴──────────────────────╯
+```
+
+A component whose command fails is hidden from the bar rather than left showing
+a stale value, so this is where the failure is visible. `STATE` is `drawn`,
+`hidden`, `failed`, or `gave up`; `READS` carries the cell text, or the exit
+code and error when there is one.
+
+The dock is composed by the attached client, so this needs a client attached.
+
+### `tuios refresh-dock`
+
+Re-run a dock component now, whatever its `refresh` mode says.
+
+**Usage:**
+```bash
+tuios refresh-dock [component] [flags]
+```
+
+With no argument every component is re-run. Refreshing also clears a give-up, so
+a component that failed five times in a row starts working again once its script
+is fixed, without restarting the session.
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `--json` - Output as JSON
+
+**Examples:**
+```bash
+# After editing the script it runs
+tuios refresh-dock agents
+
+# From a hook, so the cell updates the moment the thing it reports changes
+#   [hooks]
+#   after-agent-state = "tuios refresh-dock agents"
+```
+
+See `examples/dock/` for working components and the config that wires them up.
+
 ### `tuios list-windows`
 
 List all windows in a TUIOS session.

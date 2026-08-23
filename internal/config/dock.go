@@ -199,6 +199,38 @@ func (k DockRefreshKind) String() string {
 	}
 }
 
+// dockEventTypes is every event a refresh contract may watch. Both spellings
+// are here: the hook table names the event after-focus-change and the daemon's
+// event hub names the same thing window-focused, and a component author should
+// not have to know which of the two they are talking to.
+//
+// The list lives in this package rather than beside the alias map in
+// internal/app so the config warning can check a name at load, which is the
+// only moment anyone is looking. An event a component watches and nothing ever
+// fires is a cell that never updates and says nothing about why.
+var dockEventTypes = []string{
+	"after-agent-state", "after-attach", "after-close-window", "after-detach",
+	"after-focus-change", "after-layout-change", "after-new-window",
+	"after-resize", "after-workspace-switch",
+	"agent-state", "attached", "detached", "layout-changed", "resized",
+	"window-closed", "window-created", "window-focused", "workspace-switched",
+}
+
+// DockEventTypes returns the event names a refresh contract may watch, sorted.
+func DockEventTypes() []string {
+	return append([]string(nil), dockEventTypes...)
+}
+
+// IsDockEventType reports whether name is an event a component may watch.
+func IsDockEventType(name string) bool {
+	for _, e := range dockEventTypes {
+		if e == name {
+			return true
+		}
+	}
+	return false
+}
+
 // DockRefresh is a parsed refresh contract.
 type DockRefresh struct {
 	Kind     DockRefreshKind
@@ -349,12 +381,26 @@ func validateDock(cfg *UserConfig, result *ValidationResult) {
 	}
 
 	for name, spec := range cfg.Dock.Custom {
-		if _, err := ParseDockRefresh(spec.Refresh); err != nil {
+		refresh, err := ParseDockRefresh(spec.Refresh)
+		switch {
+		case err != nil:
 			result.Warnings = append(result.Warnings, ValidationError{
 				Field:   "dock.custom." + name,
 				Key:     "refresh",
 				Message: err.Error() + "; the component falls back to once",
 			})
+		case refresh.Kind == DockRefreshEvent:
+			for _, event := range refresh.Events {
+				if IsDockEventType(event) {
+					continue
+				}
+				result.Warnings = append(result.Warnings, ValidationError{
+					Field: "dock.custom." + name,
+					Key:   "refresh",
+					Message: fmt.Sprintf("nothing ever fires %q, so this component would never refresh; the events are %s",
+						event, strings.Join(DockEventTypes(), ", ")),
+				})
+			}
 		}
 		if spec.MaxWidth < 0 || spec.MaxWidth > DockCustomMaxWidthLimit {
 			result.Warnings = append(result.Warnings, ValidationError{

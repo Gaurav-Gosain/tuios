@@ -517,6 +517,81 @@ Be honest with the user about these rather than working around them:
   tuios emits colour indices and the host terminal fills them in, so the sixteen
   on screen are the user's and tuios does not know what they are. "Match my
   terminal" means importing that terminal's scheme file, not asking tuios.
+## Ricing: the dock's components
+
+The dock is three ordered lists of named components. That is the whole
+customisation model: reorder the names, drop the ones you do not want, or add a
+command of your own whose first line of stdout becomes a cell.
+
+```sh
+tuios list-dock-components
+```
+
+Every placed component, in draw order, with the side it is on, how it refreshes,
+what its cell reads now, and what its command last did. This is the enumeration
+half; the last two columns are the verification half.
+
+To add one, write a script and five lines of TOML. There is no manifest, no
+install step and no restart: the config file is watched, so the cell appears
+when you save.
+
+```toml
+[dock]
+right = ["custom/agents", "cpu", "ram", "session-controls"]
+
+[dock.custom.agents]
+command  = "~/.config/tuios/dock/agents.sh"
+refresh  = "event:after-agent-state"
+on-click = "tuios list-windows"
+```
+
+Then check it landed:
+
+```sh
+tuios refresh-dock agents
+tuios list-dock-components --json | jq '.components[] | select(.name=="custom/agents")'
+```
+
+The contract is environment in, one line of text out. Your command gets the
+session environment plus `TUIOS_DOCK_COMPONENT`, `TUIOS_SESSION` and
+`TUIOS_SOCKET`, so a component can call tuios verbs without being told where the
+session is. SGR colour survives; every other escape is stripped.
+
+`refresh` is one of four, and the order below is the order of cost:
+
+| value | when it runs | idle cost |
+|---|---|---|
+| `event:TYPE` | when that event fires (`after-agent-state`, `after-focus-change`, `after-workspace-switch`, …; the event-hub spellings `agent-state`, `window-focused`, … also work) | none |
+| `push` | the command stays running; each line it writes is an update | none |
+| `"30s"` | polling, floored at one second | one timer for all pollers, no frame when the value has not moved |
+| `once` | at startup, and on `tuios refresh-dock NAME` | none |
+
+Prefer `event:` and `push`. A dock with no polling component arms no timer at
+all, and that is a property worth keeping: it is why the built-in clock no
+longer redraws the screen sixty times a second.
+
+### When a component is not drawing
+
+A component that fails, times out, or prints nothing is **hidden**, so the
+absence is the symptom and `list-dock-components` is where the cause is. It
+carries the exit code, the error and the last run time. After five consecutive
+failures it stops being polled; `tuios refresh-dock NAME` revives it, which is
+what to run after fixing the script.
+
+Never conclude a component works because the config parsed. Read it back.
+
+### Two things to know before you write one
+
+- **A component runs where the client runs.** Locally that is the user's
+  machine. Under `tuios-web` it is the machine running tuios-web, and over SSH
+  it is the SSH host. A battery cell on a server reports the server's battery.
+  Every attached client runs its own copy.
+- **Anything that must happen while nothing is attached is a hook, not a
+  component.** Components are UI and die with the client that drew them.
+
+`examples/dock/` in the repo has five working recipes and a `dock.toml` that
+wires all of them up.
+
 ## Checking the keybinds
 
 tuios is a multiplexer, so its bindings compete with whatever runs inside it.

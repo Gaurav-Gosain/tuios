@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -159,10 +160,33 @@ func (m *OS) DockClockText() string {
 
 // NotifyDockEvent marks every event-driven component watching this type as due.
 // Called from the paths that already know something happened, so the wake is
-// paid for by the thing that happened rather than by a clock.
+// paid for by the thing that happened rather than by a clock, and costs nothing
+// at all when nothing is happening.
 func (m *OS) NotifyDockEvent(eventType string) {
 	m.dockEngine.NotifyEvent(eventType)
+	// Both spellings resolve. The hook table calls it after-focus-change and
+	// the daemon's event hub calls it window-focused, and a component author
+	// should not have to know which of the two they are talking to.
+	if alias := dockEventAlias(eventType); alias != "" {
+		m.dockEngine.NotifyEvent(alias)
+	}
 }
+
+// dockEventAliases maps a hook event to the name the daemon's event hub gives
+// the same thing. Refresh contracts accept either.
+var dockEventAliases = map[string]string{
+	string(hooks.AfterNewWindow):       "window-created",
+	string(hooks.AfterCloseWindow):     "window-closed",
+	string(hooks.AfterFocusChange):     "window-focused",
+	string(hooks.AfterWorkspaceSwitch): "workspace-switched",
+	string(hooks.AfterAgentState):      "agent-state",
+	string(hooks.AfterLayoutChange):    "layout-changed",
+	string(hooks.AfterAttach):          "attached",
+	string(hooks.AfterDetach):          "detached",
+	string(hooks.AfterResize):          "resized",
+}
+
+func dockEventAlias(eventType string) string { return dockEventAliases[eventType] }
 
 // RefreshDockComponent re-runs one component now, or every one when name is
 // empty. This is what the refresh-dock verb reaches, and it is what makes a
