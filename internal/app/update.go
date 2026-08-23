@@ -1587,10 +1587,16 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// verify a cell it just wrote rather than guess at it.
 			resultData = map[string]any{
 				"type":       "dock_component_list",
-				"components": m.DockComponents(),
+				"components": m.DockComponentsData(),
 			}
 			if m.DaemonClient != nil && msg.RequestID != "" {
-				_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "command executed", resultData)
+				if sendErr := m.DaemonClient.SendCommandResultWithData(
+					msg.RequestID, true, "command executed", resultData); sendErr != nil {
+					// A discarded encode error here is a ten second timeout at
+					// the caller with nothing to go on, which is exactly how
+					// this was found.
+					m.LogError("dock: could not answer list-dock-components: %v", sendErr)
+				}
 			}
 			return m, relisten
 		case "refresh_dock":

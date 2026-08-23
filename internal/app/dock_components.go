@@ -273,6 +273,38 @@ type DockComponentInfo struct {
 	Stopped  bool   `json:"stopped"`
 }
 
+// DockComponentsData is the listing shaped for the wire: plain maps rather than
+// structs, because the daemon protocol encodes with gob and gob cannot encode a
+// concrete type inside a map[string]any without it being registered first. The
+// window listing is the same shape for the same reason.
+//
+// This cost a debugging round: the encode error was discarded at the send site,
+// so the result was never written and the caller saw only a ten second timeout.
+func (m *OS) DockComponentsData() []map[string]any {
+	infos := m.DockComponents()
+	out := make([]map[string]any, 0, len(infos))
+	for _, c := range infos {
+		out = append(out, map[string]any{
+			"name":       c.Name,
+			"side":       c.Side,
+			"source":     c.Source,
+			"refresh":    c.Refresh,
+			"interval":   c.Interval,
+			"events":     c.Events,
+			"command":    c.Command,
+			"on_click":   c.OnClick,
+			"max_width":  c.MaxWidth,
+			"text":       c.Text,
+			"visible":    c.Visible,
+			"last_exit":  c.LastExit,
+			"last_run":   c.LastRun,
+			"last_error": c.LastErr,
+			"stopped":    c.Stopped,
+		})
+	}
+	return out
+}
+
 // DockComponents describes every component the dock has placed, in draw order.
 // This is what an agent reads to find out what the bar is made of and why a
 // cell it just wrote is not on it.
