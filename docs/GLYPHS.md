@@ -35,7 +35,11 @@ tuios set-config appearance.glyphs heavy
 ```
 
 In the settings page (`,` in window mode), the **Glyph set** row sits directly
-under **Theme**, which is the other half of the same question.
+under **Theme**, which is the other half of the same question. Enter on it opens
+a searchable picker: each row draws that set's own corner, window controls and
+rail marks, moving the selection applies the set so the chrome behind the panel
+is the preview, and the two lines underneath say how many roles the set names
+and which of them are not being drawn.
 
 To see what is available and what each one draws:
 
