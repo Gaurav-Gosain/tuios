@@ -449,7 +449,7 @@ func durationOr(ms int, fallback time.Duration) time.Duration {
 func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Duration) (string, *verbError) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name,
-		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true},
+		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true, EventSessionClosed: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
 
@@ -478,6 +478,9 @@ func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Dura
 		case <-d.ctx.Done():
 			return "", newVerbError(ErrVerbInternal, "daemon is shutting down")
 		case ev := <-sub.ch:
+			if ev.Type == EventSessionClosed {
+				return "", newVerbError(ErrVerbSessionNotFound, "the session was killed before the target was ready")
+			}
 			if ev.Type == EventWindowClosed && ev.Window == windowID {
 				return "", newVerbError(ErrVerbWindowNotFound, "the target window closed before it was ready")
 			}
@@ -506,7 +509,7 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, sent
 
 	stateSub := d.events.subscribe(eventFilter{
 		session: sess.Name,
-		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true},
+		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true, EventSessionClosed: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(stateSub)
 
@@ -538,6 +541,9 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, sent
 			}
 			timer.Reset(settle)
 		case ev := <-stateSub.ch:
+			if ev.Type == EventSessionClosed {
+				return "session-closed", AgentStateNone.Name()
+			}
 			if ev.Type == EventWindowClosed && ev.Window == windowID {
 				return "window-closed", AgentStateNone.Name()
 			}

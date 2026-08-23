@@ -693,7 +693,7 @@ func init() {
 			returns: []verbParam{
 				{Name: "window", Type: "string", Description: "The window that was asked."},
 				{Name: "waited_for", Type: "string", Description: "The state the target was in when the question was sent."},
-				{Name: "settled_by", Type: "string", Description: "What ended the wait: agent-state when the target reported it had finished, idle when it simply went quiet, timeout when neither happened."},
+				{Name: "settled_by", Type: "string", Description: "What ended the wait: agent-state when the target reported it had finished, idle when it simply went quiet, timeout when neither happened, or window-closed/session-closed when the target went away.", Accepted: []string{"agent-state", "idle", "timeout", "window-closed", "session-closed", "shutdown"}},
 				{Name: "state", Type: "string", Description: "The target's agent state after answering."},
 				{Name: "untrusted", Type: "bool", Description: "Always true. The reply is another program's output."},
 				{Name: "reply", Type: "string", Description: "What the pane printed after the question was sent."},
