@@ -85,8 +85,8 @@ func (m *OS) HoldModeUnsupportedReason() string {
 	if m.HoldModeKey() == "" || m.HoldModeAvailable() {
 		return ""
 	}
-	return "hold-to-window-mode needs a terminal that reports key releases (Kitty keyboard protocol); " +
-		"this one does not, so " + m.HoldModeKey() + " is inert"
+	return "Hold-to-window mode needs the Kitty keyboard protocol. " +
+		"This terminal does not report key releases, so " + m.HoldModeKey() + " does nothing."
 }
 
 // HoldModeActive reports whether the trigger is being held right now. The

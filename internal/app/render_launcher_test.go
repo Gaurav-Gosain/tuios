@@ -34,7 +34,7 @@ func TestLauncherRowsReachTheScreen(t *testing.T) {
 	if !strings.Contains(plain, "ripgrep") {
 		t.Fatalf("the program never reached the panel:\n%s", plain)
 	}
-	if !strings.Contains(plain, "Run a Program") {
+	if !strings.Contains(plain, "Run a program") {
 		t.Errorf("the panel does not say what it is:\n%s", plain)
 	}
 	if len(rows) == 0 {

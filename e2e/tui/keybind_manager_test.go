@@ -83,8 +83,8 @@ func TestKeybindManagerShowsTheGuestClash(t *testing.T) {
 
 	// The evidence tier has to be on screen. A curated list presented as
 	// detection is the one failure mode this surface must not have.
-	if !strings.Contains(strings.ToLower(screen), "curated") {
-		t.Errorf("the guests tab must say its findings are curated, not detected\n%s", term.Snapshot())
+	if !strings.Contains(strings.ToLower(screen), "program list") {
+		t.Errorf("the guests tab must say its findings come from the program list, not detection\n%s", term.Snapshot())
 	}
 }
 
@@ -167,7 +167,7 @@ func TestKeybindManagerReadsTheLivePane(t *testing.T) {
 			t.Fatalf("send tab: %v", err)
 		}
 	}
-	if err := term.WaitForText("OBSERVED IN THIS PANE", uiTimeout); err != nil {
+	if err := term.WaitForText("SEEN IN THIS PANE", uiTimeout); err != nil {
 		t.Fatalf("the overlay never reported anything observed about the pane: %v\n%s", err, term.Snapshot())
 	}
 	t.Logf("keybind manager, observed block over a live pane:\n%s", term.Snapshot())

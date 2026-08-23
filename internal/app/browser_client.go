@@ -41,11 +41,11 @@ func browserAlertWarnings(cfg *config.UserConfig) []string {
 	var out []string
 	if policy.Notify {
 		out = append(out, "[notifications.agent] notify: a browser terminal has no desktop "+
-			"notification, so this is skipped; the dock message still appears")
+			"notifications, so this one is skipped. The dock message still appears.")
 	}
 	if policy.PlaysAudio() {
-		out = append(out, "[notifications.agent] sound: the cue plays on the machine running "+
-			"tuios-web, not in the browser; sound_mode = \"bell\" flashes the terminal instead")
+		out = append(out, "[notifications.agent] sound: the sound plays on the machine that runs "+
+			"tuios-web, not in the browser. Set sound_mode = \"bell\" to flash the terminal instead.")
 	}
 	return out
 }

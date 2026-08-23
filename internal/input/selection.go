@@ -53,5 +53,5 @@ func handleClipboardPaste(o *app.OS) {
 		return
 	}
 
-	o.ShowNotification(fmt.Sprintf("Pasted %d characters", len(o.ClipboardContent)), "success", config.NotificationDuration)
+	o.ShowNotification(fmt.Sprintf("Pasted %d chars", len(o.ClipboardContent)), "success", config.NotificationDuration)
 }

@@ -110,12 +110,12 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	switch keyStr {
 	case "q", "esc":
 		fx.ExitCopyMode()
-		fx.ShowNotification("Copy Mode Exited", "info", config.NotificationDuration)
+		fx.ShowNotification("Left copy mode", "info", config.NotificationDuration)
 		return
 	case "i":
 		// Exit copy mode and enter terminal mode
 		fx.ExitCopyMode()
-		fx.ShowNotification("Terminal Mode", "info", config.NotificationDuration)
+		fx.ShowNotification("Terminal mode", "info", config.NotificationDuration)
 		// Enter terminal mode and start raw input reader
 		fx.EnterTerminalMode()
 		return

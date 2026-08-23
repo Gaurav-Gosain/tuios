@@ -76,7 +76,7 @@ func TestPaletteRenameOpensWithTitlesHidden(t *testing.T) {
 	o := hiddenTitlesOS(t)
 	o.FocusedWindow = 1
 
-	o = runPaletteCommandForTest(t, o, "Rename Window")
+	o = runPaletteCommandForTest(t, o, "Rename window")
 
 	if !o.Renaming() {
 		t.Fatal("the palette's rename row did nothing with titles hidden")

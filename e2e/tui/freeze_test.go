@@ -64,7 +64,7 @@ func TestSustainedOutputKeepsRendering(t *testing.T) {
 	// The UI must still respond to input, not merely have painted. A frozen
 	// tuios cannot service the keystroke that toggles the mode indicator.
 	leaveTerminalMode(t, term)
-	if !strings.Contains(term.Screen().Text(), "Window Management Mode") {
+	if !strings.Contains(term.Screen().Text(), "Window management mode") {
 		t.Fatalf("UI did not react to the mode switch after sustained output\n%s", term.Snapshot())
 	}
 }

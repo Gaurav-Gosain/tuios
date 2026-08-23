@@ -14,7 +14,7 @@ import (
 // and are drawn as such.
 const sidebarHeader = "sessions"
 
-// toggleSidebarViaPalette opens the command palette, runs the "Toggle Sidebar"
+// toggleSidebarViaPalette opens the command palette, runs the "Toggle sidebar"
 // entry, and waits for the palette to close.
 func toggleSidebarViaPalette(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
@@ -24,10 +24,10 @@ func toggleSidebarViaPalette(t *testing.T, term *tuitest.Terminal) {
 	if err := term.WaitForText(paletteTitle, uiTimeout); err != nil {
 		t.Fatalf("palette did not open: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.SendKeys("Toggle Sidebar"); err != nil {
+	if err := term.SendKeys("Toggle sidebar"); err != nil {
 		t.Fatalf("type palette query: %v", err)
 	}
-	if err := term.WaitForText("Toggle Sidebar", uiTimeout); err != nil {
+	if err := term.WaitForText("Toggle sidebar", uiTimeout); err != nil {
 		t.Fatalf("palette never filtered to the sidebar entry: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {
@@ -134,7 +134,7 @@ func TestSidebarClickSwitchesSession(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("normalise to window mode: %v", err)
 	}
-	if err := term.WaitForText("Window Management Mode", uiTimeout); err != nil {
+	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
 	time.Sleep(insertGuard)
@@ -202,7 +202,7 @@ func TestSidebarDragReordersSessions(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("normalise to window mode: %v", err)
 	}
-	if err := term.WaitForText("Window Management Mode", uiTimeout); err != nil {
+	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
 	time.Sleep(insertGuard)

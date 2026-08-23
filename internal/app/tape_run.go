@@ -78,7 +78,7 @@ func (m *OS) runProjectTape(content []byte, dir string) {
 		return
 	}
 	if len(content) == 0 {
-		m.ShowNotification("Tape is empty; nothing to run", "warning", config.NotificationDuration)
+		m.ShowNotification("Tape is empty. Nothing to run", "warning", config.NotificationDuration)
 		return
 	}
 

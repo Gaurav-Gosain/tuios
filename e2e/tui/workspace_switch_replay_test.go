@@ -80,7 +80,7 @@ func TestWorkspaceSwitchKeepsScrollback(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatalf("enter copy mode: %v", err)
 	}
-	if err := term.WaitForText("COPY MODE", uiTimeout); err != nil {
+	if err := term.WaitForText("Copy mode", uiTimeout); err != nil {
 		t.Fatalf("copy mode never opened: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys("g", "g"); err != nil {

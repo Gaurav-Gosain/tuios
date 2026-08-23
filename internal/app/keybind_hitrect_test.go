@@ -135,7 +135,7 @@ func TestRunningGuestIsMarkedInWords(t *testing.T) {
 	if !strings.Contains(plain, "now") {
 		t.Errorf("the running program's row must say so in words:\n%s", plain)
 	}
-	if !strings.Contains(strings.ToLower(plain), "curated") {
-		t.Errorf("the tab must say its findings are curated:\n%s", plain)
+	if !strings.Contains(strings.ToLower(plain), "program list") {
+		t.Errorf("the tab must say its findings come from the program list:\n%s", plain)
 	}
 }

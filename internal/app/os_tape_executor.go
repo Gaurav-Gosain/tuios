@@ -219,7 +219,7 @@ func (m *OS) scriptPaneReady() bool {
 	}
 	m.ScriptAwaitWindows = 0
 	m.ShowNotification(
-		"Tape: the new pane never appeared; the rest of the tape will run in the current pane",
+		"Tape: the new pane never appeared. The rest runs in the current pane",
 		"error", config.NotificationDuration*2)
 	return true
 }
@@ -816,7 +816,7 @@ func (m *OS) remember(path, value string) {
 func (m *OS) EnableAnimations() error {
 	config.AnimationsEnabled = true
 	m.remember("appearance.animations_enabled", "true")
-	m.ShowNotification("Animations: ON", "info", config.NotificationDuration)
+	m.ShowNotification("Animations on", "info", config.NotificationDuration)
 	return nil
 }
 
@@ -824,7 +824,7 @@ func (m *OS) EnableAnimations() error {
 func (m *OS) DisableAnimations() error {
 	config.AnimationsEnabled = false
 	m.remember("appearance.animations_enabled", "false")
-	m.ShowNotification("Animations: OFF", "info", config.NotificationDuration)
+	m.ShowNotification("Animations off", "info", config.NotificationDuration)
 	return nil
 }
 

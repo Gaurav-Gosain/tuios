@@ -1562,7 +1562,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 		case "tape_script":
 			// Execute a full tape script
-			notificationMsg = "Remote: executing tape script"
+			notificationMsg = "Remote: running a tape"
 
 			// Parse and execute the tape script
 			cmd, err = m.executeTapeScript(msg.TapeScript, msg.RequestID)

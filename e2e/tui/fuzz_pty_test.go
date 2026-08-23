@@ -925,7 +925,7 @@ func (p *ptyTarget) windowMode() {
 		return
 	}
 	_ = p.term.SendKeys(tuitest.Alt(tuitest.Esc))
-	_ = p.term.WaitForText("Window Management Mode", uiTimeout)
+	_ = p.term.WaitForText("Window management mode", uiTimeout)
 	time.Sleep(insertGuard)
 }
 
