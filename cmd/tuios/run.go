@@ -208,7 +208,17 @@ func loadAndApplyConfig() *config.UserConfig {
 	// applies globals itself, so this must run before ApplyOverrides.
 	config.ApplyAppearanceConfig(userConfig)
 
-	config.ApplyOverrides(config.Overrides{
+	config.ApplyOverrides(flagOverrides())
+
+	return userConfig
+}
+
+// flagOverrides collects every interface CLI flag into one Overrides value, so
+// each entrypoint that layers flags over the config applies the same set. The
+// SSH server hands it to StartSSHServer, which applies it after the appearance
+// baseline; applying it here first would only be undone by that baseline.
+func flagOverrides() config.Overrides {
+	return config.Overrides{
 		ASCIIOnly:            asciiOnly,
 		BorderStyle:          borderStyle,
 		DockbarPosition:      dockbarPosition,
@@ -227,9 +237,7 @@ func loadAndApplyConfig() *config.UserConfig {
 		NoAnimations:         noAnimations,
 		ConfirmQuit:          confirmQuit,
 		ThemeName:            themeName,
-	})
-
-	return userConfig
+	}
 }
 
 func runLocal() error {
@@ -359,11 +367,6 @@ func runSSHServer(sshHost, sshPort, sshKeyPath, defaultSession string, ephemeral
 		fmt.Println("Debug mode enabled")
 	}
 
-	config.ApplyOverrides(config.Overrides{
-		ASCIIOnly: asciiOnly,
-		ThemeName: themeName,
-	})
-
 	app.SetInputHandler(input.HandleInput)
 
 	log.Printf("Starting TUIOS SSH server on %s:%s", sshHost, sshPort)
@@ -394,6 +397,11 @@ func runSSHServer(sshHost, sshPort, sshKeyPath, defaultSession string, ephemeral
 		DefaultSession: defaultSession,
 		Version:        version,
 		Ephemeral:      ephemeral,
+		// The full flag set, not a subset: `tuios ssh` registers the same
+		// interface flags as every other run command, and the server applies
+		// them over the appearance baseline it loads. Applying them here
+		// instead used to happen before that baseline, which clobbered them.
+		Overrides: flagOverrides(),
 	}
 	if err := server.StartSSHServer(ctx, cfg); err != nil {
 		return fmt.Errorf("SSH server error: %w", err)

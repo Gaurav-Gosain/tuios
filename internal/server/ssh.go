@@ -36,6 +36,10 @@ type SSHServerConfig struct {
 	DefaultSession string // If set, all connections attach to this session
 	Ephemeral      bool   // If true, don't use daemon (old behavior)
 	Version        string // For daemon handshake
+	// Overrides carries the interface CLI flags, layered over the appearance
+	// baseline inside the same once-guarded application so flags win over the
+	// file. The zero value applies nothing.
+	Overrides config.Overrides
 }
 
 // sshServerContext holds the server-wide context for daemon mode
@@ -71,6 +75,9 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		if userConfig, err := config.LoadUserConfig(); err == nil {
 			config.ApplyAppearanceConfig(userConfig)
 		}
+		// Flags over file, the same order loadAndApplyConfig gives every
+		// other entrypoint.
+		config.ApplyOverrides(cfg.Overrides)
 	})
 
 	// Determine host key path
