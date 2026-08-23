@@ -117,14 +117,25 @@ const (
 	outerScreen
 )
 
-// detectOuterMultiplexer reports what tuios is running inside.
+// detectOuterMultiplexer reports what the client's terminal is running inside.
 //
-// $TMUX and $STY are the direct answers, set for their own children. TERM is
-// the answer for the case that matters most here: with `tuios ssh` the TUI runs
-// on the remote host, where neither variable is set even though the user's local
-// terminal is inside a multiplexer, and the forwarded TERM is what carries that
-// fact.
-func detectOuterMultiplexer() outerMultiplexer {
+// Locally, $TMUX and $STY are the direct answers, set for their own children,
+// and TERM backs them up. With `tuios ssh` the TUI runs on the remote host,
+// where the server's own environment says nothing about the user's terminal:
+// the TERM the client sent in its pty request is what carries the fact, and
+// the server's $TMUX/$STY describe only where the server was started.
+func (m *OS) detectOuterMultiplexer() outerMultiplexer {
+	if m.IsSSHMode && m.SSHSession != nil {
+		if pty, _, ok := m.SSHSession.Pty(); ok {
+			switch {
+			case strings.HasPrefix(pty.Term, "tmux"):
+				return outerTmux
+			case strings.HasPrefix(pty.Term, "screen"):
+				return outerScreen
+			}
+		}
+		return outerNone
+	}
 	term := os.Getenv("TERM")
 	switch {
 	case os.Getenv("TMUX") != "", strings.HasPrefix(term, "tmux"):

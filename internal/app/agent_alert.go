@@ -147,7 +147,7 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 	// A browser terminal parses OSC 9 and drops it, so writing it there buys
 	// nothing and the warning at startup already said so (browser_client.go).
 	if policy.Notify && !m.BrowserClient {
-		seq = hostNotifySequence(text, detectOuterMultiplexer())
+		seq = hostNotifySequence(text, m.detectOuterMultiplexer())
 	}
 	if policy.PlaysBell() {
 		seq = append(seq, 0x07)
