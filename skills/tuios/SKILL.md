@@ -608,6 +608,31 @@ With `-w` the wait also matches mail already sitting in the inbox, so it cannot
 miss something sent a moment before it started. With no `-w` it matches anything
 said in the session after the wait began.
 
+### Being reachable yourself
+
+Nothing polls your inbox for you, so an agent that wants to be reachable has to
+look. Two habits are enough, and both cost nothing while there is no mail:
+
+- Check once at a natural stopping point, before you tell the user you are done.
+  A message that arrived while you were working is exactly the one worth reading
+  before you stop.
+
+  ```sh
+  tuios read-agent-messages -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --unread
+  ```
+
+- If you have finished and are waiting anyway, block instead of exiting, and
+  report that you are waiting so the session shows it:
+
+  ```sh
+  tuios set-agent-state idle -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" -m "waiting for work"
+  tuios wait-for agent-message -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --timeout 1800000
+  ```
+
+Reporting your state matters as much as reading, because it is what tells the
+other agent whether `ask-agent` will reach you at all: a pane stuck at `working`
+is one nothing can ask a question of.
+
 ### Attachments are references, not bytes
 
 ```sh
