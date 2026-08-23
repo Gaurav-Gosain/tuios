@@ -25,7 +25,7 @@ format = "15:04"
 [dock.custom.branch]
 command  = "~/.config/tuios/dock/git-branch.sh"
 refresh  = "event:after-focus-change"
-on-click = "tuios popup -- git log --oneline -20"
+on-click = "tuios new-window log git log --oneline -20"
 ```
 
 The lists above are the default: omit the whole table and the bar is unchanged.

@@ -18,7 +18,7 @@ format = "15:04"
 [dock.custom.branch]
 command = "~/.config/tuios/dock/git-branch.sh"
 refresh = "event:after-focus-change,after-attach"
-on-click = "tuios popup -- git log --oneline -20"
+on-click = "tuios new-window log git log --oneline -20"
 
 # What the agents are doing. The reason the feature exists: with several agents
 # in several panes, whether one is waiting on you is the thing you cannot see.
