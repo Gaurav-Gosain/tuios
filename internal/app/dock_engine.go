@@ -79,6 +79,13 @@ type dockComponent struct {
 	running  bool
 	stopped  bool // gave up after DockCustomFailureLimit consecutive failures
 	reported bool // the failure has already been put in front of the user once
+
+	// revive wakes a push reader that has given up. It is a channel rather than
+	// a retry interval because a reader waiting on a timer is a timer, and the
+	// whole point of this engine is that nothing holds one without being asked
+	// to. A push component that cannot start is revived by refresh-dock and by
+	// nothing else.
+	revive chan struct{}
 }
 
 // dockEngine schedules the dock's components. One per client: components draw
@@ -138,6 +145,9 @@ func newDockEngine(comps []*dockComponent) *dockEngine {
 	for _, c := range comps {
 		if _, dup := e.comps[c.Name]; dup {
 			continue
+		}
+		if c.Refresh.Kind == config.DockRefreshPush {
+			c.revive = make(chan struct{}, 1)
 		}
 		e.comps[c.Name] = c
 		e.order = append(e.order, c.Name)
@@ -443,8 +453,11 @@ func (e *dockEngine) Refresh(name string) error {
 	case push:
 		// A push component's value is whatever its process last wrote; there is
 		// nothing to re-run without killing the process the user asked to keep
-		// running. Re-planning is enough to un-stop a reader that gave up.
-		e.replan()
+		// running. Waking its reader is what revives one that gave up.
+		select {
+		case c.revive <- struct{}{}:
+		default:
+		}
 	default:
 		go e.runOnce(c)
 	}
@@ -559,10 +572,10 @@ func (e *dockEngine) readPushed(c *dockComponent) {
 		command, stopped := c.Command, c.stopped
 		e.mu.Unlock()
 		if stopped {
-			// Left for an explicit refresh-dock to revive. Wait for a re-plan
-			// rather than spinning.
+			// Park until somebody asks for it again. No timer: a reader that
+			// gave up costs one blocked goroutine and nothing else.
 			select {
-			case <-time.After(time.Second):
+			case <-c.revive:
 				continue
 			case <-e.ctx.Done():
 				return
