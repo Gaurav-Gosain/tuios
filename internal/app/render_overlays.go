@@ -212,6 +212,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "themepicker", content, geo, rows)
 	}
 
+	if m.ShowDockEditor {
+		content, geo, rows := m.renderDockEditor()
+		layers = m.placeOverlayPanel(layers, "dockeditor", content, geo, rows)
+	}
+
 	if m.ShowGlyphPicker {
 		content, geo, rows := m.renderGlyphPicker()
 		layers = m.placeOverlayPanel(layers, "glyphpicker", content, geo, rows)

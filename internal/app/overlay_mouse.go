@@ -185,6 +185,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		if idx != m.GlyphPickerSelected {
 			m.GlyphPickerMove(idx - m.GlyphPickerSelected)
 		}
+	case "dockeditor":
+		m.DockEditorSelected = idx
 	case "session":
 		m.SessionSwitcherSelected = idx
 	case "workspace":
@@ -240,6 +242,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		m.ThemePickerMove(wheelDelta(up))
 	case "glyphpicker":
 		m.GlyphPickerMove(wheelDelta(up))
+	case "dockeditor":
+		m.DockEditorMove(wheelDelta(up))
 	case "session":
 		n := len(FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery))
 		moveListSelection(&m.SessionSwitcherSelected, &m.SessionSwitcherScroll, n, 10, wheelDelta(up))
@@ -354,6 +358,9 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "glyphpicker":
 		m.GlyphPickerSelected = row.Idx
 		return m.GlyphPickerApplySelection()
+	case "dockeditor":
+		m.DockEditorSelected = row.Idx
+		return m.DockEditorToggle()
 	case "session":
 		// A click activates, exactly like Enter on the selected row. Selecting
 		// only, as this used to, made the switcher the one list where a click
@@ -448,6 +455,10 @@ func (m *OS) closeOverlay(kind string) {
 	case "glyphpicker":
 		// Click-away leaves the previewed set reverted, matching Esc.
 		m.CancelGlyphPicker()
+	case "dockeditor":
+		// Click-away closes and keeps, matching Esc: the layout is already
+		// applied and saved.
+		m.CloseDockEditor()
 	case "session":
 		m.ShowSessionSwitcher = false
 		m.SessionSwitcherQuery = ""

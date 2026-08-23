@@ -35,6 +35,9 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	if o.ShowGlyphPicker {
 		return handleGlyphPickerInput(msg, o)
 	}
+	if o.ShowDockEditor {
+		return handleDockEditorInput(msg, o)
+	}
 
 	// Handle the keybind manager (opens over settings, like the theme picker)
 	if o.ShowKeybindManager {

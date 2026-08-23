@@ -320,6 +320,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		Name: "Dock",
 		Items: m.resolveRows([]settingsRow{
 			opt("appearance.dockbar_position"),
+			custom("", m.dockComponentsItem()),
 			opt("appearance.show_clock"),
 			opt("appearance.clock_format"),
 			opt("dock.clock.format"),
@@ -453,6 +454,27 @@ func (m *OS) glyphItem() settingItem {
 		func(m *OS, v string) { m.setOption("appearance.glyphs", v) })
 	item.activate = func(m *OS) { m.OpenGlyphPicker() }
 	return item
+}
+
+// dockComponentsItem opens the dock layout editor. It reaches no single
+// registry path: the dock's three lists are lists rather than scalars, so the
+// registry does not carry them and no derived row could express one.
+func (m *OS) dockComponentsItem() settingItem {
+	return settingItem{
+		Label:   "Components",
+		Desc:    "What the dock is made of, in draw order (press Enter for the editor)",
+		Control: controlEnum,
+		value: func(m *OS) string {
+			if m.UserConfig == nil {
+				return "default"
+			}
+			n := len(m.UserConfig.Dock.DockList("left")) +
+				len(m.UserConfig.Dock.DockList("center")) +
+				len(m.UserConfig.Dock.DockList("right"))
+			return strconv.Itoa(n) + " placed"
+		},
+		activate: func(m *OS) { m.OpenDockEditor() },
+	}
 }
 
 // maxFPSItem is the frame-rate cap. Hand-written because the row says

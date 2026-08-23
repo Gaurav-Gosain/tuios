@@ -624,6 +624,13 @@ type OS struct {
 	// not something to do per frame while composing one.
 	GlyphPickerSamples map[string]glyphSample
 
+	// Dock layout editor state. The dock is three ordered lists, which is the
+	// one thing on the settings page no row can express.
+	ShowDockEditor     bool
+	DockEditorSelected int
+	DockEditorScroll   int
+	DockEditorOriginal dockLists // the lists when it opened, for cancel
+
 	// Floating overlay placement + mouse hit-testing. Each overlay kind keeps
 	// its own drag displacement in OverlayOffsets so panels (e.g. settings and
 	// the theme picker) can be moved independently. OverlayHits records every
