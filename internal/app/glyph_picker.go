@@ -230,7 +230,7 @@ func (m *OS) GlyphPickerApplySelection() tea.Cmd {
 		// preview from the last query that did match on screen, unpersisted,
 		// with the picker gone and no Esc left to press to get back to it.
 		// Staying up keeps both the query and the escape route that reverts.
-		m.ShowNotification("Nothing to apply: no glyph set matches "+m.GlyphPickerQuery,
+		m.ShowNotification("No glyph set matches "+m.GlyphPickerQuery,
 			"info", config.NotificationDuration)
 		return nil
 	}

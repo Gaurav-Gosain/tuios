@@ -163,7 +163,7 @@ func (m *OS) persistSettings() tea.Cmd {
 	if m.ConfigReadOnly {
 		if !m.configReadOnlyTold {
 			m.configReadOnlyTold = true
-			m.ShowNotification("Settings apply to this session only; the config file is not written", "warning", 0)
+			m.ShowNotification("Settings apply to this session only. tuios does not write the config file.", "warning", 0)
 		}
 		return nil
 	}
@@ -358,7 +358,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 	// that fires when it should not is the setting people go looking for first,
 	// and until now the only place to change it was the file.
 	notifications := settingsCategory{
-		Name: "Notify",
+		Name: "Alerts",
 		Items: m.resolveRows([]settingsRow{
 			opt("notifications.duration"),
 			opt("notifications.warning_duration"),
@@ -431,7 +431,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 // previews rather than stepping to a next theme nobody can name in advance.
 func (m *OS) themeItem() settingItem {
 	options := append([]string{themeNone}, theme.AvailableThemes()...)
-	item := enumItem("Theme", "Color theme (press Enter for the picker with previews)", options,
+	item := enumItem("Theme", "Color theme. Press enter to open the picker.", options,
 		func() string {
 			if id := theme.CurrentThemeID(); id != "" {
 				return id
@@ -452,7 +452,7 @@ func (m *OS) themeItem() settingItem {
 // shapes.
 func (m *OS) glyphItem() settingItem {
 	options := theme.AvailableGlyphSets()
-	item := enumItem("Glyph set", "Shapes the border, controls, rules and rail marks are drawn with (press Enter for the picker with previews)",
+	item := enumItem("Glyph set", "Shapes for the border, controls, rules and rail marks. Press enter to open the picker.",
 		options,
 		func() string { return theme.ActiveGlyphSetID() },
 		func(m *OS, v string) { m.setOption("appearance.glyphs", v) })
@@ -466,7 +466,7 @@ func (m *OS) glyphItem() settingItem {
 func (m *OS) dockComponentsItem() settingItem {
 	return settingItem{
 		Label:   "Components",
-		Desc:    "What the dock is made of, in draw order (press Enter for the editor)",
+		Desc:    "The parts of the dock, in the order they draw. Press enter to edit.",
 		Control: controlEnum,
 		value: func(m *OS) string {
 			if m.UserConfig == nil {
@@ -485,7 +485,7 @@ func (m *OS) dockComponentsItem() settingItem {
 // "unlimited" for a number: the config holds an int, and a stepper walking to
 // the cap one frame at a time is not how anyone sets this.
 func (m *OS) maxFPSItem() settingItem {
-	return enumItem("Max FPS", "Render frame-rate cap (unlimited uncaps it)", fpsOptions,
+	return enumItem("Max FPS", "Highest frame rate tuios draws at.", fpsOptions,
 		func() string {
 			if config.NormalFPS >= config.MaxFPSCap {
 				return "unlimited"
@@ -507,7 +507,7 @@ func (m *OS) maxFPSItem() settingItem {
 // state is a model field the renderer reads directly, so the row has to move
 // both it and the config.
 func (m *OS) showKeysItem() settingItem {
-	return boolItem("Show keys overlay", "Show pressed keys as a keycast in the bottom-right corner",
+	return boolItem("Show keys", "Show each key you press in the bottom right corner.",
 		func() bool { return m.ShowKeys },
 		func(m *OS, v bool) {
 			m.ShowKeys = v

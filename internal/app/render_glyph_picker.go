@@ -147,12 +147,12 @@ func (m *OS) glyphPickerDetail(items []string, pal overlay.Palette, width int) [
 	var summary string
 	switch {
 	case sample.Named == 0:
-		summary = "Draws the shapes tuios ships"
+		summary = "Uses the default shapes"
 	case len(sample.Dropped) == 0:
-		summary = "Names " + strconv.Itoa(sample.Named) + " roles, all drawn"
+		summary = "Sets " + strconv.Itoa(sample.Named) + " roles. tuios draws them all."
 	default:
-		summary = "Names " + strconv.Itoa(sample.Named) + " roles, " +
-			strconv.Itoa(len(sample.Dropped)) + " not drawn"
+		summary = "Sets " + strconv.Itoa(sample.Named) + " roles. tuios does not draw " +
+			strconv.Itoa(len(sample.Dropped)) + " of them."
 	}
 	if sample.ASCII {
 		summary += " · ASCII"
@@ -171,7 +171,7 @@ func (m *OS) glyphPickerDetail(items []string, pal overlay.Palette, width int) [
 	}
 	// Named individually: "two roles were dropped" sends the author back to the
 	// file to work out which, and the width rule is the reason every time.
-	dropped := "wrong width, so default: " + strings.Join(sample.Dropped, ", ")
+	dropped := "Wrong width. tuios draws the default: " + strings.Join(sample.Dropped, ", ")
 	return append(lines, overlay.Style(bg).Foreground(pal.Warning).
 		Render("  "+overlay.Truncate(dropped, max(width-2, 1))))
 }

@@ -148,7 +148,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.preferred_shell", Type: OptionString, Section: "appearance",
-		Description: "Shell new panes run; empty auto-detects for the platform",
+		Description: "Shell that new panes run. Empty picks one for your platform.",
 		Default:     "",
 	},
 	{
@@ -178,7 +178,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.theme", Type: OptionString, Section: "appearance",
-		Description: "Colour theme name; empty keeps the terminal's own colours",
+		Description: "Colour theme name. Empty keeps your terminal's own colours.",
 		Default:     "", Theme: true,
 	},
 	{
@@ -203,7 +203,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.zoom_max_width", Type: OptionInt, Section: "appearance",
-		Description: "Width in cells a zoomed pane is centred at; 0 is fullscreen",
+		Description: "Width in cells of a zoomed pane. 0 fills the screen.",
 		Default:     "0", Min: 0,
 	},
 	{
@@ -213,7 +213,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.max_fps", Type: OptionInt, Section: "appearance",
-		Description: "Frame cap for the render loop; 0 uses 60, and the value is clamped to 10..240",
+		Description: "Highest frame rate tuios draws at. 0 uses 60. The range is 10 to 240.",
 		Default:     "0", Min: 0, Max: MaxFPSCap,
 	},
 	{
@@ -238,7 +238,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.dim_unfocused", Type: OptionInt, Section: "appearance",
-		Description: "Percent an unfocused pane's content is quieted toward its own background; 0 is off",
+		Description: "How much tuios fades a pane you are not in, as a percent. 0 is off.",
 		Default:     "0", Min: 0, Max: DimUnfocusedMax,
 	},
 	{
@@ -344,12 +344,12 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.scrollbar.thumb", Type: OptionString, Section: "scrollbar",
-		Description: "One-cell thumb glyph; empty takes the style's own",
+		Description: "One-cell glyph for the thumb. Empty uses the style's own.",
 		Default:     "",
 	},
 	{
 		Path: "appearance.scrollbar.track", Type: OptionString, Section: "scrollbar",
-		Description: "One-cell track glyph, or none; empty takes the style's own",
+		Description: "One-cell glyph for the track, or none. Empty uses the style's own.",
 		Default:     "",
 	},
 	{
@@ -447,19 +447,19 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "daemon.agent_detect_seconds", Type: OptionInt, Section: "daemon",
-		Description: "Seconds between detector polls; 0 uses 2, and a negative value turns detection off",
+		Description: "Seconds between checks. 0 uses 2. A negative number turns checks off.",
 		Default:     "0",
 	},
 
 	// [notifications]
 	{
 		Path: "notifications.duration", Type: OptionInt, Section: "notifications",
-		Description: "Seconds an info or success message stays up; 0 uses the built-in default",
+		Description: "Seconds an info message stays up. 0 uses the default.",
 		Default:     "0", Min: 0, Max: 3600,
 	},
 	{
 		Path: "notifications.warning_duration", Type: OptionInt, Section: "notifications",
-		Description: "Seconds a warning stays up; 0 uses the built-in default",
+		Description: "Seconds a warning stays up. 0 uses the default.",
 		Default:     "0", Min: 0, Max: 3600,
 	},
 	{
@@ -477,7 +477,7 @@ var optionSpecs = []Option{
 	// to files, which no accepted set or range can check.
 	{
 		Path: "notifications.agent.enabled", Type: OptionBool, Section: "notifications",
-		Description: "Master switch for agent-state alerts",
+		Description: "Turn every agent alert on or off",
 		Default:     "true",
 	},
 	{
@@ -492,44 +492,44 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "notifications.agent.sound_mode", Type: OptionString, Section: "notifications",
-		Description: "How an audible alert sounds: a played cue, a BEL, or both",
+		Description: "How an alert sounds: a cue, a BEL, or both",
 		Accepted:    AgentSoundModeNames, Default: "",
 	},
 	{
 		Path: "notifications.agent.sound_cooldown_seconds", Type: OptionInt, Section: "notifications",
-		Description: "Shortest gap between two cues across every pane; 0 uses 3",
+		Description: "Shortest gap between two sounds, in seconds. 0 uses 3.",
 		Default:     "3", Min: 0, Max: 3600,
 	},
 	{
 		Path: "notifications.agent.dock", Type: OptionBool, Section: "notifications",
-		Description: "Show the alert in the dock, where it jumps to the pane that raised it",
+		Description: "Show the alert in the dock. Click it to go to the pane.",
 		Default:     "true",
 	},
 	{
 		Path: "notifications.agent.command", Type: OptionString, Section: "notifications",
-		Description: "Shell command run on an alert; empty runs nothing",
+		Description: "Shell command to run on an alert. Empty runs nothing.",
 		Default:     "",
 	},
 	{
 		Path: "notifications.agent.settle_seconds", Type: OptionInt, Section: "notifications",
-		Description: "Hold an alert this long and drop it if the pane leaves the state",
+		Description: "Seconds to wait. tuios drops the alert if the pane changes state.",
 		Default:     "2", Min: 0, Max: 3600,
 	},
 	{
 		Path: "notifications.agent.suppress_focused", Type: OptionBool, Section: "notifications",
-		Description: "Drop alerts for the pane the user is already looking at",
+		Description: "No alert for the pane you are looking at",
 		Default:     "true",
 	},
 	{
 		Path: "notifications.agent.quiet_hours", Type: OptionString, Section: "notifications",
-		Description: "Local-time window written HH:MM-HH:MM in which nothing alerts",
+		Description: "Hours when nothing alerts. Write it as HH:MM-HH:MM.",
 		Default:     "",
 	},
 
 	// [notifications.agent.states]
 	{
 		Path: "notifications.agent.states.needs_input", Type: OptionBool, Section: "notifications",
-		Description: "Alert when an agent blocks on the user",
+		Description: "Alert when an agent waits for you",
 		Default:     "true",
 	},
 	{
@@ -544,7 +544,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "notifications.agent.states.idle", Type: OptionBool, Section: "notifications",
-		Description: "Alert when an agent goes quiet, which the stall timer guesses from silence",
+		Description: "Alert when an agent goes quiet",
 		Default:     "false",
 	},
 	{

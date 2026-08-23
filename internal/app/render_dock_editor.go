@@ -165,17 +165,17 @@ func (m *OS) dockEditorDetail(rows []dockEditorRow, pal overlay.Palette, width i
 	var text string
 	switch {
 	case row.Kind == dockRowEmpty && row.Side == dockAvailableSide:
-		text = "Every component is on the bar"
+		text = "Every part is on the bar"
 	case row.Kind == dockRowEmpty:
-		text = "This region draws nothing"
+		text = "This side draws nothing"
 	case row.Kind == dockRowAvailable:
-		text = "Not on the bar; enter puts it back"
+		text = "Not on the bar. Press enter to add it."
 	case row.Custom:
-		text = "Your [dock.custom] cell; enter takes it off the bar"
+		text = "Your own cell. Press enter to remove it."
 	case row.Fixed != "":
-		text = "Always draws on the " + row.Fixed + ", wherever it is listed"
+		text = "This always draws on the " + row.Fixed + "."
 	default:
-		text = "Shift with the arrows; off the end moves it to the next region"
+		text = "Press shift and an arrow to move it. Past the end it changes side."
 	}
 	return overlay.Style(bg).Foreground(pal.FgMute).Italic(true).
 		Render("  " + overlay.Truncate(text, max(width-2, 1)))
