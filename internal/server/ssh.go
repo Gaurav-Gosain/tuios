@@ -342,6 +342,11 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer,
 		Height:          height,
 		IsSSHMode:       true,
 		SSHSession:      sshSession,
+		// The config file belongs to the server operator, and several SSH
+		// clients each hold a stale snapshot of it; the same reasoning that
+		// makes a web-served session read-only (see OSOptions) applies here.
+		// Settings still apply live, they are just not written back.
+		ConfigReadOnly: true,
 		// Route kitty/sixel APC sequences to the SSH session so they reach the
 		// client's terminal, via the serialized writer shared with the
 		// bubbletea renderer so graphics and text writes never interleave on
@@ -422,6 +427,8 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 		Height:          height,
 		IsSSHMode:       true,
 		SSHSession:      sshSession,
+		// Read-only for the same reason as the ephemeral path above.
+		ConfigReadOnly:  true,
 		IsDaemonSession: true,
 		DaemonClient:    client,
 		SessionName:     sessionName,
