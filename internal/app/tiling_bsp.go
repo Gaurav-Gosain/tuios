@@ -113,6 +113,37 @@ func (m *OS) getWindowByIntID(intID int) *terminal.Window {
 	return nil
 }
 
+// openStartRect is the box a pane opens from: its own destination, halved about
+// that destination's centre, so the pane grows outward into the space it is
+// about to occupy.
+//
+// It replaces the start the layout used to inherit by accident. A new pane was
+// parked at NewWindowPlacement's box first - half the screen, centred on it -
+// and the snap animation captured that as its start, so every pane opened by
+// travelling from a half-screen rectangle to a tile. Centred is not what that
+// looks like: the box is far larger than a tile, so its top-left corner sits up
+// and to the left of any tile but the middle one, and what the eye reads is a
+// window flying in from the corner and shrinking, not a window appearing.
+//
+// Growing from the destination rather than from the centre of the screen is a
+// deliberate choice between two fixes that both remove the corner. A pane
+// belongs to its tile, and opening in place says so, while a small box crossing
+// half the screen from the middle is motion that means nothing - and under
+// shared borders it also passes over two neighbours on the way. The exception
+// proves it: the first pane on a workspace has the whole screen as its tile, so
+// it does grow from the centre of the screen, because there its tile is the
+// screen.
+//
+// The floor is the size the minimize animation shrinks to, which is the smallest
+// box the renderer is known to draw a border into. A tile at or below it opens
+// from its full size (the caller checks for that and skips the start entirely),
+// which is the pre-existing behaviour for a pane too small to animate.
+func openStartRect(rect layout.Rect) (x, y, w, h int) {
+	w = min(max(rect.W/2, ui.MinAnimatedWidth), rect.W)
+	h = min(max(rect.H/2, ui.MinAnimatedHeight), rect.H)
+	return rect.X + (rect.W-w)/2, rect.Y + (rect.H-h)/2, w, h
+}
+
 // ApplyBSPLayout applies the BSP tree layout to all windows in the current workspace
 func (m *OS) ApplyBSPLayout() {
 	tree := m.GetOrCreateBSPTree()
@@ -141,6 +172,12 @@ func (m *OS) ApplyBSPLayout() {
 		}
 
 		wasTiled := win.Tiled
+
+		// Read and clear in the same breath, before any of the branches below
+		// can leave the loop: a pane opens once, and a flag that survives its
+		// placement makes the next retile play the open animation again.
+		opening := win.Opening
+		win.Opening = false
 
 		// Cancel any existing snap animation for this window to prevent
 		// animation pileup during continuous resize.
@@ -218,12 +255,26 @@ func (m *OS) ApplyBSPLayout() {
 			win.InvalidateCache()
 		}
 
+		// A pane being placed for the first time starts from a box inside its own
+		// destination rather than from wherever it was parked, so it grows into
+		// place. See openStartRect. At zero duration there is no animation to
+		// give a start to, and NewSnapAnimation lands the pane on the target in
+		// one step, so the geometry is left exactly as the un-animated path had
+		// it.
+		dur := config.GetAnimationDuration()
+		if opening && dur > 0 {
+			if x, y, w, h := openStartRect(rect); w != rect.W || h != rect.H {
+				win.X, win.Y = x, y
+				// Assigned, not resized: the emulator keeps the size the pane was
+				// created at for the length of the animation, the way every other
+				// frame of a snap leaves it, and Update's completion resizes it
+				// once at the destination.
+				win.Width, win.Height = w, h
+			}
+		}
+
 		// Create animation for smooth transition
-		anim := ui.NewSnapAnimation(
-			win,
-			rect.X, rect.Y, rect.W, rect.H,
-			config.GetAnimationDuration(),
-		)
+		anim := ui.NewSnapAnimation(win, rect.X, rect.Y, rect.W, rect.H, dur)
 
 		if anim != nil {
 			m.Animations = append(m.Animations, anim)
@@ -331,12 +382,11 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 
 	m.LogInfo("BSP: Tree now has %d windows", tree.WindowCount())
 
-	// Position the new window at screen center so it animates from
-	// center to its tiled position with visible borders.
-	window.X = bounds.X + bounds.W/2 - window.Width/2
-	window.Y = bounds.Y + bounds.H/2 - window.Height/2
-
-	// Apply the new layout
+	// No pre-positioning here. A pane being created carries Opening and
+	// ApplyBSPLayout starts it from its own tile; a pane arriving from
+	// ToggleFloating does not, and animates from where the user last left it
+	// floating, which this used to throw away by teleporting it to the middle of
+	// the screen first.
 	m.ApplyBSPLayout()
 }
 

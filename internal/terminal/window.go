@@ -256,6 +256,13 @@ type Window struct {
 	// Alternate screen buffer tracking for TUI detection.
 	// Written on PTY/monitor goroutine, read on UI goroutine.
 	isAltScreen atomic.Bool // True when application is using alternate screen buffer (nvim, vim, etc.)
+	// Opening marks a pane that has just been created and has not yet been
+	// placed by the tiling layout. The layout consumes it to decide where the
+	// pane's open animation starts from, and clears it, so it is true for
+	// exactly one placement. Client-local and never synced: whether a pane is
+	// new is a property of the client that is about to draw it appearing, not
+	// of the session.
+	Opening bool
 	// Floating pane support
 	IsFloating bool // True when window is floating (not in BSP tiling)
 	IsPinned   bool // True when floating pane persists across workspace switches

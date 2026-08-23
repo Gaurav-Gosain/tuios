@@ -20,6 +20,15 @@ const (
 	AnimationSnap
 )
 
+const (
+	// MinAnimatedWidth and MinAnimatedHeight are the smallest box an animation
+	// is allowed to shrink a window to. It is the size a minimize travels down
+	// to, so it is the smallest box the renderer is known to still draw a
+	// border into; anything an animation scales down has to stop here.
+	MinAnimatedWidth  = 5
+	MinAnimatedHeight = 3
+)
+
 // Animation represents an animated transition for a window.
 type Animation struct {
 	Window         *terminal.Window
@@ -60,8 +69,8 @@ func NewMinimizeAnimation(w *terminal.Window, dockX, dockY int, duration time.Du
 		StartHeight: w.Height,
 		EndX:        dockX,
 		EndY:        dockY,
-		EndWidth:    5, // Small size when minimized
-		EndHeight:   3,
+		EndWidth:    MinAnimatedWidth, // Small size when minimized
+		EndHeight:   MinAnimatedHeight,
 		Progress:    0,
 		Complete:    false,
 	}
@@ -88,8 +97,8 @@ func NewRestoreAnimation(w *terminal.Window, dockX, dockY int, duration time.Dur
 		Duration:    duration,
 		StartX:      dockX,
 		StartY:      dockY,
-		StartWidth:  5,
-		StartHeight: 3,
+		StartWidth:  MinAnimatedWidth,
+		StartHeight: MinAnimatedHeight,
 		EndX:        w.PreMinimizeX,
 		EndY:        w.PreMinimizeY,
 		EndWidth:    w.PreMinimizeWidth,

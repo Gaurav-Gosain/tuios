@@ -87,6 +87,17 @@ func (m *OS) tileAllWindows() {
 
 	m.LogInfo("TileAllWindows called with %d visible windows, BSP=%v, Scrolling=%v", len(visibleWindows), m.UseBSPLayout, m.UseScrollingLayout)
 
+	// Only the BSP path plays an open animation, and it clears Opening itself as
+	// it places each pane. Clear it here for the two layouts that do not, so a
+	// pane created under a scrolling or master-stack layout cannot carry the flag
+	// until whenever the user next switches to BSP and then bloom there, long
+	// after it opened.
+	if m.UseScrollingLayout || !m.UseBSPLayout {
+		for _, w := range visibleWindows {
+			w.Opening = false
+		}
+	}
+
 	// Ends a deferral whose gesture is over, so the master-stack branch below
 	// and ApplyBSPLayout further down agree about which path they are on.
 	deferring := m.resizeDeferralActive()
