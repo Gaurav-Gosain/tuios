@@ -88,7 +88,7 @@ func TestSettingsDescriptionWrapsWithinThePanel(t *testing.T) {
 	lines := strings.Split(content, "\n")
 	var box []string
 	for i, ln := range lines {
-		if strings.Contains(ln, "Punctuation double-click") {
+		if strings.Contains(ln, "Punctuation that counts") {
 			box = lines[i:min(i+settingsDescLines, len(lines))]
 			break
 		}
@@ -103,7 +103,7 @@ func TestSettingsDescriptionWrapsWithinThePanel(t *testing.T) {
 	}
 	// The tail of the sentence made it onto the second line instead of being
 	// dropped behind an ellipsis on the first.
-	if !strings.Contains(box[1], "count") {
+	if !strings.Contains(box[1], "@-./") {
 		t.Errorf("the description did not wrap onto its second line: %q", box[1])
 	}
 	if strings.Contains(box[0], "…") {
