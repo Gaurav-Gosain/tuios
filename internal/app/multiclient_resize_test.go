@@ -336,6 +336,11 @@ func TestPeerLayoutFromASmallerClientIsRetiled(t *testing.T) {
 // TestSettledSizeIsTheSameFromBothAttachOrders pins convergence. The session
 // size is the minimum over the attached clients, and a minimum does not depend
 // on the order the clients arrived in.
+//
+// NEGATIVE CONTROL: none. This passes on the unfixed tree too, and is written
+// deliberately as a property rather than a regression test: the ordering was
+// already right, and this is here so a later change cannot quietly make the
+// settled size depend on who attached first.
 func TestSettledSizeIsTheSameFromBothAttachOrders(t *testing.T) {
 	bigFirst := func() (int, int) {
 		r := newRigSized(t, 1, holderCols, holderRows)
