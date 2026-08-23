@@ -926,6 +926,38 @@ code and error when there is one.
 
 The dock is composed by the attached client, so this needs a client attached.
 
+**JSON Output Structure:**
+```json
+{
+  "success": true,
+  "components": [
+    {
+      "name": "custom/branch",
+      "side": "left",
+      "source": "custom",
+      "refresh": "event",
+      "events": "after-focus-change",
+      "command": "~/.config/tuios/dock/git-branch.sh",
+      "on_click": "",
+      "max_width": 24,
+      "text": "\u001b[35m\uf418\u001b[0m main",
+      "visible": true,
+      "last_exit": 0,
+      "last_run": "2026-08-23T07:02:11Z",
+      "last_error": "",
+      "stopped": false
+    }
+  ]
+}
+```
+
+`source` is `builtin` or `custom`. `refresh` is `render` (drawn from model state
+on frames that were happening anyway), `once`, `interval` (with `interval`),
+`push`, or `event` (with `events`). `text` is the cell as drawn, escapes
+included. `last_error` and `last_exit` describe the component's last run, and
+`stopped` says it has failed enough times to be left alone until a
+`refresh-dock`.
+
 ### `tuios refresh-dock`
 
 Re-run a dock component now, whatever its `refresh` mode says.
