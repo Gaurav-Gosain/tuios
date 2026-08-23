@@ -208,8 +208,8 @@ func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any
 	// budget on calls that were never going to be delivered.
 	if !d.agents.checkRate(sess.Name, msg.From) {
 		return nil, hintedVerbError(ErrVerbRateLimited, "this sender is over the message rate cap", &VerbHint{
-			Verb:   "read-agent-messages",
-			Detail: "A sender gets 10 messages back to back and 30 a minute after that. Hitting the cap almost always means two agents are answering each other in a loop; read the ring before sending again.",
+			Command: "tuios read-agent-messages",
+			Detail:  "A sender gets 10 messages back to back and 30 a minute after that. Hitting the cap almost always means two agents are answering each other in a loop; read the ring before sending again.",
 		})
 	}
 
@@ -356,10 +356,13 @@ func (d *Daemon) verbAskAgent(_ *connState, params json.RawMessage) (any, *verbE
 	// deferred so a wait that times out does not leave the graph claiming an ask
 	// is still open.
 	if !d.agents.openAsk(from, target.ID) {
+		detail := "The target is already waiting, directly or through another agent, on the pane making this call, so answering would leave both sides blocked on each other. Leave a message instead: send-agent-message does not block."
+		if edges := d.agents.openAskEdges(); len(edges) > 0 {
+			detail += " Asks in flight: " + strings.Join(edges, ", ") + "."
+		}
 		return nil, hintedVerbError(ErrVerbLoopRefused, "this ask would close a loop with one already in flight", &VerbHint{
-			Verb:      "list-agents",
-			Available: d.agents.openAskEdges(),
-			Detail:    "The target is already waiting, directly or through another agent, on the pane making this call. Answering it would have both sides blocked on each other. Leave a message instead: send-agent-message does not block.",
+			Command: "tuios send-agent-message -w " + shortWindowID(target.ID) + " '<what you wanted to ask>'",
+			Detail:  detail,
 		})
 	}
 	defer d.agents.closeAsk(from, target.ID)
@@ -460,9 +463,9 @@ func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Dura
 		select {
 		case <-deadline:
 			return "", hintedVerbError(ErrVerbNotReady, "the target agent was still working when the ready timeout elapsed", &VerbHint{
-				Param:  "ready_timeout",
-				Verb:   "wait-for",
-				Detail: "Typing at an agent mid-turn interleaves with what it is doing. Raise ready_timeout, leave a message with send-agent-message instead, or pass force to send anyway.",
+				Param:   "ready_timeout",
+				Command: "tuios wait-for agent-state -w " + shortWindowID(windowID) + " --until idle,needs_input,done",
+				Detail:  "Typing at an agent mid-turn interleaves with what it is doing. Wait for it to come to rest, raise ready_timeout, leave a message with send-agent-message instead, or pass force to send anyway.",
 			})
 		case <-d.ctx.Done():
 			return "", newVerbError(ErrVerbInternal, "daemon is shutting down")

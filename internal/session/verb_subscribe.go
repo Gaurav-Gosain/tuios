@@ -561,9 +561,9 @@ func (d *Daemon) waitAgentMessage(sessionName, window string, deadline <-chan ti
 		select {
 		case <-deadline:
 			return nil, hintedVerbError(ErrVerbTimeout, "timed out waiting for an agent message", &VerbHint{
-				Param:  "timeout",
-				Verb:   "read-agent-messages",
-				Detail: "Nothing was sent before the timeout. Read the ring to see what is already there, or raise timeout (milliseconds).",
+				Param:   "timeout",
+				Command: "tuios read-agent-messages",
+				Detail:  "Nothing was sent before the timeout. Read the ring to see what is already there, or raise timeout (milliseconds).",
 			})
 		case <-d.ctx.Done():
 			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
