@@ -127,7 +127,7 @@ func (m *OS) tapeReviewTrustAndRun() {
 	store := m.ensureTapeTrust()
 	if store != nil {
 		if err := store.Trust(r.Path, r.Hash); err != nil {
-			m.ShowNotification("Tape: could not persist trust: "+err.Error(), "error", config.NotificationDuration*2)
+			m.ShowNotification("Tape: could not save trust: "+err.Error(), "error", config.NotificationDuration*2)
 		} else {
 			m.tapeDetect.indicator.status = trust.StatusTrusted
 			m.ShowNotification("Trusted "+shortTapePath(r.Path)+" (tip: set tape.autorun = \"auto\" to skip this next time)", "success", config.NotificationDuration*2)
@@ -374,7 +374,7 @@ func tapeStatusLabel(status trust.Status, changed bool, bg color.Color, pal over
 	case status == trust.StatusTrusted:
 		word, fg = "trusted", pal.Success
 	case status == trust.StatusIneligible:
-		word, fg = "ineligible", pal.Warn
+		word, fg = "cannot run", pal.Warn
 	case changed:
 		word = "untrusted (changed since you trusted it)"
 	}

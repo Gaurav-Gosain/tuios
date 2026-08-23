@@ -192,14 +192,14 @@ func TestSharedBordersPaletteToggles(t *testing.T) {
 
 	var toggle *CommandPaletteItem
 	for _, item := range GetCommandPaletteItems() {
-		if item.Name == "Toggle Shared Borders" {
+		if item.Name == "Toggle shared borders" {
 			it := item
 			toggle = &it
 			break
 		}
 	}
 	if toggle == nil {
-		t.Fatal("Toggle Shared Borders command not found in the palette")
+		t.Fatal("Toggle shared borders command not found in the palette")
 	}
 
 	_, save := toggle.Action(m)

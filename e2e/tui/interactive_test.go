@@ -110,7 +110,7 @@ func TestFocusCycleWithRapidKeyRepeat(t *testing.T) {
 	// produces a fresh message of its own.
 	//
 	// This used to call leaveTerminalMode, which sends alt+esc and waits for the
-	// "Window Management Mode" message. The storm never entered terminal mode,
+	// "Window management mode" message. The storm never entered terminal mode,
 	// so alt+esc had nothing to leave and pushed no message; the wait was
 	// satisfied by the message from the last leaveTerminalMode inside the window
 	// loop, which was still on screen because the old renderer stacked three
@@ -121,7 +121,7 @@ func TestFocusCycleWithRapidKeyRepeat(t *testing.T) {
 	if err := term.SendKeys("t"); err != nil {
 		t.Fatalf("toggle tiling after the storm: %v", err)
 	}
-	if err := term.WaitForText("Tiling Mode Disabled", uiTimeout); err != nil {
+	if err := term.WaitForText("Tiling off", uiTimeout); err != nil {
 		t.Fatalf("the UI stopped taking input after the storm: %v\n%s", err, term.Snapshot())
 	}
 }
@@ -312,7 +312,7 @@ func TestTwoClientsSeeConsistentState(t *testing.T) {
 	if err := c1.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("c1 to window mode: %v", err)
 	}
-	if err := c1.WaitForText("Window Management Mode", uiTimeout); err != nil {
+	if err := c1.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("c1 never entered window management mode: %v\n%s", err, c1.Snapshot())
 	}
 	time.Sleep(insertGuard)

@@ -241,14 +241,14 @@ func (m *OS) keybindTabSubtitle() string {
 	switch m.KeybindTab {
 	case KeybindTabConflicts:
 		if len(rep.Collisions) == 0 {
-			return "No key is claimed twice in the same scope"
+			return "No key is used twice in the same scope"
 		}
-		return "Keys claimed twice; the winner is what tuios actually runs"
+		return "Keys used twice. Each row names the one that runs."
 	case KeybindTabGuests:
 		if len(rep.GuestClashes) == 0 {
-			return "No key tuios withholds is one a curated program wants"
+			return "No program needs a key that tuios uses"
 		}
-		return "Keys tuios keeps from the pane that a program wants (curated defaults)"
+		return "Keys tuios uses that a program also wants"
 	}
 	return ""
 }
@@ -258,9 +258,9 @@ func (m *OS) keybindTabSubtitle() string {
 func (m *OS) keybindEmptyMessage() string {
 	switch m.KeybindTab {
 	case KeybindTabConflicts:
-		return "Nothing conflicts. Every key resolves to exactly one action in its scope."
+		return "No conflicts. Each key does one thing."
 	case KeybindTabGuests:
-		return "Nothing tuios takes from the pane collides with a program in the curated table."
+		return "No program needs a key that tuios uses."
 	}
 	if m.KeybindQuery() != "" {
 		return "No binding matches that filter"
@@ -435,10 +435,10 @@ func (m *OS) keybindDetail(selected int) string {
 		for _, l := range c.Losers {
 			dead = append(dead, l.Action+" ["+l.Section+"]")
 		}
-		detail := "Certain. In " + c.ScopeName + ", " + c.Press + " runs " + c.Winner +
-			". Never fires: " + strings.Join(dead, ", ") + "."
+		detail := "In " + c.ScopeName + ", " + c.Press + " runs " + c.Winner +
+			". Never runs: " + strings.Join(dead, ", ") + "."
 		if c.CrossSection {
-			detail += " The claims are in different tables, so config.toml gives no hint that one is dead: the later table is copied over the earlier one."
+			detail += " The bindings sit in different tables in config.toml. The later table wins."
 		}
 		return detail
 	case KeybindTabGuests:
@@ -446,12 +446,12 @@ func (m *OS) keybindDetail(selected int) string {
 			return ""
 		}
 		c := rep.GuestClashes[selected]
-		lead := "Reference, not detection. "
+		lead := "From the program list, not from this pane. "
 		if c.Running {
-			lead = "Reference, not detection, but " + rep.Pane.Command + " is running in this pane right now. "
+			lead = "From the program list, and " + rep.Pane.Command + " runs in this pane now. "
 		}
 		return lead + "tuios takes " + c.Key + " (" + c.TuiosDesc + "), so " +
-			c.Program + " never sees it, where it would " + c.ProgramUse + ". " + c.Note
+			c.Program + " never sees it. " + c.Program + " wants it for " + c.ProgramUse + ". " + c.Note
 	}
 
 	all := m.FilteredKeybindRows()
@@ -460,8 +460,8 @@ func (m *OS) keybindDetail(selected int) string {
 	}
 	b := all[selected]
 	if b.Shadowed {
-		return "Certain. This binding never fires: " + b.ShadowedBy +
-			" already owns " + b.Key + " in this scope, so pressing it runs that instead."
+		return "This key never works: " + b.ShadowedBy +
+			" already has " + b.Key + " in this scope. Pressing it runs that instead."
 	}
 	detail := b.Desc + ". Bound in [" + b.Section + "]."
 	for _, s := range rep.Swallowed {
@@ -512,9 +512,9 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 		add(overlay.Style(bg).Render(" "))
 		add(overlay.Style(bg).Foreground(overlay.Readable(pal.Accent, bg)).Bold(true).
 			Render("  Press any key. It will be recorded, not run."))
-		armed := "  One key, then this disarms, so the key after it is a command again."
+		armed := "  tuios records 1 key. The next key works as normal."
 		if bindAction != "" {
-			armed = "  It will be offered as a binding for " + bindAction + "."
+			armed = "  tuios will ask to bind it to " + bindAction + "."
 		}
 		add(head.Render(armed))
 	case key == "":
@@ -538,14 +538,14 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 	if key != "" && !m.KeybindArmed() {
 		section("in tuios")
 		if len(fate.Acts) == 0 {
-			add(body.Render("  " + glyphs.ok + " nothing is bound to it in any scope"))
+			add(body.Render("  " + glyphs.ok + " tuios does not use this key in any scope"))
 		}
 		for _, a := range fate.Acts {
 			mark := glyphs.ok
 			text := a.Desc
 			if a.Shadowed {
 				mark = glyphs.dead
-				text = a.Desc + " (dead: " + a.ShadowedBy + " owns the key)"
+				text = a.Desc + " (dead: " + a.ShadowedBy + " has the key)"
 			}
 			add(body.Render("  "+mark+" ") +
 				label.Render(overlay.Fill(scopeShortName(a.Scope), keybindScopeColumn, bg)) +
@@ -555,11 +555,11 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 			add(overlay.Style(bg).Foreground(overlay.ReadableAt(pal.Warning, bg, overlay.MarkFloor)).
 				Render("  "+glyphs.clash+" ") +
 				label.Render(overlay.Fill("pane", keybindScopeColumn, bg)) +
-				body.Render(overlay.Truncate("withheld: "+fate.SwallowReason, max(width-keybindScopeColumn-4, 8))))
+				body.Render(overlay.Truncate("taken by tuios: "+fate.SwallowReason, max(width-keybindScopeColumn-4, 8))))
 		} else {
 			add(body.Render("  "+glyphs.ok+" ") +
 				label.Render(overlay.Fill("pane", keybindScopeColumn, bg)) +
-				head.Render("forwarded to the program running here"))
+				head.Render("goes to the program in this pane"))
 		}
 
 		if fate.Ambiguity != "" {
@@ -570,11 +570,11 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 		}
 
 		if len(fate.GuestWants) > 0 {
-			section("wanted by (curated defaults, not detection)")
+			section("wanted by (program list, not this pane)")
 			for _, g := range fate.GuestWants {
 				tail := ""
 				if g.Running {
-					tail = " " + glyphs.live + " running here now"
+					tail = " " + glyphs.live + " runs here now"
 				}
 				add(overlay.Style(bg).Foreground(overlay.ReadableAt(pal.Warning, bg, overlay.MarkFloor)).
 					Render("  "+glyphs.clash+" ") +
@@ -585,7 +585,7 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 	}
 
 	if rep.Pane.Command != "" || rep.Pane.AltScreen {
-		section("observed in this pane")
+		section("seen in this pane")
 		for _, o := range rep.Observations {
 			if o.What == "Host keyboard" {
 				continue // already covered by the ambiguity block above
@@ -615,9 +615,9 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 func keybindFateHeadline(fate config.KeyFate) string {
 	switch {
 	case fate.Free:
-		return "free: nothing in tuios claims it, and the pane gets it"
+		return "free: tuios does not use it, so the pane gets it"
 	case len(fate.Acts) == 0 && fate.SwallowedInTerminal:
-		return "taken by tuios before the pane sees it"
+		return "tuios takes it before the pane sees it"
 	case len(fate.Acts) == 1:
 		return "bound in 1 scope"
 	default:

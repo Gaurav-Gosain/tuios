@@ -42,10 +42,10 @@ func pickTheme(t *testing.T, term *tuitest.Terminal, name string) {
 	if err := term.WaitForText(paletteTitle, uiTimeout); err != nil {
 		t.Fatalf("palette did not open: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.SendKeys("Theme Picker"); err != nil {
+	if err := term.SendKeys("Theme picker"); err != nil {
 		t.Fatalf("type palette query: %v", err)
 	}
-	if err := term.WaitForText("Theme Picker", uiTimeout); err != nil {
+	if err := term.WaitForText("Theme picker", uiTimeout); err != nil {
 		t.Fatalf("palette never filtered to the theme picker: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {

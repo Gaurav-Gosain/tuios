@@ -217,23 +217,23 @@ func generateMouseBindings() []HelpBinding {
 		{Keys: []string{"double / triple click"}, Description: "Select the word / line under the pointer", Category: cat},
 		{Keys: []string{"drag title bar"}, Description: "Move a pane", Category: cat},
 		{Keys: []string{"alt+drag"}, Description: "Move a pane, even while typing in it", Category: cat},
-		{Keys: []string{"alt+right-drag"}, Description: "Resize a pane; never opens the menu", Category: cat},
-		{Keys: []string{"ctrl+drag"}, Description: "Move a pane; drops when ctrl is let go", Category: cat},
+		{Keys: []string{"alt+right-drag"}, Description: "Resize a pane. Never opens the menu", Category: cat},
+		{Keys: []string{"ctrl+drag"}, Description: "Move a pane. Drops when you release ctrl", Category: cat},
 		{Keys: []string{"ctrl+shift+click"}, Description: "Add or remove a pane from multi-select", Category: cat},
 		{Keys: []string{"drag pane border"}, Description: "Resize one edge: divider or floating side", Category: cat},
 		{Keys: []string{"right-drag"}, Description: "Resize a pane from the nearest corner", Category: cat},
-		{Keys: []string{"right-click"}, Description: "Pane menu, unless the app tracks the mouse", Category: cat},
+		{Keys: []string{"right-click"}, Description: "Pane menu, if the program ignores the mouse", Category: cat},
 		// One badge rather than two: the key column drops the second when a row
 		// carries more than it can hold, and losing the shift half would read as
 		// if ctrl were the only way in.
-		{Keys: []string{"ctrl/shift + right-click"}, Description: "Pane menu, even over a mouse-aware app", Category: cat},
-		{Keys: []string{"wheel"}, Description: "Scroll the scrollback, or the app itself", Category: cat},
-		{Keys: []string{"drag right edge"}, Description: "Drag the scrollbar, where there is one", Category: cat},
+		{Keys: []string{"ctrl/shift + right-click"}, Description: "Pane menu, even if the program uses the mouse", Category: cat},
+		{Keys: []string{"wheel"}, Description: "Scroll the scrollback, or the program", Category: cat},
+		{Keys: []string{"drag right edge"}, Description: "Drag the scrollbar, if there is one", Category: cat},
 		{Keys: []string{"right-click desktop"}, Description: "Desktop menu", Category: cat},
 		{Keys: []string{"click dock entry"}, Description: "Restore that minimized window", Category: cat},
 		{Keys: []string{"right-click dock"}, Description: "Dock menu, or the entry's own menu", Category: cat},
 		{Keys: []string{"right-click workspace tab"}, Description: "Switch or rename that workspace", Category: cat},
-		{Keys: []string{"drag a panel"}, Description: "Move an overlay; click outside to close", Category: cat},
+		{Keys: []string{"drag a panel"}, Description: "Move the panel. Click outside to close", Category: cat},
 	}
 }
 

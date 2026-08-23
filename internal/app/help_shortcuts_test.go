@@ -90,7 +90,7 @@ func TestCommandPaletteShortcutsExist(t *testing.T) {
 	}
 
 	// Rename is leader+r. Leader+, opens the settings page.
-	rename, ok := byName["Rename Window"]
+	rename, ok := byName["Rename window"]
 	if !ok {
 		t.Fatal("command palette has no Rename Window entry")
 	}
@@ -107,7 +107,7 @@ func TestCommandPaletteShortcutsExist(t *testing.T) {
 	}
 
 	// The aggregate view has no default binding, so it must not advertise one.
-	aggregate, ok := byName["Aggregate View (All Windows)"]
+	aggregate, ok := byName["All windows"]
 	if !ok {
 		t.Fatal("command palette has no Aggregate View entry")
 	}

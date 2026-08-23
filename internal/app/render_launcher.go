@@ -112,7 +112,7 @@ func (m *OS) renderLauncher() (string, overlay.Geometry, []overlayRowHit) {
 		// No glyph, matching the palette: the title carries the meaning and a
 		// Nerd Font mark beside it is one more thing to degrade on a host
 		// without the font.
-		Title: "Run a Program",
+		Title: "Run a program",
 		Width: width,
 		Body:  strings.Join(lines, "\n"),
 		Hints: hints,

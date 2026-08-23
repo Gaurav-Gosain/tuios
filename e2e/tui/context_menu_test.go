@@ -482,7 +482,7 @@ func TestContextMenuReachesTopWindowRowWithTopDock(t *testing.T) {
 		t.Fatalf("tile: %v", err)
 	}
 	// Wait for the tiled window's own frame rather than for a window count.
-	if err := term.WaitForText("Tiling Mode Enabled", uiTimeout); err != nil {
+	if err := term.WaitForText("Tiling on", uiTimeout); err != nil {
 		t.Fatalf("tiling never turned on: %v\n%s", err, term.Snapshot())
 	}
 	time.Sleep(500 * time.Millisecond)

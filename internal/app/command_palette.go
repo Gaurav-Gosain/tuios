@@ -19,7 +19,7 @@ type ConfigReloadedMsg struct {
 
 // CommandPaletteItem represents a single command in the command palette.
 type CommandPaletteItem struct {
-	Name string // Display name: "Split Horizontal"
+	Name string // Display name: "Split horizontal"
 	// Shortcut is the row's right-hand meta slot, in muted ink. For a command it
 	// is the key that runs it ("prefix+v"); for a row whose consequence is
 	// heavier than the palette's usual jump it is that consequence in words
@@ -46,7 +46,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		// entry point without the two lists having to be ranked against each
 		// other (see launcher.go).
 		{
-			Name:     "Run a Program",
+			Name:     "Run a program",
 			Shortcut: "alt+space",
 			Category: PaletteCategoryRun,
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -56,7 +56,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 
 		// Window management
 		{
-			Name:     "New Window",
+			Name:     "New window",
 			Shortcut: "prefix+c",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -65,7 +65,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Close Window",
+			Name:     "Close window",
 			Shortcut: "prefix+x",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -76,7 +76,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Rename Window",
+			Name:     "Rename window",
 			Shortcut: "prefix+r",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -90,7 +90,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Toggle Zoom",
+			Name:     "Toggle zoom",
 			Shortcut: "prefix+z",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -99,7 +99,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Minimize Window",
+			Name:     "Minimize window",
 			Shortcut: "prefix+m m",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -113,7 +113,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Restore All Minimized",
+			Name:     "Restore all minimized",
 			Shortcut: "prefix+m M",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -131,59 +131,59 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 
 		// Layout
 		{
-			Name:     "Toggle Tiling",
+			Name:     "Toggle tiling",
 			Shortcut: "prefix+space",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.AutoTiling = !m.AutoTiling
 				if m.AutoTiling {
 					m.TileAllWindows()
-					m.ShowNotification("Tiling Mode Enabled", "success", config.NotificationDuration)
+					m.ShowNotification("Tiling on", "success", config.NotificationDuration)
 				} else {
-					m.ShowNotification("Tiling Mode Disabled", "info", config.NotificationDuration)
+					m.ShowNotification("Tiling off", "info", config.NotificationDuration)
 				}
 				m.FireLayoutChanged()
 				return m, nil
 			},
 		},
 		{
-			Name:     "Split Horizontal",
+			Name:     "Split horizontal",
 			Shortcut: "prefix+-",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.AutoTiling {
 					m.SplitFocusedHorizontal()
-					m.ShowNotification("Split Horizontal", "info", config.NotificationDuration)
+					m.ShowNotification("Split horizontal", "info", config.NotificationDuration)
 				}
 				return m, nil
 			},
 		},
 		{
-			Name:     "Split Vertical",
+			Name:     "Split vertical",
 			Shortcut: "prefix+|",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.AutoTiling {
 					m.SplitFocusedVertical()
-					m.ShowNotification("Split Vertical", "info", config.NotificationDuration)
+					m.ShowNotification("Split vertical", "info", config.NotificationDuration)
 				}
 				return m, nil
 			},
 		},
 		{
-			Name:     "Smart Split",
+			Name:     "Smart split",
 			Shortcut: "",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.AutoTiling {
 					m.SmartSplitFocused()
-					m.ShowNotification("Smart Split", "info", config.NotificationDuration)
+					m.ShowNotification("Smart split", "info", config.NotificationDuration)
 				}
 				return m, nil
 			},
 		},
 		{
-			Name:     "Toggle Shared Borders",
+			Name:     "Toggle shared borders",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				config.SharedBorders = !config.SharedBorders
@@ -191,39 +191,39 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 				m.applyAppearanceLive(true)
 				save := m.persistSettings()
 				if config.SharedBorders {
-					m.ShowNotification("Shared Borders Enabled", "success", config.NotificationDuration)
+					m.ShowNotification("Shared borders on", "success", config.NotificationDuration)
 				} else {
-					m.ShowNotification("Shared Borders Disabled", "info", config.NotificationDuration)
+					m.ShowNotification("Shared borders off", "info", config.NotificationDuration)
 				}
 				return m, save
 			},
 		},
 		{
-			Name:     "Rotate Split",
+			Name:     "Rotate split",
 			Shortcut: "prefix+R",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.AutoTiling {
 					m.RotateFocusedSplit()
-					m.ShowNotification("Split Rotated", "info", config.NotificationDuration)
+					m.ShowNotification("Split rotated", "info", config.NotificationDuration)
 				}
 				return m, nil
 			},
 		},
 		{
-			Name:     "Equalize Splits",
+			Name:     "Equalize splits",
 			Shortcut: "prefix+=",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.AutoTiling {
 					m.EqualizeSplits()
-					m.ShowNotification("Splits Equalized", "info", config.NotificationDuration)
+					m.ShowNotification("Splits equalized", "info", config.NotificationDuration)
 				}
 				return m, nil
 			},
 		},
 		{
-			Name:     "Snap Fullscreen",
+			Name:     "Snap fullscreen",
 			Shortcut: "prefix+z",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -236,7 +236,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 
 		// Layout templates
 		{
-			Name:     "Save Layout",
+			Name:     "Save layout",
 			Shortcut: "",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -247,7 +247,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Load Layout",
+			Name:     "Load layout",
 			Shortcut: "prefix+L",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -264,7 +264,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 
 		// Navigation
 		{
-			Name:     "Next Window",
+			Name:     "Next window",
 			Shortcut: "prefix+n",
 			Category: "Navigation",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -273,7 +273,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Previous Window",
+			Name:     "Previous window",
 			Shortcut: "prefix+p",
 			Category: "Navigation",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -365,7 +365,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 
 		// Layout
 		{
-			Name:     "Next Layout",
+			Name:     "Next layout",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.NextLayout()
@@ -373,7 +373,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Previous Layout",
+			Name:     "Previous layout",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.PrevLayout()
@@ -381,7 +381,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Toggle Multifocus",
+			Name:     "Toggle multifocus",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.ToggleMultifocus(m.FocusedWindow)
@@ -389,7 +389,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Clear Multifocus",
+			Name:     "Clear multifocus",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.ClearMultifocus()
@@ -398,7 +398,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		// Layout mode  - individual commands
 		{
-			Name:     "Layout: BSP Tiling",
+			Name:     "Layout: BSP tiling",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.EnableBSPLayout()
@@ -406,7 +406,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Layout: Master-Stack",
+			Name:     "Layout: master-stack",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.EnableMasterStackLayout()
@@ -414,7 +414,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Layout: Scrolling (niri-style)",
+			Name:     "Layout: scrolling (niri-style)",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.EnableScrollingLayout()
@@ -422,7 +422,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Layout: Disable Tiling",
+			Name:     "Layout: disable tiling",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.DisableAllTiling()
@@ -431,7 +431,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		// Scrolling-specific actions
 		{
-			Name:     "Scroll: Cycle Column Width",
+			Name:     "Scroll: cycle column width",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.UseScrollingLayout {
@@ -441,7 +441,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Scroll: Stack Window Below (consume)",
+			Name:     "Scroll: move window into the column below",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.UseScrollingLayout {
@@ -451,7 +451,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Scroll: Split to New Column (expel)",
+			Name:     "Scroll: move window out to its own column",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.UseScrollingLayout {
@@ -462,7 +462,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		// Scrollback
 		{
-			Name:     "Edit Scrollback in $EDITOR",
+			Name:     "Edit scrollback in $EDITOR",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				return m, m.EditScrollbackInEditor()
@@ -470,7 +470,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		},
 		// Floating
 		{
-			Name:     "Toggle Floating",
+			Name:     "Toggle floating",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.ToggleFloating()
@@ -481,7 +481,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		{
 			// No Shortcut: the aggregate view has no default binding and is
 			// reached from this palette (or a user binding) only.
-			Name:     "Aggregate View (All Windows)",
+			Name:     "All windows",
 			Category: "Navigation",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.ShowAggregateView = true
@@ -502,7 +502,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Theme Picker",
+			Name:     "Theme picker",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.OpenThemePicker()
@@ -510,7 +510,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Reload Config",
+			Name:     "Reload config",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				configPath, err := config.GetConfigPath()
@@ -531,34 +531,34 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Toggle Sidebar",
+			Name:     "Toggle sidebar",
 			Shortcut: "prefix+b",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.ToggleSidebar()
-				state := "Disabled"
+				state := "off"
 				if config.SidebarEnabled {
-					state = "Enabled"
+					state = "on"
 				}
 				m.ShowNotification("Sidebar "+state, "success", config.NotificationDuration)
 				return m, nil
 			},
 		},
 		{
-			Name:     "Toggle Focus Follows Mouse",
+			Name:     "Toggle focus follows mouse",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				save := m.ToggleFocusFollowsMouse()
-				state := "Disabled"
+				state := "off"
 				if config.FocusFollowsMouse {
-					state = "Enabled"
+					state = "on"
 				}
-				m.ShowNotification("Focus Follows Mouse "+state, "success", config.NotificationDuration)
+				m.ShowNotification("Focus follows mouse "+state, "success", config.NotificationDuration)
 				return m, save
 			},
 		},
 		{
-			Name:     "Switch Session",
+			Name:     "Switch session",
 			Shortcut: "prefix+S",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -567,7 +567,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Show Help",
+			Name:     "Show help",
 			Shortcut: "prefix+?",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -579,7 +579,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Show Logs",
+			Name:     "Show logs",
 			Shortcut: "prefix+D l",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -588,7 +588,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Toggle Scrollback Browser",
+			Name:     "Toggle scrollback browser",
 			Shortcut: "prefix+s",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -597,40 +597,40 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Toggle Show Keys",
+			Name:     "Toggle show keys",
 			Shortcut: "prefix+D k",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				save := m.ToggleShowKeys()
-				state := "Disabled"
+				state := "off"
 				if m.ShowKeys {
-					state = "Enabled"
+					state = "on"
 				}
-				m.ShowNotification("Show Keys Overlay "+state, "success", config.NotificationDuration)
+				m.ShowNotification("Show keys "+state, "success", config.NotificationDuration)
 				return m, save
 			},
 		},
 		{
-			Name:     "Toggle Animations",
+			Name:     "Toggle animations",
 			Shortcut: "prefix+D a",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				config.AnimationsEnabled = !config.AnimationsEnabled
 				if config.AnimationsEnabled {
-					m.ShowNotification("Animations Enabled", "success", config.NotificationDuration)
+					m.ShowNotification("Animations on", "success", config.NotificationDuration)
 				} else {
-					m.ShowNotification("Animations Disabled", "info", config.NotificationDuration)
+					m.ShowNotification("Animations off", "info", config.NotificationDuration)
 				}
 				return m, nil
 			},
 		},
 		{
-			Name:     "Window Management Mode",
+			Name:     "Window management mode",
 			Shortcut: "prefix+esc",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.Mode = WindowManagementMode
-				m.ShowNotification("Window Management Mode", "info", config.NotificationDuration)
+				m.ShowNotification("Window management mode", "info", config.NotificationDuration)
 				if focusedWindow := m.GetFocusedWindow(); focusedWindow != nil {
 					focusedWindow.InvalidateCache()
 				}
@@ -638,7 +638,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Tape: Review Project Tape",
+			Name:     "Tape: review the project tape",
 			Shortcut: "prefix+T t",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -647,7 +647,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Open Tape Manager",
+			Name:     "Open the tape manager",
 			Shortcut: "prefix+T m",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
@@ -656,13 +656,13 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 		{
-			Name:     "Enter Copy Mode",
+			Name:     "Enter copy mode",
 			Shortcut: "prefix+[",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if focusedWindow := m.GetFocusedWindow(); focusedWindow != nil {
 					focusedWindow.EnterCopyMode()
-					m.ShowNotification("COPY MODE (hjkl/q)", "info", config.NotificationDuration*2)
+					m.ShowNotification("Copy mode (hjkl, q to exit)", "info", config.NotificationDuration*2)
 				}
 				return m, nil
 			},

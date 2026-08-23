@@ -275,7 +275,7 @@ func (m *OS) disableAllTiling() {
 	// open for a divider now draws nothing. Give it back to them, the same way
 	// the tiling toggle does.
 	m.reclaimSeparatorGaps()
-	m.ShowNotification("Tiling disabled", "info", config.NotificationDuration)
+	m.ShowNotification("Tiling off", "info", config.NotificationDuration)
 	m.FireLayoutChanged()
 }
 

@@ -49,15 +49,15 @@ func TestNotificationLandsInTheDockNotOverAPane(t *testing.T) {
 	if err := term.SendKeys("t"); err != nil {
 		t.Fatalf("send 't': %v", err)
 	}
-	if err := term.WaitForText("Tiling Mode", uiTimeout); err != nil {
+	if err := term.WaitForText("Tiling on", uiTimeout); err != nil {
 		t.Fatalf("no message after toggling tiling: %v\n%s", err, term.Snapshot())
 	}
 
 	s := term.Screen()
-	if !strings.Contains(dockRow(s), "Tiling Mode") {
+	if !strings.Contains(dockRow(s), "Tiling on") {
 		t.Errorf("message is not in the dock row.\ndock row: %q\n%s", dockRow(s), term.Snapshot())
 	}
-	if strings.Contains(paneRows(s), "Tiling Mode") {
+	if strings.Contains(paneRows(s), "Tiling on") {
 		t.Errorf("message appears in the pane region, which is what this design removes\n%s", term.Snapshot())
 	}
 }
@@ -74,7 +74,7 @@ func TestNotificationDismissesOnEscAndTheKeyStillLands(t *testing.T) {
 	if err := term.SendKeys("t"); err != nil {
 		t.Fatalf("send 't': %v", err)
 	}
-	if err := term.WaitForText("Tiling Mode", uiTimeout); err != nil {
+	if err := term.WaitForText("Tiling on", uiTimeout); err != nil {
 		t.Fatalf("no message to dismiss: %v\n%s", err, term.Snapshot())
 	}
 
@@ -82,7 +82,7 @@ func TestNotificationDismissesOnEscAndTheKeyStillLands(t *testing.T) {
 		t.Fatalf("send esc: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "Tiling Mode")
+		return !strings.Contains(s.Text(), "Tiling on")
 	}, uiTimeout); err != nil {
 		t.Fatalf("esc did not dismiss the message: %v\n%s", err, term.Snapshot())
 	}
@@ -126,7 +126,7 @@ func TestDockStaysWithinTheScreen(t *testing.T) {
 			if err := term.SendKeys("t"); err != nil {
 				t.Fatalf("send 't': %v", err)
 			}
-			if err := term.WaitForText("Tiling Mode", uiTimeout); err != nil {
+			if err := term.WaitForText("Tiling on", uiTimeout); err != nil {
 				t.Fatalf("no message at %d cols: %v\n%s", cols, err, term.Snapshot())
 			}
 			s := term.Screen()

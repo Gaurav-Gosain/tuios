@@ -74,8 +74,8 @@ func TestLauncherIsSeparateFromThePalette(t *testing.T) {
 	// lists apart there is nothing to handicap: the command is simply the only
 	// kind of thing in the box.
 	filtered := FilterCommandPalette(m.allPaletteItems(), "new")
-	if len(filtered) == 0 || filtered[0].Name != "New Window" {
-		t.Fatalf("filtered = %v, want New Window first", paletteNames(filtered))
+	if len(filtered) == 0 || filtered[0].Name != "New window" {
+		t.Fatalf("filtered = %v, want New window first", paletteNames(filtered))
 	}
 }
 

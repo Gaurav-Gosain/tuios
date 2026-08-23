@@ -134,7 +134,7 @@ func TestCopyModeEffectsPreserveHandlerBehaviour(t *testing.T) {
 		if win.CopyMode != nil && win.CopyMode.Active {
 			t.Fatal("q did not leave copy mode")
 		}
-		if !hasNotification(o, "Copy Mode Exited") {
+		if !hasNotification(o, "Left copy mode") {
 			t.Fatalf("expected the exit notification, got %v", notificationMessages(o))
 		}
 	})
@@ -150,7 +150,7 @@ func TestCopyModeEffectsPreserveHandlerBehaviour(t *testing.T) {
 		if o.Mode != app.TerminalMode {
 			t.Fatalf("i left the OS in mode %v, want TerminalMode", o.Mode)
 		}
-		if !hasNotification(o, "Terminal Mode") {
+		if !hasNotification(o, "Terminal mode") {
 			t.Fatalf("expected the terminal-mode notification, got %v", notificationMessages(o))
 		}
 	})

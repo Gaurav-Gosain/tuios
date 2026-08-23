@@ -67,10 +67,10 @@ func TestThemePickerEnterOnNoMatch(t *testing.T) {
 		t.Fatalf("open palette: %v", err)
 	}
 	waitPaletteOpen(t, term, "for the command palette")
-	if err := term.SendKeys("Theme Picker"); err != nil {
+	if err := term.SendKeys("Theme picker"); err != nil {
 		t.Fatalf("type: %v", err)
 	}
-	if err := term.WaitForText("Theme Picker", uiTimeout); err != nil {
+	if err := term.WaitForText("Theme picker", uiTimeout); err != nil {
 		t.Fatalf("palette never filtered: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {

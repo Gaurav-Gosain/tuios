@@ -54,7 +54,7 @@ func (m *OS) renderScrollbackBrowser() string {
 	}
 
 	// === HEADER ===
-	title := styled(accent, true, "Scrollback Browser")
+	title := styled(accent, true, "Scrollback browser")
 
 	// Help-overlay style tabs
 	modes := []string{"Commands", "JSON", "Paths"}
@@ -668,10 +668,10 @@ func isCSIFinal(b byte) bool {
 // overlayBrowserHelp renders a help modal on top of the browser content.
 func overlayBrowserHelp(w, h int, outputMode bool, accent, dimFg color.Color) string {
 	var helpLines []string
-	titleText := "Keybindings"
+	titleText := "Keys"
 
 	if outputMode {
-		titleText = "Output Mode Keybindings"
+		titleText = "Output mode keys"
 		helpLines = []string{
 			"h j k l      Move cursor",
 			"\u2190 \u2193 \u2191 \u2192      Move cursor",

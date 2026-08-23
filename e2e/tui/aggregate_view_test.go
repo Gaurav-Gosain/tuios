@@ -25,10 +25,10 @@ func openAggregateView(t *testing.T, term *tuitest.Terminal) {
 	if err := term.WaitForText(paletteTitle, uiTimeout); err != nil {
 		t.Fatalf("palette did not open: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.SendKeys("All Windows"); err != nil {
+	if err := term.SendKeys("All windows"); err != nil {
 		t.Fatalf("type palette query: %v", err)
 	}
-	if err := term.WaitForText("All Windows", uiTimeout); err != nil {
+	if err := term.WaitForText("All windows", uiTimeout); err != nil {
 		t.Fatalf("palette never filtered to the aggregate entry: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys(tuitest.Enter); err != nil {

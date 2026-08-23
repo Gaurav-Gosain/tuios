@@ -304,7 +304,7 @@ func windowManagementMode(t *testing.T, term *tuitest.Terminal) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("normalise to window management mode: %v", err)
 	}
-	if err := term.WaitForText("Window Management Mode", uiTimeout); err != nil {
+	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
 	// The mode switch re-arms input handling; give it the same beat a mode
@@ -435,7 +435,7 @@ func enterTerminalMode(t *testing.T, term *tuitest.Terminal) {
 		if err := term.SendKeys("i"); err != nil {
 			t.Fatalf("send 'i': %v", err)
 		}
-		if err := term.WaitForText("Terminal Mode", terminalModeProbe); err == nil {
+		if err := term.WaitForText("Terminal mode", terminalModeProbe); err == nil {
 			time.Sleep(insertGuard + 150*time.Millisecond)
 			return
 		}
@@ -452,7 +452,7 @@ func leaveTerminalMode(t *testing.T, term *tuitest.Terminal) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("send alt+esc: %v", err)
 	}
-	if err := term.WaitForText("Window Management Mode", uiTimeout); err != nil {
+	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("did not return to window management mode: %v", err)
 	}
 	// The mode switch also re-arms input handling; give it the same beat.
@@ -836,7 +836,7 @@ func enableTiling(t *testing.T, term *tuitest.Terminal, markers ...string) {
 		// the budget for an earlier one to expire. In practice it is already
 		// gone and this returns immediately.
 		if err := term.WaitFor(func(s tuitest.Screen) bool {
-			return !strings.Contains(s.Text(), "Tiling Mode")
+			return !strings.Contains(s.Text(), "Tiling o")
 		}, 10*time.Second); err != nil {
 			t.Fatalf("a tiling message from an earlier step never cleared, so waiting "+
 				"for this one would prove nothing: %v\n%s", err, term.Snapshot())
@@ -846,7 +846,7 @@ func enableTiling(t *testing.T, term *tuitest.Terminal, markers ...string) {
 		t.Fatalf("toggle tiling: %v", err)
 	}
 	if len(markers) == 0 {
-		if err := term.WaitForText("Tiling Mode Enabled", uiTimeout); err != nil {
+		if err := term.WaitForText("Tiling on", uiTimeout); err != nil {
 			t.Fatalf("tiling was never enabled: %v\n%s", err, term.Snapshot())
 		}
 		return

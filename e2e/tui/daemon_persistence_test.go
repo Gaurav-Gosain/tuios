@@ -56,7 +56,7 @@ func TestDetachAndReattachKeepsLayoutAndPaneContent(t *testing.T) {
 	if err := first.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("to window mode: %v", err)
 	}
-	if err := first.WaitForText("Window Management Mode", uiTimeout); err != nil {
+	if err := first.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("never entered window management mode: %v\n%s", err, first.Snapshot())
 	}
 	time.Sleep(insertGuard)
@@ -125,7 +125,7 @@ func TestDetachAndReattachKeepsScrollback(t *testing.T) {
 	if err := second.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("to window mode: %v", err)
 	}
-	if err := second.WaitForText("Window Management Mode", uiTimeout); err != nil {
+	if err := second.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("never entered window management mode: %v\n%s", err, second.Snapshot())
 	}
 	time.Sleep(insertGuard)
@@ -133,7 +133,7 @@ func TestDetachAndReattachKeepsScrollback(t *testing.T) {
 	if err := second.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatalf("enter copy mode: %v", err)
 	}
-	if err := second.WaitForText("COPY MODE", uiTimeout); err != nil {
+	if err := second.WaitForText("Copy mode", uiTimeout); err != nil {
 		t.Fatalf("copy mode never opened: %v\n%s", err, second.Snapshot())
 	}
 	if err := second.SendKeys("g", "g"); err != nil {
@@ -169,7 +169,7 @@ func TestSessionSurvivesTheDaemonAndSaysItWasRestored(t *testing.T) {
 	if err := first.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("to window mode: %v", err)
 	}
-	if err := first.WaitForText("Window Management Mode", uiTimeout); err != nil {
+	if err := first.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("never entered window management mode: %v\n%s", err, first.Snapshot())
 	}
 	time.Sleep(insertGuard)

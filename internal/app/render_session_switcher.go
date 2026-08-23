@@ -17,7 +17,7 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 	// Daemon-only feature.
 	if !m.IsDaemonSession || m.DaemonClient == nil {
 		return m.simpleOverlayPanel("", "Sessions",
-			[]string{"Session management requires daemon mode.", "", "Start a daemon session with: tuios new"},
+			[]string{"Sessions need the daemon.", "", "Start a daemon session with: tuios new"},
 			[]overlay.Hint{{Key: "esc", Label: "close"}})
 	}
 
