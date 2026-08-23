@@ -46,7 +46,7 @@ func (f PaneFacts) Observations() []Observation {
 	if f.Command != "" {
 		detail := f.Command + " is the foreground process in this pane"
 		if p, ok := GuestProgramByComm(f.Command); ok {
-			detail += "; the curated table has an entry for " + p.Name
+			detail += ". The program list has an entry for " + p.Name
 		}
 		out = append(out, Observation{What: "Running", Detail: detail, Evidence: EvidenceObserved})
 	} else if f.HasForeground {
@@ -59,14 +59,14 @@ func (f PaneFacts) Observations() []Observation {
 	if f.AltScreen {
 		out = append(out, Observation{
 			What:     "Alt screen",
-			Detail:   "the pane is on the alternate screen, so a full-screen program is drawing and is likely to want most of the keyboard",
+			Detail:   "a full-screen program is drawing in this pane. It probably wants most of the keyboard",
 			Evidence: EvidenceObserved,
 		})
 	}
 	if f.GuestKittyFlags != 0 {
 		out = append(out, Observation{
 			What:     "Guest keyboard",
-			Detail:   "the program in this pane pushed the kitty keyboard protocol, so it asked for keys tuios would otherwise flatten; keys it wants are keys tuios must not take",
+			Detail:   "the program in this pane uses the kitty keyboard protocol. It asked for keys tuios must not take",
 			Evidence: EvidenceObserved,
 		})
 	}
@@ -79,7 +79,7 @@ func (f PaneFacts) Observations() []Observation {
 	} else {
 		out = append(out, Observation{
 			What:     "Host keyboard",
-			Detail:   "this terminal has not granted key disambiguation, so Ctrl+I is Tab, Ctrl+M is Enter and Ctrl+[ is Esc",
+			Detail:   "this terminal does not separate these keys. Ctrl+I is Tab, Ctrl+M is Enter and Ctrl+[ is Esc",
 			Evidence: EvidenceObserved,
 		})
 	}
@@ -295,8 +295,8 @@ func (r *KeybindRegistry) Report(facts PaneFacts) KeybindReport {
 		Leader: leader,
 		EvidenceNote: map[Evidence]string{
 			EvidenceCertain:   "Derived from tuios's own keybind registry and dispatch order. If this is wrong, tuios has a bug.",
-			EvidenceObserved:  "Read from the pane at the moment this report was built. True when read; possibly stale now.",
-			EvidenceReference: "A curated list of what these programs bind by default. Nothing was detected or asked. A user who rebound the program has an entry that is wrong for them.",
+			EvidenceObserved:  "Read from the pane when this report was built. True then, and possibly stale now.",
+			EvidenceReference: "A fixed list of what these programs bind by default. Nothing was detected. If you rebound the program, this entry is wrong for you.",
 		},
 		Pane:         facts,
 		Observations: facts.Observations(),

@@ -117,5 +117,5 @@ func AmbiguityVerdict(key string, hostDisambiguates bool) string {
 	if hostDisambiguates {
 		return a.Why + " This terminal reports disambiguated keys, so " + key + " and " + partners + " are separate here. On a terminal that does not, they are one key."
 	}
-	return a.Why + " This terminal has not granted key disambiguation, so binding " + key + " also binds " + partners + "."
+	return a.Why + " This terminal does not separate these keys, so binding " + key + " also binds " + partners + "."
 }

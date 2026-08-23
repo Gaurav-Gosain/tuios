@@ -163,7 +163,7 @@ func (m *OS) persistSettings() tea.Cmd {
 	if m.ConfigReadOnly {
 		if !m.configReadOnlyTold {
 			m.configReadOnlyTold = true
-			m.ShowNotification("Settings apply to this session only. tuios does not write the config file.", "warning", 0)
+			m.ShowNotification("Settings apply to this session only. The config file is not changed.", "warning", 0)
 		}
 		return nil
 	}

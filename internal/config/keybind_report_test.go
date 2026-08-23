@@ -473,8 +473,8 @@ func TestReportRoundTripsAndCarriesItsEvidenceNote(t *testing.T) {
 			t.Errorf("the report must explain the %q tier to a JSON-only reader", tier)
 		}
 	}
-	if !strings.Contains(back.EvidenceNote[EvidenceReference], "curated") {
-		t.Error("the reference tier's note must say it is curated, not detected")
+	if !strings.Contains(back.EvidenceNote[EvidenceReference], "fixed list") {
+		t.Error("the reference tier's note must say it is a fixed list, not detected")
 	}
 }
 
