@@ -49,7 +49,7 @@ tuios list-glyphs heavy
 | Id | What it is |
 |---|---|
 | `default` | What TUIOS ships: rounded frame, Nerd Font powerline caps, `✕` and `□` controls |
-| `unicode` | Box drawing only, no Nerd Font private-use glyphs, for a good font that is not a patched one |
+| `unicode` | Box drawing and geometric shapes for the frame, controls and marks, with no Nerd Font private-use glyphs among them, for a good font that is not a patched one. The dock icons below are not roles and are unaffected |
 | `heavy` | One stroke weight heavier throughout, border and junctions included |
 | `ascii` | Nothing outside 7-bit ASCII |
 

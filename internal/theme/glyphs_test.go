@@ -194,3 +194,28 @@ func TestEveryBuiltinSetIsDrawableWhereItSaysItIs(t *testing.T) {
 		t.Error("the heavy set measures as ascii, which would offer it to a terminal that cannot draw it")
 	}
 }
+
+func TestASetNamedInTheConfigResolvesWithoutAnythingElseScanning(t *testing.T) {
+	// The glyphs directory is read lazily, so the first thing to name a set
+	// from it is usually the config file being applied at startup. Selecting
+	// straight out of a config, with no list-glyphs and no set-config in front
+	// of it, is the path that has to work: without it a user's own set was
+	// recorded, reported as active, and drew the built-in glyphs.
+	writeGlyphSet(t, "startup", map[string]any{"bullet": "\u25e6", "rule": "\u2550"})
+
+	SetActiveGlyphs("startup")
+	if got := Glyphs().Rule; got != "\u2550" {
+		t.Errorf("rule = %q, want the set's own; the directory was never read", got)
+	}
+	if got := ActiveGlyphSetID(); got != "startup" {
+		t.Errorf("active = %q, want startup", got)
+	}
+}
+
+func TestAMissingSetLeavesTheBuiltInsRatherThanBlankingTheChrome(t *testing.T) {
+	writeGlyphSet(t, "present", map[string]any{"bullet": "\u25e6"})
+	SetActiveGlyphs("nosuchset")
+	if got := Glyphs().Bullet; got != "" {
+		t.Errorf("bullet = %q, want empty so every accessor keeps its own default", got)
+	}
+}
