@@ -113,6 +113,11 @@ func TestSyncPlacesUnplacedWindow(t *testing.T) {
 	// what must not end up on screen.
 	ws.X, ws.Y, ws.Width, ws.Height = 0, 0, 100, 40
 
+	// Asked for before the sync, not after. NewWindowPlacement steps away from
+	// a slot that is already taken, so asking once the window is placed answers
+	// for the window after this one.
+	wantX, wantY, wantW, wantH := m.NewWindowPlacement()
+
 	if err := m.ApplyStateSync(&session.SessionState{
 		Name: "s", CurrentWorkspace: 1, Windows: []session.WindowState{ws},
 	}); err != nil {
@@ -122,7 +127,6 @@ func TestSyncPlacesUnplacedWindow(t *testing.T) {
 		t.Fatalf("got %d windows, want 1", len(m.Windows))
 	}
 
-	wantX, wantY, wantW, wantH := m.NewWindowPlacement()
 	got := m.Windows[0]
 	if got.X != wantX || got.Y != wantY || got.Width != wantW || got.Height != wantH {
 		t.Errorf("placed at %d,%d %dx%d, want this client's own placement %d,%d %dx%d",
