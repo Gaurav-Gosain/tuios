@@ -198,6 +198,23 @@ func runWebServer() error {
 	// stdout; pin it to what the browser terminal renders, the same way.
 	app.SetAccentColorProfile(colorprofile.TrueColor)
 
+	// Install the browser terminal as the process host capabilities, the same
+	// way the SSH server installs its client's. Without this,
+	// GetHostCapabilities probes this process's non-TTY stdin and reports no
+	// graphics and a 9x20 default cell, disagreeing with the capabilities the
+	// daemon is told below (webCaps in createDaemonTUIOSInstance): the same
+	// terminal, described two ways. KittyAnimation stays false because the
+	// browser overlay has no a=f frame-edit path; KittyFileTransfer stays
+	// false because the browser cannot read server-local paths.
+	app.SetClientCapabilities(&app.HostCapabilities{
+		KittyGraphics: true,
+		SixelGraphics: true,
+		TrueColor:     true,
+		TerminalName:  "tuios-web",
+		CellWidth:     10,
+		CellHeight:    20,
+	})
+
 	// Set terminal environment variables
 	_ = os.Setenv("TERM", "xterm-256color")
 	_ = os.Setenv("COLORTERM", "truecolor")
