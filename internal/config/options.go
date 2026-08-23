@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -42,6 +43,12 @@ type Option struct {
 	// all is right. Without it a misspelled theme was recorded, reported as
 	// applied, and drew the palette it already had.
 	Theme bool `json:"theme,omitempty"`
+	// GlyphSet marks the string option whose value is a glyph set id. Like
+	// Theme it names an open set kept in a directory of its own, so neither an
+	// Accepted list nor no check at all is right, and for the same reason:
+	// without it a misspelled set is recorded, reported as applied, and draws
+	// the glyphs it already had.
+	GlyphSet bool `json:"glyph_set,omitempty"`
 }
 
 // The three types an option can carry. A config value crosses the protocol as a
@@ -213,6 +220,31 @@ var optionSpecs = []Option{
 		Path: "appearance.session_colors", Type: OptionBool, Section: "appearance",
 		Description: "Give each session its own colour on the rail and in the switcher",
 		Default:     "true",
+	},
+	{
+		Path: "appearance.glyphs", Type: OptionString, Section: "appearance",
+		Description: "Chrome glyph set: the characters the border, controls, rules and rail marks are drawn with",
+		Default:     theme.GlyphSetNone, GlyphSet: true,
+	},
+	{
+		Path: "appearance.gap", Type: OptionInt, Section: "appearance",
+		Description: "Cells of empty ground kept between two neighbouring tiled panes",
+		Default:     "0", Min: 0, Max: PaneGapMax,
+	},
+	{
+		Path: "appearance.panel_padding", Type: OptionInt, Section: "appearance",
+		Description: "Columns of padding each side of an overlay panel's content",
+		Default:     strconv.Itoa(overlay.DefaultPanelPadding), Min: 1, Max: overlay.MaxPanelPadding,
+	},
+	{
+		Path: "appearance.dim_unfocused", Type: OptionInt, Section: "appearance",
+		Description: "Percent an unfocused pane's content is quieted toward its own background; 0 is off",
+		Default:     "0", Min: 0, Max: DimUnfocusedMax,
+	},
+	{
+		Path: "appearance.clock_format", Type: OptionString, Section: "dock",
+		Description: "Go time layout the clock is drawn with, e.g. 15:04 or Mon 3:04PM",
+		Default:     DefaultClockFormat,
 	},
 
 	// The flat sidebar keys a config written before [appearance.sidebar] used.
@@ -602,6 +634,13 @@ func (o Option) checkValue(value string) error {
 		// restart.
 		return fmt.Errorf("%s: no theme named %q; call list-themes for the ones there are, "+
 			"or write %s.json in the themes directory first", o.Path, value, value)
+	}
+	if o.GlyphSet && !theme.GlyphSetExists(value) {
+		// GlyphSetExists re-reads the glyphs directory before it says no, for
+		// the reason Exists does: a set written a moment ago has to resolve on
+		// this call rather than on the next restart.
+		return fmt.Errorf("%s: no glyph set named %q; call list-glyphs for the ones there are, "+
+			"or write %s.json in the glyphs directory first", o.Path, value, value)
 	}
 	if len(o.Accepted) > 0 && !slices.Contains(o.Accepted, value) {
 		return fmt.Errorf("%s: %q is not one of %s", o.Path, value, strings.Join(o.Accepted, ", "))

@@ -263,6 +263,18 @@ func (w *Window) MarkPositionDirty() {
 	// DON'T clear w.CachedContent here - keep it for performance
 }
 
+// SetCachedContentDim records the dim percentage CachedContent was rendered
+// at, and CachedContentDim reads it back. Zero is an undimmed frame, which is
+// what a focused pane and an unconfigured dim both produce.
+//
+// It sits beside the cached size for the same reason: the cache is only usable
+// by a caller wanting the frame it actually holds, and focus is now one of the
+// things that decides what that frame looks like.
+func (w *Window) SetCachedContentDim(dim int) { w.cachedContentDim = dim }
+
+// CachedContentDim is the dim CachedContent was rendered at.
+func (w *Window) CachedContentDim() int { return w.cachedContentDim }
+
 // MarkContentDirty marks the window content as dirty.
 func (w *Window) MarkContentDirty() {
 	w.Dirty = true

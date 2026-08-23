@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/lrstanley/go-nf/glyphs/fa"
 	"github.com/lrstanley/go-nf/glyphs/ple"
 )
@@ -758,6 +760,58 @@ var NiriReverseScroll = false
 // Set via appearance.leader_key config
 var LeaderKey = "ctrl+b"
 
+// PaneGap is the cells of empty space the tiler keeps between two neighbouring
+// panes: i3's inner gap, and about the only spacing a terminal window manager
+// can honestly offer.
+//
+// Inner only. An outer gap would have to inset the content region, which the
+// sidebar's width, the dock's height, every overlay's placement and every mouse
+// hit test are measured against, so a margin the sidebar already draws one of
+// would cost a move of the whole frame.
+var PaneGap = 0
+
+// PaneGapMax caps it. Past this the panes on a small terminal are further apart
+// than they are wide, and spacing that swallows what it spaces has stopped
+// being spacing.
+const PaneGapMax = 8
+
+// DimUnfocused is how far an unfocused pane's content is carried toward the
+// pane's own ground, as a percentage. Zero, the default, draws every pane's
+// content the same.
+//
+// One number rather than wezterm's hue, saturation and brightness triple. A
+// blend toward the ground already moves saturation and brightness together,
+// because a pane's ground is both darker and flatter than the text on it, and
+// rotating the hue of somebody else's program output is a novelty rather than a
+// thing a rice wants. One number is also the only form that says the same thing
+// on a light theme as on a dark one.
+var DimUnfocused = 0
+
+// DimUnfocusedMax caps it. The cap is not a legibility floor - content is the
+// user's own text and they may quiet it as far as they like - it only stops a
+// pane from being erased outright, where there is nothing left to show the
+// setting worked and no way to tell a dimmed pane from a crashed one.
+const DimUnfocusedMax = 90
+
+// ClockFormat is the Go time layout the clock overlay draws with. Empty takes
+// DefaultClockFormat.
+//
+// A layout rather than a set of toggles, for the reason window_title_format is
+// one: "seconds on or off" is two of the questions people actually have about a
+// clock, and the standard library already has a spelling for all of them.
+var ClockFormat = ""
+
+// DefaultClockFormat is what the clock has always drawn.
+const DefaultClockFormat = "15:04:05"
+
+// GetClockFormat returns the layout in effect.
+func GetClockFormat() string {
+	if ClockFormat == "" {
+		return DefaultClockFormat
+	}
+	return ClockFormat
+}
+
 // ZoomMaxWidth is the maximum width in cells for zoom/zen mode.
 // 0 means fullscreen (no max width cap). When set (e.g., 120), the zoomed
 // window is centered horizontally and capped at this width.
@@ -766,18 +820,12 @@ var ZoomMaxWidth = 0
 // GetSidebarPillLeftChar returns the rail's left pill cap. The rail keeps its
 // own accessor so the dock's flat/capped setting cannot reshape its rows.
 func GetSidebarPillLeftChar() string {
-	if UseASCIIOnly {
-		return DockPillLeftCharASCII
-	}
-	return DockPillLeftChar
+	return glyphOr(func(g *theme.GlyphSet) string { return g.PillLeft }, DockPillLeftChar, DockPillLeftCharASCII)
 }
 
 // GetSidebarPillRightChar returns the rail's right pill cap.
 func GetSidebarPillRightChar() string {
-	if UseASCIIOnly {
-		return DockPillRightCharASCII
-	}
-	return DockPillRightChar
+	return glyphOr(func(g *theme.GlyphSet) string { return g.PillRight }, DockPillRightChar, DockPillRightCharASCII)
 }
 
 // GetDockPillLeftChar returns the pill's left cap, empty when pills are flat.
@@ -785,10 +833,7 @@ func GetDockPillLeftChar() string {
 	if !DockPillCaps {
 		return ""
 	}
-	if UseASCIIOnly {
-		return DockPillLeftCharASCII
-	}
-	return DockPillLeftChar
+	return GetSidebarPillLeftChar()
 }
 
 // GetDockPillRightChar returns the pill's right cap, empty when pills are flat.
@@ -796,10 +841,7 @@ func GetDockPillRightChar() string {
 	if !DockPillCaps {
 		return ""
 	}
-	if UseASCIIOnly {
-		return DockPillRightCharASCII
-	}
-	return DockPillRightChar
+	return GetSidebarPillRightChar()
 }
 
 // GetDockModeCapLeft returns the mode chip's left cap.
@@ -808,20 +850,10 @@ func GetDockPillRightChar() string {
 // chip beside them reads as an unfinished pill rather than a different kind of
 // thing. It caps regardless of DockPillCaps, which is really about the
 // minimized run, where a cap on every entry turned the row into beads.
-func GetDockModeCapLeft() string {
-	if UseASCIIOnly {
-		return DockPillLeftCharASCII
-	}
-	return DockPillLeftChar
-}
+func GetDockModeCapLeft() string { return GetSidebarPillLeftChar() }
 
 // GetDockModeCapRight returns the mode chip's right cap.
-func GetDockModeCapRight() string {
-	if UseASCIIOnly {
-		return DockPillRightCharASCII
-	}
-	return DockPillRightChar
-}
+func GetDockModeCapRight() string { return GetSidebarPillRightChar() }
 
 // GetDockWorkspaceCapLeft returns the workspace pill's left cap.
 //
@@ -837,7 +869,7 @@ func GetDockWorkspaceCapLeft() string {
 	if UseASCIIOnly {
 		return ""
 	}
-	return DockPillLeftChar
+	return GetSidebarPillLeftChar()
 }
 
 // GetDockWorkspaceCapRight returns the workspace pill's right cap.
@@ -845,7 +877,7 @@ func GetDockWorkspaceCapRight() string {
 	if UseASCIIOnly {
 		return ""
 	}
-	return DockPillRightChar
+	return GetSidebarPillRightChar()
 }
 
 // GetDockModeIconWindow returns the appropriate window mode icon based on UseASCIIOnly
@@ -906,26 +938,17 @@ func GetDockIconCloseSession() string {
 
 // GetDockSeparator returns the appropriate separator based on UseASCIIOnly
 func GetDockSeparator() string {
-	if UseASCIIOnly {
-		return DockSeparatorASCII
-	}
-	return DockSeparator
+	return glyphOr(func(g *theme.GlyphSet) string { return g.Separator }, DockSeparator, DockSeparatorASCII)
 }
 
 // GetDockWorkspaceMoreLeft returns the strip's left overflow arrow.
 func GetDockWorkspaceMoreLeft() string {
-	if UseASCIIOnly {
-		return DockWorkspaceMoreLeftASCII
-	}
-	return DockWorkspaceMoreLeft
+	return glyphOr(func(g *theme.GlyphSet) string { return g.ArrowLeft }, DockWorkspaceMoreLeft, DockWorkspaceMoreLeftASCII)
 }
 
 // GetDockWorkspaceMoreRight returns the strip's right overflow arrow.
 func GetDockWorkspaceMoreRight() string {
-	if UseASCIIOnly {
-		return DockWorkspaceMoreRightASCII
-	}
-	return DockWorkspaceMoreRight
+	return glyphOr(func(g *theme.GlyphSet) string { return g.ArrowRight }, DockWorkspaceMoreRight, DockWorkspaceMoreRightASCII)
 }
 
 // =============================================================================
@@ -959,9 +982,18 @@ const (
 	// ink well inside it. It carries the same East Asian Width class "N" as
 	// U+292B, so it still measures 1 cell and the button pill keeps its old
 	// width. See the hit-test offsets below, which depend on that width.
-	WindowButtonClose = " ✕ " // Close/kill window
-	// WindowButtonMaximize is the maximize window button character.
-	WindowButtonMaximize = " □ " // U+25A1
+	WindowButtonCloseMark = "✕"
+	// WindowButtonClose is that mark padded into the three-cell button.
+	WindowButtonClose = " " + WindowButtonCloseMark + " "
+	// WindowButtonMaximizeMark is the maximize mark.
+	WindowButtonMaximizeMark = "□" // U+25A1
+	// WindowButtonMaximize is that mark padded into the three-cell button.
+	WindowButtonMaximize = " " + WindowButtonMaximizeMark + " "
+	// WindowButtonMinimizeMark is the minimize mark. It leads the pill, so its
+	// button carries an extra cell of lead-in rather than a symmetric pad.
+	WindowButtonMinimizeMark = "-"
+	// WindowButtonMinimize is the four-cell minimize button.
+	WindowButtonMinimize = "  " + WindowButtonMinimizeMark + " "
 	// WindowButtonDot is the disc the dots style draws each control as.
 	//
 	// U+25CF BLACK CIRCLE, which JetBrainsMono Nerd Font covers and draws at an
@@ -988,11 +1020,15 @@ const (
 	WindowBorderVerticalASCII = "|"
 
 	// WindowButtonCloseASCII is the close/kill window button character (ASCII fallback).
-	WindowButtonCloseASCII = " X "
+	WindowButtonCloseMarkASCII = "X"
+	// WindowButtonCloseASCII is that mark padded into the three-cell button.
+	WindowButtonCloseASCII = " " + WindowButtonCloseMarkASCII + " "
 	// WindowButtonMaximizeASCII is the maximize window button character (ASCII
 	// fallback). Three cells like the close button, so the pill keeps its width
 	// and the hit-test offsets below still hold.
-	WindowButtonMaximizeASCII = " O "
+	WindowButtonMaximizeMarkASCII = "O"
+	// WindowButtonMaximizeASCII is that mark padded into the three-cell button.
+	WindowButtonMaximizeASCII = " " + WindowButtonMaximizeMarkASCII + " "
 	// WindowButtonDotASCII is the dots style's disc in ASCII. One cell like the
 	// disc it stands in for, so the traffic light keeps its layout and its
 	// colours, and only loses the roundness.
@@ -1011,7 +1047,7 @@ const (
 var BorderStyles = []string{
 	"rounded", "normal", "thick", "double",
 	"block", "outer-half-block", "inner-half-block",
-	"ascii", "hidden",
+	"ascii", "hidden", BorderStyleGlyphs,
 }
 
 // BorderJoinsChromeRules reports whether a divider drawn in the active style can
@@ -1027,6 +1063,11 @@ func BorderJoinsChromeRules() bool {
 	switch BorderStyle {
 	case "block", "outer-half-block", "inner-half-block", "hidden":
 		return false
+	case BorderStyleGlyphs:
+		// A set's border is answered for by the set. Reported as joining
+		// because a set naming no junctions still gets the rounded border's,
+		// and one that names them means them to be used.
+		return true
 	}
 	return true
 }
@@ -1035,6 +1076,9 @@ func BorderJoinsChromeRules() bool {
 func GetBorderForStyle() lipgloss.Border {
 	if UseASCIIOnly || BorderStyle == "ascii" {
 		return lipgloss.ASCIIBorder()
+	}
+	if BorderStyle == BorderStyleGlyphs {
+		return glyphSetBorder()
 	}
 	switch BorderStyle {
 	case "normal":
@@ -1056,6 +1100,40 @@ func GetBorderForStyle() lipgloss.Border {
 	default:
 		return lipgloss.RoundedBorder()
 	}
+}
+
+// glyphSetBorder is the border the active glyph set draws, with any rune it
+// leaves unnamed taken from the rounded border.
+//
+// Rounded rather than nothing, because a half-specified border is the likely
+// case: a set that wants square corners says four runes and means "the rest as
+// usual". Falling back per rune also means a set naming no border at all under
+// border_style = "glyphs" draws the default frame rather than a hole.
+func glyphSetBorder() lipgloss.Border {
+	b := lipgloss.RoundedBorder()
+	g := theme.Glyphs().Border
+	if g == nil {
+		return b
+	}
+	pick := func(dst *string, src string) {
+		if src != "" && (!UseASCIIOnly || overlay.IsASCII(src)) {
+			*dst = src
+		}
+	}
+	pick(&b.Top, g.Top)
+	pick(&b.Bottom, g.Bottom)
+	pick(&b.Left, g.Left)
+	pick(&b.Right, g.Right)
+	pick(&b.TopLeft, g.TopLeft)
+	pick(&b.TopRight, g.TopRight)
+	pick(&b.BottomLeft, g.BottomLeft)
+	pick(&b.BottomRight, g.BottomRight)
+	pick(&b.Middle, g.Middle)
+	pick(&b.MiddleTop, g.MiddleTop)
+	pick(&b.MiddleBottom, g.MiddleBottom)
+	pick(&b.MiddleLeft, g.MiddleLeft)
+	pick(&b.MiddleRight, g.MiddleRight)
+	return b
 }
 
 // Per-style scrollbar glyphs. The thin style's pair is one stroke at two
@@ -1104,6 +1182,12 @@ func GetScrollbarThumbChar() string {
 	if glyph, ok := scrollbarGlyphOverride(ScrollbarThumb); ok {
 		return glyph
 	}
+	// The set is consulted under the explicit option and over the style's own
+	// default: appearance.scrollbar.thumb is the narrower statement and keeps
+	// winning, and a set the user chose is still a statement about the bar.
+	if g, ok := scrollbarGlyphOverride(theme.Glyphs().ScrollbarThumb); ok {
+		return g
+	}
 	if scrollbarASCII() {
 		return scrollbarASCIIThumb
 	}
@@ -1147,6 +1231,9 @@ func GetScrollbarTrackChar() string {
 	}
 	if glyph, ok := scrollbarGlyphOverride(ScrollbarTrack); ok {
 		return glyph
+	}
+	if g, ok := scrollbarGlyphOverride(theme.Glyphs().ScrollbarTrack); ok {
+		return g
 	}
 	if scrollbarASCII() || ScrollbarStyle == ScrollbarStyleTrack {
 		return ""
@@ -1208,52 +1295,64 @@ func GetWindowBorderVertical() string {
 	return GetWindowBorderLeft()
 }
 
-// GetWindowButtonClose returns the appropriate close button character
-func GetWindowButtonClose() string {
-	if UseASCIIOnly {
-		return WindowButtonCloseASCII
-	}
-	return WindowButtonClose
+// The window controls resolve in two steps: a one-cell mark, which is what a
+// glyph set names and what a user means by "the close button", and the padded
+// button the title bar draws.
+//
+// Splitting them is what makes a set safe here. The press rectangles below are
+// fixed offsets from the border's trailing corner, measured against buttons of
+// exactly three and four cells, so a set able to name the padded string could
+// move a button out from under the pointer with one two-cell glyph. Naming the
+// mark leaves the padding to the renderer and the widths cannot drift.
+
+// GetWindowButtonCloseMark returns the one-cell close mark.
+func GetWindowButtonCloseMark() string {
+	return glyphOr(func(g *theme.GlyphSet) string { return g.Close },
+		WindowButtonCloseMark, WindowButtonCloseMarkASCII)
 }
 
-// GetWindowButtonMaximize returns the appropriate maximize button character
-func GetWindowButtonMaximize() string {
-	if UseASCIIOnly {
-		return WindowButtonMaximizeASCII
-	}
-	return WindowButtonMaximize
+// GetWindowButtonMaximizeMark returns the one-cell maximize mark.
+func GetWindowButtonMaximizeMark() string {
+	return glyphOr(func(g *theme.GlyphSet) string { return g.Maximize },
+		WindowButtonMaximizeMark, WindowButtonMaximizeMarkASCII)
 }
+
+// GetWindowButtonMinimizeMark returns the one-cell minimize mark. It had no
+// accessor and no ASCII form: the pill drew a literal "  - ", so --ascii-only
+// was being honoured there only because the glyph happened to be 7-bit already.
+func GetWindowButtonMinimizeMark() string {
+	return glyphOr(func(g *theme.GlyphSet) string { return g.Minimize },
+		WindowButtonMinimizeMark, WindowButtonMinimizeMark)
+}
+
+// GetWindowButtonClose returns the three-cell close button.
+func GetWindowButtonClose() string { return " " + GetWindowButtonCloseMark() + " " }
+
+// GetWindowButtonMaximize returns the three-cell maximize button.
+func GetWindowButtonMaximize() string { return " " + GetWindowButtonMaximizeMark() + " " }
+
+// GetWindowButtonMinimize returns the four-cell minimize button, which leads the
+// pill and so carries the extra cell of lead-in.
+func GetWindowButtonMinimize() string { return "  " + GetWindowButtonMinimizeMark() + " " }
 
 // GetWindowButtonDot returns the appropriate dots-style disc character
 func GetWindowButtonDot() string {
-	if UseASCIIOnly {
-		return WindowButtonDotASCII
-	}
-	return WindowButtonDot
+	return glyphOr(func(g *theme.GlyphSet) string { return g.Dot }, WindowButtonDot, WindowButtonDotASCII)
 }
 
 // GetWindowPillLeft returns the appropriate pill left character
 func GetWindowPillLeft() string {
-	if UseASCIIOnly {
-		return WindowPillLeftASCII
-	}
-	return WindowPillLeft
+	return glyphOr(func(g *theme.GlyphSet) string { return g.PillLeft }, WindowPillLeft, WindowPillLeftASCII)
 }
 
 // GetWindowPillRight returns the appropriate pill right character
 func GetWindowPillRight() string {
-	if UseASCIIOnly {
-		return WindowPillRightASCII
-	}
-	return WindowPillRight
+	return glyphOr(func(g *theme.GlyphSet) string { return g.PillRight }, WindowPillRight, WindowPillRightASCII)
 }
 
 // GetWindowSeparatorChar returns the appropriate separator character
 func GetWindowSeparatorChar() string {
-	if UseASCIIOnly {
-		return WindowSeparatorCharASCII
-	}
-	return WindowSeparatorChar
+	return glyphOr(func(g *theme.GlyphSet) string { return g.Rule }, WindowSeparatorChar, WindowSeparatorCharASCII)
 }
 
 // =============================================================================

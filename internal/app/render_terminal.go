@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -70,12 +71,13 @@ func isBlankRender(s string) bool {
 // it has drawn. Leaving the frame uncached and the window dirty costs one cheap
 // re-render per frame while a pane is genuinely blank, and guarantees the next
 // frame reads the emulator again rather than freezing the gap.
-func cacheRender(window *terminal.Window, content string, cols, rows int) {
+func cacheRender(window *terminal.Window, content string, cols, rows, dim int) {
 	if isBlankRender(content) {
 		return
 	}
 	window.CachedContent = content
 	window.CachedContentCols, window.CachedContentRows = cols, rows
+	window.SetCachedContentDim(dim)
 	// Only a frame read outside a synchronized update is a complete one, so
 	// only that may become what the hold falls back on. Caching a frame taken
 	// mid-update would make the hold present the very thing it exists to hide.
@@ -140,7 +142,13 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return out
 	}
 
-	if (window.IsBeingManipulated || !window.ContentDirty) && window.CachedContent != "" {
+	// The dim this frame wants, which is also what the cached frame has to have
+	// been drawn at for the cache to be usable.
+	dim := paneDim(isFocused)
+
+	cacheUsable := window.CachedContent != "" && window.CachedContentDim() == dim
+
+	if (window.IsBeingManipulated || !window.ContentDirty) && cacheUsable {
 		window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-clean", window.CachedContent)
@@ -178,6 +186,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	if window.Terminal == nil {
 		window.CachedContent = "Terminal not initialized"
 		window.CachedContentCols, window.CachedContentRows = 0, 0
+		window.SetCachedContentDim(dim)
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "no-terminal", window.CachedContent)
 		}
@@ -188,6 +197,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	if screen == nil {
 		window.CachedContent = "No screen"
 		window.CachedContentCols, window.CachedContentRows = 0, 0
+		window.SetCachedContentDim(dim)
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "no-screen", window.CachedContent)
 		}
@@ -218,6 +228,10 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// acquires, so it still converges on its true final state once the burst
 	// ends, and no input is affected.
 	if !window.TryRLockIO() {
+		// Served at whatever dim it was drawn at, unlike the keyed check above.
+		// The alternative is to fall through and block on the lock this branch
+		// exists to avoid, and the staleness cannot last: ContentDirty is still
+		// set, so the next frame that acquires re-reads and re-keys.
 		if window.CachedContent != "" {
 			window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
 			if renderTraceEnabled {
@@ -235,13 +249,21 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// Fast path for unfocused windows: use the emulator's built-in Render()
 	// which is faster than cell-by-cell iteration. The focused window uses
 	// the slow path for cursor overlay and selection highlighting.
-	if !isFocused && window.CopyMode == nil && window.ScrollbackOffset == 0 {
+	//
+	// A dim takes an unfocused pane off it, because the emulator's own renderer
+	// emits the cells as the guest wrote them and there is nowhere in it to put
+	// a blend. That is the whole cost of the feature and it falls exactly on
+	// the panes it applies to: an unfocused pane with dim on renders cell by
+	// cell like a focused one. It is charged only on a frame that was going to
+	// re-read the emulator anyway, since a clean pane serves its cache above,
+	// and BenchmarkDimUnfocusedPane measures what it comes to.
+	if !isFocused && dim == 0 && window.CopyMode == nil && window.ScrollbackOffset == 0 {
 		rendered := screen.Render()
 		cols, rows := 0, 0
 		if gridFillsEveryRow(screen, screen.Width(), screen.Height()) {
 			cols, rows = screen.Width(), screen.Height()
 		}
-		cacheRender(window, rendered, cols, rows)
+		cacheRender(window, rendered, cols, rows, dim)
 		window.RenderedCols, window.RenderedRows = cols, rows
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "fast-unfocused", rendered)
@@ -251,7 +273,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 	// Fast path for scrollback mode: content is static at a given scroll
 	// position, so reuse the cache if the offset hasn't changed.
-	if window.ScrollbackOffset > 0 && window.CachedContent != "" && !window.ContentDirty {
+	//
+	// Keyed on the dim like the check at the top, and for a sharper reason:
+	// this one is only reached once that check has already failed, so with an
+	// unkeyed test it fired exactly on the mismatch the key exists to catch.
+	if window.ScrollbackOffset > 0 && cacheUsable && !window.ContentDirty {
 		window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-scrollback", window.CachedContent)
@@ -389,6 +415,21 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 					visualSelection.Set(viewportY, x)
 				}
 			}
+		}
+	}
+
+	// The dim and the ground it carries toward, resolved once for the pane
+	// rather than per cell. dimT is zero for a focused pane, for an unset
+	// option, and for an untheme where there is no known ground to carry to,
+	// and a zero dimT makes the cell loop below identical to what it was.
+	var (
+		dimScratch   uv.Cell
+		dimFg, dimBg color.Color
+		dimT         float64
+	)
+	if dim > 0 {
+		if dimFg, dimBg = dimGround(); dimBg != nil {
+			dimT = dimBlend()
 		}
 	}
 
@@ -623,7 +664,13 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			// job to this path instead: the gesture draws no cursor either way.
 			isCursorPos := !useRealCursor && !m.Resizing && isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden() && x == cursorX && y == cursorY
 
-			needsStyling := shouldApplyStyle(cell) || isCursorPos
+			// A dimmed pane styles every cell it has, not only the ones the
+			// guest coloured. shouldApplyStyle asks whether a cell carries
+			// anything of its own, and a shell prompt mostly does not: gating
+			// the dim on it left the setting doing nothing to most of a pane
+			// even with a theme set, which reads as a broken option rather
+			// than as a subtle one.
+			needsStyling := shouldApplyStyle(cell) || isCursorPos || (dimT > 0 && cell != nil)
 
 			if x > 0 && !styleMatches(cell, isCursorPos) {
 				flushBatch()
@@ -632,10 +679,21 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			if needsStyling && batchBuilder.Len() == 0 {
 				// Pure cached style: reuse the cached ANSI escape so flushBatch
 				// skips styleToANSI.
+				//
+				// The dim is applied here rather than per cell because this is
+				// where a style run begins: the batching above compares the
+				// emulator's own cells, so the blend is paid once for a run
+				// rather than once for each of its cells. The style cache keys
+				// on the colours it is handed, so a dimmed run caches as its
+				// own entry and the focused pane's entries are untouched.
+				styleCell := cell
+				if dimT > 0 {
+					styleCell = dimCell(&dimScratch, cell, dimFg, dimBg, dimT)
+				}
 				if useOptimizedRendering {
-					currentStyle, currentPrefix, currentSuffix = buildOptimizedCellStyleCachedANSI(cell)
+					currentStyle, currentPrefix, currentSuffix = buildOptimizedCellStyleCachedANSI(styleCell)
 				} else {
-					currentStyle, currentPrefix, currentSuffix = buildCellStyleCachedANSI(cell, isCursorPos)
+					currentStyle, currentPrefix, currentSuffix = buildCellStyleCachedANSI(styleCell, isCursorPos)
 				}
 				currentStyleCached = true
 				batchHasStyle = true
@@ -672,7 +730,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		cols, rows = maxX, maxY
 	}
 	window.RenderedCols, window.RenderedRows = cols, rows
-	cacheRender(window, content, cols, rows)
+	cacheRender(window, content, cols, rows, dim)
 	if renderTraceEnabled {
 		traceRender(window, isFocused, inTerminalMode, entryDirty, "slow", content)
 	}

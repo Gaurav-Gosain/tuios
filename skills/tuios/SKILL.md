@@ -361,11 +361,27 @@ tuios get-config appearance.sidebar.position --json
 {"key":"appearance.sidebar.position","value":"left","source":"default","default":"left","option_type":"string"}
 ```
 
-## Ricing: themes and colours
+## Ricing: the four surfaces
 
-The 88 options above are scalars. A theme is not one of them: its value is a
-name drawn from an open set of several hundred, standing for twenty colours kept
-as JSON in a directory of their own. So it has its own verb.
+A rice is not a palette. Four things decide what tuios looks like, and a request
+like "make it look like X" usually means some of each:
+
+| Surface | What it decides | How to set it |
+|---|---|---|
+| **Colour** | the twenty terminal colours, the accents, the borders | `appearance.theme`, `list-themes` |
+| **Shape** | the characters the chrome is drawn with: border, controls, rules, rail marks | `appearance.glyphs`, `list-glyphs` |
+| **Spacing** | ground between panes, padding inside overlay panels | `appearance.gap`, `appearance.panel_padding` |
+| **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
+
+Colour and shape are the two that have their own verbs, because both are a name
+from an open set standing for a document kept in a directory rather than a value
+in the config file. Everything else is an option in `list-options`.
+
+### Colour: themes
+
+A theme's value is a name drawn from an open set of several hundred, standing
+for twenty colours kept as JSON in a directory of their own. So it has its own
+verb.
 
 ```sh
 tuios list-themes --filter catppuccin
@@ -471,14 +487,179 @@ The format is read from the file's content, so the extension does not matter.
 A scheme that sets only some of the twenty imports as far as it goes. Wezterm's
 Lua scheme files are not read; its toml ones are.
 
-### A rice, end to end
+### Shape: glyph sets
 
-"Make it look like Catppuccin Mocha, thicker border, sidebar on the right":
+A theme moves the colours. A glyph set moves the characters: which corner the
+border turns, what the window controls are pictures of, what a rule and a
+separator are drawn with, which mark the rail wears on the row you are on.
 
 ```sh
+tuios list-glyphs
+```
+
+```
+  ascii                 default               heavy                 unicode
+
+4 glyph set(s).
+
+roles: add, arrow_left, arrow_right, attention, border.bottom, border.bottom_left,
+border.bottom_right, border.left, border.middle, ... scrollbar_track, separator, sigil
+
+active: default (default)
+glyphs dir: /home/you/.config/tuios/glyphs
+```
+
+The four built-ins are `default` (what tuios ships), `unicode` (box drawing
+only, no Nerd Font private-use glyphs), `heavy` (one stroke weight heavier
+throughout, border included) and `ascii` (7-bit throughout).
+
+```sh
+tuios set-config appearance.glyphs heavy
+```
+
+**A set's border needs `border_style` to ask for it.** A set can carry a border
+and most do not; the one that draws is whichever `appearance.border_style`
+names, and `glyphs` is the value meaning "the active set's".
+
+```sh
+tuios set-config appearance.glyphs heavy
+tuios set-config appearance.border_style glyphs
+```
+
+That is deliberate rather than a missing convenience: a set that won silently
+would turn an option the user had already set into a no-op with nothing on
+screen to say why. Both settings stay live and the one in charge is the one that
+was named.
+
+#### Seeing what a set actually draws
+
+You cannot see the screen, and a set states only the roles it changes, so its
+file is not the answer to "what will this look like". Ask:
+
+```sh
+tuios list-glyphs heavy
+```
+
+```
+heavy  (Heavy)
+
+   attention             █      █
+   border.top_left       ┏      ┏
+   bullet                ▪      ▪
+   close                 -      ✕
+   collapse              -      «
+   rule                  ━      ━
+   ...
+
+columns: role, what the set says, what draws. ! marks a role the set
+named and did not get. A role whose glyph was the wrong width for its
+slot was dropped on load and is listed under problems below.
+```
+
+Two columns because they differ in two ways that matter. A role the set says
+nothing about reads `-` on the left and shows the built-in on the right, which
+is normal. A role that shows `!` was named and did not take, which under
+`--ascii-only` means the glyph is not 7-bit.
+
+#### Writing a set
+
+Write `<id>.json` into the glyphs directory `list-glyphs` reported. Give it
+`inherits` to start from a built-in and change one mark:
+
+```json
+{
+  "display_name": "Mine",
+  "inherits": "heavy",
+  "bullet": "◦",
+  "focus": "▐",
+  "border": { "top_left": "╔", "top_right": "╗", "bottom_left": "╚", "bottom_right": "╝" }
+}
+```
+
+Every field is optional and an absent `id` is taken from the filename. The
+directory is re-read whenever a set is looked up, so a file you just wrote is
+selectable with no restart:
+
+```sh
+tuios set-config appearance.glyphs mine
+tuios list-glyphs mine
+```
+
+**Every role has a cell width and a glyph that misses it is dropped.** The
+window controls' press rectangles are fixed offsets measured against buttons of
+exactly three and four cells, so a two-cell emoji would not look bold, it would
+move the close button out from under the pointer. `close`, `maximize`,
+`minimize`, `focus`, `attention`, `bullet` and `add` are **one cell**; you name
+the mark and the renderer owns the padding. `separator`, `ellipsis`, `collapse`
+and `expand` take any width, because each is drawn somewhere that measures it. A dropped
+role is reported rather than silently defaulted:
+
+```sh
+tuios list-glyphs mine --json | jq -r '.problems[]?'
+```
+
+```
+glyph set mine: close is 2 cells wide and the layout budgets 1, so it keeps the default
+```
+
+That line is the one thing to check after writing a set. On screen a dropped
+role looks exactly like a set that half applied.
+
+### Spacing and composition
+
+```sh
+tuios set-config appearance.gap 2              # empty ground between tiled panes
+tuios set-config appearance.panel_padding 4    # columns inside every overlay panel
+tuios set-config appearance.dim_unfocused 40   # quiet the panes you are not in
+tuios set-config appearance.clock_format "Mon 3:04PM"
+tuios set-config appearance.window_title_format "{index}: {title}"
+```
+
+`appearance.gap` is i3's inner gap and is inner only. `clock_format` is a Go
+time layout, so any spelling the standard library takes works; a layout with no
+time in it is warned about rather than refused, because a fixed label is a
+legitimate thing to want.
+
+`appearance.dim_unfocused` is a percentage, 0 to 90, and 0 is off. It quiets the
+**content** of panes that are not focused, which is most of the frame, and is
+the setting to reach for when the user says they cannot tell which pane they are
+in. It composes with `zen_mode` rather than duplicating it: zen takes the chrome
+away, this quiets the content. Two things to tell the user:
+
+- It reaches only cells a program coloured itself unless a theme is set. With no
+  theme tuios emits colour indices and the host terminal decides what they look
+  like, so a cell drawn in the terminal's own default has no colour tuios can
+  carry anywhere. Set a theme first, or expect a plain shell prompt to stay
+  bright.
+- It dims content only. The border, the title bar, the scrollbar, the rail, the
+  dock and every overlay are untouched, on purpose.
+
+### A restyle, end to end
+
+"Make it look like Catppuccin Mocha, heavier frame, roomy, sidebar on the
+right, and I keep losing track of which pane I am in."
+
+Work the four surfaces in order, because each one is checkable before the next:
+
+```sh
+# 1. Colour. Filter before you guess; the ids use underscores.
 tuios list-themes --filter catppuccin
 tuios set-config appearance.theme catppuccin_mocha
-tuios set-config appearance.border_style thick
+tuios list-themes catppuccin_mocha --json | jq -r '.palette.illegible[]'
+
+# 2. Shape. The set, and then the border style that asks for the set's border.
+tuios list-glyphs
+tuios set-config appearance.glyphs heavy
+tuios set-config appearance.border_style glyphs
+tuios list-glyphs heavy --json | jq -r '.problems[]?'
+
+# 3. Spacing.
+tuios set-config appearance.gap 2
+tuios set-config appearance.panel_padding 4
+
+# 4. Composition, and the thing they actually asked for.
+tuios set-config appearance.window_title_format "{index}: {title}"
+tuios set-config appearance.dim_unfocused 45
 tuios set-config appearance.sidebar.enabled true
 tuios set-config appearance.sidebar.position right
 ```
@@ -488,7 +669,47 @@ Read back what you changed, not what you sent:
 ```sh
 tuios get-config appearance.border_style --json
 tuios list-themes --json | jq -r .active
+tuios list-glyphs --json | jq -r .active
 ```
+
+**Record the old values first.** There is no preview and no undo, and each call
+lands as it is made:
+
+```sh
+for k in appearance.theme appearance.glyphs appearance.border_style \
+         appearance.gap appearance.dim_unfocused; do
+  printf '%s=%s\n' "$k" "$(tuios get-config "$k" --json | jq -r .value)"
+done
+```
+
+### Restyling a terminal that cannot draw much
+
+`--ascii-only` says the running terminal cannot manage more than 7-bit, and it
+overrules a glyph set **per role** rather than throwing the set away: a set
+keeps every role it spelled in ASCII and gives up only the ones it did not. So a
+set written for a good font still behaves sensibly there, and the `ascii`
+built-in is the one to inherit from when the terminal is the constraint.
+
+`appearance.gap`, `appearance.panel_padding`, `appearance.dim_unfocused` and
+`clock_format` are unaffected by ASCII mode: none of them is a glyph.
+
+### What is set and what is derived
+
+The line matters, because asking for the derived half wastes a call and a bad
+answer to it would break something:
+
+- **Set:** the theme, the glyph set, the border style, the gap, the padding, the
+  dim, the format strings, the border colour overrides. All of it is in
+  `list-options` or has a verb.
+- **Derived, and not settable:** the contrast of every chrome label, mark and
+  rule against whatever ground it lands on. tuios measures each against a floor
+  (4.5:1 for a label, 3:1 for a mark, about 1.9:1 for a decorative rule) and
+  lifts it until it clears. That is why a theme's dim blacks still produce a
+  readable border, and why a border colour you set by hand is honoured while the
+  chrome drawn on top of it is not left to chance.
+- **Derived, and not settable:** the padded width of a window control. You name
+  the one-cell mark; the three- and four-cell buttons the press rectangles are
+  measured against are built from it.
 
 ### What this cannot do
 
@@ -506,6 +727,15 @@ Be honest with the user about these rather than working around them:
 - **There is no verb for keybindings or hooks.** Both are maps rather than fixed
   paths, so `list-options` does not carry them and `set-config` cannot set one.
   They are edited in the config file.
+
+- **A glyph set cannot change the dock's semantic icons.** The mode chip, the
+  window and workspace counts and the session controls are Nerd Font pictures of
+  a meaning rather than shapes in a frame, so they are not roles. `--ascii-only`
+  is what replaces them when the font cannot draw them.
+
+- **Spacing is inner only, and horizontal in overlays.** `appearance.gap` puts
+  ground between panes and none around the outside; `appearance.panel_padding`
+  widens a panel's margins and does not change its rows.
 
 - **The chrome is not themed.** Overlays, the settings page and the dock's
   furniture sit on a constant neutral ramp on purpose, the way a window manager

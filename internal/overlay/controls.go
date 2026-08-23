@@ -90,10 +90,7 @@ func Cycler(value string, selected bool, bg color.Color, pal Palette) string {
 		arrowColor = pal.AccentBright
 		valColor = pal.Fg
 	}
-	left, right := "‹", "›"
-	if UseASCII() {
-		left, right = "<", ">"
-	}
+	left, right := ArrowLeft(), ArrowRight()
 	arrow := Style(bg).Foreground(arrowColor)
 	return arrow.Render(left+" ") +
 		Style(bg).Foreground(valColor).Bold(selected).Render(value) +
@@ -127,15 +124,36 @@ func Rule(width int, bg color.Color, pal Palette) string {
 	if UseASCII() {
 		ch = "-"
 	}
+	ch = chromeOr(func(c *Chrome) string { return c.Rule }, ch)
 	return Style(bg).Foreground(pal.FgMute).Render(strings.Repeat(ch, max(width, 0)))
+}
+
+// ArrowLeft and ArrowRight are the pair a cycler and an overflowing tab strip
+// point back and on with.
+func ArrowLeft() string {
+	def := "‹"
+	if UseASCII() {
+		def = "<"
+	}
+	return chromeOr(func(c *Chrome) string { return c.ArrowLeft }, def)
+}
+
+// ArrowRight is ArrowLeft pointing the other way.
+func ArrowRight() string {
+	def := "›"
+	if UseASCII() {
+		def = ">"
+	}
+	return chromeOr(func(c *Chrome) string { return c.ArrowRight }, def)
 }
 
 // Ellipsis returns the truncation marker for the current ASCII setting.
 func Ellipsis() string {
+	def := "…"
 	if UseASCII() {
-		return "..."
+		def = "..."
 	}
-	return "…"
+	return chromeOr(func(c *Chrome) string { return c.Ellipsis }, def)
 }
 
 // Truncate shortens s to fit within maxWidth display cells, appending an
@@ -148,6 +166,14 @@ func Truncate(s string, maxWidth int) string {
 		return s
 	}
 	ell := Ellipsis()
+	// A glyph set names the ellipsis and the role takes any width, so the
+	// marker can be wider than the budget it is meant to fit inside. Dropped
+	// rather than appended in that case: a caller asking for four cells has
+	// four cells, and returning five to say "this was cut" pushes every label
+	// after it out of the layout that measured it.
+	if lipgloss.Width(ell) >= maxWidth {
+		ell = ""
+	}
 	target := max(maxWidth-lipgloss.Width(ell), 0)
 	runes := []rune(s)
 	for len(runes) > 0 && lipgloss.Width(string(runes)) > target {

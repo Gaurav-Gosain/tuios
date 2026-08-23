@@ -67,7 +67,7 @@ func TestNewSessionSitsOnTheSessionsHeader(t *testing.T) {
 			if !strings.Contains(drawn, "sessions") {
 				t.Errorf("the control is on row %d, %q; want the sessions header", row, drawn)
 			}
-			if !strings.Contains(drawn, sidebarAddGlyph) {
+			if !strings.Contains(drawn, sidebarAddGlyph()) {
 				t.Errorf("the sessions header reads %q, want it to carry the add glyph", drawn)
 			}
 			// The header is the rail's first line, so the control is above every
@@ -101,7 +101,7 @@ func TestNewTerminalSitsOnTheTerminalsHeader(t *testing.T) {
 		t.Fatal("the terminals header drew no add control")
 	}
 	drawn := ansi.Strip(lines[hit.Y0-m.GetTopMargin()])
-	if !strings.Contains(drawn, "terminals") || !strings.Contains(drawn, sidebarAddGlyph) {
+	if !strings.Contains(drawn, "terminals") || !strings.Contains(drawn, sidebarAddGlyph()) {
 		t.Errorf("the control is on %q, want the terminals header carrying the add glyph", drawn)
 	}
 }

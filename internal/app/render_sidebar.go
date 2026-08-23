@@ -73,7 +73,7 @@ const (
 // sidebarAddGlyph is the mark both add controls wear. One cell, so it costs a
 // header no rows and no name: a "+ new" wide enough to read would have pushed
 // the label out of a narrow rail.
-const sidebarAddGlyph = "+"
+func sidebarAddGlyph() string { return config.GetRailAddGlyph() }
 
 // sidebarHeaderAdd places a section header's add control: right-aligned on the
 // same spine every other trailing figure lands on, one cell in from the rail's
@@ -87,7 +87,7 @@ const sidebarAddGlyph = "+"
 // the rail can do; the same glyph on the sessions header cannot be read as
 // anything but "another one of these".
 func sidebarHeaderAdd(kind sidebarRowKind, cw, labelW int, pal overlay.Palette, hoverX int, cursor bool) (string, sidebarTokenSpan, bool) {
-	gw := lipgloss.Width(sidebarAddGlyph)
+	gw := lipgloss.Width(sidebarAddGlyph())
 	x0 := cw - 1 - gw
 	if x0 < labelW+1 {
 		return "", sidebarTokenSpan{}, false
@@ -97,7 +97,7 @@ func sidebarHeaderAdd(kind sidebarRowKind, cw, labelW int, pal overlay.Palette, 
 	if cursor || (hoverX >= span.X0 && hoverX < span.X1) {
 		ink = pal.Fg
 	}
-	return sidebarStyle(nil, ink).Render(sidebarAddGlyph), span, true
+	return sidebarStyle(nil, ink).Render(sidebarAddGlyph()), span, true
 }
 
 // sidebarSection identifies one of the rail's three stacked lists. Each owns
@@ -229,18 +229,11 @@ func railFocusTint(tint color.Color, pal overlay.Palette) color.Color {
 // gave that pane, so the row wears exactly one identity bar instead of an
 // accent chip beside a focus mark. tint nil falls back to the rail accent.
 func sidebarGutterTinted(current bool, state string, tint, bg color.Color, pal overlay.Palette) string {
-	mark, ascii := "▎", overlay.UseASCII()
 	switch {
 	case current:
-		if ascii {
-			mark = ">"
-		}
-		return sidebarStyle(bg, railFocusTint(tint, pal)).Render(mark)
+		return sidebarStyle(bg, railFocusTint(tint, pal)).Render(config.GetRailFocusMark())
 	case sidebarAttention(state):
-		if ascii {
-			mark = "!"
-		}
-		return sidebarStyle(bg, sidebarSeverityColor(state, pal)).Render(mark)
+		return sidebarStyle(bg, sidebarSeverityColor(state, pal)).Render(config.GetRailAttentionMark())
 	default:
 		return sidebarStyle(bg, nil).Render(" ")
 	}
@@ -468,11 +461,10 @@ func sidebarQuietDotTinted(tint, bg color.Color, pal overlay.Palette) string {
 	if !config.SidebarShowGlyphs {
 		return sidebarStyle(bg, nil).Render(" ")
 	}
-	dot := "·"
-	if overlay.UseASCII() {
-		dot = "."
-	}
-	return sidebarStyle(bg, tint).Render(dot)
+	// No ASCII branch: GetRailBullet already gives up a glyph the terminal
+	// cannot draw and keeps one it can, per glyph rather than per set, so a
+	// branch here would throw away an ASCII-safe set under --ascii-only.
+	return sidebarStyle(bg, tint).Render(config.GetRailBullet())
 }
 
 // sidebarEdgeRule is the one-cell vertical rule separating the rail from the
@@ -1056,7 +1048,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			// so its recorded columns hold whether or not a label precedes it.
 			room := max(cw/2, 1)
 			if hasTermAdd {
-				room = max(room-lipgloss.Width(sidebarAddGlyph)-1, 1)
+				room = max(room-lipgloss.Width(sidebarAddGlyph())-1, 1)
 			}
 			name := sidebarStyle(nil, ink).Render(overlay.Truncate(printableTitle(shown), room))
 			right = name + sidebarStyle(nil, nil).Render(" ") + termAdd
@@ -1355,10 +1347,7 @@ type sidebarFooterZone struct {
 // does: a left rail collapses leftward and reopens rightward, a right rail the
 // other way round. Nothing else about the row mirrors.
 func (m *OS) sidebarCollapseGlyph(variant int) (glyph string, ok bool) {
-	left, right := "«", "»"
-	if overlay.UseASCII() {
-		left, right = "<<", ">>"
-	}
+	left, right := config.GetRailCollapseGlyph(), config.GetRailExpandGlyph()
 	collapse, expand := left, right
 	if config.SidebarPosition == "right" {
 		collapse, expand = right, left

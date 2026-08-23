@@ -1,6 +1,8 @@
 package overlay
 
 import (
+	"sync/atomic"
+
 	"image/color"
 	"strings"
 
@@ -28,8 +30,48 @@ type Panel struct {
 	Hints     []Hint
 }
 
-// sidePad is the number of surface cells padding each side of the content.
-const sidePad = 2
+// DefaultPanelPadding is the surface cells padding each side of a panel's
+// content, and MaxPanelPadding is as wide as it is allowed to get: past this
+// the padding is wider than the narrowest panel the family will draw, so the
+// frame would be mostly margin.
+const (
+	DefaultPanelPadding = 2
+	MaxPanelPadding     = 6
+)
+
+// panelPadding is the padding in effect. It is the one spacing knob the overlay
+// family has, and it is horizontal only.
+//
+// The vertical rhythm is left alone deliberately. A panel's blank rows are
+// counted by its hosts, which budget a body's row count against the screen
+// height before they build one, so a variable count would need every overlay to
+// re-budget and would trade a rice for a family of off-by-one clipping bugs.
+// The horizontal padding has no such reader: FitWidth subtracts it, Render
+// lays out from it, and the geometry a host hit-tests against reports it, so
+// all three agree by construction whatever it is.
+var panelPadding atomic.Int64
+
+// SetPanelPadding sets the cells of surface padding each side of a panel's
+// content. Out-of-range and zero take the default, so a config that has never
+// mentioned it draws what it always drew.
+func SetPanelPadding(cells int) {
+	if cells <= 0 || cells > MaxPanelPadding {
+		cells = DefaultPanelPadding
+	}
+	panelPadding.Store(int64(cells))
+}
+
+// PanelPadding is the padding in effect, for a host that offers it as a
+// setting and has to render the value it currently holds.
+func PanelPadding() int { return sidePad() }
+
+// sidePad is the padding in effect.
+func sidePad() int {
+	if v := panelPadding.Load(); v > 0 {
+		return int(v)
+	}
+	return DefaultPanelPadding
+}
 
 // MinPanelWidth is the narrowest inner content width a panel is asked to lay
 // itself out at. Below this the rows have nowhere to put a marker and a label,
@@ -37,15 +79,16 @@ const sidePad = 2
 const MinPanelWidth = 12
 
 // FitWidth returns the inner content width for a panel that would prefer
-// preferred columns on a screen screenW columns wide. A panel is Width+2*sidePad
-// cells across, so anything wider than the screen minus that padding draws
+// preferred columns on a screen screenW columns wide. A panel is Width plus
+// twice its padding cells across, so anything wider than the screen minus that
+// padding draws
 // outside the screen with its right-hand side simply missing. Callers pass the
 // width they want and get the width they can have.
 func FitWidth(preferred, screenW int) int {
 	if screenW <= 0 {
 		return preferred // size not known yet; the caller's preference stands
 	}
-	avail := screenW - 2*sidePad
+	avail := screenW - 2*sidePad()
 	if avail < preferred {
 		preferred = avail
 	}
@@ -192,12 +235,7 @@ func planTabRun(tabs []string, active, width int) tabRun {
 }
 
 // tabArrows returns the overflow glyphs, honoring ASCII mode.
-func tabArrows() (string, string) {
-	if UseASCII() {
-		return "<", ">"
-	}
-	return "‹", "›"
-}
+func tabArrows() (string, string) { return ArrowLeft(), ArrowRight() }
 
 // glyphPrefix returns the glyph plus a trailing space, honoring ASCII mode.
 func glyphPrefix(glyph string) string {
@@ -331,8 +369,8 @@ func footerRows(hints []Hint, bg color.Color, pal Palette, width int) []string {
 // of its interactive regions in panel-relative coordinates.
 func (p Panel) Render(pal Palette) (string, Geometry) {
 	bg := pal.Surface
-	totalW := p.Width + 2*sidePad
-	pad := Style(bg).Render(strings.Repeat(" ", sidePad))
+	totalW := p.Width + 2*sidePad()
+	pad := Style(bg).Render(strings.Repeat(" ", sidePad()))
 	blank := Style(bg).Render(strings.Repeat(" ", totalW))
 
 	// Every row is padded out to the panel width and, as a backstop, cut down to
@@ -347,7 +385,7 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 	}
 
 	var lines []string
-	geo := Geometry{Width: totalW, InnerWidth: p.Width, BodyX: sidePad}
+	geo := Geometry{Width: totalW, InnerWidth: p.Width, BodyX: sidePad()}
 
 	lines = append(lines, blank) // 0: top pad
 
@@ -358,7 +396,7 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 	lines = append(lines, blank) // 2: blank
 
 	if len(p.Tabs) > 0 {
-		row, rects, prev, next := tabsRow(p.Tabs, p.ActiveTab, bg, pal, sidePad, len(lines), p.Width)
+		row, rects, prev, next := tabsRow(p.Tabs, p.ActiveTab, bg, pal, sidePad(), len(lines), p.Width)
 		lines = append(lines, line(row))
 		geo.Tabs, geo.TabPrev, geo.TabNext = rects, prev, next
 		lines = append(lines, line(Rule(p.Width, bg, pal)))

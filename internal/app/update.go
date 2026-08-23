@@ -1417,7 +1417,12 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Bubble Tea goroutine, so the render loop never reads the globals mid-write.
 		if msg.Config != nil {
 			config.ApplyAppearanceConfig(msg.Config)
-			m.MarkAllDirty()
+			// Retiled, not just repainted. The sidebar's width and side, the
+			// dock's position and the pane gap all change how much room the
+			// panes have, and this path had only ever repainted them: a gap
+			// edited in the file moved the global and left the rectangles where
+			// they were. The other two ways in already retile.
+			m.applyAppearanceLive(true)
 		}
 		return m, nil
 

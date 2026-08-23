@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -348,10 +349,25 @@ func (m *OS) settingsCategories() []settingsCategory {
 		})
 	themeItem.activate = func(m *OS) { m.OpenThemePicker() }
 
+	// The glyph set is the theme's opposite number and sits beside it: the
+	// theme says what colour the chrome is and the set says what shape it is.
+	// A cycler rather than a picker, because the list is four built-ins plus
+	// whatever the user has written rather than several hundred.
+	glyphOptions := theme.AvailableGlyphSets()
+
 	appearance := settingsCategory{
 		Name: "Appearance",
 		Items: []settingItem{
 			themeItem,
+			enumItem("Glyph set", "Characters the border, controls, rules and rail marks are drawn with",
+				glyphOptions,
+				func() string { return config.GlyphSet },
+				func(m *OS, v string) {
+					config.GlyphSet = v
+					theme.SetActiveGlyphs(v)
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Glyphs = v })
+					m.applyAppearanceLive(true)
+				}),
 			enumItem("Border style", "Window border characters", borderStyleOptions,
 				func() string { return config.BorderStyle },
 				func(m *OS, v string) {
@@ -423,6 +439,30 @@ func (m *OS) settingsCategories() []settingsCategory {
 					m.setAppearance(func(a *config.AppearanceConfig) { a.WindowTitleFormat = v })
 					m.applyAppearanceLive(false)
 				}),
+			intItem("Pane gap", "Cells of empty ground between two neighbouring tiled panes",
+				0, config.PaneGapMax, 1,
+				func() int { return config.PaneGap },
+				func(m *OS, v int) {
+					config.PaneGap = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.Gap = v })
+					m.applyAppearanceLive(true)
+				}),
+			intItem("Dim unfocused", "Quiet the content of panes you are not in, as a percent; 0 is off",
+				0, config.DimUnfocusedMax, 5,
+				func() int { return config.DimUnfocused },
+				func(m *OS, v int) {
+					config.DimUnfocused = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.DimUnfocused = v })
+					m.applyAppearanceLive(false)
+				}),
+			intItem("Panel padding", "Columns each side of an overlay panel's content",
+				1, overlay.MaxPanelPadding, 1,
+				func() int { return overlay.PanelPadding() },
+				func(m *OS, v int) {
+					overlay.SetPanelPadding(v)
+					m.setAppearance(func(a *config.AppearanceConfig) { a.PanelPadding = v })
+					m.applyAppearanceLive(false)
+				}),
 			enumItem("Zen mode", "Hide borders of unfocused windows: disabled, always, or mouse (reveal while moving)",
 				config.ZenModeModes,
 				func() string { return config.ZenMode },
@@ -449,6 +489,13 @@ func (m *OS) settingsCategories() []settingsCategory {
 				func(m *OS, v bool) {
 					config.ShowClock = v
 					m.setAppearance(func(a *config.AppearanceConfig) { a.ShowClock = v })
+					m.applyAppearanceLive(false)
+				}),
+			stringItem("Clock format", "Go time layout the clock is drawn with", "Mon 3:04PM", config.DefaultClockFormat,
+				func(_ *OS) string { return config.ClockFormat },
+				func(m *OS, v string) {
+					config.ClockFormat = v
+					m.setAppearance(func(a *config.AppearanceConfig) { a.ClockFormat = v })
 					m.applyAppearanceLive(false)
 				}),
 			boolItem("CPU meter", "Show CPU usage in the dock",

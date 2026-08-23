@@ -255,20 +255,23 @@ func SplitsBetween(rects []Rect, gap int) []SplitLine {
 	var splits []SplitLine
 	for _, a := range rects {
 		for _, b := range rects {
+			// One line per boundary, on the gap's leading column, whatever the
+			// gap is. A line on every column of the gap is what this did, which
+			// is correct at a gap of one and turns a wider gap into a thick
+			// rule: appearance.gap asks for ground between the panes, not for a
+			// wider divider, and the BSP tiler already answers it that way.
 			if b.X == a.X+a.W+gap {
 				if from, to := max(a.Y, b.Y), min(a.Y+a.H, b.Y+b.H)-1; from <= to {
-					for x := a.X + a.W; x < b.X; x++ {
-						f, t := grow(x, from, to, true)
-						splits = append(splits, SplitLine{Vertical: true, Pos: x, From: f, To: t})
-					}
+					x := a.X + a.W
+					f, t := grow(x, from, to, true)
+					splits = append(splits, SplitLine{Vertical: true, Pos: x, From: f, To: t})
 				}
 			}
 			if b.Y == a.Y+a.H+gap {
 				if from, to := max(a.X, b.X), min(a.X+a.W, b.X+b.W)-1; from <= to {
-					for y := a.Y + a.H; y < b.Y; y++ {
-						f, t := grow(y, from, to, false)
-						splits = append(splits, SplitLine{Vertical: false, Pos: y, From: f, To: t})
-					}
+					y := a.Y + a.H
+					f, t := grow(y, from, to, false)
+					splits = append(splits, SplitLine{Vertical: false, Pos: y, From: f, To: t})
 				}
 			}
 		}

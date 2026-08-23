@@ -156,6 +156,15 @@ type Window struct {
 	// CachedContent. They are written only where CachedContent is, so a
 	// rectangle can never be read against a frame it does not describe.
 	CachedContentCols, CachedContentRows int
+	// cachedContentDim is the dim percentage CachedContent was rendered at,
+	// zero for an undimmed frame. It belongs with the two above for the same
+	// reason: a cached frame is only usable by a caller that wants the frame it
+	// actually holds, and once unfocused panes can be dimmed, focus is one of
+	// the things that decides what it holds.
+	//
+	// Unexported behind accessors because nothing outside the render path has
+	// any business setting it, and setting it wrong serves a stale frame.
+	cachedContentDim int
 	// CachedCursor is what this window's cursor was the last time the render
 	// loop could read it: where it is, whether it is hidden, and the shape the
 	// guest asked for. Reading the live one needs the I/O lock, which a pane
