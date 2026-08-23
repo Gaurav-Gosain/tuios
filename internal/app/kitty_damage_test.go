@@ -7,6 +7,8 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -375,11 +377,21 @@ func TestBitmapPatchRoundTripReproducesFrame(t *testing.T) {
 	}
 }
 
-// TestBitmapChunkedPatchRoundTripReproducesFrame covers a patch too large for
-// one APC sequence. A damage rectangle spanning a whole band of RGBA pixels
-// passes the 4096-byte chunk limit at about 96 pixels wide, so a repainting
-// pane of any real size sends chunked patches routinely.
-func TestBitmapChunkedPatchRoundTripReproducesFrame(t *testing.T) {
+// TestBitmapWidePatchIsNeverChunked pins the shape of a patch, not just its
+// pixels.
+//
+// A rectangle wider than one escape can carry used to be split across m=
+// continuation escapes, and this test used to require that split. It passed,
+// because the replay host below reassembles continuations the way the protocol
+// reads. A real kitty does not. A continuation carries no a= key, so kitty
+// routes it to the transmit handler, which finishes the load as a whole image
+// and leaves the image the size of the patch: measured on kitty 0.48.2, a
+// 100x40 patch of a 160x60 image turned the whole image the patch's colour.
+//
+// So the assertion is now the opposite one. Every patch is a single escape
+// with an a= key and no m= key, whatever the shape of the damage, and the
+// round trip still has to reproduce the frame afterwards.
+func TestBitmapWidePatchIsNeverChunked(t *testing.T) {
 	withAnimatingHost(t)
 	kp := newDamagePassthrough(t)
 
@@ -396,6 +408,8 @@ func TestBitmapChunkedPatchRoundTripReproducesFrame(t *testing.T) {
 	}
 	host := newReplayHost(hostID, vt.KittyFormatRGBA, width, height, old)
 
+	// A full-width band: 256 x 8 x 4 bytes is 8192, which is more than twice
+	// what one escape can carry, so the unsplit patch would have been chunked.
 	next := append([]byte(nil), old...)
 	paintRect(next, width, bpp, 0, 0, width, damageBandHeight, 3)
 
@@ -404,13 +418,76 @@ func TestBitmapChunkedPatchRoundTripReproducesFrame(t *testing.T) {
 	if update != bitmapPatched {
 		t.Fatalf("changed frame: update=%v, want bitmapPatched", update)
 	}
-	if seqs := splitAPC(t, out); len(seqs) < 2 {
-		t.Fatalf("expected a chunked patch, got %d sequence(s)", len(seqs))
+
+	seqs := splitAPC(t, out)
+	if len(seqs) < 2 {
+		t.Fatalf("expected the band to be split into several patches, got %d", len(seqs))
+	}
+	for i, seq := range seqs {
+		params, payload, ok := strings.Cut(strings.TrimSuffix(
+			strings.TrimPrefix(string(seq), "\x1b_G"), "\x1b\\"), ";")
+		if !ok {
+			t.Fatalf("patch %d has no payload separator: %q", i, seq)
+		}
+		keys := strings.Split(params, ",")
+		if !slices.Contains(keys, "a=f") {
+			t.Errorf("patch %d does not carry a=f: %q", i, params)
+		}
+		for _, k := range keys {
+			if strings.HasPrefix(k, "m=") {
+				t.Errorf("patch %d is chunked (%s): a continuation escape is "+
+					"not a frame edit, and kitty resizes the image instead of "+
+					"patching it", i, k)
+			}
+		}
+		if len(payload) > 4096 {
+			t.Errorf("patch %d carries %d base64 bytes, more than one escape holds",
+				i, len(payload))
+		}
 	}
 
 	host.replay(t, out)
 	assertHostShowsFrame(t, host, next, width, height, bpp,
-		damageRects(old, next, width, height, bpp))
+		splitPatchRects(damageRects(old, next, width, height, bpp), bpp))
+}
+
+// TestSplitPatchRectsFitOneEscape checks the splitter over shapes that are
+// awkward in both directions: too wide for one escape, too tall, and both.
+func TestSplitPatchRectsFitOneEscape(t *testing.T) {
+	for _, bpp := range []int{3, 4} {
+		for _, r := range []damageRect{
+			{x: 0, y: 0, w: 1, h: 1},
+			{x: 5, y: 7, w: 32, h: 8},
+			{x: 0, y: 0, w: 4096, h: 1},
+			{x: 0, y: 0, w: 1, h: 4096},
+			{x: 11, y: 13, w: 1920, h: 1080},
+		} {
+			got := splitPatchRects([]damageRect{r}, bpp)
+			covered := map[[2]int]bool{}
+			for _, p := range got {
+				if p.w*p.h*bpp > maxPatchPayload {
+					t.Errorf("bpp=%d rect=%+v: piece %+v needs %d bytes, more than one escape holds",
+						bpp, r, p, p.w*p.h*bpp)
+				}
+				if p.x < r.x || p.y < r.y || p.x+p.w > r.x+r.w || p.y+p.h > r.y+r.h {
+					t.Errorf("bpp=%d rect=%+v: piece %+v falls outside it", bpp, r, p)
+				}
+				for y := p.y; y < p.y+p.h; y++ {
+					for x := p.x; x < p.x+p.w; x++ {
+						if covered[[2]int{x, y}] {
+							t.Fatalf("bpp=%d rect=%+v: pixel (%d,%d) is in two pieces",
+								bpp, r, x, y)
+						}
+						covered[[2]int{x, y}] = true
+					}
+				}
+			}
+			if len(covered) != r.w*r.h {
+				t.Errorf("bpp=%d rect=%+v: pieces cover %d pixels, want %d",
+					bpp, r, len(covered), r.w*r.h)
+			}
+		}
+	}
 }
 
 // TestBitmapPatchRoundTripAcrossFrames walks several frames through the same
