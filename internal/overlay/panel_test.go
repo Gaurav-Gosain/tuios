@@ -49,7 +49,7 @@ func TestPanelGeometry(t *testing.T) {
 	}
 	out, geo := p.Render(pal)
 
-	// Total width is inner + 2*sidePad, and every line matches it.
+	// Total width is inner + 2*sidePad(), and every line matches it.
 	if geo.Width != 44 {
 		t.Errorf("Width=%d want 44", geo.Width)
 	}
@@ -68,8 +68,8 @@ func TestPanelGeometry(t *testing.T) {
 	if len(geo.Tabs) != 3 {
 		t.Fatalf("tabs=%d want 3", len(geo.Tabs))
 	}
-	if geo.Tabs[0].X0 != sidePad {
-		t.Errorf("first tab X0=%d want %d", geo.Tabs[0].X0, sidePad)
+	if geo.Tabs[0].X0 != sidePad() {
+		t.Errorf("first tab X0=%d want %d", geo.Tabs[0].X0, sidePad())
 	}
 	for i := 1; i < len(geo.Tabs); i++ {
 		if geo.Tabs[i].X0 != geo.Tabs[i-1].X1 {
@@ -84,7 +84,7 @@ func TestPanelGeometry(t *testing.T) {
 	if geo.BodyY <= geo.Tabs[0].Y0 {
 		t.Errorf("BodyY=%d should be below tabs at %d", geo.BodyY, geo.Tabs[0].Y0)
 	}
-	if geo.BodyX != sidePad || geo.InnerWidth != 40 {
+	if geo.BodyX != sidePad() || geo.InnerWidth != 40 {
 		t.Errorf("BodyX=%d InnerWidth=%d", geo.BodyX, geo.InnerWidth)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/adrg/xdg"
 	"github.com/pelletier/go-toml/v2"
@@ -166,6 +167,10 @@ type AppearanceConfig struct {
 	DockWorkspaceTooltip   *bool  `toml:"dock_workspace_tooltip"`    // Pop a truncated workspace name in full on hover (default: true)
 	DockPillCaps           *bool  `toml:"dock_pill_caps"`            // Powerline caps on the dock's pills (default: false, flat)
 	SessionColors          *bool  `toml:"session_colors"`            // Give each session its own colour on the rail and the switcher (default: true)
+	Glyphs                 string `toml:"glyphs"`                    // Chrome glyph set: default, box, heavy, ascii, or one from ~/.config/tuios/glyphs
+	Gap                    int    `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
+	PanelPadding           int    `toml:"panel_padding"`             // Columns of surface padding inside every overlay panel (default: 2)
+	ClockFormat            string `toml:"clock_format"`              // Go time layout the clock overlay is drawn with (default: 15:04:05)
 
 	// Legacy flat sidebar keys, superseded by the [appearance.sidebar] table.
 	// migrateLegacySidebar folds them into it and clears them, so they are read
@@ -371,6 +376,9 @@ func DefaultConfig() *UserConfig {
 			DockbarPosition:      "bottom",
 			PreferredShell:       "",
 			ClickToType:          ClickToTypeSingle,
+			Glyphs:               theme.GlyphSetNone,
+			PanelPadding:         overlay.DefaultPanelPadding,
+			ClockFormat:          DefaultClockFormat,
 			Scrollbar:            ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
 			Sidebar: SidebarConfig{
 				Position: "left",
@@ -902,6 +910,22 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.ClickToType == "" {
 		cfg.Appearance.ClickToType = defaultCfg.Appearance.ClickToType
 	}
+	if cfg.Appearance.Glyphs == "" {
+		cfg.Appearance.Glyphs = defaultCfg.Appearance.Glyphs
+	}
+	if cfg.Appearance.Gap < 0 {
+		cfg.Appearance.Gap = 0
+	} else if cfg.Appearance.Gap > PaneGapMax {
+		cfg.Appearance.Gap = PaneGapMax
+	}
+	if cfg.Appearance.PanelPadding <= 0 {
+		cfg.Appearance.PanelPadding = defaultCfg.Appearance.PanelPadding
+	} else if cfg.Appearance.PanelPadding > overlay.MaxPanelPadding {
+		cfg.Appearance.PanelPadding = overlay.MaxPanelPadding
+	}
+	if cfg.Appearance.ClockFormat == "" {
+		cfg.Appearance.ClockFormat = defaultCfg.Appearance.ClockFormat
+	}
 	if cfg.Appearance.Scrollbar.Style == "" {
 		cfg.Appearance.Scrollbar.Style = defaultCfg.Appearance.Scrollbar.Style
 	}
@@ -1039,6 +1063,18 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	}
 	HideScrollbar = cfg.Appearance.HideScrollbar
 	ShowClock = cfg.Appearance.ShowClock
+	ClockFormat = cfg.Appearance.ClockFormat
+	PaneGap = min(max(cfg.Appearance.Gap, 0), PaneGapMax)
+	overlay.SetPanelPadding(cfg.Appearance.PanelPadding)
+	// The glyph set is selected here rather than beside the theme, because it
+	// is read through the config globals the render path already goes to and
+	// this is the one funnel those come through. Re-selecting an unchanged id
+	// costs a resolve of a handful of strings.
+	GlyphSet = cfg.Appearance.Glyphs
+	if GlyphSet == "" {
+		GlyphSet = theme.GlyphSetNone
+	}
+	theme.SetActiveGlyphs(GlyphSet)
 	ShowCPU = cfg.Appearance.ShowCPU
 	ShowRAM = cfg.Appearance.ShowRAM
 	NiriReverseScroll = cfg.Appearance.NiriReverseScroll

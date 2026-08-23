@@ -79,7 +79,7 @@ func GetRailExpandGlyph() string {
 // like". The describe verb reports this rather than the set's own fields, so a
 // caller ricing over the protocol sees the frame it is going to get.
 func ResolvedGlyphs() map[string]string {
-	return map[string]string{
+	out := map[string]string{
 		"close":           GetWindowButtonCloseMark(),
 		"maximize":        GetWindowButtonMaximizeMark(),
 		"minimize":        GetWindowButtonMinimizeMark(),
@@ -100,8 +100,25 @@ func ResolvedGlyphs() map[string]string {
 		"scrollbar_track": GetScrollbarTrackChar(),
 		"ellipsis":        overlay.Ellipsis(),
 		"sigil":           overlay.SigilMark(),
-		"border_top_left": GetWindowBorderTopLeft(),
-		"border_top":      GetWindowBorderTop(),
-		"border_left":     GetWindowBorderLeft(),
 	}
+	// The border is reported through the set's own resolution rather than
+	// through GetBorderForStyle, because the two answer different questions.
+	// GetBorderForStyle says what is on screen now, which is border_style's
+	// answer unless border_style is "glyphs"; this says what the set would
+	// draw, which is what a caller inspecting a set is asking. The describe
+	// verb reports border_style alongside so the caller can tell whether the
+	// two are currently the same thing.
+	b := glyphSetBorder()
+	for role, glyph := range map[string]string{
+		"border.top": b.Top, "border.bottom": b.Bottom,
+		"border.left": b.Left, "border.right": b.Right,
+		"border.top_left": b.TopLeft, "border.top_right": b.TopRight,
+		"border.bottom_left": b.BottomLeft, "border.bottom_right": b.BottomRight,
+		"border.middle": b.Middle, "border.middle_top": b.MiddleTop,
+		"border.middle_bottom": b.MiddleBottom,
+		"border.middle_left":   b.MiddleLeft, "border.middle_right": b.MiddleRight,
+	} {
+		out[role] = glyph
+	}
+	return out
 }

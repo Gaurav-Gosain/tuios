@@ -469,6 +469,27 @@ func init() {
 			},
 			handler: (*Daemon).verbListThemes,
 		},
+		"list-glyphs": {
+			description: "List the glyph sets and describe one: the roles it names, and the characters that would actually be drawn if it were selected. A glyph set is the shape half of a rice, the way a theme is the colour half, and like a theme its value is a name from an open set standing for a document kept elsewhere.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "glyphs", Type: "string", Description: "Describe this set as well as listing. Omit to list only."},
+			},
+			returns: []verbParam{
+				{Name: "sets", Type: "[]string", Description: "Every set id, built-ins first and then the user's."},
+				{Name: "roles", Type: "[]string", Description: "Every role a set can name, which is what to write in a set file."},
+				{Name: "total", Type: "int", Description: "How many sets there are."},
+				{Name: "glyphs_dir", Type: "string", Description: "Directory user sets are read from; write <id>.json there."},
+				{Name: "active", Type: "string", Description: "The set in effect, with active_source saying whether it came from the session or the default."},
+				{Name: "problems", Type: "[]string", Description: "One line per set file that could not be read and per role dropped for being the wrong width. Present only when there are any."},
+				{Name: "set", Type: "object", Description: "Present when glyphs was given: id, display_name, inherits, ascii, names (the roles the set states) and drawn (the character each role would actually render as, defaults folded in)."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"list-glyphs","params":{}}`,
+				`{"id":1,"verb":"list-glyphs","params":{"session":"work","glyphs":"heavy"}}`,
+			},
+			handler: (*Daemon).verbListGlyphs,
+		},
 		"get-option": {
 			description: "Read an option, preferring what this session was told and falling back to what the option does untold.",
 			params: []verbParam{

@@ -1357,6 +1357,53 @@ a restart.`,
 	listThemesCmd.Flags().BoolVar(&listThemesJSON, "json", false, "Output as JSON")
 	_ = listThemesCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var listGlyphsSession string
+	var listGlyphsJSON bool
+	listGlyphsCmd := &cobra.Command{
+		Use:   "list-glyphs [set]",
+		Short: "List the glyph sets, and describe one",
+		Long: `List every glyph set and, given a name, print role by role what the set says
+and what would actually be drawn.
+
+A glyph set is the shape half of a rice, the way a theme is the colour half: it
+says which corner the border turns, what the window controls are pictures of,
+what a rule is drawn with and which mark the rail wears. Like a theme its value
+is a name from an open set rather than a setting with a closed list, so this is
+how to find one rather than guess it.
+
+The two columns are different on purpose. A set states only the roles it
+changes, and a role whose glyph is the wrong width for the slot it lands in is
+dropped back to the default with nothing on screen to say so, because the
+alternative is a window control the pointer no longer lands on. The second
+column is what draws.
+
+Writing <id>.json in the glyphs directory registers that set; the directory is
+re-read on every call, so a set authored a moment ago can be selected without a
+restart. Give it "inherits" to start from a built-in and change one mark.`,
+		Example: `  # What sets are there, and what roles can a set name
+  tuios list-glyphs
+
+  # What does this set actually draw
+  tuios list-glyphs heavy
+
+  # Select one
+  tuios set-config appearance.glyphs heavy
+
+  # The roles a set asked for and did not get
+  tuios list-glyphs mine --json | jq -r '.problems[]?'`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := ""
+			if len(args) > 0 {
+				name = args[0]
+			}
+			return runListGlyphs(listGlyphsSession, name, listGlyphsJSON)
+		},
+	}
+	listGlyphsCmd.Flags().StringVarP(&listGlyphsSession, "session", "s", "", "Target session (default: most recently active)")
+	listGlyphsCmd.Flags().BoolVar(&listGlyphsJSON, "json", false, "Output as JSON")
+	_ = listGlyphsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
 	var importThemeName string
 	var importThemeJSON bool
 	importThemeCmd := &cobra.Command{
@@ -1797,7 +1844,7 @@ Name a verb to describe only that verb.`,
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(splitWindowCmd, focusWindowCmd, moveWindowCmd, setWindowCmd)
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
-	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, importThemeCmd)
+	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd)
 
 	return rootCmd
 }

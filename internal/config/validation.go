@@ -5,9 +5,19 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
+	"unicode"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
+
+// clockFormatSample renders a layout against a fixed time, so a warning can say
+// what the user's layout actually produces rather than name the rule it broke.
+// The reference instant is Go's own, which is what makes a layout a layout.
+func clockFormatSample(format string) string {
+	return time.Date(2006, 1, 2, 15, 4, 5, 0, time.UTC).Format(format)
+}
 
 // ValidationError represents a validation error or warning
 type ValidationError struct {
@@ -285,8 +295,56 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("whichkey_position", cfg.Appearance.WhichKeyPosition, WhichKeyPositions)
 	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition, WindowTitlePositions)
 	validateTitleFormat(cfg.Appearance.WindowTitleFormat, result)
+	validateGlyphSet(cfg, result)
+	validateClockFormat(cfg.Appearance.ClockFormat, result)
 	validateBorderColors(cfg, result)
 	validateScrollbar(cfg, result)
+}
+
+// validateGlyphSet warns about a set that does not resolve, and repeats the
+// lines the directory read produced.
+//
+// The set's own problems are surfaced here rather than only logged because they
+// are the answer to "why is my set half applied": a role dropped for being the
+// wrong width is silent on screen, and it is exactly the mistake a hand-written
+// set makes.
+func validateGlyphSet(cfg *UserConfig, result *ValidationResult) {
+	id := cfg.Appearance.Glyphs
+	if id != "" && !theme.GlyphSetExists(id) {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "appearance",
+			Key:     "glyphs",
+			Message: fmt.Sprintf("'%s' is not a glyph set (see list-glyphs); the built-in glyphs are used instead", id),
+		})
+	}
+	for _, p := range theme.GlyphSetProblems() {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field: "appearance", Key: "glyphs", Message: p,
+		})
+	}
+}
+
+// validateClockFormat warns about a layout that formats to nothing.
+//
+// Go's time layouts have no syntax to be wrong at: any string is a layout, and
+// one with no reference-time component in it formats to itself. That is a
+// legitimate thing to want ("REC" as a clock is a fixed label), so this warns
+// only about the case a user cannot have meant, which is a layout whose output
+// carries no digit at all after a real time is put through it.
+func validateClockFormat(format string, result *ValidationResult) {
+	if format == "" {
+		return
+	}
+	rendered := clockFormatSample(format)
+	if strings.ContainsFunc(rendered, unicode.IsDigit) {
+		return
+	}
+	result.Warnings = append(result.Warnings, ValidationError{
+		Field: "appearance",
+		Key:   "clock_format",
+		Message: fmt.Sprintf("'%s' formats to '%s', which has no time in it; see the Go time layout reference",
+			format, rendered),
+	})
 }
 
 // hexColorPattern matches the one colour literal the config accepts.

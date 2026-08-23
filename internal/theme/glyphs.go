@@ -540,3 +540,49 @@ func Glyphs() *GlyphSet {
 	}
 	return emptyGlyphs
 }
+
+// The reflection-free introspection the describe verb needs. It is here rather
+// than in the verb because the role table is here, and a second table written
+// beside the verb would be the copy that goes stale the moment a role is added.
+
+// borderRoleNames names the border's runes, in the order borderFields returns
+// them, so the two are read together or not at all.
+var borderRoleNames = []string{
+	"top", "bottom", "left", "right",
+	"top_left", "top_right", "bottom_left", "bottom_right",
+	"middle", "middle_top", "middle_bottom", "middle_left", "middle_right",
+}
+
+// GlyphRoleNames is every scalar role a set can name.
+func GlyphRoleNames() []string {
+	names := make([]string, 0, len(glyphRoles))
+	for _, r := range glyphRoles {
+		names = append(names, r.name)
+	}
+	return names
+}
+
+// GlyphBorderRoleNames is every rune of the border a set can name.
+func GlyphBorderRoleNames() []string {
+	return append([]string(nil), borderRoleNames...)
+}
+
+// GlyphSetRoles is the set's scalar roles by name. A role the set leaves alone
+// reads as the empty string.
+func GlyphSetRoles(set *GlyphSet) map[string]string {
+	out := make(map[string]string, len(glyphRoles))
+	for _, r := range glyphRoles {
+		out[r.name] = *r.field(set)
+	}
+	return out
+}
+
+// GlyphSetBorderRoles is the border's runes by name.
+func GlyphSetBorderRoles(b *BorderGlyphs) map[string]string {
+	fields := borderFields(b)
+	out := make(map[string]string, len(fields))
+	for i, name := range borderRoleNames {
+		out[name] = *fields[i]
+	}
+	return out
+}

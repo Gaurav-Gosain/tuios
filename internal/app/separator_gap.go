@@ -20,16 +20,21 @@ func (m *OS) panesBorderless() bool {
 
 // separatorGap is the columns the layout keeps between two neighbouring panes.
 //
-// Borderless panes need one: their rectangles are guest output from edge to
-// edge, and the divider the user sees is an overlay painted in the column
-// between them. Panes drawing their own borders need none. Their two adjacent
-// border columns already divide them, so a third column would draw nothing,
-// and every pane on that side of every split would be a column narrower for it.
+// Borderless panes need one whatever the user asked for: their rectangles are
+// guest output from edge to edge, and the divider the user sees is an overlay
+// painted in the column between them, so a gap of zero there leaves the divider
+// nowhere to go. Panes drawing their own borders need none by default. Their
+// two adjacent border columns already divide them, so a third column would draw
+// nothing, and every pane on that side of every split would be a column
+// narrower for it.
+//
+// appearance.gap is what the user adds on top of that floor, which is i3's
+// inner gap: empty ground between the panes, not a wider divider.
 func (m *OS) separatorGap() int {
 	if m.panesBorderless() {
-		return 1
+		return max(config.PaneGap, 1)
 	}
-	return 0
+	return config.PaneGap
 }
 
 // reclaimSeparatorGaps re-lays-out every workspace's panes at the gap the

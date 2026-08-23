@@ -51,16 +51,16 @@ func TestAddControlRectsMatchTheirDrawnCells(t *testing.T) {
 					// Both edge columns: the first cell the rect claims carries the
 					// glyph, and the cell past its end does not.
 					first := h.X0 - railX0
-					if first < 0 || first >= len(row) || string(row[first]) != sidebarAddGlyph {
+					if first < 0 || first >= len(row) || string(row[first]) != sidebarAddGlyph() {
 						t.Errorf("%v: rect starts at column %d, which draws %q not %q",
-							h.Kind, first, safeRune(row, first), sidebarAddGlyph)
+							h.Kind, first, safeRune(row, first), sidebarAddGlyph())
 					}
-					if last := h.X1 - railX0; last < len(row) && string(row[last]) == sidebarAddGlyph {
+					if last := h.X1 - railX0; last < len(row) && string(row[last]) == sidebarAddGlyph() {
 						t.Errorf("%v: the cell past the rect at column %d still draws the glyph", h.Kind, last)
 					}
 					// And the rect is exactly the glyph's width.
-					if h.X1-h.X0 != len([]rune(sidebarAddGlyph)) {
-						t.Errorf("%v: rect is %d cells for a %d-cell glyph", h.Kind, h.X1-h.X0, len([]rune(sidebarAddGlyph)))
+					if h.X1-h.X0 != len([]rune(sidebarAddGlyph())) {
+						t.Errorf("%v: rect is %d cells for a %d-cell glyph", h.Kind, h.X1-h.X0, len([]rune(sidebarAddGlyph())))
 					}
 				}
 			})
@@ -79,7 +79,7 @@ func TestAgentsHeaderHasNoAddControl(t *testing.T) {
 	if agentsLine < 0 {
 		t.Fatal("the fixture drew no agents header")
 	}
-	if strings.Contains(lines[agentsLine], sidebarAddGlyph) {
+	if strings.Contains(lines[agentsLine], sidebarAddGlyph()) {
 		t.Errorf("the agents header reads %q, want no add control on it", lines[agentsLine])
 	}
 	for _, h := range m.SidebarHits {
@@ -244,7 +244,7 @@ func TestNarrowHeaderDropsTheAddControlWholeOrNotAtAll(t *testing.T) {
 			if h.X0 < 0 || h.X1 > railW {
 				t.Errorf("w=%d: %v spans [%d,%d) outside a %d-wide rail", w, h.Kind, h.X0, h.X1, railW)
 			}
-			if c := h.X0; c >= len(row) || string(row[c]) != sidebarAddGlyph {
+			if c := h.X0; c >= len(row) || string(row[c]) != sidebarAddGlyph() {
 				t.Errorf("w=%d: %v claims column %d, which draws %q", w, h.Kind, c, safeRune(row, c))
 			}
 		}

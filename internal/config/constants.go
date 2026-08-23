@@ -760,6 +760,40 @@ var NiriReverseScroll = false
 // Set via appearance.leader_key config
 var LeaderKey = "ctrl+b"
 
+// PaneGap is the cells of empty space the tiler keeps between two neighbouring
+// panes: i3's inner gap, and about the only spacing a terminal window manager
+// can honestly offer.
+//
+// Inner only. An outer gap would have to inset the content region, which the
+// sidebar's width, the dock's height, every overlay's placement and every mouse
+// hit test are measured against, so a margin the sidebar already draws one of
+// would cost a move of the whole frame.
+var PaneGap = 0
+
+// PaneGapMax caps it. Past this the panes on a small terminal are further apart
+// than they are wide, and spacing that swallows what it spaces has stopped
+// being spacing.
+const PaneGapMax = 8
+
+// ClockFormat is the Go time layout the clock overlay draws with. Empty takes
+// DefaultClockFormat.
+//
+// A layout rather than a set of toggles, for the reason window_title_format is
+// one: "seconds on or off" is two of the questions people actually have about a
+// clock, and the standard library already has a spelling for all of them.
+var ClockFormat = ""
+
+// DefaultClockFormat is what the clock has always drawn.
+const DefaultClockFormat = "15:04:05"
+
+// GetClockFormat returns the layout in effect.
+func GetClockFormat() string {
+	if ClockFormat == "" {
+		return DefaultClockFormat
+	}
+	return ClockFormat
+}
+
 // ZoomMaxWidth is the maximum width in cells for zoom/zen mode.
 // 0 means fullscreen (no max width cap). When set (e.g., 120), the zoomed
 // window is centered horizontally and capped at this width.
