@@ -149,5 +149,7 @@ want. Define the bright variants explicitly.
 
 ## Related Documentation
 
+- [GLYPHS.md](GLYPHS.md) - the shape half of the same question: the characters
+  the chrome is drawn with
 - [CONFIGURATION.md](CONFIGURATION.md) - the config file and every other option
 - [CLI_REFERENCE.md](CLI_REFERENCE.md) - `--theme`, `--list-themes`, `--preview-theme`

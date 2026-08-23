@@ -26,6 +26,7 @@ Full documentation is available at **[tuios-docs](https://tuios.gaurav.zip)** (h
 - **[Configuration](docs/CONFIGURATION.md)** - Customize keybindings, themes, and behavior
 - **[Hooks](docs/HOOKS.md)** - Run shell commands on window and session events
 - **[Themes](docs/THEMES.md)** - Built-in themes and custom theme JSON
+- **[Glyph sets](docs/GLYPHS.md)** - The characters the chrome is drawn with
 - **[CLI Reference](docs/CLI_REFERENCE.md)** - All command-line options
 - **[Tape Scripting](docs/TAPE_SCRIPTING.md)** - Automate workflows
 - **[Sessions](docs/SESSIONS.md)** - Daemon mode, attach/detach, and what survives
