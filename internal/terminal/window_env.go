@@ -19,19 +19,30 @@ import (
 // Guarded because windows can be created from the update loop while the
 // capabilities are refreshed on reattach.
 var (
-	graphicsMu        sync.RWMutex
-	kittyGraphicsHost bool
-	sixelGraphicsHost bool
+	graphicsMu         sync.RWMutex
+	kittyGraphicsHost  bool
+	sixelGraphicsHost  bool
+	kittyAnimationHost bool
 )
 
 // SetGraphicsCapabilities records which graphics protocols tuios can forward to
 // the host terminal. Windows created afterwards advertise a matching terminal
-// identity to their shell (see guestenv.TermProgram).
-func SetGraphicsCapabilities(kitty, sixel bool) {
+// identity to their shell (see guestenv.TermProgram) and are told whether
+// frame edits get through (see guestenv.KittyAnimationVar).
+func SetGraphicsCapabilities(kitty, sixel, animation bool) {
 	graphicsMu.Lock()
 	defer graphicsMu.Unlock()
 	kittyGraphicsHost = kitty
 	sixelGraphicsHost = sixel
+	kittyAnimationHost = animation
+}
+
+// guestKittyAnimation returns the TUIOS_KITTY_ANIMATION value for a newly
+// spawned shell.
+func guestKittyAnimation() string {
+	graphicsMu.RLock()
+	defer graphicsMu.RUnlock()
+	return guestenv.KittyAnimationVar(kittyGraphicsHost && kittyAnimationHost)
 }
 
 // guestTermProgram returns the TERM_PROGRAM value for a newly spawned shell.

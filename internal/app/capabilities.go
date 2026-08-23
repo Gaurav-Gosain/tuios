@@ -242,14 +242,7 @@ func probeTerminal(caps *HostCapabilities) {
 		fmt.Fprintf(&q, "\x1b_Gi=2,a=q,t=f,f=24,s=1,v=1;%s\x1b\\",
 			base64.StdEncoding.EncodeToString([]byte(probeFile)))
 	}
-	// Animation cannot be asked about with a=q, so it is tried instead: put a
-	// one-pixel image up quietly, edit its root frame, and see whether the
-	// edit is acknowledged. The transmit and the delete are q=2 so only the
-	// a=f speaks, and the image is never placed, so nothing reaches the
-	// screen either way.
-	q.WriteString("\x1b_Gi=3,a=t,f=32,s=1,v=1,q=2;AAAAAA==\x1b\\")
-	q.WriteString("\x1b_Gi=3,a=f,f=32,s=1,v=1,r=1,X=1,x=0,y=0;AAAAAA==\x1b\\")
-	q.WriteString("\x1b_Gi=3,a=d,d=I,q=2\x1b\\")
+	writeAnimationProbe(&q)
 	q.WriteString("\x1b[c") // DA1 last, so its reply closes the whole batch
 	_, _ = tty.WriteString(q.String())
 
@@ -279,23 +272,98 @@ func parseGraphicsSupport(caps *HostCapabilities, response string, probedFile bo
 	// transmissions as direct ones. That costs a copy but always renders;
 	// guessing the other way renders nothing at all.
 	caps.KittyFileTransfer = probedFile && kittyProbeOK(response, 2)
-	// Same rule for animation: an explicit OK to the i=3 frame edit, or no
-	// claim at all.
-	caps.KittyAnimation = caps.KittyGraphics && kittyProbeOK(response, 3)
+	// Same rule for animation, doubled: the frame edit that must be accepted
+	// has to be accepted, and the one that must be refused has to be refused.
+	// See writeAnimationProbe for why one answer is not enough.
+	caps.KittyAnimation = caps.KittyGraphics &&
+		kittyProbeOK(response, animationProbeAccept) &&
+		kittyProbeRefused(response, animationProbeReject)
 }
 
-// kittyProbeOK reports whether the host answered "OK" to the a=q probe sent
-// with the given image id.
+// animationProbeAccept and animationProbeReject are the image ids of the two
+// halves of the animation probe. They are told apart in the reply the same way
+// as the other probes, by the id the terminal echoes back.
+const (
+	animationProbeAccept = 3
+	animationProbeReject = 4
+)
+
+// writeAnimationProbe appends a test of a=f that a host which gets frame edits
+// wrong has to fail.
+//
+// Animation cannot be asked about with a=q, so it is tried. The obvious try --
+// a one-pixel image with a one-pixel patch -- cannot fail. The patch covers the
+// whole image, so a host that reads s= and v= as the patch rectangle (which is
+// right) and a host that reads them as the image's new size (which is wrong,
+// and leaves the image the size of the patch) behave identically and both
+// answer OK. That probe could not fail for the terminal it existed to catch.
+//
+// So here the patch is smaller than the image, and what is checked afterwards
+// is the image's size:
+//
+//   - id 3 is four pixels wide, is patched one pixel wide, and is then asked to
+//     take a four-pixel-wide frame. A host that kept the image four wide
+//     accepts. A host that shrank it to the patch has to answer that the frame
+//     is wider than the image.
+//   - id 4 is four pixels wide, is never patched, and is asked to take a
+//     nine-pixel-wide frame. That is out of bounds on any host that checks, so
+//     the answer must be an error. This half catches a relay that acknowledges
+//     frame edits and drops them: it answers OK to everything, including this.
+//
+// Support is claimed only when the first is accepted and the second refused.
+// Neither image is ever placed, so nothing reaches the screen either way, and
+// both are deleted afterwards.
+//
+// Every payload fits one escape. A payload split across m= continuations is
+// not a frame edit at all: a continuation carries no a= key, so the terminal
+// routes it to the transmit handler and finishes the load as a new image.
+func writeAnimationProbe(q *strings.Builder) {
+	px := func(n int) string {
+		return base64.StdEncoding.EncodeToString(make([]byte, n*4))
+	}
+	fmt.Fprintf(q, "\x1b_Gi=%d,a=t,f=32,s=4,v=1,q=2;%s\x1b\\", animationProbeAccept, px(4))
+	fmt.Fprintf(q, "\x1b_Gi=%d,a=f,r=1,X=1,x=0,y=0,s=1,v=1,f=32,q=2;%s\x1b\\", animationProbeAccept, px(1))
+	fmt.Fprintf(q, "\x1b_Gi=%d,a=f,r=1,X=1,x=0,y=0,s=4,v=1,f=32;%s\x1b\\", animationProbeAccept, px(4))
+	fmt.Fprintf(q, "\x1b_Gi=%d,a=t,f=32,s=4,v=1,q=2;%s\x1b\\", animationProbeReject, px(4))
+	fmt.Fprintf(q, "\x1b_Gi=%d,a=f,r=1,X=1,x=0,y=0,s=9,v=1,f=32;%s\x1b\\", animationProbeReject, px(9))
+	fmt.Fprintf(q, "\x1b_Gi=%d,a=d,d=I,q=2\x1b\\", animationProbeAccept)
+	fmt.Fprintf(q, "\x1b_Gi=%d,a=d,d=I,q=2\x1b\\", animationProbeReject)
+}
+
+// kittyProbeOK reports whether the host answered "OK" to the probe sent with
+// the given image id.
 func kittyProbeOK(response string, id int) bool {
-	re := regexp.MustCompile(`\x1b_G([^;\x1b]*);([^\x1b]*)\x1b\\`)
+	answer, answered := kittyProbeAnswer(response, id)
+	return answered && strings.HasPrefix(answer, "OK")
+}
+
+// kittyProbeRefused reports whether the host answered the probe sent with the
+// given image id, and answered it with an error.
+//
+// Silence is not a refusal. A host that says nothing has not shown it can tell
+// a valid frame edit from an invalid one, so it earns no claim of support.
+func kittyProbeRefused(response string, id int) bool {
+	answer, answered := kittyProbeAnswer(response, id)
+	return answered && !strings.HasPrefix(answer, "OK")
+}
+
+// kittyProbeResponse matches one graphics reply: its parameters and its
+// message. Compiled once because the probe walks it several times.
+var kittyProbeResponse = regexp.MustCompile(`\x1b_G([^;\x1b]*);([^\x1b]*)\x1b\\`)
+
+// kittyProbeAnswer returns the message the host sent for the given image id,
+// and whether it answered at all. The first answer for an id wins: a terminal
+// echoes the id it was asked about, so a later reply belongs to a later
+// command.
+func kittyProbeAnswer(response string, id int) (string, bool) {
 	want := fmt.Sprintf("i=%d", id)
-	for _, m := range re.FindAllStringSubmatch(response, -1) {
+	for _, m := range kittyProbeResponse.FindAllStringSubmatch(response, -1) {
 		if !slices.Contains(strings.Split(m[1], ","), want) {
 			continue
 		}
-		return strings.HasPrefix(m[2], "OK")
+		return m[2], true
 	}
-	return false
+	return "", false
 }
 
 // writeGraphicsProbeFile stages a one-pixel RGB payload on disk for the

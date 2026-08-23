@@ -120,6 +120,7 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 - **Kitty Keyboard Protocol** - Progressive enhancement (CSI u) with push/pop/query support. Fish 4.x compatible; Shift+printable bypasses the protocol and sends text directly.
 - **Synchronized Output** - Mode 2026 prevents screen tearing
 - **Shared Memory Support** - `t=s` passthrough for mpv `--vo-kitty-use-shm`
+- **Animation Frames** - A guest's `a=f` frame edits are forwarded to the host, so a program that patches its own image costs a rectangle instead of a whole bitmap. TUIOS also patches guests that only retransmit. Panes are told whether the host carries frame edits through `TUIOS_KITTY_ANIMATION`, because the host's reply is not relayed back into the pane and a guest cannot find out for itself.
 - **Terminal Queries** - OSC 4 palette, OSC 10-12 colors, CSI 14/16/18t sizing, DA1/DA2
 - **Experimental** - Kitty text sizing protocol (OSC 66) - basic passthrough works but has known issues with scrollback and window repositioning
 - **Kitty Animation Protocol** - Frame transmission, composition, and control (a=f, a=a, a=c), with damage-patch streaming for animated guests

@@ -49,6 +49,20 @@ const (
 	// changes everywhere should go back to the delivery path built for large
 	// frames rather than pay the diff on each one.
 	maxFullFallbacks = 8
+	// maxPatchPayload is the most raw pixel data one frame edit may carry.
+	//
+	// A kitty escape holds at most 4096 base64 characters of payload, and a
+	// longer one has to be split across m= continuation escapes. That split
+	// cannot be used for a frame edit. A continuation carries no a= key, so
+	// the terminal routes it to the transmit handler, which finishes the load
+	// as a whole image and leaves the image the size of the patch. Measured on
+	// kitty 0.48.2, a 100x40 patch of a 160x60 image turned the whole image
+	// the patch's colour; repeating a=f on the continuation loses the patch
+	// instead, which is quieter and no more correct.
+	//
+	// So a patch is one escape or it is not a patch, and a rectangle too big
+	// for one escape is cut into rectangles that are not.
+	maxPatchPayload = 4096 / 4 * 3
 )
 
 // bitmapCache is the last bitmap sent to the host for one image, kept so the
@@ -123,7 +137,7 @@ func (kp *KittyPassthrough) emitBitmap(
 		return bitmapFull
 	}
 
-	rects := damageRects(prev.data, raw, width, height, bpp)
+	rects := splitPatchRects(damageRects(prev.data, raw, width, height, bpp), bpp)
 	if len(rects) == 0 {
 		kp.rememberBitmap(windowID, hostID, format, width, height, raw, false)
 		return bitmapFull
@@ -448,6 +462,40 @@ func tileDiffers(prev, cur []byte, stride, bpp, x, y, w, h int) bool {
 	return false
 }
 
+// splitPatchRects cuts every rectangle down until its pixels fit in one frame
+// edit escape, because a patch split across continuation escapes is not a
+// patch (see maxPatchPayload).
+//
+// Columns are cut first, so a rectangle narrow enough to send whole rows keeps
+// sending whole rows: those are one contiguous run of memory per row and the
+// cheapest thing to copy. Only a rectangle wider than a whole escape can hold
+// is cut sideways.
+func splitPatchRects(rects []damageRect, bpp int) []damageRect {
+	if bpp <= 0 {
+		return nil
+	}
+	maxW := maxPatchPayload / bpp
+	if maxW < 1 {
+		return nil
+	}
+	out := rects[:0:0]
+	for _, r := range rects {
+		for x := 0; x < r.w; x += maxW {
+			w := min(maxW, r.w-x)
+			rows := maxPatchPayload / (w * bpp)
+			if rows < 1 {
+				rows = 1
+			}
+			for y := 0; y < r.h; y += rows {
+				out = append(out, damageRect{
+					x: r.x + x, y: r.y + y, w: w, h: min(rows, r.h-y),
+				})
+			}
+		}
+	}
+	return out
+}
+
 // buildFramePatch writes one damage rectangle as an a=f edit of the image's
 // root frame. r=1 names that frame, which is the bitmap the placement already
 // shows, and X=1 overwrites rather than blends, so the patch is exactly the
@@ -468,28 +516,17 @@ func buildFramePatch(
 		pixels = append(pixels, raw[lo:lo+rowBytes]...)
 	}
 
-	encoded := base64.StdEncoding.EncodeToString(pixels)
-	const chunkSize = 4096
-	var out bytes.Buffer
-	for i := 0; i < len(encoded); i += chunkSize {
-		end := min(i+chunkSize, len(encoded))
-		more := end < len(encoded)
-
-		out.WriteString("\x1b_G")
-		if i == 0 {
-			fmt.Fprintf(&out, "a=f,i=%d,r=1,X=1,f=%d,s=%d,v=%d,x=%d,y=%d,q=2",
-				hostID, format, r.w, r.h, r.x, r.y)
-		} else {
-			fmt.Fprintf(&out, "i=%d,q=2", hostID)
-		}
-		if more {
-			out.WriteString(",m=1")
-		} else if i > 0 {
-			out.WriteString(",m=0")
-		}
-		out.WriteByte(';')
-		out.WriteString(encoded[i:end])
-		out.WriteString("\x1b\\")
+	// One escape, and no m= key at all. Callers hand this rectangles that
+	// already fit; a rectangle that does not is a bug in the splitter, and
+	// sending it in chunks would silently replace the image rather than patch
+	// it, so it is dropped instead.
+	if len(pixels) > maxPatchPayload {
+		return nil
 	}
+	var out bytes.Buffer
+	fmt.Fprintf(&out, "\x1b_Ga=f,i=%d,r=1,X=1,f=%d,s=%d,v=%d,x=%d,y=%d,q=2;",
+		hostID, format, r.w, r.h, r.x, r.y)
+	out.WriteString(base64.StdEncoding.EncodeToString(pixels))
+	out.WriteString("\x1b\\")
 	return out.Bytes()
 }
