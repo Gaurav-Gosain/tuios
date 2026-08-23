@@ -227,8 +227,11 @@ type OS struct {
 	dockCustomHits         []dockCustomHit         // where the custom components were drawn last frame
 	dockPlan               dockPlan                // which components are on which side, in draw order
 	dockEngine             *dockEngine             // refresh scheduler for the components that move on their own
-	ClipboardContent       string                  // Store clipboard content from tea.ClipboardMsg
-	ShowCacheStats         bool                    // True when showing style cache statistics overlay
+	// RemoteCommandChan carries a verb the daemon routed to this client, for
+	// the hosts that cannot Send into the program directly. See dock_remote.go.
+	RemoteCommandChan chan RemoteCommandMsg
+	ClipboardContent  string // Store clipboard content from tea.ClipboardMsg
+	ShowCacheStats    bool   // True when showing style cache statistics overlay
 	// Quit menu state. The menu replaces the old yes/no quit dialog: a small
 	// list overlay on the shared list-overlay grammar, registered in OverlayHits
 	// as kind "quit" so hover, click and click-away routing come from the same
