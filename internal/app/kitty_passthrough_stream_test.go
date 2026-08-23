@@ -37,11 +37,15 @@ func TestStreamedFileFrameIsPlacedEveryFrame(t *testing.T) {
 
 	imgW, imgH := (100-2)*10, (40-2)*20
 	path := filepath.Join(t.TempDir(), "frame")
-	if err := os.WriteFile(path, []byte("frame"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 
 	for frame := 1; frame <= 4; frame++ {
+		// New pixels behind the same id, which is what a stream sends and what
+		// the placement has to follow. Re-advertising the same bytes is a
+		// different thing entirely - a frame the host is already showing - and
+		// is covered by TestRepeatFileFrameIsNotForwarded.
+		if err := os.WriteFile(path, []byte{byte(frame)}, 0o600); err != nil {
+			t.Fatal(err)
+		}
 		streamFileFrame(em, 2, imgW, imgH, path)
 		if placed := countCmd(refresh(), "a=p,"); placed == 0 {
 			t.Errorf("frame %d was transmitted and never placed; the pane still shows frame %d",

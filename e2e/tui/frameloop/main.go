@@ -66,11 +66,22 @@ func main() {
 		transport = os.Args[4]
 	}
 
-	// One shared memory object per size, never rewritten once advertised. A
-	// terminal maps the object it is handed, and truncating it under the map
-	// is a bus error in the reader rather than a torn frame.
+	// One shared memory object per size, and the object is never resized once
+	// advertised: a terminal maps what it is handed, and truncating it under
+	// the map is a bus error in the reader rather than a torn frame. Its
+	// contents are another matter, and are rewritten in place for every frame.
+	//
+	// A buffer that is filled once and then advertised over and over is not a
+	// stream, it is one picture announced repeatedly, and a passthrough is
+	// entitled to notice that the host is already showing it. Standing in for a
+	// video player means painting something different each time, the way the
+	// direct transport's stand-in already did.
 	var made []string
+	var shmFile *os.File
 	defer func() {
+		if shmFile != nil {
+			_ = shmFile.Close()
+		}
 		for _, n := range made {
 			_ = os.Remove("/dev/shm/" + n)
 		}
@@ -81,20 +92,29 @@ func main() {
 	var pixW, pixH int
 	allocate := func(w, h int) error {
 		gen++
+		pix = make([]byte, w*h*4)
+		for i := range pix {
+			pix[i] = byte((i + gen*37) * 7)
+		}
+		pixW, pixH = w, h
 		if transport == "b64" {
-			// A distinguishable bitmap, so a frame that is not the current one
-			// is visible as such rather than as identical grey.
-			pix = make([]byte, w*h*4)
-			for i := range pix {
-				pix[i] = byte((i + gen*37) * 7)
-			}
-			pixW, pixH = w, h
 			return nil
 		}
 		name := fmt.Sprintf("tuios-frameloop-%d-%d", os.Getpid(), gen)
-		if err := os.WriteFile("/dev/shm/"+name, make([]byte, w*h*4), 0o600); err != nil {
+		path := "/dev/shm/" + name
+		if err := os.WriteFile(path, pix, 0o600); err != nil {
 			return err
 		}
+		if shmFile != nil {
+			_ = shmFile.Close()
+		}
+		// Kept open and written through at offset zero from here on, so the
+		// object is never truncated under a terminal that has it mapped.
+		f, err := os.OpenFile(path, os.O_WRONLY, 0o600)
+		if err != nil {
+			return err
+		}
+		shmFile = f
 		made = append(made, name)
 		encoded = base64.StdEncoding.EncodeToString([]byte(name))
 		return nil
@@ -166,15 +186,20 @@ func main() {
 				report(cols, rows, xpx, ypx)
 			}
 		case <-tick.C:
+			// Every frame differs, the way an animating guest's does, so no
+			// frame is the picture already on screen.
+			seq++
+			for i := 0; i < len(pix); i += 4099 {
+				pix[i] = byte(seq)
+			}
 			if transport == "b64" {
-				// Every frame differs, the way an animating guest's does, so
-				// the transmission is not suppressed as a repeat.
-				seq++
-				for i := 0; i < len(pix); i += 4099 {
-					pix[i] = byte(seq)
-				}
 				_, _ = os.Stdout.Write(buildB64Frame(pix, pixW, pixH))
 				continue
+			}
+			if shmFile != nil {
+				if _, err := shmFile.WriteAt(pix, 0); err != nil {
+					return
+				}
 			}
 			fmt.Printf("\x1b[H\x1b_Ga=T,f=32,t=s,s=%d,v=%d,i=1,q=2,C=1;%s\x1b\\",
 				xpx, ypx, encoded)
