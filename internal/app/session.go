@@ -302,7 +302,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// A window created while nothing was attached has never been placed by
 	// anyone, and RestoredFromState below suppresses the first retile, so without
 	// this it would render as a full-size box over the restored layout.
-	m.placeUnplacedWindows(state)
+	m.placeUnplacedWindows(state, m.Windows)
 
 	m.MarkAllDirty()
 	m.LogInfo("[RESTORE] Restored session state: %d windows, FocusedWindow=%d, AutoTiling=%v, Workspace=%d", len(m.Windows), m.FocusedWindow, m.AutoTiling, m.CurrentWorkspace)
@@ -494,7 +494,19 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// Placing it is this client's job and has to happen whether or not tiling is
 	// on, because with tiling off nothing else will ever move it and it would
 	// render full-screen over everything.
-	placed := m.placeUnplacedWindows(state)
+	placedWindows := m.placeUnplacedWindows(state, created)
+	placed := len(placedWindows) > 0
+	if m.AutoTiling {
+		// A pane the client is placing for the first time is a pane appearing, and
+		// the layout below is what decides where it appears from. Set only under
+		// tiling, and only here rather than inside the placing loop, so the restore
+		// path - which adopts a whole session at once and suppresses the retile
+		// that would consume these - cannot leave the flag on every pane for
+		// whenever the next retile happens to run.
+		for _, w := range placedWindows {
+			w.Opening = true
+		}
+	}
 
 	// A pane arriving is the event the launcher's type-it-out path waits on, so
 	// it is answered here rather than polled for. It is answered outside the
@@ -510,17 +522,13 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// turns a daemon-side lifecycle change into something the renderer has
 	// actually absorbed.
 	//
-	// placed matters here even when no window was created or removed. The daemon
-	// broadcasts the creation state (the window still marked Unplaced) more than
-	// once around a single creation: a mutation that follows it, a focus change
-	// or a PTY resize, re-emits canonical state that still carries the Unplaced
-	// flag until this client's placing push has landed. A later such broadcast is
-	// processed after this client already placed and tiled the window, and it
-	// re-runs placeUnplacedWindows, knocking the window out of its tile back to
-	// the raw placement box. Under tiling that has to be folded straight back
-	// into the layout; otherwise the window is left floating over the tiled panes
-	// even though the daemon's own geometry for it is already correct (which is
-	// how it looked on screen: a full-size window over an otherwise clean split).
+	// placed is still consulted separately from created and removed, because the
+	// two are not the same question: a window can arrive in this client's list on
+	// a sync that places it and a sync that does not, and it is the placing that
+	// the layout has to absorb. It no longer fires on the daemon's repeat
+	// broadcasts of a creation, which placeUnplacedWindows now declines to act on;
+	// before it did, and this branch existed to fold a pane the repeat had
+	// teleported back out of its tile into the layout again.
 	switch {
 	case m.AutoTiling && (len(created) > 0 || len(removed) > 0 || placed):
 		m.adoptSyncedWindows(created, removed, placed)
@@ -558,16 +566,34 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 
 // updateWindowFromState updates an existing window with state from sync
 func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) {
+	// An unplaced box is the daemon saying it had to write a number somewhere,
+	// not a position anyone chose (see placeUnplacedWindows), and this client has
+	// already answered that question: a window that reaches this function exists
+	// here, so it was placed when it arrived. The answer simply has not reached
+	// the daemon yet, because the daemon re-broadcasts the creating state after
+	// any mutation that follows it, and that broadcast still carries the flag.
+	//
+	// So the geometry in it is not news, it is the question being asked again.
+	// Adopting it drops a full-size pane on top of an otherwise clean split a few
+	// frames after the pane opened. That used to be invisible because
+	// placeUnplacedWindows ran straight afterwards and placed the window a second
+	// time, which repaired the geometry at the cost of throwing the pane back to
+	// the raw placement box mid-animation. Declining the box here is what makes
+	// placing once correct.
+	adoptGeometry := !ws.Unplaced
+
 	// Check if size changed
-	sizeChanged := w.Width != ws.Width || w.Height != ws.Height
+	sizeChanged := adoptGeometry && (w.Width != ws.Width || w.Height != ws.Height)
 
 	// Update all properties
 	w.SetTitle(ws.Title)
 	w.CustomName = ws.CustomName
-	w.X = ws.X
-	w.Y = ws.Y
-	w.Width = ws.Width
-	w.Height = ws.Height
+	if adoptGeometry {
+		w.X = ws.X
+		w.Y = ws.Y
+		w.Width = ws.Width
+		w.Height = ws.Height
+	}
 	w.Z = ws.Z
 	w.Workspace = ws.Workspace
 	w.Minimized = ws.Minimized
@@ -770,8 +796,8 @@ func (m *OS) closeWindowFromSync(w *terminal.Window) {
 	w.Close()
 }
 
-// placeUnplacedWindows gives a position and size to every window in state that
-// the daemon marked Unplaced, and reports whether it moved any.
+// placeUnplacedWindows gives a position and size to every window in firstSeen
+// that the daemon marked Unplaced, and returns the ones it placed.
 //
 // The daemon creates windows but has no viewport to place them in, so it hands
 // over a nominal box and says the box is not a decision. Only a client can turn
@@ -779,13 +805,24 @@ func (m *OS) closeWindowFromSync(w *terminal.Window) {
 // it was asked for directly. The flag is cleared implicitly: the client's next
 // sync never sets Unplaced, so placing a window and pushing the result is what
 // tells the daemon the question has been answered.
-func (m *OS) placeUnplacedWindows(state *session.SessionState) bool {
-	byID := make(map[string]*terminal.Window, len(m.Windows))
-	for _, w := range m.Windows {
+//
+// firstSeen is the set of windows this client has only just learned about, and
+// it is a restriction, not a hint: a window outside it is left alone even while
+// the daemon still calls it unplaced. The daemon re-broadcasts the creating
+// state after a following mutation, a focus change or a PTY resize, and that
+// broadcast still carries Unplaced until this client's placing push has landed.
+// Placing again on that echo teleports a pane the client has already placed and
+// tiled back to the raw placement box, and it does it a few frames in - which is
+// what tore a newly opened pane out of its open animation and restarted it from
+// the middle of the screen. Answering the question once is also all the daemon
+// ever asked for.
+func (m *OS) placeUnplacedWindows(state *session.SessionState, firstSeen []*terminal.Window) []*terminal.Window {
+	byID := make(map[string]*terminal.Window, len(firstSeen))
+	for _, w := range firstSeen {
 		byID[w.ID] = w
 	}
 
-	placed := false
+	var placed []*terminal.Window
 	for i := range state.Windows {
 		if !state.Windows[i].Unplaced {
 			continue
@@ -819,7 +856,7 @@ func (m *OS) placeUnplacedWindows(state *session.SessionState) bool {
 		// in flight here.
 		w.Resize(width, height)
 		w.InvalidateCache()
-		placed = true
+		placed = append(placed, w)
 	}
 	return placed
 }

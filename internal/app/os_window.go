@@ -421,6 +421,10 @@ func (m *OS) AddWindow(name string, command ...string) *OS {
 
 	// Auto-tile if in tiling mode
 	if m.AutoTiling {
+		// Set only here, immediately before the layout that consumes it, so an
+		// untiled session cannot leave the flag on a pane for whenever tiling is
+		// next turned on.
+		window.Opening = true
 		if m.UseScrollingLayout {
 			m.TileAllWindows()
 		} else {
