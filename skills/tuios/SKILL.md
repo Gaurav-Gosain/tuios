@@ -461,7 +461,7 @@ is `report`, the default and the highest rank.
 is refused, still exits 0, and says so on stderr:
 
 ```
-Not applied: a higher-ranked source owns this pane; it still reports working.
+Not applied: a higher-ranked source owns this pane. It still reports working.
 ```
 
 A script that must know whether its report took should match that line, since
@@ -1331,7 +1331,7 @@ finding takes:
   the alternate screen, the kitty keyboard flags the pane's program pushed. From
   the CLI there is no pane, so this tier is empty and the report says nothing
   about one.
-- `reference` is a curated list of what common programs bind by default. Nothing
+- `reference` is a list of what common programs bind by default. Nothing
   is detected and nothing is asked. Treat it as a hint about where to look, never
   as a statement about the user's actual vim config.
 
@@ -1369,7 +1369,7 @@ display name, accent, workspace names, window ids and window names, and is
 marked `restored` in the listing:
 
 ```
-restored: layout came back from saved state; the shells are new.
+restored: the layout came back from saved state, and the shells are new.
 ```
 
 The shells are new. Scrollback is empty, whatever was running is gone, and each

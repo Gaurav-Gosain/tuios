@@ -38,7 +38,7 @@ const (
 	// with it. Both live here so the rail, the switcher, `tuios ls` and the
 	// attach path cannot word the same fact differently.
 	RestoredTag  = "restored"
-	RestoredNote = "layout came back from saved state; the shells are new"
+	RestoredNote = "the layout came back from saved state, and the shells are new"
 
 	// SavedTag and SavedNote word the state before that one: state that is on
 	// disk with no daemon holding it. A saved session is not a restored session
