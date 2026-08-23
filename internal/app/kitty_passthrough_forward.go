@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -548,6 +549,39 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		}
 	}
 	kittyPassthroughLog("forwardFileTransmit: mapped guestID=%d -> hostID=%d for window=%s", cmd.ImageID, hostID, windowID[:min(8, len(windowID))])
+
+	// A frame the host is already showing is not sent again.
+	//
+	// A guest streaming through a file re-sends whether or not anything moved:
+	// a page with a caret on it hands over a whole new bitmap several times a
+	// second, every one of them the picture already on screen. Forwarding those
+	// costs the host a re-read of the file and, because a re-transmitted image
+	// does not repaint the placement drawn from the old one, a delete and a
+	// redraw of the whole image to go with it. That is the flicker: a still
+	// page redrawn a few times a second forever.
+	//
+	// The other two transmission paths have always dropped an unchanged frame -
+	// the direct one by diffing the bitmap, the inline one by hashing it. This
+	// one could not, because its whole point is to hand the host a path instead
+	// of reading the bytes. Reading them only to hash them is a great deal
+	// cheaper than what it saves, and nothing is kept: four bytes per image.
+	if !kp.forwardFileFrameIsNew(filePath, windowID, hostID, cmd) {
+		// The pixels are the ones on screen, but where they go may not be: a
+		// guest is free to move the cursor and hand over the same picture
+		// again, and that is a request to draw it somewhere else. So the
+		// position is taken from this frame even though the frame itself is
+		// not sent, and the refresh pass re-places only if it actually moved.
+		// Marking the data dirty is what is skipped, because the data is not.
+		if existing := kp.placements[windowID][hostID]; existing != nil {
+			existing.GuestX = cursorX
+			existing.AbsoluteLine = scrollbackLen + cursorY
+			existing.HostX = windowX + contentOffsetX + cursorX
+			existing.HostY = windowY + contentOffsetY + cursorY
+			existing.PlacedOnAltScreen = isAltScreen
+		}
+		kittyPassthroughLog("forwardFileTransmit: identical frame for hostID=%d, sending nothing", hostID)
+		return
+	}
 
 	// PERFORMANCE: Forward the file path directly to the host terminal.
 	// The host (Ghostty/Kitty) reads the file itself  - no need to read the
@@ -1453,4 +1487,102 @@ func (kp *KittyPassthrough) forgetImagePixels(windowID string, guestImageID uint
 			delete(kp.imagePixels, windowID)
 		}
 	}
+}
+
+// frameHashSampleEvery is how often an image whose frames keep changing is
+// hashed anyway. A stream that never repeats itself gains nothing from the
+// comparison and should not pay for it on every frame, but one that stops
+// moving - a video paused, a page that finished loading - has to be noticed
+// without a clock to notice it with. So the check backs off to one frame in
+// this many and comes straight back the moment it finds a repeat.
+const frameHashSampleEvery = 16
+
+// frameHashMissesBeforeBackoff is how many consecutive changed frames it takes
+// to decide a stream is one that always changes.
+const frameHashMissesBeforeBackoff = 8
+
+// forwardFileFrameIsNew reports whether a file-backed frame differs from the
+// last one sent for this image, and records it when it does.
+//
+// It answers yes for anything it cannot compare: an unreadable or outsized
+// file, a first frame, or a frame it has chosen not to hash. Forwarding a
+// frame that turns out to be identical costs one redundant redraw; dropping
+// one that turns out to differ costs a pane that never updates again, so every
+// uncertain case resolves the same way.
+func (kp *KittyPassthrough) forwardFileFrameIsNew(
+	filePath, windowID string, hostID uint32, cmd *vt.KittyCommand,
+) bool {
+	if cmd.ImageID == 0 {
+		return true // a fresh image every time; there is nothing to compare with
+	}
+	if kp.frameHashMisses == nil {
+		kp.frameHashMisses = make(map[string]map[uint32]int)
+	}
+	if kp.frameHashMisses[windowID] == nil {
+		kp.frameHashMisses[windowID] = make(map[uint32]int)
+	}
+	misses := kp.frameHashMisses[windowID][hostID]
+	if misses >= frameHashMissesBeforeBackoff && misses%frameHashSampleEvery != 0 {
+		kp.frameHashMisses[windowID][hostID] = misses + 1
+		return true
+	}
+
+	// Opened once and asked about itself, rather than stat'd and then opened:
+	// one lookup, and the thing described is the thing read. A path that is not
+	// a plain file is refused for the reason the inline path refuses one - a
+	// fifo would block here and a device would read without end.
+	f, err := os.Open(filePath)
+	if err != nil {
+		return true
+	}
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxPassthroughTransmitBytes {
+		_ = f.Close()
+		return true
+	}
+	if kp.frameHashBuf == nil {
+		kp.frameHashBuf = make([]byte, 64*1024)
+	}
+	sum, err := hashFileFrame(f, cmd, kp.frameHashBuf)
+	_ = f.Close()
+	if err != nil {
+		return true
+	}
+
+	if kp.lastFrameHash[windowID] == nil {
+		kp.lastFrameHash[windowID] = make(map[uint32]uint32)
+	}
+	if prev, seen := kp.lastFrameHash[windowID][hostID]; seen && prev == sum {
+		kp.frameHashMisses[windowID][hostID] = 0
+		return false
+	}
+	kp.lastFrameHash[windowID][hostID] = sum
+	kp.frameHashMisses[windowID][hostID] = misses + 1
+	return true
+}
+
+// hashFileFrame is the checksum of a frame's bytes together with the geometry
+// the guest declared for them. The geometry is folded in because the same
+// pixels advertised at a different size are a different picture, and dropping
+// that frame would leave the pane at the old one.
+func hashFileFrame(r io.Reader, cmd *vt.KittyCommand, buf []byte) (uint32, error) {
+	h := crc32.NewIEEE()
+	var header [16]byte
+	binary.LittleEndian.PutUint32(header[0:], uint32(cmd.Width))
+	binary.LittleEndian.PutUint32(header[4:], uint32(cmd.Height))
+	binary.LittleEndian.PutUint32(header[8:], uint32(cmd.Format))
+	binary.LittleEndian.PutUint32(header[12:], uint32(cmd.Compression))
+	_, _ = h.Write(header[:])
+	if _, err := io.CopyBuffer(h, io.LimitReader(r, maxPassthroughTransmitBytes), buf); err != nil {
+		return 0, err
+	}
+	return h.Sum32(), nil
+}
+
+// forgetFrameHashes drops what is remembered about a window's frames, so a
+// window that goes away does not hold its checksums for the life of the
+// process and a re-created image is not compared with a dead one.
+func (kp *KittyPassthrough) forgetFrameHashes(windowID string) {
+	delete(kp.lastFrameHash, windowID)
+	delete(kp.frameHashMisses, windowID)
 }

@@ -116,6 +116,18 @@ type KittyPassthrough struct {
 	// having to reproduce each path's id mapping.
 	imagePixels map[string]map[uint32][2]int
 
+	// frameHashMisses counts, per image, how many frames in a row have differed
+	// from the one before them. A stream that never repeats itself gains nothing
+	// from the comparison, so past a threshold it is only sampled; see
+	// forwardFileFrameIsNew.
+	frameHashMisses map[string]map[uint32]int
+
+	// frameHashBuf is the scratch the frame comparison copies through. One
+	// buffer for the life of the passthrough rather than one per frame: this
+	// runs on every frame of every file-backed stream, and kp.mu is held
+	// throughout, so there is only ever one reader of it.
+	frameHashBuf []byte
+
 	// overlayActive is true while a full-screen overlay (help, palette, etc.) is
 	// showing. While set, self-placed remote video frames are dropped so a new
 	// frame cannot redraw over the overlay; see SetOverlayActive.
@@ -405,6 +417,7 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 		placements:        make(map[string]map[uint32]*PassthroughPlacement),
 		imageIDMap:        make(map[string]map[uint32]uint32),
 		remoteVideo:       make(map[string]map[uint32]*remoteVideoState),
+		frameHashMisses:   make(map[string]map[uint32]int),
 		imagePixels:       make(map[string]map[uint32][2]int),
 		lastFrameHash:     make(map[string]map[uint32]uint32),
 		nextHostID:        1,
