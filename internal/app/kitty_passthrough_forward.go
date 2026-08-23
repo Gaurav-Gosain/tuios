@@ -393,13 +393,36 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		kp.placements[windowID] = make(map[uint32]*PassthroughPlacement)
 	}
 	if existing := kp.placements[windowID][hostID]; existing != nil && update != bitmapFull {
-		// The bitmap was patched in place or not sent at all, so the placement
-		// on the host still shows the right image at the right size. Leaving
-		// it alone is what saves the delete and the re-place that used to cost
-		// a round of both per guest frame.
+		// The bitmap was patched in place or not sent at all, so the image on
+		// the host is already the right one and does not have to be re-sent.
+		// The record of where it goes is a different question and is rewritten
+		// in full, the way the file and shared-memory path rewrites it.
+		//
+		// Refreshing only the position is what froze a pane's width. The cell
+		// box an image is drawn into is the pane's, not the bitmap's, and the
+		// pane changes size under a bitmap that does not: a guest still
+		// painting the frame it has while its pane grows sends frame after
+		// frame that patches cleanly, and every one of them left the cell count
+		// from the pane the image was first transmitted for. The refresh pass
+		// cannot recover it - it clamps what the record holds and never widens
+		// it - so the image stayed cropped to the old pane, with the new
+		// columns blank, until something forced a whole bitmap through. Rows
+		// escaped, because the refresh recomputes those from the image's own
+		// row count, so one axis followed the pane and the other did not.
 		existing.HostX, existing.HostY = hostX, hostY
 		existing.AbsoluteLine = pending.ScrollbackLen + pending.CursorY
 		existing.GuestX = pending.CursorX
+		existing.Cols = displayCols
+		existing.ImageCols = imgCols
+		existing.Rows = imgRows
+		existing.DisplayRows = displayRows
+		existing.SourceX = pending.SourceX
+		existing.SourceY = pending.SourceY
+		existing.SourceWidth = pending.SourceWidth
+		existing.SourceHeight = pending.SourceHeight
+		existing.ImagePixelWidth = pending.Width
+		existing.ImagePixelHeight = pending.Height
+		existing.PlacedOnAltScreen = pending.IsAltScreen
 		if pending.AndPlace {
 			return &PlacementResult{
 				Rows:       imgRows,

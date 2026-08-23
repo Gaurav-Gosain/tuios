@@ -137,9 +137,17 @@ var (
 // printed to the grid is gone before a poll can read it.
 func startFrameloop(t *testing.T, term *tuitest.Terminal, repaintMS int) (geom string, cols, rows, xpx, ypx int) {
 	t.Helper()
+	return startFrameloopOpts(t, term, repaintMS, 20, "shm")
+}
+
+// startFrameloopOpts is startFrameloop with the frame rate and the kitty
+// transmission medium chosen, so the same guest can be run over shared memory
+// and over inline base64 and the two capture streams compared.
+func startFrameloopOpts(t *testing.T, term *tuitest.Terminal, repaintMS, fps int, transport string) (geom string, cols, rows, xpx, ypx int) {
+	t.Helper()
 	bin := buildFrameloop(t)
 	geom = filepath.Join(t.TempDir(), "geom")
-	typeLine(t, term, fmt.Sprintf("%s %s 20 %d", bin, geom, repaintMS))
+	typeLine(t, term, fmt.Sprintf("%s %s %d %d %s", bin, geom, fps, repaintMS, transport))
 	deadline := time.Now().Add(shellTimeout)
 	for time.Now().Before(deadline) {
 		if sizes := announcedSizes(geom); len(sizes) > 0 {
