@@ -95,6 +95,15 @@ func (m *OS) buildKeybindReport() config.KeybindReport {
 	if w := m.GetFocusedWindow(); w != nil {
 		facts.Command = w.ForegroundCommand()
 		facts.HasForeground = w.HasForegroundProcess()
+		// A daemon-backed pane has no local PTY to ask, but the daemon's own
+		// poll already shipped the same observation on the wire
+		// (WindowState.ForegroundCmd, empty at a shell prompt). Reading it
+		// keeps the observed tier alive for attached, SSH and web clients,
+		// at most one poll interval stale.
+		if facts.Command == "" && w.ForegroundCmd != "" {
+			facts.Command = w.ForegroundCmd
+			facts.HasForeground = true
+		}
 		if w.Terminal != nil {
 			facts.AltScreen = w.Terminal.IsAltScreen()
 			facts.GuestKittyFlags = w.Terminal.KittyKeyboardFlags()
