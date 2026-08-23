@@ -43,7 +43,8 @@ var (
 	knownEventTypes = []string{
 		EventWindowCreated, EventWindowClosed, EventWindowExit, EventWindowRetitled,
 		EventWindowFocused, EventWindowMoved, EventWindowMinimized, EventWindowRestored,
-		EventWorkspaceSwitched, EventOutput, EventBell, EventModeChanged,
+		EventWorkspaceSwitched, EventAgentState, EventAgentMessage,
+		EventOutput, EventBell, EventModeChanged,
 		EventSessionCreated, EventSessionClosed, EventGap,
 	}
 )
@@ -284,4 +285,16 @@ func windowTargets(state *SessionState) []string {
 	}
 	sort.Strings(targets)
 	return targets
+}
+
+// VerbErrorCodes returns every stable error code in the protocol's catalogue,
+// in the order list-verbs publishes them. It is exported so a caller matching on
+// codes, and the skill's own test, can check against the set rather than a copy
+// of it that goes stale.
+func VerbErrorCodes() []string {
+	out := make([]string, 0, len(errorCodeCatalog))
+	for _, e := range errorCodeCatalog {
+		out = append(out, e.Code)
+	}
+	return out
 }
