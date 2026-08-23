@@ -1261,6 +1261,14 @@ tuios ssh [flags]
 - `--default-session <string>` - Default session name for all connections
 - `--ephemeral` - Run in ephemeral mode (standalone, no daemon)
 
+The interface flags (`--theme`, `--border-style`, `--dockbar-position`,
+`--ascii-only`, and the rest of the appearance set) apply to every served
+session, layered over the server's config file the same way a local run
+layers them.
+
+Settings changed from the in-app settings page apply to that session only;
+the server operator's config file is never written from an SSH client.
+
 **Session Selection Priority:**
 1. `--default-session` flag (if specified)
 2. SSH username (if not generic like "tuios", "root", "anonymous")
@@ -1315,6 +1323,7 @@ By default, web sessions connect to the TUIOS daemon for persistent sessions wit
 - Sessions persist even when browser tabs close
 - Multiple browsers/tabs can view/control the same session simultaneously
 - Session state (windows, workspaces) is preserved across reconnections
+- Settings changed from the in-app settings page apply to that session only; the server's config file is never written from a browser
 
 **Installation:**
 ```bash
@@ -1340,7 +1349,9 @@ tuios-web [flags]
 - `--max-connections <int>` - Maximum concurrent connections (default: 0 = unlimited)
 - `--cert <path>` - TLS certificate in PEM form (serves HTTPS; required to bind a non-loopback host)
 - `--key <path>` - TLS private key in PEM form (required with `--cert`)
+- `--auto-tls` - Generate and serve a self-signed certificate (managed with `tuios-web cert`)
 - `--insecure` - Serve a non-loopback host over plain HTTP, unencrypted (trusted networks only)
+- `--touch <auto|on|off>` - Touch support and the on-screen key bar (default: auto-detect)
 - `--default-session <string>` - Default session name for all connections (creates shared session)
 - `--ephemeral` - Disable daemon mode (sessions don't persist)
 - `--theme <name>` - Color theme forwarded to TUIOS instances
@@ -1352,7 +1363,12 @@ tuios-web [flags]
 - `--window-button-style <style>` - Window control style: `pill`, `dots`
 - `--window-button-position <position>` - Which end they sit on: `right`, `left`
 - `--scrollback-lines <int>` - Scrollback buffer size
+- `--no-animations` - Disable UI animations
 - `--debug` - Enable debug logging
+
+**Subcommands:**
+- `tuios-web cert` - Show the status of the self-signed TLS certificate `--auto-tls` uses
+- `tuios-web cert new|info|path|remove` - Rotate, explain, locate, or delete it
 
 **Features:**
 - Full TUIOS experience in the browser
@@ -1375,10 +1391,11 @@ tuios-web
 # Start on custom port
 tuios-web --port 8080
 
-# Reach the server from a phone on the same network, over TLS
-openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
-  -subj "/CN=192.168.1.31" -addext "subjectAltName=IP:192.168.1.31" \
-  -keyout tuios-key.pem -out tuios-cert.pem
+# Reach the server from a phone on the same network, over TLS with a
+# self-signed certificate tuios-web generates and keeps for you
+tuios-web --host 0.0.0.0 --port 7681 --auto-tls
+
+# Or bring your own certificate
 tuios-web --host 0.0.0.0 --port 7681 --cert tuios-cert.pem --key tuios-key.pem
 
 # Same, on a network you trust, with nothing encrypted
