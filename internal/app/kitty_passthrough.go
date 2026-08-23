@@ -99,6 +99,23 @@ type KittyPassthrough struct {
 	// differing one, which for a video stream is a few milliseconds.
 	lastFrameHash map[string]map[uint32]uint32
 
+	// imagePixels is the pixel size a guest declared for each image it
+	// transmitted, keyed by window and by the guest's own image id.
+	//
+	// A placement command carries no pixel dimensions: a=p says which image and
+	// how many cells, and everything about how big that image is has to come
+	// from the transmission that preceded it. Without it the only figure left
+	// to divide by is the host's cell size, which assumes the guest drew one
+	// cell's worth of pixels per cell. A guest that draws at any other scale -
+	// a browser at a device pixel ratio above one is the ordinary case - then
+	// has its source rectangle computed at the wrong scale, and the picture is
+	// magnified by exactly the ratio between the two.
+	//
+	// Keyed by the guest's id rather than the host's because that is the id the
+	// later a=p names, and it is known on every transmission path without
+	// having to reproduce each path's id mapping.
+	imagePixels map[string]map[uint32][2]int
+
 	// overlayActive is true while a full-screen overlay (help, palette, etc.) is
 	// showing. While set, self-placed remote video frames are dropped so a new
 	// frame cannot redraw over the overlay; see SetOverlayActive.
@@ -388,6 +405,7 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 		placements:        make(map[string]map[uint32]*PassthroughPlacement),
 		imageIDMap:        make(map[string]map[uint32]uint32),
 		remoteVideo:       make(map[string]map[uint32]*remoteVideoState),
+		imagePixels:       make(map[string]map[uint32][2]int),
 		lastFrameHash:     make(map[string]map[uint32]uint32),
 		nextHostID:        1,
 		pendingDirectData: make(map[string]*pendingDirectTransmit),
