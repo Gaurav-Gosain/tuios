@@ -114,6 +114,15 @@ func (kp *KittyPassthrough) ForwardCommand(
 		}
 	}
 
+	// Remember what size the guest says this image is, on whichever path the
+	// bytes take. Only the first chunk of a chunked transmission carries s= and
+	// v=, and a continuation must not overwrite them with zero, so this records
+	// only a command that states both. Image id 0 is kitty's auto-assign
+	// sentinel and names nothing a later a=p could ask for.
+	if cmd.Action == vt.KittyActionTransmit || cmd.Action == vt.KittyActionTransmitPlace {
+		kp.rememberImagePixels(windowID, cmd.ImageID, cmd.Width, cmd.Height)
+	}
+
 	switch cmd.Action {
 	case vt.KittyActionQuery:
 		kittyPassthroughLog("ForwardCommand: handling QUERY")
@@ -1213,7 +1222,7 @@ func (kp *KittyPassthrough) forwardPlace(
 	contentOffsetX, contentOffsetY int,
 	cursorX, cursorY int,
 	scrollbackLen int,
-	_ bool, // isAltScreen - currently unused
+	isAltScreen bool,
 ) {
 	hostX := windowX + contentOffsetX + cursorX
 	hostY := windowY + contentOffsetY + cursorY
@@ -1227,6 +1236,7 @@ func (kp *KittyPassthrough) forwardPlace(
 	// Calculate image dimensions and cap to content area
 	// Note: calculateImageCells returns (rows, cols) in that order
 	imgRows, imgCols := kp.calculateImageCells(cmd)
+	pixelW, pixelH := kp.imagePixelsFor(windowID, cmd.ImageID, cmd.Width, cmd.Height)
 	displayCols := imgCols
 	displayRows := imgRows
 	if displayCols > contentWidth && contentWidth > 0 {
@@ -1295,6 +1305,7 @@ func (kp *KittyPassthrough) forwardPlace(
 		HostX:        hostX,
 		HostY:        hostY,
 		Cols:         displayCols,
+		ImageCols:    imgCols,     // Uncapped, so a crop can be measured against it
 		Rows:         imgRows,     // Original image rows
 		DisplayRows:  displayRows, // Capped for initial display
 		SourceX:      cmd.SourceX,
@@ -1305,6 +1316,18 @@ func (kp *KittyPassthrough) forwardPlace(
 		YOffset:      cmd.YOffset,
 		ZIndex:       cmd.ZIndex,
 		Virtual:      cmd.Virtual,
+		// The image's own pixel size, from the transmission this placement
+		// refers back to. The refresh pass divides these by the cell counts
+		// above to learn how many of the image's pixels one cell is worth, and
+		// with nothing to divide it falls back to the host's cell size, which
+		// is a different number for every guest that does not draw at exactly
+		// one cell's worth of pixels per cell.
+		ImagePixelWidth:  pixelW,
+		ImagePixelHeight: pixelH,
+		// Which screen this was placed on. Left unset, a placement made on the
+		// alternate screen looked to the refresh pass like one made on the
+		// normal screen, and the mismatch deleted it on the next pass.
+		PlacedOnAltScreen: isAltScreen,
 	}
 	// Key by hostID (allocated above), consistent with forwardTransmit,
 	// forwardFileTransmit, forwardFileTransmitInline, and the by-ID delete
@@ -1325,6 +1348,7 @@ func (kp *KittyPassthrough) deleteAllWindowPlacements(windowID string, clearImag
 	kp.forgetBitmaps(windowID, 0)
 	if clearImageMap {
 		kp.imageIDMap[windowID] = nil
+		kp.forgetImagePixels(windowID, 0)
 	}
 }
 
@@ -1349,6 +1373,7 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 					delete(placements, hostID)
 				}
 				delete(windowMap, cmd.ImageID)
+				kp.forgetImagePixels(windowID, cmd.ImageID)
 				kittyPassthroughLog("forwardDelete: deleted guestID=%d (hostID=%d)", cmd.ImageID, hostID)
 			}
 		}
@@ -1368,6 +1393,7 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 					delete(placements, hostID)
 				}
 				delete(windowMap, cmd.ImageID)
+				kp.forgetImagePixels(windowID, cmd.ImageID)
 				kittyPassthroughLog("forwardDelete: deleted guestID=%d (hostID=%d) with placement", cmd.ImageID, hostID)
 			}
 		}
@@ -1381,5 +1407,50 @@ func (kp *KittyPassthrough) forwardDelete(cmd *vt.KittyCommand, windowID string)
 			kittyPassthroughLog("forwardDelete: UNHANDLED delete type=%c (%d), clearing all as fallback", cmd.Delete, cmd.Delete)
 		}
 		kp.deleteAllWindowPlacements(windowID, true)
+	}
+}
+
+// rememberImagePixels records the pixel size a guest declared for one of its
+// images, so a later a=p naming that image can be measured against the bitmap
+// the host is actually holding rather than against a guess.
+func (kp *KittyPassthrough) rememberImagePixels(windowID string, guestImageID uint32, w, h int) {
+	if guestImageID == 0 || w <= 0 || h <= 0 {
+		return
+	}
+	if kp.imagePixels == nil {
+		kp.imagePixels = make(map[string]map[uint32][2]int)
+	}
+	if kp.imagePixels[windowID] == nil {
+		kp.imagePixels[windowID] = make(map[uint32][2]int)
+	}
+	kp.imagePixels[windowID][guestImageID] = [2]int{w, h}
+}
+
+// imagePixelsFor returns the pixel size of a guest's image, preferring what the
+// placement command itself states and falling back to what the transmission
+// declared. Zero means unknown, which is what a placement for an image this
+// process never saw transmitted has to report.
+func (kp *KittyPassthrough) imagePixelsFor(windowID string, guestImageID uint32, cmdW, cmdH int) (int, int) {
+	if cmdW > 0 && cmdH > 0 {
+		return cmdW, cmdH
+	}
+	if wh, ok := kp.imagePixels[windowID][guestImageID]; ok {
+		return wh[0], wh[1]
+	}
+	return 0, 0
+}
+
+// forgetImagePixels drops the remembered sizes for a window, or for one image
+// in it when guestImageID is non-zero.
+func (kp *KittyPassthrough) forgetImagePixels(windowID string, guestImageID uint32) {
+	if guestImageID == 0 {
+		delete(kp.imagePixels, windowID)
+		return
+	}
+	if byID := kp.imagePixels[windowID]; byID != nil {
+		delete(byID, guestImageID)
+		if len(byID) == 0 {
+			delete(kp.imagePixels, windowID)
+		}
 	}
 }
