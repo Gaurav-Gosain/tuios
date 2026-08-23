@@ -393,6 +393,9 @@ type OS struct {
 	hold holdMode
 	// optionAdviceShown keeps the macOS Option advice to once per run.
 	optionAdviceShown bool
+	// currentPointer is the last OSC 22 pointer shape written, to avoid
+	// redundant writes. Per model, since each served client has its own host.
+	currentPointer PointerShape
 	// Keybind registry for user-configurable keybindings
 	KeybindRegistry *config.KeybindRegistry
 	// ConfigWarnings holds the problems found in the loaded config, reported to

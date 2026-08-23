@@ -65,9 +65,9 @@ func isKittyResponse(payload string) bool {
 type KittyPassthrough struct {
 	mu      sync.Mutex
 	enabled bool
-	// inlineGraphics indicates the host terminal is xterm.js with a custom
-	// kitty overlay (xterm-kitty-overlay.js) that renders placements as
-	// absolutely-positioned DOM canvases. In this mode, file-based
+	// inlineGraphics indicates the host terminal is the browser client, whose
+	// vendored webterm bundle carries a kitty overlay that renders placements
+	// as absolutely-positioned DOM canvases. In this mode, file-based
 	// transmissions (t=f, t=s) are read server-side and re-encoded as
 	// direct (t=d) chunks because the browser cannot read local files.
 	inlineGraphics bool

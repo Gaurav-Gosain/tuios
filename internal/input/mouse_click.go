@@ -471,9 +471,9 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Set precise resize cursor based on corner
 		switch o.ResizeCorner {
 		case app.TopLeft, app.BottomRight:
-			app.SetPointerShape(app.PointerNWSEResize)
+			o.SetPointerShape(app.PointerNWSEResize)
 		case app.TopRight, app.BottomLeft:
-			app.SetPointerShape(app.PointerNESWResize)
+			o.SetPointerShape(app.PointerNESWResize)
 		}
 
 	case tea.MouseLeft:
@@ -495,7 +495,7 @@ func beginWindowDrag(o *app.OS, idx, x, y int) {
 	if o.Mode == app.TerminalMode {
 		o.Mode = app.WindowManagementMode
 	}
-	app.SetPointerShape(app.PointerGrabbing)
+	o.SetPointerShape(app.PointerGrabbing)
 	o.InteractionMode = true
 	o.Dragging = true
 	o.DraggedWindowIndex = idx

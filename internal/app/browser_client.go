@@ -49,3 +49,21 @@ func browserAlertWarnings(cfg *config.UserConfig) []string {
 	}
 	return out
 }
+
+// sshAlertWarnings is the SSH-served equivalent. OSC 9 does reach the client's
+// terminal over the channel, so notify is left alone; audio is the sink that
+// plays on the wrong machine, because the cue is spawned by this process, which
+// runs on the server.
+func sshAlertWarnings(cfg *config.UserConfig) []string {
+	var alerts *config.AgentAlertsConfig
+	if cfg != nil {
+		alerts = &cfg.Notifications.Agent
+	}
+	policy := config.ResolveAgentAlerts(alerts)
+	if !policy.Enabled || !policy.PlaysAudio() {
+		return nil
+	}
+	return []string{"[notifications.agent] sound: the cue plays on the machine running " +
+		"the SSH server, not where you are sitting; sound_mode = \"bell\" rings the " +
+		"client terminal instead"}
+}

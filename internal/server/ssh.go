@@ -14,10 +14,13 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"charm.land/ssh"
 	"charm.land/wish/v2"
 	"charm.land/wish/v2/bubbletea"
 	"charm.land/wish/v2/logging"
+	"github.com/charmbracelet/colorprofile"
+
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
@@ -33,6 +36,10 @@ type SSHServerConfig struct {
 	DefaultSession string // If set, all connections attach to this session
 	Ephemeral      bool   // If true, don't use daemon (old behavior)
 	Version        string // For daemon handshake
+	// Overrides carries the interface CLI flags, layered over the appearance
+	// baseline inside the same once-guarded application so flags win over the
+	// file. The zero value applies nothing.
+	Overrides config.Overrides
 }
 
 // sshServerContext holds the server-wide context for daemon mode
@@ -49,6 +56,16 @@ var applyAppearanceOnce sync.Once
 func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	sshServerConfig = cfg
 
+	// Compose frames in truecolor. composeFrame downsamples every frame
+	// through lipgloss.Sprint, whose profile is detected from THIS process's
+	// stdout and environment: a server logging to a file or running under a
+	// service manager detects NoTTY and strips every colour from every frame
+	// before the per-client profile ever sees it, for every client at once.
+	// Pinning truecolor here leaves downsampling to the bubbletea renderer,
+	// which wish configures per connection from the client's own TERM.
+	// tuios-web pins the same global for the same reason.
+	lipgloss.Writer.Profile = colorprofile.TrueColor
+
 	// Apply the user config's appearance globals once, at first server startup
 	// and single-threaded, so every per-connection session shares a consistent
 	// view of them. LoadUserConfig is pure and NewOS no longer re-applies per
@@ -58,6 +75,9 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		if userConfig, err := config.LoadUserConfig(); err == nil {
 			config.ApplyAppearanceConfig(userConfig)
 		}
+		// Flags over file, the same order loadAndApplyConfig gives every
+		// other entrypoint.
+		config.ApplyOverrides(cfg.Overrides)
 	})
 
 	// Determine host key path
@@ -269,6 +289,13 @@ func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) (tea.Model
 	clientCaps := detectClientGraphics(sshSession)
 	app.SetClientCapabilities(clientToHostCapabilities(clientCaps))
 
+	// The accent picker's fallback labels describe what the terminal showing
+	// the frame will do to each colour. Its default probe reads this process's
+	// stdout and environment, which describe the server; pin the profile wish
+	// derives for this client's renderer instead, so the labels and the frame
+	// agree. Process-global like SetClientCapabilities, same caveat.
+	app.SetAccentColorProfile(colorprofile.Env(append(sshSession.Environ(), "TERM="+pty.Term)))
+
 	// Determine session name from SSH context
 	sessionName := determineSessionName(sshSession, cfg)
 
@@ -329,6 +356,11 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer,
 		Height:          height,
 		IsSSHMode:       true,
 		SSHSession:      sshSession,
+		// The config file belongs to the server operator, and several SSH
+		// clients each hold a stale snapshot of it; the same reasoning that
+		// makes a web-served session read-only (see OSOptions) applies here.
+		// Settings still apply live, they are just not written back.
+		ConfigReadOnly: true,
 		// Route kitty/sixel APC sequences to the SSH session so they reach the
 		// client's terminal, via the serialized writer shared with the
 		// bubbletea renderer so graphics and text writes never interleave on
@@ -409,6 +441,8 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 		Height:          height,
 		IsSSHMode:       true,
 		SSHSession:      sshSession,
+		// Read-only for the same reason as the ephemeral path above.
+		ConfigReadOnly:  true,
 		IsDaemonSession: true,
 		DaemonClient:    client,
 		SessionName:     sessionName,
