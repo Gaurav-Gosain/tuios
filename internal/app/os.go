@@ -224,6 +224,9 @@ type OS struct {
 	dockOverflowHit        dockOverflowHit         // where the entries' overflow marker was drawn last frame
 	dockSessionHits        []dockSessionHit        // where the dock's session controls were drawn last frame
 	dockSessionHover       DockSessionAction       // which session control the pointer is on, DockSessionNone for neither
+	dockCustomHits         []dockCustomHit         // where the custom components were drawn last frame
+	dockPlan               dockPlan                // which components are on which side, in draw order
+	dockEngine             *dockEngine             // refresh scheduler for the components that move on their own
 	ClipboardContent       string                  // Store clipboard content from tea.ClipboardMsg
 	ShowCacheStats         bool                    // True when showing style cache statistics overlay
 	// Quit menu state. The menu replaces the old yes/no quit dialog: a small

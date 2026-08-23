@@ -120,7 +120,7 @@ func TestDockLeftRegionSurvivesTheStrip(t *testing.T) {
 			m = dockTabTestOS(t, 2, 1, 2, 5)
 		}
 		t.Run(name, func(t *testing.T) {
-			modeLabel, trail, width, mode := m.buildDockLeftText()
+			modeLabel, trail, _, width, mode := m.buildDockLeftText()
 			if mode.Color == "" {
 				t.Error("the mode pill lost its color")
 			}

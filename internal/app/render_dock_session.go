@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -25,6 +26,12 @@ type dockSessionCell struct {
 // right edge stops on a cell that does nothing, rather than on the one button
 // here that cannot be undone.
 func (m *OS) buildDockSessionStrip() (string, []dockSessionCell) {
+	m.ensureDockPlan()
+	// The controls hold the bar's right-hand end and never give any of it up,
+	// but a dock that does not list them does not draw them at all.
+	if !m.dockPlan.Has(config.DockComponentSessionControls) {
+		return "", nil
+	}
 	if !dockSessionControlsFit(m.GetRenderWidth()) {
 		return "", nil
 	}

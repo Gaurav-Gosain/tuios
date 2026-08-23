@@ -23,12 +23,20 @@ type DockItem struct {
 // DockLayout contains calculated layout information for the dock
 type DockLayout struct {
 	// ModeLabel is the mode pill's text without its caps; the renderer decides
-	// whether it wears any. TrailText is what rides after the strip (the
-	// project-tape badge), styled as passive information.
-	ModeLabel      string
-	TrailText      string
-	LeftWidth      int
-	RightWidth     int
+	// whether it wears any. TrailText is the workspace readout and TapeText the
+	// project-tape badge, both styled as passive information. They are separate
+	// because they are separate components now: the badge used to be glued onto
+	// the readout, so neither could be moved or dropped without the other.
+	ModeLabel  string
+	TrailText  string
+	TapeText   string
+	LeftWidth  int
+	RightWidth int
+	// CustomWidth is the room the custom cells on each side asked for, so the
+	// layout pass and the draw pass reserve against the same number.
+	CustomLeft     int
+	CustomCenter   int
+	CustomRight    int
 	TruncatedCount int        // Number of items that don't fit
 	VisibleItems   []DockItem // Items that fit and should be displayed
 	ModeInfo       ModeInfo   // Mode display information for styling
@@ -285,6 +293,10 @@ func pillsFitting(tabs []dockWorkspaceTab, first, width int) int {
 // scrolls the strip to the pill it just made active, while a user reading along
 // the strip with the arrows keeps the run they scrolled to.
 func (m *OS) planDockWorkspaceStrip(room, barWidth int) dockWorkspaceStrip {
+	m.ensureDockPlan()
+	if !m.dockPlan.Has(config.DockComponentWorkspaces) {
+		return dockWorkspaceStrip{}
+	}
 	tabs := m.buildDockWorkspaceTabs()
 	if len(tabs) == 0 {
 		return dockWorkspaceStrip{}
@@ -461,10 +473,19 @@ func (m *OS) ScrollDockWorkspacesAt(x, y int) bool {
 // This function is shared between rendering (render.go) and mouse handling (mouse.go)
 // to ensure consistent positioning.
 func (m *OS) CalculateDockLayout() DockLayout {
+	m.ensureDockPlan()
 	layout := DockLayout{}
 
 	// Build left side text (compact format)
-	layout.ModeLabel, layout.TrailText, layout.LeftWidth, layout.ModeInfo = m.buildDockLeftText()
+	layout.ModeLabel, layout.TrailText, layout.TapeText, layout.LeftWidth, layout.ModeInfo = m.buildDockLeftText()
+
+	// The custom cells on each side are measured once, here, and the draw pass
+	// reads the same numbers. This is the single-source-of-truth the plan/draw
+	// divergence in this file has cost bugs for.
+	layout.CustomLeft = m.dockCustomWidth(m.dockPlan.Left)
+	layout.CustomCenter = m.dockCustomWidth(m.dockPlan.Center)
+	layout.CustomRight = m.dockCustomWidth(m.dockPlan.Right)
+	layout.LeftWidth += layout.CustomLeft
 
 	// The session controls hold the bar's right-hand end and never give any of it
 	// up, so everything else is laid out against what they leave rather than
@@ -515,7 +536,8 @@ type ModeInfo struct {
 // buildDockLeftText builds the dock's left region: the mode pill's label, the
 // passive badges trailing it, the width the two claim, and the mode info the
 // renderer styles them with.
-func (m *OS) buildDockLeftText() (modeLabel, trail string, width int, modeInfo ModeInfo) {
+func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, modeInfo ModeInfo) {
+	m.ensureDockPlan()
 	focusedWindow := m.GetFocusedWindow()
 
 	// Build mode info (will be styled with colors in render.go)
@@ -601,17 +623,32 @@ func (m *OS) buildDockLeftText() (modeLabel, trail string, width int, modeInfo M
 	// carrying a .tuios.tape, a small status marker rides in the dock. It is
 	// informational only; it opens no dialog and runs nothing.
 	if badge := m.tapeDockBadge(); badge != "" {
-		trail += badge + " "
+		tape = badge + " "
 	}
 
-	// Rendered width, not byte length: Nerd Font glyphs and the caps are wider
-	// than their bytes. +4 for margins/padding.
-	width = lipgloss.Width(config.GetDockModeCapLeft()) +
-		lipgloss.Width(modeLabel) +
-		lipgloss.Width(config.GetDockModeCapRight()) +
-		lipgloss.Width(trail) + 4
+	// Only the components the plan placed claim any room. Rendered width, not
+	// byte length: Nerd Font glyphs and the caps are wider than their bytes.
+	// The +4 is the margins and padding the block has always carried.
+	if m.dockPlan.Has(config.DockComponentMode) {
+		width += lipgloss.Width(config.GetDockModeCapLeft()) +
+			lipgloss.Width(modeLabel) +
+			lipgloss.Width(config.GetDockModeCapRight())
+	} else {
+		modeLabel = ""
+	}
+	if m.dockPlan.Has(config.DockComponentTrail) {
+		width += lipgloss.Width(trail)
+	} else {
+		trail = ""
+	}
+	if m.dockPlan.Has(config.DockComponentTape) {
+		width += lipgloss.Width(tape)
+	} else {
+		tape = ""
+	}
+	width += 4
 
-	return modeLabel, trail, width, modeInfo
+	return modeLabel, trail, tape, width, modeInfo
 }
 
 // copyModeHelpTiers returns the dock's copy-mode help for a sub-state, longest
@@ -694,7 +731,7 @@ func dockItemsWidth(items []DockItem) int {
 // way to the minimized entries when the bar is too narrow for both. A message
 // does not: it holds the block for the few seconds it is up.
 func (m *OS) dockRightWidth() (width int, yields bool) {
-	if block, ok := m.renderNotificationBlock(m.GetRenderWidth(), 0); ok {
+	if block, ok := m.dockNotificationBlock(m.GetRenderWidth(), 0); ok {
 		return block.Width, false
 	}
 	return m.calculateDockRightWidth(), true
@@ -702,6 +739,7 @@ func (m *OS) dockRightWidth() (width int, yields bool) {
 
 // calculateDockRightWidth calculates the width of the right side of the dock
 func (m *OS) calculateDockRightWidth() int {
+	m.ensureDockPlan()
 	// A live message owns the right-hand block, ahead of the copy-mode help
 	// line and the system meters both. It is measured here rather than only at
 	// render time so the dock items are laid out against the room the message
@@ -712,13 +750,13 @@ func (m *OS) calculateDockRightWidth() int {
 	// silently dropped. The help line used to hold the block unconditionally, so
 	// the message was not crowded out, it was never rendered at all: a copy of
 	// something that failed, which is when a message matters most, went nowhere.
-	if block, ok := m.renderNotificationBlock(m.GetRenderWidth(), 0); ok {
+	if block, ok := m.dockNotificationBlock(m.GetRenderWidth(), 0); ok {
 		return block.Width
 	}
 
 	focusedWindow := m.GetFocusedWindow()
 
-	if focusedWindow.CopyModeVisible() {
+	if focusedWindow.CopyModeVisible() && m.dockPlan.Has(config.DockComponentCopyHelp) {
 		// In copy mode the help line is the right-hand block. Measure the
 		// longest variant rather than guessing at it, so a terminal with room
 		// for it reserves exactly enough and one without falls to a shorter
@@ -734,17 +772,39 @@ func (m *OS) calculateDockRightWidth() int {
 	// off, which is the default. A flat 32 columns held for a readout the user
 	// never turned on is the same inversion in its purest form: it was the
 	// single largest claim on the bar and it drew nothing at all.
+	parts := m.dockMeterParts()
+	custom := m.dockCustomWidth(m.dockPlan.Right)
+	if len(parts) == 0 {
+		return custom
+	}
+	return custom + lipgloss.Width(strings.Join(parts, " ")) + dockSysInfoMargin
+}
+
+// dockMeterParts is the readouts the right block would draw, in the order they
+// yield: the CPU graph goes first on a dock too narrow for both, because a
+// clipped graph reads as noise where a clipped figure reads as a figure.
+func (m *OS) dockMeterParts() []string {
+	m.ensureDockPlan()
 	var parts []string
-	if config.ShowCPU {
+	if config.ShowCPU && m.dockPlan.Has(config.DockComponentCPU) {
 		parts = append(parts, m.GetCPUGraph())
 	}
-	if config.ShowRAM {
+	if config.ShowRAM && m.dockPlan.Has(config.DockComponentRAM) {
 		parts = append(parts, m.GetRAMUsage())
 	}
-	if len(parts) == 0 {
-		return 0
+	return parts
+}
+
+// dockNotificationBlock is the message block, or nothing when the dock does not
+// list the notifications component. The takeover itself is unconditional: a
+// message is a transient claim on the right-hand end rather than a cell, so
+// where "notifications" sits in the list does not move it.
+func (m *OS) dockNotificationBlock(barWidth, room int) (notifBlock, bool) {
+	m.ensureDockPlan()
+	if !m.dockPlan.Has(config.DockComponentNotifications) {
+		return notifBlock{}, false
 	}
-	return lipgloss.Width(strings.Join(parts, " ")) + dockSysInfoMargin
+	return m.renderNotificationBlock(barWidth, room)
 }
 
 // dockSysInfoMargin is the gap the meters keep from the bar's right-hand end,
@@ -767,6 +827,10 @@ func dockItemLabel(number int, name string) string {
 
 // getDockItems returns all dock items (minimized windows in current workspace)
 func (m *OS) getDockItems() []DockItem {
+	m.ensureDockPlan()
+	if !m.dockPlan.Has(config.DockComponentWindows) {
+		return nil
+	}
 	// Find all minimized/minimizing windows in current workspace
 	dockWindows := []int{}
 	for i, window := range m.Windows {

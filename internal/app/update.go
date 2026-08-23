@@ -286,6 +286,12 @@ func (m *OS) Init() tea.Cmd {
 		ListenForCwdChange(m.ensureCwdChangeChan()),
 	}
 
+	// The dock's components. Everything that used to hold the maintenance tick
+	// at the normal frame rate for a clock is here instead, on its own deadline.
+	if cmd := m.InitDockComponents(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// Listen for state sync from other clients (daemon/SSH/web mode)
 	if m.StateSyncChan != nil {
 		cmds = append(cmds, ListenForStateSync(m.StateSyncChan))
@@ -409,7 +415,6 @@ func TickCmd() tea.Cmd {
 func (m *OS) tickNeedsWork() bool {
 	if len(m.Animations) > 0 || m.InteractionMode || m.Dragging || m.Resizing ||
 		m.PrefixActive || m.ScriptMode || len(m.Notifications) > 0 ||
-		config.NeedsDockTick() || config.ShowCPU || config.ShowRAM ||
 		m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending ||
 		len(m.pendingAgentAlerts) > 0 {
 		return true
@@ -731,14 +736,6 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// forever.
 		m.clearStaleManipulation()
 
-		// Update system info (only when explicitly enabled)
-		if config.ShowCPU {
-			m.UpdateCPUHistory()
-		}
-		if config.ShowRAM {
-			m.UpdateRAMUsage()
-		}
-
 		// Leave script mode once a finished script's completion indicator has
 		// been shown. This re-arms Ctrl+P (the palette binding), which is
 		// intercepted for script pause/resume while ScriptMode is set. It also
@@ -826,7 +823,6 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Tick handles animations, interactions, whichkey, dock stats, and scripts.
 		// PTY content changes are handled by PTYDataMsg (event-driven).
 		hasAnimations := m.HasActiveAnimations()
-		needsDockTick := config.NeedsDockTick()
 
 		// Debounce rail titles: a burst of title changes adopts at most one per
 		// interval. railTitleChanged means the rail must redraw; sidebarTitlePending
@@ -860,7 +856,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// cost smoothness without limiting the motion flood, since motion
 			// events drove their own renders regardless of the tick rate.
 			nextTick = TickCmd()
-		} else if hasAnimations || m.PrefixActive || needsScriptFrame || needsDockTick || hasNotifications || m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending {
+		} else if hasAnimations || m.PrefixActive || needsScriptFrame || hasNotifications || m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending {
 			nextTick = TickCmd() // Normal FPS when things need periodic updates
 		} else {
 			nextTick = IdleTickCmd() // Slow idle tick (process cleanup, etc.)
@@ -888,7 +884,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		// Render on tick if something periodic needs visual updates OR background windows changed
 		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
-			needsDockTick || hasBackgroundChanges || hasNotifications || notifExpired || leftScriptMode ||
+			hasBackgroundChanges || hasNotifications || notifExpired || leftScriptMode ||
 			m.SidebarMarqueeActive() || m.TooltipPending() || railTitleChanged || zenCrossed
 		if !needsRender {
 			m.renderSkipped = true
@@ -911,6 +907,16 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 		return m, nextTick
+
+	case dockComponentMsg:
+		// A component said something. The frame is drawn only if what it said
+		// changed the bar: an interval component polling a value that has not
+		// moved costs an execution and no render at all, which is the whole
+		// difference between this and the sixty-frames-a-second clock it
+		// replaced.
+		changed := m.handleDockComponent(msg)
+		m.renderSkipped = !changed
+		return m, ListenForDockComponents(m.dockEngine.Updates())
 
 	case SessionCreatedMsg:
 		cmd := ListenForSessionCreate(m.sessionCreateChan())
@@ -1417,7 +1423,12 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Bubble Tea goroutine, so the render loop never reads the globals mid-write.
 		if msg.Config != nil {
 			config.ApplyAppearanceConfig(msg.Config)
+			// The dock section is rebuilt here rather than only at startup. A
+			// feature whose distribution story is "copy a file" that then needed
+			// a restart to see the file would be most of the story missing.
+			cmd := m.ReloadDockComponents(msg.Config)
 			m.MarkAllDirty()
+			return m, cmd
 		}
 		return m, nil
 
