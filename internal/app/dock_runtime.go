@@ -42,10 +42,20 @@ func (m *OS) InitDockComponents() tea.Cmd {
 }
 
 // StopDockComponents kills every component this client started. Components are
-// UI: they belong to the attached client and die with it.
+// UI: they belong to the attached client and die with it, and a push component
+// is a process that would otherwise outlive the session that started it.
 func (m *OS) StopDockComponents() {
 	m.dockEngine.Stop()
 	m.dockEngine = nil
+}
+
+// SyncDockContext re-stamps the session name and socket onto the engine, for
+// the paths that learn which session they are on after Init has run: a daemon
+// attach names the session when the connection lands, and a session switch
+// changes it. Without this a component's TUIOS_SESSION would be whatever was
+// known at boot, which for an attach is nothing.
+func (m *OS) SyncDockContext() {
+	m.dockEngine.SetContext(m.SessionName, dockSocketPath())
 }
 
 // ReloadDockComponents rebuilds the plan after the config file changed. Without

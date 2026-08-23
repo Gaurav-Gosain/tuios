@@ -937,6 +937,9 @@ func (m *OS) SwitchToSession(targetSession string) error {
 	}
 	m.SessionName = m.DaemonClient.SessionName()
 	m.rebuildForSession(state, savedWidth, savedHeight)
+	// The components tell their commands which session they are drawing for,
+	// and that answer just changed.
+	m.SyncDockContext()
 
 	m.MarkAllDirty()
 	m.LogInfo("Session switch complete: now on %s with %d windows", m.SessionName, len(m.Windows))
@@ -1023,6 +1026,12 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 // State should be synced to the daemon before Cleanup, on the UI goroutine.
 func (m *OS) Cleanup() {
 	m.stopWindowExitDrain()
+	// The dock's components are subprocesses this client started, and a push
+	// component is a process that never exits on its own. An ephemeral SSH or
+	// web session is a goroutine inside a long-lived server, so without this
+	// every disconnect would leave one running command per push component and
+	// the goroutines reading them.
+	m.StopDockComponents()
 	if m.DaemonClient != nil {
 		_ = m.DaemonClient.Close()
 		return

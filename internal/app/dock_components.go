@@ -368,23 +368,42 @@ func (m *OS) DockComponents() []DockComponentInfo {
 // thing on the bar tuios cannot reason about the value of. What is left when
 // nothing fits is the same thing that was left before components existed.
 func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, []dockCustomHit) {
-	cells, widths, keys := m.dockCustomCells(m.dockPlan.Right)
-	meters := m.dockMeterParts()
+	// One pass over the plan builds the segments in draw order. The two meters
+	// are one segment, emitted where the first of them is named, so a plan of
+	// ["cpu", "custom/x"] draws the readouts and then the cell.
+	type segment struct {
+		text   string
+		width  int
+		name   string
+		custom bool // records a hit rectangle, and yields first when room runs out
+		meters bool // stands for whatever is left of the CPU and RAM readouts
+	}
 
-	// Where the meters go: at the first meter name in the list, so a plan of
-	// ["cpu", "custom/x"] draws them in that order.
-	meterAt := len(cells)
-	seen := 0
+	meters := m.dockMeterParts()
+	var segs []segment
+	placedMeters := false
 	for _, name := range m.dockPlan.Right {
 		switch name {
 		case config.DockComponentCPU, config.DockComponentRAM:
-			if len(meters) > 0 && meterAt == len(cells) {
-				meterAt = seen
+			if placedMeters || len(meters) == 0 {
+				continue
 			}
+			placedMeters = true
+			segs = append(segs, segment{meters: true})
 		default:
-			if dockCellComponent(name) && m.dockCustomCell(name) != "" {
-				seen++
+			if !dockCellComponent(name) {
+				continue
 			}
+			cell := m.dockCustomCell(name)
+			if cell == "" {
+				continue
+			}
+			segs = append(segs, segment{
+				text:   cell,
+				width:  lipgloss.Width(cell),
+				name:   name,
+				custom: strings.HasPrefix(name, config.DockCustomPrefix),
+			})
 		}
 	}
 
@@ -392,40 +411,53 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 		var b strings.Builder
 		var hits []dockCustomHit
 		x := 0
-		emitMeters := func() {
-			if len(meters) == 0 {
-				return
+		for _, seg := range segs {
+			text, width := seg.text, seg.width
+			if seg.meters {
+				text = meterStyle.Render(strings.Join(meters, " "))
+				width = lipgloss.Width(text)
 			}
-			text := meterStyle.Render(strings.Join(meters, " "))
+			if seg.custom {
+				hits = append(hits, dockCustomHit{X0: x, X1: x + width, Name: seg.name})
+			}
 			b.WriteString(text)
-			x += lipgloss.Width(text)
+			x += width
 		}
-		for i := range cells {
-			if i == meterAt {
-				emitMeters()
-			}
-			b.WriteString(cells[i])
-			hits = append(hits, dockCustomHit{X0: x, X1: x + widths[i], Name: keys[i]})
-			x += widths[i]
-		}
-		if meterAt >= len(cells) {
-			emitMeters()
+		if x <= room {
+			return b.String(), hits
 		}
 
-		out := b.String()
-		if lipgloss.Width(out) <= room {
-			return out, hits
+		// A custom cell yields before a meter does, because it is the one thing
+		// on the bar tuios cannot reason about the value of. Then the CPU graph
+		// before the RAM figure: a clipped graph reads as noise where a clipped
+		// figure still reads as a figure.
+		if i := lastSegmentMatching(len(segs), func(i int) bool { return segs[i].custom }); i >= 0 {
+			segs = append(segs[:i], segs[i+1:]...)
+			continue
 		}
-		switch {
-		case len(cells) > 0:
-			cells, widths, keys = cells[:len(cells)-1], widths[:len(widths)-1], keys[:len(keys)-1]
-			meterAt = min(meterAt, len(cells))
-		case len(meters) > 0:
-			// The CPU graph is the first thing dropped on a dock too narrow for
-			// both readouts, then the RAM figure; a clipped graph reads as noise.
+		if len(meters) > 1 {
 			meters = meters[1:]
-		default:
-			return "", nil
+			continue
+		}
+		if len(meters) == 1 {
+			meters = nil
+			if i := lastSegmentMatching(len(segs), func(i int) bool { return segs[i].meters }); i >= 0 {
+				segs = append(segs[:i], segs[i+1:]...)
+			}
+			continue
+		}
+		// Nothing left to give up. Whatever remains is drawn and the bar's own
+		// backstop truncates it.
+		return b.String(), hits
+	}
+}
+
+// lastSegmentMatching is the index of the last of n segments matching pred, or -1.
+func lastSegmentMatching(n int, pred func(int) bool) int {
+	for i := n - 1; i >= 0; i-- {
+		if pred(i) {
+			return i
 		}
 	}
+	return -1
 }
