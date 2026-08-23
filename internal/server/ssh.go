@@ -289,6 +289,13 @@ func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) (tea.Model
 	clientCaps := detectClientGraphics(sshSession)
 	app.SetClientCapabilities(clientToHostCapabilities(clientCaps))
 
+	// The accent picker's fallback labels describe what the terminal showing
+	// the frame will do to each colour. Its default probe reads this process's
+	// stdout and environment, which describe the server; pin the profile wish
+	// derives for this client's renderer instead, so the labels and the frame
+	// agree. Process-global like SetClientCapabilities, same caveat.
+	app.SetAccentColorProfile(colorprofile.Env(append(sshSession.Environ(), "TERM="+pty.Term)))
+
 	// Determine session name from SSH context
 	sessionName := determineSessionName(sshSession, cfg)
 

@@ -194,6 +194,9 @@ func runWebServer() error {
 	// By default, lipgloss detects color profile from os.Stdout, which isn't a TTY
 	// when running as a web server. This causes all colors to be stripped.
 	lipgloss.Writer.Profile = colorprofile.TrueColor
+	// The accent picker labels colours through its own probe of this process's
+	// stdout; pin it to what the browser terminal renders, the same way.
+	app.SetAccentColorProfile(colorprofile.TrueColor)
 
 	// Set terminal environment variables
 	_ = os.Setenv("TERM", "xterm-256color")
