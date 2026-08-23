@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -165,5 +166,41 @@ func TestAnUnknownGlyphSetIsRefusedAtTheRegistry(t *testing.T) {
 	}
 	if err := SetOptionValue(cfg, "appearance.glyphs", "heavy"); err != nil {
 		t.Errorf("setting a built-in set failed: %v", err)
+	}
+}
+
+// TestGlyphBorderInASCIIModeStaysASCII pins the fallback a glyph set's border
+// falls back to when the mode forbids what the set asked for.
+//
+// The rune check rejects a set's non-ASCII runes in ASCII mode, and the base it
+// fell back to was the rounded border, so border_style = "glyphs" with
+// --ascii-only drew ╭ corners on exactly the terminals that mode exists for.
+func TestGlyphBorderInASCIIModeStaysASCII(t *testing.T) {
+	prevASCII, prevStyle := UseASCIIOnly, BorderStyle
+	prevSet := theme.ActiveGlyphSetID()
+	t.Cleanup(func() {
+		UseASCIIOnly, BorderStyle = prevASCII, prevStyle
+		theme.SetActiveGlyphs(prevSet)
+	})
+
+	UseASCIIOnly = true
+	BorderStyle = BorderStyleGlyphs
+	// heavy names a full box-drawing border, none of which is 7-bit.
+	theme.SetActiveGlyphs("heavy")
+
+	b := GetBorderForStyle()
+	for name, rune := range map[string]string{
+		"top": b.Top, "bottom": b.Bottom, "left": b.Left, "right": b.Right,
+		"top_left": b.TopLeft, "top_right": b.TopRight,
+		"bottom_left": b.BottomLeft, "bottom_right": b.BottomRight,
+	} {
+		if !overlay.IsASCII(rune) {
+			t.Errorf("border %s is %q in ASCII mode", name, rune)
+		}
+	}
+
+	drawn := ResolvedGlyphs()
+	if got := drawn["border.top_left"]; !overlay.IsASCII(got) {
+		t.Errorf("ResolvedGlyphs reports border.top_left as %q in ASCII mode", got)
 	}
 }

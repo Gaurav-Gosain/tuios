@@ -188,3 +188,26 @@ func TestOptionSpecsAreWellFormed(t *testing.T) {
 		}
 	}
 }
+
+// TestEnumDefaultIsTheFirstAccepted pins the convention the settings page
+// relies on to show an unset enum: Default is either one of the accepted
+// values, or empty, and an empty one means the value listed first.
+//
+// Default is documented as what DefaultConfig writes, which for four enums is
+// empty meaning "use the built-in". A panel row has to draw something, and
+// drawing the empty string said the setting was off rather than what it was
+// doing. This is what makes the first accepted value the safe thing to draw.
+func TestEnumDefaultIsTheFirstAccepted(t *testing.T) {
+	for _, o := range Options() {
+		if o.Type != OptionString || len(o.Accepted) == 0 {
+			continue
+		}
+		if o.Default == "" {
+			continue
+		}
+		if !slices.Contains(o.Accepted, o.Default) {
+			t.Errorf("%s: default %q is not one of its accepted values %v",
+				o.Path, o.Default, o.Accepted)
+		}
+	}
+}

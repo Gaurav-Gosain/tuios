@@ -1104,8 +1104,19 @@ func GetBorderForStyle() lipgloss.Border {
 // case: a set that wants square corners says four runes and means "the rest as
 // usual". Falling back per rune also means a set naming no border at all under
 // border_style = "glyphs" draws the default frame rather than a hole.
+//
+// In ASCII mode the fallback is the ASCII border instead. GetBorderForStyle
+// short-circuits to the ASCII border before it reaches here, so what draws was
+// never wrong; what was wrong is what this reports. The rune check below
+// rejects a set's non-ASCII runes in ASCII mode and every rejected rune was
+// then replaced by a rounded one, so ResolvedGlyphs answered "what would this
+// set draw" with ╭ corners that ASCII mode would never put on screen. That is
+// the answer list-glyphs prints and the glyph picker previews.
 func glyphSetBorder() lipgloss.Border {
 	b := lipgloss.RoundedBorder()
+	if UseASCIIOnly {
+		b = lipgloss.ASCIIBorder()
+	}
 	g := theme.Glyphs().Border
 	if g == nil {
 		return b

@@ -847,6 +847,14 @@ standing for a document kept in a directory rather than a value in the config
 file, which is why both have a verb of their own rather than a row in
 `list-options`.
 
+Everything here is also reachable by a person, from the settings page (`,` in
+window mode): its rows are derived from the same registry `list-options` reads,
+so a path you can set is a row they can find. Themes and glyph sets each get a
+searchable picker with live previews, and the dock's lists get an editor. Say so
+when you change one of these for someone: the setting you just wrote has a
+control they can go and adjust, which is usually more useful to them than the
+path.
+
 ### Colour: themes
 
 A theme's value is a name drawn from an open set of several hundred, standing
@@ -1240,6 +1248,11 @@ Be honest with the user about these rather than working around them:
 The dock is three ordered lists of named components. That is the whole
 customisation model: reorder the names, drop the ones you do not want, or add a
 command of your own whose first line of stdout becomes a cell.
+
+The lists are not scalar options, so `set-config` does not reach them: an agent
+edits them by writing the `[dock]` table, and a person edits them in **Dock →
+Components** on the settings page. Point them there rather than at the file when
+all they want is a different order.
 
 ```sh
 tuios list-dock-components

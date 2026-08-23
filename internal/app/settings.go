@@ -7,7 +7,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -29,6 +28,11 @@ const (
 // (-1 or +1 for enum/int, either flips a bool) and applies it live; the input
 // handler persists afterward.
 type settingItem struct {
+	// Path is the registry option this row reaches, empty for a row that is
+	// not one (the daemon log level's own spelling, a section header). The
+	// coverage test reads it to tell an option with no way to reach it from one
+	// that is deliberately absent.
+	Path    string
 	Label   string
 	Desc    string
 	Control settingControl
@@ -52,6 +56,11 @@ type settingItem struct {
 	// activate, when set, runs on Enter/click instead of adjusting the value
 	// (e.g. the Theme row opens the theme picker).
 	activate func(m *OS)
+	// meter is where the value sits in its range, 0 to 1. Set for the numeric
+	// rows whose range is bounded, so the row says how far along it is and not
+	// only what the number is: "gap 3" answers nothing without knowing that the
+	// most it goes to is 8.
+	meter func(m *OS) float64
 }
 
 // settingsCategory groups related settings under a tab.
@@ -154,7 +163,7 @@ func (m *OS) persistSettings() tea.Cmd {
 	if m.ConfigReadOnly {
 		if !m.configReadOnlyTold {
 			m.configReadOnlyTold = true
-			m.ShowNotification("Settings apply to this session only; the config file is not written", "warning", 0)
+			m.ShowNotification("Settings apply to this session only. tuios does not write the config file.", "warning", 0)
 		}
 		return nil
 	}
@@ -183,24 +192,6 @@ func (m *OS) setAppearance(fn func(a *config.AppearanceConfig)) {
 	}
 }
 
-// setStartup runs fn against the held config's startup section when a config is
-// present, so a change to a [startup] setting can be persisted. These settings
-// take effect on the next launch, so there is nothing to apply live.
-func (m *OS) setStartup(fn func(s *config.StartupConfig)) {
-	if m.UserConfig != nil {
-		fn(&m.UserConfig.Startup)
-	}
-}
-
-// setTape runs fn against the held config's [tape] section. Project-tape
-// settings are read straight off UserConfig (not appearance globals), so a
-// change takes effect on the next detection with no extra apply step.
-func (m *OS) setTape(fn func(t *config.TapeConfig)) {
-	if m.UserConfig != nil {
-		fn(&m.UserConfig.Tape)
-	}
-}
-
 // setDebug runs fn against the held config's [debug] section when a config is
 // present, so a change to a diagnostic toggle can be persisted.
 func (m *OS) setDebug(fn func(d *config.DebugConfig)) {
@@ -226,15 +217,6 @@ func (m *OS) ToggleFocusFollowsMouse() tea.Cmd {
 	config.FocusFollowsMouse = !config.FocusFollowsMouse
 	m.setAppearance(func(a *config.AppearanceConfig) { a.FocusFollowsMouse = boolPtr(config.FocusFollowsMouse) })
 	return m.persistSettings()
-}
-
-// tapeAutorunConfigValue returns the configured [tape] autorun mode (not the
-// TUIOS_TAPE_AUTORUN env override), for the settings row.
-func (m *OS) tapeAutorunConfigValue() string {
-	if m.UserConfig != nil && m.UserConfig.Tape.Autorun != "" {
-		return m.UserConfig.Tape.Autorun
-	}
-	return config.TapeAutorunAsk
 }
 
 const themeNone = "none"
@@ -282,61 +264,174 @@ func boolItem(label, desc string, get func() bool, set func(m *OS, v bool)) sett
 	}
 }
 
-// intItem builds a numeric stepper bound to an int global.
-func intItem(label, desc string, lo, hi, step int, get func() int, set func(m *OS, v int)) settingItem {
-	return settingItem{
-		Label:   label,
-		Desc:    desc,
-		Control: controlInt,
-		value:   func(_ *OS) string { return strconv.Itoa(get()) },
-		adjust: func(m *OS, dir int) {
-			set(m, clampInt(get()+dir*step, lo, hi))
-		},
-	}
-}
-
-// stringItem builds a free-text field. get reads the current value (nil-safe
-// against a missing config), set commits a trimmed value. Editing happens inline
-// via the settings input handler; set is called on commit and the change is
-// persisted afterward.
-func stringItem(label, desc, placeholder, unset string, get func(m *OS) string, set func(m *OS, v string)) settingItem {
-	// The example belongs to the description. Rendered in the value's place it
-	// was indistinguishable from a value the user had actually set.
-	if placeholder != "" {
-		desc += ", e.g. " + placeholder
-	}
-	if unset == "" {
-		unset = "(default)"
-	}
-	return settingItem{
-		Label:       label,
-		Desc:        desc,
-		Control:     controlString,
-		Placeholder: placeholder,
-		Unset:       unset,
-		value:       get,
-		setStr:      set,
-	}
-}
-
-// appearanceString reads a string field off the held appearance config, or ""
-// when no config is present (e.g. in unit tests that build a bare OS).
-func (m *OS) appearanceString(get func(a *config.AppearanceConfig) string) string {
-	if m.UserConfig == nil {
-		return ""
-	}
-	return get(&m.UserConfig.Appearance)
-}
-
-// daemonLogLevelOptions lists the daemon debug verbosity levels, lowest first.
-var daemonLogLevelOptions = []string{"off", "errors", "basic", "messages", "verbose", "trace"}
-
-// settingsCategories builds the full settings model, binding each row to its
-// config global, persisted field, and live-apply behavior.
+// settingsCategories is the settings page: which options appear, under which
+// tab, in which order.
+//
+// Almost every row is a registry path, and the row itself is derived from what
+// the registry already says about it (see settings_registry.go). What is spelled
+// out here is the ordering and the grouping, which is the part the registry has
+// no opinion about. A row written by hand is one whose behaviour the registry
+// cannot describe, and it names the path it stands in for so the coverage test
+// can see it.
 func (m *OS) settingsCategories() []settingsCategory {
-	themeOptions := append([]string{themeNone}, theme.AvailableThemes()...)
+	appearance := settingsCategory{
+		Name: "Appearance",
+		Items: m.resolveRows([]settingsRow{
+			custom("appearance.theme", m.themeItem()),
+			custom("appearance.glyphs", m.glyphItem()),
+			opt("appearance.border_style"),
+			opt("appearance.window_title_position"),
+			opt("appearance.window_title_format"),
+			opt("appearance.shared_borders"),
+			opt("appearance.hide_window_buttons"),
+			opt("appearance.window_button_style"),
+			opt("appearance.window_button_position"),
+			opt("appearance.hide_scrollbar"),
+			opt("appearance.scrollbar.style"),
+			opt("appearance.scrollbar.tint"),
+			opt("appearance.scrollbar.thumb"),
+			opt("appearance.scrollbar.track"),
+			opt("appearance.border_focused_color"),
+			opt("appearance.border_unfocused_color"),
+			opt("appearance.gap"),
+			opt("appearance.dim_unfocused"),
+			opt("appearance.panel_padding"),
+			opt("appearance.zen_mode"),
+			opt("appearance.session_colors"),
+		}),
+	}
 
-	themeItem := enumItem("Theme", "Color theme (press Enter for the picker with previews)", themeOptions,
+	// The sidebar rows were appended to Appearance while there were six of them,
+	// to keep the tab strip on one row. There are nine now, which buried the rest
+	// of Appearance under a scroll; a tab of their own costs the strip a second
+	// row, and panelBody already budgets the body against TabRowCount, so that
+	// row comes out of the scrolling list rather than out of the viewport.
+	sidebar := settingsCategory{
+		Name: "Sidebar",
+		Items: m.resolveRows([]settingsRow{
+			opt("appearance.sidebar.enabled"),
+			opt("appearance.sidebar.position"),
+			opt("appearance.sidebar.width"),
+			opt("appearance.sidebar.show_windows"),
+			opt("appearance.sidebar.show_glyphs"),
+			opt("appearance.sidebar.show_counts"),
+			opt("appearance.sidebar.show_agents"),
+			opt("appearance.sidebar.marquee"),
+			opt("appearance.sidebar.tooltips"),
+		}),
+	}
+
+	dock := settingsCategory{
+		Name: "Dock",
+		Items: m.resolveRows([]settingsRow{
+			opt("appearance.dockbar_position"),
+			custom("", m.dockComponentsItem()),
+			opt("appearance.show_clock"),
+			opt("appearance.clock_format"),
+			opt("dock.clock.format"),
+			opt("appearance.show_cpu"),
+			opt("appearance.show_ram"),
+			opt("appearance.dock_workspace_tabs"),
+			opt("appearance.dock_workspace_tab_format"),
+			opt("appearance.dock_workspace_tooltip"),
+			opt("appearance.dock_pill_caps"),
+		}),
+	}
+
+	behavior := settingsCategory{
+		Name: "Behavior",
+		Items: m.resolveRows([]settingsRow{
+			opt("appearance.animations_enabled"),
+			opt("appearance.confirm_quit"),
+			opt("appearance.whichkey_enabled"),
+			opt("appearance.whichkey_position"),
+			opt("appearance.focus_follows_mouse"),
+			opt("appearance.click_to_type"),
+			opt("appearance.alt_drag"),
+			opt("appearance.niri_reverse_scroll"),
+			custom("appearance.max_fps", m.maxFPSItem()),
+			opt("appearance.preferred_shell"),
+		}),
+	}
+
+	// [notifications] is nineteen options and was none of the page. An alert
+	// that fires when it should not is the setting people go looking for first,
+	// and until now the only place to change it was the file.
+	notifications := settingsCategory{
+		Name: "Alerts",
+		Items: m.resolveRows([]settingsRow{
+			opt("notifications.duration"),
+			opt("notifications.warning_duration"),
+			opt("notifications.error_duration"),
+			opt("notifications.error_sticky"),
+			opt("notifications.agent.enabled"),
+			opt("notifications.agent.notify"),
+			opt("notifications.agent.dock"),
+			opt("notifications.agent.sound"),
+			opt("notifications.agent.sound_mode"),
+			opt("notifications.agent.sound_cooldown_seconds"),
+			opt("notifications.agent.settle_seconds"),
+			opt("notifications.agent.suppress_focused"),
+			opt("notifications.agent.quiet_hours"),
+			opt("notifications.agent.states.working"),
+			opt("notifications.agent.states.idle"),
+			opt("notifications.agent.states.done"),
+			opt("notifications.agent.states.needs_input"),
+			opt("notifications.agent.states.errored"),
+		}),
+	}
+
+	startup := settingsCategory{
+		Name: "Startup",
+		Items: m.resolveRows([]settingsRow{
+			opt("startup.open_default_window"),
+			opt("startup.tiled"),
+			opt("startup.start_in_terminal_mode"),
+			opt("startup.daemon"),
+		}),
+	}
+
+	advanced := settingsCategory{
+		Name: "Advanced",
+		Items: m.resolveRows([]settingsRow{
+			opt("appearance.scrollback_lines"),
+			opt("appearance.scroll_lines"),
+			opt("appearance.copy_on_select"),
+			opt("appearance.word_characters"),
+			opt("appearance.zoom_max_width"),
+			custom("debug.show_key_events", m.showKeysItem()),
+		}),
+	}
+
+	daemon := settingsCategory{
+		Name: "Daemon",
+		Items: m.resolveRows([]settingsRow{
+			opt("daemon.log_level"),
+			opt("daemon.agent_autodetect"),
+			opt("daemon.agent_detect_seconds"),
+		}),
+	}
+
+	tape := settingsCategory{
+		Name: "Tape",
+		Items: m.resolveRows([]settingsRow{
+			opt("tape.autorun"),
+			opt("tape.auto_review"),
+		}),
+	}
+
+	return []settingsCategory{
+		appearance, sidebar, dock, behavior,
+		notifications, startup, advanced, daemon, tape,
+	}
+}
+
+// themeItem is the theme row. Hand-written because the value is a name from an
+// open set rather than one of a closed list, so Enter opens the picker with its
+// previews rather than stepping to a next theme nobody can name in advance.
+func (m *OS) themeItem() settingItem {
+	options := append([]string{themeNone}, theme.AvailableThemes()...)
+	item := enumItem("Theme", "Color theme. Press enter to open the picker.", options,
 		func() string {
 			if id := theme.CurrentThemeID(); id != "" {
 				return id
@@ -347,472 +442,77 @@ func (m *OS) settingsCategories() []settingsCategory {
 			m.applyTheme(v)
 			m.setThemeSelection(v)
 		})
-	themeItem.activate = func(m *OS) { m.OpenThemePicker() }
+	item.activate = func(m *OS) { m.OpenThemePicker() }
+	return item
+}
 
-	// The glyph set is the theme's opposite number and sits beside it: the
-	// theme says what colour the chrome is and the set says what shape it is.
-	// A cycler rather than a picker, because the list is four built-ins plus
-	// whatever the user has written rather than several hundred.
-	glyphOptions := theme.AvailableGlyphSets()
+// glyphItem is the glyph set row, the theme's opposite number: the theme says
+// what colour the chrome is and the set says what shape it is. Hand-written for
+// the reason the theme row is, and Enter opens the picker that previews the
+// shapes.
+func (m *OS) glyphItem() settingItem {
+	options := theme.AvailableGlyphSets()
+	item := enumItem("Glyph set", "Shapes for the border, controls, rules and rail marks. Press enter to open the picker.",
+		options,
+		func() string { return theme.ActiveGlyphSetID() },
+		func(m *OS, v string) { m.setOption("appearance.glyphs", v) })
+	item.activate = func(m *OS) { m.OpenGlyphPicker() }
+	return item
+}
 
-	appearance := settingsCategory{
-		Name: "Appearance",
-		Items: []settingItem{
-			themeItem,
-			enumItem("Glyph set", "Characters the border, controls, rules and rail marks are drawn with",
-				glyphOptions,
-				func() string { return config.GlyphSet },
-				func(m *OS, v string) {
-					config.GlyphSet = v
-					theme.SetActiveGlyphs(v)
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Glyphs = v })
-					m.applyAppearanceLive(true)
-				}),
-			enumItem("Border style", "Window border characters", borderStyleOptions,
-				func() string { return config.BorderStyle },
-				func(m *OS, v string) {
-					config.BorderStyle = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.BorderStyle = v })
-					m.applyAppearanceLive(true)
-				}),
-			enumItem("Window title", "Where window titles are drawn", positionOptions,
-				func() string { return config.WindowTitlePosition },
-				func(m *OS, v string) {
-					config.WindowTitlePosition = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.WindowTitlePosition = v })
-					m.applyAppearanceLive(true)
-				}),
-			boolItem("Shared borders", "Merge borders between tiled panes",
-				func() bool { return config.SharedBorders },
-				func(m *OS, v bool) {
-					config.SharedBorders = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.SharedBorders = boolPtr(v) })
-					m.applyAppearanceLive(true)
-				}),
-			boolItem("Window buttons", "Show minimize/maximize/close buttons",
-				func() bool { return !config.HideWindowButtons },
-				func(m *OS, v bool) {
-					config.HideWindowButtons = !v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.HideWindowButtons = !v })
-					m.applyAppearanceLive(false)
-				}),
-			enumItem("Window button style", "pill: glyphs on a filled pill. dots: macOS traffic lights, labelled on hover",
-				windowButtonOptions,
-				func() string { return config.WindowButtonStyle },
-				func(m *OS, v string) {
-					config.WindowButtonStyle = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.WindowButtonStyle = v })
-					m.applyAppearanceLive(false)
-				}),
-			enumItem("Window button position", "Which end of the title bar the controls sit on. macOS puts them left",
-				windowButtonPosOptions,
-				func() string { return config.WindowButtonPosition },
-				func(m *OS, v string) {
-					config.WindowButtonPosition = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.WindowButtonPosition = v })
-					m.applyAppearanceLive(false)
-				}),
-			boolItem("Scrollbar", "Show where a scrolled-back pane is in its history",
-				func() bool { return !config.HideScrollbar },
-				func(m *OS, v bool) {
-					config.HideScrollbar = !v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.HideScrollbar = !v })
-					m.applyAppearanceLive(false)
-				}),
-			enumItem("Scrollbar style", "thin: a hairline thumb. track: a full-height track behind it",
-				scrollbarStyleOptions,
-				func() string { return config.ScrollbarStyle },
-				func(m *OS, v string) {
-					config.ScrollbarStyle = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Scrollbar.Style = v })
-					m.applyAppearanceLive(false)
-				}),
-			// The three colour rows, adjacent and identical in shape. Each opens
-			// the picker; none of them is a text field or a cycler any more.
-			colorSettingItem("appearance.scrollbar.tint"),
-			colorSettingItem("appearance.border_focused_color"),
-			colorSettingItem("appearance.border_unfocused_color"),
-			stringItem("Window title format", "Template: {title}, {index}, {cwd}", "{index}: {title}", "(raw title)",
-				func(m *OS) string { return config.WindowTitleFormat },
-				func(m *OS, v string) {
-					config.WindowTitleFormat = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.WindowTitleFormat = v })
-					m.applyAppearanceLive(false)
-				}),
-			intItem("Pane gap", "Cells of empty ground between two neighbouring tiled panes",
-				0, config.PaneGapMax, 1,
-				func() int { return config.PaneGap },
-				func(m *OS, v int) {
-					config.PaneGap = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Gap = v })
-					m.applyAppearanceLive(true)
-				}),
-			intItem("Dim unfocused", "Quiet the content of panes you are not in, as a percent; 0 is off",
-				0, config.DimUnfocusedMax, 5,
-				func() int { return config.DimUnfocused },
-				func(m *OS, v int) {
-					config.DimUnfocused = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.DimUnfocused = v })
-					m.applyAppearanceLive(false)
-				}),
-			intItem("Panel padding", "Columns each side of an overlay panel's content",
-				1, overlay.MaxPanelPadding, 1,
-				func() int { return overlay.PanelPadding() },
-				func(m *OS, v int) {
-					overlay.SetPanelPadding(v)
-					m.setAppearance(func(a *config.AppearanceConfig) { a.PanelPadding = v })
-					m.applyAppearanceLive(false)
-				}),
-			enumItem("Zen mode", "Hide borders of unfocused windows: disabled, always, or mouse (reveal while moving)",
-				config.ZenModeModes,
-				func() string { return config.ZenMode },
-				func(m *OS, v string) {
-					config.ZenMode = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.ZenMode = v })
-					m.applyAppearanceLive(true)
-				}),
+// dockComponentsItem opens the dock layout editor. It reaches no single
+// registry path: the dock's three lists are lists rather than scalars, so the
+// registry does not carry them and no derived row could express one.
+func (m *OS) dockComponentsItem() settingItem {
+	return settingItem{
+		Label:   "Components",
+		Desc:    "The parts of the dock, in the order they draw. Press enter to edit.",
+		Control: controlEnum,
+		value: func(m *OS) string {
+			if m.UserConfig == nil {
+				return "default"
+			}
+			n := len(m.UserConfig.Dock.DockList("left")) +
+				len(m.UserConfig.Dock.DockList("center")) +
+				len(m.UserConfig.Dock.DockList("right"))
+			return strconv.Itoa(n) + " placed"
 		},
+		activate: func(m *OS) { m.OpenDockEditor() },
 	}
+}
 
-	dock := settingsCategory{
-		Name: "Dock",
-		Items: []settingItem{
-			enumItem("Dock position", "Where the dock bar sits", positionOptions,
-				func() string { return config.DockbarPosition },
-				func(m *OS, v string) {
-					config.DockbarPosition = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.DockbarPosition = v })
-					m.applyAppearanceLive(true)
-				}),
-			boolItem("Clock", "Show the clock overlay",
-				func() bool { return config.ShowClock },
-				func(m *OS, v bool) {
-					config.ShowClock = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.ShowClock = v })
-					m.applyAppearanceLive(false)
-				}),
-			stringItem("Clock format", "Go time layout the clock is drawn with", "Mon 3:04PM", config.DefaultClockFormat,
-				func(_ *OS) string { return config.ClockFormat },
-				func(m *OS, v string) {
-					config.ClockFormat = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.ClockFormat = v })
-					m.applyAppearanceLive(false)
-				}),
-			boolItem("CPU meter", "Show CPU usage in the dock",
-				func() bool { return config.ShowCPU },
-				func(m *OS, v bool) {
-					config.ShowCPU = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.ShowCPU = v })
-					m.applyAppearanceLive(false)
-				}),
-			boolItem("RAM meter", "Show RAM usage in the dock",
-				func() bool { return config.ShowRAM },
-				func(m *OS, v bool) {
-					config.ShowRAM = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.ShowRAM = v })
-					m.applyAppearanceLive(false)
-				}),
-			boolItem("Workspace tabs", "Show the clickable workspace strip in the dock",
-				func() bool { return config.DockWorkspaceTabs },
-				func(m *OS, v bool) {
-					config.DockWorkspaceTabs = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.DockWorkspaceTabs = boolPtr(v) })
-					m.applyAppearanceLive(false)
-				}),
-			stringItem("Workspace tab format", "Template for each workspace tab: {index}, {name}", "{index}: {name}", "(name only)",
-				func(m *OS) string { return config.DockWorkspaceTabFormat },
-				func(m *OS, v string) {
-					config.DockWorkspaceTabFormat = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.DockWorkspaceTabFormat = v })
-					m.applyAppearanceLive(false)
-				}),
-			boolItem("Workspace name on hover", "Pop a workspace's full name when its pill cut it short",
-				func() bool { return config.DockWorkspaceTooltip },
-				func(m *OS, v bool) {
-					config.DockWorkspaceTooltip = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.DockWorkspaceTooltip = boolPtr(v) })
-					m.applyAppearanceLive(false)
-				}),
-			boolItem("Pill caps", "Powerline caps on the dock's pills instead of flat cells",
-				func() bool { return config.DockPillCaps },
-				func(m *OS, v bool) {
-					config.DockPillCaps = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.DockPillCaps = boolPtr(v) })
-					m.applyAppearanceLive(false)
-				}),
+// maxFPSItem is the frame-rate cap. Hand-written because the row says
+// "unlimited" for a number: the config holds an int, and a stepper walking to
+// the cap one frame at a time is not how anyone sets this.
+func (m *OS) maxFPSItem() settingItem {
+	return enumItem("Max FPS", "Highest frame rate tuios draws at.", fpsOptions,
+		func() string {
+			if config.NormalFPS >= config.MaxFPSCap {
+				return "unlimited"
+			}
+			return strconv.Itoa(config.NormalFPS)
 		},
-	}
+		func(m *OS, v string) {
+			fps := config.MaxFPSCap
+			if v != "unlimited" {
+				if n, err := strconv.Atoi(v); err == nil {
+					fps = n
+				}
+			}
+			m.setOption("appearance.max_fps", strconv.Itoa(fps))
+		})
+}
 
-	// The sidebar rows were appended to Appearance while there were six of them,
-	// to keep the tab strip on one row. There are ten now, which buried the rest
-	// of Appearance under a scroll; a tab of their own costs the strip a second
-	// row, and panelBody already budgets the body against TabRowCount, so that
-	// row comes out of the scrolling list rather than out of the viewport.
-	sidebar := settingsCategory{
-		Name: "Sidebar",
-		Items: []settingItem{
-			boolItem("Sidebar", "Show the vertical session sidebar",
-				func() bool { return config.SidebarEnabled },
-				func(m *OS, v bool) {
-					config.SidebarEnabled = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Enabled = boolPtr(v) })
-					m.applyAppearanceLive(true)
-				}),
-			enumItem("Position", "Which edge the sidebar reserves", sidebarPositionOptions,
-				func() string { return config.SidebarPosition },
-				func(m *OS, v string) {
-					config.SidebarPosition = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Position = v })
-					m.applyAppearanceLive(true)
-				}),
-			intItem("Width", "Preferred sidebar width in columns", 10, 60, 2,
-				func() int { return config.SidebarWidth },
-				func(m *OS, v int) {
-					config.SidebarWidth = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Width = v })
-					m.applyAppearanceLive(true)
-				}),
-			boolItem("Show windows", "List window rows under the current session",
-				func() bool { return config.SidebarShowWindows },
-				func(m *OS, v bool) {
-					config.SidebarShowWindows = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowWindows = boolPtr(v) })
-					m.applyAppearanceLive(false)
-				}),
-			boolItem("Show glyphs", "Draw agent-state glyphs on sidebar rows",
-				func() bool { return config.SidebarShowGlyphs },
-				func(m *OS, v bool) {
-					config.SidebarShowGlyphs = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowGlyphs = boolPtr(v) })
-					m.applyAppearanceLive(false)
-				}),
-			boolItem("Show counts", "Draw window counts on sidebar session rows",
-				func() bool { return config.SidebarShowCounts },
-				func(m *OS, v bool) {
-					config.SidebarShowCounts = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowCounts = boolPtr(v) })
-					m.applyAppearanceLive(false)
-				}),
-			boolItem("Agents section", "List the panes running an agent, pinned to the rail's bottom",
-				func() bool { return config.SidebarShowAgents },
-				func(m *OS, v bool) {
-					config.SidebarShowAgents = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.ShowAgents = boolPtr(v) })
-					m.applyAppearanceLive(false)
-				}),
-			boolItem("Marquee", "Scroll a hovered row's title when it does not fit",
-				func() bool { return config.SidebarMarquee },
-				func(m *OS, v bool) {
-					config.SidebarMarquee = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Marquee = boolPtr(v) })
-					m.applyAppearanceLive(false)
-				}),
-			boolItem("Tooltips", "Name icon-only controls on hover",
-				func() bool { return config.Tooltips },
-				func(m *OS, v bool) {
-					config.Tooltips = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.Sidebar.Tooltips = boolPtr(v) })
-					m.applyAppearanceLive(false)
-				}),
-			boolItem("Session colors", "Give each session its own colour on the rail and the switcher",
-				func() bool { return config.SessionColors },
-				func(m *OS, v bool) {
-					config.SessionColors = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.SessionColors = boolPtr(v) })
-					m.applyAppearanceLive(false)
-				}),
-		},
-	}
-
-	behavior := settingsCategory{
-		Name: "Behavior",
-		Items: []settingItem{
-			boolItem("Animations", "Animate window transitions",
-				func() bool { return config.AnimationsEnabled },
-				func(m *OS, v bool) {
-					config.AnimationsEnabled = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.AnimationsEnabled = boolPtr(v) })
-					m.applyAppearanceLive(false)
-				}),
-			boolItem("Confirm quit", "Always confirm before quitting",
-				func() bool { return config.AlwaysConfirmQuit },
-				func(m *OS, v bool) {
-					config.AlwaysConfirmQuit = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.ConfirmQuit = boolPtr(v) })
-				}),
-			boolItem("Which-key", "Show the leader-key hint popup",
-				func() bool { return config.WhichKeyEnabled },
-				func(m *OS, v bool) {
-					config.WhichKeyEnabled = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.WhichKeyEnabled = boolPtr(v) })
-				}),
-			enumItem("Which-key position", "Corner for the leader-key popup", whichKeyPosOptions,
-				func() string { return config.WhichKeyPosition },
-				func(m *OS, v string) {
-					config.WhichKeyPosition = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.WhichKeyPosition = v })
-				}),
-			boolItem("Focus follows mouse", "Focus the pane under the cursor without clicking",
-				func() bool { return config.FocusFollowsMouse },
-				func(m *OS, v bool) {
-					config.FocusFollowsMouse = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.FocusFollowsMouse = boolPtr(v) })
-				}),
-			enumItem("Click to type", "Clicking a pane: single starts typing, double needs two clicks, off only focuses",
-				clickToTypeOptions,
-				func() string { return config.ClickToType },
-				func(m *OS, v string) {
-					config.ClickToType = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.ClickToType = v })
-				}),
-			boolItem("Reverse scroll", "Reverse scroll in the scrolling layout",
-				func() bool { return config.NiriReverseScroll },
-				func(m *OS, v bool) {
-					config.NiriReverseScroll = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.NiriReverseScroll = v })
-				}),
-			enumItem("Max FPS", "Render frame-rate cap (unlimited uncaps it)", fpsOptions,
-				func() string {
-					if config.NormalFPS >= config.MaxFPSCap {
-						return "unlimited"
-					}
-					return strconv.Itoa(config.NormalFPS)
-				},
-				func(m *OS, v string) {
-					fps := config.MaxFPSCap
-					if v != "unlimited" {
-						if n, err := strconv.Atoi(v); err == nil {
-							fps = n
-						}
-					}
-					config.NormalFPS = fps
-					m.setAppearance(func(a *config.AppearanceConfig) { a.MaxFPS = fps })
-				}),
-			stringItem("Preferred shell", "Shell for new windows (applies to new windows)", "/bin/bash", "(auto-detect)",
-				func(m *OS) string {
-					return m.appearanceString(func(a *config.AppearanceConfig) string { return a.PreferredShell })
-				},
-				func(m *OS, v string) {
-					m.setAppearance(func(a *config.AppearanceConfig) { a.PreferredShell = v })
-				}),
-		},
-	}
-
-	startup := settingsCategory{
-		Name: "Startup",
-		Items: []settingItem{
-			boolItem("Open default window", "Open a terminal when a session starts empty (next launch)",
-				func() bool { return m.UserConfig != nil && m.UserConfig.Startup.OpenDefaultWindow },
-				func(m *OS, v bool) {
-					m.setStartup(func(s *config.StartupConfig) { s.OpenDefaultWindow = v })
-				}),
-			boolItem("Start tiled", "Start a new session tiled, not floating (next launch)",
-				func() bool { return m.UserConfig != nil && m.UserConfig.Startup.Tiled },
-				func(m *OS, v bool) {
-					m.setStartup(func(s *config.StartupConfig) { s.Tiled = v })
-				}),
-			boolItem("Start in terminal mode", "Land in the shell, ready to type (next launch)",
-				func() bool { return m.UserConfig != nil && m.UserConfig.Startup.StartInTerminalMode },
-				func(m *OS, v bool) {
-					m.setStartup(func(s *config.StartupConfig) { s.StartInTerminalMode = v })
-				}),
-			boolItem("Daemon by default", "Plain 'tuios' attaches to a daemon session; --standalone or TUIOS_NO_DAEMON=1 overrides",
-				func() bool { return m.UserConfig != nil && m.UserConfig.Startup.Daemon },
-				func(m *OS, v bool) {
-					m.setStartup(func(s *config.StartupConfig) { s.Daemon = v })
-				}),
-		},
-	}
-
-	advanced := settingsCategory{
-		Name: "Advanced",
-		Items: []settingItem{
-			intItem("Scrollback lines", "Lines kept per window (applies to new windows)", 100, 100000, 1000,
-				func() int { return config.ScrollbackLines },
-				func(m *OS, v int) {
-					config.ScrollbackLines = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.ScrollbackLines = v })
-				}),
-			intItem("Scroll lines", "Lines scrolled per mouse wheel notch", 1, 50, 1,
-				func() int { return config.ScrollLines },
-				func(m *OS, v int) {
-					config.ScrollLines = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.ScrollLines = v })
-				}),
-			boolItem("Copy on select", "Put a mouse selection on the clipboard as soon as it is released",
-				func() bool { return config.CopyOnSelect },
-				func(m *OS, v bool) {
-					config.CopyOnSelect = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.CopyOnSelect = &v })
-				}),
-			stringItem("Word characters", "Punctuation double-click keeps inside a word (letters and digits always count)", "@-./_~?&=%+#", "(default)",
-				func(m *OS) string { return config.WordCharacters },
-				func(m *OS, v string) {
-					config.WordCharacters = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.WordCharacters = &v })
-				}),
-			intItem("Zoom width", "Max columns in zoom mode (0 = fullscreen)", 0, 400, 10,
-				func() int { return config.ZoomMaxWidth },
-				func(m *OS, v int) {
-					config.ZoomMaxWidth = v
-					m.setAppearance(func(a *config.AppearanceConfig) { a.ZoomMaxWidth = v })
-				}),
-			boolItem("Show keys overlay", "Show pressed keys as a keycast in the bottom-right corner",
-				func() bool { return m.ShowKeys },
-				func(m *OS, v bool) {
-					m.ShowKeys = v
-					m.setDebug(func(d *config.DebugConfig) { d.ShowKeyEvents = v })
-				}),
-		},
-	}
-
-	daemon := settingsCategory{
-		Name: "Daemon",
-		Items: []settingItem{
-			{
-				Label:   "Log level",
-				Desc:    "Daemon debug log verbosity (applies to the daemon on restart)",
-				Control: controlEnum,
-				Options: daemonLogLevelOptions,
-				value:   func(m *OS) string { return m.daemonLogLevel() },
-				adjust: func(m *OS, dir int) {
-					next := cycleEnum(daemonLogLevelOptions, m.daemonLogLevel(), dir)
-					if m.UserConfig != nil {
-						m.UserConfig.Daemon.LogLevel = next
-					}
-				},
-			},
-		},
-	}
-
-	tape := settingsCategory{
-		Name: "Tape",
-		Items: []settingItem{
-			{
-				Label:   "Autorun",
-				Desc:    "Project-tape detection: off, ask (passive), or auto (run trusted)",
-				Control: controlEnum,
-				Options: config.TapeAutorunModes,
-				value:   func(m *OS) string { return m.tapeAutorunConfigValue() },
-				adjust: func(m *OS, dir int) {
-					next := cycleEnum(config.TapeAutorunModes, m.tapeAutorunConfigValue(), dir)
-					m.setTape(func(t *config.TapeConfig) { t.Autorun = next })
-				},
-			},
-			{
-				Label:   "Auto-open review",
-				Desc:    "Open the review dialog automatically on entering a tape directory",
-				Control: controlBool,
-				boolVal: func(m *OS) bool { return m.UserConfig != nil && m.UserConfig.Tape.AutoReview },
-				adjust: func(m *OS, _ int) {
-					cur := m.UserConfig != nil && m.UserConfig.Tape.AutoReview
-					m.setTape(func(t *config.TapeConfig) { t.AutoReview = !cur })
-				},
-			},
-		},
-	}
-
-	return []settingsCategory{appearance, sidebar, dock, behavior, startup, advanced, daemon, tape}
+// showKeysItem is the keycast toggle. Hand-written because the overlay's live
+// state is a model field the renderer reads directly, so the row has to move
+// both it and the config.
+func (m *OS) showKeysItem() settingItem {
+	return boolItem("Show keys", "Show each key you press in the bottom right corner.",
+		func() bool { return m.ShowKeys },
+		func(m *OS, v bool) {
+			m.ShowKeys = v
+			m.setOption("debug.show_key_events", strconv.FormatBool(v))
+		})
 }
 
 // daemonLogLevel returns the configured daemon log level, defaulting to "off"
