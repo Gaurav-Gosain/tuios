@@ -187,7 +187,7 @@ func windowPillPieces(col color.Color, isTiling bool) []windowButtonPiece {
 
 	pieces := []windowButtonPiece{
 		{WindowButtonNone, pillCap(config.GetWindowPillLeft())},
-		{WindowButtonMinimize, glyph("  - ")},
+		{WindowButtonMinimize, glyph(config.GetWindowButtonMinimize())},
 	}
 	if !isTiling {
 		pieces = append(pieces, windowButtonPiece{WindowButtonZoom, glyph(config.GetWindowButtonMaximize())})
@@ -325,6 +325,10 @@ func windowDotSymbol(action WindowButtonAction) string {
 	// Circled forms, so a hovered control is the same disc carrying a mark
 	// rather than a different shape. They are one cell wide like the disc, so
 	// nothing moves under the pointer and no recorded rectangle shifts.
+	//
+	// Left out of the glyph set on purpose. These are the pill's three marks
+	// again in a circled form, and a set that could name them separately could
+	// have a hovered dot showing a different control than the pill does.
 	switch action {
 	case WindowButtonClose:
 		return "\u2297" // circled times

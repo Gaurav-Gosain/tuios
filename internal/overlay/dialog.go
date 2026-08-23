@@ -57,6 +57,7 @@ func DashRule(width int, bg color.Color, pal Palette) string {
 	if UseASCII() {
 		ch = "-"
 	}
+	ch = chromeOr(func(c *Chrome) string { return c.DashRule }, ch)
 	return Style(bg).Foreground(pal.FgMute).Render(strings.Repeat(ch, max(width, 0)))
 }
 
@@ -73,10 +74,11 @@ func EnterKey() string {
 // is on. Sigil is the same mark plus its trailing space, which is the two-cell
 // form list rows and search lines use.
 func SigilMark() string {
+	def := "›"
 	if UseASCII() {
-		return ">"
+		def = ">"
 	}
-	return "›"
+	return chromeOr(func(c *Chrome) string { return c.Sigil }, def)
 }
 
 // Sigil is SigilMark plus a space.

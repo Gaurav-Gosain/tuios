@@ -90,10 +90,7 @@ func Cycler(value string, selected bool, bg color.Color, pal Palette) string {
 		arrowColor = pal.AccentBright
 		valColor = pal.Fg
 	}
-	left, right := "‹", "›"
-	if UseASCII() {
-		left, right = "<", ">"
-	}
+	left, right := ArrowLeft(), ArrowRight()
 	arrow := Style(bg).Foreground(arrowColor)
 	return arrow.Render(left+" ") +
 		Style(bg).Foreground(valColor).Bold(selected).Render(value) +
@@ -127,15 +124,36 @@ func Rule(width int, bg color.Color, pal Palette) string {
 	if UseASCII() {
 		ch = "-"
 	}
+	ch = chromeOr(func(c *Chrome) string { return c.Rule }, ch)
 	return Style(bg).Foreground(pal.FgMute).Render(strings.Repeat(ch, max(width, 0)))
+}
+
+// ArrowLeft and ArrowRight are the pair a cycler and an overflowing tab strip
+// point back and on with.
+func ArrowLeft() string {
+	def := "‹"
+	if UseASCII() {
+		def = "<"
+	}
+	return chromeOr(func(c *Chrome) string { return c.ArrowLeft }, def)
+}
+
+// ArrowRight is ArrowLeft pointing the other way.
+func ArrowRight() string {
+	def := "›"
+	if UseASCII() {
+		def = ">"
+	}
+	return chromeOr(func(c *Chrome) string { return c.ArrowRight }, def)
 }
 
 // Ellipsis returns the truncation marker for the current ASCII setting.
 func Ellipsis() string {
+	def := "…"
 	if UseASCII() {
-		return "..."
+		def = "..."
 	}
-	return "…"
+	return chromeOr(func(c *Chrome) string { return c.Ellipsis }, def)
 }
 
 // Truncate shortens s to fit within maxWidth display cells, appending an

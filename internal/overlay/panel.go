@@ -192,12 +192,7 @@ func planTabRun(tabs []string, active, width int) tabRun {
 }
 
 // tabArrows returns the overflow glyphs, honoring ASCII mode.
-func tabArrows() (string, string) {
-	if UseASCII() {
-		return "<", ">"
-	}
-	return "‹", "›"
-}
+func tabArrows() (string, string) { return ArrowLeft(), ArrowRight() }
 
 // glyphPrefix returns the glyph plus a trailing space, honoring ASCII mode.
 func glyphPrefix(glyph string) string {

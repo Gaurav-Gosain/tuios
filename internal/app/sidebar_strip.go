@@ -460,7 +460,7 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 					// a one-cell target on a three-column rail is not a control, and
 					// naming the list the "+" adds to is what the open rail's header
 					// does with the same glyph in the same place.
-					add = sidebarAddGlyph
+					add = sidebarAddGlyph()
 					note(sidebarStripHeader, g.addSession, "", sidebarAddWords(g.add), y)
 					record(g.add, g.addSession, "", y)
 				} else {
@@ -612,7 +612,7 @@ func sidebarStripHeaderCell(noun, add string, cw int, lit bool, bg color.Color, 
 func (m *OS) sidebarStripTerminalCell(e sidebarTerminalEntry, peeked bool, cw int, pal overlay.Palette, bg color.Color, lit bool) string {
 	lead, leadFg := " ", color.Color(nil)
 	if e.Focused && !peeked {
-		lead, leadFg = "▎", railFocusTint(m.sessionTint(e.SessionID, bg), pal)
+		lead, leadFg = config.GetRailFocusMark(), railFocusTint(m.sessionTint(e.SessionID, bg), pal)
 		if overlay.UseASCII() {
 			lead = ">"
 		}
@@ -632,7 +632,7 @@ func (m *OS) sidebarStripTerminalCell(e sidebarTerminalEntry, peeked bool, cw in
 func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Palette, bg color.Color, lit bool) string {
 	lead, leadFg := " ", color.Color(nil)
 	if e.WindowIndex >= 0 && e.WindowIndex == m.FocusedWindow {
-		lead, leadFg = "▎", railFocusTint(m.agentIdentityTint(e, bg), pal)
+		lead, leadFg = config.GetRailFocusMark(), railFocusTint(m.agentIdentityTint(e, bg), pal)
 		if overlay.UseASCII() {
 			lead = ">"
 		}
@@ -646,7 +646,7 @@ func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Pale
 // something to say. One vocabulary across the lists is what lets the stack be
 // read as one object at two cells wide.
 func stripStateMark(state string, doneSeen bool, pal overlay.Palette, bg color.Color, lit bool) string {
-	mark, markFg := "·", stripRestingInk(lit, pal)
+	mark, markFg := config.GetRailBullet(), stripRestingInk(lit, pal)
 	if overlay.UseASCII() {
 		mark = "."
 	}
@@ -756,13 +756,13 @@ func (m *OS) sidebarStripCell(node sessiontree.Node, cw int, pal overlay.Palette
 		// It is also a filled block rather than type, and it marks the one
 		// session the peek already names. Lifting both widths together is the
 		// right fix and is a change to the expanded rail, not to this audit.
-		lead, leadFg = "▎", railFocusTint(m.sessionTint(node.ID, bg), pal)
+		lead, leadFg = config.GetRailFocusMark(), railFocusTint(m.sessionTint(node.ID, bg), pal)
 		if overlay.UseASCII() {
 			lead = ">"
 		}
 	}
 
-	mark, markFg := "·", stripRestingInk(lit, pal)
+	mark, markFg := config.GetRailBullet(), stripRestingInk(lit, pal)
 	if overlay.UseASCII() {
 		mark = "."
 	}
