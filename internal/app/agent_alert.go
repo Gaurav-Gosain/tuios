@@ -154,11 +154,12 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 	}
 	m.writeHostSequence(seq)
 
-	// The cue plays from the client, which is the process with a human in front
-	// of it. Under `tuios ssh` that is the laptop rather than the host the
-	// session runs on, and it falls out of where alerts already live rather than
-	// needing a wire message. Play returns before anything is spawned, so the
-	// Update goroutine this runs on is not waiting on an audio device.
+	// The cue plays from the client process, not the daemon, so a local attach
+	// plays it where the human sits. A served client is the exception: under
+	// `tuios ssh` this code runs on the server, the audio comes out of the
+	// server's speakers, and the startup warning (sshAlertWarnings) already
+	// said so. Play returns before anything is spawned, so the Update
+	// goroutine this runs on is not waiting on an audio device.
 	if policy.PlaysAudio() {
 		cue := sound.CueDone
 		if policy.AttentionCue(to) {

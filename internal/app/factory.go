@@ -197,6 +197,9 @@ func NewOS(opts OSOptions) *OS {
 		if opts.BrowserClient {
 			os.ConfigWarnings = append(os.ConfigWarnings, browserAlertWarnings(cfg)...)
 		}
+		if opts.IsSSHMode {
+			os.ConfigWarnings = append(os.ConfigWarnings, sshAlertWarnings(cfg)...)
+		}
 		if cfg.Debug.ShowKeyEvents {
 			os.ShowKeys = true
 		}
