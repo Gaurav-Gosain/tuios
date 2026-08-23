@@ -24,3 +24,29 @@ func TermProgram(kittyGraphics, sixelGraphics bool) string {
 		return "TUIOS"
 	}
 }
+
+// KittyAnimationVar returns the TUIOS_KITTY_ANIMATION assignment tuios exports
+// to a guest, given whether kitty animation frames survive the trip to the
+// host terminal.
+//
+// A guest cannot find this out for itself. An a=f frame edit is answered by
+// the terminal that applies it, and tuios does not relay that answer back into
+// the pane, so a guest that sends one and waits hears nothing whether it
+// worked or not. Guessing from the environment is worse: TERM and
+// KITTY_WINDOW_ID are inherited straight through a pane, so they name the host
+// terminal and say nothing about what the pane in front of it will carry.
+//
+// So tuios says. It has already probed the host, and this is that answer,
+// which is also why the variable is the same one that overrides the probe: a
+// tuios running inside a tuios pane should believe the pane it is in.
+//
+// Only the local terminal path sets it so far. The daemon builds its own guest
+// environment in internal/session and does not, so a pane under the daemon is
+// silent on the question and a guest reading this falls back to whatever is
+// safe everywhere. Silence is the safe answer, so that is a gap and not a bug.
+func KittyAnimationVar(supported bool) string {
+	if supported {
+		return "TUIOS_KITTY_ANIMATION=1"
+	}
+	return "TUIOS_KITTY_ANIMATION=0"
+}

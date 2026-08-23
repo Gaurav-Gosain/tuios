@@ -174,6 +174,7 @@ func NewOS(opts OSOptions) *OS {
 	terminal.SetGraphicsCapabilities(
 		os.KittyPassthrough != nil && os.KittyPassthrough.IsEnabled(),
 		os.SixelPassthrough != nil && os.SixelPassthrough.IsEnabled(),
+		GetHostCapabilities().KittyAnimation,
 	)
 
 	// Initialize hooks manager and load user-defined hooks from config. Prefer
