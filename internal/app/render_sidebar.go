@@ -461,11 +461,10 @@ func sidebarQuietDotTinted(tint, bg color.Color, pal overlay.Palette) string {
 	if !config.SidebarShowGlyphs {
 		return sidebarStyle(bg, nil).Render(" ")
 	}
-	dot := config.GetRailBullet()
-	if overlay.UseASCII() {
-		dot = "."
-	}
-	return sidebarStyle(bg, tint).Render(dot)
+	// No ASCII branch: GetRailBullet already gives up a glyph the terminal
+	// cannot draw and keeps one it can, per glyph rather than per set, so a
+	// branch here would throw away an ASCII-safe set under --ascii-only.
+	return sidebarStyle(bg, tint).Render(config.GetRailBullet())
 }
 
 // sidebarEdgeRule is the one-cell vertical rule separating the rail from the
@@ -1349,9 +1348,6 @@ type sidebarFooterZone struct {
 // other way round. Nothing else about the row mirrors.
 func (m *OS) sidebarCollapseGlyph(variant int) (glyph string, ok bool) {
 	left, right := config.GetRailCollapseGlyph(), config.GetRailExpandGlyph()
-	if overlay.UseASCII() {
-		left, right = "<<", ">>"
-	}
 	collapse, expand := left, right
 	if config.SidebarPosition == "right" {
 		collapse, expand = right, left

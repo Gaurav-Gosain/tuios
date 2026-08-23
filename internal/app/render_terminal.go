@@ -146,8 +146,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// been drawn at for the cache to be usable.
 	dim := paneDim(isFocused)
 
-	if (window.IsBeingManipulated || !window.ContentDirty) && window.CachedContent != "" &&
-		window.CachedContentDim() == dim {
+	cacheUsable := window.CachedContent != "" && window.CachedContentDim() == dim
+
+	if (window.IsBeingManipulated || !window.ContentDirty) && cacheUsable {
 		window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-clean", window.CachedContent)
@@ -185,6 +186,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	if window.Terminal == nil {
 		window.CachedContent = "Terminal not initialized"
 		window.CachedContentCols, window.CachedContentRows = 0, 0
+		window.SetCachedContentDim(dim)
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "no-terminal", window.CachedContent)
 		}
@@ -195,6 +197,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	if screen == nil {
 		window.CachedContent = "No screen"
 		window.CachedContentCols, window.CachedContentRows = 0, 0
+		window.SetCachedContentDim(dim)
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "no-screen", window.CachedContent)
 		}
@@ -225,6 +228,10 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// acquires, so it still converges on its true final state once the burst
 	// ends, and no input is affected.
 	if !window.TryRLockIO() {
+		// Served at whatever dim it was drawn at, unlike the keyed check above.
+		// The alternative is to fall through and block on the lock this branch
+		// exists to avoid, and the staleness cannot last: ContentDirty is still
+		// set, so the next frame that acquires re-reads and re-keys.
 		if window.CachedContent != "" {
 			window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
 			if renderTraceEnabled {
@@ -266,7 +273,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 	// Fast path for scrollback mode: content is static at a given scroll
 	// position, so reuse the cache if the offset hasn't changed.
-	if window.ScrollbackOffset > 0 && window.CachedContent != "" && !window.ContentDirty {
+	//
+	// Keyed on the dim like the check at the top, and for a sharper reason:
+	// this one is only reached once that check has already failed, so with an
+	// unkeyed test it fired exactly on the mismatch the key exists to catch.
+	if window.ScrollbackOffset > 0 && cacheUsable && !window.ContentDirty {
 		window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-scrollback", window.CachedContent)
@@ -653,7 +664,13 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			// job to this path instead: the gesture draws no cursor either way.
 			isCursorPos := !useRealCursor && !m.Resizing && isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden() && x == cursorX && y == cursorY
 
-			needsStyling := shouldApplyStyle(cell) || isCursorPos
+			// A dimmed pane styles every cell it has, not only the ones the
+			// guest coloured. shouldApplyStyle asks whether a cell carries
+			// anything of its own, and a shell prompt mostly does not: gating
+			// the dim on it left the setting doing nothing to most of a pane
+			// even with a theme set, which reads as a broken option rather
+			// than as a subtle one.
+			needsStyling := shouldApplyStyle(cell) || isCursorPos || (dimT > 0 && cell != nil)
 
 			if x > 0 && !styleMatches(cell, isCursorPos) {
 				flushBatch()

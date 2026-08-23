@@ -176,8 +176,17 @@ func TestAnUnknownSetIsRefusedRatherThanSilentlyIgnored(t *testing.T) {
 }
 
 func TestEveryBuiltinSetIsDrawableWhereItSaysItIs(t *testing.T) {
+	// A built-in never goes through the sanitizer a file does, because it is
+	// written here rather than read from disk. So the widths a file would be
+	// checked against are checked here instead: a built-in with a two-cell
+	// glyph in a one-cell role would move a window control out from under the
+	// pointer with nothing to catch it.
 	for _, id := range []string{GlyphSetNone, "unicode", "heavy", "ascii"} {
 		set := ResolveGlyphSet(id)
+		probe := *set
+		for _, problem := range sanitizeGlyphSet(&probe) {
+			t.Errorf("built-in %s: %s", id, problem)
+		}
 		for role, glyph := range GlyphSetRoles(set) {
 			if glyph == "" {
 				continue

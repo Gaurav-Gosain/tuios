@@ -613,9 +613,6 @@ func (m *OS) sidebarStripTerminalCell(e sidebarTerminalEntry, peeked bool, cw in
 	lead, leadFg := " ", color.Color(nil)
 	if e.Focused && !peeked {
 		lead, leadFg = config.GetRailFocusMark(), railFocusTint(m.sessionTint(e.SessionID, bg), pal)
-		if overlay.UseASCII() {
-			lead = ">"
-		}
 	}
 	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+
 		stripStateMark(e.State, e.DoneSeen, pal, bg, lit), cw, bg)
@@ -633,9 +630,6 @@ func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Pale
 	lead, leadFg := " ", color.Color(nil)
 	if e.WindowIndex >= 0 && e.WindowIndex == m.FocusedWindow {
 		lead, leadFg = config.GetRailFocusMark(), railFocusTint(m.agentIdentityTint(e, bg), pal)
-		if overlay.UseASCII() {
-			lead = ">"
-		}
 	}
 	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+
 		stripStateMark(e.State, e.DoneSeen, pal, bg, lit), cw, bg)
@@ -647,9 +641,6 @@ func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Pale
 // read as one object at two cells wide.
 func stripStateMark(state string, doneSeen bool, pal overlay.Palette, bg color.Color, lit bool) string {
 	mark, markFg := config.GetRailBullet(), stripRestingInk(lit, pal)
-	if overlay.UseASCII() {
-		mark = "."
-	}
 	if g := agentStateIndicator(state); g != "" && config.SidebarShowGlyphs {
 		mark, markFg = g, sidebarStateColor(state, doneSeen, pal)
 	}
@@ -757,15 +748,9 @@ func (m *OS) sidebarStripCell(node sessiontree.Node, cw int, pal overlay.Palette
 		// session the peek already names. Lifting both widths together is the
 		// right fix and is a change to the expanded rail, not to this audit.
 		lead, leadFg = config.GetRailFocusMark(), railFocusTint(m.sessionTint(node.ID, bg), pal)
-		if overlay.UseASCII() {
-			lead = ">"
-		}
 	}
 
 	mark, markFg := config.GetRailBullet(), stripRestingInk(lit, pal)
-	if overlay.UseASCII() {
-		mark = "."
-	}
 	if config.SidebarShowGlyphs {
 		switch {
 		case sidebarAttention(node.AgentState):

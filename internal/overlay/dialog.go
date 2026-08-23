@@ -53,12 +53,18 @@ func dialogFrame() (tl, tr, bl, br, h, v string) {
 // DashRule returns a dashed internal separator, the micro-dialog's answer to a
 // Panel's solid rule: lighter, so it divides without drawing a second frame.
 func DashRule(width int, bg color.Color, pal Palette) string {
-	ch := "╌"
-	if UseASCII() {
-		ch = "-"
-	}
-	ch = chromeOr(func(c *Chrome) string { return c.DashRule }, ch)
+	ch := DashRuleGlyph()
 	return Style(bg).Foreground(pal.FgMute).Render(strings.Repeat(ch, max(width, 0)))
+}
+
+// DashRuleGlyph is the one cell DashRule repeats, exposed so a host reporting
+// what a glyph set draws can read the same answer the dialog does.
+func DashRuleGlyph() string {
+	def := "╌"
+	if UseASCII() {
+		def = "-"
+	}
+	return chromeOr(func(c *Chrome) string { return c.DashRule }, def)
 }
 
 // EnterKey names the return key for a hint strip: the glyph where it renders,

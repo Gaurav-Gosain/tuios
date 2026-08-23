@@ -72,30 +72,34 @@ func dimCell(dst, src *uv.Cell, fg, bg color.Color, t float64) *uv.Cell {
 	if src == nil {
 		return src
 	}
+	// isNilColor rather than == nil: a cell's style colour can be an interface
+	// holding a nil pointer, and color.Color's RGBA has a value receiver, so
+	// calling it through one panics rather than returning zeros. Every RGBA
+	// call on a cell style in this package screens for that first.
 	cellFg, cellBg := src.Style.Fg, src.Style.Bg
-	if cellFg == nil {
+	if isNilColor(cellFg) {
 		cellFg = fg
 	}
-	if cellBg == nil {
+	if isNilColor(cellBg) {
 		cellBg = bg
 	}
-	if cellFg == nil && cellBg == nil {
+	if isNilColor(cellFg) && isNilColor(cellBg) {
 		return src
 	}
 	*dst = *src
 	// The fg goes to the cell's own ground where it has one, so a cell painted
 	// on a block of colour dims into that block rather than into the pane
 	// behind it and keeps the block readable as a block.
-	if cellFg != nil {
+	if !isNilColor(cellFg) {
 		toward := cellBg
-		if toward == nil {
+		if isNilColor(toward) {
 			toward = bg
 		}
-		if toward != nil {
+		if !isNilColor(toward) {
 			dst.Style.Fg = blendColors(cellFg, toward, t)
 		}
 	}
-	if cellBg != nil && bg != nil {
+	if !isNilColor(cellBg) && !isNilColor(bg) {
 		dst.Style.Bg = blendColors(cellBg, bg, t)
 	}
 	return dst
@@ -108,5 +112,9 @@ func dimGround() (fg, bg color.Color) {
 	if theme.CurrentThemeID() == "" {
 		return nil, nil
 	}
-	return theme.TerminalFg(), theme.TerminalBg()
+	fg, bg = theme.TerminalFg(), theme.TerminalBg()
+	if isNilColor(fg) || isNilColor(bg) {
+		return nil, nil
+	}
+	return fg, bg
 }

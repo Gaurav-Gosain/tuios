@@ -165,8 +165,8 @@ var builtinGlyphSets = map[string]*GlyphSet{
 		PillLeft: "[", PillRight: "]",
 		Rule: "-", Separator: " | ", ArrowLeft: "<", ArrowRight: ">",
 		Focus: ">", Attention: "!", Bullet: ".",
-		Add: "+", Collapse: "<", Expand: ">",
-		ScrollbarThumb: "|", ScrollbarTrack: "",
+		Add: "+", Collapse: "<<", Expand: ">>",
+		ScrollbarThumb: "|", ScrollbarTrack: ".",
 		Ellipsis: "...", Sigil: ">", DashRule: "-",
 	},
 }
@@ -297,8 +297,10 @@ var glyphRoles = []glyphRole{
 	{"attention", func(g *GlyphSet) *string { return &g.Attention }, 1},
 	{"bullet", func(g *GlyphSet) *string { return &g.Bullet }, 1},
 	{"add", func(g *GlyphSet) *string { return &g.Add }, 1},
-	{"collapse", func(g *GlyphSet) *string { return &g.Collapse }, 1},
-	{"expand", func(g *GlyphSet) *string { return &g.Expand }, 1},
+	// The rail measures its own footer rather than budgeting a column for it,
+	// so its stepper takes any width; the ASCII default is two cells.
+	{"collapse", func(g *GlyphSet) *string { return &g.Collapse }, 0},
+	{"expand", func(g *GlyphSet) *string { return &g.Expand }, 0},
 	{"scrollbar_thumb", func(g *GlyphSet) *string { return &g.ScrollbarThumb }, 1},
 	{"scrollbar_track", func(g *GlyphSet) *string { return &g.ScrollbarTrack }, 1},
 	{"ellipsis", func(g *GlyphSet) *string { return &g.Ellipsis }, 0},
@@ -344,24 +346,22 @@ func sanitizeGlyphSet(set *GlyphSet) []string {
 	return problems
 }
 
-// glyphSetIsASCII reports whether every glyph in the set is 7-bit.
+// glyphSetIsASCII reports whether every glyph the set names is 7-bit.
+//
+// A claim about the set's own fields, not about what would be drawn: a role the
+// set leaves alone reads as the empty string here, which is trivially 7-bit
+// while the built-in it falls back to may not be. Whether a set can be drawn on
+// a terminal that manages nothing else is a question about the resolved glyphs
+// and is answered where those are resolved, by the describe verb.
 func glyphSetIsASCII(set *GlyphSet) bool {
-	ascii := func(s string) bool {
-		for _, r := range s {
-			if r > 127 {
-				return false
-			}
-		}
-		return true
-	}
 	for _, role := range glyphRoles {
-		if !ascii(*role.field(set)) {
+		if !overlay.IsASCII(*role.field(set)) {
 			return false
 		}
 	}
 	if set.Border != nil {
 		for _, p := range borderFields(set.Border) {
-			if !ascii(*p) {
+			if !overlay.IsASCII(*p) {
 				return false
 			}
 		}
@@ -466,6 +466,11 @@ func mergeGlyphSet(dst, src *GlyphSet) {
 	if dst.DisplayName == "" {
 		dst.DisplayName = src.DisplayName
 	}
+	// The nearest set's own Inherits, so a resolved set still says where it
+	// started. Without it the chain was walked correctly and reported as empty.
+	if dst.Inherits == "" {
+		dst.Inherits = src.Inherits
+	}
 	for _, role := range glyphRoles {
 		if d := role.field(dst); *d == "" {
 			*d = *role.field(src)
@@ -504,8 +509,11 @@ func SetActiveGlyphs(id string) {
 	// ReloadGlyphSets ends by refreshing the active set, so this is not a
 	// second resolve.
 	if id != GlyphSetNone && lookupGlyphSet(id) == nil {
+		// ReloadGlyphSets refreshes on its way out, but returns early on a
+		// directory it cannot read at all. Refreshing here unconditionally
+		// costs one resolve and means the drawn glyphs can never disagree with
+		// the id get-config reports.
 		ReloadGlyphSets()
-		return
 	}
 	refreshActiveGlyphs()
 }

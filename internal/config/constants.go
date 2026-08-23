@@ -993,7 +993,7 @@ const (
 	// button carries an extra cell of lead-in rather than a symmetric pad.
 	WindowButtonMinimizeMark = "-"
 	// WindowButtonMinimize is the four-cell minimize button.
-	WindowButtonMinimize = " " + WindowButtonMinimizeMark + " "
+	WindowButtonMinimize = "  " + WindowButtonMinimizeMark + " "
 	// WindowButtonDot is the disc the dots style draws each control as.
 	//
 	// U+25CF BLACK CIRCLE, which JetBrainsMono Nerd Font covers and draws at an

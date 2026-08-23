@@ -61,13 +61,18 @@ func GetRailAddGlyph() string {
 }
 
 // GetRailCollapseGlyph is the arrow that folds the rail down to its strip.
+//
+// Two cells in ASCII, where "«" has no one-cell stand-in: a lone "<" in the
+// footer of a column of one-cell marks reads as one more mark rather than as a
+// control. The rail measures its own footer, so unlike a window button this
+// role is not held to a width.
 func GetRailCollapseGlyph() string {
-	return glyphOr(func(g *theme.GlyphSet) string { return g.Collapse }, "«", "<")
+	return glyphOr(func(g *theme.GlyphSet) string { return g.Collapse }, "«", "<<")
 }
 
 // GetRailExpandGlyph is the arrow that opens it again.
 func GetRailExpandGlyph() string {
-	return glyphOr(func(g *theme.GlyphSet) string { return g.Expand }, "»", ">")
+	return glyphOr(func(g *theme.GlyphSet) string { return g.Expand }, "»", ">>")
 }
 
 // ResolvedGlyphs reports what is actually drawn for every role: the active
@@ -100,6 +105,7 @@ func ResolvedGlyphs() map[string]string {
 		"scrollbar_track": GetScrollbarTrackChar(),
 		"ellipsis":        overlay.Ellipsis(),
 		"sigil":           overlay.SigilMark(),
+		"dash_rule":       overlay.DashRuleGlyph(),
 	}
 	// The border is reported through the set's own resolution rather than
 	// through GetBorderForStyle, because the two answer different questions.

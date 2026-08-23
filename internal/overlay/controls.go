@@ -166,6 +166,14 @@ func Truncate(s string, maxWidth int) string {
 		return s
 	}
 	ell := Ellipsis()
+	// A glyph set names the ellipsis and the role takes any width, so the
+	// marker can be wider than the budget it is meant to fit inside. Dropped
+	// rather than appended in that case: a caller asking for four cells has
+	// four cells, and returning five to say "this was cut" pushes every label
+	// after it out of the layout that measured it.
+	if lipgloss.Width(ell) >= maxWidth {
+		ell = ""
+	}
 	target := max(maxWidth-lipgloss.Width(ell), 0)
 	runes := []rune(s)
 	for len(runes) > 0 && lipgloss.Width(string(runes)) > target {
