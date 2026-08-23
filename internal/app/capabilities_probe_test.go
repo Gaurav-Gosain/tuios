@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -115,5 +116,121 @@ func TestProbeSilentHostFallsBack(t *testing.T) {
 	}
 	if caps.CellWidth == 0 || caps.CellHeight == 0 {
 		t.Errorf("silent host left no cell size to render with: %dx%d", caps.CellWidth, caps.CellHeight)
+	}
+}
+
+// The animation probe used to be a one-pixel image with a one-pixel patch, and
+// it could not fail. The patch covered the whole image, so a host that read s=
+// and v= as the patch rectangle and a host that read them as the image's new
+// size both answered OK, and the second one is exactly the host the probe
+// existed to catch. These pin the two answers it now takes.
+
+// hostReply builds the graphics half of a probe response: an answer to the
+// direct-transmission probe, then to each half of the animation probe, then
+// DA1.
+func hostReply(accept, reject string) string {
+	r := "\x1b_Gi=1;OK\x1b\\"
+	if accept != "" {
+		r += "\x1b_Gi=3,r=1;" + accept + "\x1b\\"
+	}
+	if reject != "" {
+		r += "\x1b_Gi=4,r=1;" + reject + "\x1b\\"
+	}
+	return r + "\x1b[?62;4c"
+}
+
+func TestAnimationProbeTakesTwoAnswers(t *testing.T) {
+	const outOfBounds = "EINVAL:Frame width 9 larger than image width: 4"
+	cases := []struct {
+		name    string
+		reply   string
+		want    bool
+		because string
+	}{
+		{
+			name:    "kitty",
+			reply:   hostReply("OK", outOfBounds),
+			want:    true,
+			because: "it patched a rectangle and still refused a frame wider than the image",
+		},
+		{
+			name:  "host that resizes the image to the patch",
+			reply: hostReply("EINVAL:Frame width 4 larger than image width: 1", outOfBounds),
+			want:  false,
+			because: "the one-pixel patch left it holding a one-pixel image, " +
+				"so a four-pixel frame no longer fits",
+		},
+		{
+			name:    "relay that acknowledges everything",
+			reply:   hostReply("OK", "OK"),
+			want:    false,
+			because: "a frame nine pixels wide cannot fit an image four pixels wide, so OK is a rubber stamp",
+		},
+		{
+			name:    "host that ignores frame edits",
+			reply:   hostReply("", ""),
+			want:    false,
+			because: "silence is not a claim of support",
+		},
+		{
+			name:    "host that answers only the half it likes",
+			reply:   hostReply("OK", ""),
+			want:    false,
+			because: "an unanswered refusal is not a refusal",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var caps HostCapabilities
+			parseGraphicsSupport(&caps, tc.reply, false)
+			if !caps.KittyGraphics {
+				t.Fatalf("probe reply did not even claim kitty graphics: %q", tc.reply)
+			}
+			if caps.KittyAnimation != tc.want {
+				t.Errorf("KittyAnimation = %v, want %v: %s", caps.KittyAnimation, tc.want, tc.because)
+			}
+		})
+	}
+}
+
+// TestAnimationProbeAcceptAloneIsNotEnough is the negative control written out.
+// Both of these replies pass the old rule, which was a single OK for id 3, and
+// only one of them is a host that can carry a frame edit.
+func TestAnimationProbeAcceptAloneIsNotEnough(t *testing.T) {
+	rubberStamp := hostReply("OK", "OK")
+	if !kittyProbeOK(rubberStamp, animationProbeAccept) {
+		t.Fatal("a relay that answers OK to everything answers OK to the accept half too")
+	}
+	var caps HostCapabilities
+	parseGraphicsSupport(&caps, rubberStamp, false)
+	if caps.KittyAnimation {
+		t.Error("claimed animation support from a relay that rubber-stamps every command")
+	}
+}
+
+// TestAnimationProbeFitsOneEscapeEach checks the probe's own escapes, because a
+// payload split across m= continuations is not a frame edit: the continuation
+// carries no a= key, so the terminal routes it to the transmit handler.
+func TestAnimationProbeFitsOneEscapeEach(t *testing.T) {
+	var q strings.Builder
+	writeAnimationProbe(&q)
+	seqs := strings.SplitSeq(strings.TrimSuffix(q.String(), "\x1b\\"), "\x1b\\")
+	n := 0
+	for seq := range seqs {
+		n++
+		params, payload, ok := strings.Cut(strings.TrimPrefix(seq, "\x1b_G"), ";")
+		if !ok {
+			params, payload = strings.TrimPrefix(seq, "\x1b_G"), ""
+		}
+		if strings.Contains(params, "m=") {
+			t.Errorf("probe escape %q is chunked", params)
+		}
+		if len(payload) > 4096 {
+			t.Errorf("probe escape %q carries %d base64 bytes, more than one escape holds",
+				params, len(payload))
+		}
+	}
+	if n == 0 {
+		t.Fatal("probe wrote nothing")
 	}
 }
