@@ -478,3 +478,58 @@ func TestKilledSessionDropsItsRing(t *testing.T) {
 		t.Errorf("the ring outlived its session: %d messages", res.Total)
 	}
 }
+
+// TestFirstReadIsMarkedNew covers what ReadAt cannot say on the call that sets
+// it. A marking read stamps every message it returns, so without this a reader
+// could not tell the message that just arrived from the twenty it had already
+// seen, and the per-message flag disagreed with the unread count in the footer.
+func TestFirstReadIsMarkedNew(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	_, a, b := twoWindowSession(t, d, "wasunread")
+	c := dialVerb(t, sp)
+
+	c.call(t, `{"id":1,"verb":"send-agent-message","params":{"session":"wasunread","to":"`+b+`","from":"`+a+`","text":"first"}}`)
+
+	read := result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"wasunread","to":"`+b+`"}}`))
+	m := read["messages"].([]any)[0].(map[string]any)
+	if m["was_unread"] != true {
+		t.Errorf("the first read did not mark the message new: %v", m)
+	}
+	if m["read_at"] == nil {
+		t.Error("the first read did not also stamp read_at")
+	}
+
+	read = result(t, c.call(t, `{"id":3,"verb":"read-agent-messages","params":{"session":"wasunread","to":"`+b+`"}}`))
+	m = read["messages"].([]any)[0].(map[string]any)
+	if m["was_unread"] == true {
+		t.Errorf("a second read still called the message new: %v", m)
+	}
+}
+
+// TestUnclaimedPaneReportsNoSource pins the absence. An unset claim reads back
+// as "report" because that is the default a caller naming no source gets, so
+// listing it verbatim said a pane sitting at a shell prompt had reported itself.
+func TestUnclaimedPaneReportsNoSource(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess, a, b := twoWindowSession(t, d, "nosource")
+	c := dialVerb(t, sp)
+
+	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateIdle}); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+
+	res := result(t, c.call(t, `{"id":1,"verb":"list-agents","params":{"session":"nosource","all":true}}`))
+	for _, raw := range res["agents"].([]any) {
+		row := raw.(map[string]any)
+		switch row["window_id"] {
+		case a:
+			if row["source"] != "" {
+				t.Errorf("a pane nothing claimed reported source %v", row["source"])
+			}
+		case b:
+			if row["source"] != "report" {
+				t.Errorf("a reporting pane lost its source: %v", row["source"])
+			}
+		}
+	}
+}

@@ -88,13 +88,21 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 			continue
 		}
 		claim := sess.agentClaimFor(w.ID)
+		// An unset claim reads back as "report", because that is the default a
+		// caller naming no source gets. Reporting it for a pane nothing has
+		// claimed would say a pane at a shell prompt reported itself idle, so
+		// the absence is shown as an absence.
+		source := ""
+		if isAgentWindow(w) {
+			source = claim.source.Name()
+		}
 		agents = append(agents, map[string]any{
 			"window_id":      w.ID,
 			"name":           windowLabelOf(w),
 			"state":          w.AgentState.Name(),
 			"message":        w.AgentMessage,
 			"agent_state_at": w.AgentStateAt,
-			"source":         claim.source.Name(),
+			"source":         source,
 			"harness_id":     firstNonEmpty(w.AgentHarness, claim.harness),
 			"foreground":     w.ForegroundCmd,
 			"cwd":            w.Cwd,

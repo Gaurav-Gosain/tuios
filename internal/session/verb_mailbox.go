@@ -121,6 +121,12 @@ type AgentMessage struct {
 	// the old one's name, because that pane is a different agent holding
 	// different context.
 	Undeliverable bool `json:"undeliverable,omitempty"`
+	// WasUnread means this read is the first one to see the message. It exists
+	// because ReadAt cannot answer that question on the call that sets it: a
+	// marking read stamps ReadAt before returning, so every message it hands
+	// back looks read, and a reader could not tell the one that just arrived
+	// from the twenty it had already seen.
+	WasUnread bool `json:"was_unread,omitempty"`
 }
 
 // agentBus is the daemon's whole cross-agent surface: the per-session rings and
@@ -303,6 +309,7 @@ func (b *agentBus) read(session string, q readQuery) readResult {
 		out.Attachments = resolveAttachments(m.Attachments)
 		if out.Kind == agentMsgDirect && out.ReadAt == 0 {
 			res.Unread++
+			out.WasUnread = true
 			if !q.peek && q.inbox != "" && m.To == q.inbox {
 				m.ReadAt = now
 				out.ReadAt = now

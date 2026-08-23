@@ -95,7 +95,7 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool) error {
 			a.Name,
 			a.State,
 			orNone(a.HarnessID),
-			a.Source,
+			orNone(a.Source),
 			unread,
 			a.Message,
 		})
@@ -122,7 +122,13 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool) error {
 		})
 
 	fmt.Fprintln(w, t.Render())
-	fmt.Fprintf(w, "\n%d agent pane(s). * marks the focused one. Address one with -w and its ID or NAME.\n", res.Total)
+	// With --all the rows are windows rather than agents, and calling them agent
+	// panes is exactly the confusion --all exists to clear up.
+	noun := "agent pane(s)"
+	if all {
+		noun = "window(s), agent or not"
+	}
+	fmt.Fprintf(w, "\n%d %s. * marks the focused one. Address one with -w and its ID or NAME.\n", res.Total, noun)
 	return nil
 }
 
@@ -186,6 +192,7 @@ type agentMessageRow struct {
 	SentAt        int64           `json:"sent_at"`
 	ReadAt        int64           `json:"read_at"`
 	Undeliverable bool            `json:"undeliverable"`
+	WasUnread     bool            `json:"was_unread"`
 }
 
 type attachmentRow struct {
@@ -251,8 +258,8 @@ func printAgentMessages(w io.Writer, raw json.RawMessage) error {
 			who = fmt.Sprintf("%s (%s)", who, shortWindowID(m.From))
 		}
 		head := fmt.Sprintf("#%d  %s  from %s  %s", m.ID, m.Kind, who, agoOf(m.SentAt))
-		if m.ReadAt == 0 && m.Kind == "message" {
-			head += "  unread"
+		if m.WasUnread {
+			head += "  new"
 		}
 		if m.Undeliverable {
 			head += "  undeliverable: the recipient window is gone"
