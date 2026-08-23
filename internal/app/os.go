@@ -224,8 +224,14 @@ type OS struct {
 	dockOverflowHit        dockOverflowHit         // where the entries' overflow marker was drawn last frame
 	dockSessionHits        []dockSessionHit        // where the dock's session controls were drawn last frame
 	dockSessionHover       DockSessionAction       // which session control the pointer is on, DockSessionNone for neither
-	ClipboardContent       string                  // Store clipboard content from tea.ClipboardMsg
-	ShowCacheStats         bool                    // True when showing style cache statistics overlay
+	dockCustomHits         []dockCustomHit         // where the custom components were drawn last frame
+	dockPlan               dockPlan                // which components are on which side, in draw order
+	dockEngine             *dockEngine             // refresh scheduler for the components that move on their own
+	// RemoteCommandChan carries a verb the daemon routed to this client, for
+	// the hosts that cannot Send into the program directly. See dock_remote.go.
+	RemoteCommandChan chan RemoteCommandMsg
+	ClipboardContent  string // Store clipboard content from tea.ClipboardMsg
+	ShowCacheStats    bool   // True when showing style cache statistics overlay
 	// Quit menu state. The menu replaces the old yes/no quit dialog: a small
 	// list overlay on the shared list-overlay grammar, registered in OverlayHits
 	// as kind "quit" so hover, click and click-away routing come from the same
@@ -934,6 +940,9 @@ func (m *OS) SwitchToSession(targetSession string) error {
 	}
 	m.SessionName = m.DaemonClient.SessionName()
 	m.rebuildForSession(state, savedWidth, savedHeight)
+	// The components tell their commands which session they are drawing for,
+	// and that answer just changed.
+	m.SyncDockContext()
 
 	m.MarkAllDirty()
 	m.LogInfo("Session switch complete: now on %s with %d windows", m.SessionName, len(m.Windows))
@@ -1020,6 +1029,12 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 // State should be synced to the daemon before Cleanup, on the UI goroutine.
 func (m *OS) Cleanup() {
 	m.stopWindowExitDrain()
+	// The dock's components are subprocesses this client started, and a push
+	// component is a process that never exits on its own. An ephemeral SSH or
+	// web session is a goroutine inside a long-lived server, so without this
+	// every disconnect would leave one running command per push component and
+	// the goroutines reading them.
+	m.StopDockComponents()
 	if m.DaemonClient != nil {
 		_ = m.DaemonClient.Close()
 		return

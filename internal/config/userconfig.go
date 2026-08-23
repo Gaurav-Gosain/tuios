@@ -25,6 +25,10 @@ type UserConfig struct {
 	Tape          TapeConfig          `toml:"tape"`
 	Hooks         HooksConfig         `toml:"hooks"`
 	Debug         DebugConfig         `toml:"debug"`
+	// Dock is the [dock] table: the bar as ordered lists of named components.
+	// It sits outside the option registry for the same reason [hooks] and
+	// [keybindings] do, being file-plane config rather than a settable option.
+	Dock DockConfig `toml:"dock"`
 }
 
 // NotificationsConfig holds how long a dock message stays up.

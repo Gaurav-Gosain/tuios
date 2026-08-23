@@ -286,6 +286,12 @@ func (m *OS) Init() tea.Cmd {
 		ListenForCwdChange(m.ensureCwdChangeChan()),
 	}
 
+	// The dock's components. Everything that used to hold the maintenance tick
+	// at the normal frame rate for a clock is here instead, on its own deadline.
+	if cmd := m.InitDockComponents(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// Listen for state sync from other clients (daemon/SSH/web mode)
 	if m.StateSyncChan != nil {
 		cmds = append(cmds, ListenForStateSync(m.StateSyncChan))
@@ -294,6 +300,12 @@ func (m *OS) Init() tea.Cmd {
 	// Listen for client join/leave events (daemon/SSH/web mode)
 	if m.ClientEventChan != nil {
 		cmds = append(cmds, ListenForClientEvents(m.ClientEventChan))
+	}
+
+	// Listen for verbs the daemon routed here (SSH and web mode; the local
+	// attach client Sends into the program instead).
+	if m.RemoteCommandChan != nil {
+		cmds = append(cmds, ListenForRemoteCommands(m.RemoteCommandChan))
 	}
 
 	// If this is a restored daemon session, enable callbacks after a delay
@@ -409,7 +421,6 @@ func TickCmd() tea.Cmd {
 func (m *OS) tickNeedsWork() bool {
 	if len(m.Animations) > 0 || m.InteractionMode || m.Dragging || m.Resizing ||
 		m.PrefixActive || m.ScriptMode || len(m.Notifications) > 0 ||
-		config.NeedsDockTick() || config.ShowCPU || config.ShowRAM ||
 		m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending ||
 		len(m.pendingAgentAlerts) > 0 {
 		return true
@@ -731,14 +742,6 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// forever.
 		m.clearStaleManipulation()
 
-		// Update system info (only when explicitly enabled)
-		if config.ShowCPU {
-			m.UpdateCPUHistory()
-		}
-		if config.ShowRAM {
-			m.UpdateRAMUsage()
-		}
-
 		// Leave script mode once a finished script's completion indicator has
 		// been shown. This re-arms Ctrl+P (the palette binding), which is
 		// intercepted for script pause/resume while ScriptMode is set. It also
@@ -826,7 +829,6 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Tick handles animations, interactions, whichkey, dock stats, and scripts.
 		// PTY content changes are handled by PTYDataMsg (event-driven).
 		hasAnimations := m.HasActiveAnimations()
-		needsDockTick := config.NeedsDockTick()
 
 		// Debounce rail titles: a burst of title changes adopts at most one per
 		// interval. railTitleChanged means the rail must redraw; sidebarTitlePending
@@ -860,7 +862,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// cost smoothness without limiting the motion flood, since motion
 			// events drove their own renders regardless of the tick rate.
 			nextTick = TickCmd()
-		} else if hasAnimations || m.PrefixActive || needsScriptFrame || needsDockTick || hasNotifications || m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending {
+		} else if hasAnimations || m.PrefixActive || needsScriptFrame || hasNotifications || m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending {
 			nextTick = TickCmd() // Normal FPS when things need periodic updates
 		} else {
 			nextTick = IdleTickCmd() // Slow idle tick (process cleanup, etc.)
@@ -888,7 +890,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		// Render on tick if something periodic needs visual updates OR background windows changed
 		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
-			needsDockTick || hasBackgroundChanges || hasNotifications || notifExpired || leftScriptMode ||
+			hasBackgroundChanges || hasNotifications || notifExpired || leftScriptMode ||
 			m.SidebarMarqueeActive() || m.TooltipPending() || railTitleChanged || zenCrossed
 		if !needsRender {
 			m.renderSkipped = true
@@ -911,6 +913,16 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 		return m, nextTick
+
+	case dockComponentMsg:
+		// A component said something. The frame is drawn only if what it said
+		// changed the bar: an interval component polling a value that has not
+		// moved costs an execution and no render at all, which is the whole
+		// difference between this and the sixty-frames-a-second clock it
+		// replaced.
+		changed := m.handleDockComponent(msg)
+		m.renderSkipped = !changed
+		return m, ListenForDockComponents(m.dockEngine.Updates())
 
 	case SessionCreatedMsg:
 		cmd := ListenForSessionCreate(m.sessionCreateChan())
@@ -1423,6 +1435,14 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// edited in the file moved the global and left the rectangles where
 			// they were. The other two ways in already retile.
 			m.applyAppearanceLive(true)
+			// The dock section is rebuilt here too rather than only at startup.
+			// A feature whose distribution story is "copy a file" that then
+			// needed a restart to see the file would be most of the story
+			// missing. Retile first: a component list that changed the dock's
+			// height has to land before the panes are measured.
+			cmd := m.ReloadDockComponents(msg.Config)
+			m.MarkAllDirty()
+			return m, cmd
 		}
 		return m, nil
 
@@ -1477,7 +1497,10 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case RemoteCommandMsg:
-		// Execute remote command from CLI
+		// Execute remote command from CLI. The listener is re-armed on every
+		// path out of this case, including the early returns, or a channel-fed
+		// host would take exactly one routed verb per session.
+		relisten := ListenForRemoteCommands(m.RemoteCommandChan)
 		var err error
 		var cmd tea.Cmd
 		var notificationMsg string
@@ -1501,14 +1524,14 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				if m.DaemonClient != nil && msg.RequestID != "" {
 					_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "command executed", resultData)
 				}
-				return m, nil
+				return m, relisten
 			case "GetSessionInfo":
 				// Return session information (read-only, no notification)
 				resultData = m.GetSessionInfoData()
 				if m.DaemonClient != nil && msg.RequestID != "" {
 					_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "command executed", resultData)
 				}
-				return m, nil
+				return m, relisten
 			case "GetWindow":
 				// Return info about a specific window (read-only, no notification)
 				if len(msg.TapeArgs) > 0 {
@@ -1524,7 +1547,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 						_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "command executed", resultData)
 					}
 				}
-				return m, nil
+				return m, relisten
 			default:
 				// NewWindow and CloseWindow never arrive here: they are daemon
 				// owned, so the daemon runs them itself and the client hears the
@@ -1550,7 +1573,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// Keys will be processed sequentially via RemoteKeyMsg
 				// Show notification now, result will be sent after all keys processed
 				m.ShowNotification(notificationMsg, "info", config.NotificationDuration)
-				return m, cmd
+				return m, tea.Batch(cmd, relisten)
 			}
 		// capture_pane never arrives here: the daemon renders the pane from its
 		// own VT emulator whether or not a client is attached, because that is
@@ -1565,6 +1588,34 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			if m.AutoTiling {
 				m.TileAllWindows()
 			}
+		case "list_dock_components":
+			// Read-only: what the bar is made of, what each cell last said, and
+			// what its command last did. The last two are the debugging story
+			// for a component that is not drawing, and the reason an agent can
+			// verify a cell it just wrote rather than guess at it.
+			resultData = map[string]any{
+				"type":       "dock_component_list",
+				"components": m.DockComponentsData(),
+			}
+			if m.DaemonClient != nil && msg.RequestID != "" {
+				if sendErr := m.DaemonClient.SendCommandResultWithData(
+					msg.RequestID, true, "command executed", resultData); sendErr != nil {
+					// A discarded encode error here is a ten second timeout at
+					// the caller with nothing to go on, which is exactly how
+					// this was found.
+					m.LogError("dock: could not answer list-dock-components: %v", sendErr)
+				}
+			}
+			return m, relisten
+		case "refresh_dock":
+			// Re-run one component now, or every one when unnamed.
+			name := ""
+			if len(msg.TapeArgs) > 0 {
+				name = msg.TapeArgs[0]
+			}
+			if err = m.RefreshDockComponent(name); err == nil {
+				notificationMsg = "Remote: refresh-dock " + name
+			}
 		case "tape_script":
 			// Execute a full tape script
 			notificationMsg = "Remote: executing tape script"
@@ -1574,7 +1625,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			if err == nil {
 				// Script will be processed via RemoteTapeCommandMsg
 				m.ShowNotification(notificationMsg, "info", config.NotificationDuration)
-				return m, cmd
+				return m, tea.Batch(cmd, relisten)
 			}
 		default:
 			err = fmt.Errorf("unknown remote command type: %s", msg.CommandType)
@@ -1608,7 +1659,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 		}
 
-		return m, cmd
+		return m, tea.Batch(cmd, relisten)
 
 	case RemoteKeyMsg:
 		// Process a single key from a remote send-keys command

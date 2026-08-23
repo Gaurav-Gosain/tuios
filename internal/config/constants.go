@@ -689,11 +689,6 @@ var ShowCPU = false
 // Set via --show-ram flag or appearance.show_ram config
 var ShowRAM = false
 
-// NeedsDockTick returns true if any dock element requires periodic updates.
-func NeedsDockTick() bool {
-	return ShowClock || ShowCPU || ShowRAM
-}
-
 // ScrollbackLines controls the number of lines to keep in scrollback buffer
 // Set via --scrollback-lines flag or appearance.scrollback_lines config
 var ScrollbackLines = 10000

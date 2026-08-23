@@ -160,6 +160,7 @@ func (m *OS) renderDock() *lipgloss.Layer {
 // renderDockString returns the dock content and its top row, used both by the
 // layer path and the fullscreen fast path.
 func (m *OS) renderDockString() (string, int) {
+	m.ensureDockPlan()
 	layout := m.CalculateDockLayout()
 	pal := theme.UI()
 
@@ -173,97 +174,159 @@ func (m *OS) renderDockString() (string, int) {
 	// contrast: the foreground is picked against whatever colour the mode is,
 	// and bold buys the last of the legibility a saturated fill costs.
 	modeColor := lipgloss.Color(layout.ModeInfo.Color)
-	fill := lipgloss.NewStyle().Background(modeColor).Foreground(theme.ContrastText(modeColor)).Bold(true)
-	styledModeText := fill.Render(layout.ModeLabel)
-	if lc, rc := config.GetDockModeCapLeft(), config.GetDockModeCapRight(); lc != "" && rc != "" {
-		caps := lipgloss.NewStyle().Foreground(modeColor)
-		styledModeText = caps.Render(lc) + fill.Render(layout.ModeLabel) + caps.Render(rc)
+	styledModeText := ""
+	if layout.ModeLabel != "" {
+		fill := lipgloss.NewStyle().Background(modeColor).Foreground(theme.ContrastText(modeColor)).Bold(true)
+		styledModeText = fill.Render(layout.ModeLabel)
+		if lc, rc := config.GetDockModeCapLeft(), config.GetDockModeCapRight(); lc != "" && rc != "" {
+			caps := lipgloss.NewStyle().Foreground(modeColor)
+			styledModeText = caps.Render(lc) + fill.Render(layout.ModeLabel) + caps.Render(rc)
+		}
 	}
 
-	styledTrailText := lipgloss.NewStyle().Foreground(pal.FgMute).Render(layout.TrailText)
+	passive := lipgloss.NewStyle().Foreground(pal.FgMute)
+	styledTrailText, styledTapeText := "", ""
+	if layout.TrailText != "" {
+		styledTrailText = passive.Render(layout.TrailText)
+	}
+	if layout.TapeText != "" {
+		styledTapeText = passive.Render(layout.TapeText)
+	}
 
 	var dockItemsStr strings.Builder
 	itemNumber := 1
 
-	// Where each entry lands inside the items block, measured off the styled
+	// Where each entry lands inside the centre block, measured off the styled
 	// string as it is built. Turned into screen columns below, once the centring
 	// spacer this block is placed against is known.
 	type itemSpan struct {
 		windowIndex, x0, x1 int
 	}
 	var itemSpans []itemSpan
+	var centerCustom []dockCustomHit
 	relX := 0
-
-	for _, dockItem := range layout.VisibleItems {
-		windowIndex := dockItem.WindowIndex
-		window := m.Windows[windowIndex]
-
-		// A minimized entry rests on the same Panel step the rest of the chrome
-		// uses; only the two states worth a saturated fill get one.
-		bgColor, fgColor := color.Color(pal.Panel), color.Color(pal.FgDim)
-		emphasis := false
-
-		isHighlighted := time.Now().Before(window.MinimizeHighlightUntil)
-
-		switch {
-		case isHighlighted:
-			bgColor, emphasis = pal.Success, true
-		case windowIndex == m.FocusedWindow && !window.Minimizing:
-			bgColor, emphasis = pal.Accent, true
-		}
-		if emphasis {
-			fgColor = theme.ContrastText(bgColor)
-		}
-
-		// Flat by default: the caps repeated on every minimized window turned
-		// the row into beads. getDockItems pads the label, so the fill alone
-		// still reads as a cell.
-		caps := lipgloss.NewStyle().Foreground(bgColor)
-		nameLabel := lipgloss.NewStyle().
-			Background(bgColor).
-			Foreground(fgColor).
-			Bold(emphasis).
-			Render(dockItem.Label)
-
-		if itemNumber > 1 {
-			dockItemsStr.WriteString(" ")
-			relX++
-		}
-		chunk := caps.Render(config.GetDockPillLeftChar()) +
-			nameLabel + caps.Render(config.GetDockPillRightChar())
-		dockItemsStr.WriteString(chunk)
-
-		w := lipgloss.Width(chunk)
-		itemSpans = append(itemSpans, itemSpan{windowIndex, relX, relX + w})
-		relX += w
-
-		itemNumber++
-	}
-
-	// The marker's own columns, measured as it is written for the same reason
-	// the entries' are: it is a target, and a target the renderer did not record
-	// is one the click path has to guess at.
 	overflowX0, overflowX1 := 0, 0
-	if layout.TruncatedCount > 0 {
-		marker := " ..."
-		// Drawn in the same ink as the strip's overflow arrows: it wears no fill
-		// and, now that it opens the aggregate view, it is a control rather than
-		// a separator. FgMute measured 2.60:1 against the bare canvas.
-		dockItemsStr.WriteString(lipgloss.NewStyle().Foreground(dockStripArrowFg(pal)).Render(marker))
-		overflowX0, overflowX1 = relX, relX+lipgloss.Width(marker)
-		relX = overflowX1
+
+	// The centre block walks the plan too. Anything the plan puts before
+	// "windows" is drawn before the minimized entries, and the entries' relative
+	// spans carry the offset that produces.
+	for _, name := range m.dockPlan.Center {
+		if name != config.DockComponentWindows {
+			cell := m.dockCustomCell(name)
+			if cell == "" {
+				continue
+			}
+			w := lipgloss.Width(cell)
+			dockItemsStr.WriteString(cell)
+			if strings.HasPrefix(name, config.DockCustomPrefix) {
+				centerCustom = append(centerCustom, dockCustomHit{X0: relX, X1: relX + w, Name: name})
+			}
+			relX += w
+			continue
+		}
+
+		for _, dockItem := range layout.VisibleItems {
+			windowIndex := dockItem.WindowIndex
+			window := m.Windows[windowIndex]
+
+			// A minimized entry rests on the same Panel step the rest of the chrome
+			// uses; only the two states worth a saturated fill get one.
+			bgColor, fgColor := color.Color(pal.Panel), color.Color(pal.FgDim)
+			emphasis := false
+
+			isHighlighted := time.Now().Before(window.MinimizeHighlightUntil)
+
+			switch {
+			case isHighlighted:
+				bgColor, emphasis = pal.Success, true
+			case windowIndex == m.FocusedWindow && !window.Minimizing:
+				bgColor, emphasis = pal.Accent, true
+			}
+			if emphasis {
+				fgColor = theme.ContrastText(bgColor)
+			}
+
+			// Flat by default: the caps repeated on every minimized window turned
+			// the row into beads. getDockItems pads the label, so the fill alone
+			// still reads as a cell.
+			caps := lipgloss.NewStyle().Foreground(bgColor)
+			nameLabel := lipgloss.NewStyle().
+				Background(bgColor).
+				Foreground(fgColor).
+				Bold(emphasis).
+				Render(dockItem.Label)
+
+			if itemNumber > 1 {
+				dockItemsStr.WriteString(" ")
+				relX++
+			}
+			chunk := caps.Render(config.GetDockPillLeftChar()) +
+				nameLabel + caps.Render(config.GetDockPillRightChar())
+			dockItemsStr.WriteString(chunk)
+
+			w := lipgloss.Width(chunk)
+			itemSpans = append(itemSpans, itemSpan{windowIndex, relX, relX + w})
+			relX += w
+
+			itemNumber++
+		}
+
+		// The marker's own columns, measured as it is written for the same
+		// reason the entries' are: it is a target, and a target the renderer
+		// did not record is one the click path has to guess at.
+		if layout.TruncatedCount > 0 {
+			marker := " ..."
+			// Drawn in the same ink as the strip's overflow arrows: it wears no
+			// fill and, now that it opens the aggregate view, it is a control
+			// rather than a separator. FgMute measured 2.60:1 against the bare
+			// canvas.
+			dockItemsStr.WriteString(lipgloss.NewStyle().Foreground(dockStripArrowFg(pal)).Render(marker))
+			overflowX0, overflowX1 = relX, relX+lipgloss.Width(marker)
+			relX = overflowX1
+		}
 	}
 
-	// The strip sits between the mode pill and the stats, and records where each
-	// tab landed as it goes: both dock paths render through here, so the hit
-	// rects are the drawn geometry rather than a second guess at it.
-	styledTabs := m.renderDockWorkspaceStrip(layout.WorkspaceStrip, lipgloss.Width(styledModeText))
+	// The left block, assembled by walking the plan rather than by naming three
+	// segments in a fixed order. Columns are accumulated as the string is built,
+	// which is what lets the workspace strip be told where it starts and a custom
+	// cell record the rectangle that was just drawn rather than one derived
+	// afterwards from a layout that may have moved.
+	m.dockCustomHits = m.dockCustomHits[:0]
+	dockY := m.GetDockbarContentYPosition()
+	m.dockWorkspaceHits = m.dockWorkspaceHits[:0]
+	m.dockWorkspaceArrowHits = m.dockWorkspaceArrowHits[:0]
 
-	leftInfo := lipgloss.JoinHorizontal(lipgloss.Top,
-		styledModeText,
-		styledTabs,
-		styledTrailText,
-	)
+	var leftB strings.Builder
+	leftX := 0
+	for _, name := range m.dockPlan.Left {
+		var chunk string
+		custom := false
+		switch name {
+		case config.DockComponentMode:
+			chunk = styledModeText
+		case config.DockComponentWorkspaces:
+			// Both dock paths render through here, so the tab hit rects are the
+			// drawn geometry rather than a second guess at it.
+			chunk = m.renderDockWorkspaceStrip(layout.WorkspaceStrip, leftX)
+		case config.DockComponentTrail:
+			chunk = styledTrailText
+		case config.DockComponentTape:
+			chunk = styledTapeText
+		default:
+			chunk, custom = m.dockCustomCell(name), strings.HasPrefix(name, config.DockCustomPrefix)
+		}
+		if chunk == "" {
+			continue
+		}
+		w := lipgloss.Width(chunk)
+		if custom {
+			m.dockCustomHits = append(m.dockCustomHits,
+				dockCustomHit{X0: leftX, X1: leftX + w, Y: dockY, Name: name})
+		}
+		leftB.WriteString(chunk)
+		leftX += w
+	}
+	leftInfo := leftB.String()
 
 	renderWidth := m.GetRenderWidth()
 
@@ -293,9 +356,13 @@ func (m *OS) renderDockString() (string, int) {
 	// truncation below would do, and the first thing that would cut is the
 	// block's trailing columns: the gap that keeps the message off the bar's
 	// right-hand end.
-	notif, hasNotif := m.renderNotificationBlock(barWidth, max(barWidth-actualLeftWidth-centerWidth, 0))
+	notif, hasNotif := m.dockNotificationBlock(barWidth, max(barWidth-actualLeftWidth-centerWidth, 0))
 
-	inCopyMode := focusedWindow.CopyModeVisible()
+	// Where the right block's custom cells landed inside it. Converted to screen
+	// columns below, once the block's own first column is known.
+	var rightCustom []dockCustomHit
+
+	inCopyMode := focusedWindow.CopyModeVisible() && m.dockPlan.Has(config.DockComponentCopyHelp)
 	switch {
 	case hasNotif:
 		// The message outranks the help line for its duration. Copy mode is a
@@ -315,23 +382,7 @@ func (m *OS) renderDockString() (string, int) {
 			}
 		}
 	default:
-		var sysInfoParts []string
-		if config.ShowCPU {
-			sysInfoParts = append(sysInfoParts, m.GetCPUGraph())
-		}
-		if config.ShowRAM {
-			sysInfoParts = append(sysInfoParts, m.GetRAMUsage())
-		}
-		// The CPU graph is the first thing dropped on a dock too narrow for
-		// both readouts, then the RAM figure; a clipped graph reads as noise.
-		for len(sysInfoParts) > 0 {
-			rightInfo = sysInfoStyle.Render(strings.Join(sysInfoParts, " "))
-			if lipgloss.Width(rightInfo) <= rightWidth {
-				break
-			}
-			sysInfoParts = sysInfoParts[1:]
-			rightInfo = ""
-		}
+		rightInfo, rightCustom = m.renderDockRightCells(rightWidth, sysInfoStyle)
 	}
 	if w := lipgloss.Width(rightInfo); w > rightWidth {
 		rightInfo = truncateToWidth(rightInfo, rightWidth)
@@ -372,6 +423,20 @@ func (m *OS) renderDockString() (string, int) {
 			X0: itemsX + s.x0, X1: itemsX + s.x1, Y: itemY, WindowIndex: s.windowIndex,
 		})
 	}
+	for _, h := range centerCustom {
+		m.dockCustomHits = append(m.dockCustomHits, dockCustomHit{
+			X0: itemsX + h.X0, X1: itemsX + h.X1, Y: itemY, Name: h.Name,
+		})
+	}
+	// The right block is drawn right-aligned inside the room it was given, so
+	// its cells sit against its right-hand end rather than its first column.
+	rightBlockX := notifX0 + rightWidth - lipgloss.Width(rightInfo)
+	for _, h := range rightCustom {
+		m.dockCustomHits = append(m.dockCustomHits, dockCustomHit{
+			X0: rightBlockX + h.X0, X1: rightBlockX + h.X1, Y: itemY, Name: h.Name,
+		})
+	}
+
 	m.dockOverflowHit = dockOverflowHit{}
 	if overflowX1 > overflowX0 {
 		m.dockOverflowHit = dockOverflowHit{

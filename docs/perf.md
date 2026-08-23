@@ -29,6 +29,7 @@ visible consumer, idle CPU under ~0.5%.
 |-----------|-------|------|-----------|-----------|-------------|
 | M2 baseline (48c9c51) | 470 | 568 | 9 | 1.00 | 0 |
 | M2 idle diet          | 260 | 296 | 5 | 0.00 | 0 |
+| M3 dock components    | 260 | 296 | 5 | 0.00 | 0 |
 
 `TestIdleCostStaysLow` — boot + 3 windows + 10s idle:
 
@@ -36,6 +37,7 @@ visible consumer, idle CPU under ~0.5%.
 |-----------|-----------------------|-------|------|--------|
 | M2 baseline (48c9c51) | 0 | 104 | 104 | 0 |
 | M2 idle diet          | 0 | 104 | 1   | 0 |
+| M3 dock components    | 0 | 104 | 1   | 0 |
 
 Frame-skip already held at baseline (zero idle renders). The diet's win is
 per-tick work: baseline ran the full-window scans on every one of the ~100 idle
@@ -43,6 +45,31 @@ ticks; the diet skips them behind a cheap gate, so `work` stays flat while
 `ticks` climbs (104 idle ticks, 1 did scan work). The residual ~260 ns / 5
 allocs per tick is the bubbletea `tea.Tick` re-arm and the Update panic barrier,
 not sidebar or window work.
+
+The dock's components changed neither number, which was the constraint they were
+designed under: the refresh engine arms no timer at all unless an interval
+component is configured, so a default dock costs what it always cost.
+`TestDockIdleCostWithComponentsStaysLow` is the same 10s window with a `once`
+and a `push` component loaded, and it measures the same 0 wire bytes and 0 idle
+renders.
+
+## What the components deleted
+
+`NeedsDockTick()` used to pin the maintenance tick to `NormalFPS` and mark every
+one of those ticks as needing a render whenever the clock or either meter was
+on. A clock showing seconds needs one frame a second; the meters need one every
+two. Measured on the real binary with `show_clock = true`, one shell, a ~19s
+idle window:
+
+| | ticks | work | render |
+|---|-------|------|--------|
+| before (`NeedsDockTick`) | 1108 | 1108 | 1108 |
+| after (clock as a component) | 189 | 0 | 0 |
+
+The tick drops back to `IdleFPS` and does no work at all; the clock's own
+redraws come from the component channel at its configured cadence, which is once
+a second for a format carrying seconds and once a minute for one that does not.
+A component whose value has not changed draws no frame either way.
 
 `BenchmarkSidebarPanelLinesCached` — steady-state rail compose, nothing changed:
 288 ns/op, 0 allocs (an unchanged frame reuses the cache). A forced rebuild is

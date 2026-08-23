@@ -1404,6 +1404,65 @@ restart. Give it "inherits" to start from a built-in and change one mark.`,
 	listGlyphsCmd.Flags().BoolVar(&listGlyphsJSON, "json", false, "Output as JSON")
 	_ = listGlyphsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var listDockComponentsSession string
+	var listDockComponentsJSON bool
+	listDockComponentsCmd := &cobra.Command{
+		Use:   "list-dock-components",
+		Short: "List the dock's components and what each one last did",
+		Long: `List every component the dock has placed, in draw order: its name, which side
+it is on, whether it is a built-in or one of yours, how it refreshes, what its
+cell currently reads, and what its command last did.
+
+The last three are the whole debugging story for a component that is not
+drawing. A component whose command fails is hidden rather than left showing a
+value it can no longer produce, so an absent cell here carries the exit code and
+the error that produced it.
+
+The dock is composed by the attached client, so this needs one attached.`,
+		Example: `  # What is the bar made of
+  tuios list-dock-components
+
+  # Why is my cell not showing
+  tuios list-dock-components --json | jq '.components[] | select(.source=="custom")'`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return queryDockComponents(listDockComponentsSession, listDockComponentsJSON)
+		},
+	}
+	listDockComponentsCmd.Flags().StringVarP(&listDockComponentsSession, "session", "s", "", "Target session (default: most recently active)")
+	listDockComponentsCmd.Flags().BoolVar(&listDockComponentsJSON, "json", false, "Output as JSON")
+	_ = listDockComponentsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	var refreshDockSession string
+	var refreshDockJSON bool
+	refreshDockCmd := &cobra.Command{
+		Use:   "refresh-dock [component]",
+		Short: "Re-run a dock component now",
+		Long: `Re-run a dock component immediately, whatever its refresh mode says, and clear
+a give-up so a component whose script has just been fixed starts working again
+without restarting the session.
+
+With no argument every component is re-run. This is what makes a component
+scriptable: a hook, a cron entry or an agent can push a new value the moment the
+thing it reports has changed, instead of the dock polling for it.`,
+		Example: `  # After the script it reads has changed
+  tuios refresh-dock agents
+
+  # From a hook
+  #   [hooks]
+  #   after-agent-state = "tuios refresh-dock agents"`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := ""
+			if len(args) > 0 {
+				name = args[0]
+			}
+			return runRefreshDock(refreshDockSession, name, refreshDockJSON)
+		},
+	}
+	refreshDockCmd.Flags().StringVarP(&refreshDockSession, "session", "s", "", "Target session (default: most recently active)")
+	refreshDockCmd.Flags().BoolVar(&refreshDockJSON, "json", false, "Output as JSON")
+	_ = refreshDockCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
 	var importThemeName string
 	var importThemeJSON bool
 	importThemeCmd := &cobra.Command{
@@ -1845,6 +1904,7 @@ Name a verb to describe only that verb.`,
 	rootCmd.AddCommand(splitWindowCmd, focusWindowCmd, moveWindowCmd, setWindowCmd)
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd)
+	rootCmd.AddCommand(listDockComponentsCmd, refreshDockCmd)
 
 	return rootCmd
 }

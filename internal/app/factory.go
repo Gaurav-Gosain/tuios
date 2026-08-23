@@ -98,14 +98,17 @@ func NewOS(opts OSOptions) *OS {
 
 	os := &OS{
 		// Core state
-		FocusedWindow:    -1,
-		WindowExitChan:   make(chan string, 10),
-		PTYDataChan:      make(chan struct{}, 1),
-		StateSyncChan:    make(chan *session.SessionState, 10),
-		ClientEventChan:  make(chan ClientEvent, 10),
-		MasterRatio:      0.5,
-		CurrentWorkspace: 1,
-		NumWorkspaces:    numWorkspaces,
+		FocusedWindow:   -1,
+		WindowExitChan:  make(chan string, 10),
+		PTYDataChan:     make(chan struct{}, 1),
+		StateSyncChan:   make(chan *session.SessionState, 10),
+		ClientEventChan: make(chan ClientEvent, 10),
+		// Routed verbs, for the hosts that cannot Send into the program. The
+		// local attach client leaves this unused. See dock_remote.go.
+		RemoteCommandChan: make(chan RemoteCommandMsg, remoteCommandQueue),
+		MasterRatio:       0.5,
+		CurrentWorkspace:  1,
+		NumWorkspaces:     numWorkspaces,
 
 		// Workspace state maps
 		WorkspaceFocus:       make(map[int]int),
@@ -196,6 +199,12 @@ func NewOS(opts OSOptions) *OS {
 		// and it is only knowable here, where the client is known.
 		if opts.BrowserClient {
 			os.ConfigWarnings = append(os.ConfigWarnings, browserAlertWarnings(cfg)...)
+			os.ConfigWarnings = append(os.ConfigWarnings,
+				remoteDockComponentWarning(cfg, "tuios-web")...)
+		}
+		if opts.IsSSHMode {
+			os.ConfigWarnings = append(os.ConfigWarnings,
+				remoteDockComponentWarning(cfg, "over SSH")...)
 		}
 		if opts.IsSSHMode {
 			os.ConfigWarnings = append(os.ConfigWarnings, sshAlertWarnings(cfg)...)

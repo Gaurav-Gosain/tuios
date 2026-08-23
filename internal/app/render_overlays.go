@@ -25,7 +25,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 	// Show clock/status unless hidden (but always show if recording or prefix active)
 	if (config.ShowClock && !config.HideClock) || isRecording || m.PrefixActive {
-		currentTime := time.Now().Format(config.GetClockFormat())
+		// The reading comes from the clock component, so the badge and a clock
+		// cell on the dock can never disagree, and so the format is the one
+		// [dock.clock] asked for rather than the one that used to be spelled
+		// here in a string literal.
+		currentTime := m.DockClockText()
 		var statusText string
 
 		if isRecording {

@@ -177,6 +177,33 @@ func init() {
 			},
 			handler: (*Daemon).verbListVerbs,
 		},
+		"list-dock-components": {
+			description: "List the dock's components: what the bar is made of, what each cell reads, and what each component's command last did.",
+			params:      []verbParam{sessionParam},
+			returns: []verbParam{
+				{Name: "components", Type: "[]string", Description: "One entry per placed component, in draw order, carrying its name, side, source, refresh mode, current text, last exit code, last run time and last error."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"list-dock-components"}`,
+				`{"id":1,"verb":"list-dock-components","params":{"session":"work"}}`,
+			},
+			handler: (*Daemon).verbListDockComponents,
+		},
+		"refresh-dock": {
+			description: "Re-run a dock component now, whatever its refresh mode says.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "component", Type: "string", Description: "Component to re-run, named as in the config file. Omit to re-run every one."},
+			},
+			returns: []verbParam{
+				{Name: "component", Type: "string", Description: "The component that was refreshed, or \"all\"."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"refresh-dock","params":{"component":"agents"}}`,
+				`{"id":1,"verb":"refresh-dock"}`,
+			},
+			handler: (*Daemon).verbRefreshDock,
+		},
 		"list-sessions": {
 			description: "List all sessions the daemon holds.",
 			examples:    []string{`{"id":1,"verb":"list-sessions"}`},

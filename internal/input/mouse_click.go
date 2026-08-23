@@ -98,6 +98,15 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.NotificationClick(X, Y) {
 			return o, nil
 		}
+		// A custom component's cell runs its on-click command, the way a hook
+		// runs. It is tested here, after the blocks that own their columns
+		// unconditionally and before the ones whose columns move with the
+		// layout, because a component sits between them on the bar.
+		if name := o.DockCustomComponentAt(X, Y); name != "" {
+			if o.RunDockComponentClick(name, int(msg.Button)) {
+				return o, nil
+			}
+		}
 		// The strip's overflow arrows sit in the strip's own columns and are
 		// tested before its pills, so a gutter is an arrow and never the pill
 		// that was under it before the strip started scrolling.

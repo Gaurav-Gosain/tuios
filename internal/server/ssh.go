@@ -487,6 +487,18 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 
 // registerMultiClientHandlers registers handlers for multi-client messages
 func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
+	// Handle verbs the daemon routed to this client. The local attach client
+	// Sends straight into its tea.Program; here the program belongs to a
+	// per-connection goroutine, so the command goes through the model's channel
+	// and is applied in Update like any other message. Without this,
+	// set-option, send-keys and refresh-dock all timed out against an SSH
+	// session while the daemon still reported a client attached.
+	client.OnRemoteCommand(func(payload *session.RemoteCommandPayload) error {
+		if m.QueueRemoteCommand(payload) {
+			log.Printf("[SSH] RemoteCommandChan full, dropped a routed %s", payload.CommandType)
+		}
+		return nil
+	})
 	// Handle state sync from other clients via channel (thread-safe)
 	client.OnStateSync(func(state *session.SessionState, triggerType, sourceID string) {
 		log.Printf("[SSH] Received state sync: trigger=%s, source=%s", triggerType, shortID(sourceID))

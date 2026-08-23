@@ -67,3 +67,39 @@ func sshAlertWarnings(cfg *config.UserConfig) []string {
 		"the SSH server, not where you are sitting; sound_mode = \"bell\" rings the " +
 		"client terminal instead"}
 }
+
+// remoteDockComponentWarning names where a custom dock component's command
+// actually runs when the client is not on the user's own machine.
+//
+// A component is UI: it is composed in the client, so it runs wherever the
+// client runs. For a local session that is the user's machine, which is what
+// everyone expects. For tuios-web the client is the server process, and for an
+// SSH session it is the SSH host, so a component reading the git branch reports
+// the server's checkout and one reading the battery reports the server's
+// battery, which servers do not have.
+//
+// That is the correct behaviour and not a bug to route around: a component
+// rendering into the bar has to run where the bar is composed, and the
+// alternative is a protocol for executing commands on the viewer's machine,
+// which is a much larger thing to own than a dock cell. What was wrong was
+// leaving it to be discovered. Every attached client also runs its own copy,
+// the way waybar runs one per monitor.
+func remoteDockComponentWarning(cfg *config.UserConfig, host string) []string {
+	if cfg == nil || len(cfg.Dock.Custom) == 0 {
+		return nil
+	}
+	placed := 0
+	for _, side := range []string{"left", "center", "right"} {
+		for _, name := range cfg.Dock.DockList(side) {
+			if len(name) > len(config.DockCustomPrefix) && name[:len(config.DockCustomPrefix)] == config.DockCustomPrefix {
+				placed++
+			}
+		}
+	}
+	if placed == 0 {
+		return nil
+	}
+	return []string{"[dock.custom] " + host + ": a component's command runs on the machine " +
+		"hosting this session, not on the machine you are viewing it from, and every " +
+		"attached client runs its own copy"}
+}

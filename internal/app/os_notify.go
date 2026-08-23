@@ -82,6 +82,7 @@ func (m *OS) FireHook(event hooks.Event, windowID, windowName string) {
 // could not tell which session invoked them.
 func (m *OS) FireHookContext(event hooks.Event, ctx hooks.Context) {
 	if m.HookManager == nil {
+		m.NotifyDockEvent(string(event))
 		return
 	}
 	if ctx.Workspace == 0 {
@@ -89,6 +90,10 @@ func (m *OS) FireHookContext(event hooks.Event, ctx hooks.Context) {
 	}
 	ctx.SessionID = m.SessionName
 	m.HookManager.Fire(event, ctx)
+	// A dock component watching this event refreshes from the same firing. The
+	// hook table and the component list are the two things a person wires to
+	// "when X happens", so they are wired to the same X.
+	m.NotifyDockEvent(string(event))
 }
 
 // LogWarn logs a warning message.

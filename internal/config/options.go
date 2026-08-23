@@ -565,6 +565,18 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 
+	// [dock]
+	// The three component lists and the [dock.custom] tables are absent for the
+	// reason [keybindings] and [hooks] are: they are ordered lists and free-form
+	// tables, which a set-by-path verb cannot spell. The clock's format is a
+	// plain scalar, so it belongs here.
+	{
+		Path: "dock.clock.format", Type: OptionString, Section: "dock",
+		Description: "Go time layout the clock renders in (empty means " + DefaultClockFormat +
+			"); a layout without seconds refreshes once a minute",
+		Default: "",
+	},
+
 	// [debug]
 	{
 		Path: "debug.show_key_events", Type: OptionBool, Section: "debug",
