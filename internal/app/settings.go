@@ -56,6 +56,11 @@ type settingItem struct {
 	// activate, when set, runs on Enter/click instead of adjusting the value
 	// (e.g. the Theme row opens the theme picker).
 	activate func(m *OS)
+	// meter is where the value sits in its range, 0 to 1. Set for the numeric
+	// rows whose range is bounded, so the row says how far along it is and not
+	// only what the number is: "gap 3" answers nothing without knowing that the
+	// most it goes to is 8.
+	meter func(m *OS) float64
 }
 
 // settingsCategory groups related settings under a tab.

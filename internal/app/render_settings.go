@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -225,6 +226,13 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 		control = m.settingsColorControl(item, selected, bg, pal, width)
 	default:
 		control = overlay.Cycler(overlay.Truncate(item.value(m), max(width/2, 6)), selected, bg, pal)
+		// A gauge in front of a bounded number, so the row reads as a magnitude
+		// rather than as an integer with no scale. It is worth the cells on
+		// exactly these rows: the change they make is on the screen behind the
+		// panel, and the number alone does not say how far there is left to go.
+		if item.meter != nil {
+			control = settingsMeter(item.meter(m), selected, bg, pal) + control
+		}
 	}
 
 	labelColor := pal.Fg
@@ -313,4 +321,35 @@ func (m *OS) settingsStringControl(item settingItem, selected bool, bg color.Col
 	return bracket.Render("[ ") +
 		overlay.Style(bg).Foreground(fg).Italic(italic).Render(text) +
 		bracket.Render(" ]")
+}
+
+// settingsMeterCells is how wide the gauge on a bounded numeric row is. Short
+// enough to leave the value and its stepper room on a narrow panel, long enough
+// that one step of the smallest range still moves it.
+const settingsMeterCells = 6
+
+// settingsMeter draws where a value sits in its range, as filled and unfilled
+// cells followed by a space.
+//
+// A gauge rather than a percentage: the question it answers is "how much further
+// can this go", which a second number does not answer any faster than the first
+// one did.
+func settingsMeter(fraction float64, selected bool, bg color.Color, pal overlay.Palette) string {
+	fraction = min(max(fraction, 0), 1)
+	filled := int(fraction*float64(settingsMeterCells) + 0.5)
+	// A value off the floor always shows at least one cell, so nudging a
+	// setting up from zero does something visible on the row as well as on the
+	// screen behind it.
+	if filled == 0 && fraction > 0 {
+		filled = 1
+	}
+
+	on, off := config.GetScrollbarThumbChar(), config.GetScrollbarTrackChar()
+	inkOn, inkOff := pal.Accent, pal.FgMute
+	if !selected {
+		inkOn = pal.FgDim
+	}
+	return overlay.Style(bg).Foreground(inkOn).Render(strings.Repeat(on, filled)) +
+		overlay.Style(bg).Foreground(inkOff).Render(strings.Repeat(off, settingsMeterCells-filled)) +
+		overlay.Style(bg).Render(" ")
 }

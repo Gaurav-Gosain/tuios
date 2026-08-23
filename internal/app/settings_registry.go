@@ -303,6 +303,17 @@ func (m *OS) registryItem(path string) settingItem {
 		item.adjust = func(m *OS, dir int) {
 			m.setOption(path, strconv.Itoa(clampInt(m.optionInt(path)+dir*step, lo, hi)))
 		}
+		// A gauge only where the registry enforces a ceiling. On an option
+		// without one the bar would be drawn against a number this file picked,
+		// which is a scale the setting does not actually have.
+		if o.Max > 0 {
+			item.meter = func(m *OS) float64 {
+				if hi <= lo {
+					return 0
+				}
+				return float64(clampInt(m.optionInt(path), lo, hi)-lo) / float64(hi-lo)
+			}
+		}
 
 	case len(o.Accepted) > 0:
 		accepted := o.Accepted
