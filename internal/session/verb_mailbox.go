@@ -266,7 +266,21 @@ type readResult struct {
 
 // read answers a query against a session's ring, marking the returned directed
 // messages read unless the query peeks or named no inbox.
+//
+// Attachments are resolved after the lock is dropped. Stat is a syscall against
+// whatever filesystem the sender chose, and holding the bus through it would
+// let one slow path block every other agent's mail.
 func (b *agentBus) read(session string, q readQuery) readResult {
+	res := b.collect(session, q)
+	for i := range res.Messages {
+		res.Messages[i].Attachments = resolveAttachments(res.Messages[i].Attachments)
+	}
+	return res
+}
+
+// collect is read's critical section: pick the matching messages, copy them out,
+// and mark what this read consumed.
+func (b *agentBus) collect(session string, q readQuery) readResult {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	mb := b.box(session)
@@ -306,7 +320,6 @@ func (b *agentBus) read(session string, q readQuery) readResult {
 		if out.Kind == agentMsgDirect && out.To != "" && q.live != nil && !q.live(out.To) {
 			out.Undeliverable = true
 		}
-		out.Attachments = resolveAttachments(m.Attachments)
 		if out.Kind == agentMsgDirect && out.ReadAt == 0 {
 			res.Unread++
 			out.WasUnread = true
