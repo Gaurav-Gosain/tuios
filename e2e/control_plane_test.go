@@ -820,3 +820,146 @@ func TestCLIExplainsAMissingSession(t *testing.T) {
 		}
 	}
 }
+
+// TestAgentsTalkToEachOtherHeadless is the cross-agent surface driven the way an
+// orchestrating agent would drive it: over the socket, on a session no client
+// ever attached to, with nothing borrowed from the daemon's internals.
+//
+// It exists because every unit test for this feature is inside the package that
+// implements it. The claim that it works from outside, and works detached, is
+// only worth something if something outside checks it.
+func TestAgentsTalkToEachOtherHeadless(t *testing.T) {
+	e := newEnv(t)
+	e.mustRun("new", "--detach", "crew")
+	e.waitForSocket(10 * time.Second)
+	e.mustRun("new-window", "-s", "crew", "orchestrator", "--no-focus")
+	e.mustRun("new-window", "-s", "crew", "review", "--no-focus")
+
+	c := e.dial()
+
+	// Discovery. Nothing has reported, so nothing is an agent yet, and --all is
+	// what tells you the panes are there at all.
+	res := c.result(1, "list-agents", map[string]any{"session": "crew"}, 5*time.Second)
+	if res["total"] != float64(0) {
+		t.Fatalf("a session where nothing reported listed %v agents", res["total"])
+	}
+	res = c.result(2, "list-agents", map[string]any{"session": "crew", "all": true}, 5*time.Second)
+	agents, _ := res["agents"].([]any)
+	if len(agents) != 3 {
+		t.Fatalf("--all listed %d windows, want the three that exist", len(agents))
+	}
+
+	var orch, review string
+	for _, raw := range agents {
+		row := raw.(map[string]any)
+		switch row["name"] {
+		case "orchestrator":
+			orch = row["window_id"].(string)
+		case "review":
+			review = row["window_id"].(string)
+		}
+	}
+	if orch == "" || review == "" {
+		t.Fatalf("list-agents did not name the panes that were created: %v", agents)
+	}
+
+	// The review pane reports itself, which is what makes it discoverable and
+	// what makes it askable.
+	c.result(3, "set-agent-state", map[string]any{
+		"session": "crew", "window": review, "state": "needs_input",
+		"harness": "claude-code", "message": "ready",
+	}, 5*time.Second)
+
+	res = c.result(4, "list-agents", map[string]any{"session": "crew"}, 5*time.Second)
+	agents, _ = res["agents"].([]any)
+	if len(agents) != 1 {
+		t.Fatalf("a pane that reported did not show up as an agent: %v", res)
+	}
+	if row := agents[0].(map[string]any); row["ready"] != true || row["harness_id"] != "claude-code" {
+		t.Errorf("agent row is wrong: %v", row)
+	}
+
+	// A message queued for a pane, read back by that pane, marked rather than
+	// consumed, and flagged as content the reader did not write.
+	sent := c.result(5, "send-agent-message", map[string]any{
+		"session": "crew", "to": review, "from": orch,
+		"subject": "retest", "text": "rebased onto main",
+	}, 5*time.Second)
+	if sent["kind"] != "message" {
+		t.Errorf("kind = %v, want message", sent["kind"])
+	}
+
+	res = c.result(6, "list-agents", map[string]any{"session": "crew"}, 5*time.Second)
+	if row := res["agents"].([]any)[0].(map[string]any); row["unread"] != float64(1) {
+		t.Errorf("unread = %v, want 1", row["unread"])
+	}
+
+	res = c.result(7, "read-agent-messages", map[string]any{
+		"session": "crew", "to": review, "unread": true,
+	}, 5*time.Second)
+	if res["untrusted"] != true {
+		t.Error("a read did not flag its content untrusted")
+	}
+	msgs, _ := res["messages"].([]any)
+	if len(msgs) != 1 {
+		t.Fatalf("read %d messages, want 1", len(msgs))
+	}
+	m := msgs[0].(map[string]any)
+	if m["text"] != "rebased onto main" || m["was_unread"] != true {
+		t.Errorf("message did not survive the round trip: %v", m)
+	}
+	res = c.result(8, "read-agent-messages", map[string]any{
+		"session": "crew", "to": review, "unread": true,
+	}, 5*time.Second)
+	if n, _ := res["messages"].([]any); len(n) != 0 {
+		t.Errorf("the message was still unread after being read: %v", res)
+	}
+
+	// A wait blocks on the hub rather than polling, and wakes on a send from a
+	// second connection.
+	waiter := e.dial()
+	done := make(chan map[string]any, 1)
+	go func() {
+		done <- waiter.result(9, "wait-for", map[string]any{
+			"condition": "agent-message", "session": "crew",
+			"window": orch, "timeout": 15000,
+		}, 20*time.Second)
+	}()
+	time.Sleep(300 * time.Millisecond)
+	c.result(10, "send-agent-message", map[string]any{
+		"session": "crew", "to": orch, "from": review,
+		"subject": "answer", "text": "two risks, both in decode",
+	}, 5*time.Second)
+
+	select {
+	case got := <-done:
+		if got["matched"] != true || got["subject"] != "answer" {
+			t.Errorf("the wait did not match the message that was sent: %v", got)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("wait-for agent-message never returned")
+	}
+
+	// Asking a question types at the pane and comes back with what it printed.
+	// The pane is a plain shell, so the settle timer is the only signal, which
+	// is the case the fallback exists for.
+	res = c.result(11, "ask-agent", map[string]any{
+		"session": "crew", "window": review, "from": orch,
+		"text": "echo e2e_ask_reply", "settle": 900, "timeout": 20000,
+	}, 30*time.Second)
+	if res["untrusted"] != true {
+		t.Error("a reply did not flag itself untrusted")
+	}
+	if reply, _ := res["reply"].(string); !strings.Contains(reply, "e2e_ask_reply") {
+		t.Errorf("reply did not carry what the pane printed: %q", reply)
+	}
+
+	// And the loop guards refuse rather than allowing a cycle to be built.
+	resp := c.call(12, "send-agent-message", map[string]any{
+		"session": "crew", "to": orch, "from": orch, "text": "self",
+	}, 5*time.Second)
+	errObj, ok := resp["error"].(map[string]any)
+	if !ok || errObj["code"] != "loop_refused" {
+		t.Errorf("a self-addressed message was not refused with loop_refused: %v", resp)
+	}
+}

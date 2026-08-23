@@ -28,13 +28,18 @@ const (
 	EventWindowRestored    = "window-restored"    // a minimized window was restored
 	EventWorkspaceSwitched = "workspace-switched" // the session's current workspace changed
 	EventAgentState        = "agent-state"        // a window's agent state changed
-	EventOutput            = "output"             // a window produced output (activity)
-	EventBell              = "bell"               // a window rang the terminal bell
-	EventModeChanged       = "mode-changed"       // a terminal mode toggled (e.g. alt-screen)
-	EventSessionCreated    = "session-created"    // a session was created
-	EventSessionClosed     = "session-closed"     // a session was terminated
-	EventGap               = "gap"                // slow-subscriber marker: N events were dropped
-	EventSubscribed        = "subscribed"         // subscribe ack result type
+	// EventAgentMessage is one agent leaving a message for another. Window is
+	// the recipient's window id, or empty for a session-wide notice. It carries
+	// nothing else on purpose: a subscriber reads the message back from the ring
+	// rather than trusting a payload that went stale the moment it was queued.
+	EventAgentMessage   = "agent-message"
+	EventOutput         = "output"          // a window produced output (activity)
+	EventBell           = "bell"            // a window rang the terminal bell
+	EventModeChanged    = "mode-changed"    // a terminal mode toggled (e.g. alt-screen)
+	EventSessionCreated = "session-created" // a session was created
+	EventSessionClosed  = "session-closed"  // a session was terminated
+	EventGap            = "gap"             // slow-subscriber marker: N events were dropped
+	EventSubscribed     = "subscribed"      // subscribe ack result type
 )
 
 // defaultEventQueue bounds a subscriber's per-connection event queue. When it is

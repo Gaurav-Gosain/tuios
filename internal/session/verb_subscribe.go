@@ -197,6 +197,8 @@ func (d *Daemon) verbWaitFor(_ *connState, params json.RawMessage) (any, *verbEr
 		return d.waitWindowIdle(p.Session, p.Window, p.Idle, deadline)
 	case "agent-state":
 		return d.waitAgentState(p.Session, p.Window, p.Until, deadline)
+	case "agent-message":
+		return d.waitAgentMessage(p.Session, p.Window, deadline)
 	default:
 		message := "unknown condition " + p.Condition
 		if p.Condition == "" {
@@ -502,4 +504,90 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 			}
 		}
 	}
+}
+
+// waitAgentMessage resolves when a message arrives for an inbox, and is what
+// makes the mailbox cost nothing while it is empty: a waiting agent is blocked
+// on the hub rather than asking every second whether anything showed up.
+//
+// The two shapes differ on purpose. With a window it is "wake me when I have
+// mail", so an unread message already sitting in the inbox matches at once; a
+// wait that could miss a message queued a moment before it started would be a
+// race every caller had to work around. Without a window it is "wake me when
+// anything is said here", which cannot use the same rule because the ring is
+// almost never empty, so it takes the newest message id as a baseline and
+// matches only what arrives after.
+func (d *Daemon) waitAgentMessage(sessionName, window string, deadline <-chan time.Time) (any, *verbError) {
+	sess, verr := d.resolveVerbSession(sessionName)
+	if verr != nil {
+		return nil, verr
+	}
+
+	inbox := ""
+	if window != "" {
+		state := sess.GetState()
+		idx, err := findWindowStateIndex(state.Windows, window)
+		if err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+		inbox = state.Windows[idx].ID
+	}
+
+	// The baseline is taken before the subscription so a message published in
+	// the race window is newer than it, and is therefore matched rather than
+	// missed.
+	baseline := d.agents.highestID()
+
+	types := map[string]bool{EventAgentMessage: true}
+	if inbox != "" {
+		// A watched inbox closing has to fail the wait rather than run out the
+		// clock: nothing will ever be delivered to it again.
+		types[EventWindowClosed] = true
+	}
+	sub := d.events.subscribe(eventFilter{session: sess.Name, types: types}, defaultEventQueue)
+	defer d.events.unsubscribe(sub)
+
+	check := func() (AgentMessage, bool) {
+		if inbox != "" {
+			return d.agents.firstUnread(sess.Name, inbox)
+		}
+		return d.agents.newerThan(sess.Name, baseline)
+	}
+
+	if m, ok := check(); ok {
+		return agentMessageMatch(inbox, m), nil
+	}
+	for {
+		select {
+		case <-deadline:
+			return nil, hintedVerbError(ErrVerbTimeout, "timed out waiting for an agent message", &VerbHint{
+				Param:   "timeout",
+				Command: "tuios read-agent-messages",
+				Detail:  "Nothing was sent before the timeout. Read the ring to see what is already there, or raise timeout (milliseconds).",
+			})
+		case <-d.ctx.Done():
+			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
+		case ev := <-sub.ch:
+			if ev.Type == EventWindowClosed && inbox != "" && ev.Window == inbox {
+				return nil, newVerbError(ErrVerbWindowNotFound, "the watched inbox closed before a message arrived")
+			}
+			if m, ok := check(); ok {
+				return agentMessageMatch(inbox, m), nil
+			}
+		}
+	}
+}
+
+// agentMessageMatch renders the wait result. It reports the message's identity
+// and never its body: the caller reads it with read-agent-messages, which is
+// where the untrusted-content framing lives.
+func agentMessageMatch(inbox string, m AgentMessage) map[string]any {
+	return waitMatched("agent-message", map[string]any{
+		"window":     inbox,
+		"message_id": m.ID,
+		"kind":       m.Kind,
+		"from":       m.From,
+		"from_name":  m.FromLabel,
+		"subject":    m.Subject,
+	})
 }

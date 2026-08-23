@@ -37,6 +37,13 @@ type Daemon struct {
 	// stream and the wait-for verb's blocking waits.
 	events *eventHub
 
+	// agents is the cross-agent mailbox: the bounded per-session message rings
+	// and the in-flight ask graph. It is held here rather than on a Session
+	// because it must never reach disk: SessionState is what resurrection
+	// serialises, and a message that outlived the daemon would be addressed to a
+	// pane whose shell is new. See verb_mailbox.go.
+	agents *agentBus
+
 	// Goroutine tracking for clean shutdown
 	wg sync.WaitGroup
 
@@ -198,6 +205,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		clients:            make(map[string]*connState),
 		pendingRequests:    make(map[string]*pendingRequest),
 		events:             newEventHub(),
+		agents:             newAgentBus(),
 		version:            cfg.Version,
 		disableAutoRestore: cfg.DisableAutoRestore,
 		agentStallTimeout:  resolveAgentStallTimeout(cfg.AgentStallTimeout),
@@ -316,6 +324,8 @@ func (d *Daemon) onSessionCreated(s *Session) {
 // client sits in a dead session with no way to learn what happened.
 func (d *Daemon) onSessionDeleted(s *Session) {
 	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name})
+	// A session with no windows has no inboxes, so its ring is dropped with it.
+	d.agents.forget(s.Name)
 	d.broadcastToSession(s.ID, MsgSessionEnded, &SessionEndedPayload{
 		SessionName: s.Name,
 		Reason:      "the session was terminated",

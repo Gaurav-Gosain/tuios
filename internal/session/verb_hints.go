@@ -32,7 +32,7 @@ var (
 	// implemented without guessing at row boundaries.
 	// WaitConditionNames are the conditions wait-for understands. It is exported
 	// so the CLI offers exactly this set and cannot drift from the daemon's.
-	WaitConditionNames = []string{"session-exists", "window-output", "window-exit", "window-idle", "agent-state"}
+	WaitConditionNames = []string{"session-exists", "window-output", "window-exit", "window-idle", "agent-state", "agent-message"}
 
 	retiredCaptureSources = map[string]string{
 		"recent-unwrapped": "unwrapped capture is not implemented; it previously returned the same physical rows as \"recent\" without unwrapping them",
@@ -43,7 +43,8 @@ var (
 	knownEventTypes = []string{
 		EventWindowCreated, EventWindowClosed, EventWindowExit, EventWindowRetitled,
 		EventWindowFocused, EventWindowMoved, EventWindowMinimized, EventWindowRestored,
-		EventWorkspaceSwitched, EventOutput, EventBell, EventModeChanged,
+		EventWorkspaceSwitched, EventAgentState, EventAgentMessage,
+		EventOutput, EventBell, EventModeChanged,
 		EventSessionCreated, EventSessionClosed, EventGap,
 	}
 )
@@ -66,6 +67,9 @@ var errorCodeCatalog = []struct {
 	{ErrVerbOptionNotFound, "No option by that path exists. The hint carries the closest match and the full path list; list-options describes them."},
 	{ErrVerbCommandFailed, "The verb was routed to the attached client and came back failed."},
 	{ErrVerbTimeout, "A wait-for condition did not match before its timeout elapsed."},
+	{ErrVerbNotReady, "The target agent was mid-turn, so the call declined to type at it. Wait for it, leave a message instead, or force it."},
+	{ErrVerbLoopRefused, "The call was refused because it would loop: a pane addressing itself, or an ask that closes a cycle with one in flight."},
+	{ErrVerbRateLimited, "The sender is over the cross-agent message rate cap."},
 	{ErrVerbProtocolMismatch, "The caller's protocol version is outside the range this daemon accepts."},
 	{ErrVerbInternal, "Unexpected server-side failure."},
 }
@@ -281,4 +285,16 @@ func windowTargets(state *SessionState) []string {
 	}
 	sort.Strings(targets)
 	return targets
+}
+
+// VerbErrorCodes returns every stable error code in the protocol's catalogue,
+// in the order list-verbs publishes them. It is exported so a caller matching on
+// codes, and the skill's own test, can check against the set rather than a copy
+// of it that goes stale.
+func VerbErrorCodes() []string {
+	out := make([]string, 0, len(errorCodeCatalog))
+	for _, e := range errorCodeCatalog {
+		out = append(out, e.Code)
+	}
+	return out
 }
