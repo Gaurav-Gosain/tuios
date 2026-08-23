@@ -27,6 +27,14 @@ var settingsUIExcluded = map[string]string{
 	"appearance.sidebar_show_counts":  "alias of appearance.sidebar.show_counts",
 	"appearance.sidebar.workspaces":   "replaced by appearance.dock_workspace_tabs",
 	"appearance.hide_clock":           "the positive spelling appearance.show_clock has the row",
+
+	// A shell command the host runs on its own, with no further gesture from
+	// anyone. The panel is reachable by every attached client and `tuios ssh`
+	// authenticates none of them, so a row here is a way for whoever connected
+	// to run a command on the machine hosting the session. It stays settable
+	// through the config file and through set-config, both of which are the
+	// host's own doing.
+	"notifications.agent.command": "a shell command the host runs; not for a panel any client can open",
 }
 
 // TestSettingsPanelReachesEveryOption is the guard this branch was opened for.

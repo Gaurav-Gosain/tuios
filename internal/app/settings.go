@@ -373,7 +373,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("notifications.agent.settle_seconds"),
 			opt("notifications.agent.suppress_focused"),
 			opt("notifications.agent.quiet_hours"),
-			opt("notifications.agent.command"),
 			opt("notifications.agent.states.working"),
 			opt("notifications.agent.states.idle"),
 			opt("notifications.agent.states.done"),
