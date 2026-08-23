@@ -196,7 +196,16 @@ func (m *OS) optionEffective(path string) string {
 	switch o.Type {
 	case config.OptionString:
 		if value == "" && len(o.Accepted) > 0 {
-			return o.Default
+			if o.Default != "" {
+				return o.Default
+			}
+			// Registry Default is what DefaultConfig writes, which for four
+			// enums is empty meaning "the built-in". The built-in is the value
+			// the option accepts first, which is the order the registry lists
+			// them in and what TestEnumDefaultIsTheFirstAccepted pins. Without
+			// this the window title row drew an empty cycler for a title that
+			// was plainly being drawn along the bottom.
+			return o.Accepted[0]
 		}
 	case config.OptionInt:
 		if value == "0" && o.Default != "0" {
