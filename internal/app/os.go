@@ -613,6 +613,17 @@ type OS struct {
 	ThemePickerScroll   int
 	ThemePickerOriginal string // theme active when the picker opened, for cancel
 
+	// Glyph picker overlay state, the theme picker's opposite number.
+	ShowGlyphPicker     bool
+	GlyphPickerQuery    string
+	GlyphPickerSelected int
+	GlyphPickerScroll   int
+	GlyphPickerOriginal string // set active when the picker opened, for cancel
+	// GlyphPickerSamples is one preview per set, built when the picker opens.
+	// Each borrows the active selection to read what its set draws, which is
+	// not something to do per frame while composing one.
+	GlyphPickerSamples map[string]glyphSample
+
 	// Floating overlay placement + mouse hit-testing. Each overlay kind keeps
 	// its own drag displacement in OverlayOffsets so panels (e.g. settings and
 	// the theme picker) can be moved independently. OverlayHits records every

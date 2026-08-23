@@ -1,6 +1,8 @@
 package config
 
 import (
+	"sync"
+
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -127,4 +129,30 @@ func ResolvedGlyphs() map[string]string {
 		out[role] = glyph
 	}
 	return out
+}
+
+// glyphBorrowMu serialises the borrow in GlyphsForSet, so two callers cannot
+// leave the selection somewhere neither of them asked for.
+var glyphBorrowMu sync.Mutex
+
+// GlyphsForSet is what a set would draw if it were selected, without selecting
+// it.
+//
+// Answered by borrowing the selection, reading through the same accessors the
+// renderer calls, and putting it back. That is the honest answer and the only
+// one that cannot drift from what a frame would actually show: a preview built
+// by reading the set's own fields would report the roles it names and say
+// nothing about the built-ins underneath, which is most of what a person sees.
+//
+// The borrow is process-local state that no frame is composed from while it is
+// held, so a caller on the render goroutine is safe. It is still not free, so
+// callers building a list of previews should do it once rather than per frame.
+func GlyphsForSet(id string) map[string]string {
+	glyphBorrowMu.Lock()
+	defer glyphBorrowMu.Unlock()
+	prev := theme.ActiveGlyphSetID()
+	theme.SetActiveGlyphs(id)
+	drawn := ResolvedGlyphs()
+	theme.SetActiveGlyphs(prev)
+	return drawn
 }

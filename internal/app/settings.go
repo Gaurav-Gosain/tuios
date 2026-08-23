@@ -443,14 +443,16 @@ func (m *OS) themeItem() settingItem {
 
 // glyphItem is the glyph set row, the theme's opposite number: the theme says
 // what colour the chrome is and the set says what shape it is. Hand-written for
-// the reason the theme row is, because the value is a name from an open set
-// rather than one of a closed list.
+// the reason the theme row is, and Enter opens the picker that previews the
+// shapes.
 func (m *OS) glyphItem() settingItem {
 	options := theme.AvailableGlyphSets()
-	return enumItem("Glyph set", "Characters the border, controls, rules and rail marks are drawn with",
+	item := enumItem("Glyph set", "Shapes the border, controls, rules and rail marks are drawn with (press Enter for the picker with previews)",
 		options,
 		func() string { return theme.ActiveGlyphSetID() },
 		func(m *OS, v string) { m.setOption("appearance.glyphs", v) })
+	item.activate = func(m *OS) { m.OpenGlyphPicker() }
+	return item
 }
 
 // maxFPSItem is the frame-rate cap. Hand-written because the row says

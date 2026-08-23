@@ -117,6 +117,9 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.ShowThemePicker {
 		return handleThemePickerInput(msg, o)
 	}
+	if o.ShowGlyphPicker {
+		return handleGlyphPickerInput(msg, o)
+	}
 
 	// Handle the keybind manager (opens over settings, like the theme picker)
 	if o.ShowKeybindManager {

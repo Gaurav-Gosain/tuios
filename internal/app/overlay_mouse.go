@@ -181,6 +181,10 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		if idx != m.ThemePickerSelected {
 			m.ThemePickerMove(idx - m.ThemePickerSelected)
 		}
+	case "glyphpicker":
+		if idx != m.GlyphPickerSelected {
+			m.GlyphPickerMove(idx - m.GlyphPickerSelected)
+		}
 	case "session":
 		m.SessionSwitcherSelected = idx
 	case "workspace":
@@ -234,6 +238,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		m.LauncherMove(wheelDelta(up))
 	case "themepicker":
 		m.ThemePickerMove(wheelDelta(up))
+	case "glyphpicker":
+		m.GlyphPickerMove(wheelDelta(up))
 	case "session":
 		n := len(FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery))
 		moveListSelection(&m.SessionSwitcherSelected, &m.SessionSwitcherScroll, n, 10, wheelDelta(up))
@@ -345,6 +351,9 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "themepicker":
 		m.ThemePickerSelected = row.Idx
 		return m.ThemePickerApplySelection()
+	case "glyphpicker":
+		m.GlyphPickerSelected = row.Idx
+		return m.GlyphPickerApplySelection()
 	case "session":
 		// A click activates, exactly like Enter on the selected row. Selecting
 		// only, as this used to, made the switcher the one list where a click
@@ -436,6 +445,9 @@ func (m *OS) closeOverlay(kind string) {
 	case "themepicker":
 		// Click-away leaves the previewed theme reverted, matching Esc.
 		m.CancelThemePicker()
+	case "glyphpicker":
+		// Click-away leaves the previewed set reverted, matching Esc.
+		m.CancelGlyphPicker()
 	case "session":
 		m.ShowSessionSwitcher = false
 		m.SessionSwitcherQuery = ""

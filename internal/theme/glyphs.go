@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -188,7 +189,10 @@ var (
 	glyphMu       sync.RWMutex
 	userGlyphSets = map[string]*GlyphSet{}
 	glyphProblems []string
-	activeGlyphID = GlyphSetNone
+	// glyphProblemsBySet is the same lines keyed by the set that produced them,
+	// for a caller reporting on one set rather than on the directory.
+	glyphProblemsBySet = map[string][]string{}
+	activeGlyphID      = GlyphSetNone
 	// activeGlyphs is read once per glyph the renderer draws, so it is an
 	// atomic pointer to a set nothing mutates after it is published rather than
 	// a value behind the mutex above: a copy of thirty strings per accessor
@@ -210,6 +214,11 @@ func ReloadGlyphSets() (loaded, problems []string) {
 		return nil, []string{err.Error()}
 	}
 	sets := map[string]*GlyphSet{}
+	// Kept by id as well as in one list, so a caller showing one set can say
+	// what that set asked for and did not get. The flat list answers "what is
+	// wrong in my glyphs directory"; this answers "why is this set not drawing
+	// what I wrote", which is the question in front of someone choosing one.
+	bySet := map[string][]string{}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, []string{fmt.Sprintf("failed to read glyphs directory: %v", err)}
@@ -224,12 +233,15 @@ func ReloadGlyphSets() (loaded, problems []string) {
 			continue
 		}
 		problems = append(problems, probs...)
+		if len(probs) > 0 {
+			bySet[set.ID] = probs
+		}
 		sets[set.ID] = set
 		loaded = append(loaded, set.ID)
 	}
 	sort.Strings(loaded)
 	glyphMu.Lock()
-	userGlyphSets, glyphProblems = sets, problems
+	userGlyphSets, glyphProblems, glyphProblemsBySet = sets, problems, bySet
 	glyphMu.Unlock()
 	// A set that has just been rewritten on disk is the one most likely to be
 	// the active one, so re-resolve rather than wait for the next set-config.
@@ -418,6 +430,45 @@ func GlyphSetProblems() []string {
 	glyphMu.RLock()
 	defer glyphMu.RUnlock()
 	return append([]string(nil), glyphProblems...)
+}
+
+// GlyphSetProblemsFor returns the lines one set produced when it was read: the
+// roles it named and did not get, one per line.
+//
+// A role whose glyph is the wrong width for its slot is dropped at load, so it
+// is not in the set afterwards and cannot be found by comparing the set against
+// what draws. Without this the drop is invisible to everything but the log,
+// which is where "my glyph set is not working" comes from.
+func GlyphSetProblemsFor(id string) []string {
+	glyphMu.RLock()
+	defer glyphMu.RUnlock()
+	return append([]string(nil), glyphProblemsBySet[id]...)
+}
+
+// GlyphSetDroppedRoles is the roles one set named and did not get, by name.
+// The lines from GlyphSetProblemsFor say why in a sentence; this is what to put
+// where only the names fit.
+func GlyphSetDroppedRoles(id string) []string {
+	var roles []string
+	for _, line := range GlyphSetProblemsFor(id) {
+		// "glyph set <id>: <role> is N cells wide and ..." - the role is the
+		// word after the colon. A border rune's line names no role, so it is
+		// reported under the border it belongs to.
+		_, rest, ok := strings.Cut(line, ": ")
+		if !ok {
+			continue
+		}
+		if strings.HasPrefix(rest, "a border rune") {
+			roles = append(roles, "border")
+			continue
+		}
+		role, _, ok := strings.Cut(rest, " ")
+		if ok && role != "" {
+			roles = append(roles, role)
+		}
+	}
+	sort.Strings(roles)
+	return slices.Compact(roles)
 }
 
 // maxGlyphInherit caps the inheritance walk. A set inheriting from a set is
