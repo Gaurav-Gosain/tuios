@@ -253,7 +253,7 @@ func keyTokenToBytes(tok string) ([]byte, error) {
 	lower := strings.ToLower(tok)
 
 	if tok == "PREFIX" || tok == "$PREFIX" {
-		return nil, fmt.Errorf("the prefix key is a window-manager concept and has no meaning headless; attach a client")
+		return nil, fmt.Errorf("the prefix key only works with an attached client. Attach one and retry")
 	}
 
 	if b, ok := namedKeyBytes[lower]; ok {

@@ -164,7 +164,7 @@ func printThemeList(w io.Writer, themes []string, matched, total int, truncated 
 		fmt.Fprintln(w)
 	}
 	if truncated {
-		fmt.Fprintf(w, "\n%d of %d matched; %d shown. Narrow it with --filter.\n", matched, total, len(themes))
+		fmt.Fprintf(w, "\n%d of %d matched, %d shown. Narrow it with --filter.\n", matched, total, len(themes))
 	} else {
 		fmt.Fprintf(w, "\n%d of %d registered themes.\n", matched, total)
 	}
@@ -199,6 +199,6 @@ func printThemePalette(w io.Writer, p themePalette) {
 	if len(p.Illegible) > 0 {
 		fmt.Fprintf(w, "\n%d of these do not clear their floor on this background: %s\n",
 			len(p.Illegible), strings.Join(p.Illegible, ", "))
-		fmt.Fprintln(w, "tuios lifts a border drawn from one of them; text printed in one stays as the theme wrote it.")
+		fmt.Fprintln(w, "tuios adjusts a border drawn in one of them so it stays visible. Text printed in one stays as the theme wrote it.")
 	}
 }

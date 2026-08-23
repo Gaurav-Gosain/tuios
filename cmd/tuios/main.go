@@ -291,7 +291,7 @@ Shows a comparison of default and custom keybindings.`,
 and every one of those a common program wants.
 
 Each finding carries the evidence it rests on: certain (tuios's own routing),
-observed (read from a pane), or reference (a curated list of program defaults,
+observed (read from a pane), or reference (a list of common program defaults,
 not detection). --json emits the same analysis the keybind overlay draws.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return keybindsDoctor(keybindsJSON, keybindsGuest)
@@ -305,8 +305,7 @@ not detection). --json emits the same analysis the keybind overlay draws.`,
 		Short: "Say what tuios does with one key",
 		Long: `Print every scope the key acts in, whether the pane's program would
 receive it, the terminal-level pair it belongs to, and which common programs
-bind it. This is what the overlay's recorder shows, for a caller that cannot
-press anything.`,
+bind it. This prints the same answer the overlay's key recorder shows.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return keybindsExplain(args[0], keybindsJSON, keybindsGuest)
@@ -404,10 +403,10 @@ in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 
 If no session name is provided, attaches to the most recent session.
 
-The daemon is started if it is not running, which restores every session
-saved on disk; attach then opens one of those. With nothing saved and no
+If the daemon is not running, it is started and restores every session
+saved on disk. Attach then opens one of those. With nothing saved and no
 name given, a new session is opened instead. A name that matches no session
-is reported rather than created, unless -c is given.`,
+is an error unless -c is given.`,
 		Example: `  # Attach to the most recent session
   tuios attach
 
@@ -473,9 +472,9 @@ with 'tuios attach'.`,
 Shows session names, window counts, and whether clients are attached.
 
 With no daemon running, the sessions saved on disk are listed instead,
-marked "saved", and the command exits 3. That status is what tells a
-script a stopped daemon from a running one holding no sessions, which
-exits 0 with an empty list.
+marked "saved", and the command exits 3. Exit 3 lets a script tell a
+stopped daemon from a running daemon with no sessions, which exits 0
+with an empty list.
 
 Use --json for machine-readable output; saved rows carry "saved": true.`,
 		Example: `  tuios ls
@@ -805,9 +804,9 @@ Supported configuration paths:
 recorded in daemon-owned state, so this works whether or not a TUI client is
 attached.
 
-An option this session was never told is answered with what it does untold, so
-a path that exists always reads. --json reports where the value came from
-alongside it: "session" for one set here, "default" for the built-in.
+An option with no session override reads as its default, so a path that exists
+always reads. --json also reports where the value came from: "session" for an
+override set here, "default" for the built-in.
 
 Run 'tuios list-options' to see every path.`,
 		Example: `  # Read the border style
@@ -889,10 +888,9 @@ daemon socket; the reference Claude Code shim does exactly that.`,
 		Long: `Print what the foreground-process detector read for a pane, and what every
 harness manifest made of it.
 
-Detection is otherwise unfalsifiable from outside: a pane is an agent or it is
-not, with nothing said about which of comm, argv0, argv_path or exe_glob decided
-it, and no way to see what the daemon actually read. This says both, and for
-every manifest that refused, what it was comparing against.`,
+It shows what the daemon read (comm, argv, executable), which manifest matched
+and on which of comm, argv0, argv_path or exe_glob, and for every manifest that
+did not match, what it compared against.`,
 		Example: `  # Why is the focused pane not being seen as an agent?
   tuios explain-agent-detect
 
@@ -919,9 +917,8 @@ every manifest that refused, what it was comparing against.`,
 		Long: `Print a pane's screen tail exactly as the harness screen rules read it, then
 what every rule made of it and which one fired.
 
-This is the tool for writing a screen rule. The text is matched inside the
-daemon against a pane that has moved on by the time anyone looks, and a rule
-that fails otherwise says nothing about which of its strings was the reason.`,
+Use it to write or debug a screen rule: for each rule that did not match, it
+names the strings that were the reason.`,
 		Example: `  # What do claude-code's rules make of the focused pane right now?
   tuios explain-agent-screen
 
@@ -947,9 +944,8 @@ that fails otherwise says nothing about which of its strings was the reason.`,
 		Short: "Write text verbatim to a pane",
 		Long: `Write text straight to a pane's PTY with no key parsing at all.
 
-Nothing in the argument is interpreted, so spaces, quotes and punctuation arrive
-as typed. A trailing newline is the Enter that runs the line, which makes this
-one call where send-keys needs two.`,
+Nothing in the argument is interpreted: spaces, quotes and punctuation arrive
+as typed. End the text with a newline to run it as a command.`,
 		Example: `  # Run a command in the focused pane
   tuios send-text 'go build ./...
 '
@@ -983,12 +979,11 @@ works on a detached session. Give it a name to address it later without holding
 on to the id.
 
 Arguments after the name are an argv the window runs as its own process instead
-of a shell: nothing re-parses them, so nothing needs quoting, and the window
-closes when the program exits.
+of a shell. Nothing re-parses them, so nothing needs quoting. The window closes
+when the program exits.
 
---workspace puts it somewhere other than the current workspace, --cwd starts its
-shell in a directory, and --no-focus opens a pane to use later without pulling
-whoever is watching out of the one they are in.`,
+--workspace picks the workspace, --cwd sets the starting directory, and
+--no-focus leaves the focus where it is.`,
 		Example: `  # Open an unnamed window
   tuios new-window
 
@@ -1031,11 +1026,11 @@ whoever is watching out of the one they are in.`,
 	splitWindowCmd := &cobra.Command{
 		Use:   "split-window <horizontal|vertical>",
 		Short: "Divide a pane and open a new one beside it",
-		Long: `Divide a pane along an axis and print the id of the pane the split created.
+		Long: `Split a pane along an axis and print the id of the new pane.
 
-The division is a geometry, so this needs an attached client and tiling on. It
-goes through the renderer's own splitting path, so the new pane lands in the
-tree exactly as one opened from the keyboard does.`,
+Needs an attached client and tiling on. The split goes through the renderer's
+own path, so the new pane lands in the layout exactly as one opened from the
+keyboard does.`,
 		Example: `  # Split the focused pane left/right
   tuios split-window vertical
 
@@ -1068,8 +1063,8 @@ tree exactly as one opened from the keyboard does.`,
 direction, and print the pane that ended up with it.
 
 Pass exactly one of the window argument, --relative or --direction. Naming a
-window switches to its workspace. A direction is a question about the viewport,
-so that form needs an attached client; the other two work detached.`,
+window switches to its workspace. --direction needs an attached client. The
+other two forms work on a detached session.`,
 		Example: `  # Focus a pane by name
   tuios focus-window build
 
@@ -1107,8 +1102,8 @@ so that form needs an attached client; the other two work detached.`,
 		Short: "Move a window to another workspace",
 		Long: `Move a window to another workspace and report where it came from.
 
-The daemon owns the window set, so this works on a detached session. Pass
---follow to switch to that workspace after the move instead of staying put.`,
+Works on a detached session. Pass --follow to switch to that workspace after
+the move instead of staying put.`,
 		Example: `  # Move the focused window to workspace 3
   tuios move-window 3
 
@@ -1139,8 +1134,8 @@ The daemon owns the window set, so this works on a detached session. Pass
 	setWindowCmd := &cobra.Command{
 		Use:   "set-window",
 		Short: "Rename a window or minimize it",
-		Long: `Change a window's own properties: what it is called and whether it is
-minimized. Pass whichever you mean; anything left out is untouched.
+		Long: `Rename a window, or minimize and restore it. Pass only the flags to
+change. Anything left out is untouched.
 
 --name "" clears the custom name, so the window falls back to whatever its shell
 sets as the title.`,
@@ -1156,7 +1151,7 @@ sets as the title.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if setWindowMinimize && setWindowRestore {
-				return fmt.Errorf("--minimize and --restore ask for opposite things; pass one")
+				return fmt.Errorf("--minimize and --restore ask for opposite things. Pass one")
 			}
 			// An unset flag has to stay unset rather than send its zero value:
 			// --name "" is a request to clear the name, which is not the same as
@@ -1214,10 +1209,7 @@ This changes which workspace is displayed. To label one use
 		Use:   "list-workspaces",
 		Short: "List the workspaces in a session",
 		Long: `List every workspace with its name, how many windows it holds, and which one
-is showing.
-
-The same facts were spread across session-info and list-windows, which left a
-caller deciding where to put a pane joining two results by hand.`,
+is showing.`,
 		Example: `  # List the workspaces
   tuios list-workspaces
 
@@ -1243,9 +1235,8 @@ caller deciding where to put a pane joining two results by hand.`,
 		Long: `Turn tiling on or off, even out the split ratios, and flip the axis of the
 split holding the focused pane.
 
-A layout is a geometry only a renderer can compute, so this needs an attached
-client. Tiling is applied first, since evening out or rotating splits means
-nothing until the panes are tiled.`,
+Needs an attached client. Tiling is applied first, because equalize and rotate
+only mean something while the panes are tiled.`,
 		Example: `  # Tile the panes
   tuios set-layout --tiling true
 
@@ -1285,10 +1276,10 @@ nothing until the panes are tiled.`,
 		Long: `List every configuration path 'tuios set-config' accepts, with its type,
 default, accepted values and description, grouped by section.
 
-This is how to find an option rather than guess it: a misspelled path used to be
-recorded, reported as set, and do nothing. Pass a path prefix to narrow the list,
-or --section to keep one group. Where this session carries an override, the
-override is shown alongside the default.`,
+Use it to find an option path instead of guessing one: a path that does not
+exist is refused, never silently recorded. Pass a path prefix to narrow the
+list, or --section to keep one group. Where this session carries an override,
+the override is shown beside the default.`,
 		Example: `  # Everything that can be set
   tuios list-options
 
@@ -1321,27 +1312,22 @@ override is shown alongside the default.`,
 		Use:   "list-themes [theme]",
 		Short: "List the themes, and describe one",
 		Long: `List every registered theme and, given a name, print its colours with the
-contrast each one measures against that theme's own background.
+contrast each one measures against that theme's own background. The contrast
+says whether the palette is legible before anyone has to look at it.
 
-A theme is the part of the appearance 'tuios list-options' cannot describe: its
-value is a name from an open set, standing for twenty colours kept as JSON in
-the themes directory rather than as settings. This is how to find one rather
-than guess it, and how to tell whether the palette you just wrote is legible
-before anyone has to look at it.
-
-Writing <id>.json in the themes directory registers that theme; the directory is
-re-read on every call, so a theme authored a moment ago can be selected without
-a restart.`,
-		Example: `  # Narrow the registry to the ones you mean
+Writing <id>.json in the themes directory registers that theme. The directory
+is re-read on every call, so a theme written a moment ago can be selected
+without a restart.`,
+		Example: `  # List the themes matching a filter
   tuios list-themes --filter catppuccin
 
-  # What is this theme actually made of
+  # Show a theme's colours and contrast
   tuios list-themes catppuccin_mocha
 
-  # What is this session set to
+  # Show the active theme
   tuios list-themes --json | jq -r .active
 
-  # The colours that will not read on their own background
+  # List the colours that fail contrast on their own background
   tuios list-themes catppuccin_latte --json | jq -r '.palette.illegible[]'`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -1471,10 +1457,9 @@ thing it reports has changed, instead of the dock polling for it.`,
 		Long: `Read a kitty, ghostty, alacritty or wezterm colour scheme and write it into
 the tuios themes directory as a theme you can select.
 
-All four formats carry the same twenty colours in different punctuation, and the
-format is read from the file's content rather than its name. A scheme that sets
-only some of the twenty imports as far as it goes; the rest fall back to the
-xterm defaults.
+The format is read from the file's content, not its name. A scheme that sets
+only some of the 20 colours imports those. The rest fall back to the xterm
+defaults.
 
 The theme is registered as it is written, so the name it prints can be selected
 straight away without a restart.`,
@@ -1484,7 +1469,7 @@ straight away without a restart.`,
   # Name it something other than the file
   tuios import-theme ~/.config/ghostty/config --name mine
 
-  # Import it and put it on
+  # Import it and select it
   tuios import-theme ~/gruvbox.toml --name gruvbox
   tuios set-config appearance.theme gruvbox`,
 		Args: cobra.ExactArgs(1),
@@ -1518,9 +1503,9 @@ Conditions:
                   inbox, including mail queued before the wait started; without
                   one, anything said in the session after it started
 
-The daemon watches its own events, so this is exact where a capture-and-sleep
-loop is a guess. A condition that does not match before --timeout exits non-zero
-with the timeout error.`,
+The daemon watches its own events, so there is no need to poll with
+capture-pane and sleep. A condition that does not match before --timeout exits
+non-zero with the timeout error.`,
 		Example: `  # Wait for a build to print its marker
   tuios wait-for window-output -w build --pattern 'BUILD OK'
 
@@ -1583,8 +1568,8 @@ a script that targets it by name keeps working. Pass no name to clear the label.
 	setSessionAccentCmd := &cobra.Command{
 		Use:   "set-session-accent [accent]",
 		Short: "Set a session's accent",
-		Long: `Set the accent slot a session uses, shared by every client attached to it and
-kept across a reattach. Pass no accent to clear it.`,
+		Long: `Set a session's accent colour. Every attached client shares it, and it
+survives a reattach. Pass no accent to clear it.`,
 		Example: `  # Accent the current session
   tuios set-session-accent cyan
 
@@ -1777,8 +1762,8 @@ Use --json for machine-readable output.`,
 Shows mode, workspace, tiling state, size and window count.
 Use --json for machine-readable output.
 
-The theme is not here: it is a session option, reported by 'tuios list-themes'
-as active.`,
+The theme is not listed here. It is a session option. Read it with
+'tuios list-themes'.`,
 		Example: `  # Get session info (table format)
   tuios session-info
 

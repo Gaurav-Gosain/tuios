@@ -40,7 +40,7 @@ func runAttach(sessionName string, createIfMissing bool) error {
 			// that is what the daemon has always done, and it is the only thing
 			// left that gets the user to a terminal. Say so rather than let a
 			// session appear unannounced.
-			fmt.Println("No saved sessions to restore; opening a new one.")
+			fmt.Println("No saved sessions to restore. Opening a new one.")
 		}
 		if err := ensureDaemon(); err != nil {
 			return err
@@ -108,7 +108,7 @@ func ensureAttachTarget(sessionName string, createIfMissing bool) error {
 			// error, but the shared screen size surprises people who expect
 			// tmux's exclusive attach. Say so rather than letting them wonder
 			// why their window shrank.
-			fmt.Printf("Session %q already has a client attached; TUIOS shares it between clients and renders at the smallest client's size.\n", sessionName)
+			fmt.Printf("Session %q already has a client attached. TUIOS shares the session and renders at the smallest client's size.\n", sessionName)
 		}
 		// Said before the attach, because the attach itself clears the mark. This
 		// is the answer to "why is my session still here after I killed the
@@ -826,7 +826,7 @@ func listResurrectableSessions() error {
 
 	if len(infos) == 0 {
 		fmt.Println("No resurrectable sessions.")
-		fmt.Printf("Saved state lives in %s; unreadable state is moved to %s.\n",
+		fmt.Printf("Saved state lives in %s. Unreadable state is moved to %s.\n",
 			session.ResurrectionStateDir(), session.ResurrectionArchiveDir())
 		return nil
 	}
@@ -981,7 +981,7 @@ func awaitDaemonShutdown(pid int, socketPath string) error {
 		What: fmt.Sprintf("The TUIOS daemon (PID %d) was asked to stop but had not finished after %s.",
 			pid, killServerTimeout),
 		Cause: "the daemon is wedged, or a session is taking an unusually long time to write its saved state.",
-		Fix: fmt.Sprintf("wait and run 'tuios kill-server' again to re-check. If it stays stuck, force it with 'kill -9 %d' and remove %s; note that force killing loses any session state that had not been written.",
+		Fix: fmt.Sprintf("wait and run 'tuios kill-server' again to re-check. If it stays stuck, force it with 'kill -9 %d' and remove %s. Force killing loses any session state that was not yet written.",
 			pid, socketPath),
 		Err: err,
 	}

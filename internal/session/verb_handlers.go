@@ -53,7 +53,7 @@ func (d *Daemon) resolveVerbSession(name string) (*Session, *verbError) {
 		Command:    "tuios ls",
 		DidYouMean: closestMatch(name, available),
 		Available:  available,
-		Detail:     "the name matches no live session. A session that was killed is gone; one that was never started may still have saved state ('tuios resurrect').",
+		Detail:     "the name matches no live session. A session that was killed is gone. One that was never started may still have saved state ('tuios resurrect').",
 	})
 }
 
@@ -184,7 +184,7 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 		return nil, verr
 	}
 	if p.Workspace < 0 {
-		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2; omit it for the current one")
+		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2. Omit it for the current one")
 	}
 	// A directory that cannot be entered is refused rather than quietly ignored.
 	// The PTY falls back to the daemon's own directory, which means a caller that
@@ -254,7 +254,7 @@ func newWindowErr(err error, sess *Session, ws int) *verbError {
 		return hintedVerbError(ErrVerbInvalidParams, err.Error(), &VerbHint{
 			Param:  "workspace",
 			Verb:   "list-workspaces",
-			Detail: fmt.Sprintf("this session has workspaces 1 to %d; %d is outside that.", sess.GetState().workspaceBound(), ws),
+			Detail: fmt.Sprintf("this session has workspaces 1 to %d. %d is outside that range.", sess.GetState().workspaceBound(), ws),
 		})
 	}
 	return mapResolveErr(err, sess)
@@ -572,7 +572,7 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 			Param:      "state",
 			DidYouMean: closestMatch(p.State, AgentStateNames),
 			Available:  AgentStateNames,
-			Detail:     "state names the pane's semantic agent state; use none to clear it.",
+			Detail:     "state names the pane's agent state. Use none to clear it.",
 		})
 	}
 	// An omitted source is a report, so a caller written before sources existed
@@ -583,7 +583,7 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 			Param:      "source",
 			DidYouMean: closestMatch(p.Source, AgentSourceNames),
 			Available:  AgentSourceNames,
-			Detail:     "source says where the state came from and decides which of two competing reports wins; omit it to report for yourself.",
+			Detail:     "source says where the state came from and decides which of two competing reports wins. Omit it to report for yourself.",
 		})
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
@@ -797,7 +797,7 @@ func (d *Daemon) verbExplainAgentScreen(_ *connState, params json.RawMessage) (a
 				Param:      "harness",
 				DidYouMean: closestMatch(hid, reg.IDs()),
 				Available:  reg.IDs(),
-				Detail:     "harness names a manifest in the registry; drop a file in the user manifest directory to add one.",
+				Detail:     "harness names a manifest in the registry. Drop a file in the user manifest directory to add one.",
 			})
 		}
 	}

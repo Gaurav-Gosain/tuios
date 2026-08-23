@@ -240,16 +240,16 @@ func init() {
 				{Name: "name", Type: "string", Description: "Name for the new window. Omit to use the shell's title."},
 				{Name: "workspace", Type: "int", Description: "Workspace number to create the window on. Omit for the current workspace."},
 				{Name: "cwd", Type: "string", Description: "Directory to start the shell in. Omit to inherit the daemon's."},
-				{Name: "focus", Type: "bool", Description: "Focus the new window. Pass false to open a pane to work in later without moving the user out of the one they are in.", Default: "true"},
-				{Name: "command", Type: "[]string", Description: "Argv to exec as the window's process instead of a shell. No shell parses it, so nothing needs quoting; the window closes when the program exits."},
+				{Name: "focus", Type: "bool", Description: "Focus the new window. Pass false to leave the focus where it is.", Default: "true"},
+				{Name: "command", Type: "[]string", Description: "Argv to exec as the window's process instead of a shell. No shell parses it, so nothing needs quoting. The window closes when the program exits."},
 			},
 			returns: []verbParam{
-				{Name: "window_id", Type: "string", Description: "Id of the created window, which is what to address it by afterwards."},
+				{Name: "window_id", Type: "string", Description: "Id of the new window. Use it to address the window in later calls."},
 				{Name: "name", Type: "string", Description: "The window's name, generated when none was given."},
 				{Name: "workspace", Type: "int", Description: "Workspace the window was created on."},
 				{Name: "pty_id", Type: "string", Description: "Id of the window's PTY."},
 				{Name: "focused", Type: "bool", Description: "Whether the window took the focus."},
-				{Name: "unplaced", Type: "bool", Description: "True while the geometry is a placeholder the daemon chose without a viewport. An attached client replaces it; on a detached session it stays true and the reported size is nominal."},
+				{Name: "unplaced", Type: "bool", Description: "True while the window's geometry is a placeholder. An attached client replaces it. On a detached session it stays true and the reported size is nominal."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"new-window","params":{"session":"work","name":"build"}}`,
@@ -259,7 +259,7 @@ func init() {
 			handler: (*Daemon).verbNewWindow,
 		},
 		"split-window": {
-			description: "Divide a pane, putting a new one beside it. Needs an attached client and tiling on, because the division is a geometry only a renderer can compute.",
+			description: "Split a pane and put a new one beside it. Needs an attached client and tiling on.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "Window to split. Omit to split the focused one."},
@@ -275,12 +275,12 @@ func init() {
 			handler:  (*Daemon).verbSplitWindow,
 		},
 		"focus-window": {
-			description: "Move the focus to a pane, naming it by target, by position, or by direction. Pass exactly one of window, relative or direction.",
+			description: "Move the focus to a pane. Pass exactly one of window, relative or direction.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "Window id or name to focus. Switches to that window's workspace."},
 				{Name: "relative", Type: "string", Description: "Focus the next or previous window on the current workspace.", Accepted: focusRelatives},
-				{Name: "direction", Type: "string", Description: "Focus the neighbouring pane in this direction. Needs an attached client, because it is a question about the viewport.", Accepted: focusDirections},
+				{Name: "direction", Type: "string", Description: "Focus the neighbouring pane in this direction. Needs an attached client.", Accepted: focusDirections},
 			},
 			returns: []verbParam{
 				{Name: "focused_window_id", Type: "string", Description: "Id of the window that now has the focus."},
@@ -305,13 +305,13 @@ func init() {
 				{Name: "window_id", Type: "string", Description: "Id of the window that moved."},
 				{Name: "from_workspace", Type: "int", Description: "Workspace it was on."},
 				{Name: "workspace", Type: "int", Description: "Workspace it is on now."},
-				{Name: "current_workspace", Type: "int", Description: "Workspace showing after the call, which follow decides."},
+				{Name: "current_workspace", Type: "int", Description: "Workspace showing after the call. It changes only when follow is true."},
 			},
 			examples: []string{`{"id":1,"verb":"move-window","params":{"session":"work","window":"build","workspace":2,"follow":true}}`},
 			handler:  (*Daemon).verbMoveWindow,
 		},
 		"set-window": {
-			description: "Change a window's own properties: what it is called and whether it is minimized. Pass whichever you mean.",
+			description: "Change a window's name or minimized state. Pass only the fields to change.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Description: "Window to change. Omit for the focused one."},
@@ -320,14 +320,14 @@ func init() {
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the window that changed."},
-				{Name: "display_name", Type: "string", Description: "The name it shows now, which is the shell's title when the custom name was cleared."},
+				{Name: "display_name", Type: "string", Description: "The name shown now. After a clear this is the shell's title."},
 				{Name: "minimized", Type: "bool", Description: "Whether it is minimized now."},
 			},
 			examples: []string{`{"id":1,"verb":"set-window","params":{"session":"work","window":"build","name":"api tests","minimized":false}}`},
 			handler:  (*Daemon).verbSetWindow,
 		},
 		"select-workspace": {
-			description: "Show a workspace. This changes which workspace is displayed; set-workspace-name and set-workspace-order change a workspace's label and its position.",
+			description: "Show a workspace. To rename or reorder workspaces, use set-workspace-name and set-workspace-order.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "workspace", Type: "int", Required: true, Description: "Workspace number to show."},
@@ -352,7 +352,7 @@ func init() {
 			handler:  (*Daemon).verbListWorkspaces,
 		},
 		"set-layout": {
-			description: "Turn tiling on or off and tidy the splits. Needs an attached client, because a layout is a geometry only a renderer can compute.",
+			description: "Turn tiling on or off and tidy the splits. Needs an attached client.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "tiling", Type: "bool", Description: "Tile the panes automatically, or let them float."},
@@ -368,7 +368,7 @@ func init() {
 			handler:  (*Daemon).verbSetLayout,
 		},
 		"run-command": {
-			description: "Run one tape command, the vocabulary the keybindings are written in. This is the escape hatch: prefer a verb where one exists, because a verb reports what it changed and this reports only that the command ran.",
+			description: "Run one tape command (the command names the keybindings use). Prefer a verb where one exists: a verb reports what changed, this reports only that the command ran.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "command", Type: "string", Required: true, Description: `Tape command name, e.g. "ToggleZoom" or "SnapLeft".`},
@@ -376,7 +376,7 @@ func init() {
 			},
 			returns: []verbParam{
 				{Name: "command", Type: "string", Description: "The command that ran."},
-				{Name: "routed", Type: "bool", Description: "True when an attached client ran it, false when the daemon did. The two are the same command; this says which had to be available for it to work."},
+				{Name: "routed", Type: "bool", Description: "True when an attached client ran it, false when the daemon did."},
 			},
 			examples: []string{`{"id":1,"verb":"run-command","params":{"session":"work","command":"ToggleZoom"}}`},
 			handler:  (*Daemon).verbRunCommand,
@@ -421,7 +421,7 @@ func init() {
 				// can see the whole call shape.
 				{Name: "scrollback", Type: "bool", Description: `Older spelling of source "recent".`, Default: "false"},
 				{Name: "ansi", Type: "bool", Description: "Older spelling of styled.", Default: "false"},
-				{Name: "lines", Type: "int", Description: "Keep only the last N non-empty-tailed lines, so the blank rows below the cursor do not count. Ignored when start or end is given."},
+				{Name: "lines", Type: "int", Description: "Keep only the last N lines. Blank rows below the cursor do not count. Ignored when start or end is given."},
 				{Name: "start", Type: "int", Description: "1-based inclusive first line of the region to keep."},
 				{Name: "end", Type: "int", Description: "1-based inclusive last line of the region to keep."},
 			},
@@ -448,7 +448,7 @@ func init() {
 			handler:  (*Daemon).verbKillSession,
 		},
 		"list-options": {
-			description: "List every settable configuration path with its type, default, accepted values and description. This is how to find an option rather than guess it.",
+			description: "List every settable configuration path with its type, default, accepted values and description. Use it to find an option path instead of guessing one.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "section", Type: "string", Description: "Only options in this group, e.g. sidebar or dock. The full set of section names is reported on every call."},
@@ -466,7 +466,7 @@ func init() {
 			handler: (*Daemon).verbListOptions,
 		},
 		"set-option": {
-			description: "Set a configuration option, applied live when a client is attached. The path and the value are both checked against the option registry, so a call that could have no effect fails rather than reporting success.",
+			description: "Set a configuration option. An attached client applies it live. The path and value are checked against the option registry, so a bad call fails instead of reporting success.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "key", Type: "string", Required: true, Description: `Option path, e.g. "appearance.sidebar.enabled". Call list-options for the full set.`},
@@ -486,19 +486,19 @@ func init() {
 			handler: (*Daemon).verbSetOption,
 		},
 		"list-themes": {
-			description: "List the registered themes and describe one: its colours as hex and the contrast of each against its own background. A theme is the one part of the appearance list-options cannot describe, because its value is a name from an open set standing for a palette kept elsewhere.",
+			description: "List the registered themes. Name one to also get its colours as hex and the contrast of each against its own background.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "theme", Type: "string", Description: "Describe this theme as well as listing. Omit to list only."},
 				{Name: "filter", Type: "string", Description: "Only ids containing this, case-insensitively, e.g. catppuccin."},
 			},
 			returns: []verbParam{
-				{Name: "themes", Type: "[]string", Description: "Matching theme ids, capped at 100; truncated says when the cap applied."},
+				{Name: "themes", Type: "[]string", Description: "Matching theme ids, capped at 100. truncated reports when the cap applied."},
 				{Name: "total", Type: "int", Description: "How many themes are registered in all."},
 				{Name: "matched", Type: "int", Description: "How many the filter matched, before the cap."},
 				{Name: "active", Type: "string", Description: "The theme this session is set to. Empty means no theme, which is the terminal's own colours."},
 				{Name: "active_source", Type: "string", Description: `"session" for a theme set on this session, "default" for the built-in.`, Accepted: []string{"session", "default"}},
-				{Name: "themes_dir", Type: "string", Description: "Where a custom theme file goes. Writing <id>.json here registers it; no restart is needed."},
+				{Name: "themes_dir", Type: "string", Description: "Where a custom theme file goes. Writing <id>.json here registers it. No restart is needed."},
 				{Name: "problems", Type: "[]string", Description: "One line per theme file that could not be read, with the reason. Present only when a file is malformed."},
 				{Name: "palette", Type: "object", Description: "Present when theme was given: id, display_name, dark, bg, fg, cursor, swatches (each with hex, ratio, floor, passes) and illegible, the names of the swatches that did not clear their floor."},
 			},
@@ -530,7 +530,7 @@ func init() {
 			handler: (*Daemon).verbListGlyphs,
 		},
 		"get-option": {
-			description: "Read an option, preferring what this session was told and falling back to what the option does untold.",
+			description: "Read an option. Reports the session's override when one is set, otherwise the default.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "key", Type: "string", Required: true, Description: "Option path to read."},
@@ -539,14 +539,14 @@ func init() {
 				{Name: "key", Type: "string", Description: "The option that was read."},
 				{Name: "value", Type: "string", Description: "The value in effect."},
 				{Name: "source", Type: "string", Description: `Where the value came from: "session" for an override set on this session, "default" for the built-in.`, Accepted: []string{"session", "default"}},
-				{Name: "default", Type: "string", Description: "What the option does untold, so a caller can tell an override from the default it matches."},
+				{Name: "default", Type: "string", Description: "The built-in default, so a caller can tell an override from a default that happens to match."},
 				{Name: "option_type", Type: "string", Description: "bool, int or string."},
 			},
 			examples: []string{`{"id":1,"verb":"get-option","params":{"session":"work","key":"appearance.dockbar_position"}}`},
 			handler:  (*Daemon).verbGetOption,
 		},
 		"subscribe": {
-			description: "Open a long-lived event stream on this connection. Events are delivered from the moment of subscription; there is no backfill.",
+			description: "Open a long-lived event stream on this connection. Events start at the moment of subscription. There is no backfill.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
@@ -562,7 +562,7 @@ func init() {
 			handler:     (*Daemon).verbUnsubscribe,
 		},
 		"set-session-name": {
-			description: "Set a session's display name. The session's identity is unchanged: it keeps the same name for addressing, persistence and TUIOS_SESSION.",
+			description: "Set a session's display name. The session keeps its real name for addressing, persistence and TUIOS_SESSION.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "name", Type: "string", Description: "Display label for the session. Omit or pass an empty string to clear it and fall back to the session name."},
@@ -571,16 +571,16 @@ func init() {
 			handler:  (*Daemon).verbSetSessionName,
 		},
 		"set-session-accent": {
-			description: "Set a session's accent, shared by every client attached to it and kept across a reattach.",
+			description: "Set a session's accent colour. Every attached client shares it, and it survives a reattach.",
 			params: []verbParam{
 				sessionParam,
-				{Name: "accent", Type: "string", Description: "Colour name from the ANSI sixteen (\"cyan\", \"bright blue\") or a #rrggbb literal, recorded verbatim. Omit or pass an empty string to clear it and let the client pick the session's colour."},
+				{Name: "accent", Type: "string", Description: "An ANSI colour name (\"cyan\", \"bright blue\") or a #rrggbb value, recorded verbatim. Omit or pass an empty string to clear it and let the client pick the session's colour."},
 			},
 			examples: []string{`{"id":1,"verb":"set-session-accent","params":{"session":"work","accent":"cyan"}}`},
 			handler:  (*Daemon).verbSetSessionAccent,
 		},
 		"set-workspace-name": {
-			description: "Name a workspace. The number stays the workspace's identity and is the label an unnamed workspace shows.",
+			description: "Name a workspace. The workspace keeps its number for addressing. An unnamed workspace shows its number.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "workspace", Type: "int", Required: true, Description: "Workspace number to name."},
@@ -590,10 +590,10 @@ func init() {
 			handler:  (*Daemon).verbSetWorkspaceName,
 		},
 		"set-workspace-order": {
-			description: "Arrange the workspaces. This is the order they are shown in and nothing else: every workspace keeps its number, which is what the verbs, the keys and each window go on addressing it by.",
+			description: "Set the order the workspaces are shown in. Only the display order changes: verbs, keys and windows still address each workspace by its number.",
 			params: []verbParam{
 				sessionParam,
-				{Name: "order", Type: "[]int", Required: true, Description: "Workspace numbers in the order to show them. Numbers outside the session's range and repeats of one already placed are dropped; any workspace the list omits keeps its place after the ones it names. An ascending order clears the arrangement."},
+				{Name: "order", Type: "[]int", Required: true, Description: "Workspace numbers in the order to show them. Numbers outside the session's range and repeats are dropped. A workspace the list omits keeps its place after the ones named. An ascending order clears the arrangement."},
 			},
 			examples: []string{`{"id":1,"verb":"set-workspace-order","params":{"session":"work","order":[3,1,2]}}`},
 			handler:  (*Daemon).verbSetWorkspaceOrder,
@@ -605,7 +605,7 @@ func init() {
 				windowParam,
 				{Name: "state", Type: "string", Required: true, Description: "The agent state to record.", Accepted: AgentStateNames},
 				{Name: "message", Type: "string", Description: "Optional short note reported with the state, e.g. what the agent is waiting for."},
-				{Name: "source", Type: "string", Description: "Where the state came from. A source ranked below the one that last set the window is refused, and the result reports applied false with the state that stands.", Accepted: AgentSourceNames, Default: "report"},
+				{Name: "source", Type: "string", Description: "Where the state came from. A source ranked below the one that last set the window is refused. The result then reports applied false and the state that stands.", Accepted: AgentSourceNames, Default: "report"},
 				{Name: "harness", Type: "string", Description: "Optional id of the harness the state is about, reported back by get-agent-state."},
 			},
 			examples: []string{
@@ -621,7 +621,7 @@ func init() {
 			handler:     (*Daemon).verbGetAgentState,
 		},
 		"explain-agent-detect": {
-			description: "Show what the foreground-process detector sees in a pane and what every harness manifest makes of it: the comm, argv and executable it read, which manifest matched and on which predicate, and for each that refused, what it was comparing against.",
+			description: "Show what the foreground-process detector read from a pane (comm, argv and executable), which harness manifest matched and on which predicate, and for each manifest that did not match, what it compared against.",
 			params:      []verbParam{sessionParam, windowParam},
 			examples: []string{
 				`{"id":1,"verb":"explain-agent-detect","params":{"session":"work","window":"build"}}`,
@@ -629,12 +629,12 @@ func init() {
 			handler: (*Daemon).verbExplainAgentDetect,
 		},
 		"explain-agent-screen": {
-			description: "Dump a pane's screen tail exactly as the harness screen rules read it, with what every rule made of it and which one fired. This is the tool for writing a rule: it says what the classifier saw and, for each rule that refused, which strings were the reason.",
+			description: "Show a pane's screen tail exactly as the harness screen rules read it, what every rule made of it, and which one fired. Use it to write or debug a rule: for each rule that did not match, it names the strings that were the reason.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
-				{Name: "harness", Type: "string", Description: "Run this harness's rules instead of the one the pane is attributed to, for trying a rule against a pane nothing has claimed yet."},
-				{Name: "lines", Type: "int", Description: "Read this many lines from the bottom instead of the manifest's, for checking whether a rule needs to see further up."},
+				{Name: "harness", Type: "string", Description: "Run this harness's rules instead of the pane's own. Use it to try rules against a pane no harness has claimed."},
+				{Name: "lines", Type: "int", Description: "Read this many lines from the bottom instead of the manifest's count."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"explain-agent-screen","params":{"session":"work","window":"build"}}`,
@@ -933,7 +933,7 @@ func checkParamNames(verb string, entry verbEntry, params json.RawMessage) *verb
 				Command:    "tuios list-verbs " + verb,
 				DidYouMean: closestMatch(name, accepted),
 				Accepted:   accepted,
-				Detail:     "an unrecognised parameter is refused rather than ignored, so a call that cannot do what it asked for never reports success.",
+				Detail:     "An unknown parameter is refused rather than silently ignored. Fix the name and retry.",
 			})
 	}
 	return nil
@@ -1009,11 +1009,11 @@ func (d *Daemon) verbListVerbs(_ *connState, params json.RawMessage) (any, *verb
 // verbEnvelopeDoc describes the request and response envelopes themselves, so a
 // caller that has only ever seen list-verbs knows how to frame a call.
 var verbEnvelopeDoc = map[string]any{
-	"transport": "One JSON object per line on the daemon socket; one response line per request line.",
+	"transport": "One JSON object per line on the daemon socket. One response line per request line.",
 	"request":   `{"id":<any>,"verb":"<name>","params":{...}}`,
 	"success":   `{"id":<echoed>,"result":{"type":"<result type>",...}}`,
 	"failure":   `{"id":<echoed>,"error":{"code":"<stable code>","message":"...","hint":{...}}}`,
-	"hint":      "Present on most failures. Names the verb or CLI command that resolves it, the offending parameter and its accepted values, the closest matching name, and what does exist.",
+	"hint":      "Present on most failures. Names the verb or CLI command that fixes it, the bad parameter and its accepted values, the closest matching name, and the values that do exist.",
 }
 
 // describeVerb renders one registry entry as its documented form.

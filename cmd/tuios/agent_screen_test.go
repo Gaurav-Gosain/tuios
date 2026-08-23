@@ -84,7 +84,7 @@ func TestScreenExplanationSaysWhenNothingMatched(t *testing.T) {
 		Rule:      -1,
 		Rules:     []harness.RuleReport{{Index: 0, State: "needs_input", Missing: []string{"Do you want"}}},
 	})
-	if got := b.String(); !strings.Contains(got, "no opinion") {
+	if got := b.String(); !strings.Contains(got, "report nothing") {
 		t.Errorf("output does not say the tier reports nothing:\n%s", got)
 	}
 }
