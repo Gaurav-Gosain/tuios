@@ -14,10 +14,13 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"charm.land/ssh"
 	"charm.land/wish/v2"
 	"charm.land/wish/v2/bubbletea"
 	"charm.land/wish/v2/logging"
+	"github.com/charmbracelet/colorprofile"
+
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
@@ -48,6 +51,16 @@ var applyAppearanceOnce sync.Once
 // StartSSHServer initializes and runs the SSH server
 func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	sshServerConfig = cfg
+
+	// Compose frames in truecolor. composeFrame downsamples every frame
+	// through lipgloss.Sprint, whose profile is detected from THIS process's
+	// stdout and environment: a server logging to a file or running under a
+	// service manager detects NoTTY and strips every colour from every frame
+	// before the per-client profile ever sees it, for every client at once.
+	// Pinning truecolor here leaves downsampling to the bubbletea renderer,
+	// which wish configures per connection from the client's own TERM.
+	// tuios-web pins the same global for the same reason.
+	lipgloss.Writer.Profile = colorprofile.TrueColor
 
 	// Apply the user config's appearance globals once, at first server startup
 	// and single-threaded, so every per-connection session shares a consistent
