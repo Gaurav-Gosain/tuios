@@ -167,13 +167,25 @@ func TestSyncedCloseLeavesNoTile(t *testing.T) {
 	}
 }
 
-// TestSyncWithoutLifecycleChangeDoesNotRetile keeps the retile targeted. A sync
-// that only moves geometry (the common case: another client rendering) must not
-// re-run tiling, or every peer render would fight the local layout.
-func TestSyncWithoutLifecycleChangeDoesNotRetile(t *testing.T) {
+// TestSyncFromAnEqualPeerDoesNotRetile keeps the retile targeted. A sync from a
+// peer the same size as this client carries the layout this client would itself
+// compute, so it must be adopted as it stands: retiling on every peer render
+// would have each client re-running tiling for the other's benefit.
+//
+// This used to assert something stronger and wrong: that a geometry-only sync
+// is adopted verbatim whatever it says. Under tiling a pane's rectangle is not
+// shared state - it is what the shared tree and the client's own render size
+// come to between them - so a rectangle from a differently sized peer is not
+// this client's answer. The old fixture synced a single 40x20 pane at (5,3)
+// into a 120x40 tiled client, which is a layout tiling could not produce, and
+// pinned the client to it. See TestSyncFromASmallerPeerIsRetiled.
+func TestSyncFromAnEqualPeerDoesNotRetile(t *testing.T) {
 	const existingID = "win-0000-0000-0000-0000-000000000001"
 
 	m := tiledOS(existingID)
+	w := m.Windows[0]
+	x, y, width, height := w.X, w.Y, w.Width, w.Height
+
 	state := &session.SessionState{
 		Name:             "test-session",
 		CurrentWorkspace: 1,
@@ -181,7 +193,7 @@ func TestSyncWithoutLifecycleChangeDoesNotRetile(t *testing.T) {
 		FocusedWindowID:  existingID,
 		WorkspaceFocus:   map[int]string{},
 		Windows: []session.WindowState{
-			{ID: existingID, PTYID: "pty-1", Workspace: 1, X: 5, Y: 3, Width: 40, Height: 20},
+			{ID: existingID, PTYID: "pty-1", Workspace: 1, X: x, Y: y, Width: width, Height: height},
 		},
 		Version: 2,
 	}
@@ -189,9 +201,8 @@ func TestSyncWithoutLifecycleChangeDoesNotRetile(t *testing.T) {
 		t.Fatalf("ApplyStateSync failed: %v", err)
 	}
 
-	w := m.Windows[0]
-	if w.X != 5 || w.Y != 3 || w.Width != 40 || w.Height != 20 {
-		t.Errorf("geometry = (%d,%d) %dx%d, want the synced (5,3) 40x20: the sync was retiled",
-			w.X, w.Y, w.Width, w.Height)
+	if w.X != x || w.Y != y || w.Width != width || w.Height != height {
+		t.Errorf("geometry = (%d,%d) %dx%d, want the synced (%d,%d) %dx%d: the sync was retiled",
+			w.X, w.Y, w.Width, w.Height, x, y, width, height)
 	}
 }

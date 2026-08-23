@@ -496,3 +496,23 @@ func checkTerminalCapabilities(termEnv string) error {
 	}
 	return nil
 }
+
+// hostTerminalSize returns the size of the terminal this process is attached
+// to, or the conventional 80x24 when there is no answer.
+//
+// It exists so an attaching client can tell the daemon its real size straight
+// away. The session's size is the minimum over its attached clients, so a
+// client that names a placeholder does not merely mis-describe itself: it
+// shrinks the session for everyone else until it corrects itself.
+//
+// A zero dimension is treated the same as an error. It means the pty has no
+// window size set (script(1), some CI runners), which is unknown rather than
+// tiny, and passing a zero through would make the daemon read this client as
+// having no size at all.
+func hostTerminalSize() (width, height int) {
+	w, h, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || w <= 0 || h <= 0 {
+		return 80, 24
+	}
+	return w, h
+}

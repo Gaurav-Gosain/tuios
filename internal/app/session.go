@@ -153,6 +153,10 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 
 	m.LogInfo("[RESTORE] RestoreFromState: restoring %d windows", len(state.Windows))
 
+	// Adopting a whole session says nothing about what this client last pushed
+	// to a daemon, and on a session switch it is a different session entirely.
+	m.forgetSyncedState()
+
 	m.SessionName = state.Name
 	m.adoptSessionLabels(state)
 	m.DaemonStateVersion = state.Version
@@ -327,6 +331,11 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	if state == nil {
 		return nil
 	}
+
+	// The daemon now holds what arrived here, which is not necessarily what
+	// this client last pushed, so the record of that push no longer describes
+	// the daemon and must not be allowed to suppress the next one.
+	m.forgetSyncedState()
 
 	// Build maps for efficient lookup
 	incomingByID := make(map[string]*session.WindowState)
@@ -539,25 +548,21 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 		m.SyncStateToDaemon()
 	}
 
-	// If auto-tiling is enabled and the synced state has different dimensions,
-	// retile to fit our effective render size. This handles the case where
-	// a client with a smaller terminal joins and receives state from a larger client.
-	if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 {
-		renderWidth := m.GetRenderWidth()
-		renderHeight := m.GetRenderHeight()
-		// Check if any window extends beyond our render bounds
-		needsRetile := false
-		for _, w := range m.Windows {
-			if w.Workspace == m.CurrentWorkspace && !w.Minimized {
-				if w.X+w.Width > renderWidth || w.Y+w.Height > renderHeight+m.GetTopMargin() {
-					needsRetile = true
-					break
-				}
-			}
-		}
-		if needsRetile {
-			m.TileAllWindows()
-		}
+	// A sync carries the peer's pane rectangles, and a rectangle is not shared
+	// state: it is what the peer's own render size and the shared tree came to
+	// between them. Adopting it is right for a pane this client has never
+	// placed, and wrong the moment the two clients are not the same size.
+	//
+	// So the adopted geometry is checked against the box tiling is supposed to
+	// fill, in both directions. The check used to ask only whether a pane
+	// overflowed the viewport, which catches a peer that is larger and misses a
+	// peer that is smaller entirely: 30-column panes sit happily inside a
+	// 120-column screen, so a client whose session had just grown back adopted
+	// the departing peer's cramped layout and kept it. On screen that is a
+	// full-width dock with the panes still huddled in the corner, which is what
+	// "the borders don't come back" looks like.
+	if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 && m.tiledLayoutStale() {
+		m.TileAllWindows()
 	}
 
 	m.MarkAllDirty()
@@ -1348,15 +1353,44 @@ func (m *OS) UnsubscribeWorkspaceWindows(workspace int) {
 
 // SyncStateToDaemon sends the current state to the daemon.
 // This should be called after state-changing operations.
+//
+// A state that says exactly what the last one said is not sent. The callers are
+// unconditional on purpose - the input handler syncs after every keystroke,
+// every click and every wheel event, so that nothing a user does can go
+// unrecorded - and the great majority of those events change nothing the
+// daemon holds. Each one that is sent costs the daemon a merge and every other
+// attached client a full state application and a redraw, which is what made
+// typing on one client visibly disturb another.
+//
+// Suppressed at the source rather than filtered at each consumer: the daemon
+// has its own guard for the same reason, but a message not sent is the only one
+// that costs nothing anywhere.
 func (m *OS) SyncStateToDaemon() {
 	if m.DaemonClient == nil || !m.IsDaemonSession {
 		return
 	}
 
 	state := m.BuildSessionState()
+	fp := session.StateFingerprint(state)
+	if m.syncedFPSet && m.syncedFP == fp {
+		return
+	}
+
 	if err := m.DaemonClient.UpdateState(state); err != nil {
 		m.LogError("Failed to sync state to daemon: %v", err)
+		// Not recorded: the daemon does not hold what could not reach it, so
+		// the next sync must be free to send the same thing again.
+		return
 	}
+	m.syncedFP, m.syncedFPSet = fp, true
+}
+
+// forgetSyncedState drops the record of what was last pushed, so the next sync
+// is sent whatever it says. Anything that can leave the daemon holding a state
+// this client did not put there calls it: a state arriving from elsewhere, or a
+// reconnect to a daemon that never saw the last push.
+func (m *OS) forgetSyncedState() {
+	m.syncedFPSet = false
 }
 
 // SendInputToDaemon sends input to a daemon-managed PTY.

@@ -449,6 +449,12 @@ type Session struct {
 	pushMu        sync.Mutex
 	pushedVersion int
 
+	// broadcastFP is the fingerprint of the state last forwarded to this
+	// session's peers on a client sync, and broadcastFPSet says whether there
+	// is one. See NoteBroadcastFingerprint.
+	broadcastFP    uint64
+	broadcastFPSet bool
+
 	// Terminal size
 	width  int
 	height int
@@ -618,7 +624,39 @@ func (s *Session) publishState(snap *SessionState) {
 		return
 	}
 	s.pushedVersion = snap.Version
+	// A daemon-side push reaches the clients by a different road than a client
+	// sync does, so what the peers hold afterwards is not what the sync
+	// suppressor last recorded. Forget the record rather than try to keep it in
+	// step: the cost of being wrong here is one state sync too many, and the
+	// cost of being wrong the other way is a peer that never hears about a
+	// change.
+	s.forgetBroadcastFingerprint()
 	fn(snap)
+}
+
+// NoteBroadcastFingerprint records fp as the state about to be forwarded to
+// this session's peers, and reports whether that forward is worth making.
+//
+// It answers false only when fp is exactly what was forwarded last time, which
+// means every peer already holds this state and the message would tell them
+// nothing. See the call site in handleStateUpdate for why a suppressed sync
+// costs a peer nothing.
+func (s *Session) NoteBroadcastFingerprint(fp uint64) bool {
+	s.pushMu.Lock()
+	defer s.pushMu.Unlock()
+	if s.broadcastFPSet && s.broadcastFP == fp {
+		return false
+	}
+	s.broadcastFP = fp
+	s.broadcastFPSet = true
+	return true
+}
+
+// forgetBroadcastFingerprint drops the record, so the next client sync is
+// forwarded whatever it says. pushMu must already be held: its one caller is
+// publishState, which holds it for the whole delivery.
+func (s *Session) forgetBroadcastFingerprint() {
+	s.broadcastFPSet = false
 }
 
 // CreatePTY creates a new PTY in this session. windowID, if non-empty, is the

@@ -664,3 +664,51 @@ func (m *OS) SwapWindowsInBSPTree(window1, window2 *terminal.Window) {
 	id2 := m.getWindowIntID(window2.ID)
 	tree.SwapWindows(id1, id2)
 }
+
+// tiledLayoutStale reports whether the tiled panes no longer fill the box
+// tiling is supposed to partition, so the layout has to be recomputed.
+//
+// Tiling covers GetBSPBounds exactly: every visible, non-floating pane sits
+// inside it, and together they reach its right and bottom edges. Either half of
+// that failing means the rectangles were computed against some other box - a
+// peer client's, at its own size - and this client has to lay them out again.
+//
+// Checked in both directions on purpose. Asking only whether a pane overflows
+// finds a peer that is larger and is blind to one that is smaller, and a
+// session shrinking and growing back produces exactly the smaller case.
+func (m *OS) tiledLayoutStale() bool {
+	bounds := m.GetBSPBounds()
+	if bounds.W <= 0 || bounds.H <= 0 {
+		return false
+	}
+
+	// A zoomed pane is the layout deliberately not tiling: it holds a rectangle
+	// tiling did not choose and, under ZoomMaxWidth, one that does not reach the
+	// edges. Judging that stale would retile it and drop the user out of zoom.
+	if fw := m.GetFocusedWindow(); fw != nil && fw.Zoomed {
+		return false
+	}
+
+	right, bottom := 0, 0
+	any := false
+	for _, w := range m.Windows {
+		if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized || w.Minimizing || w.IsFloating {
+			continue
+		}
+		any = true
+		// Outside the box on any side: unambiguously stale.
+		if w.X < bounds.X || w.Y < bounds.Y ||
+			w.X+w.Width > bounds.X+bounds.W || w.Y+w.Height > bounds.Y+bounds.H {
+			return true
+		}
+		right = max(right, w.X+w.Width)
+		bottom = max(bottom, w.Y+w.Height)
+	}
+	if !any {
+		return false
+	}
+	// Inside the box but not filling it. A separator gap between panes is taken
+	// out of the space between them, never off the far edge, so a settled
+	// layout always reaches both.
+	return right != bounds.X+bounds.W || bottom != bounds.Y+bounds.H
+}
