@@ -58,6 +58,13 @@ func main() {
 			repaint = time.Duration(ms) * time.Millisecond
 		}
 	}
+	// transport is "shm" (t=s, the default) or "b64" (t=d, the payload inline
+	// in chunked escapes). The bitmap and the geometry are identical either
+	// way, so anything that differs downstream is the transport's own.
+	transport := "shm"
+	if len(os.Args) > 4 && os.Args[4] != "" {
+		transport = os.Args[4]
+	}
 
 	// One shared memory object per size, never rewritten once advertised. A
 	// terminal maps the object it is handed, and truncating it under the map
@@ -70,8 +77,20 @@ func main() {
 	}()
 	gen := 0
 	var encoded string
+	var pix []byte
+	var pixW, pixH int
 	allocate := func(w, h int) error {
 		gen++
+		if transport == "b64" {
+			// A distinguishable bitmap, so a frame that is not the current one
+			// is visible as such rather than as identical grey.
+			pix = make([]byte, w*h*4)
+			for i := range pix {
+				pix[i] = byte((i + gen*37) * 7)
+			}
+			pixW, pixH = w, h
+			return nil
+		}
 		name := fmt.Sprintf("tuios-frameloop-%d-%d", os.Getpid(), gen)
 		if err := os.WriteFile("/dev/shm/"+name, make([]byte, w*h*4), 0o600); err != nil {
 			return err
@@ -119,6 +138,7 @@ func main() {
 	_, _ = os.Stdout.WriteString("\x1b[?1049h")
 	defer func() { _, _ = os.Stdout.WriteString("\x1b[?1049l") }()
 
+	seq := 0
 	tick := time.NewTicker(time.Second / time.Duration(fps))
 	defer tick.Stop()
 	// relayout fires when the app has finished re-rendering at a new size. It
@@ -146,8 +166,49 @@ func main() {
 				report(cols, rows, xpx, ypx)
 			}
 		case <-tick.C:
+			if transport == "b64" {
+				// Every frame differs, the way an animating guest's does, so
+				// the transmission is not suppressed as a repeat.
+				seq++
+				for i := 0; i < len(pix); i += 4099 {
+					pix[i] = byte(seq)
+				}
+				_, _ = os.Stdout.Write(buildB64Frame(pix, pixW, pixH))
+				continue
+			}
 			fmt.Printf("\x1b[H\x1b_Ga=T,f=32,t=s,s=%d,v=%d,i=1,q=2,C=1;%s\x1b\\",
 				xpx, ypx, encoded)
 		}
 	}
+}
+
+// buildB64Frame is the same frame the shared-memory path advertises, sent as a
+// direct transmission instead: one a=T carrying the control keys and the first
+// 4096 bytes of base64, then continuation chunks that carry only m=. This is
+// the chunking real direct-transport clients use (kitten icat, chafa, wlterm).
+func buildB64Frame(pix []byte, w, h int) []byte {
+	enc := base64.StdEncoding.EncodeToString(pix)
+	b := []byte("\x1b[H")
+	first := true
+	for len(enc) > 0 {
+		chunk := enc
+		if len(chunk) > 4096 {
+			chunk = chunk[:4096]
+		}
+		enc = enc[len(chunk):]
+		m := 0
+		if len(enc) > 0 {
+			m = 1
+		}
+		if first {
+			b = append(b, fmt.Sprintf(
+				"\x1b_Ga=T,f=32,t=d,s=%d,v=%d,i=1,q=2,C=1,m=%d;", w, h, m)...)
+			first = false
+		} else {
+			b = append(b, fmt.Sprintf("\x1b_Gm=%d;", m)...)
+		}
+		b = append(b, chunk...)
+		b = append(b, "\x1b\\"...)
+	}
+	return b
 }
