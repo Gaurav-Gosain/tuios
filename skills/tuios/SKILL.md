@@ -589,8 +589,9 @@ tuios list-glyphs mine
 window controls' press rectangles are fixed offsets measured against buttons of
 exactly three and four cells, so a two-cell emoji would not look bold, it would
 move the close button out from under the pointer. `close`, `maximize`,
-`minimize` and every rail mark are **one cell**; you name the mark and the
-renderer owns the padding. `separator` and `ellipsis` take any width. A dropped
+`minimize`, `focus`, `attention`, `bullet` and `add` are **one cell**; you name
+the mark and the renderer owns the padding. `separator`, `ellipsis`, `collapse`
+and `expand` take any width, because each is drawn somewhere that measures it. A dropped
 role is reported rather than silently defaulted:
 
 ```sh

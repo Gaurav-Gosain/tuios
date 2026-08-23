@@ -155,7 +155,9 @@ cell after it and put the button under a different column than the one the
 pointer is tested against. You name the one-cell mark and TUIOS owns the
 padding.
 
-`separator` and `ellipsis` take any width. Border runes must be one cell.
+`separator`, `ellipsis`, `collapse` and `expand` take any width: each is drawn
+somewhere that measures it rather than budgeting a column for it. Border runes
+must be one cell.
 
 ## ASCII Mode
 
