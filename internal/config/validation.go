@@ -296,6 +296,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("window_title_position", cfg.Appearance.WindowTitlePosition, WindowTitlePositions)
 	validateTitleFormat(cfg.Appearance.WindowTitleFormat, result)
 	validateGlyphSet(cfg, result)
+	validateDimUnfocused(cfg, result)
 	validateClockFormat(cfg.Appearance.ClockFormat, result)
 	validateBorderColors(cfg, result)
 	validateScrollbar(cfg, result)
@@ -322,6 +323,26 @@ func validateGlyphSet(cfg *UserConfig, result *ValidationResult) {
 			Field: "appearance", Key: "glyphs", Message: p,
 		})
 	}
+}
+
+// validateDimUnfocused warns when the dim is asked for and cannot do its whole
+// job.
+//
+// With no theme set, tuios emits colour indices and the host terminal decides
+// what they look like, so a cell drawn in the terminal's own default has no RGB
+// here to carry anywhere. Those cells are left alone rather than guessed at,
+// which on a plain shell prompt is most of them, so the setting looks broken
+// unless somebody says this out loud.
+func validateDimUnfocused(cfg *UserConfig, result *ValidationResult) {
+	if cfg.Appearance.DimUnfocused <= 0 || cfg.Appearance.Theme != "" {
+		return
+	}
+	result.Warnings = append(result.Warnings, ValidationError{
+		Field: "appearance",
+		Key:   "dim_unfocused",
+		Message: "no theme is set, so a cell drawn in the terminal's own default colour has no colour " +
+			"tuios knows and is left undimmed; only cells a program coloured itself are quieted",
+	})
 }
 
 // validateClockFormat warns about a layout that formats to nothing.

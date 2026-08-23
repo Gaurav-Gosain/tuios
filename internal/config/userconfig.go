@@ -171,6 +171,7 @@ type AppearanceConfig struct {
 	Gap                    int    `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
 	PanelPadding           int    `toml:"panel_padding"`             // Columns of surface padding inside every overlay panel (default: 2)
 	ClockFormat            string `toml:"clock_format"`              // Go time layout the clock overlay is drawn with (default: 15:04:05)
+	DimUnfocused           int    `toml:"dim_unfocused"`             // Percent an unfocused pane's content is carried toward its own ground (default: 0)
 
 	// Legacy flat sidebar keys, superseded by the [appearance.sidebar] table.
 	// migrateLegacySidebar folds them into it and clears them, so they are read
@@ -918,6 +919,11 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	} else if cfg.Appearance.Gap > PaneGapMax {
 		cfg.Appearance.Gap = PaneGapMax
 	}
+	if cfg.Appearance.DimUnfocused < 0 {
+		cfg.Appearance.DimUnfocused = 0
+	} else if cfg.Appearance.DimUnfocused > DimUnfocusedMax {
+		cfg.Appearance.DimUnfocused = DimUnfocusedMax
+	}
 	if cfg.Appearance.PanelPadding <= 0 {
 		cfg.Appearance.PanelPadding = defaultCfg.Appearance.PanelPadding
 	} else if cfg.Appearance.PanelPadding > overlay.MaxPanelPadding {
@@ -1065,6 +1071,7 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	ShowClock = cfg.Appearance.ShowClock
 	ClockFormat = cfg.Appearance.ClockFormat
 	PaneGap = min(max(cfg.Appearance.Gap, 0), PaneGapMax)
+	DimUnfocused = min(max(cfg.Appearance.DimUnfocused, 0), DimUnfocusedMax)
 	overlay.SetPanelPadding(cfg.Appearance.PanelPadding)
 	// The glyph set is selected here rather than beside the theme, because it
 	// is read through the config globals the render path already goes to and

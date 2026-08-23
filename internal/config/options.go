@@ -237,6 +237,11 @@ var optionSpecs = []Option{
 		Default:     strconv.Itoa(overlay.DefaultPanelPadding), Min: 1, Max: overlay.MaxPanelPadding,
 	},
 	{
+		Path: "appearance.dim_unfocused", Type: OptionInt, Section: "appearance",
+		Description: "Percent an unfocused pane's content is quieted toward its own background; 0 is off",
+		Default:     "0", Min: 0, Max: DimUnfocusedMax,
+	},
+	{
 		Path: "appearance.clock_format", Type: OptionString, Section: "dock",
 		Description: "Go time layout the clock is drawn with, e.g. 15:04 or Mon 3:04PM",
 		Default:     DefaultClockFormat,

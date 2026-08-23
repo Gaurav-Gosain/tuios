@@ -61,6 +61,10 @@ func SetPanelPadding(cells int) {
 	panelPadding.Store(int64(cells))
 }
 
+// PanelPadding is the padding in effect, for a host that offers it as a
+// setting and has to render the value it currently holds.
+func PanelPadding() int { return sidePad() }
+
 // sidePad is the padding in effect.
 func sidePad() int {
 	if v := panelPadding.Load(); v > 0 {

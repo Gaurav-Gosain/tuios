@@ -775,6 +775,24 @@ var PaneGap = 0
 // being spacing.
 const PaneGapMax = 8
 
+// DimUnfocused is how far an unfocused pane's content is carried toward the
+// pane's own ground, as a percentage. Zero, the default, draws every pane's
+// content the same.
+//
+// One number rather than wezterm's hue, saturation and brightness triple. A
+// blend toward the ground already moves saturation and brightness together,
+// because a pane's ground is both darker and flatter than the text on it, and
+// rotating the hue of somebody else's program output is a novelty rather than a
+// thing a rice wants. One number is also the only form that says the same thing
+// on a light theme as on a dark one.
+var DimUnfocused = 0
+
+// DimUnfocusedMax caps it. The cap is not a legibility floor - content is the
+// user's own text and they may quiet it as far as they like - it only stops a
+// pane from being erased outright, where there is nothing left to show the
+// setting worked and no way to tell a dimmed pane from a crashed one.
+const DimUnfocusedMax = 90
+
 // ClockFormat is the Go time layout the clock overlay draws with. Empty takes
 // DefaultClockFormat.
 //
