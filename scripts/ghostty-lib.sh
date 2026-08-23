@@ -20,6 +20,14 @@ set -eu
 # drift under a release without a deliberate bump here.
 GHOSTTY_COMMIT=99d7b5fd508eededf2de08ca641f2d83027631f8
 
+# The archive outlives the machine that built it: CI restores it from a cache
+# shared by heterogeneous runners, and release binaries link it and then run on
+# whatever a user has. A native build bakes in the builder's CPU, so an archive
+# built where AVX-512 exists dies with SIGILL where it does not. Baseline is
+# the only portable answer. Cross targets already resolve to baseline; saying
+# it once covers native too.
+CPU=baseline
+
 TARGET="${1:-native}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CACHE="${GHOSTTY_VT_CACHE:-$ROOT/.ghostty-vt}"
@@ -36,8 +44,10 @@ if [ "$(git -C "$SRC" rev-parse HEAD)" != "$GHOSTTY_COMMIT" ]; then
     git -C "$SRC" checkout -q "$GHOSTTY_COMMIT"
 fi
 
+# The CPU is stamped alongside the commit so an archive left over from an
+# older, native build is rebuilt rather than trusted.
 STAMP="$OUT/.commit"
-if [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$GHOSTTY_COMMIT" ]; then
+if [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$GHOSTTY_COMMIT $CPU" ]; then
     echo "$OUT (cached)"
     exit 0
 fi
@@ -45,7 +55,7 @@ fi
 rm -rf "$OUT"
 TFLAG=""
 [ "$TARGET" != "native" ] && TFLAG="-Dtarget=$TARGET"
-(cd "$SRC" && zig build -Demit-lib-vt -Doptimize=ReleaseFast $TFLAG --prefix "$OUT/dist")
+(cd "$SRC" && zig build -Demit-lib-vt -Doptimize=ReleaseFast -Dcpu="$CPU" $TFLAG --prefix "$OUT/dist")
 
 mkdir -p "$OUT/lib" "$OUT/pkgconfig"
 cp -r "$OUT/dist/include" "$OUT/include"
@@ -66,5 +76,5 @@ Version: 0.1.0
 Cflags: -I\${includedir}
 Libs: -L\${libdir} -lghostty-vt
 PC
-echo "$GHOSTTY_COMMIT" > "$STAMP"
+echo "$GHOSTTY_COMMIT $CPU" > "$STAMP"
 echo "$OUT"

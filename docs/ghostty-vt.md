@@ -72,7 +72,11 @@ PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" go build -tags ghostty ./...
 
 `ghostty-lib.sh` pins the ghostty commit; bumping it is a deliberate
 change, reviewed like a dependency bump, and `go.mod` pins the binding
-commit to match. Cross targets: pass a zig target triple
+commit to match. It also pins the CPU to baseline: the archive is cached
+across CI runners and linked into release binaries, so tuning it for the
+machine that built it earns a SIGILL on the machine that runs it. What SIMD
+survives is in simdutf and highway, which pick their kernel at runtime.
+Cross targets: pass a zig target triple
 (`x86_64-windows-gnu`, `aarch64-macos`, ...). Linux and Windows artifacts
 cross-compile from Linux with zig as the C compiler; darwin builds run
 natively on a macOS runner in the release workflow because Apple's SDK

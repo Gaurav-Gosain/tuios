@@ -416,6 +416,26 @@ func requireTypedThenRuns(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
+// typeOutPrompt is the prompt the pane's shell prints under these tests. It
+// replaces the harness default because it is waited on, and a bare "$" is
+// something other parts of the screen can carry.
+const typeOutPrompt = "zzsh$"
+
+// waitForPaneShell waits until the pane's shell has printed its prompt.
+//
+// The prompt is what tells the shell being up from the tty having echoed the
+// launcher's bytes before it started: the line discipline puts the typed line
+// on screen either way, but only a shell that is running and reading prints a
+// prompt. It has to be a prompt from /bin/sh rather than a greeting from a
+// shell that has to be installed; this once waited on fish, which left the
+// pane unopenable wherever fish is absent.
+func waitForPaneShell(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	if err := term.WaitForText(typeOutPrompt, shellTimeout); err != nil {
+		t.Fatalf("the pane's shell never started: %v\n%s", err, term.Snapshot())
+	}
+}
+
 // TestLauncherTypesOutIntoASpawningPane is the local half: the pane and its PTY
 // exist the moment the launcher asks for them, and the line is written into a
 // shell that has not started yet.
@@ -423,7 +443,8 @@ func TestLauncherTypesOutIntoASpawningPane(t *testing.T) {
 	dir := writeProbe(t)
 	term, _ := start(t, startOpts{
 		args: []string{"--standalone"},
-		env:  []string{"PATH=" + dir + ":/usr/bin:/bin", "SHELL=/usr/bin/fish"},
+		// The harness's own /bin/sh, which every machine this runs on has.
+		env: []string{"PATH=" + dir + ":/usr/bin:/bin", "PS1=" + typeOutPrompt + " "},
 	})
 	waitBoot(t, term)
 	queryProbe(t, term)
@@ -431,11 +452,7 @@ func TestLauncherTypesOutIntoASpawningPane(t *testing.T) {
 	if err := term.SendKeys(tuitest.Tab); err != nil {
 		t.Fatalf("tab: %v", err)
 	}
-	// fish announces itself, which is how the shell being up is told from the
-	// line discipline having echoed the bytes before it started.
-	if err := term.WaitForText("Welcome to fish", shellTimeout); err != nil {
-		t.Fatalf("the pane's shell never started: %v\n%s", err, term.Snapshot())
-	}
+	waitForPaneShell(t, term)
 	requireTypedThenRuns(t, term)
 }
 
@@ -556,7 +573,7 @@ func TestLauncherLeavesTheRightModeBehind(t *testing.T) {
 	dir := writeArgProbe(t)
 	term, _ := start(t, startOpts{
 		args: []string{"--standalone"},
-		env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+		env:  []string{"PATH=" + dir + ":/usr/bin:/bin", "PS1=" + typeOutPrompt + " "},
 	})
 	waitBoot(t, term)
 
@@ -566,9 +583,7 @@ func TestLauncherLeavesTheRightModeBehind(t *testing.T) {
 	if err := term.SendKeys(tuitest.Tab); err != nil {
 		t.Fatalf("tab: %v", err)
 	}
-	if err := term.WaitForText("$", shellTimeout); err != nil {
-		t.Fatalf("the pane's shell never started: %v\n%s", err, term.Snapshot())
-	}
+	waitForPaneShell(t, term)
 	if err := term.SendKeys("EXTRA"); err != nil {
 		t.Fatalf("type an argument: %v", err)
 	}
