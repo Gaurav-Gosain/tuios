@@ -461,8 +461,14 @@ type Session struct {
 	sizeMu sync.RWMutex
 
 	// Lifecycle
-	Created    time.Time
-	LastActive time.Time
+	Created time.Time
+
+	// lastActive is when this session was last used, and activeMu guards it. A
+	// mutex rather than a bare field because it is written from the connection
+	// goroutine on every keystroke and read from whichever goroutine is
+	// answering a session listing.
+	lastActive time.Time
+	activeMu   sync.Mutex
 
 	// Configuration
 	config *SessionConfig
@@ -562,7 +568,7 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 		width:      width,
 		height:     height,
 		Created:    now,
-		LastActive: now,
+		lastActive: now,
 		config:     cfg,
 	}
 
@@ -817,8 +823,30 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	// Monitor process exit
 	go pty.monitorExit()
 
-	s.LastActive = time.Now()
+	s.TouchActive()
 	return pty, nil
+}
+
+// TouchActive records that the session was just used.
+//
+// "Used" has to include a keystroke reaching a pane, and that is the only
+// reason this is exported. It used to be updated as a side effect of a client's
+// state sync, which the client sent after every keypress whether or not
+// anything had changed - so the timestamp was right by accident, and stopped
+// being right the moment those redundant syncs were suppressed. A session
+// someone is typing in is active, and the listing and the "most recently
+// active" session lookup both read this.
+func (s *Session) TouchActive() {
+	s.activeMu.Lock()
+	s.lastActive = time.Now()
+	s.activeMu.Unlock()
+}
+
+// LastActive is when the session was last used.
+func (s *Session) LastActive() time.Time {
+	s.activeMu.Lock()
+	defer s.activeMu.Unlock()
+	return s.lastActive
 }
 
 // GetPTY returns a PTY by ID.
@@ -1093,7 +1121,7 @@ func (s *Session) UpdateState(state *SessionState) bool {
 
 	before := snapshotLifecycle(prev)
 	s.state = state
-	s.LastActive = time.Now()
+	s.TouchActive()
 	s.stateDirty.Store(true)
 	s.emitLifecycleLocked(before)
 	return accepted
@@ -1227,7 +1255,7 @@ func (s *Session) Info() SessionInfo {
 		Name:             s.Name,
 		ID:               s.ID,
 		Created:          s.Created.Unix(),
-		LastActive:       s.LastActive.Unix(),
+		LastActive:       s.LastActive().Unix(),
 		WindowCount:      len(windows),
 		Attached:         false, // Will be set by manager
 		Width:            width,

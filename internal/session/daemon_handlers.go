@@ -339,6 +339,12 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 		if pty := session.GetPTY(ptyID); pty != nil {
 			debugLog("[DEBUG] Writing %d bytes to PTY %s", len(data), shortID(ptyID))
 			_, _ = pty.Write(data)
+			// Someone is typing in this session, which is the plainest thing
+			// "last active" can mean. It used to be recorded only as a side
+			// effect of the state sync a client sent after every keypress, so
+			// it was right by accident and would have gone stale the moment
+			// those redundant syncs stopped being sent.
+			session.TouchActive()
 		} else {
 			debugLog("[DEBUG] PTY %s not found for input", shortID(ptyID))
 		}
