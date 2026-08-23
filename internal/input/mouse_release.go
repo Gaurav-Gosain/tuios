@@ -36,7 +36,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Reset pointer shape on release
-	app.ResetPointerShape()
+	o.ResetPointerShape()
 
 	// A sidebar session gesture resolves on release: commit a reorder drag, or
 	// deliver the plain click (switch / toggle) the press deferred.

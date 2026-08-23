@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
@@ -20,21 +19,23 @@ const (
 	PointerNESWResize PointerShape = "nesw-resize"
 )
 
-// currentPointer tracks the last shape to avoid redundant writes.
-var currentPointer PointerShape
-
 // SetPointerShape writes an OSC 22 sequence to change the mouse pointer.
-func SetPointerShape(shape PointerShape) {
-	if shape == currentPointer {
+//
+// The sequence goes through writeHostSequence rather than os.Stdout: stdout is
+// the right terminal only for a local run, while an SSH- or web-served client
+// reads a different handle entirely, and the bytes used to land on the server's
+// own console. writeHostSequence already routes to the per-mode host output.
+func (m *OS) SetPointerShape(shape PointerShape) {
+	if shape == m.currentPointer {
 		return
 	}
-	currentPointer = shape
-	fmt.Fprintf(os.Stdout, "\x1b]22;%s\x1b\\", string(shape))
+	m.currentPointer = shape
+	m.writeHostSequence(fmt.Appendf(nil, "\x1b]22;%s\x1b\\", string(shape)))
 }
 
 // ResetPointerShape sets the pointer back to default.
-func ResetPointerShape() {
-	SetPointerShape(PointerDefault)
+func (m *OS) ResetPointerShape() {
+	m.SetPointerShape(PointerDefault)
 }
 
 // UpdatePointerForPosition sets the pointer shape based on what the mouse
@@ -47,11 +48,11 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 	// Check dock area
 	topMargin := m.GetTopMargin()
 	if config.DockbarPosition == "top" && y < topMargin {
-		SetPointerShape(PointerDefault)
+		m.SetPointerShape(PointerDefault)
 		return
 	}
 	if config.DockbarPosition == "bottom" && y >= topMargin+m.GetUsableHeight() {
-		SetPointerShape(PointerDefault)
+		m.SetPointerShape(PointerDefault)
 		return
 	}
 
@@ -61,11 +62,11 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 		// only offered over a divider that is really there.
 		for _, s := range m.separatorSplits() {
 			if s.Vertical && x == s.Pos && y >= s.From && y <= s.To {
-				SetPointerShape(PointerEWResize)
+				m.SetPointerShape(PointerEWResize)
 				return
 			}
 			if !s.Vertical && y == s.Pos && x >= s.From && x <= s.To {
-				SetPointerShape(PointerNSResize)
+				m.SetPointerShape(PointerNSResize)
 				return
 			}
 		}
@@ -87,7 +88,7 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 	}
 
 	if topIdx == -1 {
-		SetPointerShape(PointerDefault)
+		m.SetPointerShape(PointerDefault)
 		return
 	}
 
@@ -98,7 +99,7 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 	// between borderless panes was already handled above.
 	borderOff := win.BorderOffset()
 	if borderOff == 0 {
-		SetPointerShape(PointerDefault)
+		m.SetPointerShape(PointerDefault)
 		return
 	}
 
@@ -109,31 +110,31 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 
 	// Corners → diagonal resize
 	if (onLeft && onTop) || (onRight && onBottom) {
-		SetPointerShape(PointerNWSEResize)
+		m.SetPointerShape(PointerNWSEResize)
 		return
 	}
 	if (onRight && onTop) || (onLeft && onBottom) {
-		SetPointerShape(PointerNESWResize)
+		m.SetPointerShape(PointerNESWResize)
 		return
 	}
 
 	// Vertical edges → horizontal resize
 	if onLeft || onRight {
-		SetPointerShape(PointerEWResize)
+		m.SetPointerShape(PointerEWResize)
 		return
 	}
 
 	// Top border → grab (title bar)
 	if onTop {
-		SetPointerShape(PointerGrab)
+		m.SetPointerShape(PointerGrab)
 		return
 	}
 
 	// Bottom border → vertical resize
 	if onBottom {
-		SetPointerShape(PointerNSResize)
+		m.SetPointerShape(PointerNSResize)
 		return
 	}
 
-	SetPointerShape(PointerDefault)
+	m.SetPointerShape(PointerDefault)
 }
