@@ -193,7 +193,7 @@ func tuiosSessionMiddleware() wish.Middleware {
 			_, windowChanges, active := sess.Pty()
 			if !active {
 				// No PTY requested, this shouldn't happen for TUIOS
-				wish.Fatalln(sess, "no active terminal, skipping")
+				wish.Fatalln(sess, "No terminal. Run ssh with -t to request one.")
 				return
 			}
 

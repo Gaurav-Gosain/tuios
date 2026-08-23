@@ -52,7 +52,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	if tuiClient == nil || daemonOwnedCommands[payload.CommandType] {
 		if payload.TapeScript != "" {
 			return d.sendCommandResult(cs, payload.RequestID, false,
-				"tape scripts require an attached client (the headless daemon has no renderer)")
+				"tape scripts need an attached client. A headless daemon has no renderer to run them")
 		}
 		onExit := func(ptyID string) { d.notifyPTYClosed(session.ID, ptyID) }
 		data, err := d.executeDaemonCommand(session, payload.CommandType, payload.Args, onExit)

@@ -66,7 +66,7 @@ func printKeybindReport(rep config.KeybindReport) {
 
 	fmt.Printf("\nCONFLICTS WITHIN TUIOS (%s)\n", config.EvidenceCertain)
 	if len(rep.Collisions) == 0 {
-		fmt.Println("  none: every key resolves to exactly one action in its scope")
+		fmt.Println("  none: each key does one thing in its scope")
 	}
 	for _, c := range rep.Collisions {
 		across := ""
@@ -87,7 +87,7 @@ func printKeybindReport(rep config.KeybindReport) {
 
 	fmt.Printf("\nGUEST CLASHES (%s)\n", config.EvidenceReference)
 	if len(rep.GuestClashes) == 0 {
-		fmt.Println("  none of the keys above is one a curated program binds by default")
+		fmt.Println("  no common program binds any of the keys above by default")
 	}
 	for _, c := range rep.GuestClashes {
 		live := ""
@@ -134,7 +134,7 @@ func keybindsExplain(key string, asJSON bool, guest string) error {
 		fmt.Printf("  %-16s %s [%s]%s\n", a.Scope, a.Desc, a.Section, dead)
 	}
 	if fate.SwallowedInTerminal {
-		fmt.Printf("  %-16s withheld from the pane: %s\n", "pane", fate.SwallowReason)
+		fmt.Printf("  %-16s kept from the pane: %s\n", "pane", fate.SwallowReason)
 	} else if !fate.Free {
 		fmt.Printf("  %-16s forwarded to the pane\n", "pane")
 	}

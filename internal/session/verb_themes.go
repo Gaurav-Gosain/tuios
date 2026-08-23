@@ -109,7 +109,7 @@ func (d *Daemon) verbListThemes(_ *connState, params json.RawMessage) (any, *ver
 				Command:    "tuios list-themes --filter " + p.Theme,
 				DidYouMean: closestMatch(p.Theme, all),
 				Detail: "the id is in neither the built-in registry nor " + themesDir +
-					"; write <id>.json there to add it.",
+					". Write <id>.json there to add it.",
 			})
 		}
 		out["palette"] = pal

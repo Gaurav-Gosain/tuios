@@ -36,7 +36,7 @@ func certValidity() time.Duration {
 func registerCertFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&webCertDir, "cert-dir", "", "Where --auto-tls keeps its keypair (default: sip's directory in your user config dir)")
 	cmd.PersistentFlags().StringSliceVar(&webCertHosts, "cert-host", nil, "Extra DNS name or IP for the --auto-tls certificate (repeatable)")
-	cmd.PersistentFlags().IntVar(&webCertDays, "cert-days", 0, "Days an --auto-tls certificate is valid for (0 = 365; under 14 also keeps Chrome's WebTransport path)")
+	cmd.PersistentFlags().IntVar(&webCertDays, "cert-days", 0, "Days an --auto-tls certificate is valid for (0 = 365, under 14 also keeps Chrome's WebTransport path)")
 }
 
 // newCertCmd builds the `tuios-web cert` group. It mirrors `sip cert`, because
@@ -53,9 +53,9 @@ func newCertCmd() *cobra.Command {
 		Short: "Manage the self-signed TLS certificate tuios-web serves with",
 		Long: `Manage the self-signed TLS certificate tuios-web keeps for this user.
 
-Binding a LAN address requires TLS, and this is the certificate for it when you
-do not have one from anywhere else. --auto-tls generates it on first use and
-serves from it. It signs for itself, so browsers warn on the first visit;
+Binding a LAN address requires TLS. This is the certificate for it when you
+have no other. --auto-tls generates it on first use and serves from it. The
+certificate is self-signed, so browsers warn on the first visit.
 ` + "`tuios-web cert info`" + ` says what the warning looks like and how to stop seeing it.
 
 With no subcommand this prints the certificate's status.`,
@@ -105,10 +105,9 @@ one takes --force.`,
 		Short: "Print the certificate's path and nothing else",
 		Long: `Print the certificate's path, for a script or a unit file.
 
---key prints the private key's path instead. It is not printed anywhere else,
-including by ` + "`tuios-web cert info`" + `: tuios-web puts a terminal on a screen that may
-be shared or recorded, and a private key's location is not something to
-volunteer into that. Ask for it and you get it.`,
+--key prints the private key's path instead. No other command prints it, not
+even ` + "`tuios-web cert info`" + `: a screen that may be shared or recorded should not
+see where the key lives unless you ask for it.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			certFile, keyFile, err := sip.CertPaths(webCertDir)
 			if err != nil {
@@ -157,7 +156,7 @@ func runCertNew(w io.Writer) error {
 	// that throws away trust every device has already granted, and the answer
 	// to an ambiguous instruction is to stop, not to guess.
 	if existing, err := sip.LoadManagedCert(webCertDir); err == nil && !webCertForce {
-		return fmt.Errorf("a certificate already exists (valid until %s); pass --force to replace it, and every device that trusted it asks again",
+		return fmt.Errorf("a certificate already exists (valid until %s). Pass --force to replace it. Every device that trusted it will ask again",
 			existing.NotAfter.Format("2006-01-02"))
 	}
 	cert, err := sip.CreateManagedCert(sip.CertOptions{

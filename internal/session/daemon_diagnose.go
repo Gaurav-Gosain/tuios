@@ -197,7 +197,7 @@ func (d DaemonDiagnosis) Explain() string {
 	case DaemonPermissionDenied:
 		return fmt.Sprintf("Permission denied connecting to the TUIOS daemon socket at %s.\n"+
 			"Most likely cause: the socket belongs to another user, or its directory permissions changed.\n"+
-			"Fix: check 'ls -l %s'. If it belongs to another user, set XDG_RUNTIME_DIR to a directory you own; if it is yours, remove it and run 'tuios new'.",
+			"Fix: check 'ls -l %s'. If it belongs to another user, set XDG_RUNTIME_DIR to a directory you own. If it is yours, remove it and run 'tuios new'.",
 			d.SocketPath, d.SocketPath)
 
 	default:

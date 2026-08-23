@@ -35,7 +35,7 @@ var (
 	WaitConditionNames = []string{"session-exists", "window-output", "window-exit", "window-idle", "agent-state"}
 
 	retiredCaptureSources = map[string]string{
-		"recent-unwrapped": "unwrapped capture is not implemented; it previously returned the same physical rows as \"recent\" without unwrapping them",
+		"recent-unwrapped": "unwrapped capture is not implemented. It returned the same physical rows as \"recent\" without unwrapping them",
 	}
 	// waitConditions are the conditions wait-for understands.
 	waitConditions = WaitConditionNames
@@ -61,9 +61,9 @@ var errorCodeCatalog = []struct {
 	{ErrVerbSessionNotFound, "The named session does not exist. The hint lists the sessions that do."},
 	{ErrVerbWindowNotFound, "The window target did not resolve. The hint lists the addressable windows."},
 	{ErrVerbNoWindows, "The session exists but holds no windows to act on."},
-	{ErrVerbPTYNotFound, "The target window has no live PTY; its shell has already exited."},
+	{ErrVerbPTYNotFound, "The target window has no live PTY. Its shell has already exited."},
 	{ErrVerbNeedsClient, "The verb needs an attached client to render it, and none is attached."},
-	{ErrVerbOptionNotFound, "No option by that path exists. The hint carries the closest match and the full path list; list-options describes them."},
+	{ErrVerbOptionNotFound, "No option by that path exists. The hint carries the closest match and the full path list. list-options describes them."},
 	{ErrVerbCommandFailed, "The verb was routed to the attached client and came back failed."},
 	{ErrVerbTimeout, "A wait-for condition did not match before its timeout elapsed."},
 	{ErrVerbProtocolMismatch, "The caller's protocol version is outside the range this daemon accepts."},

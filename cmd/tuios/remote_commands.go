@@ -1002,7 +1002,7 @@ func runSetAgentState(sessionName, windowTarget, state, message, source, harness
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 	if !res.Applied {
-		fmt.Fprintf(os.Stderr, "Not applied: a higher-ranked source owns this pane; it still reports %s.\n", res.State)
+		fmt.Fprintf(os.Stderr, "Not applied: a higher-ranked source owns this pane. It still reports %s.\n", res.State)
 	}
 	return nil
 }
@@ -1227,9 +1227,9 @@ func printDetectExplanation(w io.Writer, res detectExplanation) {
 	case p.RunToken != "":
 		fmt.Fprintf(w, "  run    %s  (an interpreter, so this one token may name an agent)\n", p.RunToken)
 	case p.Interpreter:
-		fmt.Fprintln(w, "  run    (none; an interpreter, but it was given nothing to run)")
+		fmt.Fprintln(w, "  run    (none: an interpreter, but it was given nothing to run)")
 	default:
-		fmt.Fprintln(w, "  run    (none; not an interpreter, so no argument is read as identity)")
+		fmt.Fprintln(w, "  run    (none: not an interpreter, so no argument is read as identity)")
 	}
 
 	fmt.Fprintln(w, "\nmanifests, in lookup order:")
@@ -1253,7 +1253,7 @@ func printDetectExplanation(w io.Writer, res detectExplanation) {
 	default:
 		fmt.Fprintln(w, "result: not an agent")
 		if res.NameList != "" {
-			fmt.Fprintf(w, "        the name list would have said otherwise: %s\n", res.NameList)
+			fmt.Fprintf(w, "        the name list alone would have matched: %s\n", res.NameList)
 		}
 	}
 }
@@ -1327,7 +1327,7 @@ func printScreenExplanation(w io.Writer, res screenExplanation) {
 
 	fmt.Fprintln(w, "\ntail, as the classifier sees it:")
 	if len(res.Tail) == 0 {
-		fmt.Fprintln(w, "  (nothing; the pane's visible screen is empty)")
+		fmt.Fprintln(w, "  (nothing: the pane's visible screen is empty)")
 	}
 	for i, line := range res.Tail {
 		fmt.Fprintf(w, "  %2d | %s\n", i+1, line)
@@ -1361,7 +1361,7 @@ func printScreenExplanation(w io.Writer, res screenExplanation) {
 	if res.Matched {
 		fmt.Fprintf(w, "  rule %d would report %s\n", res.Rule, res.RuleState)
 	} else {
-		fmt.Fprintln(w, "  nothing matched, so the screen tier reports no opinion")
+		fmt.Fprintln(w, "  no rule matched, so the screen rules report nothing")
 	}
 }
 

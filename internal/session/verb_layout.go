@@ -62,7 +62,7 @@ func (d *Daemon) verbFocusWindow(_ *connState, params json.RawMessage) (any, *ve
 		return nil, invalidParam("window", "name the pane to focus with one of window, relative or direction")
 	}
 	if given > 1 {
-		return nil, invalidParam("window", "window, relative and direction are three ways to name one pane; pass exactly one")
+		return nil, invalidParam("window", "window, relative and direction are three ways to name one pane. Pass exactly one")
 	}
 
 	sess, verr := d.resolveVerbSession(p.Session)
@@ -189,7 +189,7 @@ func moveErr(err error, sess *Session, ws int) *verbError {
 		return hintedVerbError(ErrVerbInvalidParams, err.Error(), &VerbHint{
 			Param:  "workspace",
 			Verb:   "list-workspaces",
-			Detail: fmt.Sprintf("this session has workspaces 1 to %d; %d is outside that.", sess.GetState().workspaceBound(), ws),
+			Detail: fmt.Sprintf("this session has workspaces 1 to %d. %d is outside that range.", sess.GetState().workspaceBound(), ws),
 		})
 	}
 	return mapResolveErr(err, sess)
@@ -468,7 +468,7 @@ func (d *Daemon) verbSplitWindow(_ *connState, params json.RawMessage) (any, *ve
 		// The split reported success but no window appeared. Saying so is better
 		// than returning an empty id that reads as a valid target.
 		out["window_id"] = ""
-		out["note"] = "the split ran but no new window has reached daemon state yet; call list-windows to find it"
+		out["note"] = "the split ran but no new window has reached daemon state yet. Call list-windows to find it"
 		return out, nil
 	}
 	out["window_id"] = created

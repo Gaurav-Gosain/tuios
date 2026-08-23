@@ -140,12 +140,12 @@ Client features:
 	rootCmd.Flags().StringVar(&webHost, "host", "localhost", "Web server host")
 	rootCmd.Flags().BoolVar(&webReadOnly, "read-only", false, "Disable input from clients (view only)")
 	rootCmd.Flags().IntVar(&webMaxConnections, "max-connections", 0, "Maximum concurrent connections (0 = unlimited)")
-	rootCmd.Flags().StringVar(&webTLSCert, "cert", "", "Path to a TLS certificate in PEM form (serves HTTPS; required to bind a non-loopback host)")
+	rootCmd.Flags().StringVar(&webTLSCert, "cert", "", "Path to a TLS certificate in PEM form (serves HTTPS, required to bind a non-loopback host)")
 	rootCmd.Flags().StringVar(&webTLSKey, "key", "", "Path to the TLS private key in PEM form (required with --cert)")
 	rootCmd.Flags().BoolVar(&webAutoTLS, "auto-tls", false, "Serve HTTPS from a self-signed certificate tuios-web generates and keeps (see `tuios-web cert`)")
 	rootCmd.Flags().BoolVar(&webInsecure, "insecure", false, "Serve a non-loopback host over plain HTTP, sending every keystroke unencrypted (trusted networks only)")
 	registerCertFlags(rootCmd)
-	rootCmd.Flags().StringVar(&webTouch, "touch", "auto", "Whether a client is driven by a finger, which widens the gestures aimed at a single cell: auto, on, off")
+	rootCmd.Flags().StringVar(&webTouch, "touch", "auto", "Touch input mode: auto, on, off. Touch widens the gestures aimed at a single cell")
 
 	// Daemon mode flags
 	rootCmd.Flags().StringVar(&defaultSession, "default-session", "", "Default session name for all connections (creates shared session)")
@@ -457,9 +457,9 @@ func checkTransportSecurity(w io.Writer) error {
 
        tuios-web --host %s --port %s --auto-tls
 
-     It signs for itself, so every browser warns once per device and you
-     accept it there. `+"`tuios-web cert info`"+` says what the warning looks
-     like and how to stop seeing it.
+     The certificate is self-signed, so every browser warns once per device.
+     Accept the warning there. `+"`tuios-web cert info`"+` says what the warning
+     looks like and how to stop seeing it.
 
   2. Over HTTPS, from a certificate you already have. One from your own CA,
      or a real one, never warns.
@@ -472,7 +472,7 @@ func checkTransportSecurity(w io.Writer) error {
 
      then open http://localhost:%s at the far end.
 
-  4. In clear text, on a network you trust and on no other.
+  4. In clear text. Only on a network you trust.
 
        tuios-web --host %s --port %s --insecure
 
