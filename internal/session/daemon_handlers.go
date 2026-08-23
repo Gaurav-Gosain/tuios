@@ -139,22 +139,22 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// handed a mark that the next state push would take straight back off.
 	session.ClearRestored()
 
-	// Get session state to return
+	// Get session state to return.
+	//
+	// The dimensions on it are the session's effective size, always. A client
+	// reads them as "the minimum over everyone attached" - that is what
+	// RestoreFromState does with them - so anything else here is a lie that the
+	// attaching client renders at.
+	//
+	// It used to be stamped only when the effective size differed from what
+	// this client asked for, which left exactly one case wrong and it is the
+	// common one: a client attaching at the smallest size in the session
+	// matches the effective size, skipped the stamp, and was handed whatever
+	// dimensions the last client to sync happened to be. A local client joining
+	// a browser session therefore came up rendering at the browser's width.
 	state := session.GetState()
-	// Only update state dimensions if we have real client sizes
-	// When reattaching after all clients disconnect, preserve the original state dimensions
-	// so that window scaling works correctly. The placeholder 80x24 values would cause
-	// windows to be scaled incorrectly when the real terminal size is known.
-	if effectiveWidth != payload.Width || effectiveHeight != payload.Height {
-		// We have real dimensions from other clients, use them
-		state.Width = effectiveWidth
-		state.Height = effectiveHeight
-	}
-	// If state dimensions are 0 (new session), use effective/placeholder values
-	if state.Width == 0 || state.Height == 0 {
-		state.Width = effectiveWidth
-		state.Height = effectiveHeight
-	}
+	state.Width = effectiveWidth
+	state.Height = effectiveHeight
 
 	debugLog("[DEBUG] Session state: %d windows, %d PTYs", len(state.Windows), session.PTYCount())
 	for i, w := range state.Windows {
@@ -339,6 +339,12 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 		if pty := session.GetPTY(ptyID); pty != nil {
 			debugLog("[DEBUG] Writing %d bytes to PTY %s", len(data), shortID(ptyID))
 			_, _ = pty.Write(data)
+			// Someone is typing in this session, which is the plainest thing
+			// "last active" can mean. It used to be recorded only as a side
+			// effect of the state sync a client sent after every keypress, so
+			// it was right by accident and would have gone stale the moment
+			// those redundant syncs stopped being sent.
+			session.TouchActive()
 		} else {
 			debugLog("[DEBUG] PTY %s not found for input", shortID(ptyID))
 		}
@@ -499,9 +505,24 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 
 	// Broadcast state change to other clients in the session. Peers get the
 	// merged state, not the raw push, so every client converges on the same view.
+	//
+	// A merge that landed on the state already broadcast is not sent again. The
+	// push side is unconditional by design - a client syncs after every
+	// keystroke and every click so nothing it does can be lost - so almost all
+	// of them say what the last one said, and each one costs every peer a full
+	// state application and a redraw. A peer already holds this state: it was
+	// either sent it, or handed it in its attach reply, which is this same
+	// snapshot. Nothing else rides on the message, so there is nothing for a
+	// suppressed one to have delivered.
+	//
+	// The reconcile reply above is deliberately outside this: it goes to the
+	// sender, whose state is by definition not the merged one.
 	clientCount := d.getSessionClientCount(cs.sessionID)
 	if clientCount > 1 {
-		d.broadcastStateSync(cs.sessionID, merged, "update", cs.clientID)
+		fp := StateFingerprint(merged)
+		if session.NoteBroadcastFingerprint(fp) {
+			d.broadcastStateSync(cs.sessionID, merged, "update", cs.clientID)
+		}
 	}
 
 	return nil

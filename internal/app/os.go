@@ -389,6 +389,11 @@ type OS struct {
 	// Multi-client effective size (min of all clients in session)
 	EffectiveWidth  int // Effective width for rendering (min of all clients, 0 = use terminal size)
 	EffectiveHeight int // Effective height for rendering (min of all clients, 0 = use terminal size)
+
+	// syncedFP fingerprints the state last accepted by the daemon from this
+	// client, and syncedFPSet says whether there is one. See SyncStateToDaemon.
+	syncedFP    uint64
+	syncedFPSet bool
 	// Keyboard enhancement support (Kitty protocol)
 	KeyboardEnhancementsEnabled bool // True when terminal supports keyboard enhancements
 	// KeyboardFlags is the flag set the host answered the enhancement query

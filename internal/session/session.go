@@ -449,14 +449,26 @@ type Session struct {
 	pushMu        sync.Mutex
 	pushedVersion int
 
+	// broadcastFP is the fingerprint of the state last forwarded to this
+	// session's peers on a client sync, and broadcastFPSet says whether there
+	// is one. See NoteBroadcastFingerprint.
+	broadcastFP    uint64
+	broadcastFPSet bool
+
 	// Terminal size
 	width  int
 	height int
 	sizeMu sync.RWMutex
 
 	// Lifecycle
-	Created    time.Time
-	LastActive time.Time
+	Created time.Time
+
+	// lastActive is when this session was last used, and activeMu guards it. A
+	// mutex rather than a bare field because it is written from the connection
+	// goroutine on every keystroke and read from whichever goroutine is
+	// answering a session listing.
+	lastActive time.Time
+	activeMu   sync.Mutex
 
 	// Configuration
 	config *SessionConfig
@@ -556,7 +568,7 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 		width:      width,
 		height:     height,
 		Created:    now,
-		LastActive: now,
+		lastActive: now,
 		config:     cfg,
 	}
 
@@ -618,7 +630,39 @@ func (s *Session) publishState(snap *SessionState) {
 		return
 	}
 	s.pushedVersion = snap.Version
+	// A daemon-side push reaches the clients by a different road than a client
+	// sync does, so what the peers hold afterwards is not what the sync
+	// suppressor last recorded. Forget the record rather than try to keep it in
+	// step: the cost of being wrong here is one state sync too many, and the
+	// cost of being wrong the other way is a peer that never hears about a
+	// change.
+	s.forgetBroadcastFingerprint()
 	fn(snap)
+}
+
+// NoteBroadcastFingerprint records fp as the state about to be forwarded to
+// this session's peers, and reports whether that forward is worth making.
+//
+// It answers false only when fp is exactly what was forwarded last time, which
+// means every peer already holds this state and the message would tell them
+// nothing. See the call site in handleStateUpdate for why a suppressed sync
+// costs a peer nothing.
+func (s *Session) NoteBroadcastFingerprint(fp uint64) bool {
+	s.pushMu.Lock()
+	defer s.pushMu.Unlock()
+	if s.broadcastFPSet && s.broadcastFP == fp {
+		return false
+	}
+	s.broadcastFP = fp
+	s.broadcastFPSet = true
+	return true
+}
+
+// forgetBroadcastFingerprint drops the record, so the next client sync is
+// forwarded whatever it says. pushMu must already be held: its one caller is
+// publishState, which holds it for the whole delivery.
+func (s *Session) forgetBroadcastFingerprint() {
+	s.broadcastFPSet = false
 }
 
 // CreatePTY creates a new PTY in this session. windowID, if non-empty, is the
@@ -779,8 +823,30 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	// Monitor process exit
 	go pty.monitorExit()
 
-	s.LastActive = time.Now()
+	s.TouchActive()
 	return pty, nil
+}
+
+// TouchActive records that the session was just used.
+//
+// "Used" has to include a keystroke reaching a pane, and that is the only
+// reason this is exported. It used to be updated as a side effect of a client's
+// state sync, which the client sent after every keypress whether or not
+// anything had changed - so the timestamp was right by accident, and stopped
+// being right the moment those redundant syncs were suppressed. A session
+// someone is typing in is active, and the listing and the "most recently
+// active" session lookup both read this.
+func (s *Session) TouchActive() {
+	s.activeMu.Lock()
+	s.lastActive = time.Now()
+	s.activeMu.Unlock()
+}
+
+// LastActive is when the session was last used.
+func (s *Session) LastActive() time.Time {
+	s.activeMu.Lock()
+	defer s.activeMu.Unlock()
+	return s.lastActive
 }
 
 // GetPTY returns a PTY by ID.
@@ -1055,7 +1121,7 @@ func (s *Session) UpdateState(state *SessionState) bool {
 
 	before := snapshotLifecycle(prev)
 	s.state = state
-	s.LastActive = time.Now()
+	s.TouchActive()
 	s.stateDirty.Store(true)
 	s.emitLifecycleLocked(before)
 	return accepted
@@ -1189,7 +1255,7 @@ func (s *Session) Info() SessionInfo {
 		Name:             s.Name,
 		ID:               s.ID,
 		Created:          s.Created.Unix(),
-		LastActive:       s.LastActive.Unix(),
+		LastActive:       s.LastActive().Unix(),
 		WindowCount:      len(windows),
 		Attached:         false, // Will be set by manager
 		Width:            width,

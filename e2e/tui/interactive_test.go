@@ -286,9 +286,25 @@ func TestTwoClientsSeeConsistentState(t *testing.T) {
 	}
 
 	c2 := startIn(t, base, startOpts{args: []string{"attach", "e2e-shared"}})
-	// tuios reports the client count in a toast, which is the daemon's own
-	// statement that both clients are attached.
-	if err := c2.WaitForText("2 clients", bootTimeout); err != nil {
+	// The daemon's own statement that both clients are attached, read on the
+	// client already there: a join is announced to the clients being joined,
+	// and the joiner learns the session's size from its attach reply rather
+	// than from a broadcast.
+	//
+	// It used to wait for the "Session size: WxH (2 clients)" toast on c2, and
+	// that toast was a symptom. The joining client is deliberately left out of
+	// the join broadcast, so the only way c2 could ever see a session-resize
+	// notification was the round trip that followed its attaching at a
+	// placeholder 80x24: the session shrank around the client already there,
+	// then grew back when c2 announced its real size. With c2 announcing its
+	// real size to begin with the session never moves, and no such toast exists
+	// to wait for.
+	if err := c1.WaitForText("2 connected", bootTimeout); err != nil {
+		t.Fatalf("the first client was never told a second one joined: %v\n%s", err, c1.Snapshot())
+	}
+	if err := c2.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) == 1
+	}, bootTimeout); err != nil {
 		t.Fatalf("second client never attached: %v\n%s", err, c2.Snapshot())
 	}
 

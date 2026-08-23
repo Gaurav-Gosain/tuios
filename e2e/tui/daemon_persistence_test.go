@@ -77,6 +77,20 @@ func TestDetachAndReattachKeepsLayoutAndPaneContent(t *testing.T) {
 		t.Fatalf("the reattached client never got both windows back (count %d): %v\n%s",
 			countWindows(second.Screen()), err, second.Snapshot())
 	}
+
+	// Raise the pane that holds the marker before reading it off the screen.
+	// Both windows are floating and the second one was opened on top, so the
+	// marker is behind it - which is what a floating layout is, not a loss of
+	// content. This assertion used to be satisfied without the raise only
+	// because the restored window was placed at the wrong size: the first
+	// client attached claiming a placeholder 80x24, placed it in an 80x24 box,
+	// and nothing ever grew it, so it stuck out from under the newer window.
+	// Now that both are the size they should be, the newer one covers it.
+	windowManagementMode(t, second)
+	if err := second.SendKeys(tuitest.Tab); err != nil {
+		t.Fatalf("cycle focus to the pane holding the marker: %v", err)
+	}
+
 	if err := second.WaitForText(marker, shellTimeout); err != nil {
 		t.Fatalf("pane content did not survive the detach: %v\n%s", err, second.Snapshot())
 	}

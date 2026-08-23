@@ -1189,12 +1189,19 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				if m.IsDaemonSession && m.AutoTiling {
 					m.LogInfo("[RESIZE] Daemon mode restore: tiling to %dx%d (was %dx%d)",
 						msg.Width, msg.Height, oldWidth, oldHeight)
-					// Force the render size to the browser viewport. Any stale
-					// EffectiveWidth/Height from the attach handshake will be
-					// corrected by the next SessionResizeMsg if the daemon
-					// actually computes something different.
-					m.EffectiveWidth = msg.Width
-					m.EffectiveHeight = msg.Height
+					// Fall back to this client's own viewport only when the
+					// daemon has not said what the session's size is. It used to
+					// be forced to the viewport unconditionally, on the reasoning
+					// that a SessionResizeMsg would correct it - but the daemon
+					// only announces a size that changed, so a client whose join
+					// left the minimum where it was never heard anything, and
+					// went on rendering at its own width inside a session sized
+					// for someone smaller. The attach reply carries the effective
+					// size, which is the answer here.
+					if m.EffectiveWidth <= 0 || m.EffectiveHeight <= 0 {
+						m.EffectiveWidth = msg.Width
+						m.EffectiveHeight = msg.Height
+					}
 					m.TileAllWindows()
 				} else if m.AutoTiling {
 					// Non-daemon mode: tile immediately

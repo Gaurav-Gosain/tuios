@@ -331,7 +331,63 @@ func (m *OS) NewWindowPlacement() (x, y, width, height int) {
 		y = min(m.LastMouseY, screenHeight-height)
 		return max(x, leftMargin), max(y, 0), width, height
 	}
-	return leftMargin + contentWidth/4, screenHeight / 4, width, height
+
+	homeX, homeY := leftMargin+contentWidth/4, screenHeight/4
+	x, y = m.cascadeFrom(homeX, homeY, width, height, leftMargin, contentWidth, screenHeight)
+	return x, y, width, height
+}
+
+// cascadeFrom returns the home slot, or the first free step along a short
+// diagonal from it when the home slot is already taken.
+//
+// Without it the placement is a pure function of the screen, so every floating
+// window opens at exactly the same rectangle and each one hides the last
+// completely: two panes exist, one is visible, and nothing on screen says
+// otherwise. It is reachable from an ordinary sequence - a window the daemon
+// created while nothing was attached is placed by the first client to see it,
+// and the next window opened takes the same slot - and what it looks like is a
+// pane and its whole scrollback disappearing.
+//
+// Only an exact collision is stepped away from. Windows overlapping is what a
+// floating layout is, and a rule that kept looking for clear space would move
+// windows the user had deliberately arranged. What is ruled out is the one case
+// that carries no information at all: a window with no edge of its own showing.
+//
+// The walk is bounded and gives up back at the home slot. Past a handful of
+// windows the screen is the constraint rather than the offset, and marching off
+// the edge would trade one invisible pane for another.
+func (m *OS) cascadeFrom(homeX, homeY, width, height, leftMargin, contentWidth, screenHeight int) (x, y int) {
+	const (
+		stepX = 2
+		stepY = 1
+		steps = 8
+	)
+
+	maxX := leftMargin + contentWidth - width
+	maxY := screenHeight - height
+	clamp := func(px, py int) (int, int) {
+		return max(min(px, maxX), leftMargin), max(min(py, maxY), 0)
+	}
+
+	taken := func(px, py int) bool {
+		for _, w := range m.Windows {
+			if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized {
+				continue
+			}
+			if w.X == px && w.Y == py {
+				return true
+			}
+		}
+		return false
+	}
+
+	for i := range steps {
+		px, py := clamp(homeX+i*stepX, homeY+i*stepY)
+		if !taken(px, py) {
+			return px, py
+		}
+	}
+	return clamp(homeX, homeY)
 }
 
 // QuitSession performs a deliberate, user-initiated quit. In a daemon session

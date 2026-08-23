@@ -244,7 +244,18 @@ func runDaemonSession(sessionName string, createNew bool) error {
 
 	log.Printf("[CLIENT] Connecting to daemon...")
 	client := session.NewTUIClient()
-	width, height := 80, 24
+	// The real host size, asked for here rather than left at a placeholder.
+	//
+	// The session's size is the minimum over its attached clients, and this is
+	// the number this client contributes to that minimum. A placeholder 80x24
+	// is not a neutral guess: it is smaller than almost any real terminal, so a
+	// local client attaching beside a browser client used to collapse the whole
+	// session to 80x24 for as long as it took Bubble Tea to deliver the first
+	// WindowSizeMsg. Every other client clamped or scaled its panes into that
+	// box and back out again, which is the resize storm an attach was reported
+	// to cause. Bubble Tea still delivers the authoritative size a moment
+	// later; this only stops the interval in between from being a lie.
+	width, height := hostTerminalSize()
 
 	if err := client.ConnectWithCapabilities(version, width, height, clientCaps); err != nil {
 		return explainDialError(err)
