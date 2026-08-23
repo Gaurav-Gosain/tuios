@@ -563,7 +563,13 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, sent
 // than what it has printed, and a baseline that never moves makes every reply
 // empty. This is the same rule capture-pane's --lines already follows.
 func contentLines(s string) int {
-	lines := strings.Split(s, "\n")
+	return countContent(strings.Split(s, "\n"))
+}
+
+// countContent is contentLines over an already-split capture, so a caller that
+// needs both the count and the lines does not split a ten-thousand-line
+// scrollback twice.
+func countContent(lines []string) int {
 	for i := len(lines) - 1; i >= 0; i-- {
 		if strings.TrimSpace(lines[i]) != "" {
 			return i + 1
@@ -589,7 +595,7 @@ func countLines(s string) int {
 // the pane, instead of being handed text from before it asked.
 func tailLines(content string, before, maxLines int) (string, bool) {
 	all := strings.Split(content, "\n")
-	if n := contentLines(content); n < len(all) {
+	if n := countContent(all); n < len(all) {
 		all = all[:n]
 	}
 	if before < 0 {

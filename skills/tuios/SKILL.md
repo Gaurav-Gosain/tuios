@@ -544,8 +544,8 @@ that name, because that pane is a different agent holding different context, and
 handing it an instruction written for its predecessor would be a bug.
 
 So: address by name where a human will read it, hold the id where a script will,
-and expect neither to survive a daemon restart. A `restored` session brings back
-the ids and names and nothing else.
+and expect neither to survive a daemon restart. A `restored` session brings its
+window ids and names back with it, but no mail and no agent state.
 
 ### Leaving a message
 
