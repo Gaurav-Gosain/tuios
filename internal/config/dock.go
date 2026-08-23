@@ -63,6 +63,27 @@ func IsDockBuiltin(name string) bool {
 	return false
 }
 
+// dockFixedSides names the built-ins that are drawn on one side whatever list
+// they are written in.
+//
+// They are not cells. The minimized entries are the centre block and are
+// measured against the room the two ends leave; the message and the copy-mode
+// help are transient claims on the right-hand end rather than segments; and the
+// session controls hold the bar's last columns and are never truncated. Listing
+// one of them elsewhere is taken as "draw it", not as "draw it there", because
+// the alternative is a segment that reserves width on one side and draws on
+// another.
+var dockFixedSides = map[string]string{
+	DockComponentWindows:         "center",
+	DockComponentNotifications:   "right",
+	DockComponentCopyHelp:        "right",
+	DockComponentSessionControls: "right",
+}
+
+// DockFixedSide is the side a component is always drawn on, or "" when it goes
+// wherever it is listed.
+func DockFixedSide(name string) string { return dockFixedSides[name] }
+
 // Default dock arrangements. These reproduce the bar exactly as it was drawn
 // before the lists existed, which is what lets a session with no [dock] table
 // stay byte-for-byte unchanged.
@@ -375,6 +396,15 @@ func validateDock(cfg *UserConfig, result *ValidationResult) {
 					Key:   name,
 					Message: fmt.Sprintf("unknown component; built-ins are %s, and a custom one is written custom/NAME",
 						strings.Join(DockBuiltinComponents(), ", ")),
+				})
+				continue
+			}
+			if fixed := DockFixedSide(name); fixed != "" && fixed != side {
+				result.Warnings = append(result.Warnings, ValidationError{
+					Field: "dock." + side,
+					Key:   name,
+					Message: fmt.Sprintf("this component is always drawn on the %s; it is still shown, but not here",
+						fixed),
 				})
 			}
 		}

@@ -42,7 +42,8 @@ func buildDockPlan(cfg *config.UserConfig) dockPlan {
 	if cfg == nil {
 		cfg = &config.UserConfig{}
 	}
-	keep := func(list []string) []string {
+	misplaced := map[string][]string{}
+	keep := func(side string, list []string) []string {
 		out := make([]string, 0, len(list))
 		for _, name := range list {
 			name = strings.TrimSpace(name)
@@ -58,13 +59,22 @@ func buildDockPlan(cfg *config.UserConfig) dockPlan {
 				continue
 			}
 			plan.placed[name] = true
+			if fixed := config.DockFixedSide(name); fixed != "" && fixed != side {
+				misplaced[fixed] = append(misplaced[fixed], name)
+				continue
+			}
 			out = append(out, name)
 		}
 		return out
 	}
-	plan.Left = keep(cfg.Dock.DockList("left"))
-	plan.Center = keep(cfg.Dock.DockList("center"))
-	plan.Right = keep(cfg.Dock.DockList("right"))
+	plan.Left = keep("left", cfg.Dock.DockList("left"))
+	plan.Center = keep("center", cfg.Dock.DockList("center"))
+	plan.Right = keep("right", cfg.Dock.DockList("right"))
+	// A component with a fixed side that was listed elsewhere is appended to the
+	// side it actually draws on, so it never reserves width on one side while
+	// drawing on another. The config warning says so at load.
+	plan.Center = append(plan.Center, misplaced["center"]...)
+	plan.Right = append(plan.Right, misplaced["right"]...)
 	return plan
 }
 

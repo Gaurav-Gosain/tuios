@@ -148,3 +148,44 @@ func TestDockComponentsListsWhatIsPlaced(t *testing.T) {
 		t.Errorf("sides are wrong: %q %q %q", got[0].Side, got[2].Side, got[3].Side)
 	}
 }
+
+// TestDockFixedSideComponentsDrawWhereTheyBelong pins the placement rule for
+// the four components that are not cells. Naming "windows" on the left is taken
+// as "draw the minimized entries", not as "draw them on the left": the entries
+// are the centre block and are measured against the room the two ends leave, so
+// honouring the position would reserve width on one side and draw on another.
+func TestDockFixedSideComponentsDrawWhereTheyBelong(t *testing.T) {
+	left := []string{"mode", "windows", "session-controls"}
+	center := []string{}
+	right := []string{}
+	plan := buildDockPlan(&config.UserConfig{Dock: config.DockConfig{
+		Left: &left, Center: &center, Right: &right,
+	}})
+
+	if !slices.Equal(plan.Left, []string{"mode"}) {
+		t.Errorf("plan.Left = %v, want only the component that goes where it is listed", plan.Left)
+	}
+	if !slices.Equal(plan.Center, []string{"windows"}) {
+		t.Errorf("plan.Center = %v, want the minimized entries", plan.Center)
+	}
+	if !slices.Equal(plan.Right, []string{"session-controls"}) {
+		t.Errorf("plan.Right = %v, want the session controls", plan.Right)
+	}
+	if !plan.Has("windows") || !plan.Has("session-controls") {
+		t.Error("a misplaced component was dropped instead of being moved")
+	}
+
+	// It is a warning, not silence: the user wrote something that did not mean
+	// what it looked like it meant.
+	cfg := &config.UserConfig{Dock: config.DockConfig{Left: &left, Center: &center, Right: &right}}
+	warnings := config.ConfigWarnings(cfg)
+	found := 0
+	for _, w := range warnings {
+		if strings.Contains(w, "always drawn on the") {
+			found++
+		}
+	}
+	if found != 2 {
+		t.Errorf("got %d placement warnings, want 2: %v", found, warnings)
+	}
+}
