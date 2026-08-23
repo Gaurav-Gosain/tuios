@@ -16,6 +16,10 @@ var optionWalkSkips = map[string]string{
 	"hooks":                      "a free-form map of event to command",
 	"daemon.agent_binaries":      "a list, which a value arriving as one string cannot spell",
 	"notifications.agent.sounds": "file paths, which no accepted set or range can check",
+	"dock.left":                  "an ordered list of component names, not a scalar path",
+	"dock.center":                "an ordered list of component names, not a scalar path",
+	"dock.right":                 "an ordered list of component names, not a scalar path",
+	"dock.custom":                "a free-form map of component name to its command and refresh",
 }
 
 // TestOptionRegistryCoversEveryScalarField is the guard that keeps the

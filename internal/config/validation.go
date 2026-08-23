@@ -173,6 +173,8 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 		checkMacOSAltUsage("workspace_prefix", cfg.Keybindings.WorkspacePrefix)
 	}
 
+	validateDock(cfg, result)
+
 	return result
 }
 
