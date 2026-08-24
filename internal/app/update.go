@@ -179,6 +179,8 @@ type ClientEvent struct {
 	Width       int    // "joined" and "resize"
 	Height      int    // "joined" and "resize"
 	Reason      string // "refresh"
+	// Reserve is the session's agreed chrome reserve, on "resize".
+	Reserve session.LayoutReserve
 }
 
 // SessionResizeMsg is sent when the effective session size changes (min of all clients).
@@ -186,6 +188,10 @@ type SessionResizeMsg struct {
 	Width       int
 	Height      int
 	ClientCount int
+	// Reserve is the chrome reserve every client of this session lays its panes
+	// out around, settled by the daemon as the largest any client asks for. It
+	// arrives with the size because the panes' box is the size less this.
+	Reserve session.LayoutReserve
 }
 
 // ForceRefreshMsg is sent to force all clients to re-render.
@@ -392,6 +398,7 @@ func ListenForClientEvents(eventChan chan ClientEvent) tea.Cmd {
 				Width:       event.Width,
 				Height:      event.Height,
 				ClientCount: event.ClientCount,
+				Reserve:     event.Reserve,
 			}
 		case "refresh":
 			return ForceRefreshMsg{Reason: event.Reason}
@@ -1161,11 +1168,18 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if !m.startupApplied {
 			m.startupApplied = true
 			m.applyStartupPreferences()
+			// Said once, on the first frame that has a screen to say it on.
+			m.warnOnBuildMismatch()
 		}
 
 		// Notify daemon of our terminal size for multi-client size calculation
 		// This allows the daemon to compute effective size = min(all clients)
+		//
+		// The chrome reserve rides the same message: the sidebar's breakpoints
+		// are measured against the render width, so a viewport that moved can
+		// have moved what this client keeps for itself as well.
 		if m.IsDaemonSession && m.DaemonClient != nil {
+			m.DaemonClient.SetOwnLayoutReserve(m.OwnLayoutReserve())
 			_ = m.DaemonClient.NotifyTerminalSize(msg.Width, msg.Height)
 		}
 
@@ -1341,6 +1355,12 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// A rename by this client or any other arrives on this push, so
 				// an open switcher follows it without being reopened.
 				m.refreshSwitcherItems()
+
+				// The rail travels with the session, so a sync can have folded
+				// or widened this client's own rail, and the rail is chrome the
+				// session's reserve is settled from. Said here rather than
+				// inside the sync, where nothing may speak at all.
+				m.AnnounceLayoutReserve()
 			}
 		}
 		// Continue listening for more state syncs
@@ -1376,10 +1396,21 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case SessionResizeMsg:
 		// Effective session size changed (min of all clients)
 		// Set the effective size - GetRenderWidth/Height will use min(terminal, effective)
-		if m.EffectiveWidth != msg.Width || m.EffectiveHeight != msg.Height {
+		//
+		// The agreed chrome reserve is half of the same answer and moves the
+		// panes' box exactly as the size does, so a change to either one is a
+		// re-layout. Before it was here a client folded its own chrome into the
+		// box privately, and two clients with different chrome laid the same
+		// panes out in different boxes.
+		if m.EffectiveWidth != msg.Width || m.EffectiveHeight != msg.Height || m.SessionReserve != msg.Reserve {
 			oldWidth, oldHeight := m.GetRenderWidth(), m.GetRenderHeight()
+			// Only a size change is worth telling the user about. The reserve
+			// moves when somebody opens a rail, which is a thing they can see
+			// happening and not a thing to announce as a resize.
+			sizeChanged := m.EffectiveWidth != msg.Width || m.EffectiveHeight != msg.Height
 			m.EffectiveWidth = msg.Width
 			m.EffectiveHeight = msg.Height
+			m.SessionReserve = msg.Reserve
 			m.MarkAllDirty()
 			// Retile if the effective render size changed
 			if m.AutoTiling {
@@ -1395,8 +1426,16 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// This ensures PTYs match the new window dimensions even if no animation was created
 			// (e.g., when window was already at target position but PTY had stale dimensions)
 			m.SyncDaemonPTYDimensions()
-			m.ShowNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2*time.Second)
+			if sizeChanged {
+				m.ShowNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2*time.Second)
+			}
 		}
+		// A session that changed size can have changed what this client keeps
+		// for itself, because the sidebar's breakpoints are measured against the
+		// render width. Announcing it here is what closes the loop, and it
+		// closes: this client's own reserve is a function of the render width
+		// alone, so the second round finds it unmoved and sends nothing.
+		m.AnnounceLayoutReserve()
 		// Continue listening for more client events
 		return m, ListenForClientEvents(m.ClientEventChan)
 
@@ -1442,6 +1481,9 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// edited in the file moved the global and left the rectangles where
 			// they were. The other two ways in already retile.
 			m.applyAppearanceLive(true)
+			// The file can move the sidebar and the dock, which is the chrome
+			// the session's reserve is settled from.
+			m.AnnounceLayoutReserve()
 			// The dock section is rebuilt here too rather than only at startup.
 			// A feature whose distribution story is "copy a file" that then
 			// needed a restart to see the file would be most of the story

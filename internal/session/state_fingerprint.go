@@ -65,6 +65,8 @@ func StateFingerprint(s *SessionState) uint64 {
 	num(s.TilingScheme)
 	str(s.LayoutMode)
 	num(s.NumWorkspaces)
+	num(s.SidebarWidth)
+	flag(s.SidebarCollapsed)
 	num(s.ResurrectionVersion)
 	num(s.Version)
 	num(s.BaseVersion)

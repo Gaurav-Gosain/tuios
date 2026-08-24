@@ -167,35 +167,40 @@ func (r *rig) otherSession() string {
 // attach runs the client-side attach sequence cmd/tuios runs: connect, attach,
 // build the OS, restore state, restore terminal content, wire the PTYs.
 func (r *rig) attach() {
-	t := r.t
+	r.t.Helper()
+	r.m, r.client = attachClientOS(r.t, r.session, r.cols, r.rows, r.keepExits)
+}
+
+// attachClientOS is the client-side attach sequence on its own, so a test that
+// needs two clients on one session gets the second one by the same route as the
+// first rather than by a second implementation of it.
+func attachClientOS(t *testing.T, name string, cols, rows int, keepExits bool) (*OS, *session.TUIClient) {
 	t.Helper()
 
 	c := session.NewTUIClient()
-	if err := c.Connect("test", r.cols, r.rows); err != nil {
+	if err := c.Connect("test", cols, rows); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	state, err := c.AttachSession(r.session, false, r.cols, r.rows)
+	state, err := c.AttachSession(name, false, cols, rows)
 	if err != nil {
 		t.Fatalf("attach: %v", err)
 	}
 	c.StartReadLoop()
 	t.Cleanup(func() { _ = c.Close() })
-	r.client = c
 
 	m := NewOS(OSOptions{
 		UserConfig:      config.DefaultConfig(),
 		IsDaemonSession: true,
 		DaemonClient:    c,
 		SessionName:     c.SessionName(),
-		Width:           r.cols,
-		Height:          r.rows,
+		Width:           cols,
+		Height:          rows,
 	})
 	if m.KeybindRegistry == nil {
 		m.KeybindRegistry = config.NewKeybindRegistry(config.DefaultConfig())
 	}
-	m.Width, m.Height = r.cols, r.rows
-	m.EffectiveWidth, m.EffectiveHeight = r.cols, r.rows
-	r.m = m
+	m.Width, m.Height = cols, rows
+	m.EffectiveWidth, m.EffectiveHeight = cols, rows
 
 	if state == nil || len(state.Windows) == 0 {
 		t.Fatalf("attach returned no windows")
@@ -213,6 +218,9 @@ func (r *rig) attach() {
 		m.TileAllWindows()
 	}
 	m.SyncDaemonPTYDimensions()
+	// A real client says what it keeps for its own chrome on its first window
+	// size message, which is what settles the session's pane box.
+	m.AnnounceLayoutReserve()
 	// RestoreFromState leaves VT callbacks suppressed for Update to re-enable,
 	// and nothing here runs Update. Without this the alt-screen flag never
 	// tracks live output and the alt-screen rows of the matrix would pass by
@@ -223,9 +231,10 @@ func (r *rig) attach() {
 	// OnPTYClosed sends on WindowExitChan from the client read loop, which is
 	// the same goroutine that dispatches PTY output. A shell that exits with
 	// nobody reading would wedge the whole stream.
-	if !r.keepExits {
+	if !keepExits {
 		drainExits(t, m)
 	}
+	return m, c
 }
 
 // drainExits keeps the window-exit channel empty for the test's lifetime.

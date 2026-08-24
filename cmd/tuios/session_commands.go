@@ -397,9 +397,9 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	})
 
 	// Handle session resize (min of all clients)
-	client.OnSessionResize(func(width, height, clientCount int) {
+	client.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
 		go func() {
-			p.Send(app.SessionResizeMsg{Width: width, Height: height, ClientCount: clientCount})
+			p.Send(app.SessionResizeMsg{Width: width, Height: height, ClientCount: clientCount, Reserve: reserve})
 		}()
 	})
 

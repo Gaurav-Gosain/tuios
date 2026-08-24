@@ -395,6 +395,19 @@ func (t *GhosttyTerminal) Resize(width, height int) {
 		t.mu.Unlock()
 		return
 	}
+	// A resize to the size the terminal already is, is not a resize. Saying so
+	// here rather than at each caller is what makes it true everywhere: a
+	// resize resets the scroll region, so a caller that re-announces a size
+	// nothing changed drops the margins a full-screen program set, and every
+	// client of a session announces every pane's size for itself.
+	//
+	// A restore left pending is left pending: every other way into this
+	// terminal flushes it first, and the size it would be replayed at has not
+	// moved.
+	if width == t.width && height == t.height {
+		t.mu.Unlock()
+		return
+	}
 	t.flushRestoreLocked()
 	t.width, t.height = width, height
 	_ = t.term.Resize(clampU16(width), clampU16(height), uint32(t.cellW), uint32(t.cellH))

@@ -201,8 +201,10 @@ func TestStripEdgeColumnStillResizesWhenTheGestureMoves(t *testing.T) {
 	if m.SidebarCollapsed {
 		t.Error("dragging the strip's edge out left the rail collapsed")
 	}
-	if config.SidebarWidth != 25 {
-		t.Errorf("the drag set the width to %d, want the pointer's column", config.SidebarWidth)
+	// Read off the model: the drag moves this session's rail, not a global
+	// every session in the process shares. See TestSidebarEdgeResizeClampAndPersist.
+	if got := m.sidebarWidthPreference(); got != 25 {
+		t.Errorf("the drag set the width to %d, want the pointer's column", got)
 	}
 }
 

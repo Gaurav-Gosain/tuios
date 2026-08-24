@@ -19,7 +19,11 @@ type RemoteCommandHandler func(payload *RemoteCommandPayload) error
 type StateSyncHandler func(state *SessionState, triggerType, sourceID string)
 type ClientJoinedHandler func(clientID string, clientCount int, width, height int)
 type ClientLeftHandler func(clientID string, clientCount int)
-type SessionResizeHandler func(width, height, clientCount int)
+
+// SessionResizeHandler is told the session's negotiated size and the chrome
+// reserve every client lays its panes out around. The two arrive together
+// because they are one answer: the panes' box is the size less the reserve.
+type SessionResizeHandler func(width, height, clientCount int, reserve LayoutReserve)
 
 // SessionEndedHandler is called when the daemon reports that the attached
 // session was terminated. It runs on the read-loop goroutine, so the handler
@@ -87,11 +91,22 @@ type TUIClient struct {
 	clientJoinedHandler  ClientJoinedHandler
 	clientLeftHandler    ClientLeftHandler
 	sessionResizeHandler SessionResizeHandler
-	disconnectHandler    DisconnectHandler
-	sessionEndedHandler  SessionEndedHandler
-	sessionEndedOnce     sync.Once // gates the single session-ended notification
-	disconnectOnce       sync.Once // gates the single disconnect notification
-	multiClientMu        sync.RWMutex
+
+	// ownReserve is the chrome this client draws around the panes, and
+	// sessionReserve is what the daemon settled on across every client. Both are
+	// guarded by multiClientMu. See LayoutReserve.
+	ownReserve     LayoutReserve
+	sessionReserve LayoutReserve
+
+	// clientBuild and daemonBuild are the two builds that met at the handshake.
+	// See BuildMismatch.
+	clientBuild         string
+	daemonBuild         string
+	disconnectHandler   DisconnectHandler
+	sessionEndedHandler SessionEndedHandler
+	sessionEndedOnce    sync.Once // gates the single session-ended notification
+	disconnectOnce      sync.Once // gates the single disconnect notification
+	multiClientMu       sync.RWMutex
 
 	// Request/response handling for synchronous calls after readLoop starts
 	pendingResponses   map[MessageType]chan *Message
@@ -231,6 +246,17 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 		return daemonProtocolMismatch(version, &welcome)
 	}
 
+	// A daemon and a client from different builds speak the same protocol right
+	// up to the moment they do not: the wire version only moves when a message
+	// changes shape, and most drift is a behaviour change on one side of it. It
+	// happens routinely - the daemon outlives an upgrade by design, and a
+	// tuios-web installed separately can be months behind - and it used to be
+	// invisible, so a fix that had been installed appeared not to work.
+	//
+	// Recorded rather than refused: the two builds can talk, and refusing would
+	// turn a note into an outage.
+	c.noteDaemonBuild(version, welcome.Version)
+
 	// Update codec based on what server negotiated
 	c.codec = DefaultCodec()
 
@@ -244,6 +270,27 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 	return nil
 }
 
+// noteDaemonBuild records the daemon's build beside this client's, so a caller
+// can say plainly that the two do not match. A build string of "dev" on both
+// sides is not evidence of agreement, which is why the install script stamps
+// the commit into it.
+func (c *TUIClient) noteDaemonBuild(clientVersion, daemonVersion string) {
+	c.multiClientMu.Lock()
+	c.clientBuild, c.daemonBuild = clientVersion, daemonVersion
+	c.multiClientMu.Unlock()
+}
+
+// BuildMismatch reports the daemon's build and this client's when they differ,
+// and empty strings when they agree or when either is unknown.
+func (c *TUIClient) BuildMismatch() (clientBuild, daemonBuild string) {
+	c.multiClientMu.RLock()
+	defer c.multiClientMu.RUnlock()
+	if c.clientBuild == "" || c.daemonBuild == "" || c.clientBuild == c.daemonBuild {
+		return "", ""
+	}
+	return c.clientBuild, c.daemonBuild
+}
+
 // AttachSession attaches to a session (creates if createNew is true).
 // Returns the session state for restoration.
 func (c *TUIClient) AttachSession(name string, createNew bool, width, height int) (*SessionState, error) {
@@ -252,6 +299,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		CreateNew:   createNew,
 		Width:       width,
 		Height:      height,
+		Reserve:     c.OwnLayoutReserve(),
 	}, c.codec)
 	if err != nil {
 		return nil, err
@@ -275,6 +323,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
 		c.NoteSession(payload.SessionName)
+		c.noteSessionReserve(payload.Reserve)
 		return payload.State, nil
 
 	case MsgError:
@@ -586,6 +635,42 @@ func (c *TUIClient) OnClientLeft(handler ClientLeftHandler) {
 	c.multiClientMu.Unlock()
 }
 
+// OwnLayoutReserve returns the chrome this client last told the daemon it draws
+// around the panes.
+func (c *TUIClient) OwnLayoutReserve() LayoutReserve {
+	c.multiClientMu.RLock()
+	defer c.multiClientMu.RUnlock()
+	return c.ownReserve
+}
+
+// SetOwnLayoutReserve records this client's chrome and reports whether it moved.
+// It only records: announcing it is NotifyTerminalSize's job, so a caller sends
+// one message for the whole of "my viewport and my chrome" rather than two that
+// can disagree for a frame.
+func (c *TUIClient) SetOwnLayoutReserve(r LayoutReserve) bool {
+	c.multiClientMu.Lock()
+	defer c.multiClientMu.Unlock()
+	if c.ownReserve == r {
+		return false
+	}
+	c.ownReserve = r
+	return true
+}
+
+// SessionLayoutReserve returns the reserve the daemon settled on for every
+// client of this session.
+func (c *TUIClient) SessionLayoutReserve() LayoutReserve {
+	c.multiClientMu.RLock()
+	defer c.multiClientMu.RUnlock()
+	return c.sessionReserve
+}
+
+func (c *TUIClient) noteSessionReserve(r LayoutReserve) {
+	c.multiClientMu.Lock()
+	c.sessionReserve = r
+	c.multiClientMu.Unlock()
+}
+
 // OnSessionResize registers a handler for session resize messages.
 // This is called when the effective session size changes (min of all clients).
 func (c *TUIClient) OnSessionResize(handler SessionResizeHandler) {
@@ -680,9 +765,10 @@ func (c *TUIClient) ResizePTY(ptyID string, width, height int) error {
 func (c *TUIClient) NotifyTerminalSize(width, height int) error {
 	// Send resize with empty PTYID to indicate client terminal resize
 	msg, err := NewMessageWithCodec(MsgResize, &ResizePTYPayload{
-		PTYID:  "", // Empty = client terminal resize, not PTY resize
-		Width:  width,
-		Height: height,
+		PTYID:   "", // Empty = client terminal resize, not PTY resize
+		Width:   width,
+		Height:  height,
+		Reserve: c.OwnLayoutReserve(),
 	}, c.codec)
 	if err != nil {
 		return err
@@ -1045,8 +1131,10 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		handler := c.sessionResizeHandler
 		c.multiClientMu.RUnlock()
 
+		c.noteSessionReserve(payload.Reserve)
+
 		if handler != nil {
-			handler(payload.Width, payload.Height, payload.ClientCount)
+			handler(payload.Width, payload.Height, payload.ClientCount, payload.Reserve)
 		}
 
 	}

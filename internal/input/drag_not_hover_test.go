@@ -267,6 +267,12 @@ func TestOverlayPanelNeedsAHeldButton(t *testing.T) {
 
 // TestSidebarEdgeResizeNeedsAHeldButton: the rail's width follows a held drag on
 // its edge rule and stays put under bare hover.
+//
+// The width is read off the model rather than off the config global. It was the
+// global, and the global is process-wide, so one browser tab's drag resized a
+// rail nobody had touched in every other session that process was serving. It
+// is also session state now, shared with the session's other clients, and
+// shared state cannot live in a process global.
 func TestSidebarEdgeResizeNeedsAHeldButton(t *testing.T) {
 	app.SetInputHandler(HandleInput)
 	m := hoverOS(t)
@@ -278,8 +284,8 @@ func TestSidebarEdgeResizeNeedsAHeldButton(t *testing.T) {
 		t.Fatal("a press on the rail's edge rule did not arm the width resize")
 	}
 	m = dragged(m, edgeX-8, 5)
-	dragged := config.SidebarWidth
-	if dragged == edgeX+1 {
+	dragged := m.SidebarWidthPref
+	if dragged == 0 || dragged == edgeX+1 {
 		t.Fatal("a held drag did not resize the rail")
 	}
 
@@ -287,8 +293,8 @@ func TestSidebarEdgeResizeNeedsAHeldButton(t *testing.T) {
 	if m.SidebarEdgeActive() {
 		t.Error("the rail's width drag outlived the button that started it")
 	}
-	if config.SidebarWidth != dragged {
-		t.Errorf("button-free motion resized the rail from %d to %d", dragged, config.SidebarWidth)
+	if m.SidebarWidthPref != dragged {
+		t.Errorf("button-free motion resized the rail from %d to %d", dragged, m.SidebarWidthPref)
 	}
 }
 

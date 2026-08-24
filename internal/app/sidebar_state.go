@@ -96,7 +96,7 @@ func (m *OS) loadSidebarState() {
 	// folds it against the breakpoints and pane floor, so an out-of-range value
 	// cannot starve the panes.
 	if st.Width >= config.SidebarGlyphWidth {
-		config.SidebarWidth = st.Width
+		m.SidebarWidthPref = st.Width
 	}
 }
 
@@ -111,7 +111,7 @@ func (m *OS) saveSidebarState() {
 	slots, colors := accentsToFile(m.SidebarAccents)
 	data, err := json.Marshal(sidebarStateFile{
 		Order:        m.SidebarOrder,
-		Width:        config.SidebarWidth,
+		Width:        m.sidebarWidthPreference(),
 		Accents:      slots,
 		AccentColors: colors,
 		AgentSeen:    m.SidebarAgentSeen,

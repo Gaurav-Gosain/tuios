@@ -269,11 +269,11 @@ func (m *OS) SidebarEdgeMotion(x, y int) bool {
 	// Dragging the edge out of the strip is an expand: the gesture asks for a
 	// width, and a collapsed rail that ignored it would look broken.
 	collapsed := m.SidebarCollapsed && w <= config.SidebarGlyphWidth
-	if w == config.SidebarWidth && collapsed == m.SidebarCollapsed {
+	if w == m.sidebarWidthPreference() && collapsed == m.SidebarCollapsed {
 		return true
 	}
 	m.SidebarCollapsed = collapsed
-	config.SidebarWidth = w
+	m.SidebarWidthPref = w
 	if m.AutoTiling {
 		m.TileAllWindows()
 	} else {

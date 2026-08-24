@@ -2,6 +2,7 @@
 package app
 
 import (
+	"fmt"
 	"maps"
 	"time"
 
@@ -114,6 +115,10 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	// that reads it did not.
 	state.LayoutMode = m.LayoutModeName()
 	state.NumWorkspaces = m.NumWorkspaces
+	// The rail travels with the session it is drawn beside. See
+	// SessionState.SidebarWidth.
+	state.SidebarWidth = m.SidebarWidthPref
+	state.SidebarCollapsed = m.SidebarCollapsed
 
 	return state
 }
@@ -166,6 +171,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.CurrentWorkspace = clampWorkspace(state.CurrentWorkspace)
 	m.MasterRatio = state.MasterRatio
 	m.AutoTiling = state.AutoTiling
+	m.adoptSidebarState(state)
 
 	// Set effective dimensions from state - this is the min of all connected clients
 	// as calculated by the daemon. This ensures a new client joining respects
@@ -179,6 +185,15 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		m.Width = state.Width
 		m.Height = state.Height
 		m.LogInfo("[RESTORE] Set size from state: %dx%d", state.Width, state.Height)
+	}
+
+	// The chrome reserve the session has agreed on, for the same reason and at
+	// the same moment as the size: it is the other half of the box the panes go
+	// in, and the layout below is computed against it. It comes off the client
+	// rather than off the state because it is the daemon's answer, settled in
+	// the attach reply, not anything a peer pushed.
+	if m.DaemonClient != nil {
+		m.SessionReserve = m.DaemonClient.SessionLayoutReserve()
 	}
 
 	// Clear existing windows
@@ -337,6 +352,23 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// the daemon and must not be allowed to suppress the next one.
 	m.forgetSyncedState()
 
+	// Nothing may be pushed while this is being applied. See applyingPeerSync:
+	// a layout worked out here because this client disagreed with the arriving
+	// one is a local display decision, not news, and sending it is the edge that
+	// would close the loop.
+	m.applyingPeerSync = true
+	m.syncAnswerOwed = false
+	defer func() {
+		m.applyingPeerSync = false
+		if m.syncAnswerOwed {
+			m.syncAnswerOwed = false
+			// One push for the whole sync, after it has been applied, so the
+			// answer that goes out is the settled one rather than a rectangle
+			// from the middle of the fold.
+			m.SyncStateToDaemon()
+		}
+	}()
+
 	// Build maps for efficient lookup
 	incomingByID := make(map[string]*session.WindowState)
 	for i := range state.Windows {
@@ -477,6 +509,7 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	m.NextBSPWindowID = max(m.NextBSPWindowID, state.NextBSPWindowID)
 	m.TilingScheme = layout.AutoScheme(state.TilingScheme)
 	m.ApplyLayoutModeName(state.LayoutMode)
+	m.adoptSidebarState(state)
 
 	// Update BSP trees, again only from a strictly newer sync so a lagging echo
 	// cannot clobber the tree this client just computed (see newerState above).
@@ -567,6 +600,22 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 
 	m.MarkAllDirty()
 	return nil
+}
+
+// adoptSidebarState takes the rail as the session has it. A zero width is a
+// client with no preference of its own rather than a request to narrow the
+// rail, so it is left alone; the collapsed flag is adopted as it stands.
+//
+// Adopting it can change what this client keeps for its own chrome, which the
+// session's reserve is settled from. Announcing that is the caller's job and
+// not this one's: nothing may be sent from inside a sync, so the announce
+// happens once the sync has been applied - see the StateSyncMsg case in
+// update.go.
+func (m *OS) adoptSidebarState(state *session.SessionState) {
+	if state.SidebarWidth > 0 {
+		m.SidebarWidthPref = state.SidebarWidth
+	}
+	m.SidebarCollapsed = state.SidebarCollapsed
 }
 
 // updateWindowFromState updates an existing window with state from sync
@@ -1370,6 +1419,16 @@ func (m *OS) SyncStateToDaemon() {
 		return
 	}
 
+	// A sync being applied is not a moment to speak. Whatever wanted to be sent
+	// was worked out from a peer's state, and sending it back is what turns two
+	// clients that disagree into two clients that argue. The one thing inside a
+	// sync that genuinely has news - a window this client placed because the
+	// daemon could not - says so here and is sent once the sync is applied.
+	if m.applyingPeerSync {
+		m.syncAnswerOwed = true
+		return
+	}
+
 	state := m.BuildSessionState()
 	fp := session.StateFingerprint(state)
 	if m.syncedFPSet && m.syncedFP == fp {
@@ -1383,6 +1442,47 @@ func (m *OS) SyncStateToDaemon() {
 		return
 	}
 	m.syncedFP, m.syncedFPSet = fp, true
+}
+
+// warnOnBuildMismatch says so when the daemon is running a different build of
+// tuios from this client. The two still speak, so this is a note and not a
+// refusal - but it is the difference between "the fix does not work" and "the
+// fix is not installed on both sides", and nothing else says it out loud.
+func (m *OS) warnOnBuildMismatch() {
+	if m.DaemonClient == nil || !m.IsDaemonSession {
+		return
+	}
+	clientBuild, daemonBuild := m.DaemonClient.BuildMismatch()
+	if clientBuild == "" {
+		return
+	}
+	m.LogWarn("Build mismatch: client %s, daemon %s", clientBuild, daemonBuild)
+	m.ShowNotification(fmt.Sprintf(
+		"The daemon is version %s and this window is version %s. To use one version in both, run 'tuios kill-server', then start tuios again.",
+		daemonBuild, clientBuild), "warning", 0)
+}
+
+// AnnounceLayoutReserve tells the daemon what this client keeps for its own
+// chrome, so the session can settle on a reserve that fits every client. It
+// sends only when the answer has moved, and it says it through the message that
+// already carries this client's viewport, so the two halves of "what box do the
+// panes go in" cannot disagree for a frame.
+//
+// It is called from the paths that can change the chrome - a viewport resize,
+// which moves the sidebar's breakpoint; a config reload; and any input, which is
+// how the rail is folded, dragged or turned off. Nothing polls for it: the
+// answer is a pure function of this client's own state, so a call that finds it
+// unmoved costs one comparison and sends nothing.
+func (m *OS) AnnounceLayoutReserve() {
+	if m.DaemonClient == nil || !m.IsDaemonSession {
+		return
+	}
+	if !m.DaemonClient.SetOwnLayoutReserve(m.OwnLayoutReserve()) {
+		return
+	}
+	if err := m.DaemonClient.NotifyTerminalSize(m.Width, m.Height); err != nil {
+		m.LogError("Failed to announce layout reserve: %v", err)
+	}
 }
 
 // forgetSyncedState drops the record of what was last pushed, so the next sync

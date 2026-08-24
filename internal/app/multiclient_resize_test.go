@@ -32,13 +32,14 @@ const (
 // OS event channel, which is what cmd/tuios and cmd/tuios-web both do.
 func (r *rig) watchSessionResize() {
 	r.t.Helper()
-	r.client.OnSessionResize(func(width, height, clientCount int) {
+	r.client.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
 		select {
 		case r.m.ClientEventChan <- ClientEvent{
 			Type:        "resize",
 			Width:       width,
 			Height:      height,
 			ClientCount: clientCount,
+			Reserve:     reserve,
 		}:
 		default:
 			r.t.Errorf("ClientEventChan full, dropped a session resize to %dx%d", width, height)
@@ -46,21 +47,37 @@ func (r *rig) watchSessionResize() {
 	})
 }
 
-// awaitSessionResize waits for one session-resize event and applies it through
-// Update, as the program loop does.
+// awaitSessionResize waits for the session's size to change and applies every
+// event it sees on the way through, as the program loop does.
+//
+// It waits for a size change rather than for one message, because this message
+// also carries the chrome reserve the session has settled on: a client saying
+// what it keeps for its own rail moves that without moving the size, and the
+// tests here are about the size.
 func (r *rig) awaitSessionResize(what string) SessionResizeMsg {
 	r.t.Helper()
-	select {
-	case ev := <-r.m.ClientEventChan:
-		if ev.Type != "resize" {
-			r.t.Fatalf("waiting for %s: got a %q event", what, ev.Type)
+	fromW, fromH := r.m.GetRenderWidth(), r.m.GetRenderHeight()
+	deadline := time.After(rigWait)
+	for {
+		select {
+		case ev := <-r.m.ClientEventChan:
+			if ev.Type != "resize" {
+				r.t.Fatalf("waiting for %s: got a %q event", what, ev.Type)
+			}
+			msg := SessionResizeMsg{
+				Width:       ev.Width,
+				Height:      ev.Height,
+				ClientCount: ev.ClientCount,
+				Reserve:     ev.Reserve,
+			}
+			r.m.Update(msg)
+			if msg.Width != fromW || msg.Height != fromH {
+				return msg
+			}
+		case <-deadline:
+			r.t.Fatalf("timed out waiting for %s", what)
+			return SessionResizeMsg{}
 		}
-		msg := SessionResizeMsg{Width: ev.Width, Height: ev.Height, ClientCount: ev.ClientCount}
-		r.m.Update(msg)
-		return msg
-	case <-time.After(rigWait):
-		r.t.Fatalf("timed out waiting for %s", what)
-		return SessionResizeMsg{}
 	}
 }
 

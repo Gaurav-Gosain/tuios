@@ -155,6 +155,11 @@ type connState struct {
 	// Client terminal dimensions (for multi-client size calculation)
 	width  int
 	height int
+	// reserve is the chrome this client draws around the panes. The session's
+	// reserve is the largest any of its clients asks for, so that the box the
+	// panes are partitioned into is the same on every client. See
+	// LayoutReserve.
+	reserve LayoutReserve
 
 	// Client's terminal graphics capabilities (pixel dimensions, etc.)
 	// Used to set proper PTY pixel sizes for tools like kitty icat

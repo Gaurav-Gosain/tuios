@@ -977,6 +977,15 @@ func (e *Emulator) Resize(width int, height int) {
 		height = 1
 	}
 
+	// A resize to the size the terminal already is, is not a resize. Saying so
+	// here rather than at each caller is what makes it true everywhere: a
+	// resize resets the scroll region, so a caller that re-announces a size
+	// nothing changed drops the margins a full-screen program set, and every
+	// client of a session announces every pane's size for itself.
+	if width == e.Width() && height == e.Height() {
+		return
+	}
+
 	// A resize reflows and reclamps, so the cell an open cluster was drawn into
 	// no longer identifies that cluster. Close it, and forget the parked print
 	// for the same reason.

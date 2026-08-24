@@ -105,6 +105,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.sessionID = session.ID
 	cs.width = payload.Width
 	cs.height = payload.Height
+	cs.reserve = payload.Reserve
 	cs.isTUIClient = true
 	cs.mu.Unlock()
 
@@ -156,6 +157,13 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	state.Width = effectiveWidth
 	state.Height = effectiveHeight
 
+	// The reserve is settled the same way and for the same reason: it is the
+	// rest of the answer to "what box do the panes go in". Recorded on the
+	// session as well, so the next client to attach is handed the same one
+	// without having to wait for a broadcast.
+	effectiveReserve := d.calculateSessionReserve(session.ID)
+	session.SetLayoutReserve(effectiveReserve)
+
 	debugLog("[DEBUG] Session state: %d windows, %d PTYs", len(state.Windows), session.PTYCount())
 	for i, w := range state.Windows {
 		debugLog("[DEBUG]   Window %d: ID=%s, PTYID=%s", i, shortID(w.ID), shortID(w.PTYID))
@@ -174,6 +182,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		Height:      effectiveHeight,
 		WindowCount: len(state.Windows),
 		State:       state,
+		Reserve:     effectiveReserve,
 	})
 }
 
@@ -196,6 +205,7 @@ func (d *Daemon) handleDetach(cs *connState) error {
 	cs.sessionID = ""
 	cs.width = 0
 	cs.height = 0
+	cs.reserve = LayoutReserve{}
 	cs.mu.Unlock()
 
 	// Unsubscribe from all PTYs and forget where each stream got to. A resume
@@ -375,6 +385,7 @@ func (d *Daemon) handleResize(cs *connState, msg *Message) error {
 		cs.mu.Lock()
 		cs.width = payload.Width
 		cs.height = payload.Height
+		cs.reserve = payload.Reserve
 		cs.mu.Unlock()
 		// Recalculate effective session size
 		d.recalculateAndBroadcastSize(cs.sessionID, "")

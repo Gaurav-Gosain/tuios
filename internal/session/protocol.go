@@ -135,6 +135,42 @@ type AttachPayload struct {
 	CreateNew   bool   `json:"create_new,omitempty"` // Create if doesn't exist
 	Width       int    `json:"width"`                // Client terminal width
 	Height      int    `json:"height"`               // Client terminal height
+	// Reserve is the chrome this client draws around the panes. See
+	// LayoutReserve. A client that sends none reserves nothing, which is what an
+	// older client means and what a client with no chrome means.
+	Reserve LayoutReserve `json:"reserve,omitempty"`
+}
+
+// LayoutReserve is the rows and columns a client keeps for its own chrome - the
+// sidebar rail, the dock - before a single pane is placed.
+//
+// It is on the wire because a pane's box is not a per-client quantity. Every
+// client attached is looking at the same PTYs, and a PTY has exactly one size,
+// so the box the panes are partitioned into has to be identical everywhere. The
+// daemon takes the largest reserve any client asks for and hands that back as
+// the session's; a client whose own chrome is narrower than the agreed reserve
+// leaves the difference blank rather than handing it to the panes.
+//
+// Without this each client folded its own reserve into the box privately, so
+// two clients with different chrome partitioned different boxes, computed
+// different rectangles for the same panes, and dragged the shared PTYs back and
+// forth between the two answers - a narrowing resize each way, on every push.
+type LayoutReserve struct {
+	Left   int `json:"left,omitempty"`
+	Right  int `json:"right,omitempty"`
+	Top    int `json:"top,omitempty"`
+	Bottom int `json:"bottom,omitempty"`
+}
+
+// Max returns the reserve that satisfies both, which is the one a session
+// agrees on: every client's own chrome fits inside it.
+func (r LayoutReserve) Max(o LayoutReserve) LayoutReserve {
+	return LayoutReserve{
+		Left:   max(r.Left, o.Left),
+		Right:  max(r.Right, o.Right),
+		Top:    max(r.Top, o.Top),
+		Bottom: max(r.Bottom, o.Bottom),
+	}
 }
 
 // AttachedPayload confirms successful session attachment.
@@ -145,6 +181,9 @@ type AttachedPayload struct {
 	Height      int           `json:"height"`          // Current session height
 	WindowCount int           `json:"window_count"`    // Number of windows in session
 	State       *SessionState `json:"state,omitempty"` // Session state for restore
+	// Reserve is the session's agreed chrome reserve, the largest any attached
+	// client asks for. The panes go in what is left of the size above.
+	Reserve LayoutReserve `json:"reserve,omitempty"`
 }
 
 // NewPayload requests creation of a new session.
@@ -305,6 +344,10 @@ type ResizePTYPayload struct {
 	PTYID  string `json:"pty_id"`
 	Width  int    `json:"width"`
 	Height int    `json:"height"`
+	// Reserve is the sending client's own chrome, read only when PTYID is
+	// empty, which is the message that announces a client's viewport rather
+	// than a pane's size. See LayoutReserve.
+	Reserve LayoutReserve `json:"reserve,omitempty"`
 }
 
 // SubscribePTYPayload requests subscribing to PTY output. FromSeq, when
@@ -447,6 +490,10 @@ type SessionResizePayload struct {
 	Width       int `json:"width"`        // New effective width (min of all clients)
 	Height      int `json:"height"`       // New effective height (min of all clients)
 	ClientCount int `json:"client_count"` // Number of clients
+	// Reserve is the session's agreed chrome reserve, the largest any attached
+	// client asks for. It travels with the size because it is the other half of
+	// the same answer: the panes' box is the size less this.
+	Reserve LayoutReserve `json:"reserve,omitempty"`
 }
 
 // Error codes

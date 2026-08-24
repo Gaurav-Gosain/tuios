@@ -52,6 +52,30 @@ func (d *Daemon) calculateEffectiveSize(sessionID string) (width, height int) {
 	return width, height
 }
 
+// calculateSessionReserve returns the chrome reserve that fits every client of
+// the session: the largest each edge is asked for. It is deliberately not an
+// average or a minimum. A client cannot draw its rail in fewer columns than the
+// rail is, and it must not take those columns off the panes, so the only
+// reserve every client can honour at once is the biggest one. A client with
+// less chrome than that leaves the difference blank.
+func (d *Daemon) calculateSessionReserve(sessionID string) LayoutReserve {
+	d.clientsMu.RLock()
+	defer d.clientsMu.RUnlock()
+
+	var agreed LayoutReserve
+	for _, cs := range d.clients {
+		cs.mu.Lock()
+		match := cs.sessionID == sessionID && cs.isTUIClient
+		r := cs.reserve
+		cs.mu.Unlock()
+		if !match {
+			continue
+		}
+		agreed = agreed.Max(r)
+	}
+	return agreed
+}
+
 // notifyClientJoined broadcasts a client join event to all other clients in the session.
 func (d *Daemon) notifyClientJoined(sessionID string, joiningClient *connState) {
 	clientCount := d.getSessionClientCount(sessionID)
@@ -107,19 +131,28 @@ func (d *Daemon) recalculateAndBroadcastSize(sessionID, excludeClientID string) 
 	if newWidth == 0 || newHeight == 0 {
 		return
 	}
+	// The reserve settles with the size, and a change to either has to be
+	// announced: the panes' box is the size less the reserve, so a client told
+	// only about the size would lay them out in a box nobody else is using.
+	newReserve := d.calculateSessionReserve(sessionID)
 
 	oldWidth, oldHeight := session.Size()
-	if newWidth != oldWidth || newHeight != oldHeight {
-		session.Resize(newWidth, newHeight)
-
-		payload := &SessionResizePayload{
-			Width:       newWidth,
-			Height:      newHeight,
-			ClientCount: d.getSessionClientCount(sessionID),
-		}
-		d.broadcastToSession(sessionID, MsgSessionResize, payload, excludeClientID)
-		LogBasic("Session %s resized to %dx%d (min of %d clients)", session.Name, newWidth, newHeight, payload.ClientCount)
+	oldReserve := session.LayoutReserve()
+	if newWidth == oldWidth && newHeight == oldHeight && newReserve == oldReserve {
+		return
 	}
+	session.Resize(newWidth, newHeight)
+	session.SetLayoutReserve(newReserve)
+
+	payload := &SessionResizePayload{
+		Width:       newWidth,
+		Height:      newHeight,
+		ClientCount: d.getSessionClientCount(sessionID),
+		Reserve:     newReserve,
+	}
+	d.broadcastToSession(sessionID, MsgSessionResize, payload, excludeClientID)
+	LogBasic("Session %s resized to %dx%d, chrome %+v (min of %d clients)",
+		session.Name, newWidth, newHeight, newReserve, payload.ClientCount)
 }
 
 // broadcastStateSync broadcasts a state update to all clients in a session.

@@ -1,5 +1,13 @@
 #!/bin/sh
-# Build tuios from this checkout and install it on your PATH as `tuios`.
+# Build tuios from this checkout and install it on your PATH as `tuios` and
+# `tuios-web`.
+#
+# Both are installed together and stamped with the same commit, because they are
+# two halves of one thing: tuios-web is a client of the same daemon, and a
+# tuios-web left behind by an upgrade is a client running last month's code
+# against this month's daemon. That used to be silent. It is now visible - the
+# two builds are compared at the handshake and the window says so - but the
+# better answer is that it does not happen.
 #
 # Usage: scripts/install.sh [ghostty|pure] [options]
 #
@@ -106,34 +114,60 @@ mkdir -p "$prefix" || die "cannot create $prefix"
 # Checked up front so a system prefix fails here rather than after the build.
 [ -w "$prefix" ] || die "$prefix is not writable. Pick a prefix you own, or re-run under sudo."
 dest=$prefix/tuios
-
-# Built next to the destination so the install is one rename on one filesystem:
-# writing over the destination in place would fail with ETXTBSY while a daemon
-# is running it.
-tmp=$prefix/.tuios.install.$$
-trap 'rm -f "$tmp"' EXIT HUP INT TERM
+webdest=$prefix/tuios-web
 
 # The commit is stamped in rather than left to the stamps the go command
 # embeds by itself: in a linked worktree those come back naming the main
 # checkout's HEAD, so a build made on a branch would report the wrong commit.
-# The version is left as "dev" because this is not a release build.
+#
+# It is stamped into the version string as well, and both binaries get the same
+# one. The version is what a client announces to the daemon at the handshake, so
+# "dev" on its own says nothing: two builds months apart both announce "dev" and
+# a mismatch that matters reads as a match. With the commit in it the daemon and
+# the client can tell whether they are the same build, and say so when they are
+# not.
 ldflags='-s -w -X main.builtBy=install.sh'
+buildversion=dev
 if rev=$(cd "$ROOT" && git rev-parse HEAD 2>/dev/null); then
+    buildversion="dev+$(printf '%s' "$rev" | cut -c1-12)"
+    # A tree with uncommitted work is not the commit it sits on, and two builds
+    # from it are not each other either. Saying so is what keeps the version
+    # honest for the comparison the daemon makes at the handshake.
     if [ -n "$(cd "$ROOT" && git status --porcelain 2>/dev/null)" ]; then
         rev="$rev-dirty"
+        buildversion="$buildversion-dirty"
     fi
     ldflags="$ldflags -X main.commit=$rev -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 fi
+ldflags="$ldflags -X main.version=$buildversion"
+
+# Built next to the destination so each install is one rename on one filesystem:
+# writing over the destination in place would fail with ETXTBSY while a daemon
+# is running it.
+tmp=$prefix/.tuios.install.$$
+webtmp=$prefix/.tuios-web.install.$$
+trap 'rm -f "$tmp" "$webtmp"' EXIT HUP INT TERM
 
 say "==> tuios ($backend backend)"
 (cd "$ROOT" && go build ${buildtags:+"$buildtags"} -trimpath \
     -ldflags "$ldflags" -o "$tmp" ./cmd/tuios)
 chmod 755 "$tmp"
+
+# Built before either is moved into place, so a compile error in one does not
+# leave the pair half installed and mismatched - the state this is here to
+# prevent.
+say "==> tuios-web ($backend backend)"
+(cd "$ROOT" && go build ${buildtags:+"$buildtags"} -trimpath \
+    -ldflags "$ldflags" -o "$webtmp" ./cmd/tuios-web)
+chmod 755 "$webtmp"
+
 mv -f "$tmp" "$dest"
+mv -f "$webtmp" "$webdest"
 trap - EXIT HUP INT TERM
 
 say ""
 say "installed $dest"
+say "installed $webdest"
 "$dest" --version
 
 case ":$PATH:" in

@@ -87,6 +87,10 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	// This ensures state persists across reconnects without explicit save
 	if o.IsDaemonSession {
 		o.SyncStateToDaemon()
+		// Folding the rail, dragging it wider or turning it off all arrive as
+		// input, and all three change what this client keeps for its own chrome.
+		// The call costs one comparison when nothing moved.
+		o.AnnounceLayoutReserve()
 	}
 
 	return result, cmd

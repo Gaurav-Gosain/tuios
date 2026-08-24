@@ -128,6 +128,20 @@ type SessionState struct {
 	// Empty means unnamed, and every reader falls back to Name, so a session that
 	// was never renamed reads exactly as it did before this field existed.
 	DisplayName string `json:"display_name,omitempty"`
+	// SidebarWidth and SidebarCollapsed are the rail as the user last left it.
+	// They are session state rather than a per-client preference because the
+	// rail is chrome, and chrome that differs between two clients of one session
+	// is chrome they cannot both draw: the panes' box is settled across every
+	// client (see LayoutReserve), so a rail one client folded and another did
+	// not costs the wider one a blank band. Sharing them means the usual case is
+	// that there is nothing to reconcile.
+	//
+	// A zero width means the client had no stored preference and is not a
+	// request to narrow anyone's rail. Collapsed is a plain flag, and its zero
+	// value - an open rail - is what state written before this existed reads as,
+	// which is the pre-existing behaviour.
+	SidebarWidth     int  `json:"sidebar_width,omitempty"`
+	SidebarCollapsed bool `json:"sidebar_collapsed,omitempty"`
 	// Accent is an optional accent for the session, recorded verbatim the way
 	// Options are: the daemon has no palette and does not interpret it. Clients
 	// read it as a colour name from the ANSI sixteen or as a hex literal, and an
@@ -455,10 +469,12 @@ type Session struct {
 	broadcastFP    uint64
 	broadcastFPSet bool
 
-	// Terminal size
-	width  int
-	height int
-	sizeMu sync.RWMutex
+	// Terminal size, and the chrome reserve every client lays its panes out
+	// around. Both are guarded by sizeMu.
+	width   int
+	height  int
+	reserve LayoutReserve
+	sizeMu  sync.RWMutex
 
 	// Lifecycle
 	Created time.Time
@@ -1237,6 +1253,22 @@ func (s *Session) Resize(width, height int) {
 	s.sizeMu.Unlock()
 }
 
+// LayoutReserve returns the chrome reserve every client of this session lays
+// its panes out around. Recorded here beside the size because it is the other
+// half of the same answer.
+func (s *Session) LayoutReserve() LayoutReserve {
+	s.sizeMu.RLock()
+	defer s.sizeMu.RUnlock()
+	return s.reserve
+}
+
+// SetLayoutReserve records the reserve the session has agreed on.
+func (s *Session) SetLayoutReserve(r LayoutReserve) {
+	s.sizeMu.Lock()
+	s.reserve = r
+	s.sizeMu.Unlock()
+}
+
 // Info returns session information.
 func (s *Session) Info() SessionInfo {
 	s.sizeMu.RLock()
@@ -1593,11 +1625,28 @@ func (p *PTY) UpdatePixelDimensions(cellWidth, cellHeight int) error {
 // being heard one width narrower than the daemon did, and a line that wrapped
 // differently is in the scrollback for good.
 func (p *PTY) Resize(width, height int) error {
-	// The pane's size is what a client announced for it, so it is recorded as
-	// soon as it is announced. Only the emulator's grid waits for the stream.
+	// A resize to the size the pane is already at is nothing, and has to cost
+	// nothing. It is not a rare case: every client of a session announces every
+	// pane's size for itself, so a second client attaching, or a client
+	// re-announcing after a retile that moved nothing, arrives here with the
+	// size that is already set.
+	//
+	// It was not free. It marked the ring, broadcast a width to every
+	// subscriber, resized the emulator - which drops the scroll region a
+	// full-screen program had set - and SIGWINCHed the guest into repainting.
+	// A repaint at an unchanged width is invisible when it works and is a line
+	// of lost scrollback when the guest's own idea of where the cursor is does
+	// not survive it.
+	//
+	// Zero is not a size and is left to the layers below to reject; it must not
+	// be recorded as the pane's own.
 	p.terminalMu.Lock()
+	unchanged := width > 0 && height > 0 && p.width == width && p.height == height
 	p.width, p.height = width, height
 	p.terminalMu.Unlock()
+	if unchanged {
+		return nil
+	}
 
 	p.streamMu.Lock()
 	if !p.vtClosed {
