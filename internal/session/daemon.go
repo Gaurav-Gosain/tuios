@@ -389,15 +389,28 @@ func (d *Daemon) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed to listen on socket: %w", err)
 	}
+	// A *net.UnixListener unlinks its socket file on Close by default, and
+	// shutdown closes the listener first, which silently unlinked the socket
+	// at the top of shutdown - while every session's state was still unsaved.
+	// The socket file is the signal WaitForDaemonShutdown and 'tuios
+	// kill-server' rely on, and the whole contract is that it disappears last,
+	// in shutdown's own explicit Remove. Under load the early unlink was
+	// observable: the wait returned mid-shutdown and read state that was not
+	// yet on disk.
+	if ul, ok := listener.(*net.UnixListener); ok {
+		ul.SetUnlinkOnClose(false)
+	}
 	d.listener = listener
 
 	if err := os.Chmod(socketPath, 0700); err != nil {
 		_ = listener.Close()
+		_ = os.Remove(socketPath) // Close no longer unlinks; a failed start must not leave a stale socket
 		return fmt.Errorf("failed to set socket permissions: %w", err)
 	}
 
 	if err := d.writePidFile(); err != nil {
 		_ = listener.Close()
+		_ = os.Remove(socketPath) // Close no longer unlinks; a failed start must not leave a stale socket
 		return fmt.Errorf("failed to write PID file: %w", err)
 	}
 

@@ -39,6 +39,7 @@ func TestBuildEnvAdvertisesGraphicsCapabilities(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewSession: %v", err)
 			}
+			defer sess.Stop()
 			sess.SetGraphicsCapabilities(tc.kitty, tc.sixel)
 
 			env := sess.buildEnv("win-1", false)

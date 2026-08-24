@@ -196,6 +196,10 @@ func TestSessionManager(t *testing.T) {
 // TestSessionNameGeneration tests automatic session name generation
 func TestSessionNameGeneration(t *testing.T) {
 	mgr := NewManager()
+	// Leaked sessions keep their periodic resurrection savers ticking for the
+	// rest of the binary, writing state files into whatever directory the
+	// override names at that moment - another test's TempDir included.
+	defer mgr.Shutdown()
 
 	// Generate first name
 	name1 := mgr.GenerateSessionName()
@@ -216,6 +220,7 @@ func TestSessionNameGeneration(t *testing.T) {
 // TestGetOrCreateSession tests the get-or-create functionality
 func TestGetOrCreateSession(t *testing.T) {
 	mgr := NewManager()
+	defer mgr.Shutdown()
 
 	// First call should create
 	session1, created, err := mgr.GetOrCreateSession("test", nil, 80, 24)
@@ -242,6 +247,7 @@ func TestGetOrCreateSession(t *testing.T) {
 // TestSessionInfo tests session info generation
 func TestSessionInfo(t *testing.T) {
 	mgr := NewManager()
+	defer mgr.Shutdown()
 
 	session, _ := mgr.CreateSession("info-test", nil, 100, 50)
 
@@ -266,6 +272,7 @@ func TestSessionInfo(t *testing.T) {
 // state, so a listing client can expand a non-attached session.
 func TestSessionInfoWindows(t *testing.T) {
 	sess, _ := NewSession("info-windows", nil, 80, 24)
+	defer sess.Stop()
 	sess.UpdateState(&SessionState{
 		Name: "info-windows",
 		Windows: []WindowState{
@@ -298,6 +305,7 @@ func TestSessionInfoWindows(t *testing.T) {
 // TestSessionState tests session state management
 func TestSessionState(t *testing.T) {
 	session, _ := NewSession("state-test", nil, 80, 24)
+	defer session.Stop()
 
 	// Initial state should be empty
 	state := session.GetState()
