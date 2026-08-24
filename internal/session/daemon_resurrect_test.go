@@ -155,6 +155,7 @@ func TestKillRemovesResurrectionState(t *testing.T) {
 	defer useResurrectionDir(tmpDir)()
 
 	mgr := NewManager()
+	defer mgr.Shutdown()
 	if _, err := mgr.CreateSession("doomed", &SessionConfig{}, 80, 24); err != nil {
 		t.Fatalf("CreateSession failed: %v", err)
 	}

@@ -47,7 +47,19 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 
 func TestResubscribeOverTheWireReplaysOnlyWhatWasMissed(t *testing.T) {
 	d, _ := startTestDaemon(t)
-	sess := makeSessionWithWindow(t, d, "switching")
+	// The pane's guest is a process that never prints. The assertion at the
+	// bottom is "the cycles replayed nothing", and an interactive shell cannot
+	// carry it: its prompt arrives whenever the shell finishes starting, and on
+	// a loaded machine that landed inside the hide/show cycles and failed the
+	// test with its own prompt bytes. The injected marker below is the only
+	// output the pane ever has, which is what makes "nothing" exact.
+	sess, err := d.manager.CreateSession("switching", &SessionConfig{}, 80, 24)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if _, err := sess.AddDaemonWindowWith(NewWindowOptions{Title: "Window", Focus: true, Command: []string{"sleep", "600"}}, nil); err != nil {
+		t.Fatalf("AddDaemonWindowWith: %v", err)
+	}
 
 	ptyID := sess.ListPTYIDs()[0]
 	client := attachTestClient(t, "switching")
