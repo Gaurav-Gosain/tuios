@@ -913,6 +913,16 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 		daemonCfg.AgentAutoDetect = userConfig.Daemon.AgentAutoDetect
 		daemonCfg.AgentDetectInterval = time.Duration(userConfig.Daemon.AgentDetectSeconds) * time.Second
 		daemonCfg.AgentBinaries = userConfig.Daemon.AgentBinaries
+
+		// Apply the appearance globals (theme, border style, ...) in the daemon
+		// process too. Every other entrypoint (local, SSH server, tape) funnels
+		// through ApplyAppearanceConfig after LoadUserConfig; without it the
+		// daemon never initializes the theme, theme.IsEnabled() stays false, and
+		// every PTY it creates is born with the terminal's default palette
+		// instead of config.toml's -- the chrome recolors, the pane content does
+		// not. createPTY and the window constructors gate their SetThemeColors on
+		// theme.IsEnabled, so this one call fixes them all.
+		config.ApplyAppearanceConfig(userConfig)
 	}
 
 	daemon := session.NewDaemon(daemonCfg)

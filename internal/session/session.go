@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -741,6 +742,20 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	// This maintains scrollback, screen content, cursor position across reconnects
 	terminal := vt.New(width, height)
 	terminal.SetScrollbackMaxLines(10000) // Match default scrollback
+
+	// Apply the daemon's active theme (from config.toml) to every fresh
+	// emulator, not only restored ones: a window created after restore (by a
+	// keybinding, the bootstrap or a client) must be born with the same palette
+	// or the theme never reaches pane content. NewWindow applies the theme for
+	// the local/standalone path; this is the daemon path's equivalent.
+	if theme.IsEnabled() {
+		terminal.SetThemeColors(
+			theme.TerminalFg(),
+			theme.TerminalBg(),
+			theme.TerminalCursor(),
+			theme.GetANSIPalette(),
+		)
+	}
 
 	// For a restored shell, seed the emulator with a one-line banner so the
 	// respawned process is clearly marked. This is written directly (before the
