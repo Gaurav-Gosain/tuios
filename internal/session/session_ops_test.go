@@ -15,6 +15,19 @@ func newTestSession(t *testing.T) *Session {
 	return sess
 }
 
+// addWindow adds a daemon window and fails the test with the spawn's own error
+// rather than letting it resurface later as a wrong window count. The flake
+// that taught this: a transient kernel EPERM on the spawn made this file's
+// tests report "window count = 0, want 1" with the actual cause discarded.
+func addWindow(t *testing.T, sess *Session, title string) WindowState {
+	t.Helper()
+	w, err := sess.AddDaemonWindow(title, nil)
+	if err != nil {
+		t.Fatalf("AddDaemonWindow(%q): %v", title, err)
+	}
+	return w
+}
+
 func TestAddDaemonWindow(t *testing.T) {
 	sess := newTestSession(t)
 
@@ -54,8 +67,8 @@ func TestAddDaemonWindow(t *testing.T) {
 func TestCloseDaemonWindow(t *testing.T) {
 	sess := newTestSession(t)
 
-	w1, _ := sess.AddDaemonWindow("one", nil)
-	w2, _ := sess.AddDaemonWindow("two", nil)
+	w1 := addWindow(t, sess, "one")
+	w2 := addWindow(t, sess, "two")
 
 	// Close the focused (second) window; focus must fall back to the first.
 	closedID, err := sess.CloseDaemonWindow(w2.ID)
@@ -81,7 +94,7 @@ func TestCloseDaemonWindow(t *testing.T) {
 func TestCloseDaemonWindowByName(t *testing.T) {
 	sess := newTestSession(t)
 
-	w1, _ := sess.AddDaemonWindow("", nil)
+	w1 := addWindow(t, sess, "")
 	if err := sess.RenameDaemonWindow(w1.ID, "build"); err != nil {
 		t.Fatalf("RenameDaemonWindow failed: %v", err)
 	}
@@ -97,9 +110,9 @@ func TestCloseDaemonWindowByName(t *testing.T) {
 func TestFocusAndCycleDaemonWindows(t *testing.T) {
 	sess := newTestSession(t)
 
-	w1, _ := sess.AddDaemonWindow("one", nil)
-	w2, _ := sess.AddDaemonWindow("two", nil)
-	w3, _ := sess.AddDaemonWindow("three", nil)
+	w1 := addWindow(t, sess, "one")
+	w2 := addWindow(t, sess, "two")
+	w3 := addWindow(t, sess, "three")
 
 	if err := sess.FocusDaemonWindow(w1.ID); err != nil {
 		t.Fatalf("FocusDaemonWindow failed: %v", err)
@@ -136,7 +149,7 @@ func TestFocusAndCycleDaemonWindows(t *testing.T) {
 func TestMoveAndSwitchWorkspace(t *testing.T) {
 	sess := newTestSession(t)
 
-	w1, _ := sess.AddDaemonWindow("one", nil)
+	w1 := addWindow(t, sess, "one")
 
 	if err := sess.MoveDaemonWindowToWorkspace(w1.ID, 3); err != nil {
 		t.Fatalf("MoveDaemonWindowToWorkspace failed: %v", err)
@@ -165,7 +178,7 @@ func TestMoveAndSwitchWorkspace(t *testing.T) {
 func TestMinimizeDaemonWindow(t *testing.T) {
 	sess := newTestSession(t)
 
-	w1, _ := sess.AddDaemonWindow("one", nil)
+	w1 := addWindow(t, sess, "one")
 	if err := sess.SetDaemonWindowMinimized(w1.ID, true); err != nil {
 		t.Fatalf("SetDaemonWindowMinimized failed: %v", err)
 	}

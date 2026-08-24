@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -79,10 +80,29 @@ func TestWatchesAreRefcountedPerDirectory(t *testing.T) {
 	}
 }
 
+// transcriptGoroutines counts goroutines currently running transcript
+// machinery. This is the direct form of "an idle join wakes no goroutine": a
+// regression back to a per-join poller sits in agent_transcript.go frames and
+// is counted here, while goroutines owned by other tests in the same binary
+// are not. The process-wide goroutine count this replaced measured the whole
+// binary: any earlier test's leftover timer firing inside the sampling window
+// grew the count and failed the test without anything here being wrong.
+func transcriptGoroutines() int {
+	buf := make([]byte, 1<<20)
+	n := runtime.Stack(buf, true)
+	count := 0
+	for _, g := range strings.Split(string(buf[:n]), "\n\n") {
+		if strings.Contains(g, "agent_transcript.go") {
+			count++
+		}
+	}
+	return count
+}
+
 // The property the whole design is built to: a joined pane whose agent is doing
 // nothing arms no timer, wakes no goroutine, and does no work. The watcher
-// goroutine sits blocked in a channel receive, so an idle machine is measured by
-// counting goroutines and finding the number does not grow.
+// goroutine sits blocked in a channel receive, so an idle join is measured by
+// finding no goroutine anywhere in the binary running transcript code.
 func TestAnIdleJoinArmsNothing(t *testing.T) {
 	s := newTestSessionWithWindow(t)
 	win := s.GetState().Windows[0].ID
@@ -103,13 +123,12 @@ func TestAnIdleJoinArmsNothing(t *testing.T) {
 		t.Fatal("a join with no file activity armed a timer")
 	}
 
-	before := runtime.NumGoroutine()
 	// A quarter of a second of a completely silent agent.
 	time.Sleep(250 * time.Millisecond)
-	if after := runtime.NumGoroutine(); after > before {
-		t.Fatalf("goroutines grew from %d to %d while nothing happened", before, after)
+	if n := transcriptGoroutines(); n != 0 {
+		t.Fatalf("%d goroutines are running transcript code while nothing happened", n)
 	}
-	// And no read happened, so the file's offset never moved.
+	// And the quiet window armed nothing either.
 	s.transcripts.mu.Lock()
 	stillArmed := s.transcripts.joins[win].debounce != nil
 	s.transcripts.mu.Unlock()
