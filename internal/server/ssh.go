@@ -95,7 +95,7 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 
 	// If using daemon mode, ensure daemon is running
 	if !cfg.Ephemeral {
-		if err := session.EnsureDaemonRunning(); err != nil {
+		if err := session.EnsureDaemonRunning(cfg.Version); err != nil {
 			log.Printf("Warning: Failed to start daemon, falling back to ephemeral mode: %v", err)
 			cfg.Ephemeral = true
 		}
@@ -536,11 +536,11 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 	// Handle session resize (min of all clients). The callback runs on the daemon
 	// read-loop goroutine, so the actual geometry mutation (TileAllWindows,
 	// emulator resizes) must happen in Update; route it through the event channel.
-	client.OnSessionResize(func(width, height, clientCount int) {
-		log.Printf("[SSH] Session resize: %dx%d (clients: %d)", width, height, clientCount)
+	client.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
+		log.Printf("[SSH] Session resize: %dx%d chrome %+v (clients: %d)", width, height, reserve, clientCount)
 		if m.ClientEventChan != nil {
 			select {
-			case m.ClientEventChan <- app.ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height}:
+			case m.ClientEventChan <- app.ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height, Reserve: reserve}:
 			default:
 				log.Printf("[SSH] Warning: ClientEventChan full, dropping session resize event")
 			}

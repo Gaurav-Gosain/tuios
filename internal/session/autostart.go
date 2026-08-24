@@ -18,8 +18,12 @@ var (
 // EnsureDaemonRunning ensures the TUIOS daemon is running.
 // If not running, it starts the daemon in-process in a background goroutine.
 // Returns nil if daemon is ready, or an error if it fails to start.
-func EnsureDaemonRunning() error {
-	return EnsureDaemonRunningWith(nil)
+//
+// version is the build of whoever is starting it, which the daemon reports back
+// to every client that connects so the two can tell whether they are the same
+// build. Empty is allowed and means the caller does not know.
+func EnsureDaemonRunning(version string) error {
+	return EnsureDaemonRunningWith(version, nil)
 }
 
 // EnsureDaemonRunningWith is EnsureDaemonRunning for a caller that has the
@@ -36,7 +40,7 @@ func EnsureDaemonRunning() error {
 // cfg is used only when this call is the one that starts the daemon. An
 // already-running daemon keeps the settings it started with, since they are
 // its own and it outlives this process.
-func EnsureDaemonRunningWith(cfg *DaemonConfig) error {
+func EnsureDaemonRunningWith(version string, cfg *DaemonConfig) error {
 	// Check if daemon is already running (either in-process or external)
 	if IsDaemonRunning() {
 		return nil
@@ -47,7 +51,15 @@ func EnsureDaemonRunningWith(cfg *DaemonConfig) error {
 		if cfg == nil {
 			cfg = &DaemonConfig{}
 		}
-		cfg.Version = "in-process"
+		// The build that started it, not a label saying how. A client compares
+		// the daemon's build against its own at the handshake and says so when
+		// they differ, and "in-process" made every such comparison meaningless:
+		// it is not a version, so it never matched anything and told nobody
+		// anything either.
+		cfg.Version = version
+		if cfg.Version == "" {
+			cfg.Version = "in-process"
+		}
 		inProcessDaemon = NewDaemon(cfg)
 
 		// Start() is non-blocking - it starts goroutines and returns

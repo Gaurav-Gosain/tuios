@@ -287,3 +287,41 @@ func TestConform_MarginsSurviveAResize(t *testing.T) {
 		t.Errorf("region %v escapes a %d-row screen", r, emu.Height())
 	}
 }
+
+// TestConform_ResizeToTheSameSizeKeepsTheMargins pins that a resize to the size
+// the terminal already is does nothing at all.
+//
+// A real resize resets DECSTBM, on both backends and in every terminal that
+// implements it, and that is correct. A resize that changes no dimension is not
+// a real resize, and it used to reset the margins anyway - which matters here
+// because tuios announces a pane's size from every client attached to it, so a
+// second client attaching, or any client re-announcing after a layout that
+// moved nothing, arrived as a resize to the size already set. A full-screen
+// program in that pane lost its scroll region to a message about nothing.
+//
+// NEGATIVE CONTROL: fails on both backends without the guard at the top of
+// Resize - the region comes back as the whole screen.
+func TestConform_ResizeToTheSameSizeKeepsTheMargins(t *testing.T) {
+	emu, _ := newConformEmulator(t, conformCase{cols: 20, rows: 10})
+	if _, err := emu.Write([]byte("\x1b[3;7r")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	before := emu.ScrollRegion()
+	if before.Min.Y == 0 && before.Max.Y == emu.Height() {
+		t.Fatalf("the scroll region never took: %v on a %d-row screen", before, emu.Height())
+	}
+
+	emu.Resize(20, 10)
+
+	if after := emu.ScrollRegion(); after != before {
+		t.Errorf("a resize to the size the terminal already was moved the scroll region from %v to %v",
+			before, after)
+	}
+
+	// A real resize still resets them, which is the behaviour every terminal
+	// has and which this must not have quietly changed.
+	emu.Resize(20, 12)
+	if after := emu.ScrollRegion(); after == before {
+		t.Errorf("a resize that did change the height left the scroll region at %v; a real resize resets it", after)
+	}
+}

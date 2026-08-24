@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // Snap snaps the window at index i to the specified position.
@@ -275,11 +276,13 @@ func (m *OS) ClampWindowsToView() {
 // GetTopMargin returns the margin at the top (reserved space for the dockbar
 // when positioned at "top").
 func (m *OS) GetTopMargin() int {
-	if config.DockbarPosition == "top" {
-		return config.DockHeight
-	}
+	return m.clampReserve(m.paneReserve().Top, m.GetRenderHeight())
+}
 
-	return 0
+// GetBottomMargin returns the rows reserved below the panes: the dock when it
+// sits at the bottom, or whatever more a peer client reserves there.
+func (m *OS) GetBottomMargin() int {
+	return m.clampReserve(m.paneReserve().Bottom, m.GetRenderHeight())
 }
 
 // GetDockbarContentYPosition returns the Y position of the dockbar
@@ -310,10 +313,7 @@ func (m *OS) GetTimeYPosition() int {
 // hands it to clipWindowContent as a viewport height, which then slices a line
 // list by a negative bound and panics inside View, outside Update's recover.
 func (m *OS) GetUsableHeight() int {
-	if config.DockbarPosition == "hidden" {
-		return m.GetRenderHeight()
-	}
-	return max(m.GetRenderHeight()-config.DockHeight, 0)
+	return max(m.GetRenderHeight()-m.GetTopMargin()-m.GetBottomMargin(), 0)
 }
 
 // GetRenderWidth returns the width to use for rendering.
@@ -369,7 +369,20 @@ func (m *OS) sidebarPreferredWidth() int {
 // sidebarStoredWidth is the expanded width the rail returns to, never below the
 // narrow variant: an expand that lands back on the glyph strip is not an expand.
 func (m *OS) sidebarStoredWidth() int {
-	return max(config.SidebarWidth, config.SidebarNarrowWidth)
+	return max(m.sidebarWidthPreference(), config.SidebarNarrowWidth)
+}
+
+// sidebarWidthPreference is the expanded width this session asks for: the one
+// dragged or synced, falling back to the configured default when nobody has
+// asked for anything. It is model state rather than a global because the rail
+// is shared with the session's other clients and because one tuios-web process
+// serves several sessions at once, where a global is one drag away from
+// resizing a rail nobody touched.
+func (m *OS) sidebarWidthPreference() int {
+	if m.SidebarWidthPref > 0 {
+		return m.SidebarWidthPref
+	}
+	return config.SidebarWidth
 }
 
 // sidebarWidthFor is GetSidebarWidth against a hypothetical preferred width, so
@@ -411,29 +424,77 @@ func (m *OS) sidebarWidthFor(prefer int) int {
 	return w
 }
 
-// GetLeftMargin returns the reserved columns on the left: the sidebar width when
-// it is enabled and positioned on the left, else 0.
-func (m *OS) GetLeftMargin() int {
-	if config.SidebarPosition == "left" {
-		return m.GetSidebarWidth()
+// OwnLayoutReserve is the chrome this client draws around the panes: its own
+// sidebar rail and its own dock, in its own configuration. It is what this
+// client tells the daemon it needs, never what it lays the panes out around -
+// see GetLeftMargin.
+func (m *OS) OwnLayoutReserve() session.LayoutReserve {
+	var r session.LayoutReserve
+	switch config.SidebarPosition {
+	case "left":
+		r.Left = m.GetSidebarWidth()
+	case "right":
+		r.Right = m.GetSidebarWidth()
 	}
-	return 0
+	switch config.DockbarPosition {
+	case "top":
+		r.Top = config.DockHeight
+	case "hidden":
+	default:
+		r.Bottom = config.DockHeight
+	}
+	return r
 }
 
-// GetRightMargin returns the reserved columns on the right: the sidebar width
-// when it is enabled and positioned on the right, else 0.
+// paneReserve is the chrome the panes are laid out around, which is not the
+// same question as what this client draws. Every client attached is looking at
+// the same PTYs and a PTY has exactly one size, so the box the panes are
+// partitioned into has to be identical on every client. The daemon settles that
+// by taking the largest reserve any client asks for; this returns it, floored by
+// this client's own chrome so that a client on its own, or one whose
+// announcement has not landed yet, still reserves what it is about to draw.
+//
+// The consequence is deliberate: a client with less chrome than the session
+// agreed leaves the difference blank rather than handing it to the panes. A
+// client absorbs its own chrome; it never moves the panes to make room.
+func (m *OS) paneReserve() session.LayoutReserve {
+	return m.OwnLayoutReserve().Max(m.SessionReserve)
+}
+
+// GetLeftMargin returns the columns reserved on the left before any pane is
+// placed: the session's agreed chrome reserve, never less than this client's own
+// sidebar. The rail itself still draws at GetSidebarWidth; any agreed columns
+// beyond it are left blank.
+func (m *OS) GetLeftMargin() int {
+	return m.clampReserve(m.paneReserve().Left, m.GetRenderWidth())
+}
+
+// GetRightMargin returns the columns reserved on the right, on the same terms as
+// GetLeftMargin.
 func (m *OS) GetRightMargin() int {
-	if config.SidebarPosition == "right" {
-		return m.GetSidebarWidth()
+	return m.clampReserve(m.paneReserve().Right, m.GetRenderWidth())
+}
+
+// clampReserve keeps a reserve from eating the screen it is measured against. A
+// reserve is agreed across clients and a client can be narrower than the one
+// that asked for it, so the arithmetic has to survive a reserve wider than this
+// client's viewport rather than hand a negative extent to a renderer.
+func (m *OS) clampReserve(reserve, extent int) int {
+	if reserve <= 0 || extent <= 0 {
+		return 0
 	}
-	return 0
+	return min(reserve, extent)
 }
 
 // GetContentWidth returns the width available to panes: the render width less the
 // left and right reserved margins. This is what tiling partitions and what the
 // pane floor is enforced against.
 func (m *OS) GetContentWidth() int {
-	return m.GetRenderWidth() - m.GetLeftMargin() - m.GetRightMargin()
+	// Floored, the way GetUsableHeight is floored. The reserve is agreed across
+	// clients and this client can be the narrow one, so the subtraction has to
+	// survive a reserve as wide as the viewport rather than hand a negative
+	// extent to a renderer or a tiler.
+	return max(m.GetRenderWidth()-m.GetLeftMargin()-m.GetRightMargin(), 0)
 }
 
 // GetRenderHeight returns the height to use for rendering.

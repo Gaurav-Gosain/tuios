@@ -206,13 +206,19 @@ func runWebServer() error {
 	// terminal, described two ways. KittyAnimation stays false because the
 	// browser overlay has no a=f frame-edit path; KittyFileTransfer stays
 	// false because the browser cannot read server-local paths.
+	//
+	// The cell size here is a process-wide default, and stays a placeholder: it
+	// is installed once at startup, before any browser has connected, and one
+	// process serves several browsers at once at whatever font size each reader
+	// chose. What each connection actually reports to the daemon is measured
+	// from that browser's own canvas - see cellSize and webCaps.
 	app.SetClientCapabilities(&app.HostCapabilities{
 		KittyGraphics: true,
 		SixelGraphics: true,
 		TrueColor:     true,
 		TerminalName:  "tuios-web",
-		CellWidth:     10,
-		CellHeight:    20,
+		CellWidth:     webFallbackCellWidth,
+		CellHeight:    webFallbackCellHeight,
 	})
 
 	// Set terminal environment variables
@@ -254,7 +260,7 @@ func runWebServer() error {
 		if session.GetDebugLevel() == session.DebugOff && userConfig.Daemon.LogLevel != "" {
 			session.SetDebugLevel(session.ParseDebugLevel(userConfig.Daemon.LogLevel))
 		}
-		if err := session.EnsureDaemonRunningWith(daemonConfigFrom(userConfig)); err != nil {
+		if err := session.EnsureDaemonRunningWith(version, daemonConfigFrom(userConfig)); err != nil {
 			log.Printf("Warning: Failed to start daemon, falling back to ephemeral mode: %v", err)
 			webServerConfig.ephemeral = true
 		}
@@ -530,7 +536,8 @@ func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
 	}
 
 	// Try to connect to daemon
-	model, opts, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height, graphicsOut, touch)
+	cellW, cellH := cellSize(pty)
+	model, opts, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height, cellW, cellH, graphicsOut, touch)
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
 		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut, touch)
@@ -547,6 +554,15 @@ func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
 
 	return model, opts
 }
+
+// webFallbackCellWidth and webFallbackCellHeight are what a cell is taken to
+// measure when the browser reports no pixel dimensions at all, which is what an
+// older client does. They are a guess at a typical monospace cell and nothing
+// more; every connection that reports its canvas gets its real measurement.
+const (
+	webFallbackCellWidth  = 10
+	webFallbackCellHeight = 20
+)
 
 // shortID returns the first 8 characters of an id for logging, or the whole id
 // when it is shorter, so a non-UUID id cannot panic the log call.
@@ -593,8 +609,32 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch
 	}
 }
 
-// createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon
-func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOut *os.File, touch bool) (tea.Model, []tea.ProgramOption, error) {
+// cellSize works out what one cell measures in the browser's pixels, from the
+// canvas size the browser reports beside its grid. It is a real measurement:
+// the browser sends widthPx and heightPx with every resize, so the answer
+// follows the reader's font size instead of a number picked at build time.
+//
+// It falls back to the placeholder when the browser reports no pixels at all,
+// which is what an older client does. A cell is never reported as zero: a
+// caller multiplying by it would tell a guest its window is zero pixels wide.
+func cellSize(pty sip.Pty) (cellWidth, cellHeight int) {
+	cellWidth, cellHeight = webFallbackCellWidth, webFallbackCellHeight
+	if pty.Width > 0 && pty.WidthPx > 0 {
+		if w := pty.WidthPx / pty.Width; w > 0 {
+			cellWidth = w
+		}
+	}
+	if pty.Height > 0 && pty.HeightPx > 0 {
+		if h := pty.HeightPx / pty.Height; h > 0 {
+			cellHeight = h
+		}
+	}
+	return cellWidth, cellHeight
+}
+
+// createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon.
+// cellWidth and cellHeight are this browser's own, from cellSize.
+func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth, cellHeight int, graphicsOut *os.File, touch bool) (tea.Model, []tea.ProgramOption, error) {
 	// Connect to daemon
 	client := session.NewTUIClient()
 	v := webServerConfig.version
@@ -605,16 +645,20 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 	// Advertise kitty graphics capability to the daemon. sip v0.1.12+
 	// bundles xterm.js's image addon with kittySupport enabled, so the
 	// browser terminal can render kitty APC sequences forwarded by child
-	// processes. Cell dimensions are placeholders; the daemon uses them
-	// for pixel-perfect sizing hints (kitty icat queries terminal cell
-	// size before transmitting) and tuios-web doesn't have access to the
-	// browser's real font metrics.
+	// processes.
+	//
+	// The cell dimensions are this browser's own, measured from the canvas size
+	// it reports beside its grid (see cellSize). They used to be a hardcoded
+	// 10x20, which the daemon then handed to every guest in the session as the
+	// pixel size of its window: a tool that asks the terminal how big a cell is
+	// before drawing - kitty icat is the usual one - was told a number that had
+	// nothing to do with the reader's font, and drew at the wrong scale.
 	webCaps := &session.ClientCapabilities{
 		KittyGraphics: true,
 		SixelGraphics: true,
 		TerminalName:  "tuios-web",
-		CellWidth:     10,
-		CellHeight:    20,
+		CellWidth:     cellWidth,
+		CellHeight:    cellHeight,
 	}
 	if err := client.ConnectWithCapabilities(v, width, height, webCaps); err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to daemon: %w", err)
@@ -753,11 +797,11 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 	// Handle session resize (min of all clients). The callback runs on the daemon
 	// read-loop goroutine, so the actual geometry mutation (TileAllWindows,
 	// emulator resizes) must happen in Update; route it through the event channel.
-	client.OnSessionResize(func(width, height, clientCount int) {
-		log.Printf("[WEB] Session resize: %dx%d (clients: %d)", width, height, clientCount)
+	client.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
+		log.Printf("[WEB] Session resize: %dx%d chrome %+v (clients: %d)", width, height, reserve, clientCount)
 		if m.ClientEventChan != nil {
 			select {
-			case m.ClientEventChan <- app.ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height}:
+			case m.ClientEventChan <- app.ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height, Reserve: reserve}:
 			default:
 				log.Printf("[WEB] Warning: ClientEventChan full, dropping session resize event")
 			}

@@ -386,6 +386,22 @@ type OS struct {
 	// and a deliberate quit reports an error. Written only on the Bubble Tea
 	// goroutine, like ExitReason.
 	QuitRequested bool
+
+	// SidebarWidthPref is the expanded rail width this session asks for, or 0
+	// to take the configured default. It is synced with the session's other
+	// clients: the rail is chrome, and the panes' box is settled across every
+	// client, so two clients disagreeing about the rail costs one of them a
+	// blank band rather than moving anybody's panes.
+	SidebarWidthPref int
+
+	// SessionReserve is the chrome reserve every client attached to this
+	// session lays its panes out around: the largest any of them asks for, as
+	// settled by the daemon. The panes' box is the render size less this, which
+	// is what makes the box - and so every pane's size - identical on every
+	// client. Zero outside a daemon session, where this client's own chrome is
+	// the only chrome there is.
+	SessionReserve session.LayoutReserve
+
 	// Multi-client effective size (min of all clients in session)
 	EffectiveWidth  int // Effective width for rendering (min of all clients, 0 = use terminal size)
 	EffectiveHeight int // Effective height for rendering (min of all clients, 0 = use terminal size)
@@ -394,6 +410,19 @@ type OS struct {
 	// client, and syncedFPSet says whether there is one. See SyncStateToDaemon.
 	syncedFP    uint64
 	syncedFPSet bool
+
+	// applyingPeerSync is set while ApplyStateSync is folding a state that came
+	// from somewhere else into this client. It is what makes a sync loop
+	// impossible rather than unlikely: no push may leave this client while it is
+	// set, so a layout this client worked out because it disagreed with the
+	// arriving one cannot travel back out and provoke the same disagreement in
+	// reverse. See SyncStateToDaemon and syncAnswerOwed.
+	applyingPeerSync bool
+	// syncAnswerOwed records that something inside the sync did have news for
+	// the daemon - a window the daemon asked this client to place, and it
+	// placed. That is an answer to a question, not an echo of a layout, so it is
+	// sent once, after the sync has been applied and the guard is down.
+	syncAnswerOwed bool
 	// Keyboard enhancement support (Kitty protocol)
 	KeyboardEnhancementsEnabled bool // True when terminal supports keyboard enhancements
 	// KeyboardFlags is the flag set the host answered the enhancement query
