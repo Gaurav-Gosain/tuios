@@ -474,7 +474,10 @@ type Session struct {
 	width   int
 	height  int
 	reserve LayoutReserve
-	sizeMu  sync.RWMutex
+	// layoutGen counts settlements of the two above. See
+	// SessionResizePayload.Generation.
+	layoutGen uint64
+	sizeMu    sync.RWMutex
 
 	// Lifecycle
 	Created time.Time
@@ -1267,6 +1270,25 @@ func (s *Session) SetLayoutReserve(r LayoutReserve) {
 	s.sizeMu.Lock()
 	s.reserve = r
 	s.sizeMu.Unlock()
+}
+
+// SettleLayout records a size and a reserve together and returns the generation
+// they were recorded at, which is what tells a client whether an announcement
+// carrying them is newer than the one it last applied.
+func (s *Session) SettleLayout(width, height int, r LayoutReserve) uint64 {
+	s.sizeMu.Lock()
+	defer s.sizeMu.Unlock()
+	s.width, s.height = width, height
+	s.reserve = r
+	s.layoutGen++
+	return s.layoutGen
+}
+
+// LayoutGeneration is the generation the session's layout currently stands at.
+func (s *Session) LayoutGeneration() uint64 {
+	s.sizeMu.RLock()
+	defer s.sizeMu.RUnlock()
+	return s.layoutGen
 }
 
 // Info returns session information.
