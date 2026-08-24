@@ -340,7 +340,7 @@ func (m *OS) pointerRecentlyMoved() bool {
 // A renderer predicate that disagreed with those would either overflow the
 // pane's rectangle or paint over the guest's own columns.
 //
-// Tiling assigns Tiled from config.SharedBorders, so in practice a borderless
+// Tiling assigns Tiled from the session-settled shared-borders state, so in practice a borderless
 // pane is a tiled pane under shared borders. There the lines between panes are
 // a compositor overlay (renderSeparatorOverlay) sitting in the gaps between
 // rectangles rather than chrome belonging to either neighbour, which is exactly

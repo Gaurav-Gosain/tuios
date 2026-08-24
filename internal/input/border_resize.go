@@ -191,7 +191,7 @@ func applyBorderResize(o *app.OS, mx, my int) {
 
 	if o.AutoTiling && !o.UseScrollingLayout {
 		treeInSync := o.AdjustTilingNeighborsVisual(w, newX, newY, newW, newH)
-		if config.SharedBorders && !treeInSync {
+		if o.SharedBorders && !treeInSync {
 			o.MarkBSPSyncPending()
 		}
 		return

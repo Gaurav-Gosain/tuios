@@ -394,6 +394,30 @@ type OS struct {
 	// blank band rather than moving anybody's panes.
 	SidebarWidthPref int
 
+	// SharedBorders and PaneGap are the layout arithmetic inside the panes' box:
+	// whether tiled panes merge their border boxes into single dividers, and how
+	// much empty ground the tiler keeps between neighbours. They are model state
+	// rather than reads of the config globals because they are inputs to pane
+	// geometry, and every input to pane geometry has to be identical across a
+	// session's attached clients - a PTY has exactly one size. Two clients whose
+	// config files (or live settings) disagreed here computed different
+	// rectangles for the same panes and dragged the shared PTYs back and forth
+	// between the two answers on every push.
+	//
+	// Seeded from this client's config, then settled across the session by state
+	// sync (session.PaneGeometryState). Purely visual appearance - theme,
+	// colours, border style, title position, dimming - deliberately stays
+	// per-client and configurable; these two are synced only because they move
+	// rectangles.
+	SharedBorders bool
+	PaneGap       int
+	// lastConfigSharedBorders and lastConfigPaneGap are the config globals as
+	// this OS last saw them, so adoptConfigPaneGeometry can tell a config-side
+	// change (adopt it) from a session-side one (leave the config alone). See
+	// adoptConfigPaneGeometry.
+	lastConfigSharedBorders bool
+	lastConfigPaneGap       int
+
 	// SessionReserve is the chrome reserve every client attached to this
 	// session lays its panes out around: the largest any of them asks for, as
 	// settled by the daemon. The panes' box is the render size less this, which

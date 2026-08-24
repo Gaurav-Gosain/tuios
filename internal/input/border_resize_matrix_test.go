@@ -34,13 +34,16 @@ func borderMatrixOS(t *testing.T, tiling, shared bool) (*app.OS, *terminal.Windo
 
 	const cols, rows = 120, 40
 	m := &app.OS{
-		NumWorkspaces:        9,
-		CurrentWorkspace:     1,
-		WorkspaceFocus:       make(map[int]int),
-		Width:                cols,
-		Height:               rows,
-		AutoTiling:           true,
-		UseBSPLayout:         true,
+		NumWorkspaces:    9,
+		CurrentWorkspace: 1,
+		WorkspaceFocus:   make(map[int]int),
+		Width:            cols,
+		Height:           rows,
+		AutoTiling:       true,
+		UseBSPLayout:     true,
+		// The layout reads the model's session-settled value, not the global;
+		// seed it from the global set above. NewOS does the same.
+		SharedBorders:        shared,
 		FocusedWindow:        0,
 		PendingResizes:       make(map[string][2]int),
 		WorkspaceHasCustom:   map[int]bool{},
@@ -189,11 +192,15 @@ func TestBorderDragHoldsAcrossSettingChanges(t *testing.T) {
 
 	drag("shared+tiled")
 
+	// Flipping the setting mid-test is what the settings panel does, and the
+	// panel writes the model; the global follows for anything still reading it.
 	config.SharedBorders = false
+	m.SharedBorders = false
 	m.TileAllWindows()
 	drag("own-borders+tiled")
 
 	config.SharedBorders = true
+	m.SharedBorders = true
 	m.TileAllWindows()
 	drag("shared+tiled-again")
 

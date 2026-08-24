@@ -17,13 +17,16 @@ func twoPaneBSP(t *testing.T) (*OS2, *terminal.Window, *terminal.Window) {
 	const cols, rows = 120, 40
 
 	m := &app.OS{
-		NumWorkspaces:        9,
-		CurrentWorkspace:     1,
-		WorkspaceFocus:       make(map[int]int),
-		Width:                cols,
-		Height:               rows,
-		AutoTiling:           true,
-		UseBSPLayout:         true,
+		NumWorkspaces:    9,
+		CurrentWorkspace: 1,
+		WorkspaceFocus:   make(map[int]int),
+		Width:            cols,
+		Height:           rows,
+		AutoTiling:       true,
+		UseBSPLayout:     true,
+		// The layout reads the model's session-settled value, not the global;
+		// seed it from the global the caller just set. NewOS does the same.
+		SharedBorders:        config.SharedBorders,
 		FocusedWindow:        0,
 		PendingResizes:       make(map[string][2]int),
 		WorkspaceHasCustom:   map[int]bool{},

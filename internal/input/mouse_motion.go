@@ -450,7 +450,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// reapplies the layout, and motion events outnumber frames. A resize
 			// the BSP tree drove needs none of this - the ratios are already what
 			// the geometry was built from.
-			if config.SharedBorders && !treeInSync {
+			if o.SharedBorders && !treeInSync {
 				o.MarkBSPSyncPending()
 			}
 		} else if o.UseScrollingLayout {

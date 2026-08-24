@@ -92,6 +92,17 @@ type TUIClient struct {
 	clientLeftHandler    ClientLeftHandler
 	sessionResizeHandler SessionResizeHandler
 
+	// pendingStateSync and pendingSessionResize hold the newest broadcast of
+	// each kind that arrived while nothing was registered to take it, so the
+	// registration can be handed what it missed. The read loop starts before
+	// the handlers exist - cmd/tuios attaches, starts reading, builds the
+	// program and only then registers - and a broadcast landing in that window
+	// used to be dropped on the floor. Both messages carry a whole answer
+	// rather than a delta, so keeping only the newest is exact. Guarded by
+	// multiClientMu.
+	pendingStateSync     *StateSyncPayload
+	pendingSessionResize *SessionResizePayload
+
 	// ownReserve is the chrome this client draws around the panes, and
 	// sessionReserve is what the daemon settled on across every client. Both are
 	// guarded by multiClientMu. See LayoutReserve.
@@ -618,10 +629,18 @@ func (c *TUIClient) OnRemoteCommand(handler RemoteCommandHandler) {
 }
 
 // OnStateSync registers a handler for state sync messages from other clients.
+// A sync that arrived before anything was registered is delivered to the new
+// handler here, on the registering goroutine; without that, a peer's push
+// racing this client's attach was lost until the peer's next change.
 func (c *TUIClient) OnStateSync(handler StateSyncHandler) {
 	c.multiClientMu.Lock()
 	c.stateSyncHandler = handler
+	pending := c.pendingStateSync
+	c.pendingStateSync = nil
 	c.multiClientMu.Unlock()
+	if handler != nil && pending != nil {
+		handler(pending.State, pending.TriggerType, pending.SourceID)
+	}
 }
 
 // OnClientJoined registers a handler for when another client joins the session.
@@ -689,10 +708,19 @@ func (c *TUIClient) noteSessionLayout(generation uint64, r LayoutReserve) bool {
 
 // OnSessionResize registers a handler for session resize messages.
 // This is called when the effective session size changes (min of all clients).
+// A resize that arrived before anything was registered is delivered to the new
+// handler here, the way OnStateSync replays a missed sync: the message carries
+// the box the panes go in, and a client that misses it lays panes out in a box
+// the session has moved on from.
 func (c *TUIClient) OnSessionResize(handler SessionResizeHandler) {
 	c.multiClientMu.Lock()
 	c.sessionResizeHandler = handler
+	pending := c.pendingSessionResize
+	c.pendingSessionResize = nil
 	c.multiClientMu.Unlock()
+	if handler != nil && pending != nil {
+		handler(pending.Width, pending.Height, pending.ClientCount, pending.Reserve)
+	}
 }
 
 // OnSessionEnded registers a handler invoked when the daemon reports that the
@@ -1095,9 +1123,19 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			return
 		}
 
-		c.multiClientMu.RLock()
+		// Handler read and pending write under one lock, so a registration
+		// cannot slip between "no handler" and the retention and leave a sync
+		// parked with a listener present.
+		c.multiClientMu.Lock()
 		handler := c.stateSyncHandler
-		c.multiClientMu.RUnlock()
+		if handler == nil {
+			// Retained rather than dropped: the read loop outruns the
+			// registrations during attach, and a peer's push landing in that
+			// window was lost until the peer's next change. See OnStateSync.
+			retained := payload
+			c.pendingStateSync = &retained
+		}
+		c.multiClientMu.Unlock()
 
 		if handler != nil {
 			handler(payload.State, payload.TriggerType, payload.SourceID)
@@ -1143,10 +1181,6 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			return
 		}
 
-		c.multiClientMu.RLock()
-		handler := c.sessionResizeHandler
-		c.multiClientMu.RUnlock()
-
 		// Two of these can be in flight at once - each client is written to on
 		// a goroutine of its own, so the order is the scheduler's - and taking
 		// the older one last leaves this client laying panes out in a box the
@@ -1156,6 +1190,17 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			debugLog("[MULTICLIENT] dropped a stale session resize at generation %d", payload.Generation)
 			return
 		}
+
+		// Same shape as MsgStateSync above: one lock over the handler read and
+		// the retention, so a broadcast arriving before the handler exists is
+		// handed to the registration instead of dropped.
+		c.multiClientMu.Lock()
+		handler := c.sessionResizeHandler
+		if handler == nil {
+			retained := payload
+			c.pendingSessionResize = &retained
+		}
+		c.multiClientMu.Unlock()
 
 		if handler != nil {
 			handler(payload.Width, payload.Height, payload.ClientCount, payload.Reserve)

@@ -32,6 +32,9 @@ func benchResizeOS(tb testing.TB, n int) *app.OS {
 		UseBSPLayout:     true,
 		FocusedWindow:    0,
 		PendingResizes:   make(map[string][2]int),
+		// The layout reads the model's session-settled value, not the global;
+		// seed it from the global the caller just set. NewOS does the same.
+		SharedBorders: config.SharedBorders,
 	}
 
 	for i := range n {

@@ -19,6 +19,10 @@ import (
 func newSwitchOS(t *testing.T, width, height int, perWorkspace map[int]int) (*OS, map[string]*toldSize) {
 	t.Helper()
 	m := &OS{
+		// The layout reads the model's session-settled geometry, seeded from
+		// the globals the way NewOS seeds it.
+		SharedBorders:        config.SharedBorders,
+		PaneGap:              config.PaneGap,
 		NumWorkspaces:        9,
 		CurrentWorkspace:     1,
 		WorkspaceFocus:       make(map[int]int),

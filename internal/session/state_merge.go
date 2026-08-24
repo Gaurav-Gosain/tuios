@@ -52,6 +52,13 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	if incoming.ResurrectionVersion == 0 {
 		incoming.ResurrectionVersion = canonical.ResurrectionVersion
 	}
+	// The agreed pane geometry is written by every current client on every
+	// push, so nil means a client that predates the field, and letting it wipe
+	// the agreement would put the session back where the field started: every
+	// client on its own arithmetic.
+	if incoming.PaneGeometry == nil {
+		incoming.PaneGeometry = canonical.PaneGeometry
+	}
 
 	cwds := make(map[string]string, len(canonical.Windows))
 	// The foreground command is read daemon-side on the detector's poll and no

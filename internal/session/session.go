@@ -58,6 +58,13 @@ type WindowState struct {
 	PreMinimizeH int    `json:"pre_minimize_h,omitempty"`
 	PTYID        string `json:"pty_id"`                  // Reference to daemon-managed PTY
 	IsAltScreen  bool   `json:"is_alt_screen,omitempty"` // Alternate screen buffer active (for mouse forwarding)
+	// IsFloating marks a window the user lifted out of the tiling. It is synced
+	// because it is an input to every peer's layout arithmetic: a peer that does
+	// not know a pane floats still counts it among the tiled panes, tiles it
+	// back into the box, and pushes the result, which destroys the float on the
+	// client that made it and moves every shared PTY twice. The zero value is a
+	// tiled window, which is what every older client and older state reads as.
+	IsFloating bool `json:"is_floating,omitempty"`
 	// Cwd is the working directory of the window's shell process, captured on the
 	// daemon side when saving resurrection state. On cold-start restore a fresh
 	// shell is respawned here. Empty for live state syncs (clients do not set it).
@@ -234,6 +241,42 @@ type SessionState struct {
 	// the daemon records them verbatim so a later get-option can read them back
 	// and an attached TUI can apply the ones it understands.
 	Options map[string]string `json:"options,omitempty"`
+	// PaneGeometry is the session's agreed intra-box layout arithmetic: the
+	// inputs that decide how the panes' box is partitioned and how much of each
+	// rectangle a guest may draw in. See PaneGeometryState for why it is session
+	// state and not a per-client preference.
+	//
+	// Nil means unstated - an older peer, or state written before this existed -
+	// and a client that receives nil keeps its own configured values, which is
+	// the pre-existing behaviour.
+	PaneGeometry *PaneGeometryState `json:"pane_geometry,omitempty"`
+}
+
+// PaneGeometryState carries the appearance settings that change cell geometry.
+//
+// A pane's PTY has exactly one size, and every client attached to a session is
+// looking at the same PTYs, so every input to pane geometry has to be identical
+// across attached clients. The outer box is already settled (the session size
+// is the minimum over clients, and the chrome reserve is negotiated - see
+// LayoutReserve); these are the inputs to the arithmetic inside that box. Two
+// clients that disagree on them partition the same box into different
+// rectangles, or the same rectangles into different guest grids, and drag the
+// shared PTYs back and forth between the two answers on every state push.
+//
+// The line is deliberate: anything that moves a rectangle is session state,
+// anything purely visual - theme, colours, glyphs, border style, title
+// position, dimming - stays per-client and riceable. Border style and title
+// position are visual because they draw on cells the pane already reserves;
+// they never change how many cells it gets.
+type PaneGeometryState struct {
+	// SharedBorders merges tiled panes' border boxes into single dividers,
+	// which changes both the rectangles (a divider column is kept between
+	// panes) and the guest grid inside each rectangle (a borderless pane hands
+	// its guest the whole rectangle rather than the rectangle less its border).
+	SharedBorders bool `json:"shared_borders,omitempty"`
+	// PaneGap is the cells of empty ground the tiler keeps between
+	// neighbouring panes.
+	PaneGap int `json:"pane_gap,omitempty"`
 }
 
 // PTY represents a daemon-managed pseudo-terminal.

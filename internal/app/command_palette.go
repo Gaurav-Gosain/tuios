@@ -186,11 +186,12 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Name:     "Toggle shared borders",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				config.SharedBorders = !config.SharedBorders
-				m.setAppearance(func(a *config.AppearanceConfig) { a.SharedBorders = boolPtr(config.SharedBorders) })
-				m.applyAppearanceLive(true)
+				// Flip the session's value, not the config global: after a
+				// peer's setting has been adopted the two can differ, and the
+				// toggle has to move the one the layout is using.
+				m.SetSharedBordersSetting(!m.SharedBorders)
 				save := m.persistSettings()
-				if config.SharedBorders {
+				if m.SharedBorders {
 					m.ShowNotification("Shared borders on", "success", config.NotificationDuration)
 				} else {
 					m.ShowNotification("Shared borders off", "info", config.NotificationDuration)
@@ -526,6 +527,11 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 				// Runs on the Bubble Tea goroutine, so applying the appearance
 				// globals here is single-threaded and takes effect immediately.
 				config.ApplyAppearanceConfig(newCfg)
+				// Land the globals the same way the file watcher does: a reload
+				// that moved the pane gap or the sidebar has to retile, not just
+				// repaint.
+				m.applyAppearanceLive(true)
+				m.AnnounceLayoutReserve()
 				m.ShowNotification("Config reloaded", "success", 0)
 				return m, nil
 			},

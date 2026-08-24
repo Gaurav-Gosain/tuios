@@ -49,6 +49,10 @@ func extentOSStyled(t *testing.T, n int, dock, sidebar, borderStyle string) *OS 
 	})
 
 	m := &OS{
+		// The layout reads the model's session-settled geometry, seeded from
+		// the globals the way NewOS seeds it.
+		SharedBorders:    config.SharedBorders,
+		PaneGap:          config.PaneGap,
 		Windows:          make([]*terminal.Window, 0, n),
 		FocusedWindow:    0,
 		WorkspaceFocus:   map[int]int{},

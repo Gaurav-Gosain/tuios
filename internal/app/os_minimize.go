@@ -158,18 +158,13 @@ func (m *OS) toggleZoom() {
 		fw.PreZoomHeight = fw.Height
 		fw.Zoomed = true
 
-		// Calculate zoom dimensions, respecting the dockbar's reserved space.
-		topMargin := 0
-		if config.DockbarPosition == "top" {
-			topMargin = config.DockHeight
-		}
-		bottomMargin := 0
-		if config.DockbarPosition == "bottom" {
-			bottomMargin = config.DockHeight
-		}
-		// Zoom fills the content region beside a reserved sidebar band: the
-		// sidebar layer composes above the windows, so a zoom into the full
-		// screen width would simply lose its left or right columns under it.
+		// Zoom fills the content region: the box the session agreed the panes
+		// go in, beside a reserved sidebar band and clear of the dock rows. The
+		// margins come from the negotiated reserve rather than this client's own
+		// dock config, because a zoomed rectangle is synced to the session's
+		// other clients as it stands, and a rectangle poking out of the agreed
+		// box reads as a stale layout to every peer, which retiles it away.
+		topMargin := m.GetTopMargin()
 		leftMargin := m.GetLeftMargin()
 		contentWidth := m.GetContentWidth()
 		zoomWidth := contentWidth
@@ -180,7 +175,7 @@ func (m *OS) toggleZoom() {
 		fw.X = leftMargin + (contentWidth-zoomWidth)/2
 		fw.Y = topMargin
 		fw.Width = zoomWidth
-		fw.Height = m.GetRenderHeight() - topMargin - bottomMargin
+		fw.Height = m.GetUsableHeight()
 		fw.InvalidateCache()
 		// Route the resize through the shared path so a daemon-hosted pane is told
 		// its new size too; resizing the local emulator alone leaves the app
