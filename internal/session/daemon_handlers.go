@@ -113,27 +113,31 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	log.Printf("Client %s attached to session %s (TUI client, %d clients total, size=%dx%d)",
 		cs.clientID, session.Name, clientCount, payload.Width, payload.Height)
 
-	// Calculate effective size including the new client's dimensions.
-	effectiveWidth, effectiveHeight := d.calculateEffectiveSize(session.ID)
-	if effectiveWidth == 0 || effectiveHeight == 0 {
-		// No known sizes yet  - fall back to this client's payload.
-		effectiveWidth = payload.Width
-		effectiveHeight = payload.Height
-	}
-
-	// Notify other clients that a new client joined (this also broadcasts size
-	// change). It runs before the session's size is recorded, because the
-	// broadcast is what compares the new effective size against the recorded one
-	// to decide there is anything to announce. Recording it first made the
-	// change invisible: a client already attached was never told the session had
-	// shrunk around it, and went on drawing its panes at columns the joining
-	// client did not have.
+	// Tell the clients already here that somebody joined.
 	if clientCount > 1 {
 		d.notifyClientJoined(session.ID, cs)
 	}
 
-	// Update session size if needed
-	session.Resize(effectiveWidth, effectiveHeight)
+	// What the session measures, now that this client is one of the things
+	// measuring it: the effective size and the chrome reserve, settled and
+	// recorded in one place under one lock, and announced to everyone already
+	// attached. The joining client is left out of that announcement and told by
+	// the reply below instead - it has no read loop yet and would read an
+	// unsolicited message as its own answer.
+	//
+	// Both of these used to be computed here by hand and recorded either side
+	// of the join notification, on the reasoning that the broadcast has to
+	// compare against the old recorded value to know there is anything to
+	// announce. That is true, and it is why the comparison and the record now
+	// live together in one function rather than being spread across a caller
+	// another goroutine can interleave with.
+	effectiveWidth, effectiveHeight, effectiveReserve := d.recalculateAndBroadcastSize(session.ID, cs.clientID)
+	if effectiveWidth == 0 || effectiveHeight == 0 {
+		// No known sizes yet - fall back to this client's payload.
+		effectiveWidth = payload.Width
+		effectiveHeight = payload.Height
+		session.Resize(effectiveWidth, effectiveHeight)
+	}
 
 	// A client is now looking at the session, so the restored mark has served its
 	// purpose. Cleared before the snapshot below so the attaching client is never
@@ -157,13 +161,6 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	state.Width = effectiveWidth
 	state.Height = effectiveHeight
 
-	// The reserve is settled the same way and for the same reason: it is the
-	// rest of the answer to "what box do the panes go in". Recorded on the
-	// session as well, so the next client to attach is handed the same one
-	// without having to wait for a broadcast.
-	effectiveReserve := d.calculateSessionReserve(session.ID)
-	session.SetLayoutReserve(effectiveReserve)
-
 	debugLog("[DEBUG] Session state: %d windows, %d PTYs", len(state.Windows), session.PTYCount())
 	for i, w := range state.Windows {
 		debugLog("[DEBUG]   Window %d: ID=%s, PTYID=%s", i, shortID(w.ID), shortID(w.PTYID))
@@ -175,7 +172,9 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		d.syncPTYPixelDimensions(session, cs.cellWidth, cs.cellHeight)
 	}
 
-	return d.sendMessage(cs, MsgAttached, &AttachedPayload{
+	// The reply, and with it this client's admission to the session's
+	// broadcasts. See sendAttachReply for why those are one step.
+	if err := d.sendAttachReply(cs, &AttachedPayload{
 		SessionName: session.Name,
 		SessionID:   session.ID,
 		Width:       effectiveWidth,
@@ -183,7 +182,50 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		WindowCount: len(state.Windows),
 		State:       state,
 		Reserve:     effectiveReserve,
-	})
+		Generation:  session.LayoutGeneration(),
+	}); err != nil {
+		return err
+	}
+
+	// The hardest thing that can have happened while the reply was being put
+	// together is the session going away underneath it. A client registers on
+	// the session at the top of this function and joins the broadcast set with
+	// the reply at the bottom, so a delete landing between those two reaches
+	// neither: the broadcast skips a client that is still attaching, and the
+	// client is left holding a session that no longer exists with nothing ever
+	// coming to tell it. Checked here, after the reply, where the answer cannot
+	// change again without the broadcast catching it.
+	if d.manager.GetSessionByID(session.ID) == nil {
+		LogBasic("Session %s was terminated while %s was attaching; telling it directly",
+			session.Name, cs.clientID)
+		_ = d.sendMessage(cs, MsgSessionEnded, &SessionEndedPayload{
+			SessionName: session.Name,
+			Reason:      "the session was terminated",
+		})
+		return nil
+	}
+
+	// Anything else that moved while the reply was being put together did not
+	// reach this client, because it was not in the broadcast set for that part
+	// of it.
+	// Compare what the reply promised against what the session holds now, and
+	// repair it directly. This runs after the reply, so it cannot race it -
+	// which is the whole reason the repair is here rather than left to a
+	// broadcast.
+	if w, h := session.Size(); w > 0 && h > 0 {
+		if r := session.LayoutReserve(); w != effectiveWidth || h != effectiveHeight || r != effectiveReserve {
+			LogBasic("Session %s moved to %dx%d chrome %+v while %s was attaching; telling it directly",
+				session.Name, w, h, r, cs.clientID)
+			_ = d.sendMessage(cs, MsgSessionResize, &SessionResizePayload{
+				Width:       w,
+				Height:      h,
+				ClientCount: d.getSessionClientCount(session.ID),
+				Reserve:     r,
+				Generation:  session.LayoutGeneration(),
+			})
+		}
+	}
+	return nil
 }
 
 func (d *Daemon) handleDetach(cs *connState) error {
@@ -206,6 +248,7 @@ func (d *Daemon) handleDetach(cs *connState) error {
 	cs.width = 0
 	cs.height = 0
 	cs.reserve = LayoutReserve{}
+	cs.attached = false
 	cs.mu.Unlock()
 
 	// Unsubscribe from all PTYs and forget where each stream got to. A resume

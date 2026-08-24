@@ -28,6 +28,12 @@ type Daemon struct {
 	clients   map[string]*connState
 	clientsMu sync.RWMutex
 
+	// layoutMu serialises the recalculation of what a session measures - its
+	// effective size and its chrome reserve - so that a read over every client
+	// and the write that follows it cannot interleave with another one. See
+	// recalculateAndBroadcastSize.
+	layoutMu sync.Mutex
+
 	// Pending requests: maps requestID to the client that made the request
 	// Used to route command results back to the original requester
 	pendingRequests   map[string]*pendingRequest
@@ -151,6 +157,22 @@ type connState struct {
 	// isTUIClient indicates this is a full TUI client (vs a control client)
 	// TUI clients can receive and execute remote commands
 	isTUIClient bool
+
+	// attached says the attach reply has been written to this connection, and
+	// it is what broadcastToSession requires before it will send anything.
+	//
+	// sessionID is set at the top of handleAttach, because everything that
+	// measures the session - the client count, the effective size, the chrome
+	// reserve - has to include the joining client from that moment. But a
+	// client is not ready to be spoken to until it has been told it is
+	// attached: it is still inside its attach call reading the one reply it
+	// asked for, with no read loop yet, so an unsolicited message arriving
+	// first is read as that reply and fails the attach.
+	//
+	// The window between the two is short and was harmless for as long as
+	// nothing broadcast into it. It is not the sort of thing to leave resting
+	// on that.
+	attached bool
 
 	// Client terminal dimensions (for multi-client size calculation)
 	width  int

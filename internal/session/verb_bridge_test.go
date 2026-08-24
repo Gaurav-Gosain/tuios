@@ -20,6 +20,11 @@ func newFakeTUI(t *testing.T, d *Daemon, sessionID string) (*connState, net.Conn
 		ptySubscriptions: make(map[string]struct{}),
 		sessionID:        sessionID,
 		isTUIClient:      true,
+		// A real client is marked attached once its attach reply is written,
+		// and nothing is sent to it before that. A hand-built one has to say so
+		// too, or the daemon correctly treats it as still attaching and never
+		// speaks to it. See connState.attached.
+		attached: true,
 	}
 	d.clientsMu.Lock()
 	d.clients[tui.clientID] = tui

@@ -97,6 +97,9 @@ type TUIClient struct {
 	// guarded by multiClientMu. See LayoutReserve.
 	ownReserve     LayoutReserve
 	sessionReserve LayoutReserve
+	// sessionLayoutGen is the newest layout generation this client has taken.
+	// See SessionResizePayload.Generation.
+	sessionLayoutGen uint64
 
 	// clientBuild and daemonBuild are the two builds that met at the handshake.
 	// See BuildMismatch.
@@ -323,7 +326,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
 		c.NoteSession(payload.SessionName)
-		c.noteSessionReserve(payload.Reserve)
+		c.noteSessionLayout(payload.Generation, payload.Reserve)
 		return payload.State, nil
 
 	case MsgError:
@@ -665,10 +668,23 @@ func (c *TUIClient) SessionLayoutReserve() LayoutReserve {
 	return c.sessionReserve
 }
 
-func (c *TUIClient) noteSessionReserve(r LayoutReserve) {
+// noteSessionLayout takes an announcement of what the session settled on and
+// reports whether it was new. An announcement at or behind the generation this
+// client has already taken is stale and changes nothing.
+//
+// Generation zero is a daemon that predates the field. It is always taken,
+// which is the behaviour there was before generations existed.
+func (c *TUIClient) noteSessionLayout(generation uint64, r LayoutReserve) bool {
 	c.multiClientMu.Lock()
+	defer c.multiClientMu.Unlock()
+	if generation != 0 {
+		if generation <= c.sessionLayoutGen {
+			return false
+		}
+		c.sessionLayoutGen = generation
+	}
 	c.sessionReserve = r
-	c.multiClientMu.Unlock()
+	return true
 }
 
 // OnSessionResize registers a handler for session resize messages.
@@ -1131,7 +1147,15 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		handler := c.sessionResizeHandler
 		c.multiClientMu.RUnlock()
 
-		c.noteSessionReserve(payload.Reserve)
+		// Two of these can be in flight at once - each client is written to on
+		// a goroutine of its own, so the order is the scheduler's - and taking
+		// the older one last leaves this client laying panes out in a box the
+		// session has moved on from, for good. Anything already passed is
+		// dropped here rather than handed on.
+		if !c.noteSessionLayout(payload.Generation, payload.Reserve) {
+			debugLog("[MULTICLIENT] dropped a stale session resize at generation %d", payload.Generation)
+			return
+		}
 
 		if handler != nil {
 			handler(payload.Width, payload.Height, payload.ClientCount, payload.Reserve)

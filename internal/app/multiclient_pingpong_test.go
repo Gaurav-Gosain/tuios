@@ -100,6 +100,42 @@ func (e *exchange) settle(limit int, quiet time.Duration) int {
 	return e.n
 }
 
+// settleBox waits until the session has finished agreeing on the box and both
+// clients have taken it, then forgets everything that happened on the way.
+//
+// Waiting for the exchange to go quiet is not enough, and the difference showed
+// up as one failure in a hundred: the announcements above cross on the wire, so
+// the daemon can settle the reserve twice, and the second broadcast can still be
+// in flight when a fixed quiet period expires. It is then delivered by the next
+// settle - inside the measurement - where applying it re-lays the panes out and
+// resizes their shells, which is exactly what the test is counting.
+//
+// So the condition is the state rather than the silence: both clients hold the
+// same session reserve, both have applied it, and the queue is empty. The
+// clients' own copies are read rather than the daemon's, because they are what
+// the OS lays out against and they are updated by the read loop the instant a
+// broadcast lands - so a broadcast received but not yet applied cannot look
+// settled.
+func (e *exchange) settleBox(r *rig, p *peer) {
+	e.t.Helper()
+	deadline := time.Now().Add(rigWait)
+	for {
+		e.settle(200, 50*time.Millisecond)
+		local, remote := r.client.SessionLayoutReserve(), p.c.SessionLayoutReserve()
+		_, queued := e.take()
+		if queued == false && local == remote &&
+			r.m.SessionReserve == local && p.m.SessionReserve == remote {
+			e.n = 0
+			return
+		}
+		if time.Now().After(deadline) {
+			e.t.Fatalf("the session never settled on one box:\n local client %+v os %+v\n peer  client %+v os %+v",
+				local, r.m.SessionReserve, remote, p.m.SessionReserve)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // joinPeerOS attaches a second OS client to the rig's session.
 func joinPeerOS(t *testing.T, r *rig, cols, rows int) *peer {
 	t.Helper()
@@ -201,8 +237,7 @@ func twoClientsDisagreeingOnChrome(t *testing.T) (*rig, *peer, *exchange) {
 	// one box before anything else happens.
 	r.m.AnnounceLayoutReserve()
 	p.m.AnnounceLayoutReserve()
-	ex.settle(40, 400*time.Millisecond)
-	ex.n = 0
+	ex.settleBox(r, p)
 
 	p.m.TileAllWindows()
 	p.m.SyncDaemonPTYDimensions()

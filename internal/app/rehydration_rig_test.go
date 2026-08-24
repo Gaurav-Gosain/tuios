@@ -218,9 +218,11 @@ func attachClientOS(t *testing.T, name string, cols, rows int, keepExits bool) (
 		m.TileAllWindows()
 	}
 	m.SyncDaemonPTYDimensions()
-	// A real client says what it keeps for its own chrome on its first window
-	// size message, which is what settles the session's pane box.
-	m.AnnounceLayoutReserve()
+	// Announcing this client's chrome is deliberately left to the caller. A real
+	// client registers its handlers first and announces on the first window-size
+	// message, and the order matters: the daemon answers an announcement with a
+	// broadcast to everyone, so announcing before the handler exists throws away
+	// the answer and leaves this OS holding no session reserve at all.
 	// RestoreFromState leaves VT callbacks suppressed for Update to re-enable,
 	// and nothing here runs Update. Without this the alt-screen flag never
 	// tracks live output and the alt-screen rows of the matrix would pass by

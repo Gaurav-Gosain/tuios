@@ -215,14 +215,17 @@ func (d *Daemon) findTargetSession(sessionName string) *Session {
 	return mostRecent
 }
 
-// findTUIClient finds the TUI client attached to a session.
+// findTUIClient finds the TUI client attached to a session, and never one that
+// is still attaching: a routed command is an unsolicited message, and a client
+// inside its attach call has no read loop to tell one from its own reply. See
+// connState.attached.
 func (d *Daemon) findTUIClient(sessionID string) *connState {
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
 
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		match := cs.sessionID == sessionID && cs.isTUIClient
+		match := cs.sessionID == sessionID && cs.isTUIClient && cs.attached
 		cs.mu.Unlock()
 		if match {
 			return cs

@@ -102,7 +102,11 @@ func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
 		// PTY. Read the guarded fields under cs.mu (clientsMu is already held,
 		// preserving the clientsMu-then-cs.mu order).
 		cs.mu.Lock()
-		match := cs.sessionID == sessionID
+		// attached for the same reason as broadcastToSession. A client mid
+		// attach holds no subscriptions either, so this is belt as well as
+		// braces - but the rule is "nothing unsolicited before the reply", and
+		// a rule each call site re-derives is a rule waiting to be missed.
+		match := cs.sessionID == sessionID && cs.attached
 		if match {
 			_, match = cs.ptySubscriptions[ptyID]
 		}
@@ -154,6 +158,43 @@ func (d *Daemon) sendError(cs *connState, code int, message string) error {
 	})
 }
 
+// sendAttachReply writes the attach reply and opens this client to the
+// session's broadcasts, in that order and with no gap between them.
+//
+// The flag is set inside the same send lock the reply is written under, which
+// is what makes the pair indivisible. A broadcast that reads the flag as set
+// queues behind the reply on that lock instead of overtaking it, and a
+// broadcast that reads it as unset ran before the reply was written, when the
+// client had nothing to reconcile against anyway.
+//
+// Setting it after the write instead leaves a window of exactly the wrong kind:
+// the client believes it is attached the moment the reply lands, and anything
+// the session says before the flag catches up - a session being killed, most of
+// all - is dropped on the floor. The window is a few instructions and has not
+// been caught in the act; it is closed here because it costs one lock to close
+// and nothing about it is bounded by how narrow it happens to be today.
+func (d *Daemon) sendAttachReply(cs *connState, payload *AttachedPayload) error {
+	msg, err := NewMessageWithCodec(MsgAttached, payload, cs.codec)
+	if err != nil {
+		return err
+	}
+
+	cs.sendMu.Lock()
+	cs.mu.Lock()
+	cs.attached = true
+	cs.mu.Unlock()
+	_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	err = WriteMessageWithCodec(cs.conn, msg, cs.codec)
+	cs.sendMu.Unlock()
+
+	if err != nil {
+		// Same treatment as any other failed write: framing is unrecoverable,
+		// so the read loop is left to run its full cleanup.
+		cs.drop()
+	}
+	return err
+}
+
 // broadcastToSession sends a message to all TUI clients attached to a session.
 // If excludeClientID is non-empty, that client is excluded from the broadcast.
 func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, payload any, excludeClientID string) {
@@ -162,7 +203,10 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		match := cs.sessionID == sessionID && cs.isTUIClient
+		// attached, not just sessionID: a client mid-attach is counted by
+		// everything that measures the session and spoken to by nothing. See
+		// connState.attached.
+		match := cs.sessionID == sessionID && cs.isTUIClient && cs.attached
 		cs.mu.Unlock()
 		if !match {
 			continue

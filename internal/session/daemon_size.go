@@ -98,7 +98,7 @@ func (d *Daemon) notifyClientJoined(sessionID string, joiningClient *connState) 
 	// left out: it is still inside its attach call, reading the one reply it
 	// asked for, and an unsolicited message arriving first fails the attach. It
 	// gets the size in that reply instead.
-	d.recalculateAndBroadcastSize(sessionID, joiningClient.clientID)
+	_, _, _ = d.recalculateAndBroadcastSize(sessionID, joiningClient.clientID)
 }
 
 // notifyClientLeft broadcasts a client leave event to all other clients in the session.
@@ -114,22 +114,42 @@ func (d *Daemon) notifyClientLeft(sessionID string, leavingClientID string) {
 
 	// Recalculate effective size and broadcast if changed
 	if clientCount > 0 {
-		d.recalculateAndBroadcastSize(sessionID, leavingClientID)
+		_, _, _ = d.recalculateAndBroadcastSize(sessionID, leavingClientID)
 	}
 }
 
-// recalculateAndBroadcastSize recalculates the effective session size and
-// broadcasts if changed. excludeClientID is left out of the broadcast, for the
-// client that is mid-attach and cannot take an unsolicited message yet.
-func (d *Daemon) recalculateAndBroadcastSize(sessionID, excludeClientID string) {
+// recalculateAndBroadcastSize recalculates what the session measures - its
+// effective size and the chrome reserve its clients lay panes out around -
+// records it, and tells everyone if either moved. It returns what it settled
+// on, so a caller that also has to put those numbers in a reply does not
+// compute them a second time.
+//
+// The whole of it runs under layoutMu, and that is the point rather than an
+// implementation detail. Two of these can run at once - a client announcing its
+// chrome and another client attaching are different connections on different
+// goroutines - and each is a read over every client followed by a write. Run
+// interleaved they record an answer computed from a client set that no longer
+// exists: measured, the session's reserve flapped between the dock's two rows
+// and nothing at all, because the attaching client's recalculation read the
+// other client's reserve just before that client's own recalculation wrote it.
+//
+// excludeClientID is left out of the broadcast. It is the client whose own
+// action caused the change and which is being answered directly instead.
+func (d *Daemon) recalculateAndBroadcastSize(sessionID, excludeClientID string) (width, height int, reserve LayoutReserve) {
+	d.layoutMu.Lock()
+	defer d.layoutMu.Unlock()
+
 	session := d.manager.GetSessionByID(sessionID)
 	if session == nil {
-		return
+		return 0, 0, LayoutReserve{}
 	}
 
 	newWidth, newHeight := d.calculateEffectiveSize(sessionID)
 	if newWidth == 0 || newHeight == 0 {
-		return
+		// Nothing known to measure. Report what the session already holds, so a
+		// caller stamping a reply is never handed a zero.
+		w, h := session.Size()
+		return w, h, session.LayoutReserve()
 	}
 	// The reserve settles with the size, and a change to either has to be
 	// announced: the panes' box is the size less the reserve, so a client told
@@ -139,20 +159,24 @@ func (d *Daemon) recalculateAndBroadcastSize(sessionID, excludeClientID string) 
 	oldWidth, oldHeight := session.Size()
 	oldReserve := session.LayoutReserve()
 	if newWidth == oldWidth && newHeight == oldHeight && newReserve == oldReserve {
-		return
+		return newWidth, newHeight, newReserve
 	}
-	session.Resize(newWidth, newHeight)
-	session.SetLayoutReserve(newReserve)
+	// Recorded and stamped as one step, under the same lock the whole of this
+	// function holds, so the generation on the wire and the state it describes
+	// cannot disagree.
+	gen := session.SettleLayout(newWidth, newHeight, newReserve)
 
 	payload := &SessionResizePayload{
 		Width:       newWidth,
 		Height:      newHeight,
 		ClientCount: d.getSessionClientCount(sessionID),
 		Reserve:     newReserve,
+		Generation:  gen,
 	}
 	d.broadcastToSession(sessionID, MsgSessionResize, payload, excludeClientID)
 	LogBasic("Session %s resized to %dx%d, chrome %+v (min of %d clients)",
 		session.Name, newWidth, newHeight, newReserve, payload.ClientCount)
+	return newWidth, newHeight, newReserve
 }
 
 // broadcastStateSync broadcasts a state update to all clients in a session.

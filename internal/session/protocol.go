@@ -184,6 +184,10 @@ type AttachedPayload struct {
 	// Reserve is the session's agreed chrome reserve, the largest any attached
 	// client asks for. The panes go in what is left of the size above.
 	Reserve LayoutReserve `json:"reserve,omitempty"`
+	// Generation is where this session's layout had got to when the reply was
+	// written, so a broadcast still in flight from before it is recognised as
+	// stale. See SessionResizePayload.Generation.
+	Generation uint64 `json:"generation,omitempty"`
 }
 
 // NewPayload requests creation of a new session.
@@ -494,6 +498,19 @@ type SessionResizePayload struct {
 	// client asks for. It travels with the size because it is the other half of
 	// the same answer: the panes' box is the size less this.
 	Reserve LayoutReserve `json:"reserve,omitempty"`
+	// Generation counts the times this session's layout has been settled, and
+	// is what lets a client tell a stale announcement from a fresh one.
+	//
+	// It has to. Each of these is written to each client on a goroutine of its
+	// own, so two settlements close together race for the connection and the
+	// order they arrive in is the scheduler's choice. Measured: two clients
+	// announcing their chrome at the same moment ended up holding different
+	// reserves for good, because one of them took the older of two messages
+	// last. A client ignores any generation it has already passed.
+	//
+	// Zero means a daemon that predates the field, and is never treated as
+	// stale.
+	Generation uint64 `json:"generation,omitempty"`
 }
 
 // Error codes
