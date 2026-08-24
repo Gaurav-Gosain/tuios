@@ -140,6 +140,13 @@ func NewOS(opts OSOptions) *OS {
 		// Daemon connection
 		DaemonClient: opts.DaemonClient,
 		SessionName:  opts.SessionName,
+
+		// Pane geometry inputs start at this client's config and are settled
+		// across the session by state sync; see the field comment in os.go.
+		SharedBorders:           config.SharedBorders,
+		PaneGap:                 config.PaneGap,
+		lastConfigSharedBorders: config.SharedBorders,
+		lastConfigPaneGap:       config.PaneGap,
 	}
 
 	// Sidebar order and expand/collapse state survive restarts; a load failure

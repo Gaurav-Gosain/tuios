@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -9,14 +8,24 @@ import (
 // own border boxes in favour of one divider drawn between them.
 //
 // It is the single answer to a question three parts of the app used to work out
-// for themselves from config.SharedBorders alone: which border a pane draws,
-// whether a separator is painted between two of them, and how many columns the
-// layout keeps free for that separator. The setting is only half of it. Shared
-// borders merge nothing unless tiling is arranging the panes, and the scrolling
-// layout never merges at all, so a pane under any of those keeps its own box.
+// for themselves from the shared-borders setting alone: which border a pane
+// draws, whether a separator is painted between two of them, and how many
+// columns the layout keeps free for that separator. The setting is only half of
+// it. Shared borders merge nothing unless tiling is arranging the panes, and
+// the scrolling layout never merges at all, so a pane under any of those keeps
+// its own box.
+//
+// It reads the session-settled m.SharedBorders, never config.SharedBorders:
+// this is geometry, and geometry inputs have to be identical on every client of
+// a session (see the field comment in os.go).
 func (m *OS) panesBorderless() bool {
-	return config.SharedBorders && m.AutoTiling && !m.UseScrollingLayout
+	return m.SharedBorders && m.AutoTiling && !m.UseScrollingLayout
 }
+
+// PanesBorderless is panesBorderless for the input package, whose shared-border
+// drag gestures have to agree with the layout about whether there is a shared
+// border to drag.
+func (m *OS) PanesBorderless() bool { return m.panesBorderless() }
 
 // separatorGap is the columns the layout keeps between two neighbouring panes.
 //
@@ -32,9 +41,9 @@ func (m *OS) panesBorderless() bool {
 // inner gap: empty ground between the panes, not a wider divider.
 func (m *OS) separatorGap() int {
 	if m.panesBorderless() {
-		return max(config.PaneGap, 1)
+		return max(m.PaneGap, 1)
 	}
-	return config.PaneGap
+	return m.PaneGap
 }
 
 // reclaimSeparatorGaps re-lays-out every workspace's panes at the gap the

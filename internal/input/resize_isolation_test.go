@@ -42,12 +42,15 @@ func isoOS(tb testing.TB, n int) *app.OS {
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
-		Width:            160,
-		Height:           48,
-		AutoTiling:       true,
-		UseBSPLayout:     true,
-		FocusedWindow:    0,
-		PendingResizes:   make(map[string][2]int),
+		// The layout reads the model's session-settled value, not the global;
+		// seed it from the global the caller just set. NewOS does the same.
+		SharedBorders:  config.SharedBorders,
+		Width:          160,
+		Height:         48,
+		AutoTiling:     true,
+		UseBSPLayout:   true,
+		FocusedWindow:  0,
+		PendingResizes: make(map[string][2]int),
 
 		WorkspaceHasCustom:   make(map[int]bool),
 		WorkspaceLayouts:     make(map[int][]app.WindowLayout),

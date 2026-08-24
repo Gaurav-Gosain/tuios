@@ -42,6 +42,10 @@ func borderModeOS(t *testing.T, n int, shared, animations bool) *OS {
 	})
 
 	m := &OS{
+		// The layout reads the model's session-settled geometry, seeded from
+		// the globals the way NewOS seeds it.
+		SharedBorders:    config.SharedBorders,
+		PaneGap:          config.PaneGap,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),

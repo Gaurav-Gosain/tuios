@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
+	"github.com/adrg/xdg"
 	"github.com/charmbracelet/colorprofile"
 )
 
@@ -21,6 +22,16 @@ import (
 func hoverOS(t *testing.T) *app.OS {
 	t.Helper()
 	app.SetInputHandler(HandleInput)
+
+	// NewOS below reads and the drag tests write the sidebar state file, so the
+	// state home has to be scratch: a dragged rail width persisted by one run
+	// moved the rail's edge for the next (`go test -count=2` failed on exactly
+	// that), and it also wrote into the developer's real state dir. Cleanup is
+	// registered before t.Setenv so the reload back runs after the env is
+	// restored (cleanups are LIFO).
+	t.Cleanup(xdg.Reload)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	xdg.Reload()
 
 	prevProfile := lipgloss.Writer.Profile
 	lipgloss.Writer.Profile = colorprofile.TrueColor

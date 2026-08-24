@@ -1,0 +1,105 @@
+package app
+
+import (
+	"strconv"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
+)
+
+// The pane geometry inputs - shared borders and the pane gap - are session
+// state, because they are arithmetic and not appearance: they decide where the
+// rectangles inside the panes' box fall and how much of each rectangle a guest
+// may draw in. A PTY has exactly one size, so every client of a session has to
+// run this arithmetic on identical inputs; two clients whose config files
+// disagreed here computed different rectangles for the same panes and dragged
+// the shared PTYs between the two answers on every push.
+//
+// The line is drawn on purpose and the rest of appearance sits on the other
+// side of it: theme, colours, glyphs, border style, title position and dimming
+// change what cells look like, never how many cells a pane gets, so they stay
+// per-client and riceable. Only what moves a rectangle is settled session-wide.
+
+// SetSharedBordersSetting is the one way a user-facing control changes shared
+// borders. It writes the model (the value layout reads), mirrors the choice
+// into this client's config as its preference for future sessions, and lands
+// the change: retile, repaint, and a state push so the session's other clients
+// adopt it.
+func (m *OS) SetSharedBordersSetting(v bool) {
+	m.SharedBorders = v
+	config.SharedBorders = v
+	m.lastConfigSharedBorders = v
+	m.setAppearance(func(a *config.AppearanceConfig) { a.SharedBorders = boolPtr(v) })
+	m.applyAppearanceLive(true)
+}
+
+// SetPaneGapSetting is SetSharedBordersSetting for the pane gap.
+func (m *OS) SetPaneGapSetting(v int) {
+	v = clampInt(v, 0, config.PaneGapMax)
+	m.PaneGap = v
+	config.PaneGap = v
+	m.lastConfigPaneGap = v
+	m.setAppearance(func(a *config.AppearanceConfig) { a.Gap = v })
+	m.applyAppearanceLive(true)
+}
+
+// adoptPaneGeometry takes the pane geometry as the session has it. Nil is a
+// peer that has not said - an older client, or state written before the field
+// existed - and leaves this client on its own configured values, which is the
+// pre-existing behaviour. It reports whether anything moved, because a moved
+// input obsoletes every tiled rectangle and the caller owes the layout a
+// retile that the geometry checks cannot always see: flipping shared borders
+// with the gap pinned changes every pane's guest grid without moving a single
+// rectangle.
+func (m *OS) adoptPaneGeometry(state *session.SessionState) bool {
+	if state == nil || state.PaneGeometry == nil {
+		return false
+	}
+	pg := state.PaneGeometry
+	changed := m.SharedBorders != pg.SharedBorders || m.PaneGap != pg.PaneGap
+	m.SharedBorders = pg.SharedBorders
+	m.PaneGap = pg.PaneGap
+	return changed
+}
+
+// sharedBordersItem is the settings row for shared borders. It is written by
+// hand rather than derived from the registry because the value in force is the
+// session's, not this client's config: after a peer's setting has been
+// adopted, a row reading the config would show a value the layout is not
+// using, and its first toggle would appear to do nothing.
+func (m *OS) sharedBordersItem() settingItem {
+	return boolItem(
+		settingLabel("appearance.shared_borders"),
+		registryDescription("appearance.shared_borders"),
+		func() bool { return m.SharedBorders },
+		func(m *OS, v bool) {
+			m.SetSharedBordersSetting(v)
+		},
+	)
+}
+
+// paneGapItem is the settings row for the pane gap, hand-written for the same
+// reason as sharedBordersItem.
+func (m *OS) paneGapItem() settingItem {
+	return settingItem{
+		Label:   settingLabel("appearance.gap"),
+		Desc:    registryDescription("appearance.gap"),
+		Control: controlInt,
+		value:   func(m *OS) string { return strconv.Itoa(m.PaneGap) },
+		adjust: func(m *OS, dir int) {
+			m.SetPaneGapSetting(m.PaneGap + dir)
+		},
+		meter: func(m *OS) float64 {
+			return float64(clampInt(m.PaneGap, 0, config.PaneGapMax)) / float64(config.PaneGapMax)
+		},
+	}
+}
+
+// registryDescription is the registry's own description for a path, so a
+// hand-written row reads exactly as the derived row it stands in for did.
+func registryDescription(path string) string {
+	if o, ok := config.LookupOption(path); ok {
+		return o.Description
+	}
+	return ""
+}

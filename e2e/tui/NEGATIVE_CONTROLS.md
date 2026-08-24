@@ -49,6 +49,7 @@ a working negative control look like a broken one for half an hour.
 | Agent-state feature absent (no verb, no indicator) | whole feature | build `origin/main` and point `TUIOS_E2E_BIN` at it | `TestAgentStateIndicatorRenders` (fails at the set step: `Unknown command "set-agent-state"`) | **caught** |
 | Two clients with different chrome laid the panes out in different boxes, dragging the shared PTYs between the two answers | n/a, see verdict | `paneReserve` in `internal/app/os_geometry.go` returns `m.OwnLayoutReserve()` instead of folding in `m.SessionReserve` | none | **not caught** — see below |
 | Pane body one column wider than the renderer vouches for, with the wrap skipped | n/a, injected | append a space to every row of the cell loop's output in `internal/app/render_terminal.go` while still reporting `maxX` | `TestWideRunesKeepThePaneRectangleOnScreen` ("pane has no right border glyph beside its content at column 119, its body is not 78 columns wide"), `TestSkippingTheWrapDrawsTheSameScreenAsWrapping` | **caught** |
+| Two clients whose configs disagree on shared borders partitioned the box with different arithmetic, dragging the shared PTYs between the two answers | whole change | build the pre-fix tree (`20f17bbd`) and point `TUIOS_E2E_BIN` at it | `TestGeometryConfigDisagreementDoesNotMovePanes` ("the second client's attach moved the panes": 61,0 59x38 dragged to 60,0 60x38) | **caught** |
 
 ### The mouse row is a whole-change control, not a single-hunk one
 

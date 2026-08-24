@@ -79,6 +79,10 @@ func checkPaneSizes(t *testing.T, m *OS, told map[string]*toldSize, label string
 func newAnnounceOS(t *testing.T, width, height int) (*OS, map[string]*toldSize) {
 	t.Helper()
 	m := &OS{
+		// The layout reads the model's session-settled geometry, seeded from
+		// the globals the way NewOS seeds it.
+		SharedBorders:        config.SharedBorders,
+		PaneGap:              config.PaneGap,
 		NumWorkspaces:        9,
 		CurrentWorkspace:     1,
 		WorkspaceFocus:       make(map[int]int),
@@ -132,6 +136,10 @@ func TestNewWindowInNewWorkspaceAnnouncesItsSize(t *testing.T) {
 	t.Cleanup(func() { close(drainDone) })
 
 	m := &OS{
+		// The layout reads the model's session-settled geometry, seeded from
+		// the globals the way NewOS seeds it.
+		SharedBorders:        config.SharedBorders,
+		PaneGap:              config.PaneGap,
 		NumWorkspaces:        9,
 		CurrentWorkspace:     1,
 		WorkspaceFocus:       make(map[int]int),

@@ -3,7 +3,6 @@ package input
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -335,7 +334,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// was temporarily cleared during drag setup (line 327).
 		if wasResizing && o.AutoTiling && o.UseScrollingLayout {
 			o.ScrollingSetPositions()
-		} else if o.AutoTiling && config.SharedBorders && !o.UseScrollingLayout {
+		} else if o.PanesBorderless() {
 			o.TileAllWindows()
 		}
 

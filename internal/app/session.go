@@ -4,6 +4,7 @@ package app
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
@@ -71,6 +72,7 @@ func (m *OS) BuildSessionState() *session.SessionState {
 			PreMinimizeH: w.PreMinimizeHeight,
 			PTYID:        w.PTYID,
 			IsAltScreen:  w.IsAltScreen(), // Save alt screen state for mouse forwarding on restore
+			IsFloating:   w.IsFloating,
 		}
 	}
 
@@ -119,6 +121,13 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	// SessionState.SidebarWidth.
 	state.SidebarWidth = m.SidebarWidthPref
 	state.SidebarCollapsed = m.SidebarCollapsed
+	// The pane geometry inputs travel with the session because they are inputs
+	// to every client's layout arithmetic. Always sent, never nil: nil on the
+	// wire means a client too old to say, and this one can.
+	state.PaneGeometry = &session.PaneGeometryState{
+		SharedBorders: m.SharedBorders,
+		PaneGap:       m.PaneGap,
+	}
 
 	return state
 }
@@ -172,6 +181,10 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.MasterRatio = state.MasterRatio
 	m.AutoTiling = state.AutoTiling
 	m.adoptSidebarState(state)
+	// The pane geometry inputs are the session's, adopted before the layout
+	// below is computed so a joining client tiles with the session's arithmetic
+	// rather than its own config's.
+	m.adoptPaneGeometry(state)
 
 	// Set effective dimensions from state - this is the min of all connected clients
 	// as calculated by the daemon. This ensures a new client joining respects
@@ -384,11 +397,24 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// Build new window list in the order specified by incoming state
 	newWindows := make([]*terminal.Window, 0, len(state.Windows))
 	var created []*terminal.Window
+	// Windows whose float state this sync moved. A float is a structural layout
+	// change and tiling topology is not adopted from a client push (see
+	// newerState below), so the structural half of the peer's toggle has to be
+	// mirrored here once the whole list has been applied.
+	var floated, unfloated []*terminal.Window
 
 	for _, ws := range state.Windows {
 		if existingWindow, exists := existingByID[ws.ID]; exists {
 			// Update existing window
+			wasFloating := existingWindow.IsFloating
 			m.updateWindowFromState(existingWindow, &ws)
+			if existingWindow.IsFloating != wasFloating {
+				if existingWindow.IsFloating {
+					floated = append(floated, existingWindow)
+				} else {
+					unfloated = append(unfloated, existingWindow)
+				}
+			}
 			newWindows = append(newWindows, existingWindow)
 			delete(existingByID, ws.ID) // Mark as handled
 		} else {
@@ -510,6 +536,10 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	m.TilingScheme = layout.AutoScheme(state.TilingScheme)
 	m.ApplyLayoutModeName(state.LayoutMode)
 	m.adoptSidebarState(state)
+	// Adopted after the layout mode it is folded together with, and before the
+	// staleness check below, which has to run against the inputs the session
+	// agrees on rather than the ones this client walked in with.
+	geometryChanged := m.adoptPaneGeometry(state)
 
 	// Update BSP trees, again only from a strictly newer sync so a lagging echo
 	// cannot clobber the tree this client just computed (see newerState above).
@@ -523,6 +553,42 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 					DefaultRatio: serialized.DefaultRatio,
 				}
 				m.WorkspaceTrees[ws] = layoutSerialized.Deserialize()
+			}
+		}
+	}
+
+	// Mirror the structural half of a float toggled elsewhere. The peer that
+	// floated a pane removed it from its own tiling structure and retiled, but
+	// a client push never carries the tree (newerState gates it), so this
+	// client's tree still holds the leaf; left there, the tiled panes never
+	// fill the box again and every sync reads as a stale layout. RemoveWindow
+	// ignores an id a tree does not hold, so every tree is asked, the way
+	// adoptSyncedWindows handles a closed pane. A pane tiled again is re-added
+	// where this client would add one of its own; on another workspace the
+	// tree catches up when that workspace next tiles.
+	for _, w := range floated {
+		intID := m.getWindowIntID(w.ID)
+		for _, tree := range m.WorkspaceTrees {
+			if tree != nil {
+				tree.RemoveWindow(intID)
+			}
+		}
+		if m.UseScrollingLayout {
+			m.ScrollingOnWindowRemoved(intID)
+		}
+	}
+	for _, w := range unfloated {
+		if w.Workspace != m.CurrentWorkspace || !m.AutoTiling {
+			continue
+		}
+		if m.UseScrollingLayout {
+			m.ScrollingOnWindowAdded(w)
+			continue
+		}
+		if tree := m.WorkspaceTrees[m.CurrentWorkspace]; tree != nil {
+			intID := m.getWindowIntID(w.ID)
+			if !slices.Contains(tree.GetAllWindowIDs(), intID) {
+				m.AddWindowToBSPTree(w)
 			}
 		}
 	}
@@ -594,7 +660,10 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// the departing peer's cramped layout and kept it. On screen that is a
 	// full-width dock with the panes still huddled in the corner, which is what
 	// "the borders don't come back" looks like.
-	if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 && m.tiledLayoutStale() {
+	// geometryChanged forces the retile the staleness check cannot always see:
+	// flipping shared borders with the gap pinned changes every tiled pane's
+	// guest grid without moving a single rectangle.
+	if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 && (geometryChanged || m.tiledLayoutStale()) {
 		m.TileAllWindows()
 	}
 
@@ -651,6 +720,9 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.Z = ws.Z
 	w.Workspace = ws.Workspace
 	w.Minimized = ws.Minimized
+	// A float is layout intent: without it this client tiles the pane a peer
+	// floated back into the box and destroys the float everywhere.
+	w.IsFloating = ws.IsFloating
 	w.PreMinimizeX = ws.PreMinimizeX
 	w.PreMinimizeY = ws.PreMinimizeY
 	w.PreMinimizeWidth = ws.PreMinimizeW
@@ -732,6 +804,9 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.CustomName = ws.CustomName
 	window.Workspace = ws.Workspace
 	window.Minimized = ws.Minimized
+	// A float is layout intent, not a rectangle: a peer that does not know a
+	// pane floats tiles it back into the box. See WindowState.IsFloating.
+	window.IsFloating = ws.IsFloating
 	window.PreMinimizeX = ws.PreMinimizeX
 	window.PreMinimizeY = ws.PreMinimizeY
 	window.PreMinimizeWidth = ws.PreMinimizeW

@@ -16,7 +16,11 @@ import (
 // check permanently, disabling auto-retiling after a single round-trip.
 func TestRestoreWorkspaceLayoutDoesNotForceCustom(t *testing.T) {
 	m := &OS{
-		AutoTiling: true,
+		// The layout reads the model's session-settled geometry, seeded from
+		// the globals the way NewOS seeds it.
+		SharedBorders: config.SharedBorders,
+		PaneGap:       config.PaneGap,
+		AutoTiling:    true,
 		WorkspaceLayouts: map[int][]WindowLayout{
 			2: {{WindowID: "nonexistent", X: 0, Y: 0, Width: 10, Height: 10}},
 		},
@@ -36,6 +40,10 @@ func TestRestoreWorkspaceLayoutDoesNotForceCustom(t *testing.T) {
 // workspace is not stuck as custom), which is what previously broke.
 func TestRestoreWorkspaceLayoutRoundTripKeepsRetiling(t *testing.T) {
 	m := &OS{
+		// The layout reads the model's session-settled geometry, seeded from
+		// the globals the way NewOS seeds it.
+		SharedBorders:        config.SharedBorders,
+		PaneGap:              config.PaneGap,
 		AutoTiling:           true,
 		WorkspaceLayouts:     map[int][]WindowLayout{},
 		WorkspaceMasterRatio: map[int]float64{},
@@ -75,6 +83,10 @@ func twoWorkspaceOS(t *testing.T, shared bool) *OS {
 	})
 
 	m := &OS{
+		// The layout reads the model's session-settled geometry, seeded from
+		// the globals the way NewOS seeds it.
+		SharedBorders:        config.SharedBorders,
+		PaneGap:              config.PaneGap,
 		NumWorkspaces:        9,
 		CurrentWorkspace:     1,
 		WorkspaceFocus:       make(map[int]int),

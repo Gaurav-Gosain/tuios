@@ -19,6 +19,10 @@ func nPaneTiledOS(t testing.TB, n, w, h int) *OS {
 		wins = append(wins, win)
 	}
 	m := &OS{
+		// The layout reads the model's session-settled geometry, seeded from
+		// the globals the way NewOS seeds it.
+		SharedBorders:    config.SharedBorders,
+		PaneGap:          config.PaneGap,
 		Windows:          wins,
 		FocusedWindow:    0,
 		CurrentWorkspace: 1,

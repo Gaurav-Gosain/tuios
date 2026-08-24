@@ -240,7 +240,7 @@ func (m *OS) ApplyBSPLayout() {
 		// Border mode is settled here, with the rest of the layout, so that one
 		// value decides it for the whole frame. A pane used to keep the old mode
 		// until its snap completed, which let a frame draw both border systems at
-		// once: the separator overlay reads config.SharedBorders live, so it
+		// once: the separator overlay reads the shared-borders state live, so it
 		// filled the gaps the new layout had already reserved while every pane
 		// still drew a box of its own. Any path that retired a snap early then
 		// made that permanent, since the flag was waiting on an animation that no
@@ -467,7 +467,7 @@ func (m *OS) SyncBSPTreeFromGeometry() {
 	tree.SyncRatiosFromGeometry(geometry, bounds, m.separatorGap())
 
 	// In shared borders mode, re-apply layout after sync to enforce separator gaps
-	if config.SharedBorders {
+	if m.SharedBorders {
 		m.ApplyBSPLayout()
 	}
 }

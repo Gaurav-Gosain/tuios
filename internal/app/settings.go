@@ -100,9 +100,31 @@ func clampInt(v, lo, hi int) int {
 // immediately; when retile is set it also reflows the tiling layout for
 // changes that affect window geometry (dock position, borders, title bars).
 func (m *OS) applyAppearanceLive(retile bool) {
+	m.adoptConfigPaneGeometry()
 	m.MarkAllDirty()
 	if retile && m.AutoTiling {
 		m.TileAllWindows()
+	}
+	// The pane geometry inputs are session state (see os.go), so a change here
+	// is news to the session's other clients. Deduplicated at the source: a
+	// call that changed nothing sends nothing.
+	m.SyncStateToDaemon()
+}
+
+// adoptConfigPaneGeometry lands a *config-side* change to the pane geometry
+// inputs in the model. It compares the globals to the last config values this
+// OS saw rather than adopting them outright, because the model's values are
+// session state: a client that adopted the session's shared borders must not
+// have them silently reset to its own config file by an unrelated appearance
+// change riding the same funnel.
+func (m *OS) adoptConfigPaneGeometry() {
+	if config.SharedBorders != m.lastConfigSharedBorders {
+		m.lastConfigSharedBorders = config.SharedBorders
+		m.SharedBorders = config.SharedBorders
+	}
+	if config.PaneGap != m.lastConfigPaneGap {
+		m.lastConfigPaneGap = config.PaneGap
+		m.PaneGap = config.PaneGap
 	}
 }
 
@@ -282,7 +304,9 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.border_style"),
 			opt("appearance.window_title_position"),
 			opt("appearance.window_title_format"),
-			opt("appearance.shared_borders"),
+			// Hand-written: the value in force is the session's pane geometry,
+			// not this client's config. See sharedBordersItem.
+			custom("appearance.shared_borders", m.sharedBordersItem()),
 			opt("appearance.hide_window_buttons"),
 			opt("appearance.window_button_style"),
 			opt("appearance.window_button_position"),
@@ -293,7 +317,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.scrollbar.track"),
 			opt("appearance.border_focused_color"),
 			opt("appearance.border_unfocused_color"),
-			opt("appearance.gap"),
+			custom("appearance.gap", m.paneGapItem()),
 			opt("appearance.dim_unfocused"),
 			opt("appearance.panel_padding"),
 			opt("appearance.zen_mode"),

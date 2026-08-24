@@ -40,6 +40,10 @@ func sharedBorderSidebarOS(t *testing.T, n int, side string) *OS {
 	})
 
 	m := &OS{
+		// The layout reads the model's session-settled geometry, seeded from
+		// the globals the way NewOS seeds it.
+		SharedBorders:    config.SharedBorders,
+		PaneGap:          config.PaneGap,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),

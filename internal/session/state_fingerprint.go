@@ -92,6 +92,7 @@ func StateFingerprint(s *SessionState) uint64 {
 		num(w.PreMinimizeH)
 		str(w.PTYID)
 		flag(w.IsAltScreen)
+		flag(w.IsFloating)
 		str(w.Cwd)
 		flag(w.Unplaced)
 		str(string(w.AgentState))
@@ -132,6 +133,16 @@ func StateFingerprint(s *SessionState) uint64 {
 	for _, k := range sortedStringKeys(s.Options) {
 		str(k)
 		str(s.Options[k])
+	}
+
+	// Nil and the zero value are distinguished: nil is a peer that has not said,
+	// and a peer adopting on receipt has to see the difference.
+	if s.PaneGeometry == nil {
+		str("nil-geometry")
+	} else {
+		str("geometry")
+		flag(s.PaneGeometry.SharedBorders)
+		num(s.PaneGeometry.PaneGap)
 	}
 
 	return h.Sum64()
