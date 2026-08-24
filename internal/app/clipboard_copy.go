@@ -38,7 +38,30 @@ func (m *OS) CopyToClipboard(text string) tea.Cmd {
 	}
 	m.CancelPendingCopy()
 	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
-	return tea.SetClipboard(text)
+	return m.clipboardWriteCmd(text)
+}
+
+// clipboardWriteCmd prefers a native system clipboard (wl-copy, xclip, pbcopy)
+// when one is reachable, and falls back to OSC 52 (tea.SetClipboard) otherwise.
+// OSC 52 is the right channel for remote clients with no local clipboard of
+// their own; a native tool is the right channel for terminals like GNOME
+// Terminal/Ptyxis whose VTE never implements OSC 52.
+func (m *OS) clipboardWriteCmd(text string) tea.Cmd {
+	// The write is wrapped so the native path runs *and* the same
+	// setClipboardMsg that tea.SetClipboard produces is still returned: Bubble
+	// Tea forwards that message as OSC 52, which is harmless in terminals that do
+	// not implement it and a second, redundant path in those that do. The
+	// double write is idempotent (same text), and the native one is what makes
+	// VTE-based terminals (GNOME Terminal, Ptyxis) work at all.
+	return func() tea.Msg {
+		if m.Settings.ClipboardLocalFallback && LocalClipboardAvailable() {
+			// Best-effort: if the native write fails (permissions, compositor
+			// gone), the OSC 52 message below is still the safety net.
+			_ = DetectClipboardTool().Write(text)
+		}
+		return tea.SetClipboard(text)()
+	}
+}
 }
 
 // DeferCopyToClipboard holds text back until delay has passed with no further
@@ -79,7 +102,7 @@ func (m *OS) HandlePendingCopy(seq uint64) tea.Cmd {
 	text := m.pendingCopy
 	m.pendingCopy = ""
 	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
-	return tea.SetClipboard(text)
+	return m.clipboardWriteCmd(text)
 }
 
 // PendingCopyText reports the text a deferred write is holding, for tests and

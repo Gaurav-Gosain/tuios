@@ -160,6 +160,7 @@ type AppearanceConfig struct {
 	ScrollbackLines      int     `toml:"scrollback_lines"`       // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
 	ScrollLines          int     `toml:"scroll_lines"`           // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
 	CopyOnSelect         *bool   `toml:"copy_on_select"`         // Copy a mouse selection to the clipboard on release (default: true)
+	ClipboardLocalFallback *bool   `toml:"clipboard_local_fallback"` // Use native system clipboard (wl-copy/xclip/pbcopy) when available (default: true)
 	FocusFollowsMouse    *bool   `toml:"focus_follows_mouse"`    // Focus the pane under the cursor as the mouse moves (default: false)
 	AltDrag              *bool   `toml:"alt_drag"`               // Alt + left-drag moves a pane (default: true)
 	ClickToType          string  `toml:"click_to_type"`          // What a click on a pane's content does in window-management mode: single, double, off (default: single)
@@ -1356,6 +1357,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// CopyOnSelect defaults to true (nil means use default)
 	if cfg.Appearance.CopyOnSelect != nil {
 		s.CopyOnSelect = *cfg.Appearance.CopyOnSelect
+	}
+
+	// ClipboardLocalFallback defaults to true (nil means use default)
+	if cfg.Appearance.ClipboardLocalFallback != nil {
+		ClipboardLocalFallback = *cfg.Appearance.ClipboardLocalFallback
 	}
 
 	// FocusFollowsMouse defaults to false; a pointer so turning it off in the

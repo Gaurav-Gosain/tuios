@@ -320,16 +320,30 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return m, cmd
 	}
 
-	// Handle paste shortcuts - intercept and request clipboard via OSC 52.
-	// Plain ctrl+v is deliberately not bound to terminal_paste_host so it falls
-	// through to the passthrough block and reaches the child PTY as 0x16 (needed
-	// for vim visual-block, etc.), matching the tmux/zellij convention.
+	// Handle paste shortcuts - intercept and request the clipboard. Prefer a
+	// native system clipboard (wl-paste, xclip, pbcopy) when one is reachable;
+	// fall back to OSC 52 (tea.ReadClipboard) which terminals that implement it
+	// answer with a tea.ClipboardMsg. Both paths end in the same message, which
+	// handler.go routes to handleClipboardPaste, so the paste destination logic
+	// is shared. Plain ctrl+v is deliberately not bound to terminal_paste_host
+	// so it falls through to the passthrough block and reaches the child PTY as
+	// 0x16 (needed for vim visual-block, etc.), matching the tmux/zellij
+	// convention.
 	if sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction) == "terminal_paste_host" {
 		if focusedWindow != nil {
-			// Ask the terminal for its clipboard via OSC 52. The reply arrives
-			// as a tea.ClipboardMsg, handled in handler.go, and a terminal that
-			// never replies is reported instead. See app.RequestHostPaste.
-			return o, o.RequestHostPaste()
+			if config.ClipboardLocalFallback && app.LocalClipboardAvailable() {
+				tool := app.DetectClipboardTool()
+				return o, func() tea.Msg {
+					text, err := tool.Read()
+					if err != nil {
+						return nil
+					}
+					return tea.ClipboardMsg{Content: text, Selection: 'c'}
+				}
+			}
+			// Use tea.ReadClipboard to request clipboard via OSC 52
+			// This will generate a tea.ClipboardMsg which we handle in handler.go
+			return o, tea.ReadClipboard
 		}
 		return o, nil
 	}

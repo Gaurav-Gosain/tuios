@@ -439,6 +439,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.scrollback_lines"),
 			opt("appearance.scroll_lines"),
 			opt("appearance.copy_on_select"),
+			opt("appearance.clipboard_local_fallback"),
 			opt("appearance.word_characters"),
 			opt("appearance.zoom_max_width"),
 			custom("debug.show_key_events", m.showKeysItem()),
