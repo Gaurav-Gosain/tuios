@@ -66,6 +66,7 @@ func (m *OS) flushScreenshotGraphicsForFrame() {
 		return
 	}
 	cols, rows := m.screenshotPreviewBody()
+	cols, rows = fitBoxToPicture(cols, rows, m.ShotPreview.PixelW, m.ShotPreview.PixelH)
 	x := h.OriginX + h.Geo.BodyX + shotPreviewImageInset
 	y := h.OriginY + h.Geo.BodyY + m.shotPreviewImageRow()
 	want := screenshotPlacementState{x: x, y: y, cols: cols, rows: rows, path: m.ShotPreview.Path}
@@ -127,4 +128,27 @@ func openInOSViewer(path string) error {
 	// back from it.
 	go func() { _ = cmd.Wait() }()
 	return nil
+}
+
+// fitBoxToPicture shrinks a cell box until the picture drawn into it keeps its
+// own proportions.
+//
+// a=p scales the image to whatever box it is given, so handing it the whole
+// panel body stretched a wide capture tall and a tall one wide. The box is
+// reduced on one axis instead, which letterboxes rather than distorts. A
+// picture whose size is unknown gets the box unchanged, which is the old
+// behaviour and no worse than it was.
+func fitBoxToPicture(cols, rows, pixelW, pixelH int) (int, int) {
+	cellW, cellH := iconCellSize()
+	if pixelW <= 0 || pixelH <= 0 || cellW <= 0 || cellH <= 0 || cols <= 0 || rows <= 0 {
+		return cols, rows
+	}
+	boxW, boxH := cols*cellW, rows*cellH
+	// Whichever axis runs out first sets the scale.
+	if pixelW*boxH < pixelH*boxW {
+		boxW = pixelW * boxH / pixelH
+	} else {
+		boxH = pixelH * boxW / pixelW
+	}
+	return max(1, boxW/cellW), max(1, boxH/cellH)
 }

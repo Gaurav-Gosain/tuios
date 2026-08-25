@@ -1,7 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	_ "image/png"
 	"os"
 	"strings"
 	"time"
@@ -67,7 +70,11 @@ type screenshotResultMsg struct {
 	// png is the picture the preview's pixel tier places. Empty on a host with
 	// no kitty graphics, which is every host the text tier already serves.
 	png []byte
-	err error
+	// pixelW and pixelH are png's own size, read from its header so the pixel
+	// tier can keep the capture's shape instead of filling whatever cell box
+	// the panel has.
+	pixelW, pixelH int
+	err            error
 }
 
 // screenshotPreview is the panel that opens after a capture.
@@ -97,6 +104,9 @@ type screenshotPreview struct {
 	// show one. It is a second render of the same grid when the saved format
 	// is not PNG, because what the preview is for is seeing the frame.
 	PNG []byte
+	// PixelW and PixelH are the picture's own size. The pixel tier draws into a
+	// cell box, and a box chosen without them stretches the capture to fill it.
+	PixelW, PixelH int
 }
 
 // CaptureActive reports whether capture mode has the input.
@@ -375,6 +385,9 @@ func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool) tea.Cmd
 			} else if pixels, perr := shot.Render(shot.FormatPNG, grid, frame, nil); perr == nil {
 				msg.png = pixels
 			}
+			if cfg, _, cerr := image.DecodeConfig(bytes.NewReader(msg.png)); cerr == nil {
+				msg.pixelW, msg.pixelH = cfg.Width, cfg.Height
+			}
 		}
 		if tryCopy && local {
 			if tool, cerr := capture.CopyImage(path, data, settings.Format.MediaType()); cerr == nil {
@@ -429,6 +442,8 @@ func (m *OS) HandleScreenshotResult(msg screenshotResultMsg) tea.Cmd {
 		Grid:   msg.grid,
 		Copied: msg.copied,
 		PNG:    msg.png,
+		PixelW: msg.pixelW,
+		PixelH: msg.pixelH,
 		Note:   m.screenshotPreviewNote(msg),
 	}
 	m.ShotPreview.CopyLabel, m.ShotPreview.Status = m.screenshotCopyOffer(msg)
