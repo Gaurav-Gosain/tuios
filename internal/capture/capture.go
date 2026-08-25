@@ -230,6 +230,12 @@ func Save(path string, data []byte) error {
 // into the file to write. A relative --out is relative to the process's own
 // working directory, which is what a person at a shell means by it; an empty
 // one lands a generated name in the configured directory.
+//
+// A generated name never lands on a file that already exists. The stamp in it
+// has one-second resolution, and a person taking captures to compare them takes
+// them faster than that, so without this the second capture of a second deleted
+// the first with nothing said. An explicit --out is left exactly as given: that
+// path is the caller's instruction, not a suggestion.
 func ResolvePath(out, dir, label string, format shot.Format, now time.Time) (string, error) {
 	if out != "" {
 		abs, err := filepath.Abs(out)
@@ -241,5 +247,28 @@ func ResolvePath(out, dir, label string, format shot.Format, now time.Time) (str
 	if dir == "" {
 		dir = config.ScreenshotConfig{}.ResolveDirectory()
 	}
-	return filepath.Join(dir, FileName(label, format, now)), nil
+	return freeName(dir, FileName(label, format, now)), nil
+}
+
+// freeNameLimit is how many same-second captures get a name of their own. Past
+// it the name repeats, because a directory scan that never ends is worse than
+// an overwritten file, and nobody takes a thousand captures in one second.
+const freeNameLimit = 1000
+
+// freeName returns name, or name with a counter before its extension when the
+// directory already holds it.
+func freeName(dir, name string) string {
+	path := filepath.Join(dir, name)
+	if _, err := os.Lstat(path); err != nil {
+		return path
+	}
+	ext := filepath.Ext(name)
+	stem := strings.TrimSuffix(name, ext)
+	for n := 2; n < freeNameLimit; n++ {
+		candidate := filepath.Join(dir, fmt.Sprintf("%s-%d%s", stem, n, ext))
+		if _, err := os.Lstat(candidate); err != nil {
+			return candidate
+		}
+	}
+	return path
 }

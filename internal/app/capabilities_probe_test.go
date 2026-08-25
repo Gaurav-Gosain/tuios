@@ -208,6 +208,54 @@ func TestAnimationProbeAcceptAloneIsNotEnough(t *testing.T) {
 	}
 }
 
+// TestCellSizeOverrideReplacesTheHostsAnswer pins TUIOS_CELL_SIZE. A host that
+// does not answer the pixel-geometry query gets a guessed cell, and everything
+// tuios draws in cells is then the wrong shape. This is how a user says the
+// real number, and it is what the end-to-end tests set so an assertion about a
+// placement box is arithmetic rather than a guess about the terminal running
+// them.
+//
+// Negative control: with the applyCellSizeOverride call removed from
+// applyEnvironmentOverrides, the first case keeps the guessed 9x20 and fails.
+func TestCellSizeOverrideReplacesTheHostsAnswer(t *testing.T) {
+	for _, tc := range []struct {
+		spec   string
+		w, h   int
+		accept bool
+	}{
+		{spec: "10x22", w: 10, h: 22, accept: true},
+		{spec: " 7 x 15 ", w: 7, h: 15, accept: true},
+		{spec: "10X22", w: 10, h: 22, accept: true},
+		{spec: "", accept: false},
+		{spec: "10", accept: false},
+		{spec: "0x22", accept: false},
+		{spec: "-4x22", accept: false},
+		{spec: "wide x tall", accept: false},
+	} {
+		t.Run(tc.spec, func(t *testing.T) {
+			caps := &HostCapabilities{CellWidth: 9, CellHeight: 20, Cols: 80, Rows: 24}
+			applyCellSizeOverride(caps, tc.spec)
+			if !tc.accept {
+				if caps.CellWidth != 9 || caps.CellHeight != 20 {
+					t.Fatalf("%q was accepted and set the cell to %dx%d",
+						tc.spec, caps.CellWidth, caps.CellHeight)
+				}
+				return
+			}
+			if caps.CellWidth != tc.w || caps.CellHeight != tc.h {
+				t.Fatalf("%q gave a %dx%d cell, want %dx%d",
+					tc.spec, caps.CellWidth, caps.CellHeight, tc.w, tc.h)
+			}
+			// The window's pixel size is derived from it, so the two cannot
+			// disagree about how big the screen is.
+			if caps.PixelWidth != tc.w*caps.Cols || caps.PixelHeight != tc.h*caps.Rows {
+				t.Errorf("the window is %dx%d px for a %dx%d cell on %dx%d cells",
+					caps.PixelWidth, caps.PixelHeight, tc.w, tc.h, caps.Cols, caps.Rows)
+			}
+		})
+	}
+}
+
 // TestAnimationProbeFitsOneEscapeEach checks the probe's own escapes, because a
 // payload split across m= continuations is not a frame edit: the continuation
 // carries no a= key, so the terminal routes it to the transmit handler.

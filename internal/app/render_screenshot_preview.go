@@ -19,10 +19,11 @@ import (
 // the content came from is drawing it again. What it cannot show is the pixel
 // dressing, and one quiet line says so rather than the panel pretending.
 //
-// A kitty host gets the same panel with the rendered PNG placed over the body
-// (see screenshot_graphics.go). Sixel gets the text tier and nothing else,
-// because sixel cannot delete a placement, which is why the launcher icons
-// already skip it.
+// A kitty host gets the same panel with the rendered PNG drawn over the capture
+// rows, which are blanked for it so the picture is not laid on top of the same
+// capture in text (see screenshot_graphics.go). Sixel gets the text tier and
+// nothing else, because sixel cannot delete a placement, which is why the
+// launcher icons already skip it.
 
 // overlayKindShot is the preview panel's overlay kind.
 const overlayKindShot = "screenshot"
@@ -94,15 +95,28 @@ func (m *OS) renderScreenshotPreview() (string, overlay.Geometry, []overlayRowHi
 	}
 	lines = append(lines, overlay.Fill("", width, pal.Surface))
 
-	// The cells are always drawn, even where the pixel tier will place a
-	// picture over them. Reserving blanks instead, the way the launcher does
-	// for its icons, would leave an empty panel on any host that claims kitty
-	// graphics and does not deliver: the text tier is complete on its own, so
-	// it is what is drawn, and the picture is dressing laid on top.
-	for _, row := range m.shotPreviewCells(bodyCols, bodyRows) {
+	// The cells are the body, except where the picture is about to be drawn
+	// over them.
+	//
+	// The picture keeps the capture's shape, so it does not fill the body: it
+	// leaves a margin on one axis. Drawing cells there too put half a picture
+	// and half a wall of text in one panel, which is what a letterboxed
+	// placement over a full text tier looks like. Blanking only the rectangle
+	// the picture covers is the narrowest answer: every other line of the panel
+	// is still cells, and a host that claims kitty graphics and does not
+	// deliver loses the capture rows and keeps the header, the path, the note
+	// and the footer, which is enough to say what happened and get out.
+	_, picRows, hasPicture := m.screenshotPreviewPictureBox()
+	rows := m.shotPreviewCells(bodyCols, bodyRows)
+	if hasPicture {
+		rows = blankPictureRows(rows, picRows)
+	}
+	for _, row := range rows {
 		lines = append(lines, overlay.Fill("  "+row, width, pal.Surface))
 	}
-	if p.Grid != nil && (p.Grid.Rows > bodyRows || p.Grid.Cols > bodyCols) {
+	// The scroll line is about the cells. Where the picture is drawn the whole
+	// capture is on screen at once, so saying it is not would be a lie.
+	if !hasPicture && p.Grid != nil && (p.Grid.Rows > bodyRows || p.Grid.Cols > bodyCols) {
 		lines = append(lines, overlay.Fill(mute.Render(
 			fmt.Sprintf("  Showing %d of %d rows. Scroll with the wheel or the arrows.",
 				min(bodyRows, p.Grid.Rows), p.Grid.Rows)), width, pal.Surface))
@@ -117,6 +131,21 @@ func (m *OS) renderScreenshotPreview() (string, overlay.Geometry, []overlayRowHi
 	}
 	content, geo := panel.Render(pal)
 	return content, geo, nil
+}
+
+// blankPictureRows empties every body row the picture will be drawn over.
+//
+// A whole row goes, not the part of it the picture covers. The rows are
+// lipgloss output, escape sequences interleaved with text, so cutting one at a
+// column means taking its styling apart and risking a broken escape for the few
+// columns a letterboxed picture leaves at the side. An empty margin beside the
+// picture reads as a margin; a strip of the capture's own text there reads as
+// the panel showing the capture twice.
+func blankPictureRows(rows []string, picRows int) []string {
+	for i := 0; i < len(rows) && i < picRows; i++ {
+		rows[i] = ""
+	}
+	return rows
 }
 
 // shotPreviewHeader is the one metadata line: what was written, how big, and

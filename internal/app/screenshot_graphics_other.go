@@ -17,6 +17,10 @@ func (m *OS) clearScreenshotGraphics() {}
 
 func (m *OS) flushScreenshotGraphicsForFrame() {}
 
+// screenshotPreviewPictureBox never has a picture to report here, so the panel
+// draws its cells over the whole body.
+func (m *OS) screenshotPreviewPictureBox() (cols, rows int, ok bool) { return 0, 0, false }
+
 // openInOSViewer hands a path to the shell's file association.
 func openInOSViewer(path string) error {
 	cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", path)

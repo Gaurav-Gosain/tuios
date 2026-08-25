@@ -467,6 +467,61 @@ func TestScreenshotResultReachesUpdate(t *testing.T) {
 	}
 }
 
+// TestCaptureBumpsTheCaptureSerial checks every capture gets a number of its
+// own. The number is what tells the picture the host holds apart from the one
+// this panel wants drawn, and the file name cannot: two captures inside one
+// second share it.
+//
+// Negative control: removing the shotCaptures increment from
+// HandleScreenshotResult leaves both captures on 0 and this fails.
+func TestCaptureBumpsTheCaptureSerial(t *testing.T) {
+	m := shotOS(t)
+
+	first := m.ScreenshotWindow(0)()
+	m.Update(first)
+	one := m.ShotPreview.Capture
+	if one == 0 {
+		t.Fatal("the first capture has no serial number")
+	}
+
+	second := m.ScreenshotWindow(0)()
+	m.Update(second)
+	two := m.ShotPreview.Capture
+	if two == one {
+		t.Errorf("two captures share serial %d, so the second draws the first one's pixels", two)
+	}
+}
+
+// TestClosingThePreviewForgetsTheUpload checks the picture bookkeeping is reset
+// whether or not a placement was ever made.
+//
+// Guarding the whole reset on shotImagePlaced was the trap: a preview that
+// uploaded a picture and never placed it left shotImageSent standing, and the
+// next capture read that as "the host already holds my picture".
+//
+// Negative control: putting the `if !m.shotImagePlaced { return }` guard back at
+// the top of clearScreenshotGraphics leaves shotImageSent set and this fails.
+func TestClosingThePreviewForgetsTheUpload(t *testing.T) {
+	m := shotOS(t)
+	m.Update(m.ScreenshotWindow(0)())
+	if !m.ShotPreview.Open {
+		t.Fatal("the capture did not open the preview")
+	}
+
+	// Uploaded but never placed, which is every frame before the panel's hit
+	// geometry has been recorded.
+	m.shotImageSent = true
+	m.shotImagePlaced = false
+
+	m.CloseScreenshotPreview(false)
+	if m.shotImageSent {
+		t.Error("closing the panel left the upload remembered, so the next capture will not send its own")
+	}
+	if m.shotPlacement != (screenshotPlacementState{}) {
+		t.Errorf("closing the panel left the placement at %+v", m.shotPlacement)
+	}
+}
+
 // TestCaptureModeIsOnTheMotionPathAndOverlayStack pins the two wiring points a
 // gesture mode silently dies without: it must be in overlayKindOrder so its
 // panel gets a stack slot, and the preview must disqualify the fullscreen fast

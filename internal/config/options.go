@@ -653,8 +653,12 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "screenshot.font_file", Type: OptionString, Section: "screenshot",
-		Description: "Font file to draw PNG with and embed in SVG and HTML. It makes those files much larger.",
-		Default:     "",
+		// The second sentence is the one that stops a bug report. With no font
+		// file a PNG is drawn in the built-in face, and every Nerd Font icon in
+		// the capture comes out as an empty box.
+		Description: "Font file to draw PNG with, also embedded in SVG and HTML. " +
+			"Set it to your terminal font or icons draw as empty boxes.",
+		Default: "",
 	},
 	{
 		Path: "screenshot.scale", Type: OptionInt, Section: "screenshot",

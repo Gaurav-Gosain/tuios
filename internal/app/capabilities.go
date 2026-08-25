@@ -447,6 +447,39 @@ func applyEnvironmentOverrides(caps *HostCapabilities) {
 	case "0":
 		caps.KittyAnimation = false
 	}
+
+	applyCellSizeOverride(caps, os.Getenv("TUIOS_CELL_SIZE"))
+}
+
+// applyCellSizeOverride reads TUIOS_CELL_SIZE, spelled WIDTHxHEIGHT in pixels.
+//
+// Every picture tuios draws in cells is sized from the host's answer to the
+// pixel-geometry query, and a host that does not answer it gets a guess. The
+// guess is close enough for an icon and not close enough for a whole captured
+// screen, which is drawn at the shape the cell size says it has. This is the
+// way to tell tuios the real number, and it is what the tests use so an
+// assertion about a placement box is arithmetic rather than a guess about the
+// terminal running them.
+func applyCellSizeOverride(caps *HostCapabilities, spec string) {
+	w, h, ok := strings.Cut(strings.ToLower(spec), "x")
+	if !ok {
+		return
+	}
+	cw, err := strconv.Atoi(strings.TrimSpace(w))
+	if err != nil || cw <= 0 {
+		return
+	}
+	ch, err := strconv.Atoi(strings.TrimSpace(h))
+	if err != nil || ch <= 0 {
+		return
+	}
+	caps.CellWidth, caps.CellHeight = cw, ch
+	if caps.Cols > 0 {
+		caps.PixelWidth = cw * caps.Cols
+	}
+	if caps.Rows > 0 {
+		caps.PixelHeight = ch * caps.Rows
+	}
 }
 
 // windowPixels and cellPixels match the two XTWINOPS replies the probe asks

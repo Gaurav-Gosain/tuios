@@ -107,6 +107,10 @@ type screenshotPreview struct {
 	// PixelW and PixelH are the picture's own size. The pixel tier draws into a
 	// cell box, and a box chosen without them stretches the capture to fill it.
 	PixelW, PixelH int
+	// Capture is the serial number of the capture this panel is showing. It is
+	// what tells the host's resident picture apart from this one; see
+	// screenshotPlacementState.
+	Capture int
 }
 
 // CaptureActive reports whether capture mode has the input.
@@ -435,16 +439,22 @@ func (m *OS) HandleScreenshotResult(msg screenshotResultMsg) tea.Cmd {
 		m.ShowNotification("The screenshot failed. "+msg.err.Error(), "error", 0)
 		return nil
 	}
+	// A new capture, so the picture the host holds under the preview's image id
+	// is now the old one whatever its file was called. The count is bumped
+	// before the panel is filled in, so the panel carries the number that says
+	// which capture it is.
+	m.shotCaptures++
 	m.ShotPreview = screenshotPreview{
-		Open:   m.screenshotPreviewWanted(),
-		Path:   msg.path,
-		Format: msg.format,
-		Grid:   msg.grid,
-		Copied: msg.copied,
-		PNG:    msg.png,
-		PixelW: msg.pixelW,
-		PixelH: msg.pixelH,
-		Note:   m.screenshotPreviewNote(msg),
+		Open:    m.screenshotPreviewWanted(),
+		Path:    msg.path,
+		Format:  msg.format,
+		Grid:    msg.grid,
+		Copied:  msg.copied,
+		PNG:     msg.png,
+		PixelW:  msg.pixelW,
+		PixelH:  msg.pixelH,
+		Capture: m.shotCaptures,
+		Note:    m.screenshotPreviewNote(msg),
 	}
 	m.ShotPreview.CopyLabel, m.ShotPreview.Status = m.screenshotCopyOffer(msg)
 	if info, err := os.Stat(msg.path); err == nil {
@@ -680,7 +690,17 @@ func (m *OS) ScreenshotFocusedWindow() tea.Cmd { return m.ScreenshotWindow(m.Foc
 
 // screenshotPlacementState is where the preview's picture was last drawn, so a
 // frame that changed nothing emits no escape at all.
+//
+// capture is which capture the drawn picture belongs to, and it is a serial
+// number rather than the file name. The name is stamped to the second, so two
+// captures inside one second share it; keying the upload on the name meant the
+// second capture was drawn from the first capture's pixels, which is the "it
+// shows the previous screenshot" report. A content hash would answer the same
+// question, but it answers a different one as well -- two captures of an
+// unchanged screen are one picture to a hash and two captures to the user --
+// and it costs a hash of a whole PNG on the Update goroutine. The serial is
+// exact, free, and cannot collide.
 type screenshotPlacementState struct {
 	x, y, cols, rows int
-	path             string
+	capture          int
 }
