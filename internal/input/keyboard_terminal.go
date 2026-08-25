@@ -342,7 +342,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				return o, func() tea.Msg {
 					text, err := tool.Read()
 					if err != nil {
-						return nil
+						// Native read failed (hung tool, empty selection,
+						// compositor gone): fall back to OSC 52 so the paste
+						// is not silently lost. VTE never answers, but any
+						// terminal that does implement it still gets the text.
+						return tea.ReadClipboard()
 					}
 					return tea.ClipboardMsg{Content: text, Selection: 'c'}
 				}
