@@ -371,6 +371,11 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer,
 		// re-encoded as direct data, since the client cannot read server paths.
 		GraphicsOutput:       graphicsOut,
 		GraphicsRemoteClient: true,
+		// This process is beside the daemon with the user at the far end of a
+		// network, so nothing here may touch the host's own desktop: a
+		// clipboard helper or a file viewer opened here acts on the operator's
+		// machine and not on the user's.
+		RemoteClient: true,
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
@@ -452,6 +457,11 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 		// since the client cannot read server-local paths.
 		GraphicsOutput:       graphicsOut,
 		GraphicsRemoteClient: true,
+		// This process is beside the daemon with the user at the far end of a
+		// network, so nothing here may touch the host's own desktop: a
+		// clipboard helper or a file viewer opened here acts on the operator's
+		// machine and not on the user's.
+		RemoteClient: true,
 	})
 
 	// Restore state from daemon if available

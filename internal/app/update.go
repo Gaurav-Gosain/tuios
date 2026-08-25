@@ -1495,6 +1495,13 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		return m, nil
 
+	case screenshotResultMsg:
+		// The render happened off this goroutine; the panel and the
+		// notification are opened here, which is the only place they may be.
+		cmd := m.HandleScreenshotResult(msg)
+		m.MarkAllDirty()
+		return m, cmd
+
 	case launcherIconsMsg:
 		// Icons decoded off the Update goroutine, filed away here so the store
 		// is only ever written on this one.

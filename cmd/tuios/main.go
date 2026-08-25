@@ -12,6 +12,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/skills"
 	"github.com/charmbracelet/fang"
@@ -709,6 +710,66 @@ Use --ansi to preserve ANSI escape codes (colors, styles).`,
 	capturePaneCmd.Flags().BoolVar(&capturePaneANSI, "ansi", false, "Preserve ANSI escape codes")
 	capturePaneCmd.Flags().IntVar(&capturePaneLines, "lines", 0, "Keep only the last N lines (0 keeps all)")
 	_ = capturePaneCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	// screenshot command
+	var shotReq screenshotRequest
+	screenshotCmd := &cobra.Command{
+		Use:   "screenshot",
+		Short: "Render a window to an image file",
+		Long: `Render a window to a styled image and save it.
+
+The picture is drawn from the pane's own cells, so colors, styles and links are
+exact. A frame is drawn around it: padding, a wash derived from your theme,
+rounded corners, a shadow and a title bar. Every part of that is a
+screenshot.* option.
+
+The daemon renders the file, so this works on a detached session with nobody
+attached. png and svg carry the frame; ansi and txt are the bare stream.
+
+With no theme set, basic and indexed colors fall back to the xterm defaults.
+Only your terminal knows its own palette, so that is a guess and the result
+says so. Use --theme to render in a palette by name instead.`,
+		Example: `  # The focused window, as a PNG under screenshot.directory
+  tuios screenshot
+
+  # A named window on a named session, detached is fine
+  tuios screenshot -s work -w build
+
+  # With history above the screen
+  tuios screenshot --scrollback --lines 200
+
+  # An SVG for a README
+  tuios screenshot --format svg --out demo.svg
+
+  # Re-render in another palette
+  tuios screenshot --theme catppuccin_mocha`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			shotReq.copy = !cmd.Flags().Changed("no-copy")
+			if cmd.Flags().Changed("copy") {
+				shotReq.copy = shotReq.copy && cmd.Flags().Lookup("copy").Value.String() == "true"
+			}
+			return runScreenshot(shotReq)
+		},
+	}
+	screenshotCmd.Flags().StringVarP(&shotReq.session, "session", "s", "", "Target session")
+	screenshotCmd.Flags().StringVarP(&shotReq.window, "window", "w", "", "Target window by name or ID")
+	screenshotCmd.Flags().StringVarP(&shotReq.format, "format", "f", "", "Output format: png, svg, ansi, html or txt")
+	screenshotCmd.Flags().StringVar(&shotReq.theme, "theme", "", "Render in this theme instead of the session's")
+	screenshotCmd.Flags().StringVar(&shotReq.frame, "frame", "", "Dressing around the capture: window, plain or none")
+	screenshotCmd.Flags().StringVarP(&shotReq.out, "out", "o", "", "Write here instead of a generated name")
+	screenshotCmd.Flags().BoolVarP(&shotReq.scrollback, "scrollback", "S", false, "Put the pane's history above the screen")
+	screenshotCmd.Flags().IntVar(&shotReq.lines, "lines", 0, "Bound the history to the last N rows")
+	screenshotCmd.Flags().BoolVar(&shotReq.cursor, "cursor", false, "Draw the cursor cell")
+	screenshotCmd.Flags().BoolVar(&shotReq.noCopy, "no-copy", false, "Do not try to copy the image to the clipboard")
+	screenshotCmd.Flags().BoolVar(&shotReq.copy, "copy", true, "Try to copy the image to the clipboard")
+	screenshotCmd.Flags().BoolVar(&shotReq.jsonOutput, "json", false, "Output result as JSON")
+	_ = screenshotCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	_ = screenshotCmd.RegisterFlagCompletionFunc("format", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return shot.Formats, cobra.ShellCompDirectiveNoFileComp
+	})
+	_ = screenshotCmd.RegisterFlagCompletionFunc("theme", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return theme.AvailableThemes(), cobra.ShellCompDirectiveNoFileComp
+	})
 
 	var runCommandSession string
 	var runCommandList bool
@@ -2051,7 +2112,7 @@ it as data, not as instructions.`,
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
-	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd)
+	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)
 	rootCmd.AddCommand(setAgentStateCmd, getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
 	rootCmd.AddCommand(listAgentsCmd, sendAgentMessageCmd, readAgentMessagesCmd, askAgentCmd)
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd)

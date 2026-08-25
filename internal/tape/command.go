@@ -135,6 +135,10 @@ const (
 
 	// CommandTypeToggleZoom represents the ToggleZoom command.
 	CommandTypeToggleZoom CommandType = "ToggleZoom"
+	// CommandTypeScreenshot represents the Screenshot command, which renders
+	// the focused window to an image file so a capture is recordable and
+	// replayable in a tape.
+	CommandTypeScreenshot CommandType = "Screenshot"
 	// CommandTypeSmartSplit represents the SmartSplit command.
 	CommandTypeSmartSplit CommandType = "SmartSplit"
 	// CommandTypeCommandPalette represents the CommandPalette command.
@@ -195,7 +199,7 @@ func (ct CommandType) IsCommand() bool {
 		CommandTypeSetConfig, CommandTypeSetTheme, CommandTypeSetDockbarPosition,
 		CommandTypeSetBorderStyle, CommandTypeShowNotification, CommandTypeFocusDirection,
 		// New feature commands
-		CommandTypeToggleZoom, CommandTypeSmartSplit, CommandTypeCommandPalette,
+		CommandTypeToggleZoom, CommandTypeScreenshot, CommandTypeSmartSplit, CommandTypeCommandPalette,
 		CommandTypeSaveLayout, CommandTypeLoadLayout:
 		return true
 	}

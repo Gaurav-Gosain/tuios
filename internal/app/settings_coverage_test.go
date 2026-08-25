@@ -35,6 +35,16 @@ var settingsUIExcluded = map[string]string{
 	// through the config file and through set-config, both of which are the
 	// host's own doing.
 	"notifications.agent.command": "a shell command the host runs; not for a panel any client can open",
+
+	// Two filesystem paths on the machine hosting the session. A row would let
+	// whoever attached point server-side writes and server-side reads at any
+	// path, and `tuios ssh` authenticates no client, which is the reason
+	// notifications.agent.command has no row either. Both stay settable through
+	// the config file and set-config, which are the host's own doing. A path is
+	// also the one value no accepted set can check, so a row could not validate
+	// what it took.
+	"screenshot.directory": "a server-side write path; not for a panel any client can open",
+	"screenshot.font_file": "a server-side read path; not for a panel any client can open",
 }
 
 // TestSettingsPanelReachesEveryOption is the guard this branch was opened for.

@@ -30,6 +30,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.28 // indirect
 	github.com/pires/go-proxyproto v0.12.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	golang.org/x/image v0.45.0 // indirect
 )
 
 require (

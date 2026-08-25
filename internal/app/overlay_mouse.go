@@ -466,6 +466,11 @@ func (m *OS) closeOverlay(kind string) {
 		m.SessionSwitcherScroll = 0
 	case "workspace":
 		m.CloseWorkspaceSwitcher()
+	case overlayKindShot:
+		// Click-away keeps the file. Only esc discards, because a click that
+		// lands outside a panel is as often a miss as an intention, and a
+		// deleted screenshot cannot be got back.
+		m.CloseScreenshotPreview(false)
 	case "layout":
 		m.ShowLayoutPicker = false
 	case "accent":

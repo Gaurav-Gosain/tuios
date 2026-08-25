@@ -453,14 +453,17 @@ func (m *OS) clearLauncherIcons() {
 // compresses to a few hundred bytes, and the escape sequence is chunked at the
 // protocol's limit either way.
 func appendKittyTransmit(buf []byte, id uint32, img *image.RGBA) []byte {
-	var raw []byte
-	{
-		w := &byteWriter{}
-		if png.Encode(w, img) != nil {
-			return buf
-		}
-		raw = w.b
+	w := &byteWriter{}
+	if png.Encode(w, img) != nil {
+		return buf
 	}
+	return appendKittyTransmitPNG(buf, id, w.b)
+}
+
+// appendKittyTransmitPNG is appendKittyTransmit for a payload that is already
+// PNG bytes. The screenshot preview has one of those and would otherwise
+// decode it back to pixels only for the encoder to put it straight back.
+func appendKittyTransmitPNG(buf []byte, id uint32, raw []byte) []byte {
 	enc := base64.StdEncoding.EncodeToString(raw)
 	for off := 0; off < len(enc); off += launcherIconChunk {
 		end := min(off+launcherIconChunk, len(enc))
@@ -485,10 +488,16 @@ func appendKittyTransmit(buf []byte, id uint32, img *image.RGBA) []byte {
 // box. The cursor is saved and restored around it, since the frame that was
 // just written left it where the renderer wanted it.
 func appendKittyPlace(buf []byte, id, placement uint32, x, y int) []byte {
+	return appendKittyPlaceBox(buf, id, placement, x, y, launcherIconCols, launcherIconRows)
+}
+
+// appendKittyPlaceBox is appendKittyPlace with the cell box spelled out, for a
+// caller whose picture is not an icon-sized one.
+func appendKittyPlaceBox(buf []byte, id, placement uint32, x, y, cols, rows int) []byte {
 	buf = append(buf, "\x1b7"...)
 	buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", y+1, x+1)...)
 	buf = append(buf, fmt.Sprintf("\x1b_Ga=p,i=%d,p=%d,c=%d,r=%d,q=2,C=1;\x1b\\",
-		id, placement, launcherIconCols, launcherIconRows)...)
+		id, placement, cols, rows)...)
 	buf = append(buf, "\x1b8"...)
 	return buf
 }

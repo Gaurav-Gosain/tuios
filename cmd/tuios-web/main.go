@@ -602,6 +602,9 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch
 		ForceGraphicsEnabled: true,
 		GraphicsOutput:       graphicsOut,
 		TouchClient:          touch,
+		// The TUI runs beside the daemon and the user is in a browser
+		// somewhere else, so nothing here may touch the host's own desktop.
+		RemoteClient: true,
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
@@ -713,6 +716,9 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth,
 		ForceGraphicsEnabled: true,
 		GraphicsOutput:       graphicsOut,
 		TouchClient:          touch,
+		// The TUI runs beside the daemon and the user is in a browser
+		// somewhere else, so nothing here may touch the host's own desktop.
+		RemoteClient: true,
 	})
 
 	// Restore state from daemon if available

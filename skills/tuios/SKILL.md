@@ -130,6 +130,21 @@ tuios capture-pane -s work -w build --scrollback --lines 40
 its last 40 real lines. Add `--ansi` when you need the colors; leave it off when
 you are matching text, which is almost always.
 
+## Showing someone a pane
+
+`capture-pane` gives you the text. When the point is for a person to look at it,
+`screenshot` renders the pane as an image instead, with its colors and styles
+intact and a frame around it:
+
+```sh
+tuios screenshot -s work -w build
+```
+
+It prints the path it wrote and works on a detached session. `--format` takes
+`png`, `svg`, `ansi`, `html` or `txt`; `--out` names the file; `--scrollback`
+puts the pane's history above the screen; `--json` gives you the path, size and
+any warnings as an object. The file is attachable to `send-agent-message`.
+
 ## Typing into a pane
 
 `send-text` writes bytes to the pane's PTY with no parsing. Whatever you pass
@@ -841,7 +856,7 @@ like "make it look like X" usually means some of each:
 | **Spacing** | ground between panes, padding inside overlay panels | `appearance.gap`, `appearance.panel_padding` |
 | **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
 
-The 92 options above are scalars, and spacing and composition are set with them
+The 107 options above are scalars, and spacing and composition are set with them
 like any other. Colour and shape are not: each is a name from an open set
 standing for a document kept in a directory rather than a value in the config
 file, which is why both have a verb of their own rather than a row in

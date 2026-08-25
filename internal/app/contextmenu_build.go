@@ -268,6 +268,7 @@ func (m *OS) paneMenu(windowIndex int) (string, []ContextMenuItem) {
 		// An accent shows on the rail, so there is nothing to set without one.
 		m.item(glyphPalette, "Accent color", "set_accent", !m.SidebarActive()),
 		m.item(glyphZoom, "Zoom", "toggle_zoom", false),
+		m.item(glyphCopy, "Screenshot this window", "screenshot_window", false),
 		m.item(glyphMinimize, "Minimize", "minimize_window", false),
 		closeItem,
 	}

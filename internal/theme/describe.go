@@ -104,6 +104,25 @@ func Describe(id string) (Palette, bool) {
 	return p, true
 }
 
+// Colors resolves a theme id to concrete colours: the sixteen ANSI entries
+// plus the foreground, background and cursor.
+//
+// Describe answers the same question in hex strings for a person to read;
+// this one answers it in color.Color for code that has to draw. The daemon is
+// the caller that needs it: it never selects a tint of its own, so Current()
+// and GetANSIPalette() answer for nothing there, and a screenshot rendered
+// daemon-side has to resolve the session's theme by name.
+func Colors(id string) (palette [16]color.Color, fg, bg, cursor color.Color, ok bool) {
+	if id == "" || !Exists(id) {
+		return palette, nil, nil, nil, false
+	}
+	t, found := tint.GetTint(id)
+	if !found || t == nil {
+		return palette, nil, nil, nil, false
+	}
+	return paletteOf(t), t.Fg, t.Bg, t.Cursor, true
+}
+
 // paletteOf is GetANSIPalette for a theme that is not the active one.
 func paletteOf(t *tint.Tint) [16]color.Color {
 	return [16]color.Color{

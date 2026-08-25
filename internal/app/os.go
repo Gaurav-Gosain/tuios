@@ -174,6 +174,33 @@ type OS struct {
 	// rather than a config global because one server holds several at once and
 	// a phone attaching must not change what the desktop beside it can hit.
 	TouchClient bool
+
+	// RemoteClient marks a client process that is not on the user's machine.
+	// See OSOptions.RemoteClient.
+	RemoteClient bool
+
+	// Capture is capture mode: the window pick, the region drag and the
+	// full-screen grab. Zero when the mode is off.
+	Capture captureState
+
+	// ShotPreview is the panel that opens after a capture. Zero when closed,
+	// and never read by tickNeedsWork: it is a static panel.
+	ShotPreview screenshotPreview
+
+	// captureHits are the window rectangles capture mode drew a highlight
+	// around this frame, so the click handler reads what was drawn instead of
+	// recomputing a layout. Reused between frames, never reallocated.
+	captureHits []captureHit
+
+	// shotImagePlaced records that the preview's kitty placement is on the
+	// host, so closing the panel takes it down again. shotImageSent records
+	// that the picture itself is resident, so a panel that only moved costs a
+	// placement and not another upload. shotPlacement is what was last drawn,
+	// so an unchanged frame emits nothing at all.
+	shotImagePlaced bool
+	shotImageSent   bool
+	shotPlacement   screenshotPlacementState
+
 	// BSP tiling state
 	WorkspaceTrees      map[int]*layout.BSPTree // BSP tree per workspace
 	PreselectionDir     layout.PreselectionDir  // Pending preselection direction (0 = none)

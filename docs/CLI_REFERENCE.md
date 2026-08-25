@@ -1241,6 +1241,74 @@ tuios capture-pane -w editor --scrollback > pane.txt
 
 ---
 
+### `tuios screenshot`
+
+Render a window to a styled image and save it.
+
+**Usage:**
+```bash
+tuios screenshot [flags]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `-w, --window <id-or-name>` - Target window (default: focused)
+- `-f, --format <fmt>` - `png` (default), `svg`, `ansi`, `html` or `txt`
+- `--frame <style>` - `window` (default), `plain` or `none`
+- `--theme <name>` - Render in this palette instead of the session's
+- `-o, --out <path>` - Write here instead of a generated name
+- `-S, --scrollback` - Put the pane's history above the screen
+- `--lines <N>` - Bound the history to the last N rows
+- `--cursor` - Draw the cursor cell
+- `--no-copy` - Do not try to copy the image to the clipboard
+- `--json` - Output the result as JSON
+
+The daemon renders and writes the file, so this works on a detached session
+with nobody attached. It prints the path it wrote.
+
+Everything about the frame comes from the `screenshot.*` options: padding, a
+wash derived from your theme, corner radius, shadow, title bar and window
+control marks. `png` and `svg` carry the frame; `ansi` and `txt` are the bare
+stream.
+
+With no theme set, basic and indexed colors fall back to the xterm reference
+defaults. Only your terminal knows its own palette, so that is a guess and the
+result says so on stderr. `--theme` renders in a named palette instead.
+
+PNG draws glyphs with a built in font that has no Nerd Font icons. Point
+`screenshot.font_file` at the font you already use and they render; without it
+a missing glyph draws as a dotted outline box rather than a silent blank.
+That same setting embeds the font in SVG and HTML output so those files stand
+alone, which makes them megabytes rather than kilobytes. Leave it unset when
+you mostly export SVG.
+
+**Examples:**
+```bash
+# The focused window, as a PNG under screenshot.directory
+tuios screenshot
+
+# A named window on a named session, detached is fine
+tuios screenshot -s work -w build
+
+# With history above the screen
+tuios screenshot --scrollback --lines 200
+
+# An SVG for a README
+tuios screenshot --format svg --out demo.svg
+
+# Re-render in another palette
+tuios screenshot --theme catppuccin_mocha
+
+# For a script
+tuios screenshot --json
+```
+
+Region and full screen captures are not CLI commands. They need a viewport and
+composed chrome, which only an attached client has: press the leader then `C`
+in the TUI and drag, or press `f`.
+
+---
+
 ## Scripting Examples
 
 These remote control and inspection commands enable powerful scripting workflows.

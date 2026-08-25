@@ -145,6 +145,8 @@ func (p *Parser) parseCommand() (Command, bool) {
 		return p.parseBasicCommand(CommandTypeEqualizeSplits)
 	case TokenToggleZoom:
 		return p.parseBasicCommand(CommandTypeToggleZoom)
+	case TokenScreenshot:
+		return p.parseBasicCommand(CommandTypeScreenshot)
 	case TokenSmartSplit:
 		return p.parseBasicCommand(CommandTypeSmartSplit)
 	case TokenCommandPalette:
