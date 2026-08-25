@@ -23,7 +23,7 @@ func tabEncodingCase(t *testing.T, name string, keys ...string) {
 		term, _ := start(t, startOpts{
 			cols: 160, rows: 45,
 			args: []string{"--standalone"},
-			env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+			env:  []string{"PATH=" + dir + ":/usr/bin:/bin", "PS1=" + typeOutPrompt + " "},
 		})
 		waitBoot(t, term)
 		queryProbe(t, term)
@@ -40,12 +40,13 @@ func tabEncodingCase(t *testing.T, name string, keys ...string) {
 			t.Fatalf("Tab in this encoding did nothing; the launcher is still open: %v\n%s",
 				err, term.Snapshot())
 		}
-		if err := term.SendKeys(tuitest.Enter); err != nil {
-			t.Fatalf("enter: %v", err)
-		}
-		if err := term.WaitForText(runAnythingMarker, shellTimeout); err != nil {
-			t.Fatalf("no command was waiting at the prompt: %v\n%s", err, term.Snapshot())
-		}
+		// Enter only once the shell's prompt is up. An Enter racing the shell's
+		// startup can be eaten by the termios handover: the typed line survives
+		// in the editor and the CR does not, which this test hit once in ~100
+		// loaded runs. What Tab's encoding did is already decided by here; the
+		// prompt wait adds no assertion, only ordering.
+		waitForPaneShell(t, term)
+		requireTypedThenRuns(t, term)
 	})
 }
 

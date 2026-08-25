@@ -197,23 +197,3 @@ func writeArgProbe(t *testing.T) string {
 	}
 	return dir
 }
-
-// manyPrograms fills a directory with executables so the first scan of $PATH
-// takes long enough to be raced, the way a real machine's several thousand do,
-// and puts the probe among them.
-func manyPrograms(t *testing.T, n int) string {
-	t.Helper()
-	dir := t.TempDir()
-	filler := []byte("#!/bin/sh\nexec sleep 30\n")
-	for i := range n {
-		p := filepath.Join(dir, "filler"+strings.Repeat("x", 1+i%12)+strconv.Itoa(i))
-		if err := os.WriteFile(p, filler, 0o755); err != nil {
-			t.Fatalf("filler: %v", err)
-		}
-	}
-	probe := "#!/bin/sh\necho " + runAnythingMarker + "\nexec sleep 30\n"
-	if err := os.WriteFile(filepath.Join(dir, probeName), []byte(probe), 0o755); err != nil {
-		t.Fatalf("probe: %v", err)
-	}
-	return dir
-}
