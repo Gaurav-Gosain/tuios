@@ -140,9 +140,7 @@ comprehensive keyboard/mouse interactions.`,
 			}
 
 			if listThemes {
-				if err := theme.Initialize("default"); err != nil {
-					return fmt.Errorf("failed to initialize themes: %w", err)
-				}
+				theme.EnsureRegistry()
 				themes := tint.TintIDs()
 				for _, t := range themes {
 					fmt.Println(t)
