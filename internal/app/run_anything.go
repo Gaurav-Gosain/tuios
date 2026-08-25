@@ -1,7 +1,9 @@
 package app
 
 import (
+	"os"
 	"slices"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -35,7 +37,32 @@ func (m *OS) ScanPathApps() tea.Cmd {
 	}
 	desktop := m.desktopApps
 	return func() tea.Msg {
+		holdScanForTest()
 		return PathAppsMsg{Entries: scanLauncherSources(cache, desktop)}
+	}
+}
+
+// holdScanForTest lets the end-to-end tests decide when a scan finishes.
+//
+// The launcher's contract for a verb pressed before the scan lands is real
+// behaviour, but a test driving a separate tuios process cannot reach the scan
+// with a Go-level fake, and racing it with keystrokes loses on machines whose
+// scan is faster than their PTY: CI proved that both ways. So the seam is a
+// file. TUIOS_E2E_HOLD_SCAN names a path, and while that file exists a scan
+// waits here before reading anything; the test removes the file when it wants
+// the scan to land. Ordinary runs never set the variable, pay one Getenv per
+// scan, and the wait sits in the scan's own goroutine, so the input loop and
+// the idle path cost nothing.
+func holdScanForTest() {
+	hold := os.Getenv("TUIOS_E2E_HOLD_SCAN")
+	if hold == "" {
+		return
+	}
+	for {
+		if _, err := os.Stat(hold); err != nil {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
 	}
 }
 

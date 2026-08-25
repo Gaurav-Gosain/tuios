@@ -88,6 +88,13 @@ func launchProbe(t *testing.T, term *tuitest.Terminal) {
 // TestLauncherIsNotTheCommandPalette is the separation, checked where it is
 // visible: ctrl+p lists commands and does not list programs, and alt+space
 // lists programs.
+//
+// The launcher half runs first, deliberately. Its row wait is what proves a
+// scan has landed and the probe is in the program tables, and only then does
+// "the palette does not list it" mean anything. Asked the other way round the
+// palette was quizzed before any scan had run, and "No matching commands"
+// passed just as readily against a build that ranks programs among the
+// commands but had not found them yet.
 func TestLauncherIsNotTheCommandPalette(t *testing.T) {
 	dir := writeProbe(t)
 	term, _ := start(t, startOpts{
@@ -96,6 +103,16 @@ func TestLauncherIsNotTheCommandPalette(t *testing.T) {
 	})
 	waitBoot(t, term)
 
+	queryProbe(t, term)
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatalf("close the launcher: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), launcherTitle)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the launcher never closed: %v\n%s", err, term.Snapshot())
+	}
+
 	if err := term.SendKeys(legacyCtrlP); err != nil {
 		t.Fatalf("send ctrl+p: %v", err)
 	}
@@ -103,8 +120,8 @@ func TestLauncherIsNotTheCommandPalette(t *testing.T) {
 	if err := term.SendKeys(probeName); err != nil {
 		t.Fatalf("type the probe's name: %v", err)
 	}
-	// Long enough for a scan to have landed, had one been able to put the
-	// program in this box.
+	// The scan above has landed and listed the probe, so if the palette were
+	// ever going to rank it among the commands it has everything it needs.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "No matching commands")
 	}, uiTimeout); err != nil {
@@ -131,7 +148,7 @@ func TestLauncherTypesTheCommandOut(t *testing.T) {
 	dir := writeProbe(t)
 	term, _ := start(t, startOpts{
 		args: []string{"--standalone"},
-		env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+		env:  []string{"PATH=" + dir + ":/usr/bin:/bin", "PS1=" + typeOutPrompt + " "},
 	})
 	waitBoot(t, term)
 	queryProbe(t, term)
@@ -139,24 +156,14 @@ func TestLauncherTypesTheCommandOut(t *testing.T) {
 	if err := term.SendKeys(tuitest.Tab); err != nil {
 		t.Fatalf("type the probe out: %v", err)
 	}
-	// The pane's shell echoes what it was sent once its line editor is up.
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), probeName) && !strings.Contains(s.Text(), launcherTitle)
-	}, shellTimeout); err != nil {
-		t.Fatalf("the command never reached the new pane's prompt: %v\n%s", err, term.Snapshot())
-	}
-	if strings.Contains(term.Screen().Text(), runAnythingMarker) {
-		t.Fatalf("the program ran, so it was not left for the user to run:\n%s", term.Snapshot())
-	}
-
+	// Enter only once the shell's prompt is up. Waiting for the probe's name
+	// was no wait at all, since the pane's border carries it as a title the
+	// moment the pane exists, and an Enter racing the shell's startup can be
+	// eaten by the termios handover.
+	waitForPaneShell(t, term)
 	// And pressing Enter now runs the very command that was waiting, which is
 	// the whole point of putting it there.
-	if err := term.SendKeys(tuitest.Enter); err != nil {
-		t.Fatalf("run the typed command: %v", err)
-	}
-	if err := term.WaitForText(runAnythingMarker, shellTimeout); err != nil {
-		t.Fatalf("the waiting command did not run when entered: %v\n%s", err, term.Snapshot())
-	}
+	requireTypedThenRuns(t, term)
 }
 
 // TestRunAnythingExecsLocalPane pins the local half of the launch semantics: a

@@ -3,12 +3,33 @@ package tuie2e
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
+
+// holdScan plants the file that makes the tuios under test hold its $PATH scan
+// open (TUIOS_E2E_HOLD_SCAN in internal/app/run_anything.go). It returns the
+// environment entry to start tuios with and the release that lets the scan
+// land.
+//
+// The seam exists because these tests drive a separate process: a Go-level
+// fake cannot reach its scan, and racing the scan with keystrokes loses
+// somewhere. This machine's scan is slower than its key delivery; CI's is
+// faster, and there the verb arrived after the rows and the "before the scan"
+// test was silently testing the ordinary path. Holding the scan makes the
+// ordering a fact the test states rather than a race it hopes to win.
+func holdScan(t *testing.T) (env string, release func()) {
+	t.Helper()
+	hold := filepath.Join(t.TempDir(), "hold-scan")
+	if err := os.WriteFile(hold, nil, 0o644); err != nil {
+		t.Fatalf("hold-scan file: %v", err)
+	}
+	return "TUIOS_E2E_HOLD_SCAN=" + hold, func() { _ = os.Remove(hold) }
+}
 
 // The launcher's icons are kitty placements, and a placement outlives the
 // panel that drew it, so every way the panel can go away is its own way to
@@ -204,6 +225,15 @@ func TestLauncherIconsCloseByShortLivedProgram(t *testing.T) {
 func TestLauncherIconsEmptyQuery(t *testing.T) {
 	f := newLauncherFixture(t, 20)
 	f.openWithQuery(t, "", 0)
+	// With no query there is no row to wait for by name, so the scan landing
+	// is waited on directly: its placeholder line leaves the panel when the
+	// rows arrive. Without this, a scan slower than the settle below closes an
+	// empty panel and the clean check passes over a launcher that never drew.
+	if err := f.term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "Scanning for programs")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the scan never filled the unfiltered list: %v\n%s", err, f.term.Snapshot())
+	}
 	f.settle(t, true)
 
 	if err := f.term.SendKeys(tuitest.Esc); err != nil {
@@ -249,20 +279,41 @@ func TestLauncherIconsNoMatchQuery(t *testing.T) {
 // TestLauncherIconsClosedDuringScan closes the launcher in the window where the
 // $PATH scan it asked for has not come back yet, so the rows it would have
 // rebuilt land on a closed panel.
+//
+// The scan is held open across every close rather than raced with sleeps, so
+// "the scan had not come back" is true on each pass by construction; an
+// unheld version only hit that window when the machine happened to be slow
+// enough. From the second pass on, the previous pass's landed scan puts rows
+// and their icon decodes on screen at open, so the close also catches decodes
+// in flight, which the varied sleep is for: it widens the churn and gates no
+// assertion.
 func TestLauncherIconsClosedDuringScan(t *testing.T) {
-	f := newLauncherFixture(t, 20)
+	hold := filepath.Join(t.TempDir(), "hold-scan")
+	if err := os.WriteFile(hold, nil, 0o644); err != nil {
+		t.Fatalf("hold-scan file: %v", err)
+	}
+	f := newLauncherFixture(t, 20, "TUIOS_E2E_HOLD_SCAN="+hold)
 	for i := range 6 {
+		if err := os.WriteFile(hold, nil, 0o644); err != nil {
+			t.Fatalf("rearm hold-scan: %v", err)
+		}
 		openLauncher(t, f.term)
 		if err := f.term.SendKeys("zzapp"); err != nil {
 			t.Fatalf("type query: %v", err)
 		}
-		// Deliberately no wait: close while the scan and the decodes are still
-		// in flight.
 		time.Sleep(time.Duration(40*i) * time.Millisecond)
 		if err := f.term.SendKeys(tuitest.Esc); err != nil {
 			t.Fatalf("esc: %v", err)
 		}
 		f.waitClosed(t, "esc during scan")
+		// Only now may the scan land, on a panel that is already gone. The
+		// pause is release propagation, not a gate: a scan that misses it
+		// stays held until the next release and lands on a closed panel all
+		// the same.
+		if err := os.Remove(hold); err != nil {
+			t.Fatalf("release hold-scan: %v", err)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	f.settle(t, false)
 	f.requireClean(t, "closing while a scan was in flight")
@@ -436,21 +487,65 @@ func waitForPaneShell(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
+// heldShell writes a shell whose start the test controls: it waits for the
+// hold file to disappear, then becomes /bin/sh. The pane spawns it through
+// $SHELL, so the window between "the pane's PTY exists" and "a shell is
+// reading it" is held open for as long as the test needs it to be.
+//
+// The prompt is re-set through env at the exec because the wrapper itself is a
+// non-interactive shell, and where /bin/sh is bash a non-interactive shell
+// drops PS1 from the environment on its way through.
+func heldShell(t *testing.T, hold string) string {
+	t.Helper()
+	sh := filepath.Join(t.TempDir(), "heldsh")
+	script := "#!/bin/sh\nwhile [ -e \"" + hold + "\" ]; do sleep 0.02; done\n" +
+		"exec /usr/bin/env PS1='" + typeOutPrompt + " ' /bin/sh \"$@\"\n"
+	if err := os.WriteFile(sh, []byte(script), 0o755); err != nil {
+		t.Fatalf("held shell: %v", err)
+	}
+	return sh
+}
+
 // TestLauncherTypesOutIntoASpawningPane is the local half: the pane and its PTY
 // exist the moment the launcher asks for them, and the line is written into a
 // shell that has not started yet.
+//
+// The shell is held with heldShell so "has not started yet" is a certainty
+// rather than a spawn raced and usually won: the line is provably in the PTY
+// before the shell exists, and the shell's line editor still has to pick it
+// up when it arrives.
 func TestLauncherTypesOutIntoASpawningPane(t *testing.T) {
 	dir := writeProbe(t)
+	hold := filepath.Join(t.TempDir(), "hold-shell")
+	if err := os.WriteFile(hold, nil, 0o644); err != nil {
+		t.Fatalf("hold-shell file: %v", err)
+	}
 	term, _ := start(t, startOpts{
 		args: []string{"--standalone"},
-		// The harness's own /bin/sh, which every machine this runs on has.
-		env: []string{"PATH=" + dir + ":/usr/bin:/bin", "PS1=" + typeOutPrompt + " "},
+		// The wrapper execs the harness's own /bin/sh, which every machine
+		// this runs on has.
+		env: []string{"PATH=" + dir + ":/usr/bin:/bin", "PS1=" + typeOutPrompt + " ",
+			"SHELL=" + heldShell(t, hold)},
 	})
 	waitBoot(t, term)
 	queryProbe(t, term)
 
 	if err := term.SendKeys(tuitest.Tab); err != nil {
 		t.Fatalf("tab: %v", err)
+	}
+	// The launcher closes and the pane stands in the same update that wrote
+	// the line, so once both are on screen the line is in the PTY, and the
+	// shell is still held: written-before-started is now a fact.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), launcherTitle) && countWindows(s) == 1
+	}, uiTimeout); err != nil {
+		t.Fatalf("tab never opened the pane: %v\n%s", err, term.Snapshot())
+	}
+	if strings.Contains(term.Screen().Text(), runAnythingMarker) {
+		t.Fatalf("the program ran before its shell had even started:\n%s", term.Snapshot())
+	}
+	if err := os.Remove(hold); err != nil {
+		t.Fatalf("release the shell: %v", err)
 	}
 	waitForPaneShell(t, term)
 	requireTypedThenRuns(t, term)
@@ -469,8 +564,10 @@ func TestLauncherTypesOutIntoADaemonPane(t *testing.T) {
 	// The daemon spawns the pane's shell from its own environment, and this
 	// path types a bare name for that shell to resolve, so the probe has to be
 	// on the daemon's $PATH and not only on the client's. The daemon inherits
-	// this process's, which is what makes setting it here enough.
+	// this process's, which is what makes setting it here enough. The prompt
+	// rides the same way, so waitForPaneShell below has something to wait on.
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	t.Setenv("PS1", typeOutPrompt+" ")
 
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -504,6 +601,9 @@ func TestLauncherTypesOutIntoADaemonPane(t *testing.T) {
 	}, shellTimeout); err != nil {
 		t.Fatalf("the daemon never created the pane: %v\n%s", err, term.Snapshot())
 	}
+	// The pane exists before its shell is reading; Enter waits for the prompt
+	// so it cannot be eaten by the shell's startup termios handover.
+	waitForPaneShell(t, term)
 	requireTypedThenRuns(t, term)
 }
 
@@ -584,6 +684,12 @@ func TestLauncherLeavesTheRightModeBehind(t *testing.T) {
 		t.Fatalf("tab: %v", err)
 	}
 	waitForPaneShell(t, term)
+	// Tab entered terminal mode on the launcher's behalf, and for insertGuard
+	// after that entry tuios swallows unmodified text keys as possible mouse
+	// fragments. A fast shell can put the prompt up inside that window, so the
+	// guard is waited out; it is a fixed span from a moment already past, not
+	// a race.
+	time.Sleep(insertGuard)
 	if err := term.SendKeys("EXTRA"); err != nil {
 		t.Fatalf("type an argument: %v", err)
 	}
@@ -623,7 +729,8 @@ func TestLauncherLeavesTheRightModeBehind(t *testing.T) {
 // --- acting before the list exists -----------------------------------------
 
 // openAndRace opens the launcher, types the query, and presses key with no wait
-// in between, which is how a person uses it and how the list is raced.
+// in between, which is how a person uses it. Whether the scan has landed by the
+// keypress is not left to timing: the caller holds the scan with holdScan.
 func openAndRace(t *testing.T, term *tuitest.Terminal, query string, key tuitest.Key) {
 	t.Helper()
 	if err := term.SendKeys(altSpace); err != nil {
@@ -649,35 +756,51 @@ func openAndRace(t *testing.T, term *tuitest.Terminal, query string, key tuitest
 // return, which threw the query away, dismissed the panel and said nothing:
 // indistinguishable from the key not being bound. The wait it needs is the
 // scan, not the pane's shell.
+//
+// The scan is held with holdScan rather than raced. An earlier version planted
+// four thousand programs to slow the scan and pressed the verb quickly; on CI
+// the scan won anyway, the verb landed on a filled list and ran the probe, and
+// the "why the key did nothing" wait timed out against a launcher that had
+// rightly closed. Held, the ordering is guaranteed on any machine, however
+// fast its filesystem or slow its PTY.
 func TestVerbBeforeTheScanLands(t *testing.T) {
 	for _, verb := range []struct {
 		name string
 		key  tuitest.Key
 	}{{"tab", tuitest.Tab}, {"enter", tuitest.Enter}} {
 		t.Run(verb.name, func(t *testing.T) {
-			dir := manyPrograms(t, 4000)
+			dir := writeProbe(t)
+			holdEnv, release := holdScan(t)
 			term, _ := start(t, startOpts{
 				cols: 160, rows: 45,
 				args: []string{"--standalone"},
-				env:  []string{"PATH=" + dir + ":/usr/bin:/bin"},
+				env: []string{"PATH=" + dir + ":/usr/bin:/bin",
+					"PS1=" + typeOutPrompt + " ", holdEnv},
 			})
 			waitBoot(t, term)
 			openAndRace(t, term, probeName, verb.key)
 
-			// The panel is still up with the query intact, and it says why the
-			// key did nothing.
-			if txt := term.Screen().Text(); !strings.Contains(txt, launcherTitle) {
-				t.Fatalf("%s before the scan landed dismissed the launcher and did "+
-					"nothing:\n%s", verb.name, term.Snapshot())
-			}
+			// The scan cannot have landed, so the verb found nothing: the
+			// panel says why the key did nothing, and it is still up with the
+			// query intact after the verb was handled.
 			if err := term.WaitForText("Still finding the programs", uiTimeout); err != nil {
 				t.Fatalf("nothing said why the key did nothing: %v\n%s", err, term.Snapshot())
 			}
+			if txt := term.Screen().Text(); !strings.Contains(txt, launcherTitle) {
+				t.Fatalf("%s before the scan landed dismissed the launcher:\n%s",
+					verb.name, term.Snapshot())
+			}
+			if txt := term.Screen().Text(); !strings.Contains(txt, probeName) {
+				t.Fatalf("%s before the scan landed threw the query away:\n%s",
+					verb.name, term.Snapshot())
+			}
 
-			// The rows arrive behind the query, so the same key now works.
+			// Let the scan land. The rows arrive behind the query, so the same
+			// key now works.
+			release()
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				return strings.Count(s.Text(), probeName) >= 2
-			}, 30*time.Second); err != nil {
+			}, uiTimeout); err != nil {
 				t.Fatalf("the scan never filled the list: %v\n%s", err, term.Snapshot())
 			}
 			if err := term.SendKeys(verb.key); err != nil {
@@ -689,7 +812,11 @@ func TestVerbBeforeTheScanLands(t *testing.T) {
 				t.Fatalf("the second %s did nothing either: %v\n%s", verb.name, err, term.Snapshot())
 			}
 			if verb.name == "tab" {
-				// Tab leaves it waiting to be run, so Enter is what runs it.
+				// Tab leaves it waiting to be run, so Enter is what runs it,
+				// and only once the prompt shows a shell is reading: an Enter
+				// racing the shell's startup can be eaten by the termios
+				// handover.
+				waitForPaneShell(t, term)
 				if err := term.SendKeys(tuitest.Enter); err != nil {
 					t.Fatalf("enter: %v", err)
 				}
