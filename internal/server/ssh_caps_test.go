@@ -88,6 +88,37 @@ func TestBuildClientCapabilities_NoPixelsNoCellSize(t *testing.T) {
 	}
 }
 
+// TestBuildClientCapabilities_CellSizeOverride pins TUIOS_CELL_SIZE over SSH.
+// Most SSH clients forward no pixel dimensions at all, so this is the only way
+// a remote session can say how big a cell is, and everything tuios draws in
+// cells is the wrong shape without it. The variable is the same one a local
+// client reads, so it means one thing wherever it is set.
+//
+// Negative control: with the override removed from buildClientCapabilities the
+// first case keeps the zero cell size and fails.
+func TestBuildClientCapabilities_CellSizeOverride(t *testing.T) {
+	// No pixel dimensions, which is the case the override exists for.
+	bare := ssh.Window{Width: 80, Height: 24}
+	caps := buildClientCapabilities("xterm-kitty", []string{"TUIOS_CELL_SIZE=10x22"}, bare)
+	if caps.CellWidth != 10 || caps.CellHeight != 22 {
+		t.Errorf("expected a 10x22 cell from the override, got %dx%d", caps.CellWidth, caps.CellHeight)
+	}
+
+	// It wins over the pty-req, because the client that set it is saying the
+	// pty-req is wrong.
+	win := ssh.Window{Width: 80, Height: 24, WidthPixels: 800, HeightPixels: 480}
+	caps = buildClientCapabilities("xterm-kitty", []string{"TUIOS_CELL_SIZE=7x15"}, win)
+	if caps.CellWidth != 7 || caps.CellHeight != 15 {
+		t.Errorf("expected the override to beat the pty-req, got %dx%d", caps.CellWidth, caps.CellHeight)
+	}
+
+	// Nonsense is ignored rather than believed.
+	caps = buildClientCapabilities("xterm-kitty", []string{"TUIOS_CELL_SIZE=zero"}, win)
+	if caps.CellWidth != 10 || caps.CellHeight != 20 {
+		t.Errorf("a malformed override changed the cell to %dx%d", caps.CellWidth, caps.CellHeight)
+	}
+}
+
 func TestClientToHostCapabilities_NeverForwardsFiles(t *testing.T) {
 	// The client is remote, so it cannot read a server-local file path. The host
 	// capabilities projected for the passthrough must always report

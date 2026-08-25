@@ -201,6 +201,13 @@ type OS struct {
 	shotImageSent   bool
 	shotPlacement   screenshotPlacementState
 
+	// shotCaptures counts the captures this client has taken. It is what
+	// names the picture the host holds, because the host holds one picture
+	// under the preview's image id and the only question that matters is
+	// whether that picture is this capture's. The file name cannot answer it:
+	// two captures in one second share a name.
+	shotCaptures int
+
 	// BSP tiling state
 	WorkspaceTrees      map[int]*layout.BSPTree // BSP tree per workspace
 	PreselectionDir     layout.PreselectionDir  // Pending preselection direction (0 = none)
