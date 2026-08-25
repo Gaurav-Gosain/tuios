@@ -110,6 +110,13 @@ func (d *ActionDispatcher) registerHandlers() {
 	// Window actions
 	d.Register("toggle_zoom", handleToggleZoom)
 
+	// Screenshot actions. Three, because the three things a person means by
+	// "take a screenshot" are different: pick one, take this window, take the
+	// lot. All three are reachable from run-command and from a custom keybind.
+	d.Register("screenshot", handleScreenshotPick)
+	d.Register("screenshot_window", handleScreenshotWindow)
+	d.Register("screenshot_screen", handleScreenshotScreen)
+
 	// Scrolling tiling actions (niri-like)
 	d.Register("scroll_focus_left", handleScrollFocusLeft)
 	d.Register("scroll_focus_right", handleScrollFocusRight)
@@ -477,6 +484,22 @@ func handleResizeHeightGrowTop(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 // ============================================================================
 // BSP Tiling Action Handlers
 // ============================================================================
+
+// handleScreenshotPick opens capture mode so the user chooses what to take.
+func handleScreenshotPick(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.BeginCapture(false)
+	return o, nil
+}
+
+// handleScreenshotWindow takes the focused window with no further gesture.
+func handleScreenshotWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.ScreenshotFocusedWindow()
+}
+
+// handleScreenshotScreen takes the whole composed frame.
+func handleScreenshotScreen(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.ScreenshotScreen()
+}
 
 func handleToggleZoom(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ToggleZoom()

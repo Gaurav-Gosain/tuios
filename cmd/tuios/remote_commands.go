@@ -14,8 +14,10 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/Gaurav-Gosain/tuios/internal/capture"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -1579,6 +1581,7 @@ func listAvailableCommands() {
 		{"Split vertical", "Split focused window vertically", "tuios run-command Split vertical"},
 		{"RotateSplit", "Rotate the split direction", "tuios run-command RotateSplit"},
 		{"EqualizeSplits", "Equalize all split ratios", "tuios run-command EqualizeSplits"},
+		{"Screenshot", "Save the focused window as an image", "tuios run-command Screenshot"},
 
 		// Workspace
 		{"SwitchWorkspace 1-9", "Switch to workspace N", "tuios run-command SwitchWorkspace 2"},
@@ -1727,6 +1730,7 @@ func getRunCommandCompletions(toComplete string) []string {
 		"SetBorderStyle\tChange border style",
 		"ShowNotification\tShow a notification",
 		"FocusDirection\tFocus window in direction",
+		"Screenshot\tSave the focused window as an image",
 	}
 
 	var filtered []string
@@ -1989,4 +1993,105 @@ func completeSessionNames(_ *cobra.Command, _ []string, _ string) ([]string, cob
 	}
 
 	return names, cobra.ShellCompDirectiveNoFileComp
+}
+
+// screenshotRequest is the CLI's resolved screenshot call.
+type screenshotRequest struct {
+	session    string
+	window     string
+	format     string
+	theme      string
+	frame      string
+	out        string
+	lines      int
+	scrollback bool
+	cursor     bool
+	copy       bool
+	noCopy     bool
+	jsonOutput bool
+}
+
+// runScreenshot renders a window to an image file through the daemon and then
+// says where the file is.
+//
+// The daemon writes the file, not the CLI. They talk over a unix socket, so
+// they are the same machine and the path the daemon reports is a path the
+// caller can open. That is also why a clipboard copy is attempted here: this
+// process is on the user's own machine, which is the rule an image copy has to
+// obey.
+func runScreenshot(req screenshotRequest) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("screenshot", map[string]any{
+		"session":    req.session,
+		"window":     req.window,
+		"format":     req.format,
+		"theme":      req.theme,
+		"frame":      req.frame,
+		"scrollback": req.scrollback,
+		"lines":      req.lines,
+		"cursor":     req.cursor,
+		"out":        req.out,
+	})
+	if err != nil {
+		return reportVerbError(explainVerbError("screenshot", err), req.jsonOutput)
+	}
+
+	var res struct {
+		Path     string   `json:"path"`
+		Host     string   `json:"host"`
+		Format   string   `json:"format"`
+		Cols     int      `json:"cols"`
+		Rows     int      `json:"rows"`
+		Bytes    int      `json:"bytes"`
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	copied, copyNote := maybeCopyScreenshot(res.Path, res.Format, req)
+
+	if req.jsonOutput {
+		out := map[string]any{
+			"success": true, "path": res.Path, "host": res.Host,
+			"format": res.Format, "cols": res.Cols, "rows": res.Rows,
+			"bytes": res.Bytes, "copied": copied,
+			"warnings": append(append([]string{}, res.Warnings...), copyNote...),
+		}
+		outputJSON(out)
+		return nil
+	}
+	fmt.Println(res.Path)
+	for _, w := range res.Warnings {
+		fmt.Fprintln(os.Stderr, w)
+	}
+	for _, w := range copyNote {
+		fmt.Fprintln(os.Stderr, w)
+	}
+	return nil
+}
+
+// maybeCopyScreenshot attempts the clipboard copy the flags asked for and
+// reports, in plain words, what actually happened.
+func maybeCopyScreenshot(path, format string, req screenshotRequest) (bool, []string) {
+	if req.noCopy || !req.copy || path == "" {
+		return false, nil
+	}
+	f, ok := shot.ParseFormat(format)
+	if !ok {
+		return false, nil
+	}
+	data, err := os.ReadFile(path) // #nosec G304 - the daemon just wrote this path
+	if err != nil {
+		return false, []string{"The file was written but could not be read back to copy it."}
+	}
+	if _, err := capture.CopyImage(path, data, f.MediaType()); err != nil {
+		return false, []string{"The file was saved. " + err.Error()}
+	}
+	return true, nil
 }

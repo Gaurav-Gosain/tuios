@@ -54,6 +54,34 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			},
 		},
 
+		// Screenshots. Three rows, because the three things a person means by
+		// "take a screenshot" want different gestures and only the first needs
+		// one.
+		{
+			Name:     "Screenshot this window",
+			Shortcut: "prefix+C",
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.ScreenshotFocusedWindow()
+			},
+		},
+		{
+			Name:     "Screenshot a region",
+			Shortcut: "drag to select",
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.BeginCapture(false)
+				return m, nil
+			},
+		},
+		{
+			Name:     "Screenshot the screen",
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.ScreenshotScreen()
+			},
+		},
+
 		// Window management
 		{
 			Name:     "New window",

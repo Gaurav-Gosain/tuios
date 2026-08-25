@@ -428,6 +428,33 @@ func init() {
 			examples: []string{`{"id":1,"verb":"capture-pane","params":{"session":"work","source":"recent","lines":50}}`},
 			handler:  (*Daemon).verbCapturePane,
 		},
+		"screenshot": {
+			description: "Render a window to an image file.",
+			params: []verbParam{
+				sessionParam,
+				windowParam,
+				{Name: "format", Type: "string", Description: "Output format.", Accepted: screenshotFormats, Default: "png"},
+				{Name: "frame", Type: "string", Description: "Dressing around the capture.", Accepted: screenshotFrames, Default: "window"},
+				{Name: "theme", Type: "string", Description: "Render in this theme instead of the session's. Truecolor cells are unchanged by it."},
+				{Name: "scrollback", Type: "bool", Description: "Put the pane's history above the screen in the picture.", Default: "false"},
+				{Name: "lines", Type: "int", Description: "Bound the history rows to the last N. Needs scrollback."},
+				{Name: "cursor", Type: "bool", Description: "Draw the cursor cell.", Default: "false"},
+				{Name: "out", Type: "string", Description: "Write here instead of generating a name under screenshot.directory."},
+			},
+			returns: []verbParam{
+				{Name: "path", Type: "string", Description: "The file that was written."},
+				{Name: "host", Type: "string", Description: "The machine the path is on: daemon or client."},
+				{Name: "format", Type: "string", Description: "The format that was rendered."},
+				{Name: "cols", Type: "int", Description: "Grid width in cells."},
+				{Name: "rows", Type: "int", Description: "Grid height in cells, history included."},
+				{Name: "bytes", Type: "int", Description: "Size of the written file."},
+				{Name: "warnings", Type: "[]string", Description: "Anything the render had to guess or fall back on. Empty when there is nothing to say."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"screenshot","params":{"session":"work","window":"build","format":"svg"}}`,
+			},
+			handler: (*Daemon).verbScreenshot,
+		},
 		"resize": {
 			description: "Resize a window's PTY.",
 			params: []verbParam{

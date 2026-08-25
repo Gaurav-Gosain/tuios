@@ -583,6 +583,89 @@ var optionSpecs = []Option{
 		Description: "Show the on-screen keycast of recent keypresses",
 		Default:     "false",
 	},
+
+	// [screenshot]
+	// The two path options (directory, font_file) are registered as plain
+	// strings: no accepted set can check a path, but a registry entry keeps
+	// them settable through set-option, which agents need. They are excluded
+	// from the settings panel instead (see settingsUIExcluded), for the
+	// reason notifications.agent.command is: an SSH client authenticates
+	// nobody and should not redirect server-side writes.
+	{
+		Path: "screenshot.format", Type: OptionString, Section: "screenshot",
+		Description: "Default output format for captures",
+		Accepted:    ScreenshotFormats, Default: ScreenshotDefaultFormat,
+	},
+	{
+		Path: "screenshot.copy", Type: OptionBool, Section: "screenshot",
+		Description: "Try to copy the capture to the clipboard",
+		Default:     "true",
+	},
+	{
+		Path: "screenshot.preview", Type: OptionBool, Section: "screenshot",
+		Description: "Open the preview panel after a capture",
+		Default:     "true",
+	},
+	{
+		Path: "screenshot.directory", Type: OptionString, Section: "screenshot",
+		Description: "Folder where capture files are saved",
+		Default:     ScreenshotDefaultDirectory,
+	},
+	{
+		Path: "screenshot.frame", Type: OptionString, Section: "screenshot",
+		Description: "Dressing around the capture: a window card, a plain card, or nothing",
+		Accepted:    ScreenshotFrames, Default: ScreenshotDefaultFrame,
+	},
+	{
+		Path: "screenshot.background", Type: OptionString, Section: "screenshot",
+		Description: "Wash behind the card: auto derives it from the theme; none, a hex color, or hex..hex work too",
+		Default:     ScreenshotDefaultBackground,
+	},
+	{
+		Path: "screenshot.padding", Type: OptionInt, Section: "screenshot",
+		Description: "Space around the card in pixels",
+		Default:     "48", Min: 0, Max: ScreenshotMaxPadding,
+	},
+	{
+		Path: "screenshot.radius", Type: OptionInt, Section: "screenshot",
+		Description: "Card corner radius in pixels",
+		Default:     "10", Min: 0, Max: ScreenshotMaxRadius,
+	},
+	{
+		Path: "screenshot.shadow", Type: OptionBool, Section: "screenshot",
+		Description: "Draw a soft shadow under the card",
+		Default:     "true",
+	},
+	{
+		Path: "screenshot.controls", Type: OptionString, Section: "screenshot",
+		Description: "Window control marks: quiet dots, macOS lights, your glyph set, or none",
+		Accepted:    ScreenshotControlSet, Default: ScreenshotDefaultControls,
+	},
+	{
+		Path: "screenshot.title_format", Type: OptionString, Section: "screenshot",
+		Description: "Title bar text, with {title}, {index} and {cwd} tokens",
+		Default:     ScreenshotDefaultTitleFormat,
+	},
+	{
+		Path: "screenshot.font_family", Type: OptionString, Section: "screenshot",
+		Description: "Font stack SVG and HTML output name",
+		Default:     ScreenshotDefaultFontFamily,
+	},
+	{
+		Path: "screenshot.font_file", Type: OptionString, Section: "screenshot",
+		Description: "Font file to draw PNG with and embed in SVG and HTML. It makes those files much larger.",
+		Default:     "",
+	},
+	{
+		Path: "screenshot.scale", Type: OptionInt, Section: "screenshot",
+		Description: "PNG size multiplier",
+		Default:     "2", Min: 1, Max: ScreenshotMaxScale,
+	},
+	{
+		Path: "screenshot.cursor", Type: OptionBool, Section: "screenshot",
+		Description: "Draw the cursor cell in the capture",
+		Default:     "false",
+	},
 }
 
 // optionsByPath indexes the registry for lookup. Built once at init so a caller

@@ -111,6 +111,7 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 		bindings = append(bindings,
 			Keybinding{"[", "Scrollback mode"},
 			Keybinding{"s", "Scrollback browser"},
+			Keybinding{"C", "Take a screenshot"},
 			Keybinding{"?", "Toggle help"},
 		)
 

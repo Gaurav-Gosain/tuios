@@ -132,6 +132,8 @@ const (
 	TokenEqualizeSplits TokenType = "EqualizeSplits"
 	// TokenToggleZoom represents the ToggleZoom command token.
 	TokenToggleZoom TokenType = "ToggleZoom"
+	// TokenScreenshot represents the Screenshot command token.
+	TokenScreenshot TokenType = "Screenshot"
 	// TokenSmartSplit represents the SmartSplit command token.
 	TokenSmartSplit TokenType = "SmartSplit"
 	// TokenCommandPalette represents the CommandPalette command token.
@@ -169,7 +171,7 @@ func (tt TokenType) IsCommand() bool {
 		TokenSnapLeft, TokenSnapRight, TokenSnapFullscreen,
 		TokenSwitchWS, TokenMoveToWS, TokenMoveAndFollowWS,
 		TokenSplit, TokenFocus, TokenRotateSplit, TokenEqualizeSplits,
-		TokenToggleZoom, TokenSmartSplit, TokenCommandPalette,
+		TokenToggleZoom, TokenScreenshot, TokenSmartSplit, TokenCommandPalette,
 		TokenSaveLayout, TokenLoadLayout,
 		TokenWait, TokenWaitUntilRegex,
 		TokenSet, TokenOutput, TokenSource,
@@ -255,6 +257,7 @@ var KeywordTokenMap = map[string]TokenType{
 	"RotateSplit":    TokenRotateSplit,
 	"EqualizeSplits": TokenEqualizeSplits,
 	"ToggleZoom":     TokenToggleZoom,
+	"Screenshot":     TokenScreenshot,
 	"SmartSplit":     TokenSmartSplit,
 	"CommandPalette": TokenCommandPalette,
 	"SaveLayout":     TokenSaveLayout,

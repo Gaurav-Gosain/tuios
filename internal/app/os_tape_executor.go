@@ -1034,6 +1034,25 @@ func (m *OS) ToggleZoomExec() error {
 	return nil
 }
 
+// ScreenshotExec renders the focused window to a file (tape executor
+// interface).
+func (m *OS) ScreenshotExec() error {
+	cmd := m.ScreenshotFocusedWindow()
+	if cmd == nil {
+		return errors.New("no window to screenshot")
+	}
+	// The tape executor already runs on the Update goroutine, and a tape wants
+	// its steps in order: running the render here rather than handing back a
+	// command means the file exists before the next line of the tape runs, so
+	// a tape can screenshot and then act on the file.
+	msg, ok := cmd().(screenshotResultMsg)
+	if !ok {
+		return nil
+	}
+	m.HandleScreenshotResult(msg)
+	return msg.err
+}
+
 // SmartSplitFocusedExec performs a smart split on the focused window (tape executor interface).
 func (m *OS) SmartSplitFocusedExec() error {
 	if !m.AutoTiling {

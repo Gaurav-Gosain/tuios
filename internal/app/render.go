@@ -491,7 +491,8 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.ShowHelp || m.ShowCommandPalette || m.ShowLauncher || m.ShowSessionSwitcher || m.ShowWorkspaceSwitcher || m.ShowLayoutPicker ||
 		m.ShowQuitMenu || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
 		m.ShowAggregateView || m.ShowTapeManager || m.ShowTapeReview || m.ShowSettings || m.ShowThemePicker ||
-		m.ShowKeybindManager || m.ShowAccentPicker || m.PrefixActive || m.ContextMenu != nil {
+		m.ShowKeybindManager || m.ShowAccentPicker || m.PrefixActive || m.ContextMenu != nil ||
+		m.Capture.Active || m.ShotPreview.Open {
 		return nil, false
 	}
 	if (config.ShowClock && !config.HideClock) || (m.TapeRecorder != nil && m.TapeRecorder.IsRecording()) {
@@ -714,7 +715,8 @@ func (m *OS) flushGraphicsForView() {
 	hideImages := m.Resizing || m.ShowHelp || m.ShowCommandPalette || m.ShowLauncher || m.ShowSessionSwitcher ||
 		m.ShowWorkspaceSwitcher || m.ShowLayoutPicker || m.ShowQuitMenu || m.ShowScrollbackBrowser ||
 		m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
-		m.ShowSettings || m.ShowThemePicker || m.ShowKeybindManager || m.ShowAccentPicker || m.ShowTapeManager || m.ShowTapeReview
+		m.ShowSettings || m.ShowThemePicker || m.ShowKeybindManager || m.ShowAccentPicker || m.ShowTapeManager || m.ShowTapeReview ||
+		m.Capture.Active || m.ShotPreview.Open
 	if m.KittyPassthrough != nil {
 		// Self-placed remote video images are hidden/dropped here, not by
 		// HideAllPlacements (they are not in `placements`).
@@ -730,6 +732,10 @@ func (m *OS) flushGraphicsForView() {
 	} else {
 		m.clearLauncherIcons()
 	}
+	// The preview's picture belongs to the panel that is doing the hiding, the
+	// same as the launcher's icons, so it runs past hideImages rather than
+	// through it.
+	m.flushScreenshotGraphicsForFrame()
 	if hideImages {
 		if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
 			m.KittyPassthrough.HideAllPlacements()

@@ -64,6 +64,7 @@ type Executor interface {
 
 	// New feature commands
 	ToggleZoomExec() error
+	ScreenshotExec() error
 	SmartSplitFocusedExec() error
 	ShowCommandPaletteExec() error
 	SaveLayoutExec(name string) error
@@ -317,6 +318,8 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 	// New feature commands
 	case CommandTypeToggleZoom:
 		return ce.executor.ToggleZoomExec()
+	case CommandTypeScreenshot:
+		return ce.executor.ScreenshotExec()
 
 	case CommandTypeSmartSplit:
 		return ce.executor.SmartSplitFocusedExec()

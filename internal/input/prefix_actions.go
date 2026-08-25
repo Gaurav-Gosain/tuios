@@ -45,6 +45,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_equalize_splits", handlePrefixEqualizeSplits)
 	d.Register("prefix_selection", handlePrefixSelection)
 	d.Register("prefix_scrollback", handlePrefixScrollback)
+	d.Register("prefix_screenshot", handlePrefixScreenshot)
 	d.Register("prefix_help", handlePrefixHelp)
 	d.Register("prefix_command_palette", handlePrefixCommandPalette)
 	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
@@ -359,6 +360,15 @@ func handlePrefixSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handlePrefixScrollback(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	OpenScrollbackBrowser(o)
+	return o, nil
+}
+
+// handlePrefixScreenshot opens capture mode from the leader. The entry is
+// treated as mouse-less: the leader was reached from the keyboard, so the hint
+// strip offers tab and enter rather than a drag nobody asked for. Moving the
+// pointer switches it over.
+func handlePrefixScreenshot(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.BeginCapture(false)
 	return o, nil
 }
 

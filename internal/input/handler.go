@@ -36,12 +36,18 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 	case tea.PasteEndMsg:
 		return o, nil
 	case tea.MouseClickMsg:
-		if o.ShowScrollbackBrowser {
+		if o.CaptureActive() {
+			result, cmd = handleCaptureMouseClick(msg, o)
+		} else if o.ShowScrollbackBrowser {
 			result, cmd = handleScrollbackBrowserMouseClick(msg, o)
 		} else {
 			result, cmd = handleMouseClick(msg, o)
 		}
 	case tea.MouseMotionMsg:
+		if o.CaptureActive() {
+			// Motion never syncs to the daemon, the same as the browser's.
+			return handleCaptureMouseMotion(msg, o)
+		}
 		if o.ShowScrollbackBrowser {
 			result, cmd = handleScrollbackBrowserMouseMotion(msg, o)
 			// Don't sync motion events
@@ -50,13 +56,17 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// Don't sync on motion - too frequent
 		return handleMouseMotion(msg, o)
 	case tea.MouseReleaseMsg:
-		if o.ShowScrollbackBrowser {
+		if o.CaptureActive() {
+			result, cmd = handleCaptureMouseRelease(o)
+		} else if o.ShowScrollbackBrowser {
 			result, cmd = handleScrollbackBrowserMouseRelease(o)
 		} else {
 			result, cmd = handleMouseRelease(msg, o)
 		}
 	case tea.MouseWheelMsg:
-		if o.ShowScrollbackBrowser {
+		if o.ScreenshotPreviewOpen() {
+			result, cmd = handleScreenshotPreviewWheel(msg, o)
+		} else if o.ShowScrollbackBrowser {
 			result, cmd = handleScrollbackBrowserMouseWheel(msg, o)
 		} else {
 			result, cmd = handleMouseWheel(msg, o)
@@ -197,6 +207,17 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// message is in the way.
 	if msg.String() == "esc" {
 		o.DismissNotifications()
+	}
+
+	// Capture mode is a gesture over the whole screen and owns every key while
+	// it is up, in either mode: a keystroke meant for the selection must not
+	// reach a shell underneath. The preview panel that follows it owns the
+	// keyboard the same way, for the same reason.
+	if o.CaptureActive() {
+		return HandleCaptureKey(msg, o)
+	}
+	if o.ScreenshotPreviewOpen() {
+		return HandleScreenshotPreviewKey(msg, o)
 	}
 
 	// The close confirmation outranks even the quit menu: it is the last thing

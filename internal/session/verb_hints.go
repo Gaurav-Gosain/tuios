@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // This file carries the machine-readable remedy surface of the verb protocol.
@@ -23,6 +25,11 @@ import (
 var (
 	// captureSources are the buffers capture-pane can read.
 	captureSources = []string{"visible", "recent"}
+	// screenshotFormats and screenshotFrames are the screenshot verb's closed
+	// sets. They are the config registry's own lists rather than copies, so a
+	// format added to one place cannot be missing from the other.
+	screenshotFormats = config.ScreenshotFormats
+	screenshotFrames  = config.ScreenshotFrames
 	// retiredCaptureSources maps a capture source that was once accepted to the
 	// reason it no longer is, so the rejection can say what happened rather than
 	// only listing what is allowed. "recent-unwrapped" was documented as reserved

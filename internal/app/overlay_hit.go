@@ -36,11 +36,14 @@ type overlayPanelHit struct {
 // only be opened over the rail, with no other panel to lose a tie against. Now
 // that a settings row opens it, the tie was with the panel it was drawn on top
 // of, and every click inside the picker went to the settings row behind it.
-var overlayKindOrder = []string{"help", "palette", "launcher", "session", "workspace", "layout", "aggregate", "settings", "keybinds", "themepicker", "glyphpicker", "dockeditor", "accent", "quit", "sessionclose"}
+var overlayKindOrder = []string{"help", "palette", "launcher", "session", "workspace", "layout", "aggregate", "settings", "keybinds", "themepicker", "glyphpicker", "dockeditor", "accent", "screenshot", "quit", "sessionclose"}
 
 // openOverlayKinds returns the set of draggable overlay kinds currently shown.
 func (m *OS) openOverlayKinds() map[string]bool {
 	open := map[string]bool{}
+	if m.ShotPreview.Open {
+		open[overlayKindShot] = true
+	}
 	if m.ShowHelp {
 		open["help"] = true
 	}

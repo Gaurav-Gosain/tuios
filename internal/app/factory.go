@@ -81,6 +81,14 @@ type OSOptions struct {
 	// KittyPassthroughOptions.RemoteClient.
 	GraphicsRemoteClient bool
 
+	// RemoteClient marks a client process that is not on the user's machine:
+	// the tuios ssh server and tuios-web both run the TUI beside the daemon,
+	// with the user at the far end of a network. Anything that would touch the
+	// host's own desktop, a clipboard helper or a file viewer, has to know,
+	// because doing it here would act on the server's desktop and not on the
+	// user's. See screenshot.go.
+	RemoteClient bool
+
 	// TouchClient says the pointer driving this session is a finger, which
 	// widens the gestures that are aimed at a single cell. Only tuios-web can
 	// know this, and only from the browser that connected.
@@ -136,6 +144,7 @@ func NewOS(opts OSOptions) *OS {
 		IsSSHMode:       opts.IsSSHMode,
 		SSHSession:      opts.SSHSession,
 		TouchClient:     opts.TouchClient,
+		RemoteClient:    opts.RemoteClient,
 
 		// Daemon connection
 		DaemonClient: opts.DaemonClient,

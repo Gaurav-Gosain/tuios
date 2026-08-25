@@ -249,6 +249,15 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 	}
 
+	if m.ShotPreview.Open {
+		content, geo, rows := m.renderScreenshotPreview()
+		layers = m.placeOverlayPanel(layers, overlayKindShot, content, geo, rows)
+	}
+
+	// Capture mode draws above every panel: it is a gesture over the whole
+	// screen, and its marquee has to be visible on top of whatever is open.
+	layers = append(layers, m.renderCaptureMode()...)
+
 	if m.ShowQuitMenu {
 		content, geo, rows := m.renderQuitMenu()
 		layers = m.placeOverlayPanel(layers, "quit", content, geo, rows)

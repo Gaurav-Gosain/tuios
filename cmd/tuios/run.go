@@ -152,6 +152,12 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		}
 	}
 
+	// Capture mode hovers a window under the bare pointer and rubber-bands with
+	// the button down, so it needs every motion event, held or not.
+	if os.CaptureActive() {
+		return msg
+	}
+
 	// Allow motion events for scrollback browser drag-to-select
 	if os.ShowScrollbackBrowser {
 		return msg

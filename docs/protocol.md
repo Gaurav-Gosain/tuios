@@ -518,6 +518,65 @@ the emulator does not record which rows are continuations and unwrapping them
 would mean guessing. A caller that needs logical lines should widen the pane
 with `resize` before capturing.
 
+### screenshot
+
+Render a window to a styled image file. The picture is drawn from the pane's
+own cells, so colors, styles and OSC 8 links are exact, and the window chrome
+in it is drawn by the renderer rather than scraped off a client's border. It
+runs daemon side for the reason `capture-pane` does, so it answers on a
+detached session with nobody attached.
+
+Params:
+
+- `session` (optional), `window` (optional).
+- `format` (optional): `png` (the default), `svg`, `ansi`, `html` or `txt`.
+  Any other value is rejected with `invalid_params`.
+- `frame` (optional): `window` (the default), `plain` or `none`. `ansi` and
+  `txt` are frameless whatever this says.
+- `theme` (optional): render in this theme instead of the session's. Indexed
+  and basic cells re map cleanly; truecolor cells, which is most modern TUI
+  output, are unchanged by it.
+- `scrollback` (optional bool): put the pane's history above the screen.
+- `lines` (optional int): bound the history to the last N rows. Needs
+  `scrollback`.
+- `cursor` (optional bool): draw the cursor cell.
+- `out` (optional): write here instead of generating a name under
+  `screenshot.directory`.
+
+Everything else about the picture comes from the `screenshot.*` options.
+
+Request:
+
+```json
+{"verb": "screenshot", "params": {"session": "work", "window": "build", "format": "svg"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "screenshot", "path": "/home/u/Pictures/tuios/tuios-build-2026-08-25-204003.svg",
+            "host": "daemon", "format": "svg", "cols": 78, "rows": 22, "bytes": 2407, "warnings": []}}
+```
+
+The verb always writes a file and returns its path. There is no bytes in the
+envelope route: the protocol is line delimited JSON, a scrollback PNG is
+megabytes, and a second delivery path is a second set of bugs. `host` names the
+machine the path is on, so a script never has to assume; a CLI reaching the
+daemon over its unix socket is on that machine by construction.
+
+`warnings` is always present and empty when there is nothing to say. The one
+that matters is the no theme case: tuios can never read the host terminal's
+palette, so a session with no theme set renders basic and indexed colors in the
+xterm reference defaults and says so. Truecolor cells are exact regardless, and
+`theme` re renders in any installed palette.
+
+A screenshot cannot contain kitty images a pane is displaying. Those are host
+side placements, not cells; the capture shows whatever cells sit under them.
+
+Region and full screen captures are not verbs. They need a viewport, a layout
+and composed chrome, which only an attached client has, and they are reached
+from capture mode in the TUI.
+
 ### resize
 
 Resize a window's PTY.

@@ -147,6 +147,10 @@ func TestContextMenuRunsRegistryAction(t *testing.T) {
 //   - arrowing down off the last row wraps past both dimmed rows straight back
 //     to Split right.
 //
+// The lap below is the menu's live rows in order, so adding a row to the pane
+// menu means adding it here. That is the point: a row nobody listed is a row
+// nobody checked was reachable.
+//
 // The wrap is what makes this evidence. A menu that merely started lower down
 // would pass the first check while still letting an arrow land on a dimmed row.
 func TestContextMenuArrowsSkipDimmedRows(t *testing.T) {
@@ -161,7 +165,8 @@ func TestContextMenuArrowsSkipDimmedRows(t *testing.T) {
 
 	// One full lap of the runnable rows, ending back where it started.
 	lap := []string{
-		"Split right", "Split down", "Rename", "Zoom", "Minimize", "Close pane",
+		"Split right", "Split down", "Rename", "Zoom", "Screenshot this window",
+		"Minimize", "Close pane",
 		"Split right",
 	}
 	for i, want := range lap {

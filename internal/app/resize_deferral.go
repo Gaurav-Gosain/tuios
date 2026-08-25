@@ -209,6 +209,9 @@ func (m *OS) EndPointerGrabs() {
 	m.SidebarDrag = sidebarDragState{}
 	m.dockWorkspaceDrag = dockWorkspaceDragState{}
 	m.CtrlDragPending = false
+	// A capture drag whose release went missing would otherwise leave the
+	// marquee tracking a bare hover for ever.
+	m.Capture.Dragging = false
 	if m.SidebarEdge.Active {
 		m.SidebarEdge = sidebarEdgeState{}
 		m.saveSidebarState()

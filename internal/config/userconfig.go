@@ -25,6 +25,9 @@ type UserConfig struct {
 	Tape          TapeConfig          `toml:"tape"`
 	Hooks         HooksConfig         `toml:"hooks"`
 	Debug         DebugConfig         `toml:"debug"`
+	// Screenshot is the [screenshot] table: how a capture renders and where
+	// the file lands. See screenshot.go.
+	Screenshot ScreenshotConfig `toml:"screenshot"`
 	// Dock is the [dock] table: the bar as ordered lists of named components.
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.
@@ -402,6 +405,7 @@ func DefaultConfig() *UserConfig {
 			Autorun:    TapeAutorunAsk,
 			AutoReview: false,
 		},
+		Screenshot: defaultScreenshotConfig(),
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
@@ -501,19 +505,23 @@ func DefaultConfig() *UserConfig {
 				// Capital X, one shift away from the x that closes a single pane.
 				// The two verbs sound alike and only one of them is recoverable, so
 				// the slip that matters costs a pane and never the session.
-				"prefix_close_session":      {"X"},
-				"prefix_exit_mode":          {"esc"},
-				"prefix_selection":          {"["},
-				"prefix_help":               {"?"},
-				"prefix_debug":              {"D"},
-				"prefix_tape":               {"T"},
-				"prefix_quit":               {"q"},
-				"prefix_fullscreen":         {"z"},
-				"prefix_split_horizontal":   {"-"},
-				"prefix_split_vertical":     {"|", "\\"},
-				"prefix_rotate_split":       {"R"},
-				"prefix_equalize_splits":    {"="},
-				"prefix_scrollback":         {"s"},
+				"prefix_close_session":    {"X"},
+				"prefix_exit_mode":        {"esc"},
+				"prefix_selection":        {"["},
+				"prefix_help":             {"?"},
+				"prefix_debug":            {"D"},
+				"prefix_tape":             {"T"},
+				"prefix_quit":             {"q"},
+				"prefix_fullscreen":       {"z"},
+				"prefix_split_horizontal": {"-"},
+				"prefix_split_vertical":   {"|", "\\"},
+				"prefix_rotate_split":     {"R"},
+				"prefix_equalize_splits":  {"="},
+				"prefix_scrollback":       {"s"},
+				// s is the scrollback browser, so the capture takes capital C,
+				// one shift away from the c that creates a window. Nothing here
+				// is destructive either way.
+				"prefix_screenshot":         {"C"},
 				"prefix_command_palette":    {"P"},
 				"prefix_toggle_sidebar":     {"b"},
 				"prefix_session_switcher":   {"S"},
@@ -836,6 +844,7 @@ func LoadUserConfig() (*UserConfig, error) {
 	fillMissingDaemon(&cfg, defaultCfg)
 	fillMissingTape(&cfg, defaultCfg)
 	fillMissingKeybinds(&cfg, defaultCfg)
+	fillMissingScreenshot(&cfg, defaultCfg)
 
 	// Validate configuration
 	validation := ValidateConfig(&cfg)

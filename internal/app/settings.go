@@ -444,9 +444,30 @@ func (m *OS) settingsCategories() []settingsCategory {
 		}),
 	}
 
+	// The two path options, screenshot.directory and screenshot.font_file, have
+	// no row here. See settingsUIExcluded for why.
+	screenshot := settingsCategory{
+		Name: "Screenshot",
+		Items: m.resolveRows([]settingsRow{
+			opt("screenshot.format"),
+			opt("screenshot.frame"),
+			opt("screenshot.background"),
+			opt("screenshot.controls"),
+			opt("screenshot.title_format"),
+			opt("screenshot.padding"),
+			opt("screenshot.radius"),
+			opt("screenshot.shadow"),
+			opt("screenshot.scale"),
+			opt("screenshot.font_family"),
+			opt("screenshot.cursor"),
+			opt("screenshot.copy"),
+			opt("screenshot.preview"),
+		}),
+	}
+
 	return []settingsCategory{
 		appearance, sidebar, dock, behavior,
-		notifications, startup, advanced, daemon, tape,
+		notifications, startup, screenshot, advanced, daemon, tape,
 	}
 }
 
