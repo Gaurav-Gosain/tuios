@@ -29,6 +29,13 @@ func debugLogf(format string, v ...any) {
 	_ = f.Close()
 }
 
+// debugLine is debugLogf for callers that pass a line rather than a fragment.
+// debugLogf writes exactly what it is given, so every one of its call sites
+// carries its own "\n"; a helper handed to another package cannot rely on that.
+func debugLine(format string, v ...any) {
+	debugLogf(format+"\n", v...)
+}
+
 const (
 	// maxBatch caps how much pending PTY output one pass of outputWriter
 	// coalesces before writing it to the emulator.

@@ -19,6 +19,7 @@ import (
 	xpty "github.com/charmbracelet/x/xpty"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -471,14 +472,18 @@ func shortID(id string) string {
 
 // NewWindow creates a new terminal window with the specified properties.
 // It spawns a shell process, sets up PTY communication, and initializes the virtual terminal.
-// Returns nil if window creation fails.
+//
+// A failure returns a nil window and the reason. The reason used to be dropped
+// on the floor, which is how a pane that never appeared came to leave nothing
+// behind to look at; the daemon path has always returned this error, and a user
+// who cannot open a pane is owed the same answer whichever path they are on.
 //
 // command, when given, becomes the pane's process in place of the shell: argv
 // exec'd directly, no shell parsing anything. The launcher runs programs this
 // way because bytes typed at a shell are re-parsed by whatever shell it is,
 // and the window closes when the program exits, the same way it does when a
 // shell does.
-func NewWindow(id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}, command ...string) *Window {
+func NewWindow(id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}, command ...string) (*Window, error) {
 	if title == "" {
 		title = "Terminal " + shortID(id)
 	}
@@ -572,15 +577,6 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		},
 	})
 
-	// Set up environment
-	// #nosec G204 - the command is the user's own shell or a program they chose
-	var cmd *exec.Cmd
-	if len(command) > 0 {
-		cmd = exec.Command(command[0], command[1:]...)
-	} else {
-		cmd = exec.Command(detectShell())
-	}
-
 	// Get cached terminal environment (detected once on first window creation)
 	termType, colorTerm := getTerminalEnv()
 
@@ -594,32 +590,35 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		}
 	}
 
-	cmd.Env = append(os.Environ(),
-		"TERM="+termType,
-		"COLORTERM="+colorTerm,
-		"TERM_PROGRAM="+guestTermProgram(), // Terminal identity guests can act on
-		"TERM_PROGRAM_VERSION=0.1.0",       // Version for compatibility checking
-		"TUIOS_WINDOW_ID="+id,
-		guestKittyAnimation(), // whether a=f frame edits reach the host
-	)
-
-	// Create PTY with initial size
-	// xpty requires dimensions at creation time
-	ptyInstance, err := xpty.NewPty(terminalWidth, terminalHeight)
+	// The PTY and its process are created together by ptyspawn, which is also
+	// where the kernel's transient refusal of the controlling terminal is
+	// absorbed. This path used to allocate and start them here, with no retry,
+	// so a refusal the daemon path shrugged off left a standalone pane with no
+	// shell in it and nothing on screen to say why. See the ptyspawn package
+	// comment.
+	//
+	// The command is rebuilt per attempt: an exec.Cmd that failed to start
+	// cannot be started again.
+	ptyInstance, cmd, err := ptyspawn.Spawn(terminalWidth, terminalHeight, func() *exec.Cmd {
+		// #nosec G204 - the command is the user's own shell or a program they chose
+		var cmd *exec.Cmd
+		if len(command) > 0 {
+			cmd = exec.Command(command[0], command[1:]...)
+		} else {
+			cmd = exec.Command(detectShell())
+		}
+		cmd.Env = append(os.Environ(),
+			"TERM="+termType,
+			"COLORTERM="+colorTerm,
+			"TERM_PROGRAM="+guestTermProgram(), // Terminal identity guests can act on
+			"TERM_PROGRAM_VERSION=0.1.0",       // Version for compatibility checking
+			"TUIOS_WINDOW_ID="+id,
+			guestKittyAnimation(), // whether a=f frame edits reach the host
+		)
+		return cmd
+	}, debugLine)
 	if err != nil {
-		// Return nil to indicate failure - caller should handle this
-		return nil
-	}
-
-	// Set up the command to use the PTY as controlling terminal
-	// This is platform-specific (see pty_unix.go and pty_windows.go)
-	setupPTYCommand(cmd)
-
-	// Start the command with PTY
-	// xpty handles command connection internally
-	if err := ptyInstance.Start(cmd); err != nil {
-		_ = ptyInstance.Close()
-		return nil
+		return nil, err
 	}
 
 	// Resize PTY after process starts to ensure size is properly set
@@ -689,7 +688,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		}
 	}()
 
-	return window
+	return window, nil
 }
 
 // NewDaemonWindow creates a new terminal window that uses a daemon-managed PTY.

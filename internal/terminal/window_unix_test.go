@@ -12,9 +12,9 @@ import (
 
 func TestSetPtyPixelSize(t *testing.T) {
 	exitChan := make(chan string, 1)
-	window := NewWindow("test-id-12345678", "Test", 0, 0, 80, 24, 0, exitChan, nil)
-	if window == nil {
-		t.Skip("Failed to create window with PTY")
+	window, err := NewWindow("test-id-12345678", "Test", 0, 0, 80, 24, 0, exitChan, nil)
+	if err != nil {
+		t.Skipf("Failed to create window with PTY: %v", err)
 	}
 	defer window.Close()
 
@@ -29,7 +29,7 @@ func TestSetPtyPixelSize(t *testing.T) {
 	xpixel := termWidth * cellWidth
 	ypixel := termHeight * cellHeight
 
-	err := window.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
+	err = window.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
 	if err != nil {
 		t.Fatalf("SetPtyPixelSize failed: %v", err)
 	}
@@ -57,9 +57,9 @@ func TestSetPtyPixelSize(t *testing.T) {
 
 func TestSetCellPixelDimensions(t *testing.T) {
 	exitChan := make(chan string, 1)
-	window := NewWindow("test-id-87654321", "Test", 0, 0, 80, 24, 0, exitChan, nil)
-	if window == nil {
-		t.Skip("Failed to create window with PTY")
+	window, err := NewWindow("test-id-87654321", "Test", 0, 0, 80, 24, 0, exitChan, nil)
+	if err != nil {
+		t.Skipf("Failed to create window with PTY: %v", err)
 	}
 	defer window.Close()
 

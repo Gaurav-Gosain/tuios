@@ -8,30 +8,31 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/xpty"
+
+	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
-// These tests pin the retry policy around the kernel's transient controlling-
-// terminal refusal. The real event cannot be provoked on demand - it needs a
-// pts index to be recycled out from under a dying session at the exact moment
-// of the fork - so the seam injects the refusal the way the kernel delivers
-// it: as an EPERM-wrapped start error. What is under test is the policy, which
-// is what the flake taught: a transient EPERM is retried on a fresh PTY, a
-// persistent one still fails loudly, and nothing else is ever retried.
+// These tests pin what the daemon's spawn path does about the kernel's
+// transient controlling-terminal refusal, by injecting it at the one door every
+// PTY-backed process goes through. The policy itself is pinned in
+// internal/ptyspawn; what is under test here is that this path goes through
+// that door - the thing that stopped being true of the standalone path when the
+// policy lived in only one of two copies of the same code.
 
 // failStarts makes the next n starts fail with err, then delegates to the real
 // start. It returns a restore function and a counter of injected failures.
 func failStarts(t *testing.T, n int, err error) *int {
 	t.Helper()
-	real := startPTYProcess
+	real := ptyspawn.StartProcess
 	injected := 0
-	startPTYProcess = func(p xpty.Pty, cmd *exec.Cmd) error {
+	ptyspawn.StartProcess = func(p xpty.Pty, cmd *exec.Cmd) error {
 		if injected < n {
 			injected++
 			return err
 		}
 		return real(p, cmd)
 	}
-	t.Cleanup(func() { startPTYProcess = real })
+	t.Cleanup(func() { ptyspawn.StartProcess = real })
 	return &injected
 }
 
@@ -55,7 +56,7 @@ func TestTransientSpawnEPERMIsRetriedOnAFreshPTY(t *testing.T) {
 func TestPersistentSpawnEPERMStillFails(t *testing.T) {
 	s := newTestSession(t)
 	epermLike := fmt.Errorf("fork/exec /bin/sh: %w", syscall.EPERM)
-	injected := failStarts(t, spawnEPERMAttempts+2, epermLike)
+	injected := failStarts(t, ptyspawn.Attempts+2, epermLike)
 
 	_, err := s.AddDaemonWindow("refused", nil)
 	if err == nil {
@@ -64,15 +65,15 @@ func TestPersistentSpawnEPERMStillFails(t *testing.T) {
 	if !errors.Is(err, syscall.EPERM) {
 		t.Fatalf("the surfaced error lost its cause: %v", err)
 	}
-	if *injected != spawnEPERMAttempts {
-		t.Fatalf("spawn was attempted %d times, want the bound %d", *injected, spawnEPERMAttempts)
+	if *injected != ptyspawn.Attempts {
+		t.Fatalf("spawn was attempted %d times, want the bound %d", *injected, ptyspawn.Attempts)
 	}
 }
 
 func TestNonEPERMSpawnErrorIsNotRetried(t *testing.T) {
 	s := newTestSession(t)
 	otherErr := fmt.Errorf("fork/exec /bin/sh: %w", syscall.ENOENT)
-	injected := failStarts(t, spawnEPERMAttempts+2, otherErr)
+	injected := failStarts(t, ptyspawn.Attempts+2, otherErr)
 
 	_, err := s.AddDaemonWindow("missing", nil)
 	if err == nil {
