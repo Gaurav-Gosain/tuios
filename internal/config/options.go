@@ -147,6 +147,11 @@ var optionSpecs = []Option{
 		Accepted:    ClickToTypeModes, Default: ClickToTypeSingle,
 	},
 	{
+		Path: "appearance.auto_enter_terminal_on_focus", Type: OptionBool, Section: "appearance",
+		Description: "Enter terminal mode when a keyboard focus command moves focus to another pane",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.word_characters", Type: OptionString, Section: "appearance",
 		Description: "Punctuation that counts as part of a word for double-click selection",
 		Default:     `@-./_~?&=%+#`,

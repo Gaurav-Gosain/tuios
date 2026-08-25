@@ -1391,8 +1391,8 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.AltDrag = *cfg.Appearance.AltDrag
 	}
 
-	// AutoEnterTerminalOnFocus defaults to true; a pointer so an explicit false
-	// in the config survives the default being on.
+	// AutoEnterTerminalOnFocus defaults to false; a pointer so an explicit true
+	// in the config survives the default being off.
 	if cfg.Appearance.AutoEnterTerminalOnFocus != nil {
 		AutoEnterTerminalOnFocus = *cfg.Appearance.AutoEnterTerminalOnFocus
 	}

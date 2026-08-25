@@ -388,6 +388,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.whichkey_position"),
 			opt("appearance.focus_follows_mouse"),
 			opt("appearance.click_to_type"),
+			opt("appearance.auto_enter_terminal_on_focus"),
 			opt("appearance.alt_drag"),
 			opt("appearance.niri_reverse_scroll"),
 			custom("appearance.max_fps", m.maxFPSItem()),

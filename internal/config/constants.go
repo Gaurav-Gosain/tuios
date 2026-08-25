@@ -568,11 +568,12 @@ func (s *Settings) FormatWorkspaceTab(name string, index int) string {
 // leaves the already-focused pane focused does not change mode, so Tab/n/w stay
 // usable until the user actually focuses a different pane.
 //
-// The default is on: focusing a pane with the keyboard is a request to type in
-// it, the same bargain click-to-type="single" makes for the mouse. Set it false
-// to keep cycling windows in window-management mode without an extra Esc.
+// The default is off: Tab/n/w must keep cycling windows in window-management
+// mode. Set it true to treat a keyboard focus command that actually moves
+// focus as a request to type in that pane, the same bargain click-to-type="single"
+// makes for the mouse.
 // Set via appearance.auto_enter_terminal_on_focus config.
-var AutoEnterTerminalOnFocus = true
+var AutoEnterTerminalOnFocus = false
 
 // PaneGapMax caps it. Past this the panes on a small terminal are further apart
 // than they are wide, and spacing that swallows what it spaces has stopped

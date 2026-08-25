@@ -201,6 +201,56 @@ func TestAutoEnterOffKeepsWindowManagementMode(t *testing.T) {
 	}
 }
 
+// TestDefaultOffLetsTabCycleThreePanes is the reviewer's reproduction: with
+// the shipped default, Tab must keep cycling in window-management mode, or the
+// second Tab goes to the shell and the third pane is unreachable.
+func TestDefaultOffLetsTabCycleThreePanes(t *testing.T) {
+	if config.AutoEnterTerminalOnFocus {
+		t.Fatal("package default is on; this test needs the shipped off default")
+	}
+	o := twoPaneWM(t)
+	ws := o.CurrentWorkspace
+	o.Windows = append(o.Windows, &terminal.Window{
+		ID: "c", X: 80, Y: 0, Width: 40, Height: 40, Workspace: ws,
+	})
+
+	o, _ = HandleKeyPress(press("tab"), o)
+	if got := focusedID(o); got != "b" {
+		t.Fatalf("first tab focused %q, want b", got)
+	}
+	if o.Mode != app.WindowManagementMode {
+		t.Fatalf("mode = %v after first tab, want window management", o.Mode)
+	}
+
+	o, _ = HandleKeyPress(press("tab"), o)
+	if got := focusedID(o); got != "c" {
+		t.Errorf("second tab focused %q, want c", got)
+	}
+	if o.Mode != app.WindowManagementMode {
+		t.Errorf("mode = %v after second tab, want window management", o.Mode)
+	}
+}
+
+// TestDirectionalFocusFromWindowModeWithDefaultOff drives Alt+Right through
+// HandleKeyPress, the same path a user presses, so a dispatcher-only test
+// cannot hide a routing miss. Focus still moves; mode stays window-management.
+func TestDirectionalFocusFromWindowModeWithDefaultOff(t *testing.T) {
+	if config.AutoEnterTerminalOnFocus {
+		t.Fatal("package default is on; this test needs the shipped off default")
+	}
+	o := twoPaneWM(t)
+	start := focusedID(o)
+
+	o, _ = HandleKeyPress(altArrow("right"), o)
+
+	if got := focusedID(o); got == start {
+		t.Fatalf("alt+right did not move focus from %q", start)
+	}
+	if o.Mode != app.WindowManagementMode {
+		t.Errorf("mode = %v after directional focus with default off, want window management", o.Mode)
+	}
+}
+
 // TestFocusWindowItselfDoesNotEnterTerminalMode pins the boundary: hover-focus
 // and click-to-type=off both call FocusWindow, and must not inherit this
 // policy. Only the registered focus commands enter.

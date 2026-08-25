@@ -12,9 +12,9 @@ func withAutoEnterTerminalOnFocus(t *testing.T) {
 	t.Cleanup(func() { config.AutoEnterTerminalOnFocus = prev })
 }
 
-func TestAutoEnterTerminalOnFocusDefaultsToTrue(t *testing.T) {
-	if !config.AutoEnterTerminalOnFocus {
-		t.Error("package default AutoEnterTerminalOnFocus is false, want true")
+func TestAutoEnterTerminalOnFocusDefaultsToFalse(t *testing.T) {
+	if config.AutoEnterTerminalOnFocus {
+		t.Error("package default AutoEnterTerminalOnFocus is true, want false")
 	}
 	if cfg := config.DefaultConfig(); cfg.Appearance.AutoEnterTerminalOnFocus != nil {
 		t.Errorf("DefaultConfig set AutoEnterTerminalOnFocus = %v, want nil so an absent key keeps the default", *cfg.Appearance.AutoEnterTerminalOnFocus)
