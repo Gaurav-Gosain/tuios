@@ -2,10 +2,8 @@ package session
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"image/color"
-	"syscall"
 
 	"log"
 	"maps"
@@ -27,6 +25,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
+	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -746,19 +745,6 @@ func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onE
 	return s.createPTY(windowID, width, height, cwd, nil, true, onExit)
 }
 
-// spawnEPERMAttempts bounds the retries of a shell spawn refused with EPERM.
-// Two retries is already one more than any captured refusal needed: in every
-// strace capture the second attempt succeeded.
-const spawnEPERMAttempts = 3
-
-// startPTYProcess starts cmd on p. It exists as a seam so a test can inject
-// the kernel's transient TIOCSCTTY refusal, which no test can provoke on
-// purpose: it needs a pts index to be recycled out from under a dying session
-// at the exact moment of the fork.
-var startPTYProcess = func(p xpty.Pty, cmd *exec.Cmd) error {
-	return p.Start(cmd)
-}
-
 // command, when non-empty, is an argv exec'd as the PTY's process in place of
 // the shell. It is deliberately not persisted: a restored window respawns as a
 // shell, because silently rerunning a program the user ran once is not what
@@ -772,30 +758,15 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 
 	shell := s.getShell()
 
-	// The PTY and the process are created together, and retried together: a
-	// spawn can fail with a transient EPERM from the kernel's controlling-
-	// terminal grab (ioctl TIOCSCTTY in the forked child), seen when the pty's
-	// pts index was just recycled from a session that is still being torn down.
-	// Captured under strace, the child is a clean session leader (setsid
-	// succeeded) holding the freshly opened slave at fd 0, and the same grab on
-	// a fresh pty succeeds milliseconds later - every capture involved the
-	// just-freed lowest pts index while other shells were being SIGKILLed. So
-	// the retry allocates a new pty rather than reusing the poisoned one: the
-	// new allocation lands on a different (or by-then dissociated) index. The
-	// bound keeps a real refusal loud: a persistent EPERM still surfaces, and
-	// any other error is never retried.
-	var ptyInstance xpty.Pty
-	var cmd *exec.Cmd
-	for attempt := 1; ; attempt++ {
-		var err error
-		ptyInstance, err = xpty.NewPty(width, height)
-		if err != nil {
-			cancel()
-			return nil, fmt.Errorf("failed to create PTY: %w", err)
-		}
-
-		// The command is rebuilt per attempt: an exec.Cmd that failed to start
-		// cannot be started again.
+	// The PTY and the process are created together, and retried together, by
+	// ptyspawn: a spawn can be refused with a transient EPERM from the kernel's
+	// controlling-terminal grab, and that refusal belongs to every spawn path
+	// rather than to this one. See the ptyspawn package comment.
+	//
+	// The command is rebuilt per attempt, because an exec.Cmd that failed to
+	// start cannot be started again.
+	ptyInstance, cmd, err := ptyspawn.Spawn(width, height, func() *exec.Cmd {
+		var cmd *exec.Cmd
 		if len(command) > 0 {
 			cmd = exec.Command(command[0], command[1:]...)
 		} else {
@@ -815,26 +786,11 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 				cmd.Dir = cwd
 			}
 		}
-
-		// Set up the command to use the PTY as controlling terminal
-		// This is required for interactive shells to work properly
-		// Platform-specific setup is in pty_unix.go and pty_windows.go
-		configurePTYCommand(cmd)
-
-		err = startPTYProcess(ptyInstance, cmd)
-		if err == nil {
-			break
-		}
-		_ = ptyInstance.Close()
-		if attempt < spawnEPERMAttempts && errors.Is(err, syscall.EPERM) {
-			debugLog("[SESSION] transient EPERM starting %s (attempt %d), retrying on a fresh PTY", cmd.Path, attempt)
-			time.Sleep(time.Duration(attempt) * time.Millisecond)
-			continue
-		}
+		return cmd
+	}, debugLog)
+	if err != nil {
 		cancel()
-		// Name the process that failed: with a command this is the program the
-		// user picked, and "shell" would send them looking at the wrong config.
-		return nil, fmt.Errorf("failed to start %s: %w", cmd.Path, err)
+		return nil, err
 	}
 
 	// Create VT emulator for persistent terminal state

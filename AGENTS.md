@@ -330,6 +330,7 @@ go run ./cmd/tuios tape play examples/demo.tape
 | Rendering | `internal/app/render.go` |
 | Input handling | `internal/input/handler.go` |
 | Terminal window | `internal/terminal/window.go` |
+| PTY spawn (every path) | `internal/ptyspawn/spawn.go` |
 | VT emulation | `internal/vt/emulator.go` |
 | Configuration | `internal/config/userconfig.go` |
 | Keybind registry | `internal/config/registry.go` |

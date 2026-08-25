@@ -445,9 +445,9 @@ func (m *OS) AddWindow(name string, command ...string) *OS {
 
 	x, y, width, height := m.NewWindowPlacement()
 
-	window := terminal.NewWindow(newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan, command...)
-	if window == nil {
-		m.LogError("Failed to create window %s (PTY creation failed)", title)
+	window, err := terminal.NewWindow(newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan, command...)
+	if err != nil {
+		m.LogError("Failed to create window %s: %v", title, err)
 		return m // Failed to create window
 	}
 
