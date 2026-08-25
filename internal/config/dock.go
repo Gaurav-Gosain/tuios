@@ -97,7 +97,7 @@ var (
 	defaultDockCenter = []string{DockComponentWindows}
 	defaultDockRight  = []string{
 		DockComponentNotifications, DockComponentCopyHelp,
-		DockComponentCPU, DockComponentRAM,
+		DockComponentCPU, DockComponentRAM, DockComponentClock,
 		DockComponentSessionControls,
 	}
 )

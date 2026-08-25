@@ -99,10 +99,13 @@ func (m *OS) ensureDockPlan() {
 func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock bool) []*dockComponent {
 	var comps []*dockComponent
 
-	// The clock is scheduled for whoever is showing it: the dock cell if it was
-	// placed, the status badge if show_clock is on. Its cadence comes from the
-	// format, so 15:04 wakes once a minute instead of sixty times a second.
-	if plan.Has(config.DockComponentClock) || showClock {
+	// Scheduled only when it will actually draw. The clock sits in the default
+	// list now, so an "or" here woke a component every minute for every session
+	// that had left show_clock off. The meters below read the same way for the
+	// same reason: the list says where, the switch says whether. Its cadence
+	// comes from the format, so 15:04 wakes once a minute rather than sixty
+	// times a second.
+	if plan.Has(config.DockComponentClock) && showClock {
 		format := cfg.Dock.DockClockFormat()
 		comps = append(comps, &dockComponent{
 			Name:    config.DockComponentClock,
@@ -209,6 +212,13 @@ func dockTruncateCell(text string, maxWidth int) string {
 // that the overlay tests exist to forbid. Rendering the cell over Panel means
 // the worst a component can do to its neighbours is nothing.
 func (m *OS) dockCustomCell(name string) string {
+	// The clock keeps its own switch, the way the meters do: the list says
+	// where it goes, show_clock still says whether it is on. Gated here rather
+	// than per side, so a clock moved to the left or the centre obeys the same
+	// switch without the caller having to remember.
+	if name == config.DockComponentClock && (!config.ShowClock || config.HideClock) {
+		return ""
+	}
 	text := m.dockEngine.Text(name)
 	if name == config.DockComponentClock && text == "" {
 		// The clock is a built-in that carries a value, so it draws through the

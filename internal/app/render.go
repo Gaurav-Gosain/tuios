@@ -494,7 +494,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 		m.ShowKeybindManager || m.ShowAccentPicker || m.PrefixActive || m.ContextMenu != nil {
 		return nil, false
 	}
-	if (config.ShowClock && !config.HideClock) || (m.TapeRecorder != nil && m.TapeRecorder.IsRecording()) {
+	if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
 		return nil, false
 	}
 	// The showkeys keycast is a compositor overlay (renderOverlays), which the

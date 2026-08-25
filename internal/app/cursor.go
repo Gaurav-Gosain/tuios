@@ -27,6 +27,15 @@ func (m *OS) getRealCursor() *tea.Cursor {
 		return nil
 	}
 
+	// An overlay covers the pane, so the pane's cursor has nothing to point at.
+	// The panels that take typing draw their own caret as a character, which is
+	// why this hides the terminal one rather than moving it: leaving it on put a
+	// blinking hardware cursor in the pane behind the panel, next to the caret
+	// the panel had already drawn.
+	if m.AnyOverlayOpen() {
+		return nil
+	}
+
 	// A resize gesture draws no cursor: the pane it is over is showing the size
 	// readout, not the guest's screen, so a cursor sitting in it points at
 	// nothing. The gesture borrows window management (BeginPointerGesture), which

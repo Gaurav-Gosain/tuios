@@ -214,6 +214,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// it here, before the lock is taken, so the two acquisitions never nest.
 	useRealCursor := m.getRealCursor() != nil
 
+	// Hoisted deliberately. AnyOverlayOpen builds a map, and the cursor test
+	// below runs once per cell, so asking per cell cost about a thousand
+	// allocations per composed frame and tripped the compositor's damage guard.
+	overlayOpen := m.AnyOverlayOpen()
+
 	// The emulator cell buffer is written by the PTY reader and daemon paths
 	// under w.ioMu and reallocated by Resize under the same lock, so every VT
 	// read below (Render, CursorPosition, CellAt, scrollback) must hold the
@@ -662,7 +667,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			// Only render fake cursor when real terminal cursor is not being
 			// used. Suppressing the real one during a resize must not hand the
 			// job to this path instead: the gesture draws no cursor either way.
-			isCursorPos := !useRealCursor && !m.Resizing && isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden() && x == cursorX && y == cursorY
+			// An open overlay is the same case. The panel covers the pane and
+			// draws its own caret, so a cursor here would be a second one in the
+			// pane behind it, and hiding only the real cursor would have moved
+			// the mark rather than removed it.
+			isCursorPos := !useRealCursor && !m.Resizing && !overlayOpen && isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden() && x == cursorX && y == cursorY
 
 			// A dimmed pane styles every cell it has, not only the ones the
 			// guest coloured. shouldApplyStyle asks whether a cell carries

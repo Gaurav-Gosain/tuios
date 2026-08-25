@@ -23,8 +23,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 	isRecording := m.TapeRecorder != nil && m.TapeRecorder.IsRecording()
 
-	// Show clock/status unless hidden (but always show if recording or prefix active)
-	if (config.ShowClock && !config.HideClock) || isRecording || m.PrefixActive {
+	// The badge is the recording light and the prefix light. It used to carry
+	// the clock as well, which is why show_clock appeared to do nothing to the
+	// dock: the option drew this instead. The clock is a dock component now,
+	// placed beside the meters it behaves like, so the two cannot double up.
+	if isRecording || m.PrefixActive {
 		// The reading comes from the clock component, so the badge and a clock
 		// cell on the dock can never disagree, and so the format is the one
 		// [dock.clock] asked for rather than the one that used to be spelled
