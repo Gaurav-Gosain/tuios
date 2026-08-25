@@ -1,9 +1,13 @@
 package app
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // clipboardTool describes a native system clipboard command pair. TUIOS normally
@@ -20,32 +24,45 @@ import (
 type clipboardTool struct {
 	name     string   // human-readable, for logs/notifications
 	copyCmd  []string // e.g. {"wl-copy"}
-	pasteCmd []string // e.g. {"wl-paste"}
+	pasteCmd []string // e.g. {"wl-paste", "-n"}
 }
 
-// detectClipboardTool finds a native clipboard tool for the current session.
+// detectClipboardToolEnv is the environment a clipboard decision is made from.
+// Both fields are injectable so the whole decision table (Wayland vs X11 vs
+// macOS, tool present or not) becomes a plain table test with no compositor.
+type detectClipboardToolEnv struct {
+	getenv   func(string) string
+	lookPath func(string) bool
+}
+
+// DetectClipboardTool finds a native clipboard tool for the current session.
 // Returns nil when none is available (headless server, no clipboard binaries).
 // Detection order: Wayland (wl-clipboard) → X11 (xclip, xsel) → macOS (pbcopy).
 func DetectClipboardTool() *clipboardTool {
+	return detectClipboardTool(detectClipboardToolEnv{os.Getenv, lookPath})
+}
+
+func detectClipboardTool(env detectClipboardToolEnv) *clipboardTool {
+	getenv, lp := env.getenv, env.lookPath
 	// Wayland. XDG_RUNTIME_DIR + WAYLAND_DISPLAY must both be set for the
 	// socket to be reachable; checking the env guards against a tool present
 	// but unusable.
-	if os.Getenv("XDG_RUNTIME_DIR") != "" && os.Getenv("WAYLAND_DISPLAY") != "" {
-		if lookPath("wl-copy") && lookPath("wl-paste") {
-			return &clipboardTool{name: "wl-clipboard", copyCmd: []string{"wl-copy"}, pasteCmd: []string{"wl-paste"}}
+	if getenv("XDG_RUNTIME_DIR") != "" && getenv("WAYLAND_DISPLAY") != "" {
+		if lp("wl-copy") && lp("wl-paste") {
+			return &clipboardTool{name: "wl-clipboard", copyCmd: []string{"wl-copy"}, pasteCmd: []string{"wl-paste", "-n"}}
 		}
 	}
 	// X11.
-	if os.Getenv("DISPLAY") != "" {
-		if lookPath("xclip") {
+	if getenv("DISPLAY") != "" {
+		if lp("xclip") {
 			return &clipboardTool{name: "xclip", copyCmd: []string{"xclip", "-selection", "clipboard"}, pasteCmd: []string{"xclip", "-selection", "clipboard", "-o"}}
 		}
-		if lookPath("xsel") {
+		if lp("xsel") {
 			return &clipboardTool{name: "xsel", copyCmd: []string{"xsel", "--clipboard", "--input"}, pasteCmd: []string{"xsel", "--clipboard", "--output"}}
 		}
 	}
 	// macOS.
-	if lookPath("pbcopy") && lookPath("pbpaste") {
+	if lp("pbcopy") && lp("pbpaste") {
 		return &clipboardTool{name: "pbcopy/pbpaste", copyCmd: []string{"pbcopy"}, pasteCmd: []string{"pbpaste"}}
 	}
 	return nil
@@ -57,18 +74,33 @@ func DetectClipboardTool() *clipboardTool {
 // The write is started but not waited on: waiting would block until the keeper
 // is replaced, which for a copy that nobody pastes is effectively forever.
 // cmd.Start returns as soon as the keeper has the content, and a later copy
-// replaces it naturally (wl-clipboard handles the handoff).
+// replaces it naturally (wl-clipboard handles the handoff). The goroutine
+// reaps the keeper so it never lingers as a zombie in the process table.
 func (t *clipboardTool) Write(text string) error {
 	cmd := exec.Command(t.copyCmd[0], t.copyCmd[1:]...)
 	cmd.Stdin = strings.NewReader(text)
-	return cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait() // reap the keeper so it does not become a zombie
+	return nil
 }
 
-// read returns the current native clipboard contents. Best-effort: an empty
+// pasteTimeout bounds a clipboard read. A hung xclip (X server gone, selinux
+// stall) would otherwise leave the paste pending forever; with the timeout the
+// read fails and the caller falls back to OSC 52.
+const pasteTimeout = 2 * time.Second
+
+// Read returns the current native clipboard contents. Best-effort: an empty
 // clipboard or a failed read yields an empty string.
 func (t *clipboardTool) Read() (string, error) {
-	out, err := exec.Command(t.pasteCmd[0], t.pasteCmd[1:]...).Output()
-	return strings.TrimSuffix(string(out), "\n"), err
+	ctx, cancel := context.WithTimeout(context.Background(), pasteTimeout)
+	defer cancel()
+	// wl-paste -n suppresses the trailing newline wl-paste adds by default;
+	// xclip -o and pbpaste do not add one, so a selection genuinely ending in
+	// a newline keeps it instead of losing it to a TrimSuffix.
+	out, err := exec.CommandContext(ctx, t.pasteCmd[0], t.pasteCmd[1:]...).Output()
+	return string(out), err
 }
 
 // localClipboardAvailable reports whether a native clipboard tool is usable
@@ -76,6 +108,32 @@ func (t *clipboardTool) Read() (string, error) {
 // compositor exit) degrades gracefully back to OSC 52.
 func LocalClipboardAvailable() bool {
 	return DetectClipboardTool() != nil
+}
+
+// ShouldUseNativeClipboard is the single decision point for the clipboard
+// fallback. The native tool is only reached for when ALL of these hold:
+//  1. the config option is on,
+//  2. the host terminal is VTE (the only family that never implements OSC 52;
+//     everywhere else OSC 52 already works and spawning wl-copy/xclip would
+//     just duplicate entries in the clipboard manager on every selection),
+//  3. a tool is actually reachable.
+//
+// The SSH/browser gate lives at the call sites (clipboardWriteCmd and the
+// paste path): only those know whether the human is sitting at this machine.
+// Under tuios ssh / tuios-web, WAYLAND_DISPLAY/DISPLAY describe the operator's
+// desktop, so a native read/write would move data between two people.
+func ShouldUseNativeClipboard() bool {
+	return shouldUseNativeClipboard(detectClipboardToolEnv{os.Getenv, lookPath}, config.HostIsVTE(), config.ClipboardLocalFallback)
+}
+
+func shouldUseNativeClipboard(env detectClipboardToolEnv, hostIsVTE, fallbackEnabled bool) bool {
+	if !fallbackEnabled {
+		return false
+	}
+	if !hostIsVTE {
+		return false
+	}
+	return detectClipboardTool(env) != nil
 }
 
 func lookPath(name string) bool {

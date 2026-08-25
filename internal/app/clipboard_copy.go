@@ -46,7 +46,15 @@ func (m *OS) CopyToClipboard(text string) tea.Cmd {
 // OSC 52 is the right channel for remote clients with no local clipboard of
 // their own; a native tool is the right channel for terminals like GNOME
 // Terminal/Ptyxis whose VTE never implements OSC 52.
+//
+// The native path is only taken for a session that is both local (not SSH, not
+// a browser client: under tuios ssh / tuios-web, WAYLAND_DISPLAY/DISPLAY
+// describe the operator's desktop, and a native read/write would move data
+// between two people) and VTE-hosted (the only family that never implements
+// OSC 52; everywhere else spawning wl-copy/xclip would just duplicate entries
+// in the clipboard manager on every selection for no gain).
 func (m *OS) clipboardWriteCmd(text string) tea.Cmd {
+	local := !m.IsSSHMode && !m.BrowserClient
 	// The write is wrapped so the native path runs *and* the same
 	// setClipboardMsg that tea.SetClipboard produces is still returned: Bubble
 	// Tea forwards that message as OSC 52, which is harmless in terminals that do
@@ -54,7 +62,7 @@ func (m *OS) clipboardWriteCmd(text string) tea.Cmd {
 	// double write is idempotent (same text), and the native one is what makes
 	// VTE-based terminals (GNOME Terminal, Ptyxis) work at all.
 	return func() tea.Msg {
-		if m.Settings.ClipboardLocalFallback && LocalClipboardAvailable() {
+		if local && m.Settings.ClipboardLocalFallback && LocalClipboardAvailable() {
 			// Best-effort: if the native write fails (permissions, compositor
 			// gone), the OSC 52 message below is still the safety net.
 			_ = DetectClipboardTool().Write(text)

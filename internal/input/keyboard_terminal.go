@@ -331,7 +331,13 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// convention.
 	if sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction) == "terminal_paste_host" {
 		if focusedWindow != nil {
-			if config.ClipboardLocalFallback && app.LocalClipboardAvailable() {
+			// Native clipboard read only for a local, VTE-hosted session: under
+			// tuios ssh / tuios-web the human is elsewhere, and WAYLAND_DISPLAY /
+			// DISPLAY describe the operator's desktop, so a native read would pull
+			// the operator's clipboard into a remote pane. VTE never implements
+			// OSC 52, so everywhere else the OSC 52 read below is the right path.
+			local := !o.IsSSHMode && !o.BrowserClient
+			if local && app.ShouldUseNativeClipboard() {
 				tool := app.DetectClipboardTool()
 				return o, func() tea.Msg {
 					text, err := tool.Read()
