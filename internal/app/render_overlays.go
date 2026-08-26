@@ -15,6 +15,16 @@ import (
 func (m *OS) renderOverlays() []*lipgloss.Layer {
 	var layers []*lipgloss.Layer
 
+	// The screen saver covers everything and nothing else is worth drawing
+	// under it, so it returns alone. Hit geometry is cleared first: the panels
+	// below are not drawn this frame, so last frame's rectangles would make
+	// dead regions clickable behind an animation.
+	if m.screensaver.active && m.screensaver.frame != "" {
+		m.OverlayHits = m.OverlayHits[:0]
+		return append(layers, lipgloss.NewLayer(m.screensaver.frame).
+			X(0).Y(0).Z(config.ZIndexScreensaver).ID("screensaver"))
+	}
+
 	// Clear last frame's hit geometry; each panel that renders below re-records
 	// itself. The ASCII glyph set is synced at the top of GetCanvas, ahead of
 	// every layer that reads it.

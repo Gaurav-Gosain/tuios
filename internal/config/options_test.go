@@ -167,7 +167,7 @@ func TestOptionSpecsAreWellFormed(t *testing.T) {
 	sections := []string{
 		"appearance", "sidebar", "dock", "scrollbar",
 		"startup", "daemon", "notifications", "tape", "debug",
-		"screenshot",
+		"screenshot", "screensaver",
 	}
 	for _, opt := range optionSpecs {
 		if opt.Description == "" {

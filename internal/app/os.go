@@ -308,6 +308,10 @@ type OS struct {
 	// tickStats records how the maintenance tick spent itself so the idle
 	// benchmark and idle e2e can prove ticks stay cheap when nothing moves.
 	tickStats tickStats
+	// screensaver is the idle animation. It deliberately adds nothing to the
+	// maintenance tick: arming is one deferred timer and the running animation
+	// drives its own frames. See screensaver.go.
+	screensaver screensaverState
 	// lastInteractionRender is when a drag/resize motion event last produced a
 	// frame. Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.
