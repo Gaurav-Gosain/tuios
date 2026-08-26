@@ -3,7 +3,7 @@ package config
 import (
 	"slices"
 
-	"github.com/Gaurav-Gosain/tuios/pkg/tfx"
+	tfx "github.com/Gaurav-Gosain/tuiffects"
 )
 
 // ScreensaverConfig is the [screensaver] section: whether the screen animates
@@ -33,6 +33,19 @@ const (
 // stops the list here and the list there drifting apart.
 var ScreensaverEffects = append([]string{ScreensaverRandomEffect}, tfx.Names()...)
 
+// retiredScreensaverEffects are names that used to be accepted and are not any
+// more. A config naming one still loads: the name maps to its replacement
+// rather than tripping the enum validator with a warning about a value the
+// person never chose and cannot look up.
+//
+// colorshift was dropped because it made a poor screen saver. It never moved a
+// character, so nothing happened on screen except a hue sweep, and being the
+// only effect that restyled every cell of every frame it was also the most
+// expensive one to draw.
+var retiredScreensaverEffects = map[string]string{
+	"colorshift": ScreensaverRandomEffect,
+}
+
 // defaultScreensaverConfig returns the section DefaultConfig carries.
 func defaultScreensaverConfig() ScreensaverConfig {
 	return ScreensaverConfig{
@@ -52,6 +65,9 @@ func fillMissingScreensaver(cfg, defaultCfg *UserConfig) {
 	if s.IdleMinutes <= 0 {
 		s.IdleMinutes = d.IdleMinutes
 	}
+	if replacement, retired := retiredScreensaverEffects[s.Effect]; retired {
+		s.Effect = replacement
+	}
 }
 
 // IsEnabled reports whether a screen saver should ever start.
@@ -65,9 +81,13 @@ func (s ScreensaverConfig) IdleDelayMinutes() int {
 	return clampRange(s.IdleMinutes, ScreensaverMinIdleMinutes, ScreensaverMaxIdleMinutes)
 }
 
-// EffectName is the effect to run, or the random marker. An unknown name falls
-// back to random rather than refusing to run.
+// EffectName is the effect to run, or the random marker. A retired name maps to
+// its replacement and any other unknown name falls back to random, so a config
+// written against a different version still starts a saver.
 func (s ScreensaverConfig) EffectName() string {
+	if replacement, retired := retiredScreensaverEffects[s.Effect]; retired {
+		return replacement
+	}
 	if s.Effect == "" || !slices.Contains(ScreensaverEffects, s.Effect) {
 		return ScreensaverRandomEffect
 	}
