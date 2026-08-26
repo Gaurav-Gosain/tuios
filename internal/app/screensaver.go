@@ -73,13 +73,6 @@ func (m *OS) screensaverConfig() config.ScreensaverConfig {
 	return m.UserConfig.Screensaver
 }
 
-// noteScreensaverInput records that input arrived and arms the start timer if
-// one is not already in flight. It returns the command to run, or nil.
-func (m *OS) noteScreensaverInput() tea.Cmd {
-	m.screensaver.lastInput = time.Now()
-	return m.armScreensaver()
-}
-
 // armScreensaver starts the single deferred timer, unless the saver is off,
 // already running, or a timer is already in flight.
 func (m *OS) armScreensaver() tea.Cmd {

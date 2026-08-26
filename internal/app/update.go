@@ -298,6 +298,13 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 
+	// Arm the screen saver's idle timer for a session nobody has typed in yet.
+	// Without this a tuios left alone from the moment it opened would never
+	// start one, because arming otherwise hangs off input.
+	if cmd := m.armScreensaver(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// Listen for state sync from other clients (daemon/SSH/web mode)
 	if m.StateSyncChan != nil {
 		cmds = append(cmds, ListenForStateSync(m.StateSyncChan))
@@ -1129,18 +1136,23 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if m.screensaver.active {
 			return m, m.dismissScreensaver()
 		}
-		// Input restarts the idle countdown. armScreensaver starts a timer only
-		// when none is in flight, so holding a key down does not queue one per
-		// repeat.
-		saverCmd := m.noteScreensaverInput()
+		// Input restarts the idle countdown. The time is taken now, before the
+		// handler runs, so a slow handler does not shorten the next wait.
+		m.screensaver.lastInput = time.Now()
 
 		// Delegate to the registered input handler
 		handler := getInputHandler()
 		if handler == nil {
-			return m, saverCmd
+			return m, m.armScreensaver()
 		}
 		newModel, cmd := handler(msg, m)
-		if saverCmd != nil {
+		// Arming happens after the handler, not before, because the keystroke
+		// that switches the saver on in the settings page is itself an input
+		// event: arming first would read the old setting and leave a session
+		// that was just enabled with no timer until someone typed again.
+		// armScreensaver starts one only when none is in flight, so holding a
+		// key down does not queue a timer per repeat.
+		if saverCmd := m.armScreensaver(); saverCmd != nil {
 			cmd = tea.Batch(cmd, saverCmd)
 		}
 
