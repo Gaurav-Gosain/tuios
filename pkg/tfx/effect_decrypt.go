@@ -110,7 +110,7 @@ func (d *Decrypt) Build(e *Engine) error {
 
 func (d *Decrypt) prepareTyping(e *Engine, characters []*Character) error {
 	for _, ch := range characters {
-		scene := ch.Animation.NewScene("typing", SceneOptions{UsesInputColors: ch.UsesInputColors})
+		scene := ch.Animation.NewScene("typing", SceneOptions{UsesInputColors: ch.UsesInputColors, Frames: 5})
 		for _, block := range []string{"▉", "▓", "▒", "░"} {
 			color := Choice(e.Rng, d.config.CiphertextColors)
 			if err := scene.AddFrame(block, 2, VisualParams{Colors: Fg(*color)}); err != nil {
@@ -143,7 +143,7 @@ func (d *Decrypt) prepareDecrypting(e *Engine, characters []*Character) error {
 func (d *Decrypt) makeDecryptingScenes(e *Engine, ch *Character) error {
 	color := *Choice(e.Rng, d.config.CiphertextColors)
 
-	fast := ch.Animation.NewScene("fast_decrypt", SceneOptions{UsesInputColors: ch.UsesInputColors})
+	fast := ch.Animation.NewScene("fast_decrypt", SceneOptions{UsesInputColors: ch.UsesInputColors, Frames: 80})
 	for i := 0; i < 80; i++ {
 		symbol := Choice(e.Rng, d.encryptedSymbols)
 		if err := fast.AddFrame(*symbol, 2, VisualParams{Colors: Fg(color)}); err != nil {
@@ -151,8 +151,9 @@ func (d *Decrypt) makeDecryptingScenes(e *Engine, ch *Character) error {
 		}
 	}
 
-	slow := ch.Animation.NewScene("slow_decrypt", SceneOptions{UsesInputColors: ch.UsesInputColors})
-	for i, n := 0, e.Rng.IntBetween(1, 15); i < n; i++ {
+	slowFrames := e.Rng.IntBetween(1, 15)
+	slow := ch.Animation.NewScene("slow_decrypt", SceneOptions{UsesInputColors: ch.UsesInputColors, Frames: slowFrames})
+	for i := 0; i < slowFrames; i++ {
 		symbol := Choice(e.Rng, d.encryptedSymbols)
 		// A wide spread of frame durations stops the resolve arriving in
 		// visible waves. Three in ten characters hold much longer.
@@ -165,7 +166,7 @@ func (d *Decrypt) makeDecryptingScenes(e *Engine, ch *Character) error {
 		}
 	}
 
-	discovered := ch.Animation.NewScene("discovered", SceneOptions{UsesInputColors: ch.UsesInputColors})
+	discovered := ch.Animation.NewScene("discovered", SceneOptions{UsesInputColors: ch.UsesInputColors, Frames: 10})
 	final := d.finalColors[ch]
 	white := MustParseColor("ffffff")
 	var fgGradient, bgGradient *Gradient

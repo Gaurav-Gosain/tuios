@@ -381,6 +381,10 @@ func (a *Animation) NewScene(id string, opts SceneOptions) *Scene {
 		HasEase:   opts.HasEase,
 		visuals:   a.visuals,
 	}
+	if opts.Frames > 0 {
+		scene.allFrames = make([]Frame, 0, opts.Frames)
+		scene.frames = make([]int, 0, opts.Frames)
+	}
 	if a.ExistingColorHandling == AlwaysExistingColors && opts.UsesInputColors {
 		scene.preexistingColors = a.InputColors
 		scene.hasPreexisting = true
@@ -397,6 +401,11 @@ type SceneOptions struct {
 	Ease            Easing
 	HasEase         bool
 	UsesInputColors bool
+	// Frames is how many frames the caller is about to add, if it knows.
+	// Nothing depends on it being right, but a scene with eighty frames
+	// regrows its slices seven times without it, and over a full screen that
+	// regrowth is most of what the build allocates.
+	Frames int
 }
 
 // ActiveSceneIsComplete reports whether the active scene has run out of
