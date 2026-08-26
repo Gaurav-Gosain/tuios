@@ -32,9 +32,10 @@ What was translated, file by file:
     color.go       ttfx src/utils/graphics.rs,   TTE utils/graphics.py
     geometry.go    ttfx src/utils/geometry.rs,   TTE utils/geometry.py
 
-    effect_decrypt.go     ttfx src/effects/decrypt.rs,    TTE effects/effect_decrypt.py
-    effect_rain.go        ttfx src/effects/rain.rs,       TTE effects/effect_rain.py
-    effect_colorshift.go  ttfx src/effects/colorshift.rs, TTE effects/effect_colorshift.py
+    effect_decrypt.go     ttfx src/effects/decrypt.rs,  TTE effects/effect_decrypt.py
+    effect_rain.go        ttfx src/effects/rain.rs,     TTE effects/effect_rain.py
+    effect_waves.go       ttfx src/effects/waves.rs,    TTE effects/effect_waves.py
+    effect_vhstape.go     ttfx src/effects/vhstape.rs,  TTE effects/effect_vhstape.py
 
 What was deliberately NOT carried over:
 

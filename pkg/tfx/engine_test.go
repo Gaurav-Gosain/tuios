@@ -167,8 +167,8 @@ func TestGradientSingleStopRepeats(t *testing.T) {
 	}
 }
 
-// TestGradientLoopReturnsToFirstStop checks the wrap the colorshift wave needs
-// to avoid a seam.
+// TestGradientLoopReturnsToFirstStop checks a looped gradient returns to its
+// first stop, which is what lets a cycling effect run with no visible seam.
 //
 // Negative control: ignoring doLoop leaves the last colour as the last stop
 // rather than the first.
@@ -515,80 +515,6 @@ func TestRainStartsAtTheTopOfTheCanvas(t *testing.T) {
 	}
 }
 
-// TestColorShiftNeverMovesACharacter checks the effect changes colour only.
-//
-// Negative control: giving the characters a path makes some frame's text differ
-// from the input.
-func TestColorShiftNeverMovesACharacter(t *testing.T) {
-	const input = "colour"
-	term := NewTerminalFromText(input, TerminalConfig{Width: 10, Height: 3})
-	engine := NewEngine(term, NewRng(5))
-	config := DefaultColorShiftConfig()
-	config.Cycles = 1
-	effect := NewColorShift(config)
-
-	frames, err := Run(effect, engine, 5000)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if len(frames) == 0 {
-		t.Fatal("the effect produced no frames")
-	}
-	for i, frame := range frames {
-		rows := nonBlank(frame)
-		if len(rows) != 1 || rows[0] != input {
-			t.Fatalf("frame %d reads %q, want %q on every frame", i, rows, input)
-		}
-	}
-}
-
-// TestColorShiftActuallyChangesColour checks the effect is not a no-op.
-//
-// Negative control: dropping the colour from the gradient scene's frames makes
-// every frame's SGR identical.
-func TestColorShiftActuallyChangesColour(t *testing.T) {
-	term := NewTerminalFromText("colour", TerminalConfig{Width: 10, Height: 3})
-	engine := NewEngine(term, NewRng(5))
-	config := DefaultColorShiftConfig()
-	config.Cycles = 1
-	effect := NewColorShift(config)
-
-	frames, err := Run(effect, engine, 5000)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if len(frames) < 4 {
-		t.Fatalf("the effect ran for %d frames, want a real animation", len(frames))
-	}
-	if frames[0] == frames[len(frames)-1] {
-		t.Error("the first and last frames are byte identical, so no colour moved")
-	}
-	if !strings.Contains(frames[0], "\x1b[38;2;") {
-		t.Error("the first frame carries no truecolor foreground")
-	}
-}
-
-// TestColorShiftCyclesZeroRunsForever checks the setting a screen saver uses.
-//
-// Negative control: treating zero as "no cycles" ends the effect on the first
-// scene completion, so the frame cap is never reached.
-func TestColorShiftCyclesZeroRunsForever(t *testing.T) {
-	term := NewTerminalFromText("loop", TerminalConfig{Width: 10, Height: 3})
-	engine := NewEngine(term, NewRng(5))
-	config := DefaultColorShiftConfig()
-	config.Cycles = 0
-	effect := NewColorShift(config)
-
-	const frameCap = 3000
-	frames, err := Run(effect, engine, frameCap)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if len(frames) != frameCap {
-		t.Errorf("the effect stopped after %d frames, want it still running at the %d cap", len(frames), frameCap)
-	}
-}
-
 // TestInputColorsResolveBackToThemselves checks the mode a screen saver runs
 // in: the captured screen must reassemble in its own colours, not the effect's.
 //
@@ -667,12 +593,12 @@ func TestFrameRowsMatchTheFrameString(t *testing.T) {
 	}
 }
 
-// TestRegistryHoldsTheThreePortedEffects guards the registry wiring, since a
+// TestRegistryHoldsThePortedEffects guards the registry wiring, since a
 // missing init leaves an effect unreachable by name.
 //
 // Negative control: deleting any effect file's init makes its name vanish.
-func TestRegistryHoldsTheThreePortedEffects(t *testing.T) {
-	want := []string{"colorshift", "decrypt", "rain"}
+func TestRegistryHoldsThePortedEffects(t *testing.T) {
+	want := []string{"decrypt", "rain", "vhstape", "waves"}
 	got := Names()
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("registered effects = %v, want %v", got, want)

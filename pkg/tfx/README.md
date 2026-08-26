@@ -65,21 +65,22 @@ The engine, in the shape ttfx found it:
 | `Canvas`, `Terminal` | the grid, the character populations, and the frame painter |
 | `Engine` | the stepping loop that ties all of it together |
 
-Three effects, chosen to exercise different parts of that engine rather than to
-be the flashiest:
+Four effects, chosen to exercise different parts of that engine and to work
+over a whole screen of arbitrary content rather than over a centred banner:
 
 | Effect | What it shows |
 | --- | --- |
 | `decrypt` | per-character scenes and scene-to-scene chaining, no motion at all |
 | `rain` | paths, easing, and a path completion handing off to an animation |
-| `colorshift` | looping scenes, gradient mapping, and an effect callback driving the loop |
+| `waves` | eased scenes released in bands, a sweep with no motion at all |
+| `vhstape` | paths driving synced scenes, row groups, and several phases |
 
 ## Adding an effect
 
 Write one file. Implement `Build` (set up scenes and paths on every character)
 and `Advance` (release a few characters, call `engine.Update()`, say whether
-you are done), and call `Register` from an `init`. The three here are 150 to
-230 lines each and the engine does the rest.
+you are done), and call `Register` from an `init`. The four here are 160 to
+430 lines each and the engine does the rest.
 
 ## Differences from ttfx
 
@@ -87,7 +88,7 @@ you are done), and call `Register` from an `init`. The three here are 150 to
   effect will not produce the same frames as either upstream. `NewRng(seed)`
   makes a run reproducible within this package, which is what the tests need.
 * No command line, no tty writer, no resize handling. The host owns the screen.
-* Three effects rather than thirty-five.
+* Four effects rather than thirty-five.
 * Rounding quirks that change how effects look **are** kept: half-to-even
   rounding on coordinates, floor division on gradient channel steps, and the
   bezier arc-length estimate that stops at t=0.9. Removing them would retune
