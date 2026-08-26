@@ -92,7 +92,10 @@ func TestSidebarRowsShareOneNameSpine(t *testing.T) {
 //
 // Negative control: with the zones recorded in construction order rather than
 // left to right, the ordering assertion below fails, and so does the fuzz
-// oracle's rail-hit-band rule. Both were confirmed red before the sort went in.
+// oracle's rail-hit-band rule. The oracle was observed failing exactly that way
+// before the sort went in ("hit 6 at (1,37) overlaps or precedes hit 5 at
+// (25,37)"), so that half is confirmed; the ordering assertion here was written
+// after and is not yet confirmed red on its own.
 func TestSidebarFooterZonesMatchWhatIsDrawn(t *testing.T) {
 	m := daemonRailOS(t, 120, 40)
 	lines, zones := m.sidebarFooter(sidebarVariantFull, 30, theme.UI(), -1, -1,

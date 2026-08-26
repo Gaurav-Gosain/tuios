@@ -34,7 +34,7 @@ func railLines(t *testing.T, m *OS) []string {
 // Negative control: with the filesView.Open branch removed from
 // sidebarPanelLinesForTree, the rail keeps drawing "sessions" and the listing
 // never appears; with the branch placed before the collapsed-strip return, a
-// folded rail draws a path into three columns. Both were confirmed red.
+// folded rail draws a path into three columns. NOT YET CONFIRMED RED.
 func TestFileViewReplacesTheSectionsOnScreen(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 

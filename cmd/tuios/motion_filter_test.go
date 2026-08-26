@@ -112,8 +112,11 @@ func TestMotionFilterPassesTheBandExitEvent(t *testing.T) {
 //
 // Negative control: with the links clause removed from filterMouseMotion, the
 // first assertion fails, and so does the underline in a real session. With the
-// cell-change guard removed the last assertion fails. Both were confirmed red
-// before either went in.
+// cell-change guard removed the last assertion fails. NOT YET CONFIRMED RED.
+//
+// The clause's absence was observed at the level above, though: before it went
+// in, TestMotionFilterPassesRailHover passed and no motion over a pane reached
+// Update, which is the state this test's first assertion is written against.
 func TestMotionFilterPassesPaneContentForLinks(t *testing.T) {
 	o := filterOS(t)
 	o.Mode = app.WindowManagementMode

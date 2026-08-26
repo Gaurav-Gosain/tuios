@@ -45,8 +45,8 @@ var wantFileOrder = []string{"apple", "Zeta", "Alpha.go", "beta.txt", "README.md
 //
 // Negative control: with the sort's IsDir clause removed, the order comes out
 // Alpha.go, apple, beta.txt, README.md, Zeta and this fails; with
-// strings.ToLower dropped, Zeta sorts before apple and it fails too. Both were
-// confirmed red.
+// strings.ToLower dropped, Zeta sorts before apple and it fails too. NOT YET
+// CONFIRMED RED.
 func TestFileViewOrdersFoldersFirst(t *testing.T) {
 	m := &OS{}
 	m.loadFileView(fileViewTree(t))
@@ -142,7 +142,7 @@ func TestUnreadableDirectoryIsReported(t *testing.T) {
 //
 // Negative control: with the alt-screen test removed from paneBusyReason the
 // first case passes the guard, and with the ForegroundCmd test removed the
-// second does. Both were confirmed red.
+// second does. NOT YET CONFIRMED RED.
 func TestPaneBusyReasonRefusesWhenSomethingIsRunning(t *testing.T) {
 	win := newTestWindow(t, "aaaaaaaa1111", 40, 10)
 

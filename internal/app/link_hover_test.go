@@ -43,7 +43,7 @@ func screenOf(col, row int) (int, int) { return col + 1, row + 1 }
 // Negative control: with markedLinkAt returning the cell's own column as both
 // ends of the run, the span assertions fail; with the OSC 8 parse taking the
 // parameters as the URL, which is the bug internal/vt/osc.go carries a comment
-// about, the address assertion fails. Both were confirmed red.
+// about, the address assertion fails. NOT YET CONFIRMED RED.
 func TestLinkHoverFindsAMarkedRun(t *testing.T) {
 	const want = "https://example.com/docs"
 	m, win := linkTestOS(t, "see \x1b]8;;"+want+"\x1b\\docs\x1b]8;;\x1b\\ here")

@@ -804,10 +804,16 @@ func abs(n int) int {
 //
 // Read the doc comment on the mouse section before using this. tuios's motion
 // filter drops bare motion in every state except an active drag, resize,
-// overlay drag, scrollback browser, or a pane running a mouse-tracking
-// application, so in every other state this is delivered to the program and
-// dropped before Update sees it. Hover-driven behaviour, including the context
-// menu's own hover highlight, cannot be observed from here at all.
+// overlay drag, scrollback browser, a pane running a mouse-tracking
+// application, the sidebar band, and pane content while appearance.links is on.
+// In every other state this is delivered to the program and dropped before
+// Update sees it, so hover-driven behaviour there, including the context menu's
+// own hover highlight, cannot be observed from here at all.
+//
+// Pane content is the exception link hover added, and it is why
+// link_hover_test.go can see an underline appear: a link's target is not a
+// rectangle the chrome recorded, so the filter has to pass motion over the
+// whole content box. That clause is off with appearance.links = off.
 func mouseHover(t *testing.T, term *tuitest.Terminal, col, row int) {
 	t.Helper()
 	sendMouse(t, term, "hover", tuitest.MouseEvent{
