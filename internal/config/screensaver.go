@@ -35,7 +35,10 @@ var ScreensaverEffects = append([]string{ScreensaverRandomEffect}, tfx.Names()..
 
 // defaultScreensaverConfig returns the section DefaultConfig carries.
 func defaultScreensaverConfig() ScreensaverConfig {
-	return ScreensaverConfig{Effect: ScreensaverRandomEffect}
+	return ScreensaverConfig{
+		IdleMinutes: ScreensaverDefaultIdleMinutes,
+		Effect:      ScreensaverRandomEffect,
+	}
 }
 
 // fillMissingScreensaver fills empty strings with defaults. Pointer fields stay
@@ -45,6 +48,9 @@ func fillMissingScreensaver(cfg, defaultCfg *UserConfig) {
 	s, d := &cfg.Screensaver, &defaultCfg.Screensaver
 	if s.Effect == "" {
 		s.Effect = d.Effect
+	}
+	if s.IdleMinutes <= 0 {
+		s.IdleMinutes = d.IdleMinutes
 	}
 }
 
