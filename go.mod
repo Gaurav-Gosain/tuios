@@ -8,6 +8,7 @@ require (
 	charm.land/ssh v0.4.3
 	charm.land/wish/v2 v2.0.3
 	github.com/Gaurav-Gosain/sip v0.7.0
+	github.com/Gaurav-Gosain/tuiffects v0.1.0
 	github.com/adrg/xdg v0.5.3
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/fang v1.0.0
@@ -21,16 +22,15 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.7
 	github.com/spf13/cobra v1.10.2
 	go.mitchellh.com/libghostty v0.0.0-20260817204349-1d44b6e69990
+	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
 )
 
 require (
-	github.com/bits-and-blooms/bitset v1.25.0 // indirect
 	github.com/mattn/go-runewidth v0.0.28 // indirect
 	github.com/pires/go-proxyproto v0.12.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	golang.org/x/image v0.45.0 // indirect
 )
 
 require (
@@ -38,7 +38,7 @@ require (
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/keygen v0.5.4 // indirect
-	github.com/charmbracelet/lipgloss v1.1.0 // indirect
+	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/log v1.0.0 // indirect
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect

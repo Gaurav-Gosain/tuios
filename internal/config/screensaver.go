@@ -3,7 +3,7 @@ package config
 import (
 	"slices"
 
-	"github.com/Gaurav-Gosain/tuios/pkg/tfx"
+	tfx "github.com/Gaurav-Gosain/tuiffects"
 )
 
 // ScreensaverConfig is the [screensaver] section: whether the screen animates
