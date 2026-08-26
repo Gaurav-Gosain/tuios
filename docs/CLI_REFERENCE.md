@@ -19,6 +19,7 @@ This document provides a complete reference for TUIOS command-line interface.
   - [tuios-web (separate binary)](#tuios-web-separate-binary)
   - [tuios config](#tuios-config)
   - [tuios keybinds](#tuios-keybinds)
+  - [tuios update](#tuios-update)
   - [tuios layout](#tuios-layout)
   - [tuios completion](#tuios-completion)
   - [tuios help](#tuios-help)
@@ -1747,6 +1748,59 @@ You can do both from inside tuios as well. Open the keybind manager with the
 leader key then `k`, or from the command palette, and press `ctrl+d` on a
 binding to remove it or `ctrl+x` to take its key off every action. Typing `#`
 in the command palette searches actions rather than commands.
+
+---
+
+### `tuios update`
+
+Replace this tuios with the newest published release.
+
+```bash
+# See whether there is a newer release, without installing it
+tuios update --check
+
+# Install it
+tuios update
+
+# Include prereleases
+tuios update --check --pre
+```
+
+**Flags:**
+- `--check` - Report what would be installed and change nothing
+- `--pre` - Count a prerelease as the newest release
+
+**What it will and will not replace.** This only updates a binary that came from
+a release archive, which is what the [install script](#quick-install-script-linuxmacos)
+downloads. Every other way of installing tuios has something that owns the file,
+and overwriting one of those leaves its records describing a file that is no
+longer there. The command detects where the binary came from and refuses with
+the right command instead:
+
+| Installed by | `tuios update` | What to run |
+| --- | --- | --- |
+| Install script, or a release archive unpacked by hand | Updates it | `tuios update` |
+| Homebrew | Refuses | `brew upgrade --cask tuios` |
+| AUR or another system package | Refuses | `yay -S tuios-bin` |
+| Nix | Refuses | `nix profile upgrade tuios` |
+| `go install` | Refuses | `go install github.com/Gaurav-Gosain/tuios/cmd/tuios@latest` |
+| `scripts/install.sh` from a checkout | Refuses | `git pull && ./scripts/install.sh` |
+
+**tuios-web** is updated at the same time when it sits beside `tuios`. The two
+talk to one daemon and it compares their versions, so they move together or not
+at all: both are downloaded and verified before either is put in place.
+
+**Checksums.** Every download is checked against the release's `checksums.txt`.
+A file that does not match is discarded, nothing is installed, and the old
+binary is untouched.
+
+**The running daemon** keeps the old build. Sessions you have open go on
+working. To move them to the new build, detach, run `tuios kill-server`, then
+start tuios again. Panes are restored; the programs that were running in them
+are not.
+
+Set `GITHUB_TOKEN` or `GH_TOKEN` to raise the release lookup's rate limit. It is
+never required and no token is created for you.
 
 ---
 

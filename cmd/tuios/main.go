@@ -2161,7 +2161,43 @@ it as data, not as instructions.`,
 	askAgentCmd.Flags().BoolVar(&askJSON, "json", false, "Output result as JSON")
 	_ = askAgentCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
-	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd)
+	var updateCheck, updatePre bool
+	updateCmd := &cobra.Command{
+		Use:   "update",
+		Short: "Install the newest release over this binary",
+		Long: `Replace this tuios with the newest published release.
+
+This only updates a binary that came from a release archive, which is what the
+install script downloads. Every other way of installing tuios has something that
+owns the file: a package manager, Homebrew, the Nix store, or the Go tool. This
+refuses to write over those and prints the command that does update them,
+because overwriting one leaves its records describing a file that is no longer
+there.
+
+tuios-web is updated at the same time when it sits beside tuios. The two talk to
+one daemon and it compares their versions, so they move together or not at all.
+
+Every download is checked against the release's published checksum. A file that
+does not match is discarded and nothing is installed.
+
+The daemon keeps running the old build until it is restarted. The command says
+what to do about that when it finishes.`,
+		Example: `  # See whether there is a newer release, without installing it
+  tuios update --check
+
+  # Install it
+  tuios update
+
+  # Include prereleases
+  tuios update --check --pre`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runUpdate(updateOptions{check: updateCheck, prerelease: updatePre})
+		},
+	}
+	updateCmd.Flags().BoolVar(&updateCheck, "check", false, "Report what would be installed and change nothing")
+	updateCmd.Flags().BoolVar(&updatePre, "pre", false, "Count a prerelease as the newest release")
+
+	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd, updateCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)
