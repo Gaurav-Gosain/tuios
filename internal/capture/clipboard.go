@@ -125,12 +125,21 @@ func CopyImage(path string, data []byte, mediaType string) (string, error) {
 		return "", fmt.Errorf("no clipboard helper")
 	}
 
-	if out, err := cmd.CombinedOutput(); err != nil {
-		msg := strings.TrimSpace(string(out))
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", fmt.Errorf("%s could not copy: %s", r.Tool, msg)
+	// Run, not CombinedOutput, and no pipes on stdout or stderr.
+	//
+	// wl-copy forks a child that goes on serving the selection after the
+	// parent exits, and that child inherits whatever pipes were attached.
+	// CombinedOutput waits for those pipes to close, so it waited for the
+	// server to die, which happens when something else takes the clipboard.
+	// A capture therefore blocked until the next capture replaced it: measured
+	// still waiting at 30 seconds, while the context deadline hit only the
+	// parent, which had already exited. The same call with no pipes returns in
+	// 1.5ms and the clipboard still holds the picture.
+	//
+	// The parent's exit code still reports whether the write was accepted, so
+	// nothing is lost by not reading its output.
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("%s could not copy: %s", r.Tool, err.Error())
 	}
 	return r.Tool, nil
 }

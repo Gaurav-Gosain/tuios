@@ -1558,6 +1558,8 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// host would take exactly one routed verb per session.
 		relisten := ListenForRemoteCommands(m.RemoteCommandChan)
 		var err error
+		// persistCmd writes a routed config change to disk, off this goroutine.
+		var persistCmd tea.Cmd
 		var cmd tea.Cmd
 		var notificationMsg string
 		var resultData map[string]any // Rich data to return
@@ -1640,6 +1642,17 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			notificationMsg = fmt.Sprintf("Remote: set %s=%s", msg.ConfigPath, msg.ConfigValue)
 
 			err = m.SetConfig(msg.ConfigPath, msg.ConfigValue)
+			// Write it down, the way the settings panel does. Without this the
+			// routed path changed the running session and nothing else, so
+			// set-config reported success, get-config read the value back from
+			// memory, and the file never grew the section. Every value set this
+			// way was lost on the next restart, in every section, which is why
+			// this reuses persistSettings rather than fixing one of them: it
+			// carries the read-only gating for remote clients and the
+			// stale-write sequencing with it.
+			if err == nil {
+				persistCmd = m.persistSettings()
+			}
 			// Retile if in tiling mode after config change
 			if m.AutoTiling {
 				m.TileAllWindows()
@@ -1715,7 +1728,7 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 		}
 
-		return m, tea.Batch(cmd, relisten)
+		return m, tea.Batch(cmd, persistCmd, relisten)
 
 	case RemoteKeyMsg:
 		// Process a single key from a remote send-keys command
