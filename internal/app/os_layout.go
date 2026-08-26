@@ -50,10 +50,13 @@ func (m *OS) RebuildBSPTreeFromPositions() {
 // Layout mode names as they travel in session state. They name the selection
 // between tiling layouts only; whether tiling is on at all is AutoTiling, which
 // is carried separately and is why disabling tiling does not erase the mode.
+// They are the config package's spellings rather than a second set: the option
+// registry publishes the accepted set for [startup] layout and cannot import
+// this package, so the names have to live where both can reach them.
 const (
-	LayoutModeBSP         = "bsp"
-	LayoutModeMasterStack = "master-stack"
-	LayoutModeScrolling   = "scrolling"
+	LayoutModeBSP         = config.LayoutModeBSP
+	LayoutModeMasterStack = config.LayoutModeMasterStack
+	LayoutModeScrolling   = config.LayoutModeScrolling
 )
 
 // LayoutModeName returns the current layout mode under the name session state
@@ -269,7 +272,11 @@ func (m *OS) DisableAllTiling() {
 // disableAllTiling is DisableAllTiling with the announcements already held.
 func (m *OS) disableAllTiling() {
 	m.AutoTiling = false
-	m.UseScrollingLayout = false
+	// The scheme is remembered. Clearing UseScrollingLayout here made this the
+	// one path that forgot it: LayoutModeName then reported bsp, that answer was
+	// pushed into session state, and turning tiling back on - or reattaching -
+	// gave a scrolling session a BSP layout it never asked for. The tiling
+	// toggle has always kept the mode; this now agrees with it.
 	m.resetTiledFlags()
 	// The panes draw their own borders again, so the column every split held
 	// open for a divider now draws nothing. Give it back to them, the same way

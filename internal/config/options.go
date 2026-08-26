@@ -232,6 +232,16 @@ var optionSpecs = []Option{
 		Default:     "0", Min: 0, Max: PaneGapMax,
 	},
 	{
+		Path: "appearance.master_ratio", Type: OptionInt, Section: "appearance",
+		Description: "Width of the master pane in the master-stack layout, as a percent of the screen",
+		Default:     strconv.Itoa(MasterRatioDefault), Min: MasterRatioMin, Max: MasterRatioMax,
+	},
+	{
+		Path: "appearance.scroll_column_width", Type: OptionInt, Section: "appearance",
+		Description: "Width of a column in the scrolling layout, as a percent of the screen",
+		Default:     strconv.Itoa(ScrollColumnWidthDefault), Min: ScrollColumnWidthMin, Max: ScrollColumnWidthMax,
+	},
+	{
 		Path: "appearance.panel_padding", Type: OptionInt, Section: "appearance",
 		Description: "Columns of padding each side of an overlay panel's content",
 		Default:     strconv.Itoa(overlay.DefaultPanelPadding), Min: 1, Max: overlay.MaxPanelPadding,
@@ -426,6 +436,11 @@ var optionSpecs = []Option{
 		Path: "startup.start_in_terminal_mode", Type: OptionBool, Section: "startup",
 		Description: "Start focused in terminal mode, when a window is present",
 		Default:     "false",
+	},
+	{
+		Path: "startup.layout", Type: OptionString, Section: "startup",
+		Description: "Tiling scheme a new session starts in. An existing session keeps its own.",
+		Accepted:    LayoutModes, Default: LayoutModeBSP,
 	},
 	{
 		Path: "startup.daemon", Type: OptionBool, Section: "startup",

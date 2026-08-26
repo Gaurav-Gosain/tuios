@@ -77,6 +77,12 @@ type StartupConfig struct {
 	OpenDefaultWindow   bool `toml:"open_default_window"`    // Open one terminal window automatically when a session starts with none (default: false)
 	Tiled               bool `toml:"tiled"`                  // Start a new session with tiling enabled instead of floating (default: false)
 	StartInTerminalMode bool `toml:"start_in_terminal_mode"` // Start focused in terminal mode so typing goes straight to the shell, when a window is present (default: false)
+	// Layout is the tiling scheme a new session arranges its panes with: bsp,
+	// master-stack or scrolling. It only ever decides where a session starts.
+	// Once one is running the scheme is the session's own and travels in its
+	// state, so attaching to a session laid out one way never re-arranges it to
+	// match the config of whoever attached.
+	Layout string `toml:"layout"`
 	// Daemon makes a bare "tuios" attach to a daemon-backed session instead of
 	// running a standalone one, for a user who always wants the daemon and would
 	// otherwise type "tuios attach" every time (default: false).
@@ -176,9 +182,15 @@ type AppearanceConfig struct {
 	SessionColors          *bool  `toml:"session_colors"`            // Give each session its own colour on the rail and the switcher (default: true)
 	Glyphs                 string `toml:"glyphs"`                    // Chrome glyph set: default, box, heavy, ascii, or one from ~/.config/tuios/glyphs
 	Gap                    int    `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
-	PanelPadding           int    `toml:"panel_padding"`             // Columns of surface padding inside every overlay panel (default: 2)
-	ClockFormat            string `toml:"clock_format"`              // Go time layout the clock overlay is drawn with (default: 15:04:05)
-	DimUnfocused           int    `toml:"dim_unfocused"`             // Percent an unfocused pane's content is carried toward its own ground (default: 0)
+	// MasterRatio and ScrollColumnWidth are percentages rather than fractions
+	// because that is what a settings stepper and a CLI argument can carry: the
+	// option registry holds ints, and "50" is a value a person types. The model
+	// keeps the master ratio as the fraction the tilers want.
+	MasterRatio       int    `toml:"master_ratio"`        // Master pane width in the master-stack layout, percent of the screen (default: 50)
+	ScrollColumnWidth int    `toml:"scroll_column_width"` // New column width in the scrolling layout, percent of the screen (default: 55)
+	PanelPadding      int    `toml:"panel_padding"`       // Columns of surface padding inside every overlay panel (default: 2)
+	ClockFormat       string `toml:"clock_format"`        // Go time layout the clock overlay is drawn with (default: 15:04:05)
+	DimUnfocused      int    `toml:"dim_unfocused"`       // Percent an unfocused pane's content is carried toward its own ground (default: 0)
 
 	// Legacy flat sidebar keys, superseded by the [appearance.sidebar] table.
 	// migrateLegacySidebar folds them into it and clears them, so they are read
@@ -387,6 +399,8 @@ func DefaultConfig() *UserConfig {
 			Glyphs:               theme.GlyphSetNone,
 			PanelPadding:         overlay.DefaultPanelPadding,
 			ClockFormat:          DefaultClockFormat,
+			MasterRatio:          MasterRatioDefault,
+			ScrollColumnWidth:    ScrollColumnWidthDefault,
 			Scrollbar:            ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
 			Sidebar: SidebarConfig{
 				Position: "left",
@@ -400,6 +414,7 @@ func DefaultConfig() *UserConfig {
 			OpenDefaultWindow:   false,
 			Tiled:               false,
 			StartInTerminalMode: false,
+			Layout:              LayoutModeBSP,
 		},
 		Tape: TapeConfig{
 			Autorun:    TapeAutorunAsk,
@@ -817,6 +832,17 @@ func isMacOS() bool {
 		strings.Contains(strings.ToLower(os.Getenv("OSTYPE")), "darwin")
 }
 
+// clampPercent folds a configured percentage into its range, treating zero as
+// "not written" and answering with the default. A percentage option's floor is
+// well above zero, so clamping an unwritten value would silently pin it to the
+// floor and there would be no way to spell "whatever the default is".
+func clampPercent(v, lo, hi, fallback int) int {
+	if v == 0 {
+		return fallback
+	}
+	return min(max(v, lo), hi)
+}
+
 // LoadUserConfig loads the user configuration from XDG config directory
 func LoadUserConfig() (*UserConfig, error) {
 	// Try to find existing config file
@@ -931,6 +957,20 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 		cfg.Appearance.Gap = 0
 	} else if cfg.Appearance.Gap > PaneGapMax {
 		cfg.Appearance.Gap = PaneGapMax
+	}
+	// Zero is "not written", which is the common case, so it falls back to the
+	// default rather than being clamped up to the floor: a config that never
+	// mentioned the master ratio must not read as one that asked for the
+	// narrowest master there is.
+	if cfg.Appearance.MasterRatio == 0 {
+		cfg.Appearance.MasterRatio = MasterRatioDefault
+	} else {
+		cfg.Appearance.MasterRatio = min(max(cfg.Appearance.MasterRatio, MasterRatioMin), MasterRatioMax)
+	}
+	if cfg.Appearance.ScrollColumnWidth == 0 {
+		cfg.Appearance.ScrollColumnWidth = ScrollColumnWidthDefault
+	} else {
+		cfg.Appearance.ScrollColumnWidth = min(max(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin), ScrollColumnWidthMax)
 	}
 	if cfg.Appearance.DimUnfocused < 0 {
 		cfg.Appearance.DimUnfocused = 0
@@ -1084,6 +1124,8 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	ShowClock = cfg.Appearance.ShowClock
 	ClockFormat = cfg.Appearance.ClockFormat
 	PaneGap = min(max(cfg.Appearance.Gap, 0), PaneGapMax)
+	MasterRatioPercent = clampPercent(cfg.Appearance.MasterRatio, MasterRatioMin, MasterRatioMax, MasterRatioDefault)
+	ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, ScrollColumnWidthMax, ScrollColumnWidthDefault)
 	DimUnfocused = min(max(cfg.Appearance.DimUnfocused, 0), DimUnfocusedMax)
 	overlay.SetPanelPadding(cfg.Appearance.PanelPadding)
 	// The glyph set is selected here rather than beside the theme, because it

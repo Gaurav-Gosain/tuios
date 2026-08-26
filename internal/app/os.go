@@ -451,12 +451,19 @@ type OS struct {
 	// rectangles.
 	SharedBorders bool
 	PaneGap       int
+	// ScrollColumnWidth is a column's width in the scrolling layout, as a
+	// percent of the screen, before anything resizes it. Session state for the
+	// same reason the two above are: it is what every column's cell width is
+	// computed from, so two clients holding different values would hand the same
+	// pane two different widths.
+	ScrollColumnWidth int
 	// lastConfigSharedBorders and lastConfigPaneGap are the config globals as
 	// this OS last saw them, so adoptConfigPaneGeometry can tell a config-side
 	// change (adopt it) from a session-side one (leave the config alone). See
 	// adoptConfigPaneGeometry.
 	lastConfigSharedBorders bool
 	lastConfigPaneGap       int
+	lastConfigScrollWidth   int
 
 	// SessionReserve is the chrome reserve every client attached to this
 	// session lays its panes out around: the largest any of them asks for, as

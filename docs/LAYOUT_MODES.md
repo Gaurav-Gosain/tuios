@@ -28,8 +28,27 @@ is on is a separate choice, made from the command palette:
 
 Choosing a mode turns tiling on if it was off. The mode is per-session and is
 carried in daemon session state, so a scrolling session comes back as a
-scrolling session on reattach. The layout data itself (the BSP tree, the column
-strip) is per workspace: each of the nine workspaces keeps its own.
+scrolling session on reattach, and turning tiling off does not forget it. The
+layout data itself (the BSP tree, the column strip) is per workspace: each of
+the nine workspaces keeps its own.
+
+### Settings
+
+Four settings shape the tiling, and all four are in the settings page
+(`Ctrl+B ,`) as well as in `config.toml`:
+
+| Setting | What it does |
+|---|---|
+| `startup.layout` | The mode a **new** session starts in: `bsp`, `master-stack` or `scrolling`. A session that already exists keeps its own. |
+| `appearance.master_ratio` | The master pane's share of the screen in master-stack, as a percent (30-70). The `<` and `>` keys move it for the session. |
+| `appearance.scroll_column_width` | A column's width in the scrolling layout, as a percent of the screen (20-90). |
+| `appearance.gap` | Cells of empty ground between neighbouring panes, in every mode. |
+
+`appearance.gap`, `appearance.master_ratio`, `appearance.scroll_column_width`
+and `appearance.shared_borders` decide how many cells a pane gets, so they are
+settled across a session rather than kept per client: change one on any client
+and every client attached to that session follows. The purely visual settings -
+theme, border style, glyphs, title position, dimming - stay per client.
 
 ## Scrolling Layout
 
@@ -80,15 +99,18 @@ A column's width is a proportion of the screen until you resize it with `<` or
 `scroll_cycle_width` unpins it again. Each press of `<` or `>` changes the width
 by four cells, within a floor of 20 cells and a ceiling of 90% of the screen.
 
-Windows stacked in one column split its height evenly.
+Windows stacked in one column split its height evenly, less `appearance.gap`
+between them.
+
+A new column is `appearance.scroll_column_width` percent of the screen wide.
+The default of 55% is deliberately over half, so two columns never quite fit
+side by side and the strip reads as something you scroll.
 
 ### Limitations
 
 - **Shared borders are not drawn in scrolling mode.** `shared_borders` applies
-  to BSP tiling only; scrolling columns always draw their own borders.
-- **There is no gap between columns.** The column gap exists in the layout code
-  but is always zero, and nothing sets it. There is no configuration option for
-  it.
+  to BSP and master-stack tiling only; scrolling columns always draw their own
+  borders.
 - **Column widths and the strip order are not saved.** The layout mode survives
   a detach, but the column arrangement is rebuilt from the window list on
   reattach.
