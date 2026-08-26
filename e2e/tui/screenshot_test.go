@@ -92,10 +92,16 @@ func TestScreenshotCaptureModeAndPreview(t *testing.T) {
 		t.Fatalf("the preview panel never appeared: %v\n%s", err, term.Snapshot())
 	}
 
-	files := shotFiles(t, dir)
-	if len(files) != 1 {
-		t.Fatalf("the capture wrote %d files, want 1: %v\n%s", len(files), files, term.Snapshot())
+	// The panel is up before the file is: the cells are in hand at capture
+	// time and the artifacts catch up, which is the whole of the fix for
+	// "it does not show the preview after". So the file is waited for here
+	// rather than expected to already exist.
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		return len(shotFiles(t, dir)) == 1
+	}, uiTimeout); err != nil {
+		t.Fatalf("the capture wrote %v, want one file: %v\n%s", shotFiles(t, dir), err, term.Snapshot())
 	}
+	files := shotFiles(t, dir)
 	body, err := os.ReadFile(files[0])
 	if err != nil {
 		t.Fatalf("read %s: %v", files[0], err)
@@ -148,12 +154,14 @@ func TestScreenshotEscapeDiscardsTheFile(t *testing.T) {
 		t.Fatalf("send enter: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "discard file")
+		return screenHas(s, "discard")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the preview never appeared: %v\n%s", err, term.Snapshot())
 	}
-	if got := len(shotFiles(t, dir)); got != 1 {
-		t.Fatalf("the capture wrote %d files, want 1", got)
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		return len(shotFiles(t, dir)) == 1
+	}, uiTimeout); err != nil {
+		t.Fatalf("the capture wrote %v, want one file: %v", shotFiles(t, dir), err)
 	}
 
 	if err := term.SendKeys(tuitest.Esc); err != nil {
@@ -202,6 +210,68 @@ func TestScreenshotCaptureModeCancels(t *testing.T) {
 	// The session still takes a window, so the mode gave the keyboard back.
 	newWindow(t, term)
 	alive(t, term, "after cancelling a capture")
+}
+
+// TestScreenshotPanelBeatsTheFile is the preview-first claim, on screen and on
+// disk at once: the panel with the captured cells is up while the file it names
+// does not exist yet.
+//
+// The whole of report 2 was that the panel arrived seconds after the gesture,
+// or not at all, because it waited for a render, a write and a clipboard helper
+// that could block without a bound. The cells are in hand at capture time, so
+// the panel waits for none of them.
+//
+// A png at scale 4 of the whole screen is used because a slow render is what
+// makes the claim observable: the same assertion on a txt capture would be a
+// race between two microsecond events.
+//
+// Negative control: removing the openPendingPreview call from renderScreenshot
+// made the panel wait for the result, so it never showed the pending status and
+// the first WaitFor timed out.
+func TestScreenshotPanelBeatsTheFile(t *testing.T) {
+	term, base := start(t, startOpts{args: []string{"new", "e2e-shot"}})
+	killDaemon(t, base)
+	waitBoot(t, term)
+	dir := shotDir(t, base)
+	newWindow(t, term)
+	setShotOption(t, term, base, "screenshot.directory", dir)
+	setShotOption(t, term, base, "screenshot.format", "png")
+	setShotOption(t, term, base, "screenshot.scale", "4")
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "C"); err != nil {
+		t.Fatalf("send leader+C: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHas(s, "full screen")
+	}, uiTimeout); err != nil {
+		t.Fatalf("capture mode never opened: %v\n%s", err, term.Snapshot())
+	}
+	// f takes the whole screen, which is the most pixels this terminal can ask
+	// for and so the slowest render available here.
+	if err := term.SendKeys("f"); err != nil {
+		t.Fatalf("send f: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHas(s, "Screenshot", "Saving the image")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the panel never showed the pending capture: %v\n%s", err, term.Snapshot())
+	}
+	if files := shotFiles(t, dir); len(files) != 0 {
+		t.Errorf("the panel waited for the file after all: %v", files)
+	}
+
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		return len(shotFiles(t, dir)) == 1
+	}, uiTimeout); err != nil {
+		t.Fatalf("the pending capture never landed: %v\n%s", err, term.Snapshot())
+	}
+	// And the panel then names the file instead of still saying it is saving.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHas(s, ".png") && !screenHas(s, "Saving the image")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the panel never named the file it wrote: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after a slow capture")
 }
 
 // TestScreenshotVerbWritesAFile drives the CLI verb against a live daemon and

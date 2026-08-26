@@ -60,6 +60,33 @@ func hostCellSize() (w, h int) {
 	return caps.CellWidth, caps.CellHeight
 }
 
+// screenshotPreviewPixelBudget is the largest the preview picture ever needs to
+// be, in pixels: the whole panel body, doubled.
+//
+// The doubling is hidpi headroom, not vanity. kitty scales a placement into the
+// cell box it is given, and a picture at exactly the box's pixel size has
+// nothing left to give when the box turns out a cell or two larger than this
+// guess. Two times the body is a few hundred kilobytes at most, against the two
+// to three megabytes the file itself is.
+func (m *OS) screenshotPreviewPixelBudget() (maxW, maxH int) {
+	cellW, cellH := hostCellSize()
+	if cellW <= 0 || cellH <= 0 {
+		return 0, 0
+	}
+	bodyCols, bodyRows := m.screenshotPreviewBody()
+	return max(1, bodyCols*cellW*2), max(1, bodyRows*cellH*2)
+}
+
+// buildScreenshotTransmit wraps a preview picture in the chunked upload
+// escapes. It runs in the render command, so the flush that has to happen
+// between two frames only copies bytes.
+func buildScreenshotTransmit(png []byte) []byte {
+	if len(png) == 0 {
+		return nil
+	}
+	return appendKittyTransmitPNG(nil, screenshotImageID, png)
+}
+
 // screenshotPreviewPictureBox is the cell box the preview's picture is drawn
 // into, and whether there is a picture to draw at all.
 //
@@ -115,7 +142,7 @@ func (m *OS) flushScreenshotGraphicsForFrame() {
 	// The host holds one picture under this id. It is this capture's only if
 	// the last upload was this capture's, so that is what the question is.
 	if m.shotPlacement.capture != want.capture || !m.shotImageSent {
-		buf = appendKittyTransmitPNG(buf, screenshotImageID, m.ShotPreview.PNG)
+		buf = append(buf, m.ShotPreview.Transmit...)
 		m.shotImageSent = true
 	}
 	buf = appendKittyPlaceBox(buf, screenshotImageID, screenshotPlacement, x, y, cols, rows)

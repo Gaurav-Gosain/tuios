@@ -1502,6 +1502,13 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.MarkAllDirty()
 		return m, cmd
 
+	case screenshotCopiedMsg:
+		// The clipboard helper answered. Nothing waited for it, which is the
+		// point: this only decides where to say what it said.
+		m.HandleScreenshotCopied(msg)
+		m.MarkAllDirty()
+		return m, nil
+
 	case launcherIconsMsg:
 		// Icons decoded off the Update goroutine, filed away here so the store
 		// is only ever written on this one.

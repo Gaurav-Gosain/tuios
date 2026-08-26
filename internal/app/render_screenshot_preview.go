@@ -58,19 +58,49 @@ const shotPreviewExtraRows = 6
 // shotPreviewHints is the footer. Every key on it works here or is not drawn:
 // c is omitted when nothing would copy, o when this client is not on the
 // user's machine, and the reason lands on the status line instead.
+//
+// A pending panel offers neither. There is no file yet, so copying it and
+// opening it are both keys that would do nothing, and a key that does nothing
+// is worse than a key that is not there.
 func (m *OS) shotPreviewHints() []overlay.Hint {
+	p := &m.ShotPreview
 	hints := []overlay.Hint{{Key: "enter", Label: "done"}}
-	if label := m.ShotPreview.CopyLabel; label != "" {
-		hints = append(hints, overlay.Hint{Key: "c", Label: label})
-	}
-	if !m.IsRemoteClient() {
-		hints = append(hints, overlay.Hint{Key: "o", Label: "open"})
+	if !p.Pending {
+		if p.CopyLabel != "" {
+			hints = append(hints, overlay.Hint{Key: "c", Label: p.CopyLabel})
+		}
+		if !m.IsRemoteClient() {
+			hints = append(hints, overlay.Hint{Key: "o", Label: "open"})
+		}
 	}
 	hints = append(hints,
 		overlay.Hint{Key: "r", Label: "retake"},
-		overlay.Hint{Key: "esc", Label: "discard file"},
+		overlay.Hint{Key: "esc", Label: "discard"},
 	)
 	return hints
+}
+
+// shotPreviewMetaLines is the block above the capture rows: what this is, where
+// it went, and what the panel cannot show. Both the renderer and the pixel
+// tier's row arithmetic read it, so the picture cannot land a row off the cells
+// it replaces.
+func (m *OS) shotPreviewMetaLines() []string {
+	p := &m.ShotPreview
+	out := []string{m.shotPreviewHeader()}
+	if p.Pending {
+		// One line, and it is the only claim the panel makes while it waits.
+		return append(out, p.Status)
+	}
+	// The path is trimmed from the front, because the end of it is the part
+	// that says which file this is.
+	out = append(out, elideLeft(shortenPath(p.Path), m.panelWidth(shotPreviewWidth)-4))
+	if p.Note != "" {
+		out = append(out, p.Note)
+	}
+	if p.Status != "" {
+		out = append(out, p.Status)
+	}
+	return out
 }
 
 // renderScreenshotPreview draws the panel and records the rows it drew.
@@ -85,13 +115,12 @@ func (m *OS) renderScreenshotPreview() (string, overlay.Geometry, []overlayRowHi
 	mute := overlay.Style(pal.Surface).Foreground(pal.FgMute)
 
 	var lines []string
-	lines = append(lines, overlay.Fill(dim.Render("  "+m.shotPreviewHeader()), width, pal.Surface))
-	lines = append(lines, overlay.Fill(mute.Render("  "+elideLeft(shortenPath(p.Path), width-4)), width, pal.Surface))
-	if p.Note != "" {
-		lines = append(lines, overlay.Fill(mute.Render("  "+p.Note), width, pal.Surface))
-	}
-	if p.Status != "" {
-		lines = append(lines, overlay.Fill(mute.Render("  "+p.Status), width, pal.Surface))
+	for i, meta := range m.shotPreviewMetaLines() {
+		style := mute
+		if i == 0 {
+			style = dim
+		}
+		lines = append(lines, overlay.Fill(style.Render("  "+meta), width, pal.Surface))
 	}
 	lines = append(lines, overlay.Fill("", width, pal.Surface))
 
@@ -152,17 +181,15 @@ func blankPictureRows(rows []string, picRows int) []string {
 // whether it reached a clipboard.
 func (m *OS) shotPreviewHeader() string {
 	p := &m.ShotPreview
-	size := "0 KB"
-	if p.Bytes > 0 {
-		size = fmt.Sprintf("%d KB", max(1, p.Bytes/1024))
-	}
 	cols, rows := 0, 0
 	if p.Grid != nil {
 		cols, rows = p.Grid.Cols, p.Grid.Rows
 	}
-	line := fmt.Sprintf("%s  %dx%d cells  %s", strings.ToUpper(string(p.Format)), cols, rows, size)
-	if p.Copied != "" {
-		line += "  copied to the clipboard"
+	line := fmt.Sprintf("%s  %dx%d cells", strings.ToUpper(string(p.Format)), cols, rows)
+	// The size is a fact about a file, so it waits until there is one rather
+	// than showing a zero the panel would have to correct a moment later.
+	if p.Bytes > 0 {
+		line += fmt.Sprintf("  %d KB", max(1, p.Bytes/1024))
 	}
 	return line
 }
@@ -272,13 +299,11 @@ func shotCellStyle(g *shot.Grid, c shot.Cell) lipgloss.Style {
 
 // shotPreviewImageRow is the body row the capture starts on, which the pixel
 // tier places its picture at so the image lands exactly where the cells would.
+//
+// It counts the same lines the renderer drew rather than counting them again
+// from the fields. Counting twice is how a picture lands a row off the cells it
+// is meant to replace.
 func (m *OS) shotPreviewImageRow() int {
-	row := 2 // the header line and the path
-	if m.ShotPreview.Note != "" {
-		row++
-	}
-	if m.ShotPreview.Status != "" {
-		row++
-	}
-	return row + 1 // the blank between the metadata and the capture
+	// The metadata block, plus the blank line between it and the capture.
+	return len(m.shotPreviewMetaLines()) + 1
 }

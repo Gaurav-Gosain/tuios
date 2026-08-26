@@ -239,7 +239,13 @@ func (d *Daemon) verbSetOption(_ *connState, params json.RawMessage) (any, *verb
 		// means nothing", which a caller could not tell apart and so could not
 		// act on. The key is now validated above, and this says which of the two
 		// remaining cases it is.
-		reason = "no client is attached, so nothing is drawing it yet. The value is recorded and applies when one attaches"
+		// The file is only ever written by an attached client, because the
+		// client is what holds the config the writer marshals. So say that
+		// here: without the second sentence a caller reads "recorded" as
+		// "saved" and finds the value gone after a restart.
+		reason = "no client is attached, so nothing is drawing it yet. " +
+			"The value is recorded for this session and is not saved to the config file. " +
+			"It applies when a client attaches"
 	}
 
 	out := map[string]any{
