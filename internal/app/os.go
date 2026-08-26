@@ -208,6 +208,12 @@ type OS struct {
 	// two captures in one second share a name.
 	shotCaptures int
 
+	// shotDiscarded holds the serials of captures the user dismissed before
+	// their file was written. The result that arrives afterwards removes its
+	// own file and says nothing. Nil when nothing is pending, which is almost
+	// always, so it costs an idle frame nothing.
+	shotDiscarded []int
+
 	// BSP tiling state
 	WorkspaceTrees      map[int]*layout.BSPTree // BSP tree per workspace
 	PreselectionDir     layout.PreselectionDir  // Pending preselection direction (0 = none)

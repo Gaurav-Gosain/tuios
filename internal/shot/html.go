@@ -23,7 +23,7 @@ func RenderHTML(g *Grid, f *Frame, decorations []Decoration) []byte {
 		family = f.FontFamily
 	}
 	b.WriteString("<style>\n")
-	if f != nil && len(f.FontData) > 0 {
+	if f != nil && f.EmbedFont && len(f.FontData) > 0 {
 		fmt.Fprintf(&b, "@font-face{font-family:%q;src:url(data:font/ttf;base64,%s);}\n",
 			svgPrimaryFamily(family), base64.StdEncoding.EncodeToString(f.FontData))
 	}
@@ -69,10 +69,6 @@ func writeHTMLTitleBar(b *strings.Builder, g *Grid, f *Frame) {
 	case ControlsMacOS:
 		for _, c := range [3]string{"#ff5f57", "#febc2e", "#28c840"} {
 			dot(c)
-		}
-	case ControlsDots:
-		for _, t := range [3]float64{0, 0.3, 0.6} {
-			dot(Hex(Mix(f.Accent, g.BG, t)))
 		}
 	case ControlsGlyphs:
 		for _, m := range []string{f.CloseGlyph, f.MinimizeGlyph, f.MaximizeGlyph} {

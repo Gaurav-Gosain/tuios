@@ -162,11 +162,16 @@ const (
 type ControlsStyle int
 
 const (
-	// ControlsDots draws three monochrome dots tinted from the accent, the
-	// quiet ray.so take. This is what "auto" resolves to.
-	ControlsDots ControlsStyle = iota
-	// ControlsMacOS draws the traffic lights.
-	ControlsMacOS
+	// ControlsMacOS draws the traffic lights, and is what "auto" resolves to.
+	//
+	// It used to resolve to three accent-tinted dots. They sat at the traffic
+	// lights' size, spacing and position, so they did not read as a quieter
+	// variant of the arrangement everyone knows; they read as that arrangement
+	// with the colours broken. Red, amber and green are what a window control
+	// is, everywhere, so they are not the theme's to tint. See the rule in the
+	// corrective spec's section 4: chrome that carries a learned meaning keeps
+	// its learned colours.
+	ControlsMacOS ControlsStyle = iota
 	// ControlsGlyphs draws the user's own glyph-set window marks.
 	ControlsGlyphs
 	// ControlsNone leaves the bar empty of controls.
@@ -204,6 +209,13 @@ type Frame struct {
 	// rasterizes with it. Nil means reference-only SVG/HTML and the
 	// embedded Go Mono for PNG.
 	FontData []byte
+	// BoldFontData is the bold cut of FontData. Nil double-strikes instead.
+	BoldFontData []byte
+	// EmbedFont allows SVG and HTML to inline FontData as an @font-face. Only
+	// a font the user named themselves earns that: embedding turns a kilobyte
+	// of SVG into megabytes, and a font tuios found by asking the terminal was
+	// found for the raster, not for the export.
+	EmbedFont bool
 	// Scale multiplies the PNG raster size, 1 to 4.
 	Scale int
 }

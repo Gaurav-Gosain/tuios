@@ -86,7 +86,7 @@ func writeSVGDefs(b *strings.Builder, g *Grid, f *Frame, l layout, family string
 				fnum(l.ch*0.45), fnum(l.ch*0.6))
 		}
 	}
-	if f != nil && len(f.FontData) > 0 {
+	if f != nil && f.EmbedFont && len(f.FontData) > 0 {
 		fmt.Fprintf(b, `<style>@font-face{font-family:%q;src:url(data:font/ttf;base64,%s);}</style>`+"\n",
 			svgPrimaryFamily(family), base64.StdEncoding.EncodeToString(f.FontData))
 	}
@@ -121,11 +121,6 @@ func writeSVGTitleBar(b *strings.Builder, g *Grid, f *Frame, l layout, family st
 		for i, c := range [3]string{"#ff5f57", "#febc2e", "#28c840"} {
 			fmt.Fprintf(b, `<circle cx="%s" cy="%s" r="%s" fill="%s"/>`+"\n",
 				fnum(cx+float64(i)*gap), fnum(cy), fnum(r), c)
-		}
-	case ControlsDots:
-		for i, t := range [3]float64{0, 0.3, 0.6} {
-			fmt.Fprintf(b, `<circle cx="%s" cy="%s" r="%s" fill="%s"/>`+"\n",
-				fnum(cx+float64(i)*gap), fnum(cy), fnum(r), Hex(Mix(f.Accent, g.BG, t)))
 		}
 	case ControlsGlyphs:
 		marks := []string{f.CloseGlyph, f.MinimizeGlyph, f.MaximizeGlyph}

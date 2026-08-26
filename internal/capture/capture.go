@@ -45,8 +45,14 @@ type Settings struct {
 	Shadow     bool
 	FontFamily string
 	FontFile   string
-	Scale      int
-	Cursor     bool
+	// HostFontFamily and HostBoldFamily are what the terminal answered when
+	// asked which font it draws with. They are PostScript names, they are only
+	// ever set by a client with a host to ask, and they are what makes a
+	// default capture come out with the user's own icons in it.
+	HostFontFamily string
+	HostBoldFamily string
+	Scale          int
+	Cursor         bool
 	// Directory is where a generated filename lands.
 	Directory string
 }
@@ -147,23 +153,65 @@ func Frame(s Settings, p *shot.Palette, plain bool) (*shot.Frame, []string) {
 	if plain && spec.Frame == "window" {
 		spec.Frame = "plain"
 	}
-	if s.FontFile != "" {
-		data, err := os.ReadFile(s.FontFile) // #nosec G304 - the path is the operator's own config
-		if err != nil {
-			warnings = append(warnings, "The font file could not be read. The built-in font was used.")
-		} else {
-			spec.FontData = data
-		}
-	}
+	regular, bold, fontWarn := resolveFontFiles(s)
+	warnings = append(warnings, fontWarn...)
+	spec.FontData = regular
+	spec.BoldFontData = bold
+	// Only a font the user named by file is written into SVG and HTML output.
+	// A font found by asking the terminal was found so the raster has icons in
+	// it; copying three megabytes of it into every exported SVG is a different
+	// decision, and one nobody made.
+	spec.EmbedFont = s.FontFile != "" && len(regular) > 0
 	in := shot.FrameInputs{Palette: p, Accents: accentsOf(p)}
 	if set := theme.ResolveGlyphSet(s.GlyphSetID); set != nil {
 		in.Close, in.Minimize, in.Maximize = set.Close, set.Minimize, set.Maximize
 	}
 	if spec.Controls == "glyphs" && in.Close == "" && in.Minimize == "" && in.Maximize == "" {
-		warnings = append(warnings, "The glyph set has no window marks. Quiet dots were drawn.")
+		warnings = append(warnings, "The glyph set has no window marks. The macOS lights were drawn.")
 		spec.Controls = "auto"
 	}
 	return shot.BuildFrame(spec, in), warnings
+}
+
+// FontFallbackNotice is the one line a capture carries when it was drawn in the
+// built-in face and the content needed more than that face has. It names the
+// cure rather than the symptom, because "some glyphs are missing" is a thing
+// the user can already see.
+const FontFallbackNotice = "Icons need your terminal font. Set screenshot.font_family."
+
+// resolveFontFiles picks the faces to rasterize with, in order of how much the
+// user asked for them: an explicit font_file first, then the font the host
+// terminal says it draws with, then the configured family, then nothing, which
+// leaves the renderer on its embedded face.
+//
+// A file that will not read is a warning and a fallthrough, not a failure. The
+// capture is the point; the font is how it looks.
+func resolveFontFiles(s Settings) (regular, bold []byte, warnings []string) {
+	if s.FontFile != "" {
+		data, err := os.ReadFile(s.FontFile) // #nosec G304 - the path is the operator's own config
+		if err == nil {
+			return data, nil, nil
+		}
+		warnings = append(warnings, "The font file could not be read. Another font was used.")
+	}
+	if face, ok := FontByPostScriptName(s.HostFontFamily); ok {
+		if data, err := os.ReadFile(face.File); err == nil { // #nosec G304 - fontconfig's own answer
+			boldFace, boldOK := FontByPostScriptName(s.HostBoldFamily)
+			if boldOK && boldFace.File != face.File {
+				bold, _ = os.ReadFile(boldFace.File) // #nosec G304 - fontconfig's own answer
+			}
+			return data, bold, warnings
+		}
+	}
+	if face, ok := FontByFamily(s.FontFamily); ok {
+		if data, err := os.ReadFile(face.File); err == nil { // #nosec G304 - fontconfig's own answer
+			if boldFace, boldOK := BoldFontByFamily(s.FontFamily, face.File); boldOK {
+				bold, _ = os.ReadFile(boldFace.File) // #nosec G304 - fontconfig's own answer
+			}
+			return data, bold, warnings
+		}
+	}
+	return nil, nil, warnings
 }
 
 // accentsOf picks the wash seeds: the theme's blue and magenta, the two
@@ -247,6 +295,9 @@ func ResolvePath(out, dir, label string, format shot.Format, now time.Time) (str
 	if dir == "" {
 		dir = config.ScreenshotConfig{}.ResolveDirectory()
 	}
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return "", fmt.Errorf("could not create %s: %w", dir, err)
+	}
 	return freeName(dir, FileName(label, format, now)), nil
 }
 
@@ -257,18 +308,37 @@ const freeNameLimit = 1000
 
 // freeName returns name, or name with a counter before its extension when the
 // directory already holds it.
+//
+// The name is claimed as it is chosen, with an exclusive create, rather than
+// tested for absence and used a moment later. Two captures now overlap on
+// purpose: the preview panel opens on the gesture and the write finishes in a
+// command, so a second capture can be started while the first is still being
+// written. Looking and then writing would let both look at the same empty
+// second and both pick the same name, and the second write would silently take
+// the first one's file. An empty file is left behind only if the write that
+// follows fails outright, which is the case where there was no capture anyway.
 func freeName(dir, name string) string {
 	path := filepath.Join(dir, name)
-	if _, err := os.Lstat(path); err != nil {
+	if claimName(path) {
 		return path
 	}
 	ext := filepath.Ext(name)
 	stem := strings.TrimSuffix(name, ext)
 	for n := 2; n < freeNameLimit; n++ {
 		candidate := filepath.Join(dir, fmt.Sprintf("%s-%d%s", stem, n, ext))
-		if _, err := os.Lstat(candidate); err != nil {
+		if claimName(candidate) {
 			return candidate
 		}
 	}
 	return path
+}
+
+// claimName creates path if nothing holds it, and reports whether it did.
+func claimName(path string) bool {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return false
+	}
+	_ = f.Close()
+	return true
 }

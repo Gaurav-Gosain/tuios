@@ -1275,12 +1275,21 @@ With no theme set, basic and indexed colors fall back to the xterm reference
 defaults. Only your terminal knows its own palette, so that is a guess and the
 result says so on stderr. `--theme` renders in a named palette instead.
 
-PNG draws glyphs with a built in font that has no Nerd Font icons. Point
-`screenshot.font_file` at the font you already use and they render; without it
-a missing glyph draws as a dotted outline box rather than a silent blank.
-That same setting embeds the font in SVG and HTML output so those files stand
-alone, which makes them megabytes rather than kilobytes. Leave it unset when
-you mostly export SVG.
+A capture is drawn in your terminal's own font where the terminal will say
+which font that is. kitty answers that question, so a capture from a kitty
+client comes out with your Nerd Font icons in it and no setting to make.
+
+Where the terminal does not answer, `screenshot.font_family` names the font to
+draw with, and `screenshot.font_file` points straight at a file and wins over
+everything else. The daemon renders with those two as well, because it has no
+terminal to ask. With none of them the capture is drawn in a built in font that
+has no icons, and a missing glyph draws as a dotted outline box rather than a
+silent blank.
+
+`screenshot.font_file` also embeds that font in SVG and HTML output so those
+files stand alone, which makes them megabytes rather than kilobytes. Only that
+setting does: a font tuios found by asking your terminal is used to draw the
+picture and is not copied into an export you did not ask to be standalone.
 
 **Examples:**
 ```bash

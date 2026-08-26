@@ -135,6 +135,10 @@ func TestFrameDropsTheTitleBarForARegion(t *testing.T) {
 // produced no frame at all and failed.
 func TestUnreadableFontFileWarnsInsteadOfFailing(t *testing.T) {
 	s := SettingsFrom(config.ScreenshotConfig{FontFile: filepath.Join(t.TempDir(), "nope.ttf")}, "", "")
+	// The font file is the only choice offered here. Leaving the configured
+	// family in place would make this test read whichever fonts the machine
+	// running it happens to have installed.
+	s.FontFamily, s.HostFontFamily = "", ""
 	p, _ := Palette("")
 	f, warnings := Frame(s, p, false)
 	if f == nil {

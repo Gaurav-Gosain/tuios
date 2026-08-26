@@ -171,7 +171,17 @@ type FrameSpec struct {
 	Title      string
 	FontFamily string
 	FontData   []byte
-	Scale      int
+	// BoldFontData is the bold cut of FontData, when the resolver found one.
+	// Without it a bold cell is double-struck, which thickens a glyph without
+	// making it the bold letterform the terminal drew.
+	BoldFontData []byte
+	// EmbedFont says the font may be written into SVG and HTML output as an
+	// @font-face. It is separate from FontData because the two questions are
+	// different: PNG has to rasterize with a real file, and a file found for
+	// it by asking the terminal is not a file the user asked to have three
+	// megabytes of copied into every SVG they export.
+	EmbedFont bool
+	Scale     int
 }
 
 // FrameInputs is what the environment contributes: the resolved palette,
@@ -199,6 +209,8 @@ func BuildFrame(spec FrameSpec, in FrameInputs) *Frame {
 		Title:         spec.Title,
 		FontFamily:    spec.FontFamily,
 		FontData:      spec.FontData,
+		BoldFontData:  spec.BoldFontData,
+		EmbedFont:     spec.EmbedFont,
 		Scale:         spec.Scale,
 		CloseGlyph:    in.Close,
 		MinimizeGlyph: in.Minimize,
@@ -213,14 +225,15 @@ func BuildFrame(spec FrameSpec, in FrameInputs) *Frame {
 		f.Mode = FrameWindow
 	}
 	switch spec.Controls {
-	case "macos":
-		f.Controls = ControlsMacOS
 	case "glyphs":
 		f.Controls = ControlsGlyphs
 	case "none":
 		f.Controls = ControlsNone
 	default:
-		f.Controls = ControlsDots
+		// "auto", "macos", and anything unrecognised, which includes the
+		// retired "dots" spelling. A config file that still says dots captures
+		// as if it said auto rather than refusing to capture at all.
+		f.Controls = ControlsMacOS
 	}
 	accents := in.Accents
 	if len(accents) == 0 {

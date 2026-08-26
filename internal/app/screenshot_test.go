@@ -472,8 +472,8 @@ func TestScreenshotResultReachesUpdate(t *testing.T) {
 // this panel wants drawn, and the file name cannot: two captures inside one
 // second share it.
 //
-// Negative control: removing the shotCaptures increment from
-// HandleScreenshotResult leaves both captures on 0 and this fails.
+// Negative control: removing the shotCaptures increment from renderScreenshot
+// leaves both captures on 0 and this fails.
 func TestCaptureBumpsTheCaptureSerial(t *testing.T) {
 	m := shotOS(t)
 

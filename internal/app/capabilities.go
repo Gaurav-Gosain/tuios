@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"regexp"
@@ -40,6 +41,14 @@ type HostCapabilities struct {
 	SixelGraphics  bool
 	TrueColor      bool
 	TerminalName   string
+	// FontFamily and BoldFontFamily are the faces the host draws with, as it
+	// named them itself. kitty answers a documented XTGETTCAP key with them,
+	// and fontconfig turns the name into a file, so a PNG capture can be drawn
+	// in the same font the terminal it pictures is drawn in. Empty on a host
+	// that does not answer, which falls back to the configured family and then
+	// to the embedded face.
+	FontFamily     string
+	BoldFontFamily string
 	PixelWidth     int
 	PixelHeight    int
 	CellWidth      int
@@ -243,6 +252,7 @@ func probeTerminal(caps *HostCapabilities) {
 			base64.StdEncoding.EncodeToString([]byte(probeFile)))
 	}
 	writeAnimationProbe(&q)
+	writeFontQuery(&q)
 	q.WriteString("\x1b[c") // DA1 last, so its reply closes the whole batch
 	_, _ = tty.WriteString(q.String())
 
@@ -250,6 +260,44 @@ func probeTerminal(caps *HostCapabilities) {
 
 	parsePixelGeometry(caps, response)
 	parseGraphicsSupport(caps, response, probeFileErr == nil)
+	parseHostFont(caps, response)
+}
+
+// fontQueryKeys are the XTGETTCAP names kitty answers with its own font.
+//
+// They ride the existing round trip rather than earning one of their own. A
+// terminal that does not know a key answers the standard invalid response and
+// leaves the field empty, and one that ignores the query entirely costs
+// nothing, because DA1 still closes the batch.
+var fontQueryKeys = []string{"kitty-query-font_family", "kitty-query-bold_font"}
+
+// writeFontQuery appends the font questions to the probe batch.
+func writeFontQuery(q *strings.Builder) {
+	for _, key := range fontQueryKeys {
+		fmt.Fprintf(q, "\x1bP+q%s\x1b\\", hex.EncodeToString([]byte(key)))
+	}
+}
+
+// xtgettcapReply matches one successful XTGETTCAP answer: DCS 1 + r
+// hexkey=hexvalue ST. The leading 1 is the terminal saying it knew the key; a 0
+// there is a refusal and matches nothing here, which is the point.
+var xtgettcapReply = regexp.MustCompile(`\x1bP1\+r([0-9a-fA-F]+)=([0-9a-fA-F]*)\x1b\\`)
+
+// parseHostFont reads the host's own font names out of a probe response.
+func parseHostFont(caps *HostCapabilities, response string) {
+	for _, m := range xtgettcapReply.FindAllStringSubmatch(response, -1) {
+		key, kerr := hex.DecodeString(m[1])
+		value, verr := hex.DecodeString(m[2])
+		if kerr != nil || verr != nil || len(value) == 0 {
+			continue
+		}
+		switch string(key) {
+		case "kitty-query-font_family":
+			caps.FontFamily = string(value)
+		case "kitty-query-bold_font":
+			caps.BoldFontFamily = string(value)
+		}
+	}
 }
 
 // parseGraphicsSupport reads kitty and sixel support out of a probe response.

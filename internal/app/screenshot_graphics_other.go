@@ -21,6 +21,12 @@ func (m *OS) flushScreenshotGraphicsForFrame() {}
 // draws its cells over the whole body.
 func (m *OS) screenshotPreviewPictureBox() (cols, rows int, ok bool) { return 0, 0, false }
 
+// screenshotPreviewPixelBudget is zero here, which is what tells the render
+// command not to shrink and encode a preview picture nothing would place.
+func (m *OS) screenshotPreviewPixelBudget() (maxW, maxH int) { return 0, 0 }
+
+func buildScreenshotTransmit(png []byte) []byte { return nil }
+
 // openInOSViewer hands a path to the shell's file association.
 func openInOSViewer(path string) error {
 	cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
