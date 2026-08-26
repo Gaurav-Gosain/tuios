@@ -136,3 +136,29 @@ type Decoration struct {
 	Color      Color
 	Note       string
 }
+
+// HasPrivateUse reports whether the grid holds a glyph from a private use area.
+//
+// That is what a Nerd Font icon is: a codepoint no standard font carries, put
+// there by the font the terminal draws with. A capture full of them rendered in
+// the embedded fallback face is a capture full of tofu boxes, and this is how
+// the caller knows to say which setting fixes it rather than leaving the user
+// to guess that the empty boxes are about a font at all.
+func HasPrivateUse(g *Grid) bool {
+	if g == nil {
+		return false
+	}
+	for _, row := range g.Cells {
+		for _, c := range row {
+			for _, r := range c.Cluster {
+				switch {
+				case r >= 0xE000 && r <= 0xF8FF,
+					r >= 0xF0000 && r <= 0xFFFFD,
+					r >= 0x100000 && r <= 0x10FFFD:
+					return true
+				}
+			}
+		}
+	}
+	return false
+}

@@ -638,7 +638,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "screenshot.controls", Type: OptionString, Section: "screenshot",
-		Description: "Window control marks: quiet dots, macOS lights, your glyph set, or none",
+		Description: "Window control marks: the macOS lights, your glyph set, or none",
 		Accepted:    ScreenshotControlSet, Default: ScreenshotDefaultControls,
 	},
 	{
@@ -648,16 +648,17 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "screenshot.font_family", Type: OptionString, Section: "screenshot",
-		Description: "Font stack SVG and HTML output name",
+		// A capture on kitty is already drawn in the terminal's own font,
+		// because kitty answers when asked which font that is. This is the
+		// answer for every other terminal, and it names a font rather than a
+		// file so it also names the SVG and HTML output.
+		Description: "Font to draw the capture in when your terminal does not say which it uses",
 		Default:     ScreenshotDefaultFontFamily,
 	},
 	{
 		Path: "screenshot.font_file", Type: OptionString, Section: "screenshot",
-		// The second sentence is the one that stops a bug report. With no font
-		// file a PNG is drawn in the built-in face, and every Nerd Font icon in
-		// the capture comes out as an empty box.
 		Description: "Font file to draw PNG with, also embedded in SVG and HTML. " +
-			"Set it to your terminal font or icons draw as empty boxes.",
+			"It wins over every other font choice.",
 		Default: "",
 	},
 	{

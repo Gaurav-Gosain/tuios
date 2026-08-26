@@ -20,7 +20,7 @@ type ScreenshotConfig struct {
 	Padding     *int   `toml:"padding"`      // px around the card, 0..128 (default: 48)
 	Radius      *int   `toml:"radius"`       // card corner radius px, 0..32 (default: 10)
 	Shadow      *bool  `toml:"shadow"`       // drop shadow under the card (default: true)
-	Controls    string `toml:"controls"`     // auto | macos | glyphs | none (default: auto)
+	Controls    string `toml:"controls"`     // auto | macos | glyphs | none (default: auto, the macOS lights)
 	TitleFormat string `toml:"title_format"` // window_title_format tokens (default: {title})
 	FontFamily  string `toml:"font_family"`  // SVG/HTML font stack (default: JetBrains Mono, monospace)
 	FontFile    string `toml:"font_file"`    // a .ttf to embed in SVG and rasterize PNG with

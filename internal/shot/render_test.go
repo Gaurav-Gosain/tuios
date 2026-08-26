@@ -38,7 +38,7 @@ func put(g *Grid, x, y int, s string, mod func(*Cell)) {
 func testFrame() *Frame {
 	return &Frame{
 		Mode: FrameWindow, Padding: 20, Radius: 8, Shadow: true,
-		Controls: ControlsDots, Title: "demo",
+		Controls: ControlsMacOS, Title: "demo",
 		Accent:    RGB(0xcb, 0xa6, 0xf7),
 		WashStart: RGB(0x30, 0x30, 0x50), WashEnd: RGB(0x20, 0x28, 0x40),
 		FontFamily: "JetBrains Mono, monospace", Scale: 2,

@@ -30,6 +30,21 @@ const pngBaseFontSize = 14.0
 
 // RenderPNG renders the grid, frame, and decorations to PNG bytes.
 func RenderPNG(g *Grid, f *Frame, decorations []Decoration) ([]byte, error) {
+	img, err := Raster(g, f, decorations...)
+	if err != nil {
+		return nil, err
+	}
+	return EncodePNG(img)
+}
+
+// Raster draws the capture and stops there, handing back the pixels.
+//
+// It is split out of RenderPNG because the preview and the file want the same
+// pixels at different sizes: the file wants them encoded whole, the panel wants
+// them shrunk to the box it will draw them in. Rendering twice cost a full
+// second on a full-screen capture and produced two pictures that had to be kept
+// in step; rendering once and encoding twice cannot drift.
+func Raster(g *Grid, f *Frame, decorations ...Decoration) (*image.RGBA, error) {
 	_ = decorations
 	scale := 2
 	if f != nil && f.Scale >= 1 && f.Scale <= 4 {
@@ -68,7 +83,13 @@ func RenderPNG(g *Grid, f *Frame, decorations []Decoration) ([]byte, error) {
 	for _, r := range textRuns(g) {
 		drawPNGRun(img, r, l, faces, g)
 	}
+	return img, nil
+}
 
+// EncodePNG serialises a raster. BestSpeed because the picture is a screenshot
+// on its way to a file or a terminal, and the seconds a smaller file would save
+// are not seconds anybody spends.
+func EncodePNG(img *image.RGBA) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := png.Encoder{CompressionLevel: png.BestSpeed}
 	if err := enc.Encode(&buf, img); err != nil {
@@ -77,13 +98,65 @@ func RenderPNG(g *Grid, f *Frame, decorations []Decoration) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// faceSet is the resolved fallback order: user font first when given, then
-// Go Mono, with the bold face used only when no user font overrides it.
+// Downscale shrinks img to fit maxW by maxH, keeping its proportions. An image
+// already inside the box comes back untouched.
+//
+// This is a box filter over integer source rectangles: the preview is a
+// picture of text being looked at from across a panel, and the difference
+// between this and a Lanczos kernel there is invisible, while the difference in
+// what it costs is the whole reason the preview arrives at all.
+func Downscale(img *image.RGBA, maxW, maxH int) *image.RGBA {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w <= 0 || h <= 0 || maxW <= 0 || maxH <= 0 || (w <= maxW && h <= maxH) {
+		return img
+	}
+	outW, outH := w, h
+	if outW > maxW {
+		outW, outH = maxW, max(1, h*maxW/w)
+	}
+	if outH > maxH {
+		outH, outW = maxH, max(1, outW*maxH/outH)
+	}
+	out := image.NewRGBA(image.Rect(0, 0, outW, outH))
+	for oy := range outH {
+		y0, y1 := b.Min.Y+oy*h/outH, b.Min.Y+(oy+1)*h/outH
+		if y1 <= y0 {
+			y1 = y0 + 1
+		}
+		row := out.Pix[oy*out.Stride:]
+		for ox := range outW {
+			x0, x1 := b.Min.X+ox*w/outW, b.Min.X+(ox+1)*w/outW
+			if x1 <= x0 {
+				x1 = x0 + 1
+			}
+			var sr, sg, sb, sa, n uint32
+			for y := y0; y < y1; y++ {
+				p := img.Pix[(y-b.Min.Y)*img.Stride+(x0-b.Min.X)*4:]
+				for x := 0; x < x1-x0; x++ {
+					sr += uint32(p[x*4])
+					sg += uint32(p[x*4+1])
+					sb += uint32(p[x*4+2])
+					sa += uint32(p[x*4+3])
+					n++
+				}
+			}
+			row[ox*4] = uint8(sr / n)
+			row[ox*4+1] = uint8(sg / n)
+			row[ox*4+2] = uint8(sb / n)
+			row[ox*4+3] = uint8(sa / n)
+		}
+	}
+	return out
+}
+
+// faceSet is the resolved fallback order: the user's font first when there is
+// one, then Go Mono, each with its bold cut when one was found.
 type faceSet struct {
-	user, regular, bold             font.Face
-	userFont, regularFont, boldFont *sfnt.Font
-	size                            float64
-	buf                             sfnt.Buffer
+	user, userBold, regular, bold                 font.Face
+	userFont, userBoldFont, regularFont, boldFont *sfnt.Font
+	size                                          float64
+	buf                                           sfnt.Buffer
 }
 
 func loadFaces(f *Frame, size float64) (*faceSet, error) {
@@ -112,12 +185,32 @@ func loadFaces(f *Frame, size float64) (*faceSet, error) {
 			return nil, fmt.Errorf("screenshot.font_file face: %w", err)
 		}
 		fs.userFont, fs.user = uf, face
+		// The bold cut is optional and its failure is not the capture's. A font
+		// that will not parse as bold leaves the double-strike in place, which
+		// is what happened before there was a bold cut at all.
+		if len(f.BoldFontData) > 0 {
+			if bf, berr := opentype.Parse(f.BoldFontData); berr == nil {
+				if bface, berr := opentype.NewFace(bf, opts); berr == nil {
+					fs.userBoldFont, fs.userBold = bf, bface
+				}
+			}
+		}
 	}
 	return fs, nil
 }
 
 // cellSize derives the grid cell from the primary face: the advance of "M"
-// wide, a terminal-ish 1.25 line height tall.
+// wide, the face's own line box tall.
+//
+// The height used to be a hardcoded 1.25 em while the width came from the
+// font, so the cell's shape was half measured and half guessed. Against
+// JetBrainsMono, whose advance is 0.600 em and whose hhea line box is 1.320 em,
+// that gave 0.486 where the terminal itself draws 0.455: every saved capture
+// came out about seven percent wider per cell than the screen it pictured,
+// uniformly, which is what "horizontally stretched" looks like to someone
+// holding the picture up next to their own terminal. Metrics().Height is
+// ascent - descent + lineGap, which is the same line box kitty and ghostty
+// size their cells from, so taking it makes the picture's aspect the host's.
 func (fs *faceSet) cellSize() (float64, float64) {
 	face := fs.regular
 	if fs.user != nil {
@@ -128,16 +221,27 @@ func (fs *faceSet) cellSize() (float64, float64) {
 		adv = fixed.I(int(fs.size * 0.6))
 	}
 	cw := fixedToFloat(adv)
-	ch := fs.size * 1.25
+	ch := fixedToFloat(face.Metrics().Height)
+	if ch <= 0 {
+		// A face with no usable metrics still has to draw somewhere. The old
+		// hardcode is the fallback rather than the rule.
+		ch = fs.size * 1.25
+	}
 	return cw, ch
 }
 
 // pick returns the face and font that can draw r, honoring bold, or nil
 // when nothing covers it (tofu).
 func (fs *faceSet) pick(r rune, bold bool) (font.Face, bool) {
+	if bold && fs.userBoldFont != nil {
+		if idx, err := fs.userBoldFont.GlyphIndex(&fs.buf, r); err == nil && idx != 0 {
+			return fs.userBold, false
+		}
+	}
 	if fs.userFont != nil {
 		if idx, err := fs.userFont.GlyphIndex(&fs.buf, r); err == nil && idx != 0 {
-			return fs.user, bold // user font has no bold twin; caller double-strikes
+			// No bold cut for this glyph, so the caller thickens it by hand.
+			return fs.user, bold
 		}
 	}
 	if bold {
@@ -309,10 +413,6 @@ func drawPNGTitleBar(img *image.RGBA, g *Grid, f *Frame, l layout, faces *faceSe
 		drawDot(0, RGB(0xff, 0x5f, 0x57))
 		drawDot(1, RGB(0xfe, 0xbc, 0x2e))
 		drawDot(2, RGB(0x28, 0xc8, 0x40))
-	case ControlsDots:
-		for i, t := range [3]float64{0, 0.3, 0.6} {
-			drawDot(i, Mix(f.Accent, g.BG, t))
-		}
 	case ControlsGlyphs:
 		baseline := cy + faces.size*0.34
 		for i, m := range []string{f.CloseGlyph, f.MinimizeGlyph, f.MaximizeGlyph} {
@@ -404,16 +504,29 @@ func pathBounds(p gpath, ox, oy float64) (minX, minY, maxX, maxY float64) {
 }
 
 // fillDiagonalGradient paints the wash: a top-left to bottom-right blend.
+//
+// The blend runs on x+y, so it is constant along every anti-diagonal. Mixing
+// per pixel therefore computed the same colour w times per diagonal and cost
+// 58 ms on a full-screen canvas; a lookup table indexed by x+y computes it
+// w+h times and copies the rest, which measured 17 ms for a picture nobody can
+// tell apart. Writing straight into Pix rather than through SetRGBA drops the
+// per-pixel bounds check the loop already made unnecessary.
 func fillDiagonalGradient(img *image.RGBA, start, end Color) {
 	b := img.Bounds()
-	span := float64(b.Dx() + b.Dy())
-	if span == 0 {
+	w, h := b.Dx(), b.Dy()
+	span := float64(w + h)
+	if w <= 0 || h <= 0 || span == 0 {
 		return
 	}
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		for x := b.Min.X; x < b.Max.X; x++ {
-			t := float64(x+y) / span
-			img.SetRGBA(x, y, Mix(start, end, t))
+	lut := make([]Color, w+h)
+	for d := range lut {
+		lut[d] = Mix(start, end, float64(d)/span)
+	}
+	for y := range h {
+		row := img.Pix[y*img.Stride : y*img.Stride+w*4]
+		for x := range w {
+			c := lut[x+y]
+			row[x*4], row[x*4+1], row[x*4+2], row[x*4+3] = c.R, c.G, c.B, c.A
 		}
 	}
 }
@@ -446,6 +559,16 @@ func roundedRectPath(x, y, w, h, r float64) gpath {
 	}}
 }
 
+// shadowScale is how much smaller than the canvas the shadow is worked out at.
+//
+// A double box blur has no detail in it: it is a featureless ramp a few dozen
+// pixels wide, and blurring it at full resolution spent 388 ms of a 903 ms
+// full-screen render on pixels that carry no information. Rasterising the
+// silhouette and blurring it at a quarter on each axis is sixteen times less
+// work and measured 63 ms, and the result is interpolated back up rather than
+// stepped up, so no seam appears where the sample grid does.
+const shadowScale = 4
+
 // drawCardShadow blurs the card silhouette and composites it under where
 // the card will land, offset down: carbon's single soft shadow.
 func drawCardShadow(img *image.RGBA, l layout, ch float64) {
@@ -455,19 +578,81 @@ func drawCardShadow(img *image.RGBA, l layout, ch float64) {
 	margin := radius * 3
 	mw := int(l.cardW) + 2*margin
 	mh := int(l.cardH) + 2*margin
-	mask := image.NewAlpha(image.Rect(0, 0, mw, mh))
-	silhouette := image.NewRGBA(mask.Bounds())
-	fillPath(silhouette, roundedRectPath(0, 0, l.cardW, l.cardH, l.radius), float64(margin), float64(margin), RGB(0, 0, 0))
-	for i := 3; i < len(silhouette.Pix); i += 4 {
-		mask.Pix[i/4] = silhouette.Pix[i]
+	if mw <= 0 || mh <= 0 {
+		return
 	}
-	boxBlurAlpha(mask, radius)
-	boxBlurAlpha(mask, radius)
+
+	q := float64(shadowScale)
+	sw, sh := (mw+shadowScale-1)/shadowScale, (mh+shadowScale-1)/shadowScale
+	small := image.NewAlpha(image.Rect(0, 0, sw, sh))
+	silhouette := image.NewRGBA(small.Bounds())
+	fillPath(silhouette, roundedRectPath(0, 0, l.cardW/q, l.cardH/q, l.radius/q),
+		float64(margin)/q, float64(margin)/q, RGB(0, 0, 0))
+	for i := 3; i < len(silhouette.Pix); i += 4 {
+		small.Pix[i/4] = silhouette.Pix[i]
+	}
+	blur := max(1, radius/shadowScale)
+	boxBlurAlpha(small, blur)
+	boxBlurAlpha(small, blur)
+	mask := upscaleAlpha(small, mw, mh)
+
 	// Composite at 35 percent black.
 	ox := int(l.cardX) - margin
 	oy := int(l.cardY+dy) - margin
 	draw.DrawMask(img, image.Rect(ox, oy, ox+mw, oy+mh),
 		image.NewUniform(color.RGBA{A: 89}), image.Point{}, mask, image.Point{}, draw.Over)
+}
+
+// upscaleAlpha resamples an alpha mask up to w by h, linearly on both axes.
+//
+// The x weights are worked out once per row width rather than once per pixel,
+// and everything is integer: the mask is nine megapixels on a full-screen
+// capture, so a float multiply per sample would give back most of what the
+// smaller blur just saved.
+func upscaleAlpha(src *image.Alpha, w, h int) *image.Alpha {
+	dst := image.NewAlpha(image.Rect(0, 0, w, h))
+	sw, sh := src.Bounds().Dx(), src.Bounds().Dy()
+	if sw <= 0 || sh <= 0 || w <= 0 || h <= 0 {
+		return dst
+	}
+	// Fixed point with 8 fractional bits, and half-pixel centres so the
+	// resampled mask sits where the small one did rather than a sample to its
+	// left.
+	type tap struct {
+		lo, hi int
+		frac   int32
+	}
+	taps := func(n, out, limit int) []tap {
+		t := make([]tap, out)
+		for i := range out {
+			// int64 because the product is a pixel count times a pixel count
+			// times 256, which leaves 32 bits behind on a large canvas.
+			f := int(((int64(2*i+1)*int64(n)*256)/int64(2*out) - 128))
+			f = max(f, 0)
+			lo := f >> 8
+			if lo >= limit-1 {
+				t[i] = tap{lo: limit - 1, hi: limit - 1}
+				continue
+			}
+			t[i] = tap{lo: lo, hi: lo + 1, frac: int32(f & 0xff)}
+		}
+		return t
+	}
+	xt := taps(sw, w, sw)
+	yt := taps(sh, h, sh)
+	for y := range h {
+		ty := yt[y]
+		r0 := src.Pix[ty.lo*src.Stride:]
+		r1 := src.Pix[ty.hi*src.Stride:]
+		out := dst.Pix[y*dst.Stride : y*dst.Stride+w]
+		for x := range w {
+			t := xt[x]
+			a := int32(r0[t.lo])<<8 + (int32(r0[t.hi])-int32(r0[t.lo]))*t.frac
+			b := int32(r1[t.lo])<<8 + (int32(r1[t.hi])-int32(r1[t.lo]))*t.frac
+			out[x] = uint8((a + (b-a)*ty.frac/256) >> 8)
+		}
+	}
+	return dst
 }
 
 // boxBlurAlpha runs one separable box blur pass over an alpha mask.
