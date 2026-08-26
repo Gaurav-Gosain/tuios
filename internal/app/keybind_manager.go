@@ -68,9 +68,18 @@ type keybindManager struct {
 // The report is built here, on the Update goroutine, and not again until the
 // overlay is reopened. That is the whole of its cost: one pass over the config
 // and one /proc read, at the moment a human asked for it.
-func (m *OS) OpenKeybindManager() {
+func (m *OS) OpenKeybindManager() { m.OpenKeybindManagerWith("") }
+
+// OpenKeybindManagerWith opens the overlay with the Bindings filter already
+// filled in.
+//
+// The palette hands its own query over this way. Someone who typed "close" into
+// the palette and picked the keybind row has already said what they are looking
+// for, and making them type it a second time into a list of a few hundred
+// bindings is the hunting the palette row exists to avoid.
+func (m *OS) OpenKeybindManagerWith(query string) {
 	m.ShowKeybindManager = true
-	m.keybinds = keybindManager{report: m.buildKeybindReport()}
+	m.keybinds = keybindManager{report: m.buildKeybindReport(), query: query}
 	m.KeybindTab = KeybindTabBindings
 }
 
@@ -302,20 +311,18 @@ func (m *OS) KeybindCommitBinding() tea.Cmd {
 	// adds an alternative instead of silently dropping the one that was there.
 	for _, existing := range target[action] {
 		if strings.EqualFold(existing, key) {
-			m.ShowNotification(key+" is already bound to "+action, "info", 0)
+			// An "info" with no duration never reaches the screen at all
+			// (notificationLifetime drops it), so this said nothing. It is a
+			// refusal, which is a warning.
+			m.ShowNotification(key+" is already bound to "+action, "warning", 0)
 			return nil
 		}
 	}
 	target[action] = append(target[action], key)
 
-	// Reloaded and re-reported before the file write is even started, so the
-	// overlay shows the consequence of the binding (including any conflict it
-	// just created) rather than the state before it.
-	m.KeybindRegistry.Reload(m.UserConfig)
-	m.keybinds.report = m.buildKeybindReport()
-	m.keybinds.filtered = nil
+	cmd := m.keybindApply()
 	m.KeybindCapture(key)
 	m.keybinds.bound = key
 	m.ShowNotification("Bound "+key+" to "+action, "success", config.NotificationDuration)
-	return m.persistSettings()
+	return cmd
 }

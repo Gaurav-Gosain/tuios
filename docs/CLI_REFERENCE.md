@@ -19,6 +19,7 @@ This document provides a complete reference for TUIOS command-line interface.
   - [tuios-web (separate binary)](#tuios-web-separate-binary)
   - [tuios config](#tuios-config)
   - [tuios keybinds](#tuios-keybinds)
+  - [tuios update](#tuios-update)
   - [tuios layout](#tuios-layout)
   - [tuios completion](#tuios-completion)
   - [tuios help](#tuios-help)
@@ -1669,6 +1670,10 @@ View and inspect keybinding configuration.
 **Subcommands:**
 - `tuios keybinds list` - List all configured keybindings
 - `tuios keybinds list-custom` - List only customized keybindings
+- `tuios keybinds doctor` - Report every key claimed twice and every key tuios takes from the pane
+- `tuios keybinds explain <key>` - Say what tuios does with one key
+- `tuios keybinds unbind <action> [key]` - Take a key off one action
+- `tuios keybinds free <key>` - Hand a key back to the program in the pane
 
 #### `tuios keybinds list`
 
@@ -1700,6 +1705,102 @@ tuios keybinds list-custom
 - Action name
 - Default keybinding
 - Your custom keybinding
+
+#### `tuios keybinds unbind`
+
+Take a key off one action and write the change to `config.toml`.
+
+```bash
+# Stop w closing a window, leaving x
+tuios keybinds unbind close_window w
+
+# Leave the action with no key at all
+tuios keybinds unbind close_window
+```
+
+An action with no keys is written as an empty list:
+
+```toml
+[keybindings.window_management]
+close_window = []
+```
+
+That is not the same as leaving the action out of the file. An action the file
+does not mention gets its default back the next time tuios starts. An empty list
+stays empty.
+
+#### `tuios keybinds free`
+
+Take one key off every action in every scope, so the program in your pane
+receives it.
+
+```bash
+# Give alt+left back to your shell
+tuios keybinds free alt+left
+```
+
+Every scope at once is the point. A key tuios still claims anywhere is a key the
+program never sees. Two keys cannot be freed this way: the leader key, which is
+`keybindings.leader_key` and is moved rather than unbound, and a handful of keys
+the input path reads directly. The command says so instead of reporting success.
+
+You can do both from inside tuios as well. Open the keybind manager with the
+leader key then `k`, or from the command palette, and press `ctrl+d` on a
+binding to remove it or `ctrl+x` to take its key off every action. Typing `#`
+in the command palette searches actions rather than commands.
+
+---
+
+### `tuios update`
+
+Replace this tuios with the newest published release.
+
+```bash
+# See whether there is a newer release, without installing it
+tuios update --check
+
+# Install it
+tuios update
+
+# Include prereleases
+tuios update --check --pre
+```
+
+**Flags:**
+- `--check` - Report what would be installed and change nothing
+- `--pre` - Count a prerelease as the newest release
+
+**What it will and will not replace.** This only updates a binary that came from
+a release archive, which is what the [install script](#quick-install-script-linuxmacos)
+downloads. Every other way of installing tuios has something that owns the file,
+and overwriting one of those leaves its records describing a file that is no
+longer there. The command detects where the binary came from and refuses with
+the right command instead:
+
+| Installed by | `tuios update` | What to run |
+| --- | --- | --- |
+| Install script, or a release archive unpacked by hand | Updates it | `tuios update` |
+| Homebrew | Refuses | `brew upgrade --cask tuios` |
+| AUR or another system package | Refuses | `yay -S tuios-bin` |
+| Nix | Refuses | `nix profile upgrade tuios` |
+| `go install` | Refuses | `go install github.com/Gaurav-Gosain/tuios/cmd/tuios@latest` |
+| `scripts/install.sh` from a checkout | Refuses | `git pull && ./scripts/install.sh` |
+
+**tuios-web** is updated at the same time when it sits beside `tuios`. The two
+talk to one daemon and it compares their versions, so they move together or not
+at all: both are downloaded and verified before either is put in place.
+
+**Checksums.** Every download is checked against the release's `checksums.txt`.
+A file that does not match is discarded, nothing is installed, and the old
+binary is untouched.
+
+**The running daemon** keeps the old build. Sessions you have open go on
+working. To move them to the new build, detach, run `tuios kill-server`, then
+start tuios again. Panes are restored; the programs that were running in them
+are not.
+
+Set `GITHUB_TOKEN` or `GH_TOKEN` to raise the release lookup's rate limit. It is
+never required and no token is created for you.
 
 ---
 

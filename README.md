@@ -83,6 +83,12 @@ docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 
 **[GitHub Releases](https://github.com/Gaurav-Gosain/tuios/releases)** - Pre-built binaries for all platforms.
 
+**Updating.** If you installed with the quick install script or a release
+binary, `tuios update` fetches the newest release and puts it in place
+(`tuios update --check` just reports). Everything else has a package manager
+that owns the binary, so use that instead; `tuios update` detects which you have
+and prints the right command rather than overwriting it.
+
 **Requirements:** A terminal with true color support. Kitty graphics and sixel support recommended (Ghostty, Kitty, WezTerm).
 
 ## Features

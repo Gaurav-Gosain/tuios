@@ -313,7 +313,61 @@ bind it. This prints the same answer the overlay's key recorder shows.`,
 	keybindsExplainCmd.Flags().BoolVar(&keybindsJSON, "json", false, "emit the answer as JSON")
 	keybindsExplainCmd.Flags().StringVar(&keybindsGuest, "guest", "", "treat this program as the one running in the pane")
 
-	keybindsCmd.AddCommand(keybindsListCmd, keybindsCustomCmd, keybindsDoctorCmd, keybindsExplainCmd)
+	keybindsUnbindCmd := &cobra.Command{
+		Use:   "unbind <action> [key]",
+		Short: "Take a key off one action",
+		Long: `Take a key off one action and write the change to config.toml.
+
+Name a key to remove that one. Name none and the action loses every key it has.
+An action with no keys is written as an empty list, which is different from
+leaving it out of the file: an action the file does not mention gets its default
+back at the next load, and an empty list does not.
+
+This changes one action. To stop tuios taking a key at all, so the program in
+your pane receives it, use ` + "`tuios keybinds free`" + `.`,
+		Example: `  # Stop w closing a window, leaving x
+  tuios keybinds unbind close_window w
+
+  # Leave the action with no key at all
+  tuios keybinds unbind close_window`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			key := ""
+			if len(args) > 1 {
+				key = args[1]
+			}
+			return keybindsUnbind(args[0], key)
+		},
+	}
+
+	keybindsFreeCmd := &cobra.Command{
+		Use:   "free <key>",
+		Short: "Hand a key back to the program in the pane",
+		Long: `Take one key off every action in every scope and write the change to
+config.toml.
+
+Every scope at once is the point. A key tuios still claims anywhere is a key the
+program in your pane never sees, so freeing one table at a time does not free
+the key. Each action that runs out of keys is written as an empty list, so the
+default does not come back at the next load.
+
+Two things this cannot take. The leader key is keybindings.leader_key rather
+than an entry in a table, so it is moved rather than unbound. A few keys are
+read by the input path itself and have no config entry. Either way the command
+says so instead of reporting a success.`,
+		Example: `  # Give alt+left back to your shell
+  tuios keybinds free alt+left
+
+  # Check first: this says every scope the key acts in
+  tuios keybinds explain alt+left`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return keybindsFree(args[0])
+		},
+	}
+
+	keybindsCmd.AddCommand(keybindsListCmd, keybindsCustomCmd, keybindsDoctorCmd,
+		keybindsExplainCmd, keybindsUnbindCmd, keybindsFreeCmd)
 
 	tapeCmd := &cobra.Command{
 		Use:   "tape",
@@ -2107,7 +2161,43 @@ it as data, not as instructions.`,
 	askAgentCmd.Flags().BoolVar(&askJSON, "json", false, "Output result as JSON")
 	_ = askAgentCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
-	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd)
+	var updateCheck, updatePre bool
+	updateCmd := &cobra.Command{
+		Use:   "update",
+		Short: "Install the newest release over this binary",
+		Long: `Replace this tuios with the newest published release.
+
+This only updates a binary that came from a release archive, which is what the
+install script downloads. Every other way of installing tuios has something that
+owns the file: a package manager, Homebrew, the Nix store, or the Go tool. This
+refuses to write over those and prints the command that does update them,
+because overwriting one leaves its records describing a file that is no longer
+there.
+
+tuios-web is updated at the same time when it sits beside tuios. The two talk to
+one daemon and it compares their versions, so they move together or not at all.
+
+Every download is checked against the release's published checksum. A file that
+does not match is discarded and nothing is installed.
+
+The daemon keeps running the old build until it is restarted. The command says
+what to do about that when it finishes.`,
+		Example: `  # See whether there is a newer release, without installing it
+  tuios update --check
+
+  # Install it
+  tuios update
+
+  # Include prereleases
+  tuios update --check --pre`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runUpdate(updateOptions{check: updateCheck, prerelease: updatePre})
+		},
+	}
+	updateCmd.Flags().BoolVar(&updateCheck, "check", false, "Report what would be installed and change nothing")
+	updateCmd.Flags().BoolVar(&updatePre, "pre", false, "Count a prerelease as the newest release")
+
+	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd, updateCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)

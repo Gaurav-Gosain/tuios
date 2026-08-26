@@ -254,6 +254,15 @@ type Binding struct {
 	Shadowed bool `json:"shadowed"`
 	// ShadowedBy names the action that actually runs, when Shadowed.
 	ShadowedBy string `json:"shadowed_by,omitempty"`
+	// Unbound is set on the one row an action with no keys still gets. Key and
+	// Press are empty on such a row.
+	//
+	// It is listed rather than left out because the alternative is a one-way
+	// door: an action taken off its key would vanish from every surface that
+	// reads this, and the overlay binds a key by selecting the action's row.
+	// Unbinding something and then being unable to find it again is not an
+	// unbind, it is a loss.
+	Unbound bool `json:"unbound,omitempty"`
 }
 
 // press joins a chord and a key the way the rest of the interface spells a
@@ -297,6 +306,19 @@ func (r *KeybindRegistry) Bindings() []Binding {
 			}
 			sort.Strings(actions)
 			for _, action := range actions {
+				// An action the config leaves with no keys gets one row saying
+				// so. See Binding.Unbound, and keybind_unbind.go for how the
+				// file spells it.
+				if liveKeyCount(section[action]) == 0 {
+					out = append(out, Binding{
+						Scope:   scope.ID,
+						Section: name,
+						Action:  action,
+						Desc:    describeAction(action),
+						Unbound: true,
+					})
+					continue
+				}
 				for _, key := range section[action] {
 					key = strings.TrimSpace(key)
 					if key == "" {

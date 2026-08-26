@@ -20,6 +20,12 @@ func TestKeybindRowRectsPointAtTheRowsDrawn(t *testing.T) {
 		idx  int
 		// key returns the text that must appear on row i of this tab.
 		key func(m *OS, i int) string
+		// seed puts rows on the tab. The conflicts tab needs one, because the
+		// defaults no longer contest any key (TestDefaultConfigHasNoConflicts)
+		// and a tab with no rows records no rects. It used to rely on the four
+		// dead digit bindings that shipped, which made this test another reason
+		// they were awkward to fix.
+		seed func(*config.UserConfig)
 	}{
 		{
 			name: "bindings", idx: KeybindTabBindings,
@@ -28,6 +34,11 @@ func TestKeybindRowRectsPointAtTheRowsDrawn(t *testing.T) {
 		{
 			name: "conflicts", idx: KeybindTabConflicts,
 			key: func(m *OS, i int) string { return m.KeybindReport().Collisions[i].Winner },
+			seed: func(c *config.UserConfig) {
+				// Two actions in one scope on one key, in two tables.
+				c.Keybindings.WindowManagement["select_window_1"] = []string{"1"}
+				c.Keybindings.Layout["snap_left"] = []string{"1"}
+			},
 		},
 		{
 			name: "guests", idx: KeybindTabGuests,
@@ -36,6 +47,10 @@ func TestKeybindRowRectsPointAtTheRowsDrawn(t *testing.T) {
 	} {
 		t.Run(tab.name, func(t *testing.T) {
 			m := newNarrowOS(t, 140, 45)
+			if tab.seed != nil {
+				tab.seed(m.UserConfig)
+				m.KeybindRegistry.Reload(m.UserConfig)
+			}
 			m.OpenKeybindManager()
 			m.KeybindSetTab(tab.idx)
 
