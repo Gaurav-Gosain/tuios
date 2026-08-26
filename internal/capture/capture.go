@@ -51,8 +51,13 @@ type Settings struct {
 	// default capture come out with the user's own icons in it.
 	HostFontFamily string
 	HostBoldFamily string
-	Scale          int
-	Cursor         bool
+	// HostCellW and HostCellH are one cell of the host terminal, in pixels, as
+	// the host itself answered. They are the shape the picture has to come out
+	// in: a capture is a picture of a terminal, and a terminal's cell is not
+	// the font's line box. Only a client with a host to ask sets them.
+	HostCellW, HostCellH int
+	Scale                int
+	Cursor               bool
 	// Directory is where a generated filename lands.
 	Directory string
 }
@@ -163,6 +168,9 @@ func Frame(s Settings, p *shot.Palette, plain bool) (*shot.Frame, []string) {
 	// decision, and one nobody made.
 	spec.EmbedFont = s.FontFile != "" && len(regular) > 0
 	in := shot.FrameInputs{Palette: p, Accents: accentsOf(p)}
+	if s.HostCellW > 0 && s.HostCellH > 0 {
+		in.CellAspect = float64(s.HostCellW) / float64(s.HostCellH)
+	}
 	if set := theme.ResolveGlyphSet(s.GlyphSetID); set != nil {
 		in.Close, in.Minimize, in.Maximize = set.Close, set.Minimize, set.Maximize
 	}

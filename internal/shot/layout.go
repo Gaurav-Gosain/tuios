@@ -218,6 +218,11 @@ type Frame struct {
 	EmbedFont bool
 	// Scale multiplies the PNG raster size, 1 to 4.
 	Scale int
+
+	// CellAspect is one cell of the terminal being pictured, width over
+	// height. Zero leaves the raster on the font's own cell, which is what a
+	// render with no terminal to ask has to do.
+	CellAspect float64
 }
 
 // layout is the resolved pixel geometry for one render.
