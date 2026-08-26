@@ -142,6 +142,23 @@ func (m *OS) handleScreensaverArm() tea.Cmd {
 	return screensaverFrameCmd()
 }
 
+// StartScreensaverNow runs the saver because the user asked for it.
+//
+// It skips the busy check that the idle timer respects. That check exists so a
+// saver does not cover a build nobody asked it to hide; someone pressing the
+// key has asked, and refusing them because a pane is busy would be the program
+// arguing with a direct instruction.
+func (m *OS) StartScreensaverNow() tea.Cmd {
+	if m.screensaver.active {
+		return nil
+	}
+	if !m.startScreensaver(m.screensaverConfig()) {
+		m.ShowNotification("The screen saver could not start here.", "warning", config.NotificationDuration)
+		return nil
+	}
+	return screensaverFrameCmd()
+}
+
 // screensaverMayStart reports whether it is polite to cover the screen now.
 //
 // A saver that hides a running build is a bug, so a pane with a foreground

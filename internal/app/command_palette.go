@@ -63,6 +63,14 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		// "take a screenshot" want different gestures and only the first needs
 		// one.
 		{
+			Name:     "Start the screen saver",
+			Shortcut: "S",
+			Category: "View",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.StartScreensaverNow()
+			},
+		},
+		{
 			Name:     "Screenshot this window",
 			Shortcut: "prefix+C",
 			Category: "Window",

@@ -109,6 +109,7 @@ func (d *ActionDispatcher) registerHandlers() {
 
 	// Window actions
 	d.Register("toggle_zoom", handleToggleZoom)
+	d.Register("start_screensaver", handleStartScreensaver)
 
 	// Screenshot actions. Three, because the three things a person means by
 	// "take a screenshot" are different: pick one, take this window, take the
@@ -837,4 +838,9 @@ func handleScrollExpel(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ScrollingExpelWindow()
 	}
 	return o, nil
+}
+
+// handleStartScreensaver covers the screen on request rather than on a timer.
+func handleStartScreensaver(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.StartScreensaverNow()
 }
