@@ -120,8 +120,61 @@ func (m *OS) KeybindFreeKey(key string) tea.Cmd {
 	return cmd
 }
 
+// KeybindSelectedConflict is the collision under the cursor on the Conflicts
+// tab, and whether there is one.
+func (m *OS) KeybindSelectedConflict() (config.Collision, bool) {
+	if m.KeybindTab != KeybindTabConflicts {
+		return config.Collision{}, false
+	}
+	all := m.keybinds.report.Collisions
+	i := m.keybinds.selected
+	if i < 0 || i >= len(all) {
+		return config.Collision{}, false
+	}
+	return all[i], true
+}
+
+// KeybindResolveSelectedConflict takes the contested key off every action that
+// loses it, leaving the one that actually runs.
+//
+// This is the one edit on this screen that changes no behaviour at all. The
+// losing bindings never fire, so removing them cannot alter what any key does;
+// it only makes config.toml say what the program was already doing. That is why
+// it is the verb the Conflicts tab offers: a panel that reports a problem and
+// gives the reader nothing to press is a panel that teaches them to distrust
+// it, and the safest possible fix is the right one to put behind the key.
+//
+// Whoever wants the other action to win rebinds it, which is ctrl+r on the
+// Bindings tab. That is a different decision and it is not made by accident
+// from here.
+func (m *OS) KeybindResolveSelectedConflict() tea.Cmd {
+	c, ok := m.KeybindSelectedConflict()
+	if !ok || len(c.Losers) == 0 || !m.keybindEditable() {
+		return nil
+	}
+	var freed []string
+	for _, l := range c.Losers {
+		if _, changed := m.UserConfig.Keybindings.UnbindKey(l.Section, l.Action, c.Key); changed {
+			freed = append(freed, l.Action)
+		}
+	}
+	if len(freed) == 0 {
+		m.ShowNotification("Could not take "+c.Key+" off "+c.Losers[0].Action, "error", 0)
+		return nil
+	}
+	cmd := m.keybindApply()
+	m.ShowNotification("Took "+c.Key+" off "+strings.Join(freed, ", ")+". "+
+		c.Winner+" keeps it, which is what it already did.", "success", config.NotificationDuration)
+	return cmd
+}
+
 // KeybindFreeSelectedKey frees the key of the binding under the cursor.
 func (m *OS) KeybindFreeSelectedKey() tea.Cmd {
+	// The Conflicts tab names a key too, and freeing it there means the same
+	// thing it means on a binding row.
+	if c, ok := m.KeybindSelectedConflict(); ok {
+		return m.KeybindFreeKey(c.Key)
+	}
 	b, ok := m.KeybindSelectedBinding()
 	if !ok {
 		return nil

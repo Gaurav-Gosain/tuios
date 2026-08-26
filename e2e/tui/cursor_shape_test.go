@@ -187,11 +187,18 @@ func TestCursorShapeSurvivesNeighbourAndSwitches(t *testing.T) {
 
 	stream.mark("workspace-switch")
 	leaveTerminalMode(t, term)
-	if err := term.SendKeys("2"); err != nil {
+	// alt+N, which is what switch_workspace_N is bound to. This used to send a
+	// bare "2" and a bare "1", which have never switched a workspace: the
+	// digits were snap_corner_N, and makeSnapCornerHandler returns early while
+	// tiling is on, which this test turns on. So the step did nothing at all
+	// and the shape survived a switch that never happened. The digits select a
+	// window now, which moved focus to the neighbour and made the silence
+	// audible.
+	if err := term.SendKeys(tuitest.Alt("2")); err != nil {
 		t.Fatalf("switch to workspace 2: %v", err)
 	}
 	time.Sleep(600 * time.Millisecond)
-	if err := term.SendKeys("1"); err != nil {
+	if err := term.SendKeys(tuitest.Alt("1")); err != nil {
 		t.Fatalf("switch back to workspace 1: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {

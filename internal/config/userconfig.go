@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -596,6 +597,13 @@ func DefaultConfig() *UserConfig {
 				"layout_prefix_load":   {"l"},
 				"layout_prefix_save":   {"s"},
 				"layout_prefix_cancel": {"esc"},
+				// Corner snapping lives here rather than on the bare digits in
+				// window mode, where it used to shadow select_window_1 through
+				// _4. See getDefaultLayoutKeybinds for why it lost that contest.
+				"snap_corner_1": {"1"},
+				"snap_corner_2": {"2"},
+				"snap_corner_3": {"3"},
+				"snap_corner_4": {"4"},
 			},
 			TerminalMode: getDefaultTerminalModeKeybinds(),
 			Sidebar:      getDefaultSidebarKeybinds(),
@@ -760,14 +768,28 @@ func getDefaultWorkspaceKeybinds() map[string][]string {
 func getDefaultLayoutKeybinds() map[string][]string {
 	// Base layout keybindings (common to all platforms)
 	layout := map[string][]string{
-		"snap_left":            {"h"},
-		"snap_right":           {"l"},
-		"snap_fullscreen":      {"f"},
-		"unsnap":               {"u"},
-		"snap_corner_1":        {"1"},
-		"snap_corner_2":        {"2"},
-		"snap_corner_3":        {"3"},
-		"snap_corner_4":        {"4"},
+		"snap_left":       {"h"},
+		"snap_right":      {"l"},
+		"snap_fullscreen": {"f"},
+		"unsnap":          {"u"},
+		// snap_corner_1 through _4 are deliberately absent here. They used to
+		// hold "1" through "4", and because the layout table is merged into the
+		// window-mode keymap after window_management, they won those keys
+		// outright: select_window_1 through _4 never fired in a default
+		// install, while 5 through 9 did, because corner snapping stops at 4.
+		//
+		// Window mode has room for four ordinal digit rows and it already has
+		// four: plain digits select a window, shift+digits restore a minimized
+		// one, alt+digits switch workspace, alt+shift+digits move a window
+		// there. Corner snapping was the fifth claimant, and it is the one of
+		// the five whose meaning is not ordinal (a 2x2 grid, not a list) and
+		// the only one that does nothing at all in half the modes:
+		// makeSnapCornerHandler returns early when tiling is on. So it is the
+		// one that gives the digits up.
+		//
+		// It keeps its action, its handler and this table; it is bound under
+		// the layout prefix (leader, L, then 1-4), which is where a layout
+		// operation belongs and where the which-key panel can show it.
 		"toggle_tiling":        {"t"},
 		"swap_left":            {"H", "ctrl+left"},
 		"swap_right":           {"L", "ctrl+right"},
@@ -1342,6 +1364,38 @@ func migrateSettingsComma(cfg *UserConfig) {
 	}
 }
 
+// migrateCornerSnapDigits takes the bare digits off snap_corner_1 through _4 in
+// a config written before corner snapping moved to the layout prefix.
+//
+// The old defaults put snap_corner_N on "1" through "4" in the layout table.
+// That table is merged into the window-mode keymap after window_management, so
+// it won those keys outright and select_window_1 through _4 never fired. Every
+// config ever written carries those four lines, and fillMapDefaults only adds
+// actions that are missing, so without this the fix would reach new installs
+// only and everyone else would go on seeing four conflicts they never caused.
+//
+// It must run before the defaults are filled in, so that the presence of a
+// corner binding under layout_prefix still distinguishes a config written by a
+// version that knew about the move (leave it alone) from an older one.
+//
+// Only the exact stale default is removed. A user who put snap_corner_1
+// somewhere of their own, or who kept the digit alongside another key, has made
+// a choice, and taking it away to quiet a warning would be the worse bug.
+func migrateCornerSnapDigits(cfg *UserConfig) {
+	for i := 1; i <= 4; i++ {
+		action := "snap_corner_" + strconv.Itoa(i)
+		if _, ok := cfg.Keybindings.LayoutPrefix[action]; ok {
+			return // written by a version that knew about the move
+		}
+	}
+	for i := 1; i <= 4; i++ {
+		action := "snap_corner_" + strconv.Itoa(i)
+		if keys := cfg.Keybindings.Layout[action]; len(keys) == 1 && keys[0] == strconv.Itoa(i) {
+			delete(cfg.Keybindings.Layout, action)
+		}
+	}
+}
+
 // fillMissingKeybinds fills in any missing keybindings with defaults
 func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// Initialize nil maps
@@ -1402,6 +1456,7 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 
 	migrateLegacyKeybinds(cfg)
 	migrateSettingsComma(cfg)
+	migrateCornerSnapDigits(cfg)
 
 	// Set default leader key if not specified
 	if cfg.Keybindings.LeaderKey == "" {

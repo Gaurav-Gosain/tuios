@@ -249,7 +249,7 @@ func (m *OS) keybindTabSubtitle() string {
 		if len(rep.Collisions) == 0 {
 			return "No key is used twice in the same scope"
 		}
-		return "Keys used twice. Each row names the one that runs."
+		return "Keys used twice. ctrl+d removes the bindings that never run."
 	case KeybindTabGuests:
 		if len(rep.GuestClashes) == 0 {
 			return "No program needs a key that tuios uses"
@@ -457,7 +457,11 @@ func (m *OS) keybindDetail(selected int) string {
 		if c.CrossSection {
 			detail += " The bindings sit in different tables in config.toml. The later table wins."
 		}
-		return detail
+		// The row is only worth reading if it can be acted on. ctrl+d is named
+		// first and described by what it does rather than by its name, because
+		// "resolve" would not tell the reader that nothing about their keyboard
+		// changes.
+		return detail + " ctrl+d removes the dead ones, which changes no key. ctrl+x frees " + c.Key + "."
 	case KeybindTabGuests:
 		if selected < 0 || selected >= len(rep.GuestClashes) {
 			return ""

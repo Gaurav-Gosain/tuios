@@ -48,18 +48,29 @@ func TestReportAgreesWithTheRegistryOnEveryContestedKey(t *testing.T) {
 	}
 }
 
-// The shipped defaults bind 1-4 to both select_window_N and snap_corner_N.
-// layout is copied over window_management, so the snap wins and select_window_1
-// is dead. This is exactly the kind of finding the overlay exists to surface,
-// so it is pinned rather than treated as a bug in the test.
-func TestDefaultConfigDigitKeysAreContested(t *testing.T) {
-	r := registryFor(t, nil)
-	found := map[string]bool{}
+// A digit claimed by both select_window_N and snap_corner_N is reported as a
+// cross-section collision, with the layout claim winning.
+//
+// This was the shipped default until corner snapping moved to the layout
+// prefix, and this case used to assert it against DefaultConfig() on the
+// grounds that surfacing such a finding is what the overlay is for. That was
+// the wrong fixture: it made the test pass precisely because the defaults were
+// broken, so the defaults could not be fixed without it failing, and it is the
+// reason four dead bindings survived as long as they did. The property is real
+// and worth keeping, so it keeps the arrangement and drops the claim that the
+// arrangement is what tuios ships. TestDefaultConfigHasNoConflicts now owns the
+// question of what the defaults may contain.
+func TestCrossSectionDigitClashIsReported(t *testing.T) {
+	r := registryFor(t, func(c *UserConfig) {
+		c.Keybindings.WindowManagement["select_window_1"] = []string{"1"}
+		c.Keybindings.Layout["snap_corner_1"] = []string{"1"}
+	})
+	found := false
 	for _, c := range r.Collisions() {
 		if c.Scope != ScopeWindowMode || c.Key != "1" {
 			continue
 		}
-		found["1"] = true
+		found = true
 		if c.Winner != "snap_corner_1" {
 			t.Errorf("winner = %q, want snap_corner_1: layout is copied over window_management", c.Winner)
 		}
@@ -76,8 +87,8 @@ func TestDefaultConfigDigitKeysAreContested(t *testing.T) {
 			t.Errorf("select_window_1 lost the key and must be listed: %v", c.Losers)
 		}
 	}
-	if !found["1"] {
-		t.Fatal("1 is bound to select_window_1 and snap_corner_1 in the defaults; that must be reported")
+	if !found {
+		t.Fatal("a key claimed by two actions in one scope must be reported")
 	}
 }
 

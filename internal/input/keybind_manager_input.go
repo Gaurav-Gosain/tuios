@@ -67,8 +67,13 @@ func handleKeybindManagerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 		// On the Record tab the only thing named is the key itself, and the
 		// question the recorder was opened to answer is whether tuios takes it,
 		// so freeing it everywhere is what the answer is for.
-		if o.KeybindTab == app.KeybindTabRecord {
+		switch o.KeybindTab {
+		case app.KeybindTabRecord:
 			return o, o.KeybindFreeCapturedKey()
+		case app.KeybindTabConflicts:
+			// On a conflict row the dead bindings are what ctrl+d takes, which
+			// resolves the row without changing what any key does.
+			return o, o.KeybindResolveSelectedConflict()
 		}
 		return o, o.KeybindUnbindSelected()
 	case "ctrl+x":
