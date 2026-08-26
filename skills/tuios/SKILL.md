@@ -856,7 +856,7 @@ like "make it look like X" usually means some of each:
 | **Spacing** | ground between panes, padding inside overlay panels | `appearance.gap`, `appearance.panel_padding` |
 | **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
 
-The 107 options above are scalars, and spacing and composition are set with them
+The 108 options above are scalars, and spacing and composition are set with them
 like any other. Colour and shape are not: each is a name from an open set
 standing for a document kept in a directory rather than a value in the config
 file, which is why both have a verb of their own rather than a row in

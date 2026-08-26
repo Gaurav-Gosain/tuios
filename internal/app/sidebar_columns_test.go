@@ -85,10 +85,14 @@ func TestSidebarRowsShareOneNameSpine(t *testing.T) {
 	}
 }
 
-// The footer is down to the collapse toggle: the add control moved into the
-// section headers, where it is bound to what it makes. What the toggle must
-// keep is agreement between the columns it is drawn on and the columns its hit
-// zone claims.
+// The footer carries the rail's own two controls: the file view on the outer
+// corner and the collapse toggle on the pane-facing one. What each must keep is
+// agreement between the columns it is drawn on and the columns its hit zone
+// claims, since nothing recomputes either.
+//
+// Negative control: with the zones recorded in construction order rather than
+// left to right, the ordering assertion below fails, and so does the fuzz
+// oracle's rail-hit-band rule. Both were confirmed red before the sort went in.
 func TestSidebarFooterZonesMatchWhatIsDrawn(t *testing.T) {
 	m := daemonRailOS(t, 120, 40)
 	lines, zones := m.sidebarFooter(sidebarVariantFull, 30, theme.UI(), -1, -1,
@@ -96,11 +100,22 @@ func TestSidebarFooterZonesMatchWhatIsDrawn(t *testing.T) {
 	if len(lines) != 1 {
 		t.Fatalf("the footer took %d lines, want one", len(lines))
 	}
-	if len(zones) != 1 || zones[0].Kind != sidebarRowCollapse {
-		t.Fatalf("footer zones = %+v, want the collapse toggle alone", zones)
+	if len(zones) != 2 {
+		t.Fatalf("footer zones = %+v, want the file view control and the collapse toggle", zones)
+	}
+	if zones[0].Kind != sidebarRowFiles || zones[1].Kind != sidebarRowCollapse {
+		t.Fatalf("footer zones = %+v, want files then collapse", zones)
+	}
+	if zones[0].X1 > zones[1].X0 {
+		t.Errorf("the two controls overlap: %+v", zones)
 	}
 	row := ansi.Strip(lines[0])
-	if got := rowColumn(row, "«"); got != zones[0].X0 {
-		t.Errorf("the toggle is drawn at column %d but its hit zone starts at %d: %q", got, zones[0].X0, row)
+	// The expected columns are read off the drawn row, for each control's own
+	// text, never taken from the zones the function under test returned.
+	if got := rowColumn(row, "«"); got != zones[1].X0 {
+		t.Errorf("the toggle is drawn at column %d but its hit zone starts at %d: %q", got, zones[1].X0, row)
+	}
+	if got := rowColumn(row, sidebarFilesLabel); got != zones[0].X0 {
+		t.Errorf("the files control is drawn at column %d but its hit zone starts at %d: %q", got, zones[0].X0, row)
 	}
 }

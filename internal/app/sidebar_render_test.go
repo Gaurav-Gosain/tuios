@@ -99,7 +99,7 @@ func TestSidebarFitsNarrowScreens(t *testing.T) {
 					// claims only its own columns and has to stay inside them.
 					switch hit.Kind {
 					case sidebarRowNewSession, sidebarRowNewWindow, sidebarRowCollapse,
-						sidebarRowAgentSort, sidebarRowAgentFilter:
+						sidebarRowAgentSort, sidebarRowAgentFilter, sidebarRowFiles:
 						if hit.X0 < sidebarX || hit.X1 > sidebarX+w || hit.X0 >= hit.X1 {
 							t.Errorf("zone hit X range [%d,%d) outside the sidebar band [%d,%d)",
 								hit.X0, hit.X1, sidebarX, sidebarX+w)

@@ -56,8 +56,15 @@ func TestMotionFilterPassesRailHover(t *testing.T) {
 				t.Error("motion over the rail was dropped; nothing downstream can hover")
 			}
 
-			// The pane keeps the CPU guard: a plain shell asked for no mouse
-			// mode and tuios draws no hover out there, so that motion is noise.
+			// The pane keeps the CPU guard when nothing out there hovers. Link
+			// hover is the one thing that does, so the guard is now conditional
+			// on it rather than absolute: with appearance.links off, a plain
+			// shell asked for no mouse mode, tuios draws no hover out there, and
+			// that motion is noise exactly as it always was.
+			prev := config.Links
+			config.Links = config.LinksOff
+			t.Cleanup(func() { config.Links = prev })
+
 			offRail := tea.MouseMotionMsg{X: 50, Y: 10}
 			if filterMouseMotion(o, offRail) != nil {
 				t.Error("motion over a plain pane was passed; the guard is what keeps a mouse sweep cheap")
@@ -76,6 +83,12 @@ func TestMotionFilterPassesTheBandExitEvent(t *testing.T) {
 	o := filterOS(t)
 	o.Mode = app.TerminalMode
 
+	// Links off, so the rail's own clause is the only thing that can pass this
+	// event and the assertions below are about it and nothing else.
+	prev := config.Links
+	config.Links = config.LinksOff
+	t.Cleanup(func() { config.Links = prev })
+
 	// The pointer is in the band and hovering, then steps out over a plain pane.
 	o.SidebarHoverActive = true
 	exit := tea.MouseMotionMsg{X: 50, Y: 10}
@@ -88,5 +101,49 @@ func TestMotionFilterPassesTheBandExitEvent(t *testing.T) {
 	o.SidebarHoverActive = false
 	if filterMouseMotion(o, exit) != nil {
 		t.Error("motion over a plain pane stayed whitelisted after the exit event")
+	}
+}
+
+// TestMotionFilterPassesPaneContentForLinks is the other half of the clause the
+// two tests above now qualify. A link under the pointer is drawn by the pane
+// itself, so unlike every other hover in tuios its target is not a rectangle the
+// chrome recorded, and the motion that crosses it has to be let through on the
+// strength of the pane's content box alone.
+//
+// Negative control: with the links clause removed from filterMouseMotion, the
+// first assertion fails, and so does the underline in a real session. With the
+// cell-change guard removed the last assertion fails. Both were confirmed red
+// before either went in.
+func TestMotionFilterPassesPaneContentForLinks(t *testing.T) {
+	o := filterOS(t)
+	o.Mode = app.WindowManagementMode
+
+	prev := config.Links
+	t.Cleanup(func() { config.Links = prev })
+
+	config.Links = config.LinksAll
+	if filterMouseMotion(o, tea.MouseMotionMsg{X: 50, Y: 10}) == nil {
+		t.Error("motion over pane content was dropped; no link can ever underline itself")
+	}
+
+	// Off is off: the guard the two tests above pin is restored exactly.
+	config.Links = config.LinksOff
+	if filterMouseMotion(o, tea.MouseMotionMsg{X: 50, Y: 10}) != nil {
+		t.Error("appearance.links = off still passed pane motion")
+	}
+
+	// A pane's border is not its content, so the pointer resting on the frame
+	// buys nothing. The pane above starts at X=31 with a border, so column 31 is
+	// the border and column 32 the first content cell.
+	config.Links = config.LinksAll
+	if filterMouseMotion(o, tea.MouseMotionMsg{X: 31, Y: 10}) != nil {
+		t.Error("motion on a pane's border was passed as content")
+	}
+
+	// And a motion that lands on the cell the pointer is already on resolves to
+	// the run it is already showing, so it is dropped.
+	o.LastMouseX, o.LastMouseY = 50, 10
+	if filterMouseMotion(o, tea.MouseMotionMsg{X: 50, Y: 10}) != nil {
+		t.Error("a motion that changed no cell was passed")
 	}
 }

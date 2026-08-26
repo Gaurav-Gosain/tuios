@@ -321,6 +321,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.dim_unfocused"),
 			opt("appearance.panel_padding"),
 			opt("appearance.zen_mode"),
+			opt("appearance.links"),
 			opt("appearance.session_colors"),
 		}),
 	}

@@ -528,6 +528,11 @@ var BorderStyle = "rounded"
 // mouse (hidden while the pointer is idle). Set via appearance.zen_mode.
 var ZenMode = ZenModeDisabled
 
+// Links controls what tuios treats as a link in pane content. Valid values are
+// the Links* constants: off, marked (OSC 8 only) or all (bare URLs too). Set
+// via appearance.links.
+var Links = LinksAll
+
 // DockbarPosition controls the position of the dockbar
 // Set via --dockbar-position flag or appearance.dockbar_position config
 var DockbarPosition = "bottom"

@@ -17,6 +17,10 @@ const (
 	PointerNSResize   PointerShape = "ns-resize"
 	PointerNWSEResize PointerShape = "nwse-resize"
 	PointerNESWResize PointerShape = "nesw-resize"
+	// PointerPointer is the hand a browser shows over a link, and it is what a
+	// run of pane cells gets while the pointer is on one. It is the only shape
+	// here that comes from content rather than from geometry.
+	PointerPointer PointerShape = "pointer"
 )
 
 // SetPointerShape writes an OSC 22 sequence to change the mouse pointer.

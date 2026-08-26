@@ -421,6 +421,13 @@ func (m *OS) SidebarSetCollapsed(collapsed bool) {
 		return
 	}
 	m.SidebarCollapsed = collapsed
+	if collapsed {
+		// Three columns cannot draw a path, so the strip has no way to show the
+		// file view and no way out of it. Folding the rail therefore leaves the
+		// mode rather than hiding it: a mode nothing on screen mentions is a mode
+		// the user cannot get out of.
+		m.CloseFileView()
+	}
 	m.sidebarClearPeek()
 	m.tooltipClear()
 	if m.AutoTiling {
