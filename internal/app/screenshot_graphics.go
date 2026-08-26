@@ -87,21 +87,36 @@ func buildScreenshotTransmit(png []byte) []byte {
 	return appendKittyTransmitPNG(nil, screenshotImageID, png)
 }
 
-// screenshotPreviewPictureBox is the cell box the preview's picture is drawn
-// into, and whether there is a picture to draw at all.
+// screenshotPreviewPictureBox is where the preview's picture goes inside the
+// panel body: how many columns to leave to the left of it, the cell box it is
+// drawn into, and whether there is a picture to draw at all.
 //
 // The renderer and the graphics flush both ask this. The renderer needs it to
 // know which body rows the picture will cover, and the flush needs it to place
 // the picture; if the two worked it out separately they could disagree and the
 // panel would show cells and pixels of the same capture side by side.
-func (m *OS) screenshotPreviewPictureBox() (cols, rows int, ok bool) {
+//
+// The picture keeps its own proportions, so it does not fill the body, and the
+// slack has to go somewhere. It goes on both sides of the picture rather than
+// all of it on the right. The panel cannot narrow to the picture, because the
+// header, the file path and the footer all need the panel's width and a
+// thirteen-column panel would cut every one of them; so the margin exists
+// whatever is done with it, and a margin split in two reads as a frame while a
+// margin all on one side reads as a picture that missed. The rows are the other
+// way round: nothing else needs them, so a picture shorter than the body ends
+// the body (see the renderer), and there is no vertical slack to place.
+func (m *OS) screenshotPreviewPictureBox() (inset, cols, rows int, ok bool) {
 	if !m.ShotPreview.Open || len(m.ShotPreview.PNG) == 0 || !m.screenshotGraphicsReady() {
-		return 0, 0, false
+		return 0, 0, 0, false
 	}
 	cellW, cellH := hostCellSize()
 	bodyCols, bodyRows := m.screenshotPreviewBody()
 	cols, rows = fitBoxToPicture(bodyCols, bodyRows, m.ShotPreview.PixelW, m.ShotPreview.PixelH, cellW, cellH)
-	return cols, rows, true
+	// The margin is measured across the panel, not across the body. The body
+	// starts shotPreviewImageInset cells in from the panel and runs to the
+	// panel's edge, so splitting the body's spare columns in two leaves the
+	// gutter on one side only and the picture sits two cells right of centre.
+	return max(0, (bodyCols-cols-shotPreviewImageInset)/2), cols, rows, true
 }
 
 // flushScreenshotGraphicsForFrame puts the preview picture on the host for the
@@ -117,7 +132,7 @@ func (m *OS) screenshotPreviewPictureBox() (cols, rows int, ok bool) {
 // not placed this frame there is nowhere to put the picture, and nothing is
 // drawn rather than something drawn in the wrong place.
 func (m *OS) flushScreenshotGraphicsForFrame() {
-	cols, rows, ok := m.screenshotPreviewPictureBox()
+	inset, cols, rows, ok := m.screenshotPreviewPictureBox()
 	if !ok {
 		m.clearScreenshotGraphics()
 		return
@@ -126,13 +141,26 @@ func (m *OS) flushScreenshotGraphicsForFrame() {
 	if !hit {
 		return
 	}
-	x := h.OriginX + h.Geo.BodyX + shotPreviewImageInset
+	x := h.OriginX + h.Geo.BodyX + shotPreviewImageInset + inset
 	y := h.OriginY + h.Geo.BodyY + m.shotPreviewImageRow()
 	want := screenshotPlacementState{
 		x: x, y: y, cols: cols, rows: rows, capture: m.ShotPreview.Capture,
+		hostW: m.Width, hostH: m.Height,
 	}
 	if m.shotImagePlaced && m.shotPlacement == want {
 		return
+	}
+	// A resize does not leave the picture alone. The host repaints its whole
+	// screen at the new size, and what it holds under this id afterwards is not
+	// what was put there: driven for real through a kitty that was resized
+	// under an open panel, the picture came back as a two-column black strip
+	// down the side of the body and stayed that way through every later resize.
+	// So a resize is treated as the host no longer having the picture, and the
+	// next flush uploads it again. It costs one upload of a preview-sized PNG
+	// per resize, which is a hundred kilobytes at a human's pace, against a
+	// panel that is ruined by touching the window.
+	if m.shotPlacement.hostW != want.hostW || m.shotPlacement.hostH != want.hostH {
+		m.shotImageSent = false
 	}
 
 	var buf []byte
@@ -215,13 +243,16 @@ func fitBoxToPicture(cols, rows, pixelW, pixelH, cellW, cellH int) (int, int) {
 		return cols, rows
 	}
 	boxW, boxH := cols*cellW, rows*cellH
-	// Whichever axis runs out first sets the scale.
+	// Whichever axis runs out first sets the scale. The reduced axis is rounded
+	// to the nearest cell rather than floored, which was the last of the aspect
+	// faults: that axis is the small one by definition, so half a cell of it is
+	// a large fraction. A wide, short region letterboxed to 2.775 rows floored
+	// to 2, drawing the picture twenty-eight percent squatter than it is;
+	// rounding gives 3, which is eight percent the other way. The axis that is
+	// not reduced loses nothing, and the axis that is cannot do better than half
+	// a cell, because a cell is the smallest thing a placement is measured in.
 	if pixelW*boxH < pixelH*boxW {
-		boxW = pixelW * boxH / pixelH
-	} else {
-		boxH = pixelH * boxW / pixelW
+		return clampInt(roundDiv(pixelW*boxH/pixelH, cellW), 1, cols), rows
 	}
-	// Only one axis is ever reduced and never below a cell, so the result
-	// cannot outgrow the box it was offered and needs no clamp against it.
-	return max(1, boxW/cellW), max(1, boxH/cellH)
+	return cols, clampInt(roundDiv(pixelH*boxW/pixelW, cellH), 1, rows)
 }

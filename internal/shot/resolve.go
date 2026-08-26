@@ -194,6 +194,10 @@ type FrameInputs struct {
 	Accents []Color
 	// Close, Minimize, Maximize are the glyph-set marks for controls glyphs.
 	Close, Minimize, Maximize string
+	// CellAspect is one cell of the terminal being pictured, width over
+	// height. Zero when nothing asked the terminal, which is every render off a
+	// daemon or the CLI, and then the font's own cell stands.
+	CellAspect float64
 }
 
 // BuildFrame resolves a spec against its inputs into a concrete Frame.
@@ -212,6 +216,7 @@ func BuildFrame(spec FrameSpec, in FrameInputs) *Frame {
 		BoldFontData:  spec.BoldFontData,
 		EmbedFont:     spec.EmbedFont,
 		Scale:         spec.Scale,
+		CellAspect:    in.CellAspect,
 		CloseGlyph:    in.Close,
 		MinimizeGlyph: in.Minimize,
 		MaximizeGlyph: in.Maximize,
