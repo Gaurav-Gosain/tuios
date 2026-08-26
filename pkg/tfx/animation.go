@@ -112,6 +112,41 @@ func writeSGRColor(b *strings.Builder, prefix string, c Color) {
 	b.WriteByte('m')
 }
 
+// visualKey identifies a formatted appearance. Every field is comparable, so
+// it works as a map key directly.
+type visualKey struct {
+	symbol string
+	params VisualParams
+}
+
+// visualCache shares CharacterVisuals across every character in one run.
+//
+// This is not a micro-optimisation. A screen saver animating a full 200 by 50
+// screen has thousands of characters, and decrypt gives each of them about a
+// hundred frames; without sharing that is a million formatted strings for a
+// pool of only a couple of thousand distinct appearances. The cache lives on
+// the Terminal, so it is freed when the run is.
+type visualCache struct {
+	m map[visualKey]*CharacterVisual
+}
+
+func newVisualCache() *visualCache {
+	return &visualCache{m: make(map[visualKey]*CharacterVisual)}
+}
+
+func (c *visualCache) get(symbol string, p VisualParams) *CharacterVisual {
+	if c == nil {
+		return NewCharacterVisual(symbol, p)
+	}
+	key := visualKey{symbol: symbol, params: p}
+	if v, ok := c.m[key]; ok {
+		return v
+	}
+	v := NewCharacterVisual(symbol, p)
+	c.m[key] = v
+	return v
+}
+
 // Frame is one visual held for a number of ticks.
 type Frame struct {
 	Visual       *CharacterVisual
@@ -133,10 +168,15 @@ type Scene struct {
 	allFrames    []Frame
 	frames       []int
 	playedFrames []int
-	// frameIndexMap maps an easing tick to a frame index.
+	// frameIndexMap maps an easing tick to a frame index. It is only built
+	// for a scene that eases, because it holds one entry per tick and an
+	// eighty-frame scene over thousands of characters is a lot of entries to
+	// keep for a lookup nothing will make.
 	frameIndexMap    []int
 	easingTotalSteps int
 	easingStep       int
+
+	visuals *visualCache
 
 	// preexistingColors overrides every frame's colours when the animation is
 	// pinned to the input colours.
@@ -157,11 +197,13 @@ func (s *Scene) AddFrame(symbol string, duration int, p VisualParams) error {
 		p.Bold = true
 	}
 	index := len(s.allFrames)
-	s.allFrames = append(s.allFrames, Frame{Visual: NewCharacterVisual(symbol, p), Duration: duration})
+	s.allFrames = append(s.allFrames, Frame{Visual: s.visuals.get(symbol, p), Duration: duration})
 	s.frames = append(s.frames, index)
-	for i := 0; i < duration; i++ {
-		s.frameIndexMap = append(s.frameIndexMap, index)
-		s.easingTotalSteps++
+	s.easingTotalSteps += duration
+	if s.HasEase {
+		for i := 0; i < duration; i++ {
+			s.frameIndexMap = append(s.frameIndexMap, index)
+		}
 	}
 	return nil
 }
@@ -308,12 +350,14 @@ type Animation struct {
 	InputBold             bool
 
 	currentVisual *CharacterVisual
+	visuals       *visualCache
 }
 
-func newAnimation(inputSymbol string) Animation {
+func newAnimation(inputSymbol string, visuals *visualCache) Animation {
 	return Animation{
 		scenes:        newOrderedMap[Scene](),
-		currentVisual: PlainVisual(inputSymbol),
+		currentVisual: visuals.get(inputSymbol, VisualParams{}),
+		visuals:       visuals,
 	}
 }
 
@@ -335,6 +379,7 @@ func (a *Animation) NewScene(id string, opts SceneOptions) *Scene {
 		Sync:      opts.Sync,
 		Ease:      opts.Ease,
 		HasEase:   opts.HasEase,
+		visuals:   a.visuals,
 	}
 	if a.ExistingColorHandling == AlwaysExistingColors && opts.UsesInputColors {
 		scene.preexistingColors = a.InputColors
@@ -375,5 +420,5 @@ func (a *Animation) SetAppearance(symbol string, colors ColorPair, usesInputColo
 		colors = a.InputColors
 		bold = a.InputBold
 	}
-	a.currentVisual = NewCharacterVisual(symbol, VisualParams{Bold: bold, Colors: colors})
+	a.currentVisual = a.visuals.get(symbol, VisualParams{Bold: bold, Colors: colors})
 }

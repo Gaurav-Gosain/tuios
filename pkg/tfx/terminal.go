@@ -97,6 +97,9 @@ type Terminal struct {
 	// bottom row. It is reused across frames.
 	renderCells []*Character
 	frameBuffer strings.Builder
+
+	// visuals is shared by every character in this run. See visualCache.
+	visuals *visualCache
 }
 
 // NewTerminalFromText builds a terminal from plain text. Tabs expand, trailing
@@ -148,10 +151,19 @@ func NewTerminalFromCells(grid [][]InputCell, cfg TerminalConfig) *Terminal {
 	for y, row := range grid {
 		canvasRow := height - y
 		for x, cell := range row {
-			if cell.Symbol == "" || cell.Symbol == " " {
+			blank := cell.Symbol == "" || cell.Symbol == " "
+			// A blank cell that carries its own background is still worth
+			// animating: on a captured screen that is the window chrome, the
+			// dock and every filled panel, and dropping them would resolve the
+			// screen back as bare text on nothing.
+			if blank && !cell.HasBg {
 				continue
 			}
-			ch := t.allocate(cell.Symbol, C(x+1, canvasRow))
+			symbol := cell.Symbol
+			if symbol == "" {
+				symbol = " "
+			}
+			ch := t.allocate(symbol, C(x+1, canvasRow))
 			ch.UsesInputColors = cell.HasFg || cell.HasBg
 			ch.Animation.InputColors = ColorPair{
 				Fg: cell.Fg, HasFg: cell.HasFg,
@@ -183,11 +195,12 @@ func newTerminal(cfg TerminalConfig) *Terminal {
 		Config:       cfg,
 		Canvas:       NewCanvas(cfg.Width, cfg.Height),
 		byInputCoord: make(map[Coord]*Character),
+		visuals:      newVisualCache(),
 	}
 }
 
 func (t *Terminal) allocate(symbol string, coord Coord) *Character {
-	ch := newCharacter(len(t.Characters), symbol, coord)
+	ch := newCharacter(len(t.Characters), symbol, coord, t.visuals)
 	ch.index = len(t.Characters)
 	ch.Animation.ExistingColorHandling = t.Config.ExistingColorHandling
 	t.Characters = append(t.Characters, ch)

@@ -31,12 +31,12 @@ type Character struct {
 	index int
 }
 
-func newCharacter(id int, symbol string, coord Coord) *Character {
+func newCharacter(id int, symbol string, coord Coord, visuals *visualCache) *Character {
 	return &Character{
 		ID:          id,
 		InputSymbol: symbol,
 		InputCoord:  coord,
-		Animation:   newAnimation(symbol),
+		Animation:   newAnimation(symbol, visuals),
 		Motion:      newMotion(coord),
 	}
 }
