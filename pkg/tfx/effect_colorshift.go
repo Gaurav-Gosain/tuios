@@ -112,9 +112,25 @@ func (c *ColorShift) Build(e *Engine) error {
 		e.Terminal.SetCharacterVisibility(ch, true)
 		colors := c.rotatedSpectrum(e, wave.Spectrum, ch.InputCoord)
 
-		gradientScene := ch.Animation.NewScene("gradient", SceneOptions{UsesInputColors: ch.UsesInputColors})
+		carriedBackground := dynamic && ch.UsesInputColors && ch.Animation.InputColors.HasBg
+		gradientScene := ch.Animation.NewScene("gradient", SceneOptions{
+			UsesInputColors: ch.UsesInputColors,
+			Frames:          len(colors),
+		})
 		for _, color := range colors {
-			if err := gradientScene.AddFrame(ch.InputSymbol, c.config.GradientFrames, VisualParams{Colors: Fg(color)}); err != nil {
+			wave := Fg(color)
+			// Upstream shifts the foreground and nothing else, which is right
+			// for piped text: it has no background to lose. A captured screen
+			// does, and this effect never moves a character, so dropping it
+			// makes a selection bar or a filled panel blink out for the whole
+			// wave and reappear at the end. When the engine is resolving to the
+			// input's own colours the background is part of what it resolves
+			// to, so the wave travels over it instead of erasing it.
+			if carriedBackground {
+				wave.Bg = ch.Animation.InputColors.Bg
+				wave.HasBg = true
+			}
+			if err := gradientScene.AddFrame(ch.InputSymbol, c.config.GradientFrames, VisualParams{Colors: wave}); err != nil {
 				return err
 			}
 		}
@@ -128,7 +144,17 @@ func (c *ColorShift) Build(e *Engine) error {
 			}
 		}
 		if final.HasBg {
-			if bgGradient, err = NewGradientSteps([]Color{last, final.Bg}, 8, false); err != nil {
+			// Both ramps start from the wave's last colour upstream, because
+			// upstream only ever animates a foreground and that is the only
+			// colour the character is wearing. Now that the wave carries the
+			// background too, starting the background ramp there would sweep it
+			// from the wave's colour back to its own: a selection bar would
+			// flush red and settle blue. It starts from where it actually is.
+			bgStart := last
+			if carriedBackground {
+				bgStart = ch.Animation.InputColors.Bg
+			}
+			if bgGradient, err = NewGradientSteps([]Color{bgStart, final.Bg}, 8, false); err != nil {
 				return err
 			}
 		}

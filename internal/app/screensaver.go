@@ -51,10 +51,17 @@ type screensaverState struct {
 	// frame is the last rendered frame, held so a repaint that is not a new
 	// animation frame does not have to step the effect.
 	frame string
-	// width and height are the canvas the effect was built for. A resize
-	// rebuilds rather than stretching.
+	// width and height are the render size the capture was taken at. A resize
+	// rebuilds rather than stretching, and this is what it is compared against.
 	width  int
 	height int
+	// canvasWidth and canvasHeight are the size of the captured grid, which is
+	// what the effect was actually built over. It is normally the same as the
+	// render size, but the capture is the authority: building a canvas bigger
+	// than the grid anchors the content into a corner and the whole animation
+	// draws offset by the difference.
+	canvasWidth  int
+	canvasHeight int
 	// capture is the converted screen the effects are built over. It is kept
 	// so an effect that runs to an end can be replaced without composing and
 	// re-capturing a screen that is no longer showing.
@@ -176,7 +183,7 @@ func (m *OS) startScreensaver(cfg config.ScreensaverConfig) bool {
 	}
 
 	capture := screensaverCells(grid)
-	engine, ok := screensaverBuild(capture, width, height, effect)
+	engine, ok := screensaverBuild(capture, grid.Cols, grid.Rows, effect)
 	if !ok {
 		return false
 	}
@@ -187,6 +194,8 @@ func (m *OS) startScreensaver(cfg config.ScreensaverConfig) bool {
 	m.screensaver.name = name
 	m.screensaver.width = width
 	m.screensaver.height = height
+	m.screensaver.canvasWidth = grid.Cols
+	m.screensaver.canvasHeight = grid.Rows
 	m.screensaver.active = true
 	m.screensaver.frame = engine.Frame()
 	m.renderSkipped = false
@@ -200,8 +209,13 @@ func (m *OS) startScreensaver(cfg config.ScreensaverConfig) bool {
 // reassembles as itself rather than in the effect's own palette.
 func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.Effect) (*tfx.Engine, bool) {
 	terminal := tfx.NewTerminalFromCells(capture, tfx.TerminalConfig{
-		Width:                 width,
-		Height:                height,
+		Width:  width,
+		Height: height,
+		// North west, not the engine's south west default. The two agree
+		// whenever the canvas matches the capture, which is the normal case;
+		// where they disagree a screen should slip towards the top left corner
+		// it was drawn from rather than the bottom left one it was not.
+		AnchorText:            tfx.AnchorNW,
 		ExistingColorHandling: tfx.DynamicExistingColors,
 	})
 	engine := tfx.NewEngine(terminal, tfx.NewRng(rand.Uint64()))
@@ -298,7 +312,7 @@ func (m *OS) restartScreensaverEffect() bool {
 	if m.screensaver.capture == nil {
 		return false
 	}
-	engine, ok := screensaverBuild(m.screensaver.capture, m.screensaver.width, m.screensaver.height, effect)
+	engine, ok := screensaverBuild(m.screensaver.capture, m.screensaver.canvasWidth, m.screensaver.canvasHeight, effect)
 	if !ok {
 		return false
 	}
@@ -327,4 +341,6 @@ func (m *OS) stopScreensaver() {
 	m.screensaver.effect = nil
 	m.screensaver.frame = ""
 	m.screensaver.capture = nil
+	m.screensaver.canvasWidth = 0
+	m.screensaver.canvasHeight = 0
 }
