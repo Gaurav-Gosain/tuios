@@ -29,6 +29,9 @@ type UserConfig struct {
 	// Screenshot is the [screenshot] table: how a capture renders and where
 	// the file lands. See screenshot.go.
 	Screenshot ScreenshotConfig `toml:"screenshot"`
+	// Screensaver is the [screensaver] table: whether the screen animates
+	// itself after a spell of quiet, and with what. See screensaver.go.
+	Screensaver ScreensaverConfig `toml:"screensaver"`
 	// Dock is the [dock] table: the bar as ordered lists of named components.
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.
@@ -406,7 +409,8 @@ func DefaultConfig() *UserConfig {
 			Autorun:    TapeAutorunAsk,
 			AutoReview: false,
 		},
-		Screenshot: defaultScreenshotConfig(),
+		Screenshot:  defaultScreenshotConfig(),
+		Screensaver: defaultScreensaverConfig(),
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
@@ -870,6 +874,7 @@ func LoadUserConfig() (*UserConfig, error) {
 	fillMissingTape(&cfg, defaultCfg)
 	fillMissingKeybinds(&cfg, defaultCfg)
 	fillMissingScreenshot(&cfg, defaultCfg)
+	fillMissingScreensaver(&cfg, defaultCfg)
 
 	// Validate configuration
 	validation := ValidateConfig(&cfg)

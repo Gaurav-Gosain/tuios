@@ -671,6 +671,30 @@ var optionSpecs = []Option{
 		Description: "Draw the cursor cell in the capture",
 		Default:     "false",
 	},
+
+	// [screensaver]. Off by default: a screen that starts animating on its own
+	// is a surprise, and the setting to stop it is the one nobody can find
+	// while it is running.
+	{
+		Path: "screensaver.enabled", Type: OptionBool, Section: "screensaver",
+		Description: "Animate the screen after a spell with no input",
+		Default:     "false",
+	},
+	{
+		Path: "screensaver.idle_minutes", Type: OptionInt, Section: "screensaver",
+		Description: "Minutes of quiet before the screen saver starts",
+		Default:     "10", Min: ScreensaverMinIdleMinutes, Max: ScreensaverMaxIdleMinutes,
+	},
+	{
+		Path: "screensaver.effect", Type: OptionString, Section: "screensaver",
+		Description: "Which effect runs, or random for a different one each time",
+		Accepted:    ScreensaverEffects, Default: ScreensaverRandomEffect,
+	},
+	{
+		Path: "screensaver.while_busy", Type: OptionBool, Section: "screensaver",
+		Description: "Start even when a pane is running a command or an agent",
+		Default:     "false",
+	},
 }
 
 // optionsByPath indexes the registry for lookup. Built once at init so a caller

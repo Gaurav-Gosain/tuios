@@ -1487,6 +1487,12 @@ const (
 	// is served by letting another panel cover it.
 	ZIndexContextMenu = 1500
 
+	// ZIndexScreensaver is the z-index for the idle screen saver. It is above
+	// everything, notifications included: the saver covers the screen, and a
+	// message drawn over an animation of that same screen would only look like
+	// part of the animation.
+	ZIndexScreensaver = 3000
+
 	// ZIndexNotifications is the z-index for notifications
 	ZIndexNotifications = 2000
 )
