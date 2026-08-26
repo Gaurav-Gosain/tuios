@@ -130,6 +130,12 @@ func (r *KeybindRegistry) Collisions() []Collision {
 	var order []string
 
 	for _, b := range r.Bindings() {
+		// An unbound action has no key, so it contests nothing. Left in, every
+		// one of them would group under the empty key and the first would be
+		// reported as winning a contest that does not exist.
+		if b.Unbound {
+			continue
+		}
 		id := b.Scope + "\x00" + lookupForm(b.Key)
 		g := groups[id]
 		if g == nil {
@@ -205,7 +211,7 @@ func (r *KeybindRegistry) Fate(key string, facts PaneFacts) KeyFate {
 	fate := KeyFate{Key: key}
 
 	for _, b := range r.Bindings() {
-		if lookupForm(b.Key) == want {
+		if !b.Unbound && lookupForm(b.Key) == want {
 			fate.Acts = append(fate.Acts, b)
 		}
 	}

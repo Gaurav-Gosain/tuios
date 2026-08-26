@@ -69,7 +69,14 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 	lines = append(lines, search, overlay.Rule(width, bg, pal))
 
 	if len(filtered) == 0 {
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render("  No matching commands"))
+		empty := "No matching commands"
+		// A "#" search that found nothing needs to say it was a search over
+		// actions. "No matching commands" under a token the user has just been
+		// taught reads as the token not working.
+		if keybinds, rest := splitPaletteKeybinds(m.CommandPaletteQuery); keybinds {
+			empty = keybindPaletteHint(rest)
+		}
+		lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render("  "+empty))
 		for len(lines) < visible+3 {
 			lines = append(lines, overlay.Style(bg).Render(" "))
 		}
@@ -83,7 +90,12 @@ func (m *OS) renderCommandPalette() (string, overlay.Geometry, []overlayRowHit) 
 			lines = append(lines, overlay.Style(bg).Render(" "))
 		}
 		if len(filtered) > visible {
-			info := fmt.Sprintf("%d of %d commands", len(filtered), len(items))
+			// Counted against the rows this query could reach, not against every
+			// row in the model. The action rows are hidden without the "#" token
+			// and the command rows are hidden with it, so a denominator that
+			// added both would say "65 of 289" over a list that can only ever
+			// hold 65.
+			info := fmt.Sprintf("%d of %d commands", len(filtered), paletteReachable(items, m.CommandPaletteQuery))
 			lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render("  "+info))
 		} else {
 			lines = append(lines, overlay.Style(bg).Render(" "))

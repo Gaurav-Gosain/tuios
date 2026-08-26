@@ -451,8 +451,11 @@ func DefaultConfig() *UserConfig {
 				// the input path was already doing behind a literal.
 				"open_settings": {","},
 				// hold_window_mode is deliberately absent rather than present and
-				// empty: an action with no keys warns at load, and this one is
-				// opt-in. Holding a modifier key is only reportable under the
+				// empty. An empty list is how a user says they took a key away
+				// (see keybind_unbind.go), and a default must not say that on
+				// their behalf: it would show up in the keybind manager as a
+				// binding they had removed. Holding a modifier key is only
+				// reportable under the
 				// Kitty protocol's report-all-keys mode, which turns every
 				// keystroke in the session into an escape code, so it is not
 				// something everyone should pay for. The config header says how

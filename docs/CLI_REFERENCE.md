@@ -1669,6 +1669,10 @@ View and inspect keybinding configuration.
 **Subcommands:**
 - `tuios keybinds list` - List all configured keybindings
 - `tuios keybinds list-custom` - List only customized keybindings
+- `tuios keybinds doctor` - Report every key claimed twice and every key tuios takes from the pane
+- `tuios keybinds explain <key>` - Say what tuios does with one key
+- `tuios keybinds unbind <action> [key]` - Take a key off one action
+- `tuios keybinds free <key>` - Hand a key back to the program in the pane
 
 #### `tuios keybinds list`
 
@@ -1700,6 +1704,49 @@ tuios keybinds list-custom
 - Action name
 - Default keybinding
 - Your custom keybinding
+
+#### `tuios keybinds unbind`
+
+Take a key off one action and write the change to `config.toml`.
+
+```bash
+# Stop w closing a window, leaving x
+tuios keybinds unbind close_window w
+
+# Leave the action with no key at all
+tuios keybinds unbind close_window
+```
+
+An action with no keys is written as an empty list:
+
+```toml
+[keybindings.window_management]
+close_window = []
+```
+
+That is not the same as leaving the action out of the file. An action the file
+does not mention gets its default back the next time tuios starts. An empty list
+stays empty.
+
+#### `tuios keybinds free`
+
+Take one key off every action in every scope, so the program in your pane
+receives it.
+
+```bash
+# Give alt+left back to your shell
+tuios keybinds free alt+left
+```
+
+Every scope at once is the point. A key tuios still claims anywhere is a key the
+program never sees. Two keys cannot be freed this way: the leader key, which is
+`keybindings.leader_key` and is moved rather than unbound, and a handful of keys
+the input path reads directly. The command says so instead of reporting success.
+
+You can do both from inside tuios as well. Open the keybind manager with the
+leader key then `k`, or from the command palette, and press `ctrl+d` on a
+binding to remove it or `ctrl+x` to take its key off every action. Typing `#`
+in the command palette searches actions rather than commands.
 
 ---
 

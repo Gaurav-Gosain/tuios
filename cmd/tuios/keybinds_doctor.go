@@ -97,6 +97,24 @@ func printKeybindReport(rep config.KeybindReport) {
 		fmt.Printf("  %-14s %-32s %s%s\n", c.Key, c.Program, c.ProgramUse, live)
 	}
 
+	// Listed because "not mentioned" and "deliberately removed" are different
+	// states of the same action and only one of them survives a reload. A
+	// reader comparing this against the defaults has no other way to tell which
+	// they are looking at.
+	var unbound []config.Binding
+	for _, b := range rep.Bindings {
+		if b.Unbound {
+			unbound = append(unbound, b)
+		}
+	}
+	if len(unbound) > 0 {
+		fmt.Printf("\nUNBOUND ON PURPOSE (%s)\n", config.EvidenceCertain)
+		fmt.Println("  config.toml sets these to [], so the default stays off after a reload.")
+		for _, b := range unbound {
+			fmt.Printf("  %-22s %s [%s]\n", b.Action, b.Desc, b.Section)
+		}
+	}
+
 	if len(rep.Ambiguous) > 0 {
 		fmt.Printf("\nKEYS A TERMINAL MAY NOT DISTINGUISH (%s)\n", config.EvidenceCertain)
 		for _, a := range rep.Ambiguous {

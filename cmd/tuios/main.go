@@ -313,7 +313,61 @@ bind it. This prints the same answer the overlay's key recorder shows.`,
 	keybindsExplainCmd.Flags().BoolVar(&keybindsJSON, "json", false, "emit the answer as JSON")
 	keybindsExplainCmd.Flags().StringVar(&keybindsGuest, "guest", "", "treat this program as the one running in the pane")
 
-	keybindsCmd.AddCommand(keybindsListCmd, keybindsCustomCmd, keybindsDoctorCmd, keybindsExplainCmd)
+	keybindsUnbindCmd := &cobra.Command{
+		Use:   "unbind <action> [key]",
+		Short: "Take a key off one action",
+		Long: `Take a key off one action and write the change to config.toml.
+
+Name a key to remove that one. Name none and the action loses every key it has.
+An action with no keys is written as an empty list, which is different from
+leaving it out of the file: an action the file does not mention gets its default
+back at the next load, and an empty list does not.
+
+This changes one action. To stop tuios taking a key at all, so the program in
+your pane receives it, use ` + "`tuios keybinds free`" + `.`,
+		Example: `  # Stop w closing a window, leaving x
+  tuios keybinds unbind close_window w
+
+  # Leave the action with no key at all
+  tuios keybinds unbind close_window`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			key := ""
+			if len(args) > 1 {
+				key = args[1]
+			}
+			return keybindsUnbind(args[0], key)
+		},
+	}
+
+	keybindsFreeCmd := &cobra.Command{
+		Use:   "free <key>",
+		Short: "Hand a key back to the program in the pane",
+		Long: `Take one key off every action in every scope and write the change to
+config.toml.
+
+Every scope at once is the point. A key tuios still claims anywhere is a key the
+program in your pane never sees, so freeing one table at a time does not free
+the key. Each action that runs out of keys is written as an empty list, so the
+default does not come back at the next load.
+
+Two things this cannot take. The leader key is keybindings.leader_key rather
+than an entry in a table, so it is moved rather than unbound. A few keys are
+read by the input path itself and have no config entry. Either way the command
+says so instead of reporting a success.`,
+		Example: `  # Give alt+left back to your shell
+  tuios keybinds free alt+left
+
+  # Check first: this says every scope the key acts in
+  tuios keybinds explain alt+left`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return keybindsFree(args[0])
+		},
+	}
+
+	keybindsCmd.AddCommand(keybindsListCmd, keybindsCustomCmd, keybindsDoctorCmd,
+		keybindsExplainCmd, keybindsUnbindCmd, keybindsFreeCmd)
 
 	tapeCmd := &cobra.Command{
 		Use:   "tape",

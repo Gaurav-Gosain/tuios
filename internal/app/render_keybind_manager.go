@@ -36,6 +36,7 @@ var keybindHints = []overlay.Hint{
 	{Key: "↑↓", Label: "move"},
 	{Key: "/", Label: "filter"},
 	{Key: "ctrl+r", Label: "record"},
+	{Key: "ctrl+d", Label: "unbind"},
 	{Key: "esc", Label: "close"},
 }
 
@@ -44,18 +45,23 @@ var keybindHints = []overlay.Hint{
 // glyph and by a word in the text; the colour is the third channel, not the
 // only one.
 type keybindMarks struct {
-	dead   string // a binding that never fires
-	clash  string // a key a guest program wants
-	ok     string // nothing wrong with this row
-	live   string // the guest program actually running right now
-	bullet string
+	dead string // a binding that never fires
+	// unbound is an action the config deliberately left with no key. Its own
+	// glyph rather than dead's: a dead binding is a mistake to fix, an unbound
+	// action is a choice already made, and one mark for both would report the
+	// user's own decision back to them as a problem.
+	unbound string
+	clash   string // a key a guest program wants
+	ok      string // nothing wrong with this row
+	live    string // the guest program actually running right now
+	bullet  string
 }
 
 func keybindGlyphs() keybindMarks {
 	if overlay.UseASCII() {
-		return keybindMarks{dead: "x", clash: "!", ok: " ", live: "<<", bullet: "-"}
+		return keybindMarks{dead: "x", unbound: "-", clash: "!", ok: " ", live: "<<", bullet: "-"}
 	}
-	return keybindMarks{dead: "✕", clash: "▲", ok: " ", live: "◀", bullet: "·"}
+	return keybindMarks{dead: "✕", unbound: "○", clash: "▲", ok: " ", live: "◀", bullet: "·"}
 }
 
 // keybindChrome is which of the body's non-row lines a given screen has room
@@ -307,8 +313,11 @@ func (m *OS) keybindBindingRow(i int, selected bool, pal overlay.Palette, width 
 	glyphs := keybindGlyphs()
 
 	mark, markFg := glyphs.ok, pal.FgMute
-	if b.Shadowed {
+	switch {
+	case b.Shadowed:
 		mark, markFg = glyphs.dead, pal.Warn
+	case b.Unbound:
+		mark, markFg = glyphs.unbound, pal.FgMute
 	}
 	bg, left := keybindRowChrome(selected, mark, markFg, pal)
 
@@ -317,16 +326,24 @@ func (m *OS) keybindBindingRow(i int, selected bool, pal overlay.Palette, width 
 	if selected {
 		descFg = pal.Fg
 	}
-	if b.Shadowed {
+	if b.Shadowed || b.Unbound {
 		// A dead binding is drawn quiet as well as marked. Quiet alone would be
 		// a colour-only signal; the mark and the "dead" word in the detail box
-		// carry it without the colour.
+		// carry it without the colour. An unbound action is quiet for the same
+		// reason and says "unbound" where its chord would be.
 		keyFg, descFg = pal.FgMute, pal.FgMute
 	}
 
+	// The word rather than an empty column: a blank there reads as a rendering
+	// fault, and the row has to say what it is without the detail box, which a
+	// short screen sheds.
+	press := b.Press
+	if b.Unbound {
+		press = "unbound"
+	}
 	keyCol := min(keybindKeyColumn, max(width/3, 8))
 	key := overlay.Style(bg).Foreground(overlay.Readable(keyFg, bg)).Bold(true).
-		Render(overlay.Fill(overlay.Truncate(b.Press, keyCol-1), keyCol, bg))
+		Render(overlay.Fill(overlay.Truncate(press, keyCol-1), keyCol, bg))
 
 	scope := scopeShortName(b.Scope)
 	scopeW := lipgloss.Width(scope) + 1
@@ -459,11 +476,17 @@ func (m *OS) keybindDetail(selected int) string {
 		return ""
 	}
 	b := all[selected]
+	if b.Unbound {
+		return b.Desc + " has no key. config.toml says " + b.Action +
+			" = [] in [" + b.Section + "], so the default stays off. Press ctrl+r to record one."
+	}
 	if b.Shadowed {
 		return "This key never works: " + b.ShadowedBy +
-			" already has " + b.Key + " in this scope. Pressing it runs that instead."
+			" already has " + b.Key + " in this scope. Pressing it runs that instead. " +
+			"ctrl+d takes the dead binding off " + b.Action + "."
 	}
-	detail := b.Desc + ". Bound in [" + b.Section + "]."
+	detail := b.Desc + ". Bound in [" + b.Section + "]. ctrl+d unbinds it; ctrl+x takes " +
+		b.Key + " off every action."
 	for _, s := range rep.Swallowed {
 		if strings.EqualFold(s.Key, b.Key) {
 			detail += " Terminal mode takes this key, so the program in the pane never sees it."
@@ -532,6 +555,12 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 		case bindAction != "":
 			add(overlay.Style(bg).Foreground(overlay.Readable(pal.Accent, bg)).
 				Render("  ⏎ bind it to " + bindAction + "   esc  leave it alone"))
+		case !fate.Free:
+			// The offer only appears for a key tuios actually holds. Printing it
+			// for a free key would invite a gesture that does nothing and read
+			// as though the key had been taken.
+			add(overlay.Style(bg).Foreground(overlay.Readable(pal.Accent, bg)).
+				Render("  ctrl+d  take " + key + " off every action, so the pane gets it"))
 		}
 	}
 
