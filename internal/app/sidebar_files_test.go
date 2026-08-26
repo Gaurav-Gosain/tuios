@@ -231,6 +231,39 @@ func TestFileViewFollowsThePaneItWasOpenedFrom(t *testing.T) {
 	}
 }
 
+// TestFileViewDoesNotDragTheUserBack is the other half of the rule above, and
+// the half that is easy to get wrong: once the user has steered the listing
+// somewhere of their own, a cd in the terminal must leave it there. The listing
+// is then answering a question they asked and the pane's directory is not.
+//
+// Negative control: read the pane's cwd back off the window after overwriting
+// it, rather than capturing the previous value first, and the guard can never
+// fire; the view follows every cd and this fails. NOT YET CONFIRMED RED, but it
+// is the bug that was in this function when it was written.
+func TestFileViewDoesNotDragTheUserBack(t *testing.T) {
+	root := fileViewTree(t)
+	sub := filepath.Join(root, "apple")
+	elsewhere := filepath.Join(root, "Zeta")
+
+	win := &terminal.Window{ID: "aaaaaaaa1111", Cwd: root}
+	m := &OS{Windows: []*terminal.Window{win}}
+	m.filesView.Open = true
+	m.filesView.Origin = win.ID
+	m.loadFileView(root)
+
+	// The user walks the listing into Zeta. The pane is still in root.
+	m.loadFileView(elsewhere)
+
+	// The pane now cds to apple. The listing must stay where the user put it.
+	m.recordWindowCwd(win.ID, "file://"+sub)
+	if got := m.FileViewDir(); got != elsewhere {
+		t.Errorf("a cd in the pane dragged the listing to %q; it should have stayed at %q", got, elsewhere)
+	}
+	if win.Cwd != sub {
+		t.Errorf("the pane's own cwd was not recorded: %q", win.Cwd)
+	}
+}
+
 // TestCwdIsRecordedWithTapeAutorunOff. The cwd handler's own gates are the tape
 // detector's and they are narrow on purpose; folding the recording into them is
 // how the file view would have come out empty for anyone with autorun off.

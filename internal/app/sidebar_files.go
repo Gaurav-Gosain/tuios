@@ -130,15 +130,19 @@ func (m *OS) recordWindowCwd(windowID, raw string) {
 	if window == nil || window.Cwd == dir {
 		return
 	}
+	// The pane's previous directory, captured before it is overwritten. It is
+	// what decides whether the view was following the pane or had been steered
+	// somewhere else, and reading it back off the window afterwards is exactly
+	// the bug this line exists to not have: by then it is the new directory and
+	// the test can never fail.
+	was := window.Cwd
 	window.Cwd = dir
 
 	// The view follows the pane it was opened from, but only while it is still
-	// showing that pane's own directory. A user who has walked somewhere else
-	// in the listing is not dragged back by a cd in the terminal.
-	if m.filesView.Open && m.filesView.Origin == windowID && m.filesView.Dir != dir {
-		if m.filesView.Dir == window.Cwd {
-			return
-		}
+	// showing that pane's own directory. A user who has walked somewhere else in
+	// the listing is not dragged back by a cd in the terminal, because the
+	// listing is then answering a question they asked and the pane's is not.
+	if m.filesView.Open && m.filesView.Origin == windowID && m.filesView.Dir == was {
 		m.loadFileView(dir)
 	}
 }

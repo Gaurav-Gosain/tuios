@@ -8,19 +8,22 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// linkTestOS builds one 40x10 daemon pane at the origin with a one-cell border,
-// writes body into it, and returns the model. The pane's geometry is spelled out
-// rather than derived, so the screen coordinates the tests press on are numbers
-// this file owns.
+// linkTestOS builds one pane at the origin, writes body into it, and returns the
+// model.
+//
+// NewDaemonWindow takes the outer rectangle and gives the emulator two cells
+// less in each direction, so a 60x10 window is a 58x8 grid behind a one-cell
+// border. Nothing here overrides those, because a window whose Width and
+// emulator disagree is a pane that cannot exist, and the screen coordinates
+// below are derived from the border rather than from a guess.
 func linkTestOS(t *testing.T, body string) (*OS, *terminal.Window) {
 	t.Helper()
 	prev := config.Links
 	config.Links = config.LinksAll
 	t.Cleanup(func() { config.Links = prev })
 
-	win := newTestWindow(t, "aaaaaaaa1111", 40, 10)
+	win := newTestWindow(t, "aaaaaaaa1111", 60, 10)
 	win.X, win.Y = 0, 0
-	win.Width, win.Height = 42, 12
 	win.Workspace = 1
 	win.WriteOutput([]byte(body))
 
@@ -29,9 +32,12 @@ func linkTestOS(t *testing.T, body string) (*OS, *terminal.Window) {
 	return m, win
 }
 
-// The pane has a one-cell border, so content cell (col, row) is screen
-// (col+1, row+1).
-func screenOf(col, row int) (int, int) { return col + 1, row + 1 }
+// screenOf maps a content cell to the absolute screen cell the pane draws it
+// on, through the pane's own border allowance rather than through a constant.
+func screenOf(win *terminal.Window, col, row int) (int, int) {
+	off := win.BorderOffset()
+	return win.X + off + col, win.Y + off + row
+}
 
 // TestLinkHoverFindsAMarkedRun checks that an OSC 8 hyperlink resolves to its
 // address and to exactly the cells the program marked.
@@ -46,7 +52,7 @@ func screenOf(col, row int) (int, int) { return col + 1, row + 1 }
 // about, the address assertion fails. NOT YET CONFIRMED RED.
 func TestLinkHoverFindsAMarkedRun(t *testing.T) {
 	const want = "https://example.com/docs"
-	m, win := linkTestOS(t, "see \x1b]8;;"+want+"\x1b\\docs\x1b]8;;\x1b\\ here")
+	_, win := linkTestOS(t, "see \x1b]8;;"+want+"\x1b\\docs\x1b]8;;\x1b\\ here")
 
 	link, ok := resolvePaneLink(win, 5, 0)
 	if !ok {
@@ -69,7 +75,6 @@ func TestLinkHoverFindsAMarkedRun(t *testing.T) {
 			t.Errorf("column %d resolved to a link; the run is 4..7", col)
 		}
 	}
-	_ = m
 }
 
 // TestLinkHoverFindsABareURL checks the other half: a URL a program printed as
@@ -132,7 +137,7 @@ func TestLinkHoverYieldsToAMouseTrackingGuest(t *testing.T) {
 	m, win := linkTestOS(t, "go to https://example.org/a now")
 	m.Windows[0].Workspace = 1
 
-	sx, sy := screenOf(8, 0)
+	sx, sy := screenOf(win, 8, 0)
 	if !m.LinkHoverAt(sx, sy) {
 		t.Fatal("no link under the pointer before the guest asked for the mouse")
 	}
@@ -177,7 +182,7 @@ func TestLinkHoverUnderlinesTheRunOnScreen(t *testing.T) {
 		t.Fatal("the pane already draws an underline with no pointer on it")
 	}
 
-	sx, sy := screenOf(8, 0)
+	sx, sy := screenOf(win, 8, 0)
 	if !m.LinkHoverAt(sx, sy) {
 		t.Fatal("no link under the pointer")
 	}
@@ -207,7 +212,7 @@ func TestUnfocusedPaneLeavesTheFastPathToUnderline(t *testing.T) {
 	m, win := linkTestOS(t, "go to https://example.org/a now")
 	const underline = "\x1b[4m"
 
-	sx, sy := screenOf(8, 0)
+	sx, sy := screenOf(win, 8, 0)
 	if !m.LinkHoverAt(sx, sy) {
 		t.Fatal("no link under the pointer")
 	}

@@ -193,6 +193,16 @@ func (m *OS) SidebarActivateCursor() bool {
 		return true
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
+	case sidebarRowFiles:
+		m.ToggleFileView()
+	case sidebarRowFileBack:
+		m.CloseFileView()
+	case sidebarRowFileCd:
+		m.queueSidebarCmd(m.FileViewCd())
+	case sidebarRowFileUp:
+		m.FileViewUp()
+	case sidebarRowFileEntry:
+		m.queueSidebarCmd(m.FileViewEnter(row.WindowIndex))
 	case sidebarRowSession:
 		m.sidebarSwitchSession(row.SessionID)
 		m.sidebarFollowSession = row.SessionID
