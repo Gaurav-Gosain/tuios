@@ -96,7 +96,11 @@ type Terminal struct {
 	// renderCells holds the winning character per cell, row-major from the
 	// bottom row. It is reused across frames.
 	renderCells []*Character
-	frameBuffer strings.Builder
+	// frameBuffer is reused across frames. It is a byte slice rather than a
+	// strings.Builder because Builder.Reset drops the buffer: a 28 KB frame
+	// then regrew from nothing sixty times a second and allocated 827 KB to
+	// produce 28 KB of output.
+	frameBuffer []byte
 
 	// visuals is shared by every character in this run. See visualCache.
 	visuals *visualCache
@@ -506,21 +510,24 @@ func (t *Terminal) FrameRows() [][]*CharacterVisual {
 // separated by newlines and no trailing newline.
 func (t *Terminal) Frame() string {
 	width, height := t.paint()
-	t.frameBuffer.Reset()
-	t.frameBuffer.Grow(width*height + height)
+	buffer := t.frameBuffer[:0]
+	if cap(buffer) < width*height+height {
+		buffer = make([]byte, 0, width*height+height)
+	}
 	for row := height - 1; row >= 0; row-- {
 		if row+1 < height {
-			t.frameBuffer.WriteByte('\n')
+			buffer = append(buffer, '\n')
 		}
 		for column := 0; column < width; column++ {
 			if ch := t.renderCells[row*width+column]; ch != nil {
-				t.frameBuffer.WriteString(ch.Animation.currentVisual.formatted)
+				buffer = append(buffer, ch.Animation.currentVisual.formatted...)
 			} else {
-				t.frameBuffer.WriteByte(' ')
+				buffer = append(buffer, ' ')
 			}
 		}
 	}
-	return t.frameBuffer.String()
+	t.frameBuffer = buffer
+	return string(buffer)
 }
 
 // preprocessLines expands tabs, strips carriage returns, and trims trailing
