@@ -291,6 +291,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	}
 	checkEnum("click_to_type", cfg.Appearance.ClickToType, ClickToTypeModes)
 	checkEnum("zen_mode", cfg.Appearance.ZenMode, ZenModeModes)
+	checkEnum("links", cfg.Appearance.Links, LinkModes)
 	checkEnum("window_button_style", cfg.Appearance.WindowButtonStyle, WindowButtonStyles)
 	checkEnum("window_button_position", cfg.Appearance.WindowButtonPosition, WindowButtonPositions)
 	checkEnum("scrollbar.style", cfg.Appearance.Scrollbar.Style, ScrollbarStyles)

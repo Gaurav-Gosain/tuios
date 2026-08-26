@@ -207,11 +207,12 @@ func (m *OS) finishFilesLines(lines []string, nav []sidebarNavRow, height int, b
 		nav = nav[:len(m.SidebarHits)]
 	}
 	m.SidebarNav = nav
-	// A rail with no navigable rows parks the cursor at zero rather than at -1,
-	// which is what the rest of the rail means by "nothing to steer".
-	if m.SidebarCursor >= len(nav) {
-		m.SidebarCursor = max(len(nav)-1, 0)
-	}
+	// The cursor stays inside the rows this frame published, and a rail with no
+	// navigable rows parks it at zero rather than at -1, which is what the rest
+	// of the rail means by "nothing to steer". Clamped in both directions
+	// because the mode is entered from a rail that had its own rows, and the
+	// cursor arrives from there.
+	m.SidebarCursor = max(min(m.SidebarCursor, len(nav)-1), 0)
 	return lines
 }
 
