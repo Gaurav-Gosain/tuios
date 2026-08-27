@@ -149,7 +149,7 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 	current := m.currentSessionInput()
 
 	if m.DaemonClient == nil {
-		return sessiontree.Build([]sessiontree.SessionInput{current})
+		return m.withHostGroups(sessiontree.Build([]sessiontree.SessionInput{current}))
 	}
 
 	names := m.DaemonClient.AvailableSessionNames()
@@ -169,7 +169,19 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 		sessions = append(sessions, current)
 	}
 	sessions = orderByKey(sessions, func(s sessiontree.SessionInput) string { return s.Name }, m.SidebarOrder)
-	return sessiontree.Build(sessions)
+	return m.withHostGroups(sessiontree.Build(sessions))
+}
+
+// withHostGroups appends the federated host rows to a tree.
+//
+// They go after this machine's sessions, always, and after the user's drag
+// order has been applied to them. Local first is the rule from section 5 of the
+// federation design, and appending here is also what keeps a remote row out of
+// SidebarOrder: that order is keyed by session name, and a host row is never
+// dragged.
+func (m *OS) withHostGroups(tree sessiontree.Tree) sessiontree.Tree {
+	tree.Sessions = append(tree.Sessions, m.hostGroupNodes()...)
+	return tree
 }
 
 // railNeighbourSession returns the session delta places from the current one in

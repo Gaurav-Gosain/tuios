@@ -682,6 +682,19 @@ type OS struct {
 	SessionSwitcherItems         []sessiontree.Node
 	SessionSwitcherError         string
 	SessionSwitcherConfirmDelete string // non-empty = confirming deletion of this session name
+
+	// FederationHosts is what the daemon last said about the machines in the
+	// [hosts] config table, with the sessions each holds. The rail reads it and
+	// never writes it; it is refreshed by a Cmd, never inside Update. See
+	// sidebar_hosts.go.
+	FederationHosts []FederationHost
+	// federationGen counts snapshots, so the rail's render cache can tell one
+	// from the next without comparing them.
+	federationGen uint64
+	// federationPolling stays true while the daemon holds at least one host. It
+	// starts true so the first poll happens, and the first answer turns it off
+	// for a daemon with no hosts, which is the default install.
+	federationPolling bool
 	// Workspace switcher overlay, scoped to the attached session
 	ShowWorkspaceSwitcher     bool
 	WorkspaceSwitcherQuery    string

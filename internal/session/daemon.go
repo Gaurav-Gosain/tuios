@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
 // Daemon manages the persistent TUIOS server process.
@@ -42,6 +44,17 @@ type Daemon struct {
 	// events is the control-plane event hub backing the subscribe verb's event
 	// stream and the wait-for verb's blocking waits.
 	events *eventHub
+
+	// federation holds the outbound links to the hosts named in config. It is
+	// nil when no hosts are configured, which is the default, and every reader
+	// checks. Links are outbound only: a remote daemon never dials this one and
+	// never gets a channel into it (federation package, section 1 of the design
+	// document).
+	federation *federation.Manager
+	// federationProblems are the config entries that were dropped, kept so the
+	// list-hosts verb can report them instead of leaving the user to wonder
+	// where a host went.
+	federationProblems []string
 
 	// agents is the cross-agent mailbox: the bounded per-session message rings
 	// and the in-flight ask graph. It is held here rather than on a Session
@@ -219,6 +232,10 @@ type DaemonConfig struct {
 	// built-in defaults. It also picks up the TUIOS_AGENT_BINARIES environment
 	// override (comma-separated).
 	AgentBinaries []string
+	// Hosts are the federated peers from the [hosts] config table. Empty, the
+	// default, means the daemon holds no links and every federation verb reports
+	// an empty table.
+	Hosts []federation.Host
 }
 
 // NewDaemon creates a new daemon instance.
@@ -257,7 +274,36 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// raise session lifecycle events.
 	d.manager.SetSessionHooks(d.onSessionCreated, d.onSessionDeleted)
 
+	d.setupFederation(cfg.Hosts)
+
 	return d
+}
+
+// setupFederation builds the host table and the link manager. Nothing is dialed
+// here; Start launches the supervisors, and a daemon with no hosts configured
+// never allocates a manager at all.
+func (d *Daemon) setupFederation(hosts []federation.Host) {
+	if len(hosts) == 0 {
+		return
+	}
+	table, problems := federation.NewTable(hosts)
+	for _, p := range problems {
+		d.federationProblems = append(d.federationProblems, p.Error())
+		log.Printf("[FEDERATION] %v", p)
+	}
+	if table.Len() == 0 {
+		return
+	}
+	d.federation = federation.New(table, federation.Options{
+		// TUIOS_SSH names the ssh program to run. It exists for a machine where
+		// ssh is not on the daemon's PATH, and it is what lets the link layer be
+		// exercised end to end without an ssh server.
+		Dial:            federation.SSHDialer(os.Getenv("TUIOS_SSH")),
+		ClientName:      "tuios-daemon",
+		ClientVersion:   d.version,
+		VerbProtocol:    VerbProtocolVersion,
+		MinVerbProtocol: MinVerbProtocolVersion,
+	})
 }
 
 // onSessionCreated installs a session's event and state sinks and publishes a
@@ -427,6 +473,13 @@ func (d *Daemon) Start() error {
 		d.restoreAllSessions()
 	}
 
+	// The links come up in the background. Start returns at once whatever the
+	// remote machines are doing, so a host that is powered off cannot delay the
+	// daemon's own socket by one millisecond.
+	if d.federation != nil {
+		d.federation.Start(d.ctx)
+	}
+
 	go d.handleSignals()
 	go d.acceptLoop()
 	go d.cleanupLoop()
@@ -481,6 +534,12 @@ func (d *Daemon) shutdown() error {
 		// to the kernel, which matters on a machine where several daemons have
 		// come and gone.
 		_ = d.transcriptWatcher.Close()
+
+		// Every ssh child is killed here. A link left running would outlive the
+		// daemon that owns it.
+		if d.federation != nil {
+			d.federation.Stop()
+		}
 
 		d.clientsMu.Lock()
 		for _, cs := range d.clients {

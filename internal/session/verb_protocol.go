@@ -70,6 +70,11 @@ const (
 	ErrVerbProtocolMismatch = "protocol_mismatch"
 )
 
+// The two federation error codes live in verb_hosts.go beside the verbs that
+// raise them: ErrVerbUnknownHost and ErrVerbHostUnreachable. Both are final.
+// A caller that gets either must report it, never retry into a different host
+// name, because reaching the wrong machine is worse than reaching none.
+
 // MinVerbProtocolVersion is the oldest protocol version this daemon still
 // serves. A caller announcing anything older is told to upgrade rather than
 // being allowed to proceed into undefined behavior.
@@ -220,6 +225,45 @@ func init() {
 			description: "List all sessions the daemon holds.",
 			examples:    []string{`{"id":1,"verb":"list-sessions"}`},
 			handler:     (*Daemon).verbListSessions,
+		},
+		"list-hosts": {
+			description: "List the machines named in the [hosts] config table, with the state of each link.",
+			returns: []verbParam{
+				{Name: "hosts", Type: "[]string", Description: "One entry per configured host, carrying its name, address, status, plain reason, remote daemon version, control protocol range, and the last time it answered."},
+				{Name: "total", Type: "int", Description: "How many hosts are configured."},
+				{Name: "config_problems", Type: "[]string", Description: "Config entries that were dropped, with the reason for each. Omitted when there are none."},
+			},
+			examples: []string{`{"id":1,"verb":"list-hosts"}`},
+			handler:  (*Daemon).verbListHosts,
+		},
+		"list-host-sessions": {
+			description: "List sessions on this machine and on every configured host. Hosts that do not answer are listed with their status.",
+			params: []verbParam{
+				{Name: "host", Type: "string", Description: "One host by name, or \"local\" for this machine. Omit for every host."},
+			},
+			returns: []verbParam{
+				{Name: "hosts", Type: "[]string", Description: "One entry per host, local first, carrying that host's status and its sessions. An entry that failed carries an error and a code instead of sessions."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"list-host-sessions"}`,
+				`{"id":1,"verb":"list-host-sessions","params":{"host":"build"}}`,
+			},
+			handler: (*Daemon).verbListHostSessions,
+		},
+		"list-host-agents": {
+			description: "List the agent panes on this machine and on every configured host. Each host answers about its own most recently active session.",
+			params: []verbParam{
+				{Name: "host", Type: "string", Description: "One host by name, or \"local\" for this machine. Omit for every host."},
+				{Name: "all", Type: "bool", Description: "List every window on each host, not just the panes identified as agents."},
+			},
+			returns: []verbParam{
+				{Name: "hosts", Type: "[]string", Description: "One entry per host, local first, carrying the session it read and the agent rows in it. An entry that failed carries an error and a code instead of agents."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"list-host-agents"}`,
+				`{"id":1,"verb":"list-host-agents","params":{"host":"build"}}`,
+			},
+			handler: (*Daemon).verbListHostAgents,
 		},
 		"session-info": {
 			description: "Report details about one session.",

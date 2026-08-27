@@ -517,6 +517,8 @@ with 'tuios attach'.`,
 	newCmd.Flags().BoolVarP(&newDetach, "detach", "d", false, "Create the session headless without attaching a client")
 
 	var lsJSON bool
+	var lsAllHosts bool
+	var lsHost string
 	lsCmd := &cobra.Command{
 		Use:   "ls",
 		Short: "List TUIOS sessions",
@@ -529,15 +531,25 @@ marked "saved", and the command exits 3. Exit 3 lets a script tell a
 stopped daemon from a running daemon with no sessions, which exits 0
 with an empty list.
 
-Use --json for machine-readable output; saved rows carry "saved": true.`,
+Use --json for machine-readable output; saved rows carry "saved": true.
+
+With --all-hosts the listing also covers every machine in the [hosts] config
+table. Local comes first. A host that does not answer gets a row saying so,
+and it never fails the command.`,
 		Example: `  tuios ls
-  tuios ls --json`,
+  tuios ls --json
+  tuios ls --all-hosts`,
 		Aliases: []string{"list-sessions"},
 		RunE: func(_ *cobra.Command, _ []string) error {
+			if lsAllHosts || lsHost != "" {
+				return runListSessionsAllHosts(lsHost, lsJSON)
+			}
 			return runListSessions(lsJSON)
 		},
 	}
 	lsCmd.Flags().BoolVar(&lsJSON, "json", false, "Output as JSON")
+	lsCmd.Flags().BoolVar(&lsAllHosts, "all-hosts", false, "List sessions on this machine and on every host in the [hosts] config table")
+	lsCmd.Flags().StringVar(&lsHost, "host", "", "List sessions on one host by name (\"local\" means this machine)")
 
 	killSessionCmd := &cobra.Command{
 		Use:   "kill-session <session-name>",
@@ -2001,6 +2013,8 @@ Name a verb to describe only that verb.`,
 	var listAgentsSession string
 	var listAgentsAll bool
 	var listAgentsJSON bool
+	var listAgentsAllHosts bool
+	var listAgentsHost string
 	listAgentsCmd := &cobra.Command{
 		Use:   "list-agents",
 		Short: "List the agent panes in a session and what each is doing",
@@ -2021,12 +2035,20 @@ would accept a question right now.`,
   tuios list-agents --json | jq -r '.agents[] | select(.state=="needs_input") | .window_id'`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			if listAgentsAllHosts || listAgentsHost != "" {
+				if listAgentsSession != "" {
+					return fmt.Errorf("--session names one machine's session, so it cannot be used with --all-hosts or --host. Each host answers about its own most recent session")
+				}
+				return runListAgentsAllHosts(listAgentsHost, listAgentsAll, listAgentsJSON)
+			}
 			return runListAgents(listAgentsSession, listAgentsAll, listAgentsJSON)
 		},
 	}
 	listAgentsCmd.Flags().StringVarP(&listAgentsSession, "session", "s", "", "Target session (default: most recently active)")
 	listAgentsCmd.Flags().BoolVar(&listAgentsAll, "all", false, "List every window, not just the panes identified as agents")
 	listAgentsCmd.Flags().BoolVar(&listAgentsJSON, "json", false, "Output result as JSON")
+	listAgentsCmd.Flags().BoolVar(&listAgentsAllHosts, "all-hosts", false, "List agents on this machine and on every host in the [hosts] config table")
+	listAgentsCmd.Flags().StringVar(&listAgentsHost, "host", "", "List agents on one host by name (\"local\" means this machine)")
 	_ = listAgentsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var sendMsgSession string
@@ -2197,6 +2219,60 @@ what to do about that when it finishes.`,
 	updateCmd.Flags().BoolVar(&updateCheck, "check", false, "Report what would be installed and change nothing")
 	updateCmd.Flags().BoolVar(&updatePre, "pre", false, "Count a prerelease as the newest release")
 
+	var hostsJSON bool
+	hostsCmd := &cobra.Command{
+		Use:   "hosts",
+		Short: "List the machines in the [hosts] config table and the state of each link",
+		Long: `List the other machines this daemon can ask for listings.
+
+The daemon holds one ssh link to each host in the [hosts] table. This command
+shows what state each link is in, which tuios version the far side runs, and
+which control protocol it speaks.
+
+Only listings cross a link. Nothing on another machine can be started, changed
+or stopped from here.
+
+Statuses:
+  up            The link is open and the remote daemon answers.
+  no_daemon     The machine is up and no tuios daemon runs on it.
+  unreachable   The last attempt failed. The line below the table says why.
+  incompatible  The remote daemon speaks a control protocol this build does not
+                serve. Upgrade tuios on one of the two machines.
+  connecting    The first attempt has not finished yet.
+
+To add a host, put this in the config file and restart the daemon:
+
+  [hosts.build]
+  addr = "gaurav@buildbox"
+
+The addr is anything ssh understands, including an ssh_config alias. The daemon
+runs ssh with BatchMode on, so a link never asks for a password and never asks
+about a host key. Run ssh to the host once by hand to accept its key.`,
+		Example: `  tuios hosts
+  tuios hosts --json`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runListHosts(hostsJSON)
+		},
+	}
+	hostsCmd.Flags().BoolVar(&hostsJSON, "json", false, "Output as JSON")
+
+	stdioProxyCmd := &cobra.Command{
+		Use:    "stdio-proxy",
+		Short:  "Connect stdin and stdout to this machine's daemon socket",
+		Hidden: true,
+		Long: `Connect stdin and stdout to this machine's tuios daemon socket.
+
+A tuios daemon on another machine runs this over ssh to read this machine's
+listings. Do not run it by hand.
+
+It does not start a daemon. If no daemon runs here, the caller is told so.`,
+		Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runStdioProxy()
+		},
+	}
+
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd, updateCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
@@ -2209,6 +2285,7 @@ what to do about that when it finishes.`,
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd)
 	rootCmd.AddCommand(listDockComponentsCmd, refreshDockCmd)
+	rootCmd.AddCommand(hostsCmd, stdioProxyCmd)
 
 	return rootCmd
 }

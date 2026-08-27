@@ -20,6 +20,12 @@ const (
 	KindSession NodeKind = iota
 	// KindWindow is a window node under a session.
 	KindWindow
+	// KindHost is a federated host's group header. Its rows are the sessions
+	// that machine holds, which follow it in the same list. A host node and the
+	// session nodes under it are read only: stage 1 of federation carries
+	// listings and nothing else, so nothing addresses them and nothing selects
+	// them.
+	KindHost
 )
 
 // Node is one row in the tree: a session or a window under it.
@@ -65,6 +71,17 @@ type Node struct {
 	// has attached to since: its layout is back and its shells are new. Always
 	// false for window nodes.
 	Restored bool
+	// Host is the machine a node belongs to, empty for anything on this one. It
+	// is set on a KindHost header and on every session node under it.
+	Host string
+	// HostStatus is a KindHost header's link state, as the federation package
+	// names it ("up", "unreachable", "no_daemon", "incompatible",
+	// "connecting"). Empty on every other node.
+	HostStatus string
+	// HostNote is the one plain sentence a host header shows when it is not up.
+	HostNote string
+	// HostLastOK is when a host last answered, as Unix seconds, zero for never.
+	HostLastOK int64
 	// Children are the window nodes of a session. Nil for a window node, and nil
 	// for a session whose windows are not known yet (a non-attached session over
 	// the coarse control protocol), which still carries a rolled-up glyph and a

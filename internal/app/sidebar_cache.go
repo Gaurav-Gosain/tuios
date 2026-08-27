@@ -219,6 +219,11 @@ func (m *OS) sidebarSignature() uint64 {
 		mixU(m.DaemonClient.CacheGen())
 	}
 
+	// The federated host groups, folded by their snapshot generation for the
+	// same reason: the rows come from a stored snapshot, and a new snapshot is
+	// the only thing that can change them.
+	mixU(m.federationGen)
+
 	// A rename in flight is not folded in: the buffer lives in its own dialog
 	// and the rail keeps drawing the old name, so typing no longer rebuilds the
 	// whole rail once per keystroke.
