@@ -8,7 +8,7 @@ require (
 	charm.land/ssh v0.4.3
 	charm.land/wish/v2 v2.0.3
 	github.com/Gaurav-Gosain/sip v0.7.0
-	github.com/Gaurav-Gosain/tuiffects v0.4.0
+	github.com/Gaurav-Gosain/tuiffects v0.5.0
 	github.com/adrg/xdg v0.5.3
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/fang v1.0.0

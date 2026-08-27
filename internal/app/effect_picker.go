@@ -389,6 +389,7 @@ var effectOpenings = map[string]effectOpening{
 	"sweep":           {frames: 177},
 	"synthgrid":       {frames: 530},
 	"thunderstorm":    {frames: 0},
+	"tuffbaby":        {frames: 505},
 	"unstable":        {frames: 291},
 	"vhstape":         {frames: 702},
 	"waves":           {frames: 410},
