@@ -429,14 +429,6 @@ func shouldApplyStyle(cell *uv.Cell) bool {
 	return cell.Style.Fg != nil || cell.Style.Bg != nil || cell.Style.Attrs != 0
 }
 
-func buildOptimizedCellStyleCached(cell *uv.Cell) lipgloss.Style {
-	return GetGlobalStyleCache().Get(cell, false, true)
-}
-
-func buildCellStyleCached(cell *uv.Cell, isCursor bool) lipgloss.Style {
-	return GetGlobalStyleCache().Get(cell, isCursor, false)
-}
-
 // buildOptimizedCellStyleCachedANSI returns the cached style together with its
 // cached ANSI escape prefix/suffix, avoiding a styleToANSI rebuild on flush.
 func buildOptimizedCellStyleCachedANSI(cell *uv.Cell) (lipgloss.Style, string, string) {

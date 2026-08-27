@@ -250,13 +250,6 @@ func (m *Manager) Shutdown() {
 	}
 }
 
-// HasSessions returns true if there are any active sessions.
-func (m *Manager) HasSessions() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.sessions) > 0
-}
-
 // GenerateSessionName generates a unique session name in session-N format.
 func (m *Manager) GenerateSessionName() string {
 	m.mu.RLock()

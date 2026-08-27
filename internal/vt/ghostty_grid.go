@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"image/color"
 	"strings"
-	"unicode/utf8"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -286,7 +285,6 @@ func (t *GhosttyTerminal) syncRowLocked(buf *uv.Buffer, y int) {
 	for x := n; x < t.width; x++ {
 		buf.SetCell(x, y, &uv.Cell{Content: " ", Width: 1})
 	}
-	_ = utf8.RuneLen // keep import if unused paths change
 }
 
 // styleFor converts a style ID to uv form through the cache. x is the cell
