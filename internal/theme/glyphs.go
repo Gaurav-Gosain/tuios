@@ -96,6 +96,16 @@ type GlyphSet struct {
 	Collapse  string `json:"collapse,omitempty"`
 	Expand    string `json:"expand,omitempty"`
 
+	// The files section's three marks, one cell each. They are roles rather
+	// than a table of file types on purpose: a set says what a folder, a parent
+	// and a plain file look like, and the per-type icons are a separate,
+	// nerd-font-only layer that falls back on exactly these three. A set that
+	// can be drawn in seven bits therefore keeps a files section that can be,
+	// which a table of private-use codepoints could never promise.
+	Folder string `json:"folder,omitempty"`
+	Parent string `json:"parent,omitempty"` // the ".." row
+	File   string `json:"file,omitempty"`
+
 	ScrollbarThumb string `json:"scrollbar_thumb,omitempty"`
 	ScrollbarTrack string `json:"scrollbar_track,omitempty"`
 
@@ -133,6 +143,7 @@ var builtinGlyphSets = map[string]*GlyphSet{
 		Rule: "─", ArrowLeft: "‹", ArrowRight: "›",
 		Focus: "▎", Attention: "▎", Bullet: "·",
 		Add: "+", Collapse: "«", Expand: "»",
+		Folder: "▸", Parent: "▴", File: "·",
 		Ellipsis: "…", Sigil: "›", DashRule: "╌",
 	},
 	// One weight heavier throughout, border included, for a frame that reads
@@ -167,6 +178,7 @@ var builtinGlyphSets = map[string]*GlyphSet{
 		Rule: "-", Separator: " | ", ArrowLeft: "<", ArrowRight: ">",
 		Focus: ">", Attention: "!", Bullet: ".",
 		Add: "+", Collapse: "<<", Expand: ">>",
+		Folder: ">", Parent: "^", File: ".",
 		ScrollbarThumb: "|", ScrollbarTrack: ".",
 		Ellipsis: "...", Sigil: ">", DashRule: "-",
 	},
@@ -309,6 +321,9 @@ var glyphRoles = []glyphRole{
 	{"attention", func(g *GlyphSet) *string { return &g.Attention }, 1},
 	{"bullet", func(g *GlyphSet) *string { return &g.Bullet }, 1},
 	{"add", func(g *GlyphSet) *string { return &g.Add }, 1},
+	{"folder", func(g *GlyphSet) *string { return &g.Folder }, 1},
+	{"parent", func(g *GlyphSet) *string { return &g.Parent }, 1},
+	{"file", func(g *GlyphSet) *string { return &g.File }, 1},
 	// The rail measures its own footer rather than budgeting a column for it,
 	// so its stepper takes any width; the ASCII default is two cells.
 	{"collapse", func(g *GlyphSet) *string { return &g.Collapse }, 0},

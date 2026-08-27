@@ -284,6 +284,13 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 	checkEnum("border_style", cfg.Appearance.BorderStyle, BorderStyles)
 	checkEnum("dockbar_position", cfg.Appearance.DockbarPosition, DockbarPositions)
 	checkEnum("sidebar.position", cfg.Appearance.Sidebar.Position, SidebarPositions)
+	for _, problem := range SidebarSectionProblems(cfg.Appearance.Sidebar.Sections) {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "appearance.sidebar.sections",
+			Message: problem,
+		})
+	}
+	checkEnum("sidebar.folder_click", cfg.Appearance.Sidebar.FolderClick, SidebarFolderClicks)
 	if cfg.Appearance.Sidebar.Workspaces != "" {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "appearance.sidebar.workspaces",

@@ -44,7 +44,7 @@ func (m *OS) ToggleSidebar() {
 		v := config.SidebarEnabled
 		m.UserConfig.Appearance.SidebarEnabled = &v
 	}
-	m.SidebarScrollS, m.SidebarScrollT, m.SidebarScrollA = 0, 0, 0
+	m.SidebarScrollS, m.SidebarScrollT, m.SidebarScrollA, m.SidebarScrollF = 0, 0, 0, 0
 	m.sidebarClearPeek()
 	m.tooltipClear()
 	if m.AutoTiling {
@@ -202,13 +202,11 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowFiles:
-		m.ToggleFileView()
-	case sidebarRowFileBack:
-		m.CloseFileView()
+		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
-		m.queueSidebarCmd(m.FileViewCd())
+		m.FileViewCd()
 	case sidebarRowFileUp:
-		m.FileViewUp()
+		m.queueSidebarCmd(m.FileViewUp())
 	case sidebarRowFileEntry:
 		m.queueSidebarCmd(m.FileViewEnter(hit.WindowIndex))
 	case sidebarRowSession:
@@ -328,13 +326,11 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowFiles:
-		m.ToggleFileView()
-	case sidebarRowFileBack:
-		m.CloseFileView()
+		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
-		m.queueSidebarCmd(m.FileViewCd())
+		m.FileViewCd()
 	case sidebarRowFileUp:
-		m.FileViewUp()
+		m.queueSidebarCmd(m.FileViewUp())
 	case sidebarRowFileEntry:
 		m.queueSidebarCmd(m.FileViewEnter(hit.WindowIndex))
 	case sidebarRowSession:
@@ -463,22 +459,7 @@ func (m *OS) SidebarWheel(x, y int, up bool) bool {
 	if !m.SidebarBandContains(x, y) {
 		return false
 	}
-	// The file view is one list over the whole rail, so it has one offset and no
-	// bands to scan. The per-section rule below exists to stop one section
-	// scrolling another off the screen, and a mode with one section has nothing
-	// to protect.
-	if m.filesView.Open {
-		if up {
-			m.filesView.Scroll = max(m.filesView.Scroll-config.ScrollLines, 0)
-		} else {
-			// Clamped against the row count on the next render, as the sections
-			// are.
-			m.filesView.Scroll += config.ScrollLines
-		}
-		return true
-	}
-
-	offsets := [sidebarSectionCount]*int{&m.SidebarScrollS, &m.SidebarScrollT, &m.SidebarScrollA}
+	offsets := m.sidebarScrollOffsets()
 	for s, band := range m.sidebarSectionY {
 		if y < band[0] || y >= band[1] {
 			continue

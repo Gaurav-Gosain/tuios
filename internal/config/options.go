@@ -420,6 +420,21 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.sidebar.sections", Type: OptionString, Section: "sidebar",
+		Description: "Section names in the order the rail stacks them, each with an optional percent share",
+		Default:     SidebarDefaultSections,
+	},
+	{
+		Path: "appearance.sidebar.file_icons", Type: OptionBool, Section: "sidebar",
+		Description: "Draw a nerd font icon per file type in the files section",
+		Default:     "true",
+	},
+	{
+		Path: "appearance.sidebar.folder_click", Type: OptionString, Section: "sidebar",
+		Description: "What a click on a folder row does",
+		Accepted:    SidebarFolderClicks, Default: SidebarFolderClickNavigate,
+	},
+	{
 		Path: "appearance.sidebar.workspaces", Type: OptionString, Section: "sidebar",
 		Description: "Workspace chip band the rail used to draw",
 		Default:     "",

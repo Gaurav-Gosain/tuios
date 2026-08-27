@@ -11,274 +11,227 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The rail's file view, drawn instead of the three sections rather than
-// alongside them. sidebar_files.go says why it is a mode; this draws it.
+// The rail's files section, drawn beside the other sections rather than instead
+// of them. sidebar_files.go says why it is a section and how its listing is
+// read; this draws it.
 //
-// It borrows the expanded rail's grammar wholesale: the same edge rule, the same
-// name spine, the same one-cell gutter carrying "this is where the pointer is",
-// the same right-aligned word tokens the agents header uses for its controls.
-// A listing that looked like a different program bolted to the side of the rail
-// would be one, and the point of putting it here rather than in a pane is that
-// it is not.
+// It borrows the rail's grammar wholesale: the same edge rule, the same name
+// spine, the same one-cell gutter, the same one-cell glyph column, the same
+// right-aligned figures inset one cell from the rail's own edge. A listing that
+// looked like a different program bolted to the side of the rail would be one,
+// and the point of putting it here rather than in a pane is that it is not.
 //
-// Every rectangle it publishes is recorded as it draws, exactly as the sections
-// do. Nothing here is recomputed by a handler.
+// Every rectangle it publishes is recorded as it draws, exactly as the other
+// sections do. Nothing here is recomputed by a handler, and nothing here reads
+// the filesystem: the rows come from whatever the last finished read left in
+// the model.
 
-// The word tokens the file view's two header rows carry. Words rather than
-// glyphs: there are three of them, they mean things a symbol would have to be
-// learned for, and the rail is wide enough to say them.
-const (
-	fileTokenBack = "back"
-	fileTokenCd   = "cd"
-)
+// fileTokenCd is the header's one word control. A word rather than a glyph:
+// there is no folder-and-arrow symbol that means "take the pane there" and
+// survives a terminal with no nerd font, and the rail is wide enough to say it.
+const fileTokenCd = "cd"
 
-// fileViewChrome is how many lines the two header rows and the blank under them
-// take before a single name is drawn.
-const fileViewChrome = 3
-
-// sidebarFilesLabel is the footer control that opens the view, and its width in
-// cells. A word rather than a glyph, for the same reason the view's own controls
-// are words: the rail has an ASCII mode to answer to, and there is no folder
-// symbol that survives it.
+// sidebarFilesLabel is the footer control that puts the section on the rail,
+// and its width in cells.
 const (
 	sidebarFilesLabel  = "files"
 	sidebarFilesLabelW = len(sidebarFilesLabel)
 )
 
-// sidebarFilesLines draws the file view over the whole rail and returns its
-// lines. It is called in place of the sections, from the same point in
-// sidebarPanelLinesForTree that the collapsed strip is called from.
-func (m *OS) sidebarFilesLines(
-	w, cw, height, topMargin, sidebarX, contentX0 int,
-	pal overlay.Palette,
-	compose func(string) string,
-	blank string,
-) []string {
-	lines := make([]string, 0, height)
-	nav := make([]sidebarNavRow, 0, len(m.filesView.Entries)+4)
+// fileRowSpec is one drawn row of the files section, resolved before the budget
+// so the section can be counted, scrolled and hit-tested by the same machinery
+// the other three use.
+type fileRowSpec struct {
+	// Kind is the row's click target, meaningful only when Note is false.
+	Kind sidebarRowKind
+	// Index is the entry's position in the listing, for an entry row.
+	Index int
+	// Key identifies the row across a relayout, so the keyboard cursor stays on
+	// the name it was on when the listing scrolls or a sibling appears. It
+	// rides the nav row's WindowID field, which nothing in this section uses.
+	Key  string
+	Name string
+	Dir  bool
+	// Note marks a row that says something about the listing rather than being
+	// part of it: the reason a read failed, that a read is running, that the
+	// folder is empty, or that the listing was cut short. It is drawn quiet and
+	// publishes no rectangle, because there is nothing for a click to do.
+	Note bool
+	// Warn raises a note row out of the quiet tier. A read that failed is the
+	// one thing this section has to say that the user has to act on, and it
+	// would otherwise be drawn in the same ink as the word "empty".
+	Warn bool
+}
 
-	// The pointer's row and the keyboard's, resolved the way the sections
-	// resolve theirs: by the absolute row, against what this pass is about to
-	// draw. hoverRow is -1 when the pointer is not in the band.
-	hoverRow := -1
-	if m.SidebarHoverActive && m.SidebarHoverY >= topMargin {
-		hoverRow = m.SidebarHoverY - topMargin
+// sidebarFileRows is the section's rows, in drawn order.
+//
+// The ".." row is part of the same list rather than pinned above it, so it
+// scrolls with the names it belongs to and the section needs one offset like
+// every other. It comes first, which is where a person looks for the way out.
+func (m *OS) sidebarFileRows() []fileRowSpec {
+	if !m.filesSectionEnabled() {
+		return nil
 	}
-	hoverX := -1
-	if m.SidebarHoverActive {
-		hoverX = m.SidebarHoverX - contentX0
+	switch {
+	case m.filesView.Want == "":
+		// Nothing has ever been asked for, which on a fresh client means no pane
+		// has said where it is. The section draws nothing at all rather than a
+		// header over a word: a permanent "no folder" row on every rail whose
+		// shell does not report its directory would cost two lines to say
+		// nothing. The footer control is where a user who goes looking for it is
+		// told why, by name, once.
+		return nil
+	case m.filesView.Err != "":
+		// A directory that could not be read says so where its names would have
+		// been, and draws nothing else. There is no listing to scroll and no row
+		// to click, so publishing either would be publishing a lie.
+		return []fileRowSpec{{Note: true, Warn: true, Name: m.filesView.Err}}
+	case m.filesView.Dir == "":
+		// Nothing has come back yet. Either a first read is running or the rail
+		// has just been switched on; both say the same thing to the user.
+		return []fileRowSpec{{Note: true, Name: "loading"}}
 	}
 
-	recordHit := func(kind sidebarRowKind, index int) {
-		y := topMargin + len(lines)
-		m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
-			X0: sidebarX, X1: sidebarX + w,
-			Y0: y, Y1: y + 1,
-			Kind:        kind,
-			WindowIndex: index,
+	rows := make([]fileRowSpec, 0, len(m.filesView.Entries)+2)
+	if filepath.Dir(m.filesView.Dir) != m.filesView.Dir {
+		rows = append(rows, fileRowSpec{Kind: sidebarRowFileUp, Index: -1, Key: "..", Name: "..", Dir: true})
+	}
+	for i, e := range m.filesView.Entries {
+		rows = append(rows, fileRowSpec{
+			Kind:  sidebarRowFileEntry,
+			Index: i,
+			Key:   e.Name,
+			Name:  e.Name,
+			Dir:   e.Dir,
 		})
-		nav = append(nav, sidebarNavRow{Kind: kind, WindowIndex: index})
 	}
-	recordToken := func(kind sidebarRowKind, x0, x1 int) {
-		y := topMargin + len(lines)
-		m.SidebarHits = append(m.SidebarHits, sidebarRowHit{
-			X0: contentX0 + x0, X1: contentX0 + x1,
-			Y0: y, Y1: y + 1,
-			Kind:        kind,
-			WindowIndex: -1,
-		})
-		nav = append(nav, sidebarNavRow{Kind: kind, WindowIndex: -1})
-	}
-
-	// Row 0: the section label and the way out.
-	//
-	// The way out is a word and it is on the first row, because this mode
-	// replaces everything the rail normally shows: a user who arrived here by
-	// clicking something small has to be able to see, without hunting, that the
-	// sessions are still there and how to get back to them.
-	backTok, backSpan, hasBack := railWordToken(fileTokenBack, cw, sidebarHeaderLabelW("files"), pal, hoverX)
-	if hasBack {
-		recordToken(sidebarRowFileBack, backSpan.X0, backSpan.X1)
-	}
-	lines = append(lines, compose(sidebarHeaderRow("files", backTok, cw, pal)))
-
-	// Row 1: where the listing is, and the control that takes the pane there.
-	//
-	// The path is the only thing on the rail that says which machine this is a
-	// listing of, and it does not say so outright: under `tuios ssh` and
-	// `tuios-web` the panes and this client both run on the server, so this is
-	// the server's filesystem. That is the right answer to "the pwd of the
-	// currently selected window" and there is nothing to correct, but it is
-	// worth knowing that a remote viewer is not looking at their own disk.
-	cdTok, cdSpan, hasCd := "", sidebarTokenSpan{}, false
-	if m.fileViewOriginWindow() != nil {
-		cdTok, cdSpan, hasCd = railWordToken(fileTokenCd, cw, 1, pal, hoverX)
-	}
-	if hasCd {
-		recordToken(sidebarRowFileCd, cdSpan.X0, cdSpan.X1)
-	}
-	pathW := cw - 2
-	if hasCd {
-		pathW -= lipgloss.Width(fileTokenCd) + 2
-	}
-	path := sidebarStyle(nil, pal.Fg).Render(truncPathLeft(shortenHome(m.filesView.Dir), max(pathW, 1)))
-	lines = append(lines, compose(sidebarHeaderRow2(path, cdTok, cw)))
-
-	lines = append(lines, blank)
-
-	// A directory that could not be read says so where its names would have
-	// been, and draws nothing else. There is no listing to scroll and no row to
-	// click, so publishing either would be publishing a lie.
-	if m.filesView.Err != "" {
-		lines = append(lines, compose(sidebarFit(
-			strings.Repeat(" ", sidebarNameCol)+
-				sidebarStyle(nil, pal.Warning).Render(overlay.Truncate(m.filesView.Err, max(cw-sidebarNameCol, 1))),
-			cw, nil)))
-		return m.finishFilesLines(lines, nav, height, blank)
-	}
-
-	// The rows: ".." first where there is a parent, then the listing. They are
-	// one list for scrolling, so the ".." never scrolls away from the names it
-	// belongs to.
-	atRoot := filepath.Dir(m.filesView.Dir) == m.filesView.Dir
-	total := len(m.filesView.Entries)
-	if !atRoot {
-		total++
-	}
-
-	avail := max(height-fileViewChrome, 0)
-	start, shown, hidden := sidebarWindowSection(m.filesView.Scroll, total, avail)
-	m.filesView.Scroll = start
-
-	for i := start; i < start+shown; i++ {
-		row := i
-		if !atRoot {
-			if row == 0 {
-				hovered := hoverRow == len(lines)
-				recordHit(sidebarRowFileUp, -1)
-				lines = append(lines, compose(m.fileRow("..", true, cw, pal, hovered)))
-				continue
-			}
-			row--
-		}
-		if row >= len(m.filesView.Entries) {
-			break
-		}
-		e := m.filesView.Entries[row]
-		hovered := hoverRow == len(lines)
-		recordHit(sidebarRowFileEntry, row)
-		lines = append(lines, compose(m.fileRow(e.Name, e.Dir, cw, pal, hovered)))
-	}
-
-	if hidden > 0 {
+	switch {
+	case m.filesView.Loading:
+		// A reload of a directory already on screen keeps the old names up and
+		// says a new answer is coming, rather than blanking the section for as
+		// long as the read takes.
+		rows = append(rows, fileRowSpec{Note: true, Name: "loading"})
+	case m.filesView.Capped:
 		// A capped listing counts nothing, because the number below the fold is
 		// not the number of names left in the directory. It says what it did
 		// instead, which is the honest fact and the shorter one.
-		more := overlay.Ellipsis() + " +" + strconv.Itoa(hidden)
-		if m.filesView.Capped {
-			more = overlay.Ellipsis() + " first " + strconv.Itoa(fileViewMaxEntries) + " shown"
-		}
-		lines = append(lines, compose(sidebarFit(strings.Repeat(" ", sidebarNameCol)+
-			sidebarStyle(nil, pal.FgMute).Render(more), cw, nil)))
-	} else if len(m.filesView.Entries) == 0 {
+		rows = append(rows, fileRowSpec{
+			Note: true,
+			Name: "first " + strconv.Itoa(fileViewMaxEntries) + " shown",
+		})
+	case len(m.filesView.Entries) == 0:
 		// The names, not the rows. A folder with nothing in it still draws a
 		// ".." above the gap, so counting rows here made "empty" reachable only
 		// at a filesystem root with nothing in it, which is the one directory
-		// nobody opens the view on.
-		lines = append(lines, compose(sidebarFit(strings.Repeat(" ", sidebarNameCol)+
-			sidebarStyle(nil, pal.FgMute).Render("empty"), cw, nil)))
+		// nobody opens the section on.
+		rows = append(rows, fileRowSpec{Note: true, Name: "empty"})
 	}
-
-	return m.finishFilesLines(lines, nav, height, blank)
+	return rows
 }
 
-// finishFilesLines pads to the rail's height, drops anything past it, and
-// publishes the nav rows.
+// sidebarFilesHeaderCd places the header's cd control on the same spine every
+// other trailing figure lands on, one cell in from the rail's edge, and says
+// which columns it took. It is drawn only when there is a pane the cd could
+// mean, and refused when the header has no room for it beside its own label,
+// since half a control is half a click target.
+func (m *OS) sidebarFilesHeaderCd(cw int, pal overlay.Palette, hoverX int, cursor bool) (string, sidebarTokenSpan, bool) {
+	if m.fileViewOriginWindow() == nil {
+		return "", sidebarTokenSpan{}, false
+	}
+	tw := lipgloss.Width(fileTokenCd)
+	x0 := cw - 1 - tw
+	if x0 < sidebarHeaderLabelW(sidebarFilesLabel)+1 {
+		return "", sidebarTokenSpan{}, false
+	}
+	span := sidebarTokenSpan{Kind: sidebarRowFileCd, X0: x0, X1: x0 + tw}
+	ink := pal.FgMute
+	if cursor || (hoverX >= span.X0 && hoverX < span.X1) {
+		ink = pal.Fg
+	}
+	return sidebarStyle(nil, ink).Render(fileTokenCd), span, true
+}
+
+// sidebarFilesHeaderRow is the section's one line of chrome: the label, the
+// directory being listed, and the cd control.
 //
-// The prune matters for the same reason it matters in the sections: a rectangle
-// recorded for a line the rail then truncated away is a click target on top of
-// whatever is really drawn there.
-func (m *OS) finishFilesLines(lines []string, nav []sidebarNavRow, height int, blank string) []string {
-	for len(lines) < height {
-		lines = append(lines, blank)
+// One line, not two. Every section on the rail costs its header before a single
+// row of content appears, and a fourth section that spent two of them would
+// take the chrome floor from four lines to six on a rail that has already once
+// overrun its region. The path is cut from the front rather than the back, so
+// what survives on a narrow rail is the folder you are in rather than the disk
+// it is on.
+//
+// The path is also the only thing on the rail that says which machine this is a
+// listing of, and it does not say so outright: under `tuios ssh` and `tuios-web`
+// the panes and this client both run on the server, so this is the server's
+// filesystem. That is the right answer to "what is in the pane's directory" and
+// there is nothing to correct, but a remote viewer is not looking at their own
+// disk.
+func (m *OS) sidebarFilesHeaderRow(cdTok string, hasCd bool, cw int, pal overlay.Palette) string {
+	room := cw - sidebarHeaderLabelW(sidebarFilesLabel) - 2
+	if hasCd {
+		room -= lipgloss.Width(fileTokenCd) + 1
 	}
-	if len(lines) > height {
-		lines = lines[:height]
-	}
-	limit := m.GetTopMargin() + height
-	kept := m.SidebarHits[:0]
-	for _, h := range m.SidebarHits {
-		if h.Y0 < limit {
-			kept = append(kept, h)
+	right := ""
+	if room > 0 {
+		if path := truncPathLeft(shortenHome(m.filesView.Dir), room); path != "" {
+			right = sidebarStyle(nil, pal.FgDim).Render(path)
 		}
 	}
-	m.SidebarHits = kept
-	if len(nav) > len(m.SidebarHits) {
-		nav = nav[:len(m.SidebarHits)]
+	if hasCd {
+		if right != "" {
+			right += sidebarStyle(nil, nil).Render(" ")
+		}
+		right += cdTok
 	}
-	m.SidebarNav = nav
-	// The cursor stays inside the rows this frame published, and a rail with no
-	// navigable rows parks it at zero rather than at -1, which is what the rest
-	// of the rail means by "nothing to steer". Clamped in both directions
-	// because the mode is entered from a rail that had its own rows, and the
-	// cursor arrives from there.
-	m.SidebarCursor = max(min(m.SidebarCursor, len(nav)-1), 0)
-	return lines
+	return sidebarHeaderRow(sidebarFilesLabel, right, cw, pal)
 }
 
-// fileRow draws one name on the rail's spine.
+// sidebarFileRow draws one row of the listing on the rail's spine.
 //
-// A directory wears a trailing slash and the primary ink; a file wears neither.
-// That is `ls -F`'s distinction and it needs no glyph, which matters because a
-// glyph would have to be a nerd-font one to say "folder" and the rail already
-// has an ASCII mode to answer to.
-func (m *OS) fileRow(name string, dir bool, cw int, pal overlay.Palette, hovered bool) string {
+// A directory wears the primary ink and a trailing slash; a file wears neither.
+// That is `ls -F`'s distinction, and it is what the row still says on a terminal
+// with no colour and no icon at all. The icon in the glyph column is the layer
+// on top of it, not instead of it.
+func (m *OS) sidebarFileRow(row fileRowSpec, cw int, pal overlay.Palette, hovered bool) string {
 	var bg color.Color
 	if hovered {
 		bg = pal.Surface
 	}
 
-	shown := name
+	if row.Note {
+		ink := pal.FgMute
+		if row.Warn {
+			ink = pal.Warning
+		}
+		return sidebarFit(sidebarStyle(bg, nil).Render(strings.Repeat(" ", sidebarNameCol))+
+			sidebarStyle(bg, ink).Render(overlay.Truncate(row.Name, sidebarNameAvail(cw, 0))), cw, bg)
+	}
+
+	// A name off a filesystem is foreign data in the same sense a window title
+	// is: it can hold a control character, a private-use codepoint or an emoji,
+	// and the rail launders all three out of every other name it draws. A name
+	// that is nothing but those keeps its raw form, because a blank row is
+	// worse than a tofu box.
+	shown := printableTitle(row.Name)
+	if shown == "" {
+		shown = row.Name
+	}
 	ink := pal.FgDim
-	if dir {
-		shown += "/"
+	if row.Dir {
+		// The ".." row is already spelled the way every shell spells it, so a
+		// slash on it would be one character of decoration on the one row that
+		// needs none.
+		if row.Kind != sidebarRowFileUp {
+			shown += "/"
+		}
 		ink = pal.Fg
 	}
 
-	gutter := sidebarGutter(hovered, "", bg, pal)
-	glyph := sidebarStyle(bg, nil).Render(" ")
+	gutter := sidebarGutter(false, "", bg, pal)
+	glyph := sidebarStyle(bg, ink).Render(fileRowGlyph(row.Name, row.Dir, row.Kind == sidebarRowFileUp))
 	body := sidebarStyle(bg, ink).Render(overlay.Truncate(shown, sidebarNameAvail(cw, 0)))
 	return sidebarComposeRow(gutter, glyph, body, "", cw, bg)
-}
-
-// railWordToken right-aligns one word control on a header row, the way the
-// agents header aligns its pair, and says where it landed. It refuses to draw
-// when the row's label leaves no room, because half a control is half a click
-// target.
-func railWordToken(word string, cw, labelW int, pal overlay.Palette, hoverX int) (string, sidebarTokenSpan, bool) {
-	ww := lipgloss.Width(word)
-	x0 := cw - 1 - ww
-	if x0 < labelW+1 {
-		return "", sidebarTokenSpan{}, false
-	}
-	span := sidebarTokenSpan{X0: x0, X1: x0 + ww}
-	ink := pal.FgMute
-	if hoverX >= span.X0 && hoverX < span.X1 {
-		ink = pal.Fg
-	}
-	return sidebarStyle(nil, ink).Render(word), span, true
-}
-
-// sidebarHeaderRow2 is the header's second line: an already-styled body on the
-// same one-cell inset the label uses, and an already-styled control on the same
-// right-hand spine every trailing figure lands on.
-func sidebarHeaderRow2(body, right string, cw int) string {
-	row := sidebarStyle(nil, nil).Render(" ") + body
-	if rw := lipgloss.Width(right); rw > 0 {
-		gap := max(cw-lipgloss.Width(row)-rw-1, 0)
-		row += strings.Repeat(" ", gap) + right + " "
-	}
-	return sidebarFit(row, cw, nil)
 }
 
 // shortenHome writes a path under the home directory as ~/..., which is how the

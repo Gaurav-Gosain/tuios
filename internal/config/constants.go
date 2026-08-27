@@ -569,11 +569,61 @@ var (
 	// SidebarMarquee scrolls a hovered row's title when it overflows its columns.
 	SidebarMarquee = true
 
+	// SidebarSections is the rail's layout: which sections it stacks, in what
+	// order, and the share of the rail each one may claim. See
+	// SidebarDefaultSections for the syntax.
+	SidebarSections = SidebarDefaultSections
+
+	// SidebarFileIcons draws a nerd font icon per file type in the files
+	// section. Off, and on a terminal running in ASCII, the section falls back
+	// to the glyph set's folder, parent and file marks.
+	SidebarFileIcons = true
+
+	// SidebarFolderClick is what a click on a folder row does: walk the listing
+	// into it, tell the pane to cd there, or both.
+	SidebarFolderClick = SidebarFolderClickNavigate
+
 	// Tooltips pops a one-row label naming whatever icon-only control the
 	// pointer is over: a row of the collapsed rail, or one of the dock's session
 	// controls. A glyph is enough to steer by and not enough to read.
 	Tooltips = true
 )
+
+// SidebarDefaultSections is the rail's layout as it ships.
+//
+// The syntax is one section per comma, in the order they are stacked from the
+// top, each optionally followed by ":" and the percent of the rail's content
+// lines it may claim. A section with no percent is flexible: it takes whatever
+// the others leave. A name left out of the list is a section the rail does not
+// draw.
+//
+// The percent is a ceiling, not a reservation. A section only ever claims the
+// lines its own rows can fill, so the three quarters this default spends on
+// sessions, files and agents are spent only when there are that many sessions,
+// files and agents; the terminals list gets the rest, which on a normal rail is
+// nearly all of it.
+const SidebarDefaultSections = "sessions:25,terminals,files:25,agents:34"
+
+// SidebarSectionNames are the sections appearance.sidebar.sections may name.
+var SidebarSectionNames = []string{"sessions", "terminals", "files", "agents"}
+
+// What a click on a folder row in the files section does.
+//
+// Navigate is the default because it is the only one of the three that touches
+// nothing outside the rail: the listing moves and no key is typed into anybody's
+// program. tuios does not know that a pane is at a shell prompt until it looks,
+// and a cd that reached vim or a REPL would be a series of edits or a syntax
+// error. A user who wants the pane to follow can say so once, here.
+const (
+	SidebarFolderClickNavigate = "navigate"
+	SidebarFolderClickCd       = "cd"
+	SidebarFolderClickBoth     = "both"
+)
+
+// SidebarFolderClicks lists the valid values for appearance.sidebar.folder_click.
+var SidebarFolderClicks = []string{
+	SidebarFolderClickNavigate, SidebarFolderClickCd, SidebarFolderClickBoth,
+}
 
 // SessionColors gives every session a colour of its own and marks it on the
 // surfaces that show more than one session at once: the rail's sessions and

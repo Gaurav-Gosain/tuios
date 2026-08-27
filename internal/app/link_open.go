@@ -161,14 +161,18 @@ func (m *OS) openLocalPath(path, rawURL string) tea.Cmd {
 	return nil
 }
 
-// openDirectoryLink shows a directory in the rail's file view, which is the one
-// surface in tuios that already knows how to list one. The rail has to be on
-// and expanded for that to be somewhere the user can see, so a rail that is not
-// falls back to the clipboard rather than switching a hidden panel into a mode
-// nobody asked for.
+// openDirectoryLink shows a directory in the rail's files section, which is the
+// one surface in tuios that already knows how to list one. The rail has to be
+// on and expanded for that to be somewhere the user can see, so a rail that is
+// not falls back to the clipboard rather than putting a section nobody can see
+// into a folder nobody asked for.
 func (m *OS) openDirectoryLink(path string) tea.Cmd {
 	if m.OpenFileView(path) {
-		return nil
+		// The listing is read off this goroutine, so opening the section hands
+		// back the command that reads it. It is parked with the rail's other
+		// pending commands rather than returned here, because the caller of a
+		// link is not always a path that returns one.
+		return m.TakeSidebarCmd()
 	}
 	m.ShowNotification("Copied the folder path. Turn the sidebar on to browse it.",
 		"info", config.NotificationDuration)

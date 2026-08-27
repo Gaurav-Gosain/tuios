@@ -125,6 +125,10 @@ reports it under `problems` with the reason.
   dock's gap between groups), `arrow_left`, `arrow_right` (overflow chevrons)
 - **Rail marks:** `focus` ("you are here"), `attention` ("this one wants a
   human"), `bullet` (a resting row), `add`, `collapse`, `expand`
+- **Files section:** `folder`, `parent` (the `..` row), `file`. These are what
+  the rail's listing draws when `appearance.sidebar.file_icons` is off or the
+  terminal is in ASCII mode; with icons on, a nerd font codepoint per file type
+  is drawn over them
 - **Scrollbar:** `scrollbar_thumb`, `scrollbar_track`
 - **Text:** `ellipsis`, `sigil`, `dash_rule`
 - **Border:** `border.top`, `border.bottom`, `border.left`, `border.right`, the

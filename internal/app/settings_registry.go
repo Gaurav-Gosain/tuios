@@ -73,6 +73,9 @@ var settingLabels = map[string]string{
 	"tape.auto_review":                  "Auto-open review",
 
 	"appearance.sidebar.show_agents":       "Agents section",
+	"appearance.sidebar.sections":          "Section layout",
+	"appearance.sidebar.file_icons":        "File icons",
+	"appearance.sidebar.folder_click":      "Click a folder",
 	"appearance.dock_workspace_tab_format": "Workspace tab format",
 	"appearance.zoom_max_width":            "Zoom width",
 	"appearance.alt_drag":                  "Alt-drag to move",
@@ -117,6 +120,7 @@ var settingInverted = map[string]bool{
 var settingPlaceholders = map[string]string{
 	"appearance.window_title_format":       "{index}: {title}",
 	"appearance.dock_workspace_tab_format": "{index}: {name}",
+	"appearance.sidebar.sections":          "sessions:25,terminals,files:25,agents:34",
 	"appearance.clock_format":              "Mon 3:04PM",
 	"dock.clock.format":                    "15:04",
 	"appearance.preferred_shell":           "/bin/bash",

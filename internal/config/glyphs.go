@@ -62,6 +62,31 @@ func GetRailAddGlyph() string {
 	return glyphOr(func(g *theme.GlyphSet) string { return g.Add }, "+", "+")
 }
 
+// The files section's three marks. Each is one cell, so a row of the listing
+// lands on the same spine every other rail row does.
+//
+// They are the fallback the per-type nerd-font icons degrade to, and they are
+// the whole listing on a terminal that cannot draw those. The ASCII defaults
+// are ">" for a folder, "^" for the parent and "." for a file, so the three
+// kinds of row stay apart with no font at all.
+
+// GetRailFolderGlyph is the mark on a directory row.
+func GetRailFolderGlyph() string {
+	return glyphOr(func(g *theme.GlyphSet) string { return g.Folder }, "▸", ">")
+}
+
+// GetRailParentGlyph is the mark on the ".." row. Distinct from the folder mark
+// because ".." is the one row that moves the listing out rather than in, and a
+// listing where every row wore the same mark gave the user nothing to aim at.
+func GetRailParentGlyph() string {
+	return glyphOr(func(g *theme.GlyphSet) string { return g.Parent }, "▴", "^")
+}
+
+// GetRailFileGlyph is the mark on a plain file row.
+func GetRailFileGlyph() string {
+	return glyphOr(func(g *theme.GlyphSet) string { return g.File }, "·", ".")
+}
+
 // GetRailCollapseGlyph is the arrow that folds the rail down to its strip.
 //
 // Two cells in ASCII, where "«" has no one-cell stand-in: a lone "<" in the
@@ -101,6 +126,9 @@ func ResolvedGlyphs() map[string]string {
 		"attention":       GetRailAttentionMark(),
 		"bullet":          GetRailBullet(),
 		"add":             GetRailAddGlyph(),
+		"folder":          GetRailFolderGlyph(),
+		"parent":          GetRailParentGlyph(),
+		"file":            GetRailFileGlyph(),
 		"collapse":        GetRailCollapseGlyph(),
 		"expand":          GetRailExpandGlyph(),
 		"scrollbar_thumb": GetScrollbarThumbChar(),

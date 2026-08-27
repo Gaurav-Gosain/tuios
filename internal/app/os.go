@@ -780,14 +780,15 @@ type OS struct {
 	// Sidebar mouse hit-testing and view state. SidebarHits records the on-screen
 	// rectangle of every sidebar row rendered in the current frame, so the mouse
 	// handlers can route clicks, wheels, and right-clicks without re-deriving the
-	// layout. Each of the rail's three sections holds its own scroll offset, so
-	// the wheel scrolls the one under the pointer and no header can be scrolled
+	// layout. Each of the rail's sections holds its own scroll offset, so the
+	// wheel scrolls the one under the pointer and no header can be scrolled
 	// away; sidebarSectionY is where each section was drawn, which is how a
 	// wheel event finds its section. Scrolls are clamped by the next render.
 	SidebarHits    []sidebarRowHit
 	SidebarScrollS int
 	SidebarScrollT int
 	SidebarScrollA int
+	SidebarScrollF int
 	// sidebarAgentAnchor keeps the agents section's viewport on the row it was
 	// left on rather than on the index that row happened to have, since that
 	// section resorts itself on live agent state. See sidebar_anchor.go.

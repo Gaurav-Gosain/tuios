@@ -69,24 +69,19 @@ const (
 	// sidebarRowCollapse is the footer's collapse toggle. Like the header's
 	// controls it is narrower than its line, so it carries its own columns.
 	sidebarRowCollapse
-	// sidebarRowFiles is the terminals header's control that puts the rail into
-	// its file view. It sits beside the "+" and is the only way in from the
-	// pointer.
+	// sidebarRowFiles is the footer control that puts the files section on the
+	// rail and takes it off again.
 	sidebarRowFiles
-	// The rows of the file view itself. They only exist while the rail is in
-	// that mode, which is also when none of the rows above do: the mode replaces
-	// the three sections rather than joining them. See sidebar_files.go.
+	// The rows of the files section. See sidebar_files.go.
 	//
-	// sidebarRowFileBack is the header control that returns to the sections.
-	sidebarRowFileBack
-	// sidebarRowFileCd is the control that sends a cd to the pane the view was
-	// opened from. It is drawn only when there is such a pane.
+	// sidebarRowFileCd is the header control that sends a cd to the pane the
+	// listing is tied to. It is drawn only when there is such a pane.
 	sidebarRowFileCd
 	// sidebarRowFileUp is the ".." row, drawn everywhere but at the root.
 	sidebarRowFileUp
 	// sidebarRowFileEntry is one name in the listing. It carries the entry's
 	// index in the WindowIndex field, which is the only integer a row hit has;
-	// nothing in this mode points at a window, so the field is free.
+	// nothing in this section points at a window, so the field is free.
 	sidebarRowFileEntry
 )
 
@@ -129,6 +124,11 @@ const (
 	sidebarSectionSessions sidebarSection = iota
 	sidebarSectionTerminals
 	sidebarSectionAgents
+	// sidebarSectionFiles lists what is in the focused pane's directory. It is
+	// last in this enum and not last on the rail: the enum is identity, and the
+	// order the sections are stacked in is the layout's, read off
+	// appearance.sidebar.sections. See sidebar_layout.go.
+	sidebarSectionFiles
 	sidebarSectionCount
 )
 
@@ -615,83 +615,53 @@ func (m *OS) renderSidebar() *lipgloss.Layer {
 	return lipgloss.NewLayer(panel).X(sidebarX).Y(m.GetTopMargin()).Z(config.ZIndexDock).ID("sidebar")
 }
 
-// sidebarBudget divides avail lines between the three sections, per the design's
-// table: sessions are content-sized up to about a quarter of the rail, agents up
-// to about a third, and the terminals section takes the slack because it is the
-// list the user actually works in. A rail too short for the terminals floor
-// shrinks agents first, then sessions, and never below their own floors.
+// sidebarBudget is the shipped three-section split, expressed as the layout it
+// is: sessions a quarter, agents a third, the terminals list the slack.
 //
-// # Why there is no fourth section for workspaces
+// It stays because it is the case the design's table was written for and the
+// one the rail draws for anybody who has not touched the layout. Reading it
+// through sidebarBudgetLines is what keeps the general allocator honest: if the
+// generalisation ever stops reproducing this split, TestRailSectionBudget says
+// so rather than the rail quietly laying itself out differently.
 //
-// It has been asked for and the answer is no, for four reasons, the first of
-// which is this function.
+// # Why the rail now has a fourth section, having refused one
 //
-// The floors below already claim 2+3+2 lines before a single row of content,
-// and every section draws its header whether or not the budget could afford it,
-// so three sections cost ten lines of chrome at the minimum. A workspaces
-// section with the same two-row floor takes that to thirteen, against a rail
-// that TestRailFitsAShortRegion walks from zero because rail growth has already
-// once overrun the region and painted over the dock. It would also have to join
-// the give-up ladder at the bottom of this function, and there is no obvious
-// answer to whether workspaces should yield before agents or after them.
+// This function used to carry a written refusal to add a workspaces section,
+// and three of its four reasons still stand. The fourth did not: it argued that
+// three sections already cost ten lines of chrome before a row of content and
+// that a fourth would take it to thirteen. That was arithmetic about floors
+// nobody had made configurable. Shares and membership are now read off
+// appearance.sidebar.sections, so a user who does not want a fourth section
+// removes it, and a rail too short for what is left gives up lines rather than
+// its region.
 //
-// It would restate what is already on screen. The terminals section is ordered
-// by workspace and tags each pane with its workspace's name, so a workspaces
-// section would be one row per workspace carrying nothing the tags do not.
-//
-// It does not fit the rail's grammar. Sessions and agents are lists across
-// every session; terminals is the list inside the selected one. A workspace
-// only exists inside a session, so a workspaces section would be the second
-// per-session list, competing with terminals for the same lines while saying
-// less than it does.
-//
-// And a workspace already has three surfaces that cost no rail lines at all:
-// the dock's pill strip, which is always on screen and can be rearranged by
-// dragging; the digit keys; and the workspace switcher. What a fourth section
-// would have been for is seeing and steering the workspace arrangement, and
-// that is what those three do.
-//
-// What the rail owed workspaces was agreement, not a section. Its terminals
-// grouping now orders by the same display order the dock's pills use, so
-// dragging a pill rearranges the panes under it here too.
+// The other three reasons are why the section that arrived is files and not
+// workspaces. A workspaces section would restate what the terminals section's
+// tags already say; it would be the second per-session list, competing with
+// terminals for the same lines while saying less; and a workspace already has
+// three surfaces that cost no rail lines at all. A listing restates nothing on
+// screen, is not per-session, and has no other surface.
 //
 // aRowH is how many lines one agent row takes, so the agents section is
 // budgeted in lines like every other section while still being counted in rows.
-// Its share of the rail stays a third of the rows either way: a tall row buys
-// its second line out of the same third, never out of the terminals list.
 func sidebarBudget(avail, nS, nT, nA, aRowH int) (sH, tH, aH int) {
-	avail = max(avail, 0)
-	aRowH = max(aRowH, 1)
-	aLines := nA * aRowH
-	sFloor, tFloor, aFloor := min(nS, 2), min(nT, 3), min(aLines, 2*aRowH)
-
-	sH = min(nS, max(avail/4, sFloor))
-	aH = min(aLines, max(aRowH*(avail/3), aFloor))
-	tH = avail - sH - aH
-	if tH < tFloor {
-		aH = max(aFloor, aH-(tFloor-tH))
-		tH = avail - sH - aH
-		if tH < tFloor {
-			sH = max(sFloor, sH-(tFloor-tH))
-			tH = avail - sH - aH
-		}
+	plans, _ := sidebarLayoutFor(config.SidebarDefaultSections)
+	rows := make([]int, len(plans))
+	rowH := make([]int, len(plans))
+	at := [sidebarSectionCount]int{}
+	for i, p := range plans {
+		at[p.Section] = i
+		rowH[i] = 1
 	}
-	tH = max(min(tH, nT), 0)
-
-	// The floors can still overrun a rail with almost no lines at all, so the
-	// last word belongs to the space that exists: give it up from the quietest
-	// section outwards.
-	for sH+tH+aH > avail {
-		switch {
-		case aH > 0:
-			aH--
-		case sH > 0:
-			sH--
-		default:
-			tH--
-		}
-	}
-	return sH, tH, aH
+	rows[at[sidebarSectionSessions]] = nS
+	rows[at[sidebarSectionTerminals]] = nT
+	rows[at[sidebarSectionAgents]] = nA
+	rowH[at[sidebarSectionAgents]] = max(aRowH, 1)
+	// The files section is not part of this question. The default layout names
+	// it, so it has to be given a row count, and zero is the one that leaves the
+	// other three exactly the lines they had before it existed.
+	out := sidebarBudgetLines(avail, plans, rows, rowH)
+	return out[at[sidebarSectionSessions]], out[at[sidebarSectionTerminals]], out[at[sidebarSectionAgents]]
 }
 
 // sidebarWindowSection windows one section's rows onto the lines it was given,
@@ -794,18 +764,6 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		return m.sidebarStripLines(sessions, w, cw, height, topMargin, sidebarX, pal, edgeLeft)
 	}
 
-	// The file view takes the whole rail, so it leaves before any of the section
-	// machinery below runs: no budget, no place table, no per-section scroll.
-	// That is the entire cost of the mode being a mode, and it is why the three
-	// sections lay out identically whether or not the mode exists.
-	//
-	// It is checked after the collapsed strip and not before, so a rail folded to
-	// three columns keeps drawing the strip. A listing cannot be drawn in three
-	// columns, and OpenFileView refuses to enter the mode there for that reason.
-	if m.filesView.Open {
-		return m.sidebarFilesLines(w, cw, height, topMargin, sidebarX, contentX0, pal, compose, blank), w
-	}
-
 	// The keyboard cursor tracks a row by identity, not by index, so it survives a
 	// relayout: the target is the session the last action asked to follow, else
 	// the nav row the cursor was on last frame. Rows matching it draw the same
@@ -825,8 +783,8 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			cursorTarget.Kind == kind && cursorTarget.SessionID == sessionID && cursorTarget.WindowID == windowID
 	}
 
-	// The three lists, built before anything is drawn: the budget needs their
-	// counts, and hover has to resolve against the same arithmetic the draw uses.
+	// The lists, built before anything is drawn: the budget needs their counts,
+	// and hover has to resolve against the same arithmetic the draw uses.
 	shown, peeking := m.sidebarShownSession(sessions)
 	terminals := m.sidebarTerminals(sessions, shown)
 	agents, agentsTotal := m.sidebarFilterAgents(m.sidebarAgents(sessions))
@@ -839,6 +797,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// way back, because a section that vanished on a control the user set two
 	// days ago reads as "no agents anywhere", which is the opposite of the truth.
 	emptyFilter := len(agents) == 0 && agentsTotal > 0
+	// The files section's rows are built the same way and from state alone: the
+	// listing was read by a command, off this goroutine, and this only draws
+	// whatever the last reply left behind. Nothing here stats, opens or spawns.
+	files := m.sidebarFileRows()
 
 	nS := len(sessions)
 	nT := len(terminals)
@@ -852,8 +814,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	if emptyPeek {
 		nT = 1
 	}
-	showTerminals := config.SidebarShowWindows && nT > 0
-	if !showTerminals {
+	if !config.SidebarShowWindows {
 		nT = 0
 	}
 	// The current rule, kept: a rail this short cannot carry an alarm block and
@@ -873,13 +834,27 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		footerLines, footerZones, footerH = nil, nil, 0
 	}
 
-	chrome := 1 // the sessions header
-	if nT > 0 {
-		chrome++
+	// The layout: which sections are stacked, in what order, and the share each
+	// may claim. A section with no rows is dropped whole, header included, so an
+	// empty section costs the rail nothing rather than costing it a label over a
+	// gap.
+	plans := sidebarLayoutPlans()
+	rowsIn := [sidebarSectionCount]int{
+		sidebarSectionSessions:  nS,
+		sidebarSectionTerminals: nT,
+		sidebarSectionAgents:    nA,
+		sidebarSectionFiles:     len(files),
 	}
-	if nA > 0 {
-		chrome += 2 // the gap that floats the agents block, plus its header
+	// The last section in the configured layout is the one pinned to the rail's
+	// bottom: the slack rides above it, and it wears a blank line of its own so
+	// the block floats free of whatever ends up over it. Agents is that section
+	// by default, and the reason is the reason it always was: an alarm block
+	// wants a stable screen position at any rail height.
+	pinned := sidebarSectionCount
+	if len(plans) > 1 {
+		pinned = plans[len(plans)-1].Section
 	}
+
 	// A second line per agent row carries the harness and the note the pane
 	// reported, which is the one thing on the rail no other row can say. It is
 	// taken only when it costs nothing: the section goes tall when the budget it
@@ -887,43 +862,110 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// the section never hides a row in order to spell one out, and the height is
 	// the same for every row in it rather than per entry.
 	agentRowH := 1
-	sH, tH, aH := sidebarBudget(height-footerH-chrome, nS, nT, nA, agentRowH)
-	if nA > 0 && !emptyFilter && sidebarAgentsHaveNotes(agents) {
-		if s2, t2, a2 := sidebarBudget(height-footerH-chrome, nS, nT, nA, sidebarAgentRowTall); a2 >= nA*sidebarAgentRowTall {
-			sH, tH, aH, agentRowH = s2, t2, a2, sidebarAgentRowTall
-		}
-	}
 	// Row heights per section, which is what turns a section's line budget into
 	// the rows it can show and a hovered line back into the row under it.
-	rowH := [sidebarSectionCount]int{1, 1, agentRowH}
-	slack := max(height-footerH-chrome-sH-tH-aH, 0)
+	rowH := [sidebarSectionCount]int{1, 1, agentRowH, 1}
+
+	// The chrome each drawn section costs before a row of it appears: its own
+	// header, plus the floating blank in front of the pinned block.
+	planRows := make([]int, len(plans))
+	planRowH := make([]int, len(plans))
+	chrome := 0
+	drawn := 0
+	for i, p := range plans {
+		planRows[i], planRowH[i] = rowsIn[p.Section], rowH[p.Section]
+		if planRows[i] == 0 {
+			continue
+		}
+		drawn++
+		chrome++
+		if p.Section == pinned {
+			chrome++
+		}
+	}
+	avail := height - footerH - chrome
+	budget := sidebarBudgetLines(avail, plans, planRows, planRowH)
+	if nA > 0 && !emptyFilter && sidebarAgentsHaveNotes(agents) {
+		tall := make([]int, len(plans))
+		copy(tall, planRowH)
+		at := -1
+		for i, p := range plans {
+			if p.Section == sidebarSectionAgents {
+				tall[i], at = sidebarAgentRowTall, i
+			}
+		}
+		if at >= 0 {
+			if grown := sidebarBudgetLines(avail, plans, planRows, tall); grown[at] >= nA*sidebarAgentRowTall {
+				budget, planRowH, agentRowH = grown, tall, sidebarAgentRowTall
+				rowH[sidebarSectionAgents] = sidebarAgentRowTall
+			}
+		}
+	}
+	used := 0
+	for _, n := range budget {
+		used += n
+	}
+	slack := max(avail-used, 0)
 
 	// Where each section's lines land, in the rail's own coordinates. Computed
 	// before any row is rendered so hover resolves against the draw's arithmetic
 	// rather than a second copy of it.
-	var place [sidebarSectionCount]struct{ header, top, lines, y0, y1 int }
+	type sectionPlace struct{ header, top, lines, y0, y1 int }
+	var place [sidebarSectionCount]sectionPlace
+	for s := range place {
+		place[s] = sectionPlace{header: -1}
+	}
 	line := 0
-	place[sidebarSectionSessions] = struct{ header, top, lines, y0, y1 int }{line, line + 1, sH, line, line + 1 + sH}
-	line += 1 + sH
-	place[sidebarSectionTerminals] = struct{ header, top, lines, y0, y1 int }{-1, line, 0, line, line}
-	if nT > 0 {
-		place[sidebarSectionTerminals] = struct{ header, top, lines, y0, y1 int }{line, line + 1, tH, line, line + 1 + tH + slack}
-		line += 1 + tH
+	for i, p := range plans {
+		if planRows[i] == 0 {
+			place[p.Section] = sectionPlace{header: -1, top: line, y0: line, y1: line}
+			continue
+		}
+		y0 := line
+		if p.Section == pinned {
+			// The slack belongs to the band of the section above, so a wheel over
+			// the empty middle of the rail scrolls that one. The single blank
+			// that floats the pinned block is this section's own, which is what
+			// keeps the gap between the two bands from belonging to neither.
+			line += slack
+			y0 = line
+			line++
+		}
+		place[p.Section] = sectionPlace{header: line, top: line + 1, lines: budget[i], y0: y0, y1: line + 1 + budget[i]}
+		line += 1 + budget[i]
 	}
-	line += slack
-	place[sidebarSectionAgents] = struct{ header, top, lines, y0, y1 int }{-1, line, 0, line, line}
-	if nA > 0 {
-		place[sidebarSectionAgents] = struct{ header, top, lines, y0, y1 int }{line + 1, line + 2, aH, line, line + 2 + aH}
-		line += 2 + aH
+	if pinned == sidebarSectionCount || rowsIn[pinned] == 0 {
+		// Nothing is pinned, so the slack falls where it always did: under the
+		// last drawn section, above the footer.
+		line += slack
 	}
+	// The band above the pinned block belongs to the section over it, so the
+	// wheel keeps working on the gap the block floats in.
+	if drawn > 1 {
+		for i := len(plans) - 1; i >= 0; i-- {
+			if planRows[i] == 0 || plans[i].Section == pinned {
+				continue
+			}
+			above := place[plans[i].Section]
+			above.y1 = max(above.y1, place[pinned].y0)
+			place[plans[i].Section] = above
+			break
+		}
+	}
+	// The bands, clamped to the rail's own rows. Every section draws its header
+	// whether or not the budget could afford it, so a rail short enough that the
+	// chrome alone overruns it produces a place table taller than the region;
+	// the draw below cuts the lines and the rectangles to fit, and a band left
+	// past the cut would hand the wheel to a section with nothing on screen.
 	for s := range m.sidebarSectionY {
-		m.sidebarSectionY[s] = [2]int{topMargin + place[s].y0, topMargin + place[s].y1}
+		y0 := min(place[s].y0, height)
+		y1 := min(place[s].y1, height)
+		m.sidebarSectionY[s] = [2]int{topMargin + y0, topMargin + max(y1, y0)}
 	}
 
 	// Keyboard cursor auto-scroll, per section: a cursor past a section's fold
 	// scrolls that section the way a wheel would, and never disturbs the others.
-	scroll := [sidebarSectionCount]*int{&m.SidebarScrollS, &m.SidebarScrollT, &m.SidebarScrollA}
-	rowsIn := [sidebarSectionCount]int{nS, nT, nA}
+	scroll := m.sidebarScrollOffsets()
 	// A section's fold is in rows and its budget is in lines. Everything below
 	// scrolls and windows against this rather than against the line count, which
 	// were the same number until an agent row took two of them.
@@ -932,7 +974,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		capRows[s] = place[s].lines / rowH[s]
 	}
 	if m.SidebarFocused && haveCursorTarget {
-		if sec, idx, ok := m.sidebarCursorIndex(cursorTarget, sessions, terminals, agents); ok {
+		if sec, idx, ok := m.sidebarCursorIndex(cursorTarget, sessions, terminals, agents, files); ok {
 			if rows := capRows[sec]; rows > 0 {
 				if idx < *scroll[sec] {
 					*scroll[sec] = idx
@@ -956,9 +998,9 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		hoverRow[s] = -1
 	}
 	footerHoverLine, footerHoverX := -1, -1
-	// Every header now carries click targets of its own (the add controls, and
-	// the agents section's filter and sort), so the pointer's column on a header
-	// line matters as well as which line it is on.
+	// Every header now carries click targets of its own (the add controls, the
+	// agents section's filter and sort, the files section's cd), so the
+	// pointer's column on a header line matters as well as which line it is on.
 	var headerHoverX [sidebarSectionCount]int
 	for s := range headerHoverX {
 		headerHoverX[s] = -1
@@ -979,6 +1021,9 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			headerHoverX[onHeader] = m.SidebarHoverX - contentX0
 		default:
 			for s := range place {
+				if place[s].header < 0 {
+					continue
+				}
 				if d := delta - place[s].top; d >= 0 && d < count[s]*rowH[s] {
 					hoverRow[s] = start[s] + d/rowH[s]
 				}
@@ -991,7 +1036,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		footerLines, footerZones = m.sidebarFooter(variant, cw, pal, footerHoverLine, footerHoverX, footerCursor)
 	}
 
-	nav := make([]sidebarNavRow, 0, nS+nT+nA+2)
+	nav := make([]sidebarNavRow, 0, nS+nT+nA+len(files)+2)
 	lines := make([]string, 0, height)
 	// recordHit publishes a drawn row's rectangle and its nav row together, in
 	// drawn order, so the mouse and the keyboard address one target set. Hits
@@ -1033,30 +1078,30 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		nav = append(nav, sidebarNavRow{Kind: tk.Kind, SessionID: sessionID, WindowIndex: -1})
 	}
 
-	// sessions
-	sessionsAdd := ""
-	if canCreate {
-		if tok, span, ok := sidebarHeaderAdd(sidebarRowNewSession, cw, sidebarHeaderLabelW("sessions"),
-			pal, headerHoverX[sidebarSectionSessions], isCursor(sidebarRowNewSession, "", "")); ok {
-			sessionsAdd = tok
-			recordToken(span, "")
+	drawSessions := func() {
+		add := ""
+		if canCreate {
+			if tok, span, ok := sidebarHeaderAdd(sidebarRowNewSession, cw, sidebarHeaderLabelW("sessions"),
+				pal, headerHoverX[sidebarSectionSessions], isCursor(sidebarRowNewSession, "", "")); ok {
+				add = tok
+				recordToken(span, "")
+			}
+		}
+		lines = append(lines, compose(sidebarHeaderRow("sessions", add, cw, pal)))
+		for i := range count[sidebarSectionSessions] {
+			idx := start[sidebarSectionSessions] + i
+			s := sessions[idx]
+			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
+			hovered := idx == hoverRow[sidebarSectionSessions] || isCursor(sidebarRowSession, s.ID, "")
+			recordHit(sidebarRowSession, s.ID, "", -1, 1)
+			lines = append(lines, compose(m.sidebarSessionRow(s, variant, cw, pal, hovered, dragged)))
+		}
+		if h := hidden[sidebarSectionSessions]; h > 0 {
+			lines = append(lines, overflowRow(h))
 		}
 	}
-	lines = append(lines, compose(sidebarHeaderRow("sessions", sessionsAdd, cw, pal)))
-	for i := range count[sidebarSectionSessions] {
-		idx := start[sidebarSectionSessions] + i
-		s := sessions[idx]
-		dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
-		hovered := idx == hoverRow[sidebarSectionSessions] || isCursor(sidebarRowSession, s.ID, "")
-		recordHit(sidebarRowSession, s.ID, "", -1, 1)
-		lines = append(lines, compose(m.sidebarSessionRow(s, variant, cw, pal, hovered, dragged)))
-	}
-	if h := hidden[sidebarSectionSessions]; h > 0 {
-		lines = append(lines, overflowRow(h))
-	}
 
-	// terminals
-	if nT > 0 {
+	drawTerminals := func() {
 		// The add control takes the spine's last cell, and the peek label sits in
 		// front of it. A peek is the pointer's own transient state and cannot
 		// coexist with a pointer on this header, so the two never compete for the
@@ -1098,27 +1143,43 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				sidebarStyle(nil, nil).Render(" ")+sidebarQuietDot(nil, pal)+
 					sidebarStyle(nil, nil).Render(" ")+
 					sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(hint, sidebarNameAvail(cw, 0))), cw, nil)))
-		} else {
-			for i := range count[sidebarSectionTerminals] {
-				idx := start[sidebarSectionTerminals] + i
-				e := terminals[idx]
-				hovered := idx == hoverRow[sidebarSectionTerminals] || isCursor(sidebarRowWindow, e.SessionID, e.WindowID)
-				recordHit(sidebarRowWindow, e.SessionID, e.WindowID, e.WindowIndex, 1)
-				lines = append(lines, compose(m.sidebarTerminalRow(e, cw, pal, hovered, peeking)))
-			}
-			if h := hidden[sidebarSectionTerminals]; h > 0 {
-				lines = append(lines, overflowRow(h))
-			}
+			return
+		}
+		for i := range count[sidebarSectionTerminals] {
+			idx := start[sidebarSectionTerminals] + i
+			e := terminals[idx]
+			hovered := idx == hoverRow[sidebarSectionTerminals] || isCursor(sidebarRowWindow, e.SessionID, e.WindowID)
+			recordHit(sidebarRowWindow, e.SessionID, e.WindowID, e.WindowIndex, 1)
+			lines = append(lines, compose(m.sidebarTerminalRow(e, cw, pal, hovered, peeking)))
+		}
+		if h := hidden[sidebarSectionTerminals]; h > 0 {
+			lines = append(lines, overflowRow(h))
 		}
 	}
 
-	for range slack {
-		lines = append(lines, blank)
+	drawFiles := func() {
+		cdTok, cdSpan, hasCd := m.sidebarFilesHeaderCd(cw, pal, headerHoverX[sidebarSectionFiles],
+			isCursor(sidebarRowFileCd, "", ""))
+		if hasCd {
+			recordToken(cdSpan, "")
+		}
+		lines = append(lines, compose(m.sidebarFilesHeaderRow(cdTok, hasCd, cw, pal)))
+		for i := range count[sidebarSectionFiles] {
+			idx := start[sidebarSectionFiles] + i
+			row := files[idx]
+			hovered := idx == hoverRow[sidebarSectionFiles]
+			if row.Kind != 0 {
+				hovered = hovered || isCursor(row.Kind, "", row.Key)
+				recordHit(row.Kind, "", row.Key, row.Index, 1)
+			}
+			lines = append(lines, compose(m.sidebarFileRow(row, cw, pal, hovered)))
+		}
+		if h := hidden[sidebarSectionFiles]; h > 0 {
+			lines = append(lines, overflowRow(h))
+		}
 	}
 
-	// agents, pinned to the bottom by the slack above them
-	if nA > 0 {
-		lines = append(lines, blank)
+	drawAgents := func() {
 		// No add control here, and the asymmetry is the honest answer: an agent is
 		// a pane running an agent CLI, which is exactly what the terminals section
 		// makes. A "+" on this header would be a second name for new-terminal
@@ -1129,30 +1190,48 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			recordToken(tk, "")
 		}
 		lines = append(lines, compose(sidebarHeaderRow("agents", controls, cw, pal)))
-		switch {
-		case emptyFilter:
+		if emptyFilter {
 			// The hint is about the attached session ("here"), so it carries that
 			// identity: it is a second filter control, and without something to tell
 			// it apart from the header's token the cursor could not address it.
 			recordHit(sidebarRowAgentFilter, m.sidebarCurrentSessionID(), "", -1, 1)
 			lines = append(lines, compose(m.sidebarAgentsEmptyRow(agentsTotal, cw, pal,
 				hoverRow[sidebarSectionAgents] == 0 || isCursor(sidebarRowAgentFilter, m.sidebarCurrentSessionID(), ""))))
-		default:
-			for i := range count[sidebarSectionAgents] {
-				idx := start[sidebarSectionAgents] + i
-				e := agents[idx]
-				hovered := idx == hoverRow[sidebarSectionAgents] || isCursor(sidebarRowAgent, e.SessionID, e.WindowID)
-				tall := rowH[sidebarSectionAgents] > 1
-				recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex, rowH[sidebarSectionAgents])
-				lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, hovered, tall)))
-				if tall {
-					lines = append(lines, compose(m.sidebarAgentNoteRow(e, cw, pal, hovered)))
-				}
-			}
-			if h := hidden[sidebarSectionAgents]; h > 0 {
-				lines = append(lines, overflowRow(h))
+			return
+		}
+		for i := range count[sidebarSectionAgents] {
+			idx := start[sidebarSectionAgents] + i
+			e := agents[idx]
+			hovered := idx == hoverRow[sidebarSectionAgents] || isCursor(sidebarRowAgent, e.SessionID, e.WindowID)
+			tall := rowH[sidebarSectionAgents] > 1
+			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex, rowH[sidebarSectionAgents])
+			lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, hovered, tall)))
+			if tall {
+				lines = append(lines, compose(m.sidebarAgentNoteRow(e, cw, pal, hovered)))
 			}
 		}
+		if h := hidden[sidebarSectionAgents]; h > 0 {
+			lines = append(lines, overflowRow(h))
+		}
+	}
+
+	draw := [sidebarSectionCount]func(){
+		sidebarSectionSessions:  drawSessions,
+		sidebarSectionTerminals: drawTerminals,
+		sidebarSectionAgents:    drawAgents,
+		sidebarSectionFiles:     drawFiles,
+	}
+	for i, p := range plans {
+		if planRows[i] == 0 {
+			continue
+		}
+		if p.Section == pinned {
+			for range slack {
+				lines = append(lines, blank)
+			}
+			lines = append(lines, blank)
+		}
+		draw[p.Section]()
 	}
 
 	for len(lines) < height-footerH {
@@ -1333,7 +1412,7 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 // sidebarCursorIndex locates the cursor's target inside its section, so the
 // auto-scroll knows which offset to move and by how much.
 func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Node,
-	terminals []sidebarTerminalEntry, agents []sidebarAgentEntry,
+	terminals []sidebarTerminalEntry, agents []sidebarAgentEntry, files []fileRowSpec,
 ) (sidebarSection, int, bool) {
 	switch target.Kind {
 	case sidebarRowSession:
@@ -1352,6 +1431,15 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Nod
 		for i, e := range agents {
 			if e.WindowID == target.WindowID && e.SessionID == target.SessionID {
 				return sidebarSectionAgents, i, true
+			}
+		}
+	case sidebarRowFileUp, sidebarRowFileEntry:
+		// By name, not by index: the listing is re-read whenever the pane cds or
+		// the user walks somewhere, and an index into the previous directory
+		// points at whatever happens to be in that slot now.
+		for i, row := range files {
+			if !row.Note && row.Kind == target.Kind && row.Key == target.WindowID {
+				return sidebarSectionFiles, i, true
 			}
 		}
 	}

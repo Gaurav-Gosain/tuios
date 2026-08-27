@@ -616,8 +616,28 @@ func refreshForeignSessionsCmd(client *session.TUIClient) tea.Cmd {
 }
 
 // Update handles all incoming messages and updates the application state.
-// It processes keyboard, mouse, and timer events, managing windows and UI updates.
-func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
+//
+// It is a thin wrapper over handleMsg so that one thing can be asked after
+// every message rather than at the end of each of the fifty handlers: does the
+// rail's files section still agree with the focused pane's directory. The focus
+// moves from key handlers, mouse handlers, session switches, window closes and
+// state sync, and a hook in each of those would be a hook missing from the next
+// one somebody writes. One comparison, once, is the whole cost, and it answers
+// nil without allocating for a client whose rail has no files section.
+func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	model, cmd := m.handleMsg(msg)
+	sync := m.FilesSyncCmd()
+	if sync == nil {
+		return model, cmd
+	}
+	if cmd == nil {
+		return model, sync
+	}
+	return model, tea.Batch(cmd, sync)
+}
+
+// handleMsg is Update's body: one switch over every message the client can see.
+func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	// Per-event panic isolation. A panic in a single message handler (reachable
 	// from malformed guest input, a bad tape/state-sync payload, or a rarely-hit
 	// UI branch) must not tear down every window: bubbletea only recovers at the
@@ -1019,6 +1039,14 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// never executes anything; it only decides whether to look.
 		cmd := m.onCwdChange(msg)
 		return m, tea.Batch(cmd, ListenForCwdChange(m.PendingCwdChange))
+
+	case fileListMsg:
+		// A directory read that finished on its own goroutine. The handler drops
+		// a reply whose generation has been superseded, so a slow mount cannot
+		// overwrite the listing the user is looking at now.
+		m.HandleFileList(msg)
+		m.renderSkipped = false
+		return m, nil
 
 	case tapeDebounceMsg:
 		// The focused cwd held still long enough; evaluate it for a project tape.

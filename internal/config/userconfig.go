@@ -356,6 +356,15 @@ type SidebarConfig struct {
 	Workspaces string `toml:"workspaces"`
 	Marquee    *bool  `toml:"marquee"`  // Scroll a hovered row's overflowing title (default: true)
 	Tooltips   *bool  `toml:"tooltips"` // Label the collapsed strip on hover (default: true)
+	// Sections is the rail's layout: which sections it stacks, in what order,
+	// and the share of it each may claim. See SidebarDefaultSections.
+	Sections string `toml:"sections"`
+	// FileIcons draws a nerd font icon per file type in the files section
+	// (default: true).
+	FileIcons *bool `toml:"file_icons"`
+	// FolderClick is what a click on a folder row does: navigate, cd or both
+	// (default: navigate).
+	FolderClick string `toml:"folder_click"`
 }
 
 // Tape autorun modes. See TapeConfig.Autorun.
@@ -429,8 +438,10 @@ func DefaultConfig() *UserConfig {
 			ScrollColumnWidth:    ScrollColumnWidthDefault,
 			Scrollbar:            ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
 			Sidebar: SidebarConfig{
-				Position: "left",
-				Width:    SidebarDefaultWidth,
+				Position:    "left",
+				Width:       SidebarDefaultWidth,
+				Sections:    SidebarDefaultSections,
+				FolderClick: SidebarFolderClickNavigate,
 			},
 		},
 		Daemon: DaemonConfig{
@@ -1145,6 +1156,18 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	}
 	if sb.Marquee != nil {
 		SidebarMarquee = *sb.Marquee
+	}
+	// The layout falls back to the shipped one when unset, so a config file
+	// written before the files section existed lays the rail out the way it
+	// always did plus the new section, rather than drawing nothing at all.
+	if sb.Sections != "" {
+		SidebarSections = sb.Sections
+	}
+	if sb.FileIcons != nil {
+		SidebarFileIcons = *sb.FileIcons
+	}
+	if sb.FolderClick != "" {
+		SidebarFolderClick = sb.FolderClick
 	}
 	if sb.Tooltips != nil {
 		Tooltips = *sb.Tooltips

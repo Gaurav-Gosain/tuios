@@ -134,22 +134,57 @@ func (m *OS) SidebarCursorCollapse() { m.sidebarStepSection(-1) }
 
 // sidebarStepSection moves the cursor to the first row of the next (delta 1) or
 // previous (delta -1) section that has rows, stopping at the ends.
+//
+// It walks the rail's configured order rather than a fixed one, so h and l step
+// the sections in the order they are drawn in. A fixed list would have sent the
+// cursor up the rail on a layout that puts the files section above the panes.
 func (m *OS) sidebarStepSection(delta int) {
-	order := [sidebarSectionCount]sidebarRowKind{sidebarRowSession, sidebarRowWindow, sidebarRowAgent}
+	plans := sidebarLayoutPlans()
 	here := 0
 	if row, ok := m.sidebarCursorRow(); ok {
-		for i, k := range order {
-			if row.Kind == k {
+		for i, p := range plans {
+			if sidebarSectionOfKind(row.Kind) == p.Section {
 				here = i
+				break
 			}
 		}
 	}
-	for i := here + delta; i >= 0 && i < len(order); i += delta {
-		if j := m.sidebarFirstRowOfKind(order[i]); j >= 0 {
+	for i := here + delta; i >= 0 && i < len(plans); i += delta {
+		if j := m.sidebarFirstRowOfSection(plans[i].Section); j >= 0 {
 			m.sidebarSetCursor(j)
 			return
 		}
 	}
+}
+
+// sidebarSectionOfKind is the section a row kind belongs to, or the count for a
+// control that belongs to none.
+func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
+	switch kind {
+	case sidebarRowSession:
+		return sidebarSectionSessions
+	case sidebarRowWindow:
+		return sidebarSectionTerminals
+	case sidebarRowAgent, sidebarRowAgentFilter, sidebarRowAgentSort:
+		return sidebarSectionAgents
+	case sidebarRowFileUp, sidebarRowFileEntry, sidebarRowFileCd:
+		return sidebarSectionFiles
+	default:
+		return sidebarSectionCount
+	}
+}
+
+// sidebarFirstRowOfSection is the index of the first nav row belonging to a
+// section, or -1. Sections whose rows come in more than one kind (the files
+// section's ".." and its names) need this rather than a search by kind, or the
+// cursor lands past the row a person is looking at.
+func (m *OS) sidebarFirstRowOfSection(section sidebarSection) int {
+	for i, r := range m.SidebarNav {
+		if sidebarSectionOfKind(r.Kind) == section {
+			return i
+		}
+	}
+	return -1
 }
 
 // sidebarFirstRowOfKind is the index of the first nav row of a kind, or -1.
@@ -194,13 +229,11 @@ func (m *OS) SidebarActivateCursor() bool {
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowFiles:
-		m.ToggleFileView()
-	case sidebarRowFileBack:
-		m.CloseFileView()
+		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
-		m.queueSidebarCmd(m.FileViewCd())
+		m.FileViewCd()
 	case sidebarRowFileUp:
-		m.FileViewUp()
+		m.queueSidebarCmd(m.FileViewUp())
 	case sidebarRowFileEntry:
 		m.queueSidebarCmd(m.FileViewEnter(row.WindowIndex))
 	case sidebarRowSession:
@@ -431,13 +464,11 @@ func (m *OS) SidebarSetCollapsed(collapsed bool) {
 		return
 	}
 	m.SidebarCollapsed = collapsed
-	if collapsed {
-		// Three columns cannot draw a path, so the strip has no way to show the
-		// file view and no way out of it. Folding the rail therefore leaves the
-		// mode rather than hiding it: a mode nothing on screen mentions is a mode
-		// the user cannot get out of.
-		m.CloseFileView()
-	}
+	// Folding no longer closes the files section. Three columns cannot draw a
+	// listing, so the strip does not draw one, and unfolding brings the section
+	// back exactly as it brings the other three back. That is only safe now the
+	// section is a section: as a mode it took the whole rail, so a folded rail
+	// left in it had nothing on screen mentioning the mode and no way out.
 	m.sidebarClearPeek()
 	m.tooltipClear()
 	if m.AutoTiling {
