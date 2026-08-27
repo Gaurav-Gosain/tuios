@@ -1,7 +1,9 @@
 package app
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -81,7 +83,23 @@ type fileViewState struct {
 	// Gen bumps on every reload. The rail's render cache folds it in, so a
 	// listing that changed under an unchanged path still repaints.
 	Gen uint64
+	// Capped says the directory held more names than were read, so the listing
+	// is the first fileViewMaxEntries of it and not the whole thing. The rail
+	// says so where it would otherwise count the rows below the fold.
+	Capped bool
 }
+
+// fileViewMaxEntries bounds one listing.
+//
+// A directory read is one syscall loop on the goroutine that also runs Update,
+// and a build tree, a node_modules or a maildir can hold six figures of names.
+// Reading all of them costs the loop the whole read and then a sort of the
+// result, and the rail can show about thirty at a time, so the last ninety-nine
+// thousand are paid for and never looked at.
+//
+// The number is far past what anyone scrolls a twenty-eight column rail through
+// and far short of what stalls the loop.
+const fileViewMaxEntries = 2000
 
 // queueSidebarCmd parks a command a rail row produced.
 //
@@ -204,13 +222,15 @@ func (m *OS) loadFileView(dir string) {
 	m.filesView.Scroll = 0
 	m.filesView.Entries = m.filesView.Entries[:0]
 	m.filesView.Err = ""
+	m.filesView.Capped = false
 	m.filesView.Gen++
 
-	items, err := os.ReadDir(dir)
+	items, capped, err := readDirCapped(dir, fileViewMaxEntries)
 	if err != nil {
 		m.filesView.Err = fileViewError(err)
 		return
 	}
+	m.filesView.Capped = capped
 	for _, it := range items {
 		m.filesView.Entries = append(m.filesView.Entries, fileEntry{
 			Name: it.Name(),
@@ -227,6 +247,45 @@ func (m *OS) loadFileView(dir string) {
 		}
 		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
 	})
+}
+
+// readDirCapped reads at most limit names from dir and says whether there were
+// more.
+//
+// os.ReadDir is the obvious call and the wrong one here: it reads the whole
+// directory and sorts it before returning, so its cost is the directory's size
+// and there is no point at which a caller can stop it. This opens the directory
+// and takes one bounded batch instead, then asks for one more name only to find
+// out whether the listing is complete.
+//
+// The batch arrives in whatever order the filesystem hands it over, unlike
+// os.ReadDir's sorted result. The caller sorts it either way, so the only thing
+// that changes is which names a capped listing holds, and on a directory that
+// large there is no ordering that makes the cut the right one.
+func readDirCapped(dir string, limit int) (entries []os.DirEntry, capped bool, err error) {
+	f, err := os.Open(dir)
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() { _ = f.Close() }()
+
+	// io.EOF is how a directory with fewer than limit names left in it reports
+	// that it is finished, so it is the expected end and not a failure.
+	entries, err = f.ReadDir(limit)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, false, err
+	}
+	if len(entries) < limit {
+		return entries, false, nil
+	}
+	more, err := f.ReadDir(1)
+	if err != nil && !errors.Is(err, io.EOF) {
+		// The batch above is good and the only thing this second read decides is
+		// a note on one row, so a failure here loses the note rather than the
+		// listing.
+		return entries, false, nil
+	}
+	return entries, len(more) > 0, nil
 }
 
 // fileViewError turns a read failure into one short sentence the rail can draw.

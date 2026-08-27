@@ -171,10 +171,20 @@ func (m *OS) sidebarFilesLines(
 	}
 
 	if hidden > 0 {
+		// A capped listing counts nothing, because the number below the fold is
+		// not the number of names left in the directory. It says what it did
+		// instead, which is the honest fact and the shorter one.
 		more := overlay.Ellipsis() + " +" + strconv.Itoa(hidden)
+		if m.filesView.Capped {
+			more = overlay.Ellipsis() + " first " + strconv.Itoa(fileViewMaxEntries) + " shown"
+		}
 		lines = append(lines, compose(sidebarFit(strings.Repeat(" ", sidebarNameCol)+
 			sidebarStyle(nil, pal.FgMute).Render(more), cw, nil)))
-	} else if total == 0 {
+	} else if len(m.filesView.Entries) == 0 {
+		// The names, not the rows. A folder with nothing in it still draws a
+		// ".." above the gap, so counting rows here made "empty" reachable only
+		// at a filesystem root with nothing in it, which is the one directory
+		// nobody opens the view on.
 		lines = append(lines, compose(sidebarFit(strings.Repeat(" ", sidebarNameCol)+
 			sidebarStyle(nil, pal.FgMute).Render("empty"), cw, nil)))
 	}

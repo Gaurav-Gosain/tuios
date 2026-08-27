@@ -125,3 +125,55 @@ func TestLinkEditorPrefersTheEnvironment(t *testing.T) {
 		t.Errorf("EDITOR did not win over VISUAL: %q", got)
 	}
 }
+
+// TestOnlyKnownSchemesReachTheDesktop is a safety property, not a convenience.
+//
+// A program in a pane chooses both halves of an OSC 8 link: the words on screen
+// and the address behind them. The address is then handed to xdg-open, which
+// resolves a scheme to whatever application the desktop registered for it, so an
+// unfiltered address is a way for a pane to start an arbitrary application from
+// one click on text it also wrote.
+//
+// Negative control, confirmed red: with the linkOpenableScheme test removed from
+// OpenLink, every refused case below returns nil after trying to spawn a viewer.
+func TestOnlyKnownSchemesReachTheDesktop(t *testing.T) {
+	allowed := []string{
+		"http://example.com/a",
+		"https://example.com/a",
+		"HTTPS://example.com/a", // the scheme is case-insensitive
+		"mailto:someone@example.com",
+		"ftp://example.com/a",
+	}
+	for _, u := range allowed {
+		if !linkOpenableScheme(u) {
+			t.Errorf("%q was refused; it is one of the schemes a terminal is asked for", u)
+		}
+	}
+
+	// Each of these resolves to a registered application on some desktop, and
+	// none of them is a link a pane's reader meant to click.
+	refused := []string{
+		"javascript:alert(1)",
+		"data:text/html,<script>x</script>",
+		"vscode://file/etc/passwd",
+		"ssh://root@example.com",
+		"smb://example.com/share",
+		"example.com/a", // no scheme at all
+		"",
+	}
+	for _, u := range refused {
+		if linkOpenableScheme(u) {
+			t.Errorf("%q was accepted for the desktop's own handler", u)
+		}
+	}
+
+	// And the refusal is the clipboard, not silence. A click that appears to do
+	// nothing is worse than one that says what it did instead.
+	m := &OS{}
+	if cmd := m.OpenLink("vscode://file/etc/passwd"); cmd == nil {
+		t.Fatal("a refused scheme produced no clipboard fallback")
+	}
+	if len(m.Notifications) == 0 {
+		t.Error("a refused scheme said nothing about what it did instead")
+	}
+}

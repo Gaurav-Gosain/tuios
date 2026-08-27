@@ -31,10 +31,16 @@ func railLines(t *testing.T, m *OS) []string {
 // where it matters: the mode costs the three sections nothing when it is off,
 // and takes the rail when it is on.
 //
-// Negative control: with the filesView.Open branch removed from
+// Negative control, confirmed red: with the filesView.Open branch removed from
 // sidebarPanelLinesForTree, the rail keeps drawing "sessions" and the listing
-// never appears; with the branch placed before the collapsed-strip return, a
-// folded rail draws a path into three columns. NOT YET CONFIRMED RED.
+// never appears.
+//
+// The other control this comment used to name (move the branch above the
+// collapsed-strip return, so a folded rail draws a path into three columns) was
+// run and turns nothing red, because the mode can never be open on a folded
+// rail: OpenFileView refuses to enter it there and collapsing leaves it. Those
+// two guards are what the invariant actually rests on, and
+// TestTheFileViewAndTheFoldedRailAreExclusive pins them.
 func TestFileViewReplacesTheSectionsOnScreen(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 
@@ -205,5 +211,157 @@ func TestTruncPathLeftKeepsTheTail(t *testing.T) {
 	}
 	if ansi.StringWidth(got) > 12 {
 		t.Errorf("truncPathLeft(%q, 12) = %q, %d cells wide", path, got, ansi.StringWidth(got))
+	}
+}
+
+// TestFileViewReachableFromTheKeyboard walks the whole mode with enter alone.
+//
+// The rail has three switches on row kind, not one: the click handler's, the
+// completed-gesture path's, and SidebarActivateCursor's. Only the last is the
+// keyboard's, and it was the one that shipped without the file view's rows, so
+// enter on a listing did nothing at all while a click on the same row worked.
+// Nothing else in this package steers the mode from the keyboard, so a
+// regression there is silent.
+//
+// Every row here is found through SidebarNav, which the renderer publishes as it
+// draws, so this also checks that the nav rows and the rectangles agree.
+//
+// Negative control, confirmed red: with the file rows dropped from
+// SidebarActivateCursor's switch, the first assertion fails and the mode is
+// never entered.
+func TestFileViewReachableFromTheKeyboard(t *testing.T) {
+	root := fileViewTree(t)
+	m := sidebarTestOS(t, 120, 40, "left")
+	m.Windows[0].Cwd = root
+	m.FocusedWindow = 0
+
+	// Enter on the footer's "files" control opens the view on the focused
+	// pane's directory.
+	railLines(t, m)
+	m.SidebarCursor = m.sidebarFirstRowOfKind(sidebarRowFiles)
+	if m.SidebarCursor < 0 {
+		t.Fatal("the rail published no files control for the keyboard to land on")
+	}
+	if exit := m.SidebarActivateCursor(); exit {
+		t.Fatal("opening the file view asked to leave the rail")
+	}
+	if !m.FileViewOpen() {
+		t.Fatal("enter on the files control did not open the view")
+	}
+	if got := m.FileViewDir(); got != root {
+		t.Fatalf("the view opened at %q, want the pane's own directory %q", got, root)
+	}
+
+	// Enter on a folder row walks into it. "apple" is the first entry.
+	railLines(t, m)
+	m.SidebarCursor = m.sidebarFirstRowOfKind(sidebarRowFileEntry)
+	if m.SidebarCursor < 0 {
+		t.Fatal("the listing published no entry row")
+	}
+	if name := m.filesView.Entries[m.SidebarNav[m.SidebarCursor].WindowIndex].Name; name != "apple" {
+		t.Fatalf("the first entry row is %q, want apple", name)
+	}
+	m.SidebarActivateCursor()
+	if got, want := m.FileViewDir(), filepath.Join(root, "apple"); got != want {
+		t.Fatalf("enter on a folder left the view at %q, want %q", got, want)
+	}
+
+	// Enter on ".." walks back out. It is the first row of a listing that has a
+	// parent, which this one does.
+	railLines(t, m)
+	m.SidebarCursor = m.sidebarFirstRowOfKind(sidebarRowFileUp)
+	if m.SidebarCursor < 0 {
+		t.Fatal("a listing below the root published no .. row")
+	}
+	m.SidebarActivateCursor()
+	if got := m.FileViewDir(); got != root {
+		t.Fatalf("enter on .. left the view at %q, want %q", got, root)
+	}
+
+	// And enter on "back" leaves the mode, which is the way out a user who
+	// arrived here by keyboard has to be able to find.
+	railLines(t, m)
+	m.SidebarCursor = m.sidebarFirstRowOfKind(sidebarRowFileBack)
+	if m.SidebarCursor < 0 {
+		t.Fatal("the file view published no back control")
+	}
+	m.SidebarActivateCursor()
+	if m.FileViewOpen() {
+		t.Error("enter on back left the rail in its file view")
+	}
+	if out := strings.Join(railLines(t, m), "\n"); !strings.Contains(out, "sessions") {
+		t.Errorf("leaving the file view did not bring the sections back:\n%s", out)
+	}
+}
+
+// TestTheFileViewAndTheFoldedRailAreExclusive.
+//
+// Three columns cannot draw a path, so a folded rail has no way to show the
+// listing and no way out of it: a mode nothing on screen mentions is a mode the
+// user cannot leave. Two guards keep the pair apart, and the mode's position in
+// sidebarPanelLinesForTree relies on both of them holding.
+//
+// Negative control, confirmed red: drop the width test from OpenFileView and the
+// first half fails; drop the CloseFileView call from SidebarSetCollapsed and the
+// second half fails.
+func TestTheFileViewAndTheFoldedRailAreExclusive(t *testing.T) {
+	dir := fileViewTree(t)
+
+	// A rail folded to its glyph strip refuses the mode outright.
+	folded := sidebarTestOS(t, 120, 40, "left")
+	folded.SidebarCollapsed = true
+	if folded.OpenFileView(dir) {
+		t.Error("the file view opened on a folded rail")
+	}
+	if folded.FileViewOpen() {
+		t.Error("a refused OpenFileView still left the rail in its file view")
+	}
+
+	// And folding an expanded rail that is in the mode leaves the mode rather
+	// than hiding it.
+	m := sidebarTestOS(t, 120, 40, "left")
+	if !m.OpenFileView(dir) {
+		t.Fatal("OpenFileView refused an expanded rail")
+	}
+	m.SidebarSetCollapsed(true)
+	if m.FileViewOpen() {
+		t.Error("folding the rail hid the file view instead of leaving it")
+	}
+	if out := strings.Join(railLines(t, m), "\n"); strings.Contains(out, "apple/") {
+		t.Errorf("a folded rail is still drawing a listing:\n%s", out)
+	}
+}
+
+// TestAnEmptyFolderSaysSo. A folder with nothing in it draws a ".." row and then
+// a gap, and a gap is also what a listing that failed to draw looks like. The
+// word is the difference.
+//
+// Negative control, confirmed red: count the drawn rows rather than the names,
+// and the ".." keeps the count above zero so the word never appears.
+func TestAnEmptyFolderSaysSo(t *testing.T) {
+	empty := filepath.Join(t.TempDir(), "nothing-here")
+	if err := os.Mkdir(empty, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	m := sidebarTestOS(t, 120, 40, "left")
+	if !m.OpenFileView(empty) {
+		t.Fatal("OpenFileView refused")
+	}
+	out := strings.Join(railLines(t, m), "\n")
+	if !strings.Contains(out, "empty") {
+		t.Errorf("an empty folder drew no word for it:\n%s", out)
+	}
+	// And the way out is still there, so it is not a dead end.
+	if !strings.Contains(out, "..") {
+		t.Errorf("an empty folder drew no way back out:\n%s", out)
+	}
+
+	// A folder with names in it says nothing of the sort.
+	if !m.OpenFileView(fileViewTree(t)) {
+		t.Fatal("OpenFileView refused the populated tree")
+	}
+	if out := strings.Join(railLines(t, m), "\n"); strings.Contains(out, "empty") {
+		t.Errorf("a five-name folder was called empty:\n%s", out)
 	}
 }

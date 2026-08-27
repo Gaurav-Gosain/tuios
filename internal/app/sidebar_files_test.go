@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -43,10 +44,9 @@ var wantFileOrder = []string{"apple", "Zeta", "Alpha.go", "beta.txt", "README.md
 
 // TestFileViewOrdersFoldersFirst.
 //
-// Negative control: with the sort's IsDir clause removed, the order comes out
-// Alpha.go, apple, beta.txt, README.md, Zeta and this fails; with
-// strings.ToLower dropped, Zeta sorts before apple and it fails too. NOT YET
-// CONFIRMED RED.
+// Negative control, both confirmed red: with the sort's IsDir clause removed
+// the order comes out Alpha.go, apple, beta.txt, README.md, Zeta; with
+// strings.ToLower dropped, Zeta sorts before apple.
 func TestFileViewOrdersFoldersFirst(t *testing.T) {
 	m := &OS{}
 	m.loadFileView(fileViewTree(t))
@@ -140,9 +140,9 @@ func TestUnreadableDirectoryIsReported(t *testing.T) {
 // into vim is a series of editing commands and into a REPL a syntax error, so
 // the pane has to be at a prompt and tuios has to be able to see that it is.
 //
-// Negative control: with the alt-screen test removed from paneBusyReason the
-// first case passes the guard, and with the ForegroundCmd test removed the
-// second does. NOT YET CONFIRMED RED.
+// Negative control, both confirmed red: with the alt-screen test removed from
+// paneBusyReason the first case passes the guard, and with the ForegroundCmd
+// test removed the second does.
 func TestPaneBusyReasonRefusesWhenSomethingIsRunning(t *testing.T) {
 	win := newTestWindow(t, "aaaaaaaa1111", 40, 10)
 
@@ -236,10 +236,16 @@ func TestFileViewFollowsThePaneItWasOpenedFrom(t *testing.T) {
 // somewhere of their own, a cd in the terminal must leave it there. The listing
 // is then answering a question they asked and the pane's directory is not.
 //
-// Negative control: read the pane's cwd back off the window after overwriting
-// it, rather than capturing the previous value first, and the guard can never
-// fire; the view follows every cd and this fails. NOT YET CONFIRMED RED, but it
-// is the bug that was in this function when it was written.
+// Negative control, confirmed red: drop the "still on the pane's own directory"
+// clause from recordWindowCwd's guard, so the view follows every cd of its
+// origin pane, and this fails with the listing dragged to the pane's directory.
+//
+// The control this comment used to name (read the pane's cwd back off the
+// window after overwriting it, rather than capturing the previous value first)
+// was run and does not turn this test red. It makes the guard compare the
+// listing against the new directory instead of the old one, so the view stops
+// following rather than always following, and it is the test above that goes
+// red. Both directions are covered; only the label was wrong.
 func TestFileViewDoesNotDragTheUserBack(t *testing.T) {
 	root := fileViewTree(t)
 	sub := filepath.Join(root, "apple")
@@ -280,5 +286,47 @@ func TestCwdIsRecordedWithTapeAutorunOff(t *testing.T) {
 
 	if win.Cwd != "/tmp" {
 		t.Errorf("with tape autorun off the pane's cwd was not recorded: %q", win.Cwd)
+	}
+}
+
+// TestALargeDirectoryIsBounded. A listing is a syscall loop on the goroutine
+// that also runs Update, and a build tree or a maildir holds six figures of
+// names. The read stops at a fixed number of them, and the rail says that it
+// did rather than counting rows that were never read.
+//
+// The directory built here is one name past the cap, which is the smallest tree
+// that tells a bounded read from an unbounded one.
+//
+// Negative control, confirmed red: with readDirCapped replaced by os.ReadDir,
+// every name is read and both assertions fail.
+func TestALargeDirectoryIsBounded(t *testing.T) {
+	dir := t.TempDir()
+	for i := range fileViewMaxEntries + 1 {
+		if err := os.WriteFile(filepath.Join(dir, "f"+strconv.Itoa(i)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	m := &OS{}
+	m.loadFileView(dir)
+	if m.filesView.Err != "" {
+		t.Fatalf("reading the tree failed: %s", m.filesView.Err)
+	}
+	if got := len(m.filesView.Entries); got != fileViewMaxEntries {
+		t.Errorf("read %d names from a directory of %d, want the cap of %d",
+			got, fileViewMaxEntries+1, fileViewMaxEntries)
+	}
+	if !m.filesView.Capped {
+		t.Error("a listing that was cut short did not say so")
+	}
+
+	// And a directory under the cap is not marked, so the note only ever
+	// appears where it is true.
+	m.loadFileView(fileViewTree(t))
+	if m.filesView.Capped {
+		t.Error("a five-name directory reported itself as cut short")
+	}
+	if got := len(m.filesView.Entries); got != len(wantFileOrder) {
+		t.Errorf("read %d names from the small tree, want %d", got, len(wantFileOrder))
 	}
 }

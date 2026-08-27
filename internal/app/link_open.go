@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -71,6 +72,14 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 		return m.openLocalPath(path, rawURL)
 	}
 
+	// The scheme decides whether this is handed to the desktop at all. See
+	// linkOpenableScheme.
+	if !linkOpenableScheme(rawURL) {
+		m.ShowNotification("tuios can not open that kind of link. The address is on your clipboard.",
+			"warning", config.NotificationDuration)
+		return tea.SetClipboard(rawURL)
+	}
+
 	// Not a local file, so it needs the viewer's own machine.
 	if m.IsRemoteClient() {
 		m.ShowNotification("Copied the link. A remote client can not open it for you.",
@@ -85,6 +94,43 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 	}
 	m.ShowNotification("Opened the link.", "success", config.NotificationDuration)
 	return nil
+}
+
+// A link's address is attacker-controlled. Any program running in a pane can
+// print an OSC 8 escape carrying any URI at all, and unlike a bare URL, which
+// this file's scanner only ever produces from three schemes, a marked link's
+// address never passed through anything that looked at it.
+//
+// What is on the other end of openInOSViewer is xdg-open, `open`, or the
+// Windows protocol handler, and all three resolve a scheme to whatever
+// application the desktop registered for it. So an unfiltered address is a way
+// for a program in a pane to start an arbitrary registered application, with an
+// argument it chose, from one click on text whose visible label it also chose.
+// The label above the run names the real target, which is what makes this a
+// click the user consents to rather than one they are tricked into; the list
+// below is what stops the consent from being worth more than it looks.
+//
+// Nothing is executed through a shell either way: openInOSViewer builds an argv
+// and never a command line, so a semicolon or a backtick in an address is one
+// more character of one argument. The risk this list closes is the scheme, not
+// the quoting.
+//
+// The set is the one a terminal is actually asked for. file:// is absent
+// because it never reaches here: OpenLink routes it above, to a stat and a pane
+// on the machine the file is on. An application's own scheme is refused and
+// copied instead, which loses nothing a paste cannot do.
+var linkOpenSchemes = []string{"http", "https", "mailto", "ftp", "ftps"}
+
+// linkOpenableScheme reports whether rawURL may be handed to the desktop's own
+// handler. An address with no scheme at all is refused: there is nothing for a
+// handler to resolve, and guessing http for it would be inventing a target the
+// program never wrote.
+func linkOpenableScheme(rawURL string) bool {
+	scheme, _, ok := strings.Cut(rawURL, ":")
+	if !ok || scheme == "" {
+		return false
+	}
+	return slices.Contains(linkOpenSchemes, strings.ToLower(scheme))
 }
 
 // openLocalPath opens a path that lives on the pane machine.
