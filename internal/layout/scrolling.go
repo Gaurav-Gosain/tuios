@@ -11,6 +11,34 @@ type ScrollColumn struct {
 	WindowIDs  []int   // Windows stacked in this column
 	Proportion float64 // Width as proportion of screen (0.0-1.0), 0 = default
 	FixedWidth int     // Fixed width in cells (0 = use proportion)
+	// Active is the index in WindowIDs of the window this column is focused on,
+	// which is the window focus lands on when the column is focused.
+	//
+	// A column remembers it. Without it, focusing a column always focused its
+	// top window: stack three, work in the bottom one, step right and step back,
+	// and you were in the top one - which is niri's behaviour inverted, since
+	// there a column's focus is exactly what stepping back returns you to.
+	Active int
+}
+
+// activeID is the window a column is focused on, or -1 for an empty column.
+func (c *ScrollColumn) activeID() int {
+	if len(c.WindowIDs) == 0 {
+		return -1
+	}
+	return c.WindowIDs[c.clampActive()]
+}
+
+// clampActive keeps Active inside WindowIDs after a window has left the column,
+// and returns it.
+func (c *ScrollColumn) clampActive() int {
+	if c.Active < 0 {
+		c.Active = 0
+	}
+	if c.Active >= len(c.WindowIDs) {
+		c.Active = max(len(c.WindowIDs)-1, 0)
+	}
+	return c.Active
 }
 
 // ScrollingLayout manages the scrollable tiling strip.
@@ -20,7 +48,15 @@ type ScrollingLayout struct {
 	ViewportX    int       // Scroll offset in cells
 	DefaultWidth float64   // Default column width proportion (e.g., 0.5)
 	PresetWidths []float64 // Preset width proportions to cycle through
-	Gap          int       // Gap between columns in cells
+	// Gap is the cells of empty ground kept between neighbouring columns, and
+	// between windows stacked inside one column. It is appearance.gap, set by
+	// the caller on every access (see OS.GetOrCreateScrollingLayout) because it
+	// is session state that a peer client can move mid-session.
+	//
+	// The strip's panes always draw their own borders, so this is ground and
+	// never a divider: there is no separator overlay in scrolling mode for a
+	// wider gap to thicken.
+	Gap int
 }
 
 // NewScrollingLayout creates a new scrolling layout with sensible defaults.
@@ -60,6 +96,14 @@ func (s *ScrollingLayout) RemoveWindow(windowID int) {
 					s.Columns[i].WindowIDs[:j],
 					s.Columns[i].WindowIDs[j+1:]...,
 				)
+				// The window that left was above the active one, so the active
+				// one has moved up a place. Removing the active window itself
+				// leaves the index where it is, which is now the window below -
+				// the same rule the column strip follows for a closed column.
+				if j < s.Columns[i].Active {
+					s.Columns[i].Active--
+				}
+				s.Columns[i].clampActive()
 				// Remove empty column
 				if len(s.Columns[i].WindowIDs) == 0 {
 					removedIdx := i
@@ -143,9 +187,16 @@ func (s *ScrollingLayout) ConsumeWindow() {
 	if len(next.WindowIDs) == 0 {
 		return
 	}
-	windowID := next.WindowIDs[0]
-	next.WindowIDs = next.WindowIDs[1:]
-	s.Columns[s.FocusedCol].WindowIDs = append(s.Columns[s.FocusedCol].WindowIDs, windowID)
+	windowID := next.activeID()
+	idx := next.clampActive()
+	next.WindowIDs = append(next.WindowIDs[:idx], next.WindowIDs[idx+1:]...)
+	next.clampActive()
+
+	col := &s.Columns[s.FocusedCol]
+	col.WindowIDs = append(col.WindowIDs, windowID)
+	// Focus follows the window that moved, which is what makes consume and
+	// expel undo each other.
+	col.Active = len(col.WindowIDs) - 1
 
 	if len(next.WindowIDs) == 0 {
 		s.Columns = append(s.Columns[:s.FocusedCol+1], s.Columns[s.FocusedCol+2:]...)
@@ -161,14 +212,22 @@ func (s *ScrollingLayout) ExpelWindow() {
 	if len(col.WindowIDs) < 2 {
 		return
 	}
-	windowID := col.WindowIDs[len(col.WindowIDs)-1]
-	col.WindowIDs = col.WindowIDs[:len(col.WindowIDs)-1]
+	// The window that leaves is the one the column is focused on, not whichever
+	// happens to be at the bottom. Expelling the bottom window meant the action
+	// moved a pane the user was not looking at, and it could not undo a consume.
+	at := col.clampActive()
+	windowID := col.WindowIDs[at]
+	col.WindowIDs = append(col.WindowIDs[:at], col.WindowIDs[at+1:]...)
+	col.clampActive()
 
 	newCol := ScrollColumn{WindowIDs: []int{windowID}}
 	idx := s.FocusedCol + 1
 	s.Columns = append(s.Columns, ScrollColumn{})
 	copy(s.Columns[idx+1:], s.Columns[idx:])
 	s.Columns[idx] = newCol
+	// Focus follows the window out, so the pane the user was in is still the
+	// pane they are in.
+	s.FocusedCol = idx
 }
 
 // ResolveColumnWidth returns the width in cells for a column by index.
@@ -224,52 +283,82 @@ func (s *ScrollingLayout) ClampViewport(screenWidth int) {
 	}
 }
 
-// EnsureFocusedVisible only scrolls the viewport when the focused column is
-// COMPLETELY off-screen. If any part of the column is already visible (the
-// user can see and interact with it), the viewport stays put. This prevents
-// the jarring large-jump behavior when clicking a partially-visible edge
-// column or when TileAllWindows runs during resize/retile.
+// scrollPeek is the cells of the neighbouring column kept on screen beside the
+// focused one, so the strip says there is more of it in the direction you are
+// travelling. Small on purpose: it is a hint that the strip continues, not a
+// second column.
+const scrollPeek = 4
+
+// reveal scrolls the viewport by the least that brings the focused column into
+// view with margin cells to spare on each side, and not at all when it is
+// already there.
 //
-// For explicit keyboard navigation where the user WANTS to see the full
-// column, use ScrollToFocusedColumn instead.
+// Least-scroll rather than centring. Centring moves the whole strip on every
+// step even when the column the user asked for was already half on screen, and
+// a strip that jumps under a plain left/right press is the thing that makes a
+// scrolling layout hard to keep your place in. It is also what niri does by
+// default; centring every focus is its center-focused-column "always", which is
+// opt-in there.
+func (s *ScrollingLayout) reveal(screenWidth, margin int) {
+	colX := s.columnX(s.FocusedCol, screenWidth)
+	colW := s.resolveWidth(s.Columns[s.FocusedCol], screenWidth)
+
+	// A column too wide to show with margin on both sides gets what is left,
+	// shared; without this the two clauses below fight and the viewport lands
+	// wherever the second one puts it.
+	if colW+2*margin > screenWidth {
+		margin = max((screenWidth-colW)/2, 0)
+	}
+	if colX-margin < s.ViewportX {
+		s.ViewportX = colX - margin
+	}
+	if colX+colW+margin > s.ViewportX+screenWidth {
+		s.ViewportX = colX + colW + margin - screenWidth
+	}
+	s.ClampViewport(screenWidth)
+}
+
+// EnsureFocusedVisible brings the focused column on screen if none of it is,
+// and otherwise leaves the viewport where it is.
+//
+// The threshold is deliberately "nothing of it is visible" rather than "not all
+// of it is": this runs on every retile and on every click, and a column the user
+// can already see and click does not need the strip to move under them. Explicit
+// keyboard navigation asks for more; that is ScrollToFocusedColumn.
 func (s *ScrollingLayout) EnsureFocusedVisible(screenWidth int) {
 	if s.FocusedCol < 0 || s.FocusedCol >= len(s.Columns) {
 		return
 	}
 	colX := s.columnX(s.FocusedCol, screenWidth)
 	colW := s.resolveWidth(s.Columns[s.FocusedCol], screenWidth)
-
-	fullyVisible := colX >= s.ViewportX && colX+colW <= s.ViewportX+screenWidth
-	if fullyVisible {
-		return
+	if colX < s.ViewportX+screenWidth && colX+colW > s.ViewportX {
+		return // some of it is on screen
 	}
-
-	// Center the focused column so both neighbors peek in
-	s.ViewportX = colX - (screenWidth-colW)/2
-	s.ClampViewport(screenWidth)
+	s.reveal(screenWidth, 0)
 }
 
-// ScrollToFocusedColumn scrolls the viewport to fully show the focused column
-// with a small margin to peek at neighbors. Used by explicit keyboard
-// navigation (FocusLeft/Right, MoveColumn, CycleWidth, ResizeColumn).
+// ScrollToFocusedColumn shows the whole focused column, with a peek of its
+// neighbour beside it. Used by explicit keyboard navigation (FocusLeft/Right,
+// MoveColumn, CycleWidth, ResizeColumn), where the user asked to be taken to
+// this column and wants to see all of it.
 func (s *ScrollingLayout) ScrollToFocusedColumn(screenWidth int) {
 	if s.FocusedCol < 0 || s.FocusedCol >= len(s.Columns) {
 		return
 	}
-	colX := s.columnX(s.FocusedCol, screenWidth)
-	colW := s.resolveWidth(s.Columns[s.FocusedCol], screenWidth)
-
-	s.ViewportX = colX - (screenWidth-colW)/2
-	s.ClampViewport(screenWidth)
+	s.reveal(screenWidth, scrollPeek)
 }
 
 // FocusColumnContaining sets focus to the column containing the given window ID.
 // Returns true if the window was found. If not found, FocusedCol is unchanged
 // and the caller should avoid scrolling the viewport.
 func (s *ScrollingLayout) FocusColumnContaining(windowID int) bool {
-	for ci, col := range s.Columns {
-		if slices.Contains(col.WindowIDs, windowID) {
+	for ci := range s.Columns {
+		if at := slices.Index(s.Columns[ci].WindowIDs, windowID); at >= 0 {
 			s.FocusedCol = ci
+			// Focusing a window in a stacked column is what tells the column
+			// which of its windows it is on, so stepping away and back returns
+			// to this one rather than to the top of the stack.
+			s.Columns[ci].Active = at
 			return true
 		}
 	}
@@ -295,17 +384,16 @@ func (s *ScrollingLayout) ComputePositions(screenWidth, usableHeight, topMargin 
 			x += colWidth + s.Gap
 			continue
 		}
-		cellHeight := usableHeight / windowCount
+		// Windows stacked in one column divide its height on the same terms
+		// neighbouring columns divide the strip: the gap comes out first and the
+		// remainder is spread rather than dropped on the last one.
+		rows := spans(topMargin, usableHeight, windowCount, s.Gap)
 		for j, winID := range col.WindowIDs {
-			h := cellHeight
-			if j == windowCount-1 {
-				h = usableHeight - j*cellHeight
-			}
 			result[winID] = Rect{
 				X: screenX,
-				Y: topMargin + j*cellHeight,
+				Y: rows[j].Pos,
 				W: colWidth,
-				H: h,
+				H: rows[j].Size,
 			}
 		}
 		x += colWidth + s.Gap
@@ -328,11 +416,7 @@ func (s *ScrollingLayout) GetFocusedWindowID() int {
 	if s.FocusedCol < 0 || s.FocusedCol >= len(s.Columns) {
 		return -1
 	}
-	col := s.Columns[s.FocusedCol]
-	if len(col.WindowIDs) == 0 {
-		return -1
-	}
-	return col.WindowIDs[0]
+	return s.Columns[s.FocusedCol].activeID()
 }
 
 // HasWindow checks if a window is in the layout.

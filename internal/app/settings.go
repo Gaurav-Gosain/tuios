@@ -126,6 +126,10 @@ func (m *OS) adoptConfigPaneGeometry() {
 		m.lastConfigPaneGap = config.PaneGap
 		m.PaneGap = config.PaneGap
 	}
+	if config.ScrollColumnWidth != m.lastConfigScrollWidth {
+		m.lastConfigScrollWidth = config.ScrollColumnWidth
+		m.ScrollColumnWidth = config.ScrollColumnWidth
+	}
 }
 
 // ApplyAppearanceLive is applyAppearanceLive for callers outside the package.
@@ -318,6 +322,11 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.border_focused_color"),
 			opt("appearance.border_unfocused_color"),
 			custom("appearance.gap", m.paneGapItem()),
+			// Hand-written for the reason sharedBordersItem is: both are session
+			// state and a row reading the config would show a value the layout
+			// is not using.
+			custom("appearance.master_ratio", m.masterRatioItem()),
+			custom("appearance.scroll_column_width", m.scrollColumnWidthItem()),
 			opt("appearance.dim_unfocused"),
 			opt("appearance.panel_padding"),
 			opt("appearance.zen_mode"),
@@ -411,6 +420,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		Items: m.resolveRows([]settingsRow{
 			opt("startup.open_default_window"),
 			opt("startup.tiled"),
+			opt("startup.layout"),
 			opt("startup.start_in_terminal_mode"),
 			opt("startup.daemon"),
 		}),
@@ -466,9 +476,19 @@ func (m *OS) settingsCategories() []settingsCategory {
 		}),
 	}
 
+	screensaver := settingsCategory{
+		Name: "Saver",
+		Items: m.resolveRows([]settingsRow{
+			opt("screensaver.enabled"),
+			opt("screensaver.idle_minutes"),
+			opt("screensaver.effect"),
+			opt("screensaver.while_busy"),
+		}),
+	}
+
 	return []settingsCategory{
 		appearance, sidebar, dock, behavior,
-		notifications, startup, screenshot, advanced, daemon, tape,
+		notifications, startup, screenshot, screensaver, advanced, daemon, tape,
 	}
 }
 

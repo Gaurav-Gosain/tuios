@@ -19,7 +19,9 @@ func (m *OS) flushScreenshotGraphicsForFrame() {}
 
 // screenshotPreviewPictureBox never has a picture to report here, so the panel
 // draws its cells over the whole body.
-func (m *OS) screenshotPreviewPictureBox() (cols, rows int, ok bool) { return 0, 0, false }
+func (m *OS) screenshotPreviewPictureBox() (inset, cols, rows int, ok bool) {
+	return 0, 0, 0, false
+}
 
 // screenshotPreviewPixelBudget is zero here, which is what tells the render
 // command not to shrink and encode a preview picture nothing would place.

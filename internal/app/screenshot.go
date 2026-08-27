@@ -382,6 +382,11 @@ func (m *OS) screenshotSettings() capture.Settings {
 	s := capture.SettingsFrom(cfg, theme.CurrentThemeID(), theme.ActiveGlyphSetID())
 	if caps := GetHostCapabilities(); caps != nil {
 		s.HostFontFamily, s.HostBoldFamily = caps.FontFamily, caps.BoldFontFamily
+		// The shape of a cell, from the terminal that owns it. Without it the
+		// raster comes out at whatever shape the font's line box happens to
+		// give, which on the built-in face is eleven percent narrower per cell
+		// than kitty's own, and the picture leans tall.
+		s.HostCellW, s.HostCellH = caps.CellWidth, caps.CellHeight
 	}
 	return s
 }
@@ -923,4 +928,13 @@ func (m *OS) ScreenshotFocusedWindow() tea.Cmd { return m.ScreenshotWindow(m.Foc
 type screenshotPlacementState struct {
 	x, y, cols, rows int
 	capture          int
+	// hostW and hostH are the host terminal's size in cells when the picture
+	// was drawn. A resize takes the picture with it: the host is repainting
+	// its whole screen at a new size, and what is under this id afterwards is
+	// not what was put there. The panel's own arithmetic does not always
+	// notice, because a centred panel lands on the same cell after a resize of
+	// one row or one column, and then every other field here was equal and the
+	// flush drew nothing. So the size the picture was drawn at is part of what
+	// makes a drawn picture this one.
+	hostW, hostH int
 }

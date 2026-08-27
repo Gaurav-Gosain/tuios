@@ -125,8 +125,9 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	// to every client's layout arithmetic. Always sent, never nil: nil on the
 	// wire means a client too old to say, and this one can.
 	state.PaneGeometry = &session.PaneGeometryState{
-		SharedBorders: m.SharedBorders,
-		PaneGap:       m.PaneGap,
+		SharedBorders:     m.SharedBorders,
+		PaneGap:           m.PaneGap,
+		ScrollColumnWidth: m.ScrollColumnWidth,
 	}
 
 	return state

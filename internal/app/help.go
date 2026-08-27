@@ -137,9 +137,13 @@ func (m *OS) OpenHelpAtCategory(name string) {
 
 // generateCategoryBindings generates bindings for a specific category
 func generateCategoryBindings(registry *config.KeybindRegistry, categoryName string, actions []string) []HelpBinding {
+	presses := config.PressesByAction(registry)
 	bindings := []HelpBinding{}
 	for _, action := range actions {
-		keys := registry.GetKeys(action)
+		// The whole chord, not the bare key: corner snapping is reached with
+		// the layout prefix, and listing its key as "1" would tell the reader
+		// that 1 snaps a window when 1 selects one.
+		keys := presses[action]
 		if len(keys) == 0 {
 			continue // Skip unbound actions
 		}

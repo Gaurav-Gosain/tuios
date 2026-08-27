@@ -57,6 +57,7 @@ func Raster(g *Grid, f *Frame, decorations ...Decoration) (*image.RGBA, error) {
 		return nil, err
 	}
 	cw, ch := faces.cellSize()
+	cw, ch = fitCellToTerminal(f, cw, ch)
 	l := computeLayout(g, f, cw, ch, float64(scale))
 
 	img := image.NewRGBA(image.Rect(0, 0, int(l.w+0.5), int(l.h+0.5)))
@@ -228,6 +229,33 @@ func (fs *faceSet) cellSize() (float64, float64) {
 		ch = fs.size * 1.25
 	}
 	return cw, ch
+}
+
+// fitCellToTerminal gives the raster's cell the shape of the cell of the
+// terminal being pictured.
+//
+// The font's own cell is not the terminal's. cellSize takes the width from the
+// 'M' advance and the height from the face's line box, and a terminal picks its
+// own height from ascent and descent and its own leading rules; the two agree
+// only by luck. Measured on this machine against a real kitty: the host's cell
+// was 9 by 20 pixels, a ratio of 0.450, while the raster's cell in the built-in
+// face was 5.76 by 14.4, a ratio of 0.400. Every column of the picture was
+// eleven percent narrower than the column it pictured, which is a whole screen
+// leaning tall, and no amount of correct letterboxing in the panel can undo it
+// because the picture itself is the wrong shape.
+//
+// The cell is only ever grown, never shrunk. A cell narrower than the advance
+// would run neighbouring glyphs into each other and a cell shorter than the
+// line box would clip them; a cell wider than the advance costs a glyph that is
+// centred in it, which drawCluster already does.
+func fitCellToTerminal(f *Frame, cw, ch float64) (float64, float64) {
+	if f == nil || f.CellAspect <= 0 || cw <= 0 || ch <= 0 {
+		return cw, ch
+	}
+	if want := ch * f.CellAspect; want > cw {
+		return want, ch
+	}
+	return cw, cw / f.CellAspect
 }
 
 // pick returns the face and font that can draw r, honoring bold, or nil

@@ -146,7 +146,9 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 		Foreground(lipgloss.Color("8")).
 		Italic(true).
 		Render("Note: " + leader + " is the leader key. Press it followed by another key for prefix commands.\n" +
-			"Set keybindings.leader_key to move it, and an action to [] to unbind it.\n" +
+			"Set keybindings.leader_key to move it.\n" +
+			"`tuios keybinds unbind <action>` takes a key off one action.\n" +
+			"`tuios keybinds free <key>` hands a key back to the program in the pane.\n" +
 			"Run `tuios keybinds doctor` for every scope, including the ones not listed here.")
 	fmt.Println(note)
 	fmt.Println()

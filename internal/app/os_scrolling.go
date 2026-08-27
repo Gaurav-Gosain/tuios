@@ -37,6 +37,15 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 			}
 		}
 	}
+	// The two geometry inputs the session settles are pushed in on every access
+	// rather than stored once at creation. Both can move under a live layout -
+	// a peer client's setting arriving by state sync, or this client's own
+	// settings row - and a strip built before the change would otherwise keep
+	// laying its columns out with the old arithmetic until something happened
+	// to rebuild it. Every caller reaches the strip through here, so this is the
+	// one place that has to be right.
+	sl.Gap = m.PaneGap
+	sl.DefaultWidth = m.ScrollColumnWidthFraction()
 	return sl
 }
 
@@ -205,17 +214,25 @@ func (m *OS) ScrollingCycleWidth() {
 	m.scrollingSetPositions()
 }
 
-// ScrollingConsumeWindow absorbs the next column's window into the focused column.
+// ScrollingConsumeWindow absorbs the next column's window into the focused
+// column. Focus follows the window that moved, so the keyboard is where the
+// user is looking; without the sync the OS focus stayed on a pane in a column
+// that may no longer exist.
 func (m *OS) ScrollingConsumeWindow() {
 	sl := m.GetOrCreateScrollingLayout()
 	sl.ConsumeWindow()
+	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
+	m.scrollingSyncFocusToOS()
 	m.scrollingSetPositions()
 }
 
-// ScrollingExpelWindow ejects the last stacked window into its own column.
+// ScrollingExpelWindow pushes the focused window out into its own column, and
+// follows it there.
 func (m *OS) ScrollingExpelWindow() {
 	sl := m.GetOrCreateScrollingLayout()
 	sl.ExpelWindow()
+	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
+	m.scrollingSyncFocusToOS()
 	m.scrollingSetPositions()
 }
 

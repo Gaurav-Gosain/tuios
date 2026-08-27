@@ -43,6 +43,52 @@ func (m *OS) SetPaneGapSetting(v int) {
 	m.applyAppearanceLive(true)
 }
 
+// SetMasterRatioSetting is SetSharedBordersSetting for the master pane's share
+// of the screen, taken as a percent. The model keeps the fraction the tilers
+// want; the config and the settings row speak percent, which is what a person
+// types and what an int option can carry.
+//
+// The master ratio was already session state, moved by the resize keys and
+// carried in SessionState. What it had no way to be was a preference: every
+// session started at 50 and the only way to change that was to press the resize
+// key again on every one of them.
+func (m *OS) SetMasterRatioSetting(percent int) {
+	percent = clampInt(percent, config.MasterRatioMin, config.MasterRatioMax)
+	m.MasterRatio = float64(percent) / 100
+	config.MasterRatioPercent = percent
+	m.setAppearance(func(a *config.AppearanceConfig) { a.MasterRatio = percent })
+	m.applyAppearanceLive(true)
+}
+
+// SetScrollColumnWidthSetting is SetSharedBordersSetting for a scrolling
+// column's width, as a percent of the screen.
+func (m *OS) SetScrollColumnWidthSetting(percent int) {
+	percent = clampInt(percent, config.ScrollColumnWidthMin, config.ScrollColumnWidthMax)
+	m.ScrollColumnWidth = percent
+	config.ScrollColumnWidth = percent
+	m.lastConfigScrollWidth = percent
+	m.setAppearance(func(a *config.AppearanceConfig) { a.ScrollColumnWidth = percent })
+	m.applyAppearanceLive(true)
+}
+
+// ScrollColumnWidthFraction is the session's column width as the proportion the
+// strip resolves against, with the config's value standing in for a model built
+// without one (the tape and fuzz entrypoints construct an OS by hand).
+func (m *OS) ScrollColumnWidthFraction() float64 {
+	w := m.ScrollColumnWidth
+	if w == 0 {
+		w = config.ScrollColumnWidth
+	}
+	return float64(clampInt(w, config.ScrollColumnWidthMin, config.ScrollColumnWidthMax)) / 100
+}
+
+// MasterRatioPercent is the session's master ratio as the settings row shows
+// it. Rounded rather than truncated, so a ratio the resize keys nudged to 0.55
+// reads back as 55 and not 54.
+func (m *OS) MasterRatioPercent() int {
+	return clampInt(int(m.MasterRatio*100+0.5), config.MasterRatioMin, config.MasterRatioMax)
+}
+
 // adoptPaneGeometry takes the pane geometry as the session has it. Nil is a
 // peer that has not said - an older client, or state written before the field
 // existed - and leaves this client on its own configured values, which is the
@@ -59,6 +105,13 @@ func (m *OS) adoptPaneGeometry(state *session.SessionState) bool {
 	changed := m.SharedBorders != pg.SharedBorders || m.PaneGap != pg.PaneGap
 	m.SharedBorders = pg.SharedBorders
 	m.PaneGap = pg.PaneGap
+	// Zero is a peer that has not said - state written before the field existed
+	// - and leaves this client on its own configured width, which is the
+	// pre-existing behaviour and the rule a nil PaneGeometry already follows.
+	if pg.ScrollColumnWidth != 0 && pg.ScrollColumnWidth != m.ScrollColumnWidth {
+		m.ScrollColumnWidth = pg.ScrollColumnWidth
+		changed = true
+	}
 	return changed
 }
 
@@ -91,6 +144,43 @@ func (m *OS) paneGapItem() settingItem {
 		},
 		meter: func(m *OS) float64 {
 			return float64(clampInt(m.PaneGap, 0, config.PaneGapMax)) / float64(config.PaneGapMax)
+		},
+	}
+}
+
+// masterRatioItem is the settings row for the master pane's share, hand-written
+// for the same reason sharedBordersItem is: the value in force is the session's
+// and not this client's config, and the resize keys move it under the row.
+func (m *OS) masterRatioItem() settingItem {
+	return percentItem("appearance.master_ratio",
+		config.MasterRatioMin, config.MasterRatioMax,
+		(*OS).MasterRatioPercent,
+		(*OS).SetMasterRatioSetting)
+}
+
+// scrollColumnWidthItem is the settings row for a scrolling column's width.
+func (m *OS) scrollColumnWidthItem() settingItem {
+	return percentItem("appearance.scroll_column_width",
+		config.ScrollColumnWidthMin, config.ScrollColumnWidthMax,
+		func(m *OS) int {
+			return clampInt(m.ScrollColumnWidth, config.ScrollColumnWidthMin, config.ScrollColumnWidthMax)
+		},
+		(*OS).SetScrollColumnWidthSetting)
+}
+
+// percentItem is a stepper over a percentage the session settles: it reads the
+// model and writes through a setter that pushes the change to the session's
+// other clients. The meter fills against the option's own range rather than
+// against 100, so the whole travel of the control is the travel of the setting.
+func percentItem(path string, lo, hi int, get func(*OS) int, set func(*OS, int)) settingItem {
+	return settingItem{
+		Label:   settingLabel(path),
+		Desc:    registryDescription(path),
+		Control: controlInt,
+		value:   func(m *OS) string { return strconv.Itoa(get(m)) + "%" },
+		adjust:  func(m *OS, dir int) { set(m, get(m)+dir) },
+		meter: func(m *OS) float64 {
+			return float64(clampInt(get(m), lo, hi)-lo) / float64(hi-lo)
 		},
 	}
 }

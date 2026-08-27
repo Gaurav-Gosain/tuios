@@ -22,6 +22,19 @@ import (
 // is driving is what used to paint a line down the pane beside it, because the
 // tree survives the mode switch holding the geometry it last laid out.
 func (m *OS) separatorSplits() []layout.SplitLine {
+	// A divider stands in for the borders two panes gave up. Panes still drawing
+	// their own have nothing to share, so nothing is drawn between them whatever
+	// gap the user asked for: appearance.gap is empty ground, not a rule down
+	// the middle of it.
+	//
+	// The frame is already right without this, because View only asks for the
+	// overlay when the panes are borderless. It is here so the answer does not
+	// depend on the caller remembering: the tree knows the gap and not what the
+	// panes look like, and it will hand out a divider for a pane that has its
+	// own border to anyone who asks.
+	if !m.panesBorderless() {
+		return nil
+	}
 	if m.UseScrollingLayout {
 		return nil
 	}
@@ -125,10 +138,19 @@ func (m *OS) transitioning() bool {
 // and a pane in flight carries its edges with it, so the layout moves as one
 // object and the moving pane reads as a pane rather than as a bare rectangle.
 func (m *OS) dividerLines(bounds layout.Rect) ([]dividerLine, []paneLayer) {
-	// The BSP tree answers for a settled layout of its own because a stacked node
-	// divides by raising a title bar rather than by a divider, which is a division
-	// the panes' edges cannot tell apart from any other.
-	if m.UseBSPLayout && !m.transitioning() {
+	// Both tilers answer for their own settled layout. The BSP tree does it
+	// because a stacked node divides by raising a title bar rather than by a
+	// divider, which is a division the panes' edges cannot tell apart from any
+	// other; the master-stack tiler does it because a division is one line on the
+	// gap's leading column whatever the gap is, and its panes' own edges are two
+	// lines with ground between them.
+	//
+	// Restricting this to BSP left the two modes disagreeing about one setting:
+	// with shared borders on and appearance.gap at 2, BSP drew one divider and a
+	// column of ground while master-stack drew a two-column rule. It also left
+	// layout.SplitsBetween - written for exactly this - reachable only from a
+	// test.
+	if !m.UseScrollingLayout && !m.transitioning() {
 		splits := m.separatorSplits()
 		lines := make([]dividerLine, len(splits))
 		for i, s := range splits {

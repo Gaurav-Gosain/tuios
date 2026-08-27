@@ -1,6 +1,8 @@
 package tuie2e
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -26,11 +28,36 @@ func openKeybindManager(t *testing.T, term *tuitest.Terminal) {
 // The overlay's whole claim is that it shows a real conflict, so the test is
 // that a real conflict is legible on the screen, not that a panel appeared.
 //
-// The shipped defaults bind 1 to both select_window_1 (window_management) and
-// snap_corner_1 (layout). layout is copied over window_management, so the snap
-// wins and select_window_1 has never fired. Nothing in config.toml says so.
+// The conflict is written into the config here. It used to come from the
+// shipped defaults, which bound 1 to both select_window_1 (window_management)
+// and snap_corner_1 (layout) and let the layout table win, so select_window_1
+// had never fired in a default install. Reading that as a feature of the panel
+// is how it survived: the test passed because the defaults were broken, and
+// fixing them would have failed the test. The defaults now resolve every key to
+// one action, guarded by TestDefaultConfigHasNoConflicts, and this case brings
+// its own clash.
 func TestKeybindManagerShowsARealConflictOnScreen(t *testing.T) {
-	term, _ := start(t, startOpts{})
+	base := t.TempDir()
+	cfgDir := filepath.Join(base, "XDG_CONFIG_HOME", "tuios")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatalf("mkdir config: %v", err)
+	}
+	// Two actions in one scope on one key, in two different tables: the
+	// cross-section case, which is the one config.toml gives no hint of.
+	//
+	// snap_left rather than snap_corner_1, which would be the historical pair.
+	// migrateCornerSnapDigits takes a corner off a bare digit at load, so that
+	// fixture is repaired before the overlay ever sees it, which is the
+	// migration doing its job and is checked in
+	// TestCornerSnapMigrationMovesTheStaleDigits. snap_left on "1" is a choice
+	// the user made and nothing rewrites it.
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte(
+		"[keybindings.window_management]\nselect_window_1 = [\"1\"]\n"+
+			"[keybindings.layout]\nsnap_left = [\"1\"]\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	term := startIn(t, base, startOpts{})
 	waitBoot(t, term)
 	openKeybindManager(t, term)
 
@@ -38,7 +65,7 @@ func TestKeybindManagerShowsARealConflictOnScreen(t *testing.T) {
 	if err := term.SendKeys(tuitest.Tab); err != nil {
 		t.Fatalf("send tab: %v", err)
 	}
-	if err := term.WaitForText("snap_corner_1", uiTimeout); err != nil {
+	if err := term.WaitForText("snap_left", uiTimeout); err != nil {
 		t.Fatalf("conflicts tab never named the winning action: %v\n%s", err, term.Snapshot())
 	}
 
@@ -47,7 +74,7 @@ func TestKeybindManagerShowsARealConflictOnScreen(t *testing.T) {
 
 	// The winner has to be named, or the panel is a list of keys rather than an
 	// answer to "what does this key do".
-	if !strings.Contains(screen, "runs snap_corner_1") {
+	if !strings.Contains(screen, "runs snap_left") {
 		t.Errorf("the conflict row must name the action that actually runs\n%s", term.Snapshot())
 	}
 	// And the loser has to be named in the detail box, or there is no way to
@@ -59,6 +86,36 @@ func TestKeybindManagerShowsARealConflictOnScreen(t *testing.T) {
 	// carries it.
 	if !strings.Contains(screen, "dead") {
 		t.Errorf("a conflict must say so in words, not only in colour\n%s", term.Snapshot())
+	}
+	// And the row has to be actionable. A panel that reports a problem and
+	// offers nothing to press teaches the reader to distrust it.
+	if !strings.Contains(screen, "ctrl+d") {
+		t.Errorf("the conflicts panel offers no way to resolve the row\n%s", term.Snapshot())
+	}
+}
+
+// TestStockConfigOpensNoConflicts is the maintainer's report, on screen: he
+// opened this tab on a config he had never edited and found four.
+//
+// The unit invariant (TestDefaultConfigHasNoConflicts) checks the same thing
+// against the registry. This checks it against the pixels, because the panel is
+// where the claim is made and a report that disagreed with its own analysis
+// would pass the unit test and still be wrong here.
+func TestStockConfigOpensNoConflicts(t *testing.T) {
+	term, _ := start(t, startOpts{})
+	waitBoot(t, term)
+	openKeybindManager(t, term)
+
+	if err := term.SendKeys(tuitest.Tab); err != nil {
+		t.Fatalf("send tab: %v", err)
+	}
+	if err := term.WaitForText("No conflicts", uiTimeout); err != nil {
+		t.Fatalf("a config nobody edited reports conflicts: %v\n%s", err, term.Snapshot())
+	}
+	t.Logf("keybind manager, Conflicts tab on a stock config:\n%s", term.Snapshot())
+
+	if strings.Contains(term.Screen().Text(), "dead") {
+		t.Errorf("the stock config's conflicts panel names a dead binding\n%s", term.Snapshot())
 	}
 }
 

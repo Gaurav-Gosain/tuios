@@ -856,7 +856,7 @@ like "make it look like X" usually means some of each:
 | **Spacing** | ground between panes, padding inside overlay panels | `appearance.gap`, `appearance.panel_padding` |
 | **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
 
-The 108 options above are scalars, and spacing and composition are set with them
+The 115 options above are scalars, and spacing and composition are set with them
 like any other. Colour and shape are not: each is a name from an open set
 standing for a document kept in a directory rather than a value in the config
 file, which is why both have a verb of their own rather than a row in
@@ -1375,6 +1375,34 @@ have received it, and the terminal-level pair it belongs to. Ctrl+I and Tab are
 the same byte, as are Ctrl+M and Enter and Ctrl+[ and Esc, so binding one of
 those binds the other unless the host terminal grants key disambiguation. Do not
 suggest a binding on `ctrl+i`, `ctrl+m` or `ctrl+[` without saying so.
+
+Two commands change what the report says. `unbind` takes a key off one action;
+`free` takes it off every action in every scope, which is what a key the user's
+own program wants needs.
+
+```sh
+tuios keybinds unbind close_window w   # one key off one action
+tuios keybinds unbind close_window     # leave the action with no key
+tuios keybinds free alt+left           # hand the key back to the pane
+```
+
+Both write an empty list on any action that runs out of keys:
+
+```toml
+[keybindings.terminal_mode]
+terminal_focus_left = []
+```
+
+That is not the same as leaving the action out of the file, and the difference
+matters when you are editing `config.toml` directly. An action the file does not
+mention is filled in from the defaults at the next load. An action set to `[]`
+stays empty. The report lists those under `unbound` on each binding, so you can
+tell a deliberate removal from an action nobody has mentioned.
+
+`free` cannot take two things, and says so rather than reporting success: the
+leader key, which is `keybindings.leader_key` and is moved rather than unbound,
+and the handful of keys the input path reads directly, which are marked
+`built-in` in `terminal_mode_swallowed`.
 
 ## When the daemon is not running
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +29,9 @@ type UserConfig struct {
 	// Screenshot is the [screenshot] table: how a capture renders and where
 	// the file lands. See screenshot.go.
 	Screenshot ScreenshotConfig `toml:"screenshot"`
+	// Screensaver is the [screensaver] table: whether the screen animates
+	// itself after a spell of quiet, and with what. See screensaver.go.
+	Screensaver ScreensaverConfig `toml:"screensaver"`
 	// Dock is the [dock] table: the bar as ordered lists of named components.
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.
@@ -77,6 +81,12 @@ type StartupConfig struct {
 	OpenDefaultWindow   bool `toml:"open_default_window"`    // Open one terminal window automatically when a session starts with none (default: false)
 	Tiled               bool `toml:"tiled"`                  // Start a new session with tiling enabled instead of floating (default: false)
 	StartInTerminalMode bool `toml:"start_in_terminal_mode"` // Start focused in terminal mode so typing goes straight to the shell, when a window is present (default: false)
+	// Layout is the tiling scheme a new session arranges its panes with: bsp,
+	// master-stack or scrolling. It only ever decides where a session starts.
+	// Once one is running the scheme is the session's own and travels in its
+	// state, so attaching to a session laid out one way never re-arranges it to
+	// match the config of whoever attached.
+	Layout string `toml:"layout"`
 	// Daemon makes a bare "tuios" attach to a daemon-backed session instead of
 	// running a standalone one, for a user who always wants the daemon and would
 	// otherwise type "tuios attach" every time (default: false).
@@ -177,9 +187,15 @@ type AppearanceConfig struct {
 	SessionColors          *bool  `toml:"session_colors"`            // Give each session its own colour on the rail and the switcher (default: true)
 	Glyphs                 string `toml:"glyphs"`                    // Chrome glyph set: default, box, heavy, ascii, or one from ~/.config/tuios/glyphs
 	Gap                    int    `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
-	PanelPadding           int    `toml:"panel_padding"`             // Columns of surface padding inside every overlay panel (default: 2)
-	ClockFormat            string `toml:"clock_format"`              // Go time layout the clock overlay is drawn with (default: 15:04:05)
-	DimUnfocused           int    `toml:"dim_unfocused"`             // Percent an unfocused pane's content is carried toward its own ground (default: 0)
+	// MasterRatio and ScrollColumnWidth are percentages rather than fractions
+	// because that is what a settings stepper and a CLI argument can carry: the
+	// option registry holds ints, and "50" is a value a person types. The model
+	// keeps the master ratio as the fraction the tilers want.
+	MasterRatio       int    `toml:"master_ratio"`        // Master pane width in the master-stack layout, percent of the screen (default: 50)
+	ScrollColumnWidth int    `toml:"scroll_column_width"` // New column width in the scrolling layout, percent of the screen (default: 55)
+	PanelPadding      int    `toml:"panel_padding"`       // Columns of surface padding inside every overlay panel (default: 2)
+	ClockFormat       string `toml:"clock_format"`        // Go time layout the clock overlay is drawn with (default: 15:04:05)
+	DimUnfocused      int    `toml:"dim_unfocused"`       // Percent an unfocused pane's content is carried toward its own ground (default: 0)
 
 	// Legacy flat sidebar keys, superseded by the [appearance.sidebar] table.
 	// migrateLegacySidebar folds them into it and clears them, so they are read
@@ -409,6 +425,8 @@ func DefaultConfig() *UserConfig {
 			Glyphs:               theme.GlyphSetNone,
 			PanelPadding:         overlay.DefaultPanelPadding,
 			ClockFormat:          DefaultClockFormat,
+			MasterRatio:          MasterRatioDefault,
+			ScrollColumnWidth:    ScrollColumnWidthDefault,
 			Scrollbar:            ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
 			Sidebar: SidebarConfig{
 				Position: "left",
@@ -422,21 +440,24 @@ func DefaultConfig() *UserConfig {
 			OpenDefaultWindow:   false,
 			Tiled:               false,
 			StartInTerminalMode: false,
+			Layout:              LayoutModeBSP,
 		},
 		Tape: TapeConfig{
 			Autorun:    TapeAutorunAsk,
 			AutoReview: false,
 		},
-		Screenshot: defaultScreenshotConfig(),
+		Screenshot:  defaultScreenshotConfig(),
+		Screensaver: defaultScreensaverConfig(),
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
-				"new_window":      {"n"},
-				"close_window":    {"w", "x"},
-				"rename_window":   {"r"},
-				"minimize_window": {"m"},
-				"restore_all":     {"M"},
-				"toggle_zoom":     {"z"},
+				"new_window":        {"n"},
+				"close_window":      {"w", "x"},
+				"rename_window":     {"r"},
+				"minimize_window":   {"m"},
+				"restore_all":       {"M"},
+				"toggle_zoom":       {"z"},
+				"start_screensaver": {"S"},
 				// Finishing a mouse selection has always told the user to press
 				// 'c' to copy it. Until this binding existed, nothing was
 				// listening.
@@ -473,8 +494,11 @@ func DefaultConfig() *UserConfig {
 				// the input path was already doing behind a literal.
 				"open_settings": {","},
 				// hold_window_mode is deliberately absent rather than present and
-				// empty: an action with no keys warns at load, and this one is
-				// opt-in. Holding a modifier key is only reportable under the
+				// empty. An empty list is how a user says they took a key away
+				// (see keybind_unbind.go), and a default must not say that on
+				// their behalf: it would show up in the keybind manager as a
+				// binding they had removed. Holding a modifier key is only
+				// reportable under the
 				// Kitty protocol's report-all-keys mode, which turns every
 				// keystroke in the session into an escape code, so it is not
 				// something everyone should pay for. The config header says how
@@ -615,6 +639,13 @@ func DefaultConfig() *UserConfig {
 				"layout_prefix_load":   {"l"},
 				"layout_prefix_save":   {"s"},
 				"layout_prefix_cancel": {"esc"},
+				// Corner snapping lives here rather than on the bare digits in
+				// window mode, where it used to shadow select_window_1 through
+				// _4. See getDefaultLayoutKeybinds for why it lost that contest.
+				"snap_corner_1": {"1"},
+				"snap_corner_2": {"2"},
+				"snap_corner_3": {"3"},
+				"snap_corner_4": {"4"},
 			},
 			TerminalMode: getDefaultTerminalModeKeybinds(),
 			Sidebar:      getDefaultSidebarKeybinds(),
@@ -779,14 +810,28 @@ func getDefaultWorkspaceKeybinds() map[string][]string {
 func getDefaultLayoutKeybinds() map[string][]string {
 	// Base layout keybindings (common to all platforms)
 	layout := map[string][]string{
-		"snap_left":            {"h"},
-		"snap_right":           {"l"},
-		"snap_fullscreen":      {"f"},
-		"unsnap":               {"u"},
-		"snap_corner_1":        {"1"},
-		"snap_corner_2":        {"2"},
-		"snap_corner_3":        {"3"},
-		"snap_corner_4":        {"4"},
+		"snap_left":       {"h"},
+		"snap_right":      {"l"},
+		"snap_fullscreen": {"f"},
+		"unsnap":          {"u"},
+		// snap_corner_1 through _4 are deliberately absent here. They used to
+		// hold "1" through "4", and because the layout table is merged into the
+		// window-mode keymap after window_management, they won those keys
+		// outright: select_window_1 through _4 never fired in a default
+		// install, while 5 through 9 did, because corner snapping stops at 4.
+		//
+		// Window mode has room for four ordinal digit rows and it already has
+		// four: plain digits select a window, shift+digits restore a minimized
+		// one, alt+digits switch workspace, alt+shift+digits move a window
+		// there. Corner snapping was the fifth claimant, and it is the one of
+		// the five whose meaning is not ordinal (a 2x2 grid, not a list) and
+		// the only one that does nothing at all in half the modes:
+		// makeSnapCornerHandler returns early when tiling is on. So it is the
+		// one that gives the digits up.
+		//
+		// It keeps its action, its handler and this table; it is bound under
+		// the layout prefix (leader, L, then 1-4), which is where a layout
+		// operation belongs and where the which-key panel can show it.
 		"toggle_tiling":        {"t"},
 		"swap_left":            {"H", "ctrl+left"},
 		"swap_right":           {"L", "ctrl+right"},
@@ -839,6 +884,17 @@ func isMacOS() bool {
 		strings.Contains(strings.ToLower(os.Getenv("OSTYPE")), "darwin")
 }
 
+// clampPercent folds a configured percentage into its range, treating zero as
+// "not written" and answering with the default. A percentage option's floor is
+// well above zero, so clamping an unwritten value would silently pin it to the
+// floor and there would be no way to spell "whatever the default is".
+func clampPercent(v, lo, hi, fallback int) int {
+	if v == 0 {
+		return fallback
+	}
+	return min(max(v, lo), hi)
+}
+
 // LoadUserConfig loads the user configuration from XDG config directory
 func LoadUserConfig() (*UserConfig, error) {
 	// Try to find existing config file
@@ -867,6 +923,7 @@ func LoadUserConfig() (*UserConfig, error) {
 	fillMissingTape(&cfg, defaultCfg)
 	fillMissingKeybinds(&cfg, defaultCfg)
 	fillMissingScreenshot(&cfg, defaultCfg)
+	fillMissingScreensaver(&cfg, defaultCfg)
 
 	// Validate configuration
 	validation := ValidateConfig(&cfg)
@@ -957,6 +1014,20 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 		cfg.Appearance.Gap = 0
 	} else if cfg.Appearance.Gap > PaneGapMax {
 		cfg.Appearance.Gap = PaneGapMax
+	}
+	// Zero is "not written", which is the common case, so it falls back to the
+	// default rather than being clamped up to the floor: a config that never
+	// mentioned the master ratio must not read as one that asked for the
+	// narrowest master there is.
+	if cfg.Appearance.MasterRatio == 0 {
+		cfg.Appearance.MasterRatio = MasterRatioDefault
+	} else {
+		cfg.Appearance.MasterRatio = min(max(cfg.Appearance.MasterRatio, MasterRatioMin), MasterRatioMax)
+	}
+	if cfg.Appearance.ScrollColumnWidth == 0 {
+		cfg.Appearance.ScrollColumnWidth = ScrollColumnWidthDefault
+	} else {
+		cfg.Appearance.ScrollColumnWidth = min(max(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin), ScrollColumnWidthMax)
 	}
 	if cfg.Appearance.DimUnfocused < 0 {
 		cfg.Appearance.DimUnfocused = 0
@@ -1118,6 +1189,8 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	ShowClock = cfg.Appearance.ShowClock
 	ClockFormat = cfg.Appearance.ClockFormat
 	PaneGap = min(max(cfg.Appearance.Gap, 0), PaneGapMax)
+	MasterRatioPercent = clampPercent(cfg.Appearance.MasterRatio, MasterRatioMin, MasterRatioMax, MasterRatioDefault)
+	ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, ScrollColumnWidthMax, ScrollColumnWidthDefault)
 	DimUnfocused = min(max(cfg.Appearance.DimUnfocused, 0), DimUnfocusedMax)
 	overlay.SetPanelPadding(cfg.Appearance.PanelPadding)
 	// The glyph set is selected here rather than beside the theme, because it
@@ -1373,6 +1446,38 @@ func migrateSettingsComma(cfg *UserConfig) {
 	}
 }
 
+// migrateCornerSnapDigits takes the bare digits off snap_corner_1 through _4 in
+// a config written before corner snapping moved to the layout prefix.
+//
+// The old defaults put snap_corner_N on "1" through "4" in the layout table.
+// That table is merged into the window-mode keymap after window_management, so
+// it won those keys outright and select_window_1 through _4 never fired. Every
+// config ever written carries those four lines, and fillMapDefaults only adds
+// actions that are missing, so without this the fix would reach new installs
+// only and everyone else would go on seeing four conflicts they never caused.
+//
+// It must run before the defaults are filled in, so that the presence of a
+// corner binding under layout_prefix still distinguishes a config written by a
+// version that knew about the move (leave it alone) from an older one.
+//
+// Only the exact stale default is removed. A user who put snap_corner_1
+// somewhere of their own, or who kept the digit alongside another key, has made
+// a choice, and taking it away to quiet a warning would be the worse bug.
+func migrateCornerSnapDigits(cfg *UserConfig) {
+	for i := 1; i <= 4; i++ {
+		action := "snap_corner_" + strconv.Itoa(i)
+		if _, ok := cfg.Keybindings.LayoutPrefix[action]; ok {
+			return // written by a version that knew about the move
+		}
+	}
+	for i := 1; i <= 4; i++ {
+		action := "snap_corner_" + strconv.Itoa(i)
+		if keys := cfg.Keybindings.Layout[action]; len(keys) == 1 && keys[0] == strconv.Itoa(i) {
+			delete(cfg.Keybindings.Layout, action)
+		}
+	}
+}
+
 // fillMissingKeybinds fills in any missing keybindings with defaults
 func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// Initialize nil maps
@@ -1433,6 +1538,7 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 
 	migrateLegacyKeybinds(cfg)
 	migrateSettingsComma(cfg)
+	migrateCornerSnapDigits(cfg)
 
 	// Set default leader key if not specified
 	if cfg.Keybindings.LeaderKey == "" {

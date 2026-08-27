@@ -219,6 +219,41 @@ func (r *KeybindRegistry) GetKeys(action string) []string {
 	return nil
 }
 
+// PressesByAction maps every action to the whole thing a user presses to reach
+// it, chord included: "1" for a window-mode binding, "ctrl+b L 1" for one that
+// lives under a prefix.
+//
+// GetKeys answers with the bare key, which is the right answer for the keymap
+// and the wrong one for anything that shows a binding to a human. An action
+// reachable only under a chord would be listed as "1", and a help screen that
+// says 1 snaps a window to a corner, while 1 selects a window, is the same
+// class of lie this whole surface exists to catch.
+//
+// Built in one pass and returned as a map because the help overlay is on the
+// render path: asking per action would rescan every section for each of eighty
+// of them, once a frame.
+func PressesByAction(r *KeybindRegistry) map[string][]string {
+	out := map[string][]string{}
+	seen := map[string]bool{}
+	for _, b := range r.Bindings() {
+		// A shadowed binding does not run, and every caller of this is telling
+		// a reader what to press. Listing a key that another action already
+		// took is the lie in its most direct form. An action whose every
+		// binding is dead drops out entirely, which is what the keybind
+		// manager's Conflicts tab is for.
+		if b.Unbound || b.Shadowed || b.Press == "" {
+			continue
+		}
+		id := b.Action + "\x00" + b.Press
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out[b.Action] = append(out[b.Action], b.Press)
+	}
+	return out
+}
+
 // GetKeysForDisplay returns a formatted string of keys for display in help
 func (r *KeybindRegistry) GetKeysForDisplay(action string) string {
 	keys := r.GetKeys(action)
@@ -261,6 +296,7 @@ var ActionDescriptions = map[string]string{
 	"minimize_window":    "Minimize window",
 	"restore_all":        "Restore all minimized",
 	"toggle_zoom":        "Toggle zoom (fullscreen)",
+	"start_screensaver":  "Start the screen saver now",
 	"screenshot":         "Pick what to screenshot",
 	"screenshot_window":  "Screenshot this window",
 	"screenshot_screen":  "Screenshot the whole screen",

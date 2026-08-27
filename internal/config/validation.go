@@ -53,15 +53,14 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 
 	// Validate all keybinding sections
 	validateSection := func(sectionName string, section map[string][]string) {
-		for action, keys := range section {
-			// Check if action has at least one key bound (warn if empty)
+		for _, keys := range section {
+			// An action with an empty list is not a mistake to report: it is the
+			// only way the file has of saying "I took this key away", and
+			// fillMissingKeybinds reads it as one. Warning about it meant the
+			// documented way to unbind something cost a startup warning for as
+			// long as the config lived, which taught users the unbind had not
+			// worked.
 			if len(keys) == 0 {
-				// Some actions might intentionally be unbound, so this is just a warning
-				result.Warnings = append(result.Warnings, ValidationError{
-					Field:   sectionName,
-					Key:     action,
-					Message: fmt.Sprintf("Action '%s' has no keybindings", action),
-				})
 				continue
 			}
 
@@ -122,15 +121,17 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	// message back under the accessibility floor)
 	validateNotificationsConfig(cfg, result)
 
-	// Check for keybinding conflicts (same key bound to multiple actions)
-	conflicts := findConflicts(cfg, normalizer)
-	for key, actions := range conflicts {
-		// Only warn if the conflict is in the same mode/context
-		// (keys in different modes can overlap, like 'n' in window mode vs terminal mode)
+	// Keys two actions contest. The first action in each list is the one that
+	// runs; the rest never fire.
+	for key, actions := range findConflicts(cfg, normalizer) {
+		// The message names the winner and says how to act on it. A warning
+		// that only listed the actions left the reader with a fact and no
+		// verb, and the verb is the whole point of reporting it.
 		result.Warnings = append(result.Warnings, ValidationError{
-			Field:   "keybindings",
-			Key:     key,
-			Message: fmt.Sprintf("Key '%s' is bound to multiple actions: %s", key, strings.Join(actions, ", ")),
+			Field: "keybindings",
+			Key:   key,
+			Message: fmt.Sprintf("%s runs %s. These never run: %s. Run `tuios keybinds unbind <action> %s` to take the key off one of them.",
+				key, actions[0], strings.Join(actions[1:], ", "), key),
 		})
 	}
 
@@ -455,132 +456,36 @@ func validateTitleFormat(format string, result *ValidationResult) {
 	}
 }
 
-// findConflicts finds keys that are bound to multiple actions within the same context
-func findConflicts(cfg *UserConfig, normalizer *KeyNormalizer) map[string][]string {
-	// Define action groups by context - actions in different contexts can share keys
-	tilingModeActions := []string{
-		"select_window_1", "select_window_2", "select_window_3", "select_window_4",
-		"select_window_5", "select_window_6", "select_window_7", "select_window_8", "select_window_9",
-		"swap_left", "swap_right", "swap_up", "swap_down",
-	}
-
-	nonTilingModeActions := []string{
-		"snap_corner_1", "snap_corner_2", "snap_corner_3", "snap_corner_4",
-		"snap_left", "snap_right", "snap_fullscreen", "unsnap",
-	}
-
-	selectionModeActions := []string{
-		"copy_selection", "paste_clipboard", "clear_selection",
-	}
-
-	// Create sets for quick lookup
-	tilingSet := make(map[string]bool)
-	for _, action := range tilingModeActions {
-		tilingSet[action] = true
-	}
-	nonTilingSet := make(map[string]bool)
-	for _, action := range nonTilingModeActions {
-		nonTilingSet[action] = true
-	}
-	selectionSet := make(map[string]bool)
-	for _, action := range selectionModeActions {
-		selectionSet[action] = true
-	}
-
-	// Collect all keybindings
-	allSections := []map[string][]string{
-		cfg.Keybindings.WindowManagement,
-		cfg.Keybindings.Workspaces,
-		cfg.Keybindings.Layout,
-		cfg.Keybindings.ModeControl,
-		cfg.Keybindings.System,
-		cfg.Keybindings.Navigation,
-	}
-
-	// Map keys to actions within each context
-	keyToActions := make(map[string][]string)
-
-	for _, section := range allSections {
-		for action, keys := range section {
-			expandedKeys := normalizer.ExpandKeys(keys)
-			for _, key := range expandedKeys {
-				// Normalize keys, but preserve case for single letters (M vs m are different keys)
-				normalizedKey := normalizeKeyForConflictDetection(key)
-				keyToActions[normalizedKey] = append(keyToActions[normalizedKey], action)
-			}
-		}
-	}
-
-	// Find conflicts - only warn if actions are in the same context
+// findConflicts returns every key that two actions contest, keyed by the key,
+// with the winner first and the dead actions after it.
+//
+// It delegates to KeybindRegistry.Collisions rather than deciding for itself.
+// It used to keep its own idea of which actions could compete, in the form of a
+// tilingModeActions and a nonTilingModeActions list, and it suppressed any
+// clash that straddled the two. That partition described a scope that does not
+// exist: the lookup flattens window_management and layout into one keymap and
+// never consults the mode, and only the handler checks it, by which point the
+// losing action's handler is not being called. It was also simply wrong about
+// select_window_N, which has no tiling guard at all and works in both modes.
+//
+// The cost of the disagreement was four dead bindings in the shipped defaults
+// that this function stayed silent about for as long as they existed, while the
+// keybind report named all four. Two conflict detectors that disagree means the
+// quieter one is load-bearing for nobody and misleading for everybody, so there
+// is now one.
+func findConflicts(cfg *UserConfig, _ *KeyNormalizer) map[string][]string {
 	conflicts := make(map[string][]string)
-	for key, actions := range keyToActions {
-		if len(actions) > 1 {
-			// Remove duplicates
-			uniqueActions := make(map[string]bool)
-			for _, action := range actions {
-				uniqueActions[action] = true
-			}
-
-			// Check if any actions conflict (are in the same context)
-			var conflictingActions []string
-			for action := range uniqueActions {
-				// Determine action's context
-				contexts := []bool{
-					tilingSet[action],
-					nonTilingSet[action],
-					selectionSet[action],
-				}
-
-				// If action is in a specific context, check for conflicts with other actions in same context
-				for otherAction := range uniqueActions {
-					if action == otherAction {
-						continue
-					}
-
-					// Check if both are in the same context (not counting "always active" actions)
-					inTiling := tilingSet[action] && tilingSet[otherAction]
-					inNonTiling := nonTilingSet[action] && nonTilingSet[otherAction]
-					inSelection := selectionSet[action] && selectionSet[otherAction]
-
-					// Both are "always active" (not in any specific context)
-					bothAlwaysActive := !contexts[0] && !contexts[1] && !contexts[2] &&
-						!tilingSet[otherAction] && !nonTilingSet[otherAction] && !selectionSet[otherAction]
-
-					if inTiling || inNonTiling || inSelection || bothAlwaysActive {
-						// Real conflict - same context
-						conflictingActions = append(conflictingActions, action)
-						break
-					}
-				}
-			}
-
-			// Only add to conflicts if we found real conflicts
-			if len(conflictingActions) > 0 {
-				var actionList []string
-				for action := range uniqueActions {
-					actionList = append(actionList, action)
-				}
-				conflicts[key] = actionList
-			}
+	for _, c := range NewKeybindRegistry(cfg).Collisions() {
+		actions := []string{c.Winner}
+		for _, l := range c.Losers {
+			actions = append(actions, l.Action)
 		}
+		// Keyed by the whole chord, not the bare key: "1" means one thing in
+		// window mode and another after the layout chord, and a warning that
+		// said only "1" could not be acted on.
+		conflicts[c.Press] = actions
 	}
-
 	return conflicts
-}
-
-// normalizeKeyForConflictDetection normalizes keys for conflict detection
-// Preserves case for single letters (M vs m are different keys in Bubbletea)
-// Lowercases everything else for consistent comparison
-func normalizeKeyForConflictDetection(key string) string {
-	trimmed := strings.TrimSpace(key)
-
-	// If it's a single letter, preserve case (M and m are different keys)
-	if len(trimmed) == 1 && ((trimmed[0] >= 'a' && trimmed[0] <= 'z') || (trimmed[0] >= 'A' && trimmed[0] <= 'Z')) {
-		return trimmed
-	}
-
-	// For everything else (ctrl+m, shift+tab, etc.), normalize to lowercase
-	return strings.ToLower(trimmed)
 }
 
 // hasKeybinding checks if an action has at least one keybinding in a specific section

@@ -237,6 +237,16 @@ var optionSpecs = []Option{
 		Default:     "0", Min: 0, Max: PaneGapMax,
 	},
 	{
+		Path: "appearance.master_ratio", Type: OptionInt, Section: "appearance",
+		Description: "Width of the master pane in the master-stack layout, as a percent of the screen",
+		Default:     strconv.Itoa(MasterRatioDefault), Min: MasterRatioMin, Max: MasterRatioMax,
+	},
+	{
+		Path: "appearance.scroll_column_width", Type: OptionInt, Section: "appearance",
+		Description: "Width of a column in the scrolling layout, as a percent of the screen",
+		Default:     strconv.Itoa(ScrollColumnWidthDefault), Min: ScrollColumnWidthMin, Max: ScrollColumnWidthMax,
+	},
+	{
 		Path: "appearance.panel_padding", Type: OptionInt, Section: "appearance",
 		Description: "Columns of padding each side of an overlay panel's content",
 		Default:     strconv.Itoa(overlay.DefaultPanelPadding), Min: 1, Max: overlay.MaxPanelPadding,
@@ -431,6 +441,11 @@ var optionSpecs = []Option{
 		Path: "startup.start_in_terminal_mode", Type: OptionBool, Section: "startup",
 		Description: "Start focused in terminal mode, when a window is present",
 		Default:     "false",
+	},
+	{
+		Path: "startup.layout", Type: OptionString, Section: "startup",
+		Description: "Tiling scheme a new session starts in. An existing session keeps its own.",
+		Accepted:    LayoutModes, Default: LayoutModeBSP,
 	},
 	{
 		Path: "startup.daemon", Type: OptionBool, Section: "startup",
@@ -674,6 +689,30 @@ var optionSpecs = []Option{
 	{
 		Path: "screenshot.cursor", Type: OptionBool, Section: "screenshot",
 		Description: "Draw the cursor cell in the capture",
+		Default:     "false",
+	},
+
+	// [screensaver]. Off by default: a screen that starts animating on its own
+	// is a surprise, and the setting to stop it is the one nobody can find
+	// while it is running.
+	{
+		Path: "screensaver.enabled", Type: OptionBool, Section: "screensaver",
+		Description: "Animate the screen after a spell with no input",
+		Default:     "false",
+	},
+	{
+		Path: "screensaver.idle_minutes", Type: OptionInt, Section: "screensaver",
+		Description: "Minutes of quiet before the screen saver starts",
+		Default:     "10", Min: ScreensaverMinIdleMinutes, Max: ScreensaverMaxIdleMinutes,
+	},
+	{
+		Path: "screensaver.effect", Type: OptionString, Section: "screensaver",
+		Description: "Which effect runs, or random for a different one each time",
+		Accepted:    ScreensaverEffects, Default: ScreensaverRandomEffect,
+	},
+	{
+		Path: "screensaver.while_busy", Type: OptionBool, Section: "screensaver",
+		Description: "Start even when a pane is running a command or an agent",
 		Default:     "false",
 	},
 }

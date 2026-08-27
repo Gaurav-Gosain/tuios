@@ -124,24 +124,31 @@ func (m *OS) renderScreenshotPreview() (string, overlay.Geometry, []overlayRowHi
 	}
 	lines = append(lines, overlay.Fill("", width, pal.Surface))
 
-	// The cells are the body, except where the picture is about to be drawn
-	// over them.
+	// The cells are the body, except that the picture replaces them.
 	//
-	// The picture keeps the capture's shape, so it does not fill the body: it
-	// leaves a margin on one axis. Drawing cells there too put half a picture
-	// and half a wall of text in one panel, which is what a letterboxed
-	// placement over a full text tier looks like. Blanking only the rectangle
-	// the picture covers is the narrowest answer: every other line of the panel
-	// is still cells, and a host that claims kitty graphics and does not
-	// deliver loses the capture rows and keeps the header, the path, the note
-	// and the footer, which is enough to say what happened and get out.
-	_, picRows, hasPicture := m.screenshotPreviewPictureBox()
+	// The picture keeps the capture's shape, so it does not fill the body. Where
+	// it is narrower than the body the spare columns are split either side of it
+	// (see screenshotPreviewPictureBox) and left empty; drawing cells there too
+	// put half a picture and half a wall of text in one panel. Where it is
+	// shorter than the body the body simply ends with it, and that is what
+	// pictureBodyRows does: the rows under a wide, short capture were the other
+	// half of the same fault, either a strip of the capture's own text under its
+	// own picture or, once the capture was short enough to run out, a hole the
+	// height of a dozen rows between the picture and the footer.
+	_, _, picRows, hasPicture := m.screenshotPreviewPictureBox()
 	rows := m.shotPreviewCells(bodyCols, bodyRows)
 	if hasPicture {
-		rows = blankPictureRows(rows, picRows)
+		rows = pictureBodyRows(picRows)
 	}
+	// The two-cell gutter is styled, not two raw spaces. overlay.Fill only
+	// paints the padding it adds, so an unstyled prefix keeps whatever the host
+	// last had, which is the terminal's own background: a black notch two cells
+	// wide running down the left of every capture row. Under a picture that
+	// started at the body's left edge nobody could see it, and centring the
+	// picture put it on show.
+	gutter := mute.Render("  ")
 	for _, row := range rows {
-		lines = append(lines, overlay.Fill("  "+row, width, pal.Surface))
+		lines = append(lines, overlay.Fill(gutter+row, width, pal.Surface))
 	}
 	// The scroll line is about the cells. Where the picture is drawn the whole
 	// capture is on screen at once, so saying it is not would be a lie.
@@ -162,19 +169,22 @@ func (m *OS) renderScreenshotPreview() (string, overlay.Geometry, []overlayRowHi
 	return content, geo, nil
 }
 
-// blankPictureRows empties every body row the picture will be drawn over.
+// pictureBodyRows is the body of a panel that is showing a picture: exactly the
+// rows the picture covers, all of them empty.
 //
-// A whole row goes, not the part of it the picture covers. The rows are
-// lipgloss output, escape sequences interleaved with text, so cutting one at a
-// column means taking its styling apart and risking a broken escape for the few
-// columns a letterboxed picture leaves at the side. An empty margin beside the
-// picture reads as a margin; a strip of the capture's own text there reads as
-// the panel showing the capture twice.
-func blankPictureRows(rows []string, picRows int) []string {
-	for i := 0; i < len(rows) && i < picRows; i++ {
-		rows[i] = ""
-	}
-	return rows
+// Whole rows go, not the part of each the picture covers. The rows are lipgloss
+// output, escape sequences interleaved with text, so cutting one at a column
+// means taking its styling apart and risking a broken escape for the columns a
+// letterboxed picture leaves at the side. An empty margin beside the picture
+// reads as a margin; a strip of the capture's own text there reads as the panel
+// showing the capture twice.
+//
+// There are no rows past the picture at all, which is the point. The body was
+// as tall as the panel could afford and the picture is only ever as tall as its
+// own proportions allow, so every row between the two was either a second copy
+// of the capture in text or nothing whatsoever.
+func pictureBodyRows(picRows int) []string {
+	return make([]string, max(0, picRows))
 }
 
 // shotPreviewHeader is the one metadata line: what was written, how big, and

@@ -497,6 +497,12 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if len(m.Animations) > 0 || m.Renaming() {
 		return nil, false
 	}
+	// The screen saver is a compositor overlay, and the fast path skips
+	// renderOverlays entirely. A lone fullscreen pane is exactly the case the
+	// saver is most likely to find, so without this it would never be drawn.
+	if m.screensaver.active {
+		return nil, false
+	}
 	if m.ShowHelp || m.ShowCommandPalette || m.ShowLauncher || m.ShowSessionSwitcher || m.ShowWorkspaceSwitcher || m.ShowLayoutPicker ||
 		m.ShowQuitMenu || m.ShowScrollbackBrowser || m.ShowLogs || m.ShowCacheStats ||
 		m.ShowAggregateView || m.ShowTapeManager || m.ShowTapeReview || m.ShowSettings || m.ShowThemePicker ||

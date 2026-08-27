@@ -775,6 +775,61 @@ var PaneGap = 0
 // being spacing.
 const PaneGapMax = 8
 
+// The tiling schemes, under the names they travel by: in [startup] layout, in
+// session state, and in the command palette. They live here rather than in the
+// package that implements them because the option registry has to publish the
+// accepted set and cannot import that package.
+const (
+	LayoutModeBSP         = "bsp"
+	LayoutModeMasterStack = "master-stack"
+	LayoutModeScrolling   = "scrolling"
+)
+
+// LayoutModes is the accepted set, for the registry and the validator.
+var LayoutModes = []string{LayoutModeBSP, LayoutModeMasterStack, LayoutModeScrolling}
+
+// MasterRatioPercent is how much of the screen the master pane takes in the
+// master-stack layout, as a percent. It is the value a new session starts at;
+// once a session is running the ratio is the session's, moved by the resize
+// keys and settled across every attached client, because it decides how many
+// columns a pane gets and a PTY has exactly one size.
+var MasterRatioPercent = MasterRatioDefault
+
+// The master ratio's range and its default. The bounds are the ones the resize
+// keys have always clamped to: past them one side of the split is too narrow to
+// be a pane rather than a strip.
+const (
+	MasterRatioMin     = 30
+	MasterRatioMax     = 70
+	MasterRatioDefault = 50
+)
+
+// MasterRatioFraction is the configured master ratio as the fraction the tilers
+// take. One conversion in one place, so a percentage in the file and a fraction
+// in the layout cannot drift apart.
+func MasterRatioFraction() float64 {
+	return float64(clampPercent(MasterRatioPercent, MasterRatioMin, MasterRatioMax, MasterRatioDefault)) / 100
+}
+
+// ScrollColumnWidth is how wide a column is in the scrolling layout, as a
+// percent of the screen, before anything resizes it. Session state for the same
+// reason the master ratio is.
+//
+// The default is deliberately over half. The strip is meant to be wider than
+// the viewport - that is what makes it a strip rather than a grid - so a
+// default that let two columns sit side by side exactly would show the layout
+// as a two-pane split and never as something you scroll.
+var ScrollColumnWidth = ScrollColumnWidthDefault
+
+// The column width's range and its default. The floor is the narrowest column
+// a shell is usable in; the ceiling is where the strip's next column stops
+// peeking in at the edge, which is the only thing that says there is one.
+const (
+	ScrollColumnWidthMin     = 20
+	ScrollColumnWidthMax     = 90
+	ScrollColumnWidthDefault = 55
+)
+
 // DimUnfocused is how far an unfocused pane's content is carried toward the
 // pane's own ground, as a percentage. Zero, the default, draws every pane's
 // content the same.
@@ -1491,6 +1546,12 @@ const (
 	// already on screen and is dismissed by the next click either way, so nothing
 	// is served by letting another panel cover it.
 	ZIndexContextMenu = 1500
+
+	// ZIndexScreensaver is the z-index for the idle screen saver. It is above
+	// everything, notifications included: the saver covers the screen, and a
+	// message drawn over an animation of that same screen would only look like
+	// part of the animation.
+	ZIndexScreensaver = 3000
 
 	// ZIndexNotifications is the z-index for notifications
 	ZIndexNotifications = 2000
