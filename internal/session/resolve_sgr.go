@@ -5,8 +5,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-
-	"github.com/charmbracelet/x/ansi"
 )
 
 // This file implements resolved colour capture for capture-pane.
@@ -17,10 +15,26 @@ import (
 // client-owned, and a consumer of capture-pane resolves indices against its
 // own palette. But a client that wants to pipe a capture into a tool which
 // renders verbatim (no palette of its own) has no way to get the colours it
-// actually paints. ResolveSGR is that way: it rewrites SGR index colours to
-// 24-bit RGB using the palette the client supplies, which is the client's
-// theme palette. The daemon still knows nothing about themes; the palette is
-// an explicit parameter of the request.
+// actually paints. ResolveSGR is that way: it rewrites SGR index colours,
+// including the standard 256-colour cube and grey ramp, to 24-bit RGB. Indices
+// 0-15 resolve against the palette the caller supplies, which is the client's
+// theme palette; everything else has a fixed value no consumer redefines. The
+// daemon still knows nothing about themes; the palette is an explicit
+// parameter of the request.
+
+// xtermDefaultHex is xterm's own default 16-colour palette, as hex literals.
+//
+// This deliberately is not derived from a colour library's BasicColor, whose
+// indices follow the darker VGA scheme (index 1 maroon, index 4 navy). A
+// capture resolved against those shades disagrees with what xterm actually
+// paints when a client sends no palette of its own, and the default has to be
+// the honest one.
+var xtermDefaultHex = [16]string{
+	"#000000", "#cd0000", "#00cd00", "#cdcd00",
+	"#0000ee", "#cd00cd", "#00cdcd", "#e5e5e5",
+	"#7f7f7f", "#ff0000", "#00ff00", "#ffff00",
+	"#5c5cff", "#ff00ff", "#00ffff", "#ffffff",
+}
 
 // xtermPalette returns the standard xterm 16-colour palette as RGB, used when
 // a resolved capture arrives without an explicit palette. The daemon has no
@@ -28,9 +42,12 @@ import (
 // consumer that cannot resolve them, and identical for every caller.
 func xtermPalette() [16]color.Color {
 	var pal [16]color.Color
-	for i := 0; i < 16; i++ {
-		r, g, b, _ := ansi.BasicColor(i).RGBA()
-		pal[i] = color.RGBA{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8), 0xff}
+	for i, h := range xtermDefaultHex {
+		c, ok := parseHexColor(h)
+		if !ok {
+			panic("tuios: built-in xterm colour " + h + " is not hex")
+		}
+		pal[i] = c
 	}
 	return pal
 }
@@ -85,120 +102,188 @@ func rgbOf(c color.Color) (uint8, uint8, uint8) {
 	return uint8(r >> 8), uint8(g >> 8), uint8(b >> 8)
 }
 
+// csiFieldInt parses one CSI parameter field that is expected to be a plain
+// integer. Anything else fails: the empty field (which SGR reads as the
+// default, usually 0) and colon-coded sub-parameters such as "4:3" are not
+// integers and must never be guessed into becoming one, because SGR 0 is the
+// total reset and flattening "4:3" into it erases every attribute set before
+// it.
+func csiFieldInt(s string) (int, bool) {
+	if s == "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+// xterm256ToRGB resolves a standard 256-colour index to its fixed 24-bit RGB
+// value. These colours are not part of any palette a theme can override: the
+// 6x6x6 cube (16-231) and the grey ramp (232-255) carry their levels in the
+// index itself, so every terminal resolves them identically.
+func xterm256ToRGB(n int) (uint8, uint8, uint8) {
+	switch {
+	case n >= 232:
+		grey := uint8(8 + 10*(n-232))
+		return grey, grey, grey
+	default: // 16 <= n <= 231
+		n -= 16
+		return colourCubeLevel(n / 36), colourCubeLevel((n / 6) % 6), colourCubeLevel(n % 6)
+	}
+}
+
+// colourCubeLevel converts one cube coordinate (0-5) into an 8-bit channel:
+// zero levels stay dark and the rest spread 55 to 235 evenly.
+func colourCubeLevel(v int) uint8 {
+	if v == 0 {
+		return 0
+	}
+	return uint8(55 + 40*v)
+}
+
 // sgrUnits splits an SGR parameter list into units, where a unit is one
 // parameter together with any it extends: 38;5;n and 38;2;r;g;b each form a
 // single unit, as do 48;5;n and 48;2;r;g;b. Everything else is a unit of one.
-func sgrUnits(params []int) [][]int {
-	var units [][]int
+//
+// Fields travel as their original text and are only turned into numbers when
+// they really are plain integers. A field that carries a colon ("4:3") or is
+// empty therefore stands alone, verbatim, instead of being folded into some
+// neighbouring colour or reset; and a colour introducer only swallows its
+// continuation when every continuation field parses, so malformed input is
+// passed through rather than misread.
+func sgrUnits(params []string) [][]string {
+	var units [][]string
 	for i := 0; i < len(params); i++ {
-		switch {
-		case params[i] == 38 || params[i] == 48:
-			// Colour: either 38;5;n (indexed) or 38;2;r;g;b (true colour).
-			if i+2 < len(params) && params[i+1] == 5 {
-				units = append(units, []int{params[i], 5, params[i+2]})
-				i += 2
-			} else if i+4 < len(params) && params[i+1] == 2 {
-				units = append(units, []int{params[i], 2, params[i+2], params[i+3], params[i+4]})
-				i += 4
-			} else {
-				units = append(units, []int{params[i]})
-			}
-		default:
-			units = append(units, []int{params[i]})
+		n, ok := csiFieldInt(params[i])
+		if !ok {
+			units = append(units, []string{params[i]})
+			continue
 		}
+		if n == 38 || n == 48 {
+			// Colour: either 38;5;n (indexed) or 38;2;r;g;b (true colour),
+			// consumed only when the continuation fields are integers too.
+			if i+2 < len(params) {
+				mid, midOK := csiFieldInt(params[i+1])
+				switch {
+				case midOK && mid == 5:
+					if _, last := csiFieldInt(params[i+2]); last {
+						units = append(units, []string{params[i], params[i+1], params[i+2]})
+						i += 2
+						continue
+					}
+				case midOK && mid == 2 && i+4 < len(params):
+					if _, r := csiFieldInt(params[i+2]); r {
+						if _, g := csiFieldInt(params[i+3]); g {
+							if _, b := csiFieldInt(params[i+4]); b {
+								units = append(units, []string{params[i], params[i+1], params[i+2], params[i+3], params[i+4]})
+								i += 4
+								continue
+							}
+						}
+					}
+				}
+			}
+		}
+		units = append(units, []string{params[i]})
 	}
 	return units
 }
 
 // resolveSGRUnit rewrites one SGR unit to 24-bit RGB when it is an index
-// colour the palette can resolve, and returns it unchanged otherwise.
-func resolveSGRUnit(u []int, pal [16]color.Color) []int {
+// colour, and returns it unchanged otherwise. Units whose head field is not a
+// plain integer are copied verbatim: they were split off precisely because
+// guessing at them could turn a harmless sub-parameter into a reset or an
+// unintended attribute.
+func resolveSGRUnit(u []string, pal [16]color.Color) []string {
+	n, ok := csiFieldInt(u[0])
+	if !ok {
+		return u
+	}
 	if len(u) == 1 {
 		// 30-37 / 90-97 foreground, 40-47 / 100-107 background.
 		switch {
-		case u[0] >= 30 && u[0] <= 37:
-			return trueColourUnit(38, pal[u[0]-30])
-		case u[0] >= 40 && u[0] <= 47:
-			return trueColourUnit(48, pal[u[0]-40])
-		case u[0] >= 90 && u[0] <= 97:
-			return trueColourUnit(38, pal[u[0]-90+8])
-		case u[0] >= 100 && u[0] <= 107:
-			return trueColourUnit(48, pal[u[0]-100+8])
+		case n >= 30 && n <= 37:
+			return trueColourUnit(38, pal[n-30])
+		case n >= 40 && n <= 47:
+			return trueColourUnit(48, pal[n-40])
+		case n >= 90 && n <= 97:
+			return trueColourUnit(38, pal[n-90+8])
+		case n >= 100 && n <= 107:
+			return trueColourUnit(48, pal[n-100+8])
 		}
 		return u
 	}
-	if len(u) == 3 && u[1] == 5 {
-		// 38;5;n / 48;5;n indexed: resolve only the first sixteen, which are
-		// the palette the theme controls. Higher indices are the standard
-		// 256-colour cube/ramp every consumer resolves identically, so they
-		// are left as indices.
-		if u[2] < 16 {
-			return trueColourUnit(u[0], pal[u[2]])
+	// Only a colour introducer reaches here as more than one field, and sgrUnits
+	// guarantees u[1] and every following field are integers when it grouped them.
+	if (n == 38 || n == 48) && u[1] == "5" {
+		idx := mustIntOrZero(u[2])
+		switch {
+		case idx < 0 || idx > 255:
+			// Out of the defined range: opaque either way, left as written.
+			return u
+		case idx < 16:
+			return trueColourUnit(n, pal[idx])
+		default:
+			r, g, b := xterm256ToRGB(idx)
+			return rgbUnit(n, r, g, b)
 		}
-		return u
 	}
 	// 38;2;r;g;b / 48;2;r;g;b and anything else: already resolved or opaque.
 	return u
 }
 
+// mustIntOrZero converts a field sgrUnits already vetted as an integer. It
+// exists so the happy path needs no second error branch.
+func mustIntOrZero(s string) int {
+	n, _ := csiFieldInt(s)
+	return n
+}
+
+// rgbUnit builds a 38;2;r;g;b or 48;2;r;g;b unit from raw channels.
+func rgbUnit(prefix int, r, g, b uint8) []string {
+	return []string{
+		strconv.Itoa(prefix), "2",
+		strconv.Itoa(int(r)), strconv.Itoa(int(g)), strconv.Itoa(int(b)),
+	}
+}
+
 // trueColourUnit builds a 38;2;r;g;b or 48;2;r;g;b unit from a palette colour.
-func trueColourUnit(prefix int, c color.Color) []int {
+func trueColourUnit(prefix int, c color.Color) []string {
 	r, g, b := rgbOf(c)
-	return []int{prefix, 2, int(r), int(g), int(b)}
+	return rgbUnit(prefix, r, g, b)
 }
 
 // resolveSGRParams transforms an SGR parameter list, resolving index colours
 // against the palette. Attributes (bold, underline, ...) and true-colour
-// parameters pass through untouched.
-func resolveSGRParams(params []int, pal [16]color.Color) []int {
+// parameters pass through untouched, as does every field that is not a plain
+// integer.
+func resolveSGRParams(params []string, pal [16]color.Color) []string {
 	units := sgrUnits(params)
-	out := make([]int, 0, len(params))
+	out := make([]string, 0, len(params)+4)
 	for _, u := range units {
 		out = append(out, resolveSGRUnit(u, pal)...)
 	}
 	return out
 }
 
-// parseCSIParams splits a CSI parameter string ("1;31") into ints. Empty
-// fields — which SGR treats as the default, usually 0 — become 0, so
-// "\x1b[m" and "\x1b[;m" both come out as a single reset.
-func parseCSIParams(s string) []int {
-	if s == "" {
-		return []int{0}
-	}
-	fields := strings.Split(s, ";")
-	out := make([]int, 0, len(fields))
-	for _, f := range fields {
-		if f == "" {
-			out = append(out, 0)
-			continue
-		}
-		n, err := strconv.Atoi(f)
-		if err != nil {
-			// A non-numeric parameter is not valid SGR; keep it as 0 so the
-			// sequence still parses as a reset rather than corrupting output.
-			out = append(out, 0)
-			continue
-		}
-		out = append(out, n)
-	}
-	return out
+// parseCSIParams splits a CSI parameter string ("1;31") into its fields, kept
+// as their original text rather than converted. Most fields are integers, but
+// the two shapes that are not matter just as much: the empty field, which SGR
+// reads as the default (usually 0, so "\x1b[m" and "\x1b[;m" both mean reset),
+// and colon-coded sub-parameters such as "4:3", which the resolver must hand
+// back exactly as they arrived. Converting to numbers here once flattened
+// "4:3" into 0, and a stray SGR 0 kills every attribute set before it.
+func parseCSIParams(s string) []string {
+	return strings.Split(s, ";")
 }
 
-// joinCSIParams renders a parameter list back into its "1;31" form. An empty
-// list is the bare reset, exactly as SGR reads it.
-func joinCSIParams(params []int) string {
-	if len(params) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	for i, p := range params {
-		if i > 0 {
-			b.WriteByte(';')
-		}
-		b.WriteString(strconv.Itoa(p))
-	}
-	return b.String()
+// joinCSIParams renders a parameter list back into its "1;31" form. Fields
+// rejoin exactly as they were split, empties and colons included, so a
+// sequence the resolver did not rewrite comes back byte-identical.
+func joinCSIParams(params []string) string {
+	return strings.Join(params, ";")
 }
 
 // ResolveSGR rewrites index colours in an ANSI-styled capture to 24-bit RGB

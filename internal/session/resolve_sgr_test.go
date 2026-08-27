@@ -85,13 +85,53 @@ func TestResolveSGR256LowIndexUsesPalette(t *testing.T) {
 	}
 }
 
-func TestResolveSGR256HighIndexLeftAlone(t *testing.T) {
+func TestResolveSGR256CubeAndRampResolved(t *testing.T) {
 	pal := mochaPalette()
-	// 38;5;196 is far outside the 16-entry theme palette; it is part of the
-	// standard 256-colour cube and every consumer resolves it identically.
-	in := "\x1b[38;5;196m"
-	if got := ResolveSGR(in, pal); got != in {
-		t.Fatalf("ResolveSGR(38;5;196) = %q, want unchanged %q", got, in)
+	// Indices at or above 16 belong to the standard 256-colour cube and grey
+	// ramp, whose levels ride the index itself, so they resolve to fixed RGB
+	// values no palette redefines. 196 is the top red corner, 208 the classic
+	// orange, 232/255 the ramp's ends.
+	cases := []struct{ in, want string }{
+		{"\x1b[38;5;196m", "\x1b[38;2;255;0;0m"},
+		{"\x1b[38;5;208m", "\x1b[38;2;255;135;0m"},
+		{"\x1b[48;5;208m", "\x1b[48;2;255;135;0m"},
+		{"\x1b[38;5;232m", "\x1b[38;2;8;8;8m"},
+		{"\x1b[38;5;255m", "\x1b[38;2;238;238;238m"},
+	}
+	for _, c := range cases {
+		if got := ResolveSGR(c.in, pal); got != c.want {
+			t.Fatalf("ResolveSGR(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestResolveSGRSubparametersPreserved pins the fix for fields SGR reads as a
+// single parameter with variants: "4:3" (curly underline) must survive
+// verbatim while its neighbours still resolve. Flattening it to 0 once turned
+// the sequence into a reset that killed bold and underline.
+func TestResolveSGRSubparametersPreserved(t *testing.T) {
+	pal := mochaPalette()
+	got := ResolveSGR("\x1b[1;4:3;31mMIX\x1b[0m", pal)
+	want := "\x1b[1;4:3;38;2;243;139;168mMIX\x1b[0m"
+	if got != want {
+		t.Fatalf("ResolveSGR(sub-params) = %q, want %q", got, want)
+	}
+}
+
+// TestResolveSGRMalformedFieldsPreserved checks fields that cannot be colour
+// parameters are handed back untouched rather than guessed into some other
+// attribute: an indexed colour cut short before its index, a sub-parameter
+// where an index belongs, and the colon spelling of the introducer itself.
+func TestResolveSGRMalformedFieldsPreserved(t *testing.T) {
+	pal := mochaPalette()
+	for _, in := range []string{
+		"\x1b[38;5;m",
+		"\x1b[38;5;:9m",
+		"\x1b[38:2:196m",
+	} {
+		if got := ResolveSGR(in, pal); got != in {
+			t.Fatalf("ResolveSGR(%q) = %q, want unchanged %q", in, got, in)
+		}
 	}
 }
 

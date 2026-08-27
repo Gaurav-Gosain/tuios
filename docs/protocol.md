@@ -495,9 +495,14 @@ Params:
 - `resolved` (optional bool): rewrite ANSI index colours to 24-bit RGB so the
   capture matches what a themed client paints. Index colours are the SGR forms
   `30-37`/`90-97` (foreground), `40-47`/`100-107` (background) and
-  `38;5;n`/`48;5;n` for `n < 16`; each is mapped through the palette. Indices
-  above 15 (the standard 256-colour cube and ramp) and true-colour
-  (`38;2;r;g;b`) pass through untouched. Default is `false`.
+  `38;5;n`/`48;5;n`; each maps through the palette when it names one of the
+  theme's sixteen, and otherwise through the fixed formulas of the standard
+  256-colour cube (indices 16-231) and grey ramp (232-255), which every
+  consumer draws identically. True colour (`38;2;r;g;b`) passes through
+  untouched, as does any parameter that is not a plain integer: a colon-coded
+  sub-parameter such as `4:3` (curly underline) travels verbatim instead of
+  being flattened into another attribute. Asking for `resolved` implies
+  styling, so the reply reports `styled: true`. Default is `false`.
 - `palette` (optional []string): the 16 hex colours (`#rrggbb`) a client's
   theme paints indices 0-15 with, used by a `resolved` capture. When present it
   must have exactly 16 entries; anything else is rejected with
@@ -522,7 +527,7 @@ Response:
 Without `resolved`, a `styled` capture emits the colours exactly as the guest
 sent them: a program that draws with SGR `31` comes back as `\x1b[31m`, and the
 consumer resolves that index against its own palette. That is the intended
-contract — appearance is client-owned and the daemon has no theme. `resolved`
+contract: appearance is client-owned and the daemon has no theme. `resolved`
 exists for consumers that render the capture verbatim and therefore need the
 colours already resolved; it takes the palette explicitly so the daemon still
 knows nothing about themes.

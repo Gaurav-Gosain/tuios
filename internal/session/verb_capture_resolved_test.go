@@ -99,6 +99,11 @@ func TestVerbCapturePaneResolvedDefaultPalette(t *testing.T) {
 			if strings.Contains(content, "\x1b[32m") {
 				t.Fatalf("resolved default palette kept index 32: %q", content)
 			}
+			// Resolved implies styled: the content carries rewritten escapes,
+			// so reporting styled=false here would leave the caller guessing.
+			if res["styled"] != true {
+				t.Fatalf("resolved capture reported styled=%v, want true", res["styled"])
+			}
 			return
 		}
 		if time.Now().After(deadline) {

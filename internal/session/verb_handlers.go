@@ -395,7 +395,10 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 	}
 
 	scrollback := p.Scrollback || p.Source == "recent"
-	ansi := p.Styled || p.ANSI
+	// Resolved implies styling: resolving has nothing to act on without the
+	// escape sequences, and the reply must admit what the content carries
+	// instead of reporting styled=false beside a rewritten capture.
+	ansi := p.Styled || p.ANSI || p.Resolved
 	var content string
 	if p.Resolved {
 		palette, verr := paletteFromParams(p.Palette)

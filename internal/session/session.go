@@ -2054,8 +2054,9 @@ func (p *PTY) CaptureContent(scrollback, ansi bool) string {
 // colours rewritten to 24-bit RGB against the given palette. The daemon still
 // knows nothing about themes: the palette is an explicit parameter, the
 // client's theme palette, so the capture matches what the client paints. A
-// bare reset stays a bare reset, and colours the palette does not own (the
-// 256-colour cube above index 15, true colour) pass through untouched.
+// bare reset stays a bare reset. Indices 0-15 come from the palette, the
+// standard 256-colour cube and grey ramp resolve through their fixed
+// formulas, and only true colour passes through untouched.
 func (p *PTY) CaptureContentResolved(scrollback bool, palette [16]color.Color) string {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
