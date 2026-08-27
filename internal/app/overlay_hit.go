@@ -83,6 +83,9 @@ func (m *OS) openOverlayKinds() map[string]bool {
 	if m.ShowDockEditor {
 		open["dockeditor"] = true
 	}
+	if m.ShowSectionEditor {
+		open["sectioneditor"] = true
+	}
 	if m.ShowAccentPicker {
 		open["accent"] = true
 	}

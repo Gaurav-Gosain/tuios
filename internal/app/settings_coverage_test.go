@@ -26,6 +26,15 @@ var settingsUIExcluded = map[string]string{
 	"appearance.sidebar_show_glyphs":  "alias of appearance.sidebar.show_glyphs",
 	"appearance.sidebar_show_counts":  "alias of appearance.sidebar.show_counts",
 	"appearance.sidebar.workspaces":   "replaced by appearance.dock_workspace_tabs",
+
+	// The two section switches. They fold into appearance.sidebar.sections on
+	// load, which is the one place membership lives: a layout may carry two
+	// spacers and a boolean per section has nowhere to put the second one. The
+	// Sections editor is the row that turns a section off, so a row here would
+	// be a second control for the same thing, disagreeing with the editor the
+	// moment either was used.
+	"appearance.sidebar.show_windows": "folded into appearance.sidebar.sections; the Sections editor is the row",
+	"appearance.sidebar.show_agents":  "folded into appearance.sidebar.sections; the Sections editor is the row",
 	"appearance.hide_clock":           "the positive spelling appearance.show_clock has the row",
 
 	// A shell command the host runs on its own, with no further gesture from

@@ -765,6 +765,13 @@ type OS struct {
 	DockEditorScroll   int
 	DockEditorOriginal dockLists // the lists when it opened, for cancel
 
+	// Rail layout editor state. The rail's sections are one ordered list with a
+	// percent on each entry, which no settings row can hold either.
+	ShowSectionEditor     bool
+	SectionEditorSelected int
+	SectionEditorScroll   int
+	SectionEditorOriginal string // the layout when it opened, for undo
+
 	// Floating overlay placement + mouse hit-testing. Each overlay kind keeps
 	// its own drag displacement in OverlayOffsets so panels (e.g. settings and
 	// the theme picker) can be moved independently. OverlayHits records every
