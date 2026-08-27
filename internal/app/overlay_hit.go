@@ -77,6 +77,9 @@ func (m *OS) openOverlayKinds() map[string]bool {
 	if m.ShowGlyphPicker {
 		open["glyphpicker"] = true
 	}
+	if m.ShowEffectPicker {
+		open["effectpicker"] = true
+	}
 	if m.ShowDockEditor {
 		open["dockeditor"] = true
 	}

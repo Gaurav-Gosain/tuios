@@ -188,7 +188,7 @@ func colorSettingItem(path string) settingItem {
 		Unset:    setting.Unset,
 		value:    func(m *OS) string { return setting.label(setting.value(m)) },
 		swatch:   func(ground color.Color) color.Color { return setting.effective(ground) },
-		activate: func(m *OS) { m.OpenColorSetting(setting.Path) },
+		activate: func(m *OS) tea.Cmd { m.OpenColorSetting(setting.Path); return nil },
 	}
 }
 

@@ -54,8 +54,11 @@ type settingItem struct {
 	// unset row still shows what it is inheriting.
 	swatch func(ground color.Color) color.Color
 	// activate, when set, runs on Enter/click instead of adjusting the value
-	// (e.g. the Theme row opens the theme picker).
-	activate func(m *OS)
+	// (e.g. the Theme row opens the theme picker). It returns a command so a
+	// row can open something that has to start running: the effect picker's
+	// preview is an animation, and a hook that could return nothing had no way
+	// to schedule the first frame.
+	activate func(m *OS) tea.Cmd
 	// meter is where the value sits in its range, 0 to 1. Set for the numeric
 	// rows whose range is bounded, so the row says how far along it is and not
 	// only what the number is: "gap 3" answers nothing without knowing that the
@@ -481,7 +484,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		Items: m.resolveRows([]settingsRow{
 			opt("screensaver.enabled"),
 			opt("screensaver.idle_minutes"),
-			opt("screensaver.effect"),
+			custom("screensaver.effect", m.screensaverEffectItem()),
 			opt("screensaver.while_busy"),
 		}),
 	}
@@ -508,7 +511,7 @@ func (m *OS) themeItem() settingItem {
 			m.applyTheme(v)
 			m.setThemeSelection(v)
 		})
-	item.activate = func(m *OS) { m.OpenThemePicker() }
+	item.activate = func(m *OS) tea.Cmd { m.OpenThemePicker(); return nil }
 	return item
 }
 
@@ -522,7 +525,26 @@ func (m *OS) glyphItem() settingItem {
 		options,
 		func() string { return theme.ActiveGlyphSetID() },
 		func(m *OS, v string) { m.setOption("appearance.glyphs", v) })
-	item.activate = func(m *OS) { m.OpenGlyphPicker() }
+	item.activate = func(m *OS) tea.Cmd { m.OpenGlyphPicker(); return nil }
+	return item
+}
+
+// screensaverEffectItem is the screen saver effect row. Hand-written because
+// the accepted set went from five values to thirty-six when the effects engine
+// grew, and a cycler that steps one value per keypress stopped being a control
+// at that size: the next largest closed list on the page has ten.
+//
+// Left and right still cycle, so the row is no worse than it was for anyone who
+// knows the name they want. Enter opens the picker, which searches the set and
+// runs each effect over the screen as you move through it, because the names
+// alone say nothing about what lands on screen.
+func (m *OS) screensaverEffectItem() settingItem {
+	item := enumItem("Effect",
+		"The animation the screen saver runs. Press enter to open the picker.",
+		config.ScreensaverEffects,
+		func() string { return m.screensaverConfig().EffectName() },
+		func(m *OS, v string) { m.setOption("screensaver.effect", v) })
+	item.activate = func(m *OS) tea.Cmd { return m.OpenEffectPicker() }
 	return item
 }
 
@@ -543,7 +565,7 @@ func (m *OS) dockComponentsItem() settingItem {
 				len(m.UserConfig.Dock.DockList("right"))
 			return strconv.Itoa(n) + " placed"
 		},
-		activate: func(m *OS) { m.OpenDockEditor() },
+		activate: func(m *OS) tea.Cmd { m.OpenDockEditor(); return nil },
 	}
 }
 
@@ -700,8 +722,7 @@ func (m *OS) SettingsActivate() tea.Cmd {
 	}
 	item := items[m.SettingsSelected]
 	if fn := item.activate; fn != nil {
-		fn(m)
-		return nil
+		return fn(m)
 	}
 	if item.Control == controlString {
 		m.SettingsBeginEdit()

@@ -185,6 +185,13 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		if idx != m.GlyphPickerSelected {
 			m.GlyphPickerMove(idx - m.GlyphPickerSelected)
 		}
+	case "effectpicker":
+		// Hover previews, as it does in the other two pickers. The command the
+		// move returns is dropped: hover cannot return one, and the preview is
+		// already running its own chain of frames, so there is nothing to start.
+		if idx != m.EffectPickerSelected {
+			_ = m.EffectPickerMove(idx - m.EffectPickerSelected)
+		}
 	case "dockeditor":
 		m.DockEditorSelected = idx
 	case "session":
@@ -242,6 +249,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		m.ThemePickerMove(wheelDelta(up))
 	case "glyphpicker":
 		m.GlyphPickerMove(wheelDelta(up))
+	case "effectpicker":
+		_ = m.EffectPickerMove(wheelDelta(up))
 	case "dockeditor":
 		m.DockEditorMove(wheelDelta(up))
 	case "session":
@@ -358,6 +367,9 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "glyphpicker":
 		m.GlyphPickerSelected = row.Idx
 		return m.GlyphPickerApplySelection()
+	case "effectpicker":
+		m.EffectPickerSelected = row.Idx
+		return m.EffectPickerApplySelection()
 	case "dockeditor":
 		m.DockEditorSelected = row.Idx
 		return m.DockEditorToggle()
@@ -455,6 +467,11 @@ func (m *OS) closeOverlay(kind string) {
 	case "glyphpicker":
 		// Click-away leaves the previewed set reverted, matching Esc.
 		m.CancelGlyphPicker()
+	case "effectpicker":
+		// Click-away closes without changing the row, matching Esc. There is no
+		// preview to revert: this picker previews by animating rather than by
+		// applying, so nothing was written on the way through.
+		m.CancelEffectPicker()
 	case "dockeditor":
 		// Click-away closes and keeps, matching Esc: the layout is already
 		// applied and saved.
