@@ -719,6 +719,18 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth,
 		// The TUI runs beside the daemon and the user is in a browser
 		// somewhere else, so nothing here may touch the host's own desktop.
 		RemoteClient: true,
+		// This browser's own cell measurement, not the process-wide placeholder
+		// installed at startup before any browser had connected. One process
+		// serves several readers at several font sizes, and the image cell math
+		// has to answer for the one it is drawing to.
+		Caps: &app.HostCapabilities{
+			KittyGraphics: true,
+			SixelGraphics: true,
+			TrueColor:     true,
+			TerminalName:  "tuios-web",
+			CellWidth:     cellWidth,
+			CellHeight:    cellHeight,
+		},
 	})
 
 	// Restore state from daemon if available

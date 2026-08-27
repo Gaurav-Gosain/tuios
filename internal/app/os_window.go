@@ -451,7 +451,7 @@ func (m *OS) AddWindow(name string, command ...string) *OS {
 		return m // Failed to create window
 	}
 
-	caps := GetHostCapabilities()
+	caps := m.hostCaps()
 	if caps.CellWidth > 0 && caps.CellHeight > 0 {
 		window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
 	}

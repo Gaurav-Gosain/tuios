@@ -37,10 +37,10 @@ func (m *OS) screenshotGraphicsReady() bool {
 	if m.PostRenderWriter == nil {
 		return false
 	}
-	if !GetHostCapabilities().KittyGraphics {
+	if !m.hostCaps().KittyGraphics {
 		return false
 	}
-	w, h := hostCellSize()
+	w, h := m.hostCellSize()
 	return w > 0 && h > 0
 }
 
@@ -52,8 +52,8 @@ func (m *OS) screenshotGraphicsReady() bool {
 // into a box half the width it needed and drawn squeezed to fit, which is the
 // "horizontally stretched" report. Anything that has to reason in pixels about
 // a cell asks this.
-func hostCellSize() (w, h int) {
-	caps := GetHostCapabilities()
+func (m *OS) hostCellSize() (w, h int) {
+	caps := m.hostCaps()
 	if caps.CellWidth <= 0 || caps.CellHeight <= 0 {
 		return 0, 0
 	}
@@ -69,7 +69,7 @@ func hostCellSize() (w, h int) {
 // guess. Two times the body is a few hundred kilobytes at most, against the two
 // to three megabytes the file itself is.
 func (m *OS) screenshotPreviewPixelBudget() (maxW, maxH int) {
-	cellW, cellH := hostCellSize()
+	cellW, cellH := m.hostCellSize()
 	if cellW <= 0 || cellH <= 0 {
 		return 0, 0
 	}
@@ -109,7 +109,7 @@ func (m *OS) screenshotPreviewPictureBox() (inset, cols, rows int, ok bool) {
 	if !m.ShotPreview.Open || len(m.ShotPreview.PNG) == 0 || !m.screenshotGraphicsReady() {
 		return 0, 0, 0, false
 	}
-	cellW, cellH := hostCellSize()
+	cellW, cellH := m.hostCellSize()
 	bodyCols, bodyRows := m.screenshotPreviewBody()
 	cols, rows = fitBoxToPicture(bodyCols, bodyRows, m.ShotPreview.PixelW, m.ShotPreview.PixelH, cellW, cellH)
 	// The margin is measured across the panel, not across the body. The body

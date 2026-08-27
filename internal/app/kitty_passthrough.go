@@ -75,8 +75,13 @@ type KittyPassthrough struct {
 	// (SSH) and does not share the server's filesystem. See
 	// KittyPassthroughOptions.RemoteClient.
 	remoteClient bool
-	hostOut      io.Writer
-	hostMu       sync.Mutex // serializes writes to hostOut across render + async paths
+	// caps is the terminal this passthrough writes to, snapshotted when the
+	// session was built. A server process holds one of these per connection,
+	// so reading a package global here would decide one client's geometry and
+	// animation support from another client's terminal. Never nil.
+	caps    *HostCapabilities
+	hostOut io.Writer
+	hostMu  sync.Mutex // serializes writes to hostOut across render + async paths
 	// hostScratch joins a multi-part sequence into one Write. Guarded by hostMu.
 	hostScratch []byte
 	// pacedUntilNanos is the wall time before which no further frame should be
@@ -393,11 +398,17 @@ type KittyPassthroughOptions struct {
 	// inline-graphics mode this keeps native placement, clipping, and delete
 	// behavior, which a real remote terminal still needs.
 	RemoteClient bool
+	// Caps is the terminal at the far end of this session. Nil falls back to
+	// this process's own terminal, which is what a local attach wants.
+	Caps *HostCapabilities
 }
 
 // NewKittyPassthroughWithOptions creates a passthrough with custom options.
 func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthrough {
-	caps := GetHostCapabilities()
+	caps := opts.Caps
+	if caps == nil {
+		caps = GetHostCapabilities()
+	}
 	enabled := caps.KittyGraphics || opts.ForceEnable
 	kittyPassthroughLog("NewKittyPassthrough: KittyGraphics=%v Force=%v TerminalName=%s", caps.KittyGraphics, opts.ForceEnable, caps.TerminalName)
 	// Open /dev/tty once for the lifetime of the passthrough (avoids per-frame open/close)
@@ -413,6 +424,7 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 		enabled:           enabled,
 		inlineGraphics:    opts.ForceEnable,
 		remoteClient:      opts.RemoteClient,
+		caps:              caps,
 		hostOut:           hostOut,
 		placements:        make(map[string]map[uint32]*PassthroughPlacement),
 		imageIDMap:        make(map[string]map[uint32]uint32),
@@ -427,6 +439,15 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 	}
 	go kp.asyncFrameWriter()
 	return kp
+}
+
+// hostCaps is the terminal this passthrough writes to. The constructor always
+// fills the field; the fallback only covers a zero-value struct.
+func (kp *KittyPassthrough) hostCaps() *HostCapabilities {
+	if kp.caps != nil {
+		return kp.caps
+	}
+	return GetHostCapabilities()
 }
 
 // writeHostSequence writes parts to hostOut as one unit that is mutually
@@ -707,7 +728,7 @@ func (kp *KittyPassthrough) calculateImageCells(cmd *vt.KittyCommand) (rows, col
 
 	// If rows/cols not specified, calculate from image dimensions
 	if rows == 0 || cols == 0 {
-		caps := GetHostCapabilities()
+		caps := kp.hostCaps()
 		kittyPassthroughLog("calculateImageCells: imgPixels=(%d,%d), cmdRC=(%d,%d), cellSize=(%d,%d)",
 			cmd.Width, cmd.Height, cmd.Columns, cmd.Rows, caps.CellWidth, caps.CellHeight)
 		if caps.CellWidth > 0 && caps.CellHeight > 0 {

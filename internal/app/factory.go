@@ -93,6 +93,15 @@ type OSOptions struct {
 	// widens the gestures that are aimed at a single cell. Only tuios-web can
 	// know this, and only from the browser that connected.
 	TouchClient bool
+
+	// Caps describes the terminal this session draws to. The servers detect it
+	// per connection, because one process holds several connections and the
+	// terminal that has to render a forwarded image is the one at the far end
+	// of this session and not the one at the far end of the last.
+	//
+	// Nil means "this process's own terminal", which is what a local attach
+	// wants and what a server falls back to when it detected nothing.
+	Caps *HostCapabilities
 }
 
 // NewOS creates a new OS instance with the given options.
@@ -102,6 +111,14 @@ func NewOS(opts OSOptions) *OS {
 	numWorkspaces := opts.NumWorkspaces
 	if numWorkspaces <= 0 {
 		numWorkspaces = 9
+	}
+
+	// Snapshot the terminal this connection is on, once. Everything downstream
+	// reads the snapshot, so nothing in this session can be re-decided by the
+	// next client to connect.
+	caps := opts.Caps
+	if caps == nil {
+		caps = GetHostCapabilities()
 	}
 
 	os := &OS{
@@ -145,6 +162,7 @@ func NewOS(opts OSOptions) *OS {
 		SSHSession:      opts.SSHSession,
 		TouchClient:     opts.TouchClient,
 		RemoteClient:    opts.RemoteClient,
+		Caps:            caps,
 
 		// Daemon connection
 		DaemonClient: opts.DaemonClient,
@@ -179,10 +197,12 @@ func NewOS(opts OSOptions) *OS {
 		ForceEnable:  opts.ForceGraphicsEnabled,
 		Output:       opts.GraphicsOutput,
 		RemoteClient: opts.GraphicsRemoteClient,
+		Caps:         caps,
 	})
 	os.SixelPassthrough = NewSixelPassthroughWithOptions(SixelPassthroughOptions{
 		ForceEnable: opts.ForceGraphicsEnabled,
 		Output:      opts.GraphicsOutput,
+		Caps:        caps,
 	})
 
 	// Tell the terminal package what tuios can forward, so shells spawned
@@ -192,7 +212,7 @@ func NewOS(opts OSOptions) *OS {
 	terminal.SetGraphicsCapabilities(
 		os.KittyPassthrough != nil && os.KittyPassthrough.IsEnabled(),
 		os.SixelPassthrough != nil && os.SixelPassthrough.IsEnabled(),
-		GetHostCapabilities().KittyAnimation,
+		caps.KittyAnimation,
 	)
 
 	// Initialize hooks manager and load user-defined hooks from config. Prefer

@@ -233,7 +233,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 			continue
 		}
 
-		caps := GetHostCapabilities()
+		caps := m.hostCaps()
 		if caps.CellWidth > 0 && caps.CellHeight > 0 {
 			window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
 		}
@@ -851,7 +851,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 		return nil
 	}
 
-	caps := GetHostCapabilities()
+	caps := m.hostCaps()
 	if caps.CellWidth > 0 && caps.CellHeight > 0 {
 		window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
 	}

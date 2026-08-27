@@ -180,6 +180,17 @@ type OS struct {
 	// See OSOptions.RemoteClient.
 	RemoteClient bool
 
+	// Caps is the terminal this session draws to, as it described itself when
+	// the connection was made. It is per session rather than a package global
+	// because one server process holds several sessions at once: an SSH client
+	// in kitty and one in xterm are two different terminals, and the graphics
+	// each gets must be decided from its own.
+	//
+	// Immutable after NewOS. Never nil: NewOS falls back to the process host
+	// when the caller has nothing better, and a hand-built OS literal in a test
+	// gets the same fallback through Caps() below.
+	Caps *HostCapabilities
+
 	// Capture is capture mode: the window pick, the region drag and the
 	// full-screen grab. Zero when the mode is off.
 	Capture captureState

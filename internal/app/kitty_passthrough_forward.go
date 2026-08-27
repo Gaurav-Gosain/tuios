@@ -241,7 +241,7 @@ func (kp *KittyPassthrough) hostReadsFiles() bool {
 	if kp.inlineGraphics || kp.remoteClient {
 		return false
 	}
-	return GetHostCapabilities().KittyFileTransfer
+	return kp.hostCaps().KittyFileTransfer
 }
 
 func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, contentCols, contentRows, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) *PlacementResult {
@@ -361,7 +361,7 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 	imgRows := pending.Rows
 	imgCols := pending.Columns
 	if imgRows == 0 || imgCols == 0 {
-		caps := GetHostCapabilities()
+		caps := kp.hostCaps()
 		if caps.CellWidth > 0 && caps.CellHeight > 0 {
 			if imgRows == 0 && pending.Height > 0 {
 				imgRows = (pending.Height + caps.CellHeight - 1) / caps.CellHeight

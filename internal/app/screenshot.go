@@ -380,7 +380,7 @@ func (m *OS) screenshotSettings() capture.Settings {
 		cfg = m.UserConfig.Screenshot
 	}
 	s := capture.SettingsFrom(cfg, theme.CurrentThemeID(), theme.ActiveGlyphSetID())
-	if caps := GetHostCapabilities(); caps != nil {
+	if caps := m.hostCaps(); caps != nil {
 		s.HostFontFamily, s.HostBoldFamily = caps.FontFamily, caps.BoldFontFamily
 		// The shape of a cell, from the terminal that owns it. Without it the
 		// raster comes out at whatever shape the font's line box happens to

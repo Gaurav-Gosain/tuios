@@ -148,8 +148,8 @@ type launcherIconsMsg struct {
 }
 
 // iconCellSize is the icon's box in pixels, from the host's reported cell size.
-func iconCellSize() (w, h int) {
-	caps := GetHostCapabilities()
+func (m *OS) iconCellSize() (w, h int) {
+	caps := m.hostCaps()
 	cw, ch := caps.CellWidth, caps.CellHeight
 	if cw <= 0 || ch <= 0 {
 		return 0, 0
@@ -168,10 +168,10 @@ func (m *OS) launcherGraphicsReady() bool {
 	if m.PostRenderWriter == nil {
 		return false
 	}
-	if !GetHostCapabilities().KittyGraphics {
+	if !m.hostCaps().KittyGraphics {
 		return false
 	}
-	w, h := iconCellSize()
+	w, h := m.iconCellSize()
 	return w > 0 && h > 0
 }
 
@@ -195,7 +195,7 @@ func (m *OS) LauncherIconCmd(names []string) tea.Cmd {
 		return nil
 	}
 	st := m.launcherIconState()
-	w, h := iconCellSize()
+	w, h := m.iconCellSize()
 
 	st.mu.Lock()
 	var want []iconKey
@@ -351,7 +351,7 @@ func (m *OS) flushLauncherIcons(placements []launcherIconPlacement) {
 	}
 	st := m.launcherIconState()
 
-	w, h := iconCellSize()
+	w, h := m.iconCellSize()
 
 	st.mu.Lock()
 	var buf []byte

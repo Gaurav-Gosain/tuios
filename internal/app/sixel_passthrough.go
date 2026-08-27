@@ -30,6 +30,9 @@ type SixelPassthrough struct {
 	mu      sync.Mutex
 	enabled bool
 	hostOut io.Writer
+	// caps is the terminal this passthrough writes to, snapshotted per
+	// connection. See KittyPassthrough.caps. Never nil after the constructor.
+	caps *HostCapabilities
 
 	// Placements per window
 	placements map[string][]*SixelPassthroughPlacement
@@ -76,13 +79,19 @@ type SixelPassthroughOptions struct {
 	// Output is the writer for sixel output. If nil, uses os.Stdout. Web mode
 	// passes the sip PtySlave; SSH mode passes the ssh.Session.
 	Output io.Writer
+	// Caps is the terminal at the far end of this session. Nil falls back to
+	// this process's own terminal.
+	Caps *HostCapabilities
 }
 
 // NewSixelPassthroughWithOptions creates a new SixelPassthrough with custom
 // options. Use this in web mode to pass the sip session's PtySlave() so
 // sixel bytes flow through the same PTY as the browser's text output.
 func NewSixelPassthroughWithOptions(opts SixelPassthroughOptions) *SixelPassthrough {
-	caps := GetHostCapabilities()
+	caps := opts.Caps
+	if caps == nil {
+		caps = GetHostCapabilities()
+	}
 	enabled := caps.SixelGraphics || opts.ForceEnable
 	sixelPassthroughLog("NewSixelPassthrough: SixelGraphics=%v Force=%v TerminalName=%s", caps.SixelGraphics, opts.ForceEnable, caps.TerminalName)
 	hostOut := opts.Output
@@ -92,8 +101,18 @@ func NewSixelPassthroughWithOptions(opts SixelPassthroughOptions) *SixelPassthro
 	return &SixelPassthrough{
 		enabled:    enabled,
 		hostOut:    hostOut,
+		caps:       caps,
 		placements: make(map[string][]*SixelPassthroughPlacement),
 	}
+}
+
+// hostCaps is the terminal this passthrough writes to. The constructor always
+// fills the field; the fallback only covers a zero-value struct.
+func (sp *SixelPassthrough) hostCaps() *HostCapabilities {
+	if sp.caps != nil {
+		return sp.caps
+	}
+	return GetHostCapabilities()
 }
 
 // IsEnabled returns whether sixel passthrough is enabled.
@@ -173,7 +192,7 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 		return
 	}
 
-	caps := GetHostCapabilities()
+	caps := sp.hostCaps()
 	cellWidth := caps.CellWidth
 	cellHeight := caps.CellHeight
 
@@ -434,7 +453,7 @@ func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 		lastSixelTime = now
 
 		// Get fresh cell dimensions (may change on resize)
-		caps := GetHostCapabilities()
+		caps := m.hostCaps()
 		cw := caps.CellWidth
 		ch := caps.CellHeight
 		if cw == 0 {
