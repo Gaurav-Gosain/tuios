@@ -36,6 +36,10 @@ type UserConfig struct {
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.
 	Dock DockConfig `toml:"dock"`
+	// Hosts is the [hosts.NAME] set: the other machines this daemon may ask for
+	// listings. Outside the option registry for the same reason as the tables
+	// above. See hosts.go.
+	Hosts map[string]HostConfig `toml:"hosts,omitempty"`
 }
 
 // NotificationsConfig holds how long a dock message stays up.

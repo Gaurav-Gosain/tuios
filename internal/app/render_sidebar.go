@@ -695,7 +695,11 @@ func sidebarWindowSection(scroll, rows, lines int) (start, shown, hidden int) {
 func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	m.SidebarHits = m.SidebarHits[:0]
 	m.SidebarSessionIDs = m.SidebarSessionIDs[:0]
-	m.refreshSessionColorsFor(tree.Sessions)
+	// Colours are arbitrated over this machine's sessions only. A remote row
+	// draws in its host group's muted ink, and letting one into the arbitration
+	// would move a local session's colour because a machine somewhere else
+	// gained a session.
+	m.refreshSessionColorsFor(localSessionNodes(tree.Sessions))
 
 	// Re-armed each frame: a marquee row sets it, so a key left standing after
 	// the row stops drawing hovered means the scroll is over and the tick idles.
@@ -755,13 +759,20 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		sessions = orderByKey(sessions, func(n sessiontree.Node) string { return n.ID }, m.SidebarDrag.Order)
 	}
 	for _, s := range sessions {
+		if isRemoteNode(s) {
+			// A remote row is not addressable, so it is not in the id list the
+			// mouse resolves a click against.
+			continue
+		}
 		m.SidebarSessionIDs = append(m.SidebarSessionIDs, s.ID)
 	}
 
 	if variant == sidebarVariantGlyph {
 		// The strip lays its own ground, so it composes its lines itself rather
-		// than borrowing the expanded rail's bare-canvas edge.
-		return m.sidebarStripLines(sessions, w, cw, height, topMargin, sidebarX, pal, edgeLeft)
+		// than borrowing the expanded rail's bare-canvas edge. Host groups stay
+		// out of it: three columns cannot say which machine a row is on, and a
+		// row that cannot say that must not sit beside the local ones.
+		return m.sidebarStripLines(localSessionNodes(sessions), w, cw, height, topMargin, sidebarX, pal, edgeLeft)
 	}
 
 	// The keyboard cursor tracks a row by identity, not by index, so it survives a
@@ -1091,6 +1102,14 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		for i := range count[sidebarSectionSessions] {
 			idx := start[sidebarSectionSessions] + i
 			s := sessions[idx]
+			if isRemoteNode(s) {
+				// Federation stage 1 carries listings and nothing else, so a row for
+				// another machine is drawn and is not a target: no hit rectangle, no
+				// nav entry, no drag, no click. Nothing can reach a remote session
+				// from the rail, which is the point rather than an omission.
+				lines = append(lines, compose(m.sidebarHostRow(s, cw, pal)))
+				continue
+			}
 			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
 			hovered := idx == hoverRow[sidebarSectionSessions] || isCursor(sidebarRowSession, s.ID, "")
 			recordHit(sidebarRowSession, s.ID, "", -1, 1)

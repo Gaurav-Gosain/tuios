@@ -20,6 +20,7 @@ var optionWalkSkips = map[string]string{
 	"dock.center":                "an ordered list of component names, not a scalar path",
 	"dock.right":                 "an ordered list of component names, not a scalar path",
 	"dock.custom":                "a free-form map of component name to its command and refresh",
+	"hosts":                      "a map of host name to its address, which no single settable path can spell",
 }
 
 // TestOptionRegistryCoversEveryScalarField is the guard that keeps the

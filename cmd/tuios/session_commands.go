@@ -913,6 +913,7 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 		daemonCfg.AgentAutoDetect = userConfig.Daemon.AgentAutoDetect
 		daemonCfg.AgentDetectInterval = time.Duration(userConfig.Daemon.AgentDetectSeconds) * time.Second
 		daemonCfg.AgentBinaries = userConfig.Daemon.AgentBinaries
+		daemonCfg.Hosts = hostsFromConfig(userConfig)
 	}
 
 	daemon := session.NewDaemon(daemonCfg)

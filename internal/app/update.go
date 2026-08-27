@@ -337,6 +337,11 @@ func (m *OS) Init() tea.Cmd {
 			cmds = append(cmds, refreshForeignSessionsCmd(m.DaemonClient))
 		}
 		cmds = append(cmds, foreignSessionRefreshTick(after))
+
+		// One poll for the federated hosts. The answer says whether any are
+		// configured, and a daemon with none never gets asked again.
+		m.federationPolling = true
+		cmds = append(cmds, refreshFederationCmd())
 	}
 
 	return tea.Batch(cmds...)
@@ -1091,6 +1096,24 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, foreignSessionRefreshTick(after)
 		}
 		return m, tea.Batch(refreshForeignSessionsCmd(m.DaemonClient), foreignSessionRefreshTick(after))
+
+	case FederationHostsMsg:
+		// Storing a snapshot is the whole handler. The network work happened in
+		// the Cmd that produced this message, which is the rule this feature is
+		// most at risk of breaking.
+		m.applyFederationSnapshot(msg)
+		m.sidebarCache.invalidate()
+		if after, refresh := m.federationRefreshPlan(); refresh {
+			return m, federationRefreshTick(after)
+		}
+		return m, nil
+
+	case FederationRefreshTickMsg:
+		after, refresh := m.federationRefreshPlan()
+		if !refresh {
+			return m, nil
+		}
+		return m, tea.Batch(refreshFederationCmd(), federationRefreshTick(after))
 
 	case TriggerAltScreenRedrawMsg:
 		// Force alt screen apps to redraw by sending resize (fake then real)
