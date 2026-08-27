@@ -553,18 +553,11 @@ var (
 	// GetSidebarWidth folds this together with the narrow-screen breakpoints.
 	SidebarWidth = SidebarDefaultWidth
 
-	// SidebarShowWindows draws the window rows under the current session. When
-	// false the sidebar lists sessions only.
-	SidebarShowWindows = true
-
 	// SidebarShowGlyphs draws the agent-state glyph on each row.
 	SidebarShowGlyphs = true
 
 	// SidebarShowCounts draws the window count on each session row.
 	SidebarShowCounts = true
-
-	// SidebarShowAgents draws the agents section at the rail's bottom.
-	SidebarShowAgents = true
 
 	// SidebarMarquee scrolls a hovered row's title when it overflows its columns.
 	SidebarMarquee = true
@@ -623,7 +616,32 @@ var (
 const SidebarDefaultSections = "sessions:25,terminals,files:25,agents:34"
 
 // SidebarSectionNames are the sections appearance.sidebar.sections may name.
+//
+// This is membership as well as order. A section left out of the layout is a
+// section the rail does not draw, and that is the only way to turn one off:
+// there is no second switch per section, because a switch cannot say where a
+// thing goes and two spacers would have no switch to share.
 var SidebarSectionNames = []string{"sessions", "terminals", "files", "agents"}
+
+// SidebarSectionSpacer is the layout's empty block. It draws nothing and takes
+// lines, which is how a person puts a gap between two sections or pushes what
+// follows it to the bottom of the rail.
+//
+// It is the one name the layout may carry more than once, because it names a
+// place rather than a section. Two spacers in a layout are two gaps, and the
+// parser keeps both; every other name is dropped the second time it appears,
+// since a rail cannot draw one list in two places.
+//
+// A spacer with a share takes that percent of the rail and keeps it. A spacer
+// with no share takes the lines nothing else wants, which is what "push the
+// rest to the bottom" means.
+const SidebarSectionSpacer = "spacer"
+
+// SidebarLayoutNames are every name the layout may carry: the sections, and the
+// spacer. Used where a person is told what they may type.
+func SidebarLayoutNames() []string {
+	return append(append([]string{}, SidebarSectionNames...), SidebarSectionSpacer)
+}
 
 // What a click on a folder row in the files section does.
 //

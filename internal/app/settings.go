@@ -339,7 +339,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 	}
 
 	// The sidebar rows were appended to Appearance while there were six of them,
-	// to keep the tab strip on one row. There are nine now, which buried the rest
+	// to keep the tab strip on one row. There are thirteen now, which buried the rest
 	// of Appearance under a scroll; a tab of their own costs the strip a second
 	// row, and panelBody already budgets the body against TabRowCount, so that
 	// row comes out of the scrolling list rather than out of the viewport.
@@ -349,11 +349,9 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.sidebar.enabled"),
 			opt("appearance.sidebar.position"),
 			opt("appearance.sidebar.width"),
-			opt("appearance.sidebar.show_windows"),
+			custom("appearance.sidebar.sections", m.sectionLayoutItem()),
 			opt("appearance.sidebar.show_glyphs"),
 			opt("appearance.sidebar.show_counts"),
-			opt("appearance.sidebar.show_agents"),
-			opt("appearance.sidebar.sections"),
 			opt("appearance.sidebar.file_icons"),
 			opt("appearance.sidebar.file_icon_colors"),
 			opt("appearance.sidebar.folder_click"),
@@ -572,6 +570,28 @@ func (m *OS) dockComponentsItem() settingItem {
 			return strconv.Itoa(n) + " placed"
 		},
 		activate: func(m *OS) tea.Cmd { m.OpenDockEditor(); return nil },
+	}
+}
+
+// sectionLayoutItem opens the rail layout editor. The path is a scalar and the
+// registry carries it, so a text row was possible and that is exactly what it
+// was: a comma-separated string with colons in it, typed blind. Order, share
+// and membership are three edits on one value, and a row that holds a value has
+// nowhere to put three.
+func (m *OS) sectionLayoutItem() settingItem {
+	return settingItem{
+		Path:    "appearance.sidebar.sections",
+		Label:   "Sections",
+		Desc:    "The rail's sections, in the order it stacks them. Press enter to edit.",
+		Control: controlEnum,
+		value: func(m *OS) string {
+			n := sectionCount(m.sectionEntries())
+			if n == 1 {
+				return "1 section"
+			}
+			return strconv.Itoa(n) + " sections"
+		},
+		activate: func(m *OS) tea.Cmd { m.OpenSectionEditor(); return nil },
 	}
 }
 

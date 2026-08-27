@@ -123,6 +123,9 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.ShowEffectPicker {
 		return handleEffectPickerInput(msg, o)
 	}
+	if o.ShowSectionEditor {
+		return handleSectionEditorInput(msg, o)
+	}
 	if o.ShowDockEditor {
 		return handleDockEditorInput(msg, o)
 	}

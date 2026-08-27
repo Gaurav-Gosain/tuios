@@ -1192,17 +1192,11 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	if sb.Width > 0 {
 		SidebarWidth = sb.Width
 	}
-	if sb.ShowWindows != nil {
-		SidebarShowWindows = *sb.ShowWindows
-	}
 	if sb.ShowGlyphs != nil {
 		SidebarShowGlyphs = *sb.ShowGlyphs
 	}
 	if sb.ShowCounts != nil {
 		SidebarShowCounts = *sb.ShowCounts
-	}
-	if sb.ShowAgents != nil {
-		SidebarShowAgents = *sb.ShowAgents
 	}
 	if sb.Marquee != nil {
 		SidebarMarquee = *sb.Marquee
@@ -1210,6 +1204,13 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// The layout falls back to the shipped one when unset, so a config file
 	// written before the files section existed lays the rail out the way it
 	// always did plus the new section, rather than drawing nothing at all.
+	//
+	// Assigned rather than left alone, so an empty value puts the rail back on
+	// the shipped layout instead of leaving it on whatever was set last. That
+	// is what lets the editor's undo hand a layout it never wrote back to the
+	// default, rather than writing today's four sections into a file that named
+	// none and pinning that user to them for good.
+	SidebarSections = SidebarDefaultSections
 	if sb.Sections != "" {
 		SidebarSections = sb.Sections
 	}
@@ -1478,6 +1479,41 @@ func migrateLegacySidebar(cfg *UserConfig) {
 	}
 	a.SidebarEnabled, a.SidebarPosition, a.SidebarWidth = nil, "", 0
 	a.SidebarShowWindows, a.SidebarShowGlyphs, a.SidebarShowCounts = nil, nil, nil
+
+	migrateSidebarSectionToggles(s)
+}
+
+// migrateSidebarSectionToggles folds show_windows and show_agents into the
+// layout string, and clears them.
+//
+// There used to be two ways to turn a section off: leave its name out of
+// sections, or set the boolean named after it. Neither could express the other.
+// The layout knows where a section goes and the boolean does not, and a layout
+// may carry two spacers while a boolean per section has nowhere to put the
+// second one, so the layout is the one that survives. A file still carrying a
+// boolean keeps its meaning here, once, and the next save writes only sections.
+//
+// Only false is folded. A boolean that says true is saying nothing the layout
+// does not already say, and adding a section back on the strength of it would
+// put a section on the rail of somebody who had taken it off the layout.
+func migrateSidebarSectionToggles(s *SidebarConfig) {
+	for _, legacy := range []struct {
+		flag    *bool
+		section string
+	}{
+		{s.ShowWindows, "terminals"},
+		{s.ShowAgents, "agents"},
+	} {
+		if legacy.flag == nil || *legacy.flag {
+			continue
+		}
+		source := s.Sections
+		if source == "" {
+			source = SidebarDefaultSections
+		}
+		s.Sections = SidebarSectionsWithout(source, legacy.section)
+	}
+	s.ShowWindows, s.ShowAgents = nil, nil
 }
 
 // migrateLegacyKeybinds rewrites bindings whose meaning changed, so a config

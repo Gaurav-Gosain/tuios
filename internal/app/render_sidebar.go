@@ -661,8 +661,11 @@ func sidebarBudget(avail, nS, nT, nA, aRowH int) (sH, tH, aH int) {
 	rowH := make([]int, len(plans))
 	at := [sidebarSectionCount]int{}
 	for i, p := range plans {
-		at[p.Section] = i
 		rowH[i] = 1
+		if p.Spacer {
+			continue
+		}
+		at[p.Section] = i
 	}
 	rows[at[sidebarSectionSessions]] = nS
 	rows[at[sidebarSectionTerminals]] = nT
@@ -836,7 +839,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	if emptyPeek {
 		nT = 1
 	}
-	if !config.SidebarShowWindows {
+	// Membership is the layout's, and only the layout's. A section the user has
+	// taken out of appearance.sidebar.sections has no rows here, so it costs no
+	// header and no line.
+	if !sidebarLayoutHas(sidebarSectionTerminals) {
 		nT = 0
 	}
 	// The current rule, kept: a rail this short cannot carry an alarm block and
@@ -873,7 +879,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// by default, and the reason is the reason it always was: an alarm block
 	// wants a stable screen position at any rail height.
 	pinned := sidebarSectionCount
-	if len(plans) > 1 {
+	if sidebarLayoutPins(plans) {
 		pinned = plans[len(plans)-1].Section
 	}
 
@@ -895,6 +901,13 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	chrome := 0
 	drawn := 0
 	for i, p := range plans {
+		if p.Spacer {
+			// A spacer is always "drawn": it has one notional row so the
+			// allocator does not read it as an empty section and drop it, and it
+			// costs no chrome because there is no header over empty space.
+			planRows[i], planRowH[i] = 1, 1
+			continue
+		}
 		planRows[i], planRowH[i] = rowsIn[p.Section], rowH[p.Section]
 		if planRows[i] == 0 {
 			continue
@@ -912,7 +925,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		copy(tall, planRowH)
 		at := -1
 		for i, p := range plans {
-			if p.Section == sidebarSectionAgents {
+			if !p.Spacer && p.Section == sidebarSectionAgents {
 				tall[i], at = sidebarAgentRowTall, i
 			}
 		}
@@ -938,7 +951,22 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		place[s] = sectionPlace{header: -1}
 	}
 	line := 0
+	// The last section placed above the current entry, so a spacer's lines can
+	// be given to its band. Empty space draws nothing and so has no band of its
+	// own, and a gap that belonged to no section would be a gap the wheel does
+	// nothing over: the same reasoning that hands the pinned block's floating
+	// gap to the section above it.
+	prev := sidebarSectionCount
 	for i, p := range plans {
+		if p.Spacer {
+			line += budget[i]
+			if prev != sidebarSectionCount {
+				above := place[prev]
+				above.y1 = max(above.y1, line)
+				place[prev] = above
+			}
+			continue
+		}
 		if planRows[i] == 0 {
 			place[p.Section] = sectionPlace{header: -1, top: line, y0: line, y1: line}
 			continue
@@ -955,6 +983,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		}
 		place[p.Section] = sectionPlace{header: line, top: line + 1, lines: budget[i], y0: y0, y1: line + 1 + budget[i]}
 		line += 1 + budget[i]
+		prev = p.Section
 	}
 	if pinned == sidebarSectionCount || rowsIn[pinned] == 0 {
 		// Nothing is pinned, so the slack falls where it always did: under the
@@ -963,9 +992,9 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 	// The band above the pinned block belongs to the section over it, so the
 	// wheel keeps working on the gap the block floats in.
-	if drawn > 1 {
+	if drawn > 1 && pinned != sidebarSectionCount {
 		for i := len(plans) - 1; i >= 0; i-- {
-			if planRows[i] == 0 || plans[i].Section == pinned {
+			if plans[i].Spacer || planRows[i] == 0 || plans[i].Section == pinned {
 				continue
 			}
 			above := place[plans[i].Section]
@@ -1252,6 +1281,12 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		sidebarSectionFiles:     drawFiles,
 	}
 	for i, p := range plans {
+		if p.Spacer {
+			for range budget[i] {
+				lines = append(lines, blank)
+			}
+			continue
+		}
 		if planRows[i] == 0 {
 			continue
 		}
@@ -1405,7 +1440,7 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 // others from the cached listing, so agents elsewhere surface here marked
 // Foreign.
 func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
-	if !config.SidebarShowAgents {
+	if !sidebarLayoutHas(sidebarSectionAgents) {
 		return nil
 	}
 	var agents []sidebarAgentEntry

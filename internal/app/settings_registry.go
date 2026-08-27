@@ -72,8 +72,7 @@ var settingLabels = map[string]string{
 	"daemon.log_level":                  "Log level",
 	"tape.auto_review":                  "Auto-open review",
 
-	"appearance.sidebar.show_agents":       "Agents section",
-	"appearance.sidebar.sections":          "Section layout",
+	"appearance.sidebar.sections":          "Sections",
 	"appearance.sidebar.file_icons":        "File icons",
 	"appearance.sidebar.file_icon_colors":  "File icon colors",
 	"appearance.sidebar.folder_click":      "Click a folder",

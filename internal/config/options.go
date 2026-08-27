@@ -393,6 +393,7 @@ var optionSpecs = []Option{
 		Path: "appearance.sidebar.show_windows", Type: OptionBool, Section: "sidebar",
 		Description: "Show the terminals section",
 		Default:     "true",
+		Deprecated:  "folded into appearance.sidebar.sections on load; leave terminals out of the layout",
 	},
 	{
 		Path: "appearance.sidebar.show_glyphs", Type: OptionBool, Section: "sidebar",
@@ -408,6 +409,7 @@ var optionSpecs = []Option{
 		Path: "appearance.sidebar.show_agents", Type: OptionBool, Section: "sidebar",
 		Description: "Show the agents section at the rail's bottom",
 		Default:     "true",
+		Deprecated:  "folded into appearance.sidebar.sections on load; leave agents out of the layout",
 	},
 	{
 		Path: "appearance.sidebar.marquee", Type: OptionBool, Section: "sidebar",
@@ -421,7 +423,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar.sections", Type: OptionString, Section: "sidebar",
-		Description: "Section names in the order the rail stacks them, each with an optional percent share",
+		Description: "Section names in the order the rail stacks them, each with an optional percent share. A name left out is a section the rail does not draw, and \"spacer\" is an empty block you may repeat.",
 		Default:     SidebarDefaultSections,
 	},
 	{

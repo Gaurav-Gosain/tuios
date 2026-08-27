@@ -122,11 +122,12 @@ func TestSidebarFitsNarrowScreens(t *testing.T) {
 // with the optional row elements disabled.
 func TestSidebarGlyphsAndCountsOff(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
-	pg, pc, pw := config.SidebarShowGlyphs, config.SidebarShowCounts, config.SidebarShowWindows
-	config.SidebarShowGlyphs, config.SidebarShowCounts, config.SidebarShowWindows = false, false, false
-	t.Cleanup(func() {
-		config.SidebarShowGlyphs, config.SidebarShowCounts, config.SidebarShowWindows = pg, pc, pw
-	})
+	pg, pc := config.SidebarShowGlyphs, config.SidebarShowCounts
+	config.SidebarShowGlyphs, config.SidebarShowCounts = false, false
+	t.Cleanup(func() { config.SidebarShowGlyphs, config.SidebarShowCounts = pg, pc })
+	// The terminals section comes off the rail the only way it now can: it is
+	// left out of the layout.
+	withSections(t, "sessions:25,files:25,agents:34")
 
 	lines, w := m.sidebarPanelLines()
 	for i, ln := range lines {

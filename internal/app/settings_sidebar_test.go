@@ -8,12 +8,16 @@ import (
 
 // TestSidebarTabCoverage asserts every knob in [appearance.sidebar] has a row,
 // so a knob added to the config cannot quietly stay TOML-only.
+//
+// "Show windows" and "Agents section" are gone from it. The rail's membership
+// is the layout's now, and those two booleans fold into it on load, so the row
+// that turns the terminals section off is the Sections editor.
 func TestSidebarTabCoverage(t *testing.T) {
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
 	want := map[string][]string{
 		"Sidebar": {
-			"Sidebar", "Position", "Width", "Show windows", "Show glyphs",
-			"Show counts", "Agents section", "Marquee",
+			"Sidebar", "Position", "Width", "Sections", "Show glyphs",
+			"Show counts", "File icons", "Marquee",
 		},
 		"Dock": {"Workspace tabs"},
 	}
@@ -36,7 +40,7 @@ func TestSidebarSettingsApplyLiveAndPersist(t *testing.T) {
 		global   *bool
 		read     func(*config.UserConfig) *bool
 	}{
-		{"Sidebar", "Agents section", &config.SidebarShowAgents, func(c *config.UserConfig) *bool { return c.Appearance.Sidebar.ShowAgents }},
+		{"Sidebar", "File icons", &config.SidebarFileIcons, func(c *config.UserConfig) *bool { return c.Appearance.Sidebar.FileIcons }},
 		{"Sidebar", "Marquee", &config.SidebarMarquee, func(c *config.UserConfig) *bool { return c.Appearance.Sidebar.Marquee }},
 		{"Dock", "Workspace tabs", &config.DockWorkspaceTabs, func(c *config.UserConfig) *bool { return c.Appearance.DockWorkspaceTabs }},
 	}

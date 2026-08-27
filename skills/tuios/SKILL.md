@@ -835,14 +835,24 @@ tuios list-options --json | jq -r '.options[].path'
  appearance.sidebar.enabled        bool    false
  appearance.sidebar.position       string  left     left, right, hidden
  appearance.sidebar.width          int     28
- appearance.sidebar.show_agents    bool    true
  appearance.sidebar.sections       string  sessions:25,terminals,files:25,agents:34
  appearance.sidebar.file_icons     bool    true
  appearance.sidebar.file_icon_colors bool  true
  appearance.sidebar.folder_click   string  navigate  navigate, cd, both
  appearance.sidebar.file_actions   bool    true
  appearance.sidebar.file_delete    string  trash    trash, permanent
+ appearance.sidebar.show_agents    bool    true      (deprecated)
 ```
+
+`sections` is the rail's whole layout: which sections it stacks, in what order,
+and the percent of the rail each may claim. A name left out is a section the
+rail does not draw, which is the only way to turn one off; the `show_windows`
+and `show_agents` booleans are folded into it on load and are there for config
+files written before it existed. `spacer` is an empty block that draws nothing
+and takes lines, and it is the one name the list may carry more than once, so
+`sessions,spacer,terminals,spacer,files` is two gaps in two places. A `spacer`
+with a percent keeps that much of the rail; one without takes the lines nothing
+else wants, which puts what follows it at the bottom.
 
 Then set it and read it back:
 
@@ -892,7 +902,8 @@ file, which is why both have a verb of their own rather than a row in
 Everything here is also reachable by a person, from the settings page (`,` in
 window mode): its rows are derived from the same registry `list-options` reads,
 so a path you can set is a row they can find. Themes and glyph sets each get a
-searchable picker with live previews, and the dock's lists get an editor. Say so
+searchable picker with live previews, and the dock's lists and the rail's
+sections each get an editor. Say so
 when you change one of these for someone: the setting you just wrote has a
 control they can go and adjust, which is usually more useful to them than the
 path.

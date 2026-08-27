@@ -194,6 +194,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		}
 	case "dockeditor":
 		m.DockEditorSelected = idx
+	case "sectioneditor":
+		m.SectionEditorSelected = idx
 	case "session":
 		m.SessionSwitcherSelected = idx
 	case "workspace":
@@ -258,6 +260,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		_ = m.EffectPickerMove(wheelDelta(up))
 	case "dockeditor":
 		m.DockEditorMove(wheelDelta(up))
+	case "sectioneditor":
+		m.SectionEditorMove(wheelDelta(up))
 	case "session":
 		n := len(FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery))
 		moveListSelection(&m.SessionSwitcherSelected, &m.SessionSwitcherScroll, n, 10, wheelDelta(up))
@@ -378,6 +382,9 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "dockeditor":
 		m.DockEditorSelected = row.Idx
 		return m.DockEditorToggle()
+	case "sectioneditor":
+		m.SectionEditorSelected = row.Idx
+		return m.SectionEditorToggle()
 	case "session":
 		// A click activates, exactly like Enter on the selected row. Selecting
 		// only, as this used to, made the switcher the one list where a click
@@ -484,6 +491,9 @@ func (m *OS) closeOverlay(kind string) {
 		// Click-away closes and keeps, matching Esc: the layout is already
 		// applied and saved.
 		m.CloseDockEditor()
+	case "sectioneditor":
+		// Click-away closes and keeps, for the same reason.
+		m.CloseSectionEditor()
 	case "session":
 		m.ShowSessionSwitcher = false
 		m.SessionSwitcherQuery = ""
