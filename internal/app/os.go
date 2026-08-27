@@ -1030,6 +1030,14 @@ type OS struct {
 	// terminal mode is deferred until that window materializes through a state
 	// sync and can be focused.
 	pendingStartTerminalMode bool
+
+	// sessionUnarranged records that the session this client attached to had
+	// never been laid out by anybody: every window it carried was still marked
+	// Unplaced, which only the daemon's own window creation sets and any client
+	// push clears. It tells a session the user arranged apart from a fresh one
+	// the daemon happened to pre-populate, which is the difference the [startup]
+	// settings turn on. See applyStartupPreferences.
+	sessionUnarranged bool
 }
 
 // Notification represents a message shown in the dock's right-hand block.
