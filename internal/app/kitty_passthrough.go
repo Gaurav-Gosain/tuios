@@ -371,6 +371,50 @@ type WindowPositionInfo struct {
 	ScreenHeight       int  // Host terminal height
 	WindowZ            int  // Window z-index for occlusion detection
 	IsAltScreen        bool // True when alternate screen is active (vim, less, etc.)
+	// LayoutX/LayoutY/LayoutW/LayoutH are the screen cells the panes are laid
+	// out in: the render area less the chrome the session reserves, which is
+	// the sidebar rail's columns and the dock's rows.
+	//
+	// It is not the same box as the screen, and the difference is the whole
+	// reason it is here. A pane is allowed to hang past this box - a floating
+	// pane is only clamped far enough to keep a strip of it reachable - and
+	// every cell tuios composes for such a pane still stops at the boundary,
+	// because the rail and the dock are drawn over the pane layer. A kitty
+	// placement is the one thing on screen tuios does not draw: the host paints
+	// it over the finished frame, so unless the reserve reaches the placement
+	// arithmetic the image runs straight over the rail.
+	//
+	// A zero W or H means the caller did not fill the box in, and the whole
+	// screen is used instead.
+	LayoutX int
+	LayoutY int
+	LayoutW int
+	LayoutH int
+}
+
+// placementBoundsSlack stands in for a screen dimension the caller left unset,
+// so an unbounded axis clamps nothing rather than clamping to zero.
+const placementBoundsSlack = 1 << 30
+
+// placementBounds is the half-open screen rectangle a placement may draw in:
+// the pane layout box, further bounded by the screen itself.
+func (info *WindowPositionInfo) placementBounds() (x0, y0, x1, y1 int) {
+	x1, y1 = info.ScreenWidth, info.ScreenHeight
+	if x1 <= 0 {
+		x1 = placementBoundsSlack
+	}
+	if y1 <= 0 {
+		y1 = placementBoundsSlack
+	}
+	if info.LayoutW > 0 {
+		x0 = max(info.LayoutX, 0)
+		x1 = min(x1, info.LayoutX+info.LayoutW)
+	}
+	if info.LayoutH > 0 {
+		y0 = max(info.LayoutY, 0)
+		y1 = min(y1, info.LayoutY+info.LayoutH)
+	}
+	return x0, y0, x1, y1
 }
 
 // KittyPassthroughOptions configures a KittyPassthrough instance.

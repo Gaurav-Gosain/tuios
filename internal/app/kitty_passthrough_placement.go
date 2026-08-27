@@ -169,17 +169,30 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			newHostX := info.WindowX + info.ContentOffsetX + st.guestX
 			newHostY := info.WindowY + info.ContentOffsetY + st.guestY
 
-			// Clamp the visible cell area to the screen. Like the regular path,
-			// keep the final screen row free: an image reaching the last row
-			// makes the host terminal scroll and cascades into duplicate frames.
+			// Clamp the visible cell area to the box the panes are laid out in,
+			// so a frame cannot paint over the sidebar rail or the dock the way
+			// the regular path's clamp stops it doing. Like the regular path,
+			// also keep the final screen row free: an image reaching the last
+			// row makes the host terminal scroll and cascades into duplicate
+			// frames.
+			//
+			// Only the right and bottom edges are clamped here. This path's
+			// frames carry a source rectangle anchored at x=0,y=0
+			// (buildPlacedFrame), so it has no way to say "start part way into
+			// the image", and a pane hanging off the left of the box is left as
+			// it was rather than cropped wrong.
+			boxX0, boxY0, boxX1, boxY1 := info.placementBounds()
 			showCols, showRows := st.cols, st.rows
-			visible := info.Visible && newHostX >= 0 && newHostY >= 0 &&
+			visible := info.Visible && newHostX >= boxX0 && newHostY >= boxY0 &&
 				info.WindowX >= 0 && info.WindowY >= 0
-			if visible && info.ScreenWidth > 0 && newHostX+showCols > info.ScreenWidth {
-				showCols = info.ScreenWidth - newHostX
+			if visible && newHostX+showCols > boxX1 {
+				showCols = boxX1 - newHostX
 			}
 			if visible && info.ScreenHeight > 0 && newHostY+showRows > info.ScreenHeight-1 {
 				showRows = info.ScreenHeight - 1 - newHostY
+			}
+			if visible && newHostY+showRows > boxY1 {
+				showRows = boxY1 - newHostY
 			}
 			if showCols <= 0 || showRows <= 0 {
 				visible = false
@@ -339,6 +352,47 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			imageCellWidth := maxShowableCols
 			imageCellHeight := maxShowableRows
 
+			// Clip to the box the panes are laid out in, not to the raw screen.
+			// See WindowPositionInfo.LayoutX for why the two differ and why the
+			// difference is only ever visible on an image: the rail and the dock
+			// are composed over the pane layer, so a pane hanging under them
+			// still draws no cell there, while a kitty placement is painted by
+			// the host over the finished frame and covers whatever is beneath.
+			//
+			// A crop off the left or the top is a crop of the image as well as
+			// of the cell area, so it is carried in ClipLeft/ClipTop for
+			// placeOne to turn into a source rectangle. Cropping the cells alone
+			// would leave kitty scaling the whole bitmap into fewer cells, which
+			// is the squeeze 6c6283cd went to some trouble to remove.
+			boxX0, boxY0, boxX1, boxY1 := info.placementBounds()
+			clipLeft := 0
+			if anyPartVisible {
+				if crop := boxX0 - newHostX; crop > 0 {
+					newHostX += crop
+					clipLeft = crop
+					imageCellWidth -= crop
+					maxShowableCols = imageCellWidth
+				}
+				if crop := boxY0 - newHostY; crop > 0 {
+					newHostY += crop
+					clipTop += crop
+					imageCellHeight -= crop
+					maxShowableRows = imageCellHeight
+				}
+				if over := newHostX + imageCellWidth - boxX1; over > 0 {
+					imageCellWidth -= over
+					maxShowableCols = imageCellWidth
+				}
+				if over := newHostY + imageCellHeight - boxY1; over > 0 {
+					clipBottom += over
+					imageCellHeight -= over
+					maxShowableRows = imageCellHeight
+				}
+				if imageCellWidth <= 0 || imageCellHeight <= 0 {
+					anyPartVisible = false
+				}
+			}
+
 			// Check if image is occluded by a higher-z window
 			if anyPartVisible && kp.isOccludedByHigherWindow(
 				newHostX, newHostY, imageCellWidth, imageCellHeight,
@@ -393,9 +447,10 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				}
 			}
 
-			kittyPassthroughLog("RefreshPlacement: winXY=(%d,%d) size=(%d,%d) off=(%d,%d) relY=%d, origRows=%d, origCols=%d, vpH=%d, vpW=%d, clipTop=%d, clipBot=%d, maxRows=%d, newHost=(%d,%d), visible=%v",
+			kittyPassthroughLog("RefreshPlacement: winXY=(%d,%d) size=(%d,%d) off=(%d,%d) relY=%d, origRows=%d, origCols=%d, vpH=%d, vpW=%d, box=(%d,%d)-(%d,%d), clipTop=%d, clipBot=%d, clipLeft=%d, maxRows=%d, maxCols=%d, newHost=(%d,%d), visible=%v",
 				info.WindowX, info.WindowY, info.Width, info.Height, info.ContentOffsetX, info.ContentOffsetY,
-				relativeY, p.Rows, p.Cols, viewportHeight, viewportWidth, clipTop, clipBottom, maxShowableRows, newHostX, newHostY, anyPartVisible)
+				relativeY, p.Rows, p.Cols, viewportHeight, viewportWidth, boxX0, boxY0, boxX1, boxY1,
+				clipTop, clipBottom, clipLeft, maxShowableRows, maxShowableCols, newHostX, newHostY, anyPartVisible)
 
 			if !anyPartVisible {
 				// Send a delete only if the image was currently visible.
@@ -414,13 +469,14 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				// but the image behind it was replaced, and the host will not
 				// redraw a placement whose image was swapped underneath it.
 				posChanged := p.Hidden || p.DataDirty || p.HostX != newHostX || p.HostY != newHostY ||
-					p.ClipTop != clipTop || p.ClipBottom != clipBottom ||
+					p.ClipTop != clipTop || p.ClipBottom != clipBottom || p.ClipLeft != clipLeft ||
 					p.MaxShowable != maxShowableRows || p.MaxShowableCols != maxShowableCols
 				if posChanged {
 					p.HostX = newHostX
 					p.HostY = newHostY
 					p.ClipTop = clipTop
 					p.ClipBottom = clipBottom
+					p.ClipLeft = clipLeft
 					p.MaxShowable = maxShowableRows
 					p.MaxShowableCols = maxShowableCols
 					kp.placeOne(p)
@@ -603,7 +659,7 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	// Showing fewer cells than the image has needs a source rectangle whichever
 	// axis is short. Without one the cell count still narrows and kitty scales
 	// the whole bitmap into it, which on one axis alone is the stretch.
-	isClipping := p.ClipTop > 0 || p.ClipBottom > 0 ||
+	isClipping := p.ClipTop > 0 || p.ClipBottom > 0 || p.ClipLeft > 0 ||
 		visibleCols < imageCols || visibleRows < p.Rows
 	pixelsPerRow := cellHeight
 	switch {
@@ -621,7 +677,7 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	}
 	switch {
 	case isClipping:
-		srcX := p.SourceX
+		srcX := p.SourceX + p.ClipLeft*pixelsPerCol
 		srcY := p.SourceY + p.ClipTop*pixelsPerRow
 		srcW := p.SourceWidth
 		if srcW == 0 && pixelsPerCol > 0 {
