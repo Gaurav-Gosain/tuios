@@ -739,6 +739,8 @@ Window targeting (--window):
 	var capturePaneWindow string
 	var capturePaneScrollback bool
 	var capturePaneANSI bool
+	var capturePaneResolved bool
+	var capturePanePalette []string
 	var capturePaneLines int
 	capturePaneCmd := &cobra.Command{
 		Use:   "capture-pane",
@@ -749,7 +751,9 @@ Output is written to stdout. By default captures the focused window's visible sc
 Use --scrollback to include the full scrollback history.
 Use --lines to keep only the last N lines, which is how you read the tail of a
 long scrollback without pulling all of it.
-Use --ansi to preserve ANSI escape codes (colors, styles).`,
+Use --ansi to preserve ANSI escape codes (colors, styles).
+Use --resolved to rewrite ANSI index colours to 24-bit RGB, optionally against
+--palette (16 hex colours of your theme, xterm defaults otherwise).`,
 		Example: `  # Capture focused window
   tuios capture-pane
 
@@ -762,16 +766,21 @@ Use --ansi to preserve ANSI escape codes (colors, styles).`,
   # Capture with ANSI colors preserved
   tuios capture-pane --ansi
 
+  # Capture with colours resolved to RGB against your theme palette
+  tuios capture-pane --ansi --resolved --palette "#45475a,#f38ba8,#a6e3a1,#f9e2af,#89b4fa,#f5c2e7,#94e2d5,#bac2de,#585b70,#f38ba8,#a6e3a1,#f9e2af,#89b4fa,#f5c2e7,#94e2d5,#a6adc8"
+
   # Pipe to a file
   tuios capture-pane -w editor --scrollback > pane.txt`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runCapturePane(capturePaneSession, capturePaneWindow, capturePaneScrollback, capturePaneANSI, capturePaneLines)
+			return runCapturePane(capturePaneSession, capturePaneWindow, capturePaneScrollback, capturePaneANSI, capturePaneResolved, capturePanePalette, capturePaneLines)
 		},
 	}
 	capturePaneCmd.Flags().StringVarP(&capturePaneSession, "session", "s", "", "Target session")
 	capturePaneCmd.Flags().StringVarP(&capturePaneWindow, "window", "w", "", "Target window by name or ID")
 	capturePaneCmd.Flags().BoolVarP(&capturePaneScrollback, "scrollback", "S", false, "Include full scrollback history")
 	capturePaneCmd.Flags().BoolVar(&capturePaneANSI, "ansi", false, "Preserve ANSI escape codes")
+	capturePaneCmd.Flags().BoolVar(&capturePaneResolved, "resolved", false, "Rewrite ANSI index colours to 24-bit RGB")
+	capturePaneCmd.Flags().StringSliceVar(&capturePanePalette, "palette", nil, "16 hex colours (#rrggbb) to resolve against (default: xterm)")
 	capturePaneCmd.Flags().IntVar(&capturePaneLines, "lines", 0, "Keep only the last N lines (0 keeps all)")
 	_ = capturePaneCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 

@@ -366,15 +366,17 @@ func (d *Daemon) verbSendText(_ *connState, params json.RawMessage) (any, *verbE
 
 func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session    string `json:"session"`
-		Window     string `json:"window"`
-		Source     string `json:"source"`     // visible | recent
-		Styled     bool   `json:"styled"`     // include ANSI styling
-		Scrollback bool   `json:"scrollback"` // alias for source=recent
-		ANSI       bool   `json:"ansi"`       // alias for styled
-		Lines      int    `json:"lines"`      // if >0, keep only the last N lines
-		Start      int    `json:"start"`      // 1-based inclusive region start
-		End        int    `json:"end"`        // 1-based inclusive region end
+		Session    string   `json:"session"`
+		Window     string   `json:"window"`
+		Source     string   `json:"source"`     // visible | recent
+		Styled     bool     `json:"styled"`     // include ANSI styling
+		Scrollback bool     `json:"scrollback"` // alias for source=recent
+		ANSI       bool     `json:"ansi"`       // alias for styled
+		Lines      int      `json:"lines"`      // if >0, keep only the last N lines
+		Start      int      `json:"start"`      // 1-based inclusive region start
+		End        int      `json:"end"`        // 1-based inclusive region end
+		Resolved   bool     `json:"resolved"`   // resolve SGR index colours to 24-bit RGB
+		Palette    []string `json:"palette"`    // 16 hex colours to resolve against (default: xterm)
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -393,8 +395,20 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 	}
 
 	scrollback := p.Scrollback || p.Source == "recent"
-	ansi := p.Styled || p.ANSI
-	content := pty.CaptureContent(scrollback, ansi)
+	// Resolved implies styling: resolving has nothing to act on without the
+	// escape sequences, and the reply must admit what the content carries
+	// instead of reporting styled=false beside a rewritten capture.
+	ansi := p.Styled || p.ANSI || p.Resolved
+	var content string
+	if p.Resolved {
+		palette, verr := paletteFromParams(p.Palette)
+		if verr != nil {
+			return nil, verr
+		}
+		content = pty.CaptureContentResolved(scrollback, palette)
+	} else {
+		content = pty.CaptureContent(scrollback, ansi)
+	}
 	content = sliceCaptureLines(content, p.Start, p.End, p.Lines)
 
 	source := p.Source
@@ -406,10 +420,11 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 		}
 	}
 	return map[string]any{
-		"type":    "pane_content",
-		"content": content,
-		"source":  source,
-		"styled":  ansi,
+		"type":     "pane_content",
+		"content":  content,
+		"source":   source,
+		"styled":   ansi,
+		"resolved": p.Resolved,
 	}, nil
 }
 

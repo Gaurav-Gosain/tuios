@@ -1217,6 +1217,17 @@ tuios capture-pane [flags]
 - `-S, --scrollback` - Include the full scrollback history
 - `--lines <N>` - Keep only the last N lines (0 keeps all)
 - `--ansi` - Preserve ANSI escape codes (colors, styles)
+- `--resolved` - Rewrite ANSI index colours (31, 91, 38;5;n, ...) to 24-bit
+  RGB, so a capture matches what a themed client paints. Indices below 16 come
+  from the palette; the rest of the standard 256-colour cube and grey ramp use
+  their fixed values. Implies `--ansi`. Without a palette this uses the xterm
+  defaults.
+- `--palette <#rrggbb,...>` - The 16 hex colours a client's theme paints ANSI
+  indices 0-15 with, used by `--resolved`. Must have exactly 16 entries.
+
+A `--ansi` capture without `--resolved` keeps the guest's SGR indices (e.g.
+`\x1b[31m`); the consumer resolves them against its own palette. `--resolved`
+is for consumers that render the capture verbatim, and implies `--ansi`.
 
 `--lines` counts from the last line that has content, so the blank rows below
 the cursor do not count. This is how you read the tail of a long scrollback
@@ -1235,6 +1246,9 @@ tuios capture-pane -w build --scrollback --lines 40
 
 # Capture with ANSI colors preserved
 tuios capture-pane --ansi
+
+# Capture with colours resolved to RGB against the current theme palette
+tuios capture-pane --ansi --resolved --palette "#45475a,#f38ba8,#a6e3a1,#f9e2af,#89b4fa,#f5c2e7,#94e2d5,#bac2de,#585b70,#f38ba8,#a6e3a1,#f9e2af,#89b4fa,#f5c2e7,#94e2d5,#a6adc8"
 
 # Pipe to a file
 tuios capture-pane -w editor --scrollback > pane.txt
