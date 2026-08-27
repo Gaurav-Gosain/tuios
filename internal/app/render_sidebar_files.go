@@ -9,6 +9,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The rail's files section, drawn beside the other sections rather than instead
@@ -52,6 +53,9 @@ type fileRowSpec struct {
 	Key  string
 	Name string
 	Dir  bool
+	// Icon is the file type's mark, carried from the listing so the render
+	// path does no lookup.
+	Icon fileIcon
 	// Note marks a row that says something about the listing rather than being
 	// part of it: the reason a read failed, that a read is running, that the
 	// folder is empty, or that the listing was cut short. It is drawn quiet and
@@ -103,6 +107,7 @@ func (m *OS) sidebarFileRows() []fileRowSpec {
 			Key:   e.Name,
 			Name:  e.Name,
 			Dir:   e.Dir,
+			Icon:  e.Icon,
 		})
 	}
 	switch {
@@ -229,7 +234,17 @@ func (m *OS) sidebarFileRow(row fileRowSpec, cw int, pal overlay.Palette, hovere
 	}
 
 	gutter := sidebarGutter(false, "", bg, pal)
-	glyph := sidebarStyle(bg, ink).Render(fileRowGlyph(row.Name, row.Dir, row.Kind == sidebarRowFileUp))
+	// The glyph is the one cell on the row allowed an ink of its own. A colour
+	// off the icon table is absolute, so it is measured against the ground this
+	// row actually draws on before it is burned; with the colour off, and on
+	// every row the table has nothing to say about, the mark wears the row's own
+	// ink like every other glyph on the rail.
+	mark := fileRowMark(row.Icon, row.Dir, row.Kind == sidebarRowFileUp)
+	glyphInk := ink
+	if mark.Hex != "" {
+		glyphInk = theme.FileIconInkOn(mark.Hex, sidebarGroundOr(bg))
+	}
+	glyph := sidebarStyle(bg, glyphInk).Render(mark.Glyph)
 	body := sidebarStyle(bg, ink).Render(overlay.Truncate(shown, sidebarNameAvail(cw, 0)))
 	return sidebarComposeRow(gutter, glyph, body, "", cw, bg)
 }

@@ -62,6 +62,11 @@ import (
 type fileEntry struct {
 	Name string
 	Dir  bool
+	// Icon is the file type's mark and colour, resolved here rather than when a
+	// row is drawn. It depends only on the name, and the name does not change
+	// between frames, so resolving it per drawn row would repeat the same map
+	// lookups on every rail rebuild for as long as the listing is up.
+	Icon fileIcon
 }
 
 // fileViewState is the files section's runtime state. It is a place the user
@@ -245,13 +250,15 @@ func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 		}
 		entries := make([]fileEntry, 0, len(items))
 		for _, it := range items {
+			// Type() is what the directory read already returned, so this costs
+			// no stat. A symlink to a directory therefore reads as a file, which
+			// is the price of not stat'ing every name in a large tree. The icon
+			// is looked up off the same two facts and for the same reason.
+			dir := it.IsDir()
 			entries = append(entries, fileEntry{
 				Name: it.Name(),
-				// Type() is what the directory read already returned, so this
-				// costs no stat. A symlink to a directory therefore reads as a
-				// file, which is the price of not stat'ing every name in a
-				// large tree.
-				Dir: it.IsDir(),
+				Dir:  dir,
+				Icon: fileIconFor(it.Name(), dir),
 			})
 		}
 		sort.Slice(entries, func(i, j int) bool {

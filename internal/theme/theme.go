@@ -296,12 +296,7 @@ func NotificationGround() color.Color {
 // cannot ask, so the rule is measured against the chrome ramp's own canvas,
 // which is the ground every other constant ink in the rail is measured against
 // and lands within a channel step of charmtone Iron.
-func RailRule() color.Color {
-	if t := Current(); t != nil {
-		return RailRuleOn(t.Bg)
-	}
-	return RailRuleOn(UI().Canvas)
-}
+func RailRule() color.Color { return RailRuleOn(RailGround()) }
 
 // NotificationSeverity maps a notification type string to its color. The type
 // strings are the ones every ShowNotification call site already passes, so this

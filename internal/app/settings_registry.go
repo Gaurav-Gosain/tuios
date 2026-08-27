@@ -75,6 +75,7 @@ var settingLabels = map[string]string{
 	"appearance.sidebar.show_agents":       "Agents section",
 	"appearance.sidebar.sections":          "Section layout",
 	"appearance.sidebar.file_icons":        "File icons",
+	"appearance.sidebar.file_icon_colors":  "File icon colors",
 	"appearance.sidebar.folder_click":      "Click a folder",
 	"appearance.dock_workspace_tab_format": "Workspace tab format",
 	"appearance.zoom_max_width":            "Zoom width",
