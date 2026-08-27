@@ -30,7 +30,7 @@ func ServeProxy(in io.Reader, out io.Writer, dial func() (net.Conn, error)) erro
 	}
 
 	pipe := &rwc{r: in, w: out}
-	m := newMux(pipe, nil)
+	m := newMux(pipe, nil, answererFirstID)
 	m.accept = func(s *Stream) { serveStream(s, dial) }
 
 	err := m.run()

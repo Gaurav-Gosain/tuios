@@ -125,17 +125,32 @@ func TestHostRowsDoNotEnterTheColourArbitration(t *testing.T) {
 
 	m := hostRailOS(t)
 	tree := m.BuildSessionTree()
-	local := localSessionNodes(tree.Sessions)
-	if len(local) == len(tree.Sessions) {
-		t.Fatal("the fixture produced no host rows, so this proves nothing")
-	}
-	for _, n := range local {
+
+	// Fixture sanity, checked against the tree rather than against the function
+	// under test. Folding the two together made a failure of the filter read as
+	// "the fixture produced no host rows", which blames the wrong thing.
+	remotes := 0
+	for _, n := range tree.Sessions {
 		if isRemoteNode(n) {
-			t.Errorf("localSessionNodes kept a remote row: %+v", n)
+			remotes++
 		}
 	}
+	if remotes == 0 {
+		t.Fatal("the fixture built a tree with no host rows, so this proves nothing")
+	}
+
+	local := localSessionNodes(tree.Sessions)
+	for _, n := range local {
+		if isRemoteNode(n) {
+			t.Errorf("localSessionNodes kept a remote row, so a machine elsewhere joins the colour arbitration: %+v", n)
+		}
+	}
+	if len(local) != len(tree.Sessions)-remotes {
+		t.Errorf("localSessionNodes returned %d of %d rows with %d remote; it is not dropping exactly the remote ones",
+			len(local), len(tree.Sessions), remotes)
+	}
 	if len(local) == 0 {
-		t.Fatal("localSessionNodes dropped every row")
+		t.Fatal("localSessionNodes dropped every row, this machine's included")
 	}
 }
 

@@ -67,3 +67,33 @@ func TestWriteFrameRefusesOversizedPayload(t *testing.T) {
 		t.Errorf("writeFrame wrote %d bytes for a refused frame, want 0", buf.Len())
 	}
 }
+
+// TestStreamIDsFromTheTwoEndsNeverCollide defends the split id space directly.
+//
+// It exists because its absence hid a security test's failure. With both ends
+// allocating from 1, the first stream a peer opened named the hub's own control
+// stream, so handleOpen's duplicate check answered it and the inbound-open
+// refusal was never reached. The refusal could then be deleted with no test
+// noticing.
+func TestStreamIDsFromTheTwoEndsNeverCollide(t *testing.T) {
+	dialer := &mux{streams: map[uint32]*Stream{}, nextID: dialerFirstID}
+	answerer := &mux{streams: map[uint32]*Stream{}, nextID: answererFirstID}
+
+	seen := map[uint32]string{}
+	for range 8 {
+		for name, m := range map[string]*mux{"dialer": dialer, "answerer": answerer} {
+			id := m.nextID
+			m.nextID += idStride
+			if other, dup := seen[id]; dup {
+				t.Fatalf("stream id %d is allocated by both %s and %s", id, other, name)
+			}
+			seen[id] = name
+			if name == "dialer" && id%2 != 1 {
+				t.Errorf("the dialer allocated %d, which is not odd", id)
+			}
+			if name == "answerer" && id%2 != 0 {
+				t.Errorf("the answerer allocated %d, which is not even", id)
+			}
+		}
+	}
+}

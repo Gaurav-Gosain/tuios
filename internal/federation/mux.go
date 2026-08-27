@@ -41,6 +41,24 @@ var (
 // maxStreams caps concurrent streams on one link.
 const maxStreams = 32
 
+// Stream ids are split between the two ends of a link: the side that dials
+// allocates odd ids, the side that answers allocates even ones. This is the
+// usual scheme (ssh and HTTP/2 both do it) and it is load bearing here for one
+// specific reason.
+//
+// Both ends used to start at 1. The hub's control stream is therefore id 1, and
+// the first stream a peer opened was also id 1, so handleOpen's duplicate check
+// answered it with a close before the inbound-open refusal above was ever
+// consulted. The peer saw a closed stream either way, which made the refusal
+// untestable: deleting it changed nothing a test could see. The split means an
+// inbound open can only ever name an id this side does not own, so the refusal
+// is the only thing that can answer it.
+const (
+	dialerFirstID   = 1
+	answererFirstID = 2
+	idStride        = 2
+)
+
 // mux interleaves logical streams over one byte pipe.
 //
 // Both ends run the same type. The hub side opens streams and passes a nil
@@ -72,22 +90,23 @@ type mux struct {
 }
 
 // newMux wraps a pipe. accept may be nil, which refuses peer-initiated streams.
-func newMux(rwc io.ReadWriteCloser, accept func(*Stream)) *mux {
-	return newMuxRW(rwc, rwc, rwc, accept)
+// firstID is dialerFirstID or answererFirstID, whichever end this is.
+func newMux(rwc io.ReadWriteCloser, accept func(*Stream), firstID uint32) *mux {
+	return newMuxRW(rwc, rwc, rwc, accept, firstID)
 }
 
 // newMuxRW is newMux with the three halves given separately. The hub needs it
 // because it reads the preamble through a bufio.Reader, which may already hold
 // the first frame's bytes: handing the mux the raw pipe instead would lose
 // them.
-func newMuxRW(r io.Reader, w io.Writer, c io.Closer, accept func(*Stream)) *mux {
+func newMuxRW(r io.Reader, w io.Writer, c io.Closer, accept func(*Stream), firstID uint32) *mux {
 	return &mux{
 		w:       w,
 		r:       r,
 		c:       c,
 		accept:  accept,
 		streams: make(map[uint32]*Stream),
-		nextID:  1,
+		nextID:  firstID,
 		done:    make(chan struct{}),
 	}
 }
@@ -118,7 +137,7 @@ func (m *mux) Open() (*Stream, error) {
 		return nil, ErrTooManyStreams
 	}
 	id := m.nextID
-	m.nextID++
+	m.nextID += idStride
 	s := newStream(m, id)
 	m.streams[id] = s
 	m.mu.Unlock()

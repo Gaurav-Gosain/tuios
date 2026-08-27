@@ -194,7 +194,9 @@ func (l *link) attempt(ctx context.Context) bool {
 		return false
 	}
 
-	m := newMuxRW(br, tr, tr, nil)
+	// nil accept: the hub answers an inbound open with a close and never hands
+	// a peer a stream. Section 1, invariant 1 of the design document.
+	m := newMuxRW(br, tr, tr, nil, dialerFirstID)
 	muxDone := make(chan struct{})
 	go func() {
 		defer close(muxDone)

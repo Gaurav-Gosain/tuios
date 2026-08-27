@@ -1,6 +1,7 @@
 package federation
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -228,8 +229,18 @@ func TestIncompatibleDaemonIsReportedNotUsed(t *testing.T) {
 	if !strings.Contains(r.Reason, "9") || !strings.Contains(r.Reason, "1") {
 		t.Errorf("reason does not name both protocol versions: %q", r.Reason)
 	}
-	if _, err := m.Call(ctx, "build", "list-sessions", nil); err == nil {
+	// The specific error matters. Any failure at all satisfied this once, which
+	// would have been satisfied by the link being dead for an unrelated reason.
+	_, err := m.Call(ctx, "build", "list-sessions", nil)
+	if err == nil {
 		t.Fatal("a call was made against an incompatible daemon")
+	}
+	var ue *UnreachableError
+	if !errors.As(err, &ue) {
+		t.Fatalf("call returned %v, want an UnreachableError naming the state", err)
+	}
+	if ue.Status != StatusIncompatible {
+		t.Errorf("the call was refused as %q, want incompatible; the caller cannot tell a version problem from a dead machine", ue.Status)
 	}
 }
 
@@ -323,72 +334,146 @@ func TestOneDeadHostDoesNotFailTheListing(t *testing.T) {
 	if bad.Err == nil {
 		t.Fatal("the dead host reported success")
 	}
+	var ue *UnreachableError
+	if !errors.As(bad.Err, &ue) {
+		t.Fatalf("the dead host failed with %v, want an UnreachableError naming it", bad.Err)
+	}
+	if ue.Host != "dead" {
+		t.Errorf("the failure names host %q, want dead", ue.Host)
+	}
 	if bad.Report.Status != StatusUnreachable {
 		t.Errorf("the dead host's status is %q, want unreachable", bad.Report.Status)
+	}
+	if len(bad.Result) != 0 {
+		t.Errorf("a host that failed still carries a result: %q", bad.Result)
 	}
 }
 
 // TestHubRefusesAStreamOpenedByTheRemote is invariant 1 of section 1: a remote
-// daemon never gets a channel into the hub. The remote here opens a stream the
-// moment the link is up; the hub must close it and keep working.
+// daemon never gets a channel into the hub.
+//
+// The assertion this test used to make was that the remote's read on the stream
+// ended with some error. That is satisfied by the link being torn down at the
+// end of the test, so it passed whether the hub refused the stream or simply
+// went away, and deleting the refusal left it green. Three things are asserted
+// instead, and none of them survives teardown:
+//
+//  1. Nothing the remote writes into the stream is ever answered.
+//  2. The stream ends inside a budget far shorter than the test's own life, so
+//     a refusal that arrives only when the link dies is not a refusal.
+//  3. The link is still up afterwards and still answers a real verb. That is
+//     what separates "the hub closed one stream" from "everything collapsed",
+//     and it is the assertion the earlier version was missing.
 func TestHubRefusesAStreamOpenedByTheRemote(t *testing.T) {
 	hub, remote := duplexPipe(t)
 
-	// The remote side: writes the preamble, then answers hello, then tries to
-	// open a stream back toward the hub.
-	opened := make(chan error, 1)
+	// refusedIn bounds how long a refusal may take. The hub answers an inbound
+	// open from its frame-reading loop, so the real number is microseconds;
+	// this is loose enough for a loaded machine and far tighter than anything
+	// teardown could produce, since teardown only happens after the assertions
+	// below have run.
+	const refusedIn = 2 * time.Second
+
+	type refusal struct {
+		err error
+		// gotBytes is what the hub sent back on the refused stream. A refusal
+		// carries no payload; a hub that served the stream would.
+		gotBytes int
+		// elapsed is how long the stream took to end.
+		elapsed time.Duration
+	}
+	answered := make(chan refusal, 1)
+	failed := make(chan error, 1)
+
 	go func() {
 		if _, err := io.WriteString(remote, LinkPreamble+"\n"); err != nil {
-			opened <- err
+			failed <- err
 			return
 		}
+		// The remote is the answering end, so it allocates even stream ids and
+		// cannot collide with the hub's control stream.
 		m := newMux(remote, func(s *Stream) {
-			// The hub's control stream. Answer hello and nothing else.
-			br := make([]byte, 4096)
-			n, err := s.Read(br)
-			if err != nil || n == 0 {
-				return
+			// The hub's control stream. Answer every request line with the
+			// handshake or a listing, so the link stays usable.
+			br := bufio.NewReader(s)
+			for {
+				line, err := br.ReadBytes('\n')
+				if len(line) == 0 || err != nil {
+					return
+				}
+				var req struct {
+					ID   json.RawMessage `json:"id"`
+					Verb string          `json:"verb"`
+				}
+				if json.Unmarshal(line, &req) != nil {
+					return
+				}
+				var result any = map[string]any{"sessions": []any{}}
+				if req.Verb == "hello" {
+					result = Handshake{Protocol: 1, MinProtocol: 1, DaemonVersion: "1.0.0"}
+				}
+				resp, _ := json.Marshal(map[string]any{"id": req.ID, "result": result})
+				if _, werr := s.Write(append(resp, '\n')); werr != nil {
+					return
+				}
 			}
-			resp, _ := json.Marshal(map[string]any{
-				"id":     1,
-				"result": Handshake{Protocol: 1, MinProtocol: 1, DaemonVersion: "1.0.0"},
-			})
-			_, _ = s.Write(append(resp, '\n'))
-		})
+		}, answererFirstID)
 		go func() { _ = m.run() }()
 
 		// Wait for the hub's control stream to exist, then push back.
 		time.Sleep(200 * time.Millisecond)
 		s, err := m.Open()
 		if err != nil {
-			opened <- err
+			failed <- err
 			return
 		}
-		// The hub answers an inbound open with a close, so this read ends.
-		buf := make([]byte, 16)
-		_, rerr := s.Read(buf)
-		opened <- rerr
+		// A stream a peer opened is worthless unless something reads it, so the
+		// remote writes a request into it. A hub that served the stream would
+		// have a handler on the other end of this write.
+		_, _ = s.Write([]byte(`{"id":99,"verb":"list-sessions"}` + "\n"))
+
+		started := time.Now()
+		buf := make([]byte, 4096)
+		n, rerr := s.Read(buf)
+		answered <- refusal{err: rerr, gotBytes: n, elapsed: time.Since(started)}
 	}()
 
 	opts := testOptions(func(context.Context, Host) (Transport, error) { return hub, nil })
-	m := managerFor(t, opts, Host{Name: "build", Addr: "unused"})
+	mgr := managerFor(t, opts, Host{Name: "build", Addr: "unused"})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
+	if r := mgr.Reports(ctx)[0]; r.Status != StatusUp {
 		t.Fatalf("status is %q (%s / %s), want up", r.Status, r.Reason, r.Detail)
 	}
 
+	var got refusal
 	select {
-	case err := <-opened:
-		if err == nil {
-			t.Fatal("the remote opened a stream into the hub and it stayed open")
-		}
-		if !errors.Is(err, io.EOF) {
-			t.Logf("inbound stream ended with %v", err)
-		}
-	case <-time.After(4 * time.Second):
-		t.Fatal("the hub never refused the remote's stream")
+	case err := <-failed:
+		t.Fatalf("the remote half of the fixture failed: %v", err)
+	case got = <-answered:
+	case <-time.After(refusedIn):
+		t.Fatalf("the hub did not refuse the remote's stream within %v; a stream a peer opened is still open", refusedIn)
+	}
+
+	if got.err == nil {
+		t.Fatalf("the hub served a stream the remote opened: %d byte(s) came back on it", got.gotBytes)
+	}
+	if got.gotBytes != 0 {
+		t.Errorf("the hub answered %d byte(s) on a refused stream; a refusal carries no payload", got.gotBytes)
+	}
+	if got.elapsed >= refusedIn {
+		t.Errorf("the refusal took %v, which is not a refusal but a timeout", got.elapsed)
+	}
+
+	// The link survived the refusal. Without this the whole test is satisfied by
+	// the fixture being torn down, which is how it used to pass with the
+	// refusal deleted.
+	if r := mgr.Reports(ctx)[0]; r.Status != StatusUp {
+		t.Fatalf("the link is %q after refusing one stream; refusing a stream must not cost the link", r.Status)
+	}
+	if _, err := mgr.Call(ctx, "build", "list-sessions", nil); err != nil {
+		t.Errorf("the link stopped answering after refusing a stream: %v", err)
 	}
 }
 
