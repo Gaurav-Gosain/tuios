@@ -1053,6 +1053,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.renderSkipped = false
 		return m, nil
 
+	case fileOpMsg:
+		// A create, rename, delete or paste that finished on its own goroutine.
+		// The handler says what happened and asks for the listing again through
+		// the generation-stamped read, rather than editing the rows in memory.
+		cmd := m.HandleFileOp(msg)
+		m.renderSkipped = false
+		return m, cmd
+
 	case tapeDebounceMsg:
 		// The focused cwd held still long enough; evaluate it for a project tape.
 		m.handleTapeDebounce(msg.gen)

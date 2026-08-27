@@ -108,6 +108,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateSection("layout_prefix", cfg.Keybindings.LayoutPrefix)
 	validateSection("terminal_mode", cfg.Keybindings.TerminalMode)
 	validateSection("sidebar", cfg.Keybindings.Sidebar)
+	validateSection("sidebar_files", cfg.Keybindings.SidebarFiles)
 	validateSection("global", cfg.Keybindings.Global)
 	validateSection("script", cfg.Keybindings.Script)
 
@@ -291,6 +292,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 		})
 	}
 	checkEnum("sidebar.folder_click", cfg.Appearance.Sidebar.FolderClick, SidebarFolderClicks)
+	checkEnum("sidebar.file_delete", cfg.Appearance.Sidebar.FileDelete, SidebarFileDeletes)
 	if cfg.Appearance.Sidebar.Workspaces != "" {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "appearance.sidebar.workspaces",

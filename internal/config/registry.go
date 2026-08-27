@@ -152,6 +152,20 @@ func (r *KeybindRegistry) GetSidebarAction(key string) string {
 	return r.lookupKeyInSection(key, r.config.Keybindings.Sidebar)
 }
 
+// GetSidebarFilesAction returns the action name for a key among the files
+// section's own binds. Consulted before GetSidebarAction, and only while the
+// rail's cursor is on a row of the listing, so the three keys the two sections
+// share each mean the thing the row under the cursor is.
+func (r *KeybindRegistry) GetSidebarFilesAction(key string) string {
+	return r.lookupKeyInSection(key, r.config.Keybindings.SidebarFiles)
+}
+
+// GetSidebarFilesKeys is GetKeys for the files section's binds, for the help
+// overlay.
+func (r *KeybindRegistry) GetSidebarFilesKeys(action string) []string {
+	return r.config.Keybindings.SidebarFiles[action]
+}
+
 // GetSidebarKeys is GetKeys for the rail's scope. GetKeys deliberately does not
 // search the sidebar section (its action names collide with the global ones),
 // so the help overlay needs its own way to read what the rail is bound to.
@@ -285,6 +299,17 @@ func (r *KeybindRegistry) GetConfig() *UserConfig {
 
 // ActionDescriptions maps action names to their descriptions for help menu generation.
 var ActionDescriptions = map[string]string{
+	// The rail's files section. They act only while the cursor is on a row of
+	// the listing, which is why three of them share a key with a rail binding
+	// above and neither loses it.
+	"file_create":         "Files: new file, or a folder with a trailing /",
+	"file_rename":         "Files: rename this file",
+	"file_delete":         "Files: delete this file",
+	"file_delete_forever": "Files: delete for good, with no trash",
+	"file_copy":           "Files: copy this file",
+	"file_cut":            "Files: cut this file",
+	"file_paste":          "Files: paste into this folder",
+
 	// Window Management
 	"new_window":    "New window",
 	"close_window":  "Close window",

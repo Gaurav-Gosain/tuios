@@ -867,3 +867,45 @@ func TestAgentsKeybindsFilledForAPreExistingSidebarSection(t *testing.T) {
 		t.Fatalf("GetSidebarAction(j) = %q, want cursor_down", got)
 	}
 }
+
+// TestSidebarFileKeybindsFilledForOlderConfig is the same claim for the files
+// section's own keys: a config written before they existed has no
+// [keybindings.sidebar_files], and left unfilled the listing would have no way
+// to create, rename or delete anything.
+func TestSidebarFileKeybindsFilledForOlderConfig(t *testing.T) {
+	cfg := writeConfig(t, "[keybindings]\nleader_key = \"ctrl+b\"\n\n[keybindings.window_management]\nclose_window = [\"x\"]\n")
+
+	r := config.NewKeybindRegistry(cfg)
+	// The fixture check, so the assertions below cannot pass on a config that was
+	// never read: the file binds close_window to "x" alone, where the default
+	// binds both "w" and "x".
+	if got := r.GetAction("w"); got == "close_window" {
+		t.Fatal("close_window still answers to w, so the fixture was never loaded")
+	}
+	for key, want := range map[string]string{
+		"a": "file_create",
+		"r": "file_rename",
+		"d": "file_delete",
+		"D": "file_delete_forever",
+		"y": "file_copy",
+		"x": "file_cut",
+		"p": "file_paste",
+	} {
+		if got := r.GetSidebarFilesAction(key); got != want {
+			t.Errorf("GetSidebarFilesAction(%q) = %q, want %q", key, got, want)
+		}
+	}
+
+	// And the rail's own keys still mean what they meant. The two sections share
+	// r and x, and the rail's meaning is what a row outside the listing gets.
+	if got := r.GetSidebarAction("r"); got != "rename" {
+		t.Errorf("GetSidebarAction(r) = %q, want rename", got)
+	}
+	if got := r.GetSidebarAction("x"); got != "kill" {
+		t.Errorf("GetSidebarAction(x) = %q, want kill", got)
+	}
+	// The file keys must not leak onto a pane either.
+	if got := r.GetAction("d"); got == "file_delete" {
+		t.Error("file_delete resolves through the global keymap; it would fire on a pane")
+	}
+}

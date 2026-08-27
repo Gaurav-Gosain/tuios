@@ -206,6 +206,11 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.QuitMenuSelected = idx
 	case "sessionclose":
 		m.SessionCloseSelected = idx
+	case "filedialog":
+		// Hover moves the cursor onto the answer under the pointer. It cannot
+		// run one: the dialog is answered by a click or by enter, and a pointer
+		// crossing the rows on its way somewhere else must not delete a file.
+		m.filePrompt.Selected = idx
 	}
 }
 
@@ -398,6 +403,9 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "sessionclose":
 		m.SessionCloseSelected = row.Idx
 		return m.SessionCloseActivate(row.Idx)
+	case "filedialog":
+		m.filePrompt.Selected = row.Idx
+		return m.FileConfirmActivate(row.Idx)
 	}
 	return nil
 }
@@ -500,6 +508,10 @@ func (m *OS) closeOverlay(kind string) {
 		// Click-away cancels, like esc. Dismissing is the safe answer, so it is
 		// the one an ambiguous gesture gets.
 		m.CloseSessionClose()
+	case "filedialog":
+		// Same rule, and it matters more here: the ambiguous gesture must never
+		// be the one that removes a file.
+		m.FilePromptCancel()
 	}
 	if m.OverlayDrag.Kind == kind {
 		m.OverlayDrag.Active = false

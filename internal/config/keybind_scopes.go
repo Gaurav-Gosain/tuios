@@ -67,6 +67,7 @@ const (
 	SectionLayoutPrefix     = "layout_prefix"
 	SectionTerminalMode     = "terminal_mode"
 	SectionSidebar          = "sidebar"
+	SectionSidebarFiles     = "sidebar_files"
 	SectionGlobal           = "global"
 	SectionScript           = "script"
 )
@@ -77,6 +78,7 @@ const (
 	ScopeWindowMode     = "window"
 	ScopeTerminalMode   = "terminal"
 	ScopeSidebar        = "sidebar"
+	ScopeSidebarFiles   = "sidebar.files"
 	ScopePrefix         = "prefix"
 	ScopePrefixWindow   = "prefix.window"
 	ScopePrefixMinimize = "prefix.minimize"
@@ -124,6 +126,17 @@ func Scopes(leader string) []Scope {
 		{
 			ID: ScopeSidebar, Name: "Sidebar",
 			Sections: []string{SectionSidebar},
+			Reaches:  ReachModal,
+		},
+		{
+			// A scope of its own, and not a second section inside the rail's,
+			// because a scope is the unit a conflict is stated against. These
+			// keys are consulted only while the cursor is on a row of the files
+			// listing, so r meaning rename here and rename-a-pane there is a
+			// resolution rather than a collision, and reporting it as one would
+			// be reporting a fault that does not exist.
+			ID: ScopeSidebarFiles, Name: "Sidebar files",
+			Sections: []string{SectionSidebarFiles},
 			Reaches:  ReachModal,
 		},
 		{
@@ -210,6 +223,8 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 		return k.TerminalMode
 	case SectionSidebar:
 		return k.Sidebar
+	case SectionSidebarFiles:
+		return k.SidebarFiles
 	}
 	return nil
 }

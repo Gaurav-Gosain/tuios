@@ -588,6 +588,19 @@ var (
 	// into it, tell the pane to cd there, or both.
 	SidebarFolderClick = SidebarFolderClickNavigate
 
+	// SidebarFileActions lets the files section create, rename, delete, copy,
+	// cut and paste. On leaves the listing exactly as it was until a key is
+	// pressed or a menu row is picked; off makes those keys do nothing at all.
+	//
+	// It is a setting because the rail is beside a terminal rather than in front
+	// of one. A file manager is a place somebody went; a rail is a place they
+	// are, and not everybody wants the folder they are looking at to be one they
+	// can delete from by mistake.
+	SidebarFileActions = true
+
+	// SidebarFileDelete is where a deleted file goes: the trash, or nowhere.
+	SidebarFileDelete = SidebarFileDeleteTrash
+
 	// Tooltips pops a one-row label naming whatever icon-only control the
 	// pointer is over: a row of the collapsed rail, or one of the dock's session
 	// controls. A glyph is enough to steer by and not enough to read.
@@ -629,6 +642,21 @@ const (
 var SidebarFolderClicks = []string{
 	SidebarFolderClickNavigate, SidebarFolderClickCd, SidebarFolderClickBoth,
 }
+
+// Where a delete from the files section sends the file.
+//
+// Trash is the default. The rail is an incidental place for a keystroke to land
+// in a way a file manager is not, and a delete that cannot be undone is the
+// wrong default for an incidental place. Permanent is for somebody who has
+// decided they mean it, and it is on a key of its own as well, because a file
+// on another disk cannot go to the home trash at all.
+const (
+	SidebarFileDeleteTrash     = "trash"
+	SidebarFileDeletePermanent = "permanent"
+)
+
+// SidebarFileDeletes lists the valid values for appearance.sidebar.file_delete.
+var SidebarFileDeletes = []string{SidebarFileDeleteTrash, SidebarFileDeletePermanent}
 
 // SessionColors gives every session a colour of its own and marks it on the
 // surfaces that show more than one session at once: the rail's sessions and
