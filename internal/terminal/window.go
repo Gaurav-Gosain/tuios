@@ -371,6 +371,18 @@ type Window struct {
 	// detected it, or empty at a shell prompt. Session surfaces label a row with
 	// it, because a title is the same string for every pane in one directory.
 	ForegroundCmd string
+	// Cwd is the directory the pane's shell last said it was in, from OSC 7, or
+	// empty when it has never said.
+	//
+	// It is written on the Update goroutine from the cwd-change channel, never
+	// from the PTY reader, which is why it is a plain field: CwdFunc does the
+	// non-blocking send and the app applies it where the rest of the window
+	// model is owned.
+	//
+	// Empty is a real and common state. A shell only fills this in if it emits
+	// OSC 7, which fish does out of the box and bash and zsh mostly do not, so
+	// anything reading it has to have an answer for not knowing.
+	Cwd string
 
 	KittyPassthroughFunc func(cmd *vt.KittyCommand, rawData []byte)
 	SixelPassthroughFunc func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int)

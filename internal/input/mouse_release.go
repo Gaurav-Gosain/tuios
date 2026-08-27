@@ -47,7 +47,10 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SidebarEdgeActive() {
 		mouse := msg.Mouse()
 		o.SidebarEdgeRelease(mouse.X, mouse.Y)
-		return o, nil
+		// The edge column's press resolves as a row activation here, and a row
+		// of the rail's file view can answer with a clipboard write. See
+		// SidebarClick for why it travels on the model rather than in a return.
+		return o, o.TakeSidebarCmd()
 	}
 
 	// A workspace pill gesture resolves here too: commit the arrangement the

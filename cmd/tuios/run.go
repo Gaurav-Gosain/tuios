@@ -158,6 +158,35 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// A link in pane content underlines itself under the pointer, which needs
+	// the motion that crosses it.
+	//
+	// This is the one clause whose target is not a rectangle the chrome drew.
+	// Any cell a program printed may carry a link, so the test is the pane's
+	// content box, and that is most of the screen. It therefore relaxes the CPU
+	// guard the clauses above keep, and it is the only thing in this feature
+	// that costs anything on a machine nobody is pointing at a link on. Two
+	// things bound it:
+	//
+	//   - appearance.links = off makes both tests below false, and the filter
+	//     then drops exactly what it dropped before any of this existed. That is
+	//     the setting for anyone who would rather have the guard than the links.
+	//   - Only a motion that reaches a different cell is passed. A pointer
+	//     nudged inside one cell resolves to the same run and would compose an
+	//     identical frame, so a sweep costs one event per cell crossed rather
+	//     than one per event the host chose to send.
+	//
+	// LinkHoverActive keeps one more event flowing after the pointer leaves a
+	// link, and that is the event that clears the underline.
+	if mm, ok := msg.(tea.MouseMotionMsg); ok {
+		mouse := mm.Mouse()
+		if mouse.X != os.LastMouseX || mouse.Y != os.LastMouseY {
+			if os.LinkHoverActive() || os.PointerOverPaneContent(mouse.X, mouse.Y) {
+				return msg
+			}
+		}
+	}
+
 	// Allow motion events for scrollback browser drag-to-select
 	if os.ShowScrollbackBrowser {
 		return msg

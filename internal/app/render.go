@@ -259,6 +259,15 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		if tip := m.renderTooltip(); tip != nil {
 			layers = append(layers, tip)
 		}
+
+		// The link label rides at the same height, for the same reason: it names
+		// something under the pointer and has to be readable over whatever that
+		// is. It is drawn after the tooltip because the two can never both be
+		// up, the tooltip's surfaces all being chrome and this one's all being
+		// pane content.
+		if label := m.renderLinkLabel(); label != nil {
+			layers = append(layers, label)
+		}
 	} else {
 		// Off the render path (e.g. state snapshots) nothing draws the sidebar,
 		// so last frame's hit geometry must not linger and mis-route a click.

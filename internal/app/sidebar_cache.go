@@ -155,6 +155,20 @@ func (m *OS) sidebarSignature() uint64 {
 	// peeked frame and a resting one can never share a cache entry.
 	mixS(m.SidebarPeek)
 
+	// The file view replaces every row on the rail, so its state is drawn state
+	// in the strongest sense: nothing else on this list describes a single line
+	// of what the rail shows while it is open.
+	//
+	// Gen is what makes a refresh visible. The path can be the same directory
+	// before and after a reload, and a listing that changed underneath it would
+	// otherwise be served from the entry keyed on the old one.
+	mixB(m.filesView.Open)
+	mixS(m.filesView.Dir)
+	mixS(m.filesView.Origin)
+	mixS(m.filesView.Err)
+	mixI(m.filesView.Scroll)
+	mixU(m.filesView.Gen)
+
 	// The agents section's two controls decide which rows it holds and in what
 	// order, so both are drawn state and both are folded. The tokens themselves
 	// change ink with them, which is the other half of what the frame shows.

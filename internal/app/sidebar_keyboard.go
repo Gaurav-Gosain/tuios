@@ -193,6 +193,16 @@ func (m *OS) SidebarActivateCursor() bool {
 		return true
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
+	case sidebarRowFiles:
+		m.ToggleFileView()
+	case sidebarRowFileBack:
+		m.CloseFileView()
+	case sidebarRowFileCd:
+		m.queueSidebarCmd(m.FileViewCd())
+	case sidebarRowFileUp:
+		m.FileViewUp()
+	case sidebarRowFileEntry:
+		m.queueSidebarCmd(m.FileViewEnter(row.WindowIndex))
 	case sidebarRowSession:
 		m.sidebarSwitchSession(row.SessionID)
 		m.sidebarFollowSession = row.SessionID
@@ -421,6 +431,13 @@ func (m *OS) SidebarSetCollapsed(collapsed bool) {
 		return
 	}
 	m.SidebarCollapsed = collapsed
+	if collapsed {
+		// Three columns cannot draw a path, so the strip has no way to show the
+		// file view and no way out of it. Folding the rail therefore leaves the
+		// mode rather than hiding it: a mode nothing on screen mentions is a mode
+		// the user cannot get out of.
+		m.CloseFileView()
+	}
 	m.sidebarClearPeek()
 	m.tooltipClear()
 	if m.AutoTiling {

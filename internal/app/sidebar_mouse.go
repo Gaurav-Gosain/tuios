@@ -201,6 +201,16 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 		m.SidebarNewWindow(hit.SessionID)
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
+	case sidebarRowFiles:
+		m.ToggleFileView()
+	case sidebarRowFileBack:
+		m.CloseFileView()
+	case sidebarRowFileCd:
+		m.queueSidebarCmd(m.FileViewCd())
+	case sidebarRowFileUp:
+		m.FileViewUp()
+	case sidebarRowFileEntry:
+		m.queueSidebarCmd(m.FileViewEnter(hit.WindowIndex))
 	case sidebarRowSession:
 		m.SidebarDrag = sidebarDragState{
 			PressActive: true,
@@ -317,6 +327,16 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 		m.SidebarNewWindow(hit.SessionID)
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
+	case sidebarRowFiles:
+		m.ToggleFileView()
+	case sidebarRowFileBack:
+		m.CloseFileView()
+	case sidebarRowFileCd:
+		m.queueSidebarCmd(m.FileViewCd())
+	case sidebarRowFileUp:
+		m.FileViewUp()
+	case sidebarRowFileEntry:
+		m.queueSidebarCmd(m.FileViewEnter(hit.WindowIndex))
 	case sidebarRowSession:
 		m.sidebarSwitchSession(hit.SessionID)
 	}
@@ -443,6 +463,21 @@ func (m *OS) SidebarWheel(x, y int, up bool) bool {
 	if !m.SidebarBandContains(x, y) {
 		return false
 	}
+	// The file view is one list over the whole rail, so it has one offset and no
+	// bands to scan. The per-section rule below exists to stop one section
+	// scrolling another off the screen, and a mode with one section has nothing
+	// to protect.
+	if m.filesView.Open {
+		if up {
+			m.filesView.Scroll = max(m.filesView.Scroll-config.ScrollLines, 0)
+		} else {
+			// Clamped against the row count on the next render, as the sections
+			// are.
+			m.filesView.Scroll += config.ScrollLines
+		}
+		return true
+	}
+
 	offsets := [sidebarSectionCount]*int{&m.SidebarScrollS, &m.SidebarScrollT, &m.SidebarScrollA}
 	for s, band := range m.sidebarSectionY {
 		if y < band[0] || y >= band[1] {

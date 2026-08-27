@@ -32,6 +32,15 @@ var (
 	searchMatchStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color("#FF8700")).
 				Foreground(lipgloss.Color("#000000"))
+
+	// The link under the pointer. An underline and a colour rather than a
+	// filled background, because the run is text the program wrote and the
+	// highlight is saying what it is, not selecting it: a block of colour would
+	// read as the drag-selection the same gesture used to start, which is the
+	// one thing this must not be confused with.
+	linkHoverStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#7DCFFF")).
+			Underline(true)
 )
 
 // isBlankRender reports whether a rendered frame carries no visible text, so
@@ -262,7 +271,17 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// cell like a focused one. It is charged only on a frame that was going to
 	// re-read the emulator anyway, since a clean pane serves its cache above,
 	// and BenchmarkDimUnfocusedPane measures what it comes to.
-	if !isFocused && dim == 0 && window.CopyMode == nil && window.ScrollbackOffset == 0 {
+	// The run of cells the pointer is on, if it is on one in this pane. Read
+	// once here rather than per cell: it is a pane-wide fact, and the test
+	// inside the loop is then two integer comparisons.
+	//
+	// It also takes the pane off the fast path below, for the same reason a dim
+	// does: the emulator's own renderer emits the cells as the guest wrote them
+	// and there is nowhere in it to put an underline. The cost falls only on the
+	// one pane the pointer is over, and only while it is over a link.
+	linkRun, hasLinkRun := m.linkHoverFor(window)
+
+	if !isFocused && dim == 0 && !hasLinkRun && window.CopyMode == nil && window.ScrollbackOffset == 0 {
 		rendered := screen.Render()
 		cols, rows := 0, 0
 		if gridFillsEveryRow(screen, screen.Width(), screen.Height()) {
@@ -662,6 +681,24 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 					x += cellWidth
 					continue
 				}
+			}
+
+			// The link under the pointer, drawn after the selection and search
+			// branches above so a run the user is selecting or searching keeps
+			// the highlight that says so. A pane the pointer is not over has
+			// hasLinkRun false and pays one boolean per cell.
+			if hasLinkRun && linkRun.Contains(x, y) {
+				flushBatch()
+
+				builder.WriteString(renderStyledText(linkHoverStyle, char))
+				prevCell = cell
+				prevIsCursor = false
+				cellWidth := 1
+				if cell != nil && cell.Width > 1 {
+					cellWidth = cell.Width
+				}
+				x += cellWidth
+				continue
 			}
 
 			// Only render fake cursor when real terminal cursor is not being
