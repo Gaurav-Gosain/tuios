@@ -327,6 +327,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 		fileRow("file_copy", "Files: copy the file under the cursor"),
 		fileRow("file_cut", "Files: cut the file under the cursor"),
 		fileRow("file_paste", "Files: paste into the folder on screen"),
+		fileRow("file_open", "Files: open the folder, or copy the file path"),
 	)
 
 	// Drop rows whose action is unbound, exactly as generateCategoryBindings does.

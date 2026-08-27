@@ -1,6 +1,8 @@
 package app
 
 import (
+	"path/filepath"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -26,6 +28,10 @@ const (
 	glyphDetach   = ""
 	glyphSwitch   = ""
 	glyphClear    = ""
+	glyphFolder   = ""
+	glyphFile     = ""
+	glyphCut      = ""
+	glyphUp       = ""
 )
 
 // OpenContextMenu opens the context menu for whatever is under the screen cell
@@ -412,4 +418,98 @@ func (m *OS) OpenSelectionMenu(x, y, windowIndex int) {
 	}
 	cm.Selected = cm.Next(1)
 	m.ContextMenu = cm
+}
+
+// ============================================================================
+// The rail's files section
+// ============================================================================
+
+// fileRowMenu is the menu for the files section: one row of the listing, or the
+// blank space around it.
+//
+// Every row names one of the section's own registry actions, so the hints are
+// the keys the user would press on that row and a rebind moves both at once.
+// Nothing here runs anything; the input layer hands the action ID to the same
+// dispatcher a keypress goes through. See sidebar_file_ops.go for what the
+// actions do and for the dialog the two deletes open.
+//
+// What the target changes:
+//
+//   - A folder opens. A file's path goes to the clipboard. Those are the two
+//     halves of one action, file_open, and they are the whole of what a folder
+//     and a file differ by here: the other six work the same on both.
+//   - The ".." row names the folder above, which is not a name in the listing.
+//     It opens, and it is not a target for a rename, a delete, a copy or a cut.
+//   - The blank space and the header name nothing at all, so only the two rows
+//     that need no target stay live: make a file, and paste into the folder.
+//
+// Rows that do not apply are dimmed rather than dropped, which is what paneMenu
+// does with a paste it cannot reach and what dockItemMenu does with a restore it
+// cannot name. A menu that changed shape from one row to the next would hide the
+// fact that the action exists at all.
+func (m *OS) fileRowMenu(t fileMenuTarget) (string, []ContextMenuItem) {
+	// One gate for the six that touch the disk, the same one the keys ask:
+	// the section has to be on screen and the setting has to allow them. With
+	// the setting off every one of them is dimmed and the rail's settings row
+	// under the menu is where it is turned back on.
+	on := m.FileActionsOn()
+	hasTarget := on && t.Name != ""
+	// Opening is not one of the six. It navigates or copies a path, which is
+	// what a plain click on the row already does whether or not file actions
+	// are allowed, so it asks only that the section is up.
+	canOpen := m.filesOn() && (t.Name != "" || t.Up)
+
+	open := m.item(glyphFile, "Open", "file_open", true)
+	switch {
+	case t.Up:
+		open = m.item(glyphUp, "Go up", "file_open", !canOpen)
+	case t.IsDir && t.Name != "":
+		open = m.item(glyphFolder, "Open folder", "file_open", !canOpen)
+	case t.Name != "":
+		open = m.item(glyphCopy, "Copy path", "file_open", !canOpen)
+	}
+
+	del := m.item(glyphClose, "Delete", "file_delete", !hasTarget)
+	del.Warn = true
+	forever := m.item(glyphClose, "Delete for good", "file_delete_forever", !hasTarget)
+	forever.Warn = true
+
+	return fileMenuTitle(t), []ContextMenuItem{
+		open,
+		separator(),
+		m.item(glyphCopy, "Copy", "file_copy", !hasTarget),
+		m.item(glyphCut, "Cut", "file_cut", !hasTarget),
+		// Paste puts the clipboard into the folder on screen, so it needs a
+		// clipboard and not a target. It overwrites nothing, which is why it is
+		// live here with no dialog behind it; see SidebarFilePaste.
+		m.item(glyphPaste, "Paste", "file_paste", !on || m.fileClip.Empty()),
+		separator(),
+		m.item(glyphNew, "New file or folder", "file_create", !on),
+		m.item(glyphRename, "Rename", "file_rename", !hasTarget),
+		del,
+		forever,
+	}
+}
+
+// fileMenuTitle heads the menu with what it will act on: the name for a row of
+// the listing, and the folder itself when the menu names no row.
+//
+// The name is laundered the way every other foreign name on the rail is. A name
+// off a filesystem can hold a control character, and a menu title is drawn
+// straight into the frame.
+func fileMenuTitle(t fileMenuTarget) string {
+	name := t.Name
+	if t.Up {
+		name = ".."
+	}
+	if name == "" && t.Dir != "" {
+		name = filepath.Base(t.Dir)
+	}
+	if title := printableTitle(name); title != "" {
+		return title
+	}
+	if name != "" {
+		return name
+	}
+	return "Files"
 }

@@ -1013,6 +1013,9 @@ type OS struct {
 	// menuSession carries the session a rail row's menu was opened on, the same
 	// way menuWorkspace carries a pill's. See TakeMenuSession.
 	menuSession string
+	// menuFile carries the listing row a files-section menu was opened on, the
+	// same way menuSession carries a session row's. See fileMenuTarget.
+	menuFile fileMenuTarget
 
 	// UserConfig is the loaded user configuration. The settings page mutates
 	// it in place and persists it so live changes survive a restart. May be

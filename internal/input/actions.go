@@ -53,6 +53,12 @@ const (
 	sidebarActFileCopy      = "file_copy"
 	sidebarActFileCut       = "file_cut"
 	sidebarActFilePaste     = "file_paste"
+	// file_open is not one of the six that touch the disk: it takes the row the
+	// way a click on it does, so a folder opens and a file's path goes to the
+	// clipboard. It exists as an action because the files context menu's first
+	// row needs one, and a menu row with no registry action behind it is a
+	// hardcoded key hint waiting to go stale.
+	sidebarActFileOpen = "file_open"
 	// jump_1..jump_9 are matched by prefix; see HandleSidebarKey.
 	sidebarActJumpPrefix = "jump_"
 )
@@ -179,6 +185,22 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("kill_session", handleKillSession)
 	d.Register("kill_session_next", handleKillSessionNext)
 	d.Register("kill_session_quit", handleKillSessionQuit)
+
+	// The rail's file actions. They are dispatched by key from HandleSidebarKey,
+	// which reads its own scope, and they are registered here because the files
+	// context menu hands its rows to this dispatcher like every other menu. Both
+	// ways in run handleSidebarFileAction, so there is one body per action.
+	//
+	// Registering them here does not make them reachable from window mode: they
+	// live only in [keybindings.sidebar_files], which the window-mode lookup
+	// never reads.
+	for _, action := range []string{
+		sidebarActFileCreate, sidebarActFileRename, sidebarActFileDelete,
+		sidebarActFileDeleteAll, sidebarActFileCopy, sidebarActFileCut,
+		sidebarActFilePaste, sidebarActFileOpen,
+	} {
+		d.Register(action, makeSidebarFileHandler(action))
+	}
 
 	// System actions
 	d.Register("toggle_logs", handleToggleLogs)

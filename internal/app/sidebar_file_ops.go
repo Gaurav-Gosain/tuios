@@ -116,12 +116,25 @@ func (m *OS) FileActionsOn() bool {
 	return config.SidebarFileActions && m.filesSectionEnabled() && m.filesView.Dir != ""
 }
 
-// fileActionTarget is the entry the cursor is on, as an absolute path.
+// fileActionTarget is the entry an action acts on, as an absolute path.
 //
-// The ".." row names the folder above and is not a target: deleting the folder
-// you are standing in from a row that means "go up" is the kind of aim nobody
-// takes on purpose.
+// The row a context menu was opened on comes first, and it is the only place
+// the mouse has to say what it aimed at: a right-click does not move the
+// keyboard cursor, and requiring it to would mean clicking a name twice to act
+// on it. The carry lives for one dispatch, so the same action reached by key
+// falls straight through to the cursor row. See fileMenuTarget.
+//
+// The ".." row names the folder above and is not a target on either path:
+// deleting the folder you are standing in from a row that means "go up" is the
+// kind of aim nobody takes on purpose.
 func (m *OS) fileActionTarget() (name, path string, ok bool) {
+	if t := m.menuFile; t.Active() && t.Name != "" {
+		// The folder the menu was opened over, not the one on screen now. A
+		// reply already in flight can replace the listing between the
+		// right-click and the row being chosen, and the action has to run on
+		// what the user was pointing at.
+		return t.Name, filepath.Join(t.Dir, t.Name), true
+	}
 	row, have := m.sidebarCursorRow()
 	if !have || row.Kind != sidebarRowFileEntry {
 		return "", "", false
@@ -159,12 +172,21 @@ func (m *OS) fileActionRefuse() bool {
 	return false
 }
 
+// fileActionDir is the folder an action that needs no name acts in: the one the
+// menu was opened over, or the one on screen. Same carry, same reason.
+func (m *OS) fileActionDir() string {
+	if t := m.menuFile; t.Active() {
+		return t.Dir
+	}
+	return m.filesView.Dir
+}
+
 // SidebarFileCreate opens the create prompt over the listed folder.
 func (m *OS) SidebarFileCreate() {
 	if m.fileActionRefuse() {
 		return
 	}
-	m.filePrompt = filePromptState{Kind: filePromptCreate, Dir: m.filesView.Dir}
+	m.filePrompt = filePromptState{Kind: filePromptCreate, Dir: m.fileActionDir()}
 }
 
 // SidebarFileRename opens the rename prompt on the cursor row, seeded with the
@@ -183,7 +205,7 @@ func (m *OS) SidebarFileRename() bool {
 	}
 	m.filePrompt = filePromptState{
 		Kind:   filePromptRename,
-		Dir:    m.filesView.Dir,
+		Dir:    m.fileActionDir(),
 		Target: name,
 		Input:  name,
 	}
@@ -208,11 +230,33 @@ func (m *OS) SidebarFileDelete(permanent bool) {
 	}
 	m.filePrompt = filePromptState{
 		Kind:     filePromptConfirm,
-		Dir:      m.filesView.Dir,
+		Dir:      m.fileActionDir(),
 		Paths:    []string{path},
 		Trash:    !permanent && config.SidebarFileDelete == config.SidebarFileDeleteTrash && trashAvailable(),
 		Selected: fileConfirmRowCancel,
 	}
+}
+
+// SidebarFileOpen acts on a listing row the way a plain click on it does: a
+// folder opens, a file's path goes to the clipboard, and ".." goes up.
+//
+// It is not one of the six. It touches no file and asks nothing, so it is live
+// whenever the section is, whatever appearance.sidebar.file_actions says: a
+// listing whose names could not be clicked would be a different feature.
+//
+// Reached from a menu it acts on the row the menu was opened on. Reached by key
+// it hands straight to SidebarActivateCursor, so the key and the rail's own
+// enter run one implementation and cannot drift.
+func (m *OS) SidebarFileOpen() tea.Cmd {
+	t := m.menuFile
+	if !t.Active() {
+		m.SidebarActivateCursor()
+		return m.TakeSidebarCmd()
+	}
+	if t.Up {
+		return m.fileViewUpFrom(t.Dir)
+	}
+	return m.fileViewOpen(t.Dir, t.Name, t.IsDir)
 }
 
 // SidebarFileCopy puts the cursor row on the file clipboard for a copy.
@@ -258,7 +302,7 @@ func (m *OS) SidebarFilePaste() tea.Cmd {
 		m.ShowNotification("Copy or cut a file first.", "info", config.NotificationDuration)
 		return nil
 	}
-	dir, clip := m.filesView.Dir, m.fileClip
+	dir, clip := m.fileActionDir(), m.fileClip
 	m.filePrompt.Busy = true
 	// A cut is spent by the paste that moves it. Leaving it on the clipboard
 	// would let a second paste try to move a source that is no longer there.
