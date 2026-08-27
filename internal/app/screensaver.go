@@ -194,13 +194,13 @@ func (m *OS) startScreensaver(cfg config.ScreensaverConfig) bool {
 	if grid == nil {
 		return false
 	}
-	name, effect := screensaverEffect(cfg.EffectName())
+	name, effect, fill := screensaverEffect(cfg.EffectName())
 	if effect == nil {
 		return false
 	}
 
 	capture := screensaverCells(grid)
-	engine, ok := screensaverBuild(capture, grid.Cols, grid.Rows, effect)
+	engine, ok := screensaverBuild(capture, grid.Cols, grid.Rows, effect, fill)
 	if !ok {
 		return false
 	}
@@ -224,10 +224,18 @@ func (m *OS) startScreensaver(cfg config.ScreensaverConfig) bool {
 // The colour policy is the whole reason a screen saver reads as one: every
 // character resolves back to the colour it was captured with, so the screen
 // reassembles as itself rather than in the effect's own palette.
-func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.Effect) (*tfx.Engine, bool) {
+//
+// fill is the effect's own NeedsFillCharacters. A capture only covers the cells
+// that carry a glyph or a background, so a screen with plain empty space leaves
+// holes in the canvas, and an effect that animates the empty cells finds nothing
+// in them. burn and laseretch do not merely look thin without it: their build
+// picks a starting cell that can land on a hole, and the saver then refuses to
+// start at all.
+func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.Effect, fill bool) (*tfx.Engine, bool) {
 	terminal := tfx.NewTerminalFromCells(capture, tfx.TerminalConfig{
-		Width:  width,
-		Height: height,
+		Width:              width,
+		Height:             height,
+		MakeFillCharacters: fill,
 		// North west, not the engine's south west default. The two agree
 		// whenever the canvas matches the capture, which is the normal case;
 		// where they disagree a screen should slip towards the top left corner
@@ -243,20 +251,21 @@ func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.E
 }
 
 // screensaverEffect resolves a configured name to a fresh effect. The random
-// setting picks a different one each time the saver starts.
-func screensaverEffect(name string) (string, tfx.Effect) {
+// setting picks a different one each time the saver starts. The third result is
+// the effect's fill requirement, which the caller hands to screensaverBuild.
+func screensaverEffect(name string) (string, tfx.Effect, bool) {
 	if name == config.ScreensaverRandomEffect {
 		names := tfx.Names()
 		if len(names) == 0 {
-			return "", nil
+			return "", nil, false
 		}
 		name = names[rand.IntN(len(names))]
 	}
 	d, ok := tfx.Lookup(name)
 	if !ok {
-		return "", nil
+		return "", nil, false
 	}
-	return d.Name, d.New()
+	return d.Name, d.New(), d.NeedsFillCharacters
 }
 
 // screensaverCells turns a captured grid into engine input.
@@ -320,7 +329,7 @@ func (m *OS) handleScreensaverFrame() tea.Cmd {
 // effect that runs to an end loops instead of freezing.
 func (m *OS) restartScreensaverEffect() bool {
 	cfg := m.screensaverConfig()
-	name, effect := screensaverEffect(cfg.EffectName())
+	name, effect, fill := screensaverEffect(cfg.EffectName())
 	if effect == nil {
 		return false
 	}
@@ -329,7 +338,7 @@ func (m *OS) restartScreensaverEffect() bool {
 	if m.screensaver.capture == nil {
 		return false
 	}
-	engine, ok := screensaverBuild(m.screensaver.capture, m.screensaver.canvasWidth, m.screensaver.canvasHeight, effect)
+	engine, ok := screensaverBuild(m.screensaver.capture, m.screensaver.canvasWidth, m.screensaver.canvasHeight, effect, fill)
 	if !ok {
 		return false
 	}

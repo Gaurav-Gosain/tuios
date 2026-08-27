@@ -241,7 +241,7 @@ func TestScreensaverEffectNameFallsBackToRandom(t *testing.T) {
 	if got := cfg.EffectName(); got != config.ScreensaverRandomEffect {
 		t.Errorf("an unknown effect resolved to %q, want %q", got, config.ScreensaverRandomEffect)
 	}
-	name, effect := screensaverEffect(config.ScreensaverRandomEffect)
+	name, effect, _ := screensaverEffect(config.ScreensaverRandomEffect)
 	if effect == nil {
 		t.Fatal("random resolved to no effect")
 	}
