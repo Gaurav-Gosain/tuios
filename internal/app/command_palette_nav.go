@@ -20,9 +20,11 @@ func (m *OS) allPaletteItems() []CommandPaletteItem {
 // never per frame.
 func (m *OS) rebuildPaletteItems() {
 	static := GetCommandPaletteItems()
-	items := make([]CommandPaletteItem, 0, len(static)+len(m.PaletteSessionItems))
+	items := make([]CommandPaletteItem, 0,
+		len(static)+len(m.PaletteSessionItems)+len(m.PaletteKeybindItems))
 	items = append(items, static...)
 	items = append(items, m.PaletteSessionItems...)
+	items = append(items, m.PaletteKeybindItems...)
 	m.PaletteItems = items
 }
 
@@ -42,6 +44,11 @@ func (m *OS) OpenCommandPalette() tea.Cmd {
 	m.CommandPaletteSelected = 0
 	m.CommandPaletteScroll = 0
 	m.PaletteSessionItems = getSessionPaletteItems(m)
+	// Built here for the same reason as the session entries: once per open, not
+	// once per frame. This one is a pass over the config rather than a daemon
+	// round trip, but the filtered list is rebuilt on every keystroke and the
+	// action rows are the larger half of it.
+	m.PaletteKeybindItems = getKeybindPaletteItems(m)
 	m.rebuildPaletteItems()
 	return nil
 }
@@ -73,6 +80,7 @@ func (m *OS) CloseCommandPalette() {
 	// Nothing reads the merged list while the palette is shut, and it is rebuilt
 	// on the next open, so dropping it costs nothing but that rebuild.
 	m.PaletteItems = nil
+	m.PaletteKeybindItems = nil
 }
 
 // ActivateCommandPalette runs the currently selected command and closes the

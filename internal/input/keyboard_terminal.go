@@ -418,8 +418,36 @@ func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		o.LayoutPickerSelected = 0
 		o.LayoutPickerScroll = 0
 		return o, nil
+	case "snap_corner_1":
+		return snapCornerFromPrefix(o, app.SnapTopLeft)
+	case "snap_corner_2":
+		return snapCornerFromPrefix(o, app.SnapTopRight)
+	case "snap_corner_3":
+		return snapCornerFromPrefix(o, app.SnapBottomLeft)
+	case "snap_corner_4":
+		return snapCornerFromPrefix(o, app.SnapBottomRight)
 	default:
 		// layout_prefix_cancel and any unbound key both dismiss the chord.
 		return o, nil
 	}
+}
+
+// snapCornerFromPrefix snaps the focused window to a corner, reached through
+// the layout chord rather than through the window-mode keymap.
+//
+// It says why nothing happened when tiling is on, which the window-mode path
+// never did. Corner snapping moves a floating window, so with tiling on there
+// is nothing for it to move; pressing the chord and getting silence reads as a
+// broken binding, and that silence is most of why the old digit binding looked
+// like it worked when it did not.
+func snapCornerFromPrefix(o *app.OS, corner app.SnapQuarter) (*app.OS, tea.Cmd) {
+	if o.AutoTiling {
+		o.ShowNotification("Corner snapping needs tiling off", "info", config.NotificationDuration)
+		return o, nil
+	}
+	if len(o.Windows) == 0 || o.FocusedWindow < 0 {
+		return o, nil
+	}
+	o.Snap(o.FocusedWindow, corner)
+	return o, nil
 }

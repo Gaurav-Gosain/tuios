@@ -298,6 +298,13 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 
+	// Arm the screen saver's idle timer for a session nobody has typed in yet.
+	// Without this a tuios left alone from the moment it opened would never
+	// start one, because arming otherwise hangs off input.
+	if cmd := m.armScreensaver(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// Listen for state sync from other clients (daemon/SSH/web mode)
 	if m.StateSyncChan != nil {
 		cmds = append(cmds, ListenForStateSync(m.StateSyncChan))
@@ -698,6 +705,18 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		m.renderSkipped = false
 		return m, autoScrollTick()
+
+	case screensaverArmMsg:
+		// The deferred idle timer fired. It is not proof of idleness, so the
+		// handler re-checks the elapsed time and re-arms for the remainder.
+		// Nothing renders here unless the saver actually starts.
+		return m, m.handleScreensaverArm()
+
+	case screensaverFrameMsg:
+		// The running saver asking for its next frame. It drives itself rather
+		// than riding the maintenance tick, which is what keeps the idle path
+		// untouched while it is merely armed.
+		return m, m.handleScreensaverFrame()
 
 	case TickerMsg:
 		// Maintenance tick: animations, dock stats, script playback, process cleanup.
@@ -1109,12 +1128,33 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// so state changed by this event (overlay selection, drag offset, etc.)
 		// would not be drawn until some other redraw happened.
 		m.renderSkipped = false
+
+		// The screen saver eats the input that dismisses it. Anything else and
+		// the first keystroke after walking back to the desk lands in a shell
+		// nobody can see yet. The pointer bookkeeping above still ran, so a
+		// button state that changed while the saver was up is not lost.
+		if m.screensaver.active {
+			return m, m.dismissScreensaver()
+		}
+		// Input restarts the idle countdown. The time is taken now, before the
+		// handler runs, so a slow handler does not shorten the next wait.
+		m.screensaver.lastInput = time.Now()
+
 		// Delegate to the registered input handler
 		handler := getInputHandler()
 		if handler == nil {
-			return m, nil
+			return m, m.armScreensaver()
 		}
 		newModel, cmd := handler(msg, m)
+		// Arming happens after the handler, not before, because the keystroke
+		// that switches the saver on in the settings page is itself an input
+		// event: arming first would read the old setting and leave a session
+		// that was just enabled with no timer until someone typed again.
+		// armScreensaver starts one only when none is in flight, so holding a
+		// key down does not queue a timer per repeat.
+		if saverCmd := m.armScreensaver(); saverCmd != nil {
+			cmd = tea.Batch(cmd, saverCmd)
+		}
 
 		// Motion events during a drag or resize arrive far faster than a frame
 		// can be composed: the pointer emits one per cell it crosses, while a

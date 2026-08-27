@@ -35,7 +35,12 @@ type CommandPaletteItem struct {
 	// glyph (sessionPaletteLabel), so the renderer can color the glyph without
 	// putting ANSI into Name, which the fuzzy filter matches raw.
 	AgentState string
-	Action     func(m *OS) (*OS, tea.Cmd)
+	// Keybind marks a row that names one action to rebind. Those rows are
+	// reached only behind the "#" token and are hidden from every other query,
+	// which is what keeps a few hundred of them out of a list of twenty
+	// commands. See splitPaletteKeybinds.
+	Keybind bool
+	Action  func(m *OS) (*OS, tea.Cmd)
 }
 
 // GetCommandPaletteItems returns all available commands for the command palette.
@@ -57,6 +62,14 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 		// Screenshots. Three rows, because the three things a person means by
 		// "take a screenshot" want different gestures and only the first needs
 		// one.
+		{
+			Name:     "Start the screen saver",
+			Shortcut: "S",
+			Category: "View",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.StartScreensaverNow()
+			},
+		},
 		{
 			Name:     "Screenshot this window",
 			Shortcut: "prefix+C",
@@ -538,6 +551,38 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 				return m, nil
 			},
 		},
+		// Keybinds. Three rows onto one overlay, because "change a key" and
+		// "stop tuios taking a key" are the two things people come here for and
+		// neither of them is spelled "keybind manager". Two of the three spend
+		// their meta slot on the "#" token, which is the part nothing else
+		// would ever tell the user about.
+		{
+			Name:     "Keybind manager",
+			Shortcut: "prefix+k",
+			Category: PaletteCategoryKeybind,
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenKeybindManager()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Rebind a key",
+			Shortcut: "or type #close",
+			Category: PaletteCategoryKeybind,
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenKeybindManager()
+				return m, nil
+			},
+		},
+		{
+			Name:     "Unbind a key",
+			Shortcut: "or type #close",
+			Category: PaletteCategoryKeybind,
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenKeybindManager()
+				return m, nil
+			},
+		},
 		{
 			Name:     "Reload config",
 			Category: "Session",
@@ -777,6 +822,24 @@ func paletteStateMatches(item CommandPaletteItem, states []string) bool {
 // fallback, so a row admitted only by its section name can never outrank one
 // that matched what it actually says.
 func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPaletteItem {
+	// The keybind token is resolved first and it is exclusive both ways: "#" is
+	// a search over actions, so it admits nothing else, and every other query
+	// admits no action rows. A few hundred actions leaking into an ordinary
+	// search would bury the commands the palette is for.
+	keybinds, keybindRest := splitPaletteKeybinds(query)
+	kept := make([]CommandPaletteItem, 0, len(items))
+	for _, item := range items {
+		if item.Keybind == keybinds {
+			kept = append(kept, item)
+		}
+	}
+	items = kept
+	if keybinds {
+		// Straight to the matcher rather than back through this function: the
+		// text after the token carries no token of its own, and re-entering
+		// would partition the list a second time and throw away every row.
+		return matchPaletteItems(items, keybindRest)
+	}
 	if states, filtered, rest := splitPaletteQuery(query); filtered {
 		kept := make([]CommandPaletteItem, 0, len(items))
 		for _, item := range items {
@@ -786,8 +849,14 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 		}
 		// The scored matcher runs over what is left, so "@a server" still ranks a
 		// prefix hit above a mid-word one.
-		return FilterCommandPalette(kept, rest)
+		return matchPaletteItems(kept, rest)
 	}
+	return matchPaletteItems(items, query)
+}
+
+// matchPaletteItems is the scored pass, with no token handling: names first,
+// then rows admitted only by their category.
+func matchPaletteItems(items []CommandPaletteItem, query string) []CommandPaletteItem {
 	if query == "" {
 		return items
 	}

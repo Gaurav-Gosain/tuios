@@ -475,9 +475,19 @@ func (m *OS) settingsCategories() []settingsCategory {
 		}),
 	}
 
+	screensaver := settingsCategory{
+		Name: "Saver",
+		Items: m.resolveRows([]settingsRow{
+			opt("screensaver.enabled"),
+			opt("screensaver.idle_minutes"),
+			opt("screensaver.effect"),
+			opt("screensaver.while_busy"),
+		}),
+	}
+
 	return []settingsCategory{
 		appearance, sidebar, dock, behavior,
-		notifications, startup, screenshot, advanced, daemon, tape,
+		notifications, startup, screenshot, screensaver, advanced, daemon, tape,
 	}
 }
 

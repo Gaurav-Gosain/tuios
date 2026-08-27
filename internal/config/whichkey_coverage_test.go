@@ -14,6 +14,8 @@ func whichKeyRowKeys(key string) []string {
 		return []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
 	case "1-9":
 		return []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}
+	case "1-4":
+		return []string{"1", "2", "3", "4"}
 	case "Shift+1-9":
 		return strings.Split("!@#$%^&*(", "")
 	case "Shift+M":
@@ -39,8 +41,11 @@ func normalizeWhichKey(k string) string {
 }
 
 // prefixTables pairs every which-key panel with the config section it claims to
-// describe. "layout" has no section of its own: its two rows are handled inline
-// by the layout prefix, so it is checked for phantom rows only.
+// describe.
+//
+// "layout" was left out while its rows were handled inline, which meant its
+// panel was the one prefix nothing checked. It binds corner snapping now, so it
+// is checked like the rest.
 var prefixTables = []struct {
 	name    string
 	section func(*UserConfig) map[string][]string
@@ -51,6 +56,7 @@ var prefixTables = []struct {
 	{"workspace", func(c *UserConfig) map[string][]string { return c.Keybindings.WorkspacePrefix }},
 	{"debug", func(c *UserConfig) map[string][]string { return c.Keybindings.DebugPrefix }},
 	{"tape", func(c *UserConfig) map[string][]string { return c.Keybindings.TapePrefix }},
+	{"layout", func(c *UserConfig) map[string][]string { return c.Keybindings.LayoutPrefix }},
 }
 
 // TestWhichKeyTablesMatchTheKeymap is the guard that keeps the which-key panels

@@ -308,6 +308,10 @@ type OS struct {
 	// tickStats records how the maintenance tick spent itself so the idle
 	// benchmark and idle e2e can prove ticks stay cheap when nothing moves.
 	tickStats tickStats
+	// screensaver is the idle animation. It deliberately adds nothing to the
+	// maintenance tick: arming is one deferred timer and the running animation
+	// drives its own frames. See screensaver.go.
+	screensaver screensaverState
 	// lastInteractionRender is when a drag/resize motion event last produced a
 	// frame. Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.
@@ -626,6 +630,11 @@ type OS struct {
 	// the difference between a palette that costs nothing to leave open and one
 	// that does not.
 	PaletteItems []CommandPaletteItem
+	// PaletteKeybindItems holds the one-row-per-action keybind entries, built
+	// when the palette opens. They are reached only behind the "#" token (see
+	// splitPaletteKeybinds): a few hundred rows in the palette's default list
+	// would bury the twenty commands it is actually for.
+	PaletteKeybindItems []CommandPaletteItem
 	// Launcher overlay: the programs a session can start, which is a separate
 	// list from the palette's commands (see launcher.go for why).
 	ShowLauncher     bool
