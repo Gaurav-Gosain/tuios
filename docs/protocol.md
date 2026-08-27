@@ -492,6 +492,21 @@ Params:
   plain text.
 - `scrollback` (optional bool): alias for `source: "recent"`.
 - `ansi` (optional bool): alias for `styled`.
+- `resolved` (optional bool): rewrite ANSI index colours to 24-bit RGB so the
+  capture matches what a themed client paints. Index colours are the SGR forms
+  `30-37`/`90-97` (foreground), `40-47`/`100-107` (background) and
+  `38;5;n`/`48;5;n`; each maps through the palette when it names one of the
+  theme's sixteen, and otherwise through the fixed formulas of the standard
+  256-colour cube (indices 16-231) and grey ramp (232-255), which every
+  consumer draws identically. True colour (`38;2;r;g;b`) passes through
+  untouched, as does any parameter that is not a plain integer: a colon-coded
+  sub-parameter such as `4:3` (curly underline) travels verbatim instead of
+  being flattened into another attribute. Asking for `resolved` implies
+  styling, so the reply reports `styled: true`. Default is `false`.
+- `palette` (optional []string): the 16 hex colours (`#rrggbb`) a client's
+  theme paints indices 0-15 with, used by a `resolved` capture. When present it
+  must have exactly 16 entries; anything else is rejected with
+  `invalid_params`. Absent, `resolved` falls back to the xterm defaults.
 - `lines` (optional int): when greater than zero and no region is given, keep
   only the last N lines.
 - `start`, `end` (optional ints): a 1 based inclusive line region. When set, the
@@ -507,6 +522,18 @@ Response:
 
 ```json
 {"result": {"type": "pane_content", "source": "recent", "styled": false, "content": "..."}}
+```
+
+Without `resolved`, a `styled` capture emits the colours exactly as the guest
+sent them: a program that draws with SGR `31` comes back as `\x1b[31m`, and the
+consumer resolves that index against its own palette. That is the intended
+contract: appearance is client-owned and the daemon has no theme. `resolved`
+exists for consumers that render the capture verbatim and therefore need the
+colours already resolved; it takes the palette explicitly so the daemon still
+knows nothing about themes.
+
+```json
+{"verb": "capture-pane", "params": {"session": "work", "source": "visible", "styled": true, "resolved": true, "palette": ["#45475a", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5", "#bac2de", "#585b70", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5", "#a6adc8"]}}
 ```
 
 Content is physical rows, not logical lines: a line longer than the pane width
