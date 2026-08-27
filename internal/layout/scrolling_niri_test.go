@@ -39,20 +39,39 @@ func TestAColumnRemembersTheWindowItWasFocusedOn(t *testing.T) {
 // Closing a window above the active one keeps the column on the same window;
 // closing the active one falls to the window below it, which is where the eye
 // already is.
+//
+// The active window has to be somewhere other than the bottom of the stack for
+// this to say anything. With the active index at the end, clamping it back
+// inside the shortened list lands on the right window by luck, and the test
+// passes with the index tracking taken out.
+//
+// NEGATIVE CONTROL: with the Active adjustment removed from RemoveWindow, the
+// first case reports window 3 instead of the window 2 the column was on.
 func TestClosingInAStackKeepsTheColumnOnAWindow(t *testing.T) {
 	s := NewScrollingLayout()
 	s.AddColumn(1)
-	s.Columns[0].WindowIDs = []int{1, 2, 3}
-	s.Columns[0].Active = 2 // window 3
+	s.Columns[0].WindowIDs = []int{1, 2, 3, 4}
+	s.Columns[0].Active = 1 // window 2, with windows above and below it
 
 	s.RemoveWindow(1)
-	if got := s.GetFocusedWindowID(); got != 3 {
-		t.Errorf("closing the window above left the column on %d, want 3", got)
+	if got := s.GetFocusedWindowID(); got != 2 {
+		t.Errorf("closing the window above left the column on %d, want the 2 it was on", got)
 	}
 
+	s.RemoveWindow(2)
+	if got := s.GetFocusedWindowID(); got != 3 {
+		t.Errorf("closing the focused window left the column on %d, want the 3 below it", got)
+	}
+
+	s.RemoveWindow(4)
+	if got := s.GetFocusedWindowID(); got != 3 {
+		t.Errorf("closing the window below left the column on %d, want 3", got)
+	}
+
+	// The last window out empties the column, which takes the column with it.
 	s.RemoveWindow(3)
-	if got := s.GetFocusedWindowID(); got != 2 {
-		t.Errorf("closing the focused window left the column on %d, want 2", got)
+	if len(s.Columns) != 0 {
+		t.Errorf("%d columns left after the last window closed", len(s.Columns))
 	}
 }
 

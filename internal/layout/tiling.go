@@ -36,6 +36,15 @@ func spans(origin, total, n, gap int) []span {
 	if n == 1 {
 		return []span{{Pos: origin, Size: max(total, 1)}}
 	}
+	// A region too tight to hold the asked-for gaps gives up ground first. A
+	// gap is only ever spacing; a share pushed past the end of the extent is a
+	// pane drawn outside the region, which is the same class of fault as the
+	// overlap above. One cell per neighbour is the floor, and below that - fewer
+	// cells in the extent than neighbours to divide it between - there is no
+	// arrangement at all.
+	if total-gap*(n-1) < n {
+		gap = max((total-n)/(n-1), 0)
+	}
 	avail := total - gap*(n-1)
 	base, rem := 1, 0
 	if avail >= n {
@@ -148,9 +157,6 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 		// branch of its own any more: it was the same arithmetic written twice,
 		// and the copy did not get the fixes the general path got.
 		cols := gridColumns(n)
-		if n == 4 {
-			cols = 2
-		}
 		rowCount := (n + cols - 1) / cols
 		rows := spans(topMargin, usableHeight, rowCount, gap)
 

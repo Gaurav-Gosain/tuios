@@ -282,21 +282,19 @@ func isBoxDrawing(r rune) bool {
 	return (r >= 0x2500 && r <= 0x257F) || r == '|' || r == '-'
 }
 
-// TestGapBetweenBorderedPanesIsEmptyGround is the regression for a divider
-// drawn down the middle of a gap between two panes that both still have their
-// own borders.
+// TestGapBetweenBorderedPanesIsEmptyGround holds appearance.gap to i3's inner
+// gap: ground between the panes. With shared borders off, each pane draws its
+// own box, so the cells between two of them are that pane's border, then the
+// ground, then the other pane's border - and nothing else.
 //
-// appearance.gap is i3's inner gap: ground between the panes. With shared
-// borders off, each pane draws its own box, so the cells between two of them
-// are that pane's border, then the ground, then the other pane's border - and
-// nothing else. The BSP path asked the tree for its splits and the tree knows
-// the gap but not what the panes look like, so it offered a divider and the
-// overlay drew it: three vertical rules where the user asked for two blank
-// columns. The master-stack path never had the bug, because it reads its splits
-// back off panes it only collects while they are borderless.
-//
-// Asserted on the composed frame rather than on the split list, because the
-// split list is what was wrong and a frame is where a person saw it.
+// The frame has always been right here, on both tilers: View only asks for the
+// separator overlay when the panes are borderless, so nothing ever drew a rule
+// down the middle of a gap. What was wrong was one step further back.
+// separatorSplits asked the tree, and the tree knows the gap but not what the
+// panes look like, so asked directly it handed out a divider for a pane that
+// had its own border. The last case below is the one that catches that; the
+// frame cases are the property it was protecting, stated where a person sees
+// it.
 func TestGapBetweenBorderedPanesIsEmptyGround(t *testing.T) {
 	for _, mode := range []string{LayoutModeBSP, LayoutModeMasterStack} {
 		for _, gap := range []int{1, 2, 3} {
@@ -338,6 +336,15 @@ func TestGapBetweenBorderedPanesIsEmptyGround(t *testing.T) {
 				}
 				if checked == 0 {
 					t.Fatal("no gap cell was examined, so this proves nothing")
+				}
+
+				// The answer at its source, which is what the frame above
+				// cannot see. A divider stands in for the borders two panes
+				// gave up; panes still drawing their own have nothing to share,
+				// so there is no divider to offer whatever the gap is.
+				if splits := m.separatorSplits(); len(splits) != 0 {
+					t.Fatalf("separatorSplits offered %d dividers for panes that draw their own borders",
+						len(splits))
 				}
 			})
 		}
@@ -415,6 +422,72 @@ func TestScrollingColumnsHonourThePaneGap(t *testing.T) {
 				if got := cols[i].X - (prev.X + prev.Width); got != gap {
 					t.Errorf("%d cells between column %d and column %d, want %d", got, i-1, i, gap)
 				}
+			}
+		})
+	}
+}
+
+// TestScrollingColumnsShowTheGapOnScreen is the scrolling gap on the composed
+// frame rather than on the rectangles.
+//
+// appearance.gap did nothing at all in this mode: the column gap was a field in
+// the layout that nothing had ever set, and the documentation carried it as a
+// limitation. So the evidence that it works now has to be the frame a person
+// looks at. Each column draws its own border, so the cells between two of them
+// are that border, then the asked-for ground, then the other border.
+func TestScrollingColumnsShowTheGapOnScreen(t *testing.T) {
+	for _, gap := range []int{0, 2, 3} {
+		t.Run(fmt.Sprintf("gap=%d", gap), func(t *testing.T) {
+			m := modeOS(t, LayoutModeScrolling, false, gap, 2, 160, 48)
+			marks := []rune{'A', 'B'}
+			for i, w := range m.Windows {
+				fillGuest(w, marks[i])
+			}
+			rows := frameRows(m)
+
+			left, right := m.Windows[0], m.Windows[1]
+			if left.X > right.X {
+				left, right = right, left
+			}
+			if got := right.X - (left.X + left.Width); got != gap {
+				t.Fatalf("%d cells between the two columns, want %d", got, gap)
+			}
+
+			// The column edges themselves must be drawn, or "the ground is
+			// blank" would be true of a frame with nothing on it.
+			checkedEdges := 0
+			for y := max(left.Y, right.Y) + 1; y < min(left.Y+left.Height, right.Y+right.Height)-1; y++ {
+				if y >= len(rows) || left.X+left.Width-1 >= len(rows[y]) {
+					break
+				}
+				if !isBoxDrawing(rows[y][left.X+left.Width-1]) {
+					t.Fatalf("row %d column %d is %q, want the left column's own border",
+						y, left.X+left.Width-1, string(rows[y][left.X+left.Width-1]))
+				}
+				checkedEdges++
+			}
+			if checkedEdges == 0 {
+				t.Fatal("no row showed the columns side by side, so this proves nothing")
+			}
+
+			if gap == 0 {
+				return // nothing between them to look at
+			}
+			checked := 0
+			for y := max(left.Y, right.Y) + 1; y < min(left.Y+left.Height, right.Y+right.Height)-1; y++ {
+				if y >= len(rows) {
+					break
+				}
+				for x := left.X + left.Width; x < right.X && x < len(rows[y]); x++ {
+					checked++
+					if rows[y][x] != ' ' {
+						t.Fatalf("row %d column %d between the columns reads %q: appearance.gap is empty ground",
+							y, x, string(rows[y][x]))
+					}
+				}
+			}
+			if checked != gap*checkedEdges {
+				t.Fatalf("%d gap cells examined over %d rows at a gap of %d", checked, checkedEdges, gap)
 			}
 		})
 	}
