@@ -34,6 +34,12 @@ func TestSkillIsEmbeddedFromTheRepoFile(t *testing.T) {
 // TestSkillFlagPrintsTheSkill runs the root command with --skill and checks it
 // writes the skill and nothing else, without reaching the code that would draw
 // an interface.
+//
+// The pipe is drained while the command runs, not after it returns. A pipe holds
+// 64KB and the skill passed that, so a reader that waits for Execute deadlocks:
+// the write blocks with the buffer full and the only thing that would empty it
+// is the read that has not started. Nothing about the claim changes, and the
+// test no longer fails the day the document gets longer.
 func TestSkillFlagPrintsTheSkill(t *testing.T) {
 	read, write, err := os.Pipe()
 	if err != nil {
@@ -43,20 +49,30 @@ func TestSkillFlagPrintsTheSkill(t *testing.T) {
 	os.Stdout = write
 	defer func() { os.Stdout = stdout }()
 
+	type capture struct {
+		out []byte
+		err error
+	}
+	done := make(chan capture, 1)
+	go func() {
+		out, err := io.ReadAll(read)
+		done <- capture{out: out, err: err}
+	}()
+
 	root := newRootCommand()
 	root.SetArgs([]string{"--skill"})
 	runErr := root.Execute()
 	_ = write.Close()
 
-	printed, err := io.ReadAll(read)
-	if err != nil {
-		t.Fatalf("read stdout: %v", err)
+	got := <-done
+	if got.err != nil {
+		t.Fatalf("read stdout: %v", got.err)
 	}
 	if runErr != nil {
 		t.Fatalf("tuios --skill failed: %v", runErr)
 	}
-	if string(printed) != skills.TUIOS {
-		t.Errorf("--skill printed %d bytes, want the %d-byte skill", len(printed), len(skills.TUIOS))
+	if string(got.out) != skills.TUIOS {
+		t.Errorf("--skill printed %d bytes, want the %d-byte skill", len(got.out), len(skills.TUIOS))
 	}
 }
 
