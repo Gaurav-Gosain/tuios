@@ -63,6 +63,7 @@ var settingLabels = map[string]string{
 	"appearance.animations_enabled":     "Animations",
 	"appearance.confirm_quit":           "Confirm quit",
 	"appearance.session_colors":         "Session colors",
+	"appearance.links":                  "Links",
 	"appearance.dock_pill_caps":         "Pill caps",
 	"appearance.dock_workspace_tabs":    "Workspace tabs",
 	"appearance.dock_workspace_tooltip": "Workspace name on hover",

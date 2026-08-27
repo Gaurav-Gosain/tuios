@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"charm.land/ssh"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -365,6 +366,13 @@ type OS struct {
 	// windowButtonHover is the window whose controls the pointer is on, empty
 	// for none. The dots style reveals its symbols on it.
 	windowButtonHover string
+	// linkHover is the run of pane cells the pointer is on, and linkHoverOn
+	// whether there is one. Gesture-scoped runtime state, resolved from arriving
+	// motion and never from a frame. The render loop reads it to underline the
+	// run, the label reads it to name the target, and the click handler reads it
+	// to decide what a press on pane content means. See link_pointer.go.
+	linkHover   PaneLink
+	linkHoverOn bool
 	// Reused per-frame scratch for graphics placement refresh (avoids per-frame allocs)
 	kittyPosMap     map[string]*WindowPositionInfo // Reused map for kitty placement refresh
 	kittyPosBacking []WindowPositionInfo           // Backing storage for kittyPosMap values
@@ -783,6 +791,14 @@ type OS struct {
 	// and whether the label has been drawn. Gesture-scoped runtime state; the
 	// Shown latch is also the tick gate.
 	Tooltip tooltipState
+	// filesView is the rail's file view: the directory it is listing, what is in
+	// it, and the pane it was opened from. Zero when the rail is on its three
+	// sections, which is every frame nobody has asked for a listing. See
+	// sidebar_files.go.
+	filesView fileViewState
+	// sidebarPendingCmd is the command the last rail gesture produced, parked
+	// because SidebarClick answers a bool. Drained by the click handler.
+	sidebarPendingCmd tea.Cmd
 	// SidebarPeek is the session the terminals section is previewing while the
 	// pointer or the rail cursor rests on its row. Gesture-scoped runtime state
 	// like the marquee: never persisted, cleared by the same motion stream that

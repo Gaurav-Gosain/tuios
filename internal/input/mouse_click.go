@@ -54,7 +54,11 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// its band is the sidebar's (focus a window, switch or expand a session, or,
 	// on right-click, open the context menu), never the pane it sits in front of.
 	if o.SidebarActive() && o.SidebarClick(X, Y, msg.Button == tea.MouseRight) {
-		return o, nil
+		// Two rows of the rail's file view answer with a command rather than
+		// with a state change: copying a path is a clipboard write. SidebarClick
+		// reports only whether it consumed the press, so the command is parked
+		// on the model and picked up here.
+		return o, o.TakeSidebarCmd()
 	}
 
 	// A click outside the rail is intent to leave it: the pane the user clicked
@@ -245,6 +249,27 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.Windows[clickedWindowIndex].HasSelection() {
 			o.OpenSelectionMenu(X, Y, clickedWindowIndex)
 			return o, nil
+		}
+	}
+
+	// Shift and the left button on a link acts on it.
+	//
+	// Shift is the terminal's own "this click is mine, not the program's"
+	// modifier, which xterm has meant by it for decades, so it is the one
+	// modifier a user already expects to reach past a program that is tracking
+	// the mouse. That is also why this sits above the forwarding below rather
+	// than under it: holding shift is the user saying the click is tuios's.
+	//
+	// A plain click is deliberately not this. A left press on a pane is already
+	// how you focus it, start typing in it, and select text in it, and a browser
+	// opening on top of any of those three would be a gesture nobody asked for
+	// landing on text that merely looks like an address.
+	if msg.Button == tea.MouseLeft && msg.Mod == tea.ModShift {
+		if link, ok := o.LinkAt(X, Y); ok {
+			if clickedWindowIndex != -1 {
+				o.FocusWindow(clickedWindowIndex)
+			}
+			return o, o.OpenLink(link.URL)
 		}
 	}
 

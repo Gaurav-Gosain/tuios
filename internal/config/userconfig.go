@@ -148,6 +148,7 @@ type DaemonConfig struct {
 type AppearanceConfig struct {
 	BorderStyle          string  `toml:"border_style"`           // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
 	ZenMode              string  `toml:"zen_mode"`               // Zen mode: disabled, always, mouse (default: disabled)
+	Links                string  `toml:"links"`                  // Links tuios acts on: off, marked, all (default: all)
 	HideWindowButtons    bool    `toml:"hide_window_buttons"`    // Hide window control buttons (minimize, maximize, close)
 	WindowButtonStyle    string  `toml:"window_button_style"`    // Window control style: pill, dots (default: pill)
 	WindowButtonPosition string  `toml:"window_button_position"` // Which end of the title bar the window controls sit on: right, left (default: right)
@@ -242,6 +243,26 @@ const (
 
 // ZenModeModes lists the valid values for appearance.zen_mode.
 var ZenModeModes = []string{ZenModeDisabled, ZenModeAlways, ZenModeMouse}
+
+// Link policies. See AppearanceConfig.Links.
+//
+// The three values answer one question: what counts as a link the pointer may
+// pick up. A program that emits OSC 8 has said outright that a run of cells is
+// a link and where it points, so "marked" trusts only that. Almost no program
+// does, though, and the links a person actually reads in a pane are plain text,
+// so "all" also finds bare http, https and file URLs. "off" is for anyone who
+// wants the pointer to leave pane content alone.
+const (
+	// LinksOff finds no links at all.
+	LinksOff = "off"
+	// LinksMarked finds only OSC 8 hyperlinks.
+	LinksMarked = "marked"
+	// LinksAll also finds bare http, https and file URLs in plain text.
+	LinksAll = "all"
+)
+
+// LinkModes lists the valid values for appearance.links.
+var LinkModes = []string{LinksOff, LinksMarked, LinksAll}
 
 // Window control styles. See AppearanceConfig.WindowButtonStyle.
 const (
@@ -392,6 +413,7 @@ func DefaultConfig() *UserConfig {
 		Appearance: AppearanceConfig{
 			BorderStyle:          "rounded",
 			ZenMode:              ZenModeDisabled,
+			Links:                LinksAll,
 			HideWindowButtons:    false,
 			WindowButtonStyle:    WindowButtonStylePill,
 			WindowButtonPosition: WindowButtonPositionRight,
@@ -960,6 +982,10 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 		cfg.Appearance.ZenMode = defaultCfg.Appearance.ZenMode
 	}
 
+	if cfg.Appearance.Links == "" {
+		cfg.Appearance.Links = defaultCfg.Appearance.Links
+	}
+
 	if cfg.Appearance.DockbarPosition == "" {
 		cfg.Appearance.DockbarPosition = defaultCfg.Appearance.DockbarPosition
 	}
@@ -1072,6 +1098,14 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 		ZenMode = cfg.Appearance.ZenMode
 	} else if cfg.Appearance.ZenMode != "" {
 		ZenMode = ZenModeDisabled
+	}
+
+	// Links takes the same shape: a typo falls back to the default rather than
+	// leaving the pointer with no policy at all.
+	if slices.Contains(LinkModes, cfg.Appearance.Links) {
+		Links = cfg.Appearance.Links
+	} else if cfg.Appearance.Links != "" {
+		Links = LinksAll
 	}
 
 	// DockbarPosition defaults to bottom.

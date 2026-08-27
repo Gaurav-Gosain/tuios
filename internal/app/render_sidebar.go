@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -68,6 +69,25 @@ const (
 	// sidebarRowCollapse is the footer's collapse toggle. Like the header's
 	// controls it is narrower than its line, so it carries its own columns.
 	sidebarRowCollapse
+	// sidebarRowFiles is the terminals header's control that puts the rail into
+	// its file view. It sits beside the "+" and is the only way in from the
+	// pointer.
+	sidebarRowFiles
+	// The rows of the file view itself. They only exist while the rail is in
+	// that mode, which is also when none of the rows above do: the mode replaces
+	// the three sections rather than joining them. See sidebar_files.go.
+	//
+	// sidebarRowFileBack is the header control that returns to the sections.
+	sidebarRowFileBack
+	// sidebarRowFileCd is the control that sends a cd to the pane the view was
+	// opened from. It is drawn only when there is such a pane.
+	sidebarRowFileCd
+	// sidebarRowFileUp is the ".." row, drawn everywhere but at the root.
+	sidebarRowFileUp
+	// sidebarRowFileEntry is one name in the listing. It carries the entry's
+	// index in the WindowIndex field, which is the only integer a row hit has;
+	// nothing in this mode points at a window, so the field is free.
+	sidebarRowFileEntry
 )
 
 // sidebarAddGlyph is the mark both add controls wear. One cell, so it costs a
@@ -774,6 +794,18 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		return m.sidebarStripLines(sessions, w, cw, height, topMargin, sidebarX, pal, edgeLeft)
 	}
 
+	// The file view takes the whole rail, so it leaves before any of the section
+	// machinery below runs: no budget, no place table, no per-section scroll.
+	// That is the entire cost of the mode being a mode, and it is why the three
+	// sections lay out identically whether or not the mode exists.
+	//
+	// It is checked after the collapsed strip and not before, so a rail folded to
+	// three columns keeps drawing the strip. A listing cannot be drawn in three
+	// columns, and OpenFileView refuses to enter the mode there for that reason.
+	if m.filesView.Open {
+		return m.sidebarFilesLines(w, cw, height, topMargin, sidebarX, contentX0, pal, compose, blank), w
+	}
+
 	// The keyboard cursor tracks a row by identity, not by index, so it survives a
 	// relayout: the target is the session the last action asked to follow, else
 	// the nav row the cursor was on last frame. Rows matching it draw the same
@@ -1370,6 +1402,13 @@ func (m *OS) sidebarCollapseGlyph(variant int) (glyph string, ok bool) {
 // it makes; leaving a duplicate down here would have been two affordances for
 // one action, which is worse than one in the wrong place.
 //
+// It now carries a second control, "files", and the paragraph above is the test
+// it had to pass. "+ new" was a section's action pinned outside its section,
+// which is why it read as belonging to whatever happened to sit above it. This
+// one is not a section's action at all: the file view replaces the whole rail,
+// so the row that already holds the rail's own toggle is exactly where it
+// belongs, and there is no section it could have been put inside instead.
+//
 // The collapsed strip draws its own controls; see sidebar_strip.go.
 func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 	hoverLine, hoverX int, isCursor func(sidebarRowKind) bool,
@@ -1394,6 +1433,24 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 	line := 0
 	items := []placed{{sidebarFooterZone{Kind: sidebarRowCollapse, Line: line, X0: facing, X1: facing + stepW}, stepGlyph}}
 
+	// "files" hugs the opposite corner from the toggle, so the two controls sit
+	// at the ends of the row rather than next to each other, and neither can be
+	// clicked by aiming at the other. It is dropped rather than crowded when the
+	// rail is too narrow to hold both with a cell between them: a control the
+	// pointer cannot separate from its neighbour is worse than one that is not
+	// there, and the file view is also reachable by clicking a folder link.
+	filesX := 1
+	if config.SidebarPosition == "right" {
+		filesX = max(cw-1-sidebarFilesLabelW, 1)
+	}
+	filesEnd := filesX + sidebarFilesLabelW
+	if filesEnd < facing-1 || filesX > facing+stepW {
+		items = append(items, placed{
+			sidebarFooterZone{Kind: sidebarRowFiles, Line: line, X0: filesX, X1: filesEnd},
+			sidebarFilesLabel,
+		})
+	}
+
 	// Cell-addressed rather than spliced into a rendered string: a zone's escape
 	// sequences would make byte offsets lie to any zone after it.
 	cells := make([][]string, line+1)
@@ -1403,6 +1460,13 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 			cells[i][c] = " "
 		}
 	}
+	// Left to right, because the rail publishes its rectangles in drawn order
+	// and a row's targets are drawn left to right. The two controls hug opposite
+	// corners, so which of them is built first depends on which side the rail is
+	// on, and recording them in construction order put the outer one's rectangle
+	// before the inner one's on a left-hand rail.
+	slices.SortFunc(items, func(a, b placed) int { return a.zone.X0 - b.zone.X0 })
+
 	zones := make([]sidebarFooterZone, 0, len(items))
 	for _, it := range items {
 		fg := pal.FgMute

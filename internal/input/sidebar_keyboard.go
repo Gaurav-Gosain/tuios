@@ -121,5 +121,9 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case sidebarActExit:
 		o.ExitSidebarFocus()
 	}
-	return o, nil
+	// Two rows of the rail's file view answer with a command rather than with a
+	// state change: copying a path is a clipboard write. The switch above cannot
+	// return one, so it parks it on the model and it is picked up here, the same
+	// way the click handler picks it up.
+	return o, o.TakeSidebarCmd()
 }

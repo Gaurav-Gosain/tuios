@@ -92,6 +92,11 @@ var optionSpecs = []Option{
 		Accepted:    ZenModeModes, Default: ZenModeDisabled,
 	},
 	{
+		Path: "appearance.links", Type: OptionString, Section: "appearance",
+		Description: "Links the pointer picks up: off, only marked links, or plain URLs too",
+		Accepted:    LinkModes, Default: LinksAll,
+	},
+	{
 		Path: "appearance.hide_window_buttons", Type: OptionBool, Section: "appearance",
 		Description: "Hide the minimize, maximize and close buttons",
 		Default:     "false",

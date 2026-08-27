@@ -151,6 +151,13 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Update pointer shape based on what we're hovering over (OSC 22)
 	o.UpdatePointerForPosition(mouse.X, mouse.Y)
 
+	// A link in pane content, which is the one hover that comes from what a
+	// program printed rather than from where the chrome is. It runs after the
+	// shape above so the border and corner shapes keep their cells, and before
+	// the guest forwarding below so a pane whose program is tracking the mouse
+	// is left alone: TrackLinkPointer applies that test itself.
+	o.TrackLinkPointer(mouse.X, mouse.Y)
+
 	// Focus follows the mouse when the user opted in: the pane under the cursor
 	// takes focus without a click and without entering terminal mode (clicking
 	// is what starts typing). Gestures in progress keep their window, chrome

@@ -135,6 +135,16 @@ func (m *OS) tapeAutorunEnabled() bool {
 // It returns the debounce command (or nil), and is a no-op that returns nil for
 // background windows, the off mode, and remote (SSH) directories.
 func (m *OS) onCwdChange(msg CwdChangedMsg) tea.Cmd {
+	// Record it on the window first, ahead of every gate below.
+	//
+	// Those gates are the tape detector's, and they are narrow on purpose: it
+	// only cares about the focused pane, and only while its own feature is on.
+	// The directory itself is a fact about the pane that other surfaces want
+	// whether or not the tape detector is running, and folding the recording
+	// into the detector's conditions is how the rail's file view would have come
+	// out empty for anyone with tape autorun off.
+	m.recordWindowCwd(msg.WindowID, msg.Cwd)
+
 	if !m.tapeAutorunEnabled() {
 		return nil
 	}
