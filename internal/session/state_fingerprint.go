@@ -143,6 +143,7 @@ func StateFingerprint(s *SessionState) uint64 {
 		str("geometry")
 		flag(s.PaneGeometry.SharedBorders)
 		num(s.PaneGeometry.PaneGap)
+		num(s.PaneGeometry.ScrollColumnWidth)
 	}
 
 	return h.Sum64()

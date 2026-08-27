@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -376,11 +377,16 @@ func (m *OS) RestoreWorkspaceLayout(workspace int) {
 		return
 	}
 
-	// Restore master ratio for this workspace (or use default)
+	// Restore the master ratio this workspace was last left at. A workspace
+	// never visited while tiling was on has no entry, and falls back to the
+	// configured ratio rather than to a literal half: with
+	// appearance.master_ratio at 70 the first visit to a workspace used to snap
+	// the split back to 50 and stay there, which reads as the setting being
+	// ignored and is the same surprise for a ratio the resize keys had moved.
 	if ratio, exists := m.WorkspaceMasterRatio[workspace]; exists {
 		m.MasterRatio = ratio
 	} else {
-		m.MasterRatio = 0.5 // Default
+		m.MasterRatio = config.MasterRatioFraction()
 	}
 
 	// Check if we have a saved layout for this workspace

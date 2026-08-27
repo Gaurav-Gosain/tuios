@@ -461,13 +461,19 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 // the layout does not agree with puts the divider somewhere the drag did not
 // ask for.
 func childBounds(node *TileNode, bounds Rect, gap int) (leftBounds, rightBounds Rect) {
-	// The reserved cell between the two children is the drawn separator's, so
-	// the far child starts one past the divider line.
+	// The reserved cells between the two children are the drawn separator's, so
+	// the far child starts gap cells past the divider line.
+	//
+	// The divider is kept far enough inside the rectangle that both children
+	// still have a cell of their own: the near one needs the line to be at least
+	// one past its origin, the far one needs at least one cell past the gap. The
+	// clamp used to reserve a single cell whatever the gap was, so at a gap of
+	// two the far child of a tight region came out zero cells wide and the
+	// layout's safety net had to shove it back inside, on top of its sibling.
 	if node.SplitType == SplitVertical {
 		splitX := bounds.X + int(float64(bounds.W)*node.SplitRatio)
 		if gap > 0 {
-			// Keep the separator cell inside the node's own rectangle.
-			splitX = max(bounds.X+1, min(splitX, bounds.X+bounds.W-2))
+			splitX = max(bounds.X+1, min(splitX, bounds.X+bounds.W-1-gap))
 		}
 		leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: splitX - bounds.X, H: bounds.H}
 		rightBounds = Rect{X: splitX + gap, Y: bounds.Y, W: bounds.X + bounds.W - splitX - gap, H: bounds.H}
@@ -476,7 +482,7 @@ func childBounds(node *TileNode, bounds Rect, gap int) (leftBounds, rightBounds 
 
 	splitY := bounds.Y + int(float64(bounds.H)*node.SplitRatio)
 	if gap > 0 {
-		splitY = max(bounds.Y+1, min(splitY, bounds.Y+bounds.H-2))
+		splitY = max(bounds.Y+1, min(splitY, bounds.Y+bounds.H-1-gap))
 	}
 	leftBounds = Rect{X: bounds.X, Y: bounds.Y, W: bounds.W, H: splitY - bounds.Y}
 	rightBounds = Rect{X: bounds.X, Y: splitY + gap, W: bounds.W, H: bounds.Y + bounds.H - splitY - gap}

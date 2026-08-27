@@ -1,13 +1,86 @@
 // Package layout provides window tiling and layout management for the terminal.
 package layout
 
-import (
-	"github.com/Gaurav-Gosain/tuios/internal/config"
-)
-
 // TileLayout represents the position and size for a tiled window
 type TileLayout struct {
 	X, Y, Width, Height int
+}
+
+// span is one neighbour's place along an axis: where it starts and how far it
+// runs.
+type span struct{ Pos, Size int }
+
+// spans divides an extent between n neighbours, keeping gap cells free between
+// each adjacent pair.
+//
+// The gap comes out of the extent before it is divided, so the shares are even.
+// Taking it out of one side afterwards - which is what this tiler used to do -
+// made the far pane narrower than the near one by the whole gap, on every split
+// and at every pane count.
+//
+// The remainder is spread a cell at a time from the first share rather than
+// handed to the last, so no two neighbours differ by more than one cell. A
+// last pane carrying the whole remainder is visibly the odd one out on a wide
+// screen, and it is the pane a rounding bug hides in.
+//
+// Shares are floored at one cell and never at a fixed minimum. A minimum wider
+// than the share is what pushed a pane past its own rectangle and into its
+// neighbour's, so a workspace holding more panes than fit at a comfortable size
+// drew them overlapping instead of simply smaller. This is the rule the BSP
+// tiler already follows (bsp.go applyLayoutRecursive): tiling never overlaps;
+// when space runs short the panes shrink.
+func spans(origin, total, n, gap int) []span {
+	if n <= 0 {
+		return nil
+	}
+	if n == 1 {
+		return []span{{Pos: origin, Size: max(total, 1)}}
+	}
+	// A region too tight to hold the asked-for gaps gives up ground first. A
+	// gap is only ever spacing; a share pushed past the end of the extent is a
+	// pane drawn outside the region, which is the same class of fault as the
+	// overlap above. One cell per neighbour is the floor, and below that - fewer
+	// cells in the extent than neighbours to divide it between - there is no
+	// arrangement at all.
+	if total-gap*(n-1) < n {
+		gap = max((total-n)/(n-1), 0)
+	}
+	avail := total - gap*(n-1)
+	base, rem := 1, 0
+	if avail >= n {
+		base, rem = avail/n, avail%n
+	}
+	out := make([]span, 0, n)
+	pos := origin
+	for i := range n {
+		size := base
+		if i < rem {
+			size++
+		}
+		out = append(out, span{Pos: pos, Size: size})
+		pos += size + gap
+	}
+	return out
+}
+
+// splitByRatio is spans for two neighbours whose shares are not equal: the
+// first takes ratio of what is left once the gap is reserved. Both sides keep
+// at least one cell, so a ratio at either end of its range cannot produce a
+// pane with nothing in it.
+func splitByRatio(origin, total int, ratio float64, gap int) (span, span) {
+	avail := max(total-gap, 2)
+	near := min(max(int(float64(avail)*ratio), 1), avail-1)
+	return span{Pos: origin, Size: near}, span{Pos: origin + near + gap, Size: avail - near}
+}
+
+// gridColumns is how many columns the grid uses for n panes. Two up to six,
+// three beyond, which keeps a pane roughly as wide as it is tall at the sizes a
+// terminal actually is.
+func gridColumns(n int) int {
+	if n <= 6 {
+		return 2
+	}
+	return 3
 }
 
 // CalculateTilingLayout returns optimal positions for n windows
@@ -17,6 +90,12 @@ type TileLayout struct {
 // same terms as the BSP splitter (bsp.go childBounds). Both layouts hand the
 // separator its own column that way, so neither pane's first column is painted
 // over by the line between them.
+//
+// Every rectangle it returns is inside the region and disjoint from every other
+// one, at any size and any pane count. That is the tiler's whole contract, and
+// it is what the fixed pane minimum this used to enforce broke: on a 51x37
+// terminal seven panes were each grown to twenty columns inside a region that
+// could give them seventeen, and the frame showed panes on top of each other.
 func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin int, masterRatio float64, gap int) []TileLayout {
 	if n == 0 {
 		return nil
@@ -50,159 +129,52 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 		// 25 column panes. Compare against the scaled height so the split
 		// follows the shape on screen, and stack when it is taller.
 		if screenWidth >= usableHeight*cellAspect {
-			masterWidth := int(float64(screenWidth) * masterRatio)
+			near, far := splitByRatio(0, screenWidth, masterRatio, gap)
 			layouts = append(layouts,
-				TileLayout{
-					X:      0,
-					Y:      topMargin,
-					Width:  masterWidth,
-					Height: usableHeight,
-				},
-				TileLayout{
-					X:      masterWidth + gap,
-					Y:      topMargin,
-					Width:  screenWidth - masterWidth - gap,
-					Height: usableHeight,
-				},
+				TileLayout{X: near.Pos, Y: topMargin, Width: near.Size, Height: usableHeight},
+				TileLayout{X: far.Pos, Y: topMargin, Width: far.Size, Height: usableHeight},
 			)
 			break
 		}
-		masterHeight := int(float64(usableHeight) * masterRatio)
+		near, far := splitByRatio(topMargin, usableHeight, masterRatio, gap)
 		layouts = append(layouts,
-			TileLayout{
-				X:      0,
-				Y:      topMargin,
-				Width:  screenWidth,
-				Height: masterHeight,
-			},
-			TileLayout{
-				X:      0,
-				Y:      topMargin + masterHeight + gap,
-				Width:  screenWidth,
-				Height: usableHeight - masterHeight - gap,
-			},
+			TileLayout{X: 0, Y: near.Pos, Width: screenWidth, Height: near.Size},
+			TileLayout{X: 0, Y: far.Pos, Width: screenWidth, Height: far.Size},
 		)
 
 	case 3:
 		// Three windows - one left (master), two right stacked
-		masterWidth := int(float64(screenWidth) * masterRatio)
-		slaveX := masterWidth + gap
-		slaveWidth := screenWidth - slaveX
-		halfHeight := usableHeight / 2
+		master, stack := splitByRatio(0, screenWidth, masterRatio, gap)
+		rows := spans(topMargin, usableHeight, 2, gap)
 		layouts = append(layouts,
-			TileLayout{
-				X:      0,
-				Y:      topMargin,
-				Width:  masterWidth,
-				Height: usableHeight,
-			},
-			TileLayout{
-				X:      slaveX,
-				Y:      topMargin,
-				Width:  slaveWidth,
-				Height: halfHeight,
-			},
-			TileLayout{
-				X:      slaveX,
-				Y:      topMargin + halfHeight + gap,
-				Width:  slaveWidth,
-				Height: usableHeight - halfHeight - gap,
-			},
-		)
-
-	case 4:
-		// Four windows - 2x2 grid
-		halfWidth := screenWidth / 2
-		rightX := halfWidth + gap
-		halfHeight := usableHeight / 2
-		bottomY := topMargin + halfHeight + gap
-		layouts = append(layouts,
-			TileLayout{
-				X:      0,
-				Y:      topMargin,
-				Width:  halfWidth,
-				Height: halfHeight,
-			},
-			TileLayout{
-				X:      rightX,
-				Y:      topMargin,
-				Width:  screenWidth - rightX,
-				Height: halfHeight,
-			},
-			TileLayout{
-				X:      0,
-				Y:      bottomY,
-				Width:  halfWidth,
-				Height: usableHeight - halfHeight - gap,
-			},
-			TileLayout{
-				X:      rightX,
-				Y:      bottomY,
-				Width:  screenWidth - rightX,
-				Height: usableHeight - halfHeight - gap,
-			},
+			TileLayout{X: master.Pos, Y: topMargin, Width: master.Size, Height: usableHeight},
+			TileLayout{X: stack.Pos, Y: rows[0].Pos, Width: stack.Size, Height: rows[0].Size},
+			TileLayout{X: stack.Pos, Y: rows[1].Pos, Width: stack.Size, Height: rows[1].Size},
 		)
 
 	default:
-		// More than 4 windows - create a grid
-		// Calculate optimal grid dimensions
-		cols := 3
-		if n <= 6 {
-			cols = 2
-		}
-		rows := (n + cols - 1) / cols // Ceiling division
+		// A grid. Four windows is the 2x2 case of it, which is why it has no
+		// branch of its own any more: it was the same arithmetic written twice,
+		// and the copy did not get the fixes the general path got.
+		cols := gridColumns(n)
+		rowCount := (n + cols - 1) / cols
+		rows := spans(topMargin, usableHeight, rowCount, gap)
 
-		// The gaps come out of the grid before the cells are sized, so the
-		// tiles still add up to the region.
-		cellWidth := (screenWidth - gap*(cols-1)) / cols
-		cellHeight := (usableHeight - gap*(rows-1)) / rows
-
-		for i := range n {
-			row := i / cols
-			col := i % cols
-
-			// Last row might have fewer windows, so expand them
-			actualCols := cols
-			if row == rows-1 {
-				remainingWindows := n - row*cols
-				if remainingWindows < cols {
-					actualCols = remainingWindows
-					cellWidth = (screenWidth - gap*(actualCols-1)) / actualCols
-				}
+		for row := range rowCount {
+			// The last row carries whatever is left over, which can be fewer
+			// panes than a full row. They share the width between them rather
+			// than leaving a hole where the missing ones would have been.
+			inRow := min(cols, n-row*cols)
+			cells := spans(0, screenWidth, inRow, gap)
+			for col := range inRow {
+				layouts = append(layouts, TileLayout{
+					X:      cells[col].Pos,
+					Y:      rows[row].Pos,
+					Width:  cells[col].Size,
+					Height: rows[row].Size,
+				})
 			}
-
-			layout := TileLayout{
-				X:      col * (cellWidth + gap),
-				Y:      topMargin + row*(cellHeight+gap),
-				Width:  cellWidth,
-				Height: cellHeight,
-			}
-
-			// Adjust last column width to fill screen
-			if col == actualCols-1 {
-				layout.Width = screenWidth - layout.X
-			}
-			// Adjust last row height to fill screen
-			if row == rows-1 {
-				layout.Height = usableHeight - row*(cellHeight+gap)
-			}
-
-			layouts = append(layouts, layout)
 		}
-	}
-
-	// Ensure minimum window size, then keep the widened tile on-screen. Without
-	// the position clamp a tile that was grown to the minimum on a small terminal
-	// would overflow screenWidth/usableHeight and overlap its neighbours.
-	for i := range layouts {
-		if layouts[i].Width < config.DefaultWindowWidth {
-			layouts[i].Width = config.DefaultWindowWidth
-		}
-		if layouts[i].Height < config.DefaultWindowHeight {
-			layouts[i].Height = config.DefaultWindowHeight
-		}
-		layouts[i].X = max(0, min(layouts[i].X, screenWidth-layouts[i].Width))
-		layouts[i].Y = max(topMargin, min(layouts[i].Y, topMargin+usableHeight-layouts[i].Height))
 	}
 
 	return layouts

@@ -114,7 +114,7 @@ func NewOS(opts OSOptions) *OS {
 		// Routed verbs, for the hosts that cannot Send into the program. The
 		// local attach client leaves this unused. See dock_remote.go.
 		RemoteCommandChan: make(chan RemoteCommandMsg, remoteCommandQueue),
-		MasterRatio:       0.5,
+		MasterRatio:       config.MasterRatioFraction(),
 		CurrentWorkspace:  1,
 		NumWorkspaces:     numWorkspaces,
 
@@ -154,8 +154,10 @@ func NewOS(opts OSOptions) *OS {
 		// across the session by state sync; see the field comment in os.go.
 		SharedBorders:           config.SharedBorders,
 		PaneGap:                 config.PaneGap,
+		ScrollColumnWidth:       config.ScrollColumnWidth,
 		lastConfigSharedBorders: config.SharedBorders,
 		lastConfigPaneGap:       config.PaneGap,
+		lastConfigScrollWidth:   config.ScrollColumnWidth,
 	}
 
 	// Sidebar order and expand/collapse state survive restarts; a load failure

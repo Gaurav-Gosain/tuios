@@ -510,6 +510,11 @@ func (m *OS) applyStartupTiling() {
 	if m.UserConfig == nil || !m.UserConfig.Startup.Tiled || m.AutoTiling {
 		return
 	}
+	// The scheme before the switch: ToggleAutoTiling builds the layout the
+	// current mode asks for, so choosing the mode afterwards would build a BSP
+	// tree and then throw it away. An unset or unknown name leaves the mode
+	// alone, which is BSP, the way ApplyLayoutModeName already handles it.
+	m.ApplyLayoutModeName(m.UserConfig.Startup.Layout)
 	m.ToggleAutoTiling()
 }
 
