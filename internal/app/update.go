@@ -315,6 +315,12 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, ListenForClientEvents(m.ClientEventChan))
 	}
 
+	// Listen for the daemon events that end this client (SSH and web mode; the
+	// local attach client Sends the same two messages into its program).
+	if cmd := ListenForDaemonExit(m.daemonExitChan()); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// Listen for verbs the daemon routed here (SSH and web mode; the local
 	// attach client Sends into the program instead).
 	if m.RemoteCommandChan != nil {
@@ -675,6 +681,15 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case PendingCopyMsg:
 		return m, m.HandlePendingCopy(msg.Seq)
+
+	case PasteTimeoutMsg:
+		// The terminal never answered the clipboard query. Say so, because the
+		// alternative is a paste key that looks broken. See clipboard_paste.go.
+		if m.pasteTimedOut(msg) {
+			m.ShowNotification("The terminal did not send the clipboard. Use your terminal's paste key.",
+				"warning", config.NotificationDuration)
+		}
+		return m, nil
 
 	case AutoScrollTickMsg:
 		if !m.AutoScrollActive || m.AutoScrollDir == 0 {

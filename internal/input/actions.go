@@ -689,8 +689,9 @@ func handlePasteClipboard(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.FocusedWindow >= 0 && o.FocusedWindow < len(o.Windows) {
 		focusedWindow := o.GetFocusedWindow()
 		if focusedWindow != nil {
-			// Request clipboard content from Bubbletea
-			return o, tea.ReadClipboard
+			// Ask the terminal for its clipboard, or say why it cannot answer.
+			// See app.RequestHostPaste.
+			return o, o.RequestHostPaste()
 		}
 	}
 	return o, nil

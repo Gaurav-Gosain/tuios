@@ -629,6 +629,16 @@ func (m *OS) chargeRenderCost(d time.Duration) {
 func (m *OS) View() tea.View {
 	var view tea.View
 
+	// The last frame of a remote client that lost its session or its daemon.
+	// It leaves the alternate screen so the reason stays on the user's terminal
+	// or in the browser tab after the program stops, which is the only place an
+	// SSH or web client can put it. See ExitNotice.
+	if notice := m.ExitNotice(); notice != "" {
+		view.SetContent(notice + "\n")
+		view.AltScreen = false
+		return view
+	}
+
 	// Fast path: return cached content when frame-skip determined nothing changed.
 	// This avoids the expensive GetCanvas → ultraviolet render pipeline on idle ticks.
 	if m.renderSkipped && m.cachedViewContent != "" {

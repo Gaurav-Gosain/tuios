@@ -4,6 +4,7 @@ import (
 	"io"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/ssh"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
@@ -111,6 +112,10 @@ func NewOS(opts OSOptions) *OS {
 		PTYDataChan:     make(chan struct{}, 1),
 		StateSyncChan:   make(chan *session.SessionState, 10),
 		ClientEventChan: make(chan ClientEvent, 10),
+		// The two daemon events that end this client. Made here rather than on
+		// first use because the SSH and web hosts write to it from the daemon
+		// read loop, which starts before Init runs. See daemon_exit.go.
+		DaemonExitChan: make(chan tea.Msg, daemonExitQueue),
 		// Routed verbs, for the hosts that cannot Send into the program. The
 		// local attach client leaves this unused. See dock_remote.go.
 		RemoteCommandChan: make(chan RemoteCommandMsg, remoteCommandQueue),
