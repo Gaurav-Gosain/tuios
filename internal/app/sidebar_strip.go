@@ -363,7 +363,7 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 
 	shownSession, peeking := m.sidebarShownSession(sessions)
 	var terminals []sidebarTerminalEntry
-	if config.SidebarShowWindows {
+	if sidebarLayoutHas(sidebarSectionTerminals) {
 		terminals = m.sidebarTerminals(sessions, shownSession)
 	}
 
@@ -376,7 +376,7 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 	// A peeked session with no panes keeps its header, or the group would vanish
 	// and the strip would read as the attached session having none.
 	listed := ""
-	if config.SidebarShowWindows && (len(terminals) > 0 || peeking) {
+	if sidebarLayoutHas(sidebarSectionTerminals) && (len(terminals) > 0 || peeking) {
 		listed = shownSession
 		groups = append(groups, sidebarStripGroup{
 			kind: sidebarStripTerminal, noun: "terminal", total: len(terminals),

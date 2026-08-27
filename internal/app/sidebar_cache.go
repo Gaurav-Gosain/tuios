@@ -122,7 +122,11 @@ func (m *OS) sidebarSignature() uint64 {
 	mixI(m.GetTopMargin())
 	mixI(m.GetRenderWidth())
 	mixS(config.SidebarPosition)
-	mixB(config.SidebarShowWindows)
+	// The layout: which sections are stacked, in what order, with what share,
+	// and where the spacers are. It carries what show_windows used to say, and
+	// it was missing from this key for as long as it has existed: a rail redrawn
+	// after the layout moved and nothing else did was served the old frame.
+	mixS(config.SidebarSections)
 	mixB(config.SidebarShowGlyphs)
 	mixB(config.SidebarShowCounts)
 

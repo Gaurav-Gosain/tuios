@@ -13,13 +13,24 @@ import (
 func withSidebarGlobals(t *testing.T) {
 	t.Helper()
 	e, p, w := SidebarEnabled, SidebarPosition, SidebarWidth
-	sw, sg, sc := SidebarShowWindows, SidebarShowGlyphs, SidebarShowCounts
-	sa, mq, dt := SidebarShowAgents, SidebarMarquee, DockWorkspaceTabs
+	sg, sc, sx := SidebarShowGlyphs, SidebarShowCounts, SidebarSections
+	mq, dt := SidebarMarquee, DockWorkspaceTabs
 	t.Cleanup(func() {
 		SidebarEnabled, SidebarPosition, SidebarWidth = e, p, w
-		SidebarShowWindows, SidebarShowGlyphs, SidebarShowCounts = sw, sg, sc
-		SidebarShowAgents, SidebarMarquee, DockWorkspaceTabs = sa, mq, dt
+		SidebarShowGlyphs, SidebarShowCounts, SidebarSections = sg, sc, sx
+		SidebarMarquee, DockWorkspaceTabs = mq, dt
 	})
+}
+
+// layoutNames is the section names of the live layout, in order, for a test
+// that cares which sections the rail was left with.
+func layoutNames(t *testing.T) []string {
+	t.Helper()
+	var out []string
+	for _, e := range ParseSidebarSections(SidebarSections) {
+		out = append(out, e.Name)
+	}
+	return out
 }
 
 // loadTOML parses src the way LoadUserConfig does, defaults and all, so a test
@@ -54,14 +65,21 @@ sidebar_show_counts = false
 	if !SidebarEnabled || SidebarPosition != "right" || SidebarWidth != 34 {
 		t.Errorf("enabled/position/width = %v/%q/%d, want true/right/34", SidebarEnabled, SidebarPosition, SidebarWidth)
 	}
-	if SidebarShowWindows || SidebarShowGlyphs || SidebarShowCounts {
-		t.Errorf("show windows/glyphs/counts = %v/%v/%v, want all false",
-			SidebarShowWindows, SidebarShowGlyphs, SidebarShowCounts)
+	if SidebarShowGlyphs || SidebarShowCounts {
+		t.Errorf("show glyphs/counts = %v/%v, want both false", SidebarShowGlyphs, SidebarShowCounts)
+	}
+	// sidebar_show_windows is two spellings old now: it folds into the table,
+	// and the table folds it into the layout. The section is gone from the rail
+	// and every other section is where it was.
+	if got := layoutNames(t); slices.Contains(got, "terminals") {
+		t.Errorf("layout = %v, want no terminals section", got)
+	}
+	if got := layoutNames(t); !slices.Contains(got, "sessions") || !slices.Contains(got, "agents") {
+		t.Errorf("layout = %v, want the sections the file never mentioned left alone", got)
 	}
 	// Knobs the old file never mentioned keep their defaults.
-	if !SidebarShowAgents || !SidebarMarquee || !DockWorkspaceTabs {
-		t.Errorf("unmentioned knobs drifted: agents=%v marquee=%v docktabs=%v",
-			SidebarShowAgents, SidebarMarquee, DockWorkspaceTabs)
+	if !SidebarMarquee || !DockWorkspaceTabs {
+		t.Errorf("unmentioned knobs drifted: marquee=%v docktabs=%v", SidebarMarquee, DockWorkspaceTabs)
 	}
 }
 
@@ -90,7 +108,7 @@ width = 20
 // the built-in default alone rather than reading as false.
 func TestSidebarNilTogglesKeepDefaults(t *testing.T) {
 	withSidebarGlobals(t)
-	SidebarShowWindows, SidebarShowAgents, SidebarMarquee, DockWorkspaceTabs = true, true, true, true
+	SidebarMarquee, DockWorkspaceTabs, SidebarSections = true, true, SidebarDefaultSections
 
 	cfg := loadTOML(t, `
 [appearance.sidebar]
@@ -101,9 +119,13 @@ enabled = true
 	}
 	ApplyAppearanceConfig(cfg)
 
-	if !SidebarShowWindows || !SidebarShowAgents || !SidebarMarquee || !DockWorkspaceTabs {
-		t.Errorf("nil toggles overwrote the defaults: windows=%v agents=%v marquee=%v docktabs=%v",
-			SidebarShowWindows, SidebarShowAgents, SidebarMarquee, DockWorkspaceTabs)
+	if !SidebarMarquee || !DockWorkspaceTabs {
+		t.Errorf("nil toggles overwrote the defaults: marquee=%v docktabs=%v", SidebarMarquee, DockWorkspaceTabs)
+	}
+	// An absent toggle takes nothing out of the layout. Folding a nil as though
+	// it were false is the way a migration quietly deletes a section.
+	if SidebarSections != SidebarDefaultSections {
+		t.Errorf("layout = %q, want the shipped %q untouched", SidebarSections, SidebarDefaultSections)
 	}
 }
 
@@ -112,7 +134,7 @@ enabled = true
 // in the settings page survive a reload.
 func TestSidebarExplicitFalseSurvivesApply(t *testing.T) {
 	withSidebarGlobals(t)
-	SidebarShowAgents, SidebarMarquee, DockWorkspaceTabs = true, true, true
+	SidebarMarquee, DockWorkspaceTabs = true, true
 
 	cfg := loadTOML(t, `
 [appearance]
@@ -125,9 +147,19 @@ workspaces = "off"
 `)
 	ApplyAppearanceConfig(cfg)
 
-	if SidebarShowAgents || SidebarMarquee || DockWorkspaceTabs {
-		t.Errorf("explicit false dropped: agents=%v marquee=%v docktabs=%v",
-			SidebarShowAgents, SidebarMarquee, DockWorkspaceTabs)
+	if SidebarMarquee || DockWorkspaceTabs {
+		t.Errorf("explicit false dropped: marquee=%v docktabs=%v", SidebarMarquee, DockWorkspaceTabs)
+	}
+	// show_agents = false is the migration this branch owes anybody whose config
+	// already carries it: the section is off the rail, by way of the layout.
+	if got := layoutNames(t); slices.Contains(got, "agents") {
+		t.Errorf("layout = %v, want no agents section", got)
+	}
+	// And the toggle is consumed, so the next save writes the layout and not the
+	// boolean. Leaving it in the file would fold it again over a layout the user
+	// had since put agents back into.
+	if cfg.Appearance.Sidebar.ShowAgents != nil {
+		t.Errorf("show_agents = %v, want it cleared once folded", *cfg.Appearance.Sidebar.ShowAgents)
 	}
 	// The deprecated key still parses into the struct (a config file written
 	// before it was dropped must not fail to load); nothing reads it any more.

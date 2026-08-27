@@ -19,26 +19,27 @@ func swapBool(t *testing.T, p *bool, v bool) {
 	t.Cleanup(func() { *p = old })
 }
 
-// TestSidebarShowAgentsTogglesSection checks the agents section is drawn by
-// default and gone when the knob is off, leaving the session tree intact.
-func TestSidebarShowAgentsTogglesSection(t *testing.T) {
+// TestSidebarLayoutTogglesAgentsSection checks the agents section is drawn by
+// default and gone when the layout leaves it out, leaving the session tree
+// intact. The layout is now the only switch a section has.
+func TestSidebarLayoutTogglesAgentsSection(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 	if !strings.Contains(sidebarText(t, m), "agents") {
 		t.Fatal("agents section missing with the default config; the test premise is wrong")
 	}
 
-	swapBool(t, &config.SidebarShowAgents, false)
+	withSections(t, "sessions:25,terminals,files:25")
 	m = sidebarTestOS(t, 120, 40, "left")
 	out := sidebarText(t, m)
 	if strings.Contains(out, "agents") {
-		t.Error("show_agents = false still drew the agents section")
+		t.Error("a layout without agents still drew the agents section")
 	}
 	if !strings.Contains(out, "sessions") {
-		t.Error("show_agents = false took the session tree with it")
+		t.Error("a layout without agents took the session tree with it")
 	}
 	for _, h := range m.SidebarHits {
 		if h.Kind == sidebarRowAgent {
-			t.Fatal("show_agents = false left an agent row clickable")
+			t.Fatal("a layout without agents left an agent row clickable")
 		}
 	}
 }

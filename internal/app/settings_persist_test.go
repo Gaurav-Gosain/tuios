@@ -45,12 +45,12 @@ func TestSettingsWriteHappensInTheCommand(t *testing.T) {
 		t.Fatalf("read seeded config: %v", err)
 	}
 
-	swapBool(t, &config.SidebarShowAgents, true)
+	swapBool(t, &config.SidebarFileIcons, true)
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
-	focusSetting(t, m, "Sidebar", "Agents section")
+	focusSetting(t, m, "Sidebar", "File icons")
 	cmd := m.SettingsAdjust(1)
 
-	if config.SidebarShowAgents {
+	if config.SidebarFileIcons {
 		t.Error("the change did not apply live")
 	}
 	mid, err := os.ReadFile(path)
@@ -71,7 +71,7 @@ func TestSettingsWriteHappensInTheCommand(t *testing.T) {
 	if string(after) == string(before) {
 		t.Error("running the save command wrote nothing")
 	}
-	if !strings.Contains(string(after), "show_agents = false") {
+	if !strings.Contains(string(after), "file_icons = false") {
 		t.Errorf("the written config does not carry the change:\n%s", after)
 	}
 }
@@ -81,9 +81,9 @@ func TestSettingsWriteHappensInTheCommand(t *testing.T) {
 // ran and wrote would not be, and nil is the cheaper proof.
 func TestReadOnlySessionHandsBackNoSaveCommand(t *testing.T) {
 	useTempConfig(t)
-	swapBool(t, &config.SidebarShowAgents, true)
+	swapBool(t, &config.SidebarFileIcons, true)
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig(), ConfigReadOnly: true})
-	focusSetting(t, m, "Sidebar", "Agents section")
+	focusSetting(t, m, "Sidebar", "File icons")
 	if cmd := m.SettingsAdjust(1); cmd != nil {
 		t.Error("a read-only session handed back a save command")
 	}
@@ -94,11 +94,11 @@ func TestReadOnlySessionHandsBackNoSaveCommand(t *testing.T) {
 // last, and the file ending up holding the config from before the newer change.
 func TestStaleSaveGivesWayToNewer(t *testing.T) {
 	path := useTempConfig(t)
-	swapBool(t, &config.SidebarShowAgents, true)
+	swapBool(t, &config.SidebarFileIcons, true)
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
-	focusSetting(t, m, "Sidebar", "Agents section")
+	focusSetting(t, m, "Sidebar", "File icons")
 
-	first := m.SettingsAdjust(1) // show_agents -> false
+	first := m.SettingsAdjust(1) // file_icons -> false
 	second := m.SettingsAdjust(1)
 	if first == nil || second == nil {
 		t.Fatal("expected a save command from each change")
@@ -112,9 +112,9 @@ func TestStaleSaveGivesWayToNewer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	want := "show_agents = true"
-	if !config.SidebarShowAgents {
-		want = "show_agents = false"
+	want := "file_icons = true"
+	if !config.SidebarFileIcons {
+		want = "file_icons = false"
 	}
 	if !strings.Contains(string(data), want) {
 		t.Errorf("a stale save overwrote a newer one; wanted %q in:\n%s", want, data)

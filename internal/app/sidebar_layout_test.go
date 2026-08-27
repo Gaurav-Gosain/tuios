@@ -91,6 +91,11 @@ func TestRailLayoutOrdersAndSelectsSections(t *testing.T) {
 // the rail's own rows, and this fails at height 4 with a band at 2..3 on a rail
 // that has two lines.
 //
+// It does not cover who owns a spacer's lines. A band that stops short of the
+// gap leaves the gap unclaimed rather than double-claimed, which is a hole and
+// not an overlap, so this test stays green for it.
+// TestWheelOverASpacerScrollsTheSectionAboveIt is the one that goes red.
+//
 // The control that was tried first (removing the give-up loop from
 // sidebarBudgetLines) leaves this green, because the clamp catches an
 // overrunning budget as well. That budget is measured directly by
@@ -104,6 +109,22 @@ func TestRailSectionsNeverOverlapAtAnyHeight(t *testing.T) {
 		"terminals,files",
 		"agents:50,files:50,sessions,terminals",
 		"sessions:90,terminals:90,files:90,agents:90",
+		// Spacers, which are the entries with no rows to be capped by and so
+		// the ones that could take the rail past its own bottom edge. Every
+		// shape they come in: leading, trailing, in the middle, two at once,
+		// with a share and without, and one asking for more of the rail than
+		// the sections leave.
+		"sessions,spacer,terminals,files",
+		"sessions:25,spacer:20,terminals,files:25,agents:34",
+		"spacer,sessions,terminals",
+		"sessions,terminals,files,spacer",
+		"files,spacer,sessions,spacer,agents",
+		"spacer:90,sessions,terminals,agents",
+		"spacer:50,spacer:50,files,terminals",
+		// And reordered layouts, since the band arithmetic runs in plan order
+		// and the pinned block is the last entry rather than a fixed section.
+		"agents,files,terminals,sessions",
+		"files,agents:20,spacer:15,terminals,sessions:20",
 	} {
 		for h := 4; h <= 40; h++ {
 			withSections(t, spec)
@@ -159,35 +180,81 @@ func TestRailSectionsNeverOverlapAtAnyHeight(t *testing.T) {
 // Negative control, confirmed red: remove the per-section row cap after the
 // ladder, and the "claims lines for rows that do not exist" case fails on the
 // flexible section as soon as the shares leave it more lines than it has rows.
+//
+// The spacer layouts are swept here because a spacer is the one entry with no
+// rows to be capped by: the row cap that holds every other entry inside the
+// rail does not apply to it, so the "never overruns" claim is doing more work
+// on these plans than on the four-section one.
+//
+// It is not where "the spacer gives its lines up first" is checked. That claim
+// is about which entry is shrunk rather than about the total, and taking
+// spacers out of the give-up order leaves this test green because the sections
+// can still give the same lines back. TestSpacerGivesUpItsLinesFirst is the one
+// that goes red for it.
 func TestBudgetNeverOverrunsOrInvents(t *testing.T) {
-	plans := []sidebarSectionPlan{
-		{Section: sidebarSectionSessions, Share: 25},
-		{Section: sidebarSectionTerminals},
-		{Section: sidebarSectionFiles, Share: 25},
-		{Section: sidebarSectionAgents, Share: 34},
-	}
-	for _, agentH := range []int{1, sidebarAgentRowTall} {
-		rowH := []int{1, 1, 1, agentH}
-		for avail := 0; avail <= 24; avail++ {
-			for nS := 0; nS <= 5; nS++ {
-				for nT := 0; nT <= 5; nT++ {
-					for nF := 0; nF <= 5; nF++ {
-						for nA := 0; nA <= 5; nA++ {
-							rows := []int{nS, nT, nF, nA}
-							out := sidebarBudgetLines(avail, plans, rows, rowH)
-							total := 0
-							for i, n := range out {
-								if n < 0 {
-									t.Fatalf("budget(%d, %v, h=%d) = %v has a negative section", avail, rows, agentH, out)
+	for _, plans := range [][]sidebarSectionPlan{
+		{
+			{Section: sidebarSectionSessions, Share: 25},
+			{Section: sidebarSectionTerminals},
+			{Section: sidebarSectionFiles, Share: 25},
+			{Section: sidebarSectionAgents, Share: 34},
+		},
+		{
+			{Section: sidebarSectionSessions, Share: 25},
+			{Section: sidebarSectionCount, Share: 40, Spacer: true},
+			{Section: sidebarSectionTerminals},
+			{Section: sidebarSectionAgents, Share: 34},
+		},
+		{
+			{Section: sidebarSectionSessions},
+			{Section: sidebarSectionCount, Spacer: true},
+			{Section: sidebarSectionTerminals},
+			{Section: sidebarSectionCount, Spacer: true},
+			{Section: sidebarSectionAgents, Share: 34},
+		},
+	} {
+		for _, agentH := range []int{1, sidebarAgentRowTall} {
+			rowH := make([]int, len(plans))
+			for i, p := range plans {
+				rowH[i] = 1
+				if !p.Spacer && p.Section == sidebarSectionAgents {
+					rowH[i] = agentH
+				}
+			}
+			for avail := 0; avail <= 24; avail++ {
+				for nS := 0; nS <= 5; nS++ {
+					for nT := 0; nT <= 5; nT++ {
+						for nF := 0; nF <= 5; nF++ {
+							for nA := 0; nA <= 5; nA++ {
+								counts := []int{nS, nT, nF, nA}
+								rows := make([]int, len(plans))
+								next := 0
+								for i, p := range plans {
+									if p.Spacer {
+										// What the render gives a spacer: one
+										// notional row, so the allocator does
+										// not read it as an empty section.
+										rows[i] = 1
+										continue
+									}
+									rows[i] = counts[next%len(counts)]
+									next++
 								}
-								if n > rows[i]*rowH[i] {
-									t.Fatalf("budget(%d, %v, h=%d) = %v claims lines for rows that do not exist",
-										avail, rows, agentH, out)
+								out := sidebarBudgetLines(avail, plans, rows, rowH)
+								total := 0
+								for i, n := range out {
+									if n < 0 {
+										t.Fatalf("budget(%d, %v, h=%d) = %v has a negative section", avail, rows, agentH, out)
+									}
+									if !plans[i].Spacer && n > rows[i]*rowH[i] {
+										t.Fatalf("budget(%d, %v, h=%d) = %v claims lines for rows that do not exist",
+											avail, rows, agentH, out)
+									}
+									total += n
 								}
-								total += n
-							}
-							if total > avail {
-								t.Fatalf("budget(%d, %v, h=%d) = %v overruns the rail", avail, rows, agentH, out)
+								if total > avail {
+									t.Fatalf("budget(%d, %v, h=%d) = %v overruns the rail", avail, rows, agentH, out)
+								}
 							}
 						}
 					}
