@@ -211,13 +211,15 @@ func TestASpareRailIsSpentOnTheSectionThatWantsIt(t *testing.T) {
 		{Section: sidebarSectionSessions, Share: 25},
 		{Section: sidebarSectionTerminals},
 		{Section: sidebarSectionFiles, Share: 25},
+		{Section: sidebarSectionAgents, Share: 34},
 	}
-	rowH := []int{1, 1, 1}
+	rowH := []int{1, 1, 1, 1}
 
-	// One session, two panes, a hundred names, forty lines. The listing is the
-	// only thing with rows left, so it gets what the other two cannot use.
-	out := sidebarBudgetLines(40, plans, []int{1, 2, 100}, rowH)
-	if out[0] != 1 || out[1] != 2 {
+	// One session, two panes, a hundred names, no agents, forty lines. The
+	// listing is the only thing with rows left, so it gets what the other three
+	// cannot use.
+	out := sidebarBudgetLines(40, plans, []int{1, 2, 100, 0}, rowH)
+	if out[0] != 1 || out[1] != 2 || out[3] != 0 {
 		t.Fatalf("the small sections were not given their own rows: %v", out)
 	}
 	if out[2] != 37 {
@@ -226,15 +228,26 @@ func TestASpareRailIsSpentOnTheSectionThatWantsIt(t *testing.T) {
 
 	// And a rail where every list fits keeps its gap, which is what leaves the
 	// pinned block floating at the bottom.
-	out = sidebarBudgetLines(40, plans, []int{1, 2, 3}, rowH)
-	if got := out[0] + out[1] + out[2]; got != 6 {
+	out = sidebarBudgetLines(40, plans, []int{1, 2, 3, 0}, rowH)
+	if got := out[0] + out[1] + out[2] + out[3]; got != 6 {
 		t.Errorf("a rail with six rows of content claimed %d lines: %v", got, out)
 	}
 
 	// Two hungry sections split what is left rather than the first taking all.
-	out = sidebarBudgetLines(20, plans, []int{1, 100, 100}, rowH)
+	out = sidebarBudgetLines(20, plans, []int{1, 100, 100, 0}, rowH)
 	if out[1] < 5 || out[2] < 5 {
 		t.Errorf("one hungry section starved the other: %v", out)
+	}
+
+	// The last section does not grow, whatever it has left below its fold. It is
+	// the one pinned to the rail's bottom edge, and the gap above it is what
+	// makes it read as a block rather than as the end of the list over it.
+	out = sidebarBudgetLines(40, plans, []int{1, 2, 0, 100}, rowH)
+	if out[3] > 40*34/100 {
+		t.Errorf("the pinned section grew past its share to %d lines: %v", out[3], out)
+	}
+	if got := out[0] + out[1] + out[2] + out[3]; got >= 40 {
+		t.Errorf("the pinned section swallowed the gap above it: %v", out)
 	}
 }
 

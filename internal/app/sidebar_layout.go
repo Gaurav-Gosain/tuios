@@ -190,14 +190,24 @@ func sidebarBudgetLines(avail int, plans []sidebarSectionPlan, rows, rowH []int)
 	// list takes the slack" is the rule the rail was built on. After that it is
 	// round robin in layout order, so two hungry sections split what is left
 	// rather than the first one taking all of it.
+	//
+	// The last section is left out of it. That is the one the rail pins to its
+	// bottom edge, and the gap above it is what makes it read as a pinned block
+	// rather than as the end of the list above it; a block that grew upward
+	// until it met that list would be an alarm the reader has to find the top of.
+	// Its share stays a ceiling, which is what it was there for.
+	last := len(plans) - 1
+	if len(plans) < 2 {
+		last = -1
+	}
 	grow := make([]int, 0, len(plans))
 	for i, p := range plans {
-		if p.Share <= 0 {
+		if p.Share <= 0 && i != last {
 			grow = append(grow, i)
 		}
 	}
 	for i, p := range plans {
-		if p.Share > 0 {
+		if p.Share > 0 && i != last {
 			grow = append(grow, i)
 		}
 	}
