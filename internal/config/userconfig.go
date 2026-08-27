@@ -362,6 +362,9 @@ type SidebarConfig struct {
 	// FileIcons draws a nerd font icon per file type in the files section
 	// (default: true).
 	FileIcons *bool `toml:"file_icons"`
+	// FileIconColors draws each of those icons in its file type's own colour
+	// (default: true).
+	FileIconColors *bool `toml:"file_icon_colors"`
 	// FolderClick is what a click on a folder row does: navigate, cd or both
 	// (default: navigate).
 	FolderClick string `toml:"folder_click"`
@@ -1165,6 +1168,9 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	}
 	if sb.FileIcons != nil {
 		SidebarFileIcons = *sb.FileIcons
+	}
+	if sb.FileIconColors != nil {
+		SidebarFileIconColors = *sb.FileIconColors
 	}
 	if sb.FolderClick != "" {
 		SidebarFolderClick = sb.FolderClick

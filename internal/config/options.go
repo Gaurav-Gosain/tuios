@@ -430,6 +430,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.sidebar.file_icon_colors", Type: OptionBool, Section: "sidebar",
+		Description: "Draw each file icon in its file type's own colour",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.sidebar.folder_click", Type: OptionString, Section: "sidebar",
 		Description: "What a click on a folder row does",
 		Accepted:    SidebarFolderClicks, Default: SidebarFolderClickNavigate,

@@ -579,6 +579,11 @@ var (
 	// to the glyph set's folder, parent and file marks.
 	SidebarFileIcons = true
 
+	// SidebarFileIconColors draws each of those icons in its own file type's
+	// colour, the way yeetui does. It needs the icons under it, so it draws
+	// nothing when they are off or the terminal is running in ASCII.
+	SidebarFileIconColors = true
+
 	// SidebarFolderClick is what a click on a folder row does: walk the listing
 	// into it, tell the pane to cd there, or both.
 	SidebarFolderClick = SidebarFolderClickNavigate

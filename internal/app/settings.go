@@ -355,6 +355,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.sidebar.show_agents"),
 			opt("appearance.sidebar.sections"),
 			opt("appearance.sidebar.file_icons"),
+			opt("appearance.sidebar.file_icon_colors"),
 			opt("appearance.sidebar.folder_click"),
 			opt("appearance.sidebar.marquee"),
 			opt("appearance.sidebar.tooltips"),

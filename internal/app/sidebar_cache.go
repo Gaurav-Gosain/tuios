@@ -166,6 +166,7 @@ func (m *OS) sidebarSignature() uint64 {
 	// path or the generation moving.
 	mixS(config.SidebarSections)
 	mixB(config.SidebarFileIcons)
+	mixB(config.SidebarFileIconColors)
 	mixI(int(m.filesView.Show))
 	mixS(m.filesView.Dir)
 	mixS(m.filesView.Origin)

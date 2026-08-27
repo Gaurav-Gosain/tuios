@@ -259,7 +259,7 @@ func TestASpareRailIsSpentOnTheSectionThatWantsIt(t *testing.T) {
 // function under test.
 //
 // Negative controls, both confirmed red: drop the fileIconsOn test from
-// fileRowGlyph and the ASCII case draws private-use codepoints at a terminal
+// fileRowMark and the ASCII case draws private-use codepoints at a terminal
 // that cannot show them; drop the UseASCII clause from fileIconsOn and the same
 // case fails while the option case still passes.
 func TestFileIconsDegrade(t *testing.T) {
@@ -280,7 +280,7 @@ func TestFileIconsDegrade(t *testing.T) {
 	// a parent and a file wear three different ones.
 	seen := map[string]string{}
 	for _, r := range rows {
-		got := fileRowGlyph(r.name, r.dir, r.parent)
+		got := fileRowGlyphFor(r.name, r.dir, r.parent)
 		if !isPUA(got) {
 			t.Errorf("with icons on, %q drew %q, which is not a nerd font icon", r.name, got)
 		}
@@ -318,9 +318,9 @@ func TestFileIconsDegrade(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.setup(t)
 			got := [3]string{
-				fileRowGlyph("src", true, false),
-				fileRowGlyph("..", true, true),
-				fileRowGlyph("main.go", false, false),
+				fileRowGlyphFor("src", true, false),
+				fileRowGlyphFor("..", true, true),
+				fileRowGlyphFor("main.go", false, false),
 			}
 			if got != tc.want {
 				t.Errorf("folder/parent/file drew %q, want %q", got, tc.want)
@@ -333,9 +333,17 @@ func TestFileIconsDegrade(t *testing.T) {
 	prev := config.SidebarShowGlyphs
 	config.SidebarShowGlyphs = false
 	t.Cleanup(func() { config.SidebarShowGlyphs = prev })
-	if got := fileRowGlyph("main.go", false, false); got != " " {
+	if got := fileRowGlyphFor("main.go", false, false); got != " " {
 		t.Errorf("with the rail's glyphs off a file row drew %q, want a blank cell", got)
 	}
+}
+
+// fileRowGlyphFor is the mark a name draws in the glyph column, resolved the
+// way the listing resolves it and then drawn the way a row draws it. The two
+// halves are separate in the app because the lookup happens once per file and
+// the draw happens once per frame; the tests below are about the pair.
+func fileRowGlyphFor(name string, dir, parent bool) string {
+	return fileRowMark(fileIconFor(name, dir), dir, parent).Glyph
 }
 
 // isPUA reports whether every rune of s is in a private use area, which is
@@ -355,28 +363,40 @@ func isPUA(s string) bool {
 // TestEveryFileIconIsOneCell. Every rail row budgets exactly one column for its
 // glyph, so a two-cell icon moves the name beside it and puts the row's click
 // target under a different column than the one the pointer is tested against.
-// The table is filtered at init; this is the check that the filter is what
-// keeps the promise rather than luck about which codepoints were typed.
+// The icon table is generated upstream and a bump can put anything in it, so
+// fileIconFit is what keeps the promise; this is the check that it does.
 //
-// Negative control, confirmed red: add a two-cell entry to fileIconByExt and
-// remove the init filter, and this fails naming that extension.
+// Negative controls, both confirmed red: return icon unchanged from
+// fileIconFit, and the wide-glyph case draws two cells; drop the Glyph == ""
+// arm of fileRowMark and the same case draws nothing at all.
 func TestEveryFileIconIsOneCell(t *testing.T) {
-	for _, table := range []map[string]string{fileIconByExt, fileIconByName} {
-		for key, icon := range table {
-			if got := lipgloss.Width(icon); got != 1 {
-				t.Errorf("the icon for %q is %d cells and the rail budgets 1", key, got)
-			}
+	// A glyph the layout cannot place is dropped, and the row falls back to a
+	// mark it can. "🚀" is two cells in every width table there is.
+	for _, tc := range []struct{ name, glyph string }{
+		{"a two-cell glyph", "🚀"},
+		{"two glyphs", ""},
+		{"no glyph", ""},
+	} {
+		if got := fileIconFit(fileIcon{Glyph: tc.glyph, Hex: "#FF0000"}); got.Glyph != "" || got.Hex != "" {
+			t.Errorf("%s survived the fit as %+v, want it dropped", tc.name, got)
 		}
 	}
-	for _, icon := range []string{fileIconFolder, fileIconParent, fileIconFile} {
-		if got := lipgloss.Width(icon); got != 1 {
-			t.Errorf("the built-in icon %q is %d cells and the rail budgets 1", icon, got)
-		}
+	// And the pair together: a dropped icon leaves the row a mark it can place,
+	// rather than an empty glyph column that would move the name.
+	wide := fileRowMark(fileIconFit(fileIcon{Glyph: "🚀", Hex: "#FF0000"}), false, false)
+	if lipgloss.Width(wide.Glyph) != 1 {
+		t.Errorf("a row whose icon was dropped drew %q, %d cells wide", wide.Glyph, lipgloss.Width(wide.Glyph))
 	}
-	// And a row drawn with a two-cell icon would be a row whose name and click
-	// target had moved, so the row itself is measured too.
-	for _, name := range []string{"main.go", "src", "..", "unknown.zzz"} {
-		if got := lipgloss.Width(fileRowGlyph(name, name == "src" || name == "..", name == "..")); got != 1 {
+
+	// And every mark the section actually draws is measured, through the same
+	// pair of calls the app makes.
+	for _, name := range []string{
+		"main.go", "lib.rs", "a.py", "a.ts", "a.tsx", "a.svg", "a.txt", "a.log",
+		"a.zst", "a.pdf", "a.mp4", "a.so", "Makefile", "Dockerfile", ".gitignore",
+		"LICENSE", "src", "..", "unknown.zzz", "no-extension",
+	} {
+		dir := name == "src" || name == ".."
+		if got := lipgloss.Width(fileRowGlyphFor(name, dir, name == "..")); got != 1 {
 			t.Errorf("the glyph column for %q came out %d cells wide", name, got)
 		}
 	}

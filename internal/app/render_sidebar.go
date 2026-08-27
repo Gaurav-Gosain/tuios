@@ -353,6 +353,17 @@ func sidebarStyle(bg, fg color.Color) lipgloss.Style {
 	return s
 }
 
+// sidebarGroundOr is the colour actually behind a row: the fill the row paints,
+// or the rail's own ground when it paints none. A nil background is not "no
+// colour", it is the terminal's own, which is what anything measuring contrast
+// on the rail has to be measured against.
+func sidebarGroundOr(bg color.Color) color.Color {
+	if bg != nil {
+		return bg
+	}
+	return theme.RailGround()
+}
+
 // sidebarFit truncates (ANSI-aware) and pads s to exactly cw cells on bg, so a
 // row can never draw past the rail's own columns.
 func sidebarFit(s string, cw int, bg color.Color) string {

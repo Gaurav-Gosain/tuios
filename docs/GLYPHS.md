@@ -128,7 +128,8 @@ reports it under `problems` with the reason.
 - **Files section:** `folder`, `parent` (the `..` row), `file`. These are what
   the rail's listing draws when `appearance.sidebar.file_icons` is off or the
   terminal is in ASCII mode; with icons on, a nerd font codepoint per file type
-  is drawn over them
+  is drawn over them, in the file type's own colour unless
+  `appearance.sidebar.file_icon_colors` is off
 - **Scrollbar:** `scrollbar_thumb`, `scrollbar_track`
 - **Text:** `ellipsis`, `sigil`, `dash_rule`
 - **Border:** `border.top`, `border.bottom`, `border.left`, `border.right`, the

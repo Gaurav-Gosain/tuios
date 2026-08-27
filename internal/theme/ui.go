@@ -36,6 +36,12 @@ func ReadableAt(c, bg color.Color, floor float64) color.Color {
 	return overlay.ReadableAt(c, bg, floor)
 }
 
+// uiCanvas is the chrome ramp's darkest base. It is named rather than only
+// spelled inside UI() because RailGround reads it once per drawn row, and
+// building the whole palette to reach one constant field means measuring a pill
+// foreground's contrast every time.
+var uiCanvas = charmtone.Pepper
+
 // railRuleMemo holds the grounds a structure ink has been measured for and the
 // answers. The measurement bisects over contrast ratios, and the grounds a
 // frame draws rules on are a handful of constants that move only when the theme
@@ -94,7 +100,7 @@ type UIPalette = overlay.Palette
 // content, while a themed session still tints its tabs, selection and badges.
 func UI() overlay.Palette {
 	p := overlay.Palette{
-		Canvas:   charmtone.Pepper,
+		Canvas:   uiCanvas,
 		Panel:    charmtone.BBQ,
 		Surface:  charmtone.Char,
 		RowSel:   charmtone.BBQ,
