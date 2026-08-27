@@ -712,6 +712,12 @@ func (m *OS) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Nothing renders here unless the saver actually starts.
 		return m, m.handleScreensaverArm()
 
+	case effectPreviewFrameMsg:
+		// The effect picker's preview asking for its next frame. Like the saver
+		// it drives itself, so the maintenance tick never reads picker state and
+		// the idle path is the same whether a picker has ever been opened.
+		return m, m.handleEffectPreviewFrame(msg)
+
 	case screensaverFrameMsg:
 		// The running saver asking for its next frame. It drives itself rather
 		// than riding the maintenance tick, which is what keeps the idle path

@@ -25,6 +25,13 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			X(0).Y(0).Z(config.ZIndexScreensaver).ID("screensaver"))
 	}
 
+	// A capture for the effect preview draws no panels. See
+	// captureEffectPreview: the animation is of the screen under them.
+	if m.effectPreview.capturing {
+		m.OverlayHits = m.OverlayHits[:0]
+		return layers
+	}
+
 	// Clear last frame's hit geometry; each panel that renders below re-records
 	// itself. The ASCII glyph set is synced at the top of GetCanvas, ahead of
 	// every layer that reads it.
@@ -233,6 +240,21 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.ShowGlyphPicker {
 		content, geo, rows := m.renderGlyphPicker()
 		layers = m.placeOverlayPanel(layers, "glyphpicker", content, geo, rows)
+	}
+
+	// The effect preview is a full-screen animation of the screen the picker
+	// opened over, so it goes under every draggable panel and over everything
+	// else. One below the overlay base rather than a constant of its own: the
+	// only thing it has to be is above the dock and below the panels, and both
+	// of those are already spelled here.
+	if m.ShowEffectPicker && m.effectPreview.frame != "" {
+		layers = append(layers, lipgloss.NewLayer(m.effectPreview.frame).
+			X(0).Y(0).Z(config.ZIndexOverlayBase-1).ID("effectpreview"))
+	}
+
+	if m.ShowEffectPicker {
+		content, geo, rows := m.renderEffectPicker()
+		layers = m.placeOverlayPanel(layers, "effectpicker", content, geo, rows)
 	}
 
 	if m.ShowAccentPicker {

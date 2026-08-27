@@ -738,6 +738,18 @@ type OS struct {
 	// not something to do per frame while composing one.
 	GlyphPickerSamples map[string]glyphSample
 
+	// Screen saver effect picker state. The third of the family, and the one
+	// whose preview is an animation rather than a still: see effect_picker.go.
+	ShowEffectPicker     bool
+	EffectPickerQuery    string
+	EffectPickerSelected int
+	EffectPickerScroll   int
+	EffectPickerOriginal string // effect set when the picker opened
+	// effectPreview is the animation behind the panel. Unexported for the same
+	// reason the saver's state is: nothing outside this package drives it, and
+	// it holds an engine that must not be shared.
+	effectPreview effectPreview
+
 	// Dock layout editor state. The dock is three ordered lists, which is the
 	// one thing on the settings page no row can express.
 	ShowDockEditor     bool
