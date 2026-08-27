@@ -1,6 +1,7 @@
 package app
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -211,4 +212,96 @@ func TestANamePromptPublishesNoAnswerRects(t *testing.T) {
 	if _, _, rows := m.renderFileDialog(); len(rows) != 0 {
 		t.Errorf("the create prompt published %d clickable rows", len(rows))
 	}
+}
+
+// TestClickingTheConfirmationRunsTheRowUnderThePointer drives the pointer
+// through the real hit rectangles: the frame is composed, the renderer records
+// where it drew the answers, and the click is routed by that record rather than
+// by anything a handler works out for itself.
+func TestClickingTheConfirmationRunsTheRowUnderThePointer(t *testing.T) {
+	trash := tempTrash(t)
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "report.txt"), "body")
+	m := filesOS(t, dir, "report.txt")
+	m.SidebarFileDelete(false)
+
+	_ = m.View() // the overlay publishes its rectangles as it draws
+	hit, ok := overlayHitOfKind(m, "filedialog")
+	if !ok {
+		t.Fatal("the dialog published no panel geometry")
+	}
+	if len(hit.Rows) != fileConfirmRowCount {
+		t.Fatalf("the dialog published %d rows, want %d", len(hit.Rows), fileConfirmRowCount)
+	}
+
+	// Cancel first: a click on it must close the dialog and run nothing.
+	x, y := rowCenter(hit, fileConfirmRowCancel)
+	handled, cmd := m.OverlayMouseClick(x, y, false)
+	if !handled {
+		t.Fatal("the click missed the dialog")
+	}
+	if cmd != nil {
+		t.Fatal("clicking Cancel produced a command")
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "report.txt")); err != nil {
+		t.Fatalf("clicking Cancel deleted the file: %v", err)
+	}
+
+	// Then the destructive row.
+	m.SidebarFileDelete(false)
+	_ = m.View()
+	hit, _ = overlayHitOfKind(m, "filedialog")
+	x, y = rowCenter(hit, fileConfirmRowGo)
+	handled, cmd = m.OverlayMouseClick(x, y, false)
+	if !handled || cmd == nil {
+		t.Fatalf("clicking the destructive row returned handled=%v cmd=%v", handled, cmd != nil)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "report.txt")); err != nil {
+		t.Fatal("the click deleted the file on the update goroutine")
+	}
+	runOp(t, m, cmd)
+	if _, err := os.Lstat(filepath.Join(trash, "files", "report.txt")); err != nil {
+		t.Errorf("the click did not send the file to the trash: %v", err)
+	}
+}
+
+// TestAClickOutsideTheConfirmationCancelsIt: the ambiguous gesture must never
+// be the one that removes a file.
+func TestAClickOutsideTheConfirmationCancelsIt(t *testing.T) {
+	tempTrash(t)
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "report.txt"), "body")
+	m := filesOS(t, dir, "report.txt")
+	m.SidebarFileDelete(false)
+
+	_ = m.View()
+	if _, ok := overlayHitOfKind(m, "filedialog"); !ok {
+		t.Fatal("the dialog published no panel geometry")
+	}
+	handled, cmd := m.OverlayMouseClick(0, 0, false)
+	if !handled || cmd != nil {
+		t.Fatalf("a click away returned handled=%v cmd=%v", handled, cmd != nil)
+	}
+	if m.FilePromptOpen() {
+		t.Error("a click away left the dialog up")
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "report.txt")); err != nil {
+		t.Errorf("a click away deleted the file: %v", err)
+	}
+}
+
+// overlayHitOfKind returns the recorded geometry for one overlay kind.
+func overlayHitOfKind(m *OS, kind string) (overlayPanelHit, bool) {
+	for _, h := range m.OverlayHits {
+		if h.Kind == kind {
+			return h, true
+		}
+	}
+	return overlayPanelHit{}, false
+}
+
+// rowCenter is a screen point inside one published answer row.
+func rowCenter(h overlayPanelHit, idx int) (int, int) {
+	r := h.Rows[idx].Rect
+	return h.OriginX + (r.X0+r.X1)/2, h.OriginY + r.Y0
 }

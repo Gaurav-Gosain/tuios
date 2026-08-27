@@ -299,6 +299,17 @@ func (r *KeybindRegistry) GetConfig() *UserConfig {
 
 // ActionDescriptions maps action names to their descriptions for help menu generation.
 var ActionDescriptions = map[string]string{
+	// The rail's files section. They act only while the cursor is on a row of
+	// the listing, which is why three of them share a key with a rail binding
+	// above and neither loses it.
+	"file_create":         "Files: new file, or a folder with a trailing /",
+	"file_rename":         "Files: rename this file",
+	"file_delete":         "Files: delete this file",
+	"file_delete_forever": "Files: delete for good, with no trash",
+	"file_copy":           "Files: copy this file",
+	"file_cut":            "Files: cut this file",
+	"file_paste":          "Files: paste into this folder",
+
 	// Window Management
 	"new_window":    "New window",
 	"close_window":  "Close window",

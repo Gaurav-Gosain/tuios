@@ -1607,6 +1607,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.Sidebar == nil {
 		cfg.Keybindings.Sidebar = make(map[string][]string)
 	}
+	if cfg.Keybindings.SidebarFiles == nil {
+		cfg.Keybindings.SidebarFiles = make(map[string][]string)
+	}
 
 	migrateLegacyKeybinds(cfg)
 	migrateSettingsComma(cfg)
@@ -1642,6 +1645,10 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// unfilled it resolves every rail key to nothing, and since the scope swallows
 	// unbound keys that traps the keyboard in the rail with no way out.
 	fillMapDefaults(cfg.Keybindings.Sidebar, defaultCfg.Keybindings.Sidebar)
+	// And the files section's own keys, for the same reason: a config written
+	// before they existed has no sidebar_files section, and left unfilled the
+	// listing would have no way to create, rename or delete anything.
+	fillMapDefaults(cfg.Keybindings.SidebarFiles, defaultCfg.Keybindings.SidebarFiles)
 
 	for _, section := range keybindSectionPairs(cfg, defaultCfg) {
 		dropStaleDuplicateKeys(section.target, section.defaults)
@@ -1678,6 +1685,7 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 		{c.LayoutPrefix, d.LayoutPrefix},
 		{c.TerminalMode, d.TerminalMode},
 		{c.Sidebar, d.Sidebar},
+		{c.SidebarFiles, d.SidebarFiles},
 		{c.Global, d.Global},
 		{c.Script, d.Script},
 	}

@@ -108,6 +108,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateSection("layout_prefix", cfg.Keybindings.LayoutPrefix)
 	validateSection("terminal_mode", cfg.Keybindings.TerminalMode)
 	validateSection("sidebar", cfg.Keybindings.Sidebar)
+	validateSection("sidebar_files", cfg.Keybindings.SidebarFiles)
 	validateSection("global", cfg.Keybindings.Global)
 	validateSection("script", cfg.Keybindings.Script)
 
