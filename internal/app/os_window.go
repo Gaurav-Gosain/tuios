@@ -520,15 +520,22 @@ func (m *OS) applyStartupTiling() {
 
 // applyStartupPreferences runs the one-shot [startup] settings once the real
 // terminal size is known (on the first WindowSizeMsg). It opens a default
-// terminal window and/or enables tiling, but only for a fresh, empty session:
-// attaching to a session that already has windows restores that session's own
-// layout from daemon state, and forcing a window or a tiling mode on top of it
-// would silently override the user's saved session.
+// terminal window and/or enables tiling, but only for a session nobody has
+// arranged yet: attaching to a session that already has windows restores that
+// session's own layout from daemon state, and forcing a window or a tiling mode
+// on top of it would silently override the user's saved session.
+//
+// "Nobody has arranged it" is not the same as "it has no windows". The daemon
+// builds a detached session with one window of its own, and a client attaching
+// to it lands on a session that is brand new and already has a window, which
+// used to skip every [startup] setting the user had asked for. What tells the
+// two apart is whether any client ever placed those windows: see
+// sessionUnarranged.
 func (m *OS) applyStartupPreferences() {
 	if m.UserConfig == nil {
 		return
 	}
-	if len(m.Windows) > 0 {
+	if len(m.Windows) > 0 && !m.sessionUnarranged {
 		return
 	}
 
@@ -542,7 +549,10 @@ func (m *OS) applyStartupPreferences() {
 
 	// Open the first window through the same path the `n` key uses, so it is
 	// created, focused and (with tiling now on) tiled exactly like a manual one.
-	if s.OpenDefaultWindow {
+	// Only when the session has none: the option opens the terminal a session
+	// starts without, and a session the daemon pre-populated already has it.
+	opened := s.OpenDefaultWindow && len(m.Windows) == 0
+	if opened {
 		m.AddWindow("")
 	}
 
@@ -555,7 +565,7 @@ func (m *OS) applyStartupPreferences() {
 	// arrives (see maybeEnterPendingTerminalMode), but only when a window was
 	// actually requested. With neither a focused window nor one on the way, the
 	// session is left in window-management mode.
-	if s.StartInTerminalMode && (s.OpenDefaultWindow || m.hasFocusedWindow()) {
+	if s.StartInTerminalMode && (opened || m.hasFocusedWindow()) {
 		m.pendingStartTerminalMode = true
 		m.maybeEnterPendingTerminalMode()
 	}
