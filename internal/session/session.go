@@ -2047,7 +2047,24 @@ func stateToLine(t vt.Terminal, row []CellState) uv.Line {
 func (p *PTY) CaptureContent(scrollback, ansi bool) string {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
+	return p.captureContent(scrollback, ansi)
+}
 
+// CaptureContentResolved is CaptureContent with styling on, plus the SGR index
+// colours rewritten to 24-bit RGB against the given palette. The daemon still
+// knows nothing about themes: the palette is an explicit parameter, the
+// client's theme palette, so the capture matches what the client paints. A
+// bare reset stays a bare reset, and colours the palette does not own (the
+// 256-colour cube above index 15, true colour) pass through untouched.
+func (p *PTY) CaptureContentResolved(scrollback bool, palette [16]color.Color) string {
+	p.terminalMu.RLock()
+	defer p.terminalMu.RUnlock()
+	return ResolveSGR(p.captureContent(scrollback, true), palette)
+}
+
+// captureContent is the shared core of the two capture paths. Callers hold
+// terminalMu.
+func (p *PTY) captureContent(scrollback, ansi bool) string {
 	if p.terminal == nil {
 		return ""
 	}

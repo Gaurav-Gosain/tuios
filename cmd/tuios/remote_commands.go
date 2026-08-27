@@ -514,7 +514,7 @@ func runSendText(sessionName, windowTarget, text string) error {
 // runCapturePane captures the content of a pane and prints to stdout. lines
 // keeps only the last N lines when positive, which is what bounds a capture of a
 // long scrollback to something a caller can actually read.
-func runCapturePane(sessionName, windowTarget string, scrollback, ansi bool, lines int) error {
+func runCapturePane(sessionName, windowTarget string, scrollback, ansi, resolved bool, palette []string, lines int) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -526,6 +526,8 @@ func runCapturePane(sessionName, windowTarget string, scrollback, ansi bool, lin
 		"window":     windowTarget,
 		"scrollback": scrollback,
 		"ansi":       ansi,
+		"resolved":   resolved,
+		"palette":    palette,
 		"lines":      lines,
 	})
 	if err != nil {
