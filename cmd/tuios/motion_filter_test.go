@@ -110,9 +110,9 @@ func TestMotionFilterPassesTheBandExitEvent(t *testing.T) {
 // chrome recorded, and the motion that crosses it has to be let through on the
 // strength of the pane's content box alone.
 //
-// Negative control: with the links clause removed from filterMouseMotion, the
-// first assertion fails, and so does the underline in a real session. With the
-// cell-change guard removed the last assertion fails. NOT YET CONFIRMED RED.
+// Negative control, both confirmed red: with the links clause removed from
+// filterMouseMotion the first assertion fails, and so does the underline in a
+// real session. With the cell-change guard removed the last assertion fails.
 //
 // The clause's absence was observed at the level above, though: before it went
 // in, TestMotionFilterPassesRailHover passed and no motion over a pane reached

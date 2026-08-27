@@ -23,23 +23,45 @@ import (
 // anything would ever want to click it.
 const linkURL = "https://example.com/e2e-link"
 
-// findOnScreen returns the column and row of the first cell of want, or
-// ok=false. It matches per physical row, so a URL that soft-wrapped is not
-// found; the terminal is wide enough that it cannot.
-func findOnScreen(s tuitest.Screen, want string) (col, row int, ok bool) {
+// findOnGrid returns the column and row of the first cell of want, or ok=false.
+// It matches per physical row, so a URL that soft-wrapped is not found; the
+// terminal is wide enough that it cannot.
+//
+// sidebar_test.go has findOnScreen, which fails the test when it finds nothing
+// and takes a *Terminal. These tests need the answer rather than a failure (one
+// of them asserts on where the run is not) and they need it against a snapshot
+// they already hold, so that the cells they then read are the same frame the
+// text was found in.
+// It walks cells rather than searching Line's string, because the answer is a
+// column and Index's answer is a byte offset. The two differ by two on every row
+// of a pane, the border being one column of three bytes, and a cell read at the
+// byte offset is then two cells to the right of the text that was found. That is
+// far enough to move an assertion off a link and not far enough to look wrong.
+func findOnGrid(s tuitest.Screen, want string) (col, row int, ok bool) {
 	cols, rows := s.Size()
 	for r := range rows {
-		line := s.Line(r)
-		i := strings.Index(line, want)
-		if i < 0 {
-			continue
+		for c := range cols {
+			if !gridMatchesAt(s, c, r, want) {
+				continue
+			}
+			return c, r, true
 		}
-		if i+len(want) > cols {
-			continue
-		}
-		return i, r, true
 	}
 	return 0, 0, false
+}
+
+// gridMatchesAt reports whether the cells from (col, row) rightwards spell want.
+// Only single-width cells can match, which is all these tests print.
+func gridMatchesAt(s tuitest.Screen, col, row int, want string) bool {
+	cols, _ := s.Size()
+	if col+len(want) > cols {
+		return false
+	}
+	var b strings.Builder
+	for i := range len(want) {
+		b.WriteString(s.Cell(col+i, row).Content)
+	}
+	return b.String() == want
 }
 
 // cellUnderlined reports whether the cell at (col, row) is drawn underlined.
@@ -49,12 +71,11 @@ func cellUnderlined(s tuitest.Screen, col, row int) bool {
 
 // TestHoveringALinkUnderlinesItOnScreen.
 //
-// Negative control, NOT YET RUN. The two controls to build are a binary with
-// the links clause removed from filterMouseMotion in cmd/tuios/run.go, and one
-// with the highlight branch removed from the cell loop in renderTerminal. Both
-// should fail at the first WaitFor, with the URL on screen and no cell
-// underlined. This has to be confirmed and recorded in NEGATIVE_CONTROLS.md
-// before the test counts as evidence.
+// Negative control, both confirmed red. A binary with the links clause removed
+// from filterMouseMotion in cmd/tuios/run.go, and one with the highlight branch
+// removed from the cell loop in renderTerminal, each fail at the first WaitFor
+// with the URL on screen and no cell underlined ("the hovered link never
+// underlined itself: WaitFor timed out after 10s").
 func TestHoveringALinkUnderlinesItOnScreen(t *testing.T) {
 	term, _ := start(t, startOpts{})
 	waitBoot(t, term)
@@ -72,10 +93,10 @@ func TestHoveringALinkUnderlinesItOnScreen(t *testing.T) {
 		t.Fatalf("the screen never settled: %v\n%s", err, term.Snapshot())
 	}
 
-	snap := term.Snapshot()
-	col, row, ok := findOnScreen(snap, linkURL)
+	snap := term.Screen()
+	col, row, ok := findOnGrid(snap, linkURL)
 	if !ok {
-		t.Fatalf("the URL is not on screen to hover:\n%s", snap)
+		t.Fatalf("the URL is not on screen to hover:\n%s", term.Snapshot())
 	}
 
 	// Nothing is underlined before the pointer arrives, so the assertion below
@@ -97,7 +118,7 @@ func TestHoveringALinkUnderlinesItOnScreen(t *testing.T) {
 
 	// The whole run, not only the cell under the pointer. This is what
 	// distinguishes a link highlight from a cursor.
-	after := term.Snapshot()
+	after := term.Screen()
 	for c := col; c < col+len(linkURL); c++ {
 		if !cellUnderlined(after, c, row) {
 			t.Errorf("column %d of the run is not underlined; the run is %d..%d",
@@ -110,7 +131,8 @@ func TestHoveringALinkUnderlinesItOnScreen(t *testing.T) {
 	if col > 0 && cellUnderlined(after, col-1, row) {
 		t.Error("the cell before the URL is underlined")
 	}
-	if end := col + len(linkURL); end < 200 && cellUnderlined(after, end, row) {
+	cols, _ := after.Size()
+	if end := col + len(linkURL); end < cols && cellUnderlined(after, end, row) {
 		t.Error("the cell after the URL is underlined")
 	}
 
@@ -147,10 +169,10 @@ func TestPlainTextIsNotUnderlined(t *testing.T) {
 		t.Fatalf("the screen never settled: %v\n%s", err, term.Snapshot())
 	}
 
-	snap := term.Snapshot()
-	col, row, ok := findOnScreen(snap, prose)
+	snap := term.Screen()
+	col, row, ok := findOnGrid(snap, prose)
 	if !ok {
-		t.Fatalf("the sentence is not on screen:\n%s", snap)
+		t.Fatalf("the sentence is not on screen:\n%s", term.Snapshot())
 	}
 
 	for c := col; c < col+len(prose); c++ {
@@ -159,7 +181,7 @@ func TestPlainTextIsNotUnderlined(t *testing.T) {
 		// samples rather than waits: there is nothing to wait for, and the
 		// failure being guarded is a highlight appearing, not one being late.
 		time.Sleep(5 * time.Millisecond)
-		if cellUnderlined(term.Snapshot(), c, row) {
+		if cellUnderlined(term.Screen(), c, row) {
 			t.Fatalf("column %d of %q was underlined as a link", c-col, prose)
 		}
 	}

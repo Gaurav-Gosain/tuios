@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -46,10 +45,10 @@ func screenOf(win *terminal.Window, col, row int) (int, int) {
 // from the resolver: "see " is four cells, the label "docs" is four more, so the
 // run is columns 4 through 7 and the URL is the one in the escape.
 //
-// Negative control: with markedLinkAt returning the cell's own column as both
-// ends of the run, the span assertions fail; with the OSC 8 parse taking the
-// parameters as the URL, which is the bug internal/vt/osc.go carries a comment
-// about, the address assertion fails. NOT YET CONFIRMED RED.
+// Negative control, both confirmed red: with markedLinkAt returning the cell's
+// own column as both ends of the run, the span assertions fail; with the OSC 8
+// parse taking the parameters as the URL, which is the bug internal/vt/osc.go
+// carries a comment about, the address assertion fails.
 func TestLinkHoverFindsAMarkedRun(t *testing.T) {
 	const want = "https://example.com/docs"
 	_, win := linkTestOS(t, "see \x1b]8;;"+want+"\x1b\\docs\x1b]8;;\x1b\\ here")
@@ -175,10 +174,14 @@ func TestLinkHoverUnderlinesTheRunOnScreen(t *testing.T) {
 	// SGR 4 is underline, and it is what linkHoverStyle renders. Nothing in the
 	// pane's own output carries it, so its presence is the highlight and its
 	// absence is the lack of one.
-	const underline = "\x1b[4m"
+	//
+	// isUnderlined parses the parameters rather than matching a literal escape.
+	// lipgloss folds every attribute of a style into one sequence, so the
+	// underline arrives as the last parameter of the colour's own sequence and a
+	// search for "\x1b[4m" finds nothing on a run that is plainly underlined.
 
 	before := m.renderTerminal(win, true, false)
-	if strings.Contains(before, underline) {
+	if isUnderlined(before) {
 		t.Fatal("the pane already draws an underline with no pointer on it")
 	}
 
@@ -187,7 +190,7 @@ func TestLinkHoverUnderlinesTheRunOnScreen(t *testing.T) {
 		t.Fatal("no link under the pointer")
 	}
 	after := m.renderTerminal(win, true, false)
-	if !strings.Contains(after, underline) {
+	if !isUnderlined(after) {
 		t.Fatalf("the hovered run is not underlined on screen:\n%q", after)
 	}
 
@@ -195,7 +198,7 @@ func TestLinkHoverUnderlinesTheRunOnScreen(t *testing.T) {
 	// so a stale cache here would leave the underline up forever.
 	m.clearLinkHover()
 	cleared := m.renderTerminal(win, true, false)
-	if strings.Contains(cleared, underline) {
+	if isUnderlined(cleared) {
 		t.Errorf("the underline outlived the pointer:\n%q", cleared)
 	}
 }
@@ -210,14 +213,13 @@ func TestLinkHoverUnderlinesTheRunOnScreen(t *testing.T) {
 // bug would have shipped.
 func TestUnfocusedPaneLeavesTheFastPathToUnderline(t *testing.T) {
 	m, win := linkTestOS(t, "go to https://example.org/a now")
-	const underline = "\x1b[4m"
 
 	sx, sy := screenOf(win, 8, 0)
 	if !m.LinkHoverAt(sx, sy) {
 		t.Fatal("no link under the pointer")
 	}
 	out := m.renderTerminal(win, false, false)
-	if !strings.Contains(out, underline) {
+	if !isUnderlined(out) {
 		t.Errorf("an unfocused pane served the fast path and drew no underline:\n%q", out)
 	}
 }

@@ -6,10 +6,8 @@ import "testing"
 // read back from ScanBareURL, so a change in the scanner cannot quietly change
 // what the test believes is correct.
 //
-// Each case names the naive scanner it rules out. NOT YET CONFIRMED RED: the
-// machine was unavailable when this was written, so the table below is the
-// intent and not yet the evidence. Each row must be seen to fail against the
-// scanner it names before this counts as coverage.
+// Each case names the naive scanner it rules out, and each of the five was
+// built and seen to fail the rows below.
 //
 //	trailing-stop / trailing-comma      fail a scanner that stops only at space
 //	closing-bracket                     fail a scanner that trims every ")"
