@@ -17,7 +17,7 @@ func blankBandCell(t *testing.T, m *OS) (int, int) {
 	t.Helper()
 	w := m.GetSidebarWidth()
 	x := 1
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		x = m.GetRenderWidth() - w + 1
 	}
 	top := m.GetTopMargin()
@@ -35,6 +35,7 @@ func TestClickOnBlankRailTakesTheKeyboard(t *testing.T) {
 		t.Run(pos, func(t *testing.T) {
 			m, tree := sidebarMultiSessionOS(t, 120, 40)
 			withSidebar(t, true, pos, config.SidebarDefaultWidth)
+			m.Settings = config.Global
 			m.sidebarPanelLinesForTree(tree)
 			x, y := blankBandCell(t, m)
 

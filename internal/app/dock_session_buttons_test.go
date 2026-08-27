@@ -34,7 +34,7 @@ func dockSessionOS(t testing.TB, width int, daemon bool) *OS {
 // dockSessionBody is the cells one control is drawn as: a pad, the glyph, a pad.
 // The words are the hover label now and are never on the bar.
 func dockSessionBody(a DockSessionAction) string {
-	return " " + dockSessionIcon(a) + " "
+	return " " + dockSessionIcon(a, &config.Global) + " "
 }
 
 // dockSessionColumns finds where a control was actually drawn on the dock row,
@@ -70,9 +70,9 @@ func TestDockSessionControlsAreClickableWhereTheyAreDrawn(t *testing.T) {
 	for _, width := range []int{160, 100, 40} {
 		for _, pos := range []string{"bottom", "top"} {
 			t.Run(strconv.Itoa(width)+"/"+pos, func(t *testing.T) {
-				prev := config.DockbarPosition
-				config.DockbarPosition = pos
-				t.Cleanup(func() { config.DockbarPosition = prev })
+				prev := config.Global.DockbarPosition
+				config.Global.DockbarPosition = pos
+				t.Cleanup(func() { config.Global.DockbarPosition = prev })
 
 				m := dockSessionOS(t, width, true)
 				if !dockSessionControlsFit(width) {

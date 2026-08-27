@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -15,6 +16,7 @@ func sessionPaletteTestOS(t *testing.T) (*OS, *terminal.Window, *terminal.Window
 	first := &terminal.Window{ID: "w1", CustomName: "first"}
 	second := &terminal.Window{ID: "w2", CustomName: "second"}
 	return &OS{
+		Settings:       config.Global,
 		Windows:        []*terminal.Window{first, second},
 		FocusedWindow:  0,
 		WorkspaceFocus: map[int]int{},

@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/perf"
 )
 
@@ -57,7 +58,7 @@ func TestLatencyCoalescer(t *testing.T) {
 	}
 
 	ptyData := make(chan struct{}, 1)
-	w := NewDaemonWindow("coal", "pane", 0, 0, 80, 24, 0, "pty-coal", ptyData)
+	w := NewDaemonWindow("coal", "pane", 0, 0, 80, 24, 0, "pty-coal", ptyData, config.DefaultScrollbackLines)
 	if w == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}

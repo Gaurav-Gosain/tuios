@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // TestListenForClientEventsMapping verifies that each ClientEvent type is mapped
@@ -90,7 +91,7 @@ func TestEveryClientEventKeepsTheListenerArmed(t *testing.T) {
 	}
 
 	for _, msg := range msgs {
-		m := &OS{ClientEventChan: make(chan ClientEvent, 1)}
+		m := &OS{Settings: config.Global, ClientEventChan: make(chan ClientEvent, 1)}
 		_, cmd := m.Update(msg)
 		if cmd == nil {
 			t.Errorf("%T returned no command, so nothing is listening for the next event", msg)

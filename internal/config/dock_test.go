@@ -12,21 +12,21 @@ import "testing"
 func TestTheTwoClockFormatsResolveInOneOrder(t *testing.T) {
 	appearance := DefaultConfig()
 	appearance.Appearance.ClockFormat = "3:04 PM"
-	ApplyAppearanceConfig(appearance)
-	t.Cleanup(func() { ApplyAppearanceConfig(DefaultConfig()) })
+	ApplyAppearanceConfig(appearance, &Global)
+	t.Cleanup(func() { ApplyAppearanceConfig(DefaultConfig(), &Global) })
 
 	specific := DockConfig{Clock: DockClockConfig{Format: "15:04"}}
-	if got := specific.DockClockFormat(); got != "15:04" {
+	if got := specific.DockClockFormat(&Global); got != "15:04" {
 		t.Errorf("with both set, format = %q, want the [dock.clock] one, 15:04", got)
 	}
 
 	var general DockConfig
-	if got := general.DockClockFormat(); got != "3:04 PM" {
+	if got := general.DockClockFormat(&Global); got != "3:04 PM" {
 		t.Errorf("with only appearance set, format = %q, want it honoured: 3:04 PM", got)
 	}
 
-	ApplyAppearanceConfig(DefaultConfig())
-	if got := general.DockClockFormat(); got != DefaultClockFormat {
+	ApplyAppearanceConfig(DefaultConfig(), &Global)
+	if got := general.DockClockFormat(&Global); got != DefaultClockFormat {
 		t.Errorf("with neither set, format = %q, want the default %q", got, DefaultClockFormat)
 	}
 }

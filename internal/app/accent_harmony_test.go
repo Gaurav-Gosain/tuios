@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/colorprofile"
 )
@@ -164,6 +165,7 @@ func TestAccentHintsArePressable(t *testing.T) {
 
 	// Apply stores the colour under the cursor.
 	m = accentTestOS(t, 120, 30)
+	m.Settings = config.Global
 	m.SetWindowAccent(id, RGBAccent(seed))
 	m.OpenAccentPicker(id)
 	m.renderAccentPicker()
@@ -182,6 +184,7 @@ func TestAccentHintsArePressable(t *testing.T) {
 
 	// Cancel closes and writes nothing, even after moving.
 	m = accentTestOS(t, 120, 30)
+	m.Settings = config.Global
 	m.SetWindowAccent(id, RGBAccent(seed))
 	m.OpenAccentPicker(id)
 	m.renderAccentPicker()
@@ -199,6 +202,7 @@ func TestAccentHintsArePressable(t *testing.T) {
 
 	// Clear takes the accent away, which is a return to inheriting.
 	m = accentTestOS(t, 120, 30)
+	m.Settings = config.Global
 	m.SetWindowAccent(id, RGBAccent(seed))
 	m.OpenAccentPicker(id)
 	m.renderAccentPicker()
@@ -212,6 +216,7 @@ func TestAccentHintsArePressable(t *testing.T) {
 
 	// And the focus hint walks the controls, so no hint is a dead word.
 	m = accentTestOS(t, 120, 30)
+	m.Settings = config.Global
 	m.OpenAccentPicker(id)
 	m.renderAccentPicker()
 	was := m.AccentPicker.Focus

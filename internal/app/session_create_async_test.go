@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -15,7 +16,7 @@ import (
 // The daemon-backed half (that a session really appears) is covered by the e2e
 // suite; what cannot regress silently is this call blocking again.
 func TestSidebarNewSessionDoesNotBlockUpdate(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 
 	// No daemon: the guard refuses and must still return immediately.
 	done := make(chan struct{})
@@ -37,7 +38,7 @@ func TestSidebarNewSessionDoesNotBlockUpdate(t *testing.T) {
 // call, which would strand the listener armed on the previous one and lose the
 // result.
 func TestSessionCreateChanIsLazyAndStable(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	if m.PendingSessionCreate != nil {
 		t.Fatal("a client that never creates a session should not allocate the channel")
 	}
@@ -64,7 +65,7 @@ func TestSidebarFocusResolvesByID(t *testing.T) {
 	a := &terminal.Window{ID: "a"}
 	b := &terminal.Window{ID: "b"}
 	c := &terminal.Window{ID: "c"}
-	m := &OS{Windows: []*terminal.Window{a, b, c}, FocusedWindow: 0}
+	m := &OS{Settings: config.Global, Windows: []*terminal.Window{a, b, c}, FocusedWindow: 0}
 
 	// The rail drew B at index 1. A exits before the click lands.
 	hit := sidebarRowHit{Kind: sidebarRowWindow, WindowID: "b", WindowIndex: 1}

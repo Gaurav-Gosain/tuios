@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/tape/trust"
 )
@@ -74,11 +73,11 @@ func (m *OS) refreshAllPanesAfterTape() {
 // on scope. A tape never runs while another tape is executing.
 func (m *OS) runProjectTape(content []byte, dir string) {
 	if m.ScriptMode {
-		m.ShowNotification("A tape is already running", "warning", config.NotificationDuration)
+		m.ShowNotification("A tape is already running", "warning", m.Settings.NotificationDuration)
 		return
 	}
 	if len(content) == 0 {
-		m.ShowNotification("Tape is empty. Nothing to run", "warning", config.NotificationDuration)
+		m.ShowNotification("Tape is empty. Nothing to run", "warning", m.Settings.NotificationDuration)
 		return
 	}
 
@@ -87,7 +86,7 @@ func (m *OS) runProjectTape(content []byte, dir string) {
 	// Require: skip with a notice if a named binary is missing, rather than
 	// typing a command into a shell that cannot run it.
 	if missing := missingRequirements(header.Requires); missing != "" {
-		m.ShowNotification("Tape skipped: requires "+missing, "warning", config.NotificationDuration*2)
+		m.ShowNotification("Tape skipped: requires "+missing, "warning", m.Settings.NotificationDuration*2)
 		return
 	}
 
@@ -131,7 +130,7 @@ func (m *OS) runTapeSessionScope(header tape.ProjectHeader, body, dir string) {
 	// there is nowhere to create one, so fall back to the current session, which
 	// is honest best-effort and documented.
 	if m.DaemonClient == nil {
-		m.ShowNotification("Tape: no session backend, running in current session", "warning", config.NotificationDuration*2)
+		m.ShowNotification("Tape: no session backend, running in current session", "warning", m.Settings.NotificationDuration*2)
 		m.startTapePlayback(compileProjectBody(body), header.Workspace)
 		return
 	}
@@ -140,13 +139,13 @@ func (m *OS) runTapeSessionScope(header tape.ProjectHeader, body, dir string) {
 		// The session is the constructor's output, run once. Re-entry just takes
 		// the user back to it; it never re-runs the tape.
 		if err := m.SwitchToSession(name); err != nil {
-			m.ShowNotification("Tape: switch to "+name+" failed: "+err.Error(), "error", config.NotificationDuration*2)
+			m.ShowNotification("Tape: switch to "+name+" failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 		}
 		return
 	}
 
 	if err := m.SwitchToSession(name); err != nil {
-		m.ShowNotification("Tape: create session "+name+" failed: "+err.Error(), "error", config.NotificationDuration*2)
+		m.ShowNotification("Tape: create session "+name+" failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 		return
 	}
 
@@ -160,7 +159,7 @@ func (m *OS) runTapeSessionScope(header tape.ProjectHeader, body, dir string) {
 	cmds = append(cmds, tape.Command{Type: tape.CommandTypeEnableTiling})
 	cmds = append(cmds, compileProjectBody(body)...)
 	m.startTapePlayback(cmds, header.Workspace)
-	m.ShowNotification("Building project session "+name, "info", config.NotificationDuration)
+	m.ShowNotification("Building project session "+name, "info", m.Settings.NotificationDuration)
 }
 
 // startTapePlayback starts the interactive tape player over an already-compiled

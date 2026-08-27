@@ -130,14 +130,14 @@ func fileIconFit(icon fileIcon) fileIcon {
 }
 
 // fileIconsOn reports whether the nerd font layer draws at all.
-func fileIconsOn() bool {
-	return config.SidebarFileIcons && !overlay.UseASCII()
+func fileIconsOn(s *config.Settings) bool {
+	return s.SidebarFileIcons && !overlay.UseASCII()
 }
 
 // fileIconColorsOn reports whether the colour layer draws. It needs the icons
 // under it, so switching the icons off switches the colour off with them.
-func fileIconColorsOn() bool {
-	return fileIconsOn() && config.SidebarFileIconColors
+func fileIconColorsOn(s *config.Settings) bool {
+	return fileIconsOn(s) && s.SidebarFileIconColors
 }
 
 // fileRowMark is the one cell in front of a name in the files section, and the
@@ -145,18 +145,18 @@ func fileIconColorsOn() bool {
 //
 // parent is the ".." row, which is a directory but not one of the names in the
 // listing: it moves the view out rather than in, so it wears its own mark.
-func fileRowMark(icon fileIcon, dir, parent bool) fileIcon {
-	if !config.SidebarShowGlyphs {
+func fileRowMark(icon fileIcon, dir, parent bool, s *config.Settings) fileIcon {
+	if !s.SidebarShowGlyphs {
 		return fileIcon{Glyph: " "}
 	}
-	if !fileIconsOn() {
+	if !fileIconsOn(s) {
 		switch {
 		case parent:
-			return fileIcon{Glyph: config.GetRailParentGlyph()}
+			return fileIcon{Glyph: s.GetRailParentGlyph()}
 		case dir:
-			return fileIcon{Glyph: config.GetRailFolderGlyph()}
+			return fileIcon{Glyph: s.GetRailFolderGlyph()}
 		default:
-			return fileIcon{Glyph: config.GetRailFileGlyph()}
+			return fileIcon{Glyph: s.GetRailFileGlyph()}
 		}
 	}
 	switch {
@@ -171,7 +171,7 @@ func fileRowMark(icon fileIcon, dir, parent bool) fileIcon {
 			icon = fileIconAny
 		}
 	}
-	if !fileIconColorsOn() {
+	if !fileIconColorsOn(s) {
 		icon.Hex = ""
 	}
 	return icon

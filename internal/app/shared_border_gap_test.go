@@ -17,15 +17,16 @@ import (
 // pane holding a marker that starts in its own first column.
 func gapTestOS(t *testing.T, n int) *OS {
 	t.Helper()
-	origAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = origAnim })
+	origAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = origAnim })
 
 	m := &OS{
+		Settings: config.Global,
 		// The layout reads the model's session-settled geometry, seeded from
 		// the globals the way NewOS seeds it.
-		SharedBorders:    config.SharedBorders,
-		PaneGap:          config.PaneGap,
+		SharedBorders:    config.Global.SharedBorders,
+		PaneGap:          config.Global.PaneGap,
 		Windows:          make([]*terminal.Window, 0, n),
 		FocusedWindow:    0,
 		WorkspaceFocus:   map[int]int{},
@@ -74,9 +75,9 @@ func paintMarkers(m *OS) {
 // This asserts the composed frame, per mode: every pane's first column is still
 // the pane's own text.
 func TestSharedBordersKeepEveryPanesFirstColumn(t *testing.T) {
-	old := config.SharedBorders
-	config.SharedBorders = true
-	t.Cleanup(func() { config.SharedBorders = old })
+	old := config.Global.SharedBorders
+	config.Global.SharedBorders = true
+	t.Cleanup(func() { config.Global.SharedBorders = old })
 
 	for _, mode := range []string{LayoutModeBSP, LayoutModeMasterStack} {
 		for _, n := range []int{2, 3, 4, 5, 7} {
@@ -115,9 +116,9 @@ func TestSharedBordersKeepEveryPanesFirstColumn(t *testing.T) {
 // panes has to have reserved the cell the line lands on, so the check runs
 // against every layout mode rather than the one the bug was found in.
 func TestSeparatorsOnlyDrawWherePanesLeftRoom(t *testing.T) {
-	old := config.SharedBorders
-	config.SharedBorders = true
-	t.Cleanup(func() { config.SharedBorders = old })
+	old := config.Global.SharedBorders
+	config.Global.SharedBorders = true
+	t.Cleanup(func() { config.Global.SharedBorders = old })
 
 	for _, mode := range []string{LayoutModeBSP, LayoutModeMasterStack, LayoutModeScrolling} {
 		for _, n := range []int{2, 3, 4, 5, 7} {

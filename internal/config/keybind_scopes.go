@@ -98,7 +98,7 @@ const (
 // ctrl+b, since rebinding the leader moves every one of them.
 func Scopes(leader string) []Scope {
 	if leader == "" {
-		leader = LeaderKey
+		leader = DefaultLeaderKey
 	}
 	return []Scope{
 		{

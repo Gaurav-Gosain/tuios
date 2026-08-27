@@ -5,7 +5,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // handleSessionSwitcherInput handles keyboard input when the session switcher is open.
@@ -46,18 +45,18 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 	case "enter":
 		if selected, ok := o.SessionSwitcherTarget(o.SessionSwitcherSelected); ok {
 			if selected.IsCurrent {
-				o.ShowNotification("Already on this session", "info", config.NotificationDuration)
+				o.ShowNotification("Already on this session", "info", o.Settings.NotificationDuration)
 			} else {
 				// The switch is made by identity: Title is a label and may be
 				// a display name that addresses nothing.
 				if err := o.SwitchToSession(selected.ID); err != nil {
-					o.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+					o.ShowNotification("Switch failed: "+err.Error(), "error", o.Settings.NotificationDuration*2)
 				}
 			}
 		} else if o.SessionSwitcherQuery != "" {
 			// No matching session  - create new one with the typed name
 			if err := o.SwitchToSession(o.SessionSwitcherQuery); err != nil {
-				o.ShowNotification("Create failed: "+err.Error(), "error", config.NotificationDuration*2)
+				o.ShowNotification("Create failed: "+err.Error(), "error", o.Settings.NotificationDuration*2)
 			}
 		}
 		o.ShowSessionSwitcher = false
@@ -113,7 +112,7 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		// Request delete confirmation for the selected session
 		if selected, ok := o.SessionSwitcherTarget(o.SessionSwitcherSelected); ok {
 			if selected.IsCurrent {
-				o.ShowNotification("Cannot delete the current session", "warning", config.NotificationDuration)
+				o.ShowNotification("Cannot delete the current session", "warning", o.Settings.NotificationDuration)
 			} else {
 				o.SessionSwitcherConfirmDelete = selected.ID
 			}

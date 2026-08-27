@@ -87,7 +87,7 @@ func stripNavWindows(m *OS, kind sidebarRowKind) []string {
 func TestStripStaysSilentWithNoAgents(t *testing.T) {
 	m, tree := noAgentStripOS(t, 120, 20)
 	lines := railPlain(t, m, tree)
-	rule := config.GetWindowBorderLeft()
+	rule := config.Global.GetWindowBorderLeft()
 
 	want := []string{
 		"  " + rule,
@@ -178,7 +178,7 @@ func TestStripGroupListsWhatWantsAHumanInTheRailsOwnOrder(t *testing.T) {
 func TestStripGroupSitsUnderItsOwnHeader(t *testing.T) {
 	m, tree := agentStripOS(t, 120, 24)
 	lines := railPlain(t, m, tree)
-	rule := config.GetWindowBorderLeft()
+	rule := config.Global.GetWindowBorderLeft()
 
 	want := []string{
 		" a" + rule, // the section's own name, cut to the strip's one column
@@ -211,6 +211,7 @@ func TestStripGroupTargetsOwnTheirSlots(t *testing.T) {
 	for _, pos := range []string{"left", "right"} {
 		m, tree := agentStripOS(t, 120, 24)
 		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		m.Settings = config.Global
 		m.SidebarCollapsed = true
 		m.SidebarFocused = true
 		m.sidebarPanelLinesForTree(tree)
@@ -374,11 +375,11 @@ func TestStripGroupYieldsToTheSpineWhenShort(t *testing.T) {
 // whole job is to be readable at a glance.
 func TestStripGroupASCIIAndMonochrome(t *testing.T) {
 	t.Run("ascii", func(t *testing.T) {
-		prev := config.UseASCIIOnly
-		config.UseASCIIOnly = true
+		prev := config.Global.UseASCIIOnly
+		config.Global.UseASCIIOnly = true
 		overlay.SetASCII(true)
 		t.Cleanup(func() {
-			config.UseASCIIOnly = prev
+			config.Global.UseASCIIOnly = prev
 			overlay.SetASCII(prev)
 		})
 
@@ -398,6 +399,8 @@ func TestStripGroupASCIIAndMonochrome(t *testing.T) {
 		// Monochrome is the frame with every colour dropped: the marks differ by
 		// shape, and the group by the name over it.
 		m, tree := agentStripOS(t, 120, 24)
+
+		m.Settings = config.Global
 		joined := strings.Join(railPlain(t, m, tree), "\n")
 		for _, want := range []string{" a", "×", "▲", "●", "■"} {
 			if !strings.Contains(joined, want) {
@@ -419,6 +422,7 @@ func TestStripGroupKeepsHitsAndNavIndexForIndex(t *testing.T) {
 			}
 			m, tree := build(t, 120, 24)
 			withSidebar(t, true, pos, config.SidebarDefaultWidth)
+			m.Settings = config.Global
 			m.SidebarCollapsed = true
 			m.sidebarPanelLinesForTree(tree)
 

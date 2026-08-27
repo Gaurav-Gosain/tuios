@@ -133,7 +133,7 @@ func (m *OS) effectRow(name string, selected bool, pal overlay.Palette, width in
 		marker = "› "
 	}
 
-	band := effectOpeningBandOf(name)
+	band := effectOpeningBandOf(name, &m.Settings)
 	timing := effectOpeningWord(band)
 	timingColor := pal.FgMute
 	if band == effectOpeningLong {
@@ -221,7 +221,7 @@ func (m *OS) effectPickerDetail(items []string, pal overlay.Palette, width int) 
 	lines := settingsDescription(description, width, effectPickerDetailRows, pal)
 
 	style := overlay.Style(bg).Foreground(pal.FgMute).Italic(true)
-	if m.effectPreview.resized || effectOpeningBandOf(name) == effectOpeningLong {
+	if m.effectPreview.resized || effectOpeningBandOf(name, &m.Settings) == effectOpeningLong {
 		// The flag, not a filter. A slow opener is still a choice someone may
 		// want; what it must not be is a surprise.
 		style = overlay.Style(bg).Foreground(pal.Warning)
@@ -254,7 +254,7 @@ func (m *OS) effectDetailText(name string) (description, status string) {
 	if status != "" {
 		return description, status
 	}
-	return description, effectOpeningSentence(effectOpeningBandOf(name))
+	return description, effectOpeningSentence(effectOpeningBandOf(name, &m.Settings))
 }
 
 // blankLines is n surface-filled spacer rows.

@@ -45,7 +45,7 @@ func TestNotificationBlockStaysInsideItsBudget(t *testing.T) {
 		for _, sev := range []string{"info", "success", "warning", "error"} {
 			for _, message := range messages {
 				m := notifTestOS(t, width)
-				m.ShowNotification(message, sev, config.NotificationDuration)
+				m.ShowNotification(message, sev, m.Settings.NotificationDuration)
 
 				block, ok := m.renderNotificationBlock(width, 0)
 				if !ok {
@@ -78,7 +78,7 @@ func TestNotificationRuleMatchesTheBlockSpan(t *testing.T) {
 	for _, width := range notifWidths {
 		for _, sev := range []string{"info", "success", "warning", "error"} {
 			m := notifTestOS(t, width)
-			m.ShowNotification("Layout applied: development", sev, config.NotificationDuration)
+			m.ShowNotification("Layout applied: development", sev, m.Settings.NotificationDuration)
 
 			block, ok := m.renderNotificationBlock(width, 0)
 			if !ok {
@@ -124,7 +124,7 @@ func TestNotificationBurnsDownAndStickyDoesNot(t *testing.T) {
 
 	// A sticky error lights the rule end to end and stays there.
 	s := notifTestOS(t, width)
-	s.ShowNotification("Failed to save layout", "error", config.NotificationDuration)
+	s.ShowNotification("Failed to save layout", "error", s.Settings.NotificationDuration)
 	if !s.Notifications[0].Sticky {
 		t.Fatal("an error should be sticky by default")
 	}
@@ -154,7 +154,7 @@ func dockRows(t *testing.T, dock string) (hairline, content string) {
 	if len(rows) != 2 {
 		t.Fatalf("the dock drew %d rows, want a hairline and a bar", len(rows))
 	}
-	if config.DockbarPosition == "top" {
+	if config.Global.DockbarPosition == "top" {
 		return rows[1], rows[0]
 	}
 	return rows[0], rows[1]
@@ -166,7 +166,7 @@ func dockRows(t *testing.T, dock string) (hairline, content string) {
 // taken from the block itself agreed with the block.
 func notifBurnSpan(t *testing.T, hairline string) (int, int) {
 	t.Helper()
-	stroke := []rune(config.GetNotificationRule(config.NotificationRuleHeavy))[0]
+	stroke := []rune(config.Global.GetNotificationRule(config.NotificationRuleHeavy))[0]
 	x0, x1 := -1, -1
 	for i, r := range []rune(stripANSIForTrace(hairline)) {
 		if r != stroke {
@@ -217,7 +217,7 @@ func TestNotificationBurnSitsUnderItsOwnBlock(t *testing.T) {
 			m := notifTestOS(t, width)
 			// An error is sticky, so the whole span is lit and the burn's extent
 			// is the block's extent exactly.
-			m.ShowNotification(message, "error", config.NotificationDuration)
+			m.ShowNotification(message, "error", m.Settings.NotificationDuration)
 
 			dock, _ := m.renderDockString()
 			hairline, content := dockRows(t, dock)
@@ -234,7 +234,7 @@ func TestNotificationBurnSitsUnderItsOwnBlock(t *testing.T) {
 
 			// The recorded rect is the block's real place on the row below, so
 			// the two assertions above are about the same thing the user sees.
-			if got := cellsFrom(stripANSIForTrace(content), z.X0); !strings.HasPrefix(got, notifCap("error")) {
+			if got := cellsFrom(stripANSIForTrace(content), z.X0); !strings.HasPrefix(got, notifCap("error", &m.Settings)) {
 				t.Errorf("width %d: column %d of the bar reads %q, want the block's opening cap",
 					width, z.X0, cellsFrom(got, 0))
 			}
@@ -282,7 +282,7 @@ func TestNotificationBurnShortensFromTheBlocksOwnEnd(t *testing.T) {
 // the way out of a sticky message.
 func TestNotificationBurnClearsTheDismissTarget(t *testing.T) {
 	m := notifTestOS(t, 120)
-	m.ShowNotification("Failed to save layout: permission denied", "error", config.NotificationDuration)
+	m.ShowNotification("Failed to save layout: permission denied", "error", m.Settings.NotificationDuration)
 
 	dock, _ := m.renderDockString()
 	hairline, _ := dockRows(t, dock)
@@ -310,7 +310,7 @@ func TestNotificationTruncationCutsTheMessageNotTheSeverity(t *testing.T) {
 	for _, width := range notifWidths {
 		for _, sev := range []string{"info", "success", "warning", "error"} {
 			m := notifTestOS(t, width)
-			m.ShowNotification(long, sev, config.NotificationDuration)
+			m.ShowNotification(long, sev, m.Settings.NotificationDuration)
 
 			block, ok := m.renderNotificationBlock(width, 0)
 			if !ok {
@@ -318,10 +318,10 @@ func TestNotificationTruncationCutsTheMessageNotTheSeverity(t *testing.T) {
 			}
 			plain := stripANSIForTrace(block.Text)
 
-			if glyph := notifGlyph(sev); !strings.Contains(plain, glyph) {
+			if glyph := notifGlyph(sev, &m.Settings); !strings.Contains(plain, glyph) {
 				t.Errorf("width %d, %s: truncation took the severity mark: %q", width, sev, plain)
 			}
-			if cap := notifCap(sev); !strings.Contains(plain, cap) {
+			if cap := notifCap(sev, &m.Settings); !strings.Contains(plain, cap) {
 				t.Errorf("width %d, %s: truncation took the severity cap: %q", width, sev, plain)
 			}
 			if !strings.Contains(plain, "...") {
@@ -341,8 +341,8 @@ func TestNotificationTruncationCutsTheMessageNotTheSeverity(t *testing.T) {
 // channel back on hue, which is the failure the prototype found when the
 // weights were an eighth apart instead of two.
 func TestSeverityCapsAreDistinctWeights(t *testing.T) {
-	info, warn, err := notifCap("info"), notifCap("warning"), notifCap("error")
-	if notifCap("success") != info {
+	info, warn, err := notifCap("info", &config.Global), notifCap("warning", &config.Global), notifCap("error", &config.Global)
+	if notifCap("success", &config.Global) != info {
 		t.Error("success and info should share the light cap; they are both routine")
 	}
 	if info == warn || warn == err || info == err {
@@ -360,8 +360,8 @@ func TestQueuedErrorIsStillIndicatedWhenBuried(t *testing.T) {
 	const width = 120
 
 	m := notifTestOS(t, width)
-	m.ShowNotification("Failed to save layout: permission denied", "error", config.NotificationDuration)
-	m.ShowNotification("Window created (2 total)", "info", config.NotificationDuration)
+	m.ShowNotification("Failed to save layout: permission denied", "error", m.Settings.NotificationDuration)
+	m.ShowNotification("Window created (2 total)", "info", m.Settings.NotificationDuration)
 
 	block, ok := m.renderNotificationBlock(width, 0)
 	if !ok {
@@ -385,7 +385,7 @@ func TestQueuedErrorIsStillIndicatedWhenBuried(t *testing.T) {
 
 	// Several more messages do not change the shape, only the count.
 	for i := 0; i < 4; i++ {
-		m.ShowNotification("Client joined", "info", config.NotificationDuration)
+		m.ShowNotification("Client joined", "info", m.Settings.NotificationDuration)
 	}
 	block, _ = m.renderNotificationBlock(width, 0)
 	plain = stripANSIForTrace(block.Text)
@@ -416,7 +416,7 @@ func TestNotificationOutranksCopyModeHelp(t *testing.T) {
 		t.Fatal("copy mode should hold the dock's right block when nothing else does")
 	}
 
-	m.ShowNotification("Yanked 240 chars", "success", config.NotificationDuration)
+	m.ShowNotification("Yanked 240 chars", "success", m.Settings.NotificationDuration)
 	dock, _ = m.renderDockString()
 	plain := stripANSIForTrace(dock)
 
@@ -445,7 +445,7 @@ func TestDockStaysOneScreenWideWithAMessage(t *testing.T) {
 
 	for _, width := range notifWidths {
 		m := notifTestOS(t, width)
-		m.ShowNotification(long, "error", config.NotificationDuration)
+		m.ShowNotification(long, "error", m.Settings.NotificationDuration)
 
 		dock, _ := m.renderDockString()
 		for i, line := range strings.Split(dock, "\n") {
@@ -469,10 +469,10 @@ func TestNotificationLifetimeFloorsAndStickiness(t *testing.T) {
 		want      time.Duration
 		sticky    bool
 	}{
-		{"info takes the floor", "info", 1500 * time.Millisecond, config.NotificationDuration, false},
-		{"success takes the floor", "success", time.Second, config.NotificationDuration, false},
+		{"info takes the floor", "info", 1500 * time.Millisecond, config.Global.NotificationDuration, false},
+		{"success takes the floor", "success", time.Second, config.Global.NotificationDuration, false},
 		{"a longer request wins", "info", time.Minute, time.Minute, false},
-		{"warning has its own floor", "warning", time.Second, config.NotificationWarningDuration, false},
+		{"warning has its own floor", "warning", time.Second, config.Global.NotificationWarningDuration, false},
 		{"error waits to be dismissed", "error", time.Second, 0, true},
 		{"a zero-duration error is still shown", "error", 0, 0, true},
 		{"a zero-duration info is not shown", "info", 0, 0, false},
@@ -480,7 +480,7 @@ func TestNotificationLifetimeFloorsAndStickiness(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, sticky := notificationLifetime(tc.notifType, tc.requested)
+			got, sticky := notificationLifetime(tc.notifType, tc.requested, &config.Global)
 			if got != tc.want || sticky != tc.sticky {
 				t.Errorf("notificationLifetime(%q, %v) = %v, sticky %v; want %v, sticky %v",
 					tc.notifType, tc.requested, got, sticky, tc.want, tc.sticky)
@@ -490,8 +490,8 @@ func TestNotificationLifetimeFloorsAndStickiness(t *testing.T) {
 
 	// The severity floors themselves must clear the accessibility minimum, or
 	// the defaults are back where they started.
-	if config.NotificationDuration < 4*time.Second {
-		t.Errorf("the default message lifetime is %v, under the 4s readability floor", config.NotificationDuration)
+	if config.Global.NotificationDuration < 4*time.Second {
+		t.Errorf("the default message lifetime is %v, under the 4s readability floor", config.Global.NotificationDuration)
 	}
 }
 
@@ -501,7 +501,7 @@ func TestNotificationLifetimeFloorsAndStickiness(t *testing.T) {
 // dock and contributes no layer at all.
 func TestNotificationNeverCoversAPane(t *testing.T) {
 	m := notifTestOS(t, 120)
-	m.ShowNotification("Recording saved: demo.tape", "success", config.NotificationDuration)
+	m.ShowNotification("Recording saved: demo.tape", "success", m.Settings.NotificationDuration)
 
 	for _, layer := range m.renderOverlays() {
 		if id := layer.GetID(); strings.HasPrefix(id, "notif") {

@@ -162,14 +162,14 @@ func TestDockLeftRegionSurvivesTheStrip(t *testing.T) {
 func TestDockPillsAreFlatByDefault(t *testing.T) {
 	m := dockTabTestOS(t, 1, 1, 2, 3)
 
-	prevCaps, prevTabs := config.DockPillCaps, config.DockWorkspaceTabs
-	t.Cleanup(func() { config.DockPillCaps, config.DockWorkspaceTabs = prevCaps, prevTabs })
+	prevCaps, prevTabs := m.Settings.DockPillCaps, m.Settings.DockWorkspaceTabs
+	t.Cleanup(func() { m.Settings.DockPillCaps, m.Settings.DockWorkspaceTabs = prevCaps, prevTabs })
 
-	config.DockPillCaps = false
-	if lc := config.GetDockPillLeftChar(); lc != "" {
+	m.Settings.DockPillCaps = false
+	if lc := m.Settings.GetDockPillLeftChar(); lc != "" {
 		t.Errorf("flat pills still report a left cap %q", lc)
 	}
-	config.DockWorkspaceTabs = false
+	m.Settings.DockWorkspaceTabs = false
 	flat, _ := m.renderDockString()
 	// The mode chip is outside this rule too. It heads a row of capped tabs, so
 	// a square chip beside them reads as an unfinished pill. It wears exactly
@@ -180,14 +180,14 @@ func TestDockPillsAreFlatByDefault(t *testing.T) {
 			t.Errorf("flat dock draws the cap glyph %q %d times, want 1 for the mode chip alone", cap, n)
 		}
 	}
-	config.DockWorkspaceTabs = prevTabs
+	m.Settings.DockWorkspaceTabs = prevTabs
 	m.renderDockString()
 
 	// The active tab is a filled cell rather than a cap pair, so the strip must
 	// keep its width and its hit rects across the two styles.
 	flatHits := append([]dockWorkspaceHit(nil), m.dockWorkspaceHits...)
 
-	config.DockPillCaps = true
+	m.Settings.DockPillCaps = true
 	capped, _ := m.renderDockString()
 	if !strings.Contains(capped, config.DockPillLeftChar) {
 		t.Error("turning pill caps on did not bring the caps back")
@@ -207,12 +207,12 @@ func TestDockDropsTheStatsTotals(t *testing.T) {
 	m := dockTabTestOS(t, 2, 1, 2, 5)
 	dock, _ := m.renderDockString()
 	plain := stripANSIForTrace(dock)
-	for _, icon := range []string{config.GetDockIconWorkspaceCount(), config.GetDockIconTerminalCount()} {
+	for _, icon := range []string{m.Settings.GetDockIconWorkspaceCount(), m.Settings.GetDockIconTerminalCount()} {
 		if strings.Contains(plain, icon) {
 			t.Errorf("the dock still shows the stats icon %q: %q", icon, plain)
 		}
 	}
-	if strings.Contains(plain, config.GetDockSeparator()+"3") {
+	if strings.Contains(plain, m.Settings.GetDockSeparator()+"3") {
 		t.Errorf("the dock still shows the totals after their separator: %q", plain)
 	}
 }

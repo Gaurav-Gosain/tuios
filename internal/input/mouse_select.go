@@ -64,14 +64,14 @@ func registerClick(win *terminal.Window, termX, termY int) int {
 // A line rather than a sentence for three clicks: terminal content is
 // line-oriented, and sentence detection over shell output, log lines and code
 // would be guesswork.
-func beginMouseSelection(cm *terminal.CopyMode, window *terminal.Window, screenX, screenY, clicks int) {
+func beginMouseSelection(cm *terminal.CopyMode, window *terminal.Window, screenX, screenY, clicks int, s *config.Settings) {
 	switch clicks {
 	case 2:
 		HandleCopyModeMouseDrag(cm, window, screenX, screenY)
 		func() {
 			window.RLockIO()
 			defer window.RUnlockIO()
-			if !selectWordUnderCursor(cm, window) {
+			if !selectWordUnderCursor(cm, window, s) {
 				// Nothing word-shaped under the pointer. Leave the one-cell
 				// selection the drag started rather than inventing one.
 				cm.State = terminal.CopyModeNormal
@@ -97,22 +97,22 @@ func beginMouseSelection(cm *terminal.CopyMode, window *terminal.Window, screenX
 // select a lone space.
 //
 // Callers must hold the window's I/O read lock.
-func selectWordUnderCursor(cm *terminal.CopyMode, window *terminal.Window) bool {
+func selectWordUnderCursor(cm *terminal.CopyMode, window *terminal.Window, s *config.Settings) bool {
 	absY := getAbsoluteY(cm, window)
 	cells := copyModeLineCells(window, absY)
 	if cm.CursorX < 0 || cm.CursorX >= len(cells) {
 		return false
 	}
-	if !isSelectionWordChar(cells[cm.CursorX]) {
+	if !isSelectionWordChar(cells[cm.CursorX], s) {
 		return false
 	}
 
 	startX := cm.CursorX
-	for startX > 0 && isSelectionWordChar(cells[startX-1]) {
+	for startX > 0 && isSelectionWordChar(cells[startX-1], s) {
 		startX--
 	}
 	endX := cm.CursorX
-	for endX < len(cells)-1 && isSelectionWordChar(cells[endX+1]) {
+	for endX < len(cells)-1 && isSelectionWordChar(cells[endX+1], s) {
 		endX++
 	}
 
@@ -127,7 +127,7 @@ func selectWordUnderCursor(cm *terminal.CopyMode, window *terminal.Window) bool 
 // Letters and digits always do; the punctuation that also does is
 // appearance.word_characters, so a path, a URL or a flag like --no-vm comes out
 // as one word instead of a handful of fragments.
-func isSelectionWordChar(cell uv.Cell) bool {
+func isSelectionWordChar(cell uv.Cell, s *config.Settings) bool {
 	if cell.Content == "" || cell.Content == " " {
 		return false
 	}
@@ -138,7 +138,7 @@ func isSelectionWordChar(cell uv.Cell) bool {
 	if unicode.IsSpace(r) {
 		return false
 	}
-	return strings.ContainsRune(config.WordCharacters, r)
+	return strings.ContainsRune(s.WordCharacters, r)
 }
 
 // copyModeLineCells returns the cells of an absolute line, from the scrollback
@@ -193,7 +193,7 @@ func finishMouseSelection(o *app.OS, window *terminal.Window) tea.Cmd {
 		return nil
 	}
 
-	if !config.CopyOnSelect {
+	if !o.Settings.CopyOnSelect {
 		return nil
 	}
 

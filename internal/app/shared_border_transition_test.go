@@ -25,34 +25,35 @@ import (
 func transitionOS(t *testing.T, n int, shared, bsp bool) *OS {
 	t.Helper()
 	restoreTransitionConfig(t)
-	config.SharedBorders = shared
-	config.AnimationsEnabled = true
+	config.Global.SharedBorders = shared
+	config.Global.AnimationsEnabled = true
 
 	return newTransitionOS(t, n, bsp)
 }
 
 func restoreTransitionConfig(t *testing.T) {
 	t.Helper()
-	shared, anim := config.SharedBorders, config.AnimationsEnabled
-	dock, style, ascii := config.DockbarPosition, config.BorderStyle, config.UseASCIIOnly
+	shared, anim := config.Global.SharedBorders, config.Global.AnimationsEnabled
+	dock, style, ascii := config.Global.DockbarPosition, config.Global.BorderStyle, config.Global.UseASCIIOnly
 	// The dividers meet the dock's hairline, and the ASCII set draws every
 	// junction as "+", so both are part of the shape these tests read.
-	config.DockbarPosition = "bottom"
-	config.BorderStyle = "rounded"
-	config.UseASCIIOnly = false
+	config.Global.DockbarPosition = "bottom"
+	config.Global.BorderStyle = "rounded"
+	config.Global.UseASCIIOnly = false
 	t.Cleanup(func() {
-		config.SharedBorders, config.AnimationsEnabled = shared, anim
-		config.DockbarPosition, config.BorderStyle, config.UseASCIIOnly = dock, style, ascii
+		config.Global.SharedBorders, config.Global.AnimationsEnabled = shared, anim
+		config.Global.DockbarPosition, config.Global.BorderStyle, config.Global.UseASCIIOnly = dock, style, ascii
 	})
 }
 
 func newTransitionOS(t *testing.T, n int, bsp bool) *OS {
 	t.Helper()
 	m := &OS{
+		Settings: config.Global,
 		// The layout reads the model's session-settled geometry, seeded from
 		// the globals the way NewOS seeds it.
-		SharedBorders:    config.SharedBorders,
-		PaneGap:          config.PaneGap,
+		SharedBorders:    config.Global.SharedBorders,
+		PaneGap:          config.Global.PaneGap,
 		Windows:          make([]*terminal.Window, 0, n),
 		FocusedWindow:    0,
 		WorkspaceFocus:   map[int]int{},
@@ -329,11 +330,11 @@ func TestTransitionDrawsInTheStylesOwnGlyphs(t *testing.T) {
 	for _, style := range config.BorderStyles {
 		t.Run(style, func(t *testing.T) {
 			restoreTransitionConfig(t)
-			config.SharedBorders = true
-			config.AnimationsEnabled = true
-			config.BorderStyle = style
+			config.Global.SharedBorders = true
+			config.Global.AnimationsEnabled = true
+			config.Global.BorderStyle = style
 
-			allowed := styleGlyphs(config.GetBorderForStyle())
+			allowed := styleGlyphs(config.Global.GetBorderForStyle())
 			m := newTransitionOS(t, 4, true)
 			spawnPane(t, m)
 			for _, step := range transitionSteps {
@@ -365,15 +366,16 @@ func TestTransitionSettlesWhereNoAnimationWould(t *testing.T) {
 				}
 				t.Run(fmt.Sprintf("shared=%v/%s/%s", shared, mode, sc.name), func(t *testing.T) {
 					restoreTransitionConfig(t)
-					config.SharedBorders = shared
+					config.Global.SharedBorders = shared
 
-					config.AnimationsEnabled = true
+					config.Global.AnimationsEnabled = true
 					animated := newTransitionOS(t, sc.panes, bsp)
 					sc.run(t, animated)
 					settle(animated)
 
-					config.AnimationsEnabled = false
+					config.Global.AnimationsEnabled = false
 					still := newTransitionOS(t, sc.panes, bsp)
+					animated.Settings = config.Global
 					sc.run(t, still)
 
 					if got, want := transitionFrame(animated), transitionFrame(still); got != want {

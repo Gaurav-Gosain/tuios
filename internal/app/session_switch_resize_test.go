@@ -13,11 +13,11 @@ import (
 // that repaints the shell's prompt, so a same-size switch that sends even one
 // leaves a stacked prompt.
 func TestSyncDaemonPTYDimensionsSkipsUnchanged(t *testing.T) {
-	orig := config.SharedBorders
-	config.SharedBorders = true
-	t.Cleanup(func() { config.SharedBorders = orig })
+	orig := config.Global.SharedBorders
+	config.Global.SharedBorders = true
+	t.Cleanup(func() { config.Global.SharedBorders = orig })
 
-	m := &OS{CurrentWorkspace: 1, Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, CurrentWorkspace: 1, Width: 120, Height: 40}
 
 	var calls int
 	mk := func(id string, w, h int) *terminal.Window {

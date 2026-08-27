@@ -35,7 +35,7 @@ func navIndexOfSession(m *OS, id string) int {
 func TestRailEnterExitTogglesFocus(t *testing.T) {
 	m, tree := sidebarMultiSessionOS(t, 120, 40)
 	// Start with the rail off so entering must reveal it.
-	config.SidebarEnabled = false
+	m.Settings.SidebarEnabled = false
 	m.UserConfig = nil
 	m.sidebarPanelLinesForTree(tree)
 
@@ -43,7 +43,7 @@ func TestRailEnterExitTogglesFocus(t *testing.T) {
 	if !m.SidebarFocused {
 		t.Fatal("EnterSidebarFocus did not take focus")
 	}
-	if !config.SidebarEnabled || !m.SidebarRevealedForFocus {
+	if !m.Settings.SidebarEnabled || !m.SidebarRevealedForFocus {
 		t.Fatal("entering a hidden rail did not reveal it")
 	}
 
@@ -51,7 +51,7 @@ func TestRailEnterExitTogglesFocus(t *testing.T) {
 	if m.SidebarFocused {
 		t.Fatal("ExitSidebarFocus did not release focus")
 	}
-	if config.SidebarEnabled {
+	if m.Settings.SidebarEnabled {
 		t.Fatal("exiting did not hide the rail it had revealed")
 	}
 }
@@ -152,7 +152,7 @@ func TestRailReorderMatchesDrag(t *testing.T) {
 		t.Fatalf("J reorder = %v, want %v", m.SidebarOrder, want)
 	}
 	// The moved session is persisted.
-	fresh := &OS{}
+	fresh := &OS{Settings: config.Global}
 	fresh.loadSidebarState()
 	if want := []string{"scratch", "main", "deploy"}; !reflect.DeepEqual(fresh.SidebarOrder, want) {
 		t.Fatalf("fresh OS loaded order %v, want %v", fresh.SidebarOrder, want)

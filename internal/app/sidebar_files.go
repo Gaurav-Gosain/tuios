@@ -167,7 +167,7 @@ func (m *OS) filesOn() bool {
 	case m.filesView.Show < 0:
 		return false
 	default:
-		return sidebarLayoutHas(sidebarSectionFiles)
+		return sidebarLayoutHas(sidebarSectionFiles, &m.Settings)
 	}
 }
 
@@ -183,7 +183,7 @@ func (m *OS) filesSectionEnabled() bool {
 	// from Update, so it is on the idle path of every client; SidebarEnabled is
 	// false for most of them and answering there costs a load and a branch,
 	// where filesOn takes the layout mutex.
-	if !config.SidebarEnabled || !m.filesOn() {
+	if !m.Settings.SidebarEnabled || !m.filesOn() {
 		return false
 	}
 	w := m.GetSidebarWidth()
@@ -323,13 +323,13 @@ func (m *OS) ToggleFileView() tea.Cmd {
 	}
 	window := m.GetFocusedWindow()
 	if window == nil {
-		m.ShowNotification("There is no pane to show files for.", "info", config.NotificationDuration)
+		m.ShowNotification("There is no pane to show files for.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	if window.Cwd == "" {
 		m.ShowNotification(
 			"tuios does not know where that pane is. The shell has to report its directory.",
-			"info", config.NotificationDuration)
+			"info", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.filesView.Show = 1
@@ -465,15 +465,15 @@ func (m *OS) FileViewEnter(index int) tea.Cmd {
 	full := filepath.Join(m.filesView.Dir, entry.Name)
 	if entry.Dir {
 		var cmd tea.Cmd
-		if config.SidebarFolderClick != config.SidebarFolderClickCd {
+		if m.Settings.SidebarFolderClick != config.SidebarFolderClickCd {
 			cmd = m.requestFileList(full, m.filesView.Origin, true)
 		}
-		if config.SidebarFolderClick != config.SidebarFolderClickNavigate {
+		if m.Settings.SidebarFolderClick != config.SidebarFolderClickNavigate {
 			m.sendCdToOrigin(full)
 		}
 		return cmd
 	}
-	m.ShowNotification("Copied the path.", "success", config.NotificationDuration)
+	m.ShowNotification("Copied the path.", "success", m.Settings.NotificationDuration)
 	return tea.SetClipboard(full)
 }
 
@@ -502,17 +502,17 @@ func (m *OS) FileViewCd() {
 func (m *OS) sendCdToOrigin(dir string) {
 	window := m.fileViewOriginWindow()
 	if window == nil {
-		m.ShowNotification("This listing is not tied to a pane.", "info", config.NotificationDuration)
+		m.ShowNotification("This listing is not tied to a pane.", "info", m.Settings.NotificationDuration)
 		return
 	}
 	if why, ok := paneBusyReason(window); !ok {
-		m.ShowNotification(why, "warning", config.NotificationDuration)
+		m.ShowNotification(why, "warning", m.Settings.NotificationDuration)
 		return
 	}
 	line := "cd " + shellQuote(dir) + "\r"
 	if err := window.SendInput([]byte(line)); err != nil {
 		m.LogError("Failed to send cd to window %s: %v", window.ID, err)
-		m.ShowNotification("Could not write to that pane.", "error", config.NotificationDuration)
+		m.ShowNotification("Could not write to that pane.", "error", m.Settings.NotificationDuration)
 	}
 }
 

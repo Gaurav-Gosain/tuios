@@ -3,6 +3,7 @@ package input
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -70,17 +71,17 @@ func abs(x int) int {
 // on the bare track jumps the thumb under the pointer first and takes its offset
 // from where the thumb landed, after opentui's Slider - taking it before the
 // jump makes the thumb leap a second time on the first pixel of the drag.
-func scrollbarGrab(win *terminal.Window, rect app.ScrollbarRect, mouseY int) int {
+func scrollbarGrab(win *terminal.Window, rect app.ScrollbarRect, mouseY int, s *config.Settings) int {
 	if rect.OnThumb(mouseY) {
 		return mouseY - rect.ThumbY
 	}
-	scrollToThumbRow(win, mouseY-rect.ThumbH/2)
-	return mouseY - app.ScrollbarThumbRow(win)
+	scrollToThumbRow(win, mouseY-rect.ThumbH/2, s)
+	return mouseY - app.ScrollbarThumbRow(win, s)
 }
 
 // scrollToThumbRow scrolls a window's copy mode so the scrollbar thumb's first
 // row lands on the given screen row.
-func scrollToThumbRow(win *terminal.Window, row int) {
+func scrollToThumbRow(win *terminal.Window, row int, s *config.Settings) {
 	if win.Terminal == nil {
 		return
 	}
@@ -103,7 +104,7 @@ func scrollToThumbRow(win *terminal.Window, row int) {
 
 	// The renderer owns the thumb's travel, so the drag inverts its arithmetic
 	// rather than keeping a second copy of it.
-	scrollOffset := app.ScrollbarOffsetForThumbRow(win, row)
+	scrollOffset := app.ScrollbarOffsetForThumbRow(win, row, s)
 
 	win.CopyMode.ScrollOffset = scrollOffset
 	win.ScrollbackOffset = scrollOffset // Sync for rendering

@@ -35,11 +35,11 @@ func hoverOS(t *testing.T) *app.OS {
 
 	prevProfile := lipgloss.Writer.Profile
 	lipgloss.Writer.Profile = colorprofile.TrueColor
-	pe, pp, pw := config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth
-	config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth = true, "left", 30
+	pe, pp, pw := config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth
+	config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth = true, "left", 30
 	t.Cleanup(func() {
 		lipgloss.Writer.Profile = prevProfile
-		config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth = pe, pp, pw
+		config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth = pe, pp, pw
 	})
 
 	cfg := config.DefaultConfig()
@@ -72,7 +72,7 @@ func railCell(t *testing.T, lines []string, label string) (x, y int) {
 	for i, line := range lines {
 		plain := stripSGR(line)
 		idx := strings.Index(plain, label)
-		if idx >= 0 && idx < config.SidebarWidth {
+		if idx >= 0 && idx < config.Global.SidebarWidth {
 			return idx, i
 		}
 	}
@@ -204,6 +204,7 @@ func TestTrailingMotionIsNotDropped(t *testing.T) {
 	want := frameLines(motion(direct, x, y))
 
 	swept := hoverOS(t)
+	direct.Settings = config.Global
 	_ = frameLines(swept)
 	for row := 2; row < y; row++ {
 		swept = motion(swept, x, row)
@@ -220,9 +221,9 @@ func TestTrailingMotionIsNotDropped(t *testing.T) {
 // other side: the setting worked all along, the events just never arrived while
 // a pane held focus.
 func TestFocusFollowsMouseInTerminalMode(t *testing.T) {
-	prev := config.FocusFollowsMouse
-	config.FocusFollowsMouse = true
-	t.Cleanup(func() { config.FocusFollowsMouse = prev })
+	prev := config.Global.FocusFollowsMouse
+	config.Global.FocusFollowsMouse = true
+	t.Cleanup(func() { config.Global.FocusFollowsMouse = prev })
 
 	m := hoverOS(t)
 	m.Mode = app.TerminalMode

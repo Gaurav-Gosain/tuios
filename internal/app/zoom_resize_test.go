@@ -4,6 +4,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -27,6 +28,7 @@ func TestToggleZoomResizesDaemonTerminal(t *testing.T) {
 	}
 
 	m := &OS{
+		Settings:       config.Global,
 		Windows:        []*terminal.Window{win},
 		FocusedWindow:  0,
 		WorkspaceFocus: map[int]int{},

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // Which machine opens a link is the whole of this file, and it is the question
@@ -54,7 +53,7 @@ func (m *OS) CopyLink(rawURL string) tea.Cmd {
 	if rawURL == "" {
 		return nil
 	}
-	m.ShowNotification("Copied the link.", "success", config.NotificationDuration)
+	m.ShowNotification("Copied the link.", "success", m.Settings.NotificationDuration)
 	return tea.SetClipboard(rawURL)
 }
 
@@ -76,23 +75,23 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 	// linkOpenableScheme.
 	if !linkOpenableScheme(rawURL) {
 		m.ShowNotification("tuios can not open that kind of link. The address is on your clipboard.",
-			"warning", config.NotificationDuration)
+			"warning", m.Settings.NotificationDuration)
 		return tea.SetClipboard(rawURL)
 	}
 
 	// Not a local file, so it needs the viewer's own machine.
 	if m.IsRemoteClient() {
 		m.ShowNotification("Copied the link. A remote client can not open it for you.",
-			"info", config.NotificationDuration)
+			"info", m.Settings.NotificationDuration)
 		return tea.SetClipboard(rawURL)
 	}
 	if err := openInOSViewer(rawURL); err != nil {
 		m.LogError("Failed to open link %s: %v", rawURL, err)
 		m.ShowNotification("Could not open the link. It is on your clipboard.",
-			"error", config.NotificationDuration)
+			"error", m.Settings.NotificationDuration)
 		return tea.SetClipboard(rawURL)
 	}
-	m.ShowNotification("Opened the link.", "success", config.NotificationDuration)
+	m.ShowNotification("Opened the link.", "success", m.Settings.NotificationDuration)
 	return nil
 }
 
@@ -147,7 +146,7 @@ func (m *OS) openLocalPath(path, rawURL string) tea.Cmd {
 	info, err := os.Stat(path)
 	if err != nil {
 		m.ShowNotification("That file is gone. The link is on your clipboard.",
-			"warning", config.NotificationDuration)
+			"warning", m.Settings.NotificationDuration)
 		return tea.SetClipboard(rawURL)
 	}
 	if info.IsDir() {
@@ -157,7 +156,7 @@ func (m *OS) openLocalPath(path, rawURL string) tea.Cmd {
 	editor := linkEditor()
 	argv := append(strings.Fields(editor), path)
 	m.AddWindow(filepath.Base(path), argv...)
-	m.ShowNotification("Opened the file in a new pane.", "success", config.NotificationDuration)
+	m.ShowNotification("Opened the file in a new pane.", "success", m.Settings.NotificationDuration)
 	return nil
 }
 
@@ -175,7 +174,7 @@ func (m *OS) openDirectoryLink(path string) tea.Cmd {
 		return m.TakeSidebarCmd()
 	}
 	m.ShowNotification("Copied the folder path. Turn the sidebar on to browse it.",
-		"info", config.NotificationDuration)
+		"info", m.Settings.NotificationDuration)
 	return tea.SetClipboard(path)
 }
 

@@ -141,6 +141,7 @@ func TestSessionColoursOffRestoreTheAccentFocusGutter(t *testing.T) {
 	}
 
 	ms, ts := stripOS(t, 120, 20)
+
 	lines := railStyled(t, ms, ts)
 	if !strings.Contains(strings.Join(lines, "\n"), fgParams(pal.Accent)) {
 		t.Error("with session colours off the strip's spine lost the rail accent")

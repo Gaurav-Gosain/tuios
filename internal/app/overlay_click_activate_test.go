@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
@@ -23,7 +24,7 @@ func hasNotification(m *OS, s string) bool {
 // fails, and that failure notification is the proof the click called
 // SwitchToSession rather than stopping at selection.
 func TestSessionSwitcherRowClickActivates(t *testing.T) {
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 	m.ShowSessionSwitcher = true
 	m.SessionSwitcherItems = []sessiontree.Node{
 		{Kind: sessiontree.KindSession, ID: "alpha", Title: "alpha", IsCurrent: true},
@@ -43,7 +44,7 @@ func TestSessionSwitcherRowClickActivates(t *testing.T) {
 // TestSessionSwitcherCurrentRowClickCloses checks clicking the current session's
 // row does not try to switch to itself: it reports and closes, mirroring Enter.
 func TestSessionSwitcherCurrentRowClickCloses(t *testing.T) {
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 	m.ShowSessionSwitcher = true
 	m.SessionSwitcherItems = []sessiontree.Node{
 		{Kind: sessiontree.KindSession, ID: "alpha", Title: "alpha", IsCurrent: true},
@@ -67,7 +68,7 @@ func TestSessionSwitcherCurrentRowClickCloses(t *testing.T) {
 // switch fails outside daemon mode; the failure notification is the proof the
 // row did not silently do nothing.
 func TestSidebarWindowRowOtherSessionAttemptsSwitch(t *testing.T) {
-	m := &OS{Width: 120, Height: 40, SessionName: "alpha"}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40, SessionName: "alpha"}
 
 	m.sidebarFocusWindow(sidebarRowHit{
 		Kind:        sidebarRowWindow,
@@ -87,8 +88,9 @@ func TestSidebarWindowRowOtherSessionAttemptsSwitch(t *testing.T) {
 // Outside daemon mode the switch fails; the failure notification proves the
 // click reached the switch call.
 func TestSidebarSessionRowClickAttemptsSwitch(t *testing.T) {
-	m := &OS{Width: 120, Height: 40, SessionName: "alpha"}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40, SessionName: "alpha"}
 	withSidebar(t, true, "left", 28)
+	m.Settings = config.Global
 
 	// A recorded hit for another session's row, as sidebarPanelLines would
 	// record it inside the band.

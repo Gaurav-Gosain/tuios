@@ -2,7 +2,6 @@ package app
 
 import (
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
@@ -271,7 +270,7 @@ func (m *OS) launcherTarget(idx int) (applist.Entry, bool) {
 		m.CloseLauncher()
 		return e, true
 	}
-	m.ShowNotification(m.launcherEmptyReason(), "info", config.NotificationDuration)
+	m.ShowNotification(m.launcherEmptyReason(), "info", m.Settings.NotificationDuration)
 	return applist.Entry{}, false
 }
 

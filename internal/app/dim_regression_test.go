@@ -74,19 +74,19 @@ func TestTheRailKeepsAnASCIISafeGlyphSetUnderASCIIMode(t *testing.T) {
 	// The accessors already give up a glyph the terminal cannot draw and keep
 	// one it can, per glyph. A second ASCII branch after one throws away a set
 	// the terminal could have drawn.
-	prevASCII, prevSet := config.UseASCIIOnly, theme.ActiveGlyphSetID()
-	config.UseASCIIOnly = true
+	prevASCII, prevSet := config.Global.UseASCIIOnly, theme.ActiveGlyphSetID()
+	config.Global.UseASCIIOnly = true
 	theme.SetActiveGlyphs("ascii")
 	t.Cleanup(func() {
-		config.UseASCIIOnly = prevASCII
+		config.Global.UseASCIIOnly = prevASCII
 		theme.SetActiveGlyphs(prevSet)
 	})
 
 	for _, c := range []struct{ name, got, want string }{
-		{"focus", config.GetRailFocusMark(), ">"},
-		{"bullet", config.GetRailBullet(), "."},
-		{"collapse", config.GetRailCollapseGlyph(), "<<"},
-		{"expand", config.GetRailExpandGlyph(), ">>"},
+		{"focus", config.Global.GetRailFocusMark(), ">"},
+		{"bullet", config.Global.GetRailBullet(), "."},
+		{"collapse", config.Global.GetRailCollapseGlyph(), "<<"},
+		{"expand", config.Global.GetRailExpandGlyph(), ">>"},
 	} {
 		if c.got != c.want {
 			t.Errorf("%s = %q, want the ascii set's own %q", c.name, c.got, c.want)

@@ -13,9 +13,9 @@ import (
 // not fire while it is focused, and esc leaves it. Entering/leaving is what
 // makes the scope a scope; the pane-key check is the guarantee it is exclusive.
 func TestRailScopeRoutesKeys(t *testing.T) {
-	prev := config.SidebarEnabled
-	config.SidebarEnabled = true
-	t.Cleanup(func() { config.SidebarEnabled = prev })
+	prev := config.Global.SidebarEnabled
+	config.Global.SidebarEnabled = true
+	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
 
 	o := twoPaneOS(t)
 	before := len(o.Windows)
@@ -51,9 +51,9 @@ func TestRailScopeRoutesKeys(t *testing.T) {
 // while the rail owns the keyboard, even though the client is in terminal mode
 // (the rail is reachable from terminal mode via ctrl+b o).
 func TestRailScopeSuppressesTerminalTyping(t *testing.T) {
-	prev := config.SidebarEnabled
-	config.SidebarEnabled = true
-	t.Cleanup(func() { config.SidebarEnabled = prev })
+	prev := config.Global.SidebarEnabled
+	config.Global.SidebarEnabled = true
+	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
 
 	o := twoPaneOS(t)
 	o.Mode = app.TerminalMode

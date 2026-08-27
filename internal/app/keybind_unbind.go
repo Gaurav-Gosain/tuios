@@ -55,7 +55,7 @@ func (m *OS) KeybindUnbindSelected() tea.Cmd {
 		return nil
 	}
 	if b.Unbound {
-		m.ShowNotification(b.Action+" already has no key. Press ctrl+r to give it one.", "info", config.NotificationDuration)
+		m.ShowNotification(b.Action+" already has no key. Press ctrl+r to give it one.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	if !m.keybindEditable() {
@@ -77,7 +77,7 @@ func (m *OS) KeybindUnbindSelected() tea.Cmd {
 	if rest := m.keybindOtherClaims(b.Key); rest != "" {
 		msg += ". " + rest
 	}
-	m.ShowNotification(msg, "success", config.NotificationDuration)
+	m.ShowNotification(msg, "success", m.Settings.NotificationDuration)
 	return cmd
 }
 
@@ -100,7 +100,7 @@ func (m *OS) KeybindFreeKey(key string) tea.Cmd {
 			m.ShowNotification("Nothing binds "+key+", but "+held, "warning", 0)
 			return nil
 		}
-		m.ShowNotification("Nothing binds "+key+". The pane already gets it.", "info", config.NotificationDuration)
+		m.ShowNotification("Nothing binds "+key+". The pane already gets it.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 
@@ -116,7 +116,7 @@ func (m *OS) KeybindFreeKey(key string) tea.Cmd {
 		m.ShowNotification(msg+". It still will not reach the pane: "+held, "warning", 0)
 		return cmd
 	}
-	m.ShowNotification(msg+". The pane gets it now.", "success", config.NotificationDuration)
+	m.ShowNotification(msg+". The pane gets it now.", "success", m.Settings.NotificationDuration)
 	return cmd
 }
 
@@ -164,7 +164,7 @@ func (m *OS) KeybindResolveSelectedConflict() tea.Cmd {
 	}
 	cmd := m.keybindApply()
 	m.ShowNotification("Took "+c.Key+" off "+strings.Join(freed, ", ")+". "+
-		c.Winner+" keeps it, which is what it already did.", "success", config.NotificationDuration)
+		c.Winner+" keeps it, which is what it already did.", "success", m.Settings.NotificationDuration)
 	return cmd
 }
 
@@ -180,7 +180,7 @@ func (m *OS) KeybindFreeSelectedKey() tea.Cmd {
 		return nil
 	}
 	if b.Unbound {
-		m.ShowNotification(b.Action+" has no key to free", "info", config.NotificationDuration)
+		m.ShowNotification(b.Action+" has no key to free", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	return m.KeybindFreeKey(b.Key)

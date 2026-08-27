@@ -3,6 +3,8 @@ package terminal
 import (
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // The render coalescer has two jobs, and they pull in opposite directions:
@@ -19,7 +21,7 @@ import (
 // loaded machine while telling nobody anything.
 func TestCoalescerEmitsQuietPaneImmediately(t *testing.T) {
 	ptyData := make(chan struct{}, 1)
-	w := NewDaemonWindow("coal-lead", "pane", 0, 0, 80, 24, 0, "pty-coal-lead", ptyData)
+	w := NewDaemonWindow("coal-lead", "pane", 0, 0, 80, 24, 0, "pty-coal-lead", ptyData, config.DefaultScrollbackLines)
 	if w == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}
@@ -52,7 +54,7 @@ func TestCoalescerEmitsQuietPaneImmediately(t *testing.T) {
 // them.
 func TestCoalescerCapsAFloodingPane(t *testing.T) {
 	ptyData := make(chan struct{}, 1)
-	w := NewDaemonWindow("coal-cap", "pane", 0, 0, 80, 24, 0, "pty-coal-cap", ptyData)
+	w := NewDaemonWindow("coal-cap", "pane", 0, 0, 80, 24, 0, "pty-coal-cap", ptyData, config.DefaultScrollbackLines)
 	if w == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}

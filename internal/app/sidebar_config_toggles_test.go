@@ -29,7 +29,9 @@ func TestSidebarLayoutTogglesAgentsSection(t *testing.T) {
 	}
 
 	withSections(t, "sessions:25,terminals,files:25")
+	m.Settings = config.Global
 	m = sidebarTestOS(t, 120, 40, "left")
+	m.Settings = config.Global
 	out := sidebarText(t, m)
 	if strings.Contains(out, "agents") {
 		t.Error("a layout without agents still drew the agents section")
@@ -55,7 +57,7 @@ func TestDockWorkspaceTabsToggle(t *testing.T) {
 	y := m.GetDockbarContentYPosition()
 	was := m.dockWorkspaceHits[0]
 
-	swapBool(t, &config.DockWorkspaceTabs, false)
+	swapBool(t, &config.Global.DockWorkspaceTabs, false)
 	m = dockTabTestOS(t, 1, 1, 3, 7)
 	m.renderDockString()
 	if got := len(m.dockWorkspaceHits); got != 0 {
@@ -72,14 +74,14 @@ func TestDockWorkspaceTabsToggle(t *testing.T) {
 func TestSidebarMarqueeToggle(t *testing.T) {
 	const long = "a-very-long-window-name-that-will-not-fit"
 
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.sidebarMarquee("w:1", long, 10, true)
 	if !m.SidebarMarqueeActive() {
 		t.Fatal("a hovered overflowing row did not arm the marquee by default")
 	}
 
-	swapBool(t, &config.SidebarMarquee, false)
-	m = &OS{}
+	swapBool(t, &config.Global.SidebarMarquee, false)
+	m = &OS{Settings: config.Global}
 	off := m.sidebarMarquee("w:1", long, 10, true)
 	if m.SidebarMarqueeActive() {
 		t.Error("marquee = false still armed the scroll, so the tick never idles")

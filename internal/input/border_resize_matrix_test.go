@@ -23,17 +23,18 @@ func borderMatrixOS(t *testing.T, tiling, shared bool) (*app.OS, *terminal.Windo
 	t.Helper()
 	app.SetInputHandler(HandleInput)
 
-	prevAnim := config.AnimationsEnabled
-	prevShared := config.SharedBorders
-	config.AnimationsEnabled = false
-	config.SharedBorders = shared
+	prevAnim := config.Global.AnimationsEnabled
+	prevShared := config.Global.SharedBorders
+	config.Global.AnimationsEnabled = false
+	config.Global.SharedBorders = shared
 	t.Cleanup(func() {
-		config.AnimationsEnabled = prevAnim
-		config.SharedBorders = prevShared
+		config.Global.AnimationsEnabled = prevAnim
+		config.Global.SharedBorders = prevShared
 	})
 
 	const cols, rows = 120, 40
 	m := &app.OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
@@ -64,7 +65,7 @@ func borderMatrixOS(t *testing.T, tiling, shared bool) (*app.OS, *terminal.Windo
 			}
 		}()
 		t.Cleanup(func() { close(done) })
-		win := terminal.NewDaemonWindow(id, "test", 0, 0, cols, rows, 0, "pty-"+id, ptyData)
+		win := terminal.NewDaemonWindow(id, "test", 0, 0, cols, rows, 0, "pty-"+id, ptyData, config.DefaultScrollbackLines)
 		if win == nil {
 			t.Fatal("NewDaemonWindow returned nil")
 		}
@@ -194,12 +195,12 @@ func TestBorderDragHoldsAcrossSettingChanges(t *testing.T) {
 
 	// Flipping the setting mid-test is what the settings panel does, and the
 	// panel writes the model; the global follows for anything still reading it.
-	config.SharedBorders = false
+	config.Global.SharedBorders = false
 	m.SharedBorders = false
 	m.TileAllWindows()
 	drag("own-borders+tiled")
 
-	config.SharedBorders = true
+	config.Global.SharedBorders = true
 	m.SharedBorders = true
 	m.TileAllWindows()
 	drag("shared+tiled-again")

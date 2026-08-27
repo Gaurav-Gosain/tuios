@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -51,7 +52,7 @@ func TestSessionRenameDoesNotBlockUpdate(t *testing.T) {
 	// inline would fail here rather than reach a daemon.
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 
-	m := &OS{SessionName: "work", SessionDisplayName: "old"}
+	m := &OS{Settings: config.Global, SessionName: "work", SessionDisplayName: "old"}
 	m.BeginRenameSession("work")
 	if m.RenameBuffer != "old" {
 		t.Fatalf("editor seeded with %q, want the existing label", m.RenameBuffer)
@@ -91,7 +92,7 @@ func TestSessionRenameDoesNotBlockUpdate(t *testing.T) {
 func TestWorkspaceRenameSeedsAndCommits(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 
-	m := &OS{SessionName: "work", NumWorkspaces: 9, CurrentWorkspace: 1}
+	m := &OS{Settings: config.Global, SessionName: "work", NumWorkspaces: 9, CurrentWorkspace: 1}
 	m.adoptSessionLabels(&session.SessionState{WorkspaceNames: map[int]string{2: "review"}})
 
 	m.BeginRenameWorkspace(2)
@@ -116,7 +117,7 @@ func TestWorkspaceRenameSeedsAndCommits(t *testing.T) {
 // reads its title off the frame, so the user can tell a session rename from a
 // pane rename when both look identical otherwise.
 func TestRenameDialogSaysWhatItRenames(t *testing.T) {
-	m := &OS{Width: 100, Height: 30, SessionName: "work", NumWorkspaces: 9}
+	m := &OS{Settings: config.Global, Width: 100, Height: 30, SessionName: "work", NumWorkspaces: 9}
 
 	m.BeginRenameSession("work")
 	m.RenameBuffer = "Payments API"
@@ -151,7 +152,7 @@ func TestRenameDialogSaysWhatItRenames(t *testing.T) {
 // display and the key looked dead even once it reached the buffer. A wide rune
 // costs two cells, and the frame has to stay square around it.
 func TestRenameFieldKeepsWhatWasTyped(t *testing.T) {
-	m := &OS{Width: 100, Height: 30, SessionName: "work", NumWorkspaces: 9}
+	m := &OS{Settings: config.Global, Width: 100, Height: 30, SessionName: "work", NumWorkspaces: 9}
 	m.BeginRenameSession("work")
 
 	m.RenameBuffer = "build "
@@ -180,7 +181,7 @@ func TestRenameFieldKeepsWhatWasTyped(t *testing.T) {
 // TestRenameAppendGate is the editor's own rule, checked without a keyboard: it
 // takes what the chrome will draw and refuses what the chrome would strip.
 func TestRenameAppendGate(t *testing.T) {
-	m := &OS{Width: 100, Height: 30, SessionName: "work"}
+	m := &OS{Settings: config.Global, Width: 100, Height: 30, SessionName: "work"}
 	m.BeginRenameSession("work")
 	m.RenameBuffer = ""
 
@@ -211,7 +212,7 @@ func TestRenameAppendGate(t *testing.T) {
 // window name is client-owned and must not be routed through a session verb.
 func TestWindowRenameStillCommitsLocally(t *testing.T) {
 	w := &terminal.Window{ID: "w1", CustomName: "build"}
-	m := &OS{Windows: []*terminal.Window{w}}
+	m := &OS{Settings: config.Global, Windows: []*terminal.Window{w}}
 
 	m.BeginRenameWindow(w)
 	if m.RenameKind != RenameWindow || m.RenameBuffer != "build" {

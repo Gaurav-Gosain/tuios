@@ -52,7 +52,7 @@ type settingItem struct {
 	// swatch is the colour a controlColor row shows, given the ground it will be
 	// painted on. It is the colour in force rather than the value stored, so an
 	// unset row still shows what it is inheriting.
-	swatch func(ground color.Color) color.Color
+	swatch func(ground color.Color, s *config.Settings) color.Color
 	// activate, when set, runs on Enter/click instead of adjusting the value
 	// (e.g. the Theme row opens the theme picker). It returns a command so a
 	// row can open something that has to start running: the effect picker's
@@ -121,17 +121,17 @@ func (m *OS) applyAppearanceLive(retile bool) {
 // have them silently reset to its own config file by an unrelated appearance
 // change riding the same funnel.
 func (m *OS) adoptConfigPaneGeometry() {
-	if config.SharedBorders != m.lastConfigSharedBorders {
-		m.lastConfigSharedBorders = config.SharedBorders
-		m.SharedBorders = config.SharedBorders
+	if m.Settings.SharedBorders != m.lastConfigSharedBorders {
+		m.lastConfigSharedBorders = m.Settings.SharedBorders
+		m.SharedBorders = m.Settings.SharedBorders
 	}
-	if config.PaneGap != m.lastConfigPaneGap {
-		m.lastConfigPaneGap = config.PaneGap
-		m.PaneGap = config.PaneGap
+	if m.Settings.PaneGap != m.lastConfigPaneGap {
+		m.lastConfigPaneGap = m.Settings.PaneGap
+		m.PaneGap = m.Settings.PaneGap
 	}
-	if config.ScrollColumnWidth != m.lastConfigScrollWidth {
-		m.lastConfigScrollWidth = config.ScrollColumnWidth
-		m.ScrollColumnWidth = config.ScrollColumnWidth
+	if m.Settings.ScrollColumnWidth != m.lastConfigScrollWidth {
+		m.lastConfigScrollWidth = m.Settings.ScrollColumnWidth
+		m.ScrollColumnWidth = m.Settings.ScrollColumnWidth
 	}
 }
 
@@ -243,8 +243,8 @@ func (m *OS) ToggleShowKeys() tea.Cmd {
 // the persisted appearance config, and saves it. Shared by the settings row and
 // the command-palette entry so both stay in sync and survive a restart.
 func (m *OS) ToggleFocusFollowsMouse() tea.Cmd {
-	config.FocusFollowsMouse = !config.FocusFollowsMouse
-	m.setAppearance(func(a *config.AppearanceConfig) { a.FocusFollowsMouse = boolPtr(config.FocusFollowsMouse) })
+	m.Settings.FocusFollowsMouse = !m.Settings.FocusFollowsMouse
+	m.setAppearance(func(a *config.AppearanceConfig) { a.FocusFollowsMouse = boolPtr(m.Settings.FocusFollowsMouse) })
 	return m.persistSettings()
 }
 
@@ -504,7 +504,16 @@ func (m *OS) settingsCategories() []settingsCategory {
 // previews rather than stepping to a next theme nobody can name in advance.
 func (m *OS) themeItem() settingItem {
 	options := append([]string{themeNone}, theme.AvailableThemes()...)
-	item := enumItem("Theme", "Color theme. Press enter to open the picker.", options,
+	desc := "Color theme. Press enter to open the picker."
+	// The theme is still one per process. Everything else on this page is this
+	// session's own, so a served client that changes the theme changes it for
+	// every other client attached to the same server, and the row says so
+	// rather than letting them find out from somebody else's screen. Only on a
+	// served session, because a local attach is the only client there is.
+	if m.ConfigReadOnly {
+		desc = "Color theme. Press enter to open the picker. Shared with every client on this server."
+	}
+	item := enumItem("Theme", desc, options,
 		func() string {
 			if id := theme.CurrentThemeID(); id != "" {
 				return id
@@ -601,10 +610,10 @@ func (m *OS) sectionLayoutItem() settingItem {
 func (m *OS) maxFPSItem() settingItem {
 	return enumItem("Max FPS", "Highest frame rate tuios draws at.", fpsOptions,
 		func() string {
-			if config.NormalFPS >= config.MaxFPSCap {
+			if m.Settings.NormalFPS >= config.MaxFPSCap {
 				return "unlimited"
 			}
-			return strconv.Itoa(config.NormalFPS)
+			return strconv.Itoa(m.Settings.NormalFPS)
 		},
 		func(m *OS, v string) {
 			fps := config.MaxFPSCap

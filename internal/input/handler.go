@@ -110,7 +110,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 // to show quit confirmation for. Returns true if any window has a foreground process
 // (besides the shell itself), or if we're unable to detect (falls back to true).
 func shouldShowQuitDialog(o *app.OS) bool {
-	if config.AlwaysConfirmQuit {
+	if o.Settings.AlwaysConfirmQuit {
 		return true
 	}
 	// Check each window for active foreground processes
@@ -274,7 +274,7 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// swallows what it does not bind, so leaving it in front would strand the
 	// overlay's scroll, search and close keys (and every character of a palette
 	// query) behind an esc that also drops the rail's focus.
-	if o.SidebarFocused && !o.ShowHelp && !o.ShowCommandPalette && !o.PrefixActive && !isLeaderKey(msg) {
+	if o.SidebarFocused && !o.ShowHelp && !o.ShowCommandPalette && !o.PrefixActive && !isLeaderKey(msg, &o.Settings) {
 		return HandleSidebarKey(msg, o)
 	}
 
@@ -319,7 +319,7 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Check for prefix key activation in window management mode
-	if isLeaderKey(msg) {
+	if isLeaderKey(msg, &o.Settings) {
 		return handlePrefixKey(msg, o)
 	}
 
@@ -393,8 +393,8 @@ func handleRenameMode(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 // isLeaderKey reports whether a key press is the configured leader.
-func isLeaderKey(msg tea.KeyPressMsg) bool {
-	return strings.EqualFold(msg.String(), config.LeaderKey)
+func isLeaderKey(msg tea.KeyPressMsg, s *config.Settings) bool {
+	return strings.EqualFold(msg.String(), s.LeaderKey)
 }
 
 // handlePrefixKey handles Ctrl+B prefix key activation

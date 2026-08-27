@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -17,6 +18,7 @@ func idleOS(t testing.TB, n int) *OS {
 		wins = append(wins, newTestWindow(t, "idle-"+string(rune('a'+i)), 80, 24))
 	}
 	return &OS{
+		Settings:       config.Global,
 		Windows:        wins,
 		FocusedWindow:  0,
 		WorkspaceFocus: map[int]int{},

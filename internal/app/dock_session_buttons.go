@@ -72,11 +72,11 @@ const (
 )
 
 // dockSessionIcon is a control's glyph, following the configured glyph set.
-func dockSessionIcon(a DockSessionAction) string {
+func dockSessionIcon(a DockSessionAction, s *config.Settings) string {
 	if a == DockSessionLeave {
-		return config.GetDockIconLeaveRunning()
+		return s.GetDockIconLeaveRunning()
 	}
-	return config.GetDockIconCloseSession()
+	return s.GetDockIconCloseSession()
 }
 
 // dockSessionLabel is a control's word, which is what its tooltip says.

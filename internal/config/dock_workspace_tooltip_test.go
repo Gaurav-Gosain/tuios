@@ -5,8 +5,8 @@ import "testing"
 // withDockWorkspaceTooltip restores the global an apply pass writes.
 func withDockWorkspaceTooltip(t *testing.T) {
 	t.Helper()
-	prev := DockWorkspaceTooltip
-	t.Cleanup(func() { DockWorkspaceTooltip = prev })
+	prev := Global.DockWorkspaceTooltip
+	t.Cleanup(func() { Global.DockWorkspaceTooltip = prev })
 }
 
 // TestDockWorkspaceTooltipDefaultsOn is the migration half of the tri-state: a
@@ -14,7 +14,7 @@ func withDockWorkspaceTooltip(t *testing.T) {
 // up with the label on rather than reading the absence as off.
 func TestDockWorkspaceTooltipDefaultsOn(t *testing.T) {
 	withDockWorkspaceTooltip(t)
-	DockWorkspaceTooltip = true
+	Global.DockWorkspaceTooltip = true
 
 	cfg := loadTOML(t, `
 [appearance]
@@ -23,8 +23,8 @@ dock_workspace_tabs = true
 	if cfg.Appearance.DockWorkspaceTooltip != nil {
 		t.Fatalf("an absent key parsed as non-nil: %v", *cfg.Appearance.DockWorkspaceTooltip)
 	}
-	ApplyAppearanceConfig(cfg)
-	if !DockWorkspaceTooltip {
+	ApplyAppearanceConfig(cfg, &Global)
+	if !Global.DockWorkspaceTooltip {
 		t.Error("an old config file turned the label off by saying nothing")
 	}
 }
@@ -33,14 +33,14 @@ dock_workspace_tabs = true
 // it off in the settings page has to survive a reload.
 func TestDockWorkspaceTooltipExplicitFalseSurvivesApply(t *testing.T) {
 	withDockWorkspaceTooltip(t)
-	DockWorkspaceTooltip = true
+	Global.DockWorkspaceTooltip = true
 
 	cfg := loadTOML(t, `
 [appearance]
 dock_workspace_tooltip = false
 `)
-	ApplyAppearanceConfig(cfg)
-	if DockWorkspaceTooltip {
+	ApplyAppearanceConfig(cfg, &Global)
+	if Global.DockWorkspaceTooltip {
 		t.Error("an explicit false was dropped")
 	}
 }

@@ -10,8 +10,8 @@ import (
 // is package state shared with every other test in the run.
 func withDockWorkspaceTabFormat(t *testing.T) {
 	t.Helper()
-	prev := config.DockWorkspaceTabFormat
-	t.Cleanup(func() { config.DockWorkspaceTabFormat = prev })
+	prev := config.Global.DockWorkspaceTabFormat
+	t.Cleanup(func() { config.Global.DockWorkspaceTabFormat = prev })
 }
 
 // The dock strip formats each tab's label through appearance.dock_workspace_tab_format.
@@ -19,7 +19,7 @@ func withDockWorkspaceTabFormat(t *testing.T) {
 // "name and index on every tab" request (issue #80) asked for.
 func TestWorkspaceTabFormatReachesTheStrip(t *testing.T) {
 	withDockWorkspaceTabFormat(t)
-	config.DockWorkspaceTabFormat = "{index}: {name}"
+	config.Global.DockWorkspaceTabFormat = "{index}: {name}"
 
 	m := chipOS(t)
 	tabs := m.buildDockWorkspaceTabs()
@@ -41,14 +41,14 @@ func TestWorkspaceTabFormatReachesTheStrip(t *testing.T) {
 // longer cover the cells the pill actually draws.
 func TestWorkspaceTabFormatWidthFollowsLabel(t *testing.T) {
 	withDockWorkspaceTabFormat(t)
-	config.DockWorkspaceTabFormat = "{index} {name}"
+	config.Global.DockWorkspaceTabFormat = "{index} {name}"
 
 	m := chipOS(t)
 	for _, tab := range m.buildDockWorkspaceTabs() {
 		if tab.Add {
 			continue
 		}
-		if want := workspacePillWidth(tab.Label); tab.Width != want {
+		if want := workspacePillWidth(tab.Label, &config.Global); tab.Width != want {
 			t.Errorf("workspace %d records width %d, want %d for formatted label %q",
 				tab.Workspace, tab.Width, want, tab.Label)
 		}
@@ -58,7 +58,7 @@ func TestWorkspaceTabFormatWidthFollowsLabel(t *testing.T) {
 // A name-only tab (empty format) is unchanged: the historic rendering.
 func TestWorkspaceTabFormatEmptyIsNameOnly(t *testing.T) {
 	withDockWorkspaceTabFormat(t)
-	config.DockWorkspaceTabFormat = ""
+	config.Global.DockWorkspaceTabFormat = ""
 
 	m := chipOS(t)
 	want := map[int]string{1: "1", 2: "review", 3: "3"}

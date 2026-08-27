@@ -2,8 +2,6 @@ package app
 
 import (
 	"fmt"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // PointerShape represents a CSS cursor shape name for OSC 22.
@@ -51,11 +49,11 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 
 	// Check dock area
 	topMargin := m.GetTopMargin()
-	if config.DockbarPosition == "top" && y < topMargin {
+	if m.Settings.DockbarPosition == "top" && y < topMargin {
 		m.SetPointerShape(PointerDefault)
 		return
 	}
-	if config.DockbarPosition == "bottom" && y >= topMargin+m.GetUsableHeight() {
+	if m.Settings.DockbarPosition == "bottom" && y >= topMargin+m.GetUsableHeight() {
 		m.SetPointerShape(PointerDefault)
 		return
 	}

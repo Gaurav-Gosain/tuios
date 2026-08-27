@@ -28,6 +28,7 @@ func attentionOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	}
 	m.FocusedWindow = 0
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	m.Settings = config.Global
 	m.SidebarOrder, m.SidebarAgentSeen = nil, nil
 	return m, m.BuildSessionTree()
 }
@@ -99,7 +100,7 @@ func TestRailDrawsAgentsAtTheBottom(t *testing.T) {
 	if got := strings.TrimSpace(stripANSIForTrace(lines[agentsRow-1])); got != "│" && got != "" {
 		t.Fatalf("row %d = %q, want a blank row opening the agents section", agentsRow-1, lines[agentsRow-1])
 	}
-	if rule := config.GetWindowSeparatorChar(); strings.Contains(lines[agentsRow-1], strings.Repeat(rule, 4)) {
+	if rule := config.Global.GetWindowSeparatorChar(); strings.Contains(lines[agentsRow-1], strings.Repeat(rule, 4)) {
 		t.Fatalf("row %d still draws the hairline: %q", agentsRow-1, lines[agentsRow-1])
 	}
 }
@@ -144,6 +145,7 @@ func TestRailNavAndHitsFollowDrawnOrder(t *testing.T) {
 func TestGlyphRailMarksAttentionWithoutASecondFill(t *testing.T) {
 	m, _ := attentionOS(t, 120, 40)
 	withSidebar(t, true, "left", config.SidebarGlyphWidth)
+	m.Settings = config.Global
 	pal := theme.UI()
 	cw := config.SidebarGlyphWidth - 1
 
@@ -184,7 +186,7 @@ func ansiBackgroundCount(s string) int {
 func TestSidebarCacheInvalidatesOnAttention(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 	win := &terminal.Window{ID: "w1", CustomName: "ALPHA", AgentState: "working"}
-	m := &OS{Windows: []*terminal.Window{win}, FocusedWindow: 0, Width: 120, Height: 40, SessionName: "s"}
+	m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}, FocusedWindow: 0, Width: 120, Height: 40, SessionName: "s"}
 
 	base := m.sidebarSignature()
 	win.AgentState = "done"

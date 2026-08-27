@@ -212,14 +212,14 @@ func TestFolderClickCanCdThePane(t *testing.T) {
 
 			win, typedInto := cdProbe(t, "aaaaaaaa1111")
 			win.Cwd = root
-			m := &OS{Windows: []*terminal.Window{win}}
+			m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 			m.filesView.Show = 1
 			m.filesView.Origin = win.ID
 			m.loadFileViewNow(t, root)
 
-			prev := config.SidebarFolderClick
-			config.SidebarFolderClick = tc.mode
-			t.Cleanup(func() { config.SidebarFolderClick = prev })
+			prev := m.Settings.SidebarFolderClick
+			m.Settings.SidebarFolderClick = tc.mode
+			t.Cleanup(func() { m.Settings.SidebarFolderClick = prev })
 
 			// "apple" is the first entry, per the order fileViewTree pins.
 			cmd := m.FileViewEnter(0)
@@ -445,6 +445,8 @@ func TestAFoldedRailDrawsNoListing(t *testing.T) {
 	// And folding an expanded rail that has the section hides the listing
 	// rather than leaving half of it on a three-column strip.
 	m := sidebarTestOS(t, 120, 40, "left")
+	folded.Settings = config.Global
+	folded.Settings = m.Settings
 	openFilesOn(t, m, dir)
 	if out := strings.Join(railLines(t, m), "\n"); !strings.Contains(out, "apple/") {
 		t.Fatalf("the expanded rail is not drawing the listing to begin with:\n%s", out)

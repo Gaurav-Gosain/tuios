@@ -20,24 +20,24 @@ func pillColumns(t *testing.T, tiling bool, width int) []rune {
 
 	// The documented offsets are counted in from the row's right edge, so this
 	// pins the position rather than leaning on it being the default.
-	prev := config.WindowButtonPosition
-	config.WindowButtonPosition = config.WindowButtonPositionRight
-	t.Cleanup(func() { config.WindowButtonPosition = prev })
+	prev := config.Global.WindowButtonPosition
+	config.Global.WindowButtonPosition = config.WindowButtonPositionRight
+	t.Cleanup(func() { config.Global.WindowButtonPosition = prev })
 
 	buttonColor := lipgloss.Color("#7dd3fc")
 	buttonStyle := badgeStyle(buttonColor)
-	cross := buttonStyle.Render(config.GetWindowButtonClose())
+	cross := buttonStyle.Render(config.Global.GetWindowButtonClose())
 	dash := buttonStyle.Render("  - ")
 
 	var buttons string
 	if tiling {
-		buttons = makeRounded(dash+cross, buttonColor)
+		buttons = makeRounded(dash+cross, buttonColor, &config.Global)
 	} else {
 		square := buttonStyle.Render(" □ ")
-		buttons = makeRounded(dash+square+cross, buttonColor)
+		buttons = makeRounded(dash+square+cross, buttonColor, &config.Global)
 	}
 
-	border := layoutBorderRow("", buttons, width, buttonColor, true).text
+	border := layoutBorderRow("", buttons, width, buttonColor, true, &config.Global).text
 	if border == "" {
 		t.Fatalf("layoutBorderRow drew nothing for width %d", width)
 	}
@@ -62,20 +62,20 @@ func TestControlPillWidths(t *testing.T) {
 
 	buttonColor := lipgloss.Color("#7dd3fc")
 	buttonStyle := badgeStyle(buttonColor)
-	cross := buttonStyle.Render(config.GetWindowButtonClose())
+	cross := buttonStyle.Render(config.Global.GetWindowButtonClose())
 	dash := buttonStyle.Render("  - ")
 	square := buttonStyle.Render(" □ ")
 
-	if got := lipgloss.Width(makeRounded(dash+cross, buttonColor)); got != tilingPillWidth {
+	if got := lipgloss.Width(makeRounded(dash+cross, buttonColor, &config.Global)); got != tilingPillWidth {
 		t.Errorf("tiling pill is %d cells wide, want %d", got, tilingPillWidth)
 	}
-	if got := lipgloss.Width(makeRounded(dash+square+cross, buttonColor)); got != floatingPillWidth {
+	if got := lipgloss.Width(makeRounded(dash+square+cross, buttonColor, &config.Global)); got != floatingPillWidth {
 		t.Errorf("floating pill is %d cells wide, want %d", got, floatingPillWidth)
 	}
 }
 
 func TestControlPillGlyphsLandOnTheirHitboxes(t *testing.T) {
-	closeGlyph := []rune(config.GetWindowButtonClose())[1]
+	closeGlyph := []rune(config.Global.GetWindowButtonClose())[1]
 
 	// Wide and narrow panes: the pill is right-aligned, so its glyphs sit at
 	// the same offsets from the right edge regardless of how much border runs

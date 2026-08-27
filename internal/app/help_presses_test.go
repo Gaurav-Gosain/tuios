@@ -15,7 +15,7 @@ import (
 // helpBindingFor returns the help entry for an action, across every category.
 func helpBindingFor(t *testing.T, r *config.KeybindRegistry, action string) (HelpBinding, bool) {
 	t.Helper()
-	for _, cat := range GetHelpCategories(r) {
+	for _, cat := range GetHelpCategories(r, &config.Global) {
 		for _, b := range cat.Bindings {
 			if b.Action == action {
 				return b, true

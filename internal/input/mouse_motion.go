@@ -168,7 +168,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// focus-follows-mouse that stops working wherever the user actually spends
 	// their time just reads as broken. Rail keyboard focus still suppresses it,
 	// since the rail owns the keyboard and a click is the way back to a pane.
-	if config.FocusFollowsMouse && !o.SidebarFocused &&
+	if o.Settings.FocusFollowsMouse && !o.SidebarFocused &&
 		!o.Dragging && !o.Resizing && !o.ScrollbarDragging &&
 		!o.AnyOverlayOpen() && !o.ContextMenuActive() &&
 		!o.SidebarBandContains(mouse.X, mouse.Y) && !o.InDockBand(mouse.Y) {
@@ -203,7 +203,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Handle scrollbar drag
 	if o.ScrollbarDragging && o.ScrollbarDragWindowIndex >= 0 && o.ScrollbarDragWindowIndex < len(o.Windows) {
 		win := o.Windows[o.ScrollbarDragWindowIndex]
-		scrollToThumbRow(win, mouse.Y-o.ScrollbarGrabOffset)
+		scrollToThumbRow(win, mouse.Y-o.ScrollbarGrabOffset, &o.Settings)
 		return o, nil
 	}
 

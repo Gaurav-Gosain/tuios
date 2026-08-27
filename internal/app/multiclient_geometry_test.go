@@ -29,8 +29,8 @@ type clientGlobals struct {
 }
 
 func (g clientGlobals) install() {
-	config.SharedBorders = g.shared
-	config.PaneGap = g.gap
+	config.Global.SharedBorders = g.shared
+	config.Global.PaneGap = g.gap
 }
 
 // routeSide is exchange.route with one side's globals installed before each of
@@ -67,12 +67,12 @@ func routeSide(ex *exchange, c *session.TUIClient, m *OS, label string, g client
 // adopted, and the exchange quiet.
 func geometryRig(t *testing.T, localG, peerG clientGlobals) (*rig, *peer, *exchange) {
 	t.Helper()
-	prevShared, prevGap := config.SharedBorders, config.PaneGap
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
+	prevShared, prevGap := config.Global.SharedBorders, config.Global.PaneGap
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
 	t.Cleanup(func() {
-		config.SharedBorders, config.PaneGap = prevShared, prevGap
-		config.AnimationsEnabled = prevAnim
+		config.Global.SharedBorders, config.Global.PaneGap = prevShared, prevGap
+		config.Global.AnimationsEnabled = prevAnim
 	})
 
 	localG.install()

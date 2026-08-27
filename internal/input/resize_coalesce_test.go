@@ -55,7 +55,7 @@ func TestResizeMotionRendersAreBoundedAndKeepFinalFrame(t *testing.T) {
 	}
 	elapsed := time.Since(start)
 
-	budget := time.Second / time.Duration(config.NormalFPS)
+	budget := time.Second / time.Duration(config.Global.NormalFPS)
 	// One frame of slack for the leading edge, one for scheduling jitter.
 	maxFrames := int(elapsed/budget) + 2
 	if composed > maxFrames {
@@ -126,9 +126,9 @@ func TestResizeInteractionTickFlushesSkippedMotion(t *testing.T) {
 func TestSharedBorderResizeSettlesAtRelease(t *testing.T) {
 	app.SetInputHandler(HandleInput)
 
-	prev := config.SharedBorders
-	config.SharedBorders = true
-	t.Cleanup(func() { config.SharedBorders = prev })
+	prev := config.Global.SharedBorders
+	config.Global.SharedBorders = true
+	t.Cleanup(func() { config.Global.SharedBorders = prev })
 
 	m := benchResizeOS(t, 4)
 	startX, startY := m.ResizeStartX, m.ResizeStartY
@@ -189,9 +189,9 @@ func TestSharedBorderResizeSettlesAtRelease(t *testing.T) {
 // windows the workspace held, while the same drag without shared borders stayed
 // flat. Allocations stand in for cost here because they are deterministic.
 func TestSharedBorderMotionCostDoesNotScaleWithWindowCount(t *testing.T) {
-	prev := config.SharedBorders
-	config.SharedBorders = true
-	t.Cleanup(func() { config.SharedBorders = prev })
+	prev := config.Global.SharedBorders
+	config.Global.SharedBorders = true
+	t.Cleanup(func() { config.Global.SharedBorders = prev })
 
 	motionAllocs := func(n int) float64 {
 		m := benchResizeOS(t, n)

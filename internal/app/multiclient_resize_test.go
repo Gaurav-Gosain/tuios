@@ -307,9 +307,9 @@ func (r *rig) paneSpan() (right, bottom int) {
 func TestPeerLayoutFromASmallerClientIsRetiled(t *testing.T) {
 	// The span is read straight off the rectangles, so a pane still easing into
 	// its tile would be measured mid-flight.
-	prev := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	defer func() { config.AnimationsEnabled = prev }()
+	prev := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	defer func() { config.Global.AnimationsEnabled = prev }()
 
 	r := newRigSized(t, 2, holderCols, holderRows)
 	r.watchSessionResize()

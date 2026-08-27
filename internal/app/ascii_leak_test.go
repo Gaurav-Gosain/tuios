@@ -15,10 +15,10 @@ import (
 // withASCII puts the session in ASCII-only mode for the test.
 func withASCII(t *testing.T) {
 	t.Helper()
-	prev := config.UseASCIIOnly
-	config.UseASCIIOnly = true
+	prev := config.Global.UseASCIIOnly
+	config.Global.UseASCIIOnly = true
 	t.Cleanup(func() {
-		config.UseASCIIOnly = prev
+		config.Global.UseASCIIOnly = prev
 		overlay.SetASCII(prev)
 	})
 }
@@ -59,12 +59,12 @@ func TestWindowControlsPillIsASCIISafe(t *testing.T) {
 	withASCII(t)
 	for _, style := range config.WindowButtonStyles {
 		t.Run(style, func(t *testing.T) {
-			prev := config.WindowButtonStyle
-			config.WindowButtonStyle = style
-			t.Cleanup(func() { config.WindowButtonStyle = prev })
+			prev := config.Global.WindowButtonStyle
+			config.Global.WindowButtonStyle = style
+			t.Cleanup(func() { config.Global.WindowButtonStyle = prev })
 
 			win := &terminal.Window{ID: "w", CustomName: "pane", X: 0, Y: 0, Width: 40, Height: 12, Workspace: 1}
-			m := &OS{}
+			m := &OS{Settings: config.Global}
 			border := m.addToBorder(strings.Repeat(" ", 40), 38, lipgloss.Color("#ffffff"), win, 1, false)
 			for _, r := range ansi.Strip(border) {
 				if r > 127 {

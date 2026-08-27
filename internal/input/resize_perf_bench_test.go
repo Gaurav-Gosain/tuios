@@ -23,6 +23,7 @@ func benchResizeOS(tb testing.TB, n int) *app.OS {
 	tb.Helper()
 
 	m := &app.OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
@@ -34,7 +35,7 @@ func benchResizeOS(tb testing.TB, n int) *app.OS {
 		PendingResizes:   make(map[string][2]int),
 		// The layout reads the model's session-settled value, not the global;
 		// seed it from the global the caller just set. NewOS does the same.
-		SharedBorders: config.SharedBorders,
+		SharedBorders: config.Global.SharedBorders,
 	}
 
 	for i := range n {
@@ -52,7 +53,7 @@ func benchResizeOS(tb testing.TB, n int) *app.OS {
 		}()
 		tb.Cleanup(func() { close(done) })
 
-		win := terminal.NewDaemonWindow(id, "test", 0, 0, benchCols, benchRows, 0, "pty-"+id, ptyData)
+		win := terminal.NewDaemonWindow(id, "test", 0, 0, benchCols, benchRows, 0, "pty-"+id, ptyData, config.DefaultScrollbackLines)
 		if win == nil {
 			tb.Fatal("NewDaemonWindow returned nil")
 		}
@@ -121,9 +122,9 @@ func BenchmarkResizeMotionHandler(b *testing.B) {
 		for _, n := range []int{2, 4, 9} {
 			name := fmt.Sprintf("windows-%d/shared-%v", n, shared)
 			b.Run(name, func(b *testing.B) {
-				prev := config.SharedBorders
-				config.SharedBorders = shared
-				b.Cleanup(func() { config.SharedBorders = prev })
+				prev := config.Global.SharedBorders
+				config.Global.SharedBorders = shared
+				b.Cleanup(func() { config.Global.SharedBorders = prev })
 
 				m := benchResizeOS(b, n)
 				startX, startY := m.ResizeStartX, m.ResizeStartY
@@ -153,9 +154,9 @@ func BenchmarkResizeMotionFrame(b *testing.B) {
 		for _, n := range []int{2, 4, 9} {
 			name := fmt.Sprintf("windows-%d/shared-%v", n, shared)
 			b.Run(name, func(b *testing.B) {
-				prev := config.SharedBorders
-				config.SharedBorders = shared
-				b.Cleanup(func() { config.SharedBorders = prev })
+				prev := config.Global.SharedBorders
+				config.Global.SharedBorders = shared
+				b.Cleanup(func() { config.Global.SharedBorders = prev })
 
 				m := benchResizeOS(b, n)
 				startX, startY := m.ResizeStartX, m.ResizeStartY

@@ -26,7 +26,7 @@ func railOS(t *testing.T) *app.OS {
 // railHelpCategory is the help section the rail's key opens on.
 func railHelpCategory(t *testing.T, o *app.OS) app.HelpCategory {
 	t.Helper()
-	cats := app.GetHelpCategories(o.KeybindRegistry)
+	cats := app.GetHelpCategories(o.KeybindRegistry, &o.Settings)
 	if o.HelpCategory < 0 || o.HelpCategory >= len(cats) {
 		t.Fatalf("HelpCategory = %d, outside the %d sections", o.HelpCategory, len(cats))
 	}

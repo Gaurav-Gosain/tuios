@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -27,7 +26,7 @@ func (m *OS) ToggleFloating() {
 		fw.SetTiled(false)
 		fw.InvalidateCache()
 		m.RecalcZOrder()
-		m.ShowNotification("Window: floating", "info", config.NotificationDuration)
+		m.ShowNotification("Window: floating", "info", m.Settings.NotificationDuration)
 	} else {
 		// Re-add to tiling layout when unfloating
 		if m.AutoTiling {
@@ -44,7 +43,7 @@ func (m *OS) ToggleFloating() {
 		}
 		fw.InvalidateCache()
 		m.RecalcZOrder()
-		m.ShowNotification("Window: tiled", "info", config.NotificationDuration)
+		m.ShowNotification("Window: tiled", "info", m.Settings.NotificationDuration)
 	}
 }
 
@@ -95,10 +94,10 @@ func (m *OS) ToggleMultifocus(windowIndex int) {
 		if len(m.MultifocusSet) == 0 {
 			m.MultifocusSet = nil
 		}
-		m.ShowNotification("Multifocus: removed window", "info", config.NotificationDuration)
+		m.ShowNotification("Multifocus: removed window", "info", m.Settings.NotificationDuration)
 	} else {
 		m.MultifocusSet[windowID] = true
-		m.ShowNotification(fmt.Sprintf("Multifocus: %d windows", len(m.MultifocusSet)), "info", config.NotificationDuration)
+		m.ShowNotification(fmt.Sprintf("Multifocus: %d windows", len(m.MultifocusSet)), "info", m.Settings.NotificationDuration)
 	}
 	// Invalidate caches to show visual indicator on all affected windows
 	m.Windows[windowIndex].InvalidateCache()
@@ -445,7 +444,7 @@ func (m *OS) AddWindow(name string, command ...string) *OS {
 
 	x, y, width, height := m.NewWindowPlacement()
 
-	window, err := terminal.NewWindow(newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan, command...)
+	window, err := terminal.NewWindow(newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines, command...)
 	if err != nil {
 		m.LogError("Failed to create window %s: %v", title, err)
 		return m // Failed to create window

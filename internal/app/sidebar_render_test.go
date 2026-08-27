@@ -23,6 +23,7 @@ func sidebarTestOS(t *testing.T, w, h int, pos string) *OS {
 	}
 	m.FocusedWindow = 0
 	withSidebar(t, true, pos, config.SidebarDefaultWidth)
+	m.Settings = config.Global
 	// NewOS ran before withSidebar redirected the state dir, so it read the
 	// tree the whole binary shares, where an earlier test may have saved an
 	// order. Drop it, so the rows come out in the order set below.
@@ -122,12 +123,13 @@ func TestSidebarFitsNarrowScreens(t *testing.T) {
 // with the optional row elements disabled.
 func TestSidebarGlyphsAndCountsOff(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
-	pg, pc := config.SidebarShowGlyphs, config.SidebarShowCounts
-	config.SidebarShowGlyphs, config.SidebarShowCounts = false, false
-	t.Cleanup(func() { config.SidebarShowGlyphs, config.SidebarShowCounts = pg, pc })
+	pg, pc := m.Settings.SidebarShowGlyphs, m.Settings.SidebarShowCounts
+	m.Settings.SidebarShowGlyphs, m.Settings.SidebarShowCounts = false, false
+	t.Cleanup(func() { m.Settings.SidebarShowGlyphs, m.Settings.SidebarShowCounts = pg, pc })
 	// The terminals section comes off the rail the only way it now can: it is
 	// left out of the layout.
 	withSections(t, "sessions:25,files:25,agents:34")
+	m.Settings = config.Global
 
 	lines, w := m.sidebarPanelLines()
 	for i, ln := range lines {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/x/xpty"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
@@ -46,7 +47,7 @@ func TestStandalonePaneSurvivesATransientSpawnEPERM(t *testing.T) {
 	injected := failNextStarts(t, 1, fmt.Errorf("fork/exec /bin/sh: %w", syscall.EPERM))
 
 	exitChan := make(chan string, 1)
-	window, err := NewWindow("spawn-eperm-0001", "Test", 0, 0, 80, 24, 0, exitChan, nil)
+	window, err := NewWindow("spawn-eperm-0001", "Test", 0, 0, 80, 24, 0, exitChan, nil, config.DefaultScrollbackLines)
 	if err != nil {
 		t.Fatalf("a one-shot EPERM left the pane with no shell; the standalone path is not going through the retry: %v", err)
 	}
@@ -65,7 +66,7 @@ func TestStandalonePaneGivesUpOnAPersistentSpawnEPERM(t *testing.T) {
 	injected := failNextStarts(t, ptyspawn.Attempts+2, fmt.Errorf("fork/exec /bin/sh: %w", syscall.EPERM))
 
 	exitChan := make(chan string, 1)
-	window, err := NewWindow("spawn-eperm-0002", "Test", 0, 0, 80, 24, 0, exitChan, nil)
+	window, err := NewWindow("spawn-eperm-0002", "Test", 0, 0, 80, 24, 0, exitChan, nil, config.DefaultScrollbackLines)
 	if err == nil {
 		window.Close()
 		t.Fatal("a persistent EPERM produced a pane anyway; a real refusal must surface")

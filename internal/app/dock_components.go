@@ -96,7 +96,7 @@ func (m *OS) ensureDockPlan() {
 //
 // Everything else on the bar is drawn from model state on the frames that were
 // happening anyway, so it has nothing to schedule and costs nothing to hold.
-func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock bool) []*dockComponent {
+func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock bool, s *config.Settings) []*dockComponent {
 	var comps []*dockComponent
 
 	// Scheduled only when it will actually draw. The clock sits in the default
@@ -106,7 +106,7 @@ func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock 
 	// comes from the format, so 15:04 wakes once a minute rather than sixty
 	// times a second.
 	if plan.Has(config.DockComponentClock) && showClock {
-		format := cfg.Dock.DockClockFormat()
+		format := cfg.Dock.DockClockFormat(s)
 		comps = append(comps, &dockComponent{
 			Name:    config.DockComponentClock,
 			Builtin: true,
@@ -118,14 +118,14 @@ func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock 
 	}
 	// The meters keep their own switches: the lists say where they go, show_cpu
 	// and show_ram still say whether they are on.
-	if plan.Has(config.DockComponentCPU) && config.ShowCPU {
+	if plan.Has(config.DockComponentCPU) && s.ShowCPU {
 		comps = append(comps, &dockComponent{
 			Name:    config.DockComponentCPU,
 			Builtin: true,
 			Refresh: config.DockRefresh{Kind: config.DockRefreshInterval, Interval: dockMeterInterval},
 		})
 	}
-	if plan.Has(config.DockComponentRAM) && config.ShowRAM {
+	if plan.Has(config.DockComponentRAM) && s.ShowRAM {
 		comps = append(comps, &dockComponent{
 			Name:    config.DockComponentRAM,
 			Builtin: true,
@@ -216,7 +216,7 @@ func (m *OS) dockCustomCell(name string) string {
 	// where it goes, show_clock still says whether it is on. Gated here rather
 	// than per side, so a clock moved to the left or the centre obeys the same
 	// switch without the caller having to remember.
-	if name == config.DockComponentClock && (!config.ShowClock || config.HideClock) {
+	if name == config.DockComponentClock && (!m.Settings.ShowClock || m.Settings.HideClock) {
 		return ""
 	}
 	text := m.dockEngine.Text(name)

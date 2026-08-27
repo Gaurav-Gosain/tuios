@@ -25,6 +25,7 @@ func bareShellOS(t *testing.T, n int) *OS {
 	}
 	m.FocusedWindow = 0
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	m.Settings = config.Global
 	m.SidebarOrder = nil
 	return m
 }

@@ -25,6 +25,7 @@ func floatingPane(t *testing.T) (*OS2, *terminal.Window) {
 	const cols, rows = 120, 40
 
 	m := &app.OS{
+		Settings:             config.Global,
 		NumWorkspaces:        9,
 		CurrentWorkspace:     1,
 		WorkspaceFocus:       make(map[int]int),
@@ -50,7 +51,7 @@ func floatingPane(t *testing.T) (*OS2, *terminal.Window) {
 	}()
 	t.Cleanup(func() { close(done) })
 
-	win := terminal.NewDaemonWindow("float", "test", 6, 3, 70, 18, 0, "pty-float", ptyData)
+	win := terminal.NewDaemonWindow("float", "test", 6, 3, 70, 18, 0, "pty-float", ptyData, config.DefaultScrollbackLines)
 	if win == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}
@@ -103,13 +104,13 @@ func TestWindowControlsRunTheirOwnActionAtEitherEnd(t *testing.T) {
 	// Snapping animates, and an animation would leave the pane mid-flight with
 	// its geometry unchanged. With animations off the snap lands on the press,
 	// which is what makes zoom tellable from the other two.
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
-	prevStyle, prevPos := config.WindowButtonStyle, config.WindowButtonPosition
+	prevStyle, prevPos := config.Global.WindowButtonStyle, config.Global.WindowButtonPosition
 	t.Cleanup(func() {
-		config.WindowButtonStyle, config.WindowButtonPosition = prevStyle, prevPos
+		config.Global.WindowButtonStyle, config.Global.WindowButtonPosition = prevStyle, prevPos
 	})
 
 	want := map[app.WindowButtonAction]pressOutcome{
@@ -121,8 +122,8 @@ func TestWindowControlsRunTheirOwnActionAtEitherEnd(t *testing.T) {
 	for _, style := range config.WindowButtonStyles {
 		for _, position := range config.WindowButtonPositions {
 			t.Run(style+"/"+position, func(t *testing.T) {
-				config.WindowButtonStyle = style
-				config.WindowButtonPosition = position
+				config.Global.WindowButtonStyle = style
+				config.Global.WindowButtonPosition = position
 
 				o, win := floatingPane(t)
 				cells := controlCells(o, win)
@@ -153,16 +154,16 @@ func TestWindowControlsRunTheirOwnActionAtEitherEnd(t *testing.T) {
 // used to close the window, and moving the pill to the leading corner puts the
 // same trap on the other end.
 func TestWindowCornersAreNotControls(t *testing.T) {
-	prevStyle, prevPos := config.WindowButtonStyle, config.WindowButtonPosition
+	prevStyle, prevPos := config.Global.WindowButtonStyle, config.Global.WindowButtonPosition
 	t.Cleanup(func() {
-		config.WindowButtonStyle, config.WindowButtonPosition = prevStyle, prevPos
+		config.Global.WindowButtonStyle, config.Global.WindowButtonPosition = prevStyle, prevPos
 	})
 
 	for _, style := range config.WindowButtonStyles {
 		for _, position := range config.WindowButtonPositions {
 			t.Run(style+"/"+position, func(t *testing.T) {
-				config.WindowButtonStyle = style
-				config.WindowButtonPosition = position
+				config.Global.WindowButtonStyle = style
+				config.Global.WindowButtonPosition = position
 
 				o, win := floatingPane(t)
 				for _, x := range []int{win.X, win.X + win.Width - 1} {

@@ -32,6 +32,7 @@ func sessionColorOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	m.DaemonClient = &session.TUIClient{}
 	m.IsDaemonSession = true
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	m.Settings = config.Global
 	m.SidebarOrder = nil
 	return m, sessionColorTree()
 }
@@ -84,9 +85,9 @@ func glyphCell(row string) string {
 // withSessionColors pins the config key for one test and puts it back.
 func withSessionColors(t *testing.T, on bool) {
 	t.Helper()
-	prev := config.SessionColors
-	config.SessionColors = on
-	t.Cleanup(func() { config.SessionColors = prev })
+	prev := config.Global.SessionColors
+	config.Global.SessionColors = on
+	t.Cleanup(func() { config.Global.SessionColors = prev })
 }
 
 // TestSessionColourIsStableAndShared is the whole case for deriving the colour
@@ -101,6 +102,7 @@ func TestSessionColourIsStableAndShared(t *testing.T) {
 	// A second client, attached elsewhere, with its own focus and its own local
 	// window accents: everything that differs between two attached terminals.
 	there, thereTree := sessionColorOS(t, 120, 40)
+	here.Settings = config.Global
 	there.SessionName = "api"
 	there.FocusedWindow = 1
 	there.SetWindowAccent("aaaaaaaa1111", SlotAccent(9))
@@ -377,8 +379,9 @@ func TestSessionColoursDegradeToShapeAndName(t *testing.T) {
 	m, tree := sessionColorOS(t, 120, 40)
 
 	withSessionColors(t, false)
+	m.Settings = config.Global
 	off := railPlain(t, m, tree)
-	config.SessionColors = true
+	config.Global.SessionColors = true
 	on := railPlain(t, m, tree)
 
 	if len(off) != len(on) {
@@ -403,11 +406,12 @@ func TestSessionColoursDegradeToShapeAndName(t *testing.T) {
 
 	// ASCII-only: the marks are the ASCII ones the rail already had, and the
 	// name the colour is shorthand for is still printed beside them.
-	prevASCII := config.UseASCIIOnly
-	config.UseASCIIOnly = true
+	prevASCII := config.Global.UseASCIIOnly
+	config.Global.UseASCIIOnly = true
+	m.Settings.UseASCIIOnly = true
 	overlay.SetASCII(true)
 	t.Cleanup(func() {
-		config.UseASCIIOnly = prevASCII
+		config.Global.UseASCIIOnly = prevASCII
 		overlay.SetASCII(prevASCII)
 	})
 	ascii := railPlain(t, m, tree)
@@ -438,7 +442,7 @@ func TestSessionColourInputsAreInTheRailSignature(t *testing.T) {
 		t.Error("the signature did not come back when the accent was cleared")
 	}
 
-	config.SessionColors = false
+	m.Settings.SessionColors = false
 	off := m.sidebarSignature()
 	if off == base {
 		t.Error("turning the colours off does not move the signature")

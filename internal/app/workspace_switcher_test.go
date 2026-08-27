@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -12,6 +13,7 @@ import (
 // wsSwitcherOS builds an OS with panes spread over workspaces 1, 2 and 4.
 func wsSwitcherOS() *OS {
 	m := &OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		Windows: []*terminal.Window{

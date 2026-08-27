@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -60,7 +61,7 @@ func TestPrintableTitleDropsSpinnerFrames(t *testing.T) {
 // a decorative terminal title while keeping the agent-state glyph it prepends.
 func TestTitleBadgeStripsDecorative(t *testing.T) {
 	win := &terminal.Window{ID: "w1", CustomName: decorativeTitle, AgentState: "working"}
-	got := getWindowTitle(win, 1, 80)
+	got := getWindowTitle(win, 1, 80, &config.Global)
 	if strings.ContainsAny(got, "✳♦️") || strings.ContainsRune(got, '\U0001f680') {
 		t.Errorf("title badge kept decorative junk: %q", got)
 	}

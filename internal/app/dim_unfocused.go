@@ -36,7 +36,7 @@ import (
 
 // dimBlend is the fraction of the way to the ground an unfocused cell is
 // carried, for the configured percentage.
-func dimBlend() float64 { return float64(config.DimUnfocused) / 100 }
+func dimBlend(s *config.Settings) float64 { return float64(s.DimUnfocused) / 100 }
 
 // paneDim is the dim that applies to one pane this frame: the configured
 // amount for an unfocused pane, and none for the focused one.
@@ -48,11 +48,11 @@ func dimBlend() float64 { return float64(config.DimUnfocused) / 100 }
 // wrote something. Keying the cache on the dim is the fix that no focus path
 // can get around, because it is checked where the cache is used rather than
 // where focus moves.
-func paneDim(isFocused bool) int {
+func paneDim(isFocused bool, s *config.Settings) int {
 	if isFocused {
 		return 0
 	}
-	return config.DimUnfocused
+	return s.DimUnfocused
 }
 
 // dimCell fills dst with src carried toward the pane's ground and returns it,

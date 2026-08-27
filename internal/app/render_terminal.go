@@ -153,7 +153,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 	// The dim this frame wants, which is also what the cached frame has to have
 	// been drawn at for the cache to be usable.
-	dim := paneDim(isFocused)
+	dim := paneDim(isFocused, &m.Settings)
 
 	cacheUsable := window.CachedContent != "" && window.CachedContentDim() == dim
 
@@ -453,7 +453,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	)
 	if dim > 0 {
 		if dimFg, dimBg = dimGround(); dimBg != nil {
-			dimT = dimBlend()
+			dimT = dimBlend(&m.Settings)
 		}
 	}
 

@@ -21,9 +21,9 @@ import (
 func TestFullscreenFastPathYieldsToShowkeys(t *testing.T) {
 	// Fix the render-affecting globals so the eligibility check is deterministic
 	// regardless of what an earlier test or config load left behind.
-	defer withConfig(&config.DockbarPosition, "bottom")()
-	defer withConfig(&config.ShowClock, false)()
-	defer withConfig(&config.SharedBorders, false)()
+	defer withConfig(&config.Global.DockbarPosition, "bottom")()
+	defer withConfig(&config.Global.ShowClock, false)()
+	defer withConfig(&config.Global.SharedBorders, false)()
 
 	win := newTestWindow(t, "showkeys-fast-0001", 80, 23)
 	m := newTestOS(win)

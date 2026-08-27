@@ -163,16 +163,16 @@ func (m *OS) toggleLayoutMode() {
 			m.WorkspaceTrees = make(map[int]*layout.BSPTree)
 		}
 		m.WorkspaceTrees[m.CurrentWorkspace] = nil
-		m.ShowNotification("Layout: BSP tiling", "info", config.NotificationDuration)
+		m.ShowNotification("Layout: BSP tiling", "info", m.Settings.NotificationDuration)
 	} else if m.UseBSPLayout {
 		// BSP -> master-stack
 		m.UseBSPLayout = false
-		m.ShowNotification("Layout: master-stack", "info", config.NotificationDuration)
+		m.ShowNotification("Layout: master-stack", "info", m.Settings.NotificationDuration)
 	} else {
 		// master-stack -> scrolling
 		m.UseScrollingLayout = true
 		delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
-		m.ShowNotification("Layout: scrolling (niri)", "info", config.NotificationDuration)
+		m.ShowNotification("Layout: scrolling (niri)", "info", m.Settings.NotificationDuration)
 	}
 	if !m.AutoTiling && (m.UseScrollingLayout || m.UseBSPLayout) {
 		m.AutoTiling = true
@@ -219,7 +219,7 @@ func (m *OS) enableScrollingLayout() {
 	// Clear old scrolling layout to rebuild from current windows
 	delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
 	m.TileAllWindows()
-	m.ShowNotification("Layout: scrolling (niri)", "info", config.NotificationDuration)
+	m.ShowNotification("Layout: scrolling (niri)", "info", m.Settings.NotificationDuration)
 	m.FireLayoutChanged()
 }
 
@@ -242,7 +242,7 @@ func (m *OS) enableBSPLayout() {
 	}
 	m.WorkspaceTrees[m.CurrentWorkspace] = nil
 	m.TileAllWindows()
-	m.ShowNotification("Layout: BSP tiling", "info", config.NotificationDuration)
+	m.ShowNotification("Layout: BSP tiling", "info", m.Settings.NotificationDuration)
 	m.FireLayoutChanged()
 }
 
@@ -260,7 +260,7 @@ func (m *OS) enableMasterStackLayout() {
 		m.AutoTiling = true
 	}
 	m.TileAllWindows()
-	m.ShowNotification("Layout: master-stack", "info", config.NotificationDuration)
+	m.ShowNotification("Layout: master-stack", "info", m.Settings.NotificationDuration)
 	m.FireLayoutChanged()
 }
 
@@ -282,7 +282,7 @@ func (m *OS) disableAllTiling() {
 	// open for a divider now draws nothing. Give it back to them, the same way
 	// the tiling toggle does.
 	m.reclaimSeparatorGaps()
-	m.ShowNotification("Tiling off", "info", config.NotificationDuration)
+	m.ShowNotification("Tiling off", "info", m.Settings.NotificationDuration)
 	m.FireLayoutChanged()
 }
 

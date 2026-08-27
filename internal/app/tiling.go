@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -386,7 +385,7 @@ func (m *OS) RestoreWorkspaceLayout(workspace int) {
 	if ratio, exists := m.WorkspaceMasterRatio[workspace]; exists {
 		m.MasterRatio = ratio
 	} else {
-		m.MasterRatio = config.MasterRatioFraction()
+		m.MasterRatio = m.Settings.MasterRatioFraction()
 	}
 
 	// Check if we have a saved layout for this workspace

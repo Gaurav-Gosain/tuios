@@ -36,5 +36,5 @@ func (m *OS) NoteComposedOptionChord(chord string) {
 	if host == config.HostGhostty {
 		advice += ". " + config.GhosttyAltArrowAdvice
 	}
-	m.ShowNotification(advice, "warning", config.NotificationDuration)
+	m.ShowNotification(advice, "warning", m.Settings.NotificationDuration)
 }

@@ -140,18 +140,26 @@ func describeGlyphSet(id string, render glyphRenderSettings) map[string]any {
 		named[role] = glyph
 	}
 
+	// The settings the glyphs are resolved against are built here and thrown
+	// away, so nothing in the process ever sees them. This used to be a
+	// save/set/restore over the package globals: describeMu made it safe
+	// against a second describe call and against nothing else, and a client
+	// composing a frame on another goroutine could read the borrowed border
+	// style mid-flight. A local value has no such window.
+	//
+	// The glyph set itself is still borrowed, because theme keeps it in a
+	// package global that has no per-call form yet; describeMu still guards
+	// that half.
+	settings := config.Global
+	settings.BorderStyle = render.borderStyle
+	settings.ScrollbarStyle = render.scrollbarStyle
+	settings.ScrollbarThumb, settings.ScrollbarTrack = render.scrollbarThumb, render.scrollbarTrack
+
 	describeMu.Lock()
 	prev := theme.ActiveGlyphSetID()
-	prevBorder, prevStyle := config.BorderStyle, config.ScrollbarStyle
-	prevThumb, prevTrack := config.ScrollbarThumb, config.ScrollbarTrack
 	theme.SetActiveGlyphs(id)
-	config.BorderStyle = render.borderStyle
-	config.ScrollbarStyle = render.scrollbarStyle
-	config.ScrollbarThumb, config.ScrollbarTrack = render.scrollbarThumb, render.scrollbarTrack
-	drawn := config.ResolvedGlyphs()
+	drawn := settings.ResolvedGlyphs()
 	theme.SetActiveGlyphs(prev)
-	config.BorderStyle, config.ScrollbarStyle = prevBorder, prevStyle
-	config.ScrollbarThumb, config.ScrollbarTrack = prevThumb, prevTrack
 	describeMu.Unlock()
 
 	return map[string]any{

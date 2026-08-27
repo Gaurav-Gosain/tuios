@@ -44,6 +44,8 @@ func TestLegacyAccentFileRendersIdentically(t *testing.T) {
 	// Before: the accent the old model would have held for index 4, which is an
 	// ANSI slot resolved against whatever theme is loaded.
 	before := accentTestOS(t, 120, 40)
+	after.Settings = config.Global
+	after.Settings = before.Settings
 	before.SidebarAccents = map[string]Accent{legacyID: SlotAccent(4)}
 
 	beforeRows, afterRows := railStyledFrame(t, before), railStyledFrame(t, after)
@@ -94,7 +96,7 @@ func TestLegacyAccentIndexZeroIsBrightBlack(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 	writeSidebarStateFile(t, `{"accents":{"w1":0}}`)
 
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.loadSidebarState()
 
 	got, ok := m.WindowAccent("w1")
@@ -117,7 +119,7 @@ func TestLegacyAccentIndexZeroIsBrightBlack(t *testing.T) {
 func TestAccentFileRoundTripsBothKinds(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.SidebarAccents = map[string]Accent{
 		"slot":   SlotAccent(6),
 		"picked": RGBAccent(color.RGBA{R: 0x3b, G: 0x82, B: 0xf6, A: 0xff}),
@@ -145,7 +147,7 @@ func TestAccentFileRoundTripsBothKinds(t *testing.T) {
 		t.Errorf("the picked colour was also written as an index: %v", st.Accents)
 	}
 
-	next := &OS{}
+	next := &OS{Settings: config.Global}
 	next.loadSidebarState()
 	for id, want := range m.SidebarAccents {
 		if got, ok := next.WindowAccent(id); !ok || got != want {
@@ -160,10 +162,10 @@ func TestAccentSurvivesRestart(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 
 	want := RGBAccent(color.RGBA{R: 0xf5, G: 0x9e, B: 0x0b, A: 0xff})
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.SetWindowAccent("w1", want)
 
-	next := &OS{}
+	next := &OS{Settings: config.Global}
 	next.loadSidebarState()
 	if got, ok := next.WindowAccent("w1"); !ok || got != want {
 		t.Fatalf("accent after restart = %+v, want %+v", got, want)

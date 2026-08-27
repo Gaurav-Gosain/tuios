@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/charmbracelet/x/ansi"
@@ -15,7 +16,7 @@ func TestKeyboardEnhancementsFollowThePane(t *testing.T) {
 	em := vt.NewEmulator(80, 24)
 	t.Cleanup(func() { _ = em.Close() })
 	win := &terminal.Window{ID: "enhance-0001", Terminal: em, Width: 82, Height: 26}
-	m := &OS{Mode: TerminalMode, FocusedWindow: 0, Windows: []*terminal.Window{win}}
+	m := &OS{Settings: config.Global, Mode: TerminalMode, FocusedWindow: 0, Windows: []*terminal.Window{win}}
 
 	if got := m.keyboardEnhancements(); got.ReportEventTypes {
 		t.Error("a session with no pane asking for releases should not ask the host for them")

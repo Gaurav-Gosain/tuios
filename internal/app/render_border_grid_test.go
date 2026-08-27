@@ -20,34 +20,35 @@ import (
 // windows, and restores the SharedBorders global when the test ends.
 func sharedBorderOS(t *testing.T, n int) *OS {
 	t.Helper()
-	originalShared, originalAnim := config.SharedBorders, config.AnimationsEnabled
-	originalStyle, originalASCII := config.BorderStyle, config.UseASCIIOnly
-	originalDock := config.DockbarPosition
+	originalShared, originalAnim := config.Global.SharedBorders, config.Global.AnimationsEnabled
+	originalStyle, originalASCII := config.Global.BorderStyle, config.Global.UseASCIIOnly
+	originalDock := config.Global.DockbarPosition
 	// The caps sit where the perimeter turns, and the dock's hairline is what a
 	// full-height divider turns on, so the dock's position is part of the shape
 	// these tests read. Other tests in this package move it.
-	config.DockbarPosition = "bottom"
-	config.SharedBorders = true
+	config.Global.DockbarPosition = "bottom"
+	config.Global.SharedBorders = true
 	// Tiling applies geometry through an animation when animations are on, which
 	// would leave the windows at their nominal size for the duration of the test.
-	config.AnimationsEnabled = false
+	config.Global.AnimationsEnabled = false
 	// Pin the border style: other tests in this package mutate it, and the ASCII
 	// set draws every corner as "+", which would hide a difference in the caps.
-	config.BorderStyle = "rounded"
-	config.UseASCIIOnly = false
+	config.Global.BorderStyle = "rounded"
+	config.Global.UseASCIIOnly = false
 	t.Cleanup(func() {
-		config.SharedBorders = originalShared
-		config.AnimationsEnabled = originalAnim
-		config.BorderStyle = originalStyle
-		config.UseASCIIOnly = originalASCII
-		config.DockbarPosition = originalDock
+		config.Global.SharedBorders = originalShared
+		config.Global.AnimationsEnabled = originalAnim
+		config.Global.BorderStyle = originalStyle
+		config.Global.UseASCIIOnly = originalASCII
+		config.Global.DockbarPosition = originalDock
 	})
 
 	m := &OS{
+		Settings: config.Global,
 		// The layout reads the model's session-settled geometry, seeded from
 		// the globals the way NewOS seeds it.
-		SharedBorders:    config.SharedBorders,
-		PaneGap:          config.PaneGap,
+		SharedBorders:    config.Global.SharedBorders,
+		PaneGap:          config.Global.PaneGap,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
@@ -160,7 +161,7 @@ func TestSharedBorderFocusIsNotColorAlone(t *testing.T) {
 		t.Error("focused perimeter is not bold, leaving color as the only signal")
 	}
 
-	border := config.GetBorderForStyle()
+	border := config.Global.GetBorderForStyle()
 	corners := border.TopLeft + border.TopRight + border.BottomLeft + border.BottomRight
 	if !strings.ContainsAny(focused, corners) {
 		t.Errorf("focused perimeter has no corner cap; expected one of %q in %q", corners, focused)
@@ -176,7 +177,7 @@ func TestSharedBorderFocusIsNotColorAlone(t *testing.T) {
 // head of it is the screen edge, which the divider runs into rather than caps.
 func TestSharedBorderCapsBendTowardTheFocusedPane(t *testing.T) {
 	m := sharedBorderOS(t, 2)
-	border := config.GetBorderForStyle()
+	border := config.Global.GetBorderForStyle()
 
 	m.FocusedWindow = 0
 	_, left := separatorText(t, m)
@@ -209,6 +210,7 @@ func TestSharedBorderFocusHandlesEdgeCases(t *testing.T) {
 
 	t.Run("zoomed window suppresses the frame", func(t *testing.T) {
 		m := sharedBorderOS(t, 3)
+		m.Settings = config.Global
 		m.Windows[m.FocusedWindow].Zoomed = true
 		if layers := m.renderSeparatorOverlay(); len(layers) != 0 {
 			t.Errorf("a zoomed window should draw no separators, got %d layers", len(layers))
@@ -217,6 +219,7 @@ func TestSharedBorderFocusHandlesEdgeCases(t *testing.T) {
 
 	t.Run("floating focus leaves the frame unfocused", func(t *testing.T) {
 		m := sharedBorderOS(t, 3)
+		m.Settings = config.Global
 		m.Windows[m.FocusedWindow].IsFloating = true
 		_, focused := separatorText(t, m)
 		if focused != "" {
@@ -226,6 +229,7 @@ func TestSharedBorderFocusHandlesEdgeCases(t *testing.T) {
 
 	t.Run("minimized focus leaves the frame unfocused", func(t *testing.T) {
 		m := sharedBorderOS(t, 3)
+		m.Settings = config.Global
 		m.Windows[m.FocusedWindow].Minimized = true
 		_, focused := separatorText(t, m)
 		if focused != "" {

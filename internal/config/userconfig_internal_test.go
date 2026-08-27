@@ -17,25 +17,25 @@ func TestMaxFPSClamp(t *testing.T) {
 		{in: 10000, want: MaxFPSCap},
 	}
 
-	orig := NormalFPS
-	t.Cleanup(func() { NormalFPS = orig })
+	orig := Global.NormalFPS
+	t.Cleanup(func() { Global.NormalFPS = orig })
 
 	for _, tc := range tests {
 		cfg := &UserConfig{}
 		cfg.Appearance.MaxFPS = tc.in
 
-		NormalFPS = orig
-		ApplyAppearanceConfig(cfg)
-		if NormalFPS != tc.want {
-			t.Errorf("max_fps %d: apply gave %d, want %d", tc.in, NormalFPS, tc.want)
+		Global.NormalFPS = orig
+		ApplyAppearanceConfig(cfg, &Global)
+		if Global.NormalFPS != tc.want {
+			t.Errorf("max_fps %d: apply gave %d, want %d", tc.in, Global.NormalFPS, tc.want)
 		}
 	}
 
 	// Unset means "leave the current rate alone".
-	NormalFPS = 45
-	ApplyAppearanceConfig(&UserConfig{})
-	if NormalFPS != 45 {
-		t.Errorf("an unset max_fps moved the rate to %d, want it left at 45", NormalFPS)
+	Global.NormalFPS = 45
+	ApplyAppearanceConfig(&UserConfig{}, &Global)
+	if Global.NormalFPS != 45 {
+		t.Errorf("an unset max_fps moved the rate to %d, want it left at 45", Global.NormalFPS)
 	}
 }
 

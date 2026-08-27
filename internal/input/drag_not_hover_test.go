@@ -187,16 +187,16 @@ func TestScrollbarThumbNeedsAHeldButton(t *testing.T) {
 	top := rect.TrackY
 	bottom := rect.TrackY + rect.TrackH - 1
 
-	o = pressed(o, rect.X, app.ScrollbarThumbRow(win))
+	o = pressed(o, rect.X, app.ScrollbarThumbRow(win, &o.Settings))
 	if !o.ScrollbarDragging {
 		t.Fatal("a press on the thumb did not start a drag")
 	}
 	o = dragged(o, rect.X, bottom)
-	moved := app.ScrollbarThumbRow(win)
+	moved := app.ScrollbarThumbRow(win, &o.Settings)
 
 	// The release never arrives; what comes back is motion reporting no button.
 	o = motion(o, rect.X, top)
-	if got := app.ScrollbarThumbRow(win); got != moved {
+	if got := app.ScrollbarThumbRow(win, &o.Settings); got != moved {
 		t.Errorf("button-free motion dragged the thumb from row %d to %d", moved, got)
 	}
 	if o.ScrollbarDragging {
@@ -206,7 +206,7 @@ func TestScrollbarThumbNeedsAHeldButton(t *testing.T) {
 	// And hover is reachable again: it is no longer swallowed by a drag that
 	// never ended.
 	o = motion(o, rect.X, bottom)
-	if got := app.ScrollbarThumbRow(win); got != moved {
+	if got := app.ScrollbarThumbRow(win, &o.Settings); got != moved {
 		t.Errorf("a second button-free motion moved the thumb to %d, want %d", got, moved)
 	}
 }
@@ -218,13 +218,13 @@ func TestScrollbarThumbLocksOnRelease(t *testing.T) {
 	o, win, rect := scrolledBackPane(t)
 
 	bottom := rect.TrackY + rect.TrackH - 1
-	o = pressed(o, rect.X, app.ScrollbarThumbRow(win))
+	o = pressed(o, rect.X, app.ScrollbarThumbRow(win, &o.Settings))
 	o = dragged(o, rect.X, bottom)
 	o = released(o, rect.X, bottom)
-	locked := app.ScrollbarThumbRow(win)
+	locked := app.ScrollbarThumbRow(win, &o.Settings)
 
 	o = motion(o, rect.X, rect.TrackY)
-	if got := app.ScrollbarThumbRow(win); got != locked {
+	if got := app.ScrollbarThumbRow(win, &o.Settings); got != locked {
 		t.Errorf("the thumb did not lock on release: row %d -> %d", locked, got)
 	}
 }
@@ -277,7 +277,7 @@ func TestSidebarEdgeResizeNeedsAHeldButton(t *testing.T) {
 	app.SetInputHandler(HandleInput)
 	m := hoverOS(t)
 	_ = frameLines(m)
-	edgeX := config.SidebarWidth - 1
+	edgeX := config.Global.SidebarWidth - 1
 
 	m = pressed(m, edgeX, 5)
 	if !m.SidebarEdgeActive() {

@@ -45,12 +45,12 @@ func TestSettingsWriteHappensInTheCommand(t *testing.T) {
 		t.Fatalf("read seeded config: %v", err)
 	}
 
-	swapBool(t, &config.SidebarFileIcons, true)
+	swapBool(t, &config.Global.SidebarFileIcons, true)
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
 	focusSetting(t, m, "Sidebar", "File icons")
 	cmd := m.SettingsAdjust(1)
 
-	if config.SidebarFileIcons {
+	if m.Settings.SidebarFileIcons {
 		t.Error("the change did not apply live")
 	}
 	mid, err := os.ReadFile(path)
@@ -81,7 +81,7 @@ func TestSettingsWriteHappensInTheCommand(t *testing.T) {
 // ran and wrote would not be, and nil is the cheaper proof.
 func TestReadOnlySessionHandsBackNoSaveCommand(t *testing.T) {
 	useTempConfig(t)
-	swapBool(t, &config.SidebarFileIcons, true)
+	swapBool(t, &config.Global.SidebarFileIcons, true)
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig(), ConfigReadOnly: true})
 	focusSetting(t, m, "Sidebar", "File icons")
 	if cmd := m.SettingsAdjust(1); cmd != nil {
@@ -94,7 +94,7 @@ func TestReadOnlySessionHandsBackNoSaveCommand(t *testing.T) {
 // last, and the file ending up holding the config from before the newer change.
 func TestStaleSaveGivesWayToNewer(t *testing.T) {
 	path := useTempConfig(t)
-	swapBool(t, &config.SidebarFileIcons, true)
+	swapBool(t, &config.Global.SidebarFileIcons, true)
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
 	focusSetting(t, m, "Sidebar", "File icons")
 
@@ -113,7 +113,7 @@ func TestStaleSaveGivesWayToNewer(t *testing.T) {
 		t.Fatalf("read config: %v", err)
 	}
 	want := "file_icons = true"
-	if !config.SidebarFileIcons {
+	if !m.Settings.SidebarFileIcons {
 		want = "file_icons = false"
 	}
 	if !strings.Contains(string(data), want) {

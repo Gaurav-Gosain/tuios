@@ -35,6 +35,7 @@ func TestRailAddressingHoldsAcrossEveryCombination(t *testing.T) {
 							t.Run(name, func(t *testing.T) {
 								m, tree := sectionsTestOS(t, 120, h)
 								withSidebar(t, true, pos, config.SidebarDefaultWidth)
+								m.Settings = config.Global
 								m.SidebarCollapsed = collapsed
 								m.SidebarPeek = peek
 								m.SidebarAgentFilter, m.SidebarAgentSort = filter, sortBy
@@ -80,6 +81,7 @@ func TestRailFitsAShortRegion(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/h=%d", pos, h), func(t *testing.T) {
 				m, tree := sectionsTestOS(t, 120, h)
 				withSidebar(t, true, pos, config.SidebarDefaultWidth)
+				m.Settings = config.Global
 				// The expanded rail, which is the one that lays out sections; the
 				// collapsed strip composes its own lines against the same height.
 				m.SidebarCollapsed = false
@@ -121,7 +123,7 @@ func assertHitsStayInTheBand(t *testing.T, m *OS) {
 	t.Helper()
 	w := m.GetSidebarWidth()
 	x0 := 0
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		x0 = m.GetRenderWidth() - w
 	}
 	top, bottom := m.GetTopMargin(), m.GetTopMargin()+m.GetUsableHeight()
@@ -233,6 +235,8 @@ func TestRailEmptyStatesAreDocumented(t *testing.T) {
 	// A peek into a session with no panes says so, or the section reads as
 	// "the attached session has no panes".
 	m2, tree2 := sectionsTestOS(t, 120, 30)
+	m.Settings = config.Global
+	m.Settings = m2.Settings
 	m2.SidebarPeek = "docs"
 	if lineOf(railPlain(t, m2, tree2), "no terminals") < 0 {
 		t.Error("an empty peek said nothing")
@@ -240,6 +244,8 @@ func TestRailEmptyStatesAreDocumented(t *testing.T) {
 
 	// A filter that hides everything says what it hid and offers the way back.
 	m3, tree3 := sectionsTestOS(t, 120, 30)
+	m2.Settings = config.Global
+	m2.Settings = m3.Settings
 	m3.SessionName = "docs" // attached to the session with no agents
 	m3.SidebarAgentFilter = sidebarAgentsSession
 	if lineOf(railPlain(t, m3, tree3), "none here") < 0 {

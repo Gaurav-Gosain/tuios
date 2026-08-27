@@ -23,16 +23,16 @@ func sidebarText(t *testing.T, m *OS) string {
 // the rail when nothing changed: the common case, a pane printing output while
 // the sidebar sits still. It must not rebuild or restyle.
 func BenchmarkSidebarPanelLinesCached(b *testing.B) {
-	config.SidebarEnabled = true
-	config.SidebarPosition = "left"
-	config.SidebarWidth = config.SidebarDefaultWidth
-	defer func() { config.SidebarEnabled = false }()
+	config.Global.SidebarEnabled = true
+	config.Global.SidebarPosition = "left"
+	config.Global.SidebarWidth = config.SidebarDefaultWidth
+	defer func() { config.Global.SidebarEnabled = false }()
 
 	wins := make([]*terminal.Window, 0, 6)
 	for i := range 6 {
 		wins = append(wins, &terminal.Window{ID: "w" + string(rune('a'+i)), CustomName: "window"})
 	}
-	m := &OS{Windows: wins, Width: 120, Height: 40, SessionName: "s"}
+	m := &OS{Settings: config.Global, Windows: wins, Width: 120, Height: 40, SessionName: "s"}
 	m.sidebarPanelLines() // prime the cache
 
 	b.ReportAllocs()
@@ -48,16 +48,16 @@ func BenchmarkSidebarPanelLinesCached(b *testing.B) {
 // rows there rebuilt the whole rail on every composed frame, including the
 // frames the row cache had just declared unchanged.
 func BenchmarkSidebarPanelCached(b *testing.B) {
-	config.SidebarEnabled = true
-	config.SidebarPosition = "left"
-	config.SidebarWidth = config.SidebarDefaultWidth
-	defer func() { config.SidebarEnabled = false }()
+	config.Global.SidebarEnabled = true
+	config.Global.SidebarPosition = "left"
+	config.Global.SidebarWidth = config.SidebarDefaultWidth
+	defer func() { config.Global.SidebarEnabled = false }()
 
 	wins := make([]*terminal.Window, 0, 6)
 	for i := range 6 {
 		wins = append(wins, &terminal.Window{ID: "w" + string(rune('a'+i)), CustomName: "window"})
 	}
-	m := &OS{Windows: wins, Width: 120, Height: 40, SessionName: "s"}
+	m := &OS{Settings: config.Global, Windows: wins, Width: 120, Height: 40, SessionName: "s"}
 	m.sidebarPanel() // prime the cache
 
 	b.ReportAllocs()
@@ -77,6 +77,7 @@ func TestSidebarCacheServesAndInvalidates(t *testing.T) {
 	win := &terminal.Window{ID: "w1", CustomName: "ALPHA"}
 	win2 := &terminal.Window{ID: "w2", CustomName: "BRAVO"}
 	m := &OS{
+		Settings:      config.Global,
 		Windows:       []*terminal.Window{win, win2},
 		FocusedWindow: 0,
 		Width:         120,
@@ -167,6 +168,7 @@ func TestSidebarCacheFollowsForeignCache(t *testing.T) {
 		{Name: "other"},
 	})
 	m := &OS{
+		Settings:     config.Global,
 		Windows:      []*terminal.Window{{ID: "w1", CustomName: "ALPHA"}},
 		Width:        120,
 		Height:       40,
@@ -195,9 +197,9 @@ func TestSidebarCacheFollowsForeignCache(t *testing.T) {
 // panes. Neither input was folded in.
 func TestSidebarSignatureFollowsTheGlyphSet(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-	prevASCII, prevStyle := config.UseASCIIOnly, config.BorderStyle
+	prevASCII, prevStyle := config.Global.UseASCIIOnly, config.Global.BorderStyle
 	t.Cleanup(func() {
-		config.UseASCIIOnly, config.BorderStyle = prevASCII, prevStyle
+		config.Global.UseASCIIOnly, config.Global.BorderStyle = prevASCII, prevStyle
 		overlay.SetASCII(prevASCII)
 	})
 
@@ -205,14 +207,15 @@ func TestSidebarSignatureFollowsTheGlyphSet(t *testing.T) {
 		name string
 		flip func()
 	}{
-		{"ascii-only", func() { config.UseASCIIOnly = true }},
-		{"border-style", func() { config.BorderStyle = "double" }},
+		{"ascii-only", func() { config.Global.UseASCIIOnly = true }},
+		{"border-style", func() { config.Global.BorderStyle = "double" }},
 	}
 	for _, f := range flips {
 		t.Run(f.name, func(t *testing.T) {
-			config.UseASCIIOnly, config.BorderStyle = false, "rounded"
+			config.Global.UseASCIIOnly, config.Global.BorderStyle = false, "rounded"
 			overlay.SetASCII(false)
 			m := &OS{
+				Settings:      config.Global,
 				Windows:       []*terminal.Window{{ID: "w1", CustomName: "ALPHA", AgentState: "needs_input"}},
 				FocusedWindow: 0,
 				Width:         120,
@@ -222,7 +225,7 @@ func TestSidebarSignatureFollowsTheGlyphSet(t *testing.T) {
 			before, sig := sidebarText(t, m), m.sidebarSignature()
 
 			f.flip()
-			overlay.SetASCII(config.UseASCIIOnly)
+			overlay.SetASCII(m.Settings.UseASCIIOnly)
 			// The cache is dropped so this render shows what the rail draws now,
 			// which is what the signature has to have followed.
 			m.sidebarCache.invalidate()

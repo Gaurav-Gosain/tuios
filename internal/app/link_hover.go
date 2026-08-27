@@ -69,7 +69,7 @@ func (l PaneLink) Same(o PaneLink) bool {
 }
 
 // linksEnabled reports whether the pointer picks links up at all.
-func linksEnabled() bool { return config.Links != config.LinksOff }
+func linksEnabled(s *config.Settings) bool { return s.Links != config.LinksOff }
 
 // resolvePaneLink returns the link covering viewport cell (x, y) of window, or
 // ok=false when there is none.
@@ -80,8 +80,8 @@ func linksEnabled() bool { return config.Links != config.LinksOff }
 // would stall the whole input loop for a hover highlight. Motion arrives many
 // times a second, so a skipped resolution costs one frame of a stale underline
 // and nothing else.
-func resolvePaneLink(window *terminal.Window, x, y int) (PaneLink, bool) {
-	if window == nil || window.Terminal == nil || !linksEnabled() {
+func resolvePaneLink(window *terminal.Window, x, y int, s *config.Settings) (PaneLink, bool) {
+	if window == nil || window.Terminal == nil || !linksEnabled(s) {
 		return PaneLink{}, false
 	}
 	if !window.TryRLockIO() {
@@ -97,7 +97,7 @@ func resolvePaneLink(window *terminal.Window, x, y int) (PaneLink, bool) {
 	if link, ok := markedLinkAt(window, x, y, maxX); ok {
 		return link, true
 	}
-	if config.Links != config.LinksAll {
+	if s.Links != config.LinksAll {
 		return PaneLink{}, false
 	}
 	return bareLinkAt(window, x, y, maxX)

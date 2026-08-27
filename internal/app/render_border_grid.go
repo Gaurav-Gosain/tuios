@@ -248,10 +248,10 @@ func (m *OS) chromeRules(bounds layout.Rect) chromeRules {
 	// Only a divider with a stroke has something to meet the rule with. The rest
 	// stop at the boundary, since a cell of fill covers the rule rather than
 	// joining it and a cell of the hidden style rubs it out.
-	if !config.BorderJoinsChromeRules() {
+	if !m.Settings.BorderJoinsChromeRules() {
 		return r
 	}
-	switch config.DockbarPosition {
+	switch m.Settings.DockbarPosition {
 	case "hidden":
 	case "top":
 		r.top = bounds.Y - 1
@@ -378,7 +378,7 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	}
 
 	// Get border characters from the configured style
-	border := config.GetBorderForStyle()
+	border := m.Settings.GetBorderForStyle()
 	g := dividerGlyphs(border)
 	chVert, chHoriz := g.vert, g.horiz
 	chCross, chTRight, chTLeft := g.cross, g.tRight, g.tLeft

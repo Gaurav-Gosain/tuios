@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // repaintPayload is a full-screen truecolor repaint, the shape DOOM-fire and
@@ -62,7 +64,7 @@ func TestFloodedPaneLeavesRoomForInput(t *testing.T) {
 	)
 
 	ptyDataChan := make(chan struct{}, 1)
-	w := NewDaemonWindow("flood-window-01", "flood", 0, 0, 158, 40, 0, "pty-flood", ptyDataChan)
+	w := NewDaemonWindow("flood-window-01", "flood", 0, 0, 158, 40, 0, "pty-flood", ptyDataChan, config.DefaultScrollbackLines)
 	t.Cleanup(w.Close)
 
 	// The flood: a pane repainting as fast as the output path will take it.

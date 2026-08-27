@@ -19,11 +19,12 @@ import (
 func newDeferralOS(t *testing.T, width, height, windows int) *OS {
 	t.Helper()
 
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
 	m := &OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
@@ -60,7 +61,7 @@ func newDeferralWindow(t *testing.T, id string) *terminal.Window {
 	}()
 	t.Cleanup(func() { close(done) })
 
-	win := terminal.NewDaemonWindow(id, "test", 0, 0, 10, 5, 0, "pty-"+id, ptyDataChan)
+	win := terminal.NewDaemonWindow(id, "test", 0, 0, 10, 5, 0, "pty-"+id, ptyDataChan, config.DefaultScrollbackLines)
 	if win == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}

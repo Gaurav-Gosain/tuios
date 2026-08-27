@@ -63,9 +63,9 @@ func BenchmarkResizeDragWithOutput(b *testing.B) {
 		for _, n := range []int{2, 4, 9} {
 			name := fmt.Sprintf("windows-%d/shared-%v", n, shared)
 			b.Run(name, func(b *testing.B) {
-				prev := config.SharedBorders
-				config.SharedBorders = shared
-				b.Cleanup(func() { config.SharedBorders = prev })
+				prev := config.Global.SharedBorders
+				config.Global.SharedBorders = shared
+				b.Cleanup(func() { config.Global.SharedBorders = prev })
 
 				m := benchResizeOS(b, n)
 				resizes := countDaemonResizes(m)
@@ -112,9 +112,9 @@ func TestSharedBorderDragTracksPointerAndDoesNotAnimate(t *testing.T) {
 
 	for _, shared := range []bool{false, true} {
 		t.Run(fmt.Sprintf("shared-%v", shared), func(t *testing.T) {
-			prev := config.SharedBorders
-			config.SharedBorders = shared
-			t.Cleanup(func() { config.SharedBorders = prev })
+			prev := config.Global.SharedBorders
+			config.Global.SharedBorders = shared
+			t.Cleanup(func() { config.Global.SharedBorders = prev })
 
 			m := benchResizeOS(t, 9)
 			focused := m.GetFocusedWindow()
@@ -167,9 +167,9 @@ func TestResizeDragDefersPTYResizeUntilRelease(t *testing.T) {
 
 	for _, shared := range []bool{false, true} {
 		t.Run(fmt.Sprintf("shared-%v", shared), func(t *testing.T) {
-			prev := config.SharedBorders
-			config.SharedBorders = shared
-			t.Cleanup(func() { config.SharedBorders = prev })
+			prev := config.Global.SharedBorders
+			config.Global.SharedBorders = shared
+			t.Cleanup(func() { config.Global.SharedBorders = prev })
 
 			m := benchResizeOS(t, 9)
 			resizes := countDaemonResizes(m)

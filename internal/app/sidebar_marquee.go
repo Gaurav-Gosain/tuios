@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
@@ -42,7 +41,7 @@ func (m *OS) sidebarMarquee(key, s string, avail int, hovered bool) string {
 	if avail < 1 {
 		avail = 1
 	}
-	if !hovered || !config.SidebarMarquee || lipgloss.Width(s) <= avail {
+	if !hovered || !m.Settings.SidebarMarquee || lipgloss.Width(s) <= avail {
 		return overlay.Truncate(s, avail)
 	}
 

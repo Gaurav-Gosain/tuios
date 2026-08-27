@@ -28,6 +28,7 @@ func stripHits(t *testing.T, pos string, h int) *OS {
 	t.Helper()
 	m, tree := stripOS(t, 120, h)
 	withSidebar(t, true, pos, config.SidebarDefaultWidth)
+	m.Settings = config.Global
 	m.SidebarCollapsed = true
 	m.SidebarFocused = true
 	m.sidebarPanelLinesForTree(tree)
@@ -106,6 +107,7 @@ func TestStripSlotsTileTheirLists(t *testing.T) {
 
 	// A rail too short for the whole list still tiles what it drew.
 	short, tree := manySessionsOS(t, 120, 9)
+	m.Settings = config.Global
 	short.sidebarPanelLinesForTree(tree)
 	last := -1
 	for _, h := range short.SidebarHits {

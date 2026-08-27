@@ -115,7 +115,7 @@ func (m *OS) notePointerEvent(at time.Time) {
 	// but each window's CachedLayer still holds the borderless render and is
 	// reused until the window is dirty, so the reveal must mark the affected
 	// windows dirty here - otherwise the borders would never be drawn again.
-	if config.ZenMode == config.ZenModeMouse && m.zenHidden && !m.pointerRecentlyMoved() {
+	if m.Settings.ZenMode == config.ZenModeMouse && m.zenHidden && !m.pointerRecentlyMoved() {
 		m.markZenDirty()
 	}
 	m.lastPointerAt = at

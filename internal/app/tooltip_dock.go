@@ -2,7 +2,6 @@ package app
 
 import (
 	"charm.land/lipgloss/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -53,7 +52,7 @@ func (m *OS) renderDockSessionTooltip() *lipgloss.Layer {
 		renderW := m.GetRenderWidth()
 		label := tooltipLabel(dockSessionLabel(h.Action), renderW, theme.UI())
 		y := h.Y - 1
-		if config.DockbarPosition == "top" {
+		if m.Settings.DockbarPosition == "top" {
 			y = h.Y + 1
 		}
 		return tooltipLayer(label, h.X0, y, renderW, "dock-session-tooltip")
@@ -102,7 +101,7 @@ func (m *OS) renderDockWorkspaceTooltip() *lipgloss.Layer {
 		renderW := m.GetRenderWidth()
 		label := tooltipLabel(m.workspacePillName(h.Workspace), renderW, theme.UI())
 		y := h.Y - 1
-		if config.DockbarPosition == "top" {
+		if m.Settings.DockbarPosition == "top" {
 			y = h.Y + 1
 		}
 		return tooltipLayer(label, h.X0, y, renderW, "dock-workspace-tooltip")

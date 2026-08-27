@@ -12,7 +12,7 @@ import (
 func keybindOS(t *testing.T) *OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
-	m := &OS{UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)}
+	m := &OS{Settings: config.Global, UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)}
 	m.OpenKeybindManager()
 	return m
 }
@@ -237,7 +237,7 @@ func TestMoveClampsToTheList(t *testing.T) {
 // A model with no registry must not panic; the overlay is reachable from the
 // palette before a config has necessarily loaded.
 func TestOverlaySurvivesAMissingRegistry(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.OpenKeybindManager()
 	m.KeybindArm()
 	m.KeybindCapture("ctrl+g")

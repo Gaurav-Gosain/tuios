@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
@@ -12,7 +13,7 @@ import (
 // switcherOS builds a session switcher over a fixed item list, with a zero-value
 // daemon client because the switcher's daemon-mode guard only checks for one.
 func switcherOS(items []sessiontree.Node) *OS {
-	m := &OS{IsDaemonSession: true, DaemonClient: &session.TUIClient{}}
+	m := &OS{Settings: config.Global, IsDaemonSession: true, DaemonClient: &session.TUIClient{}}
 	m.ShowSessionSwitcher = true
 	m.SessionSwitcherItems = items
 	return m

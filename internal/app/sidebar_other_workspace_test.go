@@ -37,7 +37,7 @@ func windowRowFor(t *testing.T, m *OS, windowID string) string {
 // padding: what the row actually says.
 func rowContent(line string) string {
 	s := strings.TrimRight(ansi.Strip(line), " ")
-	s = strings.TrimSuffix(s, config.GetWindowBorderLeft())
+	s = strings.TrimSuffix(s, config.Global.GetWindowBorderLeft())
 	return strings.TrimRight(s, " ")
 }
 

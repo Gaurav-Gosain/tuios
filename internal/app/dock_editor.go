@@ -307,7 +307,7 @@ func (m *OS) DockEditorShift(dir int) tea.Cmd {
 		// moving it would change the file and nothing on screen. Saying so
 		// beats an edit that appears to do nothing.
 		m.ShowNotification(row.Name+" always draws on the "+row.Fixed+
-			". You cannot move it.", "info", config.NotificationDuration)
+			". You cannot move it.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 

@@ -92,32 +92,32 @@ func titleBadgeText(windowName, agentState string, badgeBg color.Color) string {
 	return nameStyle.Render(" ") + glyphStyle.Render(glyph) + nameStyle.Render(rest+" ")
 }
 
-func getBorder() lipgloss.Border {
-	return config.GetBorderForStyle()
+func getBorder(s *config.Settings) lipgloss.Border {
+	return s.GetBorderForStyle()
 }
 
-func getNormalBorder() lipgloss.Border {
-	return getBorder()
+func getNormalBorder(s *config.Settings) lipgloss.Border {
+	return getBorder(s)
 }
 
 // borderRowGlyphs returns the fill character and the two corners a top or a
 // bottom border row is drawn from.
-func borderRowGlyphs(isTop bool) (fill, cornerLeft, cornerRight string) {
+func borderRowGlyphs(isTop bool, s *config.Settings) (fill, cornerLeft, cornerRight string) {
 	if isTop {
-		return config.GetWindowBorderTop(), config.GetWindowBorderTopLeft(), config.GetWindowBorderTopRight()
+		return s.GetWindowBorderTop(), s.GetWindowBorderTopLeft(), s.GetWindowBorderTopRight()
 	}
-	return config.GetWindowBorderBottom(), config.GetWindowBorderBottomLeft(), config.GetWindowBorderBottomRight()
+	return s.GetWindowBorderBottom(), s.GetWindowBorderBottomLeft(), s.GetWindowBorderBottomRight()
 }
 
 // windowTitleBadge wraps a window's name in the pill caps the title bar shows
 // it in.
-func windowTitleBadge(windowName, agentState string, col color.Color) string {
+func windowTitleBadge(windowName, agentState string, col color.Color, s *config.Settings) string {
 	style := pool.GetStyle()
 	defer pool.PutStyle(style)
 	render := style.Foreground(col).Render
-	return render(config.GetWindowPillLeft()) +
+	return render(s.GetWindowPillLeft()) +
 		titleBadgeText(windowName, agentState, col) +
-		render(config.GetWindowPillRight())
+		render(s.GetWindowPillRight())
 }
 
 // buttonBorderRow is a drawn title-bar row together with the column its control
@@ -141,12 +141,12 @@ type buttonBorderRow struct {
 // not both fit the badge is dropped rather than the pill: a name the bar cannot
 // show is still readable from the dock, while a close button nobody can press
 // is simply gone.
-func layoutBorderRow(badge, pill string, width int, col color.Color, isTop bool) buttonBorderRow {
+func layoutBorderRow(badge, pill string, width int, col color.Color, isTop bool, s *config.Settings) buttonBorderRow {
 	style := pool.GetStyle()
 	defer pool.PutStyle(style)
 	render := style.Foreground(col).Render
 
-	fill, cornerLeft, cornerRight := borderRowGlyphs(isTop)
+	fill, cornerLeft, cornerRight := borderRowGlyphs(isTop, s)
 
 	pillWidth := lipgloss.Width(pill)
 	padding := width - lipgloss.Width(badge) - pillWidth
@@ -162,7 +162,7 @@ func layoutBorderRow(badge, pill string, width int, col color.Color, isTop bool)
 	middle := render(strings.Repeat(fill, padding))
 	// A bar with no controls leaves the badge where it has always been, since
 	// there is nothing for it to make room for.
-	if pill != "" && config.WindowButtonPosition == config.WindowButtonPositionLeft {
+	if pill != "" && s.WindowButtonPosition == config.WindowButtonPositionLeft {
 		return buttonBorderRow{
 			text:      render(cornerLeft) + pill + middle + badge + render(cornerRight),
 			pillStart: 1,
@@ -174,11 +174,11 @@ func layoutBorderRow(badge, pill string, width int, col color.Color, isTop bool)
 	}
 }
 
-func makeRounded(content string, color color.Color) string {
+func makeRounded(content string, color color.Color, s *config.Settings) string {
 	style := pool.GetStyle()
 	defer pool.PutStyle(style)
 	render := style.Foreground(color).Render
-	content = render(config.GetWindowPillLeft()) + content + render(config.GetWindowPillRight())
+	content = render(s.GetWindowPillLeft()) + content + render(s.GetWindowPillRight())
 	return content
 }
 
@@ -194,7 +194,7 @@ func isDefaultTitle(title, windowID string) bool {
 // Returns empty string if title should be hidden or doesn't fit.
 // position is the window's 1-based place in its workspace, used by the {index}
 // placeholder of appearance.window_title_format.
-func getWindowTitle(window *terminal.Window, position int, maxWidth int) string {
+func getWindowTitle(window *terminal.Window, position int, maxWidth int, s *config.Settings) string {
 	// Titles reach the badge as chrome, so launder the same decorative junk the
 	// sidebar and palette drop; our own state glyph is added below, untouched.
 	windowName := ""
@@ -205,10 +205,10 @@ func getWindowTitle(window *terminal.Window, position int, maxWidth int) string 
 		windowName = printableTitle(t)
 	}
 
-	if windowName != "" || config.WindowTitleFormat != "" {
+	if windowName != "" || s.WindowTitleFormat != "" {
 		// A format that mentions only {index} or {cwd} still has something to
 		// say about a window whose title is empty.
-		windowName = config.FormatWindowTitle(windowName, position, window.CWD())
+		windowName = s.FormatWindowTitle(windowName, position, window.CWD())
 	}
 
 	// The agent-state indicator shows even for a window with no name, so a pane
@@ -277,7 +277,7 @@ func (m *OS) addToBorder(content string, width int, color color.Color, window *t
 // needs the same two rows without a rendered box to splice them into.
 func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Window, position int, isTiling bool) (topBorder, bottomBorder string) {
 	width = max(width, 0)
-	titlePos := config.WindowTitlePosition
+	titlePos := m.Settings.WindowTitlePosition
 
 	style := pool.GetStyle()
 	defer pool.PutStyle(style)
@@ -299,7 +299,7 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 
 	windowName := ""
 	if titlePos != "hidden" {
-		windowName = getWindowTitle(window, position, titleMaxWidth)
+		windowName = getWindowTitle(window, position, titleMaxWidth, &m.Settings)
 	}
 
 	borderStyle := style.Foreground(color)
@@ -309,9 +309,9 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 	// are the ones it drew on.
 	badge := ""
 	if titlePos == "top" && windowName != "" {
-		badge = windowTitleBadge(windowName, window.AgentState, color)
+		badge = windowTitleBadge(windowName, window.AgentState, color, &m.Settings)
 	}
-	row := layoutBorderRow(badge, buttons, width, color, true)
+	row := layoutBorderRow(badge, buttons, width, color, true, &m.Settings)
 	topBorder = row.text
 	m.recordWindowButtons(window.ID, placeWindowButtons(hits, window, row.pillStart))
 
@@ -329,34 +329,34 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 	}
 
 	if titlePos == "bottom" && windowName != "" {
-		bottomBorder = renderTitleBadge(windowName, window.AgentState, width, color, false)
+		bottomBorder = renderTitleBadge(windowName, window.AgentState, width, color, false, &m.Settings)
 	} else if scrollIndicator != "" {
 		// Bottom border with scrollback position indicator on the right
 		indicatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24")).Bold(true)
 		indicator := indicatorStyle.Render(scrollIndicator)
 		indicatorWidth := lipgloss.Width(indicator)
 		lineWidth := max(width-indicatorWidth, 0)
-		bottomBorder = borderStyle.Render(config.GetWindowBorderBottomLeft()+strings.Repeat(config.GetWindowBorderBottom(), lineWidth)) + indicator + borderStyle.Render(config.GetWindowBorderBottomRight())
+		bottomBorder = borderStyle.Render(m.Settings.GetWindowBorderBottomLeft()+strings.Repeat(m.Settings.GetWindowBorderBottom(), lineWidth)) + indicator + borderStyle.Render(m.Settings.GetWindowBorderBottomRight())
 	} else {
-		bottomBorder = borderStyle.Render(config.GetWindowBorderBottomLeft() + strings.Repeat(config.GetWindowBorderBottom(), width) + config.GetWindowBorderBottomRight())
+		bottomBorder = borderStyle.Render(m.Settings.GetWindowBorderBottomLeft() + strings.Repeat(m.Settings.GetWindowBorderBottom(), width) + m.Settings.GetWindowBorderBottomRight())
 	}
 
 	return topBorder, bottomBorder
 }
 
 // renderTitleBadge renders a border with a centered title badge.
-func renderTitleBadge(windowName, agentState string, width int, color color.Color, isTop bool) string {
+func renderTitleBadge(windowName, agentState string, width int, color color.Color, isTop bool, s *config.Settings) string {
 	style := pool.GetStyle()
 	defer pool.PutStyle(style)
 	borderStyle := style.Foreground(color)
 
-	borderChar, cornerLeft, cornerRight := borderRowGlyphs(isTop)
+	borderChar, cornerLeft, cornerRight := borderRowGlyphs(isTop, s)
 
 	if windowName == "" {
 		return borderStyle.Render(cornerLeft + strings.Repeat(borderChar, width) + cornerRight)
 	}
 
-	nameBadge := windowTitleBadge(windowName, agentState, color)
+	nameBadge := windowTitleBadge(windowName, agentState, color, s)
 	badgeWidth := lipgloss.Width(nameBadge)
 	totalPadding := width - badgeWidth
 

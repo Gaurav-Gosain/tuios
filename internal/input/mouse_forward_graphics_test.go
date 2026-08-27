@@ -24,6 +24,7 @@ func mouseModeGraphicsWindow(t *testing.T) (*app.OS, *vt.Emulator) {
 
 	win := &terminal.Window{Terminal: em, X: 0, Y: 0, Width: 82, Height: 26}
 	o := &app.OS{
+		Settings:      config.Global,
 		Mode:          app.TerminalMode,
 		FocusedWindow: 0,
 		Windows:       []*terminal.Window{win},
@@ -70,9 +71,9 @@ func TestWheelForwardedToMouseModeGraphicsPane(t *testing.T) {
 
 // withScrollLines sets config.ScrollLines and returns a restore func.
 func withScrollLines(n int) func() {
-	prev := config.ScrollLines
-	config.ScrollLines = n
-	return func() { config.ScrollLines = prev }
+	prev := config.Global.ScrollLines
+	config.Global.ScrollLines = n
+	return func() { config.Global.ScrollLines = prev }
 }
 
 // TestWheelAmplifiedByScrollLines proves one physical notch over a mouse-mode
@@ -132,6 +133,7 @@ func TestWheelForwardedAfterDaemonModeRestore(t *testing.T) {
 
 	win := &terminal.Window{Terminal: em, X: 0, Y: 0, Width: 82, Height: 26}
 	o := &app.OS{
+		Settings:      config.Global,
 		Mode:          app.TerminalMode,
 		FocusedWindow: 0,
 		Windows:       []*terminal.Window{win},

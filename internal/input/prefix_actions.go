@@ -5,7 +5,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 )
 
@@ -313,7 +312,7 @@ func handlePrefixFullscreen(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	o.ToggleZoom()
 	if fw := o.GetFocusedWindow(); fw != nil && fw.Zoomed {
-		o.ShowNotification("ZOOM", "info", config.NotificationDuration)
+		o.ShowNotification("ZOOM", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }
@@ -321,7 +320,7 @@ func handlePrefixFullscreen(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handlePrefixSplitHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.SplitFocusedHorizontal()
-		o.ShowNotification("Split horizontal", "info", config.NotificationDuration)
+		o.ShowNotification("Split horizontal", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }
@@ -329,7 +328,7 @@ func handlePrefixSplitHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 func handlePrefixSplitVertical(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.SplitFocusedVertical()
-		o.ShowNotification("Split vertical", "info", config.NotificationDuration)
+		o.ShowNotification("Split vertical", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }
@@ -337,7 +336,7 @@ func handlePrefixSplitVertical(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 func handlePrefixRotateSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.RotateFocusedSplit()
-		o.ShowNotification("Split rotated", "info", config.NotificationDuration)
+		o.ShowNotification("Split rotated", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }
@@ -345,7 +344,7 @@ func handlePrefixRotateSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handlePrefixEqualizeSplits(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.EqualizeSplits()
-		o.ShowNotification("Splits equalized", "info", config.NotificationDuration)
+		o.ShowNotification("Splits equalized", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }
@@ -353,7 +352,7 @@ func handlePrefixEqualizeSplits(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 func handlePrefixSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if focused := o.GetFocusedWindow(); focused != nil {
 		focused.EnterCopyMode()
-		o.ShowNotification("Copy mode (hjkl, q to exit)", "info", 2*config.NotificationDuration)
+		o.ShowNotification("Copy mode (hjkl, q to exit)", "info", 2*o.Settings.NotificationDuration)
 	}
 	return o, nil
 }
@@ -384,16 +383,16 @@ func handlePrefixCommandPalette(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 func handlePrefixToggleSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ToggleSidebar()
 	state := "off"
-	if config.SidebarEnabled {
+	if o.Settings.SidebarEnabled {
 		state = "on"
 	}
-	o.ShowNotification("Sidebar "+state, "success", config.NotificationDuration)
+	o.ShowNotification("Sidebar "+state, "success", o.Settings.NotificationDuration)
 	return o, nil
 }
 
 func handlePrefixJumpNotif(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if !o.JumpToNotification() {
-		o.ShowNotification("No message to jump to", "info", config.NotificationDuration)
+		o.ShowNotification("No message to jump to", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }
@@ -415,7 +414,7 @@ func leaveTerminalMode(o *app.OS) {
 		return
 	}
 	o.Mode = app.WindowManagementMode
-	o.ShowNotification("Window management mode", "info", config.NotificationDuration)
+	o.ShowNotification("Window management mode", "info", o.Settings.NotificationDuration)
 	refreshFocusedWindow(o)
 }
 
@@ -495,7 +494,7 @@ func toggleNotify(o *app.OS, label string, on bool) {
 	if on {
 		state = "ON"
 	}
-	o.ShowNotification(label+": "+state, "info", config.NotificationDuration)
+	o.ShowNotification(label+": "+state, "info", o.Settings.NotificationDuration)
 }
 
 func handleDebugLogs(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -517,8 +516,8 @@ func handleDebugShowkeys(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handleDebugAnimations(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	config.AnimationsEnabled = !config.AnimationsEnabled
-	toggleNotify(o, "Animations", config.AnimationsEnabled)
+	o.Settings.AnimationsEnabled = !o.Settings.AnimationsEnabled
+	toggleNotify(o, "Animations", o.Settings.AnimationsEnabled)
 	return o, nil
 }
 
@@ -536,7 +535,7 @@ func handleTapeReview(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handleTapeRecord(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
-		o.ShowNotification("Already recording", "warning", config.NotificationDuration)
+		o.ShowNotification("Already recording", "warning", o.Settings.NotificationDuration)
 		return o, nil
 	}
 	o.TapeManagerStartRecording()
@@ -548,7 +547,7 @@ func handleTapeStop(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
 		o.TapeManagerStopRecording()
 	} else {
-		o.ShowNotification("Not recording", "warning", config.NotificationDuration)
+		o.ShowNotification("Not recording", "warning", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }

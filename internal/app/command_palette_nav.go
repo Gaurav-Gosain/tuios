@@ -2,7 +2,6 @@ package app
 
 import (
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // allPaletteItems returns the merged palette list: the static commands, and the
@@ -19,7 +18,7 @@ func (m *OS) allPaletteItems() []CommandPaletteItem {
 // rebuildPaletteItems merges the two sources. Called when the palette opens,
 // never per frame.
 func (m *OS) rebuildPaletteItems() {
-	static := GetCommandPaletteItems()
+	static := GetCommandPaletteItems(&m.Settings)
 	items := make([]CommandPaletteItem, 0,
 		len(static)+len(m.PaletteSessionItems)+len(m.PaletteKeybindItems))
 	items = append(items, static...)
@@ -93,7 +92,7 @@ func (m *OS) ActivateCommandPalette() tea.Cmd {
 		// silence and cannot be told from the key not being bound. The query is
 		// what the user is part way through typing, so it stays and so does the
 		// panel.
-		m.ShowNotification("Nothing to run: no command matches "+m.CommandPaletteQuery, "info", config.NotificationDuration)
+		m.ShowNotification("Nothing to run: no command matches "+m.CommandPaletteQuery, "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	action := filtered[m.CommandPaletteSelected].Action

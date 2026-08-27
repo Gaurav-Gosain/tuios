@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -15,6 +16,7 @@ func TestSessionCycleFollowsTheRailAndWraps(t *testing.T) {
 	client := session.NewTUIClient()
 	client.UpdateSessionCache([]session.SessionInfo{{Name: "alpha"}, {Name: "bravo"}, {Name: "charlie"}})
 	m := &OS{
+		Settings:     config.Global,
 		Windows:      []*terminal.Window{{ID: "w1"}},
 		Width:        120,
 		DaemonClient: client,
@@ -51,14 +53,14 @@ func TestSessionCycleFollowsTheRailAndWraps(t *testing.T) {
 // TestSessionCycleAloneHasNowhereToGo covers standalone (no daemon) and a daemon
 // with a single session: both must report rather than switch.
 func TestSessionCycleAloneHasNowhereToGo(t *testing.T) {
-	standalone := &OS{Windows: []*terminal.Window{{ID: "w1"}}, Width: 120}
+	standalone := &OS{Settings: config.Global, Windows: []*terminal.Window{{ID: "w1"}}, Width: 120}
 	if got := standalone.railNeighbourSession(1); got != "" {
 		t.Errorf("standalone offered %q to switch to", got)
 	}
 
 	client := session.NewTUIClient()
 	client.UpdateSessionCache([]session.SessionInfo{{Name: "only"}})
-	solo := &OS{Windows: []*terminal.Window{{ID: "w1"}}, Width: 120, SessionName: "only", DaemonClient: client}
+	solo := &OS{Settings: config.Global, Windows: []*terminal.Window{{ID: "w1"}}, Width: 120, SessionName: "only", DaemonClient: client}
 	if got := solo.railNeighbourSession(-1); got != "" {
 		t.Errorf("a lone session offered %q to switch to", got)
 	}

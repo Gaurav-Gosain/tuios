@@ -3,8 +3,6 @@ package app
 import (
 	"strconv"
 	"strings"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // WorkspaceItem is one row of the workspace switcher. Number is the workspace's
@@ -124,7 +122,7 @@ func (m *OS) WorkspaceSwitcherActivate(idx int) {
 		// Nothing to switch to, so the switcher stays up: the query that
 		// narrowed it to nothing is what the user is typing, and dismissing it
 		// answers the key with silence.
-		m.ShowNotification("Nothing to switch to: no workspace matches "+m.WorkspaceSwitcherQuery, "info", config.NotificationDuration)
+		m.ShowNotification("Nothing to switch to: no workspace matches "+m.WorkspaceSwitcherQuery, "info", m.Settings.NotificationDuration)
 		return
 	}
 	if !target.IsCurrent {

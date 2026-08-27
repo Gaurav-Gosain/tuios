@@ -6,7 +6,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -78,6 +77,14 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 	var mu sync.Mutex
 	var lastNotify, lastBell time.Time
 
+	// Both closures below run on the PTY reader goroutine and read
+	// m.Settings.NotificationDuration while Update may be writing it. That is
+	// an unsynchronised read of one word, and it is exactly the read the
+	// package global had before Settings existed, so this is no worse than it
+	// was. It is not fixed here because the honest fix is a published snapshot
+	// of the settings for off-loop readers, which is a change of its own; the
+	// worst case is one notification held for the previous duration.
+
 	window.NotifyFunc = func(title, body string) {
 		mu.Lock()
 		if time.Since(lastNotify) < notifyRateLimit {
@@ -102,7 +109,7 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 		}
 
 		select {
-		case ch <- NotificationMsg{Message: message, Type: "info", Duration: config.NotificationDuration, WindowID: windowID}:
+		case ch <- NotificationMsg{Message: message, Type: "info", Duration: m.Settings.NotificationDuration, WindowID: windowID}:
 		default:
 			// Channel full, drop (non-blocking).
 		}
@@ -128,7 +135,7 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 		mu.Unlock()
 
 		select {
-		case ch <- NotificationMsg{Message: "bell", Type: "info", Duration: config.NotificationDuration, WindowID: windowID}:
+		case ch <- NotificationMsg{Message: "bell", Type: "info", Duration: m.Settings.NotificationDuration, WindowID: windowID}:
 		default:
 			// Channel full, drop (non-blocking).
 		}

@@ -23,29 +23,30 @@ import (
 // like and is the state that arms the deferral the transition test exercises.
 func borderModeOS(t *testing.T, n int, shared, animations bool) *OS {
 	t.Helper()
-	origShared, origAnim := config.SharedBorders, config.AnimationsEnabled
-	origStyle, origASCII := config.BorderStyle, config.UseASCIIOnly
-	origSidebar := config.SidebarEnabled
-	config.SharedBorders = shared
-	config.AnimationsEnabled = animations
+	origShared, origAnim := config.Global.SharedBorders, config.Global.AnimationsEnabled
+	origStyle, origASCII := config.Global.BorderStyle, config.Global.UseASCIIOnly
+	origSidebar := config.Global.SidebarEnabled
+	config.Global.SharedBorders = shared
+	config.Global.AnimationsEnabled = animations
 	// Other tests in this package mutate the style, and the ASCII set draws every
 	// corner as "+", which would hide a pane box among the separator glyphs.
-	config.BorderStyle = "rounded"
-	config.UseASCIIOnly = false
-	config.SidebarEnabled = false
+	config.Global.BorderStyle = "rounded"
+	config.Global.UseASCIIOnly = false
+	config.Global.SidebarEnabled = false
 	t.Cleanup(func() {
-		config.SharedBorders = origShared
-		config.AnimationsEnabled = origAnim
-		config.BorderStyle = origStyle
-		config.UseASCIIOnly = origASCII
-		config.SidebarEnabled = origSidebar
+		config.Global.SharedBorders = origShared
+		config.Global.AnimationsEnabled = origAnim
+		config.Global.BorderStyle = origStyle
+		config.Global.UseASCIIOnly = origASCII
+		config.Global.SidebarEnabled = origSidebar
 	})
 
 	m := &OS{
+		Settings: config.Global,
 		// The layout reads the model's session-settled geometry, seeded from
 		// the globals the way NewOS seeds it.
-		SharedBorders:    config.SharedBorders,
-		PaneGap:          config.PaneGap,
+		SharedBorders:    config.Global.SharedBorders,
+		PaneGap:          config.Global.PaneGap,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
@@ -97,7 +98,7 @@ func cellAt(g [][]rune, x, y int) rune {
 func borderAudit(t *testing.T, m *OS) (ownBoxes, strayRules, junctions int) {
 	t.Helper()
 	g := frameGrid(t, m)
-	border := config.GetBorderForStyle()
+	border := m.Settings.GetBorderForStyle()
 	topLeft := firstRune(border.TopLeft, '╭')
 
 	covered := make(map[[2]int]bool)
@@ -200,7 +201,7 @@ func TestBorderSystemsNeverDrawTogether(t *testing.T) {
 func TestSharedBorderToggleDoesNotDoubleBorders(t *testing.T) {
 	m := borderModeOS(t, 3, false, true)
 
-	config.SharedBorders = true
+	m.Settings.SharedBorders = true
 	m.applyAppearanceLive(true)
 
 	if len(m.Animations) == 0 {
@@ -223,7 +224,7 @@ func TestSharedBorderToggleDoesNotDoubleBorders(t *testing.T) {
 		}
 		for _, w := range m.Windows {
 			if !w.Tiled {
-				t.Errorf("window %s left untiled while config.SharedBorders is true", w.ID)
+				t.Errorf("window %s left untiled while shared borders are on", w.ID)
 			}
 		}
 	})

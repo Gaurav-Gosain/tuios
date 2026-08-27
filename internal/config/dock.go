@@ -295,7 +295,7 @@ func ParseDockRefresh(s string) (DockRefresh, error) {
 
 // DockClockFormat is the layout the clock renders in, falling back to the
 // format the status badge has always used.
-func (c DockConfig) DockClockFormat() string {
+func (c DockConfig) DockClockFormat(s *Settings) string {
 	if f := strings.TrimSpace(c.Clock.Format); f != "" {
 		return f
 	}
@@ -304,7 +304,7 @@ func (c DockConfig) DockClockFormat() string {
 	// question, and a session that set the appearance one and never opened
 	// [dock.clock] would otherwise watch it do nothing. The specific table
 	// still wins over the general one when it says anything at all.
-	return GetClockFormat()
+	return s.GetClockFormat()
 }
 
 // DockClockInterval is how often a clock in this format has to be redrawn. A

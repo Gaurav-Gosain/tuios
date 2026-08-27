@@ -299,7 +299,7 @@ var subPrefixEntry = map[string]string{
 // leader is what got the user into prefix mode in the first place. The leader,
 // and for a sub-prefix action the key that opens that sub-prefix, are prepended
 // here so the hint is the whole thing a user has to press.
-func contextMenuHint(registry *config.KeybindRegistry, action string) string {
+func contextMenuHint(registry *config.KeybindRegistry, action string, s *config.Settings) string {
 	if registry == nil || action == "" {
 		return ""
 	}
@@ -315,10 +315,10 @@ func contextMenuHint(registry *config.KeybindRegistry, action string) string {
 		if entryKey == "" {
 			return "" // no way in, so there is no chord to show
 		}
-		return config.LeaderKey + " " + entryKey + " " + key
+		return s.LeaderKey + " " + entryKey + " " + key
 	}
 	if strings.HasPrefix(action, "prefix_") {
-		return config.LeaderKey + " " + key
+		return s.LeaderKey + " " + key
 	}
 	return key
 }

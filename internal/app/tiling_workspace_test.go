@@ -16,10 +16,11 @@ import (
 // check permanently, disabling auto-retiling after a single round-trip.
 func TestRestoreWorkspaceLayoutDoesNotForceCustom(t *testing.T) {
 	m := &OS{
+		Settings: config.Global,
 		// The layout reads the model's session-settled geometry, seeded from
 		// the globals the way NewOS seeds it.
-		SharedBorders: config.SharedBorders,
-		PaneGap:       config.PaneGap,
+		SharedBorders: config.Global.SharedBorders,
+		PaneGap:       config.Global.PaneGap,
 		AutoTiling:    true,
 		WorkspaceLayouts: map[int][]WindowLayout{
 			2: {{WindowID: "nonexistent", X: 0, Y: 0, Width: 10, Height: 10}},
@@ -40,10 +41,11 @@ func TestRestoreWorkspaceLayoutDoesNotForceCustom(t *testing.T) {
 // workspace is not stuck as custom), which is what previously broke.
 func TestRestoreWorkspaceLayoutRoundTripKeepsRetiling(t *testing.T) {
 	m := &OS{
+		Settings: config.Global,
 		// The layout reads the model's session-settled geometry, seeded from
 		// the globals the way NewOS seeds it.
-		SharedBorders:        config.SharedBorders,
-		PaneGap:              config.PaneGap,
+		SharedBorders:        config.Global.SharedBorders,
+		PaneGap:              config.Global.PaneGap,
 		AutoTiling:           true,
 		WorkspaceLayouts:     map[int][]WindowLayout{},
 		WorkspaceMasterRatio: map[int]float64{},
@@ -65,28 +67,29 @@ func TestRestoreWorkspaceLayoutRoundTripKeepsRetiling(t *testing.T) {
 // and one on workspace 2, in the given border mode.
 func twoWorkspaceOS(t *testing.T, shared bool) *OS {
 	t.Helper()
-	origShared, origAnim := config.SharedBorders, config.AnimationsEnabled
-	origStyle, origASCII, origSidebar := config.BorderStyle, config.UseASCIIOnly, config.SidebarEnabled
-	config.SharedBorders = shared
+	origShared, origAnim := config.Global.SharedBorders, config.Global.AnimationsEnabled
+	origStyle, origASCII, origSidebar := config.Global.BorderStyle, config.Global.UseASCIIOnly, config.Global.SidebarEnabled
+	config.Global.SharedBorders = shared
 	// Tiling applies geometry through an animation when animations are on, which
 	// would leave the panes at their nominal size for the length of the test.
-	config.AnimationsEnabled = false
+	config.Global.AnimationsEnabled = false
 	// The ASCII set draws every corner as "+", which would hide a pane box among
 	// the separator glyphs.
-	config.BorderStyle = "rounded"
-	config.UseASCIIOnly = false
-	config.SidebarEnabled = false
+	config.Global.BorderStyle = "rounded"
+	config.Global.UseASCIIOnly = false
+	config.Global.SidebarEnabled = false
 	t.Cleanup(func() {
-		config.SharedBorders, config.AnimationsEnabled = origShared, origAnim
-		config.BorderStyle, config.UseASCIIOnly = origStyle, origASCII
-		config.SidebarEnabled = origSidebar
+		config.Global.SharedBorders, config.Global.AnimationsEnabled = origShared, origAnim
+		config.Global.BorderStyle, config.Global.UseASCIIOnly = origStyle, origASCII
+		config.Global.SidebarEnabled = origSidebar
 	})
 
 	m := &OS{
+		Settings: config.Global,
 		// The layout reads the model's session-settled geometry, seeded from
 		// the globals the way NewOS seeds it.
-		SharedBorders:        config.SharedBorders,
-		PaneGap:              config.PaneGap,
+		SharedBorders:        config.Global.SharedBorders,
+		PaneGap:              config.Global.PaneGap,
 		NumWorkspaces:        9,
 		CurrentWorkspace:     1,
 		WorkspaceFocus:       make(map[int]int),

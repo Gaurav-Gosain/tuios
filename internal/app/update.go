@@ -282,7 +282,7 @@ func (m *OS) Init() tea.Cmd {
 	m.reportConfigWarnings()
 
 	cmds := []tea.Cmd{
-		TickCmd(),
+		TickCmd(&m.Settings),
 		ListenForWindowExits(m.WindowExitChan),
 		ListenForPTYData(m.PTYDataChan),
 		ListenForClipboardSet(m.PendingClipboardSet),
@@ -425,8 +425,8 @@ func ListenForClientEvents(eventChan chan ClientEvent) tea.Cmd {
 
 // TickCmd creates a maintenance tick for animations, dock stats, and script playback.
 // This runs at a low rate and does NOT drive PTY rendering.
-func TickCmd() tea.Cmd {
-	return tea.Tick(time.Second/time.Duration(config.NormalFPS), func(t time.Time) tea.Msg {
+func TickCmd(s *config.Settings) tea.Cmd {
+	return tea.Tick(time.Second/time.Duration(s.NormalFPS), func(t time.Time) tea.Msg {
 		return TickerMsg(t)
 	})
 }
@@ -448,7 +448,7 @@ func (m *OS) tickNeedsWork() bool {
 	// the reveal window, and come back the instant it moves again. The motion
 	// event forces its own frame, but the timeout crossing has no event, so a
 	// work tick that lands on the far side of the threshold must repaint.
-	if config.ZenMode == config.ZenModeMouse && m.zenHidden != m.zenBordersHidden(false) {
+	if m.Settings.ZenMode == config.ZenModeMouse && m.zenHidden != m.zenBordersHidden(false) {
 		return true
 	}
 	// A moved daemon listing can carry a new title for a window this client
@@ -807,14 +807,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		leftScriptMode := m.maybeExitFinishedScript()
 
 		// Handle script playback if in script mode
-		cmds := []tea.Cmd{TickCmd()}
+		cmds := []tea.Cmd{TickCmd(&m.Settings)}
 		if m.ScriptMode && !m.ScriptPaused && m.ScriptPlayer != nil {
 			player := m.ScriptPlayer
 			if !player.IsFinished() {
 				// Wait for animations to complete before executing next command
 				// This ensures visual consistency during script playback
 				if m.HasActiveAnimations() {
-					return m, TickCmd()
+					return m, TickCmd(&m.Settings)
 				}
 
 				// Hold the next command until a pane the previous one asked for
@@ -824,20 +824,20 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// was splitting away from, so the next Type would be typed into
 				// the wrong pane.
 				if !m.scriptPaneReady() {
-					return m, TickCmd()
+					return m, TickCmd(&m.Settings)
 				}
 
 				// Check if we're blocking on a WaitUntilRegex condition from a
 				// previously dispatched command.
 				if m.ScriptWaitRegex != nil && !m.checkScriptWaitRegex() {
 					// Condition not met and not timed out yet, keep waiting.
-					return m, TickCmd()
+					return m, TickCmd(&m.Settings)
 				}
 
 				// Check if we're waiting for a sleep to finish
 				if !m.ScriptSleepUntil.IsZero() && time.Now().Before(m.ScriptSleepUntil) {
 					// Still waiting, don't advance yet
-					return m, TickCmd()
+					return m, TickCmd(&m.Settings)
 				}
 				// Sleep finished or wasn't waiting, clear the sleep time
 				m.ScriptSleepUntil = time.Time{}
@@ -918,9 +918,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// It runs at the normal rate: dropping it to a lower one used to
 			// cost smoothness without limiting the motion flood, since motion
 			// events drove their own renders regardless of the tick rate.
-			nextTick = TickCmd()
+			nextTick = TickCmd(&m.Settings)
 		} else if hasAnimations || m.PrefixActive || needsScriptFrame || hasNotifications || m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending {
-			nextTick = TickCmd() // Normal FPS when things need periodic updates
+			nextTick = TickCmd(&m.Settings) // Normal FPS when things need periodic updates
 		} else {
 			nextTick = IdleTickCmd() // Slow idle tick (process cleanup, etc.)
 		}
@@ -940,7 +940,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// visible to show for it. Marking the affected windows dirty also
 		// rebuilds their CachedLayer, which still holds the bordered render
 		// and is reused until the window is dirty.
-		zenCrossed := config.ZenMode == config.ZenModeMouse && m.zenHidden != m.zenBordersHidden(false)
+		zenCrossed := m.Settings.ZenMode == config.ZenModeMouse && m.zenHidden != m.zenBordersHidden(false)
 		if zenCrossed {
 			m.markZenDirty()
 		}
@@ -984,11 +984,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case SessionCreatedMsg:
 		cmd := ListenForSessionCreate(m.sessionCreateChan())
 		if msg.Err != nil {
-			m.ShowNotification("Create failed: "+msg.Err.Error(), "error", config.NotificationDuration*2)
+			m.ShowNotification("Create failed: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, cmd
 		}
 		if err := m.SwitchToSession(msg.Name); err != nil {
-			m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+			m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, cmd
 		}
 		// A session the daemon just built carries AutoTiling false, and the switch
@@ -1005,10 +1005,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case SessionKilledMsg:
 		cmd := ListenForSessionKill(m.sessionKillChan())
 		if msg.Err != nil {
-			m.ShowNotification("Kill failed: "+msg.Err.Error(), "error", config.NotificationDuration*2)
+			m.ShowNotification("Kill failed: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, cmd
 		}
-		m.ShowNotification("Killed session: "+msg.Label, "success", config.NotificationDuration)
+		m.ShowNotification("Killed session: "+msg.Label, "success", m.Settings.NotificationDuration)
 		// The switcher lists a snapshot, so the row of a session that no longer
 		// exists would sit there until the overlay was reopened.
 		if m.ShowSessionSwitcher {
@@ -1236,7 +1236,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// event so the final position is drawn unconditionally.
 		if _, isMotion := msg.(tea.MouseMotionMsg); isMotion && m.InteractionMode {
 			now := time.Now()
-			if now.Sub(m.lastInteractionRender) < time.Second/time.Duration(config.NormalFPS) {
+			if now.Sub(m.lastInteractionRender) < time.Second/time.Duration(m.Settings.NormalFPS) {
 				m.renderSkipped = true
 			} else {
 				m.lastInteractionRender = now
@@ -1421,7 +1421,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// A hold key the terminal cannot support does have to say so, or the user
 		// presses a key that does nothing and has no way to find out why.
 		if reason := m.HoldModeUnsupportedReason(); reason != "" && first {
-			m.ShowNotification(reason, "warning", config.NotificationDuration)
+			m.ShowNotification(reason, "warning", m.Settings.NotificationDuration)
 		}
 		return m, nil
 
@@ -1477,7 +1477,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			if what == "" {
 				what = "Rename"
 			}
-			m.ShowNotification(what+" failed: "+msg.Err.Error(), "error", config.NotificationDuration*2)
+			m.ShowNotification(what+" failed: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, nil
 		}
 		// The attached session's new label rides the state push. A session this
@@ -1576,10 +1576,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, tea.Quit
 
 	case ConfigReloadedMsg:
-		// Apply appearance config parsed by the watcher goroutine here, on the
-		// Bubble Tea goroutine, so the render loop never reads the globals mid-write.
+		// Apply the appearance config parsed by the watcher goroutine here, on
+		// the Bubble Tea goroutine, so the render loop never reads this
+		// session's settings mid-write.
 		if msg.Config != nil {
-			config.ApplyAppearanceConfig(msg.Config)
+			config.ApplyAppearanceConfig(msg.Config, &m.Settings)
 			// Retiled, not just repainted. The sidebar's width and side, the
 			// dock's position and the pane gap all change how much room the
 			// panes have, and this path had only ever repainted them: a gap
@@ -1655,7 +1656,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if executor := m.ScriptExecutor; executor != nil {
 			if err := executor.Execute(msg.Command); err != nil {
 				// Log error but continue playback
-				m.ShowNotification(fmt.Sprintf("Script error: %v", err), "error", config.NotificationDuration)
+				m.ShowNotification(fmt.Sprintf("Script error: %v", err), "error", m.Settings.NotificationDuration)
 			} else {
 				// Tape playback mutates the model outside the input handler, so
 				// it has to push the result like any other mutation would.
@@ -1742,7 +1743,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			if err == nil {
 				// Keys will be processed sequentially via RemoteKeyMsg
 				// Show notification now, result will be sent after all keys processed
-				m.ShowNotification(notificationMsg, "info", config.NotificationDuration)
+				m.ShowNotification(notificationMsg, "info", m.Settings.NotificationDuration)
 				return m, tea.Batch(cmd, relisten)
 			}
 		// capture_pane never arrives here: the daemon renders the pane from its
@@ -1805,7 +1806,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			cmd, err = m.executeTapeScript(msg.TapeScript, msg.RequestID)
 			if err == nil {
 				// Script will be processed via RemoteTapeCommandMsg
-				m.ShowNotification(notificationMsg, "info", config.NotificationDuration)
+				m.ShowNotification(notificationMsg, "info", m.Settings.NotificationDuration)
 				return m, tea.Batch(cmd, relisten)
 			}
 		default:
@@ -1826,9 +1827,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		// Show notification for the remote command
 		if err != nil {
-			m.ShowNotification(fmt.Sprintf("Remote error: %v", err), "error", config.NotificationDuration)
+			m.ShowNotification(fmt.Sprintf("Remote error: %v", err), "error", m.Settings.NotificationDuration)
 		} else if notificationMsg != "" {
-			m.ShowNotification(notificationMsg, "info", config.NotificationDuration)
+			m.ShowNotification(notificationMsg, "info", m.Settings.NotificationDuration)
 		}
 
 		// Send result back if we have a daemon client
@@ -1886,7 +1887,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// All remote keys have been processed - do final cleanup
 		// Re-enable animations
 		m.ProcessingRemoteKeys = false
-		config.AnimationsSuppressed = false
+		m.Settings.AnimationsSuppressed = false
 
 		if m.AutoTiling {
 			// Clear the BSP tree for current workspace to force a full rebuild
@@ -1938,7 +1939,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		executor := tape.NewCommandExecutor(m)
 		if err := executor.Execute(&msg.Command); err != nil {
 			// Log error but continue with remaining commands
-			m.ShowNotification(fmt.Sprintf("Script error: %v", err), "error", config.NotificationDuration)
+			m.ShowNotification(fmt.Sprintf("Script error: %v", err), "error", m.Settings.NotificationDuration)
 		}
 
 		// Retile if in tiling mode after command execution
@@ -1976,7 +1977,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// All tape commands have been processed - do final cleanup
 		// Re-enable animations
 		m.ProcessingRemoteKeys = false
-		config.AnimationsSuppressed = false
+		m.Settings.AnimationsSuppressed = false
 
 		// Mark script finish time for progress display
 		m.ScriptFinishedTime = time.Now()

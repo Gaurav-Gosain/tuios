@@ -24,6 +24,7 @@ func selectPane(t *testing.T, line string) (*app.OS, *terminal.Window) {
 	}
 	win := &terminal.Window{Terminal: em, X: 0, Y: 0, Width: 42, Height: 22}
 	o := &app.OS{
+		Settings:      config.Global,
 		Mode:          app.TerminalMode,
 		FocusedWindow: 0,
 		Windows:       []*terminal.Window{win},
@@ -154,9 +155,9 @@ func TestDoubleClickStopsAtACharacterOutsideTheWordSet(t *testing.T) {
 // The word set is configurable, so a user who wants host:port in one grab can
 // have it.
 func TestWordCharactersIsConfigurable(t *testing.T) {
-	prev := config.WordCharacters
-	t.Cleanup(func() { config.WordCharacters = prev })
-	config.WordCharacters = prev + ":"
+	prev := config.Global.WordCharacters
+	t.Cleanup(func() { config.Global.WordCharacters = prev })
+	config.Global.WordCharacters = prev + ":"
 
 	o, win := selectPane(t, "main.go:42:9 error")
 
@@ -238,9 +239,9 @@ func TestMultiClickCountingWrapsAndTimesOut(t *testing.T) {
 
 // Some people do not want a stray drag overwriting their clipboard.
 func TestCopyOnSelectCanBeTurnedOff(t *testing.T) {
-	prev := config.CopyOnSelect
-	t.Cleanup(func() { config.CopyOnSelect = prev })
-	config.CopyOnSelect = false
+	prev := config.Global.CopyOnSelect
+	t.Cleanup(func() { config.Global.CopyOnSelect = prev })
+	config.Global.CopyOnSelect = false
 
 	o, win := selectPane(t, "alpha bravo charlie")
 

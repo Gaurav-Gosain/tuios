@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -261,7 +260,7 @@ func (m *OS) ApplyBSPLayout() {
 		// give a start to, and NewSnapAnimation lands the pane on the target in
 		// one step, so the geometry is left exactly as the un-animated path had
 		// it.
-		dur := config.GetAnimationDuration()
+		dur := m.Settings.GetAnimationDuration()
 		if opening && dur > 0 {
 			if x, y, w, h := openStartRect(rect); w != rect.W || h != rect.H {
 				win.X, win.Y = x, y
@@ -583,7 +582,7 @@ func (m *OS) SetPreselection(dir layout.PreselectionDir) {
 		m.PreselectionDir = layout.PreselectionNone
 		return
 	}
-	m.ShowNotification("Preselection: "+dirName, "info", config.NotificationDuration)
+	m.ShowNotification("Preselection: "+dirName, "info", m.Settings.NotificationDuration)
 }
 
 // ClearPreselection clears any active preselection

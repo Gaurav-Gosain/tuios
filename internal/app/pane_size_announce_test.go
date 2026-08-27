@@ -79,10 +79,11 @@ func checkPaneSizes(t *testing.T, m *OS, told map[string]*toldSize, label string
 func newAnnounceOS(t *testing.T, width, height int) (*OS, map[string]*toldSize) {
 	t.Helper()
 	m := &OS{
+		Settings: config.Global,
 		// The layout reads the model's session-settled geometry, seeded from
 		// the globals the way NewOS seeds it.
-		SharedBorders:        config.SharedBorders,
-		PaneGap:              config.PaneGap,
+		SharedBorders:        config.Global.SharedBorders,
+		PaneGap:              config.Global.PaneGap,
 		NumWorkspaces:        9,
 		CurrentWorkspace:     1,
 		WorkspaceFocus:       make(map[int]int),
@@ -112,13 +113,13 @@ func newAnnounceOS(t *testing.T, width, height int) (*OS, map[string]*toldSize) 
 // at the session's nominal box, and the client places and tiles it. The size
 // the guest is told must be the size the tile gives it, not the nominal box.
 func TestNewWindowInNewWorkspaceAnnouncesItsSize(t *testing.T) {
-	prevAnim := config.AnimationsEnabled
-	prevShared := config.SharedBorders
-	config.AnimationsEnabled = false
-	config.SharedBorders = true
+	prevAnim := config.Global.AnimationsEnabled
+	prevShared := config.Global.SharedBorders
+	config.Global.AnimationsEnabled = false
+	config.Global.SharedBorders = true
 	t.Cleanup(func() {
-		config.AnimationsEnabled = prevAnim
-		config.SharedBorders = prevShared
+		config.Global.AnimationsEnabled = prevAnim
+		config.Global.SharedBorders = prevShared
 	})
 
 	const width, height = 200, 50
@@ -136,10 +137,11 @@ func TestNewWindowInNewWorkspaceAnnouncesItsSize(t *testing.T) {
 	t.Cleanup(func() { close(drainDone) })
 
 	m := &OS{
+		Settings: config.Global,
 		// The layout reads the model's session-settled geometry, seeded from
 		// the globals the way NewOS seeds it.
-		SharedBorders:        config.SharedBorders,
-		PaneGap:              config.PaneGap,
+		SharedBorders:        config.Global.SharedBorders,
+		PaneGap:              config.Global.PaneGap,
 		NumWorkspaces:        9,
 		CurrentWorkspace:     1,
 		WorkspaceFocus:       make(map[int]int),
@@ -209,7 +211,7 @@ func TestNewWindowInNewWorkspaceAnnouncesItsSize(t *testing.T) {
 // setSharedBorders flips the setting the way the settings panel and the command
 // palette do, so the test exercises whatever those paths do about it.
 func setSharedBorders(m *OS, v bool) {
-	config.SharedBorders = v
+	m.Settings.SharedBorders = v
 	m.applyAppearanceLive(true)
 }
 
@@ -222,19 +224,19 @@ func setSharedBorders(m *OS, v bool) {
 // Every route into a cell is walked, because the flag and the announcement part
 // company at whichever one forgets to resize, not at the state itself.
 func TestBorderAllowanceMatrix(t *testing.T) {
-	prevAnim := config.AnimationsEnabled
-	prevShared := config.SharedBorders
-	config.AnimationsEnabled = false
+	prevAnim := config.Global.AnimationsEnabled
+	prevShared := config.Global.SharedBorders
+	config.Global.AnimationsEnabled = false
 	t.Cleanup(func() {
-		config.AnimationsEnabled = prevAnim
-		config.SharedBorders = prevShared
+		config.Global.AnimationsEnabled = prevAnim
+		config.Global.SharedBorders = prevShared
 	})
 
 	for _, tiling := range []bool{true, false} {
 		for _, shared := range []bool{false, true} {
 			name := fmt.Sprintf("tiling=%v/shared=%v", tiling, shared)
 			t.Run(name, func(t *testing.T) {
-				config.SharedBorders = shared
+				config.Global.SharedBorders = shared
 				m, told := newAnnounceOS(t, 200, 50)
 				m.TileAllWindows()
 
@@ -278,16 +280,16 @@ func TestBorderAllowanceMatrix(t *testing.T) {
 }
 
 func TestAnnouncedSizeMatchesDrawable(t *testing.T) {
-	prevAnim := config.AnimationsEnabled
-	prevShared := config.SharedBorders
-	prevSidebarEnabled := config.SidebarEnabled
-	prevSidebarPos := config.SidebarPosition
-	config.AnimationsEnabled = false
+	prevAnim := config.Global.AnimationsEnabled
+	prevShared := config.Global.SharedBorders
+	prevSidebarEnabled := config.Global.SidebarEnabled
+	prevSidebarPos := config.Global.SidebarPosition
+	config.Global.AnimationsEnabled = false
 	t.Cleanup(func() {
-		config.AnimationsEnabled = prevAnim
-		config.SharedBorders = prevShared
-		config.SidebarEnabled = prevSidebarEnabled
-		config.SidebarPosition = prevSidebarPos
+		config.Global.AnimationsEnabled = prevAnim
+		config.Global.SharedBorders = prevShared
+		config.Global.SidebarEnabled = prevSidebarEnabled
+		config.Global.SidebarPosition = prevSidebarPos
 	})
 
 	for _, bsp := range []bool{true, false} {
@@ -295,10 +297,10 @@ func TestAnnouncedSizeMatchesDrawable(t *testing.T) {
 			for _, sidebar := range []string{"off", "left", "right"} {
 				name := fmt.Sprintf("bsp=%v/shared=%v/sidebar=%s", bsp, shared, sidebar)
 				t.Run(name, func(t *testing.T) {
-					config.SharedBorders = shared
-					config.SidebarEnabled = sidebar != "off"
+					config.Global.SharedBorders = shared
+					config.Global.SidebarEnabled = sidebar != "off"
 					if sidebar != "off" {
-						config.SidebarPosition = sidebar
+						config.Global.SidebarPosition = sidebar
 					}
 
 					m, told := newAnnounceOS(t, 200, 50)
@@ -320,10 +322,10 @@ func TestAnnouncedSizeMatchesDrawable(t *testing.T) {
 					m.ToggleAutoTiling()
 					checkPaneSizes(t, m, told, name+"/tiling-on")
 
-					config.SharedBorders = !shared
+					config.Global.SharedBorders = !shared
 					m.TileAllWindows()
 					checkPaneSizes(t, m, told, name+"/shared-toggled")
-					config.SharedBorders = shared
+					config.Global.SharedBorders = shared
 					m.TileAllWindows()
 					checkPaneSizes(t, m, told, name+"/shared-restored")
 
@@ -356,7 +358,7 @@ func TestAnnouncedSizeMatchesDrawable(t *testing.T) {
 					win.UnlockIO()
 					win.EnterCopyMode()
 					win.CopyMode.ScrollOffset = 10
-					if !windowNeedsScrollbar(win) {
+					if !windowNeedsScrollbar(win, &config.Global) {
 						t.Fatalf("%s: scrolled-back pane shows no scrollbar", name)
 					}
 					checkPaneSizes(t, m, told, name+"/scrollbar-shown")

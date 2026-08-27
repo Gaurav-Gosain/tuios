@@ -121,8 +121,8 @@ const dockWorkspaceArrowWidth = 2
 // The caps are counted here and nowhere else, which is what puts them inside
 // the rectangle the renderer records: a cap is part of the pill's shape, so
 // clicking the rounded end selects the workspace it belongs to.
-func workspacePillWidth(label string) int {
-	lc, rc := config.GetDockWorkspaceCapLeft(), config.GetDockWorkspaceCapRight()
+func workspacePillWidth(label string, s *config.Settings) int {
+	lc, rc := s.GetDockWorkspaceCapLeft(), s.GetDockWorkspaceCapRight()
 	return lipgloss.Width(lc) + lipgloss.Width(rc) + lipgloss.Width(label) + 2
 }
 
@@ -146,7 +146,7 @@ func (m *OS) workspacePillName(n int) string {
 // workspacePillLabel is what a pill prints: the name through the configured
 // tab format (so {index} and {name} can be combined), capped.
 func (m *OS) workspacePillLabel(n int) string {
-	label := config.FormatWorkspaceTab(m.workspacePillName(n), n)
+	label := m.Settings.FormatWorkspaceTab(m.workspacePillName(n), n)
 	return overlay.Truncate(label, workspacePillLabelMax)
 }
 
@@ -155,7 +155,7 @@ func (m *OS) workspacePillLabel(n int) string {
 // through the tab format, because that is what the pill draws: a short name can
 // still be clipped once the format lengthens it.
 func (m *OS) workspacePillClipped(n int) bool {
-	return lipgloss.Width(config.FormatWorkspaceTab(m.workspacePillName(n), n)) > workspacePillLabelMax
+	return lipgloss.Width(m.Settings.FormatWorkspaceTab(m.workspacePillName(n), n)) > workspacePillLabelMax
 }
 
 // occupiedWorkspaceNumbers lists the workspaces worth showing: those holding a
@@ -183,7 +183,7 @@ func (m *OS) occupiedWorkspaces() []int {
 // nowhere a click could take you, so the strip stays off and the idle dock is
 // exactly what it was.
 func (m *OS) buildDockWorkspaceTabs() []dockWorkspaceTab {
-	if !config.DockWorkspaceTabs {
+	if !m.Settings.DockWorkspaceTabs {
 		return nil
 	}
 	tabs := make([]dockWorkspaceTab, 0, m.NumWorkspaces)
@@ -194,14 +194,14 @@ func (m *OS) buildDockWorkspaceTabs() []dockWorkspaceTab {
 			Label:     label,
 			Active:    n == m.CurrentWorkspace,
 			Dragged:   m.dockWorkspaceDrag.Dragging && n == m.dockWorkspaceDrag.Workspace,
-			Width:     workspacePillWidth(label),
+			Width:     workspacePillWidth(label, &m.Settings),
 		})
 	}
 	// A trailing "+" opens the next empty workspace, so making one is a click
 	// rather than a remembered keybind. With it appended even a single-workspace
 	// session has two tabs, which is what makes the strip worth showing at all.
 	if next := m.nextFreeWorkspace(); next > 0 {
-		tabs = append(tabs, dockWorkspaceTab{Add: true, Label: "+", Width: workspacePillWidth("+")})
+		tabs = append(tabs, dockWorkspaceTab{Add: true, Label: "+", Width: workspacePillWidth("+", &m.Settings)})
 	}
 	if len(tabs) < 2 {
 		return nil
@@ -567,7 +567,7 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 		// Window mode entered by holding a key ends the moment the key is let
 		// go, and the pill is the only place that says so.
 		modeInfo.Color = theme.ColorToString(theme.DockColorWindow())
-		modeLabel = config.GetDockModeIconWindow() + " HOLD"
+		modeLabel = m.Settings.GetDockModeIconWindow() + " HOLD"
 	case m.Mode == TerminalMode:
 		if focusedWindow.CopyModeVisible() {
 			// Copy mode
@@ -579,9 +579,9 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 			modeInfo.Color = theme.ColorToString(theme.DockColorTerminal())
 			// Add tiling indicator for terminal mode (with split direction)
 			if m.AutoTiling {
-				modeLabel = config.GetDockModeIconTiling() + modeInfo.NextSplit
+				modeLabel = m.Settings.GetDockModeIconTiling() + modeInfo.NextSplit
 			} else {
-				modeLabel = config.GetDockModeIconTerminal()
+				modeLabel = m.Settings.GetDockModeIconTerminal()
 			}
 		}
 	default:
@@ -589,9 +589,9 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 		modeInfo.Color = theme.ColorToString(theme.DockColorWindow())
 		// Add tiling indicator for window mode (with split direction)
 		if m.AutoTiling {
-			modeLabel = config.GetDockModeIconTiling() + modeInfo.NextSplit
+			modeLabel = m.Settings.GetDockModeIconTiling() + modeInfo.NextSplit
 		} else {
-			modeLabel = config.GetDockModeIconWindow()
+			modeLabel = m.Settings.GetDockModeIconWindow()
 		}
 	}
 
@@ -630,9 +630,9 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 	// byte length: Nerd Font glyphs and the caps are wider than their bytes.
 	// The +4 is the margins and padding the block has always carried.
 	if m.dockPlan.Has(config.DockComponentMode) {
-		width += lipgloss.Width(config.GetDockModeCapLeft()) +
+		width += lipgloss.Width(m.Settings.GetDockModeCapLeft()) +
 			lipgloss.Width(modeLabel) +
-			lipgloss.Width(config.GetDockModeCapRight())
+			lipgloss.Width(m.Settings.GetDockModeCapRight())
 	} else {
 		modeLabel = ""
 	}
@@ -786,10 +786,10 @@ func (m *OS) calculateDockRightWidth() int {
 func (m *OS) dockMeterParts() []string {
 	m.ensureDockPlan()
 	var parts []string
-	if config.ShowCPU && m.dockPlan.Has(config.DockComponentCPU) {
+	if m.Settings.ShowCPU && m.dockPlan.Has(config.DockComponentCPU) {
 		parts = append(parts, m.GetCPUGraph())
 	}
-	if config.ShowRAM && m.dockPlan.Has(config.DockComponentRAM) {
+	if m.Settings.ShowRAM && m.dockPlan.Has(config.DockComponentRAM) {
 		parts = append(parts, m.GetRAMUsage())
 	}
 	return parts
@@ -854,9 +854,9 @@ func (m *OS) getDockItems() []DockItem {
 
 		// Calculate width: 2 for circles (left + right) + actual rendered label width
 		// Use lipgloss.Width to get proper display width (handles Unicode, emojis, etc.)
-		itemWidth := lipgloss.Width(config.GetDockPillLeftChar()) +
+		itemWidth := lipgloss.Width(m.Settings.GetDockPillLeftChar()) +
 			lipgloss.Width(labelText) +
-			lipgloss.Width(config.GetDockPillRightChar())
+			lipgloss.Width(m.Settings.GetDockPillRightChar())
 
 		items = append(items, DockItem{
 			WindowIndex: windowIndex,

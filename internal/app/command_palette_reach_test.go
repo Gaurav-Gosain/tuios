@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -139,7 +140,7 @@ func TestPaletteStateFilterFindsWhoNeedsYou(t *testing.T) {
 // TestPaletteStateFilterDropsCommands: filtering by state is a question about
 // panes, so the static commands go whatever their names say.
 func TestPaletteStateFilterDropsCommands(t *testing.T) {
-	items := append(GetCommandPaletteItems(),
+	items := append(GetCommandPaletteItems(&config.Global),
 		CommandPaletteItem{Name: "Window: idle-looking", Category: "Sessions", AgentState: "working"})
 	got := FilterCommandPalette(items, "@w")
 	if len(got) != 1 || !strings.Contains(got[0].Name, "idle-looking") {
@@ -150,7 +151,7 @@ func TestPaletteStateFilterDropsCommands(t *testing.T) {
 // TestPaletteQueryWithoutATokenIsUnchanged: the filter is opt-in, and a query
 // that does not open with "@" must rank exactly as it did.
 func TestPaletteQueryWithoutATokenIsUnchanged(t *testing.T) {
-	items := GetCommandPaletteItems()
+	items := GetCommandPaletteItems(&config.Global)
 	got := FilterCommandPalette(items, "split")
 	if len(got) == 0 {
 		t.Fatal("an ordinary query stopped matching")

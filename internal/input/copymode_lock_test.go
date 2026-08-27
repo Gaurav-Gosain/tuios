@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -28,7 +29,7 @@ func newCopyModeWindow(t testing.TB, id string) *terminal.Window {
 	}()
 	t.Cleanup(func() { close(drainDone) })
 
-	win := terminal.NewDaemonWindow(id, "copymode", 0, 0, 80, 24, 0, "pty-"+id, ptyDataChan)
+	win := terminal.NewDaemonWindow(id, "copymode", 0, 0, 80, 24, 0, "pty-"+id, ptyDataChan, config.DefaultScrollbackLines)
 	if win == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}
@@ -83,7 +84,7 @@ func key(s string) tea.KeyPressMsg {
 // and the test never finishes).
 func TestCopyModeKeyAgainstConcurrentPTYWriter(t *testing.T) {
 	win := newCopyModeWindow(t, "copymode-lock-0002")
-	o := &app.OS{Mode: app.WindowManagementMode}
+	o := &app.OS{Settings: config.Global, Mode: app.WindowManagementMode}
 
 	var wg sync.WaitGroup
 
@@ -125,7 +126,7 @@ func TestCopyModeKeyAgainstConcurrentPTYWriter(t *testing.T) {
 func TestCopyModeEffectsPreserveHandlerBehaviour(t *testing.T) {
 	t.Run("quit exits copy mode and notifies", func(t *testing.T) {
 		win := newCopyModeWindow(t, "copymode-fx-0001")
-		o := &app.OS{Mode: app.WindowManagementMode}
+		o := &app.OS{Settings: config.Global, Mode: app.WindowManagementMode}
 
 		_, cmd := HandleCopyModeKey(key("q"), o, win)
 		if cmd != nil {
@@ -141,7 +142,7 @@ func TestCopyModeEffectsPreserveHandlerBehaviour(t *testing.T) {
 
 	t.Run("i enters terminal mode", func(t *testing.T) {
 		win := newCopyModeWindow(t, "copymode-fx-0002")
-		o := &app.OS{Mode: app.WindowManagementMode}
+		o := &app.OS{Settings: config.Global, Mode: app.WindowManagementMode}
 
 		HandleCopyModeKey(key("i"), o, win)
 		if win.CopyMode != nil && win.CopyMode.Active {
@@ -157,7 +158,7 @@ func TestCopyModeEffectsPreserveHandlerBehaviour(t *testing.T) {
 
 	t.Run("yank in visual mode returns a clipboard command", func(t *testing.T) {
 		win := newCopyModeWindow(t, "copymode-fx-0003")
-		o := &app.OS{Mode: app.WindowManagementMode}
+		o := &app.OS{Settings: config.Global, Mode: app.WindowManagementMode}
 
 		HandleCopyModeKey(key("v"), o, win)
 		if win.CopyMode.State != terminal.CopyModeVisualChar {
@@ -179,7 +180,7 @@ func TestCopyModeEffectsPreserveHandlerBehaviour(t *testing.T) {
 
 	t.Run("count prefix notifies then clears", func(t *testing.T) {
 		win := newCopyModeWindow(t, "copymode-fx-0004")
-		o := &app.OS{Mode: app.WindowManagementMode}
+		o := &app.OS{Settings: config.Global, Mode: app.WindowManagementMode}
 
 		HandleCopyModeKey(key("5"), o, win)
 		if win.CopyMode.PendingCount != 5 {
@@ -203,7 +204,7 @@ func TestCopyModeEffectsPreserveHandlerBehaviour(t *testing.T) {
 
 	t.Run("search entry notifies with the prefix", func(t *testing.T) {
 		win := newCopyModeWindow(t, "copymode-fx-0005")
-		o := &app.OS{Mode: app.WindowManagementMode}
+		o := &app.OS{Settings: config.Global, Mode: app.WindowManagementMode}
 
 		HandleCopyModeKey(key("/"), o, win)
 		if win.CopyMode.State != terminal.CopyModeSearch {

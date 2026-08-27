@@ -121,7 +121,7 @@ func (m *OS) ScaleWindowsToTerminal(oldWidth, oldHeight, newWidth, newHeight int
 	}
 
 	oldUsableHeight := oldHeight - m.GetTopMargin()
-	if config.DockbarPosition != "hidden" {
+	if m.Settings.DockbarPosition != "hidden" {
 		oldUsableHeight -= 1
 	}
 
@@ -287,7 +287,7 @@ func (m *OS) GetBottomMargin() int {
 
 // GetDockbarContentYPosition returns the Y position of the dockbar
 func (m *OS) GetDockbarContentYPosition() int {
-	if config.DockbarPosition == "top" {
+	if m.Settings.DockbarPosition == "top" {
 		return 0
 	}
 
@@ -296,7 +296,7 @@ func (m *OS) GetDockbarContentYPosition() int {
 
 // GetTimeYPosition returns the Y position of the time display
 func (m *OS) GetTimeYPosition() int {
-	if config.DockbarPosition == "top" {
+	if m.Settings.DockbarPosition == "top" {
 		return m.Height - 1
 	}
 
@@ -382,14 +382,14 @@ func (m *OS) sidebarWidthPreference() int {
 	if m.SidebarWidthPref > 0 {
 		return m.SidebarWidthPref
 	}
-	return config.SidebarWidth
+	return m.Settings.SidebarWidth
 }
 
 // sidebarWidthFor is GetSidebarWidth against a hypothetical preferred width, so
 // the footer stepper can ask what a width would actually get it before offering
 // the step. GetSidebarWidth is this with the configured preference.
 func (m *OS) sidebarWidthFor(prefer int) int {
-	if !config.SidebarEnabled || config.SidebarPosition == "hidden" {
+	if !m.Settings.SidebarEnabled || m.Settings.SidebarPosition == "hidden" {
 		return 0
 	}
 	rw := m.GetRenderWidth()
@@ -430,13 +430,13 @@ func (m *OS) sidebarWidthFor(prefer int) int {
 // see GetLeftMargin.
 func (m *OS) OwnLayoutReserve() session.LayoutReserve {
 	var r session.LayoutReserve
-	switch config.SidebarPosition {
+	switch m.Settings.SidebarPosition {
 	case "left":
 		r.Left = m.GetSidebarWidth()
 	case "right":
 		r.Right = m.GetSidebarWidth()
 	}
-	switch config.DockbarPosition {
+	switch m.Settings.DockbarPosition {
 	case "top":
 		r.Top = config.DockHeight
 	case "hidden":

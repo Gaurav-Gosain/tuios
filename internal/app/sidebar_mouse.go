@@ -39,9 +39,9 @@ type sidebarEdgeState struct {
 // loaded config so a later save keeps it. This is what the palette entry and the
 // keybind both call.
 func (m *OS) ToggleSidebar() {
-	config.SidebarEnabled = !config.SidebarEnabled
+	m.Settings.SidebarEnabled = !m.Settings.SidebarEnabled
 	if m.UserConfig != nil {
-		v := config.SidebarEnabled
+		v := m.Settings.SidebarEnabled
 		m.UserConfig.Appearance.SidebarEnabled = &v
 	}
 	m.SidebarScrollS, m.SidebarScrollT, m.SidebarScrollA, m.SidebarScrollF = 0, 0, 0, 0
@@ -74,7 +74,7 @@ func (m *OS) SidebarBandContains(x, y int) bool {
 		return false
 	}
 	sidebarX := 0
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		sidebarX = m.GetRenderWidth() - w
 	}
 	return x >= sidebarX && x < sidebarX+w
@@ -234,7 +234,7 @@ func (m *OS) sidebarOnEdge(x int) bool {
 	if w <= 0 {
 		return false
 	}
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		return x == m.GetRenderWidth()-w
 	}
 	return x == w-1
@@ -267,7 +267,7 @@ func (m *OS) SidebarEdgeMotion(x, y int) bool {
 		m.SidebarEdge.HaveRow = false // the gesture is a resize now, not a click
 	}
 	var w int
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		w = m.GetRenderWidth() - x
 	} else {
 		w = x + 1
@@ -465,10 +465,10 @@ func (m *OS) SidebarWheel(x, y int, up bool) bool {
 			continue
 		}
 		if up {
-			*offsets[s] = max(*offsets[s]-config.ScrollLines, 0)
+			*offsets[s] = max(*offsets[s]-m.Settings.ScrollLines, 0)
 		} else {
 			// The upper bound is clamped against the row count on the next render.
-			*offsets[s] += config.ScrollLines
+			*offsets[s] += m.Settings.ScrollLines
 		}
 		break
 	}
@@ -493,7 +493,7 @@ func (m *OS) sidebarSwitchSession(sessionID string) {
 	}
 	m.clearSidebarReturn() // attaching elsewhere is not something esc should undo
 	if err := m.SwitchToSession(sessionID); err != nil {
-		m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+		m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 	}
 }
 
@@ -524,7 +524,7 @@ func (m *OS) sidebarFocusWindow(hit sidebarRowHit) (int, bool) {
 	// Window of another session: switch first, then focus by ID.
 	if hit.SessionID != "" && hit.SessionID != m.sidebarCurrentSessionID() {
 		if err := m.SwitchToSession(hit.SessionID); err != nil {
-			m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+			m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 			return -1, false
 		}
 	}

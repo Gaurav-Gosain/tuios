@@ -73,11 +73,11 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	// raced other sessions' render loops.
 	applyAppearanceOnce.Do(func() {
 		if userConfig, err := config.LoadUserConfig(); err == nil {
-			config.ApplyAppearanceConfig(userConfig)
+			config.ApplyAppearanceConfig(userConfig, &config.Global)
 		}
 		// Flags over file, the same order loadAndApplyConfig gives every
 		// other entrypoint.
-		config.ApplyOverrides(cfg.Overrides)
+		config.ApplyOverrides(cfg.Overrides, &config.Global)
 	})
 
 	// Determine host key path

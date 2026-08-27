@@ -194,7 +194,7 @@ func (m *OS) renderScrollbackBrowser() string {
 			}
 		}
 	}
-	lines = append(lines, fitLine(browserFooterHints(hints, innerW), innerW))
+	lines = append(lines, fitLine(browserFooterHints(hints, innerW, &m.Settings), innerW))
 
 	// Pad to exact height
 	for len(lines) < innerH {
@@ -773,13 +773,13 @@ type browserHint struct {
 	desc string
 }
 
-func browserFooterHints(hints []browserHint, maxWidth int) string {
+func browserFooterHints(hints []browserHint, maxWidth int, s *config.Settings) string {
 	pillBg := lipgloss.Color("#3a3a5e")
 	pillFg := lipgloss.Color("#ffffff")
 	descFg := lipgloss.Color("#808098")
 
-	pillLeft := config.GetWindowPillLeft()
-	pillRight := config.GetWindowPillRight()
+	pillLeft := s.GetWindowPillLeft()
+	pillRight := s.GetWindowPillRight()
 
 	renderHint := func(h browserHint) string {
 		left := lipgloss.NewStyle().Foreground(pillBg).Render(pillLeft)

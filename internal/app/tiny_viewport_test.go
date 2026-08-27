@@ -14,15 +14,15 @@ import (
 // nonsense in all of them; the render loop is only where it happened to be fatal.
 func TestUsableHeightNeverGoesNegative(t *testing.T) {
 	for _, pos := range []string{"bottom", "top", "hidden"} {
-		prev := config.DockbarPosition
-		config.DockbarPosition = pos
+		prev := config.Global.DockbarPosition
+		config.Global.DockbarPosition = pos
 		for h := range config.DockHeight + 2 {
 			m := newNarrowOS(t, 80, h)
 			if got := m.GetUsableHeight(); got < 0 {
 				t.Errorf("dock %s, host height %d: usable height %d", pos, h, got)
 			}
 		}
-		config.DockbarPosition = prev
+		config.Global.DockbarPosition = prev
 	}
 }
 

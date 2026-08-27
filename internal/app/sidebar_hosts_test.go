@@ -119,9 +119,9 @@ func TestRemoteRowsAreNotTargets(t *testing.T) {
 func TestHostRowsDoNotEnterTheColourArbitration(t *testing.T) {
 	// Restored to whatever it was, not to false: this is a package global, and
 	// another test in this binary asserts on it.
-	prev := config.SessionColors
-	config.SessionColors = true
-	t.Cleanup(func() { config.SessionColors = prev })
+	prev := config.Global.SessionColors
+	config.Global.SessionColors = true
+	t.Cleanup(func() { config.Global.SessionColors = prev })
 
 	m := hostRailOS(t)
 	tree := m.BuildSessionTree()

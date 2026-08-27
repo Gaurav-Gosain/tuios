@@ -69,54 +69,54 @@ type Overrides struct {
 // first; a zero value here means the flag was not given and the config's
 // value stands. Any new setting belongs in ApplyAppearanceConfig, and only
 // needs a line here if a CLI flag can override it.
-func ApplyOverrides(overrides Overrides) {
+func ApplyOverrides(overrides Overrides, s *Settings) {
 	if overrides.ASCIIOnly {
-		UseASCIIOnly = true
+		s.UseASCIIOnly = true
 	}
 	if overrides.BorderStyle != "" {
-		BorderStyle = overrides.BorderStyle
+		s.BorderStyle = overrides.BorderStyle
 	}
 	if overrides.DockbarPosition != "" {
-		DockbarPosition = overrides.DockbarPosition
+		s.DockbarPosition = overrides.DockbarPosition
 	}
 	if overrides.HideWindowButtons {
-		HideWindowButtons = true
+		s.HideWindowButtons = true
 	}
 	if overrides.WindowButtonStyle != "" {
-		WindowButtonStyle = overrides.WindowButtonStyle
+		s.WindowButtonStyle = overrides.WindowButtonStyle
 	}
 	if overrides.WindowButtonPosition != "" {
-		WindowButtonPosition = overrides.WindowButtonPosition
+		s.WindowButtonPosition = overrides.WindowButtonPosition
 	}
 	if overrides.HideScrollbar {
-		HideScrollbar = true
+		s.HideScrollbar = true
 	}
 	if overrides.WindowTitlePosition != "" {
-		WindowTitlePosition = overrides.WindowTitlePosition
+		s.WindowTitlePosition = overrides.WindowTitlePosition
 	}
 	if overrides.HideClock {
-		HideClock = true
+		s.HideClock = true
 	}
 	if overrides.ShowClock {
-		ShowClock = true
+		s.ShowClock = true
 	}
 	if overrides.ShowCPU {
-		ShowCPU = true
+		s.ShowCPU = true
 	}
 	if overrides.ShowRAM {
-		ShowRAM = true
+		s.ShowRAM = true
 	}
 	if overrides.SharedBorders {
-		SharedBorders = true
+		s.SharedBorders = true
 	}
 	if overrides.ScrollbackLines > 0 {
-		ScrollbackLines = min(max(overrides.ScrollbackLines, 100), 1000000)
+		s.ScrollbackLines = min(max(overrides.ScrollbackLines, 100), 1000000)
 	}
 	if overrides.NoAnimations {
-		AnimationsEnabled = false
+		s.AnimationsEnabled = false
 	}
 	if overrides.ConfirmQuit {
-		AlwaysConfirmQuit = true
+		s.AlwaysConfirmQuit = true
 	}
 	if overrides.ThemeName != "" {
 		if err := theme.Initialize(overrides.ThemeName); err != nil {
@@ -124,6 +124,6 @@ func ApplyOverrides(overrides Overrides) {
 		}
 	}
 	if overrides.ZoomMaxWidth > 0 {
-		ZoomMaxWidth = overrides.ZoomMaxWidth
+		s.ZoomMaxWidth = overrides.ZoomMaxWidth
 	}
 }

@@ -21,6 +21,7 @@ func shotOS(t testing.TB) *OS {
 	cfg := config.DefaultConfig()
 	cfg.Screenshot.Directory = t.TempDir()
 	os := &OS{
+		Settings:       config.Global,
 		FocusedWindow:  0,
 		WorkspaceFocus: map[int]int{},
 		NumWorkspaces:  9,

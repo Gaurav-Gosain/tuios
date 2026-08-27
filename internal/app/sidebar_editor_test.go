@@ -84,7 +84,7 @@ func TestSectionEditorTurnsTheFilesSectionOff(t *testing.T) {
 		t.Fatalf("after switching files off the layout is %q", got)
 	}
 	// The rail agrees, which is the half a string comparison cannot see.
-	if sidebarLayoutHas(sidebarSectionFiles) {
+	if sidebarLayoutHas(sidebarSectionFiles, &m.Settings) {
 		t.Error("the rail still lays out a files section")
 	}
 	// And it is now in the second list, one keystroke from coming back.
@@ -93,7 +93,7 @@ func TestSectionEditorTurnsTheFilesSectionOff(t *testing.T) {
 	if got := m.sectionLayout(); got != "sessions:25,terminals,agents:34,files" {
 		t.Errorf("after switching files back on the layout is %q", got)
 	}
-	if !sidebarLayoutHas(sidebarSectionFiles) {
+	if !sidebarLayoutHas(sidebarSectionFiles, &config.Global) {
 		t.Error("the rail did not take the files section back")
 	}
 }
@@ -205,7 +205,7 @@ func TestSectionEditorWalksTheShare(t *testing.T) {
 func TestSectionEditorUndoAndReset(t *testing.T) {
 	m := editorOS(t)
 	m.UserConfig.Appearance.Sidebar.Sections = "terminals,sessions"
-	config.SidebarSections = "terminals,sessions"
+	config.Global.SidebarSections = "terminals,sessions"
 	m.OpenSectionEditor()
 
 	selectRow(t, m, "sessions", railRowPlaced)
@@ -251,7 +251,7 @@ func TestSectionEditorUndoLeavesAnUnnamedLayoutUnnamed(t *testing.T) {
 		t.Errorf("undo left the config naming %q, want it naming none", got)
 	}
 	// And the rail is back on the shipped layout rather than stuck on the edit.
-	if !sidebarLayoutHas(sidebarSectionFiles) {
+	if !sidebarLayoutHas(sidebarSectionFiles, &m.Settings) {
 		t.Error("undo left the files section off the rail")
 	}
 }

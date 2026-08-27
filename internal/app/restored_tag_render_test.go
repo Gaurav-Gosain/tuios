@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -38,7 +39,7 @@ func TestSwitcherRowTagsARestoredSession(t *testing.T) {
 // TestSidebarSessionRowTagsARestoredSession does the same for the rail, at the
 // full width where there is room for a word.
 func TestSidebarSessionRowTagsARestoredSession(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	pal := overlay.Palette{}
 
 	restored := sessiontree.BuildSession(sessiontree.SessionInput{

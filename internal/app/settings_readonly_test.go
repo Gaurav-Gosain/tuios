@@ -28,14 +28,14 @@ func TestConfigReadOnlySessionAppliesWithoutWriting(t *testing.T) {
 	// Both globals the panel is driven through, restored afterwards: a
 	// read-only session still applies its change, so without this the second
 	// toggle below leaks out of the test.
-	swapBool(t, &config.SidebarFileIcons, true)
-	swapBool(t, &config.SidebarMarquee, true)
+	swapBool(t, &config.Global.SidebarFileIcons, true)
+	swapBool(t, &config.Global.SidebarMarquee, true)
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig(), ConfigReadOnly: true})
 
 	focusSetting(t, m, "Sidebar", "File icons")
 	m.SettingsAdjust(1)
 
-	if config.SidebarFileIcons {
+	if m.Settings.SidebarFileIcons {
 		t.Error("the change did not apply live; a read-only session still runs the setting")
 	}
 
@@ -90,7 +90,7 @@ func TestConfigReadOnlyShowsInSettingsTitle(t *testing.T) {
 // so a local tuios keeps saving its settings.
 func TestWritableSessionStillPersists(t *testing.T) {
 	useTempConfig(t)
-	swapBool(t, &config.SidebarFileIcons, true)
+	swapBool(t, &config.Global.SidebarFileIcons, true)
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
 
 	focusSetting(t, m, "Sidebar", "File icons")

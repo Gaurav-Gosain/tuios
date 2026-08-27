@@ -14,14 +14,14 @@ func TestCollapseSurvivesARestart(t *testing.T) {
 	m := sidebarTestOS(t, 120, 30, "left")
 	m.SidebarSetCollapsed(true)
 
-	restored := &OS{}
+	restored := &OS{Settings: config.Global}
 	restored.loadSidebarState()
 	if !restored.SidebarCollapsed {
 		t.Error("a collapsed rail came back expanded")
 	}
 
 	m.SidebarSetCollapsed(false)
-	restored = &OS{}
+	restored = &OS{Settings: config.Global}
 	restored.loadSidebarState()
 	if restored.SidebarCollapsed {
 		t.Error("an expanded rail came back collapsed")
@@ -35,11 +35,11 @@ func TestCollapseSurvivesARestart(t *testing.T) {
 func TestCollapseKeepsTheStoredWidth(t *testing.T) {
 	withSidebar(t, true, "left", 34)
 	m := sidebarTestOS(t, 200, 30, "left")
-	config.SidebarWidth = 34
+	m.Settings.SidebarWidth = 34
 
 	m.SidebarSetCollapsed(true)
-	if config.SidebarWidth != 34 {
-		t.Fatalf("collapsing moved the stored width to %d", config.SidebarWidth)
+	if m.Settings.SidebarWidth != 34 {
+		t.Fatalf("collapsing moved the stored width to %d", m.Settings.SidebarWidth)
 	}
 	if got := m.GetSidebarWidth(); got != config.SidebarGlyphWidth {
 		t.Fatalf("a collapsed rail draws %d columns, want the glyph strip", got)
@@ -66,6 +66,10 @@ func TestCollapseFoldsThroughTheBreakpoints(t *testing.T) {
 
 	// 90 columns is past the full breakpoint, so an expanded rail is wide there.
 	mid := sidebarTestOS(t, 90, 30, "left")
+
+	wide.Settings = config.Global
+
+	wide.Settings = mid.Settings
 	if got := mid.GetSidebarWidth(); got <= config.SidebarNarrowWidth {
 		t.Fatalf("precondition: an expanded rail on a 90-column screen draws %d", got)
 	}
@@ -77,6 +81,8 @@ func TestCollapseFoldsThroughTheBreakpoints(t *testing.T) {
 	// The clamp's own narrowing is not a collapse: nothing was stored, so
 	// widening the screen brings the rail back without the user doing anything.
 	clamped := sidebarTestOS(t, config.SidebarBreakpointNarrow-1, 30, "left")
+	mid.Settings = config.Global
+	mid.Settings = clamped.Settings
 	if clamped.SidebarCollapsed {
 		t.Error("a screen too narrow for a wide rail recorded a collapse of its own")
 	}

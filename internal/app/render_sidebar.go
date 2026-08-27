@@ -88,7 +88,7 @@ const (
 // sidebarAddGlyph is the mark both add controls wear. One cell, so it costs a
 // header no rows and no name: a "+ new" wide enough to read would have pushed
 // the label out of a narrow rail.
-func sidebarAddGlyph() string { return config.GetRailAddGlyph() }
+func sidebarAddGlyph(s *config.Settings) string { return s.GetRailAddGlyph() }
 
 // sidebarHeaderAdd places a section header's add control: right-aligned on the
 // same spine every other trailing figure lands on, one cell in from the rail's
@@ -101,8 +101,8 @@ func sidebarAddGlyph() string { return config.GetRailAddGlyph() }
 // directly under the agents block and read as "new agent", which is not a thing
 // the rail can do; the same glyph on the sessions header cannot be read as
 // anything but "another one of these".
-func sidebarHeaderAdd(kind sidebarRowKind, cw, labelW int, pal overlay.Palette, hoverX int, cursor bool) (string, sidebarTokenSpan, bool) {
-	gw := lipgloss.Width(sidebarAddGlyph())
+func sidebarHeaderAdd(kind sidebarRowKind, cw, labelW int, pal overlay.Palette, hoverX int, cursor bool, s *config.Settings) (string, sidebarTokenSpan, bool) {
+	gw := lipgloss.Width(sidebarAddGlyph(s))
 	x0 := cw - 1 - gw
 	if x0 < labelW+1 {
 		return "", sidebarTokenSpan{}, false
@@ -112,7 +112,7 @@ func sidebarHeaderAdd(kind sidebarRowKind, cw, labelW int, pal overlay.Palette, 
 	if cursor || (hoverX >= span.X0 && hoverX < span.X1) {
 		ink = pal.Fg
 	}
-	return sidebarStyle(nil, ink).Render(sidebarAddGlyph()), span, true
+	return sidebarStyle(nil, ink).Render(sidebarAddGlyph(s)), span, true
 }
 
 // sidebarSection identifies one of the rail's three stacked lists. Each owns
@@ -230,8 +230,8 @@ func sidebarSeverityColor(state string, pal overlay.Palette) color.Color {
 // trailing whitespace; and the cursor, the one thing being steered, was the
 // quietest mark on the rail. A margin strip scans without painting, which frees
 // the only band on a resting screen for the pointer and the keyboard cursor.
-func sidebarGutter(current bool, state string, bg color.Color, pal overlay.Palette) string {
-	return sidebarGutterTinted(current, state, nil, bg, pal)
+func sidebarGutter(current bool, state string, bg color.Color, pal overlay.Palette, s *config.Settings) string {
+	return sidebarGutterTinted(current, state, nil, bg, pal, s)
 }
 
 // railFocusTint is the colour a focus mark burns: the identity the caller
@@ -248,12 +248,12 @@ func railFocusTint(tint color.Color, pal overlay.Palette) color.Color {
 // of the caller's choosing: the focused pane's gutter burns the accent the user
 // gave that pane, so the row wears exactly one identity bar instead of an
 // accent chip beside a focus mark. tint nil falls back to the rail accent.
-func sidebarGutterTinted(current bool, state string, tint, bg color.Color, pal overlay.Palette) string {
+func sidebarGutterTinted(current bool, state string, tint, bg color.Color, pal overlay.Palette, s *config.Settings) string {
 	switch {
 	case current:
-		return sidebarStyle(bg, railFocusTint(tint, pal)).Render(config.GetRailFocusMark())
+		return sidebarStyle(bg, railFocusTint(tint, pal)).Render(s.GetRailFocusMark())
 	case sidebarAttention(state):
-		return sidebarStyle(bg, sidebarSeverityColor(state, pal)).Render(config.GetRailAttentionMark())
+		return sidebarStyle(bg, sidebarSeverityColor(state, pal)).Render(s.GetRailAttentionMark())
 	default:
 		return sidebarStyle(bg, nil).Render(" ")
 	}
@@ -453,8 +453,8 @@ const sidebarNameCol = 3
 // sidebarGlyph returns the styled agent-state glyph for a row, or a single
 // space on the row background when there is no state or glyphs are disabled,
 // so rows stay aligned. It always occupies exactly one cell.
-func sidebarGlyph(state string, doneSeen bool, bg color.Color, pal overlay.Palette) string {
-	if !config.SidebarShowGlyphs {
+func sidebarGlyph(state string, doneSeen bool, bg color.Color, pal overlay.Palette, s *config.Settings) string {
+	if !s.SidebarShowGlyphs {
 		return sidebarStyle(bg, nil).Render(" ")
 	}
 	g := agentStateIndicator(state)
@@ -467,11 +467,11 @@ func sidebarGlyph(state string, doneSeen bool, bg color.Color, pal overlay.Palet
 // sidebarQuietDot is the placeholder a session row puts in its glyph column
 // when nothing in it is running an agent: the column stays occupied, so the
 // names below it never step left and the section reads as one list.
-func sidebarQuietDot(bg color.Color, pal overlay.Palette) string {
-	if !config.SidebarShowGlyphs {
+func sidebarQuietDot(bg color.Color, pal overlay.Palette, s *config.Settings) string {
+	if !s.SidebarShowGlyphs {
 		return sidebarStyle(bg, nil).Render(" ")
 	}
-	return sidebarQuietDotTinted(pal.FgMute, bg, pal)
+	return sidebarQuietDotTinted(pal.FgMute, bg, pal, s)
 }
 
 // dotTint is the colour the quiet dot burns: the session's, or the muted ink it
@@ -488,21 +488,21 @@ func dotTint(tint color.Color, pal overlay.Palette, stated bool) color.Color {
 // choosing: a session row with no agent running burns its session's colour in
 // the dot it was already drawing, so the colour costs the rail no cell and a
 // terminal without colour sees the row it saw before.
-func sidebarQuietDotTinted(tint, bg color.Color, pal overlay.Palette) string {
-	if !config.SidebarShowGlyphs {
+func sidebarQuietDotTinted(tint, bg color.Color, pal overlay.Palette, s *config.Settings) string {
+	if !s.SidebarShowGlyphs {
 		return sidebarStyle(bg, nil).Render(" ")
 	}
 	// No ASCII branch: GetRailBullet already gives up a glyph the terminal
 	// cannot draw and keeps one it can, per glyph rather than per set, so a
 	// branch here would throw away an ASCII-safe set under --ascii-only.
-	return sidebarStyle(bg, tint).Render(config.GetRailBullet())
+	return sidebarStyle(bg, tint).Render(s.GetRailBullet())
 }
 
 // sidebarEdgeRule is the one-cell vertical rule separating the rail from the
 // panes, drawn in the window-border character at the dock separator's color:
 // the rail's edge is the vertical sibling of the dock's hairline.
-func sidebarEdgeRule() string {
-	return lipgloss.NewStyle().Foreground(theme.RailRule()).Render(config.GetWindowBorderLeft())
+func sidebarEdgeRule(s *config.Settings) string {
+	return lipgloss.NewStyle().Foreground(theme.RailRule()).Render(s.GetWindowBorderLeft())
 }
 
 // sidebarHeaderRow renders a quiet section header: the label, lowercase and
@@ -620,7 +620,7 @@ func (m *OS) renderSidebar() *lipgloss.Layer {
 		return nil
 	}
 	sidebarX := 0
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		sidebarX = m.GetRenderWidth() - w
 	}
 	return lipgloss.NewLayer(panel).X(sidebarX).Y(m.GetTopMargin()).Z(config.ZIndexDock).ID("sidebar")
@@ -735,7 +735,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 
 	topMargin := m.GetTopMargin()
 	sidebarX := 0
-	edgeLeft := config.SidebarPosition != "right"
+	edgeLeft := m.Settings.SidebarPosition != "right"
 	if !edgeLeft {
 		sidebarX = m.GetRenderWidth() - w
 	}
@@ -749,12 +749,12 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	pal := theme.UI()
 	variant := sidebarVariant(w)
 	cw := w - 1 // content columns beside the edge rule
-	edge := sidebarEdgeRule()
+	edge := sidebarEdgeRule(&m.Settings)
 	// While the rail owns the keyboard its edge rule burns accent instead of the
 	// dock's muted hairline, so the focus is legible at the frame, not only on a
 	// single highlighted row.
 	if m.SidebarFocused {
-		edge = lipgloss.NewStyle().Foreground(pal.Accent).Render(config.GetWindowBorderLeft())
+		edge = lipgloss.NewStyle().Foreground(pal.Accent).Render(m.Settings.GetWindowBorderLeft())
 	}
 
 	// compose attaches the edge rule on the pane-facing side.
@@ -842,7 +842,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// Membership is the layout's, and only the layout's. A section the user has
 	// taken out of appearance.sidebar.sections has no rows here, so it costs no
 	// header and no line.
-	if !sidebarLayoutHas(sidebarSectionTerminals) {
+	if !sidebarLayoutHas(sidebarSectionTerminals, &m.Settings) {
 		nT = 0
 	}
 	// The current rule, kept: a rail this short cannot carry an alarm block and
@@ -866,7 +866,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// may claim. A section with no rows is dropped whole, header included, so an
 	// empty section costs the rail nothing rather than costing it a label over a
 	// gap.
-	plans := sidebarLayoutPlans()
+	plans := sidebarLayoutPlans(&m.Settings)
 	rowsIn := [sidebarSectionCount]int{
 		sidebarSectionSessions:  nS,
 		sidebarSectionTerminals: nT,
@@ -1133,7 +1133,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		add := ""
 		if canCreate {
 			if tok, span, ok := sidebarHeaderAdd(sidebarRowNewSession, cw, sidebarHeaderLabelW("sessions"),
-				pal, headerHoverX[sidebarSectionSessions], isCursor(sidebarRowNewSession, "", "")); ok {
+				pal, headerHoverX[sidebarSectionSessions], isCursor(sidebarRowNewSession, "", ""), &m.Settings); ok {
 				add = tok
 				recordToken(span, "")
 			}
@@ -1167,7 +1167,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		// same cells in practice; the arithmetic holds either way.
 		termAdd, termSpan, hasTermAdd := sidebarHeaderAdd(sidebarRowNewWindow, cw,
 			sidebarHeaderLabelW("terminals"), pal, headerHoverX[sidebarSectionTerminals],
-			isCursor(sidebarRowNewWindow, shown, ""))
+			isCursor(sidebarRowNewWindow, shown, ""), &m.Settings)
 		right := termAdd
 		if peeking {
 			// Whose panes these are, since they are not the attached session's,
@@ -1184,7 +1184,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			// so its recorded columns hold whether or not a label precedes it.
 			room := max(cw/2, 1)
 			if hasTermAdd {
-				room = max(room-lipgloss.Width(sidebarAddGlyph())-1, 1)
+				room = max(room-lipgloss.Width(sidebarAddGlyph(&m.Settings))-1, 1)
 			}
 			name := sidebarStyle(nil, ink).Render(overlay.Truncate(printableTitle(shown), room))
 			right = name + sidebarStyle(nil, nil).Render(" ") + termAdd
@@ -1199,7 +1199,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		if emptyPeek {
 			hint := "no terminals"
 			lines = append(lines, compose(sidebarFit(
-				sidebarStyle(nil, nil).Render(" ")+sidebarQuietDot(nil, pal)+
+				sidebarStyle(nil, nil).Render(" ")+sidebarQuietDot(nil, pal, &m.Settings)+
 					sidebarStyle(nil, nil).Render(" ")+
 					sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(hint, sidebarNameAvail(cw, 0))), cw, nil)))
 			return
@@ -1440,7 +1440,7 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 // others from the cached listing, so agents elsewhere surface here marked
 // Foreign.
 func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
-	if !sidebarLayoutHas(sidebarSectionAgents) {
+	if !sidebarLayoutHas(sidebarSectionAgents, &m.Settings) {
 		return nil
 	}
 	var agents []sidebarAgentEntry
@@ -1532,9 +1532,9 @@ type sidebarFooterZone struct {
 // does: a left rail collapses leftward and reopens rightward, a right rail the
 // other way round. Nothing else about the row mirrors.
 func (m *OS) sidebarCollapseGlyph(variant int) (glyph string, ok bool) {
-	left, right := config.GetRailCollapseGlyph(), config.GetRailExpandGlyph()
+	left, right := m.Settings.GetRailCollapseGlyph(), m.Settings.GetRailExpandGlyph()
 	collapse, expand := left, right
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		collapse, expand = right, left
 	}
 	if variant == sidebarVariantGlyph {
@@ -1580,7 +1580,7 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 	// The toggle is always the thing nearest the panes, where the pointer
 	// arrives from, so its corner swaps with the rail's side.
 	facing := max(cw-1-stepW, 1)
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		facing = 1
 	}
 	line := 0
@@ -1593,7 +1593,7 @@ func (m *OS) sidebarFooter(variant, cw int, pal overlay.Palette,
 	// pointer cannot separate from its neighbour is worse than one that is not
 	// there, and the file view is also reachable by clicking a folder link.
 	filesX := 1
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		filesX = max(cw-1-sidebarFilesLabelW, 1)
 	}
 	filesEnd := filesX + sidebarFilesLabelW
@@ -1683,13 +1683,13 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	tint := m.sessionTint(node.ID, railGround(rowBg))
 	stated := agentStateIndicator(node.AgentState) != ""
 
-	glyph := sidebarQuietDotTinted(dotTint(tint, pal, stated), rowBg, pal)
+	glyph := sidebarQuietDotTinted(dotTint(tint, pal, stated), rowBg, pal, &m.Settings)
 	if stated {
-		glyph = sidebarGlyph(node.AgentState, node.DoneSeen, rowBg, pal)
+		glyph = sidebarGlyph(node.AgentState, node.DoneSeen, rowBg, pal, &m.Settings)
 	}
 
 	right, rightW := "", 0
-	if config.SidebarShowCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
+	if m.Settings.SidebarShowCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
 		countStr := strconv.Itoa(node.WindowCount)
 		right = sidebarStyle(rowBg, pal.FgMute).Render(countStr)
 		rightW = lipgloss.Width(countStr)
@@ -1716,7 +1716,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).
 		Render(m.sidebarMarquee("s:"+node.ID, printableTitle(node.Title), sidebarNameAvail(cw, rightW), hovered))
 
-	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal)
+	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal, &m.Settings)
 	if tint != nil && stated && !node.IsCurrent && !sidebarAttention(node.AgentState) {
 		gutter = sidebarStyle(rowBg, tint).Render(accentMark())
 	}
@@ -1744,7 +1744,7 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 		title = "shell"
 	}
 
-	gutter := sidebarGutter(false, e.State, rowBg, pal)
+	gutter := sidebarGutter(false, e.State, rowBg, pal, &m.Settings)
 	if !peeked {
 		// The focus mark is the session's own colour. The rail is one object, and a
 		// session marked magenta two rows above its focused pane marked blue reads
@@ -1763,7 +1763,7 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 		}
 		switch {
 		case e.Focused:
-			gutter = sidebarGutterTinted(true, e.State, tint, rowBg, pal)
+			gutter = sidebarGutterTinted(true, e.State, tint, rowBg, pal, &m.Settings)
 		case accented && !sidebarAttention(e.State):
 			gutter = sidebarStyle(rowBg, tint).Render(accentMark())
 		}
@@ -1795,7 +1795,7 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(e.State)).
 		Render(m.sidebarMarquee("t:"+e.WindowID, title, sidebarNameAvail(cw, rightW), hovered))
-	return sidebarComposeRow(gutter, sidebarGlyph(e.State, e.DoneSeen, rowBg, pal), name, right, cw, rowBg)
+	return sidebarComposeRow(gutter, sidebarGlyph(e.State, e.DoneSeen, rowBg, pal, &m.Settings), name, right, cw, rowBg)
 }
 
 // workspaceTag is the quiet right-hand mark saying which workspace a pane sits
@@ -2021,7 +2021,7 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// foreign rows only, so it says "not from here" on a terminal with no colour
 	// and says which session on one with colour. It is the answer the prefix
 	// gives in words and gives up first when the row runs out of room.
-	gutter := sidebarGutter(false, e.State, rowBg, pal)
+	gutter := sidebarGutter(false, e.State, rowBg, pal, &m.Settings)
 	if e.Foreign && !sidebarAttention(e.State) {
 		if tint := m.agentIdentityTint(e, railGround(rowBg)); tint != nil {
 			gutter = sidebarStyle(rowBg, tint).Render(accentMark())
@@ -2031,5 +2031,5 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 		nameStyle.Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name,
 			max(avail-lipgloss.Width(shown), 1), hovered))
 	return sidebarComposeRow(gutter,
-		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal), body, right, cw, rowBg)
+		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal, &m.Settings), body, right, cw, rowBg)
 }

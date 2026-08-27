@@ -7,12 +7,13 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"golang.org/x/sys/unix"
 )
 
 func TestSetPtyPixelSize(t *testing.T) {
 	exitChan := make(chan string, 1)
-	window, err := NewWindow("test-id-12345678", "Test", 0, 0, 80, 24, 0, exitChan, nil)
+	window, err := NewWindow("test-id-12345678", "Test", 0, 0, 80, 24, 0, exitChan, nil, config.DefaultScrollbackLines)
 	if err != nil {
 		t.Skipf("Failed to create window with PTY: %v", err)
 	}
@@ -57,7 +58,7 @@ func TestSetPtyPixelSize(t *testing.T) {
 
 func TestSetCellPixelDimensions(t *testing.T) {
 	exitChan := make(chan string, 1)
-	window, err := NewWindow("test-id-87654321", "Test", 0, 0, 80, 24, 0, exitChan, nil)
+	window, err := NewWindow("test-id-87654321", "Test", 0, 0, 80, 24, 0, exitChan, nil, config.DefaultScrollbackLines)
 	if err != nil {
 		t.Skipf("Failed to create window with PTY: %v", err)
 	}

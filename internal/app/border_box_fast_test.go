@@ -62,15 +62,15 @@ func TestFastWindowBoxMatchesLipgloss(t *testing.T) {
 // chrome rows are shared code, so what this is really pinning is that the fused
 // path splices them in at the same places the spliced-apart box did.
 func TestFastWindowBoxMatchesAcrossSizesAndChrome(t *testing.T) {
-	prevTitle, prevButton := config.WindowTitlePosition, config.WindowButtonPosition
+	prevTitle, prevButton := config.Global.WindowTitlePosition, config.Global.WindowButtonPosition
 	t.Cleanup(func() {
-		config.WindowTitlePosition, config.WindowButtonPosition = prevTitle, prevButton
+		config.Global.WindowTitlePosition, config.Global.WindowButtonPosition = prevTitle, prevButton
 	})
 
 	for _, titlePos := range []string{"top", "bottom", "hidden"} {
 		for _, buttonPos := range config.WindowButtonPositions {
-			config.WindowTitlePosition = titlePos
-			config.WindowButtonPosition = buttonPos
+			config.Global.WindowTitlePosition = titlePos
+			config.Global.WindowButtonPosition = buttonPos
 			for _, sz := range [][2]int{{3, 3}, {4, 4}, {10, 6}, {41, 13}, {80, 24}, {160, 42}} {
 				for _, name := range []string{"", "editor"} {
 					win := newTestWindow(t, fmt.Sprintf("chrome-%dx%d", sz[0], sz[1]), sz[0], sz[1])
@@ -184,10 +184,10 @@ func TestFastWindowBoxRecordsTheSameButtons(t *testing.T) {
 // not do, so it must hand the frame back rather than draw the first rune of it
 // on every row.
 func TestFastWindowBoxDeclinesABorderItCannotDraw(t *testing.T) {
-	if _, _, ok := borderSideCells(lipgloss.Color("62")); !ok {
+	if _, _, ok := borderSideCells(lipgloss.Color("62"), &config.Global); !ok {
 		t.Fatal("the default border was declined")
 	}
-	if _, _, ok := borderSideCells(nil); ok {
+	if _, _, ok := borderSideCells(nil, &config.Global); ok {
 		t.Error("a frame with no border colour was accepted")
 	}
 	for _, s := range []string{"", "ab", "│┃"} {
@@ -225,7 +225,7 @@ func TestFastWindowBoxDeclinesATabbedBody(t *testing.T) {
 func TestFastWindowBoxDeclinesAPaneTooSmallToHaveABody(t *testing.T) {
 	for _, sz := range [][2]int{{1, 1}, {2, 2}, {2, 10}, {10, 2}} {
 		win := &terminal.Window{ID: "tiny", Width: sz[0], Height: sz[1], Workspace: 1}
-		m := &OS{}
+		m := &OS{Settings: config.Global}
 		if _, ok := m.fastWindowBox("x", win, lipgloss.Color("62"), 1, false); ok {
 			t.Errorf("a %dx%d pane was accepted", sz[0], sz[1])
 		}

@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -19,6 +20,7 @@ func twoPaneSideBySide(t *testing.T) (m *OS, left, right *terminal.Window) {
 	right.X, right.Y, right.Width, right.Height = 60, 0, 60, height
 	left.Tiled, right.Tiled = true, true
 	m = &OS{
+		Settings:             config.Global,
 		Windows:              []*terminal.Window{left, right},
 		FocusedWindow:        1, // focus the RIGHT (boundary) pane
 		WorkspaceFocus:       map[int]int{},

@@ -4,6 +4,8 @@ import (
 	"os/exec"
 	"sync"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // TestDaemonWindowCloseUnderOutputFlood is a race-detector regression test for
@@ -36,7 +38,7 @@ func TestDaemonWindowCloseUnderOutputFlood(t *testing.T) {
 	}()
 	defer close(drainDone)
 
-	w := NewDaemonWindow("race-window-0001", "race", 0, 0, 80, 24, 0, "pty-race-0001", ptyDataChan)
+	w := NewDaemonWindow("race-window-0001", "race", 0, 0, 80, 24, 0, "pty-race-0001", ptyDataChan, config.DefaultScrollbackLines)
 
 	var wg sync.WaitGroup
 
@@ -81,7 +83,7 @@ func TestDaemonWindowCloseUnderOutputFlood(t *testing.T) {
 func TestDaemonResponseReaderRacesClose(t *testing.T) {
 	for range 200 {
 		ptyDataChan := make(chan struct{}, 1)
-		w := NewDaemonWindow("reader-race-0001", "reader-race", 0, 0, 80, 24, 0, "pty-reader-race", ptyDataChan)
+		w := NewDaemonWindow("reader-race-0001", "reader-race", 0, 0, 80, 24, 0, "pty-reader-race", ptyDataChan, config.DefaultScrollbackLines)
 
 		var wg sync.WaitGroup
 		wg.Add(2)
@@ -102,7 +104,7 @@ func TestDaemonResponseReaderRacesClose(t *testing.T) {
 // rather than a live pointer or a panic.
 func TestTerminalRefAfterClose(t *testing.T) {
 	ptyDataChan := make(chan struct{}, 1)
-	w := NewDaemonWindow("ref-after-close-01", "ref", 0, 0, 80, 24, 0, "pty-ref", ptyDataChan)
+	w := NewDaemonWindow("ref-after-close-01", "ref", 0, 0, 80, 24, 0, "pty-ref", ptyDataChan, config.DefaultScrollbackLines)
 
 	if w.terminalRef() == nil {
 		t.Fatal("terminalRef returned nil before Close")

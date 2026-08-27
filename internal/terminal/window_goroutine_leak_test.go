@@ -3,6 +3,8 @@ package terminal
 import (
 	"testing"
 	"testing/synctest"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // TestDaemonWindowOpenCloseLeaksNoGoroutines asserts that opening and closing a
@@ -31,7 +33,7 @@ func TestDaemonWindowOpenCloseLeaksNoGoroutines(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ptyDataChan := make(chan struct{}, 1)
 
-		w := NewDaemonWindow("leak-window-0001", "leak", 0, 0, 80, 24, 0, "pty-leak-0001", ptyDataChan)
+		w := NewDaemonWindow("leak-window-0001", "leak", 0, 0, 80, 24, 0, "pty-leak-0001", ptyDataChan, config.DefaultScrollbackLines)
 
 		// Drive real work through both goroutines before teardown, so the test
 		// covers the interesting case (a window that was actually used) rather
@@ -64,7 +66,7 @@ func TestDaemonWindowOpenCloseLeaksNoGoroutines(t *testing.T) {
 func TestDaemonWindowCloseIsIdempotentUnderLoad(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ptyDataChan := make(chan struct{}, 1)
-		w := NewDaemonWindow("leak-window-0002", "leak", 0, 0, 80, 24, 0, "pty-leak-0002", ptyDataChan)
+		w := NewDaemonWindow("leak-window-0002", "leak", 0, 0, 80, 24, 0, "pty-leak-0002", ptyDataChan, config.DefaultScrollbackLines)
 
 		payload := []byte("line of \x1b[31mcolored\x1b[0m output\r\n")
 		for range 64 {

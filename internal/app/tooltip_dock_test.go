@@ -63,9 +63,9 @@ func TestDockSessionTooltipNamesTheControl(t *testing.T) {
 func TestDockSessionTooltipNeverCoversItsOwnControl(t *testing.T) {
 	for _, pos := range []string{"bottom", "top"} {
 		t.Run(pos, func(t *testing.T) {
-			prev := config.DockbarPosition
-			config.DockbarPosition = pos
-			t.Cleanup(func() { config.DockbarPosition = prev })
+			prev := config.Global.DockbarPosition
+			config.Global.DockbarPosition = pos
+			t.Cleanup(func() { config.Global.DockbarPosition = prev })
 
 			m := dockSessionOS(t, 160, true)
 			layer, hit := dockTooltipAt(t, m, DockSessionClose)
@@ -149,9 +149,9 @@ func TestDockSessionTooltipCostsNoIdleTick(t *testing.T) {
 // still gets the control they are about to click drawn as the one they are about
 // to click.
 func TestDockSessionTooltipsCanBeTurnedOff(t *testing.T) {
-	prev := config.Tooltips
-	config.Tooltips = false
-	t.Cleanup(func() { config.Tooltips = prev })
+	prev := config.Global.Tooltips
+	config.Global.Tooltips = false
+	t.Cleanup(func() { config.Global.Tooltips = prev })
 
 	m := dockSessionOS(t, 160, true)
 	m.renderDockString()

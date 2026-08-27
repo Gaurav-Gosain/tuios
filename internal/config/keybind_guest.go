@@ -80,7 +80,7 @@ func (r *KeybindRegistry) TerminalModeSwallowed() []Swallow {
 
 	leader := kb.LeaderKey
 	if leader == "" {
-		leader = LeaderKey
+		leader = DefaultLeaderKey
 	}
 	add(leader, "leader", "Start a prefix chord", "built-in")
 

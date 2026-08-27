@@ -12,7 +12,7 @@ import (
 // into, which is the state every path below starts from.
 func newGlyphPickerOS(t *testing.T) *OS {
 	t.Helper()
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 	m.UserConfig = config.DefaultConfig()
 	before := theme.ActiveGlyphSetID()
 	t.Cleanup(func() { theme.SetActiveGlyphs(before) })
@@ -143,7 +143,7 @@ func TestGlyphSamplesLeaveTheSelectionAlone(t *testing.T) {
 	t.Cleanup(func() { theme.SetActiveGlyphs(before) })
 
 	theme.SetActiveGlyphs("heavy")
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 	m.buildGlyphSamples()
 
 	if got := theme.ActiveGlyphSetID(); got != "heavy" {

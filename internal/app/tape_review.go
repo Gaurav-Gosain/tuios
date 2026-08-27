@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/tape/trust"
@@ -48,11 +47,11 @@ type TapeReviewState struct {
 func (m *OS) OpenTapeReview() {
 	dir := m.tapeDetect.indicator.dir
 	if !m.tapeDetect.indicator.active || dir == "" {
-		m.ShowNotification("No project tape in the current directory", "info", config.NotificationDuration)
+		m.ShowNotification("No project tape in the current directory", "info", m.Settings.NotificationDuration)
 		return
 	}
 	if m.ScriptMode {
-		m.ShowNotification("A tape is already running", "warning", config.NotificationDuration)
+		m.ShowNotification("A tape is already running", "warning", m.Settings.NotificationDuration)
 		return
 	}
 	m.openTapeReviewForDir(dir)
@@ -62,7 +61,7 @@ func (m *OS) OpenTapeReview() {
 func (m *OS) openTapeReviewForDir(dir string) {
 	store := m.ensureTapeTrust()
 	if store == nil {
-		m.ShowNotification("Tape trust store unavailable", "error", config.NotificationDuration)
+		m.ShowNotification("Tape trust store unavailable", "error", m.Settings.NotificationDuration)
 		return
 	}
 
@@ -74,7 +73,7 @@ func (m *OS) openTapeReviewForDir(dir string) {
 
 	if res.Status == trust.StatusDenied {
 		// A denied path is inert and never prompts.
-		m.ShowNotification("This project tape is denied (never for this path)", "info", config.NotificationDuration)
+		m.ShowNotification("This project tape is denied (never for this path)", "info", m.Settings.NotificationDuration)
 		return
 	}
 
@@ -127,10 +126,10 @@ func (m *OS) tapeReviewTrustAndRun() {
 	store := m.ensureTapeTrust()
 	if store != nil {
 		if err := store.Trust(r.Path, r.Hash); err != nil {
-			m.ShowNotification("Tape: could not save trust: "+err.Error(), "error", config.NotificationDuration*2)
+			m.ShowNotification("Tape: could not save trust: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 		} else {
 			m.tapeDetect.indicator.status = trust.StatusTrusted
-			m.ShowNotification("Trusted "+shortTapePath(r.Path)+" (tip: set tape.autorun = \"auto\" to skip this next time)", "success", config.NotificationDuration*2)
+			m.ShowNotification("Trusted "+shortTapePath(r.Path)+" (tip: set tape.autorun = \"auto\" to skip this next time)", "success", m.Settings.NotificationDuration*2)
 		}
 	}
 	content, dir := r.Content, r.Dir
@@ -147,9 +146,9 @@ func (m *OS) tapeReviewNever() {
 	store := m.ensureTapeTrust()
 	if store != nil {
 		if err := store.Deny(r.Path); err != nil {
-			m.ShowNotification("Tape: could not deny: "+err.Error(), "error", config.NotificationDuration*2)
+			m.ShowNotification("Tape: could not deny: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 		} else {
-			m.ShowNotification("Denied "+shortTapePath(r.Path)+" (never for this path)", "info", config.NotificationDuration)
+			m.ShowNotification("Denied "+shortTapePath(r.Path)+" (never for this path)", "info", m.Settings.NotificationDuration)
 		}
 	}
 	m.tapeDetect.indicator = tapeIndicator{}
@@ -170,9 +169,9 @@ func (m *OS) tapeReviewRevoke() {
 	store := m.ensureTapeTrust()
 	if store != nil {
 		if err := store.Forget(r.Path); err != nil {
-			m.ShowNotification("Tape: could not revoke trust: "+err.Error(), "error", config.NotificationDuration*2)
+			m.ShowNotification("Tape: could not revoke trust: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 		} else {
-			m.ShowNotification("Revoked trust for "+shortTapePath(r.Path), "info", config.NotificationDuration)
+			m.ShowNotification("Revoked trust for "+shortTapePath(r.Path), "info", m.Settings.NotificationDuration)
 		}
 	}
 	m.tapeDetect.indicator.status = trust.StatusUntrusted

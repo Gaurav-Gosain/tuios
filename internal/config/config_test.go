@@ -283,14 +283,14 @@ func TestKeybindRegistry_AccentedLookup(t *testing.T) {
 
 func TestAnimationConfig(t *testing.T) {
 	// Default should be enabled
-	config.AnimationsEnabled = true
+	config.Global.AnimationsEnabled = true
 
-	duration := config.GetAnimationDuration()
+	duration := config.Global.GetAnimationDuration()
 	if duration == 0 {
 		t.Error("Expected non-zero animation duration when enabled")
 	}
 
-	fastDuration := config.GetFastAnimationDuration()
+	fastDuration := config.Global.GetFastAnimationDuration()
 	if fastDuration == 0 {
 		t.Error("Expected non-zero fast animation duration when enabled")
 	}
@@ -300,20 +300,20 @@ func TestAnimationConfig(t *testing.T) {
 	}
 
 	// Disable animations
-	config.AnimationsEnabled = false
+	config.Global.AnimationsEnabled = false
 
-	duration = config.GetAnimationDuration()
+	duration = config.Global.GetAnimationDuration()
 	if duration != 0 {
 		t.Errorf("Expected zero duration when disabled, got %v", duration)
 	}
 
-	fastDuration = config.GetFastAnimationDuration()
+	fastDuration = config.Global.GetFastAnimationDuration()
 	if fastDuration != 0 {
 		t.Errorf("Expected zero fast duration when disabled, got %v", fastDuration)
 	}
 
 	// Reset for other tests
-	config.AnimationsEnabled = true
+	config.Global.AnimationsEnabled = true
 }
 
 // =============================================================================
@@ -384,168 +384,168 @@ func BenchmarkNormalizeKey(b *testing.B) {
 
 func TestApplyOverrides_ASCIIOnly(t *testing.T) {
 	// Save original values
-	originalASCII := config.UseASCIIOnly
-	defer func() { config.UseASCIIOnly = originalASCII }()
+	originalASCII := config.Global.UseASCIIOnly
+	defer func() { config.Global.UseASCIIOnly = originalASCII }()
 
 	// Reset to default
-	config.UseASCIIOnly = false
+	config.Global.UseASCIIOnly = false
 
 	// Apply override
-	config.ApplyOverrides(config.Overrides{ASCIIOnly: true})
+	config.ApplyOverrides(config.Overrides{ASCIIOnly: true}, &config.Global)
 
-	if !config.UseASCIIOnly {
+	if !config.Global.UseASCIIOnly {
 		t.Error("Expected UseASCIIOnly to be true after override")
 	}
 }
 
 func TestApplyOverrides_BorderStyle(t *testing.T) {
 	// Save original value
-	originalBorder := config.BorderStyle
-	defer func() { config.BorderStyle = originalBorder }()
+	originalBorder := config.Global.BorderStyle
+	defer func() { config.Global.BorderStyle = originalBorder }()
 
 	// Reset to default
-	config.BorderStyle = "rounded"
+	config.Global.BorderStyle = "rounded"
 
 	// Apply CLI override
-	config.ApplyOverrides(config.Overrides{BorderStyle: "double"})
-	if config.BorderStyle != "double" {
-		t.Errorf("Expected BorderStyle 'double', got %q", config.BorderStyle)
+	config.ApplyOverrides(config.Overrides{BorderStyle: "double"}, &config.Global)
+	if config.Global.BorderStyle != "double" {
+		t.Errorf("Expected BorderStyle 'double', got %q", config.Global.BorderStyle)
 	}
 
 	// CLI flag takes precedence over user config
-	config.BorderStyle = "rounded"
+	config.Global.BorderStyle = "rounded"
 	userCfg := config.DefaultConfig()
 	userCfg.Appearance.BorderStyle = "thick"
-	config.ApplyAppearanceConfig(userCfg)
-	config.ApplyOverrides(config.Overrides{BorderStyle: "normal"})
-	if config.BorderStyle != "normal" {
-		t.Errorf("Expected CLI override 'normal' to take precedence, got %q", config.BorderStyle)
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	config.ApplyOverrides(config.Overrides{BorderStyle: "normal"}, &config.Global)
+	if config.Global.BorderStyle != "normal" {
+		t.Errorf("Expected CLI override 'normal' to take precedence, got %q", config.Global.BorderStyle)
 	}
 
 	// User config used when CLI flag not set
-	config.BorderStyle = "rounded"
-	config.ApplyAppearanceConfig(userCfg)
-	config.ApplyOverrides(config.Overrides{})
-	if config.BorderStyle != "thick" {
-		t.Errorf("Expected user config 'thick' to be used, got %q", config.BorderStyle)
+	config.Global.BorderStyle = "rounded"
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	config.ApplyOverrides(config.Overrides{}, &config.Global)
+	if config.Global.BorderStyle != "thick" {
+		t.Errorf("Expected user config 'thick' to be used, got %q", config.Global.BorderStyle)
 	}
 }
 
 func TestApplyOverrides_DockbarPosition(t *testing.T) {
 	// Save original value
-	originalPos := config.DockbarPosition
-	defer func() { config.DockbarPosition = originalPos }()
+	originalPos := config.Global.DockbarPosition
+	defer func() { config.Global.DockbarPosition = originalPos }()
 
 	// Reset to default
-	config.DockbarPosition = "bottom"
+	config.Global.DockbarPosition = "bottom"
 
 	// Apply CLI override
-	config.ApplyOverrides(config.Overrides{DockbarPosition: "top"})
-	if config.DockbarPosition != "top" {
-		t.Errorf("Expected DockbarPosition 'top', got %q", config.DockbarPosition)
+	config.ApplyOverrides(config.Overrides{DockbarPosition: "top"}, &config.Global)
+	if config.Global.DockbarPosition != "top" {
+		t.Errorf("Expected DockbarPosition 'top', got %q", config.Global.DockbarPosition)
 	}
 
 	// User config fallback
-	config.DockbarPosition = "bottom"
+	config.Global.DockbarPosition = "bottom"
 	userCfg := config.DefaultConfig()
 	userCfg.Appearance.DockbarPosition = "left"
-	config.ApplyAppearanceConfig(userCfg)
-	config.ApplyOverrides(config.Overrides{})
-	if config.DockbarPosition != "left" {
-		t.Errorf("Expected user config 'left', got %q", config.DockbarPosition)
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	config.ApplyOverrides(config.Overrides{}, &config.Global)
+	if config.Global.DockbarPosition != "left" {
+		t.Errorf("Expected user config 'left', got %q", config.Global.DockbarPosition)
 	}
 }
 
 func TestApplyOverrides_HideWindowButtons(t *testing.T) {
 	// Save original value
-	originalHide := config.HideWindowButtons
-	defer func() { config.HideWindowButtons = originalHide }()
+	originalHide := config.Global.HideWindowButtons
+	defer func() { config.Global.HideWindowButtons = originalHide }()
 
 	// Reset to default
-	config.HideWindowButtons = false
+	config.Global.HideWindowButtons = false
 
 	// CLI flag only
-	config.ApplyOverrides(config.Overrides{HideWindowButtons: true})
-	if !config.HideWindowButtons {
+	config.ApplyOverrides(config.Overrides{HideWindowButtons: true}, &config.Global)
+	if !config.Global.HideWindowButtons {
 		t.Error("Expected HideWindowButtons to be true from CLI flag")
 	}
 
 	// User config only
-	config.HideWindowButtons = false
+	config.Global.HideWindowButtons = false
 	userCfg := config.DefaultConfig()
 	userCfg.Appearance.HideWindowButtons = true
-	config.ApplyAppearanceConfig(userCfg)
-	config.ApplyOverrides(config.Overrides{})
-	if !config.HideWindowButtons {
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	config.ApplyOverrides(config.Overrides{}, &config.Global)
+	if !config.Global.HideWindowButtons {
 		t.Error("Expected HideWindowButtons to be true from user config")
 	}
 
 	// OR of both (CLI false, user config true)
-	config.HideWindowButtons = false
-	config.ApplyAppearanceConfig(userCfg)
-	config.ApplyOverrides(config.Overrides{HideWindowButtons: false})
-	if !config.HideWindowButtons {
+	config.Global.HideWindowButtons = false
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	config.ApplyOverrides(config.Overrides{HideWindowButtons: false}, &config.Global)
+	if !config.Global.HideWindowButtons {
 		t.Error("Expected HideWindowButtons to be true (OR of CLI and user config)")
 	}
 }
 
 func TestApplyOverrides_ScrollbackLines(t *testing.T) {
 	// Save original value
-	originalLines := config.ScrollbackLines
-	defer func() { config.ScrollbackLines = originalLines }()
+	originalLines := config.Global.ScrollbackLines
+	defer func() { config.Global.ScrollbackLines = originalLines }()
 
 	// Reset to default
-	config.ScrollbackLines = 10000
+	config.Global.ScrollbackLines = 10000
 
 	// CLI override takes precedence
-	config.ApplyOverrides(config.Overrides{ScrollbackLines: 5000})
-	if config.ScrollbackLines != 5000 {
-		t.Errorf("Expected ScrollbackLines 5000, got %d", config.ScrollbackLines)
+	config.ApplyOverrides(config.Overrides{ScrollbackLines: 5000}, &config.Global)
+	if config.Global.ScrollbackLines != 5000 {
+		t.Errorf("Expected ScrollbackLines 5000, got %d", config.Global.ScrollbackLines)
 	}
 
 	// Test clamping to minimum
-	config.ScrollbackLines = 10000
-	config.ApplyOverrides(config.Overrides{ScrollbackLines: 50})
-	if config.ScrollbackLines != 100 {
-		t.Errorf("Expected ScrollbackLines to be clamped to 100, got %d", config.ScrollbackLines)
+	config.Global.ScrollbackLines = 10000
+	config.ApplyOverrides(config.Overrides{ScrollbackLines: 50}, &config.Global)
+	if config.Global.ScrollbackLines != 100 {
+		t.Errorf("Expected ScrollbackLines to be clamped to 100, got %d", config.Global.ScrollbackLines)
 	}
 
 	// Test clamping to maximum
-	config.ScrollbackLines = 10000
-	config.ApplyOverrides(config.Overrides{ScrollbackLines: 2000000})
-	if config.ScrollbackLines != 1000000 {
-		t.Errorf("Expected ScrollbackLines to be clamped to 1000000, got %d", config.ScrollbackLines)
+	config.Global.ScrollbackLines = 10000
+	config.ApplyOverrides(config.Overrides{ScrollbackLines: 2000000}, &config.Global)
+	if config.Global.ScrollbackLines != 1000000 {
+		t.Errorf("Expected ScrollbackLines to be clamped to 1000000, got %d", config.Global.ScrollbackLines)
 	}
 
 	// User config fallback
-	config.ScrollbackLines = 10000
+	config.Global.ScrollbackLines = 10000
 	userCfg := config.DefaultConfig()
 	userCfg.Appearance.ScrollbackLines = 20000
-	config.ApplyAppearanceConfig(userCfg)
-	config.ApplyOverrides(config.Overrides{})
-	if config.ScrollbackLines != 20000 {
-		t.Errorf("Expected user config 20000, got %d", config.ScrollbackLines)
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	config.ApplyOverrides(config.Overrides{}, &config.Global)
+	if config.Global.ScrollbackLines != 20000 {
+		t.Errorf("Expected user config 20000, got %d", config.Global.ScrollbackLines)
 	}
 }
 
 func TestApplyOverrides_NoAnimations(t *testing.T) {
 	// Save original value
-	originalEnabled := config.AnimationsEnabled
-	defer func() { config.AnimationsEnabled = originalEnabled }()
+	originalEnabled := config.Global.AnimationsEnabled
+	defer func() { config.Global.AnimationsEnabled = originalEnabled }()
 
 	// Reset to default
-	config.AnimationsEnabled = true
+	config.Global.AnimationsEnabled = true
 
 	// Apply NoAnimations flag
-	config.ApplyOverrides(config.Overrides{NoAnimations: true})
-	if config.AnimationsEnabled {
+	config.ApplyOverrides(config.Overrides{NoAnimations: true}, &config.Global)
+	if config.Global.AnimationsEnabled {
 		t.Error("Expected AnimationsEnabled to be false after NoAnimations override")
 	}
 
 	// Not setting the flag should not change the value
-	config.AnimationsEnabled = true
-	config.ApplyOverrides(config.Overrides{NoAnimations: false})
-	if !config.AnimationsEnabled {
+	config.Global.AnimationsEnabled = true
+	config.ApplyOverrides(config.Overrides{NoAnimations: false}, &config.Global)
+	if !config.Global.AnimationsEnabled {
 		t.Error("Expected AnimationsEnabled to remain true when NoAnimations is false")
 	}
 }
@@ -556,18 +556,18 @@ func TestApplyOverrides_NoAnimations(t *testing.T) {
 // implicitly, and the fix that keeps `--no-animations` from being reverted by
 // animations_enabled = true.
 func TestStartupPrecedence_FlagWinsOverConfig(t *testing.T) {
-	original := config.AnimationsEnabled
-	defer func() { config.AnimationsEnabled = original }()
+	original := config.Global.AnimationsEnabled
+	defer func() { config.Global.AnimationsEnabled = original }()
 
 	enabled := true
 	userCfg := config.DefaultConfig()
 	userCfg.Appearance.AnimationsEnabled = &enabled
 
-	config.ApplyAppearanceConfig(userCfg) // baseline: on
-	config.ApplyAppearanceConfig(userCfg)
-	config.ApplyOverrides(config.Overrides{NoAnimations: true}) // flag wins: off
+	config.ApplyAppearanceConfig(userCfg, &config.Global) // baseline: on
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	config.ApplyOverrides(config.Overrides{NoAnimations: true}, &config.Global) // flag wins: off
 
-	if config.AnimationsEnabled {
+	if config.Global.AnimationsEnabled {
 		t.Error("CLI --no-animations must win over config animations_enabled = true")
 	}
 }
@@ -576,87 +576,87 @@ func TestStartupPrecedence_FlagWinsOverConfig(t *testing.T) {
 // effects, so a second load (e.g. inside NewOS or per server connection) cannot
 // clobber previously applied globals or race other sessions.
 func TestLoadUserConfig_Pure(t *testing.T) {
-	original := config.AnimationsEnabled
-	defer func() { config.AnimationsEnabled = original }()
+	original := config.Global.AnimationsEnabled
+	defer func() { config.Global.AnimationsEnabled = original }()
 
-	config.AnimationsEnabled = false
+	config.Global.AnimationsEnabled = false
 	// Load a config of this test's own. Reading whatever the developer happens
 	// to have made the result depend on the machine, and the skip that guarded
 	// it turned a genuine load failure into a silent pass.
 	writeConfig(t, "[appearance]\nanimations_enabled = true\n")
-	if config.AnimationsEnabled {
+	if config.Global.AnimationsEnabled {
 		t.Error("LoadUserConfig must not mutate appearance globals")
 	}
 }
 
 func TestApplyOverrides_LeaderKey(t *testing.T) {
 	// Save original value
-	originalLeader := config.LeaderKey
-	defer func() { config.LeaderKey = originalLeader }()
+	originalLeader := config.Global.LeaderKey
+	defer func() { config.Global.LeaderKey = originalLeader }()
 
 	// Reset to default
-	config.LeaderKey = "ctrl+b"
+	config.Global.LeaderKey = "ctrl+b"
 
 	// Leader key only comes from user config
 	userCfg := config.DefaultConfig()
 	userCfg.Keybindings.LeaderKey = "ctrl+a"
-	config.ApplyAppearanceConfig(userCfg)
-	config.ApplyOverrides(config.Overrides{})
-	if config.LeaderKey != "ctrl+a" {
-		t.Errorf("Expected LeaderKey 'ctrl+a', got %q", config.LeaderKey)
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	config.ApplyOverrides(config.Overrides{}, &config.Global)
+	if config.Global.LeaderKey != "ctrl+a" {
+		t.Errorf("Expected LeaderKey 'ctrl+a', got %q", config.Global.LeaderKey)
 	}
 
 	// No user config should keep default
-	config.LeaderKey = "ctrl+b"
-	config.ApplyOverrides(config.Overrides{})
-	if config.LeaderKey != "ctrl+b" {
-		t.Errorf("Expected LeaderKey to remain 'ctrl+b', got %q", config.LeaderKey)
+	config.Global.LeaderKey = "ctrl+b"
+	config.ApplyOverrides(config.Overrides{}, &config.Global)
+	if config.Global.LeaderKey != "ctrl+b" {
+		t.Errorf("Expected LeaderKey to remain 'ctrl+b', got %q", config.Global.LeaderKey)
 	}
 }
 
 func TestApplyOverrides_WindowTitlePosition(t *testing.T) {
 	// Save original value
-	originalPos := config.WindowTitlePosition
-	defer func() { config.WindowTitlePosition = originalPos }()
+	originalPos := config.Global.WindowTitlePosition
+	defer func() { config.Global.WindowTitlePosition = originalPos }()
 
 	// Reset to default
-	config.WindowTitlePosition = "bottom"
+	config.Global.WindowTitlePosition = "bottom"
 
 	// CLI override
-	config.ApplyOverrides(config.Overrides{WindowTitlePosition: "top"})
-	if config.WindowTitlePosition != "top" {
-		t.Errorf("Expected WindowTitlePosition 'top', got %q", config.WindowTitlePosition)
+	config.ApplyOverrides(config.Overrides{WindowTitlePosition: "top"}, &config.Global)
+	if config.Global.WindowTitlePosition != "top" {
+		t.Errorf("Expected WindowTitlePosition 'top', got %q", config.Global.WindowTitlePosition)
 	}
 
 	// Hidden option
-	config.WindowTitlePosition = "bottom"
-	config.ApplyOverrides(config.Overrides{WindowTitlePosition: "hidden"})
-	if config.WindowTitlePosition != "hidden" {
-		t.Errorf("Expected WindowTitlePosition 'hidden', got %q", config.WindowTitlePosition)
+	config.Global.WindowTitlePosition = "bottom"
+	config.ApplyOverrides(config.Overrides{WindowTitlePosition: "hidden"}, &config.Global)
+	if config.Global.WindowTitlePosition != "hidden" {
+		t.Errorf("Expected WindowTitlePosition 'hidden', got %q", config.Global.WindowTitlePosition)
 	}
 }
 
 func TestApplyOverrides_HideClock(t *testing.T) {
 	// Save original value
-	originalHide := config.HideClock
-	defer func() { config.HideClock = originalHide }()
+	originalHide := config.Global.HideClock
+	defer func() { config.Global.HideClock = originalHide }()
 
 	// Reset to default
-	config.HideClock = false
+	config.Global.HideClock = false
 
 	// CLI flag
-	config.ApplyOverrides(config.Overrides{HideClock: true})
-	if !config.HideClock {
+	config.ApplyOverrides(config.Overrides{HideClock: true}, &config.Global)
+	if !config.Global.HideClock {
 		t.Error("Expected HideClock to be true from CLI flag")
 	}
 
 	// User config OR with CLI
-	config.HideClock = false
+	config.Global.HideClock = false
 	userCfg := config.DefaultConfig()
 	userCfg.Appearance.HideClock = true
-	config.ApplyAppearanceConfig(userCfg)
-	config.ApplyOverrides(config.Overrides{HideClock: false})
-	if !config.HideClock {
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	config.ApplyOverrides(config.Overrides{HideClock: false}, &config.Global)
+	if !config.Global.HideClock {
 		t.Error("Expected HideClock to be true from user config (OR)")
 	}
 }
@@ -665,8 +665,8 @@ func TestApplyOverrides_HideClock(t *testing.T) {
 // it must reach the global the input layer reads, and an unset value must not
 // clobber the default.
 func TestApplyAppearanceConfig_ScrollLines(t *testing.T) {
-	original := config.ScrollLines
-	defer func() { config.ScrollLines = original }()
+	original := config.Global.ScrollLines
+	defer func() { config.Global.ScrollLines = original }()
 
 	if cfg := config.DefaultConfig(); cfg.Appearance.ScrollLines != 3 {
 		t.Errorf("default scroll_lines = %d, want 3", cfg.Appearance.ScrollLines)
@@ -674,18 +674,18 @@ func TestApplyAppearanceConfig_ScrollLines(t *testing.T) {
 
 	userCfg := config.DefaultConfig()
 	userCfg.Appearance.ScrollLines = 8
-	config.ApplyAppearanceConfig(userCfg)
-	if config.ScrollLines != 8 {
-		t.Errorf("ScrollLines = %d, want 8", config.ScrollLines)
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	if config.Global.ScrollLines != 8 {
+		t.Errorf("ScrollLines = %d, want 8", config.Global.ScrollLines)
 	}
 
 	// An absent value in a hand-written config must leave the current setting
 	// alone rather than scrolling zero lines per notch.
-	config.ScrollLines = 5
+	config.Global.ScrollLines = 5
 	userCfg.Appearance.ScrollLines = 0
-	config.ApplyAppearanceConfig(userCfg)
-	if config.ScrollLines != 5 {
-		t.Errorf("ScrollLines = %d after an unset value, want it unchanged at 5", config.ScrollLines)
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	if config.Global.ScrollLines != 5 {
+		t.Errorf("ScrollLines = %d after an unset value, want it unchanged at 5", config.Global.ScrollLines)
 	}
 }
 
@@ -709,25 +709,25 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		buttonStyle             string
 		buttonPos               string
 	}{
-		config.BorderStyle, config.DockbarPosition,
-		config.HideWindowButtons, config.HideScrollbar,
-		config.ShowClock, config.ShowCPU, config.ShowRAM, config.NiriReverseScroll,
-		config.ScrollbackLines, config.NormalFPS,
-		config.LeaderKey,
-		config.ClickToType,
-		config.WindowButtonStyle,
-		config.WindowButtonPosition,
+		config.Global.BorderStyle, config.Global.DockbarPosition,
+		config.Global.HideWindowButtons, config.Global.HideScrollbar,
+		config.Global.ShowClock, config.Global.ShowCPU, config.Global.ShowRAM, config.Global.NiriReverseScroll,
+		config.Global.ScrollbackLines, config.Global.NormalFPS,
+		config.Global.LeaderKey,
+		config.Global.ClickToType,
+		config.Global.WindowButtonStyle,
+		config.Global.WindowButtonPosition,
 	}
 	defer func() {
-		config.BorderStyle, config.DockbarPosition = orig.border, orig.dock
-		config.HideWindowButtons, config.HideScrollbar = orig.buttons, orig.scrollbar
-		config.ShowClock, config.ShowCPU, config.ShowRAM = orig.clock, orig.cpu, orig.ram
-		config.NiriReverseScroll = orig.revScr
-		config.ScrollbackLines, config.NormalFPS = orig.scrollback, orig.fps
-		config.LeaderKey = orig.leader
-		config.ClickToType = orig.clickToType
-		config.WindowButtonStyle = orig.buttonStyle
-		config.WindowButtonPosition = orig.buttonPos
+		config.Global.BorderStyle, config.Global.DockbarPosition = orig.border, orig.dock
+		config.Global.HideWindowButtons, config.Global.HideScrollbar = orig.buttons, orig.scrollbar
+		config.Global.ShowClock, config.Global.ShowCPU, config.Global.ShowRAM = orig.clock, orig.cpu, orig.ram
+		config.Global.NiriReverseScroll = orig.revScr
+		config.Global.ScrollbackLines, config.Global.NormalFPS = orig.scrollback, orig.fps
+		config.Global.LeaderKey = orig.leader
+		config.Global.ClickToType = orig.clickToType
+		config.Global.WindowButtonStyle = orig.buttonStyle
+		config.Global.WindowButtonPosition = orig.buttonPos
 	}()
 
 	cfg := config.DefaultConfig()
@@ -746,27 +746,27 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 	cfg.Appearance.WindowButtonStyle = config.WindowButtonStyleDots
 	cfg.Appearance.WindowButtonPosition = config.WindowButtonPositionLeft
 
-	config.ApplyAppearanceConfig(cfg)
+	config.ApplyAppearanceConfig(cfg, &config.Global)
 
 	checks := []struct {
 		name string
 		got  any
 		want any
 	}{
-		{"BorderStyle", config.BorderStyle, "double"},
-		{"DockbarPosition", config.DockbarPosition, "top"},
-		{"HideWindowButtons", config.HideWindowButtons, true},
-		{"HideScrollbar", config.HideScrollbar, true},
-		{"ShowClock", config.ShowClock, true},
-		{"ShowCPU", config.ShowCPU, true},
-		{"ShowRAM", config.ShowRAM, true},
-		{"NiriReverseScroll", config.NiriReverseScroll, true},
-		{"ScrollbackLines", config.ScrollbackLines, 12345},
-		{"NormalFPS", config.NormalFPS, 30},
-		{"LeaderKey", config.LeaderKey, "ctrl+a"},
-		{"ClickToType", config.ClickToType, config.ClickToTypeDouble},
-		{"WindowButtonStyle", config.WindowButtonStyle, config.WindowButtonStyleDots},
-		{"WindowButtonPosition", config.WindowButtonPosition, config.WindowButtonPositionLeft},
+		{"BorderStyle", config.Global.BorderStyle, "double"},
+		{"DockbarPosition", config.Global.DockbarPosition, "top"},
+		{"HideWindowButtons", config.Global.HideWindowButtons, true},
+		{"HideScrollbar", config.Global.HideScrollbar, true},
+		{"ShowClock", config.Global.ShowClock, true},
+		{"ShowCPU", config.Global.ShowCPU, true},
+		{"ShowRAM", config.Global.ShowRAM, true},
+		{"NiriReverseScroll", config.Global.NiriReverseScroll, true},
+		{"ScrollbackLines", config.Global.ScrollbackLines, 12345},
+		{"NormalFPS", config.Global.NormalFPS, 30},
+		{"LeaderKey", config.Global.LeaderKey, "ctrl+a"},
+		{"ClickToType", config.Global.ClickToType, config.ClickToTypeDouble},
+		{"WindowButtonStyle", config.Global.WindowButtonStyle, config.WindowButtonStyleDots},
+		{"WindowButtonPosition", config.Global.WindowButtonPosition, config.WindowButtonPositionLeft},
 	}
 	for _, c := range checks {
 		if c.got != c.want {
@@ -778,8 +778,8 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 	// no unset state, so a conditional assignment would make "off" unsaveable.
 	cfg.Appearance.HideWindowButtons = false
 	cfg.Appearance.ShowClock = false
-	config.ApplyAppearanceConfig(cfg)
-	if config.HideWindowButtons || config.ShowClock {
+	config.ApplyAppearanceConfig(cfg, &config.Global)
+	if config.Global.HideWindowButtons || config.Global.ShowClock {
 		t.Error("clearing hide_window_buttons/show_clock did not reach the globals")
 	}
 }

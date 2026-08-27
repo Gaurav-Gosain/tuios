@@ -17,11 +17,11 @@ import (
 // lies about what it does.
 func TestMirrorArrowsPointWhereTheRailWillGo(t *testing.T) {
 	for _, ascii := range []bool{false, true} {
-		prev := config.UseASCIIOnly
-		config.UseASCIIOnly = ascii
+		prev := config.Global.UseASCIIOnly
+		config.Global.UseASCIIOnly = ascii
 		overlay.SetASCII(ascii)
 		t.Cleanup(func() {
-			config.UseASCIIOnly = prev
+			config.Global.UseASCIIOnly = prev
 			overlay.SetASCII(prev)
 		})
 
@@ -41,6 +41,7 @@ func TestMirrorArrowsPointWhereTheRailWillGo(t *testing.T) {
 		} {
 			m := sidebarTestOS(t, 120, 30, tc.pos)
 			withSidebar(t, true, tc.pos, config.SidebarDefaultWidth)
+			m.Settings = config.Global
 			got, ok := m.sidebarCollapseGlyph(tc.variant)
 			if !ok {
 				t.Errorf("%s/%d: the control is not offered at all", tc.pos, tc.variant)
@@ -60,6 +61,7 @@ func TestMirrorFooterCornerSwaps(t *testing.T) {
 	for _, pos := range []string{"left", "right"} {
 		m := daemonRailOS(t, 120, 20)
 		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		m.Settings = config.Global
 		railFrame(t, m)
 
 		var toggle sidebarRowHit
@@ -97,6 +99,7 @@ func TestMirrorHeaderAddControlsStayOnTheSpine(t *testing.T) {
 	for _, pos := range []string{"left", "right"} {
 		m := daemonRailOS(t, 120, 20)
 		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		m.Settings = config.Global
 		railFrame(t, m)
 
 		w := m.GetSidebarWidth()
@@ -137,6 +140,7 @@ func TestMirrorStripToggleHugsThePaneFacingColumn(t *testing.T) {
 	for _, pos := range []string{"left", "right"} {
 		m, tree := stripOS(t, 120, 20)
 		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		m.Settings = config.Global
 		m.SidebarCollapsed = true
 		lines, w := m.sidebarPanelLinesForTree(tree)
 
@@ -181,6 +185,7 @@ func TestMirrorTextNeverMirrors(t *testing.T) {
 	for i, pos := range []string{"left", "right"} {
 		m, tree := sectionsTestOS(t, 120, 30)
 		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		m.Settings = config.Global
 		frames[i] = railPlain(t, m, tree)
 	}
 	if len(frames[0]) != len(frames[1]) {
@@ -189,8 +194,8 @@ func TestMirrorTextNeverMirrors(t *testing.T) {
 	for i := range frames[0] {
 		// The edge rule swaps sides, the arrow flips and the footer swaps ends,
 		// so the frames are compared on their words rather than cell for cell.
-		l := strings.TrimSpace(strings.Trim(frames[0][i], config.GetWindowBorderLeft()))
-		r := strings.TrimSpace(strings.Trim(frames[1][i], config.GetWindowBorderLeft()))
+		l := strings.TrimSpace(strings.Trim(frames[0][i], config.Global.GetWindowBorderLeft()))
+		r := strings.TrimSpace(strings.Trim(frames[1][i], config.Global.GetWindowBorderLeft()))
 		if strings.Contains(l, "new") || strings.Contains(l, "«") || strings.Contains(r, "»") {
 			continue // the footer line, whose ends are exactly what mirrors
 		}
@@ -203,10 +208,11 @@ func TestMirrorTextNeverMirrors(t *testing.T) {
 // TestMirrorEdgeRuleStaysOnThePaneFacingColumn: the rail's own frame is the one
 // thing that was already mirrored, and the pass must not have moved it.
 func TestMirrorEdgeRuleStaysOnThePaneFacingColumn(t *testing.T) {
-	rule := config.GetWindowBorderLeft()
+	rule := config.Global.GetWindowBorderLeft()
 	for _, pos := range []string{"left", "right"} {
 		m, tree := sectionsTestOS(t, 120, 30)
 		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		m.Settings = config.Global
 		lines := railPlain(t, m, tree)
 		w := m.GetSidebarWidth()
 

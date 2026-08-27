@@ -108,8 +108,8 @@ func screensaverArmCmd(d time.Duration) tea.Cmd {
 }
 
 // screensaverFrameCmd schedules the next animation frame.
-func screensaverFrameCmd() tea.Cmd {
-	return tea.Tick(time.Second/time.Duration(config.NormalFPS), func(time.Time) tea.Msg {
+func screensaverFrameCmd(s *config.Settings) tea.Cmd {
+	return tea.Tick(time.Second/time.Duration(s.NormalFPS), func(time.Time) tea.Msg {
 		return screensaverFrameMsg{}
 	})
 }
@@ -139,7 +139,7 @@ func (m *OS) handleScreensaverArm() tea.Cmd {
 		m.screensaver.armed = true
 		return screensaverArmCmd(delay)
 	}
-	return screensaverFrameCmd()
+	return screensaverFrameCmd(&m.Settings)
 }
 
 // StartScreensaverNow runs the saver because the user asked for it.
@@ -153,10 +153,10 @@ func (m *OS) StartScreensaverNow() tea.Cmd {
 		return nil
 	}
 	if !m.startScreensaver(m.screensaverConfig()) {
-		m.ShowNotification("The screen saver could not start here.", "warning", config.NotificationDuration)
+		m.ShowNotification("The screen saver could not start here.", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	return screensaverFrameCmd()
+	return screensaverFrameCmd(&m.Settings)
 }
 
 // screensaverMayStart reports whether it is polite to cover the screen now.
@@ -322,7 +322,7 @@ func (m *OS) handleScreensaverFrame() tea.Cmd {
 		m.screensaver.frame = m.screensaver.engine.Frame()
 	}
 	m.renderSkipped = false
-	return screensaverFrameCmd()
+	return screensaverFrameCmd(&m.Settings)
 }
 
 // restartScreensaverEffect builds a fresh effect over the same capture, so an

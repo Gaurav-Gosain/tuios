@@ -14,30 +14,30 @@ import (
 // then a theme got its border style back: the struct still said rounded and
 // re-applying it won. get-option kept answering with the value the caller had
 // asked for, which is the part that makes it hard to see, so the check here is
-// on the global the renderer actually draws from.
+// on the settings the renderer actually draws from.
 func TestSetConfigSurvivesTheNextSet(t *testing.T) {
 	tests := []struct {
 		name  string
 		path  string
 		value string
-		read  func() string
+		read  func(m *OS) string
 	}{
-		{"border style", "appearance.border_style", "thick", func() string { return config.BorderStyle }},
-		{"dockbar position", "appearance.dockbar_position", "top", func() string { return config.DockbarPosition }},
-		{"window button style", "appearance.window_button_style", config.WindowButtonStyles[1], func() string { return config.WindowButtonStyle }},
-		{"window button position", "appearance.window_button_position", config.WindowButtonPositions[1], func() string { return config.WindowButtonPosition }},
+		{"border style", "appearance.border_style", "thick", func(m *OS) string { return m.Settings.BorderStyle }},
+		{"dockbar position", "appearance.dockbar_position", "top", func(m *OS) string { return m.Settings.DockbarPosition }},
+		{"window button style", "appearance.window_button_style", config.WindowButtonStyles[1], func(m *OS) string { return m.Settings.WindowButtonStyle }},
+		{"window button position", "appearance.window_button_position", config.WindowButtonPositions[1], func(m *OS) string { return m.Settings.WindowButtonPosition }},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := &OS{UserConfig: config.DefaultConfig()}
-			config.ApplyAppearanceConfig(m.UserConfig)
+			m := &OS{Settings: config.Global, UserConfig: config.DefaultConfig()}
+			config.ApplyAppearanceConfig(m.UserConfig, &m.Settings)
 
 			if err := m.SetConfig(tt.path, tt.value); err != nil {
 				t.Fatalf("SetConfig(%q, %q) = %v", tt.path, tt.value, err)
 			}
-			if got := tt.read(); got != tt.value {
-				t.Fatalf("after the set, the global is %q, want %q", got, tt.value)
+			if got := tt.read(m); got != tt.value {
+				t.Fatalf("after the set, the session reads %q, want %q", got, tt.value)
 			}
 
 			// Any other registry option will do; the sidebar's width is a
@@ -45,7 +45,7 @@ func TestSetConfigSurvivesTheNextSet(t *testing.T) {
 			if err := m.SetConfig("appearance.sidebar.width", "30"); err != nil {
 				t.Fatalf("second SetConfig = %v", err)
 			}
-			if got := tt.read(); got != tt.value {
+			if got := tt.read(m); got != tt.value {
 				t.Errorf("a later set reverted it to %q, want %q still", got, tt.value)
 			}
 		})
@@ -56,14 +56,14 @@ func TestSetConfigSurvivesTheNextSet(t *testing.T) {
 // whose recorded value is not the string it was handed: "toggle" resolves to
 // whichever of the two it lands on.
 func TestToggleAnimationsSurvivesTheNextSet(t *testing.T) {
-	m := &OS{UserConfig: config.DefaultConfig()}
-	config.ApplyAppearanceConfig(m.UserConfig)
+	m := &OS{Settings: config.Global, UserConfig: config.DefaultConfig()}
+	config.ApplyAppearanceConfig(m.UserConfig, &m.Settings)
 
-	before := config.AnimationsEnabled
+	before := m.Settings.AnimationsEnabled
 	if err := m.SetConfig("appearance.animations_enabled", "toggle"); err != nil {
 		t.Fatalf("toggle = %v", err)
 	}
-	toggled := config.AnimationsEnabled
+	toggled := m.Settings.AnimationsEnabled
 	if toggled == before {
 		t.Fatalf("toggle did not change anything (still %v)", toggled)
 	}
@@ -71,7 +71,7 @@ func TestToggleAnimationsSurvivesTheNextSet(t *testing.T) {
 	if err := m.SetConfig("appearance.sidebar.width", "30"); err != nil {
 		t.Fatalf("second SetConfig = %v", err)
 	}
-	if config.AnimationsEnabled != toggled {
-		t.Errorf("a later set reverted animations to %v, want %v still", config.AnimationsEnabled, toggled)
+	if m.Settings.AnimationsEnabled != toggled {
+		t.Errorf("a later set reverted animations to %v, want %v still", m.Settings.AnimationsEnabled, toggled)
 	}
 }

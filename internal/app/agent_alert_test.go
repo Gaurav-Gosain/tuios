@@ -15,7 +15,8 @@ import (
 func alertOS(t *testing.T, agent config.AgentAlertsConfig) *OS {
 	t.Helper()
 	m := &OS{
-		Width: 120, Height: 40,
+		Settings: config.Global,
+		Width:    120, Height: 40,
 		FocusedWindow:    -1,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,

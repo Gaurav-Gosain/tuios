@@ -13,7 +13,7 @@ import (
 func helpSection(t *testing.T, name string) HelpCategory {
 	t.Helper()
 	reg := config.NewKeybindRegistry(config.DefaultConfig())
-	for _, cat := range GetHelpCategories(reg) {
+	for _, cat := range GetHelpCategories(reg, &config.Global) {
 		if cat.Name == name {
 			return cat
 		}
@@ -64,7 +64,7 @@ func TestHelpDocumentsTheRailScope(t *testing.T) {
 // than one you cannot read.
 func TestHelpDocumentsTheEntryPointsToTheRail(t *testing.T) {
 	cat := helpSection(t, "Sidebar")
-	want := []string{"s", config.LeaderKey + ", e", config.LeaderKey + ", b"}
+	want := []string{"s", config.Global.LeaderKey + ", e", config.Global.LeaderKey + ", b"}
 
 	for _, key := range want {
 		found := false
@@ -152,7 +152,7 @@ func TestGestureRowsFitTheHelpPanel(t *testing.T) {
 // is what pushes the tabs onto a second row.
 func TestHelpSectionsHaveTabLabels(t *testing.T) {
 	reg := config.NewKeybindRegistry(config.DefaultConfig())
-	for _, cat := range GetHelpCategories(reg) {
+	for _, cat := range GetHelpCategories(reg, &config.Global) {
 		if _, ok := helpTabNames[cat.Name]; !ok {
 			t.Errorf("section %q has no entry in helpTabNames", cat.Name)
 		}

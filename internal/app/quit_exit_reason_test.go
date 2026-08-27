@@ -1,6 +1,10 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+)
 
 // Quitting a daemon session kills it, and the daemon announces the session
 // ending and the connection dropping back to the client that asked. Those
@@ -19,7 +23,7 @@ func TestDeliberateQuitExitsNormally(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			m := &OS{QuitRequested: true}
+			m := &OS{Settings: config.Global, QuitRequested: true}
 			if _, _ = m.Update(tc.msg); m.ExitReason != ExitNormal {
 				t.Errorf("after a deliberate quit, ExitReason = %v, want ExitNormal", m.ExitReason)
 			}
@@ -29,13 +33,13 @@ func TestDeliberateQuitExitsNormally(t *testing.T) {
 
 func TestUnexpectedTerminationKeepsDiagnostic(t *testing.T) {
 	t.Run("session killed elsewhere", func(t *testing.T) {
-		m := &OS{}
+		m := &OS{Settings: config.Global}
 		if _, _ = m.Update(SessionEndedMsg{SessionName: "s", Reason: "killed"}); m.ExitReason != ExitSessionKilled {
 			t.Errorf("ExitReason = %v, want ExitSessionKilled", m.ExitReason)
 		}
 	})
 	t.Run("daemon lost", func(t *testing.T) {
-		m := &OS{}
+		m := &OS{Settings: config.Global}
 		if _, _ = m.Update(DaemonDisconnectedMsg{}); m.ExitReason != ExitDaemonLost {
 			t.Errorf("ExitReason = %v, want ExitDaemonLost", m.ExitReason)
 		}
@@ -46,7 +50,7 @@ func TestUnexpectedTerminationKeepsDiagnostic(t *testing.T) {
 // every quit keybinding, the confirmation dialog, and the dialog's mouse
 // handler all depend on.
 func TestQuitSessionRecordsIntent(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	if m.QuitRequested {
 		t.Fatal("QuitRequested set before quitting")
 	}

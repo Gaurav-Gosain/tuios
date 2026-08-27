@@ -132,7 +132,7 @@ func TestStripRestsAsAStackOfNamedLists(t *testing.T) {
 	if want := m.GetUsableHeight(); len(lines) != want {
 		t.Fatalf("the strip drew %d lines, want %d", len(lines), want)
 	}
-	rule := config.GetWindowBorderLeft()
+	rule := config.Global.GetWindowBorderLeft()
 	want := []string{
 		"  " + rule, // the pad above the stack: no badge, no hole for one
 		"+s" + rule, // sessions, and the control that makes one
@@ -179,7 +179,7 @@ func TestStripStackHasNoHolesInIt(t *testing.T) {
 		lines := railPlain(t, m, tree)
 
 		marked := func(i int) bool {
-			return strings.TrimSpace(strings.TrimSuffix(lines[i], config.GetWindowBorderLeft())) != ""
+			return strings.TrimSpace(strings.TrimSuffix(lines[i], config.Global.GetWindowBorderLeft())) != ""
 		}
 		first := 0
 		for first < len(lines) && !marked(first) {
@@ -212,6 +212,7 @@ func TestStripBandCoversItsFullHeight(t *testing.T) {
 	for _, pos := range []string{"left", "right"} {
 		m, tree := stripOS(t, 120, 20)
 		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		m.Settings = config.Global
 		m.SidebarCollapsed = true
 		lines, w := m.sidebarPanelLinesForTree(tree)
 
@@ -292,7 +293,7 @@ func TestStripInksSeverityInExactlyOnePlace(t *testing.T) {
 func TestStripBadgeLeadsTheSpine(t *testing.T) {
 	m, tree := stripOS(t, 120, 20)
 	lines := railPlain(t, m, tree)
-	rule := config.GetWindowBorderLeft()
+	rule := config.Global.GetWindowBorderLeft()
 
 	if lines[0] != "  "+rule {
 		t.Errorf("line 0 = %q, want a pad above the badge", lines[0])
@@ -311,6 +312,7 @@ func TestStripBadgeLeadsTheSpine(t *testing.T) {
 	}
 
 	quiet, qtree := quietStripOS(t, 120, 20)
+	m.Settings = config.Global
 	if got := railPlain(t, quiet, qtree)[1]; got != "+s"+rule {
 		t.Errorf("with nothing blocked line 1 = %q, want the stack, not a reserved hole", got)
 	}
@@ -369,7 +371,7 @@ func TestStripListsKeepOneShapeAtOneInterval(t *testing.T) {
 		t.Fatalf("the sessions list drew %d marks, want one per session:\n%s", len(marks), strings.Join(lines, "\n"))
 	}
 	for i, l := range marks {
-		body := strings.TrimSuffix(l, config.GetWindowBorderLeft())
+		body := strings.TrimSuffix(l, config.Global.GetWindowBorderLeft())
 		if strings.TrimSpace(body) == "" {
 			t.Errorf("session mark %d is a blank row: %q", i, l)
 		}
@@ -416,7 +418,7 @@ func TestStripSpacingCollapsesBeforeMarksDrop(t *testing.T) {
 func TestStripPacksThenSaysWhatItCut(t *testing.T) {
 	m, tree := manySessionsOS(t, 120, 9)
 	lines := railPlain(t, m, tree)
-	rule := config.GetWindowBorderLeft()
+	rule := config.Global.GetWindowBorderLeft()
 
 	want := []string{
 		"  " + rule,
@@ -478,6 +480,7 @@ func TestStripHitsAndNavStayIndexForIndex(t *testing.T) {
 	for _, pos := range []string{"left", "right"} {
 		m, tree := stripOS(t, 120, 20)
 		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		m.Settings = config.Global
 		m.SidebarCollapsed = true
 		lines, w := m.sidebarPanelLinesForTree(tree)
 
@@ -525,11 +528,11 @@ func TestStripHitsAndNavStayIndexForIndex(t *testing.T) {
 // stays as the boundary of last resort.
 func TestStripASCIIAndMonochromeBothStayCoherent(t *testing.T) {
 	t.Run("ascii", func(t *testing.T) {
-		prev := config.UseASCIIOnly
-		config.UseASCIIOnly = true
+		prev := config.Global.UseASCIIOnly
+		config.Global.UseASCIIOnly = true
 		overlay.SetASCII(true)
 		t.Cleanup(func() {
-			config.UseASCIIOnly = prev
+			config.Global.UseASCIIOnly = prev
 			overlay.SetASCII(prev)
 		})
 
@@ -552,8 +555,10 @@ func TestStripASCIIAndMonochromeBothStayCoherent(t *testing.T) {
 		// Monochrome is the rendered frame with every colour dropped, which is
 		// what a terminal with no palette to give leaves on screen.
 		m, tree := stripOS(t, 120, 20)
+
+		m.Settings = config.Global
 		lines := railPlain(t, m, tree)
-		rule := config.GetWindowBorderLeft()
+		rule := config.Global.GetWindowBorderLeft()
 		joined := strings.Join(lines, "\n")
 
 		for i, l := range lines {
@@ -577,6 +582,7 @@ func TestStripTooltipsStillPopAndStayOnScreen(t *testing.T) {
 	for _, pos := range []string{"left", "right"} {
 		m, tree := stripOS(t, 120, 20)
 		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		m.Settings = config.Global
 		m.SidebarCollapsed = true
 		m.sidebarPanelLinesForTree(tree)
 

@@ -2,7 +2,6 @@ package app
 
 import (
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // QuitMenuKind names what a quit-menu row does when run.
@@ -211,10 +210,10 @@ func (m *OS) KillSessionGoNext(next string) tea.Cmd {
 	}
 	if m.DaemonClient != nil {
 		if err := m.DaemonClient.KillSessionByName(old); err != nil {
-			m.ShowNotification("Kill failed: "+err.Error(), "error", config.NotificationDuration*2)
+			m.ShowNotification("Kill failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 			return nil
 		}
 	}
-	m.ShowNotification("Killed session: "+oldLabel, "success", config.NotificationDuration)
+	m.ShowNotification("Killed session: "+oldLabel, "success", m.Settings.NotificationDuration)
 	return nil
 }

@@ -22,7 +22,7 @@ import (
 // rather than a package global, so the assertion does not depend on what any
 // other test in the binary left behind.
 func TestSettingsTellsTheTruthAboutUnsetValues(t *testing.T) {
-	m := &OS{Width: 120, Height: 40, UserConfig: config.DefaultConfig()}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40, UserConfig: config.DefaultConfig()}
 	m.ShowSettings = true
 
 	row := settingsRowNamed(t, m, "Preferred shell")
@@ -51,7 +51,7 @@ func TestSettingsTellsTheTruthAboutUnsetValues(t *testing.T) {
 // uses, with the swatch of the colour in force in front of it, so an unset row
 // says where its colour comes from and still shows what that colour is.
 func TestColourRowFramesItsValueBesideItsSwatch(t *testing.T) {
-	m := &OS{Width: 120, Height: 40, UserConfig: config.DefaultConfig()}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40, UserConfig: config.DefaultConfig()}
 	m.ShowSettings = true
 	row := settingsRowNamed(t, m, "Focused border color")
 
@@ -86,7 +86,7 @@ func settingsRowLine(t *testing.T, m *OS, label string) string {
 // TestSettingsExamplesLiveOnTheDescriptionLine checks the example did not just
 // disappear: it is still there to copy, one line down.
 func TestSettingsExamplesLiveOnTheDescriptionLine(t *testing.T) {
-	m := &OS{Width: 120, Height: 40, UserConfig: config.DefaultConfig()}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40, UserConfig: config.DefaultConfig()}
 	m.ShowSettings = true
 	row := settingsRowNamed(t, m, "Preferred shell")
 	if !strings.Contains(row.Desc, row.Placeholder) {

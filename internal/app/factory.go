@@ -131,7 +131,7 @@ func NewOS(opts OSOptions) *OS {
 		// Routed verbs, for the hosts that cannot Send into the program. The
 		// local attach client leaves this unused. See dock_remote.go.
 		RemoteCommandChan: make(chan RemoteCommandMsg, remoteCommandQueue),
-		MasterRatio:       config.MasterRatioFraction(),
+		MasterRatio:       config.Global.MasterRatioFraction(),
 		CurrentWorkspace:  1,
 		NumWorkspaces:     numWorkspaces,
 
@@ -164,18 +164,24 @@ func NewOS(opts OSOptions) *OS {
 		RemoteClient:    opts.RemoteClient,
 		Caps:            caps,
 
+		// One struct copy of the process seed, and from here on this session's
+		// own. The entrypoints have already applied the config file and the
+		// flags to config.Global, single-threaded, before any connection was
+		// served; nothing writes it after that.
+		Settings: config.Global,
+
 		// Daemon connection
 		DaemonClient: opts.DaemonClient,
 		SessionName:  opts.SessionName,
 
 		// Pane geometry inputs start at this client's config and are settled
 		// across the session by state sync; see the field comment in os.go.
-		SharedBorders:           config.SharedBorders,
-		PaneGap:                 config.PaneGap,
-		ScrollColumnWidth:       config.ScrollColumnWidth,
-		lastConfigSharedBorders: config.SharedBorders,
-		lastConfigPaneGap:       config.PaneGap,
-		lastConfigScrollWidth:   config.ScrollColumnWidth,
+		SharedBorders:           config.Global.SharedBorders,
+		PaneGap:                 config.Global.PaneGap,
+		ScrollColumnWidth:       config.Global.ScrollColumnWidth,
+		lastConfigSharedBorders: config.Global.SharedBorders,
+		lastConfigPaneGap:       config.Global.PaneGap,
+		lastConfigScrollWidth:   config.Global.ScrollColumnWidth,
 	}
 
 	// Sidebar order and expand/collapse state survive restarts; a load failure
