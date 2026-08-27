@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -42,6 +43,26 @@ func fileViewTree(t *testing.T) string {
 
 var wantFileOrder = []string{"apple", "Zeta", "Alpha.go", "beta.txt", "README.md"}
 
+// loadFileViewNow reads dir into the files section and waits for the answer.
+//
+// It goes through the real command and the real handler rather than filling the
+// model in: the read runs on its own goroutine in the app, so a test that wrote
+// the entries directly would prove nothing about the path that actually runs,
+// including the generation guard that decides whether a reply is applied at all.
+func (m *OS) loadFileViewNow(t *testing.T, dir string) {
+	t.Helper()
+	m.filesView.Show = 1
+	cmd := m.requestFileList(dir, m.filesView.Origin, true)
+	if cmd == nil {
+		t.Fatalf("no read was scheduled for %q", dir)
+	}
+	msg, ok := cmd().(fileListMsg)
+	if !ok {
+		t.Fatalf("the read answered with %T, not a listing", msg)
+	}
+	m.HandleFileList(msg)
+}
+
 // TestFileViewOrdersFoldersFirst.
 //
 // Negative control, both confirmed red: with the sort's IsDir clause removed
@@ -49,7 +70,7 @@ var wantFileOrder = []string{"apple", "Zeta", "Alpha.go", "beta.txt", "README.md
 // strings.ToLower dropped, Zeta sorts before apple.
 func TestFileViewOrdersFoldersFirst(t *testing.T) {
 	m := &OS{}
-	m.loadFileView(fileViewTree(t))
+	m.loadFileViewNow(t, fileViewTree(t))
 
 	if m.filesView.Err != "" {
 		t.Fatalf("reading the tree failed: %s", m.filesView.Err)
@@ -77,20 +98,35 @@ func TestFileViewOrdersFoldersFirst(t *testing.T) {
 func TestFileViewNavigatesWithoutTouchingAnyPane(t *testing.T) {
 	root := fileViewTree(t)
 	m := &OS{}
-	m.filesView.Open = true
-	m.loadFileView(root)
+	m.loadFileViewNow(t, root)
 
-	// "apple" is the first entry, per the order pinned above.
-	if cmd := m.FileViewEnter(0); cmd != nil {
-		t.Error("walking into a folder produced a command; it should only move the listing")
+	// A pane that would notice being typed into. Nothing here may reach it.
+	win, typedInto := cdProbe(t, "aaaaaaaa1111")
+	m.Windows = []*terminal.Window{win}
+	m.filesView.Origin = win.ID
+
+	// "apple" is the first entry, per the order pinned above. Walking into it
+	// answers with the command that reads the folder, and with nothing else.
+	cmd := m.FileViewEnter(0)
+	if cmd == nil {
+		t.Fatal("walking into a folder scheduled no read")
 	}
+	m.HandleFileList(cmd().(fileListMsg))
 	if got, want := m.FileViewDir(), filepath.Join(root, "apple"); got != want {
 		t.Fatalf("after entering the folder the view is at %q, want %q", got, want)
 	}
+	if typed := typedInto(); typed != "" {
+		t.Errorf("walking into a folder typed %q into the pane", typed)
+	}
 
-	m.FileViewUp()
+	if cmd := m.FileViewUp(); cmd != nil {
+		m.HandleFileList(cmd().(fileListMsg))
+	}
 	if got := m.FileViewDir(); got != root {
 		t.Fatalf("after going up the view is at %q, want %q", got, root)
+	}
+	if typed := typedInto(); typed != "" {
+		t.Errorf("walking out of a folder typed %q into the pane", typed)
 	}
 
 	// A file answers with a clipboard write and leaves the listing where it is.
@@ -108,8 +144,7 @@ func TestFileViewNavigatesWithoutTouchingAnyPane(t *testing.T) {
 // must not reload forever or blank the view.
 func TestFileViewUpStopsAtTheRoot(t *testing.T) {
 	m := &OS{}
-	m.filesView.Open = true
-	m.loadFileView(string(filepath.Separator))
+	m.loadFileViewNow(t, string(filepath.Separator))
 	gen := m.filesView.Gen
 	m.FileViewUp()
 	if m.filesView.Gen != gen {
@@ -124,7 +159,7 @@ func TestFileViewUpStopsAtTheRoot(t *testing.T) {
 // showing an empty folder, which is a different and misleading fact.
 func TestUnreadableDirectoryIsReported(t *testing.T) {
 	m := &OS{}
-	m.loadFileView(filepath.Join(t.TempDir(), "not-there"))
+	m.loadFileViewNow(t, filepath.Join(t.TempDir(), "not-there"))
 	if m.filesView.Err == "" {
 		t.Fatal("a missing directory reported no error")
 	}
@@ -181,8 +216,7 @@ func TestPaneBusyReasonRefusesWhenSomethingIsRunning(t *testing.T) {
 // tied to any pane, so there is no pane the cd could mean.
 func TestFileViewCdRefusesWithoutAnOrigin(t *testing.T) {
 	m := &OS{}
-	m.filesView.Open = true
-	m.loadFileView(t.TempDir())
+	m.loadFileViewNow(t, t.TempDir())
 	m.FileViewCd()
 	if len(m.Notifications) == 0 {
 		t.Error("a cd with no origin pane said nothing")
@@ -209,64 +243,194 @@ func TestShellQuoteSurvivesAHostileName(t *testing.T) {
 	}
 }
 
-// TestFileViewFollowsThePaneItWasOpenedFrom, and only while it is still showing
-// that pane's own directory: a user who has walked somewhere else is not dragged
-// back by a cd in the terminal.
-func TestFileViewFollowsThePaneItWasOpenedFrom(t *testing.T) {
+// runSync drives the one comparison Update makes after every message: does the
+// files section still agree with the focused pane's directory. It runs the
+// command it produces and applies the reply, which is what the loop does one
+// message later.
+func (m *OS) runSync(t *testing.T) bool {
+	t.Helper()
+	cmd := m.FilesSyncCmd()
+	if cmd == nil {
+		return false
+	}
+	msg, ok := cmd().(fileListMsg)
+	if !ok {
+		t.Fatalf("the sync read answered with %T, not a listing", msg)
+	}
+	m.HandleFileList(msg)
+	return true
+}
+
+// TestFilesSectionFollowsTheFocusedPane. The section is not a mode any more, so
+// it has no gesture that says which directory it is about: it follows whatever
+// pane has the focus, and a cd in that pane moves it.
+//
+// Negative control, confirmed red: return the focused window's ID rather than
+// its Cwd from filesWantDir, so the section asks for a window id as a path, and
+// the listing lands on an unreadable directory instead of the pane's.
+func TestFilesSectionFollowsTheFocusedPane(t *testing.T) {
 	root := fileViewTree(t)
 	sub := filepath.Join(root, "apple")
 
-	win := &terminal.Window{ID: "aaaaaaaa1111", Cwd: root}
-	m := &OS{Windows: []*terminal.Window{win}}
-	m.filesView.Open = true
-	m.filesView.Origin = win.ID
-	m.loadFileView(root)
+	m := sidebarTestOS(t, 120, 40, "left")
+	m.filesView.Show = 1
+	m.Windows[0].Cwd = root
+	m.FocusedWindow = 0
 
-	m.recordWindowCwd(win.ID, "file://"+sub)
-	if got := m.FileViewDir(); got != sub {
-		t.Errorf("the view did not follow the pane: at %q, want %q", got, sub)
+	if !m.runSync(t) {
+		t.Fatal("the section asked for nothing with a focused pane in a known directory")
 	}
-	if win.Cwd != sub {
-		t.Errorf("the window's own cwd was not recorded: %q", win.Cwd)
+	if got := m.FileViewDir(); got != root {
+		t.Fatalf("the section is at %q, want the pane's own directory %q", got, root)
+	}
+	if m.runSync(t) {
+		t.Error("the section asked for the same directory twice")
+	}
+
+	// The pane cds. The next message the loop sees carries the section with it.
+	m.onCwdChange(CwdChangedMsg{WindowID: m.Windows[0].ID, Cwd: "file://" + sub})
+	if !m.runSync(t) {
+		t.Fatal("a cd in the focused pane did not move the section")
+	}
+	if got := m.FileViewDir(); got != sub {
+		t.Errorf("the section did not follow the pane: at %q, want %q", got, sub)
+	}
+	if m.Windows[0].Cwd != sub {
+		t.Errorf("the window's own cwd was not recorded: %q", m.Windows[0].Cwd)
+	}
+
+	// And the focus moving to a pane in another directory takes it there.
+	m.Windows[1].Cwd = root
+	m.FocusedWindow = 1
+	if !m.runSync(t) {
+		t.Fatal("moving the focus to a pane elsewhere did not move the section")
+	}
+	if got := m.FileViewDir(); got != root {
+		t.Errorf("after the focus moved the section is at %q, want %q", got, root)
 	}
 }
 
-// TestFileViewDoesNotDragTheUserBack is the other half of the rule above, and
-// the half that is easy to get wrong: once the user has steered the listing
+// TestFilesSectionDoesNotDragTheUserBack is the other half of the rule above,
+// and the half that is easy to get wrong: once the user has steered the listing
 // somewhere of their own, a cd in the terminal must leave it there. The listing
 // is then answering a question they asked and the pane's directory is not.
 //
-// Negative control, confirmed red: drop the "still on the pane's own directory"
-// clause from recordWindowCwd's guard, so the view follows every cd of its
-// origin pane, and this fails with the listing dragged to the pane's directory.
-//
-// The control this comment used to name (read the pane's cwd back off the
-// window after overwriting it, rather than capturing the previous value first)
-// was run and does not turn this test red. It makes the guard compare the
-// listing against the new directory instead of the old one, so the view stops
-// following rather than always following, and it is the test above that goes
-// red. Both directions are covered; only the label was wrong.
-func TestFileViewDoesNotDragTheUserBack(t *testing.T) {
+// Negative controls, both confirmed red: drop the Pinned clause from
+// filesWantDir, and the cd drags the listing back to the pane's directory; drop
+// the Origin comparison beside it, and the listing stays pinned after the focus
+// has moved to a pane the user never steered.
+func TestFilesSectionDoesNotDragTheUserBack(t *testing.T) {
 	root := fileViewTree(t)
 	sub := filepath.Join(root, "apple")
 	elsewhere := filepath.Join(root, "Zeta")
 
-	win := &terminal.Window{ID: "aaaaaaaa1111", Cwd: root}
-	m := &OS{Windows: []*terminal.Window{win}}
-	m.filesView.Open = true
-	m.filesView.Origin = win.ID
-	m.loadFileView(root)
+	m := sidebarTestOS(t, 120, 40, "left")
+	m.filesView.Show = 1
+	m.Windows[0].Cwd = root
+	m.FocusedWindow = 0
+	m.runSync(t)
 
 	// The user walks the listing into Zeta. The pane is still in root.
-	m.loadFileView(elsewhere)
+	if cmd := m.requestFileList(elsewhere, m.filesView.Origin, true); cmd != nil {
+		m.HandleFileList(cmd().(fileListMsg))
+	}
 
 	// The pane now cds to apple. The listing must stay where the user put it.
-	m.recordWindowCwd(win.ID, "file://"+sub)
+	m.onCwdChange(CwdChangedMsg{WindowID: m.Windows[0].ID, Cwd: "file://" + sub})
+	if m.runSync(t) {
+		t.Error("a cd in the pane moved a listing the user had steered")
+	}
 	if got := m.FileViewDir(); got != elsewhere {
 		t.Errorf("a cd in the pane dragged the listing to %q; it should have stayed at %q", got, elsewhere)
 	}
-	if win.Cwd != sub {
-		t.Errorf("the pane's own cwd was not recorded: %q", win.Cwd)
+	if m.Windows[0].Cwd != sub {
+		t.Errorf("the pane's own cwd was not recorded: %q", m.Windows[0].Cwd)
+	}
+
+	// The pin is about one pane. Focusing another drops it, because the listing
+	// is then about a pane the user has steered nothing in.
+	m.Windows[1].Cwd = root
+	m.FocusedWindow = 1
+	if !m.runSync(t) {
+		t.Fatal("the pin outlived the pane it was made in")
+	}
+	if got := m.FileViewDir(); got != root {
+		t.Errorf("after the focus moved the section is at %q, want %q", got, root)
+	}
+}
+
+// TestFileReadRunsOffTheUpdateGoroutine is the claim this whole design rests on:
+// a directory that never answers must not hold the client.
+//
+// The reader is replaced with one that blocks on a channel, which is what a
+// hung NFS or sshfs mount does to a real one. Update is then driven with the
+// same messages the loop sees, and it has to keep returning, keep drawing, and
+// keep the "loading" row up rather than the wrong listing.
+//
+// Negative control, confirmed red: call readDirFunc from requestFileList itself
+// instead of from inside the returned command, which is what the section did
+// while it was a mode, and Update never returns.
+func TestFileReadRunsOffTheUpdateGoroutine(t *testing.T) {
+	root := fileViewTree(t)
+
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	restore := readDirFunc
+	readDirFunc = func(dir string, limit int) ([]os.DirEntry, bool, error) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-release
+		return restore(dir, limit)
+	}
+	t.Cleanup(func() {
+		readDirFunc = restore
+		close(release)
+	})
+
+	m := sidebarTestOS(t, 120, 40, "left")
+	m.filesView.Show = 1
+	m.Windows[0].Cwd = root
+	m.FocusedWindow = 0
+
+	cmd := m.FilesSyncCmd()
+	if cmd == nil {
+		t.Fatal("the section scheduled no read")
+	}
+	go func() {
+		if msg := cmd(); msg != nil {
+			// The reply is thrown away: this test is about the loop staying
+			// alive while the read is stuck, not about what comes back.
+			_ = msg
+		}
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the read never started")
+	}
+
+	// The read is now stuck in the kernel. Everything the loop does next has to
+	// come back anyway.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 20 {
+			m.Update(TickerMsg(time.Now()))
+		}
+		railLines(t, m)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the client stopped answering while a directory read was stuck")
+	}
+
+	// And the section says a read is running rather than showing a listing it
+	// does not have.
+	if out := strings.Join(railLines(t, m), "\n"); !strings.Contains(out, "loading") {
+		t.Errorf("a section waiting on a stuck read does not say so:\n%s", out)
 	}
 }
 
@@ -308,7 +472,7 @@ func TestALargeDirectoryIsBounded(t *testing.T) {
 	}
 
 	m := &OS{}
-	m.loadFileView(dir)
+	m.loadFileViewNow(t, dir)
 	if m.filesView.Err != "" {
 		t.Fatalf("reading the tree failed: %s", m.filesView.Err)
 	}
@@ -322,7 +486,7 @@ func TestALargeDirectoryIsBounded(t *testing.T) {
 
 	// And a directory under the cap is not marked, so the note only ever
 	// appears where it is true.
-	m.loadFileView(fileViewTree(t))
+	m.loadFileViewNow(t, fileViewTree(t))
 	if m.filesView.Capped {
 		t.Error("a five-name directory reported itself as cut short")
 	}

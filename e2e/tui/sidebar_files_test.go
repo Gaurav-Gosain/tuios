@@ -9,15 +9,15 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The rail's file view, on the host's own grid.
+// The rail's files section, on the host's own grid.
 //
-// Everything else that covers this mode renders the rail in process and reads
+// Everything else that covers the section renders the rail in process and reads
 // the strings back. This drives it the way a person does: a real shell reports a
-// real directory, a real click opens the listing, and the names are read off the
-// terminal the client drew into. Model state and pixels disagreeing is the
-// failure this codebase keeps hitting, and a rail that lays out correctly in a
-// unit test and lands in the wrong columns on screen would pass every other test
-// this mode has.
+// real directory, a real click puts the section on the rail, and the names are
+// read off the terminal the client drew into. Model state and pixels disagreeing
+// is the failure this codebase keeps hitting, and a rail that lays out correctly
+// in a unit test and lands in the wrong columns on screen would pass every other
+// test the section has.
 
 // fileViewFixture builds a directory whose listing has a knowable shape: two
 // folders and one file, named so that folders-first and plain alphabetical
@@ -36,12 +36,11 @@ func fileViewFixture(t *testing.T) string {
 	return dir
 }
 
-// TestRailFileViewListsThePanesFolder.
+// TestRailFilesSectionListsThePanesFolder.
 //
-// Negative control, confirmed red: with the filesView.Open branch removed from
-// sidebarPanelLinesForTree the rail keeps drawing "sessions" and the wait for
-// the listing times out.
-func TestRailFileViewListsThePanesFolder(t *testing.T) {
+// Negative control, confirmed red: skip the files section in the layout draw
+// loop of sidebarPanelLinesForTree and the wait for the listing times out.
+func TestRailFilesSectionListsThePanesFolder(t *testing.T) {
 	dir := fileViewFixture(t)
 
 	term, _ := start(t, startOpts{})
@@ -64,23 +63,20 @@ func TestRailFileViewListsThePanesFolder(t *testing.T) {
 		t.Fatalf("the rail never came up: %v\n%s", err, term.Snapshot())
 	}
 
-	// The way in is the footer's own control, clicked where it is drawn. The
-	// rectangle is the renderer's, so a click that lands on the word is a click
-	// on the zone.
-	col, row, ok := findOnGrid(term.Screen(), "files")
-	if !ok {
-		t.Fatalf("the rail drew no files control:\n%s", term.Snapshot())
-	}
-	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
+	// No gesture opens it. The section is part of the rail's shipped layout and
+	// it follows the focused pane, so the listing arrives on its own once the
+	// shell has said where it is. That is the change this branch made, and
+	// waiting for it rather than clicking for it is what checks it.
 
-	// The listing replaces the sections outright, which is the whole design
-	// decision: both halves are checked, so a mode drawn on top of the sections
-	// fails as loudly as one that never appears.
+	// The listing sits beside the rail's other sections rather than replacing
+	// them, which is the design decision this branch changed: both halves are
+	// checked, so a listing that took the rail over fails as loudly as one that
+	// never appears.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		txt := s.Text()
-		return strings.Contains(txt, "alpha/") && !strings.Contains(txt, sidebarHeader)
+		return strings.Contains(txt, "alpha/") && strings.Contains(txt, sidebarHeader)
 	}, uiTimeout); err != nil {
-		t.Fatalf("the file view never listed the pane's folder: %v\n%s", err, term.Snapshot())
+		t.Fatalf("the files section never listed the pane's folder: %v\n%s", err, term.Snapshot())
 	}
 
 	snap := term.Screen()
@@ -91,7 +87,7 @@ func TestRailFileViewListsThePanesFolder(t *testing.T) {
 		}
 	}
 	// A folder wears a trailing slash and a file does not, which is the whole
-	// of `ls -F`'s distinction and needs no glyph.
+	// of `ls -F`'s distinction and is what the row says with no icon at all.
 	if strings.Contains(txt, "brief.txt/") {
 		t.Errorf("a file was drawn as a folder:\n%s", term.Snapshot())
 	}
@@ -122,5 +118,32 @@ func TestRailFileViewListsThePanesFolder(t *testing.T) {
 		t.Errorf("clicking a folder typed a cd at the pane:\n%s", term.Snapshot())
 	}
 
-	alive(t, term, "after browsing the rail's file view")
+	// The footer control is the switch, and it is the way off as well as on: a
+	// section the user cannot take off the rail is one they are stuck with.
+	col, row, ok := findFooterFiles(term.Screen())
+	if !ok {
+		t.Fatalf("the rail drew no files control:\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		txt := s.Text()
+		return !strings.Contains(txt, "brief.txt") && strings.Contains(txt, sidebarHeader)
+	}, uiTimeout); err != nil {
+		t.Fatalf("the footer control did not take the section off the rail: %v\n%s", err, term.Snapshot())
+	}
+
+	alive(t, term, "after browsing the rail's files section")
+}
+
+// findFooterFiles locates the footer's "files" control, which is the last row
+// of the rail. The word also names the section's own header, so a plain search
+// for it finds the header first and clicks a path instead of a control.
+func findFooterFiles(s tuitest.Screen) (int, int, bool) {
+	lines := strings.Split(s.Text(), "\n")
+	for row := len(lines) - 1; row >= 0; row-- {
+		if col := strings.Index(lines[row], "files"); col >= 0 {
+			return col, row, true
+		}
+	}
+	return 0, 0, false
 }

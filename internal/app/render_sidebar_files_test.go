@@ -4,14 +4,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/x/ansi"
 )
 
 // These read the rail's composed output rather than its state. Model state and
-// pixels disagreeing is the failure this codebase keeps hitting, so the mode's
-// claim that it replaces the sections is checked by looking at what is drawn.
+// pixels disagreeing is the failure this codebase keeps hitting, so the files
+// section's claims about where its rows land are checked by looking at what is
+// drawn.
 
 // railLines renders the rail and returns its rows with the styling stripped.
 func railLines(t *testing.T, m *OS) []string {
@@ -27,21 +31,39 @@ func railLines(t *testing.T, m *OS) []string {
 	return out
 }
 
-// TestFileViewReplacesTheSectionsOnScreen is the whole design decision, checked
-// where it matters: the mode costs the three sections nothing when it is off,
-// and takes the rail when it is on.
+// openFilesOn puts the files section on the rail and waits for its first
+// listing, so a render test has names to look at. It drives the real command,
+// which is the only way the entries ever arrive in the app.
+func openFilesOn(t *testing.T, m *OS, dir string) {
+	t.Helper()
+	if !m.OpenFileView(dir) {
+		t.Fatal("OpenFileView refused a rail that is on and expanded")
+	}
+	cmd := m.TakeSidebarCmd()
+	if cmd == nil {
+		t.Fatal("opening the section scheduled no read")
+	}
+	msg, ok := cmd().(fileListMsg)
+	if !ok {
+		t.Fatalf("the read answered with %T, not a listing", msg)
+	}
+	m.HandleFileList(msg)
+}
+
+// TestFilesSectionSitsBesideTheOtherSections is the design decision this branch
+// changed, checked where it matters: the listing is a section on the rail, not
+// a mode that hides the rail's other sections.
 //
-// Negative control, confirmed red: with the filesView.Open branch removed from
-// sidebarPanelLinesForTree, the rail keeps drawing "sessions" and the listing
-// never appears.
+// It replaces TestFileViewReplacesTheSectionsOnScreen, which pinned exactly the
+// opposite and had to go: it asserted that opening the listing took "sessions"
+// and "terminals" off the screen. That was the old design and the maintainer
+// asked for the other one, so the test is inverted rather than deleted, and the
+// half of it that is still true (the header, the folders, the files, the path,
+// and the way back to a rail without the section) is kept.
 //
-// The other control this comment used to name (move the branch above the
-// collapsed-strip return, so a folded rail draws a path into three columns) was
-// run and turns nothing red, because the mode can never be open on a folded
-// rail: OpenFileView refuses to enter it there and collapsing leaves it. Those
-// two guards are what the invariant actually rests on, and
-// TestTheFileViewAndTheFoldedRailAreExclusive pins them.
-func TestFileViewReplacesTheSectionsOnScreen(t *testing.T) {
+// Negative control, confirmed red: skip the files section in the layout draw
+// loop, and the rail keeps its three sections but never draws a listing.
+func TestFilesSectionSitsBesideTheOtherSections(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 
 	before := strings.Join(railLines(t, m), "\n")
@@ -50,35 +72,29 @@ func TestFileViewReplacesTheSectionsOnScreen(t *testing.T) {
 	}
 
 	dir := fileViewTree(t)
-	if !m.OpenFileView(dir) {
-		t.Fatal("OpenFileView refused a rail that is on and expanded")
-	}
+	openFilesOn(t, m, dir)
 	after := strings.Join(railLines(t, m), "\n")
 
-	if strings.Contains(after, "sessions") || strings.Contains(after, "terminals") {
-		t.Errorf("the file view left the sections on screen:\n%s", after)
+	for _, want := range []string{"sessions", "terminals", "files", "apple/", "README.md"} {
+		if !strings.Contains(after, want) {
+			t.Errorf("the rail with a files section does not show %q:\n%s", want, after)
+		}
 	}
-	if !strings.Contains(after, "files") {
-		t.Errorf("the file view drew no header:\n%s", after)
-	}
-	// Folders wear a trailing slash and come first, per fileViewTree's order.
-	if !strings.Contains(after, "apple/") {
-		t.Errorf("the listing does not show its folders:\n%s", after)
-	}
-	if !strings.Contains(after, "README.md") {
-		t.Errorf("the listing does not show its files:\n%s", after)
-	}
-	// The path row names the directory, cut from the front so the last
-	// component always survives.
+	// The header names the directory, cut from the front so the last component
+	// always survives.
 	if !strings.Contains(after, filepath.Base(dir)) {
-		t.Errorf("the path row does not name the directory %q:\n%s", dir, after)
+		t.Errorf("the files header does not name the directory %q:\n%s", dir, after)
 	}
 
-	// And back again: closing restores exactly what was there before.
+	// And back again: switching the section off restores exactly what was there
+	// before, with no listing left on the rail.
 	m.CloseFileView()
 	restored := strings.Join(railLines(t, m), "\n")
 	if !strings.Contains(restored, "sessions") || !strings.Contains(restored, "terminals") {
-		t.Errorf("closing the file view did not bring the sections back:\n%s", restored)
+		t.Errorf("switching the files section off took the other sections with it:\n%s", restored)
+	}
+	if strings.Contains(restored, "apple/") {
+		t.Errorf("a rail with the files section off is still drawing a listing:\n%s", restored)
 	}
 }
 
@@ -92,9 +108,7 @@ func TestFileViewReplacesTheSectionsOnScreen(t *testing.T) {
 // before, every rectangle is one row low and this fails on the first entry.
 func TestFileViewRowsAreClickableWhereTheyAreDrawn(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
-	if !m.OpenFileView(fileViewTree(t)) {
-		t.Fatal("OpenFileView refused")
-	}
+	openFilesOn(t, m, fileViewTree(t))
 	lines := railLines(t, m)
 	top := m.GetTopMargin()
 
@@ -123,9 +137,7 @@ func TestFileViewRowsAreClickableWhereTheyAreDrawn(t *testing.T) {
 func TestFileViewClickWalksIntoAFolder(t *testing.T) {
 	root := fileViewTree(t)
 	m := sidebarTestOS(t, 120, 40, "left")
-	if !m.OpenFileView(root) {
-		t.Fatal("OpenFileView refused")
-	}
+	openFilesOn(t, m, root)
 	railLines(t, m)
 
 	var target sidebarRowHit
@@ -141,8 +153,96 @@ func TestFileViewClickWalksIntoAFolder(t *testing.T) {
 	if !m.SidebarClick(target.X0+1, target.Y0, false) {
 		t.Fatal("the rail did not consume a click on one of its own rows")
 	}
+	// The click schedules the read; the loop runs it and hands the reply back.
+	cmd := m.TakeSidebarCmd()
+	if cmd == nil {
+		t.Fatal("the click on a folder scheduled no read")
+	}
+	m.HandleFileList(cmd().(fileListMsg))
 	if got, want := m.FileViewDir(), filepath.Join(root, "apple"); got != want {
 		t.Errorf("the click left the view at %q, want %q", got, want)
+	}
+}
+
+// cdProbe is a pane whose writes are recorded instead of reaching a PTY, so a
+// test can assert the bytes a cd actually typed rather than that a function was
+// called. The window is a real daemon window, so SendInput takes the same path
+// it takes for an attached client.
+func cdProbe(t *testing.T, id string) (*terminal.Window, func() string) {
+	t.Helper()
+	win := newTestWindow(t, id, 40, 10)
+	var mu sync.Mutex
+	var buf strings.Builder
+	win.DaemonWriteFunc = func(b []byte) error {
+		mu.Lock()
+		defer mu.Unlock()
+		buf.Write(b)
+		return nil
+	}
+	return win, func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return buf.String()
+	}
+}
+
+// TestFolderClickCanCdThePane is the option the maintainer asked for: a click
+// on a folder can walk the listing, tell the pane to cd there, or do both.
+//
+// The pane is a real one with a real PTY, so what is asserted is what the shell
+// actually received, not that a function was called.
+//
+// Negative controls, all three confirmed red: with the folder_click test
+// dropped from FileViewEnter so it always navigates, the cd and both cases see
+// nothing typed; with it always sending a cd, the navigate case types into the
+// pane it must not touch.
+func TestFolderClickCanCdThePane(t *testing.T) {
+	for _, tc := range []struct {
+		mode         string
+		wantNavigate bool
+		wantCd       bool
+	}{
+		{config.SidebarFolderClickNavigate, true, false},
+		{config.SidebarFolderClickCd, false, true},
+		{config.SidebarFolderClickBoth, true, true},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			root := fileViewTree(t)
+			sub := filepath.Join(root, "apple")
+
+			win, typedInto := cdProbe(t, "aaaaaaaa1111")
+			win.Cwd = root
+			m := &OS{Windows: []*terminal.Window{win}}
+			m.filesView.Show = 1
+			m.filesView.Origin = win.ID
+			m.loadFileViewNow(t, root)
+
+			prev := config.SidebarFolderClick
+			config.SidebarFolderClick = tc.mode
+			t.Cleanup(func() { config.SidebarFolderClick = prev })
+
+			// "apple" is the first entry, per the order fileViewTree pins.
+			cmd := m.FileViewEnter(0)
+			if (cmd != nil) != tc.wantNavigate {
+				t.Errorf("%s scheduled a listing read: %v, want %v", tc.mode, cmd != nil, tc.wantNavigate)
+			}
+			if cmd != nil {
+				m.HandleFileList(cmd().(fileListMsg))
+				if got := m.FileViewDir(); got != sub {
+					t.Errorf("%s left the listing at %q, want %q", tc.mode, got, sub)
+				}
+			} else if got := m.FileViewDir(); got != root {
+				t.Errorf("%s moved the listing to %q with navigation off", tc.mode, got)
+			}
+
+			typed := typedInto()
+			if got := strings.Contains(typed, "cd "); got != tc.wantCd {
+				t.Errorf("%s typed %q into the pane; wanted a cd: %v", tc.mode, typed, tc.wantCd)
+			}
+			if tc.wantCd && !strings.Contains(typed, shellQuote(sub)) {
+				t.Errorf("%s typed %q, which does not name %q", tc.mode, typed, sub)
+			}
+		})
 	}
 }
 
@@ -151,9 +251,7 @@ func TestFileViewClickWalksIntoAFolder(t *testing.T) {
 // different and misleading fact.
 func TestFileViewShowsAnUnreadableDirectory(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
-	if !m.OpenFileView(filepath.Join(t.TempDir(), "not-there")) {
-		t.Fatal("OpenFileView refused")
-	}
+	openFilesOn(t, m, filepath.Join(t.TempDir(), "not-there"))
 	out := strings.Join(railLines(t, m), "\n")
 	if !strings.Contains(out, "gone") {
 		t.Errorf("the rail did not say the folder is gone:\n%s", out)
@@ -176,7 +274,10 @@ func TestFileViewRowsFitTheRail(t *testing.T) {
 	for _, size := range []struct{ w, h int }{{120, 40}, {80, 24}, {90, 10}} {
 		m := sidebarTestOS(t, size.w, size.h, "left")
 		if !m.OpenFileView(dir) {
-			continue // too narrow for the mode, which is its own correct answer
+			continue // too narrow for the section, which is its own correct answer
+		}
+		if cmd := m.TakeSidebarCmd(); cmd != nil {
+			m.HandleFileList(cmd().(fileListMsg))
 		}
 		lines, w := m.sidebarPanelLines()
 		for i, ln := range lines {
@@ -214,121 +315,153 @@ func TestTruncPathLeftKeepsTheTail(t *testing.T) {
 	}
 }
 
-// TestFileViewReachableFromTheKeyboard walks the whole mode with enter alone.
+// TestFilesSectionReachableFromTheKeyboard walks the whole section with enter
+// alone.
 //
 // The rail has three switches on row kind, not one: the click handler's, the
 // completed-gesture path's, and SidebarActivateCursor's. Only the last is the
-// keyboard's, and it was the one that shipped without the file view's rows, so
-// enter on a listing did nothing at all while a click on the same row worked.
-// Nothing else in this package steers the mode from the keyboard, so a
-// regression there is silent.
+// keyboard's, and it was the one that shipped without the file rows, so enter
+// on a listing did nothing at all while a click on the same row worked. Nothing
+// else in this package steers the section from the keyboard, so a regression
+// there is silent.
 //
 // Every row here is found through SidebarNav, which the renderer publishes as it
 // draws, so this also checks that the nav rows and the rectangles agree.
 //
+// The "back" control it used to end on is gone with the mode it belonged to:
+// the section is switched off from the same footer control that switches it on,
+// which is the last thing this walks.
+//
 // Negative control, confirmed red: with the file rows dropped from
-// SidebarActivateCursor's switch, the first assertion fails and the mode is
-// never entered.
-func TestFileViewReachableFromTheKeyboard(t *testing.T) {
+// SidebarActivateCursor's switch, the first assertion fails and the section is
+// never opened.
+func TestFilesSectionReachableFromTheKeyboard(t *testing.T) {
 	root := fileViewTree(t)
 	m := sidebarTestOS(t, 120, 40, "left")
 	m.Windows[0].Cwd = root
 	m.FocusedWindow = 0
+	// The layout names the files section, so this starts it off and lets the
+	// footer control be the thing that turns it on.
+	m.filesView.Show = -1
 
-	// Enter on the footer's "files" control opens the view on the focused
+	// enter runs the cursor's row and then the read it scheduled, which is what
+	// the loop does one message later.
+	enter := func() {
+		t.Helper()
+		m.SidebarActivateCursor()
+		if cmd := m.TakeSidebarCmd(); cmd != nil {
+			if msg, ok := cmd().(fileListMsg); ok {
+				m.HandleFileList(msg)
+			}
+		}
+	}
+	land := func(kind sidebarRowKind, what string) {
+		t.Helper()
+		railLines(t, m)
+		m.SidebarCursor = m.sidebarFirstRowOfKind(kind)
+		if m.SidebarCursor < 0 {
+			t.Fatalf("the rail published no %s for the keyboard to land on", what)
+		}
+	}
+
+	// Enter on the footer's "files" control opens the section on the focused
 	// pane's directory.
-	railLines(t, m)
-	m.SidebarCursor = m.sidebarFirstRowOfKind(sidebarRowFiles)
-	if m.SidebarCursor < 0 {
-		t.Fatal("the rail published no files control for the keyboard to land on")
-	}
-	if exit := m.SidebarActivateCursor(); exit {
-		t.Fatal("opening the file view asked to leave the rail")
-	}
+	land(sidebarRowFiles, "files control")
+	enter()
 	if !m.FileViewOpen() {
-		t.Fatal("enter on the files control did not open the view")
+		t.Fatal("enter on the files control did not open the section")
 	}
 	if got := m.FileViewDir(); got != root {
-		t.Fatalf("the view opened at %q, want the pane's own directory %q", got, root)
+		t.Fatalf("the section opened at %q, want the pane's own directory %q", got, root)
 	}
 
 	// Enter on a folder row walks into it. "apple" is the first entry.
-	railLines(t, m)
-	m.SidebarCursor = m.sidebarFirstRowOfKind(sidebarRowFileEntry)
-	if m.SidebarCursor < 0 {
-		t.Fatal("the listing published no entry row")
-	}
+	land(sidebarRowFileEntry, "entry row")
 	if name := m.filesView.Entries[m.SidebarNav[m.SidebarCursor].WindowIndex].Name; name != "apple" {
 		t.Fatalf("the first entry row is %q, want apple", name)
 	}
-	m.SidebarActivateCursor()
+	enter()
 	if got, want := m.FileViewDir(), filepath.Join(root, "apple"); got != want {
-		t.Fatalf("enter on a folder left the view at %q, want %q", got, want)
+		t.Fatalf("enter on a folder left the listing at %q, want %q", got, want)
 	}
 
 	// Enter on ".." walks back out. It is the first row of a listing that has a
 	// parent, which this one does.
-	railLines(t, m)
-	m.SidebarCursor = m.sidebarFirstRowOfKind(sidebarRowFileUp)
-	if m.SidebarCursor < 0 {
-		t.Fatal("a listing below the root published no .. row")
-	}
-	m.SidebarActivateCursor()
+	land(sidebarRowFileUp, ".. row")
+	enter()
 	if got := m.FileViewDir(); got != root {
-		t.Fatalf("enter on .. left the view at %q, want %q", got, root)
+		t.Fatalf("enter on .. left the listing at %q, want %q", got, root)
 	}
 
-	// And enter on "back" leaves the mode, which is the way out a user who
-	// arrived here by keyboard has to be able to find.
-	railLines(t, m)
-	m.SidebarCursor = m.sidebarFirstRowOfKind(sidebarRowFileBack)
-	if m.SidebarCursor < 0 {
-		t.Fatal("the file view published no back control")
-	}
-	m.SidebarActivateCursor()
+	// And enter on the same footer control takes the section off again.
+	land(sidebarRowFiles, "files control")
+	enter()
 	if m.FileViewOpen() {
-		t.Error("enter on back left the rail in its file view")
+		t.Error("enter on the files control left the section on the rail")
 	}
-	if out := strings.Join(railLines(t, m), "\n"); !strings.Contains(out, "sessions") {
-		t.Errorf("leaving the file view did not bring the sections back:\n%s", out)
+	if out := strings.Join(railLines(t, m), "\n"); strings.Contains(out, "apple/") {
+		t.Errorf("a rail with the section switched off is still drawing a listing:\n%s", out)
 	}
 }
 
-// TestTheFileViewAndTheFoldedRailAreExclusive.
+// TestAFoldedRailDrawsNoListing.
 //
-// Three columns cannot draw a path, so a folded rail has no way to show the
-// listing and no way out of it: a mode nothing on screen mentions is a mode the
-// user cannot leave. Two guards keep the pair apart, and the mode's position in
-// sidebarPanelLinesForTree relies on both of them holding.
+// Three columns cannot draw a path or a name, so the strip does not draw the
+// files section. This replaces TestTheFileViewAndTheFoldedRailAreExclusive,
+// whose second half pinned the old rule that folding the rail switched the
+// listing off: that rule existed because the listing was a mode, and a folded
+// rail left in a mode had nothing on screen mentioning it and no way out. A
+// section has no such trap, so folding now hides it and unfolding brings it
+// back, exactly as it does the other three.
 //
-// Negative control, confirmed red: drop the width test from OpenFileView and the
-// first half fails; drop the CloseFileView call from SidebarSetCollapsed and the
-// second half fails.
-func TestTheFileViewAndTheFoldedRailAreExclusive(t *testing.T) {
+// Negative controls, both confirmed red: drop the width test from OpenFileView
+// and the first half fails; put the CloseFileView call back in
+// SidebarSetCollapsed, so folding switches the section off rather than hiding
+// it, and unfolding never brings the listing back.
+//
+// The "a folded rail draws no listing" line in the middle is a guard rather
+// than a measurement, and it is written down as one: the collapsed strip has
+// its own renderer and returns before the section machinery runs at all, so no
+// change inside the files section can make it draw one. Removing the width test
+// from filesSectionEnabled leaves it green, which was run and confirmed.
+func TestAFoldedRailDrawsNoListing(t *testing.T) {
 	dir := fileViewTree(t)
 
-	// A rail folded to its glyph strip refuses the mode outright.
+	// A rail folded to its glyph strip refuses to open the section outright,
+	// because the caller needs to know it has to do something else instead: a
+	// folder link falls back to the clipboard.
 	folded := sidebarTestOS(t, 120, 40, "left")
 	folded.SidebarCollapsed = true
 	if folded.OpenFileView(dir) {
-		t.Error("the file view opened on a folded rail")
+		t.Error("the files section opened on a folded rail")
 	}
-	if folded.FileViewOpen() {
-		t.Error("a refused OpenFileView still left the rail in its file view")
+	if cmd := folded.TakeSidebarCmd(); cmd != nil {
+		t.Error("a refused OpenFileView still scheduled a directory read")
+	}
+	if out := strings.Join(railLines(t, folded), "\n"); strings.Contains(out, "apple/") {
+		t.Errorf("a folded rail drew a listing it refused to open:\n%s", out)
 	}
 
-	// And folding an expanded rail that is in the mode leaves the mode rather
-	// than hiding it.
+	// And folding an expanded rail that has the section hides the listing
+	// rather than leaving half of it on a three-column strip.
 	m := sidebarTestOS(t, 120, 40, "left")
-	if !m.OpenFileView(dir) {
-		t.Fatal("OpenFileView refused an expanded rail")
+	openFilesOn(t, m, dir)
+	if out := strings.Join(railLines(t, m), "\n"); !strings.Contains(out, "apple/") {
+		t.Fatalf("the expanded rail is not drawing the listing to begin with:\n%s", out)
 	}
 	m.SidebarSetCollapsed(true)
-	if m.FileViewOpen() {
-		t.Error("folding the rail hid the file view instead of leaving it")
-	}
 	if out := strings.Join(railLines(t, m), "\n"); strings.Contains(out, "apple/") {
 		t.Errorf("a folded rail is still drawing a listing:\n%s", out)
+	}
+	// Unfolding brings it back, which is what makes hiding it safe.
+	m.SidebarSetCollapsed(false)
+	if cmd := m.TakeSidebarCmd(); cmd != nil {
+		if msg, ok := cmd().(fileListMsg); ok {
+			m.HandleFileList(msg)
+		}
+	}
+	if out := strings.Join(railLines(t, m), "\n"); !strings.Contains(out, "apple/") {
+		t.Errorf("unfolding the rail did not bring the listing back:\n%s", out)
 	}
 }
 
@@ -345,9 +478,7 @@ func TestAnEmptyFolderSaysSo(t *testing.T) {
 	}
 
 	m := sidebarTestOS(t, 120, 40, "left")
-	if !m.OpenFileView(empty) {
-		t.Fatal("OpenFileView refused")
-	}
+	openFilesOn(t, m, empty)
 	out := strings.Join(railLines(t, m), "\n")
 	if !strings.Contains(out, "empty") {
 		t.Errorf("an empty folder drew no word for it:\n%s", out)
@@ -358,9 +489,7 @@ func TestAnEmptyFolderSaysSo(t *testing.T) {
 	}
 
 	// A folder with names in it says nothing of the sort.
-	if !m.OpenFileView(fileViewTree(t)) {
-		t.Fatal("OpenFileView refused the populated tree")
-	}
+	openFilesOn(t, m, fileViewTree(t))
 	if out := strings.Join(railLines(t, m), "\n"); strings.Contains(out, "empty") {
 		t.Errorf("a five-name folder was called empty:\n%s", out)
 	}

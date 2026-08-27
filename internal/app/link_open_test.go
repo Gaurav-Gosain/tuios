@@ -86,12 +86,17 @@ func TestMissingFileIsReportedNotGuessed(t *testing.T) {
 }
 
 // TestDirectoryLinkFallsBackWhenTheRailIsOff. A folder link wants the rail's
-// file view, and the rail can be off, hidden, or folded to three columns. A mode
-// the user cannot see is a mode they cannot leave, so OpenFileView refuses and
+// files section, and the rail can be off, hidden, or folded to three columns.
+// A listing nobody can see is no answer to a link, so OpenFileView refuses and
 // the link says what it did instead.
 //
-// Negative control: with OpenFileView returning true unconditionally, the view
-// opens behind a hidden rail and the clipboard fallback never runs.
+// What is asserted is that no directory was asked for. It used to be
+// FileViewOpen, which now answers whether the layout names the section at all
+// and is true by default whether or not a link ever pointed at anything.
+//
+// Negative control, confirmed red: with OpenFileView returning true
+// unconditionally, the read is scheduled behind a hidden rail and the clipboard
+// fallback never runs.
 func TestDirectoryLinkFallsBackWhenTheRailIsOff(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
@@ -102,8 +107,8 @@ func TestDirectoryLinkFallsBackWhenTheRailIsOff(t *testing.T) {
 	if cmd := m.OpenLink("file://" + dir); cmd == nil {
 		t.Fatal("a folder link with no rail produced no clipboard fallback")
 	}
-	if m.FileViewOpen() {
-		t.Error("the file view opened on a rail that reserves no columns")
+	if got := m.filesView.Want; got != "" {
+		t.Errorf("the link asked the rail to list %q on a rail that reserves no columns", got)
 	}
 }
 
