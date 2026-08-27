@@ -1,6 +1,7 @@
 package app
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -295,10 +296,13 @@ func TestEffectPickerShowsWhatEachEffectDoesAndHowLongItHides(t *testing.T) {
 	if !strings.Contains(body, head) {
 		t.Errorf("the panel does not describe print; body:\n%s", body)
 	}
-	if !strings.Contains(body, "35s") {
-		t.Errorf("print's row does not carry its opening time; body:\n%s", body)
+	// Off print's own row, not off the panel. The band words are also in the
+	// sentence under the list, so a search of the whole body passes with the
+	// column gone.
+	if got := pickerRowColumn(t, m, "print"); got != "long" {
+		t.Errorf("print's row carries %q in the opening column, want \"long\"; body:\n%s", got, body)
 	}
-	if !strings.Contains(body, "The screen comes back after about 35 seconds.") {
+	if !strings.Contains(body, "The wait is long. The time depends on your screen.") {
 		t.Errorf("the panel does not say how long print hides the screen; body:\n%s", body)
 	}
 
@@ -307,11 +311,271 @@ func TestEffectPickerShowsWhatEachEffectDoesAndHowLongItHides(t *testing.T) {
 	idx = effectRowIndex(m, "wipe")
 	_ = m.EffectPickerMove(idx - m.EffectPickerSelected)
 	body = pickerBody(t, m)
-	if !strings.Contains(body, "0.9s") {
-		t.Errorf("wipe's row does not carry its opening time; body:\n%s", body)
+	if got := pickerRowColumn(t, m, "wipe"); got != "short" {
+		t.Errorf("wipe's row carries %q in the opening column, want \"short\"; body:\n%s", got, body)
 	}
-	if strings.Contains(body, "after about 35") {
+	if strings.Contains(body, "The wait is long") {
 		t.Error("the detail line did not follow the selection")
+	}
+}
+
+// pickerRowColumn is the last word on one effect's row, which is the opening
+// column when the row has one. It fails the test when the row is not on screen,
+// so a caller cannot pass by asking about a row that scrolled away.
+func pickerRowColumn(t *testing.T, m *OS, name string) string {
+	t.Helper()
+	content, _, rows := m.renderEffectPicker()
+	lines := strings.Split(stripANSIForTrace(content), "\n")
+	items := m.effectPickerItems()
+	for _, r := range rows {
+		if items[r.Idx] != name || r.Rect.Y0 < 0 || r.Rect.Y0 >= len(lines) {
+			continue
+		}
+		fields := strings.Fields(lines[r.Rect.Y0])
+		if len(fields) == 0 {
+			t.Fatalf("%s's row is blank", name)
+		}
+		if last := fields[len(fields)-1]; last != name {
+			return last
+		}
+		return ""
+	}
+	t.Fatalf("%s is not on screen, so its row cannot be read", name)
+	return ""
+}
+
+// TestEffectPickerClaimsNoTimeItCannotKnow is the truthfulness fix.
+//
+// The table behind the column is one measurement of one screen at 80x24. The
+// effects that do work per character take longer on a bigger screen with more
+// text on it, and the spread is not small: pour is 3.1 seconds over a bare
+// prompt and 97.8 seconds at 200x50 over a full one. So the picker may not put
+// a time on the panel. It used to put two: "35s" on the row and "The screen
+// comes back after about 35 seconds." under the list.
+//
+// A band is what survives. This holds the panel to one.
+//
+// Negative control: returning strconv.Itoa(int(seconds+0.5))+"s" from
+// effectOpeningWord, or the old sentence from effectOpeningSentence, fails
+// this.
+func TestEffectPickerClaimsNoTimeItCannotKnow(t *testing.T) {
+	m, _ := effectPickerOS(t, 100, 40)
+	_ = m.OpenEffectPicker()
+
+	digits := regexp.MustCompile(`[0-9]`)
+	clock := regexp.MustCompile(`(?i)second|minute|\bsec\b`)
+
+	checked := 0
+	for i, name := range m.effectPickerItems() {
+		m.EffectPickerSelected = i
+		m.buildEffectPreview()
+		_, status := m.effectDetailText(name)
+		for _, s := range []string{status, effectOpeningWord(effectOpeningBandOf(name))} {
+			if s == "" {
+				continue
+			}
+			checked++
+			if digits.MatchString(s) {
+				t.Errorf("%s is given a figure the picker cannot know: %q", name, s)
+			}
+			if clock.MatchString(s) {
+				t.Errorf("%s is given a time the picker cannot know: %q", name, s)
+			}
+		}
+	}
+	if checked < 60 {
+		t.Fatalf("only %d strings were checked; the gather is not reaching them", checked)
+	}
+}
+
+// TestEffectPickerSaysTheTimeDependsOnTheScreen: dropping the number is half
+// the fix. Somebody who reads "long" and comes back to a screen that took twice
+// as long has still been told something that was not true of their screen, so
+// the panel has to say what moves it.
+//
+// The none band is exempt and says something stronger instead. See
+// TestEffectsWithNoOpeningNeverHideTheScreen.
+//
+// Negative control: cutting the second sentence out of effectOpeningSentence
+// fails this.
+func TestEffectPickerSaysTheTimeDependsOnTheScreen(t *testing.T) {
+	m, _ := effectPickerOS(t, 100, 40)
+	_ = m.OpenEffectPicker()
+
+	const caveat = "The time depends on your screen."
+	hiding, quoted := 0, 0
+	for i, name := range m.effectPickerItems() {
+		if name == config.ScreensaverRandomEffect {
+			continue
+		}
+		band := effectOpeningBandOf(name)
+		if band == effectOpeningNone || band == effectOpeningUnknown {
+			continue
+		}
+		hiding++
+		m.EffectPickerSelected = i
+		m.buildEffectPreview()
+		if _, status := m.effectDetailText(name); strings.Contains(status, caveat) {
+			quoted++
+		} else {
+			t.Errorf("%s hides the screen and the panel does not say what sets the time: %q", name, status)
+		}
+	}
+	if hiding < 30 {
+		t.Fatalf("only %d effects hide the screen; the gather is not reaching them", hiding)
+	}
+	if quoted != hiding {
+		t.Errorf("%d of %d hiding effects carry the caveat", quoted, hiding)
+	}
+
+	// And it is on the panel, not only in the string.
+	idx := effectRowIndex(m, "swarm")
+	_ = m.EffectPickerMove(idx - m.EffectPickerSelected)
+	if body := pickerBody(t, m); !strings.Contains(body, caveat) {
+		t.Errorf("the caveat is not on the panel; body:\n%s", body)
+	}
+}
+
+// TestEffectOpeningBandsSeparateFastFromSlow: a band that says the same thing
+// for every effect is a column of nothing. The order it puts them in is the
+// part of the old measurement that survives a change of screen, so it has to be
+// visible.
+//
+// Negative control: returning one word from effectOpeningWord, or dropping the
+// boundaries so every effect lands in one band, fails this.
+func TestEffectOpeningBandsSeparateFastFromSlow(t *testing.T) {
+	want := []struct {
+		name string
+		band effectOpeningBand
+		word string
+	}{
+		{"highlight", effectOpeningNone, "none"},
+		{"wipe", effectOpeningShort, "short"},
+		{"rain", effectOpeningMedium, "medium"},
+		{"swarm", effectOpeningLong, "long"},
+	}
+	seen := map[string]bool{}
+	for _, w := range want {
+		got := effectOpeningBandOf(w.name)
+		if got != w.band {
+			t.Errorf("%s is in band %d, want %d", w.name, got, w.band)
+		}
+		word := effectOpeningWord(got)
+		if word != w.word {
+			t.Errorf("%s reads %q in the column, want %q", w.name, word, w.word)
+		}
+		if seen[word] {
+			t.Errorf("%s repeats the column word %q, so the column carries no order", w.name, word)
+		}
+		seen[word] = true
+		if sentence := effectOpeningSentence(got); sentence == "" {
+			t.Errorf("%s gets no sentence under the list", w.name)
+		}
+	}
+
+	// Every band word fits the column it is drawn in, or the name beside it is
+	// cut to make room.
+	for _, band := range []effectOpeningBand{
+		effectOpeningNone, effectOpeningShort, effectOpeningMedium, effectOpeningLong,
+	} {
+		if n := len(effectOpeningWord(band)); n > effectOpeningColumn {
+			t.Errorf("band %d reads %q, %d cells in a %d-cell column",
+				band, effectOpeningWord(band), n, effectOpeningColumn)
+		}
+	}
+
+	// random has no one opening, so it claims none.
+	if got := effectOpeningBandOf(config.ScreensaverRandomEffect); got != effectOpeningUnknown {
+		t.Errorf("random is in band %d, want no band at all", got)
+	}
+	if word := effectOpeningWord(effectOpeningUnknown); word != "" {
+		t.Errorf("random carries %q in the column", word)
+	}
+}
+
+// TestEffectsWithNoOpeningNeverHideTheScreen is the one claim on this panel
+// that is not a band, so it is the one that has to be structural.
+//
+// "The screen stays visible from the start" is stronger than anything else the
+// picker says. It carries no "it depends on your screen", so it has to hold on
+// every screen, and a measurement of one screen cannot earn it. That is how
+// rings, vhstape, waves and thunderstorm came to carry it: all four measured
+// zero under a metric that asked when the screen first read well, and the first
+// three then took the screen away for twenty-three, twelve and seven seconds.
+//
+// So this runs every effect flagged keepsScreen to its end and holds it to the
+// whole claim on every frame: every captured glyph legible, in its own place,
+// no share of it missing. Six screen shapes, from a phone-sized terminal to a
+// wide one, because the effects that failed this failed it by size.
+//
+// highlight passes. It sweeps a band of brighter colour over text that never
+// moves.
+//
+// Negative control: setting keepsScreen on rings, vhstape, waves, thunderstorm
+// or burn fails this, naming the frame the screen goes away on.
+func TestEffectsWithNoOpeningNeverHideTheScreen(t *testing.T) {
+	var none []string
+	for name := range effectOpenings {
+		if effectOpeningBandOf(name) == effectOpeningNone {
+			none = append(none, name)
+		}
+	}
+	slices.Sort(none)
+	if len(none) == 0 {
+		t.Fatal("no effect claims to keep the screen visible, so this proves nothing")
+	}
+
+	for _, screen := range []struct{ w, h int }{
+		{40, 12}, {60, 20}, {80, 24}, {100, 30}, {160, 45}, {220, 60},
+	} {
+		m, _ := effectPickerOS(t, screen.w, screen.h)
+		_ = m.OpenEffectPicker()
+		p := &m.effectPreview
+		if p.capture == nil {
+			t.Fatalf("setup: no capture at %dx%d", screen.w, screen.h)
+		}
+		for _, name := range none {
+			// The screen the effect ends on, read off the effect itself. The
+			// engine anchors the captured text to the top left of the canvas,
+			// so a capture whose content starts below the first row is drawn a
+			// row or two higher than it was taken; comparing against the
+			// capture's own coordinates would measure that shift rather than
+			// the effect. The end state is what the claim is about anyway.
+			want := effectSettledScreen(t, p, name)
+			if len(want) < 20 {
+				t.Fatalf("setup: %s settles on %d glyph cells at %dx%d, not a screen worth hiding",
+					name, len(want), screen.w, screen.h)
+			}
+
+			d, _ := tfx.Lookup(name)
+			effect := d.New()
+			engine, ok := screensaverBuild(p.capture, p.canvasWidth, p.canvasHeight, effect, d.NeedsFillCharacters)
+			if !ok {
+				t.Fatalf("%s will not build at %dx%d", name, screen.w, screen.h)
+			}
+			worst, worstFrame, frame := len(want), 0, 0
+			for frame < 8000 {
+				if readable := measureReadable(engine, want); readable < worst {
+					worst, worstFrame = readable, frame
+				}
+				if !effect.Advance(engine) {
+					break
+				}
+				frame++
+			}
+			if frame < 30 {
+				t.Errorf("%s ran %d frames at %dx%d, too few to have hidden anything",
+					name, frame, screen.w, screen.h)
+			}
+			// The whole screen, not most of it. An effect that dims a
+			// corner of a small terminal for a second is hiding part of the
+			// screen, and the claim leaves no room for a part.
+			if worst < len(want) {
+				t.Errorf("%s is told to say the screen stays visible, but at frame %d of %d at %dx%d "+
+					"only %d of %d captured glyphs are readable",
+					name, worstFrame, frame, screen.w, screen.h, worst, len(want))
+			}
+		}
 	}
 }
 
@@ -324,15 +588,49 @@ func TestEffectPickerShowsWhatEachEffectDoesAndHowLongItHides(t *testing.T) {
 func TestEffectOpeningTableCoversEveryEffect(t *testing.T) {
 	names := tfx.Names()
 	for _, name := range names {
-		if _, ok := effectOpeningFrames[name]; !ok {
+		if _, ok := effectOpenings[name]; !ok {
 			t.Errorf("%s has no measured opening; re-run the measurement and add it", name)
 		}
 	}
-	for name := range effectOpeningFrames {
+	for name := range effectOpenings {
 		if !slices.Contains(names, name) {
 			t.Errorf("%s is measured but is not an effect any more", name)
 		}
 	}
+}
+
+// effectSettledScreen runs an effect to its end and returns the screen it
+// leaves behind, cell by cell.
+func effectSettledScreen(t *testing.T, p *effectPreview, name string) map[measureCoord]measureLook {
+	t.Helper()
+	d, _ := tfx.Lookup(name)
+	effect := d.New()
+	engine, ok := screensaverBuild(p.capture, p.canvasWidth, p.canvasHeight, effect, d.NeedsFillCharacters)
+	if !ok {
+		t.Fatalf("%s will not build", name)
+	}
+	for range 8000 {
+		if !effect.Advance(engine) {
+			break
+		}
+	}
+	settled := map[measureCoord]measureLook{}
+	for y, line := range engine.FrameRows() {
+		for x, cell := range line {
+			if cell == nil || cell.Symbol == "" || cell.Symbol == " " {
+				continue
+			}
+			look := measureLook{symbol: cell.Symbol}
+			if cell.Colors.HasFg {
+				look.fg = cell.Colors.Fg
+			}
+			if cell.Colors.HasBg {
+				look.bg, look.hasBg = cell.Colors.Bg, true
+			}
+			settled[measureCoord{x, y}] = look
+		}
+	}
+	return settled
 }
 
 // TestEveryEffectBuildsOverACapturedScreen is the fill-character fix.

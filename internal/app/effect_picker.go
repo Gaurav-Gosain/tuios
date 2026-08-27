@@ -324,77 +324,157 @@ func (m *OS) EffectPickerApplySelection() tea.Cmd {
 	return save
 }
 
-// effectOpeningFrames is how long each effect takes to give the screen back,
-// in engine frames, measured at 80x24 over a real composed screen.
+// effectOpenings is how long each effect hides the screen, over one reference
+// screen at 80x24, and whether it hides it at all.
 //
-// The metric is the first frame at which nine cells in ten of the capture's
-// glyph cells show their captured symbol in their captured place and in their
-// captured foreground colour. Colour is in it because of burn: burn holds every
-// character in its final position from the first frame, so a symbols-only
-// metric calls it instant, while what is on screen is a flat grey sheet for
-// eleven seconds. The numbers are the median of five runs; the effects that
-// place characters at random vary by a few percent between runs, and the rest
-// are identical every time.
+// frames is not a time the picker can show anyone. Read the block below before
+// putting a number back on the panel.
 //
-// A screen with more text on it takes longer, so these are a scale rather than
-// a promise. They are here because the alternative is measuring thirty-five
-// effects when the picker opens, which is two seconds of work for a number that
-// hardly moves.
+// The metric is the last frame at which fewer than nine cells in ten of the
+// capture's glyph cells are readable, plus one. A cell is readable when it
+// shows its captured symbol, in its captured place, in a colour that stands off
+// the background it is drawn on. TestMeasureEffectOpenings carries the argument
+// for both halves and re-measures the table.
+//
+// What frames is not is a promise about anyone's screen. Several of these
+// effects do work per character, so the wait scales with how much text is on
+// screen and how big the screen is. Measured over four screens, pour ran from
+// 3.1 seconds on a bare prompt to 97.8 seconds at 200x50 on a full one, rain
+// from 2.6 to 65.2, and laseretch from 6.4 to 133.3. Others hardly move:
+// fireworks stayed inside 18.9 to 20.3 and matrix inside 25.1 to 37.6. So no
+// single scale factor fits them, and a number taken from here and shown to a
+// user is a measurement of a screen that is not theirs.
+//
+// What survives is the order and the size of the wait. wipe is at the top on
+// every screen measured and swarm at the bottom, and an effect that hides the
+// screen for most of a minute does that on any screen. So the picker takes a
+// band from this table and never a time, and the panel says the time depends on
+// the screen. effectOpeningBandOf is the only reader.
+//
+// Measuring the real screen instead was considered and does not fit: it means
+// running each effect to its end, and at 200x50 four of them are still going
+// after two minutes of animation. The picker would have to sit there.
 //
 // TestEffectOpeningTableCoversEveryEffect fails the build when the engine gains
-// or loses an effect, so a version bump cannot leave a row with no number.
-var effectOpeningFrames = map[string]int{
-	"binarypath":      939,
-	"blackhole":       910,
-	"bouncyballs":     1159,
-	"bubbles":         1449,
-	"burn":            769,
-	"crumble":         568,
-	"decrypt":         1071,
-	"errorcorrect":    475,
-	"expand":          88,
-	"fireworks":       1206,
-	"highlight":       0,
-	"laseretch":       1684,
-	"matrix":          1559,
-	"middleout":       128,
-	"orbittingvolley": 1043,
-	"overflow":        137,
-	"pour":            865,
-	"print":           2087,
-	"rain":            556,
-	"randomsequence":  188,
-	"rings":           0,
-	"scattered":       134,
-	"slice":           121,
-	"slide":           113,
-	"smoke":           167,
-	"spotlights":      653,
-	"spray":           369,
-	"swarm":           2750,
-	"sweep":           178,
-	"synthgrid":       538,
-	"thunderstorm":    1,
-	"unstable":        292,
-	"vhstape":         0,
-	"waves":           0,
-	"wipe":            54,
+// or loses an effect, so a version bump cannot leave a row with no band.
+var effectOpenings = map[string]effectOpening{
+	"binarypath":      {frames: 801},
+	"blackhole":       {frames: 848},
+	"bouncyballs":     {frames: 1043},
+	"bubbles":         {frames: 1411},
+	"burn":            {frames: 754},
+	"crumble":         {frames: 544},
+	"decrypt":         {frames: 1014},
+	"errorcorrect":    {frames: 454},
+	"expand":          {frames: 88},
+	"fireworks":       {frames: 1164},
+	"highlight":       {frames: 0, keepsScreen: true},
+	"laseretch":       {frames: 1649},
+	"matrix":          {frames: 1548},
+	"middleout":       {frames: 99},
+	"orbittingvolley": {frames: 1043},
+	"overflow":        {frames: 152},
+	"pour":            {frames: 807},
+	"print":           {frames: 2087},
+	"rain":            {frames: 539},
+	"randomsequence":  {frames: 156},
+	"rings":           {frames: 1373},
+	"scattered":       {frames: 136},
+	"slice":           {frames: 121},
+	"slide":           {frames: 113},
+	"smoke":           {frames: 154},
+	"spotlights":      {frames: 641},
+	"spray":           {frames: 366},
+	"swarm":           {frames: 2778},
+	"sweep":           {frames: 177},
+	"synthgrid":       {frames: 530},
+	"thunderstorm":    {frames: 0},
+	"unstable":        {frames: 291},
+	"vhstape":         {frames: 702},
+	"waves":           {frames: 410},
+	"wipe":            {frames: 54},
 }
 
-// effectOpeningSeconds is an effect's opening in seconds at the current frame
-// rate, and whether it is known at all.
-func effectOpeningSeconds(name string) (float64, bool) {
-	frames, ok := effectOpeningFrames[name]
+// effectOpening is one row of the table.
+type effectOpening struct {
+	// frames is the opening over the reference screen, in engine frames. It
+	// feeds a band and nothing else.
+	frames int
+	// keepsScreen is the one thing here that is not a measurement of one
+	// screen. It says the effect never takes a character off the screen, never
+	// moves one, and never draws one in a colour you cannot read it in: every
+	// captured glyph is legible in its own place on every frame of the run.
+	//
+	// highlight is the only effect that does this. It sweeps a band of brighter
+	// colour over text that never moves.
+	//
+	// A zero in frames does not imply it, and reading it that way is what put
+	// "The screen stays visible from the start." under rings, vhstape, waves
+	// and thunderstorm. The first three run from the untouched screen and take
+	// it away afterwards, for twenty-three, twelve and seven seconds; the
+	// fourth dims a fifth of a small screen at a time. All four measure zero
+	// under a metric that asks when the screen first reads well.
+	//
+	// TestEffectsWithNoOpeningNeverHideTheScreen holds every effect flagged
+	// here to the claim, on every frame, over six screen shapes.
+	keepsScreen bool
+}
+
+// effectOpeningBand is how long an effect hides the screen, coarse enough to
+// stay true on a screen that is not the one the table was measured over.
+type effectOpeningBand int
+
+const (
+	// effectOpeningUnknown is an effect with no measurement, and the picker
+	// shows nothing for it. random lands here: it has no one opening.
+	effectOpeningUnknown effectOpeningBand = iota
+	// effectOpeningNone never hides the screen at all. See keepsScreen.
+	effectOpeningNone
+	effectOpeningShort
+	effectOpeningMedium
+	// effectOpeningLong is the band worth flagging. It is drawn in the warning
+	// colour on the row and under the list.
+	effectOpeningLong
+)
+
+// The band boundaries, in seconds over the reference screen.
+//
+// Both sit in a gap in the measurements rather than on a round number, so a
+// re-measurement that moves an effect by a few percent does not move it a band.
+// The nearest neighbours are unstable at 4.8 and spray at 6.1, then crumble at
+// 9.1 and spotlights at 10.7.
+const (
+	effectMediumOpening = 5.5
+	// effectSlowOpening is the point past which an opening is worth flagging.
+	// Ten seconds of a screen you cannot read is long enough to look like a
+	// fault.
+	effectSlowOpening = 10.0
+)
+
+// effectOpeningBandOf is the band an effect falls in over the reference screen.
+//
+// It takes seconds from the table at the current frame rate and throws them
+// away again. Nothing else may read effectOpenings: a caller that wants the
+// number wants to show it, and the number is not true of the screen the user is
+// looking at.
+func effectOpeningBandOf(name string) effectOpeningBand {
+	opening, ok := effectOpenings[name]
 	if !ok {
-		return 0, false
+		return effectOpeningUnknown
+	}
+	if opening.keepsScreen {
+		return effectOpeningNone
 	}
 	fps := config.NormalFPS
 	if fps <= 0 {
 		fps = 60
 	}
-	return float64(frames) / float64(fps), true
+	switch seconds := float64(opening.frames) / float64(fps); {
+	case seconds < effectMediumOpening:
+		return effectOpeningShort
+	case seconds < effectSlowOpening:
+		return effectOpeningMedium
+	default:
+		return effectOpeningLong
+	}
 }
-
-// effectSlowOpening is the point past which an opening is worth flagging. Ten
-// seconds of a screen you cannot read is long enough to look like a fault.
-const effectSlowOpening = 10.0
