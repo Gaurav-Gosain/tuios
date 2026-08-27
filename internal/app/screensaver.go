@@ -232,15 +232,21 @@ func (m *OS) startScreensaver(cfg config.ScreensaverConfig) bool {
 // picks a starting cell that can land on a hole, and the saver then refuses to
 // start at all.
 func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.Effect, fill bool) (*tfx.Engine, bool) {
-	terminal := tfx.NewTerminalFromCells(capture, tfx.TerminalConfig{
+	terminal := tfx.NewTerminalFromCells(screensaverFit(capture, height), tfx.TerminalConfig{
 		Width:              width,
 		Height:             height,
 		MakeFillCharacters: fill,
-		// North west, not the engine's south west default. The two agree
-		// whenever the canvas matches the capture, which is the normal case;
-		// where they disagree a screen should slip towards the top left corner
-		// it was drawn from rather than the bottom left one it was not.
-		AnchorText:            tfx.AnchorNW,
+		// South west, which is the one anchor that moves nothing.
+		//
+		// Every other anchor measures the block the capture fills and slides it
+		// to a corner. That is right for a caption placed on a canvas and wrong
+		// for a screen: a capture whose first two rows are empty fills a block
+		// two rows shorter than the screen, so north west lifts the whole
+		// picture two rows and the saver starts by jolting the screen upwards.
+		// The capture already carries the coordinate of every cell, and south
+		// west is the anchor that keeps them. screensaverFit does the only
+		// placing that is left.
+		AnchorText:            tfx.AnchorSW,
 		ExistingColorHandling: tfx.DynamicExistingColors,
 	})
 	engine := tfx.NewEngine(terminal, tfx.NewRng(rand.Uint64()))
@@ -248,6 +254,29 @@ func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.E
 		return nil, false
 	}
 	return engine, true
+}
+
+// screensaverFit makes a capture exactly as tall as the canvas, keeping the top.
+//
+// The engine counts rows from the bottom, so it reads a capture bottom up and
+// the capture's own height decides where its first row lands. A capture shorter
+// than the canvas would therefore sit on the floor, and a taller one would lose
+// its top rows off the ceiling. Both are the wrong end: a screen is drawn from
+// the top left corner, so that is the corner it keeps. Padding at the bottom
+// costs nothing, because a row of empty cells makes no characters.
+//
+// The two are the same size on every screen the saver takes, and this is what
+// makes that a fact rather than an assumption.
+func screensaverFit(capture [][]tfx.InputCell, height int) [][]tfx.InputCell {
+	if height < 1 || len(capture) == height {
+		return capture
+	}
+	if len(capture) > height {
+		return capture[:height]
+	}
+	fitted := make([][]tfx.InputCell, height)
+	copy(fitted, capture)
+	return fitted
 }
 
 // screensaverEffect resolves a configured name to a fresh effect. The random

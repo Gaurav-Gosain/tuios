@@ -326,9 +326,10 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// for vim visual-block, etc.), matching the tmux/zellij convention.
 	if sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction) == "terminal_paste_host" {
 		if focusedWindow != nil {
-			// Use tea.ReadClipboard to request clipboard via OSC 52
-			// This will generate a tea.ClipboardMsg which we handle in handler.go
-			return o, tea.ReadClipboard
+			// Ask the terminal for its clipboard via OSC 52. The reply arrives
+			// as a tea.ClipboardMsg, handled in handler.go, and a terminal that
+			// never replies is reported instead. See app.RequestHostPaste.
+			return o, o.RequestHostPaste()
 		}
 		return o, nil
 	}

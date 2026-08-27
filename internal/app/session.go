@@ -168,6 +168,10 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 
 	m.LogInfo("[RESTORE] RestoreFromState: restoring %d windows", len(state.Windows))
 
+	// Recorded before placeUnplacedWindows below, which is what makes every
+	// window in the session look placed from here on.
+	m.sessionUnarranged = stateUnarranged(state)
+
 	// Adopting a whole session says nothing about what this client last pushed
 	// to a daemon, and on a session switch it is a different session entirely.
 	m.forgetSyncedState()
@@ -353,6 +357,23 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	}
 
 	return nil
+}
+
+// stateUnarranged reports whether anybody has ever laid this session out.
+//
+// The daemon has no viewport, so a window it creates on its own carries a
+// placeholder box and says so with Unplaced. The first client push replaces
+// that box with real coordinates and clears the flag. A session whose every
+// window is still Unplaced has therefore never been arranged by a client, which
+// is what tells a fresh session the daemon pre-populated apart from a session
+// the user built. An empty session is unarranged for the same reason.
+func stateUnarranged(state *session.SessionState) bool {
+	for i := range state.Windows {
+		if !state.Windows[i].Unplaced {
+			return false
+		}
+	}
+	return true
 }
 
 // ApplyStateSync applies a state update from another client.

@@ -56,22 +56,27 @@ var applyAppearanceOnce sync.Once
 func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	sshServerConfig = cfg
 
-	// Compose frames in truecolor. composeFrame downsamples every frame
-	// through lipgloss.Sprint, whose profile is detected from THIS process's
-	// stdout and environment: a server logging to a file or running under a
-	// service manager detects NoTTY and strips every colour from every frame
-	// before the per-client profile ever sees it, for every client at once.
-	// Pinning truecolor here leaves downsampling to the bubbletea renderer,
-	// which wish configures per connection from the client's own TERM.
-	// tuios-web pins the same global for the same reason.
-	lipgloss.Writer.Profile = colorprofile.TrueColor
-
-	// Apply the user config's appearance globals once, at first server startup
-	// and single-threaded, so every per-connection session shares a consistent
-	// view of them. LoadUserConfig is pure and NewOS no longer re-applies per
+	// Apply the process-wide render globals once, at first server startup and
+	// single-threaded, so every per-connection session shares a consistent view
+	// of them. LoadUserConfig is pure and NewOS no longer re-applies per
 	// connection, so this replaces the old per-connection global writes that
 	// raced other sessions' render loops.
+	//
+	// The lipgloss profile is in here for exactly that reason and not only for
+	// tidiness: a second StartSSHServer in the same process wrote it again while
+	// the first server's sessions were still composing frames, which the race
+	// detector reported against composeFrame's lipgloss.Sprint.
 	applyAppearanceOnce.Do(func() {
+		// Compose frames in truecolor. composeFrame downsamples every frame
+		// through lipgloss.Sprint, whose profile is detected from THIS process's
+		// stdout and environment: a server logging to a file or running under a
+		// service manager detects NoTTY and strips every colour from every frame
+		// before the per-client profile ever sees it, for every client at once.
+		// Pinning truecolor here leaves downsampling to the bubbletea renderer,
+		// which wish configures per connection from the client's own TERM.
+		// tuios-web pins the same global for the same reason.
+		lipgloss.Writer.Profile = colorprofile.TrueColor
+
 		if userConfig, err := config.LoadUserConfig(); err == nil {
 			config.ApplyAppearanceConfig(userConfig, &config.Global)
 		}
@@ -562,6 +567,24 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 			default:
 				log.Printf("[SSH] Warning: ClientEventChan full, dropping session resize event")
 			}
+		}
+	})
+
+	// Handle the session being killed out from under this client, and an
+	// unexpected loss of the daemon. Both leave nothing to render and nothing to
+	// reconnect to, so the client says why and quits. Without these two the SSH
+	// client kept the last frame on screen for ever, where the local client
+	// exits. The queue is separate from ClientEventChan, which drops when full.
+	client.OnSessionEnded(func(name, reason string) {
+		log.Printf("[SSH] Session ended: %s (%s)", name, reason)
+		if m.QueueSessionEnded(name, reason) {
+			log.Printf("[SSH] DaemonExitChan full, dropped the session end")
+		}
+	})
+	client.OnDisconnect(func(err error) {
+		log.Printf("[SSH] Daemon connection lost: %v", err)
+		if m.QueueDaemonDisconnect(err) {
+			log.Printf("[SSH] DaemonExitChan full, dropped the disconnect")
 		}
 	})
 }

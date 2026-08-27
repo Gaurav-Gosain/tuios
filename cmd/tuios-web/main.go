@@ -825,4 +825,22 @@ func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
 			}
 		}
 	})
+
+	// Handle the session being killed out from under this client, and an
+	// unexpected loss of the daemon. Both leave nothing to render and nothing to
+	// reconnect to, so the client says why and quits. Without these two the browser
+	// client kept the last frame on screen for ever, where the local client
+	// exits. The queue is separate from ClientEventChan, which drops when full.
+	client.OnSessionEnded(func(name, reason string) {
+		log.Printf("[WEB] Session ended: %s (%s)", name, reason)
+		if m.QueueSessionEnded(name, reason) {
+			log.Printf("[WEB] DaemonExitChan full, dropped the session end")
+		}
+	})
+	client.OnDisconnect(func(err error) {
+		log.Printf("[WEB] Daemon connection lost: %v", err)
+		if m.QueueDaemonDisconnect(err) {
+			log.Printf("[WEB] DaemonExitChan full, dropped the disconnect")
+		}
+	})
 }

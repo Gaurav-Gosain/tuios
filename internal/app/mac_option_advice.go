@@ -29,9 +29,22 @@ func (m *OS) NoteComposedOptionChord(chord string) {
 		m.KeybindRegistry.GetTerminalModeAction(chord) == "" {
 		return
 	}
+	// A browser tab has no terminal settings to change, so there is no advice to
+	// give. The composition happens in macOS before the page ever sees the key,
+	// and nothing in the browser can undo it.
+	if m.BrowserClient {
+		return
+	}
 	m.optionAdviceShown = true
 
+	// The environment this process reads belongs to the machine tuios runs on.
+	// For a client on the far end of a network that is the server, not the
+	// terminal the user is sitting at, so name no product and give the step that
+	// is true of every terminal.
 	host := config.DetectHostTerminal()
+	if m.RemoteClient {
+		host = config.HostUnknown
+	}
 	advice := config.MacOptionAdvice(host, chord)
 	if host == config.HostGhostty {
 		advice += ". " + config.GhosttyAltArrowAdvice

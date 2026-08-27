@@ -242,8 +242,16 @@ func (m *OS) toggleAutoTiling() {
 	m.requireRealLayout()
 
 	m.AutoTiling = !m.AutoTiling
-	// Deferred because the enabling branch returns early for scrolling mode.
+	// Both deferred because the enabling branch returns early for scrolling
+	// mode. The sync is the one that has to be: the daemon holds AutoTiling and
+	// echoes it back to every client on the next push, so a client that turns
+	// tiling on without telling the daemon has it turned off again by the first
+	// state the daemon sends. That is what made scrolling mode refuse to tile in
+	// a daemon session while BSP, which reached the sync at the end, worked.
+	// Deferred in this order so the sync still runs before the hook, the way it
+	// did when the BSP branch fell through to it.
 	defer m.FireLayoutChanged()
+	defer m.SyncStateToDaemon()
 
 	if m.AutoTiling {
 		// If scrolling mode was active, re-enable it
@@ -322,9 +330,6 @@ func (m *OS) toggleAutoTiling() {
 		}
 		m.MarkAllDirty()
 	}
-
-	// Sync state to daemon so tiling mode persists across reconnects
-	m.SyncStateToDaemon()
 }
 
 // TileNewWindow arranges the new window in the tiling layout

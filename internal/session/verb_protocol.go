@@ -465,6 +465,8 @@ func init() {
 				// can see the whole call shape.
 				{Name: "scrollback", Type: "bool", Description: `Older spelling of source "recent".`, Default: "false"},
 				{Name: "ansi", Type: "bool", Description: "Older spelling of styled.", Default: "false"},
+				{Name: "resolved", Type: "bool", Description: "Rewrite ANSI index colours (30-37, 90-97, 40-47, 100-107, 38;5;n<16, 48;5;n<16) to 24-bit RGB so the capture matches what a themed client paints. Indices above 15 and true colour pass through untouched.", Default: "false"},
+				{Name: "palette", Type: "[]string", Description: "The 16 hex colours (#rrggbb) the client's theme paints indices 0-15 with, used by resolved captures. Must be exactly 16 entries when present; absent means the xterm defaults.", Default: "xterm defaults"},
 				{Name: "lines", Type: "int", Description: "Keep only the last N lines. Blank rows below the cursor do not count. Ignored when start or end is given."},
 				{Name: "start", Type: "int", Description: "1-based inclusive first line of the region to keep."},
 				{Name: "end", Type: "int", Description: "1-based inclusive last line of the region to keep."},

@@ -249,7 +249,11 @@ func (m *OS) paneMenu(windowIndex int) (string, []ContextMenuItem) {
 	// Pasting reaches the shell only from terminal mode; the clipboard reply is
 	// dropped in every other mode. Dimming says so rather than letting the row
 	// look live and do nothing.
-	canPaste := m.Mode == TerminalMode
+	//
+	// A browser tab never sends the clipboard at all, so the row is dimmed there
+	// in every mode. It read as fully live and did nothing when clicked, which
+	// is the inert control this project forbids. See ClipboardReadUnsupportedReason.
+	canPaste := m.Mode == TerminalMode && m.ClipboardReadUnsupportedReason() == ""
 	canSplit := m.AutoTiling
 
 	closeItem := m.item(glyphClose, "Close pane", "close_window", false)

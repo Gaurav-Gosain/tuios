@@ -164,13 +164,16 @@ type OS struct {
 	PTYDataChan     chan struct{}              // Signaled by PTY readers when new output arrives (buffered 1, coalescing)
 	StateSyncChan   chan *session.SessionState // Channel for thread-safe state sync from callbacks
 	ClientEventChan chan ClientEvent           // Channel for thread-safe client join/leave notifications
-	Animations      []*ui.Animation            // Active animations
-	CPUHistory      []float64                  // CPU usage history for graph
-	LastCPUUpdate   time.Time                  // Last time CPU was updated
-	RAMUsage        float64                    // Cached RAM usage percentage
-	LastRAMUpdate   time.Time                  // Last time RAM was updated
-	AutoTiling      bool                       // Automatic tiling mode enabled
-	MasterRatio     float64                    // Master window width ratio for tiling (0.3-0.7)
+	// DaemonExitChan carries the two daemon events that end this client: the
+	// session was destroyed, or the connection dropped. See daemon_exit.go.
+	DaemonExitChan chan tea.Msg
+	Animations     []*ui.Animation // Active animations
+	CPUHistory     []float64       // CPU usage history for graph
+	LastCPUUpdate  time.Time       // Last time CPU was updated
+	RAMUsage       float64         // Cached RAM usage percentage
+	LastRAMUpdate  time.Time       // Last time RAM was updated
+	AutoTiling     bool            // Automatic tiling mode enabled
+	MasterRatio    float64         // Master window width ratio for tiling (0.3-0.7)
 	// TouchClient marks a session whose pointer is a finger. It is per session
 	// rather than a config global because one server holds several at once and
 	// a phone attaching must not change what the desktop beside it can hit.
@@ -324,6 +327,11 @@ type OS struct {
 	// clipboard_copy.go for why the write waits.
 	pendingCopy  string
 	selectionSeq uint64
+	// pastePending says a clipboard query is still waiting for the terminal's
+	// answer, and pasteSeq names the query it belongs to. See clipboard_paste.go
+	// for why an unanswered query has to time out.
+	pastePending bool
+	pasteSeq     uint64
 
 	// Performance optimization caches
 	cachedSeparator      string // Cached dock separator string
@@ -1047,6 +1055,14 @@ type OS struct {
 	// terminal mode is deferred until that window materializes through a state
 	// sync and can be focused.
 	pendingStartTerminalMode bool
+
+	// sessionUnarranged records that the session this client attached to had
+	// never been laid out by anybody: every window it carried was still marked
+	// Unplaced, which only the daemon's own window creation sets and any client
+	// push clears. It tells a session the user arranged apart from a fresh one
+	// the daemon happened to pre-populate, which is the difference the [startup]
+	// settings turn on. See applyStartupPreferences.
+	sessionUnarranged bool
 }
 
 // Notification represents a message shown in the dock's right-hand block.
