@@ -53,7 +53,11 @@ func TestRailFilesSectionListsThePanesFolder(t *testing.T) {
 	// outright: it is the same sequence and the same handler either way, and a
 	// test that depended on which shell the machine has would be testing that.
 	enterTerminalMode(t, term)
-	runInShell(t, term, "cd "+dir+" && printf 'at %s\\n' \"$PWD\"", "at "+dir, uiTimeout)
+	// The marker is a short constant rather than the path. A temp directory is
+	// long enough to wrap across two pane lines, and WaitForText looks for its
+	// text on one: waiting for the path made the test's own name a thing that
+	// could break it.
+	runInShell(t, term, "cd "+dir+" && printf 'in-the-dir\\n'", "in-the-dir", uiTimeout)
 	runInShell(t, term,
 		`printf '\033]7;file://%s\033\\marked\n' "$PWD"`, "marked", uiTimeout)
 	leaveTerminalMode(t, term)
