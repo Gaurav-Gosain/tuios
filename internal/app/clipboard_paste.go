@@ -4,7 +4,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // hostPasteTimeout is how long tuios waits for the terminal to answer the OSC 52
@@ -44,7 +43,7 @@ func (m *OS) ClipboardReadUnsupportedReason() string {
 // it, so neither can offer a paste the other has already found impossible.
 func (m *OS) RequestHostPaste() tea.Cmd {
 	if reason := m.ClipboardReadUnsupportedReason(); reason != "" {
-		m.ShowNotification(reason, "warning", config.NotificationDuration)
+		m.ShowNotification(reason, "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.pasteSeq++

@@ -687,7 +687,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// alternative is a paste key that looks broken. See clipboard_paste.go.
 		if m.pasteTimedOut(msg) {
 			m.ShowNotification("The terminal did not send the clipboard. Use your terminal's paste key.",
-				"warning", config.NotificationDuration)
+				"warning", m.Settings.NotificationDuration)
 		}
 		return m, nil
 
