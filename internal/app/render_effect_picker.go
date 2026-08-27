@@ -2,7 +2,6 @@ package app
 
 import (
 	"image/color"
-	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -27,8 +26,8 @@ const (
 	// change size as the selection moves.
 	effectPickerDetailRows = 2
 	// effectOpeningColumn is the width of the right-hand column holding the
-	// opening time. Five cells hold "45.5s" and everything shorter.
-	effectOpeningColumn = 5
+	// opening band. Six cells hold "medium" and every band word is shorter.
+	effectOpeningColumn = 6
 )
 
 // effectPickerHints is the footer, shared by the renderer and the sizing helper
@@ -112,13 +111,18 @@ func (m *OS) renderEffectPicker() (string, overlay.Geometry, []overlayRowHit) {
 	return content, geo, rows
 }
 
-// effectRow renders one effect: its name on the left and how long it takes to
-// give the screen back on the right, with a highlight bar when selected.
+// effectRow renders one effect: its name on the left and how long it hides the
+// screen on the right, with a highlight bar when selected.
 //
-// The time is on the row rather than only in the detail line because it is the
+// The wait is on the row rather than only in the detail line because it is the
 // one property that separates these thirty-six from each other in a way a user
-// cares about before choosing. wipe hands the screen back in under a second and
-// swarm takes three quarters of a minute, and nothing in either name says so.
+// cares about before choosing. wipe hands the screen back at once and swarm
+// keeps it for most of a minute, and nothing in either name says so.
+//
+// It is a band and not a time. The measured seconds behind it move by more than
+// tenfold with the size of the screen and the amount of text on it, so a figure
+// here would be a fact about a screen nobody is looking at. See
+// effectOpenings.
 func (m *OS) effectRow(name string, selected bool, pal overlay.Palette, width int) string {
 	bg := pal.Surface
 	nameColor := pal.FgDim
@@ -129,16 +133,13 @@ func (m *OS) effectRow(name string, selected bool, pal overlay.Palette, width in
 		marker = "› "
 	}
 
-	opening, known := effectOpeningSeconds(name)
-	timing := ""
+	band := effectOpeningBandOf(name)
+	timing := effectOpeningWord(band)
 	timingColor := pal.FgMute
-	if known {
-		timing = effectOpeningLabel(opening)
-		if effectIsSlow(name) {
-			// The flag, not a filter. A slow opener is still a choice someone
-			// may want; what it must not be is a surprise.
-			timingColor = pal.Warning
-		}
+	if band == effectOpeningLong {
+		// The flag, not a filter. A slow opener is still a choice someone may
+		// want; what it must not be is a surprise.
+		timingColor = pal.Warning
 	}
 	timingW := lipgloss.Width(timing)
 	// On a panel too narrow for a name and a time, the name wins.
@@ -155,28 +156,51 @@ func (m *OS) effectRow(name string, selected bool, pal overlay.Palette, width in
 	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + right
 }
 
-// effectOpeningLabel is a duration in the row's right-hand column. Under ten
-// seconds it keeps a decimal, because the difference between 0.9 and 2.0 is the
-// difference between two effects and rounding hides it.
-func effectOpeningLabel(seconds float64) string {
-	if seconds >= 10 {
-		return strconv.Itoa(int(seconds+0.5)) + "s"
+// effectOpeningWord is a band in the row's right-hand column.
+//
+// The words are a scale and read as one down the column, which is the whole of
+// what the column is for: it answers "which of these gives me my screen back
+// soonest", and it must not answer "how many seconds", because that answer
+// changes with the screen it is asked about.
+func effectOpeningWord(band effectOpeningBand) string {
+	switch band {
+	case effectOpeningNone:
+		return "none"
+	case effectOpeningShort:
+		return "short"
+	case effectOpeningMedium:
+		return "medium"
+	case effectOpeningLong:
+		return "long"
+	default:
+		return ""
 	}
-	return strconv.FormatFloat(seconds, 'f', 1, 64) + "s"
 }
 
-// effectOpeningWords is a duration for the sentence under the list. It rounds
-// to whole seconds: the decimal earns its place in a column of numbers to
-// compare and reads as false precision in a sentence.
-func effectOpeningWords(seconds float64) string {
-	whole := int(seconds + 0.5)
-	if whole < 1 {
-		whole = 1
+// effectOpeningSentence is the line under the list.
+//
+// Every band that hides the screen says the time depends on the screen, because
+// it does: the same effect over a bare prompt and over a full 200x50 screen can
+// differ by more than tenfold. The band survives that. A number would not, and
+// the panel used to print one.
+//
+// The none band says something stronger and keeps saying it. An effect gets
+// there by never taking a character off the screen and never moving one, on any
+// screen, so there is no wait for anything to depend on. See
+// effectOpening.keepsScreen.
+func effectOpeningSentence(band effectOpeningBand) string {
+	switch band {
+	case effectOpeningNone:
+		return "The screen stays visible from the start."
+	case effectOpeningShort:
+		return "The wait is short. The time depends on your screen."
+	case effectOpeningMedium:
+		return "The wait is medium. The time depends on your screen."
+	case effectOpeningLong:
+		return "The wait is long. The time depends on your screen."
+	default:
+		return ""
 	}
-	if whole == 1 {
-		return "1 second"
-	}
-	return strconv.Itoa(whole) + " seconds"
 }
 
 // effectPickerDetail is the block under the list: what the selected effect
@@ -197,7 +221,7 @@ func (m *OS) effectPickerDetail(items []string, pal overlay.Palette, width int) 
 	lines := settingsDescription(description, width, effectPickerDetailRows, pal)
 
 	style := overlay.Style(bg).Foreground(pal.FgMute).Italic(true)
-	if m.effectPreview.resized || effectIsSlow(name) {
+	if m.effectPreview.resized || effectOpeningBandOf(name) == effectOpeningLong {
 		// The flag, not a filter. A slow opener is still a choice someone may
 		// want; what it must not be is a surprise.
 		style = overlay.Style(bg).Foreground(pal.Warning)
@@ -230,22 +254,7 @@ func (m *OS) effectDetailText(name string) (description, status string) {
 	if status != "" {
 		return description, status
 	}
-	opening, known := effectOpeningSeconds(name)
-	switch {
-	case !known:
-		return description, ""
-	case opening < 0.5:
-		return description, "The screen stays visible from the start."
-	default:
-		return description, "The screen comes back after about " + effectOpeningWords(opening) + "."
-	}
-}
-
-// effectIsSlow reports whether an effect hides the screen long enough to be
-// worth flagging.
-func effectIsSlow(name string) bool {
-	opening, known := effectOpeningSeconds(name)
-	return known && opening >= effectSlowOpening
+	return description, effectOpeningSentence(effectOpeningBandOf(name))
 }
 
 // blankLines is n surface-filled spacer rows.
