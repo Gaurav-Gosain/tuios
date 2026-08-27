@@ -689,18 +689,23 @@ func (m *OS) tiledLayoutStale() bool {
 		return false
 	}
 
+	// The near edges start at the far corner so the minima below need no first
+	// pass; any is what says whether they were ever taken.
+	left, top := bounds.X+bounds.W, bounds.Y+bounds.H
 	right, bottom := 0, 0
 	any := false
 	for _, w := range m.Windows {
 		if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized || w.Minimizing || w.IsFloating {
 			continue
 		}
-		any = true
 		// Outside the box on any side: unambiguously stale.
 		if w.X < bounds.X || w.Y < bounds.Y ||
 			w.X+w.Width > bounds.X+bounds.W || w.Y+w.Height > bounds.Y+bounds.H {
 			return true
 		}
+		any = true
+		left = min(left, w.X)
+		top = min(top, w.Y)
 		right = max(right, w.X+w.Width)
 		bottom = max(bottom, w.Y+w.Height)
 	}
@@ -709,6 +714,17 @@ func (m *OS) tiledLayoutStale() bool {
 	}
 	// Inside the box but not filling it. A separator gap between panes is taken
 	// out of the space between them, never off the far edge, so a settled
-	// layout always reaches both.
-	return right != bounds.X+bounds.W || bottom != bounds.Y+bounds.H
+	// layout always reaches all four.
+	//
+	// All four, not two. The check used to measure the far edges alone, which
+	// misses a layout inset from the near ones - and that is not a hypothetical
+	// shape. A client attaching is handed the session's reserve as it stands,
+	// lays the panes out against it and pushes; if the reserve then shrinks
+	// because that same client asks for less chrome than the one already there,
+	// the pushed rectangles start too far in and still reach the far edges
+	// exactly. A peer that had already retiled against the smaller reserve
+	// adopted them and had no reason to look again, so it drew every shared
+	// shell narrower than the shell was actually running.
+	return left != bounds.X || top != bounds.Y ||
+		right != bounds.X+bounds.W || bottom != bounds.Y+bounds.H
 }

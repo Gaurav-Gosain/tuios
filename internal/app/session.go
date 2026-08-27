@@ -471,7 +471,17 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	m.SessionName = state.Name
 	m.adoptSessionLabels(state)
 	m.DaemonStateVersion = state.Version
+	// A workspace switch adopted from a sync moves which panes are laid out, and
+	// the panes it brings on screen were last laid out whenever their workspace
+	// was last shown here - under whatever shared-borders setting was in force
+	// then. The rectangles in the sync are right, so nothing reads as stale, and
+	// the only thing wrong is the border allowance each pane keeps: two rows and
+	// two columns of every guest on the workspace, on this client alone. It is
+	// the same shape as geometryChanged below, so it is folded into the same
+	// retile.
+	previousWorkspace := m.CurrentWorkspace
 	m.CurrentWorkspace = clampWorkspace(state.CurrentWorkspace)
+	workspaceChanged := previousWorkspace != m.CurrentWorkspace
 	m.MasterRatio = state.MasterRatio
 	m.AutoTiling = state.AutoTiling
 
@@ -664,7 +674,8 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// geometryChanged forces the retile the staleness check cannot always see:
 	// flipping shared borders with the gap pinned changes every tiled pane's
 	// guest grid without moving a single rectangle.
-	if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 && (geometryChanged || m.tiledLayoutStale()) {
+	if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 &&
+		(geometryChanged || workspaceChanged || m.tiledLayoutStale()) {
 		m.TileAllWindows()
 	}
 
