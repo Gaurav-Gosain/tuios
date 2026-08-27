@@ -809,6 +809,13 @@ type OS struct {
 	// sections, which is every frame nobody has asked for a listing. See
 	// sidebar_files.go.
 	filesView fileViewState
+	// filePrompt is the file action dialog: the create prompt, the rename
+	// prompt, or the delete confirmation. Zero when none is up, which is every
+	// frame nobody has pressed a file action key on. See sidebar_file_ops.go.
+	filePrompt filePromptState
+	// fileClip is what a copy or a cut in the files section captured, waiting
+	// for a paste. It holds paths and no bytes, so it costs nothing to carry.
+	fileClip fileClipboard
 	// sidebarPendingCmd is the command the last rail gesture produced, parked
 	// because SidebarClick answers a bool. Drained by the click handler.
 	sidebarPendingCmd tea.Cmd

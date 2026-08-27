@@ -291,6 +291,7 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 		})
 	}
 	checkEnum("sidebar.folder_click", cfg.Appearance.Sidebar.FolderClick, SidebarFolderClicks)
+	checkEnum("sidebar.file_delete", cfg.Appearance.Sidebar.FileDelete, SidebarFileDeletes)
 	if cfg.Appearance.Sidebar.Workspaces != "" {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "appearance.sidebar.workspaces",

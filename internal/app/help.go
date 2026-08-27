@@ -307,6 +307,28 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 		row("help", "Show this list of the rail's keys"),
 	)
 
+	// The files section's own keys, which act only on a row of the listing.
+	// They are read from their own section for the reason that section exists:
+	// three of them share a key with a rail binding above, so the map the rail
+	// uses cannot hold them. See getDefaultSidebarFilesKeybinds.
+	fileRow := func(action, desc string) HelpBinding {
+		return HelpBinding{
+			Action:      action,
+			Keys:        registry.GetSidebarFilesKeys(action),
+			Description: desc,
+			Category:    cat,
+		}
+	}
+	bindings = append(bindings,
+		fileRow("file_create", "Files: make a file, or a folder with a / at the end"),
+		fileRow("file_rename", "Files: rename the file under the cursor"),
+		fileRow("file_delete", "Files: delete the file under the cursor"),
+		fileRow("file_delete_forever", "Files: delete for good, with no trash"),
+		fileRow("file_copy", "Files: copy the file under the cursor"),
+		fileRow("file_cut", "Files: cut the file under the cursor"),
+		fileRow("file_paste", "Files: paste into the folder on screen"),
+	)
+
 	// Drop rows whose action is unbound, exactly as generateCategoryBindings does.
 	bound := bindings[:0]
 	for _, b := range bindings {

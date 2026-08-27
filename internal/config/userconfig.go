@@ -365,6 +365,12 @@ type SidebarConfig struct {
 	// FolderClick is what a click on a folder row does: navigate, cd or both
 	// (default: navigate).
 	FolderClick string `toml:"folder_click"`
+	// FileActions lets the files section create, rename, delete, copy, cut and
+	// paste (default: true).
+	FileActions *bool `toml:"file_actions"`
+	// FileDelete is where a delete sends the file: trash or permanent
+	// (default: trash).
+	FileDelete string `toml:"file_delete"`
 }
 
 // Tape autorun modes. See TapeConfig.Autorun.
@@ -414,6 +420,10 @@ type KeybindingsConfig struct {
 	// of buildMappings: that flattens sections into the global keymap, which would
 	// leak rail keys (j/k/h/l/enter) onto panes.
 	Sidebar map[string][]string `toml:"sidebar"`
+	// SidebarFiles binds are looked up before Sidebar, and only while the rail's
+	// cursor is on a row of the files section. See
+	// getDefaultSidebarFilesKeybinds for why they are not in Sidebar.
+	SidebarFiles map[string][]string `toml:"sidebar_files"`
 }
 
 // DefaultConfig returns the default configuration
@@ -442,6 +452,7 @@ func DefaultConfig() *UserConfig {
 				Width:       SidebarDefaultWidth,
 				Sections:    SidebarDefaultSections,
 				FolderClick: SidebarFolderClickNavigate,
+				FileDelete:  SidebarFileDeleteTrash,
 			},
 		},
 		Daemon: DaemonConfig{
@@ -660,6 +671,7 @@ func DefaultConfig() *UserConfig {
 			},
 			TerminalMode: getDefaultTerminalModeKeybinds(),
 			Sidebar:      getDefaultSidebarKeybinds(),
+			SidebarFiles: getDefaultSidebarFilesKeybinds(),
 			Global: map[string][]string{
 				// ctrl+p is fish's history-back and vim's keyword completion, and
 				// alt+space is readline's set-mark. Both are taken on purpose and
@@ -720,6 +732,37 @@ func getDefaultSidebarKeybinds() map[string][]string {
 		"menu":        {"m"},
 		"help":        {"?"},
 		"exit":        {"esc", "s"},
+	}
+}
+
+// getDefaultSidebarFilesKeybinds returns the files section's own keys, live
+// only while the rail owns the keyboard and the cursor is on a row of the
+// listing.
+//
+// They are neo-tree's keys and yeetui's: a adds, r renames, d deletes, y
+// copies, x cuts, p pastes. Both tools agree on five of the six and the
+// maintainer wrote one of them, so this is the set his hands already know.
+//
+// A section of their own, and not entries in [keybindings.sidebar], because
+// three of them collide with a rail key that already exists: r renames a pane
+// or a session, x opens a row's destructive menu, and a makes nothing yet. One
+// map cannot hold two actions on one key, so the two maps are consulted in
+// order instead, and the row under the cursor decides which one answers. That
+// is the same rule the rail's own rename already follows, where r means the
+// pane on a pane row and the session on a session row.
+//
+// D is the permanent delete. It is a key of its own rather than a second answer
+// inside the dialog, because a file on another disk cannot go to the home trash
+// at all, and somebody who means it should not have to edit a config file.
+func getDefaultSidebarFilesKeybinds() map[string][]string {
+	return map[string][]string{
+		"file_create":         {"a"},
+		"file_rename":         {"r"},
+		"file_delete":         {"d"},
+		"file_delete_forever": {"D"},
+		"file_copy":           {"y"},
+		"file_cut":            {"x"},
+		"file_paste":          {"p"},
 	}
 }
 
@@ -1168,6 +1211,12 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	}
 	if sb.FolderClick != "" {
 		SidebarFolderClick = sb.FolderClick
+	}
+	if sb.FileActions != nil {
+		SidebarFileActions = *sb.FileActions
+	}
+	if sb.FileDelete != "" {
+		SidebarFileDelete = sb.FileDelete
 	}
 	if sb.Tooltips != nil {
 		Tooltips = *sb.Tooltips

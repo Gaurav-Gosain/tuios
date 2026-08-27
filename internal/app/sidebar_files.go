@@ -52,8 +52,10 @@ import (
 // # What it is not
 //
 // It is not a file manager. It lists, it walks in and out, it hands a path to
-// the clipboard and a directory to a shell. It does not create, rename, delete
-// or move anything: yeetui does all of that far better than twenty-eight
+// the clipboard and a directory to a shell, and it does the six file actions
+// named in sidebar_file_ops.go: create, rename, delete, copy, cut and paste.
+// That is the whole set. There is no multi-select, no tree, no filter and no
+// drag and drop, because yeetui does all of that far better than twenty-six
 // columns ever will, and it runs in a pane.
 
 // fileEntry is one row of a listing. Only what the rail draws and what a click
@@ -350,6 +352,10 @@ func (m *OS) OpenFileView(dir string) bool {
 // it again on the next frame and the control would look broken.
 func (m *OS) CloseFileView() {
 	m.filesView = fileViewState{Show: -1}
+	// A dialog asking about a file in a listing that is no longer on screen has
+	// nothing to point at. It is dropped with the listing, and an operation
+	// already running is left to finish and report. See sidebar_file_ops.go.
+	m.closeFilePrompt()
 }
 
 // RefreshFileView re-reads the current directory. It is the answer to a listing

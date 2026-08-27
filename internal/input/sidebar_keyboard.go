@@ -38,6 +38,17 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ExitSidebarFocus()
 		return o, nil
 	}
+	// The files section's own keys are consulted first, and only while the
+	// cursor is on a row of the listing. Three of them share a key with a rail
+	// binding that already exists (r renames, x kills, a was free), so the row
+	// under the cursor is what decides which of the two answers. On every other
+	// row the lookup finds nothing and the rail's own binding runs, unchanged.
+	if o.SidebarCursorOnFile() {
+		if act := lookupAction(msg, o.KeybindRegistry.GetSidebarFilesAction); act != "" {
+			return o, handleSidebarFileAction(act, o)
+		}
+	}
+
 	action := lookupAction(msg, o.KeybindRegistry.GetSidebarAction)
 	if action == "" {
 		// esc leaves the rail when nothing else claims it. The scope swallows
@@ -126,4 +137,29 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// return one, so it parks it on the model and it is picked up here, the same
 	// way the click handler picks it up.
 	return o, o.TakeSidebarCmd()
+}
+
+// handleSidebarFileAction runs one of the files section's six actions.
+//
+// Not one of them touches the disk here. Create, rename and delete open a
+// dialog; copy and cut write down a path; paste answers with the command that
+// does the work off the loop.
+func handleSidebarFileAction(action string, o *app.OS) tea.Cmd {
+	switch action {
+	case sidebarActFileCreate:
+		o.SidebarFileCreate()
+	case sidebarActFileRename:
+		o.SidebarFileRename()
+	case sidebarActFileDelete:
+		o.SidebarFileDelete(false)
+	case sidebarActFileDeleteAll:
+		o.SidebarFileDelete(true)
+	case sidebarActFileCopy:
+		o.SidebarFileCopy()
+	case sidebarActFileCut:
+		o.SidebarFileCut()
+	case sidebarActFilePaste:
+		return o.SidebarFilePaste()
+	}
+	return nil
 }

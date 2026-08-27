@@ -76,6 +76,8 @@ var settingLabels = map[string]string{
 	"appearance.sidebar.sections":          "Section layout",
 	"appearance.sidebar.file_icons":        "File icons",
 	"appearance.sidebar.folder_click":      "Click a folder",
+	"appearance.sidebar.file_actions":      "File actions",
+	"appearance.sidebar.file_delete":       "Delete sends to",
 	"appearance.dock_workspace_tab_format": "Workspace tab format",
 	"appearance.zoom_max_width":            "Zoom width",
 	"appearance.alt_drag":                  "Alt-drag to move",

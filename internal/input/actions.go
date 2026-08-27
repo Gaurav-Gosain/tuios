@@ -41,6 +41,18 @@ const (
 	sidebarActMenu        = "menu"
 	sidebarActHelp        = "help"
 	sidebarActExit        = "exit"
+
+	// The files section's own six. They are resolved before the rail's other
+	// bindings while the cursor is on a file row, which is what lets "x" mean
+	// cut on a name and kill on a pane without either losing its key. See
+	// HandleSidebarKey.
+	sidebarActFileCreate    = "file_create"
+	sidebarActFileRename    = "file_rename"
+	sidebarActFileDelete    = "file_delete"
+	sidebarActFileDeleteAll = "file_delete_forever"
+	sidebarActFileCopy      = "file_copy"
+	sidebarActFileCut       = "file_cut"
+	sidebarActFilePaste     = "file_paste"
 	// jump_1..jump_9 are matched by prefix; see HandleSidebarKey.
 	sidebarActJumpPrefix = "jump_"
 )

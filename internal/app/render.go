@@ -494,7 +494,7 @@ func (m *OS) composeFrame() string {
 // visible windows, any overlay, separators, graphics, or active manipulation or
 // animation. Pure: it does not mutate render state.
 func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
-	if len(m.Animations) > 0 || m.Renaming() {
+	if len(m.Animations) > 0 || m.Renaming() || m.FilePromptOpen() {
 		return nil, false
 	}
 	// The screen saver is a compositor overlay, and the fast path skips

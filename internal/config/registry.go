@@ -152,6 +152,20 @@ func (r *KeybindRegistry) GetSidebarAction(key string) string {
 	return r.lookupKeyInSection(key, r.config.Keybindings.Sidebar)
 }
 
+// GetSidebarFilesAction returns the action name for a key among the files
+// section's own binds. Consulted before GetSidebarAction, and only while the
+// rail's cursor is on a row of the listing, so the three keys the two sections
+// share each mean the thing the row under the cursor is.
+func (r *KeybindRegistry) GetSidebarFilesAction(key string) string {
+	return r.lookupKeyInSection(key, r.config.Keybindings.SidebarFiles)
+}
+
+// GetSidebarFilesKeys is GetKeys for the files section's binds, for the help
+// overlay.
+func (r *KeybindRegistry) GetSidebarFilesKeys(action string) []string {
+	return r.config.Keybindings.SidebarFiles[action]
+}
+
 // GetSidebarKeys is GetKeys for the rail's scope. GetKeys deliberately does not
 // search the sidebar section (its action names collide with the global ones),
 // so the help overlay needs its own way to read what the rail is bound to.

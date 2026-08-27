@@ -435,6 +435,16 @@ var optionSpecs = []Option{
 		Accepted:    SidebarFolderClicks, Default: SidebarFolderClickNavigate,
 	},
 	{
+		Path: "appearance.sidebar.file_actions", Type: OptionBool, Section: "sidebar",
+		Description: "Let the files section create, rename, delete, copy and paste",
+		Default:     "true",
+	},
+	{
+		Path: "appearance.sidebar.file_delete", Type: OptionString, Section: "sidebar",
+		Description: "Where a delete sends the file: the trash, or nowhere",
+		Accepted:    SidebarFileDeletes, Default: SidebarFileDeleteTrash,
+	},
+	{
 		Path: "appearance.sidebar.workspaces", Type: OptionString, Section: "sidebar",
 		Description: "Workspace chip band the rail used to draw",
 		Default:     "",

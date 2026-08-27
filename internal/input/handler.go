@@ -250,6 +250,13 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.Renaming() {
 		return handleRenameMode(msg, o)
 	}
+	// A file dialog is the same case again: opened from the rail, and it owns
+	// every key while it is up. It is checked ahead of the rail so the key that
+	// opened it cannot answer it, and so a rail binding cannot fire behind a
+	// confirmation that is asking about a delete.
+	if o.FilePromptOpen() {
+		return handleFilePromptInput(msg, o)
+	}
 
 	// The sidebar rail owns the keyboard while focused, in both terminal and
 	// window mode (it is reachable from either via ctrl+b o), so pane and window

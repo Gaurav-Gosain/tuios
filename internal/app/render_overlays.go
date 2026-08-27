@@ -303,6 +303,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "sessionclose", content, geo, rows)
 	}
 
+	if m.FilePromptOpen() {
+		content, geo, rows := m.renderFileDialog()
+		layers = m.placeOverlayPanel(layers, "filedialog", content, geo, rows)
+	}
+
 	if m.ShowHelp {
 		content, geo := m.RenderHelpMenu()
 		layers = m.placeOverlayPanel(layers, "help", content, geo, nil)
