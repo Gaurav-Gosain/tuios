@@ -250,6 +250,18 @@ func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.E
 		ExistingColorHandling: tfx.DynamicExistingColors,
 	})
 	engine := tfx.NewEngine(terminal, tfx.NewRng(rand.Uint64()))
+	// The clock has to be the rate this program really paints at. NewEngine
+	// installs one that steps a sixtieth of a second per frame, and the saver
+	// ticks at config.NormalFPS, which max_fps sets and which is 240 on a
+	// screen that will take it. Left alone, the engine's idea of time ran four
+	// times faster than the wall and every effect written in seconds ran four
+	// times too fast: matrix rained for the wrong length, thunderstorm stormed
+	// for the wrong length, and tuffbaby played its clip at forty frames a
+	// second instead of ten.
+	//
+	// screensaverFrameCmd and effectPreviewFrameCmd both tick at NormalFPS, so
+	// this one line covers the saver and the effect picker's preview alike.
+	engine.Clock = tfx.NewVirtualClock(config.NormalFPS)
 	if err := effect.Build(engine); err != nil {
 		return nil, false
 	}
