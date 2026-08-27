@@ -150,34 +150,34 @@ type DaemonConfig struct {
 
 // AppearanceConfig holds appearance-related settings
 type AppearanceConfig struct {
-	BorderStyle          string  `toml:"border_style"`           // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
-	ZenMode              string  `toml:"zen_mode"`               // Zen mode: disabled, always, mouse (default: disabled)
-	Links                string  `toml:"links"`                  // Links tuios acts on: off, marked, all (default: all)
-	HideWindowButtons    bool    `toml:"hide_window_buttons"`    // Hide window control buttons (minimize, maximize, close)
-	WindowButtonStyle    string  `toml:"window_button_style"`    // Window control style: pill, dots (default: pill)
-	WindowButtonPosition string  `toml:"window_button_position"` // Which end of the title bar the window controls sit on: right, left (default: right)
-	HideScrollbar        bool    `toml:"hide_scrollbar"`         // Hide the window scrollbar thumb on the border
-	ScrollbackLines      int     `toml:"scrollback_lines"`       // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
-	ScrollLines          int     `toml:"scroll_lines"`           // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
-	CopyOnSelect         *bool   `toml:"copy_on_select"`         // Copy a mouse selection to the clipboard on release (default: true)
+	BorderStyle            string  `toml:"border_style"`             // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
+	ZenMode                string  `toml:"zen_mode"`                 // Zen mode: disabled, always, mouse (default: disabled)
+	Links                  string  `toml:"links"`                    // Links tuios acts on: off, marked, all (default: all)
+	HideWindowButtons      bool    `toml:"hide_window_buttons"`      // Hide window control buttons (minimize, maximize, close)
+	WindowButtonStyle      string  `toml:"window_button_style"`      // Window control style: pill, dots (default: pill)
+	WindowButtonPosition   string  `toml:"window_button_position"`   // Which end of the title bar the window controls sit on: right, left (default: right)
+	HideScrollbar          bool    `toml:"hide_scrollbar"`           // Hide the window scrollbar thumb on the border
+	ScrollbackLines        int     `toml:"scrollback_lines"`         // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
+	ScrollLines            int     `toml:"scroll_lines"`             // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
+	CopyOnSelect           *bool   `toml:"copy_on_select"`           // Copy a mouse selection to the clipboard on release (default: true)
 	ClipboardLocalFallback *bool   `toml:"clipboard_local_fallback"` // Use native system clipboard (wl-copy/xclip/pbcopy) when available (default: true)
-	FocusFollowsMouse    *bool   `toml:"focus_follows_mouse"`    // Focus the pane under the cursor as the mouse moves (default: false)
-	AltDrag              *bool   `toml:"alt_drag"`               // Alt + left-drag moves a pane (default: true)
-	ClickToType          string  `toml:"click_to_type"`          // What a click on a pane's content does in window-management mode: single, double, off (default: single)
-	WordCharacters       *string `toml:"word_characters"`        // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
-	DockbarPosition      string  `toml:"dockbar_position"`       // Dockbar position: bottom, top, hidden
-	PreferredShell       string  `toml:"preferred_shell"`        // Preferred shell: if empty, auto-detect based on platform.
-	AnimationsEnabled    *bool   `toml:"animations_enabled"`     // Enable UI animations (default: true). Set to false for instant transitions.
-	ConfirmQuit          *bool   `toml:"confirm_quit"`           // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
-	WhichKeyEnabled      *bool   `toml:"whichkey_enabled"`       // Show which-key popup after pressing leader key (default: true)
-	WhichKeyPosition     string  `toml:"whichkey_position"`      // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
-	WindowTitlePosition  string  `toml:"window_title_position"`  // Window title position: bottom, top, hidden (default: bottom). Shows CustomName if set, else terminal title.
-	HideClock            bool    `toml:"hide_clock"`             // Hide the clock overlay (deprecated, use show_clock)
-	ShowClock            bool    `toml:"show_clock"`             // Show the clock overlay (default: false)
-	ShowCPU              bool    `toml:"show_cpu"`               // Show CPU graph in dock (default: false)
-	ShowRAM              bool    `toml:"show_ram"`               // Show RAM usage in dock (default: false)
-	Theme                string  `toml:"theme"`                  // Color theme name (e.g., dracula, nord, my-custom-theme)
-	SharedBorders        *bool   `toml:"shared_borders"`         // Share borders between adjacent tiled windows (default: false)
+	FocusFollowsMouse      *bool   `toml:"focus_follows_mouse"`      // Focus the pane under the cursor as the mouse moves (default: false)
+	AltDrag                *bool   `toml:"alt_drag"`                 // Alt + left-drag moves a pane (default: true)
+	ClickToType            string  `toml:"click_to_type"`            // What a click on a pane's content does in window-management mode: single, double, off (default: single)
+	WordCharacters         *string `toml:"word_characters"`          // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
+	DockbarPosition        string  `toml:"dockbar_position"`         // Dockbar position: bottom, top, hidden
+	PreferredShell         string  `toml:"preferred_shell"`          // Preferred shell: if empty, auto-detect based on platform.
+	AnimationsEnabled      *bool   `toml:"animations_enabled"`       // Enable UI animations (default: true). Set to false for instant transitions.
+	ConfirmQuit            *bool   `toml:"confirm_quit"`             // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
+	WhichKeyEnabled        *bool   `toml:"whichkey_enabled"`         // Show which-key popup after pressing leader key (default: true)
+	WhichKeyPosition       string  `toml:"whichkey_position"`        // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
+	WindowTitlePosition    string  `toml:"window_title_position"`    // Window title position: bottom, top, hidden (default: bottom). Shows CustomName if set, else terminal title.
+	HideClock              bool    `toml:"hide_clock"`               // Hide the clock overlay (deprecated, use show_clock)
+	ShowClock              bool    `toml:"show_clock"`               // Show the clock overlay (default: false)
+	ShowCPU                bool    `toml:"show_cpu"`                 // Show CPU graph in dock (default: false)
+	ShowRAM                bool    `toml:"show_ram"`                 // Show RAM usage in dock (default: false)
+	Theme                  string  `toml:"theme"`                    // Color theme name (e.g., dracula, nord, my-custom-theme)
+	SharedBorders          *bool   `toml:"shared_borders"`           // Share borders between adjacent tiled windows (default: false)
 	// Customization
 	BorderFocusedColor     string `toml:"border_focused_color"`      // Hex color for focused pane border (e.g., "#89b4fa")
 	BorderUnfocusedColor   string `toml:"border_unfocused_color"`    // Hex color for unfocused pane border (e.g., "#585b70")

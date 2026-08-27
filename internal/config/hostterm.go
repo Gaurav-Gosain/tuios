@@ -58,12 +58,6 @@ func detectHostTerminal(getenv func(string) string) HostTerminal {
 	if getenv("ALACRITTY_WINDOW_ID") != "" || getenv("ALACRITTY_SOCKET") != "" {
 		return HostAlacritty
 	}
-	// VTE-based terminals (GNOME Terminal, Ptyxis, Tilix) set VTE_VERSION.
-	// This is the marker the native clipboard fallback keys off: VTE never
-	// implements OSC 52, so the host needs the system tool instead.
-	if getenv("VTE_VERSION") != "" {
-		return HostVTE
-	}
 	if getenv("WEZTERM_EXECUTABLE") != "" {
 		return HostWezTerm
 	}
@@ -76,6 +70,12 @@ func detectHostTerminal(getenv func(string) string) HostTerminal {
 		return HostAlacritty
 	case strings.Contains(term, "rio"):
 		return HostRio
+	}
+	// VTE-based terminals (GNOME Terminal, Ptyxis, Tilix) set VTE_VERSION.
+	// This is the marker the native clipboard fallback keys off: VTE never
+	// implements OSC 52, so the host needs the system tool instead.
+	if getenv("VTE_VERSION") != "" {
+		return HostVTE
 	}
 	return HostUnknown
 }
