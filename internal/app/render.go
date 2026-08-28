@@ -830,6 +830,12 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 			backing := m.kittyPosBacking[:len(m.Windows)]
 			screenWidth := m.GetRenderWidth()
 			screenHeight := m.GetRenderHeight()
+			// The box the panes are laid out in, which is what a placement is
+			// allowed to draw in. It is the render area less the chrome the
+			// session reserves, and it is not the screen: see
+			// WindowPositionInfo.LayoutX. Read once per frame, not per window.
+			layoutX, layoutY := m.GetLeftMargin(), m.GetTopMargin()
+			layoutW, layoutH := m.GetContentWidth(), m.GetUsableHeight()
 			n := 0
 			for _, w := range m.Windows {
 				// Include EVERY window, but mark off-workspace/minimized ones
@@ -869,6 +875,10 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 					IsAltScreen:        w.IsAltScreen(),
 					ScreenWidth:        screenWidth,
 					ScreenHeight:       screenHeight,
+					LayoutX:            layoutX,
+					LayoutY:            layoutY,
+					LayoutW:            layoutW,
+					LayoutH:            layoutH,
 				}
 				m.kittyPosMap[w.ID] = &backing[n]
 				n++
