@@ -521,16 +521,17 @@ Request:
 Response:
 
 ```json
-{"result": {"type": "pane_content", "source": "recent", "styled": false, "content": "..."}}
+{"result": {"type": "pane_content", "source": "recent", "styled": false, "resolved": false, "content": "..."}}
 ```
 
-Without `resolved`, a `styled` capture emits the colours exactly as the guest
-sent them: a program that draws with SGR `31` comes back as `\x1b[31m`, and the
-consumer resolves that index against its own palette. That is the intended
-contract: appearance is client-owned and the daemon has no theme. `resolved`
-exists for consumers that render the capture verbatim and therefore need the
-colours already resolved; it takes the palette explicitly so the daemon still
-knows nothing about themes.
+The reply echoes `resolved` so a consumer can tell whether the capture it
+received was rewritten. Without `resolved`, a `styled` capture emits the
+colours exactly as the guest sent them: a program that draws with SGR `31`
+comes back as `\x1b[31m`, and the consumer resolves that index against its
+own palette. That is the intended contract: appearance is client-owned and
+the daemon has no theme. `resolved` exists for consumers that render the
+capture verbatim and therefore need the colours already resolved; it takes
+the palette explicitly so the daemon still knows nothing about themes.
 
 ```json
 {"verb": "capture-pane", "params": {"session": "work", "source": "visible", "styled": true, "resolved": true, "palette": ["#45475a", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5", "#bac2de", "#585b70", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5", "#a6adc8"]}}
