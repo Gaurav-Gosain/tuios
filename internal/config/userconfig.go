@@ -1361,7 +1361,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 
 	// ClipboardLocalFallback defaults to true (nil means use default)
 	if cfg.Appearance.ClipboardLocalFallback != nil {
-		ClipboardLocalFallback = *cfg.Appearance.ClipboardLocalFallback
+		s.ClipboardLocalFallback = *cfg.Appearance.ClipboardLocalFallback
 	}
 
 	// FocusFollowsMouse defaults to false; a pointer so turning it off in the

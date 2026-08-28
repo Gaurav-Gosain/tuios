@@ -62,14 +62,13 @@ func (m *OS) clipboardWriteCmd(text string) tea.Cmd {
 	// double write is idempotent (same text), and the native one is what makes
 	// VTE-based terminals (GNOME Terminal, Ptyxis) work at all.
 	return func() tea.Msg {
-		if local && m.Settings.ClipboardLocalFallback && LocalClipboardAvailable() {
+		if local && ShouldUseNativeClipboard(m.Settings.ClipboardLocalFallback) {
 			// Best-effort: if the native write fails (permissions, compositor
 			// gone), the OSC 52 message below is still the safety net.
 			_ = DetectClipboardTool().Write(text)
 		}
 		return tea.SetClipboard(text)()
 	}
-}
 }
 
 // DeferCopyToClipboard holds text back until delay has passed with no further

@@ -337,23 +337,25 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// the operator's clipboard into a remote pane. VTE never implements
 			// OSC 52, so everywhere else the OSC 52 read below is the right path.
 			local := !o.IsSSHMode && !o.BrowserClient
-			if local && app.ShouldUseNativeClipboard() {
+			if local && app.ShouldUseNativeClipboard(o.Settings.ClipboardLocalFallback) {
 				tool := app.DetectClipboardTool()
 				return o, func() tea.Msg {
 					text, err := tool.Read()
 					if err != nil {
 						// Native read failed (hung tool, empty selection,
-						// compositor gone): fall back to OSC 52 so the paste
-						// is not silently lost. VTE never answers, but any
-						// terminal that does implement it still gets the text.
-						return tea.ReadClipboard()
+						// compositor gone): fall back to the host paste path
+						// so the OSC 52 read still arms the deadline and the
+						// browser client still hears why paste cannot work.
+						return o.RequestHostPaste()()
 					}
 					return tea.ClipboardMsg{Content: text, Selection: 'c'}
 				}
 			}
-			// Use tea.ReadClipboard to request clipboard via OSC 52
-			// This will generate a tea.ClipboardMsg which we handle in handler.go
-			return o, tea.ReadClipboard
+			// Request the clipboard via the host paste path: it routes through
+			// RequestHostPaste so the browser client is told why paste cannot
+			// work and the OSC 52 deadline is armed (a terminal that never
+			// answers is reported instead of looking broken).
+			return o, o.RequestHostPaste()
 		}
 		return o, nil
 	}

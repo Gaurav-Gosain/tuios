@@ -122,8 +122,8 @@ func LocalClipboardAvailable() bool {
 // paste path): only those know whether the human is sitting at this machine.
 // Under tuios ssh / tuios-web, WAYLAND_DISPLAY/DISPLAY describe the operator's
 // desktop, so a native read/write would move data between two people.
-func ShouldUseNativeClipboard() bool {
-	return shouldUseNativeClipboard(detectClipboardToolEnv{os.Getenv, lookPath}, config.HostIsVTE(), config.ClipboardLocalFallback)
+func ShouldUseNativeClipboard(fallbackEnabled bool) bool {
+	return shouldUseNativeClipboard(detectClipboardToolEnv{os.Getenv, lookPath}, config.HostIsVTE(), fallbackEnabled)
 }
 
 func shouldUseNativeClipboard(env detectClipboardToolEnv, hostIsVTE, fallbackEnabled bool) bool {
