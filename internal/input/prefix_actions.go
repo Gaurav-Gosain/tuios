@@ -145,13 +145,13 @@ func handleTerminalFocusDirection(dir string) ActionHandler {
 			case "right":
 				o.ScrollingFocusRight()
 			}
-			return maybeEnterTerminalOnFocusChange(o, prev)
+			return maybeEnterTerminalOnFocusChange(o, prev, focusEnterTargeted)
 		}
 		// A direction with nothing in it is a no-op, which is what stopping at the
 		// edge of the layout looks like.
 		_ = o.FocusDirection(dir)
 		refreshFocusedWindow(o)
-		return maybeEnterTerminalOnFocusChange(o, prev)
+		return maybeEnterTerminalOnFocusChange(o, prev, focusEnterTargeted)
 	}
 }
 
@@ -274,7 +274,7 @@ func handlePrefixNextWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CycleToNextVisibleWindow()
 		refreshFocusedWindow(o)
 	}
-	return maybeEnterTerminalOnFocusChange(o, prev)
+	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterCycle)
 }
 
 func handlePrefixPrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -283,7 +283,7 @@ func handlePrefixPrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CycleToPreviousVisibleWindow()
 		refreshFocusedWindow(o)
 	}
-	return maybeEnterTerminalOnFocusChange(o, prev)
+	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterCycle)
 }
 
 // makePrefixSelectHandler focuses the num-th window of the current workspace.
@@ -309,7 +309,7 @@ func makePrefixSelectHandler(num int) ActionHandler {
 			}
 		}
 		refreshFocusedWindow(o)
-		return maybeEnterTerminalOnFocusChange(o, prev)
+		return maybeEnterTerminalOnFocusChange(o, prev, focusEnterTargeted)
 	}
 }
 
@@ -578,7 +578,7 @@ func handleTerminalNextWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CycleToNextVisibleWindow()
 	}
 	refreshFocusedWindow(o)
-	return maybeEnterTerminalOnFocusChange(o, prev)
+	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterCycle)
 }
 
 func handleTerminalPrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -589,7 +589,7 @@ func handleTerminalPrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CycleToPreviousVisibleWindow()
 	}
 	refreshFocusedWindow(o)
-	return maybeEnterTerminalOnFocusChange(o, prev)
+	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterCycle)
 }
 
 func handleTerminalExitMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

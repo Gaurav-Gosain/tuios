@@ -562,18 +562,18 @@ func (s *Settings) FormatWorkspaceTab(name string, index int) string {
 }
 
 // AutoEnterTerminalOnFocus enters terminal mode when a window-management
-// keyboard command actually moves focus to another pane (next/prev window,
-// numbered select, directional pane focus). Hover-focus and click-to-type keep
-// their own policies; this is only those explicit focus commands. A no-op that
-// leaves the already-focused pane focused does not change mode, so Tab/n/w stay
-// usable until the user actually focuses a different pane.
+// keyboard command actually moves focus to another pane. Hover-focus and
+// click-to-type keep their own policies; this is only those explicit focus
+// commands. A no-op that leaves the already-focused pane focused does not
+// change mode.
 //
-// The default is off: Tab/n/w must keep cycling windows in window-management
-// mode. Set it true to treat a keyboard focus command that actually moves
-// focus as a request to type in that pane, the same bargain click-to-type="single"
-// makes for the mouse.
+// off (the default): Tab keeps cycling in window-management mode.
+// targeted: numbered select and directional arrows enter terminal mode; Tab
+// does not.
+// all: every covered focus command that actually moves focus also enters
+// terminal mode, including next/prev window.
 // Set via appearance.auto_enter_terminal_on_focus config.
-var AutoEnterTerminalOnFocus = false
+var AutoEnterTerminalOnFocus = AutoEnterTerminalOff
 
 // PaneGapMax caps it. Past this the panes on a small terminal are further apart
 // than they are wide, and spacing that swallows what it spaces has stopped

@@ -147,9 +147,9 @@ var optionSpecs = []Option{
 		Accepted:    ClickToTypeModes, Default: ClickToTypeSingle,
 	},
 	{
-		Path: "appearance.auto_enter_terminal_on_focus", Type: OptionBool, Section: "appearance",
-		Description: "Enter terminal mode when a keyboard focus command moves focus to another pane",
-		Default:     "false",
+		Path: "appearance.auto_enter_terminal_on_focus", Type: OptionString, Section: "appearance",
+		Description: "Type in a pane when a keyboard focus command moves to it: off, targeted (select and arrows), or all (including Tab)",
+		Accepted:    AutoEnterTerminalModes, Default: string(AutoEnterTerminalOff),
 	},
 	{
 		Path: "appearance.word_characters", Type: OptionString, Section: "appearance",

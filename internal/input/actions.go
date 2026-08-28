@@ -353,13 +353,13 @@ func handleRestoreAll(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleNextWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	prev := o.FocusedWindow
 	o.CycleToNextVisibleWindow()
-	return maybeEnterTerminalOnFocusChange(o, prev)
+	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterCycle)
 }
 
 func handlePrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	prev := o.FocusedWindow
 	o.CycleToPreviousVisibleWindow()
-	return maybeEnterTerminalOnFocusChange(o, prev)
+	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterCycle)
 }
 
 // makeSelectWindowHandler creates a handler for selecting a window by index.
@@ -368,7 +368,7 @@ func makeSelectWindowHandler(idx int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		prev := o.FocusedWindow
 		selectWindowByIndex(idx+1, o)
-		return maybeEnterTerminalOnFocusChange(o, prev)
+		return maybeEnterTerminalOnFocusChange(o, prev, focusEnterTargeted)
 	}
 }
 
@@ -664,25 +664,49 @@ func handlePreselectDown(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // Mode Control Action Handlers
 // ============================================================================
 
+// focusEnterKind is whether a focus command was walking the pane list or
+// picking one pane. targeted follows the mouse bargain (go there and type);
+// cycle does not, because Tab has to keep reaching a third pane.
+type focusEnterKind int
+
+const (
+	focusEnterCycle focusEnterKind = iota
+	focusEnterTargeted
+)
+
 // maybeEnterTerminalOnFocusChange enters terminal mode after a window-focus
 // command that actually moved focus, from window-management mode. Hover-focus
 // and click-to-type keep their own policies; this is only the keyboard (and
 // prefix) focus commands. A no-op that leaves the already-focused pane focused
 // does not change mode.
 //
-// It reuses the enter_terminal_mode handler so the notification, logging, and
-// mode-switch side effects stay on one path.
-func maybeEnterTerminalOnFocusChange(o *app.OS, previousFocused int) (*app.OS, tea.Cmd) {
-	if !config.AutoEnterTerminalOnFocus {
-		return o, nil
-	}
+// The auto path is silent: a toast per Tab is noise. Explicit enter_terminal_mode
+// still notifies.
+func maybeEnterTerminalOnFocusChange(o *app.OS, previousFocused int, kind focusEnterKind) (*app.OS, tea.Cmd) {
 	if o.Mode != app.WindowManagementMode {
 		return o, nil
 	}
 	if o.FocusedWindow == previousFocused || o.FocusedWindow < 0 || len(o.Windows) == 0 {
 		return o, nil
 	}
-	return handleEnterTerminalMode(tea.KeyPressMsg{}, o)
+	switch config.AutoEnterTerminalOnFocus {
+	case config.AutoEnterTerminalAll:
+		return enterTerminalModeSilent(o)
+	case config.AutoEnterTerminalTargeted:
+		if kind != focusEnterTargeted {
+			return o, nil
+		}
+		return enterTerminalModeSilent(o)
+	default:
+		return o, nil
+	}
+}
+
+func enterTerminalModeSilent(o *app.OS) (*app.OS, tea.Cmd) {
+	if len(o.Windows) == 0 || o.FocusedWindow < 0 {
+		return o, nil
+	}
+	return o, o.EnterTerminalMode()
 }
 
 func handleEnterTerminalMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -897,7 +921,7 @@ func handleScrollFocusLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.UseScrollingLayout {
 		o.ScrollingFocusLeft()
 	}
-	return maybeEnterTerminalOnFocusChange(o, prev)
+	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterTargeted)
 }
 
 func handleScrollFocusRight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -905,7 +929,7 @@ func handleScrollFocusRight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.UseScrollingLayout {
 		o.ScrollingFocusRight()
 	}
-	return maybeEnterTerminalOnFocusChange(o, prev)
+	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterTargeted)
 }
 
 func handleScrollMoveLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

@@ -81,7 +81,7 @@ var settingLabels = map[string]string{
 	"appearance.dock_workspace_tab_format":    "Workspace tab format",
 	"appearance.zoom_max_width":               "Zoom width",
 	"appearance.alt_drag":                     "Alt-drag to move",
-	"appearance.auto_enter_terminal_on_focus": "Auto-enter terminal on focus",
+	"appearance.auto_enter_terminal_on_focus": "Type in a pane when focus moves to it",
 	"startup.tiled":                           "Start tiled",
 	"startup.daemon":                          "Daemon by default",
 
