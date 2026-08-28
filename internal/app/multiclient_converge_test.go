@@ -410,6 +410,41 @@ var convergeZoom = os.Getenv("TUIOS_CONVERGE_ZOOM") != ""
 // TUIOS_CONVERGE_STALEPUSH=1 TUIOS_CONVERGE_SEED=8709371129874198873.
 var convergeStalePush = os.Getenv("TUIOS_CONVERGE_STALEPUSH") != ""
 
+// TUIOS_CONVERGE_MODES makes the "another tiling layout" action cycle the three
+// tiling modes. It is off for the same reason the two above are: this tree does
+// not converge under it, and the three ways it does not are none of them about
+// the action itself.
+//
+// Until this existed the action called NextLayout, which cycles saved layout
+// templates rather than tiling modes. There are none under the test's own XDG
+// tree, so every sequence ever run raised "No saved layouts" and stayed in BSP,
+// while the journal said the layout had changed. The harness has therefore
+// never seen master-stack or the scrolling strip.
+//
+// Turned on, three of the five default sequences fail, each naming a piece of
+// layout authority still held by the client:
+//
+//   - the strip's column topology is not session state. A client that switches
+//     to the scrolling layout builds its strip from its own window list, and a
+//     peer that adopts the mode from the sync builds its own: two panes came
+//     out stacked in one column on the client that made the switch (@24,2 and
+//     @24,19) and side by side on the other two (@24,2 and @50,2), which the
+//     failure names as the guest grid the stacked client keeps a border out of.
+//     Reproduce with TUIOS_CONVERGE_MODES=1 TUIOS_CONVERGE_SEED=4354685564937353519.
+//   - a pane opened in the scrolling layout is not placed by the strip on every
+//     client: one held it at the box's corner while the others had it in a
+//     column. Reproduce with
+//     TUIOS_CONVERGE_MODES=1 TUIOS_CONVERGE_SEED=11400714819323706650.
+//   - one pane alone on a workspace under master-stack with shared borders on:
+//     one client hands its guest the whole rectangle and another deducts a
+//     border, so the same rectangle carries two guest grids. Reproduce with
+//     TUIOS_CONVERGE_MODES=1 TUIOS_CONVERGE_SEED=508165.
+//
+// The strip's offset - the thing this switch was added while pinning - is not
+// among them: it is session state now (SessionState.ScrollStrip) and
+// clientView compares it.
+var convergeModes = os.Getenv("TUIOS_CONVERGE_MODES") != ""
+
 // convergeTrace turns on a line per delivery, for reading a failing seed.
 var convergeTrace = os.Getenv("TUIOS_CONVERGE_TRACE") != ""
 
@@ -462,6 +497,14 @@ type clientView struct {
 	gap         int
 	reserve     session.LayoutReserve
 	effW, effH  int
+	// scrollX is where the scrolling strip is scrolled to on the workspace
+	// being shown, and -1 when this client has no strip for it. It is compared
+	// like the focus and the workspace, because it is the same kind of thing:
+	// the strip is one row of columns and this is a place on it, so two clients
+	// holding different offsets are showing different columns of one session.
+	// It is also the term in every pane's x in that layout, so a divergence
+	// here is a divergence in the rectangles, named at its source.
+	scrollX int
 }
 
 func viewOf(m *OS) clientView {
@@ -475,6 +518,12 @@ func viewOf(m *OS) clientView {
 		reserve:     m.SessionReserve,
 		effW:        m.EffectiveWidth,
 		effH:        m.EffectiveHeight,
+	}
+	v.scrollX = -1
+	// Read, never created: asking for the strip would build one, and a client
+	// that has never laid this workspace out has nothing to compare.
+	if sl := m.WorkspaceScrollingLayouts[m.CurrentWorkspace]; sl != nil {
+		v.scrollX = sl.ViewportX
 	}
 	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 		v.focus = m.Windows[m.FocusedWindow].PTYID
@@ -539,6 +588,8 @@ func (v clientView) diff(o clientView) string {
 		return fmt.Sprintf("master ratio %.4f vs %.4f", v.masterRatio, o.masterRatio)
 	case v.focus != o.focus:
 		return fmt.Sprintf("focused pane %s vs %s", shortID(v.focus), shortID(o.focus))
+	case v.layoutMode == LayoutModeScrolling && v.scrollX != o.scrollX:
+		return fmt.Sprintf("the strip is scrolled to %d vs %d", v.scrollX, o.scrollX)
 	case len(v.panes) != len(o.panes):
 		return fmt.Sprintf("%d panes vs %d panes", len(v.panes), len(o.panes))
 	}
@@ -857,7 +908,14 @@ func (f *fleet) step() string {
 		return fmt.Sprintf("client %s zoomed %s", fc.name, id)
 
 	case 5: // another tiling layout
-		m.NextLayout()
+		// The tiling modes are behind a switch because this tree does not
+		// converge under them; see convergeModes. NextLayout is what the action
+		// did before, and under the test's own XDG tree it does nothing at all.
+		if convergeModes {
+			m.ToggleLayoutMode()
+		} else {
+			m.NextLayout()
+		}
 		fc.commit()
 		return fmt.Sprintf("client %s switched to the %s layout", fc.name, m.LayoutModeName())
 

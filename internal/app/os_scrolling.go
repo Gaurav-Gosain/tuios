@@ -5,6 +5,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
@@ -290,6 +291,122 @@ func (m *OS) ScrollingOnWindowRemoved(windowIntID int) {
 	if sl.WindowCount() > 0 {
 		sl.EnsureFocusedVisible(m.ScrollingViewWidth())
 		m.scrollingSyncFocusToOS()
+		m.scrollingSetPositions()
+	}
+}
+
+// scrollingLayoutStale reports whether the panes on screen are somewhere other
+// than this client's own strip puts them, which is the scrolling layout's
+// version of the question tiledLayoutStale asks of the other two.
+//
+// It is asked against the strip rather than against the box because the strip
+// is longer than the box by design. What it catches is the same thing: a
+// rectangle computed by somebody else and adopted here. What it must not catch
+// is a strip scrolled off the focused column, which is a position the user
+// chose and not a layout in need of recomputing.
+func (m *OS) scrollingLayoutStale() bool {
+	sl := m.WorkspaceScrollingLayouts[m.CurrentWorkspace]
+	if sl == nil || len(sl.Columns) == 0 {
+		return false
+	}
+	want := sl.ComputePositions(m.ScrollingViewWidth(), m.GetUsableHeight(), m.GetTopMargin())
+	leftMargin := m.GetLeftMargin()
+	for _, w := range m.Windows {
+		if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized || w.Minimizing || w.IsFloating {
+			continue
+		}
+		rect, ok := want[m.getWindowIntID(w.ID)]
+		if !ok {
+			// A pane the strip has never heard of: the strip is behind the
+			// window list, which the retile is what fixes.
+			return true
+		}
+		rect.X += leftMargin
+		// A pane already sliding to where the strip wants it is not stale, it is
+		// in flight. The strip's own transitions always animate, so without this
+		// every sync that arrived during a slide would read the intermediate
+		// position as somebody else's layout.
+		if m.windowHasAnimationTo(w, rect.X, rect.Y, rect.W, rect.H) {
+			continue
+		}
+		if w.X != rect.X || w.Y != rect.Y || w.Width != rect.W || w.Height != rect.H {
+			return true
+		}
+	}
+	return false
+}
+
+// ScrollStripState is this client's strip on the workspace it is showing, or
+// nil when it has none to report. It is read for the state push, so it never
+// builds a strip as a side effect: a client that has never laid this workspace
+// out has no offset to send and says so, rather than inventing a home position
+// and scrolling everyone else to it.
+func (m *OS) ScrollStripState() *session.ScrollStripState {
+	if !m.UseScrollingLayout {
+		return nil
+	}
+	sl := m.WorkspaceScrollingLayouts[m.CurrentWorkspace]
+	if sl == nil {
+		return nil
+	}
+	return &session.ScrollStripState{ViewportX: sl.ViewportX}
+}
+
+// adoptScrollStrip takes the strip as the session has it: the offset a peer
+// scrolled to, and the column the session's focus is on.
+//
+// Both halves are needed and neither is enough. The offset alone leaves the
+// strip pointing at the column this client last focused, which is what decides
+// where a new column is inserted and where a left/right step starts from. The
+// focused column alone leaves the viewport where it was, which is the report
+// this exists for: the border moves to a window that is not on screen.
+//
+// It acts only on a change. A broadcast repeating the state everyone already
+// holds must not restart the slide, and - now that the offset is shared - must
+// not drag the strip back to the focused column either: a peer scrolling away
+// from the focused window is a decision, and re-broadcasting it is not a
+// request to undo it. EnsureFocusedVisible therefore runs on a focus change and
+// not otherwise, which is also what keeps it agreeing with the threshold it was
+// given in 5f3af88a: a column any of which is on screen is left alone.
+//
+// Called from inside a sync, so it never pushes. The answer owed to the daemon
+// for the whole sync is sent once, by ApplyStateSync.
+func (m *OS) adoptScrollStrip(strip *session.ScrollStripState, focusChanged bool) {
+	if !m.AutoTiling || !m.UseScrollingLayout {
+		return
+	}
+	if strip == nil && !focusChanged {
+		return
+	}
+	sl := m.GetOrCreateScrollingLayout()
+	moved := false
+	if strip != nil && sl.ViewportX != strip.ViewportX {
+		sl.ViewportX = strip.ViewportX
+		moved = true
+	}
+	if focusChanged {
+		if fw := m.GetFocusedWindow(); fw != nil && !fw.IsFloating && !fw.Minimized &&
+			fw.Workspace == m.CurrentWorkspace {
+			// Only a column change is a move. Focus landing on another window
+			// stacked in the column it was already on is worth recording - it is
+			// what the column returns to when it is focused again - but every
+			// window in a column keeps its row whichever of them is active, so
+			// there is nothing to lay out again.
+			was := sl.FocusedCol
+			if sl.FocusColumnContaining(m.getWindowIntID(fw.ID)) && sl.FocusedCol != was {
+				moved = true
+			}
+		}
+		// The offset the peer sent has usually done this already, and then this
+		// is a no-op. It is what answers the cases where nothing sent one: a
+		// focus the daemon moved on its own, or a peer too old to say where its
+		// strip is. Every client works it out from the same strip and the same
+		// content width, so they all land on the same offset.
+		before := sl.ViewportX
+		sl.EnsureFocusedVisible(m.ScrollingViewWidth())
+		moved = moved || sl.ViewportX != before
+	}
+	if moved {
 		m.scrollingSetPositions()
 	}
 }
