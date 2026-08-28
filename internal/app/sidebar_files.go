@@ -221,7 +221,24 @@ func (m *OS) FilesSyncCmd() tea.Cmd {
 		return nil
 	}
 	want := m.filesWantDir()
-	if want == "" || want == m.filesView.Want {
+	if want == "" {
+		// There is nothing for the section to be about: no pane is focused, or
+		// the focused one has never said where it is. Either way the listing on
+		// screen belongs to a directory that is not the answer to the question
+		// the section asks, so it goes.
+		//
+		// The comparison below cannot take this case. An empty want never
+		// matches a directory that was asked for, so it would fall through and
+		// ask for "" on every message forever. The guard is on the state rather
+		// than on the answer for the same reason: this runs once per message,
+		// and a client sitting with no pane must write nothing after the first
+		// time.
+		if m.filesView.Want != "" && !m.fileViewFromLink() {
+			m.clearFileView()
+		}
+		return nil
+	}
+	if want == m.filesView.Want {
 		return nil
 	}
 	window := m.GetFocusedWindow()
@@ -230,6 +247,45 @@ func (m *OS) FilesSyncCmd() tea.Cmd {
 		origin = window.ID
 	}
 	return m.requestFileList(want, origin, false)
+}
+
+// fileViewFromLink reports whether the listing was opened from a directory link
+// rather than from a pane: pinned, with no origin window. OpenFileView is the
+// one place that makes such a listing, and it names a folder the user asked for
+// by hand.
+//
+// It is the one listing that survives having no pane, because it was never
+// about a pane. The section is answering "what is in the folder you clicked",
+// and the answer to that does not change when a shell exits. A pane that opens
+// afterwards and reports a directory takes the section back, through the same
+// comparison every other pane goes through.
+func (m *OS) fileViewFromLink() bool {
+	return m.filesView.Pinned && m.filesView.Origin == ""
+}
+
+// clearFileView drops the listing and everything that describes it, for when
+// there is nothing to list it for.
+//
+// Show survives. It is the user's own on and off switch for the section and not
+// part of the listing, so a pane exiting must not answer it. Zeroing it would:
+// zero means "follow the layout", so a section the user had forced on would go
+// off for anyone whose layout does not name files. A section the user had
+// switched off never reaches here, because a switched off section is not
+// enabled and the sync returns above, but the field is kept for the switch's
+// sake either way. The scroll offset survives too: a section drawing no rows
+// cannot be scrolled, and the next listing zeroes it anyway.
+//
+// The generation is bumped and never reset. A read can be in flight when the
+// last pane closes, and its reply carries the generation it was stamped with;
+// bumping means that reply no longer matches and HandleFileList drops it.
+// Resetting to zero would be worse than leaving it: the next request would
+// stamp a number that has already been handed out, and the stale reply would
+// land on it.
+//
+// Origin and Pinned go with the rest. A pin is a pin to one pane's listing, and
+// a pane that has closed cannot be the one the user meant.
+func (m *OS) clearFileView() {
+	m.filesView = fileViewState{Show: m.filesView.Show, Gen: m.filesView.Gen + 1}
 }
 
 // requestFileList stamps a new request and returns the command that answers it.
