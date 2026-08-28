@@ -67,6 +67,26 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	if incoming.ScrollStrip == nil {
 		incoming.ScrollStrip = canonical.ScrollStrip
 	}
+	// The per-workspace master ratios are unioned rather than replaced. Every
+	// current client sends every entry it holds, but a client only ever holds the
+	// ones it has been told about or tuned itself, so a snapshot built before
+	// another client tuned a workspace would otherwise drop that workspace's ratio
+	// out of the session - which is the whole failure this field exists to stop,
+	// arriving one layer lower down. Nothing ever removes an entry, so the union
+	// is the complete answer, and the incoming value wins where both sides hold
+	// one: that is a client saying the ratio moved. A nil incoming map (an older
+	// peer, or a client with tiling off) is left holding the canonical set for the
+	// reason the pane geometry is.
+	if len(canonical.WorkspaceMasterRatio) > 0 {
+		if incoming.WorkspaceMasterRatio == nil {
+			incoming.WorkspaceMasterRatio = make(map[int]float64, len(canonical.WorkspaceMasterRatio))
+		}
+		for ws, ratio := range canonical.WorkspaceMasterRatio {
+			if _, ok := incoming.WorkspaceMasterRatio[ws]; !ok {
+				incoming.WorkspaceMasterRatio[ws] = ratio
+			}
+		}
+	}
 
 	cwds := make(map[string]string, len(canonical.Windows))
 	// The foreground command is read daemon-side on the detector's poll and no
@@ -172,6 +192,13 @@ func reconcileStale(incoming, canonical *SessionState, hasLivePTY func(ptyID str
 		incoming.ScrollStrip = canonical.ScrollStrip
 	}
 
+	// WorkspaceMasterRatio is deliberately not taken from canonical here. The
+	// daemon never moves a master ratio - no headless operation touches it - so
+	// canonical is not newer there by construction the way it is for the focus,
+	// and a stale snapshot still reports a ratio the client itself just moved
+	// correctly. What a stale snapshot can do is omit an entry it never learned,
+	// and the union in retainDaemonExclusive, which runs on this path too, is what
+	// stops that.
 	incoming.FocusedWindowID = canonical.FocusedWindowID
 	incoming.CurrentWorkspace = canonical.CurrentWorkspace
 	if canonical.WorkspaceFocus != nil {

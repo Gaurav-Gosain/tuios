@@ -40,7 +40,7 @@ Four settings shape the tiling, and all four are in the settings page
 | Setting | What it does |
 |---|---|
 | `startup.layout` | The mode a **new** session starts in: `bsp`, `master-stack` or `scrolling`. A session that already exists keeps its own. |
-| `appearance.master_ratio` | The master pane's share of the screen in master-stack, as a percent (30-70). The `<` and `>` keys move it for the session. |
+| `appearance.master_ratio` | The master pane's share of the screen in master-stack, as a percent (30-70). The `<` and `>` keys move it for the workspace you are on, and every client attached to the session follows. A workspace nobody has moved it on starts at this setting. |
 | `appearance.scroll_column_width` | A column's width in the scrolling layout, as a percent of the screen (20-90). |
 | `appearance.gap` | Cells of empty ground between neighbouring panes, in every mode. |
 
