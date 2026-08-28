@@ -66,6 +66,32 @@ type WindowState struct {
 	// client that made it and moves every shared PTY twice. The zero value is a
 	// tiled window, which is what every older client and older state reads as.
 	IsFloating bool `json:"is_floating,omitempty"`
+	// Zoomed marks a pane the user blew up to fill the content region. It is
+	// synced for the reason IsFloating is, and for a second one that is not a
+	// matter of taste: zooming resizes the shared PTY. toggleZoom routes the
+	// zoomed rectangle through Window.Resize, and a PTY has one size, so a peer
+	// that does not know a pane is zoomed counts it among the tiled panes,
+	// tiles it back into the box and pushes that, which drops the zoom on the
+	// client that asked for it and leaves every client drawing a guest grid the
+	// shell is not running in. tmux shares resize-pane -Z across attached
+	// clients for the same arithmetic.
+	//
+	// The flag travels; the rectangle does not. A zoomed pane covers the
+	// content region of the client that zoomed it, and that box is that
+	// client's own render size less the agreed reserve. A peer recomputes it
+	// against its own bounds, the way it recomputes a tiled layout - see
+	// applyZoomState. The zero value is an unzoomed window, which is what every
+	// older client and older state reads as.
+	Zoomed bool `json:"zoomed,omitempty"`
+	// PreZoomX/Y/W/H are the rectangle the pane had before it was zoomed, and
+	// they travel with the flag for the same reason the PreMinimize four do: any
+	// client may be the one that unzooms, and under a floating or untiled layout
+	// nothing else will ever put the pane back. Without them a peer's unzoom
+	// restored a pane to 0x0.
+	PreZoomX int `json:"pre_zoom_x,omitempty"`
+	PreZoomY int `json:"pre_zoom_y,omitempty"`
+	PreZoomW int `json:"pre_zoom_w,omitempty"`
+	PreZoomH int `json:"pre_zoom_h,omitempty"`
 	// Cwd is the working directory of the window's shell process, captured on the
 	// daemon side when saving resurrection state. On cold-start restore a fresh
 	// shell is respawned here. Empty for live state syncs (clients do not set it).

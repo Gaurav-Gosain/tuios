@@ -60,9 +60,14 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	rightClip := leftMargin + m.GetContentWidth()
 
 	// Hoist loop-invariants out of the per-window loop below.
-	// The focused window and its zoom state are the same for every iteration.
-	focusedWindow := m.GetFocusedWindow()
-	focusedZoomed := focusedWindow != nil && focusedWindow.Zoomed
+	// The zoomed pane, if there is one, is the same for every iteration.
+	//
+	// The workspace's zoomed pane, not this client's focused one. Zoom is shared
+	// state, so a peer that adopts the flag has to draw the same pane covering
+	// its box even though its own focus is elsewhere; keying on the focused
+	// window drew the whole tiled layout underneath a pane somebody else had
+	// zoomed. See zoomedWindow.
+	zoomedWindow := m.zoomedWindow()
 
 	// Precompute the set of windows with an active (incomplete) animation once
 	// per frame instead of rescanning m.Animations for every window, which was
@@ -91,7 +96,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		}
 
 		// When any window is zoomed, only render the zoomed window
-		if focusedZoomed && window != focusedWindow {
+		if zoomedWindow != nil && window != zoomedWindow {
 			continue
 		}
 

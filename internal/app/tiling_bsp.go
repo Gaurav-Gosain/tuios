@@ -169,6 +169,16 @@ func (m *OS) ApplyBSPLayout() {
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
 		}
+		// A zoomed pane keeps its slot in the tree and loses its rectangle to the
+		// zoom box, so the tiler leaves the rectangle alone. This is new with
+		// shared zoom: while the flag was local, nothing retiled a workspace that
+		// had a zoomed pane on it, so the tiler never met one. Now a peer's sync
+		// can bring a pane, close one or move the box while somebody else holds
+		// the zoom, and each of those retiles - and a retile that placed the
+		// zoomed pane would drop the zoom on every client at once.
+		if win.Zoomed {
+			continue
+		}
 
 		wasTiled := win.Tiled
 
@@ -692,11 +702,23 @@ func (m *OS) tiledLayoutStale() bool {
 		return false
 	}
 
-	// A zoomed pane is the layout deliberately not tiling: it holds a rectangle
-	// tiling did not choose and, under ZoomMaxWidth, one that does not reach the
-	// edges. Judging that stale would retile it and drop the user out of zoom.
-	if fw := m.GetFocusedWindow(); fw != nil && fw.Zoomed {
-		return false
+	// A zoomed pane is one rectangle the tiler did not choose, and the test
+	// below is a test of the rectangles: the panes have to cover the box
+	// exactly. One of them covering it on its own passes that test whatever the
+	// others are doing, so with a zoom on the workspace the check is blind, and
+	// blind is not a licence to answer "settled". While the flag was local that
+	// hardly mattered - the zoom lasted as long as the keypress that ended it,
+	// and unzooming retiles - but a shared zoom can be somebody else's and can
+	// stand for as long as they leave it. Measured: three clients holding a
+	// peer's zoom kept three different widths for the pane behind it, because
+	// nothing looked while the zoom was up.
+	//
+	// So the rectangles are recomputed rather than judged. The tiler skips the
+	// zoomed pane and lays out the rest, which is idempotent for a client that
+	// already agrees, so the cost of saying "stale" here is one retile per sync
+	// for as long as a zoom is up.
+	if m.zoomedWindow() != nil {
+		return true
 	}
 
 	// The near edges start at the far corner so the minima below need no first

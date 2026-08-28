@@ -102,6 +102,16 @@ func (m *OS) tileAllWindows() {
 	// and ApplyBSPLayout further down agree about which path they are on.
 	deferring := m.resizeDeferralActive()
 
+	// A zoomed pane is not tiled, and the three branches below all skip its
+	// rectangle - but skipping is not the whole answer, because the zoom box is
+	// this client's own and it moves whenever the box the panes go in moves. A
+	// retile is exactly when that has happened: every resize path ends here.
+	// Left out, a client that resized while a peer held the zoom kept drawing
+	// the pane at the old box, so the shell had two sizes.
+	if zw := m.zoomedWindow(); zw != nil {
+		m.applyZoomRect(zw, deferring)
+	}
+
 	// Scrolling layout mode (niri-like)
 	if m.UseScrollingLayout {
 		sl := m.GetOrCreateScrollingLayout()
@@ -116,6 +126,11 @@ func (m *OS) tileAllWindows() {
 		layouts := m.contentTileLayouts(len(visibleWindows))
 		for i, l := range layouts {
 			if i < len(visibleWindows) {
+				// A zoomed pane keeps its slot and loses its rectangle to the
+				// zoom box. See the same skip in ApplyBSPLayout.
+				if visibleWindows[i].Zoomed {
+					continue
+				}
 				// A snap still in flight owns this window's geometry and stamps
 				// its own rectangle back on the next tick, without resizing the
 				// emulator with it. ApplyBSPLayout and placePane both retire it

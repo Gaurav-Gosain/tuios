@@ -99,6 +99,11 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
 		}
+		// A zoomed pane keeps its column and loses its rectangle to the zoom
+		// box. See the same skip in ApplyBSPLayout.
+		if win.Zoomed {
+			continue
+		}
 		// The strip has no dividers to share, so its panes always draw their own
 		// border. Settle that allowance before the rectangle, as placePane does:
 		// it decides how much of the rectangle the guest gets, so settling it

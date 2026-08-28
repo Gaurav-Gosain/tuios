@@ -382,21 +382,15 @@ func (f *fleet) route(fc *fleetClient) {
 	})
 }
 
-// Two switches, both off by default, each guarding an action this tree does not
-// yet converge under. They are off so the harness can guard everything else
-// rather than being red for one known reason; they are here rather than deleted
-// because a one-line reproduction of an open bug is worth more than a paragraph
-// describing it.
+// Zooming is in the default action set, and used not to be. It was behind
+// TUIOS_CONVERGE_ZOOM for as long as zoom was client-local state whose rectangle
+// was session state: the pane's covering box was pushed and adopted everywhere
+// and the flag that said why was not, so a peer read the box as a layout
+// computed for somebody else's screen, tiled it away and resized the shared
+// shell, and the client that asked for the zoom was left drawing a guest grid
+// the daemon was not running. WindowState.Zoomed is what closed that, and the
+// switch went with it: the action guards the thing now.
 //
-// TUIOS_CONVERGE_ZOOM puts zooming back in the action set. Zoom is client-local
-// state whose rectangle is session state: the pane's box is pushed and adopted
-// everywhere, and the flag that says why is not. A peer reads the covering
-// rectangle as a layout computed for somebody else's screen, tiles it away and
-// resizes the shared shell, and the client that asked for the zoom is left
-// drawing a guest grid the daemon is not running. Reproduce with
-// TUIOS_CONVERGE_ZOOM=1 TUIOS_CONVERGE_SEED=8709371129874198873.
-var convergeZoom = os.Getenv("TUIOS_CONVERGE_ZOOM") != ""
-
 // TUIOS_CONVERGE_STALEPUSH restores the state push that internal/input makes
 // after every input, including the one that asks the daemon for a pane. That
 // push carries the state as it was before the pane existed, so it reaches the
@@ -478,11 +472,12 @@ type paneView struct {
 	z         int
 	minimized bool
 	floating  bool
+	zoomed    bool
 }
 
 func (p paneView) String() string {
-	return fmt.Sprintf("%s ws%d @%d,%d %dx%d guest %dx%d z%d min=%t float=%t",
-		shortID(p.pty), p.workspace, p.x, p.y, p.w, p.h, p.cw, p.ch, p.z, p.minimized, p.floating)
+	return fmt.Sprintf("%s ws%d @%d,%d %dx%d guest %dx%d z%d min=%t float=%t zoom=%t",
+		shortID(p.pty), p.workspace, p.x, p.y, p.w, p.h, p.cw, p.ch, p.z, p.minimized, p.floating, p.zoomed)
 }
 
 // clientView is everything a client has to agree with its peers about.
@@ -538,6 +533,7 @@ func viewOf(m *OS) clientView {
 			z:         w.Z,
 			minimized: w.Minimized,
 			floating:  w.IsFloating,
+			zoomed:    w.Zoomed,
 		}
 		// Geometry is compared for the panes on the workspace being shown, and
 		// only for those. A pane on another workspace is not being laid out by
@@ -634,9 +630,9 @@ func (f *fleet) diverged() string {
 		if !ok {
 			return fmt.Sprintf("the clients hold pane %s and the daemon does not", shortID(p.pty))
 		}
-		if ws.Workspace != p.workspace || ws.Minimized != p.minimized || ws.IsFloating != p.floating {
-			return fmt.Sprintf("pane %s: the daemon has ws%d min=%t float=%t, the clients ws%d min=%t float=%t",
-				shortID(p.pty), ws.Workspace, ws.Minimized, ws.IsFloating, p.workspace, p.minimized, p.floating)
+		if ws.Workspace != p.workspace || ws.Minimized != p.minimized || ws.IsFloating != p.floating || ws.Zoomed != p.zoomed {
+			return fmt.Sprintf("pane %s: the daemon has ws%d min=%t float=%t zoom=%t, the clients ws%d min=%t float=%t zoom=%t",
+				shortID(p.pty), ws.Workspace, ws.Minimized, ws.IsFloating, ws.Zoomed, p.workspace, p.minimized, p.floating, p.zoomed)
 		}
 	}
 	if st.CurrentWorkspace != base.workspace {
@@ -770,8 +766,8 @@ func (f *fleet) fail(what, why string) {
 				fmt.Fprintf(&b, "     %s ws%d shell unreadable: %v\n", shortID(ws.PTYID), ws.Workspace, err)
 				continue
 			}
-			fmt.Fprintf(&b, "     %s ws%d shell %dx%d min=%t float=%t\n",
-				shortID(ws.PTYID), ws.Workspace, dw, dh, ws.Minimized, ws.IsFloating)
+			fmt.Fprintf(&b, "     %s ws%d shell %dx%d min=%t float=%t zoom=%t\n",
+				shortID(ws.PTYID), ws.Workspace, dw, dh, ws.Minimized, ws.IsFloating, ws.Zoomed)
 		}
 	}
 	f.t.Fatal(b.String())
@@ -821,9 +817,6 @@ func (f *fleet) step() string {
 	m := fc.m
 
 	pick := f.rng.IntN(10)
-	if pick == 4 && !convergeZoom {
-		pick = 3
-	}
 	if pick == 9 && len(f.cs) < 3 {
 		pick = 3
 	}

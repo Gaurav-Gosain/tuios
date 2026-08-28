@@ -282,8 +282,11 @@ func (c *cell) isHoriz() bool { return c != nil && c.horiz }
 // renderSeparatorOverlay renders thin separator lines between tiled panes.
 // Each separator line is its own lipgloss Layer to avoid occluding content.
 func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
-	// Don't render shared borders when a window is zoomed
-	if fw := m.GetFocusedWindow(); fw != nil && fw.Zoomed {
+	// Don't render shared borders when a window is zoomed. Any zoomed pane on
+	// the workspace, not this client's focused one: zoom is shared, so the pane
+	// covering the box can be one this client did not zoom and is not focused
+	// on, and the dividers would then be drawn across it. See zoomedWindow.
+	if m.zoomedWindow() != nil {
 		return nil
 	}
 

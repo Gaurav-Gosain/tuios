@@ -73,6 +73,14 @@ func (m *OS) BuildSessionState() *session.SessionState {
 			PTYID:        w.PTYID,
 			IsAltScreen:  w.IsAltScreen(), // Save alt screen state for mouse forwarding on restore
 			IsFloating:   w.IsFloating,
+			// Zoom is layout intent and it is shared: see WindowState.Zoomed.
+			// The rectangle above is this client's zoom box, which a peer will
+			// decline and recompute; the flag is what it decides that on.
+			Zoomed:   w.Zoomed,
+			PreZoomX: w.PreZoomX,
+			PreZoomY: w.PreZoomY,
+			PreZoomW: w.PreZoomWidth,
+			PreZoomH: w.PreZoomHeight,
 		}
 	}
 
@@ -356,6 +364,15 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// this it would render as a full-size box over the restored layout.
 	m.placeUnplacedWindows(state, m.Windows)
 
+	// A zoomed pane came in holding the box of whichever client zoomed it, at
+	// that client's size. The flag is session state and the rectangle is not, so
+	// it is recomputed here - and it has to be here, because RestoredFromState
+	// below suppresses the first retile, which is the only other thing that
+	// would have looked.
+	if zw := m.zoomedWindow(); zw != nil {
+		m.applyZoomRect(zw, false)
+	}
+
 	m.MarkAllDirty()
 	m.LogInfo("[RESTORE] Restored session state: %d windows, FocusedWindow=%d, AutoTiling=%v, Workspace=%d", len(m.Windows), m.FocusedWindow, m.AutoTiling, m.CurrentWorkspace)
 
@@ -448,11 +465,17 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// newerState below), so the structural half of the peer's toggle has to be
 	// mirrored here once the whole list has been applied.
 	var floated, unfloated []*terminal.Window
+	// Panes this sync took out of zoom. Zoom is shared and its rectangle is not,
+	// so the pane has to be given a rectangle here; the one it was holding is a
+	// zoom box, and nothing else in the sync says what should replace it. See
+	// applyZoomState.
+	var unzoomed []*terminal.Window
 
 	for _, ws := range state.Windows {
 		if existingWindow, exists := existingByID[ws.ID]; exists {
 			// Update existing window
 			wasFloating := existingWindow.IsFloating
+			wasZoomed := existingWindow.Zoomed
 			m.updateWindowFromState(existingWindow, &ws)
 			if existingWindow.IsFloating != wasFloating {
 				if existingWindow.IsFloating {
@@ -460,6 +483,9 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 				} else {
 					unfloated = append(unfloated, existingWindow)
 				}
+			}
+			if wasZoomed && !existingWindow.Zoomed {
+				unzoomed = append(unzoomed, existingWindow)
 			}
 			newWindows = append(newWindows, existingWindow)
 			delete(existingByID, ws.ID) // Mark as handled
@@ -732,10 +758,21 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// geometryChanged forces the retile the staleness check cannot always see:
 	// flipping shared borders with the gap pinned changes every tiled pane's
 	// guest grid without moving a single rectangle.
-	if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 &&
-		(geometryChanged || workspaceChanged || m.tiledLayoutStale()) {
-		m.TileAllWindows()
-	}
+	//
+	// Zoom is answered on the same terms and in the same settlement. The flag
+	// arrived in this sync and the box it implies is this client's own, so
+	// applyZoomState recomputes it here rather than letting the peer's
+	// rectangle through; and a pane the sync took out of zoom is handed back to
+	// the layout, which is what zoomRetile says. One settlement for both, so a
+	// pane the unzoom returns to the tiling is told the tiled size once instead
+	// of being told the pre-zoom size on the way there.
+	m.settleSizes(func() {
+		zoomRetile := m.applyZoomState(unzoomed)
+		if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 &&
+			(geometryChanged || workspaceChanged || zoomRetile || m.tiledLayoutStale()) {
+			m.TileAllWindows()
+		}
+	})
 
 	m.MarkAllDirty()
 	return nil
@@ -773,7 +810,12 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// time, which repaired the geometry at the cost of throwing the pane back to
 	// the raw placement box mid-animation. Declining the box here is what makes
 	// placing once correct.
-	adoptGeometry := !ws.Unplaced
+	// The zoomed rectangle is declined for a second reason: it is the content
+	// region of whichever client zoomed the pane, at that client's size, and a
+	// rectangle is not shared state (see the retile at the end of
+	// ApplyStateSync). The flag is adopted below and applyZoomState recomputes
+	// the box against this client's own bounds.
+	adoptGeometry := !ws.Unplaced && !ws.Zoomed
 
 	// Check if size changed
 	sizeChanged := adoptGeometry && (w.Width != ws.Width || w.Height != ws.Height)
@@ -793,6 +835,13 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// A float is layout intent: without it this client tiles the pane a peer
 	// floated back into the box and destroys the float everywhere.
 	w.IsFloating = ws.IsFloating
+	// Zoom is layout intent too, and the caller watches for it changing so the
+	// rectangle can be recomputed here rather than adopted. See applyZoomState.
+	w.Zoomed = ws.Zoomed
+	w.PreZoomX = ws.PreZoomX
+	w.PreZoomY = ws.PreZoomY
+	w.PreZoomWidth = ws.PreZoomW
+	w.PreZoomHeight = ws.PreZoomH
 	w.PreMinimizeX = ws.PreMinimizeX
 	w.PreMinimizeY = ws.PreMinimizeY
 	w.PreMinimizeWidth = ws.PreMinimizeW
@@ -877,6 +926,14 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	// A float is layout intent, not a rectangle: a peer that does not know a
 	// pane floats tiles it back into the box. See WindowState.IsFloating.
 	window.IsFloating = ws.IsFloating
+	// Zoom is the same kind of intent, and the same rule: the flag is adopted
+	// and the rectangle it implies is this client's to compute. See
+	// WindowState.Zoomed.
+	window.Zoomed = ws.Zoomed
+	window.PreZoomX = ws.PreZoomX
+	window.PreZoomY = ws.PreZoomY
+	window.PreZoomWidth = ws.PreZoomW
+	window.PreZoomHeight = ws.PreZoomH
 	window.PreMinimizeX = ws.PreMinimizeX
 	window.PreMinimizeY = ws.PreMinimizeY
 	window.PreMinimizeWidth = ws.PreMinimizeW
