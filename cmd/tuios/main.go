@@ -167,8 +167,8 @@ comprehensive keyboard/mouse interactions.`,
 	rootCmd.Flags().BoolVar(&listThemes, "list-themes", false, "List all available themes and exit")
 	rootCmd.Flags().StringVar(&previewTheme, "preview-theme", "", "Preview a theme's 16 ANSI colors")
 
-	var sshPort, sshHost, sshKeyPath, sshDefaultSession string
-	var sshEphemeral bool
+	var sshPort, sshHost, sshKeyPath, sshDefaultSession, sshAuthorizedKeys string
+	var sshEphemeral, sshNoAuth bool
 
 	sshCmd := &cobra.Command{
 		Use:   "ssh",
@@ -185,7 +185,12 @@ Session selection priority:
   3. SSH command argument (e.g., "ssh host attach mysession")
   4. First available session or create new
 
-Use --ephemeral for standalone sessions (legacy behavior).`,
+Use --ephemeral for standalone sessions (legacy behavior).
+
+Every connection gets a shell on this machine, so the server checks who is
+connecting. It reads public keys from ~/.config/tuios/authorized_keys, and
+from ~/.ssh/authorized_keys when the first file is absent. A host outside this
+machine is refused until there are keys, or until you pass --no-auth.`,
 		Example: `  # Start SSH server on default port
   tuios ssh
 
@@ -199,9 +204,23 @@ Use --ephemeral for standalone sessions (legacy behavior).`,
   tuios ssh --default-session mysession
 
   # Run in ephemeral mode (standalone, no daemon)
-  tuios ssh --ephemeral`,
+  tuios ssh --ephemeral
+
+  # Read the allowed public keys from somewhere else
+  tuios ssh --authorized-keys /etc/tuios/authorized_keys
+
+  # Serve the network with no authentication (trusted networks only)
+  tuios ssh --host 0.0.0.0 --no-auth`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runSSHServer(sshHost, sshPort, sshKeyPath, sshDefaultSession, sshEphemeral)
+			return runSSHServer(sshServerFlags{
+				host:           sshHost,
+				port:           sshPort,
+				keyPath:        sshKeyPath,
+				defaultSession: sshDefaultSession,
+				authorizedKeys: sshAuthorizedKeys,
+				ephemeral:      sshEphemeral,
+				noAuth:         sshNoAuth,
+			})
 		},
 	}
 
@@ -210,6 +229,8 @@ Use --ephemeral for standalone sessions (legacy behavior).`,
 	sshCmd.Flags().StringVar(&sshKeyPath, "key-path", "", "Path to SSH host key (auto-generated if not specified)")
 	sshCmd.Flags().StringVar(&sshDefaultSession, "default-session", "", "Default session name for all connections")
 	sshCmd.Flags().BoolVar(&sshEphemeral, "ephemeral", false, "Run in ephemeral mode (standalone, no daemon)")
+	sshCmd.Flags().StringVar(&sshAuthorizedKeys, "authorized-keys", "", "Path to the public keys allowed to connect (default ~/.config/tuios/authorized_keys, then ~/.ssh/authorized_keys)")
+	sshCmd.Flags().BoolVar(&sshNoAuth, "no-auth", false, "Give every connection a shell without checking who it is (trusted networks only)")
 
 	configCmd := &cobra.Command{
 		Use:   "config",

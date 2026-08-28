@@ -36,6 +36,14 @@ type SSHServerConfig struct {
 	DefaultSession string // If set, all connections attach to this session
 	Ephemeral      bool   // If true, don't use daemon (old behavior)
 	Version        string // For daemon handshake
+	// AuthorizedKeysPath names the file of public keys allowed to connect.
+	// Empty searches ~/.config/tuios/authorized_keys, then
+	// ~/.ssh/authorized_keys. See auth.go.
+	AuthorizedKeysPath string
+	// NoAuth accepts every connection without checking who it is. It is the
+	// opt-out that lets a non-loopback bind run with no authorized keys, and
+	// the way back in for an operator whose key file locked them out.
+	NoAuth bool
 	// Overrides carries the interface CLI flags, layered over the appearance
 	// baseline inside the same once-guarded application so flags win over the
 	// file. The zero value applies nothing.
@@ -54,6 +62,21 @@ var applyAppearanceOnce sync.Once
 
 // StartSSHServer initializes and runs the SSH server
 func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
+	// Who may connect, decided before anything listens. A bind that cannot be
+	// served safely is refused here rather than started and warned about: this
+	// is the same order cmd/tuios-web uses for TLS, and it is the only order
+	// that cannot leave an open port behind while the operator reads the
+	// warning. It runs before anything in this process is written, so a
+	// refused bind leaves no trace of itself behind.
+	//
+	// The check lives here and not only in cmd/tuios because this function is
+	// the entry point every caller uses, including the tests. A gate that only
+	// the command line enforces is a gate the next caller forgets.
+	authPlan, err := PlanSSHAuth(cfg.Host, cfg.AuthorizedKeysPath, cfg.NoAuth)
+	if err != nil {
+		return err
+	}
+
 	sshServerConfig = cfg
 
 	// Apply the process-wide render globals once, at first server startup and
@@ -107,7 +130,7 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	}
 
 	// Create SSH server with middleware
-	server, err := wish.NewServer(
+	opts := []ssh.Option{
 		wish.WithAddress(net.JoinHostPort(cfg.Host, cfg.Port)),
 		wish.WithHostKeyPath(hostKeyPath),
 		wish.WithMiddleware(
@@ -121,7 +144,25 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 			// middleware outermost, so this wraps everything above.
 			recoverMiddleware(),
 		),
-	)
+	}
+
+	// The authentication handler, or the warning that says there is none.
+	//
+	// Installing no handler is not an oversight when the plan says so: charm's
+	// ssh sets NoClientAuth when every handler is nil, which is what lets a
+	// client with no key at all attach on loopback. Installing a handler that
+	// returns true would break that, because such a client offers no key to
+	// hand it.
+	if authPlan.Authenticated() {
+		opts = append(opts, wish.WithPublicKeyAuth(publicKeyHandler(authPlan.Keys.Path)))
+		log.Printf("SSH authentication is on. %d key(s) from %s", len(authPlan.Keys.Keys), authPlan.Keys.Path)
+	} else {
+		// Once, at startup. Not per connection: a line on every connect is a
+		// line nobody reads, and this one has to be read.
+		log.Print(authPlan.Warning)
+	}
+
+	server, err := wish.NewServer(opts...)
 	if err != nil {
 		return fmt.Errorf("failed to create SSH server: %w", err)
 	}
