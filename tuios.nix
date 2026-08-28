@@ -15,5 +15,5 @@ pkgs.buildGoModule {
   env.GOTOOLCHAIN = "auto";
 
   # This has to be updated each time dependencies are updated.
-  vendorHash = "sha256-p1zm7qI5Xc9TBN2fcQuSH9N+sP0zYUr1xA9Idlt4StE=";
+  vendorHash = "sha256-pRsZgHWz+L8Ja+DqXZye77g6E6pm3XlBWcVVTZlP1y8=";
 }
