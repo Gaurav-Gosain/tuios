@@ -349,15 +349,20 @@ func (m *OS) SidebarOpenCursorMenu(destructive bool) {
 }
 
 // sidebarRowHasMenu reports whether a row points at something a context menu
-// can be about: a session, or a pane in either of the two sections that list
-// panes. The rail's controls point at the rail itself, which the right-click on
-// blank rail already covers.
+// can be about: a session, a pane in either of the two sections that list
+// panes, or any row of the files section. The rail's own controls point at the
+// rail itself, which the right-click on blank rail already covers.
 func sidebarRowHasMenu(row sidebarNavRow) bool {
 	switch row.Kind {
 	case sidebarRowSession:
 		return row.SessionID != ""
 	case sidebarRowWindow, sidebarRowAgent:
 		return row.WindowID != "" || row.WindowIndex >= 0
+	case sidebarRowFileCd, sidebarRowFileUp, sidebarRowFileEntry:
+		// Every row of the files section points at the section, which is a
+		// thing the menu is about: the header and the ".." row still offer the
+		// two actions that need no name. See fileRowMenu.
+		return true
 	default:
 		return false
 	}

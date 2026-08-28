@@ -309,6 +309,7 @@ var ActionDescriptions = map[string]string{
 	"file_copy":           "Files: copy this file",
 	"file_cut":            "Files: cut this file",
 	"file_paste":          "Files: paste into this folder",
+	"file_open":           "Files: open this folder, or copy this file's path",
 
 	// Window Management
 	"new_window":    "New window",

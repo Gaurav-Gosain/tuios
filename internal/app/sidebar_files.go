@@ -491,12 +491,18 @@ func fileViewError(err error) string {
 
 // FileViewUp walks to the parent directory. At the root there is no parent and
 // nothing happens, which is why the row is not drawn there.
-func (m *OS) FileViewUp() tea.Cmd {
-	if !m.filesOn() || m.filesView.Dir == "" {
+func (m *OS) FileViewUp() tea.Cmd { return m.fileViewUpFrom(m.filesView.Dir) }
+
+// fileViewUpFrom is FileViewUp for a folder named by the caller, which is what
+// the files menu's "Go up" row needs: the menu carries the folder it was opened
+// over, and that is the folder the row means whatever the listing has done
+// since.
+func (m *OS) fileViewUpFrom(dir string) tea.Cmd {
+	if !m.filesOn() || dir == "" {
 		return nil
 	}
-	parent := filepath.Dir(m.filesView.Dir)
-	if parent == m.filesView.Dir {
+	parent := filepath.Dir(dir)
+	if parent == dir {
 		return nil
 	}
 	return m.requestFileList(parent, m.filesView.Origin, true)
@@ -518,8 +524,21 @@ func (m *OS) FileViewEnter(index int) tea.Cmd {
 		return nil
 	}
 	entry := m.filesView.Entries[index]
-	full := filepath.Join(m.filesView.Dir, entry.Name)
-	if entry.Dir {
+	return m.fileViewOpen(m.filesView.Dir, entry.Name, entry.Dir)
+}
+
+// fileViewOpen is what a row of the listing does when it is taken, addressed by
+// name rather than by an index into the listing on screen.
+//
+// The menu's Open row goes through here too, with the folder and the name it
+// was opened on. One body, so the two ways of taking a row can never come to
+// mean different things, and so the folder_click setting is read in one place.
+func (m *OS) fileViewOpen(dir, name string, isDir bool) tea.Cmd {
+	if !m.filesOn() || dir == "" || name == "" {
+		return nil
+	}
+	full := filepath.Join(dir, name)
+	if isDir {
 		var cmd tea.Cmd
 		if config.SidebarFolderClick != config.SidebarFolderClickCd {
 			cmd = m.requestFileList(full, m.filesView.Origin, true)

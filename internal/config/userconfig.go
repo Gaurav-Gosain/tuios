@@ -770,6 +770,12 @@ func getDefaultSidebarFilesKeybinds() map[string][]string {
 		"file_copy":           {"y"},
 		"file_cut":            {"x"},
 		"file_paste":          {"p"},
+		// enter is what already opens a listing row through the rail's own
+		// activate binding, so this names what that row does rather than adding
+		// a second way to do it: the menu's Open row shows the key the user is
+		// already pressing. The files scope is consulted first, so on a listing
+		// row this answers and everywhere else activate does, unchanged.
+		"file_open": {"enter"},
 	}
 }
 
