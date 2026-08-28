@@ -75,6 +75,24 @@ func TestResolveSGRBrightBackground(t *testing.T) {
 	}
 }
 
+func TestResolveSGRBrightForegroundUsesBrightSlot(t *testing.T) {
+	// A palette whose bright slots differ from the normal ones, so a
+	// regression that maps 91 to pal[1] (normal red) instead of pal[9]
+	// (bright red) cannot hide behind a theme that repeats its colours
+	// in slots 8-15 (catppuccin, among others, does).
+	pal := mustPalette(t, []string{
+		"#111111", "#222222", "#333333", "#444444",
+		"#555555", "#666666", "#777777", "#888888",
+		"#999999", "#ff0000", "#00ff00", "#ffff00",
+		"#0000ff", "#ff00ff", "#00ffff", "#ffffff",
+	})
+	got := ResolveSGR("\x1b[91m", pal)
+	want := "\x1b[38;2;255;0;0m" // pal[9] = #ff0000, not pal[1] = #222222
+	if got != want {
+		t.Fatalf("ResolveSGR(91) = %q, want %q (bright slot, not normal slot)", got, want)
+	}
+}
+
 func TestResolveSGR256LowIndexUsesPalette(t *testing.T) {
 	pal := mochaPalette()
 	// 38;5;1 is the 256-colour spelling of index 1; the theme palette owns it.
@@ -259,6 +277,22 @@ func TestXtermPaletteIsRGB(t *testing.T) {
 		}
 		if r == 0 && g == 0 && b == 0 && i != 0 {
 			t.Fatalf("xterm colour %d is black; palette not populated", i)
+		}
+		// Pin the exact RGB as literals — xterm's own defaults, written out
+		// here rather than read back from xtermDefaultHex so a regression to
+		// a colour library's VGA shades (index 1 = #800000) cannot pass by
+		// changing both sides together. The daemon resolves against what
+		// xterm actually paints when no palette is sent; a capture that
+		// disagrees with the terminal is a lie.
+		want := [16][3]int{
+			{0, 0, 0}, {205, 0, 0}, {0, 205, 0}, {205, 205, 0},
+			{0, 0, 238}, {205, 0, 205}, {0, 205, 205}, {229, 229, 229},
+			{127, 127, 127}, {255, 0, 0}, {0, 255, 0}, {255, 255, 0},
+			{92, 92, 255}, {255, 0, 255}, {0, 255, 255}, {255, 255, 255},
+		}[i]
+		if r>>8 != uint32(want[0]) || g>>8 != uint32(want[1]) || b>>8 != uint32(want[2]) {
+			t.Fatalf("xterm colour %d = #%02x%02x%02x, want #%02x%02x%02x (xterm defaults, not VGA)",
+				i, r>>8, g>>8, b>>8, want[0], want[1], want[2])
 		}
 	}
 	// The xterm red (index 1) is a known RGB; confirm it serialises to a

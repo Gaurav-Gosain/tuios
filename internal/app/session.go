@@ -129,6 +129,11 @@ func (m *OS) BuildSessionState() *session.SessionState {
 		PaneGap:           m.PaneGap,
 		ScrollColumnWidth: m.ScrollColumnWidth,
 	}
+	// Where the strip is scrolled to, on the workspace this state names. Shared
+	// for the reason the focus is: the strip is one row of columns and this is a
+	// place on it, so two clients holding one offset are looking at the same
+	// place. See SessionState.ScrollStrip.
+	state.ScrollStrip = m.ScrollStripState()
 
 	return state
 }
@@ -337,6 +342,15 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		m.CurrentWorkspace = state.CurrentWorkspace
 	}
 
+	// A client joining a scrolling session starts where the session is looking,
+	// not at the left end of the strip. The strip is built here rather than left
+	// to the first retile because that retile only ever reveals the focused
+	// column, which is a different place from wherever the session has actually
+	// scrolled to.
+	if m.AutoTiling && m.UseScrollingLayout && state.ScrollStrip != nil {
+		m.GetOrCreateScrollingLayout().ViewportX = state.ScrollStrip.ViewportX
+	}
+
 	// A window created while nothing was attached has never been placed by
 	// anyone, and RestoredFromState below suppresses the first retile, so without
 	// this it would render as a full-size box over the restored layout.
@@ -404,6 +418,15 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 			m.SyncStateToDaemon()
 		}
 	}()
+
+	// Which window was focused before any of this was applied. It is read here
+	// rather than beside the focus adoption below because the window list is
+	// rebuilt in between, which leaves the old index pointing at whatever
+	// happens to sit there now.
+	focusBefore := ""
+	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
+		focusBefore = m.Windows[m.FocusedWindow].ID
+	}
 
 	// Build maps for efficient lookup
 	incomingByID := make(map[string]*session.WindowState)
@@ -517,6 +540,11 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 			}
 		}
 	}
+	focusAfter := ""
+	if m.FocusedWindow >= 0 {
+		focusAfter = m.Windows[m.FocusedWindow].ID
+	}
+	focusChanged := focusAfter != focusBefore
 
 	// Terminal mode with nothing focused is a dead end: keystrokes have no
 	// terminal to reach. Closing the last window used to drop back to window
@@ -679,6 +707,14 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 		m.RecalcZOrder()
 		m.SyncStateToDaemon()
 	}
+
+	// The strip as the session has it, taken before the retile below rather than
+	// after it: that retile lays the strip out from the offset and the focused
+	// column, so giving it the session's answers first is one pass over the
+	// panes instead of two - and on a workspace switch, which is the case that
+	// retiles, the strip it lays out is then the one this sync named. A sync
+	// that moved neither leaves it alone.
+	m.adoptScrollStrip(state.ScrollStrip, focusChanged)
 
 	// A sync carries the peer's pane rectangles, and a rectangle is not shared
 	// state: it is what the peer's own render size and the shared tree came to

@@ -251,6 +251,19 @@ type SessionState struct {
 	// and a client that receives nil keeps its own configured values, which is
 	// the pre-existing behaviour.
 	PaneGeometry *PaneGeometryState `json:"pane_geometry,omitempty"`
+	// ScrollStrip is the scrolling layout's strip as the session has it, on the
+	// workspace this state names. It travels with CurrentWorkspace and means
+	// nothing without it: each workspace keeps its own strip.
+	//
+	// Nil means unstated - a client too old to know the field, or state written
+	// before it existed - and a client that receives nil keeps the strip it has,
+	// which is the behaviour that predates this. A pointer rather than a plain
+	// field because the offset's zero, a strip at its left end, is the commonest
+	// position there is, and gob omits a zero-valued field from the wire: a plain
+	// int (or a *int, which gob flattens to one) would send "scrolled home" as
+	// "nothing to say". A non-nil pointer to a struct survives, which is what
+	// makes home a value this can carry.
+	ScrollStrip *ScrollStripState `json:"scroll_strip,omitempty"`
 }
 
 // PaneGeometryState carries the appearance settings that change cell geometry.
@@ -288,6 +301,26 @@ type PaneGeometryState struct {
 	// PaneGeometry: an older client, or state written before the field existed.
 	// The receiving client keeps its own configured value.
 	ScrollColumnWidth int `json:"scroll_column_width,omitempty"`
+}
+
+// ScrollStripState is the scrolling layout's strip, shared across the clients
+// attached to one session.
+//
+// The strip is one long row of columns and the viewport is a window onto it, so
+// where it is scrolled to is a place in the session rather than a property of a
+// screen: two clients holding one offset are looking at the same place, which is
+// what a shared session means. That is safe for the same reason it is wanted:
+// the panes' box is identical on every client (the session's size is the
+// minimum over them and the chrome reserve the maximum, so GetContentWidth
+// agrees everywhere), so one offset puts the same columns on every screen.
+//
+// It is not a rectangle. A pane's rectangle is what one client's size and the
+// shared layout came to between them and must never be adopted from a peer; an
+// offset is an input to that arithmetic, like the master ratio and the column
+// width beside it.
+type ScrollStripState struct {
+	// ViewportX is how many cells the strip is scrolled by, from its left end.
+	ViewportX int `json:"viewport_x"`
 }
 
 // PTY represents a daemon-managed pseudo-terminal.

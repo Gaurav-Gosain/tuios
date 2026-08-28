@@ -79,6 +79,13 @@ neighboring columns peek in at the edges. Clicking a partially visible column
 does not recenter, on the reasoning that a column you can already see and click
 does not need the viewport to jump.
 
+Where the strip is scrolled to is part of the session, not of one window onto
+it. Every client attached to the session shares the offset, the way they share
+the focus and the workspace: move the focus or turn the wheel on one, and the
+others follow to the same place. That works because the panes' box is settled
+across the session, so one offset shows every client the same columns whatever
+size their terminals are.
+
 `niri_reverse_scroll = true` in `[appearance]` inverts the wheel direction.
 
 ### Column commands
@@ -111,9 +118,9 @@ side by side and the strip reads as something you scroll.
 - **Shared borders are not drawn in scrolling mode.** `shared_borders` applies
   to BSP and master-stack tiling only; scrolling columns always draw their own
   borders.
-- **Column widths and the strip order are not saved.** The layout mode survives
-  a detach, but the column arrangement is rebuilt from the window list on
-  reattach.
+- **Column widths and the strip order are not shared or saved.** The layout mode
+  and the scroll offset are session state; the column arrangement is not, and is
+  rebuilt from the window list on reattach and on each client.
 - **Transitions always animate.** The viewport slide is kept even when
   animations are disabled, because the jump is disorienting without it.
 

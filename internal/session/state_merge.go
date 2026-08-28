@@ -59,6 +59,14 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	if incoming.PaneGeometry == nil {
 		incoming.PaneGeometry = canonical.PaneGeometry
 	}
+	// The strip is carried over on the same terms, and for one more reason
+	// besides: a client says nothing about it whenever it is not in the
+	// scrolling layout, so without this the session would forget where its strip
+	// is every time anybody pushed from another layout, and a client joining
+	// later would come up at the left end.
+	if incoming.ScrollStrip == nil {
+		incoming.ScrollStrip = canonical.ScrollStrip
+	}
 
 	cwds := make(map[string]string, len(canonical.Windows))
 	// The foreground command is read daemon-side on the detector's poll and no
@@ -151,6 +159,17 @@ func reconcileStale(incoming, canonical *SessionState, hasLivePTY func(ptyID str
 			continue // closed by the client; the close stands
 		}
 		incoming.Windows = append(incoming.Windows, win)
+	}
+
+	// The strip offset is the offset of the workspace being shown, so it is only
+	// meaningful beside the workspace it was measured on. Where the workspace is
+	// rewritten to the daemon's, the offset the client sent belongs to the
+	// workspace it thought it was on and would scroll everyone's strip to a
+	// place taken from a different one, so the daemon's travels with it. On the
+	// same workspace the client's own offset stands: a scroll is exactly the
+	// kind of thing a client owns and a stale snapshot still reports correctly.
+	if canonical.CurrentWorkspace != incoming.CurrentWorkspace {
+		incoming.ScrollStrip = canonical.ScrollStrip
 	}
 
 	incoming.FocusedWindowID = canonical.FocusedWindowID

@@ -135,6 +135,15 @@ func StateFingerprint(s *SessionState) uint64 {
 		str(s.Options[k])
 	}
 
+	// Nil and the zero value are distinguished here too, and for the same
+	// reason: a strip scrolled home is not a peer with nothing to say about it.
+	if s.ScrollStrip == nil {
+		str("nil-strip")
+	} else {
+		str("strip")
+		num(s.ScrollStrip.ViewportX)
+	}
+
 	// Nil and the zero value are distinguished: nil is a peer that has not said,
 	// and a peer adopting on receipt has to see the difference.
 	if s.PaneGeometry == nil {

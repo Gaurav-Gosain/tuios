@@ -676,6 +676,17 @@ func (m *OS) SwapWindowsInBSPTree(window1, window2 *terminal.Window) {
 // finds a peer that is larger and is blind to one that is smaller, and a
 // session shrinking and growing back produces exactly the smaller case.
 func (m *OS) tiledLayoutStale() bool {
+	// The scrolling strip is asked a different question, because it is not a
+	// partition of the box and never claims to be: it is longer than the screen
+	// and the columns either side of the viewport are meant to be off it. Every
+	// test below reads a settled strip as stale, so a state sync used to retile
+	// in that layout whatever it said - and a retile brings the focused column
+	// back on screen, so a strip somebody had deliberately scrolled away from
+	// was pulled back by the next broadcast anybody made.
+	if m.UseScrollingLayout {
+		return m.scrollingLayoutStale()
+	}
+
 	bounds := m.GetBSPBounds()
 	if bounds.W <= 0 || bounds.H <= 0 {
 		return false
