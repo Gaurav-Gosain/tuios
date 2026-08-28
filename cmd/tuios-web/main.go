@@ -20,6 +20,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
+	"github.com/Gaurav-Gosain/tuios/internal/netutil"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/fang"
@@ -376,9 +377,6 @@ func runWebServer() error {
 	return server.Serve(ctx, createTUIOSHandler)
 }
 
-// isLoopbackHost reports whether a bind address keeps traffic inside this
-// machine. It mirrors the check sip makes when it decides whether TLS is
-// mandatory, so the two agree on which binds need a certificate.
 // daemonConfigFrom maps the user's [daemon] section onto the daemon's own
 // config, mirroring what runDaemon does in cmd/tuios so a daemon autostarted by
 // the web server behaves like one started by `tuios daemon`.
@@ -390,16 +388,14 @@ func daemonConfigFrom(userConfig *config.UserConfig) *session.DaemonConfig {
 	}
 }
 
-func isLoopbackHost(host string) bool {
-	if host == "" || host == "localhost" {
-		return true
-	}
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		host = h
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}
+// isLoopbackHost reports whether a bind address keeps traffic inside this
+// machine. It mirrors the check sip makes when it decides whether TLS is
+// mandatory, so the two agree on which binds need a certificate.
+//
+// The body moved to internal/netutil when `tuios ssh` grew the same kind of
+// gate for authentication. One answer to "is this address on the network"
+// serves both refusals.
+func isLoopbackHost(host string) bool { return netutil.IsLoopbackHost(host) }
 
 // resolveTLSFiles decides which keypair the server serves from, generating
 // sip's managed one when --auto-tls asked for it and there is none, or the one

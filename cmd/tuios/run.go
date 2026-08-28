@@ -396,19 +396,40 @@ func runLocal() error {
 	return nil
 }
 
-func runSSHServer(sshHost, sshPort, sshKeyPath, defaultSession string, ephemeral bool) error {
+// sshServerFlags is the `tuios ssh` command line, gathered so the runner reads
+// as one thing rather than as seven positional arguments.
+type sshServerFlags struct {
+	host           string
+	port           string
+	keyPath        string
+	defaultSession string
+	authorizedKeys string
+	ephemeral      bool
+	noAuth         bool
+}
+
+func runSSHServer(f sshServerFlags) error {
 	if debugMode {
 		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
 		fmt.Println("Debug mode enabled")
 	}
 
+	// Decided before anything starts, and before the daemon is touched.
+	// StartSSHServer makes the same call and refuses the same binds; this one
+	// exists so the refusal can be answered with the flags this command has,
+	// which is the same reason cmd/tuios-web decides TLS in the command rather
+	// than leaving it to sip.
+	if err := checkSSHAuth(os.Stderr, f); err != nil {
+		return err
+	}
+
 	app.SetInputHandler(input.HandleInput)
 
-	log.Printf("Starting TUIOS SSH server on %s:%s", sshHost, sshPort)
-	if defaultSession != "" {
-		log.Printf("Default session: %s", defaultSession)
+	log.Printf("Starting TUIOS SSH server on %s:%s", f.host, f.port)
+	if f.defaultSession != "" {
+		log.Printf("Default session: %s", f.defaultSession)
 	}
-	if ephemeral {
+	if f.ephemeral {
 		log.Printf("Running in ephemeral mode (no daemon)")
 	}
 
@@ -426,12 +447,14 @@ func runSSHServer(sshHost, sshPort, sshKeyPath, defaultSession string, ephemeral
 	}()
 
 	cfg := &server.SSHServerConfig{
-		Host:           sshHost,
-		Port:           sshPort,
-		KeyPath:        sshKeyPath,
-		DefaultSession: defaultSession,
-		Version:        version,
-		Ephemeral:      ephemeral,
+		Host:               f.host,
+		Port:               f.port,
+		KeyPath:            f.keyPath,
+		DefaultSession:     f.defaultSession,
+		AuthorizedKeysPath: f.authorizedKeys,
+		NoAuth:             f.noAuth,
+		Version:            version,
+		Ephemeral:          f.ephemeral,
 		// The full flag set, not a subset: `tuios ssh` registers the same
 		// interface flags as every other run command, and the server applies
 		// them over the appearance baseline it loads. Applying them here

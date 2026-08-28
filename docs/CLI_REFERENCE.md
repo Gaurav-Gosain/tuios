@@ -1447,6 +1447,33 @@ tuios ssh [flags]
 - `--key-path <string>` - Path to SSH host key (auto-generated if not specified)
 - `--default-session <string>` - Default session name for all connections
 - `--ephemeral` - Run in ephemeral mode (standalone, no daemon)
+- `--authorized-keys <string>` - Path to the public keys allowed to connect (default: `~/.config/tuios/authorized_keys`, then `~/.ssh/authorized_keys`)
+- `--no-auth` - Give every connection a shell without checking who it is (trusted networks only)
+
+**Who can connect:**
+
+Every connection gets a shell on the machine running the server, so the server
+checks who is connecting. It reads public keys from
+`~/.config/tuios/authorized_keys`, and from `~/.ssh/authorized_keys` when the
+first file is absent.
+
+- With keys: only the holders of those keys connect. Add a key while the server
+  runs and it works on the next connection.
+- With no keys on `localhost`: every connection is accepted and the server
+  prints one warning at startup. This keeps a single-user laptop working with
+  no setup.
+- With no keys on any other host: the server refuses to start and prints the
+  ways forward. Pass `--no-auth` to serve anyway, on a network you trust.
+
+A keys file that cannot be read, does not parse, or holds no key stops startup.
+Only an absent file means "no keys are configured".
+
+```bash
+# Let one key in
+mkdir -p ~/.config/tuios
+cat ~/.ssh/id_ed25519.pub >> ~/.config/tuios/authorized_keys
+tuios ssh --host 0.0.0.0 --port 2222
+```
 
 The interface flags (`--theme`, `--border-style`, `--dockbar-position`,
 `--ascii-only`, and the rest of the appearance set) apply to every served
@@ -1470,8 +1497,11 @@ tuios ssh
 # Start on custom port
 tuios ssh --port 8022
 
-# Listen on all interfaces
+# Listen on all interfaces (needs an authorized_keys file, or --no-auth)
 tuios ssh --host 0.0.0.0 --port 2222
+
+# Read the allowed public keys from somewhere else
+tuios ssh --authorized-keys /etc/tuios/authorized_keys
 
 # Use custom host key
 tuios ssh --key-path /path/to/host_key
@@ -2050,10 +2080,13 @@ tuios kill-server
 # Start SSH server on default port
 tuios ssh
 
-# Start on custom port with remote access
+# Start on custom port with remote access. A host outside this machine
+# needs keys, so add one first.
+mkdir -p ~/.config/tuios
+cat ~/.ssh/id_ed25519.pub >> ~/.config/tuios/authorized_keys
 tuios ssh --host 0.0.0.0 --port 8022
 
-# Connect from another machine
+# Connect from another machine, with the matching private key
 ssh -p 8022 your-server-hostname
 ```
 

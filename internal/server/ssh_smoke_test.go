@@ -62,8 +62,11 @@ func TestSSHServer_AcceptsPTYSessionAndRenders(t *testing.T) {
 
 	// Dial until the listener is up (host key generation + bind take a moment).
 	clientCfg := &gossh.ClientConfig{
-		User:            "tester",
-		Auth:            nil, // the server runs with NoClientAuth
+		User: "tester",
+		// No keys are configured in the isolated test tree, so this loopback
+		// server runs unauthenticated. See ssh_auth_test.go for the servers
+		// that do check.
+		Auth:            nil,
 		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
 		Timeout:         2 * time.Second,
 	}
