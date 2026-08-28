@@ -20,9 +20,9 @@ import (
 // there is always a snap in flight for the next action to trample.
 
 func TestNoStaleSnapSurvivesALayoutChange(t *testing.T) {
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
 	changes := []struct {
 		name  string

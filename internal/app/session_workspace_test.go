@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -28,7 +29,7 @@ func TestClampWorkspace(t *testing.T) {
 // normalizes to workspace 1, which is reachable, instead of stranding future
 // windows on the unreachable workspace 0.
 func TestRestoreFromStateClampsWorkspace(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	state := &session.SessionState{
 		Name:             "fresh",
 		CurrentWorkspace: 0,
@@ -46,7 +47,7 @@ func TestRestoreFromStateClampsWorkspace(t *testing.T) {
 // so one client entering terminal mode flipped every attached client's input
 // mode out from under its user.
 func TestApplyStateSyncLeavesModeAlone(t *testing.T) {
-	m := &OS{Mode: WindowManagementMode}
+	m := &OS{Settings: config.Global, Mode: WindowManagementMode}
 	state := &session.SessionState{Name: "shared", CurrentWorkspace: 1}
 	if err := m.ApplyStateSync(state); err != nil {
 		t.Fatalf("ApplyStateSync returned error: %v", err)

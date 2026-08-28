@@ -32,9 +32,9 @@ func pillTooltipOS(t *testing.T) *OS {
 		WorkspaceNames: map[int]string{2: pillTooltipName, 3: "docs"},
 	})
 
-	prevTabs, prevTip := config.DockWorkspaceTabs, config.DockWorkspaceTooltip
-	config.DockWorkspaceTabs, config.DockWorkspaceTooltip = true, true
-	t.Cleanup(func() { config.DockWorkspaceTabs, config.DockWorkspaceTooltip = prevTabs, prevTip })
+	prevTabs, prevTip := m.Settings.DockWorkspaceTabs, m.Settings.DockWorkspaceTooltip
+	m.Settings.DockWorkspaceTabs, m.Settings.DockWorkspaceTooltip = true, true
+	t.Cleanup(func() { m.Settings.DockWorkspaceTabs, m.Settings.DockWorkspaceTooltip = prevTabs, prevTip })
 	return m
 }
 
@@ -92,7 +92,7 @@ func TestWorkspacePillTooltipRevealsTheWholeName(t *testing.T) {
 	// On the row beside the bar, not over it: a label drawn on the pill would
 	// cover the thing the pointer is asking about.
 	row := rect.Y - 1
-	if config.DockbarPosition == "top" {
+	if config.Global.DockbarPosition == "top" {
 		row = rect.Y + 1
 	}
 	if row < 0 || row >= len(after) || !strings.Contains(after[row], pillTooltipName) {
@@ -129,7 +129,7 @@ func TestWorkspacePillTooltipLeavesTheStripWhereItWas(t *testing.T) {
 	// Everything but the one row the label occupies is untouched, which is what
 	// makes this a label over the frame rather than a change to it.
 	labelRow := rect.Y - 1
-	if config.DockbarPosition == "top" {
+	if config.Global.DockbarPosition == "top" {
 		labelRow = rect.Y + 1
 	}
 	for i := range before {
@@ -244,7 +244,7 @@ func TestWorkspacePillTooltipCostsNoIdleTick(t *testing.T) {
 // did before the label existed, and the hover arms nothing at all.
 func TestWorkspacePillTooltipCanBeTurnedOff(t *testing.T) {
 	m := pillTooltipOS(t)
-	config.DockWorkspaceTooltip = false
+	m.Settings.DockWorkspaceTooltip = false
 
 	before := pillFrame(m)
 	was := pillHits(m)
@@ -290,7 +290,7 @@ func TestWorkspacePillTooltipInASCIIAndMonochrome(t *testing.T) {
 		m := pillTooltipOS(t)
 		_, after, rect := hoverPill(t, m, 2)
 		row := rect.Y - 1
-		if config.DockbarPosition == "top" {
+		if config.Global.DockbarPosition == "top" {
 			row = rect.Y + 1
 		}
 		if !strings.Contains(safeRow(after, row), pillTooltipName) {
@@ -299,18 +299,18 @@ func TestWorkspacePillTooltipInASCIIAndMonochrome(t *testing.T) {
 	})
 
 	t.Run("ascii", func(t *testing.T) {
-		prev := config.UseASCIIOnly
-		config.UseASCIIOnly = true
+		prev := config.Global.UseASCIIOnly
+		config.Global.UseASCIIOnly = true
 		overlay.SetASCII(true)
 		t.Cleanup(func() {
-			config.UseASCIIOnly = prev
+			config.Global.UseASCIIOnly = prev
 			overlay.SetASCII(prev)
 		})
 
 		m := pillTooltipOS(t)
 		_, after, rect := hoverPill(t, m, 2)
 		row := rect.Y - 1
-		if config.DockbarPosition == "top" {
+		if config.Global.DockbarPosition == "top" {
 			row = rect.Y + 1
 		}
 		line := safeRow(after, row)

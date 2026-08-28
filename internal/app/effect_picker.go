@@ -162,7 +162,7 @@ func (m *OS) buildEffectPreview() {
 	if effect == nil {
 		return
 	}
-	engine, ok := screensaverBuild(p.capture, p.canvasWidth, p.canvasHeight, effect, fill)
+	engine, ok := screensaverBuild(p.capture, p.canvasWidth, p.canvasHeight, effect, fill, &m.Settings)
 	if !ok {
 		return
 	}
@@ -179,12 +179,12 @@ func (m *OS) effectPreviewTick() tea.Cmd {
 		return nil
 	}
 	p.ticking = true
-	return effectPreviewFrameCmd(p.gen)
+	return effectPreviewFrameCmd(p.gen, &m.Settings)
 }
 
 // effectPreviewFrameCmd waits one frame and asks for the next one.
-func effectPreviewFrameCmd(gen int) tea.Cmd {
-	return tea.Tick(time.Second/time.Duration(config.NormalFPS), func(time.Time) tea.Msg {
+func effectPreviewFrameCmd(gen int, s *config.Settings) tea.Cmd {
+	return tea.Tick(time.Second/time.Duration(s.NormalFPS), func(time.Time) tea.Msg {
 		return effectPreviewFrameMsg{gen: gen}
 	})
 }
@@ -315,7 +315,7 @@ func (m *OS) EffectPickerApplySelection() tea.Cmd {
 		// the query that found nothing along with the only key that gets back
 		// to a list, which is the trap the other two pickers name.
 		m.ShowNotification("No effect matches "+m.EffectPickerQuery,
-			"info", config.NotificationDuration)
+			"info", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.setOption("screensaver.effect", items[m.EffectPickerSelected])
@@ -458,7 +458,7 @@ const (
 // away again. Nothing else may read effectOpenings: a caller that wants the
 // number wants to show it, and the number is not true of the screen the user is
 // looking at.
-func effectOpeningBandOf(name string) effectOpeningBand {
+func effectOpeningBandOf(name string, s *config.Settings) effectOpeningBand {
 	opening, ok := effectOpenings[name]
 	if !ok {
 		return effectOpeningUnknown
@@ -466,7 +466,7 @@ func effectOpeningBandOf(name string) effectOpeningBand {
 	if opening.keepsScreen {
 		return effectOpeningNone
 	}
-	fps := config.NormalFPS
+	fps := s.NormalFPS
 	if fps <= 0 {
 		fps = 60
 	}

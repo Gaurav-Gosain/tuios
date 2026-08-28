@@ -27,6 +27,7 @@ func (p *ptySpy) install(win *terminal.Window) {
 // newTilingClient is an attached client with a known viewport, tiling on, BSP.
 func newTilingClient(width, height, workspace int) *OS {
 	return &OS{
+		Settings:             config.Global,
 		NumWorkspaces:        9,
 		CurrentWorkspace:     workspace,
 		WorkspaceFocus:       make(map[int]int),
@@ -71,9 +72,9 @@ func daemonNewWindow(state *session.SessionState, id string, width, height, work
 // is left at the placement box: the pane and its shell disagree, permanently,
 // because nothing resizes again until the user does.
 func TestNewWindowPTYMatchesPaneAfterRepeatedUnplacedSync(t *testing.T) {
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
 	const width, height = 130, 55
 
@@ -124,9 +125,9 @@ func TestNewWindowPTYMatchesPaneAfterRepeatedUnplacedSync(t *testing.T) {
 // switch to an empty workspace, create a window there, and the pane's shell must
 // be the size of the pane.
 func TestNewWindowOnNewWorkspacePTYSize(t *testing.T) {
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
 	const width, height = 130, 55
 
@@ -168,9 +169,9 @@ func TestNewWindowOnNewWorkspacePTYSize(t *testing.T) {
 // Every announcement is a SIGWINCH, and a shell answers one by repainting its
 // prompt over whatever is on screen.
 func TestSettledPaneAnnouncesNothing(t *testing.T) {
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
 	const width, height = 130, 55
 
@@ -217,9 +218,9 @@ func TestSettledPaneAnnouncesNothing(t *testing.T) {
 // the retile that runs when the user switches to it. Its PTY must end up the
 // size of the pane it is shown at.
 func TestNewWindowOnNonCurrentWorkspaceSizedOnSwitch(t *testing.T) {
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
 	const width, height = 130, 55
 

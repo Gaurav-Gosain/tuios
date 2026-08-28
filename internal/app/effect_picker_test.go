@@ -370,7 +370,7 @@ func TestEffectPickerClaimsNoTimeItCannotKnow(t *testing.T) {
 		m.EffectPickerSelected = i
 		m.buildEffectPreview()
 		_, status := m.effectDetailText(name)
-		for _, s := range []string{status, effectOpeningWord(effectOpeningBandOf(name))} {
+		for _, s := range []string{status, effectOpeningWord(effectOpeningBandOf(name, &config.Global))} {
 			if s == "" {
 				continue
 			}
@@ -408,7 +408,7 @@ func TestEffectPickerSaysTheTimeDependsOnTheScreen(t *testing.T) {
 		if name == config.ScreensaverRandomEffect {
 			continue
 		}
-		band := effectOpeningBandOf(name)
+		band := effectOpeningBandOf(name, &config.Global)
 		if band == effectOpeningNone || band == effectOpeningUnknown {
 			continue
 		}
@@ -456,7 +456,7 @@ func TestEffectOpeningBandsSeparateFastFromSlow(t *testing.T) {
 	}
 	seen := map[string]bool{}
 	for _, w := range want {
-		got := effectOpeningBandOf(w.name)
+		got := effectOpeningBandOf(w.name, &config.Global)
 		if got != w.band {
 			t.Errorf("%s is in band %d, want %d", w.name, got, w.band)
 		}
@@ -485,7 +485,7 @@ func TestEffectOpeningBandsSeparateFastFromSlow(t *testing.T) {
 	}
 
 	// random has no one opening, so it claims none.
-	if got := effectOpeningBandOf(config.ScreensaverRandomEffect); got != effectOpeningUnknown {
+	if got := effectOpeningBandOf(config.ScreensaverRandomEffect, &config.Global); got != effectOpeningUnknown {
 		t.Errorf("random is in band %d, want no band at all", got)
 	}
 	if word := effectOpeningWord(effectOpeningUnknown); word != "" {
@@ -516,7 +516,7 @@ func TestEffectOpeningBandsSeparateFastFromSlow(t *testing.T) {
 func TestEffectsWithNoOpeningNeverHideTheScreen(t *testing.T) {
 	var none []string
 	for name := range effectOpenings {
-		if effectOpeningBandOf(name) == effectOpeningNone {
+		if effectOpeningBandOf(name, &config.Global) == effectOpeningNone {
 			none = append(none, name)
 		}
 	}
@@ -549,7 +549,7 @@ func TestEffectsWithNoOpeningNeverHideTheScreen(t *testing.T) {
 
 			d, _ := tfx.Lookup(name)
 			effect := d.New()
-			engine, ok := screensaverBuild(p.capture, p.canvasWidth, p.canvasHeight, effect, d.NeedsFillCharacters)
+			engine, ok := screensaverBuild(p.capture, p.canvasWidth, p.canvasHeight, effect, d.NeedsFillCharacters, defaultSaverSettings())
 			if !ok {
 				t.Fatalf("%s will not build at %dx%d", name, screen.w, screen.h)
 			}
@@ -605,7 +605,7 @@ func effectSettledScreen(t *testing.T, p *effectPreview, name string) map[measur
 	t.Helper()
 	d, _ := tfx.Lookup(name)
 	effect := d.New()
-	engine, ok := screensaverBuild(p.capture, p.canvasWidth, p.canvasHeight, effect, d.NeedsFillCharacters)
+	engine, ok := screensaverBuild(p.capture, p.canvasWidth, p.canvasHeight, effect, d.NeedsFillCharacters, defaultSaverSettings())
 	if !ok {
 		t.Fatalf("%s will not build", name)
 	}
@@ -667,7 +667,7 @@ func TestEveryEffectBuildsOverACapturedScreen(t *testing.T) {
 
 	for _, name := range tfx.Names() {
 		d, _ := tfx.Lookup(name)
-		if _, ok := screensaverBuild(p.capture, p.canvasWidth, p.canvasHeight, d.New(), d.NeedsFillCharacters); !ok {
+		if _, ok := screensaverBuild(p.capture, p.canvasWidth, p.canvasHeight, d.New(), d.NeedsFillCharacters, defaultSaverSettings()); !ok {
 			t.Errorf("%s will not build over a captured screen, so choosing it stops the saver working", name)
 		}
 	}

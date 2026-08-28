@@ -132,9 +132,9 @@ func TestSharedBorderDragKeepsFocusedSeparatorHighlighted(t *testing.T) {
 	t.Cleanup(func() { lipgloss.Writer.Profile = prevProfile })
 	app.SetInputHandler(HandleInput)
 
-	prev := config.SharedBorders
-	config.SharedBorders = true
-	t.Cleanup(func() { config.SharedBorders = prev })
+	prev := config.Global.SharedBorders
+	config.Global.SharedBorders = true
+	t.Cleanup(func() { config.Global.SharedBorders = prev })
 
 	m := benchResizeOS(t, 4)
 	startX, startY := m.ResizeStartX, m.ResizeStartY

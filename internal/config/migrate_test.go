@@ -12,13 +12,13 @@ import (
 // a test may drive ApplyAppearanceConfig without leaking into the next one.
 func withSidebarGlobals(t *testing.T) {
 	t.Helper()
-	e, p, w := SidebarEnabled, SidebarPosition, SidebarWidth
-	sg, sc, sx := SidebarShowGlyphs, SidebarShowCounts, SidebarSections
-	mq, dt := SidebarMarquee, DockWorkspaceTabs
+	e, p, w := Global.SidebarEnabled, Global.SidebarPosition, Global.SidebarWidth
+	sg, sc, sx := Global.SidebarShowGlyphs, Global.SidebarShowCounts, Global.SidebarSections
+	mq, dt := Global.SidebarMarquee, Global.DockWorkspaceTabs
 	t.Cleanup(func() {
-		SidebarEnabled, SidebarPosition, SidebarWidth = e, p, w
-		SidebarShowGlyphs, SidebarShowCounts, SidebarSections = sg, sc, sx
-		SidebarMarquee, DockWorkspaceTabs = mq, dt
+		Global.SidebarEnabled, Global.SidebarPosition, Global.SidebarWidth = e, p, w
+		Global.SidebarShowGlyphs, Global.SidebarShowCounts, Global.SidebarSections = sg, sc, sx
+		Global.SidebarMarquee, Global.DockWorkspaceTabs = mq, dt
 	})
 }
 
@@ -27,7 +27,7 @@ func withSidebarGlobals(t *testing.T) {
 func layoutNames(t *testing.T) []string {
 	t.Helper()
 	var out []string
-	for _, e := range ParseSidebarSections(SidebarSections) {
+	for _, e := range ParseSidebarSections(Global.SidebarSections) {
 		out = append(out, e.Name)
 	}
 	return out
@@ -60,13 +60,13 @@ sidebar_show_windows = false
 sidebar_show_glyphs = false
 sidebar_show_counts = false
 `)
-	ApplyAppearanceConfig(cfg)
+	ApplyAppearanceConfig(cfg, &Global)
 
-	if !SidebarEnabled || SidebarPosition != "right" || SidebarWidth != 34 {
-		t.Errorf("enabled/position/width = %v/%q/%d, want true/right/34", SidebarEnabled, SidebarPosition, SidebarWidth)
+	if !Global.SidebarEnabled || Global.SidebarPosition != "right" || Global.SidebarWidth != 34 {
+		t.Errorf("enabled/position/width = %v/%q/%d, want true/right/34", Global.SidebarEnabled, Global.SidebarPosition, Global.SidebarWidth)
 	}
-	if SidebarShowGlyphs || SidebarShowCounts {
-		t.Errorf("show glyphs/counts = %v/%v, want both false", SidebarShowGlyphs, SidebarShowCounts)
+	if Global.SidebarShowGlyphs || Global.SidebarShowCounts {
+		t.Errorf("show glyphs/counts = %v/%v, want both false", Global.SidebarShowGlyphs, Global.SidebarShowCounts)
 	}
 	// sidebar_show_windows is two spellings old now: it folds into the table,
 	// and the table folds it into the layout. The section is gone from the rail
@@ -78,8 +78,8 @@ sidebar_show_counts = false
 		t.Errorf("layout = %v, want the sections the file never mentioned left alone", got)
 	}
 	// Knobs the old file never mentioned keep their defaults.
-	if !SidebarMarquee || !DockWorkspaceTabs {
-		t.Errorf("unmentioned knobs drifted: marquee=%v docktabs=%v", SidebarMarquee, DockWorkspaceTabs)
+	if !Global.SidebarMarquee || !Global.DockWorkspaceTabs {
+		t.Errorf("unmentioned knobs drifted: marquee=%v docktabs=%v", Global.SidebarMarquee, Global.DockWorkspaceTabs)
 	}
 }
 
@@ -97,10 +97,10 @@ sidebar_width = 34
 enabled = true
 width = 20
 `)
-	ApplyAppearanceConfig(cfg)
+	ApplyAppearanceConfig(cfg, &Global)
 
-	if !SidebarEnabled || SidebarWidth != 20 {
-		t.Errorf("enabled/width = %v/%d, want true/20 (the table wins)", SidebarEnabled, SidebarWidth)
+	if !Global.SidebarEnabled || Global.SidebarWidth != 20 {
+		t.Errorf("enabled/width = %v/%d, want true/20 (the table wins)", Global.SidebarEnabled, Global.SidebarWidth)
 	}
 }
 
@@ -108,7 +108,7 @@ width = 20
 // the built-in default alone rather than reading as false.
 func TestSidebarNilTogglesKeepDefaults(t *testing.T) {
 	withSidebarGlobals(t)
-	SidebarMarquee, DockWorkspaceTabs, SidebarSections = true, true, SidebarDefaultSections
+	Global.SidebarMarquee, Global.DockWorkspaceTabs, Global.SidebarSections = true, true, SidebarDefaultSections
 
 	cfg := loadTOML(t, `
 [appearance.sidebar]
@@ -117,15 +117,15 @@ enabled = true
 	if s := cfg.Appearance.Sidebar; s.ShowWindows != nil || s.ShowAgents != nil || s.Marquee != nil {
 		t.Fatalf("absent toggles parsed as non-nil: %+v", s)
 	}
-	ApplyAppearanceConfig(cfg)
+	ApplyAppearanceConfig(cfg, &Global)
 
-	if !SidebarMarquee || !DockWorkspaceTabs {
-		t.Errorf("nil toggles overwrote the defaults: marquee=%v docktabs=%v", SidebarMarquee, DockWorkspaceTabs)
+	if !Global.SidebarMarquee || !Global.DockWorkspaceTabs {
+		t.Errorf("nil toggles overwrote the defaults: marquee=%v docktabs=%v", Global.SidebarMarquee, Global.DockWorkspaceTabs)
 	}
 	// An absent toggle takes nothing out of the layout. Folding a nil as though
 	// it were false is the way a migration quietly deletes a section.
-	if SidebarSections != SidebarDefaultSections {
-		t.Errorf("layout = %q, want the shipped %q untouched", SidebarSections, SidebarDefaultSections)
+	if Global.SidebarSections != SidebarDefaultSections {
+		t.Errorf("layout = %q, want the shipped %q untouched", Global.SidebarSections, SidebarDefaultSections)
 	}
 }
 
@@ -134,7 +134,7 @@ enabled = true
 // in the settings page survive a reload.
 func TestSidebarExplicitFalseSurvivesApply(t *testing.T) {
 	withSidebarGlobals(t)
-	SidebarMarquee, DockWorkspaceTabs = true, true
+	Global.SidebarMarquee, Global.DockWorkspaceTabs = true, true
 
 	cfg := loadTOML(t, `
 [appearance]
@@ -145,10 +145,10 @@ show_agents = false
 marquee = false
 workspaces = "off"
 `)
-	ApplyAppearanceConfig(cfg)
+	ApplyAppearanceConfig(cfg, &Global)
 
-	if SidebarMarquee || DockWorkspaceTabs {
-		t.Errorf("explicit false dropped: marquee=%v docktabs=%v", SidebarMarquee, DockWorkspaceTabs)
+	if Global.SidebarMarquee || Global.DockWorkspaceTabs {
+		t.Errorf("explicit false dropped: marquee=%v docktabs=%v", Global.SidebarMarquee, Global.DockWorkspaceTabs)
 	}
 	// show_agents = false is the migration this branch owes anybody whose config
 	// already carries it: the section is off the rail, by way of the layout.

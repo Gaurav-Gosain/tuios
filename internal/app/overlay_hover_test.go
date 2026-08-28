@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
@@ -36,7 +37,7 @@ func TestOverlayMotionSelectsRowUnderCursor(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.kind, func(t *testing.T) {
-			m := &OS{Width: 120, Height: 40}
+			m := &OS{Settings: config.Global, Width: 120, Height: 40}
 			h := hoverPanel(tc.kind)
 			m.OverlayHits = []overlayPanelHit{h}
 
@@ -59,7 +60,7 @@ func TestOverlayMotionSelectsRowUnderCursor(t *testing.T) {
 // TestOverlayMotionOffPanelIsNotConsumed checks motion away from every panel
 // falls through (so pane hover forwarding keeps working) and selects nothing.
 func TestOverlayMotionOffPanelIsNotConsumed(t *testing.T) {
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 	m.OverlayHits = []overlayPanelHit{hoverPanel("palette")}
 	m.CommandPaletteSelected = 1
 
@@ -74,7 +75,7 @@ func TestOverlayMotionOffPanelIsNotConsumed(t *testing.T) {
 // TestSettingsMotionThroughRealRender drives hover through the real settings
 // renderer's recorded hit rects, so the row geometry and the routing agree.
 func TestSettingsMotionThroughRealRender(t *testing.T) {
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 	m.ShowSettings = true
 	m.renderSettingsHit()
 	h := m.settingsHit()
@@ -94,7 +95,7 @@ func TestSettingsMotionThroughRealRender(t *testing.T) {
 // TestSettingsValueClickTogglesBool checks a click on a bool row's value area,
 // not just the stepper rects, flips the setting (the D-note fix).
 func TestSettingsValueClickTogglesBool(t *testing.T) {
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 	m.ShowSettings = true
 	m.renderSettingsHit()
 	h := m.settingsHit()
@@ -132,7 +133,7 @@ func TestSettingsValueClickTogglesBool(t *testing.T) {
 // TestSettingsValueClickCyclesEnum checks a click on an enum row's value text,
 // between the stepper arrows, cycles the value like Enter does.
 func TestSettingsValueClickCyclesEnum(t *testing.T) {
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 	m.ShowSettings = true
 	m.SettingsCategory = 1 // Dock: first row is the position enum
 	m.renderSettingsHit()
@@ -170,7 +171,7 @@ func TestSettingsValueClickCyclesEnum(t *testing.T) {
 // session state, and that the safe row is always first (the default).
 func TestQuitMenuRowsPerState(t *testing.T) {
 	t.Run("standalone", func(t *testing.T) {
-		m := &OS{Width: 120, Height: 40}
+		m := &OS{Settings: config.Global, Width: 120, Height: 40}
 		m.OpenQuitMenu()
 		if !m.ShowQuitMenu {
 			t.Fatal("menu did not open")
@@ -180,21 +181,21 @@ func TestQuitMenuRowsPerState(t *testing.T) {
 	})
 
 	t.Run("daemon last session", func(t *testing.T) {
-		m := &OS{Width: 120, Height: 40, IsDaemonSession: true}
+		m := &OS{Settings: config.Global, Width: 120, Height: 40, IsDaemonSession: true}
 		items := m.buildQuitMenuItems(nil, false)
 		want := []QuitMenuKind{QuitDetach, QuitKillAndQuit}
 		assertQuitKinds(t, items, want)
 	})
 
 	t.Run("daemon with other sessions", func(t *testing.T) {
-		m := &OS{Width: 120, Height: 40, IsDaemonSession: true}
+		m := &OS{Settings: config.Global, Width: 120, Height: 40, IsDaemonSession: true}
 		items := m.buildQuitMenuItems([]string{"other"}, false)
 		want := []QuitMenuKind{QuitDetach, QuitSwitchSession, QuitKillGoNext, QuitKillAndQuit}
 		assertQuitKinds(t, items, want)
 	})
 
 	t.Run("kill rows warn when a pane is busy", func(t *testing.T) {
-		m := &OS{Width: 120, Height: 40, IsDaemonSession: true}
+		m := &OS{Settings: config.Global, Width: 120, Height: 40, IsDaemonSession: true}
 		items := m.buildQuitMenuItems([]string{"other"}, true)
 		for _, it := range items {
 			isKill := it.Kind == QuitKillGoNext || it.Kind == QuitKillAndQuit
@@ -223,7 +224,7 @@ func assertQuitKinds(t *testing.T, items []QuitMenuItem, want []QuitMenuKind) {
 // TestQuitMenuClickActivatesRow checks a click on a quit-menu row runs it (the
 // cancel row is safe to run in a test: the menu closes and nothing quits).
 func TestQuitMenuClickActivatesRow(t *testing.T) {
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 	m.OpenQuitMenu() // standalone: Quit / Cancel
 	cancelIdx := m.QuitMenuIndexOfKind(QuitCancel)
 	if cancelIdx < 0 {
@@ -242,7 +243,7 @@ func TestQuitMenuClickActivatesRow(t *testing.T) {
 // TestQuitMenuSwitchRowOpensSwitcher checks the switch row closes the menu and
 // opens the session switcher, matching its label.
 func TestQuitMenuSwitchRowOpensSwitcher(t *testing.T) {
-	m := &OS{Width: 120, Height: 40, IsDaemonSession: true}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40, IsDaemonSession: true}
 	m.QuitMenuItems = m.buildQuitMenuItems([]string{"other"}, false)
 	m.ShowQuitMenu = true
 
@@ -287,8 +288,9 @@ func TestKillSessionGoNextFallsBackToQuit(t *testing.T) {
 // TestSidebarMotionHighlightsRow checks motion inside the band records the
 // hover and consumes the event, and motion outside clears it.
 func TestSidebarMotionHighlightsRow(t *testing.T) {
-	m := &OS{Width: 120, Height: 40, SessionName: "alpha"}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40, SessionName: "alpha"}
 	withSidebar(t, true, "left", 28)
+	m.Settings = config.Global
 
 	if !m.SidebarMotion(3, 5) {
 		t.Fatal("motion inside the band was not consumed")
@@ -308,8 +310,9 @@ func TestSidebarMotionHighlightsRow(t *testing.T) {
 // TestSidebarSessionRowRightClickOpensSessionMenu checks the sidebar session
 // row's context menu carries the quit menu's lifecycle rows in daemon mode.
 func TestSidebarSessionRowRightClickOpensSessionMenu(t *testing.T) {
-	m := &OS{Width: 120, Height: 40, SessionName: "alpha", IsDaemonSession: true}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40, SessionName: "alpha", IsDaemonSession: true}
 	withSidebar(t, true, "left", 28)
+	m.Settings = config.Global
 	m.SidebarHits = []sidebarRowHit{{
 		X0: 0, Y0: 4, X1: 28, Y1: 5,
 		Kind:        sidebarRowSession,
@@ -345,7 +348,7 @@ func TestSidebarSessionRowRightClickOpensSessionMenu(t *testing.T) {
 // TestQuitMenuHoverThroughRealRender drives hover through the real quit menu
 // renderer, so its recorded rows route exactly like the other list overlays.
 func TestQuitMenuHoverThroughRealRender(t *testing.T) {
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 	m.OpenQuitMenu()
 	m.reconcileOverlayZOrder()
 	content, geo, rows := m.renderQuitMenu()
@@ -368,7 +371,7 @@ func TestQuitMenuHoverThroughRealRender(t *testing.T) {
 // TestSessionSwitcherHoverDoesNotActivate pins "hover selects, click runs":
 // motion alone must never switch sessions.
 func TestSessionSwitcherHoverDoesNotActivate(t *testing.T) {
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 	m.ShowSessionSwitcher = true
 	m.SessionSwitcherItems = []sessiontree.Node{
 		{Kind: sessiontree.KindSession, ID: "alpha", Title: "alpha", IsCurrent: true},

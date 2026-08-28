@@ -4,6 +4,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -56,12 +57,13 @@ func TestApplyStateSyncResizeRacesOutput(t *testing.T) {
 	defer close(drainDone)
 
 	const winID = "sync-race-window-0001"
-	win := terminal.NewDaemonWindow(winID, "race", 0, 0, 60, 20, 0, "pty-sync-0001", ptyDataChan)
+	win := terminal.NewDaemonWindow(winID, "race", 0, 0, 60, 20, 0, "pty-sync-0001", ptyDataChan, config.DefaultScrollbackLines)
 	if win == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}
 
 	m := &OS{
+		Settings:       config.Global,
 		Windows:        []*terminal.Window{win},
 		FocusedWindow:  0,
 		WorkspaceFocus: map[int]int{},
@@ -154,12 +156,13 @@ func TestRestoreTerminalContentRacesOutput(t *testing.T) {
 	defer close(drainDone)
 
 	const cols, rows = 60, 20
-	win := terminal.NewDaemonWindow("restore-race-win-01", "race", 0, 0, cols+2, rows+2, 0, "pty-restore-001", ptyDataChan)
+	win := terminal.NewDaemonWindow("restore-race-win-01", "race", 0, 0, cols+2, rows+2, 0, "pty-restore-001", ptyDataChan, config.DefaultScrollbackLines)
 	if win == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}
 
 	m := &OS{
+		Settings:       config.Global,
 		Windows:        []*terminal.Window{win},
 		FocusedWindow:  0,
 		WorkspaceFocus: map[int]int{},
@@ -246,12 +249,13 @@ func TestPlaceUnplacedWindowsRacesOutput(t *testing.T) {
 	defer close(drainDone)
 
 	const winID = "place-race-window-001"
-	win := terminal.NewDaemonWindow(winID, "race", 0, 0, 60, 20, 0, "pty-place-0001", ptyDataChan)
+	win := terminal.NewDaemonWindow(winID, "race", 0, 0, 60, 20, 0, "pty-place-0001", ptyDataChan, config.DefaultScrollbackLines)
 	if win == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}
 
 	m := &OS{
+		Settings:       config.Global,
 		Windows:        []*terminal.Window{win},
 		FocusedWindow:  0,
 		WorkspaceFocus: map[int]int{},

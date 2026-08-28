@@ -26,6 +26,7 @@ func sectionsTestOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	m.DaemonClient = &session.TUIClient{}
 	m.IsDaemonSession = true
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	m.Settings = config.Global
 	m.SidebarOrder = nil
 
 	tree := sessiontree.Build([]sessiontree.SessionInput{
@@ -136,6 +137,7 @@ func TestRailHitsAreASubsequenceOfNav(t *testing.T) {
 				t.Run(pos+"/"+peek+"/"+string(rune('0'+h/10))+string(rune('0'+h%10)), func(t *testing.T) {
 					m, tree := sectionsTestOS(t, 120, h)
 					withSidebar(t, true, pos, config.SidebarDefaultWidth)
+					m.Settings = config.Global
 					m.SidebarPeek = peek
 					m.sidebarPanelLinesForTree(tree)
 

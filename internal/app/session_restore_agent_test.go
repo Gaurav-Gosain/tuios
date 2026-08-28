@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -35,7 +36,7 @@ func agentRestoreState() *session.SessionState {
 // daemon's polled listing, which is why the section could show other people's
 // agents and never your own.
 func TestRestoreKeepsDaemonOwnedAgentFields(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	if err := m.RestoreFromState(agentRestoreState()); err != nil {
 		t.Fatalf("RestoreFromState: %v", err)
 	}

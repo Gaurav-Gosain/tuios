@@ -68,7 +68,7 @@ func TestDividerCellsStayInTheStylesOwnGlyphs(t *testing.T) {
 			for _, side := range sidebarSides() {
 				t.Run(fmt.Sprintf("%s/%s-dock/%s", style, dock, sidebarName(side)), func(t *testing.T) {
 					m := extentOSStyled(t, 4, dock, side, style)
-					own := styleGlyphs(config.GetBorderForStyle())
+					own := styleGlyphs(config.Global.GetBorderForStyle())
 					g := frameCells(t, m)
 					for _, c := range dividerCells(m) {
 						if got := cellAt(g, c.X, c.Y); !strings.ContainsRune(own, got) {
@@ -91,13 +91,13 @@ func TestDividerMeetsTheChromeRuleInItsOwnTerms(t *testing.T) {
 		for _, dock := range []string{"top", "bottom"} {
 			t.Run(style+"/"+dock+"-dock", func(t *testing.T) {
 				m := extentOSStyled(t, 2, dock, "", style)
-				border := config.GetBorderForStyle()
+				border := config.Global.GetBorderForStyle()
 				own := styleGlyphs(border)
-				rule := firstRune(config.GetWindowSeparatorChar(), '─')
+				rule := firstRune(config.Global.GetWindowSeparatorChar(), '─')
 				s := firstSplit(t, m, true)
 				got := cellAt(frameCells(t, m), s.Pos, dockRuleRow(m))
 
-				if !config.BorderJoinsChromeRules() {
+				if !config.Global.BorderJoinsChromeRules() {
 					if got != rule {
 						t.Errorf("the dock's rule under the divider is %q, want the rule's own %q: this style has no stroke to join it with, so it stops at the boundary",
 							string(got), string(rule))
@@ -138,7 +138,7 @@ func TestDividerMeetsTheRailEdgeOnEitherSide(t *testing.T) {
 			t.Run(style+"/"+side+"-sidebar", func(t *testing.T) {
 				m := stackedOS(t, side, style)
 				b := m.GetBSPBounds()
-				border := config.GetBorderForStyle()
+				border := config.Global.GetBorderForStyle()
 				s := firstSplit(t, m, false)
 				if s.From > b.X || s.To < b.X+b.W-1 {
 					t.Fatalf("this divider spans columns %d-%d, not the region's %d-%d; it cannot answer for either edge",
@@ -150,8 +150,8 @@ func TestDividerMeetsTheRailEdgeOnEitherSide(t *testing.T) {
 				if side == "left" {
 					edge, want, caps = b.X-1, firstRune(border.MiddleLeft, '├'), border.TopLeft+border.BottomLeft
 				}
-				if !config.BorderJoinsChromeRules() {
-					want = firstRune(config.GetWindowBorderLeft(), '│')
+				if !config.Global.BorderJoinsChromeRules() {
+					want = firstRune(config.Global.GetWindowBorderLeft(), '│')
 					caps = ""
 				}
 				if got := cellAt(g, edge, s.Pos); got != want && !strings.ContainsRune(caps, got) {
@@ -168,10 +168,11 @@ func TestDividerMeetsTheRailEdgeOnEitherSide(t *testing.T) {
 func TestDividerCellsInASCII(t *testing.T) {
 	for _, style := range config.BorderStyles {
 		t.Run(style, func(t *testing.T) {
-			ascii := config.UseASCIIOnly
-			t.Cleanup(func() { config.UseASCIIOnly = ascii })
+			ascii := config.Global.UseASCIIOnly
+			t.Cleanup(func() { config.Global.UseASCIIOnly = ascii })
 			m := extentOSStyled(t, 4, "bottom", "right", style)
-			config.UseASCIIOnly = true
+			config.Global.UseASCIIOnly = true
+			m.Settings.UseASCIIOnly = true
 			g := frameCells(t, m)
 			for _, c := range dividerCells(m) {
 				if got := cellAt(g, c.X, c.Y); got > 127 {

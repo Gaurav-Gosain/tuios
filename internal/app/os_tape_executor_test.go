@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -21,6 +22,7 @@ func focusedOS(t *testing.T, screen string) *OS {
 	}
 	win := &terminal.Window{Terminal: em, Workspace: 1}
 	return &OS{
+		Settings:         config.Global,
 		Windows:          []*terminal.Window{win},
 		FocusedWindow:    0,
 		CurrentWorkspace: 1,
@@ -28,7 +30,7 @@ func focusedOS(t *testing.T, screen string) *OS {
 }
 
 func TestStartScriptWaitRegexBadPattern(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.startScriptWaitRegex(&tape.Command{Type: tape.CommandTypeWaitUntilRegex, Args: []string{"("}})
 	if m.ScriptWaitRegex != nil {
 		t.Error("expected no wait to be armed for an invalid pattern")
@@ -41,7 +43,7 @@ func TestStartScriptWaitRegexBadPattern(t *testing.T) {
 }
 
 func TestScriptWaitRegexDefaultTimeout(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	before := time.Now()
 	m.startScriptWaitRegex(&tape.Command{Type: tape.CommandTypeWaitUntilRegex, Args: []string{"x"}})
 	if m.ScriptWaitRegex == nil {
@@ -89,7 +91,7 @@ func TestCheckScriptWaitRegexBlocksThenTimesOut(t *testing.T) {
 
 // TestParseKeyToMessage tests the key parsing function
 func TestParseKeyToMessage(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 
 	tests := []struct {
 		name           string
@@ -152,7 +154,7 @@ func TestParseKeyToMessage(t *testing.T) {
 
 // TestParseKeysToMessages tests parsing multiple keys
 func TestParseKeysToMessages(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 
 	tests := []struct {
 		name     string
@@ -189,7 +191,7 @@ func TestParseKeysToMessages(t *testing.T) {
 
 // TestParseKeysToMessagesRaw tests raw key parsing (no splitting)
 func TestParseKeysToMessagesRaw(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 
 	tests := []struct {
 		name     string
@@ -215,7 +217,7 @@ func TestParseKeysToMessagesRaw(t *testing.T) {
 
 // TestParseKeyToMessageModifierWithoutText verifies modifiers don't set Text
 func TestParseKeyToMessageModifierWithoutText(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 
 	// When there's a modifier, Text should be empty so String() includes the modifier
 	msg := m.parseKeyToMessage("ctrl+b")
@@ -237,7 +239,7 @@ func TestParseKeyToMessageModifierWithoutText(t *testing.T) {
 // TestParseKeyToMessageSpaceModifier verifies a modified space keeps its
 // modifier: Text must stay empty so String() does not drop Ctrl/Alt.
 func TestParseKeyToMessageSpaceModifier(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 
 	msg := m.parseKeyToMessage("ctrl+space")
 
@@ -282,7 +284,7 @@ func TestGetWindowDisplayNameLogic(t *testing.T) {
 
 // TestSetDockbarPosition tests dockbar position validation
 func TestSetDockbarPosition(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 
 	tests := []struct {
 		name      string
@@ -309,7 +311,7 @@ func TestSetDockbarPosition(t *testing.T) {
 
 // TestSetBorderStyle tests border style validation
 func TestSetBorderStyle(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 
 	tests := []struct {
 		name      string
@@ -340,6 +342,7 @@ func TestSetBorderStyle(t *testing.T) {
 // TestMoveWindowToWorkspaceByID tests workspace validation
 func TestMoveWindowToWorkspaceByID(t *testing.T) {
 	m := &OS{
+		Settings:      config.Global,
 		NumWorkspaces: 9,
 	}
 
@@ -370,6 +373,7 @@ func TestMoveWindowToWorkspaceByID(t *testing.T) {
 // TestApplyStateSyncGlobalState tests that global state (workspace, tiling) is synced
 func TestApplyStateSyncGlobalState(t *testing.T) {
 	m := &OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
@@ -404,6 +408,7 @@ func TestApplyStateSyncUpdatesExistingWindows(t *testing.T) {
 	win1ID := "win-1234-5678-90ab-cdef-000000000001"
 
 	m := &OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
@@ -457,6 +462,7 @@ func TestApplyStateSyncRemovesDeletedWindows(t *testing.T) {
 	win2ID := "win-1234-5678-90ab-cdef-000000000002"
 
 	m := &OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
@@ -493,7 +499,7 @@ func TestApplyStateSyncRemovesDeletedWindows(t *testing.T) {
 
 // TestApplyStateSyncNilState tests handling nil state
 func TestApplyStateSyncNilState(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 
 	err := m.ApplyStateSync(nil)
 	if err != nil {
@@ -507,6 +513,7 @@ func TestApplyStateSyncFocusUpdate(t *testing.T) {
 	win2ID := "win-1234-5678-90ab-cdef-000000000002"
 
 	m := &OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
@@ -540,6 +547,7 @@ func TestApplyStateSyncFocusUpdate(t *testing.T) {
 // TestApplyStateSyncSkipsInvalidWindows tests that windows with empty IDs are skipped
 func TestApplyStateSyncSkipsInvalidWindows(t *testing.T) {
 	m := &OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),

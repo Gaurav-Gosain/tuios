@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
@@ -89,14 +88,14 @@ func (m *OS) SwapWindowsWithOriginal(draggedIndex, targetIndex int, origX, origY
 	anim1 := ui.NewSnapAnimation(
 		draggedWindow,
 		targetX, targetY, targetW, targetH,
-		config.GetFastAnimationDuration(),
+		m.Settings.GetFastAnimationDuration(),
 	)
 
 	// Target window goes to dragged window's ORIGINAL position (with animation)
 	anim2 := ui.NewSnapAnimation(
 		targetWindow,
 		origX, origY, origWidth, origHeight,
-		config.GetFastAnimationDuration(),
+		m.Settings.GetFastAnimationDuration(),
 	)
 
 	if anim1 != nil {
@@ -143,7 +142,7 @@ func (m *OS) TileRemainingWindows(excludeIndex int) {
 		anim := ui.NewSnapAnimation(
 			m.Windows[idx],
 			l.X, l.Y, l.Width, l.Height,
-			config.GetAnimationDuration(),
+			m.Settings.GetAnimationDuration(),
 		)
 
 		if anim != nil {

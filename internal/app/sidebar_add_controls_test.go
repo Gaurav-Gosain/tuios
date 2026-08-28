@@ -36,6 +36,7 @@ func TestAddControlRectsMatchTheirDrawnCells(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/w=%d", pos, width), func(t *testing.T) {
 				m := daemonRailOS(t, 120, 40)
 				withSidebar(t, true, pos, width)
+				m.Settings = config.Global
 				lines, w := m.sidebarPanelLines()
 
 				hits := addHits(m)
@@ -51,16 +52,16 @@ func TestAddControlRectsMatchTheirDrawnCells(t *testing.T) {
 					// Both edge columns: the first cell the rect claims carries the
 					// glyph, and the cell past its end does not.
 					first := h.X0 - railX0
-					if first < 0 || first >= len(row) || string(row[first]) != sidebarAddGlyph() {
+					if first < 0 || first >= len(row) || string(row[first]) != sidebarAddGlyph(&m.Settings) {
 						t.Errorf("%v: rect starts at column %d, which draws %q not %q",
-							h.Kind, first, safeRune(row, first), sidebarAddGlyph())
+							h.Kind, first, safeRune(row, first), sidebarAddGlyph(&m.Settings))
 					}
-					if last := h.X1 - railX0; last < len(row) && string(row[last]) == sidebarAddGlyph() {
+					if last := h.X1 - railX0; last < len(row) && string(row[last]) == sidebarAddGlyph(&m.Settings) {
 						t.Errorf("%v: the cell past the rect at column %d still draws the glyph", h.Kind, last)
 					}
 					// And the rect is exactly the glyph's width.
-					if h.X1-h.X0 != len([]rune(sidebarAddGlyph())) {
-						t.Errorf("%v: rect is %d cells for a %d-cell glyph", h.Kind, h.X1-h.X0, len([]rune(sidebarAddGlyph())))
+					if h.X1-h.X0 != len([]rune(sidebarAddGlyph(&m.Settings))) {
+						t.Errorf("%v: rect is %d cells for a %d-cell glyph", h.Kind, h.X1-h.X0, len([]rune(sidebarAddGlyph(&m.Settings))))
 					}
 				}
 			})
@@ -79,7 +80,7 @@ func TestAgentsHeaderHasNoAddControl(t *testing.T) {
 	if agentsLine < 0 {
 		t.Fatal("the fixture drew no agents header")
 	}
-	if strings.Contains(lines[agentsLine], sidebarAddGlyph()) {
+	if strings.Contains(lines[agentsLine], sidebarAddGlyph(&m.Settings)) {
 		t.Errorf("the agents header reads %q, want no add control on it", lines[agentsLine])
 	}
 	for _, h := range m.SidebarHits {
@@ -178,9 +179,9 @@ func TestTheWalkStepsOntoTheAddControlAndTheSectionKeyStepsOverIt(t *testing.T) 
 // TestAddControlsHaveTooltips: they are the only thing on the expanded rail
 // drawn as a bare glyph, which is exactly the condition for a label.
 func TestAddControlsHaveTooltips(t *testing.T) {
-	prev := config.Tooltips
-	config.Tooltips = true
-	t.Cleanup(func() { config.Tooltips = prev })
+	prev := config.Global.Tooltips
+	config.Global.Tooltips = true
+	t.Cleanup(func() { config.Global.Tooltips = prev })
 
 	m := daemonRailOS(t, 120, 40)
 	m.sidebarPanelLines()
@@ -208,11 +209,11 @@ func TestAddControlsHaveTooltips(t *testing.T) {
 // TestAddControlsDegradeToASCII, since the rail supports it. "+" is ASCII
 // already, so this is a guard against a later round reaching for a nicer glyph.
 func TestAddControlsDegradeToASCII(t *testing.T) {
-	prev := config.UseASCIIOnly
-	config.UseASCIIOnly = true
+	prev := config.Global.UseASCIIOnly
+	config.Global.UseASCIIOnly = true
 	overlay.SetASCII(true)
 	t.Cleanup(func() {
-		config.UseASCIIOnly = prev
+		config.Global.UseASCIIOnly = prev
 		overlay.SetASCII(prev)
 	})
 
@@ -235,6 +236,7 @@ func TestNarrowHeaderDropsTheAddControlWholeOrNotAtAll(t *testing.T) {
 	for w := config.SidebarGlyphWidth + 1; w <= config.SidebarNarrowWidth; w++ {
 		m := daemonRailOS(t, 120, 40)
 		withSidebar(t, true, "left", w)
+		m.Settings = config.Global
 		lines, railW := m.sidebarPanelLines()
 		if sidebarVariant(railW) == sidebarVariantGlyph {
 			continue // the strip draws its own controls
@@ -244,7 +246,7 @@ func TestNarrowHeaderDropsTheAddControlWholeOrNotAtAll(t *testing.T) {
 			if h.X0 < 0 || h.X1 > railW {
 				t.Errorf("w=%d: %v spans [%d,%d) outside a %d-wide rail", w, h.Kind, h.X0, h.X1, railW)
 			}
-			if c := h.X0; c >= len(row) || string(row[c]) != sidebarAddGlyph() {
+			if c := h.X0; c >= len(row) || string(row[c]) != sidebarAddGlyph(&m.Settings) {
 				t.Errorf("w=%d: %v claims column %d, which draws %q", w, h.Kind, c, safeRune(row, c))
 			}
 		}

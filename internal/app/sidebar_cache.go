@@ -2,8 +2,6 @@ package app
 
 import (
 	"strings"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // sidebarRenderCache holds a fully styled rail so a frame composed for an
@@ -121,21 +119,21 @@ func (m *OS) sidebarSignature() uint64 {
 	mixI(m.GetUsableHeight())
 	mixI(m.GetTopMargin())
 	mixI(m.GetRenderWidth())
-	mixS(config.SidebarPosition)
+	mixS(m.Settings.SidebarPosition)
 	// The layout: which sections are stacked, in what order, with what share,
 	// and where the spacers are. It carries what show_windows used to say, and
 	// it was missing from this key for as long as it has existed: a rail redrawn
 	// after the layout moved and nothing else did was served the old frame.
-	mixS(config.SidebarSections)
-	mixB(config.SidebarShowGlyphs)
-	mixB(config.SidebarShowCounts)
+	mixS(m.Settings.SidebarSections)
+	mixB(m.Settings.SidebarShowGlyphs)
+	mixB(m.Settings.SidebarShowCounts)
 
 	// The glyph set the rows are drawn from. ASCII mode swaps the collapse
 	// chevrons and the agent-state indicators for their fallbacks, and both it
 	// and the border style pick the character of the edge rule facing the panes,
 	// so a rail drawn before either moved is not the rail this frame draws.
-	mixB(config.UseASCIIOnly)
-	mixS(config.BorderStyle)
+	mixB(m.Settings.UseASCIIOnly)
+	mixS(m.Settings.BorderStyle)
 
 	// View state: scroll, focus, and hover all restyle rows. Each section holds
 	// its own offset, so all three are folded.
@@ -168,9 +166,9 @@ func (m *OS) sidebarSignature() uint64 {
 	// otherwise be served from the entry keyed on the old one. Loading is folded
 	// separately because it is a row the section draws and it flips without the
 	// path or the generation moving.
-	mixS(config.SidebarSections)
-	mixB(config.SidebarFileIcons)
-	mixB(config.SidebarFileIconColors)
+	mixS(m.Settings.SidebarSections)
+	mixB(m.Settings.SidebarFileIcons)
+	mixB(m.Settings.SidebarFileIconColors)
 	mixI(int(m.filesView.Show))
 	mixS(m.filesView.Dir)
 	mixS(m.filesView.Origin)
@@ -260,8 +258,8 @@ func (m *OS) sidebarSignature() uint64 {
 	// covered by the cache generation; the attached session's explicit accent is
 	// the one input nothing else carries, and it is folded only while the
 	// colours are actually drawn.
-	mixB(config.SessionColors)
-	if config.SessionColors {
+	mixB(m.Settings.SessionColors)
+	if m.Settings.SessionColors {
 		mixS(m.SessionAccent)
 	}
 

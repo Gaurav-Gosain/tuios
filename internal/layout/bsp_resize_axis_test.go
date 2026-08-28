@@ -90,7 +90,7 @@ func deepNest() *BSPTree {
 }
 
 func sharedGap() int {
-	if config.SharedBorders {
+	if config.Global.SharedBorders {
 		return 1
 	}
 	return 0
@@ -181,9 +181,9 @@ func assertAxisIsolated(t *testing.T, label string, e edge, before, after map[in
 // withSharedBorders runs fn with config.SharedBorders set, restoring it after.
 func withSharedBorders(t *testing.T, shared bool, fn func()) {
 	t.Helper()
-	prev := config.SharedBorders
-	config.SharedBorders = shared
-	defer func() { config.SharedBorders = prev }()
+	prev := config.Global.SharedBorders
+	config.Global.SharedBorders = shared
+	defer func() { config.Global.SharedBorders = prev }()
 	fn()
 }
 

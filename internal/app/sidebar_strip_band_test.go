@@ -59,6 +59,7 @@ func TestStripHoverBandIsTheHitRectangle(t *testing.T) {
 		t.Run(pos, func(t *testing.T) {
 			m, tree := stripOS(t, 120, 24)
 			withSidebar(t, true, pos, config.SidebarDefaultWidth)
+			m.Settings = config.Global
 			m.SidebarCollapsed = true
 
 			m.sidebarPanelLinesForTree(tree)
@@ -158,6 +159,7 @@ func TestStripHoverBandSpansEveryColumnOnBothSides(t *testing.T) {
 		t.Run(pos, func(t *testing.T) {
 			m, tree := quietStripOS(t, 120, 20)
 			withSidebar(t, true, pos, config.SidebarDefaultWidth)
+			m.Settings = config.Global
 			m.SidebarCollapsed = true
 			m.sidebarPanelLinesForTree(tree)
 

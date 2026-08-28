@@ -18,9 +18,9 @@ func TestDockSeparatorFollowsItsGlyph(t *testing.T) {
 		t.Fatalf("the dock hairline is not the separator character: %q", dock)
 	}
 
-	prev := config.UseASCIIOnly
-	config.UseASCIIOnly = true
-	t.Cleanup(func() { config.UseASCIIOnly = prev })
+	prev := m.Settings.UseASCIIOnly
+	m.Settings.UseASCIIOnly = true
+	t.Cleanup(func() { m.Settings.UseASCIIOnly = prev })
 
 	dock, _ = m.renderDockString()
 	if strings.Contains(dock, config.WindowSeparatorChar) {

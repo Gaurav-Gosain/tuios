@@ -38,11 +38,11 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 
 		switch cm.State {
 		case terminal.CopyModeSearch:
-			handleSearchInput(msg, cm, window, fx)
+			handleSearchInput(msg, cm, window, fx, &o.Settings)
 		case terminal.CopyModeVisualChar, terminal.CopyModeVisualLine:
-			handleVisualInput(msg, cm, window, fx)
+			handleVisualInput(msg, cm, window, fx, &o.Settings)
 		case terminal.CopyModeNormal:
-			handleNormalInput(msg, cm, window, fx)
+			handleNormalInput(msg, cm, window, fx, &o.Settings)
 		}
 	}()
 
@@ -50,7 +50,7 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 }
 
 // handleNormalInput handles keys in normal navigation mode
-func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects) {
+func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects, s *config.Settings) {
 	keyStr := msg.String()
 
 	// Handle pending character search (f/F/t/T followed by character)
@@ -110,12 +110,12 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	switch keyStr {
 	case "q", "esc":
 		fx.ExitCopyMode()
-		fx.ShowNotification("Left copy mode", "info", config.NotificationDuration)
+		fx.ShowNotification("Left copy mode", "info", s.NotificationDuration)
 		return
 	case "i":
 		// Exit copy mode and enter terminal mode
 		fx.ExitCopyMode()
-		fx.ShowNotification("Terminal mode", "info", config.NotificationDuration)
+		fx.ShowNotification("Terminal mode", "info", s.NotificationDuration)
 		// Enter terminal mode and start raw input reader
 		fx.EnterTerminalMode()
 		return
@@ -329,7 +329,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		cm.SearchMatches = nil
 		cm.CurrentMatch = 0
 		cm.SearchCache.Valid = false
-		fx.ShowNotification("Search cleared", "info", config.NotificationDuration)
+		fx.ShowNotification("Search cleared", "info", s.NotificationDuration)
 		fx.InvalidateCache()
 		return
 
@@ -350,7 +350,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 }
 
 // handleSearchInput handles keys in search mode
-func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects) {
+func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects, s *config.Settings) {
 	key := msg.Key()
 
 	// Determine search prefix based on direction
@@ -366,7 +366,7 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		if len(cm.SearchMatches) > 0 {
 			matchInfo = fmt.Sprintf(" (%d matches)", len(cm.SearchMatches))
 		}
-		fx.ShowNotification(fmt.Sprintf("%s%s%s", searchPrefix, cm.SearchQuery, matchInfo), "info", config.NotificationDuration)
+		fx.ShowNotification(fmt.Sprintf("%s%s%s", searchPrefix, cm.SearchQuery, matchInfo), "info", s.NotificationDuration)
 	case tea.KeyEscape:
 		cm.State = terminal.CopyModeNormal
 		cm.SearchQuery = ""
@@ -390,7 +390,7 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 }
 
 // handleVisualInput handles keys in visual selection mode
-func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects) {
+func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *terminal.Window, fx *copyModeEffects, s *config.Settings) {
 	keyStr := msg.String()
 
 	// Handle pending character search (f/F/t/T followed by character)
@@ -454,7 +454,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	case "y", "c":
 		text := extractVisualText(cm, window)
 		cm.State = terminal.CopyModeNormal
-		fx.ShowNotification(fmt.Sprintf("Yanked %d chars", len(text)), "success", config.NotificationDuration)
+		fx.ShowNotification(fmt.Sprintf("Yanked %d chars", len(text)), "success", s.NotificationDuration)
 		fx.InvalidateCache()
 		fx.SetClipboard(text)
 		return

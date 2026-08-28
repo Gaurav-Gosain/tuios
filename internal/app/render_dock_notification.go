@@ -83,8 +83,8 @@ func notifSeverityRank(notifType string) int {
 
 // notifGlyph is the severity mark. It is the one part of the block that is
 // never truncated: a message cut down to nothing still says how bad it was.
-func notifGlyph(notifType string) string {
-	if config.UseASCIIOnly {
+func notifGlyph(notifType string, s *config.Settings) string {
+	if s.UseASCIIOnly {
 		switch notifType {
 		case "error":
 			return config.NotificationIconError
@@ -113,24 +113,24 @@ func notifGlyph(notifType string) string {
 // Two eighths apart rather than one. The first pass ran the three weights an
 // eighth apart and the step from info to warning was invisible, because you
 // never see two of them side by side to compare.
-func notifCap(notifType string) string {
+func notifCap(notifType string, s *config.Settings) string {
 	switch notifType {
 	case "error":
-		return config.GetNotificationCap(config.NotificationCapHeavy)
+		return s.GetNotificationCap(config.NotificationCapHeavy)
 	case "warning", "warn":
-		return config.GetNotificationCap(config.NotificationCapMedium)
+		return s.GetNotificationCap(config.NotificationCapMedium)
 	default:
-		return config.GetNotificationCap(config.NotificationCapLight)
+		return s.GetNotificationCap(config.NotificationCapLight)
 	}
 }
 
 // notifRuleStroke escalates the hairline's weight with severity, so a burning
 // info is no heavier than the rule it replaces and an error is a heavy line.
-func notifRuleStroke(notifType string) string {
+func notifRuleStroke(notifType string, s *config.Settings) string {
 	if notifSeverityRank(notifType) >= 2 {
-		return config.GetNotificationRule(config.NotificationRuleHeavy)
+		return s.GetNotificationRule(config.NotificationRuleHeavy)
 	}
-	return config.GetNotificationRule(config.NotificationRuleLight)
+	return s.GetNotificationRule(config.NotificationRuleLight)
 }
 
 // notifStatus reads the live queue. The newest message wins the block and the
@@ -244,8 +244,8 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 	// The cap is a freestanding sliver on the bare bar: its weight still reads
 	// as two, four or six eighths of a cell of ink, and it is the block's whole
 	// left edge now that there is no fill to open.
-	lead := inked.Render(notifCap(s.msg.Type))
-	mark := inked.Render(" " + notifGlyph(s.msg.Type))
+	lead := inked.Render(notifCap(s.msg.Type, &m.Settings))
+	mark := inked.Render(" " + notifGlyph(s.msg.Type, &m.Settings))
 
 	budget := notifBudget(renderWidth)
 	if avail > 0 {
@@ -294,7 +294,7 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 
 	return notifBlock{
 		Text:     block,
-		Rule:     notifBurnRule(s, width),
+		Rule:     notifBurnRule(s, width, &m.Settings),
 		Width:    width,
 		DismissW: lipgloss.Width(meta) + 2, // meta and the bar columns after it
 	}, true
@@ -327,7 +327,7 @@ func notifFit(message string, room int) string {
 // affordance, and it is the reason the burn is on the rule rather than in a
 // cell of its own: a line that has stopped is legible as stopped at a glance,
 // where a single character that has stopped changing is not.
-func notifBurnRule(s notifStatus, span int) string {
+func notifBurnRule(s notifStatus, span int, set *config.Settings) string {
 	if span <= 0 {
 		return ""
 	}
@@ -335,9 +335,9 @@ func notifBurnRule(s notifStatus, span int) string {
 	lit := notifLitSpan(s.frac, span)
 
 	burnt := lipgloss.NewStyle().Foreground(theme.NotificationSeverity(s.msg.Type)).
-		Render(strings.Repeat(notifRuleStroke(s.msg.Type), lit))
+		Render(strings.Repeat(notifRuleStroke(s.msg.Type, set), lit))
 	rest := lipgloss.NewStyle().Foreground(theme.RailRule()).
-		Render(strings.Repeat(config.GetWindowSeparatorChar(), span-lit))
+		Render(strings.Repeat(set.GetWindowSeparatorChar(), span-lit))
 	return burnt + rest
 }
 

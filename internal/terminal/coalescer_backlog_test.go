@@ -3,6 +3,8 @@ package terminal
 import (
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // backlogWindow builds a daemon window with a drained data channel.
@@ -21,7 +23,7 @@ func backlogWindow(t *testing.T, id string) *Window {
 	}()
 	t.Cleanup(func() { close(done) })
 
-	w := NewDaemonWindow(id, "pane", 0, 0, 80, 24, 0, "pty-"+id, ptyData)
+	w := NewDaemonWindow(id, "pane", 0, 0, 80, 24, 0, "pty-"+id, ptyData, config.DefaultScrollbackLines)
 	if w == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}
@@ -99,7 +101,7 @@ func TestQueuedBytesTracksWhatIsWaitingForTheEmulator(t *testing.T) {
 // this pacing exists to quieten.
 func TestPacedCoalescerStillEmitsWhileBehind(t *testing.T) {
 	ptyData := make(chan struct{}, 1)
-	w := NewDaemonWindow("coal-behind", "pane", 0, 0, 80, 24, 0, "pty-coal-behind", ptyData)
+	w := NewDaemonWindow("coal-behind", "pane", 0, 0, 80, 24, 0, "pty-coal-behind", ptyData, config.DefaultScrollbackLines)
 	if w == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}

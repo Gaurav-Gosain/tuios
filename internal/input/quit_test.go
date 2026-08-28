@@ -11,12 +11,12 @@ import (
 // quit keybindings used to each carry their own copy of: put the dialog up when
 // a window is running something, quit outright when nothing is.
 func TestRequestQuitConfirmsOnlyWhenThereIsSomethingToLose(t *testing.T) {
-	prev := config.AlwaysConfirmQuit
-	t.Cleanup(func() { config.AlwaysConfirmQuit = prev })
+	prev := config.Global.AlwaysConfirmQuit
+	t.Cleanup(func() { config.Global.AlwaysConfirmQuit = prev })
 
 	t.Run("nothing running quits outright", func(t *testing.T) {
-		config.AlwaysConfirmQuit = false
 		o := app.NewOS(app.OSOptions{})
+		o.Settings.AlwaysConfirmQuit = false
 
 		m, cmd := requestQuit(o)
 		if cmd == nil {
@@ -28,8 +28,8 @@ func TestRequestQuitConfirmsOnlyWhenThereIsSomethingToLose(t *testing.T) {
 	})
 
 	t.Run("confirm-always puts the menu up", func(t *testing.T) {
-		config.AlwaysConfirmQuit = true
 		o := app.NewOS(app.OSOptions{})
+		o.Settings.AlwaysConfirmQuit = true
 
 		m, cmd := requestQuit(o)
 		if cmd != nil {
@@ -44,8 +44,8 @@ func TestRequestQuitConfirmsOnlyWhenThereIsSomethingToLose(t *testing.T) {
 	})
 
 	t.Run("daemon session always gets the menu", func(t *testing.T) {
-		config.AlwaysConfirmQuit = false
 		o := app.NewOS(app.OSOptions{IsDaemonSession: true})
+		o.Settings.AlwaysConfirmQuit = false
 
 		m, cmd := requestQuit(o)
 		if cmd != nil {

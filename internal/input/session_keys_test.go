@@ -110,9 +110,9 @@ func TestSessionKeysReachTheActionFromBothModes(t *testing.T) {
 // half only works because the rail lets the leader through: it swallows every
 // other unbound key, so ctrl+b could not otherwise start a chord from inside it.
 func TestLeaderExploreTogglesRailFocus(t *testing.T) {
-	prev := config.SidebarEnabled
-	config.SidebarEnabled = true
-	t.Cleanup(func() { config.SidebarEnabled = prev })
+	prev := config.Global.SidebarEnabled
+	config.Global.SidebarEnabled = true
+	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
 
 	leader := tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl}
 	explore := tea.KeyPressMsg{Code: 'e', Text: "e"}

@@ -38,8 +38,8 @@ func scrollbarThumbHeight(contentH, scrollbackLen int) int {
 // to read: a bar pinned to the bottom at the live tail is chrome answering a
 // question nobody asked, and it is the only thing that used to drop a lone
 // scrolled-to-tail pane off the fullscreen fast path.
-func windowNeedsScrollbar(window *terminal.Window) bool {
-	if config.HideScrollbar {
+func windowNeedsScrollbar(window *terminal.Window, s *config.Settings) bool {
+	if s.HideScrollbar {
 		return false
 	}
 	if window.Terminal == nil || window.IsAltScreen() {
@@ -111,8 +111,8 @@ func (m *OS) resetScrollbarRects() {
 // otherwise have. The thin style works at one: its glyphs style the cross axis,
 // and Unicode has no right-half-plus-partial-height block to smooth the scroll
 // axis with, so the two styles do not blend.
-func scrollbarTravel(contentH, scrollbackLen int) (unitsPerRow, thumb, travel int) {
-	if config.ScrollbarStyle != config.ScrollbarStyleTrack {
+func scrollbarTravel(contentH, scrollbackLen int, s *config.Settings) (unitsPerRow, thumb, travel int) {
+	if s.ScrollbarStyle != config.ScrollbarStyleTrack {
 		thumb = scrollbarThumbHeight(contentH, scrollbackLen)
 		return 1, thumb, contentH - thumb
 	}
@@ -136,8 +136,8 @@ func roundDiv(a, b int) int {
 // Slider: truncation biases every position toward the live tail, so a pane a
 // hair off its oldest line drew the thumb a whole row shy of the top of its
 // track.
-func scrollbarThumbStart(contentH, scrollbackLen, offset int) int {
-	_, _, travel := scrollbarTravel(contentH, scrollbackLen)
+func scrollbarThumbStart(contentH, scrollbackLen, offset int, s *config.Settings) int {
+	_, _, travel := scrollbarTravel(contentH, scrollbackLen, s)
 	if travel <= 0 || scrollbackLen <= 0 {
 		return 0
 	}
@@ -147,8 +147,8 @@ func scrollbarThumbStart(contentH, scrollbackLen, offset int) int {
 // scrollbarOffsetForStart inverts scrollbarThumbStart: the scroll offset that
 // puts the thumb's leading edge on a given travel unit. A drag reads it, so the
 // thumb lands where the pointer left it.
-func scrollbarOffsetForStart(contentH, scrollbackLen, start int) int {
-	_, _, travel := scrollbarTravel(contentH, scrollbackLen)
+func scrollbarOffsetForStart(contentH, scrollbackLen, start int, s *config.Settings) int {
+	_, _, travel := scrollbarTravel(contentH, scrollbackLen, s)
 	if travel <= 0 {
 		return scrollbackLen
 	}
@@ -159,9 +159,9 @@ func scrollbarOffsetForStart(contentH, scrollbackLen, start int) int {
 // scrollbarHasTrack reports whether the bar paints its whole column. The track
 // style always does; the thin style does once it has a glyph to draw one with,
 // which ASCII has not and `track = "none"` asks it not to.
-func scrollbarHasTrack() bool {
-	return config.GetScrollbarTrackChar() != "" ||
-		config.ScrollbarStyle == config.ScrollbarStyleTrack
+func scrollbarHasTrack(s *config.Settings) bool {
+	return s.GetScrollbarTrackChar() != "" ||
+		s.ScrollbarStyle == config.ScrollbarStyleTrack
 }
 
 // scrollbarBlockThumb is the only thumb glyph with half-height siblings, so it
@@ -172,18 +172,18 @@ const scrollbarBlockThumb = "█"
 // scrollbarRows draws the bar's whole column, one glyph per viewport row, and
 // reports the rows the thumb landed on: a press is measured against those, not
 // against the arithmetic that produced them.
-func scrollbarRows(contentH, scrollbackLen, offset int) (rows []string, thumbTop, thumbRows int) {
-	perRow, thumbUnits, _ := scrollbarTravel(contentH, scrollbackLen)
-	start := scrollbarThumbStart(contentH, scrollbackLen, offset)
+func scrollbarRows(contentH, scrollbackLen, offset int, s *config.Settings) (rows []string, thumbTop, thumbRows int) {
+	perRow, thumbUnits, _ := scrollbarTravel(contentH, scrollbackLen, s)
+	start := scrollbarThumbStart(contentH, scrollbackLen, offset, s)
 	end := start + thumbUnits
 
-	full := config.GetScrollbarThumbChar()
+	full := s.GetScrollbarThumbChar()
 	upper, lower := "▀", "▄"
 	if full != scrollbarBlockThumb {
 		upper, lower = full, full
 	}
-	blank := config.GetScrollbarTrackChar()
-	if blank == "" && config.ScrollbarStyle == config.ScrollbarStyleTrack {
+	blank := s.GetScrollbarTrackChar()
+	if blank == "" && s.ScrollbarStyle == config.ScrollbarStyleTrack {
 		blank = " " // the surface fill is this style's track
 	}
 
@@ -290,14 +290,14 @@ func scrollbarQuietInk(ground color.Color, want float64) color.Color {
 // skips the floor: measurement was overridden on purpose.
 func (m *OS) scrollbarInk(window *terminal.Window, focused bool, ground color.Color) (thumb, track color.Color) {
 	track = theme.UI().FgMute
-	switch config.ScrollbarTintResolved() {
+	switch m.Settings.ScrollbarTintResolved() {
 	case config.ScrollbarTintQuiet:
 		return scrollbarQuietInk(ground, scrollbarQuietThumbContrast),
 			scrollbarQuietInk(ground, scrollbarQuietTrackContrast)
 	case config.ScrollbarTintMuted:
 		return theme.BorderUnfocused(), track
 	}
-	if hex, ok := config.ScrollbarTintHex(); ok {
+	if hex, ok := m.Settings.ScrollbarTintHex(); ok {
 		return lipgloss.Color(hex), track
 	}
 	if !focused {
@@ -323,7 +323,7 @@ func (m *OS) scrollbarInk(window *terminal.Window, focused bool, ground color.Co
 // first column of the sidebar band; a pane mid-drag may straddle it, and the
 // bar is composed above the band's own layer.
 func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int, focused bool) *lipgloss.Layer {
-	if window.IsBeingManipulated || !windowNeedsScrollbar(window) {
+	if window.IsBeingManipulated || !windowNeedsScrollbar(window, &m.Settings) {
 		return nil
 	}
 
@@ -335,7 +335,7 @@ func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int
 	scrollbackLen := window.ScrollbackLenSync()
 	contentH := window.ContentHeight()
 	top := window.Y + window.BorderOffset()
-	rows, thumbTop, thumbRows := scrollbarRows(contentH, scrollbackLen, scrollbarViewOffset(window))
+	rows, thumbTop, thumbRows := scrollbarRows(contentH, scrollbackLen, scrollbarViewOffset(window), &m.Settings)
 
 	// The ground is what the bar's cells actually land on, which is what every
 	// ratio below is measured against. The thin style floats over the pane's own
@@ -344,7 +344,7 @@ func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int
 	pal := theme.UI()
 	ground := theme.TerminalBg()
 	base := lipgloss.NewStyle()
-	if config.ScrollbarStyle == config.ScrollbarStyleTrack {
+	if m.Settings.ScrollbarStyle == config.ScrollbarStyleTrack {
 		ground = pal.Surface
 		base = base.Background(pal.Surface)
 	}
@@ -355,7 +355,7 @@ func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int
 	// Without a track the untouched rows stay the guest's: a blank there would
 	// paint over a column of content to say nothing.
 	trackTop, trackRows := top, contentH
-	if !scrollbarHasTrack() {
+	if !scrollbarHasTrack(&m.Settings) {
 		rows = rows[thumbTop : thumbTop+thumbRows]
 		top += thumbTop
 		trackTop, trackRows = top, thumbRows
@@ -390,18 +390,18 @@ func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int
 // ScrollbarThumbRow returns the screen row the thumb's first cell sits on at the
 // pane's current scroll position. Input recomputes it after a track click so the
 // drag that follows holds the offset the thumb actually landed with.
-func ScrollbarThumbRow(window *terminal.Window) int {
+func ScrollbarThumbRow(window *terminal.Window, s *config.Settings) int {
 	_, thumbTop, _ := scrollbarRows(window.ContentHeight(), window.ScrollbackLenSync(),
-		scrollbarViewOffset(window))
+		scrollbarViewOffset(window), s)
 	return window.Y + window.BorderOffset() + thumbTop
 }
 
 // ScrollbarOffsetForThumbRow is the inverse: the scroll offset that draws the
 // thumb's first cell on the given screen row.
-func ScrollbarOffsetForThumbRow(window *terminal.Window, row int) int {
+func ScrollbarOffsetForThumbRow(window *terminal.Window, row int, s *config.Settings) int {
 	contentH := window.ContentHeight()
 	scrollbackLen := window.ScrollbackLenSync()
-	perRow, _, _ := scrollbarTravel(contentH, scrollbackLen)
+	perRow, _, _ := scrollbarTravel(contentH, scrollbackLen, s)
 	rel := clampInt(row-window.Y-window.BorderOffset(), 0, max(contentH-1, 0))
-	return scrollbarOffsetForStart(contentH, scrollbackLen, rel*perRow)
+	return scrollbarOffsetForStart(contentH, scrollbackLen, rel*perRow, s)
 }

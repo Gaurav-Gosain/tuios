@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -43,6 +44,7 @@ func TestKittyPlacementSurvivesMinimize(t *testing.T) {
 	}
 
 	m := &OS{
+		Settings:         config.Global,
 		Width:            80,
 		Height:           24,
 		CurrentWorkspace: 1,
@@ -90,7 +92,7 @@ func TestKittyPlacementSurvivesWorkspaceSwitch(t *testing.T) {
 	kp.placements[win.ID] = map[uint32]*PassthroughPlacement{
 		hostID: {HostImageID: hostID, WindowID: win.ID, Cols: 5, Rows: 3, DisplayRows: 3, Hidden: true},
 	}
-	m := &OS{Width: 80, Height: 24, CurrentWorkspace: 1, KittyPassthrough: kp, Windows: []*terminal.Window{win}}
+	m := &OS{Settings: config.Global, Width: 80, Height: 24, CurrentWorkspace: 1, KittyPassthrough: kp, Windows: []*terminal.Window{win}}
 
 	m.GetKittyGraphicsCmd()
 	if kp.placements[win.ID][hostID].Hidden {
@@ -120,7 +122,7 @@ func TestKittyPlacementDeletedWhenWindowGone(t *testing.T) {
 	}
 
 	// No windows in the model -> the window is genuinely gone.
-	m := &OS{Width: 80, Height: 24, CurrentWorkspace: 1, KittyPassthrough: kp}
+	m := &OS{Settings: config.Global, Width: 80, Height: 24, CurrentWorkspace: 1, KittyPassthrough: kp}
 	m.GetKittyGraphicsCmd()
 
 	if _, ok := kp.placements[winID]; ok {

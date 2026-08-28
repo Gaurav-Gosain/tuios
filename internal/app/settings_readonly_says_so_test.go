@@ -16,7 +16,7 @@ import (
 
 // TestReadOnlySettingsPanelSaysSo checks the settings panel's own title.
 func TestReadOnlySettingsPanelSaysSo(t *testing.T) {
-	m := &OS{Width: 120, Height: 44}
+	m := &OS{Settings: config.Global, Width: 120, Height: 44}
 	m.UserConfig = config.DefaultConfig()
 	m.ShowSettings = true
 
@@ -35,7 +35,7 @@ func TestReadOnlySettingsPanelSaysSo(t *testing.T) {
 // TestReadOnlyDockEditorSaysSo checks the same for the dock editor, which can be
 // left open on its own after the panel behind it is closed.
 func TestReadOnlyDockEditorSaysSo(t *testing.T) {
-	m := &OS{Width: 120, Height: 44}
+	m := &OS{Settings: config.Global, Width: 120, Height: 44}
 	m.UserConfig = config.DefaultConfig()
 	m.OpenDockEditor()
 
@@ -55,7 +55,7 @@ func TestReadOnlyDockEditorSaysSo(t *testing.T) {
 // cannot write the file still behaves as it was asked to for as long as it
 // lasts, which is the whole point of the distinction.
 func TestReadOnlySessionStillApplies(t *testing.T) {
-	m := &OS{Width: 120, Height: 44}
+	m := &OS{Settings: config.Global, Width: 120, Height: 44}
 	m.UserConfig = config.DefaultConfig()
 	m.ConfigReadOnly = true
 
@@ -64,8 +64,8 @@ func TestReadOnlySessionStillApplies(t *testing.T) {
 	if got, _ := config.GetOptionValue(m.UserConfig, "appearance.gap"); got != "4" {
 		t.Errorf("the config holds gap %q, want 4", got)
 	}
-	if config.PaneGap != 4 {
-		t.Errorf("the global the renderer reads is %d, want 4", config.PaneGap)
+	if m.Settings.PaneGap != 4 {
+		t.Errorf("the global the renderer reads is %d, want 4", m.Settings.PaneGap)
 	}
 	if cmd := m.persistSettings(); cmd != nil {
 		t.Error("a read-only session handed back a command that would write the file")

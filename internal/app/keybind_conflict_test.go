@@ -20,7 +20,7 @@ func conflictOS(t *testing.T) *OS {
 	cfg.Keybindings.WindowManagement["select_window_1"] = []string{"1", "ctrl+alt+1"}
 	cfg.Keybindings.Layout["snap_corner_1"] = []string{"1"}
 
-	m := &OS{UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)}
+	m := &OS{Settings: config.Global, UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)}
 	m.OpenKeybindManager()
 	m.KeybindSetTab(KeybindTabConflicts)
 	if len(m.KeybindReport().Collisions) == 0 {

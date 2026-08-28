@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
@@ -19,7 +20,7 @@ func (m *OS) renderSettingsHit() {
 func (m *OS) settingsHit() overlayPanelHit { return m.OverlayHits[0] }
 
 func TestOverlayClickSelectsTabAndRow(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.Width, m.Height = 120, 40
 	m.ShowSettings = true
 	m.renderSettingsHit()
@@ -52,7 +53,7 @@ func TestOverlayClickSelectsTabAndRow(t *testing.T) {
 }
 
 func TestOverlayClickAwayCloses(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.Width, m.Height = 120, 40
 	m.ShowSettings = true
 	m.renderSettingsHit()
@@ -65,7 +66,7 @@ func TestOverlayClickAwayCloses(t *testing.T) {
 }
 
 func TestOverlayLeftDragOnChromeMoves(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.Width, m.Height = 120, 40
 	m.ShowSettings = true
 	m.renderSettingsHit()
@@ -90,7 +91,7 @@ func TestOverlayLeftDragOnChromeMoves(t *testing.T) {
 }
 
 func TestOverlayRightDragMoves(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.Width, m.Height = 120, 40
 	m.ShowSettings = true
 	m.renderSettingsHit()
@@ -115,7 +116,7 @@ func TestOverlayRightDragMoves(t *testing.T) {
 // and dragged independently: a click on each routes to that panel, and dragging
 // one does not move the other.
 func TestOverlayIndependentPanels(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.Width, m.Height = 160, 48
 
 	// Two panels: "settings" on the left (bottom of stack), "themepicker" on the

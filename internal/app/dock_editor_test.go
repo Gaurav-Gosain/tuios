@@ -10,7 +10,7 @@ import (
 // newDockEditorOS builds a model with the editor open on the default layout.
 func newDockEditorOS(t *testing.T) *OS {
 	t.Helper()
-	m := &OS{Width: 120, Height: 44}
+	m := &OS{Settings: config.Global, Width: 120, Height: 44}
 	m.UserConfig = config.DefaultConfig()
 	m.ConfigReadOnly = true // applied live, never written to the real config file
 	m.OpenDockEditor()

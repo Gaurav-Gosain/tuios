@@ -151,15 +151,15 @@ type windowButtonPiece struct {
 // were actually rendered, so a style with different glyphs moves its own
 // hitboxes with it.
 func (m *OS) buildWindowButtons(col color.Color, window *terminal.Window, isTiling bool) (string, []WindowButtonRect) {
-	if config.HideWindowButtons {
+	if m.Settings.HideWindowButtons {
 		return "", nil
 	}
 
 	var pieces []windowButtonPiece
-	if config.WindowButtonStyle == config.WindowButtonStyleDots {
+	if m.Settings.WindowButtonStyle == config.WindowButtonStyleDots {
 		pieces = m.windowDotPieces(col, window, isTiling)
 	} else {
-		pieces = windowPillPieces(col, isTiling)
+		pieces = windowPillPieces(col, isTiling, &m.Settings)
 	}
 
 	var pill string
@@ -178,7 +178,7 @@ func (m *OS) buildWindowButtons(col color.Color, window *terminal.Window, isTili
 
 // windowPillPieces is the original filled pill: black glyphs on the border
 // colour, capped with powerline half circles, minimize then zoom then close.
-func windowPillPieces(col color.Color, isTiling bool) []windowButtonPiece {
+func windowPillPieces(col color.Color, isTiling bool, s *config.Settings) []windowButtonPiece {
 	pillCap := lipgloss.NewStyle().Foreground(col).Render
 	// badgeStyle rather than a fixed black: the pill is filled with the border
 	// colour, which follows the theme, and black on a theme's dark red measured
@@ -186,15 +186,15 @@ func windowPillPieces(col color.Color, isTiling bool) []windowButtonPiece {
 	glyph := badgeStyle(col).Render
 
 	pieces := []windowButtonPiece{
-		{WindowButtonNone, pillCap(config.GetWindowPillLeft())},
-		{WindowButtonMinimize, glyph(config.GetWindowButtonMinimize())},
+		{WindowButtonNone, pillCap(s.GetWindowPillLeft())},
+		{WindowButtonMinimize, glyph(s.GetWindowButtonMinimize())},
 	}
 	if !isTiling {
-		pieces = append(pieces, windowButtonPiece{WindowButtonZoom, glyph(config.GetWindowButtonMaximize())})
+		pieces = append(pieces, windowButtonPiece{WindowButtonZoom, glyph(s.GetWindowButtonMaximize())})
 	}
 	return append(pieces,
-		windowButtonPiece{WindowButtonClose, glyph(config.GetWindowButtonClose())},
-		windowButtonPiece{WindowButtonNone, pillCap(config.GetWindowPillRight())},
+		windowButtonPiece{WindowButtonClose, glyph(s.GetWindowButtonClose())},
+		windowButtonPiece{WindowButtonNone, pillCap(s.GetWindowPillRight())},
 	)
 }
 
@@ -224,9 +224,9 @@ func (m *OS) windowDotPieces(col color.Color, window *terminal.Window, isTiling 
 	pieces := []windowButtonPiece{{WindowButtonNone, gap}}
 	for _, a := range actions {
 		dot := readableDot(windowDotColor(a), ground)
-		glyph := config.GetWindowButtonDot()
+		glyph := m.Settings.GetWindowButtonDot()
 		if hovered {
-			glyph = windowDotSymbol(a)
+			glyph = windowDotSymbol(a, &m.Settings)
 		}
 		// The symbol is drawn in the disc's own colour rather than on it. A cell
 		// background is a rectangle, so filling it trades the round silhouette
@@ -311,8 +311,8 @@ func windowDotColor(action WindowButtonAction) color.Color {
 // its symbols when the pointer reaches the group. Each is one cell and each is
 // already drawn elsewhere in the window chrome, so no new rune enters the
 // frame and the ASCII forms come along for free.
-func windowDotSymbol(action WindowButtonAction) string {
-	if config.UseASCIIOnly {
+func windowDotSymbol(action WindowButtonAction, s *config.Settings) string {
+	if s.UseASCIIOnly {
 		switch action {
 		case WindowButtonClose:
 			return "x"

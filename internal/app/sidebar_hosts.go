@@ -7,7 +7,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -298,7 +297,7 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette) 
 	if label := hostStatusLabel(node.HostStatus); label != "" {
 		right = sidebarStyle(nil, pal.FgMute).Render(label)
 		rightW = lipgloss.Width(label)
-	} else if config.SidebarShowCounts && node.WindowCount > 0 {
+	} else if m.Settings.SidebarShowCounts && node.WindowCount > 0 {
 		count := strconv.Itoa(node.WindowCount)
 		right = sidebarStyle(nil, pal.FgMute).Render(count)
 		rightW = lipgloss.Width(count)
@@ -318,7 +317,7 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette) 
 // sidebarRemoteSessionRow draws one session that lives on another machine.
 func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw int, pal overlay.Palette) string {
 	right, rightW := "", 0
-	if config.SidebarShowCounts && node.WindowCount > 0 {
+	if m.Settings.SidebarShowCounts && node.WindowCount > 0 {
 		count := strconv.Itoa(node.WindowCount)
 		right = sidebarStyle(nil, pal.FgMute).Render(count)
 		rightW = lipgloss.Width(count)

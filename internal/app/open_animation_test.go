@@ -22,6 +22,7 @@ type openAnimHarness struct {
 func newOpenAnimHarness(width, height int) *openAnimHarness {
 	return &openAnimHarness{
 		m: &OS{
+			Settings:         config.Global,
 			NumWorkspaces:    9,
 			CurrentWorkspace: 1,
 			WorkspaceFocus:   make(map[int]int),
@@ -90,9 +91,9 @@ func (h *openAnimHarness) newestWindowAnim(t *testing.T, anims []*ui.Animation) 
 // middle one, so a new pane read as flying in from the corner and shrinking.
 // It must instead grow outward from inside the tile it is about to fill.
 func TestOpenAnimationGrowsFromItsOwnTile(t *testing.T) {
-	prev := config.AnimationsEnabled
-	config.AnimationsEnabled = true
-	defer func() { config.AnimationsEnabled = prev }()
+	prev := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = true
+	defer func() { config.Global.AnimationsEnabled = prev }()
 
 	h := newOpenAnimHarness(120, 40)
 
@@ -134,9 +135,9 @@ func TestOpenAnimationGrowsFromItsOwnTile(t *testing.T) {
 // its tile in one step. The open start rectangle is a property of the animation,
 // so it must not survive into the path that has no animation.
 func TestOpenAnimationRespectsDisabledAnimations(t *testing.T) {
-	prev := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	defer func() { config.AnimationsEnabled = prev }()
+	prev := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	defer func() { config.Global.AnimationsEnabled = prev }()
 
 	h := newOpenAnimHarness(120, 40)
 
@@ -168,9 +169,9 @@ func TestOpenAnimationRespectsDisabledAnimations(t *testing.T) {
 //
 // So the echo must move nothing at all, and must not arm a fresh animation.
 func TestRepeatCreationSyncLeavesAPlacedPaneAlone(t *testing.T) {
-	prev := config.AnimationsEnabled
-	config.AnimationsEnabled = true
-	defer func() { config.AnimationsEnabled = prev }()
+	prev := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = true
+	defer func() { config.Global.AnimationsEnabled = prev }()
 
 	h := newOpenAnimHarness(120, 40)
 	h.createWindow(t)
@@ -220,9 +221,9 @@ func TestRepeatCreationSyncLeavesAPlacedPaneAlone(t *testing.T) {
 // own; the surviving panes snap from where they were to the space they inherit,
 // which is continuous motion and was never affected by the bug.
 func TestCloseAnimationUnchanged(t *testing.T) {
-	prev := config.AnimationsEnabled
-	config.AnimationsEnabled = true
-	defer func() { config.AnimationsEnabled = prev }()
+	prev := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = true
+	defer func() { config.Global.AnimationsEnabled = prev }()
 
 	h := newOpenAnimHarness(120, 40)
 	h.createWindow(t)

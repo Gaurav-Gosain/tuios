@@ -19,10 +19,11 @@ func nPaneTiledOS(t testing.TB, n, w, h int) *OS {
 		wins = append(wins, win)
 	}
 	m := &OS{
+		Settings: config.Global,
 		// The layout reads the model's session-settled geometry, seeded from
 		// the globals the way NewOS seeds it.
-		SharedBorders:    config.SharedBorders,
-		PaneGap:          config.PaneGap,
+		SharedBorders:    config.Global.SharedBorders,
+		PaneGap:          config.Global.PaneGap,
 		Windows:          wins,
 		FocusedWindow:    0,
 		CurrentWorkspace: 1,
@@ -70,18 +71,18 @@ func TestSettledTiledLayoutIsNeverStale(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.what, func(t *testing.T) {
-			prevGap, prevShared := config.PaneGap, config.SharedBorders
-			prevSidebar, prevSide := config.SidebarEnabled, config.SidebarPosition
-			prevAnim := config.AnimationsEnabled
+			prevGap, prevShared := config.Global.PaneGap, config.Global.SharedBorders
+			prevSidebar, prevSide := config.Global.SidebarEnabled, config.Global.SidebarPosition
+			prevAnim := config.Global.AnimationsEnabled
 			t.Cleanup(func() {
-				config.PaneGap, config.SharedBorders = prevGap, prevShared
-				config.SidebarEnabled, config.SidebarPosition = prevSidebar, prevSide
-				config.AnimationsEnabled = prevAnim
+				config.Global.PaneGap, config.Global.SharedBorders = prevGap, prevShared
+				config.Global.SidebarEnabled, config.Global.SidebarPosition = prevSidebar, prevSide
+				config.Global.AnimationsEnabled = prevAnim
 			})
-			config.PaneGap, config.SharedBorders = tc.gap, tc.shared
-			config.AnimationsEnabled = false
+			config.Global.PaneGap, config.Global.SharedBorders = tc.gap, tc.shared
+			config.Global.AnimationsEnabled = false
 			if tc.sidebar {
-				config.SidebarEnabled, config.SidebarPosition = true, "left"
+				config.Global.SidebarEnabled, config.Global.SidebarPosition = true, "left"
 			}
 
 			for _, panes := range []int{1, 2, 3, 5} {
@@ -104,9 +105,9 @@ func TestSettledTiledLayoutIsNeverStale(t *testing.T) {
 // TestLayoutFromASmallerScreenIsStale is the true-positive direction, taken at
 // the check itself rather than through a whole sync.
 func TestLayoutFromASmallerScreenIsStale(t *testing.T) {
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
 	m := nPaneTiledOS(t, 2, 160, 48)
 	if m.tiledLayoutStale() {

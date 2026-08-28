@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -47,7 +48,7 @@ func TestSpacedNamesStayFindable(t *testing.T) {
 // TestSwitcherRendersSpacedAndNonASCIINames reads the names off the rendered
 // frame: a name that cannot be seen has not really round-tripped.
 func TestSwitcherRendersSpacedAndNonASCIINames(t *testing.T) {
-	m := &OS{Width: 100, Height: 30, SessionName: "work", IsDaemonSession: true}
+	m := &OS{Settings: config.Global, Width: 100, Height: 30, SessionName: "work", IsDaemonSession: true}
 	pal := theme.UI()
 	for i, want := range []string{"Payments API", "café builds"} {
 		out := m.sessionSwitcherRow(spacedSwitcherItems[i], false, pal.Canvas, pal, sessionSwitcherWidth)

@@ -16,9 +16,9 @@ import (
 // "/" opens the palette, and the characters that follow reach the query rather
 // than the rail's cursor keys.
 func TestRailSlashOpensThePaletteAndKeepsItsKeys(t *testing.T) {
-	prev := config.SidebarEnabled
-	config.SidebarEnabled = true
-	t.Cleanup(func() { config.SidebarEnabled = prev })
+	prev := config.Global.SidebarEnabled
+	config.Global.SidebarEnabled = true
+	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
 
 	o := twoPaneOS(t)
 	o.SidebarFocused = true

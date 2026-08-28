@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -160,7 +159,7 @@ func (m *OS) refreshSessionColorsFor(sessions []sessiontree.Node) {
 // to draw. Called once per rail and once per switcher render, off the cached
 // path, so a row can ask per cell without redoing the arbitration.
 func (m *OS) refreshSessionColors(names []string) {
-	if !config.SessionColors {
+	if !m.Settings.SessionColors {
 		m.sessionColors = nil
 		return
 	}
@@ -224,7 +223,7 @@ func (m *OS) sessionAccentString(name string) string {
 // said which sessions it holds, and the session's bare preference otherwise, so
 // a caller outside a render still gets a stable answer rather than none.
 func (m *OS) SessionColor(name string) (Accent, bool) {
-	if !config.SessionColors || name == "" {
+	if !m.Settings.SessionColors || name == "" {
 		return Accent{}, false
 	}
 	// An open picker outranks all of it, so every surface wearing this session's
@@ -328,7 +327,7 @@ func (m *OS) sessionEffectiveAccent(name string) (Accent, accentSource) {
 // the sessions section uses. An accent the user pinned to that pane outranks
 // the session's colour: it is the more specific thing they asked for.
 func (m *OS) agentIdentityTint(e sidebarAgentEntry, bg color.Color) color.Color {
-	if !config.SessionColors {
+	if !m.Settings.SessionColors {
 		return nil
 	}
 	a, src := m.effectiveAccent(e.WindowID, e.SessionID)

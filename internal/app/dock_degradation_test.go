@@ -17,6 +17,7 @@ import (
 func dockCrowdedOS(t testing.TB, width, workspaces, minimized int) *OS {
 	t.Helper()
 	m := &OS{
+		Settings:         config.Global,
 		WorkspaceFocus:   map[int]int{},
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
@@ -61,9 +62,9 @@ func dockRow(t *testing.T, m *OS) string {
 // off by default, which is itself part of what the bar was rationing for.
 func withMeters(t *testing.T) {
 	t.Helper()
-	cpu, ram := config.ShowCPU, config.ShowRAM
-	config.ShowCPU, config.ShowRAM = true, true
-	t.Cleanup(func() { config.ShowCPU, config.ShowRAM = cpu, ram })
+	cpu, ram := config.Global.ShowCPU, config.Global.ShowRAM
+	config.Global.ShowCPU, config.Global.ShowRAM = true, true
+	t.Cleanup(func() { config.Global.ShowCPU, config.Global.ShowRAM = cpu, ram })
 }
 
 // TestDockKeepsTheEntryTheMetersWereCrowdingOut is the priority inversion, at
@@ -180,14 +181,11 @@ func TestDockMetersReserveOnlyWhatTheyDraw(t *testing.T) {
 	m := dockCrowdedOS(t, 120, 2, 0)
 	m.Windows = append(m.Windows, &terminal.Window{ID: "x", Workspace: 1})
 
-	cpu, ram := config.ShowCPU, config.ShowRAM
-	t.Cleanup(func() { config.ShowCPU, config.ShowRAM = cpu, ram })
-
-	config.ShowCPU, config.ShowRAM = false, false
+	m.Settings.ShowCPU, m.Settings.ShowRAM = false, false
 	if got := m.calculateDockRightWidth(); got != 0 {
 		t.Errorf("the meters reserved %d columns while drawing nothing", got)
 	}
-	config.ShowCPU, config.ShowRAM = true, true
+	m.Settings.ShowCPU, m.Settings.ShowRAM = true, true
 	if got := m.calculateDockRightWidth(); got <= 0 {
 		t.Errorf("the meters reserved %d columns while drawing both readouts", got)
 	}

@@ -233,13 +233,13 @@ func (m *OS) sidebarFileRow(row fileRowSpec, cw int, pal overlay.Palette, hovere
 		ink = pal.Fg
 	}
 
-	gutter := sidebarGutter(false, "", bg, pal)
+	gutter := sidebarGutter(false, "", bg, pal, &m.Settings)
 	// The glyph is the one cell on the row allowed an ink of its own. A colour
 	// off the icon table is absolute, so it is measured against the ground this
 	// row actually draws on before it is burned; with the colour off, and on
 	// every row the table has nothing to say about, the mark wears the row's own
 	// ink like every other glyph on the rail.
-	mark := fileRowMark(row.Icon, row.Dir, row.Kind == sidebarRowFileUp)
+	mark := fileRowMark(row.Icon, row.Dir, row.Kind == sidebarRowFileUp, &m.Settings)
 	glyphInk := ink
 	if mark.Hex != "" {
 		glyphInk = theme.FileIconInkOn(mark.Hex, sidebarGroundOr(bg))

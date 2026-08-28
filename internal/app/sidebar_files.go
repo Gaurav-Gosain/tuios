@@ -167,7 +167,7 @@ func (m *OS) filesOn() bool {
 	case m.filesView.Show < 0:
 		return false
 	default:
-		return sidebarLayoutHas(sidebarSectionFiles)
+		return sidebarLayoutHas(sidebarSectionFiles, &m.Settings)
 	}
 }
 
@@ -183,7 +183,7 @@ func (m *OS) filesSectionEnabled() bool {
 	// from Update, so it is on the idle path of every client; SidebarEnabled is
 	// false for most of them and answering there costs a load and a branch,
 	// where filesOn takes the layout mutex.
-	if !config.SidebarEnabled || !m.filesOn() {
+	if !m.Settings.SidebarEnabled || !m.filesOn() {
 		return false
 	}
 	w := m.GetSidebarWidth()
@@ -221,7 +221,24 @@ func (m *OS) FilesSyncCmd() tea.Cmd {
 		return nil
 	}
 	want := m.filesWantDir()
-	if want == "" || want == m.filesView.Want {
+	if want == "" {
+		// There is nothing for the section to be about: no pane is focused, or
+		// the focused one has never said where it is. Either way the listing on
+		// screen belongs to a directory that is not the answer to the question
+		// the section asks, so it goes.
+		//
+		// The comparison below cannot take this case. An empty want never
+		// matches a directory that was asked for, so it would fall through and
+		// ask for "" on every message forever. The guard is on the state rather
+		// than on the answer for the same reason: this runs once per message,
+		// and a client sitting with no pane must write nothing after the first
+		// time.
+		if m.filesView.Want != "" && !m.fileViewFromLink() {
+			m.clearFileView()
+		}
+		return nil
+	}
+	if want == m.filesView.Want {
 		return nil
 	}
 	window := m.GetFocusedWindow()
@@ -230,6 +247,45 @@ func (m *OS) FilesSyncCmd() tea.Cmd {
 		origin = window.ID
 	}
 	return m.requestFileList(want, origin, false)
+}
+
+// fileViewFromLink reports whether the listing was opened from a directory link
+// rather than from a pane: pinned, with no origin window. OpenFileView is the
+// one place that makes such a listing, and it names a folder the user asked for
+// by hand.
+//
+// It is the one listing that survives having no pane, because it was never
+// about a pane. The section is answering "what is in the folder you clicked",
+// and the answer to that does not change when a shell exits. A pane that opens
+// afterwards and reports a directory takes the section back, through the same
+// comparison every other pane goes through.
+func (m *OS) fileViewFromLink() bool {
+	return m.filesView.Pinned && m.filesView.Origin == ""
+}
+
+// clearFileView drops the listing and everything that describes it, for when
+// there is nothing to list it for.
+//
+// Show survives. It is the user's own on and off switch for the section and not
+// part of the listing, so a pane exiting must not answer it. Zeroing it would:
+// zero means "follow the layout", so a section the user had forced on would go
+// off for anyone whose layout does not name files. A section the user had
+// switched off never reaches here, because a switched off section is not
+// enabled and the sync returns above, but the field is kept for the switch's
+// sake either way. The scroll offset survives too: a section drawing no rows
+// cannot be scrolled, and the next listing zeroes it anyway.
+//
+// The generation is bumped and never reset. A read can be in flight when the
+// last pane closes, and its reply carries the generation it was stamped with;
+// bumping means that reply no longer matches and HandleFileList drops it.
+// Resetting to zero would be worse than leaving it: the next request would
+// stamp a number that has already been handed out, and the stale reply would
+// land on it.
+//
+// Origin and Pinned go with the rest. A pin is a pin to one pane's listing, and
+// a pane that has closed cannot be the one the user meant.
+func (m *OS) clearFileView() {
+	m.filesView = fileViewState{Show: m.filesView.Show, Gen: m.filesView.Gen + 1}
 }
 
 // requestFileList stamps a new request and returns the command that answers it.
@@ -323,13 +379,13 @@ func (m *OS) ToggleFileView() tea.Cmd {
 	}
 	window := m.GetFocusedWindow()
 	if window == nil {
-		m.ShowNotification("There is no pane to show files for.", "info", config.NotificationDuration)
+		m.ShowNotification("There is no pane to show files for.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	if window.Cwd == "" {
 		m.ShowNotification(
 			"tuios does not know where that pane is. The shell has to report its directory.",
-			"info", config.NotificationDuration)
+			"info", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.filesView.Show = 1
@@ -435,12 +491,18 @@ func fileViewError(err error) string {
 
 // FileViewUp walks to the parent directory. At the root there is no parent and
 // nothing happens, which is why the row is not drawn there.
-func (m *OS) FileViewUp() tea.Cmd {
-	if !m.filesOn() || m.filesView.Dir == "" {
+func (m *OS) FileViewUp() tea.Cmd { return m.fileViewUpFrom(m.filesView.Dir) }
+
+// fileViewUpFrom is FileViewUp for a folder named by the caller, which is what
+// the files menu's "Go up" row needs: the menu carries the folder it was opened
+// over, and that is the folder the row means whatever the listing has done
+// since.
+func (m *OS) fileViewUpFrom(dir string) tea.Cmd {
+	if !m.filesOn() || dir == "" {
 		return nil
 	}
-	parent := filepath.Dir(m.filesView.Dir)
-	if parent == m.filesView.Dir {
+	parent := filepath.Dir(dir)
+	if parent == dir {
 		return nil
 	}
 	return m.requestFileList(parent, m.filesView.Origin, true)
@@ -462,18 +524,31 @@ func (m *OS) FileViewEnter(index int) tea.Cmd {
 		return nil
 	}
 	entry := m.filesView.Entries[index]
-	full := filepath.Join(m.filesView.Dir, entry.Name)
-	if entry.Dir {
+	return m.fileViewOpen(m.filesView.Dir, entry.Name, entry.Dir)
+}
+
+// fileViewOpen is what a row of the listing does when it is taken, addressed by
+// name rather than by an index into the listing on screen.
+//
+// The menu's Open row goes through here too, with the folder and the name it
+// was opened on. One body, so the two ways of taking a row can never come to
+// mean different things, and so the folder_click setting is read in one place.
+func (m *OS) fileViewOpen(dir, name string, isDir bool) tea.Cmd {
+	if !m.filesOn() || dir == "" || name == "" {
+		return nil
+	}
+	full := filepath.Join(dir, name)
+	if isDir {
 		var cmd tea.Cmd
-		if config.SidebarFolderClick != config.SidebarFolderClickCd {
+		if m.Settings.SidebarFolderClick != config.SidebarFolderClickCd {
 			cmd = m.requestFileList(full, m.filesView.Origin, true)
 		}
-		if config.SidebarFolderClick != config.SidebarFolderClickNavigate {
+		if m.Settings.SidebarFolderClick != config.SidebarFolderClickNavigate {
 			m.sendCdToOrigin(full)
 		}
 		return cmd
 	}
-	m.ShowNotification("Copied the path.", "success", config.NotificationDuration)
+	m.ShowNotification("Copied the path.", "success", m.Settings.NotificationDuration)
 	return tea.SetClipboard(full)
 }
 
@@ -502,17 +577,17 @@ func (m *OS) FileViewCd() {
 func (m *OS) sendCdToOrigin(dir string) {
 	window := m.fileViewOriginWindow()
 	if window == nil {
-		m.ShowNotification("This listing is not tied to a pane.", "info", config.NotificationDuration)
+		m.ShowNotification("This listing is not tied to a pane.", "info", m.Settings.NotificationDuration)
 		return
 	}
 	if why, ok := paneBusyReason(window); !ok {
-		m.ShowNotification(why, "warning", config.NotificationDuration)
+		m.ShowNotification(why, "warning", m.Settings.NotificationDuration)
 		return
 	}
 	line := "cd " + shellQuote(dir) + "\r"
 	if err := window.SendInput([]byte(line)); err != nil {
 		m.LogError("Failed to send cd to window %s: %v", window.ID, err)
-		m.ShowNotification("Could not write to that pane.", "error", config.NotificationDuration)
+		m.ShowNotification("Could not write to that pane.", "error", m.Settings.NotificationDuration)
 	}
 }
 

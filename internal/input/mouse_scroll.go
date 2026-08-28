@@ -28,10 +28,14 @@ import (
 // that edge.
 
 // scrollCopyModeUp scrolls the pane's viewport back by one wheel step.
-func scrollCopyModeUp(win *terminal.Window) { scrollCopyModeUpBy(win, scrollStep()) }
+func scrollCopyModeUp(win *terminal.Window, s *config.Settings) {
+	scrollCopyModeUpBy(win, scrollStep(s))
+}
 
 // scrollCopyModeDown scrolls the pane's viewport forward by one wheel step.
-func scrollCopyModeDown(win *terminal.Window) { scrollCopyModeDownBy(win, scrollStep()) }
+func scrollCopyModeDown(win *terminal.Window, s *config.Settings) {
+	scrollCopyModeDownBy(win, scrollStep(s))
+}
 
 // scrollCopyModeUpBy scrolls the viewport back by lines, stopping at the oldest
 // line in the scrollback.
@@ -77,8 +81,8 @@ func setCopyCursorRow(cm *terminal.CopyMode, win *terminal.Window, row int) {
 // scrollStep is the number of lines one wheel click moves, from
 // appearance.scroll_lines, floored at one so a misconfigured zero cannot make
 // the wheel inert.
-func scrollStep() int {
-	return max(config.ScrollLines, 1)
+func scrollStep(s *config.Settings) int {
+	return max(s.ScrollLines, 1)
 }
 
 // leaveCopyModeAtBottom ends an implicit copy-mode session that has scrolled

@@ -1345,13 +1345,6 @@ func (s *Session) LayoutReserve() LayoutReserve {
 	return s.reserve
 }
 
-// SetLayoutReserve records the reserve the session has agreed on.
-func (s *Session) SetLayoutReserve(r LayoutReserve) {
-	s.sizeMu.Lock()
-	s.reserve = r
-	s.sizeMu.Unlock()
-}
-
 // SettleLayout records a size and a reserve together and returns the generation
 // they were recorded at, which is what tells a client whether an announcement
 // carrying them is newer than the one it last applied.

@@ -14,17 +14,17 @@ import (
 // shared with every other test in the run.
 func withZenMode(t *testing.T) {
 	t.Helper()
-	prev := config.ZenMode
-	t.Cleanup(func() { config.ZenMode = prev })
+	prev := config.Global.ZenMode
+	t.Cleanup(func() { config.Global.ZenMode = prev })
 }
 
 // Disabled is the default and the historic behaviour: every window keeps its
 // border regardless of focus or pointer activity.
 func TestZenBordersHiddenDisabled(t *testing.T) {
 	withZenMode(t)
-	config.ZenMode = config.ZenModeDisabled
+	config.Global.ZenMode = config.ZenModeDisabled
 
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	if m.zenBordersHidden(false) {
 		t.Error("zenBordersHidden(false) = true with zen_mode disabled, want false")
 	}
@@ -37,9 +37,9 @@ func TestZenBordersHiddenDisabled(t *testing.T) {
 // the user always retains an anchor for where their keystrokes land.
 func TestZenBordersHiddenAlways(t *testing.T) {
 	withZenMode(t)
-	config.ZenMode = config.ZenModeAlways
+	config.Global.ZenMode = config.ZenModeAlways
 
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	if !m.zenBordersHidden(false) {
 		t.Error("zenBordersHidden(false) = false with zen_mode always, want true")
 	}
@@ -52,9 +52,9 @@ func TestZenBordersHiddenAlways(t *testing.T) {
 // unfocused ones once it sits still past the reveal window.
 func TestZenBordersHiddenMouse(t *testing.T) {
 	withZenMode(t)
-	config.ZenMode = config.ZenModeMouse
+	config.Global.ZenMode = config.ZenModeMouse
 
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 
 	// No pointer event ever: treated as idle, so unfocused borders hide.
 	if !m.zenBordersHidden(false) {
@@ -83,7 +83,7 @@ func TestZenBordersHiddenMouse(t *testing.T) {
 
 // pointerRecentlyMoved answers strictly inside the reveal window.
 func TestPointerRecentlyMoved(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 
 	if m.pointerRecentlyMoved() {
 		t.Error("pointerRecentlyMoved() = true with no pointer event, want false")
@@ -109,7 +109,7 @@ func TestPointerRecentlyMoved(t *testing.T) {
 // nothing visible to show for it.
 func TestZenMouseTickForcesRenderOnCrossing(t *testing.T) {
 	withZenMode(t)
-	config.ZenMode = config.ZenModeMouse
+	config.Global.ZenMode = config.ZenModeMouse
 
 	win := newTestWindow(t, "zen-tick-0001", 60, 34)
 	m := newTestOS(win)
@@ -137,9 +137,9 @@ func TestZenMouseTickForcesRenderOnCrossing(t *testing.T) {
 // back to the slow idle rate instead of spinning at 10fps).
 func TestZenMouseTickMeltsAndConverges(t *testing.T) {
 	withZenMode(t)
-	config.ZenMode = config.ZenModeMouse
+	config.Global.ZenMode = config.ZenModeMouse
 
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.zenHidden = false
 	m.lastPointerAt = time.Now().Add(-(zenModeMouseIdleTimeout + time.Second))
 
@@ -164,11 +164,12 @@ func TestZenMouseTickMeltsAndConverges(t *testing.T) {
 // until the window is dirty. Without this the borders would never come back.
 func TestZenPointerRevealMarksDirty(t *testing.T) {
 	withZenMode(t)
-	config.ZenMode = config.ZenModeMouse
+	config.Global.ZenMode = config.ZenModeMouse
 
 	win := newTestWindow(t, "zen-reveal-0001", 60, 34)
 	win2 := newTestWindow(t, "zen-reveal-0002", 60, 34)
 	m := &OS{
+		Settings:      config.Global,
 		Windows:       []*terminal.Window{win, win2},
 		FocusedWindow: 0,
 	}
@@ -203,10 +204,10 @@ func TestZenPointerRevealMarksDirty(t *testing.T) {
 // content keeps its exact position.
 func TestZenRenderWindowBoxKeepsContentPlacement(t *testing.T) {
 	withZenMode(t)
-	config.ZenMode = config.ZenModeDisabled
+	config.Global.ZenMode = config.ZenModeDisabled
 
 	win := newTestWindow(t, "zen-layout-0001", 40, 12)
-	m := &OS{Windows: []*terminal.Window{win}, FocusedWindow: 0}
+	m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}, FocusedWindow: 0}
 
 	// Paint some content into the emulator so there is something to compare.
 	win.LockIO()
@@ -217,7 +218,7 @@ func TestZenRenderWindowBoxKeepsContentPlacement(t *testing.T) {
 	// That is the exact transition the melt performs, so the content must
 	// land on the same cell in both frames.
 	bordered := m.renderWindowBox(win, 0, false, lipgloss.Color("1"))
-	config.ZenMode = config.ZenModeAlways
+	m.Settings.ZenMode = config.ZenModeAlways
 	zen := m.renderWindowBox(win, 0, false, lipgloss.Color("1"))
 
 	// Compare the visual cells, not the raw bytes: the bordered frame carries

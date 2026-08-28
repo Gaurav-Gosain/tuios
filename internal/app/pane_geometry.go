@@ -27,7 +27,7 @@ import (
 // adopt it.
 func (m *OS) SetSharedBordersSetting(v bool) {
 	m.SharedBorders = v
-	config.SharedBorders = v
+	m.Settings.SharedBorders = v
 	m.lastConfigSharedBorders = v
 	m.setAppearance(func(a *config.AppearanceConfig) { a.SharedBorders = boolPtr(v) })
 	m.applyAppearanceLive(true)
@@ -37,7 +37,7 @@ func (m *OS) SetSharedBordersSetting(v bool) {
 func (m *OS) SetPaneGapSetting(v int) {
 	v = clampInt(v, 0, config.PaneGapMax)
 	m.PaneGap = v
-	config.PaneGap = v
+	m.Settings.PaneGap = v
 	m.lastConfigPaneGap = v
 	m.setAppearance(func(a *config.AppearanceConfig) { a.Gap = v })
 	m.applyAppearanceLive(true)
@@ -55,7 +55,7 @@ func (m *OS) SetPaneGapSetting(v int) {
 func (m *OS) SetMasterRatioSetting(percent int) {
 	percent = clampInt(percent, config.MasterRatioMin, config.MasterRatioMax)
 	m.MasterRatio = float64(percent) / 100
-	config.MasterRatioPercent = percent
+	m.Settings.MasterRatioPercent = percent
 	m.setAppearance(func(a *config.AppearanceConfig) { a.MasterRatio = percent })
 	m.applyAppearanceLive(true)
 }
@@ -65,7 +65,7 @@ func (m *OS) SetMasterRatioSetting(percent int) {
 func (m *OS) SetScrollColumnWidthSetting(percent int) {
 	percent = clampInt(percent, config.ScrollColumnWidthMin, config.ScrollColumnWidthMax)
 	m.ScrollColumnWidth = percent
-	config.ScrollColumnWidth = percent
+	m.Settings.ScrollColumnWidth = percent
 	m.lastConfigScrollWidth = percent
 	m.setAppearance(func(a *config.AppearanceConfig) { a.ScrollColumnWidth = percent })
 	m.applyAppearanceLive(true)
@@ -77,7 +77,7 @@ func (m *OS) SetScrollColumnWidthSetting(percent int) {
 func (m *OS) ScrollColumnWidthFraction() float64 {
 	w := m.ScrollColumnWidth
 	if w == 0 {
-		w = config.ScrollColumnWidth
+		w = m.Settings.ScrollColumnWidth
 	}
 	return float64(clampInt(w, config.ScrollColumnWidthMin, config.ScrollColumnWidthMax)) / 100
 }

@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -31,6 +32,7 @@ func floatingResizeOS(t *testing.T) (*app.OS, *terminal.Window) {
 
 	win := &terminal.Window{ID: "resize-pane", Terminal: em, X: 2, Y: 2, Width: 82, Height: 26}
 	o := &app.OS{
+		Settings:                 config.Global,
 		Mode:                     app.TerminalMode,
 		FocusedWindow:            0,
 		Windows:                  []*terminal.Window{win},

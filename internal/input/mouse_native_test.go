@@ -135,9 +135,9 @@ func TestTerminalModeRightClickWithoutSelectionPassesThrough(t *testing.T) {
 func TestFocusFollowsMouse(t *testing.T) {
 	setFFM := func(t *testing.T, v bool) {
 		t.Helper()
-		prev := config.FocusFollowsMouse
-		config.FocusFollowsMouse = v
-		t.Cleanup(func() { config.FocusFollowsMouse = prev })
+		prev := config.Global.FocusFollowsMouse
+		config.Global.FocusFollowsMouse = v
+		t.Cleanup(func() { config.Global.FocusFollowsMouse = prev })
 	}
 
 	t.Run("on: motion over pane b focuses it", func(t *testing.T) {
@@ -185,10 +185,10 @@ func TestFocusFollowsMouse(t *testing.T) {
 
 	t.Run("on: motion over the sidebar band does not steal focus", func(t *testing.T) {
 		setFFM(t, true)
-		prevEnabled, prevPos, prevWidth := config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth
-		config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth = true, "left", 28
+		prevEnabled, prevPos, prevWidth := config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth
+		config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth = true, "left", 28
 		t.Cleanup(func() {
-			config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth = prevEnabled, prevPos, prevWidth
+			config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth = prevEnabled, prevPos, prevWidth
 		})
 		o := twoPaneOS(t)
 		o.FocusedWindow = 1

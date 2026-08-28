@@ -220,7 +220,7 @@ func (m *OS) scriptPaneReady() bool {
 	m.ScriptAwaitWindows = 0
 	m.ShowNotification(
 		"Tape: the new pane never appeared. The rest runs in the current pane",
-		"error", config.NotificationDuration*2)
+		"error", m.Settings.NotificationDuration*2)
 	return true
 }
 
@@ -345,7 +345,7 @@ func (m *OS) GetSessionInfoData() map[string]any {
 	}
 
 	// Get dockbar position - it's stored as a string in config
-	dockbarPosition := config.DockbarPosition
+	dockbarPosition := m.Settings.DockbarPosition
 	if dockbarPosition == "" {
 		dockbarPosition = "bottom"
 	}
@@ -380,7 +380,7 @@ func (m *OS) GetSessionInfoData() map[string]any {
 		"tiling_mode":        tilingMode,
 		"theme":              themeName,
 		"dockbar_position":   dockbarPosition,
-		"animations_enabled": config.AnimationsEnabled,
+		"animations_enabled": m.Settings.AnimationsEnabled,
 		"width":              m.Width,
 		"height":             m.Height,
 		"workspace_windows":  workspaceWindows,
@@ -814,23 +814,23 @@ func (m *OS) remember(path, value string) {
 
 // EnableAnimations enables UI animations.
 func (m *OS) EnableAnimations() error {
-	config.AnimationsEnabled = true
+	m.Settings.AnimationsEnabled = true
 	m.remember("appearance.animations_enabled", "true")
-	m.ShowNotification("Animations on", "info", config.NotificationDuration)
+	m.ShowNotification("Animations on", "info", m.Settings.NotificationDuration)
 	return nil
 }
 
 // DisableAnimations disables UI animations.
 func (m *OS) DisableAnimations() error {
-	config.AnimationsEnabled = false
+	m.Settings.AnimationsEnabled = false
 	m.remember("appearance.animations_enabled", "false")
-	m.ShowNotification("Animations off", "info", config.NotificationDuration)
+	m.ShowNotification("Animations off", "info", m.Settings.NotificationDuration)
 	return nil
 }
 
 // ToggleAnimations toggles UI animations.
 func (m *OS) ToggleAnimations() error {
-	if config.AnimationsEnabled {
+	if m.Settings.AnimationsEnabled {
 		return m.DisableAnimations()
 	}
 	return m.EnableAnimations()
@@ -860,9 +860,9 @@ func (m *OS) SetConfig(path, value string) error {
 	case "appearance.hide_window_buttons", "hide_window_buttons":
 		switch value {
 		case "true", "on", "1":
-			config.HideWindowButtons = true
+			m.Settings.HideWindowButtons = true
 		case "false", "off", "0":
-			config.HideWindowButtons = false
+			m.Settings.HideWindowButtons = false
 		}
 		m.remember("appearance.hide_window_buttons", value)
 		m.MarkAllDirty()
@@ -872,7 +872,7 @@ func (m *OS) SetConfig(path, value string) error {
 			return fmt.Errorf("unknown window button style: %s (want %s)",
 				value, strings.Join(config.WindowButtonStyles, " or "))
 		}
-		config.WindowButtonStyle = value
+		m.Settings.WindowButtonStyle = value
 		m.remember("appearance.window_button_style", value)
 		m.MarkAllDirty()
 		return nil
@@ -881,7 +881,7 @@ func (m *OS) SetConfig(path, value string) error {
 			return fmt.Errorf("unknown window button position: %s (want %s)",
 				value, strings.Join(config.WindowButtonPositions, " or "))
 		}
-		config.WindowButtonPosition = value
+		m.Settings.WindowButtonPosition = value
 		m.remember("appearance.window_button_position", value)
 		m.MarkAllDirty()
 		return nil
@@ -918,9 +918,14 @@ func (m *OS) setConfigFromRegistry(path, value string) error {
 	}
 
 	// ApplyAppearanceConfig is the one funnel from the config struct to the
-	// globals the render path reads, so going through it means a registry option
-	// lands exactly where the same key from the config file would.
-	config.ApplyAppearanceConfig(m.UserConfig)
+	// settings the render path reads, so going through it means a registry
+	// option lands exactly where the same key from the config file would.
+	//
+	// It lands in THIS session's settings and nowhere else. A server holds a
+	// session per connection, and this is the call every keypress in the
+	// settings panel comes through: writing the process seed here is what used
+	// to give one client's border style to every other client attached.
+	config.ApplyAppearanceConfig(m.UserConfig, &m.Settings)
 	// Retile unconditionally: most of what is reachable here changes how much
 	// room the panes have (the sidebar's width and side, the dock's position),
 	// and a retile on a change that did not need one costs a frame.
@@ -953,7 +958,7 @@ func (m *OS) SetTheme(themeName string) error {
 		}
 	}
 
-	m.ShowNotification(fmt.Sprintf("Theme: %s", themeName), "info", config.NotificationDuration)
+	m.ShowNotification(fmt.Sprintf("Theme: %s", themeName), "info", m.Settings.NotificationDuration)
 	m.MarkAllDirty()
 	return nil
 }
@@ -962,9 +967,9 @@ func (m *OS) SetTheme(themeName string) error {
 func (m *OS) SetDockbarPosition(position string) error {
 	switch position {
 	case "top", "bottom", "hidden":
-		config.DockbarPosition = position
+		m.Settings.DockbarPosition = position
 		m.remember("appearance.dockbar_position", position)
-		m.ShowNotification(fmt.Sprintf("Dockbar: %s", position), "info", config.NotificationDuration)
+		m.ShowNotification(fmt.Sprintf("Dockbar: %s", position), "info", m.Settings.NotificationDuration)
 		m.MarkAllDirty()
 		return nil
 	default:
@@ -984,16 +989,16 @@ func (m *OS) SetBorderStyle(style string) error {
 		return fmt.Errorf("invalid border style: %s (use: %s)",
 			style, strings.Join(config.BorderStyles, ", "))
 	}
-	config.BorderStyle = style
+	m.Settings.BorderStyle = style
 	m.remember("appearance.border_style", style)
-	m.ShowNotification(fmt.Sprintf("Border: %s", style), "info", config.NotificationDuration)
+	m.ShowNotification(fmt.Sprintf("Border: %s", style), "info", m.Settings.NotificationDuration)
 	m.MarkAllDirty()
 	return nil
 }
 
 // ShowNotificationCmd displays a notification in the UI.
 func (m *OS) ShowNotificationCmd(message, notificationType string) error {
-	m.ShowNotification(message, notificationType, config.NotificationDuration)
+	m.ShowNotification(message, notificationType, m.Settings.NotificationDuration)
 	return nil
 }
 
@@ -1139,7 +1144,7 @@ func (m *OS) startRemoteSendKeys(keys string, literal bool, raw bool, windowTarg
 	// Disable animations during remote key processing
 	// This ensures immediate layout updates instead of animations that might not complete
 	m.ProcessingRemoteKeys = true
-	config.AnimationsSuppressed = true
+	m.Settings.AnimationsSuppressed = true
 
 	// Start processing the first key, remaining keys will be processed sequentially
 	firstKey := keyMsgs[0]
@@ -1168,7 +1173,7 @@ func (m *OS) executeTapeScript(script string, requestID string) (tea.Cmd, error)
 
 	// Disable animations during script execution
 	m.ProcessingRemoteKeys = true
-	config.AnimationsSuppressed = true
+	m.Settings.AnimationsSuppressed = true
 
 	// Set up script mode for progress display
 	m.ScriptMode = true
@@ -1222,7 +1227,7 @@ func (m *OS) parseKeysToMessages(keys string) []tea.KeyPressMsg {
 		// Handle $PREFIX or PREFIX special token
 		if strings.EqualFold(part, "$PREFIX") || strings.EqualFold(part, "PREFIX") {
 			// Get the configured leader key
-			leaderKey := config.LeaderKey
+			leaderKey := m.Settings.LeaderKey
 			if leaderKey == "" {
 				leaderKey = "ctrl+b"
 			}
@@ -1436,12 +1441,12 @@ func (m *OS) findWindowInDirection(from *terminal.Window, dx, dy int) int {
 // command is skipped without arming a wait.
 func (m *OS) startScriptWaitRegex(cmd *tape.Command) {
 	if len(cmd.Args) == 0 {
-		m.ShowNotification("WaitUntilRegex: missing pattern", "error", config.NotificationDuration)
+		m.ShowNotification("WaitUntilRegex: missing pattern", "error", m.Settings.NotificationDuration)
 		return
 	}
 	re, err := regexp.Compile(cmd.Args[0])
 	if err != nil {
-		m.ShowNotification(fmt.Sprintf("WaitUntilRegex: invalid pattern: %v", err), "error", config.NotificationDuration)
+		m.ShowNotification(fmt.Sprintf("WaitUntilRegex: invalid pattern: %v", err), "error", m.Settings.NotificationDuration)
 		return
 	}
 	timeout := 5000 * time.Millisecond
@@ -1478,7 +1483,7 @@ func (m *OS) checkScriptWaitRegex() bool {
 	}
 
 	if !m.ScriptWaitDeadline.IsZero() && time.Now().After(m.ScriptWaitDeadline) {
-		m.ShowNotification("WaitUntilRegex: timed out", "warning", config.NotificationDuration)
+		m.ShowNotification("WaitUntilRegex: timed out", "warning", m.Settings.NotificationDuration)
 		m.ScriptWaitRegex = nil
 		m.ScriptWaitDeadline = time.Time{}
 		return true

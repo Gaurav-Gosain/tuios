@@ -23,9 +23,9 @@ func chipOS(t *testing.T) *OS {
 		{ID: "w3", Width: 40, Height: 10, Workspace: 3},
 	}
 	m.adoptSessionLabels(&session.SessionState{WorkspaceNames: map[int]string{2: "review"}})
-	prev := config.DockWorkspaceTabs
-	config.DockWorkspaceTabs = true
-	t.Cleanup(func() { config.DockWorkspaceTabs = prev })
+	prev := m.Settings.DockWorkspaceTabs
+	m.Settings.DockWorkspaceTabs = true
+	t.Cleanup(func() { m.Settings.DockWorkspaceTabs = prev })
 	return m
 }
 
@@ -56,18 +56,18 @@ func TestWorkspaceChipsCarryTheirNames(t *testing.T) {
 func TestWorkspaceChipWidthFollowsItsLabel(t *testing.T) {
 	m := chipOS(t)
 	for _, tab := range m.buildDockWorkspaceTabs() {
-		drawn := lipgloss.Width(workspacePill(tab.Label, tab.Active, false, theme.UI()))
+		drawn := lipgloss.Width(workspacePill(tab.Label, tab.Active, false, theme.UI(), &config.Global))
 		if drawn != tab.Width {
 			t.Errorf("workspace %d's chip draws %d cells but claims %d", tab.Workspace, drawn, tab.Width)
 		}
-		if tab.Width != workspacePillWidth(tab.Label) {
+		if tab.Width != workspacePillWidth(tab.Label, &config.Global) {
 			t.Errorf("workspace %d's recorded width %d is not its label's %d",
-				tab.Workspace, tab.Width, workspacePillWidth(tab.Label))
+				tab.Workspace, tab.Width, workspacePillWidth(tab.Label, &config.Global))
 		}
 		// Active and inactive must measure the same, or the strip reflows as the
 		// current workspace moves along it and every rect past it shifts.
-		if a, b := lipgloss.Width(workspacePill(tab.Label, true, false, theme.UI())),
-			lipgloss.Width(workspacePill(tab.Label, false, false, theme.UI())); a != b {
+		if a, b := lipgloss.Width(workspacePill(tab.Label, true, false, theme.UI(), &config.Global)),
+			lipgloss.Width(workspacePill(tab.Label, false, false, theme.UI(), &config.Global)); a != b {
 			t.Errorf("workspace %d measures %d active and %d inactive", tab.Workspace, a, b)
 		}
 	}

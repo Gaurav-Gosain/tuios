@@ -13,9 +13,9 @@ import (
 // withClickToType sets the policy for a test and restores it after.
 func withClickToType(t *testing.T, mode string) {
 	t.Helper()
-	prev := config.ClickToType
-	config.ClickToType = mode
-	t.Cleanup(func() { config.ClickToType = prev })
+	prev := config.Global.ClickToType
+	config.Global.ClickToType = mode
+	t.Cleanup(func() { config.Global.ClickToType = prev })
 }
 
 // clickPane presses and releases the left button on a cell through HandleInput,

@@ -139,13 +139,24 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.TakeSidebarCmd()
 }
 
-// handleSidebarFileAction runs one of the files section's six actions.
+// makeSidebarFileHandler wraps a file action for the ActionDispatcher, which is
+// how the files context menu reaches it. The key path calls
+// handleSidebarFileAction directly; both end in the same body.
+func makeSidebarFileHandler(action string) ActionHandler {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		return o, handleSidebarFileAction(action, o)
+	}
+}
+
+// handleSidebarFileAction runs one of the files section's actions.
 //
 // Not one of them touches the disk here. Create, rename and delete open a
-// dialog; copy and cut write down a path; paste answers with the command that
-// does the work off the loop.
+// dialog; copy and cut write down a path; paste and open answer with the command
+// that does the work off the loop.
 func handleSidebarFileAction(action string, o *app.OS) tea.Cmd {
 	switch action {
+	case sidebarActFileOpen:
+		return o.SidebarFileOpen()
 	case sidebarActFileCreate:
 		o.SidebarFileCreate()
 	case sidebarActFileRename:

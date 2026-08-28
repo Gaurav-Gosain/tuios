@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -41,6 +42,7 @@ func pasteHarness(t *testing.T, bracketed bool) (*app.OS, *strings.Builder) {
 		},
 	}
 	o := &app.OS{
+		Settings:      config.Global,
 		Mode:          app.TerminalMode,
 		FocusedWindow: 0,
 		Windows:       []*terminal.Window{win},

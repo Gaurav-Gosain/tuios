@@ -44,7 +44,7 @@ type CommandPaletteItem struct {
 }
 
 // GetCommandPaletteItems returns all available commands for the command palette.
-func GetCommandPaletteItems() []CommandPaletteItem {
+func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 	return []CommandPaletteItem{
 		// The launcher is its own overlay, and this is the row that opens it.
 		// It is the bridge that keeps "one box finds everything" true as an
@@ -179,9 +179,9 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 				m.AutoTiling = !m.AutoTiling
 				if m.AutoTiling {
 					m.TileAllWindows()
-					m.ShowNotification("Tiling on", "success", config.NotificationDuration)
+					m.ShowNotification("Tiling on", "success", s.NotificationDuration)
 				} else {
-					m.ShowNotification("Tiling off", "info", config.NotificationDuration)
+					m.ShowNotification("Tiling off", "info", s.NotificationDuration)
 				}
 				m.FireLayoutChanged()
 				return m, nil
@@ -194,7 +194,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.AutoTiling {
 					m.SplitFocusedHorizontal()
-					m.ShowNotification("Split horizontal", "info", config.NotificationDuration)
+					m.ShowNotification("Split horizontal", "info", s.NotificationDuration)
 				}
 				return m, nil
 			},
@@ -206,7 +206,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.AutoTiling {
 					m.SplitFocusedVertical()
-					m.ShowNotification("Split vertical", "info", config.NotificationDuration)
+					m.ShowNotification("Split vertical", "info", s.NotificationDuration)
 				}
 				return m, nil
 			},
@@ -218,7 +218,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.AutoTiling {
 					m.SmartSplitFocused()
-					m.ShowNotification("Smart split", "info", config.NotificationDuration)
+					m.ShowNotification("Smart split", "info", s.NotificationDuration)
 				}
 				return m, nil
 			},
@@ -233,9 +233,9 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 				m.SetSharedBordersSetting(!m.SharedBorders)
 				save := m.persistSettings()
 				if m.SharedBorders {
-					m.ShowNotification("Shared borders on", "success", config.NotificationDuration)
+					m.ShowNotification("Shared borders on", "success", s.NotificationDuration)
 				} else {
-					m.ShowNotification("Shared borders off", "info", config.NotificationDuration)
+					m.ShowNotification("Shared borders off", "info", s.NotificationDuration)
 				}
 				return m, save
 			},
@@ -247,7 +247,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.AutoTiling {
 					m.RotateFocusedSplit()
-					m.ShowNotification("Split rotated", "info", config.NotificationDuration)
+					m.ShowNotification("Split rotated", "info", s.NotificationDuration)
 				}
 				return m, nil
 			},
@@ -259,7 +259,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if m.AutoTiling {
 					m.EqualizeSplits()
-					m.ShowNotification("Splits equalized", "info", config.NotificationDuration)
+					m.ShowNotification("Splits equalized", "info", s.NotificationDuration)
 				}
 				return m, nil
 			},
@@ -597,9 +597,10 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 					m.ShowNotification("Config error: "+err.Error(), "error", 0)
 					return m, nil
 				}
-				// Runs on the Bubble Tea goroutine, so applying the appearance
-				// globals here is single-threaded and takes effect immediately.
-				config.ApplyAppearanceConfig(newCfg)
+				// Runs on the Bubble Tea goroutine, so applying it to this
+				// session's settings is single-threaded and takes effect
+				// immediately, and reaches nobody else's session.
+				config.ApplyAppearanceConfig(newCfg, &m.Settings)
 				// Land the globals the same way the file watcher does: a reload
 				// that moved the pane gap or the sidebar has to retile, not just
 				// repaint.
@@ -616,10 +617,10 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.ToggleSidebar()
 				state := "off"
-				if config.SidebarEnabled {
+				if s.SidebarEnabled {
 					state = "on"
 				}
-				m.ShowNotification("Sidebar "+state, "success", config.NotificationDuration)
+				m.ShowNotification("Sidebar "+state, "success", s.NotificationDuration)
 				return m, nil
 			},
 		},
@@ -629,10 +630,10 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				save := m.ToggleFocusFollowsMouse()
 				state := "off"
-				if config.FocusFollowsMouse {
+				if s.FocusFollowsMouse {
 					state = "on"
 				}
-				m.ShowNotification("Focus follows mouse "+state, "success", config.NotificationDuration)
+				m.ShowNotification("Focus follows mouse "+state, "success", s.NotificationDuration)
 				return m, save
 			},
 		},
@@ -685,7 +686,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 				if m.ShowKeys {
 					state = "on"
 				}
-				m.ShowNotification("Show keys "+state, "success", config.NotificationDuration)
+				m.ShowNotification("Show keys "+state, "success", s.NotificationDuration)
 				return m, save
 			},
 		},
@@ -694,11 +695,11 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Shortcut: "prefix+D a",
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				config.AnimationsEnabled = !config.AnimationsEnabled
-				if config.AnimationsEnabled {
-					m.ShowNotification("Animations on", "success", config.NotificationDuration)
+				s.AnimationsEnabled = !s.AnimationsEnabled
+				if s.AnimationsEnabled {
+					m.ShowNotification("Animations on", "success", s.NotificationDuration)
 				} else {
-					m.ShowNotification("Animations off", "info", config.NotificationDuration)
+					m.ShowNotification("Animations off", "info", s.NotificationDuration)
 				}
 				return m, nil
 			},
@@ -709,7 +710,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: "Session",
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.Mode = WindowManagementMode
-				m.ShowNotification("Window management mode", "info", config.NotificationDuration)
+				m.ShowNotification("Window management mode", "info", s.NotificationDuration)
 				if focusedWindow := m.GetFocusedWindow(); focusedWindow != nil {
 					focusedWindow.InvalidateCache()
 				}
@@ -741,7 +742,7 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if focusedWindow := m.GetFocusedWindow(); focusedWindow != nil {
 					focusedWindow.EnterCopyMode()
-					m.ShowNotification("Copy mode (hjkl, q to exit)", "info", config.NotificationDuration*2)
+					m.ShowNotification("Copy mode (hjkl, q to exit)", "info", s.NotificationDuration*2)
 				}
 				return m, nil
 			},

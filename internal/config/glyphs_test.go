@@ -17,17 +17,17 @@ func withGlyphSet(t *testing.T, id string) {
 
 func TestASetChangesTheGlyphsTheChromeIsDrawnWith(t *testing.T) {
 	withGlyphSet(t, "heavy")
-	if got := GetWindowSeparatorChar(); got != "━" {
+	if got := Global.GetWindowSeparatorChar(); got != "━" {
 		t.Errorf("rule = %q, want heavy's ━", got)
 	}
-	if got := GetRailFocusMark(); got != "█" {
+	if got := Global.GetRailFocusMark(); got != "█" {
 		t.Errorf("rail focus = %q, want heavy's █", got)
 	}
-	if got := GetRailBullet(); got != "▪" {
+	if got := Global.GetRailBullet(); got != "▪" {
 		t.Errorf("rail bullet = %q, want heavy's ▪", got)
 	}
 	// heavy says nothing about the collapse arrow, so the built-in stands.
-	if got := GetRailCollapseGlyph(); got != "«" {
+	if got := Global.GetRailCollapseGlyph(); got != "«" {
 		t.Errorf("collapse = %q, want the built-in « an unnamed role keeps", got)
 	}
 }
@@ -43,10 +43,10 @@ func TestAWindowControlKeepsItsWidthWhateverTheSetSays(t *testing.T) {
 			got   string
 			cells int
 		}{
-			{"close", GetWindowButtonClose(), 3},
-			{"maximize", GetWindowButtonMaximize(), 3},
-			{"minimize", GetWindowButtonMinimize(), 4},
-			{"dot", GetWindowButtonDot(), 1},
+			{"close", Global.GetWindowButtonClose(), 3},
+			{"maximize", Global.GetWindowButtonMaximize(), 3},
+			{"minimize", Global.GetWindowButtonMinimize(), 4},
+			{"dot", Global.GetWindowButtonDot(), 1},
 		} {
 			if w := lipgloss.Width(c.got); w != c.cells {
 				t.Errorf("%s: %s = %q, %d cells, want %d", id, c.name, c.got, w, c.cells)
@@ -60,19 +60,19 @@ func TestTheSetsBorderDrawsOnlyWhenBorderStyleAsksForIt(t *testing.T) {
 	// thing to say and turns an option the user already set into a silent
 	// no-op. Selected by name instead, so both settings stay live.
 	withGlyphSet(t, "heavy")
-	prev := BorderStyle
-	t.Cleanup(func() { BorderStyle = prev })
+	prev := Global.BorderStyle
+	t.Cleanup(func() { Global.BorderStyle = prev })
 
-	BorderStyle = "rounded"
-	if got := GetBorderForStyle().TopLeft; got != "╭" {
+	Global.BorderStyle = "rounded"
+	if got := Global.GetBorderForStyle().TopLeft; got != "╭" {
 		t.Errorf("top-left = %q under border_style=rounded, want the rounded corner", got)
 	}
 
-	BorderStyle = BorderStyleGlyphs
-	if got := GetBorderForStyle().TopLeft; got != "┏" {
+	Global.BorderStyle = BorderStyleGlyphs
+	if got := Global.GetBorderForStyle().TopLeft; got != "┏" {
 		t.Errorf("top-left = %q under border_style=glyphs, want heavy's ┏", got)
 	}
-	if got := GetBorderForStyle().Middle; got != "╋" {
+	if got := Global.GetBorderForStyle().Middle; got != "╋" {
 		t.Errorf("junction = %q, want heavy's own, so a divider joins its border", got)
 	}
 }
@@ -81,11 +81,11 @@ func TestASetLeavingTheBorderPartlyUnsaidFallsBackPerRune(t *testing.T) {
 	// The likely case for a hand-written set: four corners and "the rest as
 	// usual". Falling back whole would give the frame a stroke its corners do
 	// not meet.
-	prev := BorderStyle
-	t.Cleanup(func() { BorderStyle = prev })
-	BorderStyle = BorderStyleGlyphs
+	prev := Global.BorderStyle
+	t.Cleanup(func() { Global.BorderStyle = prev })
+	Global.BorderStyle = BorderStyleGlyphs
 	withGlyphSet(t, theme.GlyphSetNone)
-	b := GetBorderForStyle()
+	b := Global.GetBorderForStyle()
 	if b.Top != "─" || b.TopLeft != "╭" {
 		t.Errorf("border = %+v, want the rounded border where the set says nothing", b)
 	}
@@ -93,23 +93,23 @@ func TestASetLeavingTheBorderPartlyUnsaidFallsBackPerRune(t *testing.T) {
 
 func TestASetsGlyphOutsideASCIILosesToASCIIModePerRole(t *testing.T) {
 	withGlyphSet(t, "heavy")
-	prev := UseASCIIOnly
-	UseASCIIOnly = true
-	t.Cleanup(func() { UseASCIIOnly = prev })
+	prev := Global.UseASCIIOnly
+	Global.UseASCIIOnly = true
+	t.Cleanup(func() { Global.UseASCIIOnly = prev })
 
-	if got := GetRailFocusMark(); got != ">" {
+	if got := Global.GetRailFocusMark(); got != ">" {
 		t.Errorf("rail focus = %q, want the ASCII default: █ is not 7-bit", got)
 	}
-	if got := GetWindowButtonMinimize(); got != "  - " {
+	if got := Global.GetWindowButtonMinimize(); got != "  - " {
 		t.Errorf("minimize = %q, want the ASCII four-cell button", got)
 	}
 
 	// The ascii set is 7-bit throughout, so nothing of it is given up.
 	withGlyphSet(t, "ascii")
-	if got := GetRailFocusMark(); got != ">" {
+	if got := Global.GetRailFocusMark(); got != ">" {
 		t.Errorf("rail focus = %q under the ascii set, want its own >", got)
 	}
-	if got := GetDockSeparator(); got != " | " {
+	if got := Global.GetDockSeparator(); got != " | " {
 		t.Errorf("separator = %q under the ascii set, want its own", got)
 	}
 }
@@ -118,22 +118,22 @@ func TestTheGapAndTheClockComeOffTheConfig(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Appearance.Gap = 3
 	cfg.Appearance.ClockFormat = "15:04"
-	ApplyAppearanceConfig(cfg)
-	t.Cleanup(func() { ApplyAppearanceConfig(DefaultConfig()) })
+	ApplyAppearanceConfig(cfg, &Global)
+	t.Cleanup(func() { ApplyAppearanceConfig(DefaultConfig(), &Global) })
 
-	if PaneGap != 3 {
-		t.Errorf("PaneGap = %d, want 3", PaneGap)
+	if Global.PaneGap != 3 {
+		t.Errorf("PaneGap = %d, want 3", Global.PaneGap)
 	}
-	if got := GetClockFormat(); got != "15:04" {
+	if got := Global.GetClockFormat(); got != "15:04" {
 		t.Errorf("clock format = %q, want 15:04", got)
 	}
 
 	// A gap past the cap is clamped rather than refused: the frame still draws
 	// and the value the user asked for is the one they get up to the ceiling.
 	cfg.Appearance.Gap = 99
-	ApplyAppearanceConfig(cfg)
-	if PaneGap != PaneGapMax {
-		t.Errorf("PaneGap = %d for a gap of 99, want the %d cap", PaneGap, PaneGapMax)
+	ApplyAppearanceConfig(cfg, &Global)
+	if Global.PaneGap != PaneGapMax {
+		t.Errorf("PaneGap = %d for a gap of 99, want the %d cap", Global.PaneGap, PaneGapMax)
 	}
 }
 
@@ -176,19 +176,19 @@ func TestAnUnknownGlyphSetIsRefusedAtTheRegistry(t *testing.T) {
 // fell back to was the rounded border, so border_style = "glyphs" with
 // --ascii-only drew ╭ corners on exactly the terminals that mode exists for.
 func TestGlyphBorderInASCIIModeStaysASCII(t *testing.T) {
-	prevASCII, prevStyle := UseASCIIOnly, BorderStyle
+	prevASCII, prevStyle := Global.UseASCIIOnly, Global.BorderStyle
 	prevSet := theme.ActiveGlyphSetID()
 	t.Cleanup(func() {
-		UseASCIIOnly, BorderStyle = prevASCII, prevStyle
+		Global.UseASCIIOnly, Global.BorderStyle = prevASCII, prevStyle
 		theme.SetActiveGlyphs(prevSet)
 	})
 
-	UseASCIIOnly = true
-	BorderStyle = BorderStyleGlyphs
+	Global.UseASCIIOnly = true
+	Global.BorderStyle = BorderStyleGlyphs
 	// heavy names a full box-drawing border, none of which is 7-bit.
 	theme.SetActiveGlyphs("heavy")
 
-	b := GetBorderForStyle()
+	b := Global.GetBorderForStyle()
 	for name, rune := range map[string]string{
 		"top": b.Top, "bottom": b.Bottom, "left": b.Left, "right": b.Right,
 		"top_left": b.TopLeft, "top_right": b.TopRight,
@@ -199,7 +199,7 @@ func TestGlyphBorderInASCIIModeStaysASCII(t *testing.T) {
 		}
 	}
 
-	drawn := ResolvedGlyphs()
+	drawn := Global.ResolvedGlyphs()
 	if got := drawn["border.top_left"]; !overlay.IsASCII(got) {
 		t.Errorf("ResolvedGlyphs reports border.top_left as %q in ASCII mode", got)
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -137,6 +138,7 @@ func TestPanelSecondaryTextClearsTheFloor(t *testing.T) {
 // paletteContrastOS is a model big enough for the overlays to lay out.
 func paletteContrastOS() *OS {
 	return &OS{
+		Settings:         config.Global,
 		WorkspaceFocus:   map[int]int{},
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,

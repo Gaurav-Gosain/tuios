@@ -53,6 +53,7 @@ func helpModalOS(t *testing.T) *app.OS {
 	t.Helper()
 
 	m := &app.OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
@@ -80,7 +81,7 @@ func helpModalOS(t *testing.T) *app.OS {
 		}()
 		t.Cleanup(func() { close(done) })
 
-		win := terminal.NewDaemonWindow(id, "help", 0, 0, 40, 12, i, "pty-"+id, ptyData)
+		win := terminal.NewDaemonWindow(id, "help", 0, 0, 40, 12, i, "pty-"+id, ptyData, config.DefaultScrollbackLines)
 		if win == nil {
 			t.Fatal("NewDaemonWindow returned nil")
 		}

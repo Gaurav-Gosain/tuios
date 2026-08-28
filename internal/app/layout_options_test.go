@@ -22,10 +22,10 @@ import (
 // adoptPaneGeometry, the joining client keeps its own 70% and lays the same
 // three panes out 32 columns wider than the client it joined.
 func TestScrollColumnWidthIsSettledAcrossTheSession(t *testing.T) {
-	prev := config.ScrollColumnWidth
-	t.Cleanup(func() { config.ScrollColumnWidth = prev })
+	prev := config.Global.ScrollColumnWidth
+	t.Cleanup(func() { config.Global.ScrollColumnWidth = prev })
 
-	config.ScrollColumnWidth = 40
+	config.Global.ScrollColumnWidth = 40
 	host := modeOS(t, LayoutModeScrolling, false, 0, 3, 160, 48)
 	host.ScrollColumnWidth = 40
 	host.TileAllWindows()
@@ -37,8 +37,9 @@ func TestScrollColumnWidthIsSettledAcrossTheSession(t *testing.T) {
 	}
 
 	// A second client whose own process was configured for a wider column.
-	config.ScrollColumnWidth = 70
+	config.Global.ScrollColumnWidth = 70
 	joiner := modeOS(t, LayoutModeScrolling, false, 0, 3, 160, 48)
+	host.Settings = config.Global
 	joiner.ScrollColumnWidth = 70
 	joiner.TileAllWindows()
 	joiner.CompleteAllAnimations()
@@ -69,10 +70,10 @@ func TestScrollColumnWidthIsSettledAcrossTheSession(t *testing.T) {
 // is what makes the field additive: a client too old to send it, or state
 // written before it existed, must not reset anybody's layout to a zero.
 func TestAnUnsaidColumnWidthLeavesThisClientAlone(t *testing.T) {
-	prev := config.ScrollColumnWidth
-	t.Cleanup(func() { config.ScrollColumnWidth = prev })
+	prev := config.Global.ScrollColumnWidth
+	t.Cleanup(func() { config.Global.ScrollColumnWidth = prev })
 
-	config.ScrollColumnWidth = 70
+	config.Global.ScrollColumnWidth = 70
 	m := modeOS(t, LayoutModeScrolling, false, 0, 2, 160, 48)
 	m.ScrollColumnWidth = 70
 
@@ -87,11 +88,11 @@ func TestAnUnsaidColumnWidthLeavesThisClientAlone(t *testing.T) {
 // this whole feature is a fix for: appearance.gap existed in the scrolling
 // layout as a field and nothing ever set it.
 func TestScrollColumnWidthDecidesTheColumn(t *testing.T) {
-	prev := config.ScrollColumnWidth
-	t.Cleanup(func() { config.ScrollColumnWidth = prev })
+	prev := config.Global.ScrollColumnWidth
+	t.Cleanup(func() { config.Global.ScrollColumnWidth = prev })
 
 	for _, pct := range []int{30, 55, 90} {
-		config.ScrollColumnWidth = pct
+		config.Global.ScrollColumnWidth = pct
 		m := modeOS(t, LayoutModeScrolling, false, 0, 3, 200, 48)
 		m.ScrollColumnWidth = pct
 		m.TileAllWindows()
@@ -108,8 +109,8 @@ func TestScrollColumnWidthDecidesTheColumn(t *testing.T) {
 // settings row reads the session's value back, so a row cannot show a number
 // the layout is not using.
 func TestMasterRatioSettingMovesTheSplit(t *testing.T) {
-	prev := config.MasterRatioPercent
-	t.Cleanup(func() { config.MasterRatioPercent = prev })
+	prev := config.Global.MasterRatioPercent
+	t.Cleanup(func() { config.Global.MasterRatioPercent = prev })
 
 	m := modeOS(t, LayoutModeMasterStack, false, 0, 2, 160, 40)
 	m.UserConfig = config.DefaultConfig()
@@ -201,9 +202,9 @@ func TestAnUnsetStartupLayoutKeepsTheDefault(t *testing.T) {
 // the first time takes a 70% split to 50% and leaves it there - the setting
 // reads as ignored, and a ratio the resize keys had moved is thrown away.
 func TestAFreshWorkspaceStartsAtTheConfiguredMasterRatio(t *testing.T) {
-	prev := config.MasterRatioPercent
-	t.Cleanup(func() { config.MasterRatioPercent = prev })
-	config.MasterRatioPercent = 70
+	prev := config.Global.MasterRatioPercent
+	t.Cleanup(func() { config.Global.MasterRatioPercent = prev })
+	config.Global.MasterRatioPercent = 70
 
 	m := modeOS(t, LayoutModeMasterStack, false, 0, 4, 160, 40)
 	m.MasterRatio = 0.7

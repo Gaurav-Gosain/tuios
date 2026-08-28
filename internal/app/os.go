@@ -183,6 +183,31 @@ type OS struct {
 	// See OSOptions.RemoteClient.
 	RemoteClient bool
 
+	// Settings is this session's appearance and behaviour, copied from the
+	// process seed when the session was built and thereafter its own.
+	//
+	// A value, not a pointer, so a read is a field offset and an OS built as a
+	// struct literal is never nil. It is written only on the Bubble Tea
+	// goroutine: the settings page edits it live through setConfigFromRegistry,
+	// and a config reload replaces it wholesale. Background goroutines that
+	// need a setting are handed the value they need when they are started, not
+	// a pointer to this.
+	//
+	// This is the thing that stops one client's settings page reaching another
+	// client's frame. See config.Settings.
+	Settings config.Settings
+
+	// Caps is the terminal this session draws to, as it described itself when
+	// the connection was made. It is per session rather than a package global
+	// because one server process holds several sessions at once: an SSH client
+	// in kitty and one in xterm are two different terminals, and the graphics
+	// each gets must be decided from its own.
+	//
+	// Immutable after NewOS. Never nil: NewOS falls back to the process host
+	// when the caller has nothing better, and a hand-built OS literal in a test
+	// gets the same fallback through Caps() below.
+	Caps *HostCapabilities
+
 	// Capture is capture mode: the window pick, the region drag and the
 	// full-screen grab. Zero when the mode is off.
 	Capture captureState
@@ -1013,6 +1038,9 @@ type OS struct {
 	// menuSession carries the session a rail row's menu was opened on, the same
 	// way menuWorkspace carries a pill's. See TakeMenuSession.
 	menuSession string
+	// menuFile carries the listing row a files-section menu was opened on, the
+	// same way menuSession carries a session row's. See fileMenuTarget.
+	menuFile fileMenuTarget
 
 	// UserConfig is the loaded user configuration. The settings page mutates
 	// it in place and persists it so live changes survive a restart. May be
@@ -1150,7 +1178,7 @@ func (m *OS) SwitchToSession(targetSession string) error {
 
 	m.MarkAllDirty()
 	m.LogInfo("Session switch complete: now on %s with %d windows", m.SessionName, len(m.Windows))
-	m.ShowNotification("Session: "+m.SessionName, "success", config.NotificationDuration)
+	m.ShowNotification("Session: "+m.SessionName, "success", m.Settings.NotificationDuration)
 	// Switching sessions is an attach: this client is now driving a different
 	// session, and a hook that tracks which session is live has to hear about it
 	// here as well as at startup.

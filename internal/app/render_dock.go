@@ -52,7 +52,7 @@ func dockStripArrowFg(pal overlay.Palette) color.Color {
 // The label is passed in rather than derived: the tab that carries it also
 // carries the width the hit rectangle was cut to, and the two must be the same
 // string.
-func workspacePill(label string, active, dragged bool, pal overlay.Palette) string {
+func workspacePill(label string, active, dragged bool, pal overlay.Palette, s *config.Settings) string {
 	// A picked-up pill comes up onto Surface, the same step the rail lifts a
 	// dragged row onto, so the gesture reads the same wherever it is made. It is
 	// a ground change and not an ink one, which leaves the accent free to go on
@@ -69,7 +69,7 @@ func workspacePill(label string, active, dragged bool, pal overlay.Palette) stri
 	// circle reads as the rounded end of the pill rather than as a glyph beside
 	// it. ASCII has none, and styling nothing still costs the frame the escape
 	// sequences around it.
-	lc, rc := config.GetDockWorkspaceCapLeft(), config.GetDockWorkspaceCapRight()
+	lc, rc := s.GetDockWorkspaceCapLeft(), s.GetDockWorkspaceCapRight()
 	pill := body.Render(" " + label + " ")
 	if lc == "" && rc == "" {
 		return pill
@@ -116,7 +116,7 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 		x += dockWorkspaceArrowWidth
 	}
 
-	gutter(config.GetDockWorkspaceMoreLeft(), s.MoreLeft, -1)
+	gutter(m.Settings.GetDockWorkspaceMoreLeft(), s.MoreLeft, -1)
 
 	drawn := 0
 	for i, t := range s.Pills {
@@ -124,7 +124,7 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 			b.WriteString(strings.Repeat(" ", dockWorkspacePillGap))
 			x, drawn = x+dockWorkspacePillGap, drawn+dockWorkspacePillGap
 		}
-		b.WriteString(workspacePill(t.Label, t.Active, t.Dragged, pal))
+		b.WriteString(workspacePill(t.Label, t.Active, t.Dragged, pal, &m.Settings))
 		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
 			X0: x, X1: x + t.Width, Y: y, Workspace: t.Workspace,
 		})
@@ -137,14 +137,14 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 		x += s.Inner - drawn
 	}
 
-	gutter(config.GetDockWorkspaceMoreRight(), s.MoreRight, 1)
+	gutter(m.Settings.GetDockWorkspaceMoreRight(), s.MoreRight, 1)
 
 	if s.Add != nil {
 		if len(s.Pills) > 0 {
 			b.WriteString(strings.Repeat(" ", dockWorkspacePillGap))
 			x += dockWorkspacePillGap
 		}
-		b.WriteString(workspacePill(s.Add.Label, false, false, pal))
+		b.WriteString(workspacePill(s.Add.Label, false, false, pal, &m.Settings))
 		m.dockWorkspaceHits = append(m.dockWorkspaceHits, dockWorkspaceHit{
 			X0: x, X1: x + s.Add.Width, Y: y, Workspace: 0,
 		})
@@ -178,7 +178,7 @@ func (m *OS) renderDockString() (string, int) {
 	if layout.ModeLabel != "" {
 		fill := lipgloss.NewStyle().Background(modeColor).Foreground(theme.ContrastText(modeColor)).Bold(true)
 		styledModeText = fill.Render(layout.ModeLabel)
-		if lc, rc := config.GetDockModeCapLeft(), config.GetDockModeCapRight(); lc != "" && rc != "" {
+		if lc, rc := m.Settings.GetDockModeCapLeft(), m.Settings.GetDockModeCapRight(); lc != "" && rc != "" {
 			caps := lipgloss.NewStyle().Foreground(modeColor)
 			styledModeText = caps.Render(lc) + fill.Render(layout.ModeLabel) + caps.Render(rc)
 		}
@@ -260,8 +260,8 @@ func (m *OS) renderDockString() (string, int) {
 				dockItemsStr.WriteString(" ")
 				relX++
 			}
-			chunk := caps.Render(config.GetDockPillLeftChar()) +
-				nameLabel + caps.Render(config.GetDockPillRightChar())
+			chunk := caps.Render(m.Settings.GetDockPillLeftChar()) +
+				nameLabel + caps.Render(m.Settings.GetDockPillRightChar())
 			dockItemsStr.WriteString(chunk)
 
 			w := lipgloss.Width(chunk)
@@ -481,7 +481,7 @@ func (m *OS) renderDockString() (string, int) {
 	// Keyed on the glyph as well as the width: the separator character follows
 	// the border style, which is switchable from the settings menu, and a
 	// width-only key served the old hairline until the next resize.
-	if sepChar := config.GetWindowSeparatorChar(); m.cachedSeparatorWidth != renderWidth || m.cachedSeparatorChar != sepChar {
+	if sepChar := m.Settings.GetWindowSeparatorChar(); m.cachedSeparatorWidth != renderWidth || m.cachedSeparatorChar != sepChar {
 		m.cachedSeparator = strings.Repeat(sepChar, renderWidth)
 		m.cachedSeparatorWidth = renderWidth
 		m.cachedSeparatorChar = sepChar
@@ -506,14 +506,14 @@ func (m *OS) renderDockString() (string, int) {
 			notifRule, ruleWidth = truncateToWidth(notifRule, room), room
 		}
 		hairline := lipgloss.NewStyle().Foreground(theme.RailRule())
-		sepChar := config.GetWindowSeparatorChar()
+		sepChar := m.Settings.GetWindowSeparatorChar()
 		separator = hairline.Render(strings.Repeat(sepChar, notifX0)) + notifRule +
 			hairline.Render(strings.Repeat(sepChar, renderWidth-notifX0-ruleWidth))
 	}
 
 	dockbarYPos := m.GetRenderHeight() - config.DockHeight
 	dockbarParts := []string{separator, dockBar}
-	if config.DockbarPosition == "top" {
+	if m.Settings.DockbarPosition == "top" {
 		dockbarYPos = 0
 		dockbarParts[0], dockbarParts[1] = dockbarParts[1], dockbarParts[0]
 	}

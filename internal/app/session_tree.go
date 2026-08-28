@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -205,11 +204,11 @@ func (m *OS) railNeighbourSession(delta int) string {
 func (m *OS) CycleSession(delta int) {
 	target := m.railNeighbourSession(delta)
 	if target == "" {
-		m.ShowNotification("No other sessions", "info", config.NotificationDuration)
+		m.ShowNotification("No other sessions", "info", m.Settings.NotificationDuration)
 		return
 	}
 	if err := m.SwitchToSession(target); err != nil {
-		m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+		m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 	}
 }
 
@@ -252,12 +251,12 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 			AgentState: s.AgentState,
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if isCurrent {
-					m.ShowNotification("Already on this session", "info", config.NotificationDuration)
+					m.ShowNotification("Already on this session", "info", m.Settings.NotificationDuration)
 					return m, nil
 				}
 				m.sidebarLeaveForJump()
 				if err := m.SwitchToSession(sessionName); err != nil {
-					m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+					m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 				}
 				return m, nil
 			},
@@ -279,7 +278,7 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 					m.sidebarLeaveForJump()
 					if !isCurrent {
 						if err := m.SwitchToSession(sessionName); err != nil {
-							m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+							m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 							return m, nil
 						}
 					}

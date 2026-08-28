@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // The routing these tests pin is the one thing in the link feature that is a
@@ -60,7 +62,7 @@ func TestLinkFilePathAcceptsOnlyLocalFiles(t *testing.T) {
 // remote client returns a nil command here (having tried to spawn a browser)
 // and this fails.
 func TestRemoteClientCopiesRatherThanOpens(t *testing.T) {
-	m := &OS{RemoteClient: true}
+	m := &OS{Settings: config.Global, RemoteClient: true}
 	if cmd := m.OpenLink("https://example.com/a"); cmd == nil {
 		t.Fatal("a remote client produced no clipboard write; the click did nothing at all")
 	}
@@ -75,7 +77,7 @@ func TestRemoteClientCopiesRatherThanOpens(t *testing.T) {
 // Negative control: with the stat dropped from openLocalPath, a missing path
 // falls through to spawning an editor pane on a file that is not there.
 func TestMissingFileIsReportedNotGuessed(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	gone := filepath.Join(t.TempDir(), "never-existed")
 	if cmd := m.OpenLink("file://" + gone); cmd == nil {
 		t.Fatal("a missing file produced no clipboard fallback")
@@ -103,7 +105,7 @@ func TestDirectoryLinkFallsBackWhenTheRailIsOff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m := &OS{} // no rail: GetSidebarWidth is zero
+	m := &OS{Settings: config.Global} // no rail: GetSidebarWidth is zero
 	if cmd := m.OpenLink("file://" + dir); cmd == nil {
 		t.Fatal("a folder link with no rail produced no clipboard fallback")
 	}
@@ -174,7 +176,7 @@ func TestOnlyKnownSchemesReachTheDesktop(t *testing.T) {
 
 	// And the refusal is the clipboard, not silence. A click that appears to do
 	// nothing is worse than one that says what it did instead.
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	if cmd := m.OpenLink("vscode://file/etc/passwd"); cmd == nil {
 		t.Fatal("a refused scheme produced no clipboard fallback")
 	}

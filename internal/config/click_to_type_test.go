@@ -10,8 +10,8 @@ import (
 // package state shared with every other test in the run.
 func withClickToType(t *testing.T) {
 	t.Helper()
-	prev := config.ClickToType
-	t.Cleanup(func() { config.ClickToType = prev })
+	prev := config.Global.ClickToType
+	t.Cleanup(func() { config.Global.ClickToType = prev })
 }
 
 // The default is what tuios has always done, and the setting exists to be able
@@ -30,9 +30,9 @@ func TestClickToTypeReachesTheGlobal(t *testing.T) {
 	for _, mode := range config.ClickToTypeModes {
 		cfg := config.DefaultConfig()
 		cfg.Appearance.ClickToType = mode
-		config.ApplyAppearanceConfig(cfg)
-		if config.ClickToType != mode {
-			t.Errorf("ClickToType = %q after applying %q", config.ClickToType, mode)
+		config.ApplyAppearanceConfig(cfg, &config.Global)
+		if config.Global.ClickToType != mode {
+			t.Errorf("ClickToType = %q after applying %q", config.Global.ClickToType, mode)
 		}
 	}
 
@@ -47,7 +47,7 @@ func TestClickToTypeReachesTheGlobal(t *testing.T) {
 // the mouse doing nothing recognisable.
 func TestClickToTypeRejectsAnUnknownValue(t *testing.T) {
 	withClickToType(t)
-	config.ClickToType = config.ClickToTypeDouble
+	config.Global.ClickToType = config.ClickToTypeDouble
 
 	cfg := config.DefaultConfig()
 	cfg.Appearance.ClickToType = "sometimes"
@@ -60,8 +60,8 @@ func TestClickToTypeRejectsAnUnknownValue(t *testing.T) {
 		t.Error("an unknown click_to_type value was accepted without a warning")
 	}
 
-	config.ApplyAppearanceConfig(cfg)
-	if config.ClickToType != config.ClickToTypeSingle {
-		t.Errorf("ClickToType = %q after an unknown value, want the default %q", config.ClickToType, config.ClickToTypeSingle)
+	config.ApplyAppearanceConfig(cfg, &config.Global)
+	if config.Global.ClickToType != config.ClickToTypeSingle {
+		t.Errorf("ClickToType = %q after an unknown value, want the default %q", config.Global.ClickToType, config.ClickToTypeSingle)
 	}
 }

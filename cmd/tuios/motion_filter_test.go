@@ -12,13 +12,13 @@ import (
 // filterOS builds a model with the rail on the left and one pane beside it.
 func filterOS(t *testing.T) *app.OS {
 	t.Helper()
-	pe, pp, pw := config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth
-	config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth = true, "left", 30
-	prevFFM := config.FocusFollowsMouse
-	config.FocusFollowsMouse = false
+	pe, pp, pw := config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth
+	config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth = true, "left", 30
+	prevFFM := config.Global.FocusFollowsMouse
+	config.Global.FocusFollowsMouse = false
 	t.Cleanup(func() {
-		config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth = pe, pp, pw
-		config.FocusFollowsMouse = prevFFM
+		config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth = pe, pp, pw
+		config.Global.FocusFollowsMouse = prevFFM
 	})
 
 	cfg := config.DefaultConfig()
@@ -61,9 +61,7 @@ func TestMotionFilterPassesRailHover(t *testing.T) {
 			// on it rather than absolute: with appearance.links off, a plain
 			// shell asked for no mouse mode, tuios draws no hover out there, and
 			// that motion is noise exactly as it always was.
-			prev := config.Links
-			config.Links = config.LinksOff
-			t.Cleanup(func() { config.Links = prev })
+			o.Settings.Links = config.LinksOff
 
 			offRail := tea.MouseMotionMsg{X: 50, Y: 10}
 			if filterMouseMotion(o, offRail) != nil {
@@ -85,9 +83,7 @@ func TestMotionFilterPassesTheBandExitEvent(t *testing.T) {
 
 	// Links off, so the rail's own clause is the only thing that can pass this
 	// event and the assertions below are about it and nothing else.
-	prev := config.Links
-	config.Links = config.LinksOff
-	t.Cleanup(func() { config.Links = prev })
+	o.Settings.Links = config.LinksOff
 
 	// The pointer is in the band and hovering, then steps out over a plain pane.
 	o.SidebarHoverActive = true
@@ -121,16 +117,13 @@ func TestMotionFilterPassesPaneContentForLinks(t *testing.T) {
 	o := filterOS(t)
 	o.Mode = app.WindowManagementMode
 
-	prev := config.Links
-	t.Cleanup(func() { config.Links = prev })
-
-	config.Links = config.LinksAll
+	o.Settings.Links = config.LinksAll
 	if filterMouseMotion(o, tea.MouseMotionMsg{X: 50, Y: 10}) == nil {
 		t.Error("motion over pane content was dropped; no link can ever underline itself")
 	}
 
 	// Off is off: the guard the two tests above pin is restored exactly.
-	config.Links = config.LinksOff
+	o.Settings.Links = config.LinksOff
 	if filterMouseMotion(o, tea.MouseMotionMsg{X: 50, Y: 10}) != nil {
 		t.Error("appearance.links = off still passed pane motion")
 	}
@@ -138,7 +131,7 @@ func TestMotionFilterPassesPaneContentForLinks(t *testing.T) {
 	// A pane's border is not its content, so the pointer resting on the frame
 	// buys nothing. The pane above starts at X=31 with a border, so column 31 is
 	// the border and column 32 the first content cell.
-	config.Links = config.LinksAll
+	o.Settings.Links = config.LinksAll
 	if filterMouseMotion(o, tea.MouseMotionMsg{X: 31, Y: 10}) != nil {
 		t.Error("motion on a pane's border was passed as content")
 	}

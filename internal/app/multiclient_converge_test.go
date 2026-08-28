@@ -171,10 +171,10 @@ type procConfig struct {
 }
 
 func (g procConfig) install() {
-	config.SharedBorders = g.shared
-	config.PaneGap = g.gap
-	config.SidebarPosition = g.sidebarPos
-	config.DockbarPosition = g.dockPos
+	config.Global.SharedBorders = g.shared
+	config.Global.PaneGap = g.gap
+	config.Global.SidebarPosition = g.sidebarPos
+	config.Global.DockbarPosition = g.dockPos
 }
 
 // fleetClient is one attached client: its model, its connection, the size its
@@ -253,31 +253,31 @@ const (
 func newFleet(t *testing.T, seed uint64) *fleet {
 	t.Helper()
 
-	prevShared, prevGap := config.SharedBorders, config.PaneGap
-	prevAnim := config.AnimationsEnabled
-	prevSidebar := config.SidebarEnabled
-	prevSidebarWidth := config.SidebarWidth
-	prevSidebarPos := config.SidebarPosition
-	prevDockPos := config.DockbarPosition
-	config.AnimationsEnabled = false
-	config.SidebarEnabled = true
-	config.SidebarWidth = 24
+	prevShared, prevGap := config.Global.SharedBorders, config.Global.PaneGap
+	prevAnim := config.Global.AnimationsEnabled
+	prevSidebar := config.Global.SidebarEnabled
+	prevSidebarWidth := config.Global.SidebarWidth
+	prevSidebarPos := config.Global.SidebarPosition
+	prevDockPos := config.Global.DockbarPosition
+	config.Global.AnimationsEnabled = false
+	config.Global.SidebarEnabled = true
+	config.Global.SidebarWidth = 24
 	t.Cleanup(func() {
-		config.SharedBorders, config.PaneGap = prevShared, prevGap
-		config.AnimationsEnabled = prevAnim
-		config.SidebarEnabled = prevSidebar
-		config.SidebarWidth = prevSidebarWidth
-		config.SidebarPosition = prevSidebarPos
-		config.DockbarPosition = prevDockPos
+		config.Global.SharedBorders, config.Global.PaneGap = prevShared, prevGap
+		config.Global.AnimationsEnabled = prevAnim
+		config.Global.SidebarEnabled = prevSidebar
+		config.Global.SidebarWidth = prevSidebarWidth
+		config.Global.SidebarPosition = prevSidebarPos
+		config.Global.DockbarPosition = prevDockPos
 	})
 
 	f := &fleet{t: t, seed: seed, rng: rand.New(rand.NewPCG(seed, seed^0x9e3779b9))}
 
 	base := procConfig{
-		shared:     config.SharedBorders,
-		gap:        config.PaneGap,
-		sidebarPos: config.SidebarPosition,
-		dockPos:    config.DockbarPosition,
+		shared:     config.Global.SharedBorders,
+		gap:        config.Global.PaneGap,
+		sidebarPos: config.Global.SidebarPosition,
+		dockPos:    config.Global.DockbarPosition,
 	}
 	base.install()
 

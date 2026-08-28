@@ -12,9 +12,9 @@ import (
 // withSections sets the rail's layout for one test and puts it back after.
 func withSections(t *testing.T, spec string) {
 	t.Helper()
-	prev := config.SidebarSections
-	config.SidebarSections = spec
-	t.Cleanup(func() { config.SidebarSections = prev })
+	prev := config.Global.SidebarSections
+	config.Global.SidebarSections = spec
+	t.Cleanup(func() { config.Global.SidebarSections = prev })
 }
 
 // TestRailLayoutOrdersAndSelectsSections is the layout option, checked on the
@@ -59,6 +59,7 @@ func TestRailLayoutOrdersAndSelectsSections(t *testing.T) {
 	t.Run("omitted", func(t *testing.T) {
 		withSections(t, "sessions,files")
 		m := sidebarTestOS(t, 120, 40, "left")
+		m.Settings = config.Global
 		openFilesOn(t, m, dir)
 		out := strings.Join(railLines(t, m), "\n")
 		if !strings.Contains(out, " sessions") || !strings.Contains(out, " files") {
@@ -368,16 +369,16 @@ func TestFileIconsDegrade(t *testing.T) {
 		want  [3]string
 	}{
 		{"option off", func(t *testing.T) {
-			prev := config.SidebarFileIcons
-			config.SidebarFileIcons = false
-			t.Cleanup(func() { config.SidebarFileIcons = prev })
+			prev := config.Global.SidebarFileIcons
+			config.Global.SidebarFileIcons = false
+			t.Cleanup(func() { config.Global.SidebarFileIcons = prev })
 		}, [3]string{"▸", "▴", "·"}},
 		{"ascii", func(t *testing.T) {
-			prevCfg := config.UseASCIIOnly
-			config.UseASCIIOnly = true
+			prevCfg := config.Global.UseASCIIOnly
+			config.Global.UseASCIIOnly = true
 			overlay.SetASCII(true)
 			t.Cleanup(func() {
-				config.UseASCIIOnly = prevCfg
+				config.Global.UseASCIIOnly = prevCfg
 				overlay.SetASCII(false)
 			})
 		}, [3]string{">", "^", "."}},
@@ -397,9 +398,9 @@ func TestFileIconsDegrade(t *testing.T) {
 
 	// And the glyph column can be switched off entirely, which is the option
 	// every other row on the rail already answers to.
-	prev := config.SidebarShowGlyphs
-	config.SidebarShowGlyphs = false
-	t.Cleanup(func() { config.SidebarShowGlyphs = prev })
+	prev := config.Global.SidebarShowGlyphs
+	config.Global.SidebarShowGlyphs = false
+	t.Cleanup(func() { config.Global.SidebarShowGlyphs = prev })
 	if got := fileRowGlyphFor("main.go", false, false); got != " " {
 		t.Errorf("with the rail's glyphs off a file row drew %q, want a blank cell", got)
 	}
@@ -410,7 +411,7 @@ func TestFileIconsDegrade(t *testing.T) {
 // halves are separate in the app because the lookup happens once per file and
 // the draw happens once per frame; the tests below are about the pair.
 func fileRowGlyphFor(name string, dir, parent bool) string {
-	return fileRowMark(fileIconFor(name, dir), dir, parent).Glyph
+	return fileRowMark(fileIconFor(name, dir), dir, parent, &config.Global).Glyph
 }
 
 // isPUA reports whether every rune of s is in a private use area, which is
@@ -450,7 +451,7 @@ func TestEveryFileIconIsOneCell(t *testing.T) {
 	}
 	// And the pair together: a dropped icon leaves the row a mark it can place,
 	// rather than an empty glyph column that would move the name.
-	wide := fileRowMark(fileIconFit(fileIcon{Glyph: "🚀", Hex: "#FF0000"}), false, false)
+	wide := fileRowMark(fileIconFit(fileIcon{Glyph: "🚀", Hex: "#FF0000"}), false, false, &config.Global)
 	if lipgloss.Width(wide.Glyph) != 1 {
 		t.Errorf("a row whose icon was dropped drew %q, %d cells wide", wide.Glyph, lipgloss.Width(wide.Glyph))
 	}
@@ -530,7 +531,7 @@ func TestALayoutStringIsForgivingAndSaysWhy(t *testing.T) {
 // and the late reply overwrites the listing.
 func TestAStaleListingIsDropped(t *testing.T) {
 	root := fileViewTree(t)
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.filesView.Show = 1
 
 	// A read is asked for and its answer is held back.

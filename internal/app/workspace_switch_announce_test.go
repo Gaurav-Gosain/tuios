@@ -19,10 +19,11 @@ import (
 func newSwitchOS(t *testing.T, width, height int, perWorkspace map[int]int) (*OS, map[string]*toldSize) {
 	t.Helper()
 	m := &OS{
+		Settings: config.Global,
 		// The layout reads the model's session-settled geometry, seeded from
 		// the globals the way NewOS seeds it.
-		SharedBorders:        config.SharedBorders,
-		PaneGap:              config.PaneGap,
+		SharedBorders:        config.Global.SharedBorders,
+		PaneGap:              config.Global.PaneGap,
 		NumWorkspaces:        9,
 		CurrentWorkspace:     1,
 		WorkspaceFocus:       make(map[int]int),
@@ -88,16 +89,16 @@ func checkNoSpuriousWinch(t *testing.T, m *OS, told map[string]*toldSize, before
 }
 
 func TestWorkspaceSwitchSendsNoSpuriousWinch(t *testing.T) {
-	prevAnim := config.AnimationsEnabled
-	prevShared := config.SharedBorders
-	prevSidebarEnabled := config.SidebarEnabled
-	prevSidebarPos := config.SidebarPosition
-	config.AnimationsEnabled = false
+	prevAnim := config.Global.AnimationsEnabled
+	prevShared := config.Global.SharedBorders
+	prevSidebarEnabled := config.Global.SidebarEnabled
+	prevSidebarPos := config.Global.SidebarPosition
+	config.Global.AnimationsEnabled = false
 	t.Cleanup(func() {
-		config.AnimationsEnabled = prevAnim
-		config.SharedBorders = prevShared
-		config.SidebarEnabled = prevSidebarEnabled
-		config.SidebarPosition = prevSidebarPos
+		config.Global.AnimationsEnabled = prevAnim
+		config.Global.SharedBorders = prevShared
+		config.Global.SidebarEnabled = prevSidebarEnabled
+		config.Global.SidebarPosition = prevSidebarPos
 	})
 
 	for _, shared := range []bool{false, true} {
@@ -105,10 +106,10 @@ func TestWorkspaceSwitchSendsNoSpuriousWinch(t *testing.T) {
 			for _, custom := range []bool{false, true} {
 				name := fmt.Sprintf("shared=%v/sidebar=%s/custom=%v", shared, sidebar, custom)
 				t.Run(name, func(t *testing.T) {
-					config.SharedBorders = shared
-					config.SidebarEnabled = sidebar != "off"
+					config.Global.SharedBorders = shared
+					config.Global.SidebarEnabled = sidebar != "off"
 					if sidebar != "off" {
-						config.SidebarPosition = sidebar
+						config.Global.SidebarPosition = sidebar
 					}
 
 					m, told := newSwitchOS(t, 200, 50, map[int]int{1: 2, 2: 2})
@@ -146,13 +147,13 @@ func TestWorkspaceSwitchSendsNoSpuriousWinch(t *testing.T) {
 // printed a banner and a prompt must still show exactly one of each after a
 // round trip through another workspace.
 func TestWorkspaceSwitchKeepsGuestScreen(t *testing.T) {
-	prevAnim := config.AnimationsEnabled
-	prevShared := config.SharedBorders
-	config.AnimationsEnabled = false
-	config.SharedBorders = true
+	prevAnim := config.Global.AnimationsEnabled
+	prevShared := config.Global.SharedBorders
+	config.Global.AnimationsEnabled = false
+	config.Global.SharedBorders = true
 	t.Cleanup(func() {
-		config.AnimationsEnabled = prevAnim
-		config.SharedBorders = prevShared
+		config.Global.AnimationsEnabled = prevAnim
+		config.Global.SharedBorders = prevShared
 	})
 
 	m, _ := newSwitchOS(t, 200, 50, map[int]int{1: 1, 2: 1})

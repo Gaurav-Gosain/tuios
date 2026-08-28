@@ -724,7 +724,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		return
 	}
 
-	lastHeartbeat := time.Now()
 	for {
 		select {
 		case <-d.ctx.Done():
@@ -744,10 +743,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 			}
 			var netErr net.Error
 			if errors.As(err, &netErr) && netErr.Timeout() {
-				// Keep-alive check
-				if time.Since(lastHeartbeat) > 2*time.Second {
-					lastHeartbeat = time.Now()
-				}
+				// The short deadline is only there to give the loop a chance to
+				// see ctx.Done and cs.done; a timeout is not an error.
 				continue
 			}
 			LogError("Read error from %s: %v", clientID, err)

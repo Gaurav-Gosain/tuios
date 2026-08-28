@@ -281,11 +281,11 @@ func TestSettingsTabOverflowArrowsStep(t *testing.T) {
 // there because they are glyphs rather than colour.
 func TestSettingsTabRowASCIIAndMonochrome(t *testing.T) {
 	t.Run("ascii", func(t *testing.T) {
-		prev := config.UseASCIIOnly
-		config.UseASCIIOnly = true
+		prev := config.Global.UseASCIIOnly
+		config.Global.UseASCIIOnly = true
 		overlay.SetASCII(true)
 		t.Cleanup(func() {
-			config.UseASCIIOnly = prev
+			config.Global.UseASCIIOnly = prev
 			overlay.SetASCII(prev)
 		})
 

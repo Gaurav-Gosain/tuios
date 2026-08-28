@@ -347,7 +347,7 @@ func checkGestureNeedsAButton(f *fuzzOS) []fuzz.Violation {
 // divider.
 func checkScrollbarColumn(f *fuzzOS) []fuzz.Violation {
 	for _, w := range visibleFuzzPanes(f.m) {
-		if !windowNeedsScrollbar(w) {
+		if !windowNeedsScrollbar(w, &f.m.Settings) {
 			continue
 		}
 		col := scrollbarColumn(w)
@@ -387,7 +387,7 @@ func checkFrameFitsTheHost(f *fuzzOS) []fuzz.Violation {
 // it looked.
 func checkRailAddressing(f *fuzzOS) []fuzz.Violation {
 	m := f.m
-	if !config.SidebarEnabled || m.GetSidebarWidth() <= 0 {
+	if !f.m.Settings.SidebarEnabled || m.GetSidebarWidth() <= 0 {
 		return nil
 	}
 	// The hits and nav lists are published by the render, so a viewport too small
@@ -415,7 +415,7 @@ func checkRailAddressing(f *fuzzOS) []fuzz.Violation {
 
 	w := m.GetSidebarWidth()
 	x0 := 0
-	if config.SidebarPosition == "right" {
+	if f.m.Settings.SidebarPosition == "right" {
 		x0 = m.GetRenderWidth() - w
 	}
 	top, bottom := m.GetTopMargin(), m.GetTopMargin()+m.GetUsableHeight()
@@ -461,7 +461,7 @@ func checkRailAddressing(f *fuzzOS) []fuzz.Violation {
 // costs a rebuild rather than a wrong pixel and has its own table test.
 func checkRailSignatureFollowsTheRail(f *fuzzOS) []fuzz.Violation {
 	m := f.m
-	if !config.SidebarEnabled || m.GetSidebarWidth() <= 0 {
+	if !f.m.Settings.SidebarEnabled || m.GetSidebarWidth() <= 0 {
 		f.prevSignature, f.prevRail = "", ""
 		return nil
 	}
@@ -619,10 +619,10 @@ func (f *fuzzOS) deferring() bool {
 // changed at runtime under a live layout gets checked.
 func checkDividersUseTheirOwnGlyphs(f *fuzzOS) []fuzz.Violation {
 	m := f.m
-	if !config.SharedBorders || !f.framePaintsPanes() {
+	if !f.m.Settings.SharedBorders || !f.framePaintsPanes() {
 		return nil
 	}
-	own := styleGlyphs(config.GetBorderForStyle())
+	own := styleGlyphs(f.m.Settings.GetBorderForStyle())
 	if own == "" {
 		return nil
 	}
@@ -630,7 +630,7 @@ func checkDividersUseTheirOwnGlyphs(f *fuzzOS) []fuzz.Violation {
 	for _, c := range dividerCells(m) {
 		if got := cellAt(g, c.X, c.Y); !strings.ContainsRune(own, got) {
 			return vio("divider-glyph", "divider cell (%d,%d) is %q, outside style %q's own glyphs %q",
-				c.X, c.Y, string(got), config.BorderStyle, own)
+				c.X, c.Y, string(got), f.m.Settings.BorderStyle, own)
 		}
 	}
 	return nil

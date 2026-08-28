@@ -138,7 +138,7 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 	text := name + " " + word
 
 	if policy.Dock {
-		m.ShowNotificationFrom(text, sev, config.NotificationDuration,
+		m.ShowNotificationFrom(text, sev, m.Settings.NotificationDuration,
 			NotifTarget{SessionID: m.sidebarCurrentSessionID(), WindowID: w.ID})
 	}
 	// One write for both, so a terminal that treats BEL as "raise the window"

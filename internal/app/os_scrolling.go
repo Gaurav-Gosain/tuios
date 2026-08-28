@@ -3,7 +3,6 @@ package app
 import (
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -81,8 +80,8 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 	// Scrolling layout transitions always animate (even with --no-animations)
 	// because the viewport shift is disorienting without the slide.
 	dur := 150 * time.Millisecond
-	if config.GetAnimationDuration() > 0 {
-		dur = config.GetAnimationDuration()
+	if m.Settings.GetAnimationDuration() > 0 {
+		dur = m.Settings.GetAnimationDuration()
 	}
 
 	// Asked once for the whole layout, as ApplyBSPLayout does, because it ends a

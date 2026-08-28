@@ -236,13 +236,14 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 			ws.Z,
 			ws.PTYID,
 			m.PTYDataChan,
+			m.Settings.ScrollbackLines,
 		)
 		if window == nil {
 			m.LogError("Failed to create daemon window for %s", shortID(ws.ID))
 			continue
 		}
 
-		caps := GetHostCapabilities()
+		caps := m.hostCaps()
 		if caps.CellWidth > 0 && caps.CellHeight > 0 {
 			window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
 		}
@@ -903,12 +904,13 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 		ws.Z,
 		ws.PTYID,
 		m.PTYDataChan,
+		m.Settings.ScrollbackLines,
 	)
 	if window == nil {
 		return nil
 	}
 
-	caps := GetHostCapabilities()
+	caps := m.hostCaps()
 	if caps.CellWidth > 0 && caps.CellHeight > 0 {
 		window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
 	}

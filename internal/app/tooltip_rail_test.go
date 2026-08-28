@@ -16,6 +16,7 @@ func tooltipOS(t *testing.T, pos string, kind sidebarStripRowKind) (*OS, int) {
 	t.Helper()
 	m, tree := stripOS(t, 120, 20)
 	withSidebar(t, true, pos, config.SidebarDefaultWidth)
+	m.Settings = config.Global
 	m.SidebarCollapsed = true
 	m.sidebarPanelLinesForTree(tree)
 	for _, r := range m.sidebarStripRows {
@@ -208,9 +209,9 @@ func TestTooltipClampsToThePaneArea(t *testing.T) {
 // TestTooltipsCanBeTurnedOff: the config key has to reach the render, not just
 // the struct.
 func TestTooltipsCanBeTurnedOff(t *testing.T) {
-	prev := config.Tooltips
-	config.Tooltips = false
-	t.Cleanup(func() { config.Tooltips = prev })
+	prev := config.Global.Tooltips
+	config.Global.Tooltips = false
+	t.Cleanup(func() { config.Global.Tooltips = prev })
 
 	m, y := tooltipOS(t, "left", sidebarStripSession)
 	m.SidebarMotion(1, y)
@@ -237,7 +238,7 @@ func TestTooltipIsStripOnly(t *testing.T) {
 // railOriginX is the rail's first screen column, which is where a test has to
 // aim to land inside the band on either side.
 func railOriginX(m *OS) int {
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		return m.GetRenderWidth() - m.GetSidebarWidth()
 	}
 	return 0

@@ -39,9 +39,9 @@ type sidebarEdgeState struct {
 // loaded config so a later save keeps it. This is what the palette entry and the
 // keybind both call.
 func (m *OS) ToggleSidebar() {
-	config.SidebarEnabled = !config.SidebarEnabled
+	m.Settings.SidebarEnabled = !m.Settings.SidebarEnabled
 	if m.UserConfig != nil {
-		v := config.SidebarEnabled
+		v := m.Settings.SidebarEnabled
 		m.UserConfig.Appearance.SidebarEnabled = &v
 	}
 	m.SidebarScrollS, m.SidebarScrollT, m.SidebarScrollA, m.SidebarScrollF = 0, 0, 0, 0
@@ -74,7 +74,7 @@ func (m *OS) SidebarBandContains(x, y int) bool {
 		return false
 	}
 	sidebarX := 0
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		sidebarX = m.GetRenderWidth() - w
 	}
 	return x >= sidebarX && x < sidebarX+w
@@ -165,6 +165,15 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 	hit, ok := m.sidebarRowAt(x, y)
 	if !ok {
 		if right {
+			// Blank rail inside the files section is still the files section.
+			// The two rows that need no name (make a file, paste one) are what
+			// a right-click under a short listing can mean, and sending it to
+			// the rail's settings instead was the one place on the section
+			// where the pointer found nothing.
+			if m.filesBandContains(y) {
+				m.openFilesSectionMenu(x, y, fileMenuTarget{Dir: m.filesView.Dir})
+				return true
+			}
 			m.openRailSettingsMenu(x, y)
 			return true
 		}
@@ -234,7 +243,7 @@ func (m *OS) sidebarOnEdge(x int) bool {
 	if w <= 0 {
 		return false
 	}
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		return x == m.GetRenderWidth()-w
 	}
 	return x == w-1
@@ -267,7 +276,7 @@ func (m *OS) SidebarEdgeMotion(x, y int) bool {
 		m.SidebarEdge.HaveRow = false // the gesture is a resize now, not a click
 	}
 	var w int
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		w = m.GetRenderWidth() - x
 	} else {
 		w = x + 1
@@ -465,10 +474,10 @@ func (m *OS) SidebarWheel(x, y int, up bool) bool {
 			continue
 		}
 		if up {
-			*offsets[s] = max(*offsets[s]-config.ScrollLines, 0)
+			*offsets[s] = max(*offsets[s]-m.Settings.ScrollLines, 0)
 		} else {
 			// The upper bound is clamped against the row count on the next render.
-			*offsets[s] += config.ScrollLines
+			*offsets[s] += m.Settings.ScrollLines
 		}
 		break
 	}
@@ -493,7 +502,7 @@ func (m *OS) sidebarSwitchSession(sessionID string) {
 	}
 	m.clearSidebarReturn() // attaching elsewhere is not something esc should undo
 	if err := m.SwitchToSession(sessionID); err != nil {
-		m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+		m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 	}
 }
 
@@ -524,7 +533,7 @@ func (m *OS) sidebarFocusWindow(hit sidebarRowHit) (int, bool) {
 	// Window of another session: switch first, then focus by ID.
 	if hit.SessionID != "" && hit.SessionID != m.sidebarCurrentSessionID() {
 		if err := m.SwitchToSession(hit.SessionID); err != nil {
-			m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+			m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 			return -1, false
 		}
 	}
@@ -537,7 +546,8 @@ func (m *OS) sidebarFocusWindow(hit sidebarRowHit) (int, bool) {
 
 // openSidebarContextMenu opens the context menu for a sidebar row, reusing the
 // existing menu builders (contextmenu_build.go): the pane menu for a window or
-// agent row (after focusing it), the desktop menu for a session row.
+// agent row (after focusing it), the files menu for a row of the listing, the
+// desktop menu for a session row.
 func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 	cm := &ContextMenu{
 		AnchorX:  x,
@@ -547,6 +557,13 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 	}
 
 	switch hit.Kind {
+	case sidebarRowFileCd, sidebarRowFileUp, sidebarRowFileEntry:
+		// A listing row's menu is about the row the pointer is on, and the
+		// pointer does not have to take the keyboard cursor there first: the
+		// name rides on the menu and is handed to whatever row runs. See
+		// fileMenuTarget.
+		m.openFilesSectionMenu(x, y, m.fileMenuTargetFor(hit))
+		return
 	case sidebarRowWindow, sidebarRowAgent:
 		// The menu is about the pane the focus actually landed on, and when it
 		// landed nowhere there is no menu to open: reading the focused pane back
@@ -581,6 +598,66 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 
 	cm.Selected = cm.Next(1)
 	m.ContextMenu = cm
+}
+
+// openFilesSectionMenu opens the files section's menu, anchored where the
+// gesture was, with the rail's settings row under it the way every other rail
+// menu carries it.
+func (m *OS) openFilesSectionMenu(x, y int, t fileMenuTarget) {
+	cm := &ContextMenu{
+		AnchorX:     x,
+		AnchorY:     y,
+		Selected:    -1,
+		ItemH:       1,
+		Target:      CtxTargetFileRow,
+		WindowIndex: -1,
+		File:        t,
+	}
+	cm.Title, cm.Items = m.fileRowMenu(t)
+	cm.Items = append(cm.Items, separator(), m.railSettingsItem())
+	cm.Selected = cm.Next(1)
+	m.ContextMenu = cm
+}
+
+// fileMenuTargetFor resolves what a listing row's menu is about, from the row
+// the renderer published and the listing in memory.
+//
+// The name is looked up rather than taken from the row's index. The index came
+// off the listing the render drew, which can be one reply behind the one in
+// memory, and a menu that offered to delete whatever now sits at that position
+// would be naming one file and destroying another. A name that has left the
+// listing resolves to no target at all, and the menu opens with its target rows
+// dimmed.
+func (m *OS) fileMenuTargetFor(hit sidebarRowHit) fileMenuTarget {
+	t := fileMenuTarget{Dir: m.filesView.Dir}
+	switch hit.Kind {
+	case sidebarRowFileUp:
+		t.Up = true
+	case sidebarRowFileEntry:
+		// The row carries the entry's name in WindowID; see the note on
+		// fileRowSpec.Key.
+		for _, e := range m.filesView.Entries {
+			if e.Name == hit.WindowID {
+				t.Name, t.IsDir = e.Name, e.Dir
+				break
+			}
+		}
+	}
+	return t
+}
+
+// filesBandContains reports whether a rail row falls in the files section's
+// band.
+//
+// The band is what the renderer wrote down as it laid the sections out, the
+// same rectangle the wheel already routes against. Nothing here works out where
+// the section is; it reads where the section was drawn.
+func (m *OS) filesBandContains(y int) bool {
+	if !m.filesSectionEnabled() {
+		return false
+	}
+	band := m.sidebarSectionY[sidebarSectionFiles]
+	return y >= band[0] && y < band[1]
 }
 
 // openRailSettingsMenu is the menu for a right-click on blank rail: there is no

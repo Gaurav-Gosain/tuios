@@ -231,7 +231,7 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 		// exactly these rows: the change they make is on the screen behind the
 		// panel, and the number alone does not say how far there is left to go.
 		if item.meter != nil {
-			control = settingsMeter(item.meter(m), selected, bg, pal) + control
+			control = settingsMeter(item.meter(m), selected, bg, pal, &m.Settings) + control
 		}
 	}
 
@@ -275,7 +275,7 @@ func (m *OS) settingsColorControl(item settingItem, selected bool, bg color.Colo
 
 	out := bracket.Render("[ ")
 	if item.swatch != nil {
-		out += colorSwatch(item.swatch(bg), bg) + overlay.Style(bg).Render(" ")
+		out += colorSwatch(item.swatch(bg, &m.Settings), bg) + overlay.Style(bg).Render(" ")
 	}
 	return out + overlay.Style(bg).Foreground(fg).Italic(unset).Render(text) + bracket.Render(" ]")
 }
@@ -334,7 +334,7 @@ const settingsMeterCells = 6
 // A gauge rather than a percentage: the question it answers is "how much further
 // can this go", which a second number does not answer any faster than the first
 // one did.
-func settingsMeter(fraction float64, selected bool, bg color.Color, pal overlay.Palette) string {
+func settingsMeter(fraction float64, selected bool, bg color.Color, pal overlay.Palette, s *config.Settings) string {
 	fraction = min(max(fraction, 0), 1)
 	filled := int(fraction*float64(settingsMeterCells) + 0.5)
 	// A value off the floor always shows at least one cell, so nudging a
@@ -344,7 +344,7 @@ func settingsMeter(fraction float64, selected bool, bg color.Color, pal overlay.
 		filled = 1
 	}
 
-	on, off := config.GetScrollbarThumbChar(), config.GetScrollbarTrackChar()
+	on, off := s.GetScrollbarThumbChar(), s.GetScrollbarTrackChar()
 	inkOn, inkOff := pal.Accent, pal.FgMute
 	if !selected {
 		inkOn = pal.FgDim

@@ -14,14 +14,15 @@ import (
 // alongside the daemon's copy of the tiling tree. It asserts the resulting
 // geometries partition the screen with no overlap and no large gap.
 func TestSixDaemonWindowsTileWithoutOverlap(t *testing.T) {
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	defer func() { config.AnimationsEnabled = prevAnim }()
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	defer func() { config.Global.AnimationsEnabled = prevAnim }()
 
 	const width, height = 120, 40
 
 	// The attached client: tiling on, BSP layout, a known viewport.
 	m := &OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),

@@ -34,6 +34,7 @@ func TestRailKeepsAGapBeforeEveryRightHandFigure(t *testing.T) {
 		for _, name := range names {
 			m := railGapOS(t, name)
 			withSidebar(t, true, "left", w)
+			m.Settings = config.Global
 			tree := sessiontree.Build([]sessiontree.SessionInput{
 				{Name: "main", Attached: true, IsCurrent: true, Windows: []sessiontree.WindowInput{
 					{ID: "aaaaaaaa1111", Title: name, AgentState: "needs_input", Focused: true},

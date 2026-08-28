@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -25,6 +26,7 @@ import (
 // window in workspace 1. The invariant is unchanged and so is what would fail.
 func TestAggregateViewNamesTheWorkspaceTheWindowsAreIn(t *testing.T) {
 	m := &OS{
+		Settings:         config.Global,
 		WorkspaceFocus:   map[int]int{},
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,

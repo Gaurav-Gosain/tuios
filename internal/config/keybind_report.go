@@ -295,7 +295,7 @@ type AmbiguousBinding struct {
 func (r *KeybindRegistry) Report(facts PaneFacts) KeybindReport {
 	leader := r.config.Keybindings.LeaderKey
 	if leader == "" {
-		leader = LeaderKey
+		leader = DefaultLeaderKey
 	}
 	rep := KeybindReport{
 		Leader: leader,

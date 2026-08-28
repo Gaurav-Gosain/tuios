@@ -295,32 +295,32 @@ func newModel(options Options) *Model {
 	// the theme, so applying the options first would let the user's config file
 	// silently overrule what the embedder asked for. Options are the outer
 	// layer here, exactly as CLI flags are in cmd/tuios.
-	config.ApplyAppearanceConfig(userConfig)
+	config.ApplyAppearanceConfig(userConfig, &config.Global)
 
 	// Apply global config options
 	if options.ASCIIOnly {
-		config.UseASCIIOnly = true
+		config.Global.UseASCIIOnly = true
 	}
 	if options.BorderStyle != "" {
-		config.BorderStyle = options.BorderStyle
+		config.Global.BorderStyle = options.BorderStyle
 	}
 	if options.DockbarPosition != "" {
-		config.DockbarPosition = options.DockbarPosition
+		config.Global.DockbarPosition = options.DockbarPosition
 	}
 	if options.HideWindowButtons {
-		config.HideWindowButtons = true
+		config.Global.HideWindowButtons = true
 	}
 	if options.WindowButtonStyle != "" {
-		config.WindowButtonStyle = options.WindowButtonStyle
+		config.Global.WindowButtonStyle = options.WindowButtonStyle
 	}
 	if options.WindowButtonPosition != "" {
-		config.WindowButtonPosition = options.WindowButtonPosition
+		config.Global.WindowButtonPosition = options.WindowButtonPosition
 	}
 	if options.ScrollbackLines > 0 {
-		config.ScrollbackLines = options.ScrollbackLines
+		config.Global.ScrollbackLines = options.ScrollbackLines
 	}
 	if !options.Animations {
-		config.AnimationsEnabled = false
+		config.Global.AnimationsEnabled = false
 	}
 
 	// Initialize theme
@@ -350,7 +350,7 @@ func newModel(options Options) *Model {
 //	p := tea.NewProgram(model, tuios.ProgramOptions()...)
 func ProgramOptions() []tea.ProgramOption {
 	return []tea.ProgramOption{
-		tea.WithFPS(config.NormalFPS),
+		tea.WithFPS(config.Global.NormalFPS),
 	}
 }
 

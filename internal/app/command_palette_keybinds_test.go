@@ -12,7 +12,7 @@ import (
 func paletteOS(t *testing.T) *OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
-	return &OS{UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)}
+	return &OS{Settings: config.Global, UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)}
 }
 
 // TestPaletteOpensTheKeybindManager: the manager was reachable only from the
@@ -22,7 +22,7 @@ func paletteOS(t *testing.T) *OS {
 // Negative control: this fails on the tree before the row was added.
 func TestPaletteOpensTheKeybindManager(t *testing.T) {
 	m := paletteOS(t)
-	item := paletteItemNamed(GetCommandPaletteItems(), "Keybind manager")
+	item := paletteItemNamed(GetCommandPaletteItems(&config.Global), "Keybind manager")
 	if item.Action == nil {
 		t.Fatal("the palette has no row that opens the keybind manager")
 	}
@@ -41,7 +41,7 @@ func TestPaletteOpensTheKeybindManager(t *testing.T) {
 // Negative control: delete the "Unbind a key" row and this fails.
 func TestUnbindIsFindableByItsOwnWord(t *testing.T) {
 	for _, word := range []string{"unbind", "rebind"} {
-		hits := FilterCommandPalette(GetCommandPaletteItems(), word)
+		hits := FilterCommandPalette(GetCommandPaletteItems(&config.Global), word)
 		if len(hits) == 0 {
 			t.Errorf("nothing in the palette answers to %q", word)
 			continue

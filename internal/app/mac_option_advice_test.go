@@ -8,7 +8,7 @@ import (
 )
 
 func adviceModel() *OS {
-	return &OS{KeybindRegistry: config.NewKeybindRegistry(config.DefaultConfig())}
+	return &OS{Settings: config.DefaultSettings(), KeybindRegistry: config.NewKeybindRegistry(config.DefaultConfig())}
 }
 
 // TestLocalClientGetsTheNamedAdvice is the control: a client in the terminal it

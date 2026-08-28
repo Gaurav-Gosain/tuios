@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -27,6 +28,7 @@ func TestRailRetitlesWindowsItStoppedWatching(t *testing.T) {
 	dropped.SetTitle("bash") // what it was called when the client stopped watching
 
 	m := &OS{
+		Settings:    config.Global,
 		SessionName: "attached",
 		Windows:     []*terminal.Window{watched, dropped},
 		DaemonClient: railTitleClient(
@@ -54,6 +56,7 @@ func TestRailKeepsCustomNameOverDaemonTitle(t *testing.T) {
 	w := &terminal.Window{ID: "w1", PTYID: "p1", DaemonMode: true, CustomName: "logs"}
 	w.SetTitle("bash")
 	m := &OS{
+		Settings:       config.Global,
 		SessionName:    "attached",
 		Windows:        []*terminal.Window{w},
 		DaemonClient:   railTitleClient(session.WindowSummary{ID: "w1", Title: "vim"}),
@@ -75,6 +78,7 @@ func TestRailTitleTickWakesOnMovedListing(t *testing.T) {
 	w.SetTitle("bash")
 	client := railTitleClient(session.WindowSummary{ID: "w1", Title: "bash"})
 	m := &OS{
+		Settings:       config.Global,
 		SessionName:    "attached",
 		Windows:        []*terminal.Window{w},
 		DaemonClient:   client,

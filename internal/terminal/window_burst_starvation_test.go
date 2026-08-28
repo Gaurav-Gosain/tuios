@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -65,7 +66,7 @@ func newBurstTestWindow(t *testing.T, id string) *Window {
 	}()
 	t.Cleanup(func() { close(drainDone) })
 
-	w := NewDaemonWindow(id, "burst", 0, 0, 80, 24, 0, "pty-"+id, ptyDataChan)
+	w := NewDaemonWindow(id, "burst", 0, 0, 80, 24, 0, "pty-"+id, ptyDataChan, config.DefaultScrollbackLines)
 	t.Cleanup(w.Close)
 	return w
 }

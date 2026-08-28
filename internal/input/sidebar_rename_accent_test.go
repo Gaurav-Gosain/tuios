@@ -12,9 +12,9 @@ import (
 // railFocusedOS is a two-pane client with the rail holding the keyboard.
 func railFocusedOS(t *testing.T) *app.OS {
 	t.Helper()
-	prev := config.SidebarEnabled
-	config.SidebarEnabled = true
-	t.Cleanup(func() { config.SidebarEnabled = prev })
+	prev := config.Global.SidebarEnabled
+	config.Global.SidebarEnabled = true
+	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
 
 	o := twoPaneOS(t)
 	o.SidebarFocused = true

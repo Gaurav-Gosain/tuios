@@ -20,12 +20,12 @@ import (
 // and the cursor on name.
 func filesRailOS(t *testing.T, dir, name string) *app.OS {
 	t.Helper()
-	prev, prevActions := config.SidebarEnabled, config.SidebarFileActions
-	config.SidebarEnabled = true
-	config.SidebarFileActions = true
+	prev, prevActions := config.Global.SidebarEnabled, config.Global.SidebarFileActions
+	config.Global.SidebarEnabled = true
+	config.Global.SidebarFileActions = true
 	t.Cleanup(func() {
-		config.SidebarEnabled = prev
-		config.SidebarFileActions = prevActions
+		config.Global.SidebarEnabled = prev
+		config.Global.SidebarFileActions = prevActions
 	})
 
 	o := twoPaneOS(t)

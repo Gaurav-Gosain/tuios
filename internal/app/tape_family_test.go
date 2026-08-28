@@ -21,7 +21,7 @@ import (
 // tapeTestOS is a session with two tapes recorded and a project tape to review.
 func tapeTestOS(t *testing.T) *OS {
 	t.Helper()
-	m := &OS{Width: 120, Height: 40, WorkspaceFocus: map[int]int{}, NumWorkspaces: 9, CurrentWorkspace: 1}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40, WorkspaceFocus: map[int]int{}, NumWorkspaces: 9, CurrentWorkspace: 1}
 	m.InitTapeManager()
 	stamp := time.Date(2026, 8, 13, 9, 0, 0, 0, time.UTC)
 	m.TapeManager.Files = []TapeFile{
@@ -112,11 +112,11 @@ func TestTapeListSelectionFillsTheRow(t *testing.T) {
 // TestTapeSurfacesHoldUpInASCII checks the two surfaces carry no glyph a
 // terminal without a capable font cannot draw.
 func TestTapeSurfacesHoldUpInASCII(t *testing.T) {
-	prev := config.UseASCIIOnly
-	config.UseASCIIOnly = true
+	prev := config.Global.UseASCIIOnly
+	config.Global.UseASCIIOnly = true
 	overlay.SetASCII(true)
 	t.Cleanup(func() {
-		config.UseASCIIOnly = prev
+		config.Global.UseASCIIOnly = prev
 		overlay.SetASCII(prev)
 	})
 

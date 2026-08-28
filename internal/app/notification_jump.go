@@ -2,8 +2,6 @@ package app
 
 import (
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // A message about a pane is a pointer to that pane, so it may as well be
@@ -60,7 +58,7 @@ func (m *OS) JumpToNotification() bool {
 func (m *OS) jumpToNotifTarget(t NotifTarget) {
 	foreign := t.SessionID != "" && t.SessionID != m.sidebarCurrentSessionID()
 	if foreign && !m.sessionCached(t.SessionID) {
-		m.ShowNotification("Source session closed", "info", config.NotificationDuration)
+		m.ShowNotification("Source session closed", "info", m.Settings.NotificationDuration)
 		return
 	}
 
@@ -68,7 +66,7 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) {
 	if !foreign {
 		idx = m.windowIndexByID(t.WindowID)
 		if idx < 0 {
-			m.ShowNotification("Source pane closed", "info", config.NotificationDuration)
+			m.ShowNotification("Source pane closed", "info", m.Settings.NotificationDuration)
 			return
 		}
 	}
@@ -82,7 +80,7 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) {
 	landed := m.windowIndexByID(t.WindowID)
 	if landed < 0 {
 		// The switch went through but the pane is gone on the other side.
-		m.ShowNotification("Source pane closed", "info", config.NotificationDuration)
+		m.ShowNotification("Source pane closed", "info", m.Settings.NotificationDuration)
 		return
 	}
 	// Flash the pane the jump landed on, using the dock's existing time-bounded

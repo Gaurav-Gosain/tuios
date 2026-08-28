@@ -69,7 +69,7 @@ func (m *OS) loadFileViewNow(t *testing.T, dir string) {
 // the order comes out Alpha.go, apple, beta.txt, README.md, Zeta; with
 // strings.ToLower dropped, Zeta sorts before apple.
 func TestFileViewOrdersFoldersFirst(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.loadFileViewNow(t, fileViewTree(t))
 
 	if m.filesView.Err != "" {
@@ -97,7 +97,7 @@ func TestFileViewOrdersFoldersFirst(t *testing.T) {
 // reloading, the directory assertion fails and the pane below receives input.
 func TestFileViewNavigatesWithoutTouchingAnyPane(t *testing.T) {
 	root := fileViewTree(t)
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.loadFileViewNow(t, root)
 
 	// A pane that would notice being typed into. Nothing here may reach it.
@@ -143,7 +143,7 @@ func TestFileViewNavigatesWithoutTouchingAnyPane(t *testing.T) {
 // TestFileViewUpStopsAtTheRoot: the parent of "/" is "/", so walking up there
 // must not reload forever or blank the view.
 func TestFileViewUpStopsAtTheRoot(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.loadFileViewNow(t, string(filepath.Separator))
 	gen := m.filesView.Gen
 	m.FileViewUp()
@@ -158,7 +158,7 @@ func TestFileViewUpStopsAtTheRoot(t *testing.T) {
 // TestUnreadableDirectoryIsReported: a listing that failed says so instead of
 // showing an empty folder, which is a different and misleading fact.
 func TestUnreadableDirectoryIsReported(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.loadFileViewNow(t, filepath.Join(t.TempDir(), "not-there"))
 	if m.filesView.Err == "" {
 		t.Fatal("a missing directory reported no error")
@@ -215,7 +215,7 @@ func TestPaneBusyReasonRefusesWhenSomethingIsRunning(t *testing.T) {
 // TestFileViewCdRefusesWithoutAnOrigin: a view opened from a folder link is not
 // tied to any pane, so there is no pane the cd could mean.
 func TestFileViewCdRefusesWithoutAnOrigin(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.loadFileViewNow(t, t.TempDir())
 	m.FileViewCd()
 	if len(m.Notifications) == 0 {
@@ -445,7 +445,7 @@ func TestCwdIsRecordedWithTapeAutorunOff(t *testing.T) {
 	cfg.Tape.Autorun = config.TapeAutorunOff
 
 	win := &terminal.Window{ID: "aaaaaaaa1111"}
-	m := &OS{Windows: []*terminal.Window{win}, UserConfig: cfg}
+	m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}, UserConfig: cfg}
 	m.onCwdChange(CwdChangedMsg{WindowID: win.ID, Cwd: "file:///tmp"})
 
 	if win.Cwd != "/tmp" {
@@ -471,7 +471,7 @@ func TestALargeDirectoryIsBounded(t *testing.T) {
 		}
 	}
 
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.loadFileViewNow(t, dir)
 	if m.filesView.Err != "" {
 		t.Fatalf("reading the tree failed: %s", m.filesView.Err)

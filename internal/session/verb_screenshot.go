@@ -245,5 +245,5 @@ func (d *Daemon) screenshotTitle(sess *Session, target, format string) string {
 	if title == "" {
 		title = w.Title
 	}
-	return config.FormatWindowTitle(title, idx+1, w.Cwd)
+	return config.Global.FormatWindowTitle(title, idx+1, w.Cwd)
 }

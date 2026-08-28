@@ -363,7 +363,7 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 
 	shownSession, peeking := m.sidebarShownSession(sessions)
 	var terminals []sidebarTerminalEntry
-	if sidebarLayoutHas(sidebarSectionTerminals) {
+	if sidebarLayoutHas(sidebarSectionTerminals, &m.Settings) {
 		terminals = m.sidebarTerminals(sessions, shownSession)
 	}
 
@@ -376,7 +376,7 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 	// A peeked session with no panes keeps its header, or the group would vanish
 	// and the strip would read as the attached session having none.
 	listed := ""
-	if sidebarLayoutHas(sidebarSectionTerminals) && (len(terminals) > 0 || peeking) {
+	if sidebarLayoutHas(sidebarSectionTerminals, &m.Settings) && (len(terminals) > 0 || peeking) {
 		listed = shownSession
 		groups = append(groups, sidebarStripGroup{
 			kind: sidebarStripTerminal, noun: "terminal", total: len(terminals),
@@ -460,7 +460,7 @@ func (m *OS) sidebarStripLines(sessions []sessiontree.Node, w, cw, height, topMa
 					// a one-cell target on a three-column rail is not a control, and
 					// naming the list the "+" adds to is what the open rail's header
 					// does with the same glyph in the same place.
-					add = sidebarAddGlyph()
+					add = sidebarAddGlyph(&m.Settings)
 					note(sidebarStripHeader, g.addSession, "", sidebarAddWords(g.add), y)
 					record(g.add, g.addSession, "", y)
 				} else {
@@ -558,7 +558,7 @@ func (m *OS) sidebarStripBand(content string, cw int, edgeLeft bool, bg, edgeFg 
 		// frames. StructureTarget is the same judgement with a number behind it.
 		rule = theme.RailRuleOn(bg)
 	}
-	edge := lipgloss.NewStyle().Background(bg).Foreground(rule).Render(config.GetWindowBorderLeft())
+	edge := lipgloss.NewStyle().Background(bg).Foreground(rule).Render(m.Settings.GetWindowBorderLeft())
 	body := sidebarFit(content, cw, bg)
 	if edgeLeft {
 		return body + edge
@@ -612,10 +612,10 @@ func sidebarStripHeaderCell(noun, add string, cw int, lit bool, bg color.Color, 
 func (m *OS) sidebarStripTerminalCell(e sidebarTerminalEntry, peeked bool, cw int, pal overlay.Palette, bg color.Color, lit bool) string {
 	lead, leadFg := " ", color.Color(nil)
 	if e.Focused && !peeked {
-		lead, leadFg = config.GetRailFocusMark(), railFocusTint(m.sessionTint(e.SessionID, bg), pal)
+		lead, leadFg = m.Settings.GetRailFocusMark(), railFocusTint(m.sessionTint(e.SessionID, bg), pal)
 	}
 	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+
-		stripStateMark(e.State, e.DoneSeen, pal, bg, lit), cw, bg)
+		stripStateMark(e.State, e.DoneSeen, pal, bg, lit, &m.Settings), cw, bg)
 }
 
 // sidebarStripAgentCell is one pane of the last group in two cells: the gutter
@@ -629,19 +629,19 @@ func (m *OS) sidebarStripTerminalCell(e sidebarTerminalEntry, peeked bool, cw in
 func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Palette, bg color.Color, lit bool) string {
 	lead, leadFg := " ", color.Color(nil)
 	if e.WindowIndex >= 0 && e.WindowIndex == m.FocusedWindow {
-		lead, leadFg = config.GetRailFocusMark(), railFocusTint(m.agentIdentityTint(e, bg), pal)
+		lead, leadFg = m.Settings.GetRailFocusMark(), railFocusTint(m.agentIdentityTint(e, bg), pal)
 	}
 	return sidebarFit(sidebarStyle(bg, leadFg).Render(lead)+
-		stripStateMark(e.State, e.DoneSeen, pal, bg, lit), cw, bg)
+		stripStateMark(e.State, e.DoneSeen, pal, bg, lit, &m.Settings), cw, bg)
 }
 
 // stripStateMark is a pane's one cell on the spine: the quiet dot every list on
 // this rail rests at, or the pane's state glyph in its own colour when it has
 // something to say. One vocabulary across the lists is what lets the stack be
 // read as one object at two cells wide.
-func stripStateMark(state string, doneSeen bool, pal overlay.Palette, bg color.Color, lit bool) string {
-	mark, markFg := config.GetRailBullet(), stripRestingInk(lit, pal)
-	if g := agentStateIndicator(state); g != "" && config.SidebarShowGlyphs {
+func stripStateMark(state string, doneSeen bool, pal overlay.Palette, bg color.Color, lit bool, s *config.Settings) string {
+	mark, markFg := s.GetRailBullet(), stripRestingInk(lit, pal)
+	if g := agentStateIndicator(state); g != "" && s.SidebarShowGlyphs {
 		mark, markFg = g, sidebarStateColor(state, doneSeen, pal)
 	}
 	return sidebarStyle(bg, markFg).Render(mark)
@@ -747,11 +747,11 @@ func (m *OS) sidebarStripCell(node sessiontree.Node, cw int, pal overlay.Palette
 		// It is also a filled block rather than type, and it marks the one
 		// session the peek already names. Lifting both widths together is the
 		// right fix and is a change to the expanded rail, not to this audit.
-		lead, leadFg = config.GetRailFocusMark(), railFocusTint(m.sessionTint(node.ID, bg), pal)
+		lead, leadFg = m.Settings.GetRailFocusMark(), railFocusTint(m.sessionTint(node.ID, bg), pal)
 	}
 
-	mark, markFg := config.GetRailBullet(), stripRestingInk(lit, pal)
-	if config.SidebarShowGlyphs {
+	mark, markFg := m.Settings.GetRailBullet(), stripRestingInk(lit, pal)
+	if m.Settings.SidebarShowGlyphs {
 		switch {
 		case sidebarAttention(node.AgentState):
 			// Held to the floor against the band it is drawn on. errored measured

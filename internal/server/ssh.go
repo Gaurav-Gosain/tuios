@@ -78,11 +78,11 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		lipgloss.Writer.Profile = colorprofile.TrueColor
 
 		if userConfig, err := config.LoadUserConfig(); err == nil {
-			config.ApplyAppearanceConfig(userConfig)
+			config.ApplyAppearanceConfig(userConfig, &config.Global)
 		}
 		// Flags over file, the same order loadAndApplyConfig gives every
 		// other entrypoint.
-		config.ApplyOverrides(cfg.Overrides)
+		config.ApplyOverrides(cfg.Overrides, &config.Global)
 	})
 
 	// Determine host key path
@@ -292,7 +292,11 @@ func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) (tea.Model
 	// process host capabilities so the image cell math and cell-size lookups
 	// that read GetHostCapabilities report the client, not the server.
 	clientCaps := detectClientGraphics(sshSession)
-	app.SetClientCapabilities(clientToHostCapabilities(clientCaps))
+	hostCaps := clientToHostCapabilities(clientCaps)
+	// The session gets its own copy (app.OSOptions.Caps), which is what every
+	// consumer inside it reads. The process global is still seeded for the few
+	// readers that have no session in reach.
+	app.SetClientCapabilities(hostCaps)
 
 	// The accent picker's fallback labels describe what the terminal showing
 	// the frame will do to each colour. Its default probe reads this process's
@@ -306,14 +310,14 @@ func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) (tea.Model
 
 	// If ephemeral mode or daemon not available, use old behavior
 	if cfg.Ephemeral {
-		return createEphemeralTUIOSInstance(sshSession, graphicsOut, pty.Window.Width, pty.Window.Height)
+		return createEphemeralTUIOSInstance(sshSession, graphicsOut, pty.Window.Width, pty.Window.Height, hostCaps)
 	}
 
 	// Try to connect to daemon
-	model, opts, err := createDaemonTUIOSInstance(sshSession, graphicsOut, sessionName, pty.Window.Width, pty.Window.Height, cfg, clientCaps)
+	model, opts, err := createDaemonTUIOSInstance(sshSession, graphicsOut, sessionName, pty.Window.Width, pty.Window.Height, cfg, clientCaps, hostCaps)
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
-		return createEphemeralTUIOSInstance(sshSession, graphicsOut, pty.Window.Width, pty.Window.Height)
+		return createEphemeralTUIOSInstance(sshSession, graphicsOut, pty.Window.Width, pty.Window.Height, hostCaps)
 	}
 	return model, opts
 }
@@ -342,7 +346,7 @@ func determineSessionName(sshSession ssh.Session, cfg *SSHServerConfig) string {
 }
 
 // createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
-func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, width, height int) (tea.Model, []tea.ProgramOption) {
+func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, width, height int, hostCaps *app.HostCapabilities) (tea.Model, []tea.ProgramOption) {
 	// Load user configuration and create keybind registry
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
@@ -381,6 +385,8 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer,
 		// clipboard helper or a file viewer opened here acts on the operator's
 		// machine and not on the user's.
 		RemoteClient: true,
+		// The terminal this client connected from, not the last one to connect.
+		Caps: hostCaps,
 	})
 
 	return tuiosInstance, []tea.ProgramOption{
@@ -389,7 +395,7 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer,
 }
 
 // createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon
-func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, sessionName string, width, height int, cfg *SSHServerConfig, clientCaps *session.ClientCapabilities) (tea.Model, []tea.ProgramOption, error) {
+func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, sessionName string, width, height int, cfg *SSHServerConfig, clientCaps *session.ClientCapabilities, hostCaps *app.HostCapabilities) (tea.Model, []tea.ProgramOption, error) {
 	// Connect to daemon
 	client := session.NewTUIClient()
 	version := cfg.Version
@@ -467,6 +473,8 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 		// clipboard helper or a file viewer opened here acts on the operator's
 		// machine and not on the user's.
 		RemoteClient: true,
+		// The terminal this client connected from, not the last one to connect.
+		Caps: hostCaps,
 	})
 
 	// Restore state from daemon if available

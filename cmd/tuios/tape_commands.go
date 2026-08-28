@@ -47,7 +47,7 @@ func runTapeInteractive(tapeFile string) error {
 	// LoadUserConfig no longer applies globals; apply the config appearance so
 	// tape playback honors the user's borders/dock/etc. Animations are forced
 	// off below for deterministic playback.
-	config.ApplyAppearanceConfig(userConfig)
+	config.ApplyAppearanceConfig(userConfig, &config.Global)
 
 	if err := theme.Initialize(themeName); err != nil {
 		log.Printf("Warning: Failed to load theme '%s': %v", themeName, err)
@@ -60,11 +60,14 @@ func runTapeInteractive(tapeFile string) error {
 	// Force animations off for deterministic playback of hand-written tapes,
 	// matching recorded tapes (the recorder prepends DisableAnimations). Tapes
 	// can still re-enable them explicitly with EnableAnimations.
-	config.AnimationsEnabled = false
+	config.Global.AnimationsEnabled = false
 
 	player := tape.NewPlayer(commands)
 
 	initialOS := &app.OS{
+		// The seed, the same copy NewOS takes. This path builds the model by
+		// hand rather than through the factory, so it has to say so.
+		Settings:             config.Global,
 		FocusedWindow:        -1,
 		WindowExitChan:       make(chan string, 10),
 		StateSyncChan:        make(chan *session.SessionState, 10),

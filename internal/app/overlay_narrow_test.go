@@ -85,7 +85,7 @@ func TestOverlayPanelsFitNarrowScreens(t *testing.T) {
 			m := newNarrowOS(t, sc.w, sc.h)
 
 			m.HelpCategory = -1
-			cats := GetHelpCategories(m.KeybindRegistry)
+			cats := GetHelpCategories(m.KeybindRegistry, &m.Settings)
 			for i := range cats {
 				m.HelpCategory = i
 				m.HelpScrollOffset = 0
@@ -305,14 +305,14 @@ func TestWhichKeyFitsNarrowScreens(t *testing.T) {
 	}
 	positions := []string{"top-left", "top-right", "bottom-left", "bottom-right", "center"}
 
-	oldPos := config.WhichKeyPosition
-	defer func() { config.WhichKeyPosition = oldPos }()
+	oldPos := config.Global.WhichKeyPosition
+	defer func() { config.Global.WhichKeyPosition = oldPos }()
 
 	for _, sc := range narrowScreens {
 		for _, p := range prefixes {
 			for _, pos := range positions {
 				t.Run(sc.name+"/"+p.name+"/"+pos, func(t *testing.T) {
-					config.WhichKeyPosition = pos
+					config.Global.WhichKeyPosition = pos
 					m := newNarrowOS(t, sc.w, sc.h)
 					m.PrefixActive = true
 					m.LastPrefixTime = time.Now().Add(-time.Hour)
@@ -382,8 +382,8 @@ func TestDockFitsNarrowScreens(t *testing.T) {
 
 			// With the system readouts on, the right-hand block asks for 32
 			// columns; in copy mode its help line asks for 110.
-			config.ShowCPU, config.ShowRAM = true, true
-			defer func() { config.ShowCPU, config.ShowRAM = false, false }()
+			m.Settings.ShowCPU, m.Settings.ShowRAM = true, true
+			defer func() { m.Settings.ShowCPU, m.Settings.ShowRAM = false, false }()
 			dock, _ = m.renderDockString()
 			assertFitsScreen(t, "dock with stats", dock, sc.w, sc.h)
 

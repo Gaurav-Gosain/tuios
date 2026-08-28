@@ -227,14 +227,14 @@ func (m *OS) ScreenshotWindow(index int) tea.Cmd {
 		index = m.FocusedWindow
 	}
 	if index < 0 || index >= len(m.Windows) || m.Windows[index] == nil {
-		m.ShowNotification("There is no window to capture.", "warning", config.NotificationDuration)
+		m.ShowNotification("There is no window to capture.", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	win := m.Windows[index]
 	palette := m.shotPalette()
 	grid := windowGrid(win, palette, m.screenshotSettings().Cursor)
 	if grid == nil {
-		m.ShowNotification("That window has no screen to capture.", "warning", config.NotificationDuration)
+		m.ShowNotification("That window has no screen to capture.", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	return m.renderScreenshot(grid, windowRowTitle(win), false)
@@ -252,7 +252,7 @@ func (m *OS) ScreenshotScreen() tea.Cmd {
 func (m *OS) ScreenshotRegion(x0, y0, x1, y1 int) tea.Cmd {
 	grid := m.composedGrid(x0, y0, x1, y1)
 	if grid == nil {
-		m.ShowNotification("That selection is too small to capture.", "warning", config.NotificationDuration)
+		m.ShowNotification("That selection is too small to capture.", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
 	label := "screen"
@@ -380,7 +380,7 @@ func (m *OS) screenshotSettings() capture.Settings {
 		cfg = m.UserConfig.Screenshot
 	}
 	s := capture.SettingsFrom(cfg, theme.CurrentThemeID(), theme.ActiveGlyphSetID())
-	if caps := GetHostCapabilities(); caps != nil {
+	if caps := m.hostCaps(); caps != nil {
 		s.HostFontFamily, s.HostBoldFamily = caps.FontFamily, caps.BoldFontFamily
 		// The shape of a cell, from the terminal that owns it. Without it the
 		// raster comes out at whatever shape the font's line box happens to
@@ -408,7 +408,7 @@ func (m *OS) screenshotSettings() capture.Settings {
 func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool) tea.Cmd {
 	settings := m.screenshotSettings()
 	if settings.Title != "" {
-		settings.Title = config.FormatWindowTitle(label, m.FocusedWindow+1, "")
+		settings.Title = m.Settings.FormatWindowTitle(label, m.FocusedWindow+1, "")
 	}
 	// The serial is bumped before the panel is filled in, so the panel carries
 	// the number that says which capture it is showing.
@@ -604,12 +604,12 @@ func (m *OS) HandleScreenshotResult(msg screenshotResultMsg) tea.Cmd {
 	}
 
 	for _, w := range msg.warnings {
-		m.ShowNotification(w, "warning", config.NotificationWarningDuration)
+		m.ShowNotification(w, "warning", m.Settings.NotificationWarningDuration)
 	}
 	if !showing {
 		// The panel moved on or was closed with enter. The file was still
 		// asked for, so it stays, and this is the one line that says so.
-		m.ShowNotification("Saved to "+shortenPath(msg.path), "success", config.NotificationDuration)
+		m.ShowNotification("Saved to "+shortenPath(msg.path), "success", m.Settings.NotificationDuration)
 		return m.screenshotCopyCmd(msg)
 	}
 
@@ -652,14 +652,14 @@ func (m *OS) screenshotCopyCmd(msg screenshotResultMsg) tea.Cmd {
 func (m *OS) HandleScreenshotCopied(msg screenshotCopiedMsg) {
 	showing := m.ShotPreview.Open && m.ShotPreview.Capture == msg.capture
 	if msg.err != nil {
-		m.ShowNotification(shotStatusCopyFailed, "warning", config.NotificationWarningDuration)
+		m.ShowNotification(shotStatusCopyFailed, "warning", m.Settings.NotificationWarningDuration)
 		return
 	}
 	if showing {
 		m.ShotPreview.Status = shotStatusCopied
 		return
 	}
-	m.ShowNotification(shotStatusCopied, "success", config.NotificationDuration)
+	m.ShowNotification(shotStatusCopied, "success", m.Settings.NotificationDuration)
 }
 
 // screenshotPreviewNote is the one quiet line saying what the text tier cannot
@@ -746,13 +746,13 @@ func (m *OS) CloseScreenshotPreview(discard bool) {
 	switch {
 	case path != "":
 		if err := os.Remove(path); err == nil {
-			m.ShowNotification(shotStatusDeleted, "info", config.NotificationDuration)
+			m.ShowNotification(shotStatusDeleted, "info", m.Settings.NotificationDuration)
 		}
 	case pending:
 		// The file does not exist yet, so the answer is given now and the
 		// removal happens when there is something to remove.
 		m.discardCapture(serial)
-		m.ShowNotification(shotStatusDeleted, "info", config.NotificationDuration)
+		m.ShowNotification(shotStatusDeleted, "info", m.Settings.NotificationDuration)
 	}
 }
 

@@ -31,10 +31,10 @@ func switchLayoutMode(m *OS, mode string) {
 }
 
 func TestLayoutModeSwitchAnnouncesEachSizeOnce(t *testing.T) {
-	prevAnim, prevShared := config.AnimationsEnabled, config.SharedBorders
-	config.AnimationsEnabled = false
+	prevAnim, prevShared := config.Global.AnimationsEnabled, config.Global.SharedBorders
+	config.Global.AnimationsEnabled = false
 	t.Cleanup(func() {
-		config.AnimationsEnabled, config.SharedBorders = prevAnim, prevShared
+		config.Global.AnimationsEnabled, config.Global.SharedBorders = prevAnim, prevShared
 	})
 
 	modes := []string{LayoutModeBSP, LayoutModeMasterStack, LayoutModeScrolling}
@@ -42,7 +42,7 @@ func TestLayoutModeSwitchAnnouncesEachSizeOnce(t *testing.T) {
 		for _, from := range modes {
 			for _, to := range modes {
 				t.Run(fmt.Sprintf("shared=%v/%s->%s", shared, from, to), func(t *testing.T) {
-					config.SharedBorders = shared
+					config.Global.SharedBorders = shared
 					m, told := newSwitchOS(t, 200, 50, map[int]int{1: 3})
 					switchLayoutMode(m, from)
 

@@ -130,7 +130,7 @@ func requireNoOffset(t *testing.T, capture [][]tfx.InputCell, width, height int)
 	if !ok {
 		t.Fatalf("the engine no longer has %s; pick another effect with keepsScreen", anchorTestEffect)
 	}
-	engine, ok := screensaverBuild(capture, width, height, d.New(), d.NeedsFillCharacters)
+	engine, ok := screensaverBuild(capture, width, height, d.New(), d.NeedsFillCharacters, defaultSaverSettings())
 	if !ok {
 		t.Fatal("the effect would not build over the capture")
 	}

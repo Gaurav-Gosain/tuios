@@ -37,7 +37,7 @@ func (m *OS) contextMenuWidth(cm *ContextMenu) int {
 		if it.Sep {
 			continue
 		}
-		w := lipgloss.Width(contextMenuRowLeft(it)) + lipgloss.Width(it.Hint)
+		w := lipgloss.Width(contextMenuRowLeft(it, &m.Settings)) + lipgloss.Width(it.Hint)
 		if it.Hint != "" {
 			w += contextMenuGap
 		}
@@ -52,9 +52,9 @@ func (m *OS) contextMenuWidth(cm *ContextMenu) int {
 // contextMenuRowLeft is the left-hand part of a row: the selection marker, the
 // icon, and the label, unstyled. It exists so the width measurement and the
 // renderer cannot disagree about how much room the left side takes.
-func contextMenuRowLeft(it ContextMenuItem) string {
+func contextMenuRowLeft(it ContextMenuItem, s *config.Settings) string {
 	icon := ""
-	if it.Icon != "" && !config.UseASCIIOnly {
+	if it.Icon != "" && !s.UseASCIIOnly {
 		icon = it.Icon + " "
 	}
 	return "  " + icon + it.Label
@@ -142,13 +142,13 @@ func (m *OS) contextMenuRow(it ContextMenuItem, selected bool, width int, bg col
 	marker := "  "
 	if selected && !it.Dim {
 		marker = "› "
-		if config.UseASCIIOnly {
+		if m.Settings.UseASCIIOnly {
 			marker = "> "
 		}
 	}
 
 	left := overlay.Style(rowBg).Foreground(pal.Accent).Bold(true).Render(marker)
-	if it.Icon != "" && !config.UseASCIIOnly {
+	if it.Icon != "" && !m.Settings.UseASCIIOnly {
 		left += overlay.Style(rowBg).Foreground(iconColor).Render(it.Icon + " ")
 	}
 

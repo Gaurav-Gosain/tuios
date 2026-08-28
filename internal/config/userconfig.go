@@ -770,6 +770,12 @@ func getDefaultSidebarFilesKeybinds() map[string][]string {
 		"file_copy":           {"y"},
 		"file_cut":            {"x"},
 		"file_paste":          {"p"},
+		// enter is what already opens a listing row through the rail's own
+		// activate binding, so this names what that row does rather than adding
+		// a second way to do it: the menu's Open row shows the key the user is
+		// already pressing. The files scope is consulted first, so on a listing
+		// row this answers and everywhere else activate does, unchanged.
+		"file_open": {"enter"},
 	}
 }
 
@@ -1146,32 +1152,32 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 // `tuios tape`, the pkg/tuios embed, and every live config reload through
 // ConfigReloadedMsg. ApplyOverrides still layers CLI flags on top, so flags
 // keep winning where they are set.
-func ApplyAppearanceConfig(cfg *UserConfig) {
+func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// BorderStyle defaults to rounded. Empty means "not configured", so the
 	// current value (a flag, or the default) stands.
 	if cfg.Appearance.BorderStyle != "" {
-		BorderStyle = cfg.Appearance.BorderStyle
+		s.BorderStyle = cfg.Appearance.BorderStyle
 	}
 
 	// ZenMode only takes one of its three values, so a typo in the config lands
 	// on the default the validator warned it would fall back to.
 	if slices.Contains(ZenModeModes, cfg.Appearance.ZenMode) {
-		ZenMode = cfg.Appearance.ZenMode
+		s.ZenMode = cfg.Appearance.ZenMode
 	} else if cfg.Appearance.ZenMode != "" {
-		ZenMode = ZenModeDisabled
+		s.ZenMode = ZenModeDisabled
 	}
 
 	// Links takes the same shape: a typo falls back to the default rather than
 	// leaving the pointer with no policy at all.
 	if slices.Contains(LinkModes, cfg.Appearance.Links) {
-		Links = cfg.Appearance.Links
+		s.Links = cfg.Appearance.Links
 	} else if cfg.Appearance.Links != "" {
-		Links = LinksAll
+		s.Links = LinksAll
 	}
 
 	// DockbarPosition defaults to bottom.
 	if cfg.Appearance.DockbarPosition != "" {
-		DockbarPosition = cfg.Appearance.DockbarPosition
+		s.DockbarPosition = cfg.Appearance.DockbarPosition
 	}
 
 	// Sidebar. Also runs for a config that never went through LoadUserConfig (the
@@ -1184,22 +1190,22 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// survives a reload just as turning it on does.
 	sb := cfg.Appearance.Sidebar
 	if sb.Enabled != nil {
-		SidebarEnabled = *sb.Enabled
+		s.SidebarEnabled = *sb.Enabled
 	}
 	if sb.Position != "" {
-		SidebarPosition = sb.Position
+		s.SidebarPosition = sb.Position
 	}
 	if sb.Width > 0 {
-		SidebarWidth = sb.Width
+		s.SidebarWidth = sb.Width
 	}
 	if sb.ShowGlyphs != nil {
-		SidebarShowGlyphs = *sb.ShowGlyphs
+		s.SidebarShowGlyphs = *sb.ShowGlyphs
 	}
 	if sb.ShowCounts != nil {
-		SidebarShowCounts = *sb.ShowCounts
+		s.SidebarShowCounts = *sb.ShowCounts
 	}
 	if sb.Marquee != nil {
-		SidebarMarquee = *sb.Marquee
+		s.SidebarMarquee = *sb.Marquee
 	}
 	// The layout falls back to the shipped one when unset, so a config file
 	// written before the files section existed lays the rail out the way it
@@ -1210,177 +1216,177 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// is what lets the editor's undo hand a layout it never wrote back to the
 	// default, rather than writing today's four sections into a file that named
 	// none and pinning that user to them for good.
-	SidebarSections = SidebarDefaultSections
+	s.SidebarSections = SidebarDefaultSections
 	if sb.Sections != "" {
-		SidebarSections = sb.Sections
+		s.SidebarSections = sb.Sections
 	}
 	if sb.FileIcons != nil {
-		SidebarFileIcons = *sb.FileIcons
+		s.SidebarFileIcons = *sb.FileIcons
 	}
 	if sb.FileIconColors != nil {
-		SidebarFileIconColors = *sb.FileIconColors
+		s.SidebarFileIconColors = *sb.FileIconColors
 	}
 	if sb.FolderClick != "" {
-		SidebarFolderClick = sb.FolderClick
+		s.SidebarFolderClick = sb.FolderClick
 	}
 	if sb.FileActions != nil {
-		SidebarFileActions = *sb.FileActions
+		s.SidebarFileActions = *sb.FileActions
 	}
 	if sb.FileDelete != "" {
-		SidebarFileDelete = sb.FileDelete
+		s.SidebarFileDelete = sb.FileDelete
 	}
 	if sb.Tooltips != nil {
-		Tooltips = *sb.Tooltips
+		s.Tooltips = *sb.Tooltips
 	}
 	if cfg.Appearance.DockWorkspaceTabs != nil {
-		DockWorkspaceTabs = *cfg.Appearance.DockWorkspaceTabs
+		s.DockWorkspaceTabs = *cfg.Appearance.DockWorkspaceTabs
 	}
 	// DockWorkspaceTabFormat is assigned unconditionally: an empty string is the
 	// "{name}" default, and clearing it on reload has to be possible too.
-	DockWorkspaceTabFormat = cfg.Appearance.DockWorkspaceTabFormat
+	s.DockWorkspaceTabFormat = cfg.Appearance.DockWorkspaceTabFormat
 	if cfg.Appearance.DockWorkspaceTooltip != nil {
-		DockWorkspaceTooltip = *cfg.Appearance.DockWorkspaceTooltip
+		s.DockWorkspaceTooltip = *cfg.Appearance.DockWorkspaceTooltip
 	}
 	if cfg.Appearance.DockPillCaps != nil {
-		DockPillCaps = *cfg.Appearance.DockPillCaps
+		s.DockPillCaps = *cfg.Appearance.DockPillCaps
 	}
 	if cfg.Appearance.SessionColors != nil {
-		SessionColors = *cfg.Appearance.SessionColors
+		s.SessionColors = *cfg.Appearance.SessionColors
 	}
 	if cfg.Appearance.Scrollbar.Style != "" {
-		ScrollbarStyle = cfg.Appearance.Scrollbar.Style
+		s.ScrollbarStyle = cfg.Appearance.Scrollbar.Style
 	}
 	// The glyph and tint keys are assigned as written, empty included: empty is
 	// the "use the style's default" state, and the getters below resolve it. A
 	// value that does not measure one cell is rejected there too, so an edit
 	// made live in the settings page cannot slip past the file's validation.
-	ScrollbarThumb = cfg.Appearance.Scrollbar.Thumb
-	ScrollbarTrack = cfg.Appearance.Scrollbar.Track
-	ScrollbarTint = cfg.Appearance.Scrollbar.Tint
+	s.ScrollbarThumb = cfg.Appearance.Scrollbar.Thumb
+	s.ScrollbarTrack = cfg.Appearance.Scrollbar.Track
+	s.ScrollbarTint = cfg.Appearance.Scrollbar.Tint
 
 	// The hide/show toggles are plain bools with no "unset" state, so they are
 	// assigned unconditionally: turning one off in the settings page has to
 	// survive a reload just as turning it on does.
-	HideWindowButtons = cfg.Appearance.HideWindowButtons
+	s.HideWindowButtons = cfg.Appearance.HideWindowButtons
 	if cfg.Appearance.WindowButtonStyle != "" {
-		WindowButtonStyle = cfg.Appearance.WindowButtonStyle
+		s.WindowButtonStyle = cfg.Appearance.WindowButtonStyle
 	}
 	if cfg.Appearance.WindowButtonPosition != "" {
-		WindowButtonPosition = cfg.Appearance.WindowButtonPosition
+		s.WindowButtonPosition = cfg.Appearance.WindowButtonPosition
 	}
-	HideScrollbar = cfg.Appearance.HideScrollbar
-	ShowClock = cfg.Appearance.ShowClock
-	ClockFormat = cfg.Appearance.ClockFormat
-	PaneGap = min(max(cfg.Appearance.Gap, 0), PaneGapMax)
-	MasterRatioPercent = clampPercent(cfg.Appearance.MasterRatio, MasterRatioMin, MasterRatioMax, MasterRatioDefault)
-	ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, ScrollColumnWidthMax, ScrollColumnWidthDefault)
-	DimUnfocused = min(max(cfg.Appearance.DimUnfocused, 0), DimUnfocusedMax)
+	s.HideScrollbar = cfg.Appearance.HideScrollbar
+	s.ShowClock = cfg.Appearance.ShowClock
+	s.ClockFormat = cfg.Appearance.ClockFormat
+	s.PaneGap = min(max(cfg.Appearance.Gap, 0), PaneGapMax)
+	s.MasterRatioPercent = clampPercent(cfg.Appearance.MasterRatio, MasterRatioMin, MasterRatioMax, MasterRatioDefault)
+	s.ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, ScrollColumnWidthMax, ScrollColumnWidthDefault)
+	s.DimUnfocused = min(max(cfg.Appearance.DimUnfocused, 0), DimUnfocusedMax)
 	overlay.SetPanelPadding(cfg.Appearance.PanelPadding)
 	// The glyph set is selected here rather than beside the theme, because it
 	// is read through the config globals the render path already goes to and
 	// this is the one funnel those come through. Re-selecting an unchanged id
 	// costs a resolve of a handful of strings.
-	GlyphSet = cfg.Appearance.Glyphs
-	if GlyphSet == "" {
-		GlyphSet = theme.GlyphSetNone
+	s.GlyphSet = cfg.Appearance.Glyphs
+	if s.GlyphSet == "" {
+		s.GlyphSet = theme.GlyphSetNone
 	}
-	theme.SetActiveGlyphs(GlyphSet)
-	ShowCPU = cfg.Appearance.ShowCPU
-	ShowRAM = cfg.Appearance.ShowRAM
-	NiriReverseScroll = cfg.Appearance.NiriReverseScroll
+	theme.SetActiveGlyphs(s.GlyphSet)
+	s.ShowCPU = cfg.Appearance.ShowCPU
+	s.ShowRAM = cfg.Appearance.ShowRAM
+	s.NiriReverseScroll = cfg.Appearance.NiriReverseScroll
 
 	if cfg.Appearance.ScrollbackLines > 0 {
-		ScrollbackLines = cfg.Appearance.ScrollbackLines
+		s.ScrollbackLines = cfg.Appearance.ScrollbackLines
 	}
 
 	if cfg.Appearance.MaxFPS > 0 {
-		NormalFPS = clampMaxFPS(cfg.Appearance.MaxFPS)
+		s.NormalFPS = clampMaxFPS(cfg.Appearance.MaxFPS)
 	}
 
 	// LeaderKey lives in [keybindings] rather than [appearance], but it is a
 	// package global fed by the same file and it had the same gap.
 	if cfg.Keybindings.LeaderKey != "" {
-		LeaderKey = cfg.Keybindings.LeaderKey
+		s.LeaderKey = cfg.Keybindings.LeaderKey
 	}
 
 	// AnimationsEnabled defaults to true (nil means use default)
 	// Only set global if explicitly configured
 	if cfg.Appearance.AnimationsEnabled != nil {
-		AnimationsEnabled = *cfg.Appearance.AnimationsEnabled
+		s.AnimationsEnabled = *cfg.Appearance.AnimationsEnabled
 	}
 
 	// ConfirmQuit defaults to false (nil means use default)
 	if cfg.Appearance.ConfirmQuit != nil {
-		AlwaysConfirmQuit = *cfg.Appearance.ConfirmQuit
+		s.AlwaysConfirmQuit = *cfg.Appearance.ConfirmQuit
 	}
 
 	// SharedBorders defaults to true (nil means use default)
 	if cfg.Appearance.SharedBorders != nil {
-		SharedBorders = *cfg.Appearance.SharedBorders
+		s.SharedBorders = *cfg.Appearance.SharedBorders
 	}
 
 	// WhichKeyEnabled defaults to true (nil means use default)
 	if cfg.Appearance.WhichKeyEnabled != nil {
-		WhichKeyEnabled = *cfg.Appearance.WhichKeyEnabled
+		s.WhichKeyEnabled = *cfg.Appearance.WhichKeyEnabled
 	}
 
 	// WhichKeyPosition defaults to bottom-right
 	if cfg.Appearance.WhichKeyPosition != "" {
-		WhichKeyPosition = cfg.Appearance.WhichKeyPosition
+		s.WhichKeyPosition = cfg.Appearance.WhichKeyPosition
 	}
 
 	// WindowTitlePosition defaults to bottom
 	if cfg.Appearance.WindowTitlePosition != "" {
-		WindowTitlePosition = cfg.Appearance.WindowTitlePosition
+		s.WindowTitlePosition = cfg.Appearance.WindowTitlePosition
 	}
 
 	// HideClock defaults to false
-	HideClock = cfg.Appearance.HideClock
+	s.HideClock = cfg.Appearance.HideClock
 
 	// WindowTitleFormat defaults to empty, meaning the title is shown as-is.
 	// An empty string in the config also clears a previously set format on
 	// reload, which is why it is assigned unconditionally.
-	WindowTitleFormat = cfg.Appearance.WindowTitleFormat
+	s.WindowTitleFormat = cfg.Appearance.WindowTitleFormat
 
 	// ScrollLines (lines per wheel notch)
 	if cfg.Appearance.ScrollLines > 0 {
-		ScrollLines = cfg.Appearance.ScrollLines
+		s.ScrollLines = cfg.Appearance.ScrollLines
 	}
 
 	// CopyOnSelect defaults to true (nil means use default)
 	if cfg.Appearance.CopyOnSelect != nil {
-		CopyOnSelect = *cfg.Appearance.CopyOnSelect
+		s.CopyOnSelect = *cfg.Appearance.CopyOnSelect
 	}
 
 	// FocusFollowsMouse defaults to false; a pointer so turning it off in the
 	// settings page survives a reload just as turning it on does.
 	if cfg.Appearance.FocusFollowsMouse != nil {
-		FocusFollowsMouse = *cfg.Appearance.FocusFollowsMouse
+		s.FocusFollowsMouse = *cfg.Appearance.FocusFollowsMouse
 	}
 
 	// AltDrag defaults to true; a pointer so an explicit false in the config
 	// survives the default being on.
 	if cfg.Appearance.AltDrag != nil {
-		AltDrag = *cfg.Appearance.AltDrag
+		s.AltDrag = *cfg.Appearance.AltDrag
 	}
 
 	// ClickToType only takes one of its three values, so a typo in the config
 	// lands on the default the validator warned it would fall back to.
 	if slices.Contains(ClickToTypeModes, cfg.Appearance.ClickToType) {
-		ClickToType = cfg.Appearance.ClickToType
+		s.ClickToType = cfg.Appearance.ClickToType
 	} else if cfg.Appearance.ClickToType != "" {
-		ClickToType = ClickToTypeSingle
+		s.ClickToType = ClickToTypeSingle
 	}
 
 	// WordCharacters is a pointer so an explicitly empty string can mean "no
 	// punctuation is part of a word", which is different from "unset".
 	if cfg.Appearance.WordCharacters != nil {
-		WordCharacters = *cfg.Appearance.WordCharacters
+		s.WordCharacters = *cfg.Appearance.WordCharacters
 	}
 
 	// ZoomMaxWidth (0 = fullscreen)
 	if cfg.Appearance.ZoomMaxWidth > 0 {
-		ZoomMaxWidth = cfg.Appearance.ZoomMaxWidth
+		s.ZoomMaxWidth = cfg.Appearance.ZoomMaxWidth
 	}
 
 	// Theme. An empty name means "no theme, use the terminal's own colors",
@@ -1402,7 +1408,7 @@ func ApplyAppearanceConfig(cfg *UserConfig) {
 	// this is the one function every path that loads a config file already
 	// calls: the tape runner, the SSH server, the command palette's save, and
 	// the live reload. A second entry point is a second thing to forget.
-	ApplyNotificationConfig(cfg)
+	ApplyNotificationConfig(cfg, s)
 }
 
 // clampMaxFPS folds a configured max_fps into the range the tick loop can
@@ -1418,20 +1424,20 @@ func clampMaxFPS(fps int) int {
 // globals the renderer reads. Absent or non-positive values leave the built-in
 // default in place rather than collapsing a message to zero seconds, which is
 // the failure mode the old 1500ms default was already close enough to.
-func ApplyNotificationConfig(cfg *UserConfig) {
+func ApplyNotificationConfig(cfg *UserConfig, s *Settings) {
 	if cfg.Notifications.Duration > 0 {
-		NotificationDuration = time.Duration(cfg.Notifications.Duration) * time.Second
+		s.NotificationDuration = time.Duration(cfg.Notifications.Duration) * time.Second
 	}
 	if cfg.Notifications.WarningDuration > 0 {
-		NotificationWarningDuration = time.Duration(cfg.Notifications.WarningDuration) * time.Second
+		s.NotificationWarningDuration = time.Duration(cfg.Notifications.WarningDuration) * time.Second
 	}
 	if cfg.Notifications.ErrorDuration > 0 {
-		NotificationErrorDuration = time.Duration(cfg.Notifications.ErrorDuration) * time.Second
+		s.NotificationErrorDuration = time.Duration(cfg.Notifications.ErrorDuration) * time.Second
 	}
 	// ErrorSticky defaults to true, so nil means "keep the default" and only an
 	// explicit false turns it off.
 	if cfg.Notifications.ErrorSticky != nil {
-		NotificationErrorSticky = *cfg.Notifications.ErrorSticky
+		s.NotificationErrorSticky = *cfg.Notifications.ErrorSticky
 	}
 }
 

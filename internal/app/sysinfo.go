@@ -41,7 +41,7 @@ func (m *OS) GetCPUGraph() string {
 		height := min(int(usage/12.5), 8)
 
 		// Use block characters for the graph (or ASCII equivalents)
-		if config.UseASCIIOnly {
+		if m.Settings.UseASCIIOnly {
 			// ASCII fallback: use simple characters
 			switch height {
 			case 0:

@@ -72,20 +72,20 @@ type configSnapshot struct {
 
 func snapshotConfig() configSnapshot {
 	return configSnapshot{
-		shared: config.SharedBorders, anim: config.AnimationsEnabled,
-		ascii: config.UseASCIIOnly, sessionColors: config.SessionColors,
-		sidebarOn: config.SidebarEnabled, borderStyle: config.BorderStyle,
-		dockPos: config.DockbarPosition, sidebarPos: config.SidebarPosition,
-		sidebarWidth: config.SidebarWidth,
+		shared: config.Global.SharedBorders, anim: config.Global.AnimationsEnabled,
+		ascii: config.Global.UseASCIIOnly, sessionColors: config.Global.SessionColors,
+		sidebarOn: config.Global.SidebarEnabled, borderStyle: config.Global.BorderStyle,
+		dockPos: config.Global.DockbarPosition, sidebarPos: config.Global.SidebarPosition,
+		sidebarWidth: config.Global.SidebarWidth,
 	}
 }
 
 func (c configSnapshot) restore() {
-	config.SharedBorders, config.AnimationsEnabled = c.shared, c.anim
-	config.UseASCIIOnly, config.SessionColors = c.ascii, c.sessionColors
-	config.SidebarEnabled, config.BorderStyle = c.sidebarOn, c.borderStyle
-	config.DockbarPosition, config.SidebarPosition = c.dockPos, c.sidebarPos
-	config.SidebarWidth = c.sidebarWidth
+	config.Global.SharedBorders, config.Global.AnimationsEnabled = c.shared, c.anim
+	config.Global.UseASCIIOnly, config.Global.SessionColors = c.ascii, c.sessionColors
+	config.Global.SidebarEnabled, config.Global.BorderStyle = c.sidebarOn, c.borderStyle
+	config.Global.DockbarPosition, config.Global.SidebarPosition = c.dockPos, c.sidebarPos
+	config.Global.SidebarWidth = c.sidebarWidth
 }
 
 // New builds a target. stateDir is a scratch directory the app's XDG state root
@@ -112,15 +112,15 @@ func (t *Target) Reset() error {
 	t.releaseWindows()
 	t.saved.restore()
 
-	config.AnimationsEnabled = false
-	config.SharedBorders = false
-	config.UseASCIIOnly = false
-	config.BorderStyle = "rounded"
-	config.DockbarPosition = "bottom"
-	config.SidebarEnabled = true
-	config.SidebarPosition = "left"
-	config.SidebarWidth = config.SidebarDefaultWidth
-	config.SessionColors = true
+	config.Global.AnimationsEnabled = false
+	config.Global.SharedBorders = false
+	config.Global.UseASCIIOnly = false
+	config.Global.BorderStyle = "rounded"
+	config.Global.DockbarPosition = "bottom"
+	config.Global.SidebarEnabled = true
+	config.Global.SidebarPosition = "left"
+	config.Global.SidebarWidth = config.SidebarDefaultWidth
+	config.Global.SessionColors = true
 
 	// Redirected for the life of the target, not just for this call: the rail
 	// persists a collapse, a drag order and a width, and it does so from inside
@@ -178,7 +178,7 @@ func (t *Target) Reset() error {
 func (t *Target) addPane() error {
 	t.seq++
 	id := fmt.Sprintf("fuzzpane%04d", t.seq)
-	win := terminal.NewDaemonWindow(id, "fuzz", 0, 0, 60, 20, 0, "pty-"+id, t.m.PTYDataChan)
+	win := terminal.NewDaemonWindow(id, "fuzz", 0, 0, 60, 20, 0, "pty-"+id, t.m.PTYDataChan, config.DefaultScrollbackLines)
 	if win == nil {
 		return fmt.Errorf("NewDaemonWindow(%s) returned nil", id)
 	}
@@ -251,7 +251,7 @@ func (t *Target) Apply(a fuzz.Action) error {
 	case fuzz.Key:
 		t.send(keyMsg(a.S))
 	case fuzz.Chord:
-		t.send(keyMsg(config.LeaderKey))
+		t.send(keyMsg(m.Settings.LeaderKey))
 		t.send(keyMsg(a.S))
 	case fuzz.Text:
 		for _, r := range a.S {
@@ -305,7 +305,7 @@ func (t *Target) Apply(a fuzz.Action) error {
 	case fuzz.ToggleTiling:
 		m.ToggleAutoTiling()
 	case fuzz.ToggleShared:
-		setSharedBorders(m, !config.SharedBorders)
+		setSharedBorders(m, !m.Settings.SharedBorders)
 	case fuzz.LayoutMode:
 		switch a.A % 3 {
 		case 0:
@@ -324,7 +324,7 @@ func (t *Target) Apply(a fuzz.Action) error {
 		// leaves them.
 		m.SidebarSetCollapsed(!m.SidebarCollapsed)
 	case fuzz.SidebarPosition:
-		config.SidebarPosition = []string{"left", "right"}[a.A%2]
+		m.Settings.SidebarPosition = []string{"left", "right"}[a.A%2]
 		m.ApplyAppearanceLive(true)
 	case fuzz.OpenOverlay:
 		t.openOverlay(a.A)
@@ -374,10 +374,10 @@ func (t *Target) Apply(a fuzz.Action) error {
 }
 
 // setSharedBorders flips the shared-border setting the way the settings page
-// does: the global moves and the layout is reflowed, because the cells a pane
-// withholds from its guest follow the border it draws.
+// does: this session's setting moves and the layout is reflowed, because the
+// cells a pane withholds from its guest follow the border it draws.
 func setSharedBorders(m *app.OS, v bool) {
-	config.SharedBorders = v
+	m.Settings.SharedBorders = v
 	m.ApplyAppearanceLive(true)
 }
 
@@ -460,28 +460,28 @@ func applySetting(m *app.OS, which, value int) {
 	case 0:
 		setSharedBorders(m, on)
 	case 1:
-		config.UseASCIIOnly = on
+		m.Settings.UseASCIIOnly = on
 		m.ApplyAppearanceLive(true)
 	case 2:
 		// Every style the settings page offers, not two of them: a style swapped
 		// under a live layout is the sequence a table test cannot reach.
 		if n := len(config.BorderStyles); n > 0 {
-			config.BorderStyle = config.BorderStyles[value%n]
+			m.Settings.BorderStyle = config.BorderStyles[value%n]
 		}
 		m.ApplyAppearanceLive(true)
 	case 3:
-		config.DockbarPosition = map[bool]string{true: "top", false: "bottom"}[on]
+		m.Settings.DockbarPosition = map[bool]string{true: "top", false: "bottom"}[on]
 		m.ApplyAppearanceLive(true)
 	case 4:
-		config.DockbarPosition = map[bool]string{true: "hidden", false: "bottom"}[on]
+		m.Settings.DockbarPosition = map[bool]string{true: "hidden", false: "bottom"}[on]
 		m.ApplyAppearanceLive(true)
 	case 5:
-		config.SessionColors = on
+		m.Settings.SessionColors = on
 	case 6:
-		config.SidebarEnabled = on
+		m.Settings.SidebarEnabled = on
 		m.ApplyAppearanceLive(true)
 	case 7:
-		config.SidebarWidth = map[bool]int{true: config.SidebarDefaultWidth, false: 20}[on]
+		m.Settings.SidebarWidth = map[bool]int{true: config.SidebarDefaultWidth, false: 20}[on]
 		m.ApplyAppearanceLive(true)
 	default:
 		if on {

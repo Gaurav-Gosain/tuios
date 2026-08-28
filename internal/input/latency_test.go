@@ -88,7 +88,7 @@ func latencyOS(t *testing.T, n int) *app.OS {
 
 	for i := range n {
 		id := fmt.Sprintf("lat-%d", i)
-		win := terminal.NewDaemonWindow(id, "pane", (i%cols)*winW, (i/cols)*winH, winW, winH, i, "pty-"+id, ptyData)
+		win := terminal.NewDaemonWindow(id, "pane", (i%cols)*winW, (i/cols)*winH, winW, winH, i, "pty-"+id, ptyData, config.DefaultScrollbackLines)
 		if win == nil {
 			t.Fatal("NewDaemonWindow returned nil")
 		}

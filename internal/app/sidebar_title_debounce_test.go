@@ -24,7 +24,7 @@ func backdate(m *OS, id string, d time.Duration) {
 func TestRailTitleDebounce(t *testing.T) {
 	win := &terminal.Window{ID: "w1"}
 	win.SetTitle("cmd-a")
-	m := &OS{Windows: []*terminal.Window{win}}
+	m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 
 	// Seed: a first title shows at once.
 	if changed := m.updateRailTitles(); changed {
@@ -70,7 +70,7 @@ func TestRailTitleDebounce(t *testing.T) {
 func TestTickNeedsWorkWakesOnTitleDrift(t *testing.T) {
 	win := &terminal.Window{ID: "w1"}
 	win.SetTitle("cmd-a")
-	m := &OS{Windows: []*terminal.Window{win}}
+	m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 	m.updateRailTitles() // seed shown = cmd-a
 
 	if m.tickNeedsWork() {
@@ -91,7 +91,7 @@ func TestRailTitleDebounceDropsClosedWindows(t *testing.T) {
 	b := &terminal.Window{ID: "b"}
 	a.SetTitle("A")
 	b.SetTitle("B")
-	m := &OS{Windows: []*terminal.Window{a, b}}
+	m := &OS{Settings: config.Global, Windows: []*terminal.Window{a, b}}
 	m.updateRailTitles()
 	if len(m.sidebarTitles) != 2 {
 		t.Fatalf("seeded entries = %d, want 2", len(m.sidebarTitles))
@@ -111,7 +111,7 @@ func TestSidebarHoldsTitleDuringChurn(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 	win := &terminal.Window{ID: "w1"}
 	win.SetTitle("stable")
-	m := &OS{Windows: []*terminal.Window{win}, Width: 120, Height: 40, SessionName: "s"}
+	m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}, Width: 120, Height: 40, SessionName: "s"}
 	m.updateRailTitles()
 
 	first := sidebarText(t, m)

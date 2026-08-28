@@ -317,7 +317,7 @@ func runWebServer() error {
 	//
 	// The file is the baseline; CLI flags win. Order matters: ApplyOverrides
 	// layers the flags on top of what this leaves behind.
-	config.ApplyAppearanceConfig(userConfig)
+	config.ApplyAppearanceConfig(userConfig, &config.Global)
 
 	config.ApplyOverrides(config.Overrides{
 		ASCIIOnly:            asciiOnly,
@@ -329,7 +329,7 @@ func runWebServer() error {
 		ScrollbackLines:      scrollbackLines,
 		NoAnimations:         noAnimations,
 		ThemeName:            themeName,
-	})
+	}, &config.Global)
 
 	// Create sip server
 	sipConfig := sip.DefaultConfig()
@@ -345,7 +345,7 @@ func runWebServer() error {
 	// The touch key bar is server-wide while the keys it carries are user
 	// settings, so it is built from the startup config read above rather than
 	// from a second load that could disagree with the globals.
-	leader := config.LeaderKey
+	leader := config.Global.LeaderKey
 	if userConfig.Keybindings.LeaderKey != "" {
 		leader = userConfig.Keybindings.LeaderKey
 	}
@@ -719,6 +719,18 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth,
 		// The TUI runs beside the daemon and the user is in a browser
 		// somewhere else, so nothing here may touch the host's own desktop.
 		RemoteClient: true,
+		// This browser's own cell measurement, not the process-wide placeholder
+		// installed at startup before any browser had connected. One process
+		// serves several readers at several font sizes, and the image cell math
+		// has to answer for the one it is drawing to.
+		Caps: &app.HostCapabilities{
+			KittyGraphics: true,
+			SixelGraphics: true,
+			TrueColor:     true,
+			TerminalName:  "tuios-web",
+			CellWidth:     cellWidth,
+			CellHeight:    cellHeight,
+		},
 	})
 
 	// Restore state from daemon if available

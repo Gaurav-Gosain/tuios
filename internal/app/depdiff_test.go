@@ -140,8 +140,8 @@ func TestDepDiffWidth(t *testing.T) {
 // a window name.
 func TestDepDiffFrame(t *testing.T) {
 	depDiffOut(t)
-	origShared := config.SharedBorders
-	t.Cleanup(func() { config.SharedBorders = origShared })
+	origShared := config.Global.SharedBorders
+	t.Cleanup(func() { config.Global.SharedBorders = origShared })
 
 	guests := []struct{ name, text string }{
 		{"ascii", "PANEEDGE"},
@@ -156,7 +156,7 @@ func TestDepDiffFrame(t *testing.T) {
 
 	var b strings.Builder
 	for _, shared := range []bool{false, true} {
-		config.SharedBorders = shared
+		config.Global.SharedBorders = shared
 		for _, panes := range []int{2, 3, 5} {
 			for _, g := range guests {
 				name := fmt.Sprintf("shared=%v/panes=%d/%s", shared, panes, g.name)
@@ -225,12 +225,12 @@ func TestDepDiffWrap(t *testing.T) {
 // lookup decide the bytes that carry it, and a stripped frame cannot see them.
 func TestDepDiffStyle(t *testing.T) {
 	depDiffOut(t)
-	origShared := config.SharedBorders
-	t.Cleanup(func() { config.SharedBorders = origShared })
+	origShared := config.Global.SharedBorders
+	t.Cleanup(func() { config.Global.SharedBorders = origShared })
 
 	var b strings.Builder
 	for _, shared := range []bool{false, true} {
-		config.SharedBorders = shared
+		config.Global.SharedBorders = shared
 		for _, panes := range []int{2, 4} {
 			for _, text := range []string{"PANEEDGE", "世世世", "👋👋"} {
 				m := gapTestOS(t, panes)

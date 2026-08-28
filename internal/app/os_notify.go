@@ -132,20 +132,20 @@ const maxLiveNotifications = 16
 // "no timeout" and getting "no notification": os_selection asks for a sticky
 // error when a capture fails and got silence, which is the worst possible
 // outcome for the one message class the user cannot afford to miss.
-func notificationLifetime(notifType string, requested time.Duration) (time.Duration, bool) {
+func notificationLifetime(notifType string, requested time.Duration, s *config.Settings) (time.Duration, bool) {
 	switch notifType {
 	case "error":
-		if config.NotificationErrorSticky {
+		if s.NotificationErrorSticky {
 			return 0, true
 		}
-		return max(requested, config.NotificationErrorDuration), false
+		return max(requested, s.NotificationErrorDuration), false
 	case "warning", "warn":
-		return max(requested, config.NotificationWarningDuration), false
+		return max(requested, s.NotificationWarningDuration), false
 	default:
 		if requested <= 0 {
 			return 0, false
 		}
-		return max(requested, config.NotificationDuration), false
+		return max(requested, s.NotificationDuration), false
 	}
 }
 
@@ -184,7 +184,7 @@ func (m *OS) showNotification(message, notifType string, duration time.Duration,
 		return
 	}
 
-	effective, sticky := notificationLifetime(notifType, duration)
+	effective, sticky := notificationLifetime(notifType, duration, &m.Settings)
 	if effective <= 0 && !sticky {
 		return
 	}

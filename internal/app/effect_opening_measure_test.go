@@ -176,7 +176,7 @@ func TestMeasureEffectOpenings(t *testing.T) {
 		for _, name := range tfx.Names() {
 			d, _ := tfx.Lookup(name)
 			effect := d.New()
-			engine, ok := screensaverBuild(capture, grid.Cols, grid.Rows, effect, d.NeedsFillCharacters)
+			engine, ok := screensaverBuild(capture, grid.Cols, grid.Rows, effect, d.NeedsFillCharacters, defaultSaverSettings())
 			if !ok {
 				t.Errorf("%s will not build", name)
 				continue

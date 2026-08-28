@@ -6,7 +6,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/scrollback"
 )
 
@@ -142,11 +141,11 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		if text != "" {
 			o.ShowNotification(
 				fmt.Sprintf("Copied %d chars", len(text)),
-				"success", config.NotificationDuration,
+				"success", o.Settings.NotificationDuration,
 			)
 			return o, tea.SetClipboard(text)
 		}
-		o.ShowNotification("Nothing to copy", "warning", config.NotificationDuration)
+		o.ShowNotification("Nothing to copy", "warning", o.Settings.NotificationDuration)
 
 	// Copy command text to clipboard
 	case "c":
@@ -154,7 +153,7 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		if text != "" {
 			o.ShowNotification(
 				fmt.Sprintf("Copied: %s", truncateForNotif(text, 30)),
-				"success", config.NotificationDuration,
+				"success", o.Settings.NotificationDuration,
 			)
 			return o, tea.SetClipboard(text)
 		}
@@ -183,7 +182,7 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		_ = focusedWindow.SendInput(data)
 		o.ShowNotification(
 			fmt.Sprintf("Pasted: %s", truncateForNotif(text, 30)),
-			"info", config.NotificationDuration,
+			"info", o.Settings.NotificationDuration,
 		)
 	}
 
@@ -469,7 +468,7 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 				vim.ExitVisual()
 				o.ShowNotification(
 					fmt.Sprintf("Copied %d chars", len(text)),
-					"success", config.NotificationDuration,
+					"success", o.Settings.NotificationDuration,
 				)
 				vim.EnsureVisible()
 				return o, tea.SetClipboard(text)
@@ -479,13 +478,13 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 			if text != "" {
 				o.ShowNotification(
 					fmt.Sprintf("Copied %d chars", len(text)),
-					"success", config.NotificationDuration,
+					"success", o.Settings.NotificationDuration,
 				)
 				vim.EnsureVisible()
 				return o, tea.SetClipboard(text)
 			}
 		}
-		o.ShowNotification("Nothing to copy", "warning", config.NotificationDuration)
+		o.ShowNotification("Nothing to copy", "warning", o.Settings.NotificationDuration)
 
 	// Exit
 	case "esc", "q":
@@ -520,7 +519,7 @@ func handleScrollbackBrowserMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.O
 		return o, nil
 	}
 
-	scrollAmount := config.ScrollLines
+	scrollAmount := o.Settings.ScrollLines
 
 	if browser.OutputMode && browser.Vim != nil {
 		vim := browser.Vim

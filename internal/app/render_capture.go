@@ -116,7 +116,7 @@ func (m *OS) captureOutline(pal overlay.Palette, x, y, w, h int, chip string) []
 	// glyph set, the border style and ascii-only mode, so a riced session's
 	// marquee is drawn in its own strokes rather than in a set spelled out
 	// here.
-	g := config.GetBorderForStyle()
+	g := m.Settings.GetBorderForStyle()
 	ink := lipgloss.NewStyle().Foreground(pal.AccentBright).Bold(true)
 	z := config.ZIndexContextMenu + 1
 

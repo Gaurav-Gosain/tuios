@@ -35,7 +35,40 @@ const (
 	// CtxTargetWorkspacePill is one workspace tab in the dock's strip. The "+"
 	// tab is not one: it stands for a workspace that does not exist yet.
 	CtxTargetWorkspacePill
+	// CtxTargetFileRow is the rail's files section: one row of the listing, or
+	// the blank space the section drew around it. Both are the same target
+	// because the two rows that need no file at all (make one, paste one) are
+	// the whole of what the blank space can offer, and they are on the row menu
+	// too. What the menu was opened on rides in ContextMenu.File.
+	CtxTargetFileRow
 )
+
+// fileMenuTarget is the listing row a files-section menu was opened on.
+//
+// It is captured when the menu opens and carried to the row that runs, so an
+// action reached from the menu acts on the name the user pointed at rather than
+// on the row the keyboard cursor happens to be sitting on. Right-clicking a row
+// does not move the cursor, and it must not have to.
+//
+// Dir is the folder that was listed at that moment, kept for the same reason
+// filePromptState keeps one: a reply already in flight can replace the listing
+// between the right-click and the row being chosen, and the operation has to act
+// on what the user was looking at.
+type fileMenuTarget struct {
+	Dir string
+	// Name is the entry, or "" when the menu was opened on the section's blank
+	// space, on its header, or on a row whose name has since left the listing.
+	Name string
+	// IsDir says the entry is a folder, which is the whole of what a folder's
+	// menu and a file's have to differ by.
+	IsDir bool
+	// Up marks the ".." row. It names the folder above, which is not a name in
+	// the listing and so is not a target for a rename or a delete.
+	Up bool
+}
+
+// Active reports whether the target names something a menu can be about at all.
+func (t fileMenuTarget) Active() bool { return t.Dir != "" }
 
 // ContextMenuItem is one row of a context menu.
 //
@@ -87,6 +120,12 @@ type ContextMenu struct {
 	// same way Workspace does, so a row acting on a session acts on the one the
 	// user pointed at rather than on the attached one.
 	SessionID string
+	// File is the listing row the menu was opened on, for a files-section menu.
+	// It carries exactly as far as Workspace and SessionID do, and it is read
+	// only inside this package: the actions it steers (fileActionTarget,
+	// SidebarFileOpen) live here, so there is no getter for the input layer the
+	// way TakeMenuSession is one.
+	File fileMenuTarget
 
 	AnchorX int
 	AnchorY int
@@ -193,7 +232,7 @@ func (m *OS) ContextMenuSelectedAction() string {
 	if cm == nil || !cm.selectable(cm.Selected) {
 		return ""
 	}
-	m.menuWorkspace, m.menuSession = cm.Workspace, cm.SessionID
+	m.menuWorkspace, m.menuSession, m.menuFile = cm.Workspace, cm.SessionID, cm.File
 	return cm.Items[cm.Selected].Action
 }
 
@@ -210,7 +249,9 @@ func (m *OS) TakeMenuSession() string { return m.menuSession }
 
 // ClearMenuTarget ends the carry. The input layer calls it after dispatching a
 // menu row.
-func (m *OS) ClearMenuTarget() { m.menuWorkspace, m.menuSession = 0, "" }
+func (m *OS) ClearMenuTarget() {
+	m.menuWorkspace, m.menuSession, m.menuFile = 0, "", fileMenuTarget{}
+}
 
 // ContextMenuMove moves the selection by delta, skipping separators and dimmed
 // rows.
@@ -249,7 +290,7 @@ func (m *OS) ContextMenuClick(x, y int) (action string, consumed bool) {
 	}
 	cm.Selected = idx
 	action = cm.Items[idx].Action
-	m.menuWorkspace, m.menuSession = cm.Workspace, cm.SessionID
+	m.menuWorkspace, m.menuSession, m.menuFile = cm.Workspace, cm.SessionID, cm.File
 	m.CloseContextMenu()
 	return action, true
 }
@@ -299,7 +340,7 @@ var subPrefixEntry = map[string]string{
 // leader is what got the user into prefix mode in the first place. The leader,
 // and for a sub-prefix action the key that opens that sub-prefix, are prepended
 // here so the hint is the whole thing a user has to press.
-func contextMenuHint(registry *config.KeybindRegistry, action string) string {
+func contextMenuHint(registry *config.KeybindRegistry, action string, s *config.Settings) string {
 	if registry == nil || action == "" {
 		return ""
 	}
@@ -315,19 +356,31 @@ func contextMenuHint(registry *config.KeybindRegistry, action string) string {
 		if entryKey == "" {
 			return "" // no way in, so there is no chord to show
 		}
-		return config.LeaderKey + " " + entryKey + " " + key
+		return s.LeaderKey + " " + entryKey + " " + key
 	}
 	if strings.HasPrefix(action, "prefix_") {
-		return config.LeaderKey + " " + key
+		return s.LeaderKey + " " + key
 	}
 	return key
 }
 
 // firstKey returns the first key bound to an action, or "".
+//
+// GetKeys sweeps the window, prefix and terminal sections and stops there, so
+// an action that lives only in one of the rail's two scopes would answer with
+// no hint at all. Those two are asked after it rather than folded into it: they
+// are the rail's own keymaps, they are consulted only while the rail owns the
+// keyboard, and a rail key must not start showing up as the hint for a
+// window-mode action that happens to share its name.
 func firstKey(registry *config.KeybindRegistry, action string) string {
-	keys := registry.GetKeys(action)
-	if len(keys) == 0 {
-		return ""
+	for _, keys := range [][]string{
+		registry.GetKeys(action),
+		registry.GetSidebarFilesKeys(action),
+		registry.GetSidebarKeys(action),
+	} {
+		if len(keys) > 0 {
+			return keys[0]
+		}
 	}
-	return keys[0]
+	return ""
 }

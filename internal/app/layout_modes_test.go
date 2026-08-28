@@ -31,13 +31,14 @@ import (
 // been through it, and the tree it left behind outlives the switch.
 func modeOS(t *testing.T, mode string, shared bool, gap, n, w, h int) *OS {
 	t.Helper()
-	prevAnim, prevShared, prevGap := config.AnimationsEnabled, config.SharedBorders, config.PaneGap
-	config.AnimationsEnabled, config.SharedBorders, config.PaneGap = false, shared, gap
+	prevAnim, prevShared, prevGap := config.Global.AnimationsEnabled, config.Global.SharedBorders, config.Global.PaneGap
+	config.Global.AnimationsEnabled, config.Global.SharedBorders, config.Global.PaneGap = false, shared, gap
 	t.Cleanup(func() {
-		config.AnimationsEnabled, config.SharedBorders, config.PaneGap = prevAnim, prevShared, prevGap
+		config.Global.AnimationsEnabled, config.Global.SharedBorders, config.Global.PaneGap = prevAnim, prevShared, prevGap
 	})
 
 	m := &OS{
+		Settings:             config.Global,
 		SharedBorders:        shared,
 		PaneGap:              gap,
 		ScrollColumnWidth:    config.ScrollColumnWidthDefault,
@@ -244,6 +245,7 @@ func TestBSPExhaustsTheRegionByHalvingIt(t *testing.T) {
 	}
 
 	cramped := modeOS(t, LayoutModeBSP, true, 0, 9, 120, 40)
+	roomy.Settings = config.Global
 	smallest := cramped.Windows[0]
 	for _, w := range cramped.Windows {
 		if w.Width*w.Height < smallest.Width*smallest.Height {

@@ -91,14 +91,14 @@ var (
 
 // sidebarLayoutPlans is the rail's layout, in the order the sections are
 // stacked from the top.
-func sidebarLayoutPlans() []sidebarSectionPlan {
-	plans, _ := sidebarLayoutFor(config.SidebarSections)
+func sidebarLayoutPlans(s *config.Settings) []sidebarSectionPlan {
+	plans, _ := sidebarLayoutFor(s.SidebarSections)
 	return plans
 }
 
 // sidebarLayoutHas reports whether the layout names a section at all.
-func sidebarLayoutHas(section sidebarSection) bool {
-	_, has := sidebarLayoutFor(config.SidebarSections)
+func sidebarLayoutHas(section sidebarSection, s *config.Settings) bool {
+	_, has := sidebarLayoutFor(s.SidebarSections)
 	return has[section]
 }
 

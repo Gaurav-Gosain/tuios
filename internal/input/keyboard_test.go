@@ -124,6 +124,7 @@ func TestTransitionGuardIntegration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			o := &app.OS{
+				Settings:              config.Global,
 				Mode:                  app.TerminalMode,
 				FocusedWindow:         -1, // no focused window
 				TerminalModeEnteredAt: time.Now().Add(-tt.enteredAgo),
@@ -181,13 +182,13 @@ func TestPrefixCommandsAvailableInBothModes(t *testing.T) {
 
 	for _, mode := range modes {
 		t.Run(mode.name, func(t *testing.T) {
-			o := &app.OS{Mode: mode.mode, PrefixActive: true, KeybindRegistry: registry}
+			o := &app.OS{Settings: config.Global, Mode: mode.mode, PrefixActive: true, KeybindRegistry: registry}
 			result, _ := HandlePrefixCommand(tea.KeyPressMsg{Code: 'S', Text: "S"}, o)
 			if !result.ShowSessionSwitcher {
 				t.Error("leader S should open the session switcher")
 			}
 
-			o2 := &app.OS{Mode: mode.mode, PrefixActive: true, KeybindRegistry: registry}
+			o2 := &app.OS{Settings: config.Global, Mode: mode.mode, PrefixActive: true, KeybindRegistry: registry}
 			result2, _ := HandlePrefixCommand(tea.KeyPressMsg{Code: 'P', Text: "P"}, o2)
 			if !result2.ShowCommandPalette {
 				t.Error("leader P should open the command palette")
@@ -230,7 +231,7 @@ func TestMacOSOptionGlyphsAreReservedOnlyOnDarwin(t *testing.T) {
 func TestTerminalPrefixChordNotRecorded(t *testing.T) {
 	rec := tape.NewRecorder()
 	rec.Start()
-	o := &app.OS{Mode: app.TerminalMode, TapeRecorder: rec}
+	o := &app.OS{Settings: config.Global, Mode: app.TerminalMode, TapeRecorder: rec}
 
 	// ctrl+b activates prefix mode and must not be recorded.
 	ctrlB := tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl}
@@ -255,7 +256,7 @@ func TestTerminalPrefixChordNotRecorded(t *testing.T) {
 func TestRecordTerminalKeyClassification(t *testing.T) {
 	rec := tape.NewRecorder()
 	rec.Start()
-	o := &app.OS{TapeRecorder: rec}
+	o := &app.OS{Settings: config.Global, TapeRecorder: rec}
 
 	recordTerminalKey(o, tea.KeyPressMsg{Code: 'l', Text: "l"})
 	recordTerminalKey(o, tea.KeyPressMsg{Code: 's', Text: "s"})

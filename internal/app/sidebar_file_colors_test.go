@@ -136,9 +136,9 @@ func TestFileIconColorsPaintTheGlyphAndNothingElse(t *testing.T) {
 // Negative control, confirmed red: drop the config.SidebarFileIconColors term
 // from fileIconColorsOn, and the off case paints the go glyph blue.
 func TestFileIconColorsOffIsACleanPath(t *testing.T) {
-	prev := config.SidebarFileIconColors
-	config.SidebarFileIconColors = false
-	t.Cleanup(func() { config.SidebarFileIconColors = prev })
+	prev := config.Global.SidebarFileIconColors
+	config.Global.SidebarFileIconColors = false
+	t.Cleanup(func() { config.Global.SidebarFileIconColors = prev })
 
 	lines := colorRailLines(t, colorTestDir(t))
 	for _, name := range []string{"main.go", "lib.rs", "app.py", "internal"} {
@@ -172,23 +172,23 @@ func TestFileIconColorsNeedTheIconsUnderThem(t *testing.T) {
 		glyph string
 	}{
 		{"icons off", func(t *testing.T) {
-			prev := config.SidebarFileIcons
-			config.SidebarFileIcons = false
-			t.Cleanup(func() { config.SidebarFileIcons = prev })
+			prev := config.Global.SidebarFileIcons
+			config.Global.SidebarFileIcons = false
+			t.Cleanup(func() { config.Global.SidebarFileIcons = prev })
 		}, "·"},
 		{"ascii", func(t *testing.T) {
-			prev := config.UseASCIIOnly
-			config.UseASCIIOnly = true
+			prev := config.Global.UseASCIIOnly
+			config.Global.UseASCIIOnly = true
 			overlay.SetASCII(true)
 			t.Cleanup(func() {
-				config.UseASCIIOnly = prev
+				config.Global.UseASCIIOnly = prev
 				overlay.SetASCII(false)
 			})
 		}, "."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.setup(t)
-			if fileIconColorsOn() {
+			if fileIconColorsOn(&config.Global) {
 				t.Error("the colour layer says it is on with the icons off")
 			}
 			line := lineHolding(t, colorRailLines(t, colorTestDir(t)), "main.go")
@@ -247,7 +247,7 @@ func TestFileIconColorsClearTheMarkFloor(t *testing.T) {
 			raw, worstRaw, worstName := 0, 99.0, ""
 			for _, name := range names {
 				icon := fileIconFor(name, name == "src")
-				mark := fileRowMark(icon, name == "src", false)
+				mark := fileRowMark(icon, name == "src", false, &config.Global)
 				if mark.Hex == "" {
 					t.Fatalf("%q drew no colour at all", name)
 				}

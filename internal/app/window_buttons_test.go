@@ -21,9 +21,9 @@ import (
 // withButtonStyle runs fn under one control style and restores the global.
 func withButtonStyle(t *testing.T, style string, fn func()) {
 	t.Helper()
-	prev := config.WindowButtonStyle
-	config.WindowButtonStyle = style
-	defer func() { config.WindowButtonStyle = prev }()
+	prev := config.Global.WindowButtonStyle
+	config.Global.WindowButtonStyle = style
+	defer func() { config.Global.WindowButtonStyle = prev }()
 	fn()
 }
 
@@ -31,9 +31,9 @@ func withButtonStyle(t *testing.T, style string, fn func()) {
 // restores the global.
 func withButtonPosition(t *testing.T, position string, fn func()) {
 	t.Helper()
-	prev := config.WindowButtonPosition
-	config.WindowButtonPosition = position
-	defer func() { config.WindowButtonPosition = prev }()
+	prev := config.Global.WindowButtonPosition
+	config.Global.WindowButtonPosition = position
+	defer func() { config.Global.WindowButtonPosition = prev }()
 	fn()
 }
 
@@ -56,7 +56,7 @@ func TestWindowButtonRectsCoverTheGlyphsTheyWereDrawnFor(t *testing.T) {
 						withButtonPosition(t, position, func() {
 							withButtonStyle(t, style, func() {
 								win := &terminal.Window{ID: "w", X: originX, Y: 4, Width: width, Height: 10, Workspace: 1}
-								m := &OS{Windows: []*terminal.Window{win}}
+								m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 								cols, rects := drawTopBorder(t, m, win, tiling)
 
 								wantControls := 3
@@ -124,7 +124,7 @@ func TestWindowButtonsSitAgainstTheEndTheyWereAskedFor(t *testing.T) {
 				withButtonPosition(t, position, func() {
 					withButtonStyle(t, style, func() {
 						win := &terminal.Window{ID: "w", X: 12, Y: 3, Width: 50, Height: 10, Workspace: 1}
-						m := &OS{Windows: []*terminal.Window{win}}
+						m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 						pill, pillHits := m.buildWindowButtons(lipgloss.Color("#7dd3fc"), win, tiling)
 						pillWidth := lipgloss.Width(pill)
 
@@ -162,7 +162,7 @@ func TestWindowButtonRectsDoNotOverlap(t *testing.T) {
 			withButtonPosition(t, position, func() {
 				withButtonStyle(t, style, func() {
 					win := &terminal.Window{ID: "w", X: 3, Y: 1, Width: 60, Height: 10, Workspace: 1}
-					m := &OS{Windows: []*terminal.Window{win}}
+					m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 					_, rects := drawTopBorder(t, m, win, false)
 					for i, a := range rects {
 						for _, b := range rects[i+1:] {
@@ -197,7 +197,7 @@ func TestPillRectsMatchTheDocumentedOffsets(t *testing.T) {
 			{true, WindowButtonMinimize, config.MinimizeButtonLeftTiling, config.MinimizeButtonRightTiling},
 		} {
 			win := &terminal.Window{ID: "w", X: 11, Y: 2, Width: 50, Height: 10, Workspace: 1}
-			m := &OS{Windows: []*terminal.Window{win}}
+			m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 			cols, rects := drawTopBorder(t, m, win, tc.tiling)
 			end := win.X + len(cols) // one past the corner, which offset -1 names
 
@@ -227,19 +227,19 @@ func TestPillRectsMatchTheDocumentedOffsets(t *testing.T) {
 func TestWindowButtonRectsAreEmptyWhenNothingWasDrawn(t *testing.T) {
 	withButtonStyle(t, config.WindowButtonStylePill, func() {
 		win := &terminal.Window{ID: "w", X: 0, Y: 0, Width: 6, Height: 4, Workspace: 1}
-		m := &OS{Windows: []*terminal.Window{win}}
+		m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 		if _, rects := drawTopBorder(t, m, win, false); len(rects) != 0 {
 			t.Errorf("a %d-column window recorded %d controls, want none", win.Width, len(rects))
 		}
 	})
 
 	withButtonStyle(t, config.WindowButtonStyleDots, func() {
-		prev := config.HideWindowButtons
-		config.HideWindowButtons = true
-		defer func() { config.HideWindowButtons = prev }()
+		prev := config.Global.HideWindowButtons
+		config.Global.HideWindowButtons = true
+		defer func() { config.Global.HideWindowButtons = prev }()
 
 		win := &terminal.Window{ID: "w", X: 0, Y: 0, Width: 60, Height: 8, Workspace: 1}
-		m := &OS{Windows: []*terminal.Window{win}}
+		m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 		if _, rects := drawTopBorder(t, m, win, false); len(rects) != 0 {
 			t.Errorf("hidden buttons recorded %d controls, want none", len(rects))
 		}
@@ -251,7 +251,7 @@ func TestWindowButtonRectsAreEmptyWhenNothingWasDrawn(t *testing.T) {
 func TestWindowButtonRectsAreDroppedWithTheirWindow(t *testing.T) {
 	withButtonStyle(t, config.WindowButtonStyleDots, func() {
 		win := &terminal.Window{ID: "w", X: 4, Y: 3, Width: 40, Height: 8, Workspace: 1}
-		m := &OS{Windows: []*terminal.Window{win}}
+		m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 		_, rects := drawTopBorder(t, m, win, false)
 		if len(rects) == 0 {
 			t.Fatal("nothing was recorded to drop")
@@ -273,7 +273,7 @@ func TestWindowButtonRectsAreDroppedWithTheirWindow(t *testing.T) {
 func TestWindowButtonRectsFollowTheWindow(t *testing.T) {
 	withButtonStyle(t, config.WindowButtonStyleDots, func() {
 		win := &terminal.Window{ID: "w", X: 4, Y: 3, Width: 40, Height: 8, Workspace: 1}
-		m := &OS{Windows: []*terminal.Window{win}}
+		m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 		_, before := drawTopBorder(t, m, win, false)
 
 		win.X += 9
@@ -297,7 +297,7 @@ func TestOverlappingControlsResolveToTheirOwnWindow(t *testing.T) {
 	withButtonStyle(t, config.WindowButtonStyleDots, func() {
 		under := &terminal.Window{ID: "under", X: 0, Y: 5, Width: 40, Height: 8, Workspace: 1}
 		over := &terminal.Window{ID: "over", X: 0, Y: 5, Width: 40, Height: 8, Workspace: 1}
-		m := &OS{Windows: []*terminal.Window{under, over}}
+		m := &OS{Settings: config.Global, Windows: []*terminal.Window{under, over}}
 		_, underRects := drawTopBorder(t, m, under, false)
 		drawTopBorder(t, m, over, false)
 
@@ -319,10 +319,10 @@ func TestOverlappingControlsResolveToTheirOwnWindow(t *testing.T) {
 func TestDotsRevealTheirSymbolsOnHover(t *testing.T) {
 	withButtonStyle(t, config.WindowButtonStyleDots, func() {
 		win := &terminal.Window{ID: "w", X: 2, Y: 1, Width: 40, Height: 8, Workspace: 1}
-		m := &OS{Windows: []*terminal.Window{win}}
+		m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 
 		idle, rects := drawTopBorder(t, m, win, false)
-		dot := []rune(config.GetWindowButtonDot())[0]
+		dot := []rune(m.Settings.GetWindowButtonDot())[0]
 		if strings.Count(string(idle), string(dot)) != 3 {
 			t.Fatalf("idle bar drew %q, want three %c", string(idle), dot)
 		}

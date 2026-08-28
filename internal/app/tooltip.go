@@ -79,7 +79,7 @@ type tooltipState struct {
 
 // tooltipsEnabled reports whether a surface pops labels at all.
 func (m *OS) tooltipsEnabled(src tooltipSource) bool {
-	if !config.Tooltips || src == tooltipNone {
+	if !m.Settings.Tooltips || src == tooltipNone {
 		return false
 	}
 	if src == tooltipRailStrip {
@@ -93,7 +93,7 @@ func (m *OS) tooltipsEnabled(src tooltipSource) bool {
 		return sidebarVariant(m.GetSidebarWidth()) != sidebarVariantGlyph
 	}
 	if src == tooltipDockWorkspace {
-		return config.DockWorkspaceTooltip
+		return m.Settings.DockWorkspaceTooltip
 	}
 	return true
 }
