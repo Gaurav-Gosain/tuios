@@ -229,6 +229,27 @@ type SessionState struct {
 	WindowToBSPID   map[string]int             `json:"window_to_bsp_id,omitempty"` // Window UUID -> BSP int ID
 	NextBSPWindowID int                        `json:"next_bsp_window_id,omitempty"`
 	TilingScheme    int                        `json:"tiling_scheme,omitempty"` // Default auto-insertion scheme
+	// WorkspaceMasterRatio is the master-stack split, keyed by workspace, the way
+	// this state already keys the focus, the names, the order and the BSP trees.
+	// The ratio is the session's rather than any one client's - a PTY has one
+	// size, which is why MasterRatio was settled here to begin with - and a
+	// workspace is what a ratio belongs to: BSP split ratios have been
+	// per-workspace state for as long as they were carried at all, and
+	// master-stack's single flat value was the odd one out. Each client kept a
+	// private per-workspace memory of it and never sent it, so a client that had
+	// not visited a workspace laid that workspace out at its own configured ratio
+	// and pushed the result back, taking another client's tuned value away from
+	// the whole session.
+	//
+	// Absent means what state written before this field existed meant: MasterRatio
+	// alone, which is the ratio in force on the workspace CurrentWorkspace names.
+	// A peer too old to send this is read exactly that way and behaves as it
+	// always did. MasterRatio stays beside this and keeps that same meaning, so an
+	// older peer reading this state still gets the one value it understands. An
+	// entry-less map says the same nothing as an absent one and is read the same
+	// way, which matters because gob drops a nil map and sends an empty one, so
+	// both forms reach a reader.
+	WorkspaceMasterRatio map[int]float64 `json:"workspace_master_ratio,omitempty"`
 	// LayoutMode is which tiling layout the session uses: "bsp", "master-stack"
 	// or "scrolling". It sits beside the BSP topology it selects between, which
 	// was already carried here; without it a scrolling session came back as a BSP
@@ -1079,6 +1100,9 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	}
 	if s.state.WorkspaceOrder != nil {
 		stateCopy.WorkspaceOrder = slices.Clone(s.state.WorkspaceOrder)
+	}
+	if s.state.WorkspaceMasterRatio != nil {
+		stateCopy.WorkspaceMasterRatio = maps.Clone(s.state.WorkspaceMasterRatio)
 	}
 	return &stateCopy
 }

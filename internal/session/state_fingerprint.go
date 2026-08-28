@@ -117,6 +117,15 @@ func StateFingerprint(s *SessionState) uint64 {
 	hashIntStr(s.WorkspaceFocus)
 	hashIntStr(s.WorkspaceNames)
 
+	// The per-workspace master ratios, folded in the same way and for the same
+	// reason as the flat one above: a peer acts on them, so a push that changes
+	// one has something to say and must not be suppressed.
+	num(len(s.WorkspaceMasterRatio))
+	for _, k := range sortedIntKeys(s.WorkspaceMasterRatio) {
+		num(k)
+		f64(s.WorkspaceMasterRatio[k])
+	}
+
 	num(len(s.WorkspaceOrder))
 	for _, v := range s.WorkspaceOrder {
 		num(v)

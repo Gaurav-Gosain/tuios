@@ -396,12 +396,15 @@ func (m *OS) RestoreWorkspaceLayout(workspace int) {
 		return
 	}
 
-	// Restore the master ratio this workspace was last left at. A workspace
-	// never visited while tiling was on has no entry, and falls back to the
-	// configured ratio rather than to a literal half: with
-	// appearance.master_ratio at 70 the first visit to a workspace used to snap
-	// the split back to 50 and stay there, which reads as the setting being
-	// ignored and is the same surprise for a ratio the resize keys had moved.
+	// Restore the master ratio this workspace was last left at. The map is the
+	// session's, not this client's: it is adopted from session state on every
+	// sync, so a workspace another client tuned is laid out here at the ratio that
+	// client left it at rather than at whatever this one has configured. A
+	// workspace no client has a value for has no entry, and falls back to the
+	// configured ratio rather than to a literal half: with appearance.master_ratio
+	// at 70 the first visit to a workspace used to snap the split back to 50 and
+	// stay there, which reads as the setting being ignored and is the same
+	// surprise for a ratio the resize keys had moved.
 	if ratio, exists := m.WorkspaceMasterRatio[workspace]; exists {
 		m.MasterRatio = ratio
 	} else {
