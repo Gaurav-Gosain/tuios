@@ -115,22 +115,30 @@ func TestStateFingerprintNoticesEveryChange(t *testing.T) {
 		"window workspace":  func(s *SessionState) { s.Windows[0].Workspace = 2 },
 		"window alt screen": func(s *SessionState) { s.Windows[0].IsAltScreen = true },
 		"window unplaced":   func(s *SessionState) { s.Windows[0].Unplaced = true },
-		"agent state":       func(s *SessionState) { s.Windows[0].AgentState = AgentStateWorking },
-		"foreground cmd":    func(s *SessionState) { s.Windows[0].ForegroundCmd = "nvim" },
-		"window dropped":    func(s *SessionState) { s.Windows = s.Windows[:1] },
-		"window order":      func(s *SessionState) { s.Windows[0], s.Windows[1] = s.Windows[1], s.Windows[0] },
-		"workspace focus":   func(s *SessionState) { s.WorkspaceFocus[1] = "win-2" },
-		"workspace name":    func(s *SessionState) { s.WorkspaceNames[1] = "uno" },
-		"workspace ratio":   func(s *SessionState) { s.WorkspaceMasterRatio[1] = 0.51 },
-		"ratio added":       func(s *SessionState) { s.WorkspaceMasterRatio[6] = 0.5 },
-		"ratio dropped":     func(s *SessionState) { delete(s.WorkspaceMasterRatio, 5) },
-		"workspace order":   func(s *SessionState) { s.WorkspaceOrder = []int{2, 1} },
-		"bsp id map":        func(s *SessionState) { s.WindowToBSPID["win-1"] = 9 },
-		"tree ratio":        func(s *SessionState) { s.WorkspaceTrees[1].Root.SplitRatio = 0.6 },
-		"tree shape":        func(s *SessionState) { s.WorkspaceTrees[1].Root.Left = nil },
-		"tree added":        func(s *SessionState) { s.WorkspaceTrees[3] = &SerializedBSPTree{} },
-		"option value":      func(s *SessionState) { s.Options["a"] = "2" },
-		"option added":      func(s *SessionState) { s.Options["f"] = "6" },
+		"window floating":   func(s *SessionState) { s.Windows[0].IsFloating = true },
+		// Zoom is the case where the flag is the whole news. One pane on a
+		// workspace already fills the box, so zooming it moves no rectangle at
+		// all: if the flag is not in here the push looks like a repeat, the
+		// daemon does not re-broadcast it, and the other clients never hear that
+		// anything happened.
+		"window zoomed":   func(s *SessionState) { s.Windows[0].Zoomed = true },
+		"window pre-zoom": func(s *SessionState) { s.Windows[0].PreZoomW = 40 },
+		"agent state":     func(s *SessionState) { s.Windows[0].AgentState = AgentStateWorking },
+		"foreground cmd":  func(s *SessionState) { s.Windows[0].ForegroundCmd = "nvim" },
+		"window dropped":  func(s *SessionState) { s.Windows = s.Windows[:1] },
+		"window order":    func(s *SessionState) { s.Windows[0], s.Windows[1] = s.Windows[1], s.Windows[0] },
+		"workspace focus": func(s *SessionState) { s.WorkspaceFocus[1] = "win-2" },
+		"workspace name":  func(s *SessionState) { s.WorkspaceNames[1] = "uno" },
+		"workspace ratio": func(s *SessionState) { s.WorkspaceMasterRatio[1] = 0.51 },
+		"ratio added":     func(s *SessionState) { s.WorkspaceMasterRatio[6] = 0.5 },
+		"ratio dropped":   func(s *SessionState) { delete(s.WorkspaceMasterRatio, 5) },
+		"workspace order": func(s *SessionState) { s.WorkspaceOrder = []int{2, 1} },
+		"bsp id map":      func(s *SessionState) { s.WindowToBSPID["win-1"] = 9 },
+		"tree ratio":      func(s *SessionState) { s.WorkspaceTrees[1].Root.SplitRatio = 0.6 },
+		"tree shape":      func(s *SessionState) { s.WorkspaceTrees[1].Root.Left = nil },
+		"tree added":      func(s *SessionState) { s.WorkspaceTrees[3] = &SerializedBSPTree{} },
+		"option value":    func(s *SessionState) { s.Options["a"] = "2" },
+		"option added":    func(s *SessionState) { s.Options["f"] = "6" },
 	}
 
 	for what, mutate := range cases {

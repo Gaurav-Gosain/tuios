@@ -2,6 +2,8 @@ package app
 
 import (
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // MinimizeWindow minimizes the window at the specified index.
@@ -149,6 +151,15 @@ func (m *OS) toggleZoom() {
 		}
 		m.MarkAllDirty()
 	} else {
+		// One pane is zoomed per workspace. It was not, while the flag was
+		// client-local and only the focused pane was drawn: zooming a second
+		// pane left the first one flagged and still holding the whole box,
+		// invisible until the focus came back to it and the layout was wrong
+		// when it did. Shared, that ambiguity is a divergence rather than a
+		// latent mess - each client picks a pane to blow up and they need not
+		// pick the same one - so the previous zoom is retired here.
+		retireRetile := m.retireOtherZooms(fw)
+
 		// Save current position and zoom to fullscreen
 		fw.PreZoomX = fw.X
 		fw.PreZoomY = fw.Y
@@ -156,32 +167,170 @@ func (m *OS) toggleZoom() {
 		fw.PreZoomHeight = fw.Height
 		fw.Zoomed = true
 
-		// Zoom fills the content region: the box the session agreed the panes
-		// go in, beside a reserved sidebar band and clear of the dock rows. The
-		// margins come from the negotiated reserve rather than this client's own
-		// dock config, because a zoomed rectangle is synced to the session's
-		// other clients as it stands, and a rectangle poking out of the agreed
-		// box reads as a stale layout to every peer, which retiles it away.
-		topMargin := m.GetTopMargin()
-		leftMargin := m.GetLeftMargin()
-		contentWidth := m.GetContentWidth()
-		zoomWidth := contentWidth
-		// If ZoomMaxWidth is set, cap width and center horizontally
-		if m.Settings.ZoomMaxWidth > 0 && m.Settings.ZoomMaxWidth < contentWidth {
-			zoomWidth = m.Settings.ZoomMaxWidth
+		m.applyZoomRect(fw, false)
+		if retireRetile {
+			// A pane the retirement above handed back to the layout. Retiling
+			// while a pane is zoomed is safe now and was not before: the tiler
+			// skips the zoomed pane's rectangle and hands it the zoom box.
+			m.tileAllWindows()
 		}
-		fw.X = leftMargin + (contentWidth-zoomWidth)/2
-		fw.Y = topMargin
-		fw.Width = zoomWidth
-		fw.Height = m.GetUsableHeight()
-		fw.InvalidateCache()
-		// Route the resize through the shared path so a daemon-hosted pane is told
-		// its new size too; resizing the local emulator alone leaves the app
-		// unreflowed at the old size.
-		fw.Resize(fw.Width, fw.Height)
 		m.FlushPTYBuffersAfterResize()
 		m.MarkAllDirty()
 	}
+}
+
+// zoomedWindow is the pane the session has zoomed on the workspace this client
+// is showing, or nil when nothing on it is zoomed.
+//
+// Asked of the workspace, never of the focused pane. While zoom was
+// client-local the two questions had one answer, because the only client that
+// could hold the flag was the one that had just pressed the key on its own
+// focused pane. They come apart the moment the flag is shared: focus and zoom
+// travel in the same broadcast but a client applies them a step apart, a client
+// whose focused id is not in its window list holds -1, and a peer can be sitting
+// in its sidebar. Every reader that asked the focused window read those moments
+// as "nothing is zoomed" - which retiles the zoom away and drags every other
+// client's shell back to its tile with it.
+func (m *OS) zoomedWindow() *terminal.Window {
+	for _, w := range m.Windows {
+		if w == nil || !w.Zoomed {
+			continue
+		}
+		if w.Workspace != m.CurrentWorkspace || w.Minimized || w.Minimizing {
+			continue
+		}
+		return w
+	}
+	return nil
+}
+
+// zoomRect is the box a zoomed pane fills on this client: the content region,
+// which is the box the session agreed the panes go in, beside a reserved
+// sidebar band and clear of the dock rows. The margins come from the negotiated
+// reserve rather than this client's own dock config, so the rectangle sits
+// inside the box every client tiles against.
+//
+// It is this client's box, computed from this client's size. The flag that says
+// a pane is zoomed is shared; this is not, and a peer recomputes it here rather
+// than adopting the rectangle a differently sized client arrived at.
+//
+// ZoomMaxWidth is the one term in it that is a per-client setting rather than a
+// session-agreed one, so two clients that have set it differently will hand the
+// same shell two widths. It is off by default and it was already the width the
+// zooming client pushed, so nothing regressed here - but it is the one input to
+// this box that the session does not settle, and settling it is a job of its
+// own.
+func (m *OS) zoomRect() (x, y, w, h int) {
+	topMargin := m.GetTopMargin()
+	leftMargin := m.GetLeftMargin()
+	contentWidth := m.GetContentWidth()
+	zoomWidth := contentWidth
+	// If ZoomMaxWidth is set, cap width and center horizontally
+	if m.Settings.ZoomMaxWidth > 0 && m.Settings.ZoomMaxWidth < contentWidth {
+		zoomWidth = m.Settings.ZoomMaxWidth
+	}
+	return leftMargin + (contentWidth-zoomWidth)/2, topMargin, zoomWidth, m.GetUsableHeight()
+}
+
+// applyZoomRect puts a zoomed pane in this client's zoom box and tells its
+// guest, through the shared path so a daemon-hosted pane is told its new size
+// too; resizing the local emulator alone leaves the app unreflowed at the old
+// size. It is idempotent, so it can be run on any sync that might have moved
+// the box.
+//
+// deferring is the tiler's own answer to resizeDeferralActive, threaded through
+// rather than asked again: while the pointer is dragging an edge the pane is
+// given the box visually and the real announcement is left for the release, the
+// same bargain every tiled pane gets.
+func (m *OS) applyZoomRect(w *terminal.Window, deferring bool) {
+	// A snap still in flight owns this pane's rectangle and stamps its own back
+	// on the next tick, so it is retired before the box is set - the same thing
+	// toggleZoom does before it zooms, and the same thing ApplyBSPLayout does
+	// before it places a pane. Retired even when the box already matches: the
+	// snap is heading somewhere else regardless.
+	m.CancelSnapAnimation(w)
+	x, y, width, height := m.zoomRect()
+	if w.X == x && w.Y == y && w.Width == width && w.Height == height {
+		return
+	}
+	w.X, w.Y = x, y
+	w.InvalidateCache()
+	if deferring {
+		w.ResizeVisual(width, height)
+		m.PendingResizes[w.ID] = [2]int{width, height}
+		w.MarkPositionDirty()
+		return
+	}
+	w.Resize(width, height)
+}
+
+// applyZoomState puts this client's own geometry behind the zoom flags a sync
+// delivered, and reports whether the layout owes anybody a retile.
+//
+// Zoom travels as a flag; the rectangle it implies does not. A zoomed pane
+// covers the content region of the client that zoomed it, which is that
+// client's render size less the agreed reserve, so adopting the box would leave
+// a narrower peer drawing a shell wider than its screen and a wider one drawing
+// it in a corner. The flag is adopted, the box is computed here.
+//
+// unzoomed are the panes this sync took out of zoom. They are holding a zoom box
+// and nothing in the sync says what should replace it: under a tiling layout the
+// answer is the layout's, which is what the returned bool asks for, and outside
+// one it is the rectangle the pane had before it was zoomed, which travels with
+// the flag exactly as the pre-minimize rectangle does.
+func (m *OS) applyZoomState(unzoomed []*terminal.Window) bool {
+	retile := false
+	for _, w := range unzoomed {
+		retile = m.unzoomPane(w) || retile
+	}
+	if zw := m.zoomedWindow(); zw != nil {
+		// Unconditional, not only when the flag changed: the box also moves when
+		// the session resizes or its reserve is renegotiated, and while a pane is
+		// zoomed nothing else looks at that pane's rectangle.
+		m.applyZoomRect(zw, false)
+	}
+	return retile
+}
+
+// retireOtherZooms takes every pane but keep out of zoom on keep's workspace,
+// reporting whether the layout owes any of them a retile.
+func (m *OS) retireOtherZooms(keep *terminal.Window) bool {
+	retile := false
+	for _, w := range m.Windows {
+		if w == nil || w == keep || !w.Zoomed || w.Workspace != keep.Workspace {
+			continue
+		}
+		retile = m.unzoomPane(w) || retile
+	}
+	return retile
+}
+
+// unzoomPane takes one pane out of zoom and gives it a rectangle again,
+// reporting whether the answer is a retile the caller still owes it.
+//
+// Under a tiling layout the pre-zoom rectangle is not the answer. It is a record
+// of where the pane sat at the moment it was zoomed, and the box has had every
+// chance to move since - a client resized, a peer joined narrower, the reserve
+// was renegotiated - so restoring it puts the pane at a size the layout does not
+// agree with and the shell at a width no client is drawing. The layout knows
+// where the pane goes; the caller is told to ask it.
+//
+// Outside a tiling layout nothing else will ever place the pane, so the pre-zoom
+// rectangle is the only record there is and it is restored.
+func (m *OS) unzoomPane(w *terminal.Window) bool {
+	w.Zoomed = false
+	if m.AutoTiling && !w.IsFloating {
+		return true
+	}
+	if w.PreZoomWidth <= 0 || w.PreZoomHeight <= 0 {
+		// A peer that predates the pre-zoom fields, or a pane zoomed before it
+		// had a rectangle. Nothing to go back to, so the box it holds stands.
+		return false
+	}
+	w.X, w.Y = w.PreZoomX, w.PreZoomY
+	w.InvalidateCache()
+	w.Resize(w.PreZoomWidth, w.PreZoomHeight)
+	return false
 }
 
 // RestoreMinimizedByIndex restores a minimized window by its minimized index.

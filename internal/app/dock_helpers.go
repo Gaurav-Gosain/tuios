@@ -595,8 +595,10 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 		}
 	}
 
-	// Add zoom indicator
-	if focusedWindow != nil && focusedWindow.Zoomed && !m.SidebarFocused {
+	// Add zoom indicator. The workspace's zoomed pane, not the focused one: the
+	// pane filling the box may be one a peer zoomed, and the chip is meant to
+	// say why the other panes are not on screen. See zoomedWindow.
+	if m.zoomedWindow() != nil && !m.SidebarFocused {
 		modeLabel += " Z"
 	}
 
