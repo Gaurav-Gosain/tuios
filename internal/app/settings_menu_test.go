@@ -100,8 +100,8 @@ func TestStringSettingsApplyAndPersist(t *testing.T) {
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
 
 	editSetting(t, m, "Appearance", "Window title format", "{index}: {title}")
-	if config.WindowTitleFormat != "{index}: {title}" {
-		t.Errorf("window title format global = %q, want {index}: {title}", config.WindowTitleFormat)
+	if m.Settings.WindowTitleFormat != "{index}: {title}" {
+		t.Errorf("window title format global = %q, want {index}: {title}", m.Settings.WindowTitleFormat)
 	}
 	if m.UserConfig.Appearance.WindowTitleFormat != "{index}: {title}" {
 		t.Errorf("window title format config = %q", m.UserConfig.Appearance.WindowTitleFormat)
@@ -168,7 +168,7 @@ func TestDaemonLogLevelPersists(t *testing.T) {
 // TestSettingsStringValuesNilConfigSafe guards the getters against a bare OS
 // (no held config), the shape used by several render/mouse tests.
 func TestSettingsStringValuesNilConfigSafe(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	for _, cat := range m.settingsCategories() {
 		for _, item := range cat.Items {
 			if item.value != nil {
@@ -186,12 +186,12 @@ func TestSharedBordersPaletteToggles(t *testing.T) {
 	// The toggle writes a package global, and shared borders change how every
 	// layout is measured, so a test that left it on would move the geometry
 	// under whatever ran next.
-	orig := config.SharedBorders
-	t.Cleanup(func() { config.SharedBorders = orig })
-	config.SharedBorders = false
+	orig := m.Settings.SharedBorders
+	t.Cleanup(func() { m.Settings.SharedBorders = orig })
+	m.Settings.SharedBorders = false
 
 	var toggle *CommandPaletteItem
-	for _, item := range GetCommandPaletteItems() {
+	for _, item := range GetCommandPaletteItems(&m.Settings) {
 		if item.Name == "Toggle shared borders" {
 			it := item
 			toggle = &it
@@ -204,7 +204,7 @@ func TestSharedBordersPaletteToggles(t *testing.T) {
 
 	_, save := toggle.Action(m)
 	runSave(t, save)
-	if !config.SharedBorders {
+	if !m.Settings.SharedBorders {
 		t.Error("palette toggle did not enable shared borders")
 	}
 	if m.UserConfig.Appearance.SharedBorders == nil || !*m.UserConfig.Appearance.SharedBorders {

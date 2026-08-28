@@ -28,12 +28,12 @@ func dimTestWindow(t testing.TB, w, h int) *terminal.Window {
 // carry toward.
 func withDim(t *testing.T, percent int) {
 	t.Helper()
-	prevDim := config.DimUnfocused
+	prevDim := config.Global.DimUnfocused
 	prevTheme := theme.CurrentThemeID()
-	config.DimUnfocused = percent
+	config.Global.DimUnfocused = percent
 	_ = theme.Initialize("catppuccin_mocha")
 	t.Cleanup(func() {
-		config.DimUnfocused = prevDim
+		config.Global.DimUnfocused = prevDim
 		_ = theme.Initialize(prevTheme)
 	})
 }
@@ -85,9 +85,9 @@ func TestTheDimIsPartOfTheContentCacheKey(t *testing.T) {
 }
 
 func TestDimOffLeavesTheRenderPathExactlyAsItWas(t *testing.T) {
-	prev := config.DimUnfocused
-	config.DimUnfocused = 0
-	t.Cleanup(func() { config.DimUnfocused = prev })
+	prev := config.Global.DimUnfocused
+	config.Global.DimUnfocused = 0
+	t.Cleanup(func() { config.Global.DimUnfocused = prev })
 
 	win := dimTestWindow(t, 40, 6)
 	m := newTestOS(win)
@@ -102,11 +102,11 @@ func TestWithNoThemeTheDimLeavesDefaultColouredCellsAlone(t *testing.T) {
 	// they look like, so there is no RGB here to carry anywhere. Guessing one
 	// would repaint the user's own palette on the panes they are not looking
 	// at. Validation says this out loud rather than letting it look broken.
-	prevDim, prevTheme := config.DimUnfocused, theme.CurrentThemeID()
-	config.DimUnfocused = 50
+	prevDim, prevTheme := config.Global.DimUnfocused, theme.CurrentThemeID()
+	config.Global.DimUnfocused = 50
 	_ = theme.Initialize("")
 	t.Cleanup(func() {
-		config.DimUnfocused = prevDim
+		config.Global.DimUnfocused = prevDim
 		_ = theme.Initialize(prevTheme)
 	})
 
@@ -162,14 +162,14 @@ func BenchmarkCellLoopPaneDimmed(b *testing.B) {
 // benchCellLoopPane renders focused, which always takes the cell loop, so the
 // only difference between the two callers is the blend.
 func benchCellLoopPane(b *testing.B, percent int) {
-	prevDim, prevTheme := config.DimUnfocused, theme.CurrentThemeID()
+	prevDim, prevTheme := config.Global.DimUnfocused, theme.CurrentThemeID()
 	// Focused panes are never dimmed, so the blend is forced on by rendering
 	// unfocused and taking the fast path away with a scrollback offset, which
 	// is what a scrolled-back pane does anyway.
-	config.DimUnfocused = percent
+	config.Global.DimUnfocused = percent
 	_ = theme.Initialize("catppuccin_mocha")
 	b.Cleanup(func() {
-		config.DimUnfocused = prevDim
+		config.Global.DimUnfocused = prevDim
 		_ = theme.Initialize(prevTheme)
 	})
 
@@ -186,11 +186,11 @@ func benchCellLoopPane(b *testing.B, percent int) {
 }
 
 func benchDimPane(b *testing.B, percent int) {
-	prevDim, prevTheme := config.DimUnfocused, theme.CurrentThemeID()
-	config.DimUnfocused = percent
+	prevDim, prevTheme := config.Global.DimUnfocused, theme.CurrentThemeID()
+	config.Global.DimUnfocused = percent
 	_ = theme.Initialize("catppuccin_mocha")
 	b.Cleanup(func() {
-		config.DimUnfocused = prevDim
+		config.Global.DimUnfocused = prevDim
 		_ = theme.Initialize(prevTheme)
 	})
 

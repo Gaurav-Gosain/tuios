@@ -14,7 +14,7 @@ import (
 // Shift+D.
 func TestHelpDebugKeysAreRealKeys(t *testing.T) {
 	registry := config.NewKeybindRegistry(config.DefaultConfig())
-	categories := GetHelpCategories(registry)
+	categories := GetHelpCategories(registry, &config.Global)
 
 	var debug []HelpBinding
 	for _, cat := range categories {
@@ -37,10 +37,10 @@ func TestHelpDebugKeysAreRealKeys(t *testing.T) {
 
 	// The real chords are leader, Shift+D, then one of l/c/k/a.
 	want := map[string]bool{
-		config.LeaderKey + ", D, l": true,
-		config.LeaderKey + ", D, c": true,
-		config.LeaderKey + ", D, k": true,
-		config.LeaderKey + ", D, a": true,
+		config.Global.LeaderKey + ", D, l": true,
+		config.Global.LeaderKey + ", D, c": true,
+		config.Global.LeaderKey + ", D, k": true,
+		config.Global.LeaderKey + ", D, a": true,
 	}
 	for _, b := range debug {
 		for _, key := range b.Keys {
@@ -61,7 +61,7 @@ func TestHelpListsDebugChordsOnce(t *testing.T) {
 	registry := config.NewKeybindRegistry(config.DefaultConfig())
 
 	seen := map[string]int{}
-	for _, cat := range GetHelpCategories(registry) {
+	for _, cat := range GetHelpCategories(registry, &config.Global) {
 		for _, b := range cat.Bindings {
 			for _, key := range b.Keys {
 				if strings.Contains(key, ", D, ") || strings.Contains(key, ", d, ") {
@@ -82,7 +82,7 @@ func TestHelpListsDebugChordsOnce(t *testing.T) {
 // beside each command. A hint that names a chord the input layer does not
 // implement is worse than no hint: it teaches the user a key that does nothing.
 func TestCommandPaletteShortcutsExist(t *testing.T) {
-	items := GetCommandPaletteItems()
+	items := GetCommandPaletteItems(&config.Global)
 
 	byName := make(map[string]CommandPaletteItem, len(items))
 	for _, item := range items {

@@ -14,6 +14,7 @@ import (
 // existed, in both the title and the id.
 func TestUnnamedSessionPresentsAsItsIdentity(t *testing.T) {
 	m := &OS{
+		Settings:    config.Global,
 		SessionName: "work",
 		Windows:     []*terminal.Window{{ID: "w1"}},
 	}
@@ -30,6 +31,7 @@ func TestUnnamedSessionPresentsAsItsIdentity(t *testing.T) {
 // keyed on the identity name and must survive the rename untouched.
 func TestDisplayRenameLeavesTheIdentityKeysAlone(t *testing.T) {
 	m := &OS{
+		Settings:     config.Global,
 		SessionName:  "work",
 		Windows:      []*terminal.Window{{ID: "w1"}},
 		SidebarOrder: []string{"other", "work"},
@@ -53,6 +55,7 @@ func TestDisplayRenameLeavesTheIdentityKeysAlone(t *testing.T) {
 	// The rail's own row targets are the other half of the split: a click or an
 	// enter has to address the session the daemon knows, whatever the row says.
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	m.Settings = config.Global
 	m.Width, m.Height = 120, 30
 	m.EffectiveWidth, m.EffectiveHeight = 120, 30
 	m.sidebarPanelLinesForTree(m.BuildSessionTree())
@@ -85,7 +88,7 @@ func TestDisplayRenameLeavesTheIdentityKeysAlone(t *testing.T) {
 // state away and restores from the daemon's snapshot. The label is daemon-owned,
 // so it must come back with it rather than reverting to the identity name.
 func TestRenameSurvivesAReattach(t *testing.T) {
-	m := &OS{SessionName: "work", Windows: []*terminal.Window{{ID: "w1"}}}
+	m := &OS{Settings: config.Global, SessionName: "work", Windows: []*terminal.Window{{ID: "w1"}}}
 
 	if err := m.RestoreFromState(&session.SessionState{
 		Name:             "work",
@@ -114,7 +117,7 @@ func TestRenameSurvivesAReattach(t *testing.T) {
 // presents as its number, which is both its identity and the label it has
 // always shown.
 func TestWorkspaceLabelFallsBackToTheNumber(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	if got := m.WorkspaceLabel(3); got != "3" {
 		t.Errorf("unnamed workspace label = %q, want %q", got, "3")
 	}
@@ -133,7 +136,7 @@ func TestWorkspaceLabelFallsBackToTheNumber(t *testing.T) {
 // labels behind its back.
 func TestAdoptSessionLabelsCopiesTheMap(t *testing.T) {
 	names := map[int]string{1: "review"}
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.adoptSessionLabels(&session.SessionState{DisplayName: "Payments API", WorkspaceNames: names})
 
 	names[1] = "mutated"

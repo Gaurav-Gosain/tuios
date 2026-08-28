@@ -31,14 +31,15 @@ func windowWithScrollback(t *testing.T) *terminal.Window {
 // high-resolution wheels or large monitors had no way to make scrollback move
 // faster. It now follows appearance.scroll_lines.
 func TestMouseWheelUsesConfiguredScrollLines(t *testing.T) {
-	prev := config.ScrollLines
-	t.Cleanup(func() { config.ScrollLines = prev })
+	prev := config.Global.ScrollLines
+	t.Cleanup(func() { config.Global.ScrollLines = prev })
 
 	for _, step := range []int{1, 3, 10} {
 		t.Run(fmt.Sprintf("step %d", step), func(t *testing.T) {
-			config.ScrollLines = step
+			config.Global.ScrollLines = step
 			win := windowWithScrollback(t)
 			o := &app.OS{
+				Settings:      config.Global,
 				Mode:          app.TerminalMode,
 				FocusedWindow: 0,
 				Windows:       []*terminal.Window{win},
@@ -59,12 +60,13 @@ func TestMouseWheelUsesConfiguredScrollLines(t *testing.T) {
 
 // Scrolling must still stop at the ends of the buffer whatever the step is.
 func TestMouseWheelClampsAtScrollbackBounds(t *testing.T) {
-	prev := config.ScrollLines
-	t.Cleanup(func() { config.ScrollLines = prev })
-	config.ScrollLines = 50
+	prev := config.Global.ScrollLines
+	t.Cleanup(func() { config.Global.ScrollLines = prev })
+	config.Global.ScrollLines = 50
 
 	win := windowWithScrollback(t)
 	o := &app.OS{
+		Settings:      config.Global,
 		Mode:          app.TerminalMode,
 		FocusedWindow: 0,
 		Windows:       []*terminal.Window{win},

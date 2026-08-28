@@ -75,7 +75,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// test claims one row too many, and that row is the first row of the topmost
 	// window. With a top dock and any minimized window, an ordinary click on that
 	// row was being swallowed as a dock click.
-	if ((config.DockbarPosition == "bottom") && (Y >= o.Height-config.DockHeight)) || ((config.DockbarPosition == "top") && (Y < config.DockHeight)) {
+	if ((o.Settings.DockbarPosition == "bottom") && (Y >= o.Height-config.DockHeight)) || ((o.Settings.DockbarPosition == "top") && (Y < config.DockHeight)) {
 		// A plain right-click on the dock opens its menu (the dock item's menu
 		// when one is under the pointer). The dock has no drag gesture on the
 		// right button, so the menu can open on the press itself.
@@ -207,7 +207,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// back.
 	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft &&
 		msg.Mod&tea.ModAlt != 0 && msg.Mod&(tea.ModCtrl|tea.ModShift) == 0 &&
-		config.AltDrag && !o.Windows[clickedWindowIndex].Zoomed {
+		o.Settings.AltDrag && !o.Windows[clickedWindowIndex].Zoomed {
 		o.BeginPointerGesture()
 		beginWindowDrag(o, clickedWindowIndex, X, Y)
 		return o, nil
@@ -222,7 +222,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		win := o.Windows[clickedWindowIndex]
 		if rect, drawn := o.ScrollbarHit(win); drawn && rect.Contains(X, Y) {
 			o.FocusWindow(clickedWindowIndex)
-			o.ScrollbarGrabOffset = scrollbarGrab(win, rect, Y)
+			o.ScrollbarGrabOffset = scrollbarGrab(win, rect, Y, &o.Settings)
 			o.ScrollbarDragging = true
 			o.ScrollbarDragWindowIndex = clickedWindowIndex
 			o.InteractionMode = true
@@ -382,7 +382,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.CancelPendingCopy()
 			o.SelectionDragged = false
 			beginMouseSelection(clickedWindow.CopyMode, clickedWindow, X, Y,
-				registerClick(clickedWindow, terminalX, terminalY))
+				registerClick(clickedWindow, terminalX, terminalY), &o.Settings)
 			o.Dragging = true
 			o.DraggedWindowIndex = clickedWindowIndex
 			o.InteractionMode = true
@@ -426,10 +426,10 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// The clicks that changed mode select nothing themselves: entering a mode
 	// is not a request to put a word on the clipboard.
 	if mouse.Button == tea.MouseLeft && o.Mode == app.WindowManagementMode &&
-		config.ClickToType != config.ClickToTypeOff {
+		o.Settings.ClickToType != config.ClickToTypeOff {
 		if termX, termY, inContent := clickedWindow.ScreenToTerminal(X, Y); inContent {
 			arm := true
-			if config.ClickToType == config.ClickToTypeDouble {
+			if o.Settings.ClickToType == config.ClickToTypeDouble {
 				arm = registerClick(clickedWindow, termX, termY) >= 2
 				if arm {
 					clickedWindow.ClickCount = 0

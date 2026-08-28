@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // forwardPasteToFocused sends paste text to the focused window's PTY, wrapping it in
@@ -44,14 +43,14 @@ func handleClipboardPaste(o *app.OS) {
 	}
 
 	if o.ClipboardContent == "" {
-		o.ShowNotification("Clipboard is empty", "warning", config.NotificationDuration)
+		o.ShowNotification("Clipboard is empty", "warning", o.Settings.NotificationDuration)
 		return
 	}
 
 	if !forwardPasteToFocused(o, o.ClipboardContent) {
-		o.ShowNotification("Paste failed", "error", config.NotificationDuration)
+		o.ShowNotification("Paste failed", "error", o.Settings.NotificationDuration)
 		return
 	}
 
-	o.ShowNotification(fmt.Sprintf("Pasted %d chars", len(o.ClipboardContent)), "success", config.NotificationDuration)
+	o.ShowNotification(fmt.Sprintf("Pasted %d chars", len(o.ClipboardContent)), "success", o.Settings.NotificationDuration)
 }

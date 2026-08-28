@@ -108,8 +108,8 @@ func screensaverArmCmd(d time.Duration) tea.Cmd {
 }
 
 // screensaverFrameCmd schedules the next animation frame.
-func screensaverFrameCmd() tea.Cmd {
-	return tea.Tick(time.Second/time.Duration(config.NormalFPS), func(time.Time) tea.Msg {
+func screensaverFrameCmd(s *config.Settings) tea.Cmd {
+	return tea.Tick(time.Second/time.Duration(s.NormalFPS), func(time.Time) tea.Msg {
 		return screensaverFrameMsg{}
 	})
 }
@@ -139,7 +139,7 @@ func (m *OS) handleScreensaverArm() tea.Cmd {
 		m.screensaver.armed = true
 		return screensaverArmCmd(delay)
 	}
-	return screensaverFrameCmd()
+	return screensaverFrameCmd(&m.Settings)
 }
 
 // StartScreensaverNow runs the saver because the user asked for it.
@@ -153,10 +153,10 @@ func (m *OS) StartScreensaverNow() tea.Cmd {
 		return nil
 	}
 	if !m.startScreensaver(m.screensaverConfig()) {
-		m.ShowNotification("The screen saver could not start here.", "warning", config.NotificationDuration)
+		m.ShowNotification("The screen saver could not start here.", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	return screensaverFrameCmd()
+	return screensaverFrameCmd(&m.Settings)
 }
 
 // screensaverMayStart reports whether it is polite to cover the screen now.
@@ -200,7 +200,7 @@ func (m *OS) startScreensaver(cfg config.ScreensaverConfig) bool {
 	}
 
 	capture := screensaverCells(grid)
-	engine, ok := screensaverBuild(capture, grid.Cols, grid.Rows, effect, fill)
+	engine, ok := screensaverBuild(capture, grid.Cols, grid.Rows, effect, fill, &m.Settings)
 	if !ok {
 		return false
 	}
@@ -231,7 +231,7 @@ func (m *OS) startScreensaver(cfg config.ScreensaverConfig) bool {
 // in them. burn and laseretch do not merely look thin without it: their build
 // picks a starting cell that can land on a hole, and the saver then refuses to
 // start at all.
-func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.Effect, fill bool) (*tfx.Engine, bool) {
+func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.Effect, fill bool, s *config.Settings) (*tfx.Engine, bool) {
 	terminal := tfx.NewTerminalFromCells(screensaverFit(capture, height), tfx.TerminalConfig{
 		Width:              width,
 		Height:             height,
@@ -252,7 +252,7 @@ func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.E
 	engine := tfx.NewEngine(terminal, tfx.NewRng(rand.Uint64()))
 	// The clock has to be the rate this program really paints at. NewEngine
 	// installs one that steps a sixtieth of a second per frame, and the saver
-	// ticks at config.NormalFPS, which max_fps sets and which is 240 on a
+	// ticks at the session's NormalFPS, which max_fps sets and which is 240 on a
 	// screen that will take it. Left alone, the engine's idea of time ran four
 	// times faster than the wall and every effect written in seconds ran four
 	// times too fast: matrix rained for the wrong length, thunderstorm stormed
@@ -261,7 +261,7 @@ func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.E
 	//
 	// screensaverFrameCmd and effectPreviewFrameCmd both tick at NormalFPS, so
 	// this one line covers the saver and the effect picker's preview alike.
-	engine.Clock = tfx.NewVirtualClock(config.NormalFPS)
+	engine.Clock = tfx.NewVirtualClock(s.NormalFPS)
 	if err := effect.Build(engine); err != nil {
 		return nil, false
 	}
@@ -363,7 +363,7 @@ func (m *OS) handleScreensaverFrame() tea.Cmd {
 		m.screensaver.frame = m.screensaver.engine.Frame()
 	}
 	m.renderSkipped = false
-	return screensaverFrameCmd()
+	return screensaverFrameCmd(&m.Settings)
 }
 
 // restartScreensaverEffect builds a fresh effect over the same capture, so an
@@ -379,7 +379,7 @@ func (m *OS) restartScreensaverEffect() bool {
 	if m.screensaver.capture == nil {
 		return false
 	}
-	engine, ok := screensaverBuild(m.screensaver.capture, m.screensaver.canvasWidth, m.screensaver.canvasHeight, effect, fill)
+	engine, ok := screensaverBuild(m.screensaver.capture, m.screensaver.canvasWidth, m.screensaver.canvasHeight, effect, fill, &m.Settings)
 	if !ok {
 		return false
 	}

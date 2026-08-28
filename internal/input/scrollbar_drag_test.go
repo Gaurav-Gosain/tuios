@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -61,7 +62,7 @@ func TestScrollbarTrackClickJumpsThenDragsWithoutASecondLeap(t *testing.T) {
 	if !o.ScrollbarDragging {
 		t.Fatal("a press on the track did not start a drag")
 	}
-	jumped := app.ScrollbarThumbRow(win)
+	jumped := app.ScrollbarThumbRow(win, &config.Global)
 	if jumped < target-rect.ThumbH || jumped > target {
 		t.Errorf("the click on row %d put the thumb at row %d; it did not jump under the pointer", target, jumped)
 	}
@@ -73,14 +74,14 @@ func TestScrollbarTrackClickJumpsThenDragsWithoutASecondLeap(t *testing.T) {
 	// The first motion event of the gesture, on the row the press landed on.
 	// Nothing moved between them, so nothing may move now.
 	handleMouseMotion(motionMsg(rect.X, target), o)
-	if got := app.ScrollbarThumbRow(win); got != jumped {
+	if got := app.ScrollbarThumbRow(win, &config.Global); got != jumped {
 		t.Errorf("the first motion event moved the thumb from row %d to %d: the bar leapt a second time",
 			jumped, got)
 	}
 
 	// And the drag proper tracks the pointer, holding the offset it grabbed.
 	handleMouseMotion(motionMsg(rect.X, target+2), o)
-	if got := app.ScrollbarThumbRow(win); got != jumped+2 {
+	if got := app.ScrollbarThumbRow(win, &config.Global); got != jumped+2 {
 		t.Errorf("dragging two rows down moved the thumb to row %d, want %d", got, jumped+2)
 	}
 
@@ -95,18 +96,18 @@ func TestScrollbarTrackClickJumpsThenDragsWithoutASecondLeap(t *testing.T) {
 // the thumb does not jump to centre itself on the pointer first.
 func TestScrollbarThumbGrabDoesNotJump(t *testing.T) {
 	o, win, rect := scrolledBackPane(t)
-	before := app.ScrollbarThumbRow(win)
+	before := app.ScrollbarThumbRow(win, &config.Global)
 	row := rect.ThumbY + rect.ThumbH - 1
 
 	handleMouseClick(clickMsg(rect.X, row), o)
-	if got := app.ScrollbarThumbRow(win); got != before {
+	if got := app.ScrollbarThumbRow(win, &config.Global); got != before {
 		t.Errorf("grabbing the thumb at row %d moved it from %d to %d", row, before, got)
 	}
 	if want := row - before; o.ScrollbarGrabOffset != want {
 		t.Errorf("grab offset %d, want %d", o.ScrollbarGrabOffset, want)
 	}
 	handleMouseMotion(motionMsg(rect.X, row), o)
-	if got := app.ScrollbarThumbRow(win); got != before {
+	if got := app.ScrollbarThumbRow(win, &config.Global); got != before {
 		t.Errorf("the first motion event moved a stationary grab from row %d to %d", before, got)
 	}
 }

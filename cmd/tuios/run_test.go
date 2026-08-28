@@ -23,18 +23,18 @@ func TestLoadAndApplyConfigHonorsConfirmQuit(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	xdg.Reload()
 
-	prevFlag, prevApplied := confirmQuit, config.AlwaysConfirmQuit
+	prevFlag, prevApplied := confirmQuit, config.Global.AlwaysConfirmQuit
 	t.Cleanup(func() {
 		confirmQuit = prevFlag
-		config.AlwaysConfirmQuit = prevApplied
+		config.Global.AlwaysConfirmQuit = prevApplied
 	})
 
 	confirmQuit = true
-	config.AlwaysConfirmQuit = false
+	config.Global.AlwaysConfirmQuit = false
 
 	loadAndApplyConfig()
 
-	if !config.AlwaysConfirmQuit {
+	if !config.Global.AlwaysConfirmQuit {
 		t.Fatal("loadAndApplyConfig ignored the ConfirmQuit override")
 	}
 }

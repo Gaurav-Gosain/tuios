@@ -28,7 +28,7 @@ func osWithGlobalBinds(t *testing.T, binds map[string][]string) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
 	cfg.Keybindings.Global = binds
-	return &app.OS{KeybindRegistry: config.NewKeybindRegistry(cfg)}
+	return &app.OS{Settings: config.Global, KeybindRegistry: config.NewKeybindRegistry(cfg)}
 }
 
 // ctrlPEncodings is every way a terminal might send Ctrl+P. The stringified key

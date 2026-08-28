@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -20,6 +21,7 @@ func TestBuildSessionTreeStandaloneRollsUpAndMarksFocus(t *testing.T) {
 	blank := &terminal.Window{ID: "w3"}
 
 	m := &OS{
+		Settings:      config.Global,
 		Windows:       []*terminal.Window{working, idle, blank},
 		FocusedWindow: 2,
 	}
@@ -85,13 +87,13 @@ func TestBuildSessionTreeStandaloneRollsUpAndMarksFocus(t *testing.T) {
 func TestBuildSessionTreeStandaloneSessionName(t *testing.T) {
 	win := &terminal.Window{ID: "w1"}
 
-	m := &OS{Windows: []*terminal.Window{win}, FocusedWindow: 0}
+	m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}, FocusedWindow: 0}
 	tree := m.BuildSessionTree()
 	if got := tree.Sessions[0].ID; got != "local" {
 		t.Errorf("session name with empty SessionName = %q, want %q", got, "local")
 	}
 
-	m2 := &OS{Windows: []*terminal.Window{win}, FocusedWindow: 0, SessionName: "named"}
+	m2 := &OS{Settings: config.Global, Windows: []*terminal.Window{win}, FocusedWindow: 0, SessionName: "named"}
 	tree2 := m2.BuildSessionTree()
 	if got := tree2.Sessions[0].ID; got != "named" {
 		t.Errorf("session name with SessionName set = %q, want %q", got, "named")
@@ -113,6 +115,7 @@ func TestBuildSessionTreeForeignSessionExpands(t *testing.T) {
 	})
 
 	m := &OS{
+		Settings:      config.Global,
 		Windows:       []*terminal.Window{{ID: "aw1"}},
 		FocusedWindow: 0,
 		SessionName:   "attached",
@@ -155,7 +158,7 @@ func TestBuildSessionTreeForeignSessionExpands(t *testing.T) {
 // skipped, mirroring currentSessionInput's nil check.
 func TestBuildSessionTreeSkipsNilWindows(t *testing.T) {
 	win := &terminal.Window{ID: "w1"}
-	m := &OS{Windows: []*terminal.Window{win, nil}, FocusedWindow: 0}
+	m := &OS{Settings: config.Global, Windows: []*terminal.Window{win, nil}, FocusedWindow: 0}
 
 	tree := m.BuildSessionTree()
 	if len(tree.Sessions[0].Children) != 1 {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -12,6 +13,7 @@ import (
 func placementOS(t testing.TB) *OS {
 	t.Helper()
 	return &OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),

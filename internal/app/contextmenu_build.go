@@ -122,7 +122,7 @@ func (m *OS) InDockBand(y int) bool {
 // on: with the dock at the top that extra row is the first row of the topmost
 // window, which is how the pane menu came to be unreachable there.
 func (m *OS) inDockBand(y int) bool {
-	switch config.DockbarPosition {
+	switch m.Settings.DockbarPosition {
 	case "hidden":
 		return false
 	case "top":
@@ -227,7 +227,7 @@ func (m *OS) item(icon, label, action string, dim bool) ContextMenuItem {
 		Icon:   icon,
 		Label:  label,
 		Action: action,
-		Hint:   contextMenuHint(m.KeybindRegistry, action),
+		Hint:   contextMenuHint(m.KeybindRegistry, action, &m.Settings),
 		Dim:    dim,
 	}
 }

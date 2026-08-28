@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -43,7 +42,7 @@ func (m *OS) EnterSidebarFocus() {
 	if m.SidebarFocused {
 		return
 	}
-	if !config.SidebarEnabled {
+	if !m.Settings.SidebarEnabled {
 		m.ToggleSidebar()
 		m.SidebarRevealedForFocus = true
 	}
@@ -89,7 +88,7 @@ func (m *OS) ExitSidebarFocus() {
 	m.endSidebarReturn()
 	if m.SidebarRevealedForFocus {
 		m.SidebarRevealedForFocus = false
-		if config.SidebarEnabled {
+		if m.Settings.SidebarEnabled {
 			m.ToggleSidebar()
 		}
 	}
@@ -139,7 +138,7 @@ func (m *OS) SidebarCursorCollapse() { m.sidebarStepSection(-1) }
 // the sections in the order they are drawn in. A fixed list would have sent the
 // cursor up the rail on a layout that puts the files section above the panes.
 func (m *OS) sidebarStepSection(delta int) {
-	plans := sidebarLayoutPlans()
+	plans := sidebarLayoutPlans(&m.Settings)
 	here := 0
 	if row, ok := m.sidebarCursorRow(); ok {
 		for i, p := range plans {
@@ -331,7 +330,7 @@ func (m *OS) SidebarOpenCursorMenu(destructive bool) {
 		return
 	}
 	if !sidebarRowHasMenu(row) {
-		m.ShowNotification("Nothing on this row to act on", "info", config.NotificationDuration)
+		m.ShowNotification("Nothing on this row to act on", "info", m.Settings.NotificationDuration)
 		return
 	}
 	x, y := m.sidebarCursorAnchor(row)
@@ -378,7 +377,7 @@ func (m *OS) sidebarCursorAnchor(row sidebarNavRow) (int, int) {
 		}
 	}
 	x := 0
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		x = m.GetRenderWidth() - m.GetSidebarWidth()
 	}
 	return x, m.GetTopMargin()
@@ -438,7 +437,7 @@ func (m *OS) SidebarRenameCursor() {
 		m.BeginRenameSession(row.SessionID)
 		return
 	}
-	m.ShowNotification("Nothing on this row to rename", "info", config.NotificationDuration)
+	m.ShowNotification("Nothing on this row to rename", "info", m.Settings.NotificationDuration)
 }
 
 // SidebarCanCreateSession reports whether this client can make a session at
@@ -465,7 +464,7 @@ func (m *OS) SidebarSetCollapsed(collapsed bool) {
 	// Expanding cannot help on a screen whose breakpoint already pins the rail
 	// to the strip; saying so beats appearing to do nothing.
 	if !collapsed && sidebarVariant(m.sidebarWidthFor(m.sidebarStoredWidth())) == sidebarVariantGlyph {
-		m.ShowNotification("The screen is too narrow for a wider rail", "info", config.NotificationDuration)
+		m.ShowNotification("The screen is too narrow for a wider rail", "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.SidebarCollapsed = collapsed
@@ -490,7 +489,7 @@ func (m *OS) SidebarSetCollapsed(collapsed bool) {
 // two ways in never invent different conventions.
 func (m *OS) SidebarNewSession() {
 	if !m.SidebarCanCreateSession() {
-		m.ShowNotification("Sessions need the daemon", "info", config.NotificationDuration)
+		m.ShowNotification("Sessions need the daemon", "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.clearSidebarReturn() // the new session is where the user asked to end up
@@ -520,7 +519,7 @@ func (m *OS) SidebarNewSession() {
 // silently acts on the wrong session is worse than one that says it cannot.
 func (m *OS) SidebarNewWindow(sessionID string) {
 	if sessionID != "" && sessionID != m.sidebarCurrentSessionID() {
-		m.ShowNotification("Attach to that session first", "info", config.NotificationDuration)
+		m.ShowNotification("Attach to that session first", "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.clearSidebarReturn() // the new pane is where the user asked to end up
@@ -568,5 +567,5 @@ func (m *OS) SidebarAccentCursor() {
 		m.OpenSessionAccentPicker(row.SessionID)
 		return
 	}
-	m.ShowNotification("Accents work on a pane or a session row", "info", config.NotificationDuration)
+	m.ShowNotification("Accents work on a pane or a session row", "info", m.Settings.NotificationDuration)
 }

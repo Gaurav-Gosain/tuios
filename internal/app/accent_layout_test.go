@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
@@ -34,7 +35,7 @@ func TestAccentLayoutBreakpoints(t *testing.T) {
 
 	// Wide also needs the height for its right column whole, since a clipped
 	// column is worse than a stacked one.
-	if got := (&OS{Width: 120, Height: 8, EffectiveWidth: 120, EffectiveHeight: 8}).accentPlan().Mode; got == accentLayoutWide {
+	if got := (&OS{Settings: config.Global, Width: 120, Height: 8, EffectiveWidth: 120, EffectiveHeight: 8}).accentPlan().Mode; got == accentLayoutWide {
 		t.Error("a wide screen with eight rows still laid out wide")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -31,7 +32,7 @@ func newTestWindow(t testing.TB, id string, w, h int) *terminal.Window {
 	}()
 	t.Cleanup(func() { close(drainDone) })
 
-	win := terminal.NewDaemonWindow(id, "test", 0, 0, w, h, 0, "pty-"+id, ptyDataChan)
+	win := terminal.NewDaemonWindow(id, "test", 0, 0, w, h, 0, "pty-"+id, ptyDataChan, config.DefaultScrollbackLines)
 	if win == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}
@@ -41,6 +42,7 @@ func newTestWindow(t testing.TB, id string, w, h int) *terminal.Window {
 
 func newTestOS(win *terminal.Window) *OS {
 	return &OS{
+		Settings:       config.Global,
 		Windows:        []*terminal.Window{win},
 		FocusedWindow:  0,
 		WorkspaceFocus: map[int]int{},

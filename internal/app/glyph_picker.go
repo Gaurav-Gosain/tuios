@@ -91,13 +91,13 @@ func (m *OS) buildGlyphSamples() {
 	sets := theme.AvailableGlyphSets()
 	m.GlyphPickerSamples = make(map[string]glyphSample, len(sets))
 	for _, id := range sets {
-		m.GlyphPickerSamples[id] = glyphSampleFor(id)
+		m.GlyphPickerSamples[id] = glyphSampleFor(id, &m.Settings)
 	}
 }
 
 // glyphSampleFor builds one set's preview from what it would draw.
-func glyphSampleFor(id string) glyphSample {
-	drawn := config.GlyphsForSet(id)
+func glyphSampleFor(id string, s *config.Settings) glyphSample {
+	drawn := s.GlyphsForSet(id)
 
 	// The strip reads left to right as border, window controls, rail marks: a
 	// corner and two cells of edge, the three buttons, then the focus mark, a
@@ -231,7 +231,7 @@ func (m *OS) GlyphPickerApplySelection() tea.Cmd {
 		// with the picker gone and no Esc left to press to get back to it.
 		// Staying up keeps both the query and the escape route that reverts.
 		m.ShowNotification("No glyph set matches "+m.GlyphPickerQuery,
-			"info", config.NotificationDuration)
+			"info", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.applyGlyphSet(items[m.GlyphPickerSelected])

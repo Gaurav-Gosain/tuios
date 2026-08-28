@@ -36,9 +36,10 @@ func TestStripAddLeadsTheListItAddsTo(t *testing.T) {
 	for _, pos := range []string{"left", "right"} {
 		m, tree := noAgentStripOS(t, 120, 20)
 		withSidebar(t, true, pos, config.SidebarDefaultWidth)
+		m.Settings = config.Global
 		m.SidebarCollapsed = true
 		lines := railPlain(t, m, tree)
-		rule := config.GetWindowBorderLeft()
+		rule := config.Global.GetWindowBorderLeft()
 
 		// The pad, the sessions header, then the list under it.
 		head := []string{"  ", "+s", "▎·"}
@@ -106,6 +107,7 @@ func TestStripAddCostsTheSpineNothing(t *testing.T) {
 		withMarks := len(stripMarkRows(railPlain(t, with, tree)))
 
 		without, wtree := noAgentStripOS(t, 120, h)
+		with.Settings = config.Global
 		without.DaemonClient = nil // no session to make, so no control
 		withoutMarks := len(stripMarkRows(railPlain(t, without, wtree)))
 
@@ -135,6 +137,7 @@ func TestStripNewSessionIsClickableAcrossItsWholeRow(t *testing.T) {
 		for col := range 3 {
 			m, tree := noAgentStripOS(t, 120, 20)
 			withSidebar(t, true, pos, config.SidebarDefaultWidth)
+			m.Settings = config.Global
 			m.SidebarCollapsed = true
 			m.sidebarPanelLinesForTree(tree)
 
@@ -227,6 +230,7 @@ func TestStripNewSessionYieldsFirstOnAShortRail(t *testing.T) {
 	// rather than drawn dead. Panes are still local, so the terminals list keeps
 	// its own.
 	m, tree := noAgentStripOS(t, 120, 20)
+	m.Settings = config.Global
 	m.DaemonClient = nil
 	m.sidebarPanelLinesForTree(tree)
 	if _, ok := sidebarHitOfKind(m, sidebarRowNewSession); ok {
@@ -240,11 +244,11 @@ func TestStripNewSessionYieldsFirstOnAShortRail(t *testing.T) {
 // TestStripNewSessionASCIIAndMonochrome: the glyph is ASCII already and carries
 // no colour of its own, so both modes degrade to the same cell.
 func TestStripNewSessionASCIIAndMonochrome(t *testing.T) {
-	prev := config.UseASCIIOnly
-	config.UseASCIIOnly = true
+	prev := config.Global.UseASCIIOnly
+	config.Global.UseASCIIOnly = true
 	overlay.SetASCII(true)
 	t.Cleanup(func() {
-		config.UseASCIIOnly = prev
+		config.Global.UseASCIIOnly = prev
 		overlay.SetASCII(prev)
 	})
 
@@ -252,10 +256,10 @@ func TestStripNewSessionASCIIAndMonochrome(t *testing.T) {
 	lines := railPlain(t, m, tree)
 	// The ASCII toggle is two cells wide, which is why it keeps a line of its
 	// own at the rail's foot rather than sharing one with anything.
-	if got := lines[len(lines)-2]; got != ">>"+config.GetWindowBorderLeft() {
+	if got := lines[len(lines)-2]; got != ">>"+config.Global.GetWindowBorderLeft() {
 		t.Errorf("the ASCII toggle line is %q", got)
 	}
-	if got := lines[1]; got != "+s"+config.GetWindowBorderLeft() {
+	if got := lines[1]; got != "+s"+config.Global.GetWindowBorderLeft() {
 		t.Errorf("the ASCII sessions header is %q", got)
 	}
 }

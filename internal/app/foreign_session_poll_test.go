@@ -41,7 +41,7 @@ func TestForeignSessionRefreshPlan(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			withSidebar(t, tc.sidebar, "left", config.SidebarDefaultWidth)
-			m := &OS{Width: 120, DaemonClient: tc.client, ShowSessionSwitcher: tc.switcher}
+			m := &OS{Settings: config.Global, Width: 120, DaemonClient: tc.client, ShowSessionSwitcher: tc.switcher}
 			after, refresh := m.foreignSessionRefreshPlan()
 			if refresh != tc.wantRefresh {
 				t.Fatalf("refresh = %v, want %v", refresh, tc.wantRefresh)
@@ -66,6 +66,7 @@ func TestForeignSessionStalenessClears(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 	client := multiSessionClient()
 	m := &OS{
+		Settings:     config.Global,
 		Windows:      []*terminal.Window{{ID: "aw1"}},
 		SessionName:  "attached",
 		Width:        120,

@@ -21,11 +21,11 @@ import (
 func filesOS(t *testing.T, dir, name string) *OS {
 	t.Helper()
 	m := sidebarTestOS(t, 120, 40, "left")
-	config.SidebarFileActions = true
-	config.SidebarFileDelete = config.SidebarFileDeleteTrash
+	m.Settings.SidebarFileActions = true
+	m.Settings.SidebarFileDelete = config.SidebarFileDeleteTrash
 	t.Cleanup(func() {
-		config.SidebarFileActions = true
-		config.SidebarFileDelete = config.SidebarFileDeleteTrash
+		m.Settings.SidebarFileActions = true
+		m.Settings.SidebarFileDelete = config.SidebarFileDeleteTrash
 	})
 	openFilesOn(t, m, dir)
 	m.SidebarFocused = true
@@ -319,7 +319,7 @@ func TestFileActionsOffMakesEveryKeyInert(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, "report.txt"), "body")
 	m := filesOS(t, dir, "report.txt")
-	config.SidebarFileActions = false
+	m.Settings.SidebarFileActions = false
 
 	if m.SidebarCursorOnFile() {
 		t.Error("the file keys are still routed to the listing with the setting off")

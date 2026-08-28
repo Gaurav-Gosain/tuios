@@ -588,7 +588,7 @@ func (kp *KittyPassthrough) deleteOnePlacement(p *PassthroughPlacement) {
 }
 
 func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
-	caps := GetHostCapabilities()
+	caps := kp.hostCaps()
 	cellHeight := caps.CellHeight
 	if cellHeight <= 0 {
 		cellHeight = 20 // Fallback

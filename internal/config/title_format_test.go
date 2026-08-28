@@ -10,8 +10,8 @@ import (
 // into the config struct and never read by anything: setting it had no effect
 // on any window title.
 func TestFormatWindowTitle(t *testing.T) {
-	prev := config.WindowTitleFormat
-	t.Cleanup(func() { config.WindowTitleFormat = prev })
+	prev := config.Global.WindowTitleFormat
+	t.Cleanup(func() { config.Global.WindowTitleFormat = prev })
 
 	tests := []struct {
 		name   string
@@ -67,8 +67,8 @@ func TestFormatWindowTitle(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			config.WindowTitleFormat = tc.format
-			if got := config.FormatWindowTitle(tc.title, tc.index, tc.cwd); got != tc.want {
+			config.Global.WindowTitleFormat = tc.format
+			if got := config.Global.FormatWindowTitle(tc.title, tc.index, tc.cwd); got != tc.want {
 				t.Errorf("FormatWindowTitle(%q, %d, %q) = %q, want %q",
 					tc.title, tc.index, tc.cwd, got, tc.want)
 			}
@@ -80,22 +80,22 @@ func TestFormatWindowTitle(t *testing.T) {
 // formatting: the option is only honest if loading a config actually reaches
 // the global the renderer reads.
 func TestWindowTitleFormatIsAppliedFromConfig(t *testing.T) {
-	prev := config.WindowTitleFormat
-	t.Cleanup(func() { config.WindowTitleFormat = prev })
+	prev := config.Global.WindowTitleFormat
+	t.Cleanup(func() { config.Global.WindowTitleFormat = prev })
 
 	cfg := config.DefaultConfig()
 	cfg.Appearance.WindowTitleFormat = "{index}. {title}"
-	config.ApplyAppearanceConfig(cfg)
+	config.ApplyAppearanceConfig(cfg, &config.Global)
 
-	if config.WindowTitleFormat != "{index}. {title}" {
-		t.Fatalf("WindowTitleFormat = %q, want the configured format", config.WindowTitleFormat)
+	if config.Global.WindowTitleFormat != "{index}. {title}" {
+		t.Fatalf("WindowTitleFormat = %q, want the configured format", config.Global.WindowTitleFormat)
 	}
 
 	// Clearing it in the config must clear the global too, so a hot reload that
 	// removes the option goes back to plain titles.
 	cfg.Appearance.WindowTitleFormat = ""
-	config.ApplyAppearanceConfig(cfg)
-	if config.WindowTitleFormat != "" {
-		t.Errorf("WindowTitleFormat = %q, want it cleared", config.WindowTitleFormat)
+	config.ApplyAppearanceConfig(cfg, &config.Global)
+	if config.Global.WindowTitleFormat != "" {
+		t.Errorf("WindowTitleFormat = %q, want it cleared", config.Global.WindowTitleFormat)
 	}
 }

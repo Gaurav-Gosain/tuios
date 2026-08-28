@@ -323,6 +323,6 @@ func (m *OS) KeybindCommitBinding() tea.Cmd {
 	cmd := m.keybindApply()
 	m.KeybindCapture(key)
 	m.keybinds.bound = key
-	m.ShowNotification("Bound "+key+" to "+action, "success", config.NotificationDuration)
+	m.ShowNotification("Bound "+key+" to "+action, "success", m.Settings.NotificationDuration)
 	return cmd
 }

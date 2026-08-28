@@ -20,9 +20,9 @@ import (
 // recorded rectangle against the cells that were actually painted in it.
 func pillOS(t *testing.T, w int, names map[int]string, workspaces ...int) *OS {
 	t.Helper()
-	prevTabs, prevASCII := config.DockWorkspaceTabs, config.UseASCIIOnly
-	config.DockWorkspaceTabs, config.UseASCIIOnly = true, true
-	t.Cleanup(func() { config.DockWorkspaceTabs, config.UseASCIIOnly = prevTabs, prevASCII })
+	prevTabs, prevASCII := config.Global.DockWorkspaceTabs, config.Global.UseASCIIOnly
+	config.Global.DockWorkspaceTabs, config.Global.UseASCIIOnly = true, true
+	t.Cleanup(func() { config.Global.DockWorkspaceTabs, config.Global.UseASCIIOnly = prevTabs, prevASCII })
 
 	m := newNarrowOS(t, w, 30)
 	m.NumWorkspaces = 9
@@ -55,7 +55,7 @@ func dockBarRow(t *testing.T, m *OS) string {
 	dock, _ := m.renderDockString()
 	rows := strings.Split(stripANSIForTrace(dock), "\n")
 	row := rows[len(rows)-1]
-	if config.DockbarPosition == "top" {
+	if m.Settings.DockbarPosition == "top" {
 		row = rows[0]
 	}
 	if lipgloss.Width(row) != len([]rune(row)) {
@@ -80,17 +80,17 @@ func cells(row string, x0, x1 int) string {
 // still be compared against the cells that were painted in it.
 func pillCapsOS(t *testing.T, w int, names map[int]string, workspaces ...int) *OS {
 	t.Helper()
-	prev := config.UseASCIIOnly
-	t.Cleanup(func() { config.UseASCIIOnly = prev })
+	prev := config.Global.UseASCIIOnly
+	t.Cleanup(func() { config.Global.UseASCIIOnly = prev })
 	m := pillOS(t, w, names, workspaces...)
-	config.UseASCIIOnly = false
+	m.Settings.UseASCIIOnly = false
 	return m
 }
 
 // pillText is what a pill carrying label draws: a column of padding either side
 // of the label, inside the rounded caps the glyph set provides.
-func pillText(label string) string {
-	return config.GetDockWorkspaceCapLeft() + " " + label + " " + config.GetDockWorkspaceCapRight()
+func pillText(label string, s *config.Settings) string {
+	return s.GetDockWorkspaceCapLeft() + " " + label + " " + s.GetDockWorkspaceCapRight()
 }
 
 // TestWorkspacePillRectsMatchTheirDrawnCells is the invariant a named workspace
@@ -118,7 +118,7 @@ func TestWorkspacePillRectsMatchTheirDrawnCells(t *testing.T) {
 				if len(m.dockWorkspaceHits) == 0 {
 					t.Fatal("the strip recorded no rectangles")
 				}
-				lc := config.GetDockWorkspaceCapLeft()
+				lc := m.Settings.GetDockWorkspaceCapLeft()
 				if capped == (lc == "") {
 					t.Fatalf("the glyph set is wrong for this case: left cap %q with capped=%v", lc, capped)
 				}
@@ -128,7 +128,7 @@ func TestWorkspacePillRectsMatchTheirDrawnCells(t *testing.T) {
 					if h.Workspace > 0 {
 						label = m.workspacePillLabel(h.Workspace)
 					}
-					if got, want := cells(row, h.X0, h.X1), pillText(label); got != want {
+					if got, want := cells(row, h.X0, h.X1), pillText(label, &m.Settings); got != want {
 						t.Errorf("workspace %d's rect [%d,%d) covers %q, but its pill draws %q",
 							h.Workspace, h.X0, h.X1, got, want)
 					}
@@ -138,7 +138,7 @@ func TestWorkspacePillRectsMatchTheirDrawnCells(t *testing.T) {
 						if got := cells(row, h.X0, h.X0+1); got != lc {
 							t.Errorf("workspace %d's rect opens on %q, not its left cap %q", h.Workspace, got, lc)
 						}
-						if rc := config.GetDockWorkspaceCapRight(); cells(row, h.X1-1, h.X1) != rc {
+						if rc := m.Settings.GetDockWorkspaceCapRight(); cells(row, h.X1-1, h.X1) != rc {
 							t.Errorf("workspace %d's rect ends on %q, not its right cap %q",
 								h.Workspace, cells(row, h.X1-1, h.X1), rc)
 						}
@@ -171,14 +171,11 @@ func TestWorkspacePillRectsMatchTheirDrawnCells(t *testing.T) {
 func TestWorkspacePillsKeepTheirCapsWhateverTheDockDoes(t *testing.T) {
 	for _, flat := range []bool{false, true} {
 		t.Run(strconv.FormatBool(flat), func(t *testing.T) {
-			prev := config.DockPillCaps
-			config.DockPillCaps = !flat
-			t.Cleanup(func() { config.DockPillCaps = prev })
-
 			m := pillCapsOS(t, 120, map[int]string{2: "review"}, 1, 2, 3)
+			m.Settings.DockPillCaps = !flat
 			row := dockBarRow(t, m)
 			for _, h := range m.dockWorkspaceHits {
-				if got := cells(row, h.X0, h.X0+1); got != config.GetDockWorkspaceCapLeft() {
+				if got := cells(row, h.X0, h.X0+1); got != m.Settings.GetDockWorkspaceCapLeft() {
 					t.Errorf("workspace %d lost its left cap with dock_pill_caps=%v: %q",
 						h.Workspace, !flat, got)
 				}
@@ -193,7 +190,7 @@ func TestWorkspacePillsKeepTheirCapsWhateverTheDockDoes(t *testing.T) {
 // two columns per pill that nothing was painted in.
 func TestWorkspacePillsDropTheCapsUnderASCII(t *testing.T) {
 	m := pillOS(t, 120, map[int]string{2: "review"}, 1, 2, 3)
-	if got := config.GetDockWorkspaceCapLeft() + config.GetDockWorkspaceCapRight(); got != "" {
+	if got := m.Settings.GetDockWorkspaceCapLeft() + m.Settings.GetDockWorkspaceCapRight(); got != "" {
 		t.Fatalf("the ASCII strip still has caps: %q", got)
 	}
 	row := dockBarRow(t, m)
@@ -218,7 +215,7 @@ func TestActiveWorkspacePillReadsAsActive(t *testing.T) {
 	dock, _ := m.renderDockString()
 
 	pal := theme.UI()
-	active := workspacePill("review", true, false, pal)
+	active := workspacePill("review", true, false, pal, &config.Global)
 	if !strings.Contains(dock, active) {
 		t.Errorf("the dock does not draw workspace 2's pill as the active one: %q", active)
 	}
@@ -226,7 +223,7 @@ func TestActiveWorkspacePillReadsAsActive(t *testing.T) {
 		t.Error("the active pill lost the underline, which is the whole of its emphasis")
 	}
 	// The resting pills carry the fill but not the emphasis.
-	resting := workspacePill("1", false, false, pal)
+	resting := workspacePill("1", false, false, pal, &config.Global)
 	if !strings.Contains(dock, resting) {
 		t.Errorf("the dock does not draw workspace 1's pill at rest: %q", resting)
 	}
@@ -302,7 +299,7 @@ func TestWorkspaceStripScrollsRatherThanTruncates(t *testing.T) {
 			continue
 		}
 		label := m.workspacePillLabel(h.Workspace)
-		if !strings.Contains(row, pillText(label)) {
+		if !strings.Contains(row, pillText(label, &m.Settings)) {
 			t.Errorf("workspace %d is drawn but its name %q is not whole in the row: %q", h.Workspace, label, row)
 		}
 	}

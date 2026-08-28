@@ -27,7 +27,7 @@ func (m *OS) InitDockComponents() tea.Cmd {
 	m.dockPlan = buildDockPlan(m.UserConfig)
 	m.dockEngine.Stop()
 
-	comps := dockRefreshableComponents(m.UserConfig, m.dockPlan, config.ShowClock)
+	comps := dockRefreshableComponents(m.UserConfig, m.dockPlan, m.Settings.ShowClock, &m.Settings)
 	m.dockEngine = newDockEngine(comps)
 	m.dockEngine.SetContext(m.SessionName, dockSocketPath())
 	// The built-ins are filled here rather than by the engine, because their
@@ -120,7 +120,7 @@ func (m *OS) handleDockComponent(msg dockComponentMsg) bool {
 			detail = "exit " + strconv.Itoa(msg.Exit)
 		}
 		m.LogWarn("Dock component %s failed: %s", name, msg.Err)
-		m.ShowNotification("Dock component "+name+": "+detail, "warning", config.NotificationDuration)
+		m.ShowNotification("Dock component "+name+": "+detail, "warning", m.Settings.NotificationDuration)
 		return true
 	}
 	return changed
@@ -154,7 +154,7 @@ func (m *OS) dockClockFormat() string {
 	if m.UserConfig == nil {
 		return config.DefaultClockFormat
 	}
-	return m.UserConfig.Dock.DockClockFormat()
+	return m.UserConfig.Dock.DockClockFormat(&m.Settings)
 }
 
 // DockClockText is the clock's current reading, for the status badge. It comes

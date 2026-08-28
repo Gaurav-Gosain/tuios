@@ -5,7 +5,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // PendingCopyMsg fires when a multi-click selection's window has closed and the
@@ -38,7 +37,7 @@ func (m *OS) CopyToClipboard(text string) tea.Cmd {
 		return nil
 	}
 	m.CancelPendingCopy()
-	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", config.NotificationDuration)
+	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
 	return tea.SetClipboard(text)
 }
 
@@ -79,7 +78,7 @@ func (m *OS) HandlePendingCopy(seq uint64) tea.Cmd {
 	}
 	text := m.pendingCopy
 	m.pendingCopy = ""
-	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", config.NotificationDuration)
+	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
 	return tea.SetClipboard(text)
 }
 

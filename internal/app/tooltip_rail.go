@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -79,7 +78,7 @@ func (m *OS) renderRailAddTooltip() *lipgloss.Layer {
 	label := tooltipLabel(sidebarAddWords(kind), max(renderW-railW-1, 1), theme.UI())
 
 	x := railW
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		x = renderW - railW - lipgloss.Width(label)
 	}
 	return tooltipLayer(label, x, row, renderW, "sidebar-tooltip")
@@ -228,7 +227,7 @@ func (m *OS) renderRailTooltip() *lipgloss.Layer {
 	label := tooltipLabel(text, max(renderW-railW-1, 1), theme.UI())
 
 	x := railW
-	if config.SidebarPosition == "right" {
+	if m.Settings.SidebarPosition == "right" {
 		// The rail is against the right edge, so the label opens leftward and
 		// its right edge lands flush against the rail's first column.
 		x = renderW - railW - lipgloss.Width(label)

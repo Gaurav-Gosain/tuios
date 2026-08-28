@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -382,7 +381,7 @@ func (m *OS) TileVisibleWorkspaceWindows() {
 				layouts[i].y,
 				layouts[i].width,
 				layouts[i].height,
-				config.GetAnimationDuration(),
+				m.Settings.GetAnimationDuration(),
 			)
 
 			if anim != nil {

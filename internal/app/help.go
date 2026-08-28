@@ -26,7 +26,7 @@ type HelpCategory struct {
 }
 
 // GetHelpCategories generates all help categories from the keybind registry
-func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
+func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []HelpCategory {
 	categories := []HelpCategory{
 		{
 			Name: "Window Management",
@@ -43,7 +43,7 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 		},
 		{
 			Name:     "Workspaces",
-			Bindings: generateWorkspaceBindings(registry),
+			Bindings: generateWorkspaceBindings(registry, s),
 		},
 		{
 			Name: "Layout",
@@ -73,11 +73,11 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 		},
 		{
 			Name:     "Sidebar",
-			Bindings: generateSidebarBindings(registry),
+			Bindings: generateSidebarBindings(registry, s),
 		},
 		{
 			Name:     "Copy Mode",
-			Bindings: generateCopyModeBindings(),
+			Bindings: generateCopyModeBindings(s),
 		},
 		{
 			Name: "Modes",
@@ -89,15 +89,15 @@ func GetHelpCategories(registry *config.KeybindRegistry) []HelpCategory {
 		},
 		{
 			Name:     "Debug",
-			Bindings: generateDebugBindings(),
+			Bindings: generateDebugBindings(s),
 		},
 		{
 			Name:     "Tape",
-			Bindings: generateTapeBindings(),
+			Bindings: generateTapeBindings(s),
 		},
 		{
 			Name:     "Prefix",
-			Bindings: generatePrefixBindings(registry),
+			Bindings: generatePrefixBindings(registry, s),
 		},
 	}
 
@@ -127,7 +127,7 @@ func (m *OS) OpenHelpAtCategory(name string) {
 	m.HelpSearchMode = false
 	m.HelpSearchQuery = ""
 	m.HelpCategory = -1
-	for i, cat := range GetHelpCategories(m.KeybindRegistry) {
+	for i, cat := range GetHelpCategories(m.KeybindRegistry, &m.Settings) {
 		if cat.Name == name {
 			m.HelpCategory = i
 			return
@@ -164,7 +164,7 @@ func generateCategoryBindings(registry *config.KeybindRegistry, categoryName str
 }
 
 // generateWorkspaceBindings generates all workspace-related bindings
-func generateWorkspaceBindings(registry *config.KeybindRegistry) []HelpBinding {
+func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	bindings := []HelpBinding{}
 
 	// Add all 9 workspace switches
@@ -197,7 +197,7 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry) []HelpBinding {
 
 	// Renaming a workspace is a chord rather than a plain key, so its row is
 	// built from the same whole-chord hint the pill menu shows.
-	if chord := contextMenuHint(registry, "workspace_prefix_rename"); chord != "" {
+	if chord := contextMenuHint(registry, "workspace_prefix_rename", s); chord != "" {
 		bindings = append(bindings, HelpBinding{
 			Action:      "workspace_prefix_rename",
 			Keys:        []string{chord},
@@ -245,7 +245,7 @@ func generateMouseBindings() []HelpBinding {
 // keys inside it, and the gestures that do the same jobs with the pointer. The
 // keys come from the [keybindings.sidebar] section, which the global keymap
 // deliberately does not carry, so they are read through GetSidebarKeys.
-func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
+func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	const cat = "Sidebar"
 	row := func(action, desc string) HelpBinding {
 		return HelpBinding{
@@ -265,7 +265,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 			}
 			bindings = append(bindings, HelpBinding{
 				Action:      action,
-				Keys:        []string{config.LeaderKey + ", " + key},
+				Keys:        []string{s.LeaderKey + ", " + key},
 				Description: desc,
 				Category:    cat,
 			})
@@ -353,9 +353,9 @@ func generateSidebarBindings(registry *config.KeybindRegistry) []HelpBinding {
 }
 
 // generateCopyModeBindings generates copy mode keybindings
-func generateCopyModeBindings() []HelpBinding {
+func generateCopyModeBindings(s *config.Settings) []HelpBinding {
 	return []HelpBinding{
-		{Keys: []string{config.LeaderKey + ", ["}, Description: "Enter copy mode", Category: "Copy Mode"},
+		{Keys: []string{s.LeaderKey + ", ["}, Description: "Enter copy mode", Category: "Copy Mode"},
 		{Keys: []string{"h, j, k, l"}, Description: "Move cursor", Category: "Copy Mode"},
 		{Keys: []string{"w, b, e"}, Description: "Word fwd/back/end", Category: "Copy Mode"},
 		{Keys: []string{"0, ^, $"}, Description: "Line start/first/end", Category: "Copy Mode"},
@@ -369,35 +369,35 @@ func generateCopyModeBindings() []HelpBinding {
 }
 
 // generateDebugBindings generates debug keybindings
-func generateDebugBindings() []HelpBinding {
+func generateDebugBindings(s *config.Settings) []HelpBinding {
 	return []HelpBinding{
-		{Keys: []string{config.LeaderKey + ", D, l"}, Description: "Toggle log viewer", Category: "Debug"},
-		{Keys: []string{config.LeaderKey + ", D, c"}, Description: "Toggle cache stats", Category: "Debug"},
-		{Keys: []string{config.LeaderKey + ", D, k"}, Description: "Toggle showkeys", Category: "Debug"},
-		{Keys: []string{config.LeaderKey + ", D, a"}, Description: "Toggle animations", Category: "Debug"},
+		{Keys: []string{s.LeaderKey + ", D, l"}, Description: "Toggle log viewer", Category: "Debug"},
+		{Keys: []string{s.LeaderKey + ", D, c"}, Description: "Toggle cache stats", Category: "Debug"},
+		{Keys: []string{s.LeaderKey + ", D, k"}, Description: "Toggle showkeys", Category: "Debug"},
+		{Keys: []string{s.LeaderKey + ", D, a"}, Description: "Toggle animations", Category: "Debug"},
 	}
 }
 
 // generateTapeBindings generates tape scripting bindings
-func generateTapeBindings() []HelpBinding {
+func generateTapeBindings(s *config.Settings) []HelpBinding {
 	bindings := []HelpBinding{}
 
 	// Add tape commands with prefix notation
 	bindings = append(bindings, HelpBinding{
 		Action:      "tape_manager",
-		Keys:        []string{config.LeaderKey + ", T, m"},
+		Keys:        []string{s.LeaderKey + ", T, m"},
 		Description: "Open tape manager",
 		Category:    "Tape Scripting",
 	})
 	bindings = append(bindings, HelpBinding{
 		Action:      "tape_record",
-		Keys:        []string{config.LeaderKey + ", T, r"},
+		Keys:        []string{s.LeaderKey + ", T, r"},
 		Description: "Start recording",
 		Category:    "Tape Scripting",
 	})
 	bindings = append(bindings, HelpBinding{
 		Action:      "tape_stop",
-		Keys:        []string{config.LeaderKey + ", T, s"},
+		Keys:        []string{s.LeaderKey + ", T, s"},
 		Description: "Stop recording",
 		Category:    "Tape Scripting",
 	})
@@ -406,7 +406,7 @@ func generateTapeBindings() []HelpBinding {
 }
 
 // generatePrefixBindings generates prefix command bindings
-func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
+func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	bindings := []HelpBinding{}
 
 	// Get all prefix actions from the config
@@ -446,7 +446,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry) []HelpBinding {
 		// Prefix all keys with the leader key for display
 		prefixedKeys := []string{}
 		for _, key := range keys {
-			prefixedKeys = append(prefixedKeys, config.LeaderKey+", "+key)
+			prefixedKeys = append(prefixedKeys, s.LeaderKey+", "+key)
 		}
 
 		bindings = append(bindings, HelpBinding{
@@ -549,7 +549,7 @@ func helpTabLabel(name string) string {
 
 // RenderHelpMenu renders the keybindings overlay on the shared panel grammar.
 func (m *OS) RenderHelpMenu() (string, overlay.Geometry) {
-	categories := GetHelpCategories(m.KeybindRegistry)
+	categories := GetHelpCategories(m.KeybindRegistry, &m.Settings)
 	if len(categories) == 0 {
 		return "", overlay.Geometry{}
 	}

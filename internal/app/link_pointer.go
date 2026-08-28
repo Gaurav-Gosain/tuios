@@ -45,7 +45,7 @@ func (m *OS) linkHoverFor(window *terminal.Window) (PaneLink, bool) {
 // appearance.links = off exists, since that turns the clause off entirely and
 // restores the filter to exactly what it dropped before.
 func (m *OS) PointerOverPaneContent(x, y int) bool {
-	if !linksEnabled() {
+	if !linksEnabled(&m.Settings) {
 		return false
 	}
 	idx := m.WindowAt(x, y)
@@ -85,7 +85,7 @@ func (m *OS) TrackLinkPointer(x, y int) {
 // read; the cost of a move over a link is that plus one row scan. Nothing here
 // is reached from a render.
 func (m *OS) LinkHoverAt(x, y int) bool {
-	if !linksEnabled() {
+	if !linksEnabled(&m.Settings) {
 		return m.clearLinkHover()
 	}
 
@@ -103,7 +103,7 @@ func (m *OS) LinkHoverAt(x, y int) bool {
 		return m.clearLinkHover()
 	}
 
-	link, ok := resolvePaneLink(window, termX, termY)
+	link, ok := resolvePaneLink(window, termX, termY, &m.Settings)
 	if !ok {
 		return m.clearLinkHover()
 	}
@@ -123,7 +123,7 @@ func (m *OS) LinkHoverAt(x, y int) bool {
 // caller reaches this only with the modifier held, and holding it is the user
 // saying this click is the terminal's rather than the program's.
 func (m *OS) LinkAt(x, y int) (PaneLink, bool) {
-	if !linksEnabled() {
+	if !linksEnabled(&m.Settings) {
 		return PaneLink{}, false
 	}
 	idx := m.WindowAt(x, y)
@@ -135,7 +135,7 @@ func (m *OS) LinkAt(x, y int) (PaneLink, bool) {
 	if !inContent {
 		return PaneLink{}, false
 	}
-	return resolvePaneLink(window, termX, termY)
+	return resolvePaneLink(window, termX, termY, &m.Settings)
 }
 
 // guestOwnsPointer reports whether the program in this pane is tracking the

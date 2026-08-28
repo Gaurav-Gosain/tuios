@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -19,7 +20,7 @@ import (
 func TestAccentPickerOpensOnOneAnswer(t *testing.T) {
 	blue := color.RGBA{R: 0x3a, G: 0xa0, B: 0xff, A: 0xff}
 	for _, prior := range []bool{false, true} {
-		m := &OS{Width: 120, Height: 40, WorkspaceFocus: map[int]int{}, NumWorkspaces: 9, CurrentWorkspace: 1}
+		m := &OS{Settings: config.Global, Width: 120, Height: 40, WorkspaceFocus: map[int]int{}, NumWorkspaces: 9, CurrentWorkspace: 1}
 		win := &terminal.Window{ID: "w1", CustomName: "pane", Workspace: 1}
 		m.Windows = []*terminal.Window{win}
 		if prior {
@@ -62,7 +63,7 @@ func TestAccentPickerOpensOnOneAnswer(t *testing.T) {
 // chrome actually uses, so a pane with no accent still opens on something the
 // user has seen.
 func TestAccentSeedFallbackIsAChromeColour(t *testing.T) {
-	m := &OS{Width: 120, Height: 40, WorkspaceFocus: map[int]int{}, NumWorkspaces: 9, CurrentWorkspace: 1}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40, WorkspaceFocus: map[int]int{}, NumWorkspaces: 9, CurrentWorkspace: 1}
 	m.Windows = []*terminal.Window{{ID: "w1", Workspace: 1}}
 	m.OpenAccentPicker("w1")
 	if got, want := m.AccentPicker.Cur, toRGBA(theme.UI().Accent); got != want {

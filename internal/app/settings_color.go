@@ -41,7 +41,7 @@ type colorSetting struct {
 	// set to. It is what the row's swatch and the picker's seed are painted in,
 	// so an unset row still shows the colour it is inheriting rather than a
 	// blank where a colour should be.
-	effective func(ground color.Color) color.Color
+	effective func(ground color.Color, s *config.Settings) color.Color
 	// namedColor is the colour one of the option's keywords produces, for the
 	// picker's chips. Nil for an option with no keywords.
 	namedColor func(keyword string, ground color.Color) color.Color
@@ -55,7 +55,7 @@ var colorSettings = []colorSetting{
 		Desc:  "Colour of the focused pane's border",
 		Unset: "(theme)",
 		apply: func(m *OS, _ string) { m.applyBorderColors() },
-		effective: func(color.Color) color.Color {
+		effective: func(color.Color, *config.Settings) color.Color {
 			return theme.BorderFocusedWindow()
 		},
 	},
@@ -65,7 +65,7 @@ var colorSettings = []colorSetting{
 		Desc:  "Colour of every unfocused pane's border",
 		Unset: "(theme)",
 		apply: func(m *OS, _ string) { m.applyBorderColors() },
-		effective: func(color.Color) color.Color {
+		effective: func(color.Color, *config.Settings) color.Color {
 			return theme.BorderUnfocused()
 		},
 	},
@@ -75,7 +75,7 @@ var colorSettings = []colorSetting{
 		Desc:  "quiet: the pane's own ink, dimmed. border: the focused pane's accent. muted: one grey",
 		Unset: "(quiet)",
 		apply: func(m *OS, v string) {
-			config.ScrollbarTint = v
+			m.Settings.ScrollbarTint = v
 			m.MarkAllDirty()
 		},
 		effective:  scrollbarTintColor,
@@ -90,11 +90,11 @@ var colorSettings = []colorSetting{
 // answer, so the picker's own ground stands in for one. It is the colour the
 // rule produces where the swatch is, which is the honest thing a swatch on this
 // panel can show.
-func scrollbarTintColor(ground color.Color) color.Color {
-	if hex, ok := config.ScrollbarTintHex(); ok {
+func scrollbarTintColor(ground color.Color, s *config.Settings) color.Color {
+	if hex, ok := s.ScrollbarTintHex(); ok {
 		return lipgloss.Color(hex)
 	}
-	return scrollbarTintKeywordColor(config.ScrollbarTintResolved(), ground)
+	return scrollbarTintKeywordColor(s.ScrollbarTintResolved(), ground)
 }
 
 // scrollbarTintKeywordColor is the colour one tint keyword produces. It mirrors
@@ -163,7 +163,7 @@ func (m *OS) setColorOption(path, value string) tea.Cmd {
 	}
 	if m.UserConfig != nil {
 		if err := config.SetOptionValue(m.UserConfig, path, value); err != nil {
-			m.ShowNotification(err.Error(), "error", config.NotificationDuration)
+			m.ShowNotification(err.Error(), "error", m.Settings.NotificationDuration)
 			return nil
 		}
 	}
@@ -187,7 +187,7 @@ func colorSettingItem(path string) settingItem {
 		Control:  controlColor,
 		Unset:    setting.Unset,
 		value:    func(m *OS) string { return setting.label(setting.value(m)) },
-		swatch:   func(ground color.Color) color.Color { return setting.effective(ground) },
+		swatch:   func(ground color.Color, s *config.Settings) color.Color { return setting.effective(ground, s) },
 		activate: func(m *OS) tea.Cmd { m.OpenColorSetting(setting.Path); return nil },
 	}
 }

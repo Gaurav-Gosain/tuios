@@ -17,9 +17,9 @@ import (
 // below are derived from the border rather than from a guess.
 func linkTestOS(t *testing.T, body string) (*OS, *terminal.Window) {
 	t.Helper()
-	prev := config.Links
-	config.Links = config.LinksAll
-	t.Cleanup(func() { config.Links = prev })
+	prev := config.Global.Links
+	config.Global.Links = config.LinksAll
+	t.Cleanup(func() { config.Global.Links = prev })
 
 	win := newTestWindow(t, "aaaaaaaa1111", 60, 10)
 	win.X, win.Y = 0, 0
@@ -53,7 +53,7 @@ func TestLinkHoverFindsAMarkedRun(t *testing.T) {
 	const want = "https://example.com/docs"
 	_, win := linkTestOS(t, "see \x1b]8;;"+want+"\x1b\\docs\x1b]8;;\x1b\\ here")
 
-	link, ok := resolvePaneLink(win, 5, 0)
+	link, ok := resolvePaneLink(win, 5, 0, &config.Global)
 	if !ok {
 		t.Fatal("no link resolved under a cell inside the marked run")
 	}
@@ -70,7 +70,7 @@ func TestLinkHoverFindsAMarkedRun(t *testing.T) {
 
 	// The cells on either side of the label were never marked.
 	for _, col := range []int{3, 8} {
-		if _, ok := resolvePaneLink(win, col, 0); ok {
+		if _, ok := resolvePaneLink(win, col, 0, &config.Global); ok {
 			t.Errorf("column %d resolved to a link; the run is 4..7", col)
 		}
 	}
@@ -86,7 +86,7 @@ func TestLinkHoverFindsABareURL(t *testing.T) {
 	const want = "https://example.org/a"
 	_, win := linkTestOS(t, "go to "+want+" now")
 
-	link, ok := resolvePaneLink(win, 8, 0)
+	link, ok := resolvePaneLink(win, 8, 0, &config.Global)
 	if !ok {
 		t.Fatal("no link resolved inside a bare URL")
 	}
@@ -110,14 +110,14 @@ func TestLinkHoverFindsABareURL(t *testing.T) {
 // Negative control: with the config check dropped from resolvePaneLink, the
 // bare URL resolves under "marked" and this fails.
 func TestLinkModeMarkedIgnoresBareURLs(t *testing.T) {
-	_, win := linkTestOS(t, "go to https://example.org/a now")
+	m, win := linkTestOS(t, "go to https://example.org/a now")
 
-	config.Links = config.LinksMarked
-	if _, ok := resolvePaneLink(win, 8, 0); ok {
+	m.Settings.Links = config.LinksMarked
+	if _, ok := resolvePaneLink(win, 8, 0, &m.Settings); ok {
 		t.Error("appearance.links = marked still found a bare URL")
 	}
-	config.Links = config.LinksOff
-	if _, ok := resolvePaneLink(win, 8, 0); ok {
+	m.Settings.Links = config.LinksOff
+	if _, ok := resolvePaneLink(win, 8, 0, &m.Settings); ok {
 		t.Error("appearance.links = off still found a link")
 	}
 }

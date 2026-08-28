@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // videoDragHarness is a headless ssh browser-pane rig: a self-placed remote
@@ -149,7 +151,7 @@ func TestResizeHidesGraphicsAndRestoresThem(t *testing.T) {
 	h := newVideoDragHarness(t, rec, rec)
 	_ = h.refresh() // prime: the image is placed and visible
 
-	m := &OS{KittyPassthrough: h.kp}
+	m := &OS{Settings: config.Global, KittyPassthrough: h.kp}
 
 	hidden := rec.count("a=d,d=i,i=")
 	m.Resizing = true

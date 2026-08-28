@@ -10,8 +10,8 @@ import (
 // package state shared with every other test in the run.
 func withZenMode(t *testing.T) {
 	t.Helper()
-	prev := config.ZenMode
-	t.Cleanup(func() { config.ZenMode = prev })
+	prev := config.Global.ZenMode
+	t.Cleanup(func() { config.Global.ZenMode = prev })
 }
 
 // The default keeps today's behaviour: borders are always visible, and zen mode
@@ -30,9 +30,9 @@ func TestZenModeReachesTheGlobal(t *testing.T) {
 	for _, mode := range config.ZenModeModes {
 		cfg := config.DefaultConfig()
 		cfg.Appearance.ZenMode = mode
-		config.ApplyAppearanceConfig(cfg)
-		if config.ZenMode != mode {
-			t.Errorf("ZenMode = %q after applying %q", config.ZenMode, mode)
+		config.ApplyAppearanceConfig(cfg, &config.Global)
+		if config.Global.ZenMode != mode {
+			t.Errorf("ZenMode = %q after applying %q", config.Global.ZenMode, mode)
 		}
 	}
 
@@ -47,7 +47,7 @@ func TestZenModeReachesTheGlobal(t *testing.T) {
 // the renderer doing something unrecognisable.
 func TestZenModeRejectsAnUnknownValue(t *testing.T) {
 	withZenMode(t)
-	config.ZenMode = config.ZenModeAlways
+	config.Global.ZenMode = config.ZenModeAlways
 
 	cfg := config.DefaultConfig()
 	cfg.Appearance.ZenMode = "sometimes"
@@ -60,8 +60,8 @@ func TestZenModeRejectsAnUnknownValue(t *testing.T) {
 		t.Error("an unknown zen_mode value was accepted without a warning")
 	}
 
-	config.ApplyAppearanceConfig(cfg)
-	if config.ZenMode != config.ZenModeDisabled {
-		t.Errorf("ZenMode = %q after an unknown value, want the default %q", config.ZenMode, config.ZenModeDisabled)
+	config.ApplyAppearanceConfig(cfg, &config.Global)
+	if config.Global.ZenMode != config.ZenModeDisabled {
+		t.Errorf("ZenMode = %q after an unknown value, want the default %q", config.Global.ZenMode, config.ZenModeDisabled)
 	}
 }

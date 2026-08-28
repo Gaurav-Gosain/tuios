@@ -21,6 +21,7 @@ func stripHeightOS(t *testing.T, w, h int, pos string) (*OS, sessiontree.Tree) {
 	t.Helper()
 	m, tree := sectionsTestOS(t, w, h)
 	withSidebar(t, true, pos, config.SidebarDefaultWidth)
+	m.Settings = config.Global
 	m.SidebarCollapsed = true
 	return m, tree
 }

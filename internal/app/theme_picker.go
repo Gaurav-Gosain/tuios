@@ -118,7 +118,7 @@ func (m *OS) ThemePickerApplySelection() tea.Cmd {
 		// unpersisted, with the picker gone and no way back to it but Esc that
 		// was no longer there to press. Staying up keeps both the query and the
 		// escape route that reverts.
-		m.ShowNotification("Nothing to apply: no theme matches "+m.ThemePickerQuery, "info", config.NotificationDuration)
+		m.ShowNotification("Nothing to apply: no theme matches "+m.ThemePickerQuery, "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	sel := items[m.ThemePickerSelected]

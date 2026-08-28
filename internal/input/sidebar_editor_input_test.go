@@ -23,9 +23,9 @@ func wmPress(o *app.OS, key string) (*app.OS, tea.Cmd) {
 // HandleWindowManagementModeKey. The keystroke falls through and the editor's
 // selection does not move.
 func TestSectionEditorTakesKeysBeforeTheRailDoes(t *testing.T) {
-	prev := config.SidebarSections
-	config.SidebarSections = config.SidebarDefaultSections
-	t.Cleanup(func() { config.SidebarSections = prev })
+	prev := config.Global.SidebarSections
+	config.Global.SidebarSections = config.SidebarDefaultSections
+	t.Cleanup(func() { config.Global.SidebarSections = prev })
 
 	o := app.NewOS(app.OSOptions{UserConfig: config.DefaultConfig(), Width: 120, Height: 40})
 	o.ConfigReadOnly = true

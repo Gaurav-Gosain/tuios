@@ -167,9 +167,9 @@ func checkFrameDivision(t *testing.T, m *OS, label string) {
 // holds in each, on the rectangles and again on the composed frame. The sidebar
 // runs off, left and right because the content region's width moves with it.
 func TestDivisionReservesOnlyWhatItDraws(t *testing.T) {
-	prevShared, prevSide, prevPos := config.SharedBorders, config.SidebarEnabled, config.SidebarPosition
+	prevShared, prevSide, prevPos := config.Global.SharedBorders, config.Global.SidebarEnabled, config.Global.SidebarPosition
 	t.Cleanup(func() {
-		config.SharedBorders, config.SidebarEnabled, config.SidebarPosition = prevShared, prevSide, prevPos
+		config.Global.SharedBorders, config.Global.SidebarEnabled, config.Global.SidebarPosition = prevShared, prevSide, prevPos
 	})
 
 	for _, side := range []struct {
@@ -182,8 +182,8 @@ func TestDivisionReservesOnlyWhatItDraws(t *testing.T) {
 				for _, tiling := range []bool{true, false} {
 					name := fmt.Sprintf("%s/%s/shared=%v/tiling=%v", side.name, mode, shared, tiling)
 					t.Run(name, func(t *testing.T) {
-						config.SidebarEnabled, config.SidebarPosition = side.on, side.pos
-						config.SharedBorders = shared
+						config.Global.SidebarEnabled, config.Global.SidebarPosition = side.on, side.pos
+						config.Global.SharedBorders = shared
 						m := gapTestOS(t, 2)
 						m.UseBSPLayout = true
 						m.TileAllWindows()
@@ -218,13 +218,13 @@ func TestDivisionReservesOnlyWhatItDraws(t *testing.T) {
 // setting and then left alone strands its panes around a column nobody fills,
 // which is the shape of failure this area keeps producing.
 func TestLiveToggleReclaimsTheDivider(t *testing.T) {
-	prevShared := config.SharedBorders
-	t.Cleanup(func() { config.SharedBorders = prevShared })
+	prevShared := config.Global.SharedBorders
+	t.Cleanup(func() { config.Global.SharedBorders = prevShared })
 
 	for _, mode := range []string{LayoutModeBSP, LayoutModeMasterStack} {
 		for _, start := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/from-shared=%v", mode, start), func(t *testing.T) {
-				config.SharedBorders = start
+				config.Global.SharedBorders = start
 				m := gapTestOS(t, 3)
 				m.UseBSPLayout = true
 				m.TileAllWindows()
@@ -267,9 +267,9 @@ func TestLiveToggleReclaimsTheDivider(t *testing.T) {
 // gap is not the one being retiled. Its panes must not be left drawing their
 // own boxes inside rectangles still spaced for a separator.
 func TestDividerReclaimReachesEveryWorkspace(t *testing.T) {
-	prevShared := config.SharedBorders
-	config.SharedBorders = true
-	t.Cleanup(func() { config.SharedBorders = prevShared })
+	prevShared := config.Global.SharedBorders
+	config.Global.SharedBorders = true
+	t.Cleanup(func() { config.Global.SharedBorders = prevShared })
 
 	m := gapTestOS(t, 4)
 	m.UseBSPLayout = true

@@ -34,10 +34,10 @@ func TestRailRendersTheThreeWidths(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := daemonRailOS(t, 120, 14)
-			prev := config.SidebarWidth
-			config.SidebarWidth = tc.width
+			prev := config.Global.SidebarWidth
+			config.Global.SidebarWidth = tc.width
 			m.SidebarCollapsed = tc.collapsed
-			t.Cleanup(func() { config.SidebarWidth = prev })
+			t.Cleanup(func() { config.Global.SidebarWidth = prev })
 
 			lines := railFrame(t, m)
 			joined := strings.Join(lines, "\n")
@@ -62,16 +62,17 @@ func TestRailRendersTheThreeWidths(t *testing.T) {
 // control follows in a standalone session.
 func TestRailToggleIsOfferedOnlyWhereItCanMove(t *testing.T) {
 	m := daemonRailOS(t, 120, 14)
-	prev := config.SidebarWidth
-	t.Cleanup(func() { config.SidebarWidth = prev })
+	prev := config.Global.SidebarWidth
+	t.Cleanup(func() { config.Global.SidebarWidth = prev })
 
-	config.SidebarWidth = config.SidebarDefaultWidth
+	config.Global.SidebarWidth = config.SidebarDefaultWidth
 	if _, ok := m.sidebarCollapseGlyph(sidebarVariantFull); !ok {
 		t.Error("a full rail on a wide screen is not offered a collapse")
 	}
 
 	// A strip on a screen too narrow for anything wider cannot expand.
 	narrow := daemonRailOS(t, config.SidebarBreakpointNarrow-1, 14)
+	m.Settings = config.Global
 	if _, ok := narrow.sidebarCollapseGlyph(sidebarVariantGlyph); ok {
 		t.Error("a strip is offered an expand on a screen with no room for one")
 	}
@@ -87,9 +88,9 @@ func TestRailCollapseIsBinaryAndIdempotent(t *testing.T) {
 	// No daemon client: the toggle re-lays the panes, and this is about the two
 	// states rather than about syncing them anywhere.
 	m := sidebarTestOS(t, 120, 14, "left")
-	prev := config.SidebarWidth
-	config.SidebarWidth = config.SidebarDefaultWidth
-	t.Cleanup(func() { config.SidebarWidth = prev })
+	prev := m.Settings.SidebarWidth
+	m.Settings.SidebarWidth = config.SidebarDefaultWidth
+	t.Cleanup(func() { m.Settings.SidebarWidth = prev })
 
 	if got := sidebarVariant(m.GetSidebarWidth()); got != sidebarVariantFull {
 		t.Fatalf("the rail starts at variant %d, want full", got)
@@ -112,8 +113,8 @@ func TestRailCollapseIsBinaryAndIdempotent(t *testing.T) {
 	if got := sidebarVariant(m.GetSidebarWidth()); got != sidebarVariantFull {
 		t.Fatalf("a round trip landed on variant %d, want full", got)
 	}
-	if config.SidebarWidth != config.SidebarDefaultWidth {
-		t.Errorf("the round trip moved the stored width to %d", config.SidebarWidth)
+	if m.Settings.SidebarWidth != config.SidebarDefaultWidth {
+		t.Errorf("the round trip moved the stored width to %d", m.Settings.SidebarWidth)
 	}
 }
 
@@ -157,17 +158,17 @@ func TestRailControlHitsAndNavStayParallel(t *testing.T) {
 		}
 	}
 
-	before := config.SidebarWidth
-	t.Cleanup(func() { config.SidebarWidth = before })
+	before := config.Global.SidebarWidth
+	t.Cleanup(func() { config.Global.SidebarWidth = before })
 }
 
 // Every glyph the footer adds needs an ASCII answer.
 func TestRailFooterDegradesToASCII(t *testing.T) {
-	prev := config.UseASCIIOnly
-	config.UseASCIIOnly = true
+	prev := config.Global.UseASCIIOnly
+	config.Global.UseASCIIOnly = true
 	overlay.SetASCII(true)
 	t.Cleanup(func() {
-		config.UseASCIIOnly = prev
+		config.Global.UseASCIIOnly = prev
 		overlay.SetASCII(prev)
 	})
 
@@ -187,9 +188,9 @@ func TestRailFooterDegradesToASCII(t *testing.T) {
 // would leave yesterday's rail on screen.
 func TestSidebarSignatureCoversTheWidthStep(t *testing.T) {
 	m := sidebarTestOS(t, 120, 14, "left")
-	prev := config.SidebarWidth
-	config.SidebarWidth = config.SidebarDefaultWidth
-	t.Cleanup(func() { config.SidebarWidth = prev })
+	prev := m.Settings.SidebarWidth
+	m.Settings.SidebarWidth = config.SidebarDefaultWidth
+	t.Cleanup(func() { m.Settings.SidebarWidth = prev })
 
 	before := m.sidebarSignature()
 	m.SidebarSetCollapsed(true)
@@ -203,9 +204,9 @@ func TestSidebarSignatureCoversTheWidthStep(t *testing.T) {
 // stepper only the keyboard could move.
 func TestRailToggleClickCollapsesTheRail(t *testing.T) {
 	m := sidebarTestOS(t, 120, 14, "left")
-	prev := config.SidebarWidth
-	config.SidebarWidth = config.SidebarDefaultWidth
-	t.Cleanup(func() { config.SidebarWidth = prev })
+	prev := m.Settings.SidebarWidth
+	m.Settings.SidebarWidth = config.SidebarDefaultWidth
+	t.Cleanup(func() { m.Settings.SidebarWidth = prev })
 
 	railFrame(t, m)
 	var step sidebarRowHit

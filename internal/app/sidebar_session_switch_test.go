@@ -23,6 +23,7 @@ func TestSidebarKeepsSessionCreatedFromInside(t *testing.T) {
 	client := session.NewTUIClient()
 	client.UpdateSessionCache([]session.SessionInfo{{Name: "origin"}})
 	m := &OS{
+		Settings:     config.Global,
 		Windows:      []*terminal.Window{{ID: "w1"}},
 		SessionName:  "origin",
 		Width:        120,

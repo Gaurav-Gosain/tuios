@@ -30,6 +30,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -77,6 +78,7 @@ func (s *frameSink) emit(content string) int {
 func floodOS(tb testing.TB, n, cols, rows int) *OS {
 	tb.Helper()
 	m := &OS{
+		Settings:         config.Global,
 		Windows:          make([]*terminal.Window, 0, n),
 		FocusedWindow:    0,
 		WorkspaceFocus:   map[int]int{},

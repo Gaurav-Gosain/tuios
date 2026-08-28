@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
@@ -59,7 +58,7 @@ func TestWindowBoxNeverExceedsItsRectangle(t *testing.T) {
 	// come from config because other tests in this package change them.
 	lines := strings.Split(box, "\n")
 	last := lines[len(lines)-1]
-	if !strings.Contains(last, config.GetWindowBorderBottomLeft()) || strings.Contains(last, "line ") {
+	if !strings.Contains(last, m.Settings.GetWindowBorderBottomLeft()) || strings.Contains(last, "line ") {
 		t.Errorf("last row of the box is not the bottom border: %q", last)
 	}
 }

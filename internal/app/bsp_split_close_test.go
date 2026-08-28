@@ -13,11 +13,12 @@ import (
 // one window is in.
 func splitOS(t *testing.T) *OS {
 	t.Helper()
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
 	m := &OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),

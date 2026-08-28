@@ -13,12 +13,12 @@ import (
 // configuration afterwards.
 func withSidebarGlobals(t *testing.T, pos string) {
 	t.Helper()
-	pe, pp, pw := config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth
-	config.SidebarEnabled = true
-	config.SidebarPosition = pos
-	config.SidebarWidth = config.SidebarDefaultWidth
+	pe, pp, pw := config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth
+	config.Global.SidebarEnabled = true
+	config.Global.SidebarPosition = pos
+	config.Global.SidebarWidth = config.SidebarDefaultWidth
 	t.Cleanup(func() {
-		config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth = pe, pp, pw
+		config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth = pe, pp, pw
 	})
 }
 
@@ -31,6 +31,7 @@ func TestSidebarBandClickNeverReachesPane(t *testing.T) {
 
 	win := &terminal.Window{ID: "w1", X: 0, Y: 0, Width: 120, Height: 39, Workspace: 1}
 	o := &app.OS{
+		Settings:         config.Global,
 		Width:            120,
 		Height:           40,
 		Mode:             app.WindowManagementMode,

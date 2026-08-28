@@ -3,8 +3,6 @@ package app
 import (
 	"testing"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // TestNotificationKeepsTheFrameDrawing is the regression test for a message
@@ -49,7 +47,7 @@ func TestNotificationKeepsTheFrameDrawing(t *testing.T) {
 	// The requested 40ms is below the severity floor, so the message is still
 	// up: a duration is a floor now, not the answer. Age it past the floor by
 	// hand rather than sleeping six seconds for it.
-	m.Notifications[0].StartTime = time.Now().Add(-2 * config.NotificationDuration)
+	m.Notifications[0].StartTime = time.Now().Add(-2 * m.Settings.NotificationDuration)
 
 	// The tick that retires it must still draw, or the message leaves the model
 	// and stays on the screen: that is the same freeze in a different place.
@@ -74,7 +72,7 @@ func TestStickyErrorWaitsForDismissal(t *testing.T) {
 	m := newTestOS(win)
 	m.Width, m.Height = 120, 40
 
-	m.ShowNotification("Capture failed: permission denied", "error", config.NotificationDuration)
+	m.ShowNotification("Capture failed: permission denied", "error", m.Settings.NotificationDuration)
 	if len(m.Notifications) != 1 || !m.Notifications[0].Sticky {
 		t.Fatalf("an error should be sticky by default, got %+v", m.Notifications)
 	}

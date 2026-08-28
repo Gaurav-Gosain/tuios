@@ -14,36 +14,37 @@ import (
 // the full screen.
 func sharedBorderSidebarOS(t *testing.T, n int, side string) *OS {
 	t.Helper()
-	origShared, origAnim := config.SharedBorders, config.AnimationsEnabled
-	origStyle, origASCII := config.BorderStyle, config.UseASCIIOnly
-	origEnabled, origPos := config.SidebarEnabled, config.SidebarPosition
-	origDock := config.DockbarPosition
+	origShared, origAnim := config.Global.SharedBorders, config.Global.AnimationsEnabled
+	origStyle, origASCII := config.Global.BorderStyle, config.Global.UseASCIIOnly
+	origEnabled, origPos := config.Global.SidebarEnabled, config.Global.SidebarPosition
+	origDock := config.Global.DockbarPosition
 	// The dock's hairline closes the content region from below, and a divider
 	// that reaches it meets it there, so pin the side it is on.
-	config.DockbarPosition = "bottom"
-	config.SharedBorders = true
-	config.AnimationsEnabled = false
-	config.BorderStyle = "rounded"
-	config.UseASCIIOnly = false
-	config.SidebarEnabled = side != ""
+	config.Global.DockbarPosition = "bottom"
+	config.Global.SharedBorders = true
+	config.Global.AnimationsEnabled = false
+	config.Global.BorderStyle = "rounded"
+	config.Global.UseASCIIOnly = false
+	config.Global.SidebarEnabled = side != ""
 	if side != "" {
-		config.SidebarPosition = side
+		config.Global.SidebarPosition = side
 	}
 	t.Cleanup(func() {
-		config.SharedBorders = origShared
-		config.AnimationsEnabled = origAnim
-		config.BorderStyle = origStyle
-		config.UseASCIIOnly = origASCII
-		config.SidebarEnabled = origEnabled
-		config.SidebarPosition = origPos
-		config.DockbarPosition = origDock
+		config.Global.SharedBorders = origShared
+		config.Global.AnimationsEnabled = origAnim
+		config.Global.BorderStyle = origStyle
+		config.Global.UseASCIIOnly = origASCII
+		config.Global.SidebarEnabled = origEnabled
+		config.Global.SidebarPosition = origPos
+		config.Global.DockbarPosition = origDock
 	})
 
 	m := &OS{
+		Settings: config.Global,
 		// The layout reads the model's session-settled geometry, seeded from
 		// the globals the way NewOS seeds it.
-		SharedBorders:    config.SharedBorders,
-		PaneGap:          config.PaneGap,
+		SharedBorders:    config.Global.SharedBorders,
+		PaneGap:          config.Global.PaneGap,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
@@ -102,7 +103,7 @@ func focusRightmostPane(t *testing.T, m *OS) *terminal.Window {
 func TestSharedBorderSuppressesCapAtSidebarEdge(t *testing.T) {
 	withSidebar := sharedBorderSidebarOS(t, 3, "right")
 	// Read after the model pins the style: the glyphs are the style's own.
-	b := config.GetBorderForStyle()
+	b := config.Global.GetBorderForStyle()
 	if withSidebar.GetRightMargin() <= 0 {
 		t.Fatalf("right sidebar reserved no margin; content width %d", withSidebar.GetContentWidth())
 	}
@@ -120,6 +121,7 @@ func TestSharedBorderSuppressesCapAtSidebarEdge(t *testing.T) {
 	// Regression guard: the junction is drawn for a rule that is there, not for
 	// every divider that runs to the edge of the content region.
 	noSidebar := sharedBorderSidebarOS(t, 3, "")
+	withSidebar.Settings = config.Global
 	focusRightmostPane(t, noSidebar)
 	allNo, _ := separatorText(t, noSidebar)
 	if strings.Contains(allNo, b.MiddleRight) {

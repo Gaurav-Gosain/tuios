@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -58,7 +59,7 @@ func (m *OS) fastWindowBox(content string, window *terminal.Window, borderColorO
 		return "", false
 	}
 
-	left, right, ok := borderSideCells(borderColorObj)
+	left, right, ok := borderSideCells(borderColorObj, &m.Settings)
 	if !ok {
 		return "", false
 	}
@@ -86,8 +87,8 @@ func (m *OS) fastWindowBox(content string, window *terminal.Window, borderColorO
 // lipgloss cycles a multi-rune border side down the rows and substitutes a
 // space for an empty one. Both are reproducible, but neither is a border any
 // style in the registry uses, so they are declined rather than duplicated.
-func borderSideCells(borderColorObj color.Color) (left, right string, ok bool) {
-	border := getBorder()
+func borderSideCells(borderColorObj color.Color, s *config.Settings) (left, right string, ok bool) {
+	border := getBorder(s)
 	if !isSingleRune(border.Left) || !isSingleRune(border.Right) {
 		return "", "", false
 	}

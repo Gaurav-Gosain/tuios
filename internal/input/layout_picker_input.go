@@ -3,7 +3,6 @@ package input
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // handleLayoutPickerInput handles keyboard input when the layout picker is open.
@@ -27,13 +26,13 @@ func handleLayoutSaveInput(keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
 	case "enter":
 		name := o.LayoutSaveBuffer
 		if name == "" {
-			o.ShowNotification("Layout name cannot be empty", "warning", config.NotificationDuration)
+			o.ShowNotification("Layout name cannot be empty", "warning", o.Settings.NotificationDuration)
 			return o, nil
 		}
 		if err := app.SaveLayoutTemplate(name, o); err != nil {
-			o.ShowNotification("Failed to save layout: "+err.Error(), "error", config.NotificationDuration)
+			o.ShowNotification("Failed to save layout: "+err.Error(), "error", o.Settings.NotificationDuration)
 		} else {
-			o.ShowNotification("Layout saved: "+name, "success", config.NotificationDuration)
+			o.ShowNotification("Layout saved: "+name, "success", o.Settings.NotificationDuration)
 		}
 		o.ShowLayoutPicker = false
 		o.LayoutSaveBuffer = ""
@@ -77,7 +76,7 @@ func handleLayoutLoadInput(keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
 			o.LayoutPickerQuery = ""
 			o.LayoutPickerSelected = 0
 			o.LayoutPickerScroll = 0
-			o.ShowNotification("Layout applied: "+selected.Name, "success", config.NotificationDuration)
+			o.ShowNotification("Layout applied: "+selected.Name, "success", o.Settings.NotificationDuration)
 		}
 		return o, nil
 
@@ -120,9 +119,9 @@ func handleLayoutLoadInput(keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
 			if len(filtered) > 0 && o.LayoutPickerSelected < len(filtered) {
 				selected := filtered[o.LayoutPickerSelected]
 				if err := app.DeleteLayoutTemplate(selected.Name); err != nil {
-					o.ShowNotification("Failed to delete layout: "+err.Error(), "error", config.NotificationDuration)
+					o.ShowNotification("Failed to delete layout: "+err.Error(), "error", o.Settings.NotificationDuration)
 				} else {
-					o.ShowNotification("Layout deleted: "+selected.Name, "info", config.NotificationDuration)
+					o.ShowNotification("Layout deleted: "+selected.Name, "info", o.Settings.NotificationDuration)
 					// Refresh the list
 					templates, _ := app.LoadLayoutTemplates()
 					o.LayoutPickerItems = templates

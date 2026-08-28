@@ -42,7 +42,7 @@ func drawnNotifZones(t *testing.T, m *OS) notifHitZones {
 // message off the dock.
 func TestNotificationClickJumpsToItsPane(t *testing.T) {
 	m := jumpTestOS(t)
-	m.ShowNotificationFrom("yonder needs input", "warning", config.NotificationDuration,
+	m.ShowNotificationFrom("yonder needs input", "warning", m.Settings.NotificationDuration,
 		NotifTarget{SessionID: "main", WindowID: "yonder"})
 
 	z := drawnNotifZones(t, m)
@@ -64,8 +64,8 @@ func TestNotificationClickJumpsToItsPane(t *testing.T) {
 // the visible message and leaves focus where it was.
 func TestNotificationDismissZoneDoesNotJump(t *testing.T) {
 	m := jumpTestOS(t)
-	m.ShowNotification("first", "info", config.NotificationDuration)
-	m.ShowNotificationFrom("yonder finished", "success", config.NotificationDuration,
+	m.ShowNotification("first", "info", m.Settings.NotificationDuration)
+	m.ShowNotificationFrom("yonder finished", "success", m.Settings.NotificationDuration,
 		NotifTarget{SessionID: "main", WindowID: "yonder"})
 
 	z := drawnNotifZones(t, m)
@@ -84,7 +84,7 @@ func TestNotificationDismissZoneDoesNotJump(t *testing.T) {
 // own columns, so the dock items beside it still get their clicks.
 func TestNotificationClickOutsideBlockIsNotOurs(t *testing.T) {
 	m := jumpTestOS(t)
-	m.ShowNotificationFrom("yonder finished", "success", config.NotificationDuration,
+	m.ShowNotificationFrom("yonder finished", "success", m.Settings.NotificationDuration,
 		NotifTarget{SessionID: "main", WindowID: "yonder"})
 
 	z := drawnNotifZones(t, m)
@@ -137,9 +137,9 @@ func TestNotificationKeyboardTwinWalksTheQueue(t *testing.T) {
 		t.Fatal("an empty queue claimed to have jumped")
 	}
 
-	m.ShowNotificationFrom("yonder finished", "success", config.NotificationDuration,
+	m.ShowNotificationFrom("yonder finished", "success", m.Settings.NotificationDuration,
 		NotifTarget{SessionID: "main", WindowID: "yonder"})
-	m.ShowNotification("Copied", "info", config.NotificationDuration)
+	m.ShowNotification("Copied", "info", m.Settings.NotificationDuration)
 
 	if !m.JumpToNotification() {
 		t.Fatal("a targeted message behind an untargeted one was not reachable")
@@ -159,7 +159,7 @@ func TestNotificationKeyboardTwinWalksTheQueue(t *testing.T) {
 // follow is marked as one, and a message you cannot is not.
 func TestTargetedNotificationIsUnderlined(t *testing.T) {
 	m := jumpTestOS(t)
-	m.ShowNotification("Copied to clipboard", "info", config.NotificationDuration)
+	m.ShowNotification("Copied to clipboard", "info", m.Settings.NotificationDuration)
 	plain, ok := m.renderNotificationBlock(m.GetRenderWidth(), 0)
 	if !ok {
 		t.Fatal("no block for the untargeted message")
@@ -169,7 +169,7 @@ func TestTargetedNotificationIsUnderlined(t *testing.T) {
 	}
 
 	m.Notifications = nil
-	m.ShowNotificationFrom("yonder needs input", "warning", config.NotificationDuration,
+	m.ShowNotificationFrom("yonder needs input", "warning", m.Settings.NotificationDuration,
 		NotifTarget{SessionID: "main", WindowID: "yonder"})
 	linked, ok := m.renderNotificationBlock(m.GetRenderWidth(), 0)
 	if !ok {

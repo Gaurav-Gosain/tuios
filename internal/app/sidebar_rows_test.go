@@ -28,6 +28,7 @@ func sidebarMultiSessionOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	}
 	m.FocusedWindow = 0
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	m.Settings = config.Global
 	m.SidebarOrder = nil
 
 	tree := sessiontree.Build([]sessiontree.SessionInput{
@@ -116,7 +117,7 @@ func TestSidebarDragReorderPersists(t *testing.T) {
 		t.Fatalf("committed order = %v, want %v", m.SidebarOrder, want)
 	}
 
-	fresh := &OS{}
+	fresh := &OS{Settings: config.Global}
 	fresh.loadSidebarState()
 	if want := []string{"main", "deploy", "scratch"}; !reflect.DeepEqual(fresh.SidebarOrder, want) {
 		t.Fatalf("fresh OS loaded order %v, want %v", fresh.SidebarOrder, want)
@@ -201,11 +202,12 @@ func TestSidebarAgentsSectionListsAgentPanes(t *testing.T) {
 func TestSidebarASCIIFallback(t *testing.T) {
 	m, tree := sidebarMultiSessionOS(t, 120, 40)
 
-	prevASCII := config.UseASCIIOnly
-	config.UseASCIIOnly = true
+	prevASCII := config.Global.UseASCIIOnly
+	config.Global.UseASCIIOnly = true
+	m.Settings.UseASCIIOnly = true
 	overlay.SetASCII(true)
 	t.Cleanup(func() {
-		config.UseASCIIOnly = prevASCII
+		config.Global.UseASCIIOnly = prevASCII
 		overlay.SetASCII(prevASCII)
 	})
 
@@ -233,7 +235,7 @@ func TestSidebarASCIIFallback(t *testing.T) {
 	// Default mode: private-use codepoints only where the dock already uses
 	// them (the pill caps); anything else is the kind of tofu the rail must
 	// never emit.
-	config.UseASCIIOnly = false
+	config.Global.UseASCIIOnly = false
 	overlay.SetASCII(false)
 	sanctioned := map[rune]bool{}
 	for _, r := range config.DockPillLeftChar + config.DockPillRightChar {

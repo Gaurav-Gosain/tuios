@@ -185,7 +185,7 @@ func TestSidebarSignatureFoldsWhatTheRailDraws(t *testing.T) {
 func TestAccentPickerPicksAndClears(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 	truecolorForTest(t)
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.Width, m.Height = 120, 40
 
 	m.OpenAccentPicker("w1")

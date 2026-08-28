@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -139,7 +140,7 @@ func TestBorderBoxInnerWidthIsKnown(t *testing.T) {
 			box := sizeContentBox(lipgloss.NewStyle().
 				Align(lipgloss.Left).
 				AlignVertical(lipgloss.Top).
-				Border(getBorder()).
+				Border(getBorder(&config.Global)).
 				BorderTop(false), win, preShaped)
 			rendered := box.BorderForeground(lipgloss.Color("62")).Render(content)
 			measured := max(lipgloss.Width(rendered)-2, 0)

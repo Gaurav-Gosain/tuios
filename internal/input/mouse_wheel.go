@@ -3,7 +3,6 @@ package input
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -50,7 +49,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		mouse := msg.Mouse()
 		if mouse.Mod&(tea.ModAlt|tea.ModShift) != 0 {
 			dir := 1
-			if config.NiriReverseScroll {
+			if o.Settings.NiriReverseScroll {
 				dir = -1
 			}
 			switch msg.Button {
@@ -93,7 +92,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				// (browsers especially). Send config.ScrollLines events per notch
 				// so a notch covers the same distance as scrollback scrolling,
 				// tunable through the existing scroll-speed setting.
-				reps := max(config.ScrollLines, 1)
+				reps := max(o.Settings.ScrollLines, 1)
 				for range reps {
 					sendMouseToWindow(focusedWindow, adjustedMouse)
 				}
@@ -110,7 +109,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			case tea.MouseWheelUp:
 				if focusedWindow.InCopyMode() {
 					// Already in copy mode  - scroll up
-					scrollCopyModeUp(focusedWindow)
+					scrollCopyModeUp(focusedWindow, &o.Settings)
 				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() && !focusedWindow.IsAltScreen() && focusedWindow.ScrollbackLen() > 0 {
 					// No mouse tracking, not alt screen, and there is history to
 					// show: turn the wheel and the view scrolls. Copy mode is the
@@ -119,13 +118,13 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 					// changing mode. Panes with no scrollback are left alone
 					// rather than dropped into an empty scrolled state.
 					focusedWindow.EnterCopyModeImplicit()
-					scrollCopyModeUp(focusedWindow)
+					scrollCopyModeUp(focusedWindow, &o.Settings)
 				}
 				return o, nil
 			case tea.MouseWheelDown:
 				if focusedWindow.InCopyMode() {
 					// In copy mode, scroll down
-					scrollCopyModeDown(focusedWindow)
+					scrollCopyModeDown(focusedWindow, &o.Settings)
 					leaveCopyModeAtBottom(focusedWindow)
 				}
 				return o, nil
@@ -140,16 +139,16 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			switch msg.Button {
 			case tea.MouseWheelUp:
 				if focusedWindow.InCopyMode() {
-					scrollCopyModeUp(focusedWindow)
+					scrollCopyModeUp(focusedWindow, &o.Settings)
 				} else if focusedWindow.ScrollbackLen() > 0 {
 					// Same silent entry as terminal mode: the wheel scrolls, it
 					// does not put the pane into a mode and teach keys for it.
 					focusedWindow.EnterCopyModeImplicit()
-					scrollCopyModeUp(focusedWindow)
+					scrollCopyModeUp(focusedWindow, &o.Settings)
 				}
 			case tea.MouseWheelDown:
 				if focusedWindow.InCopyMode() {
-					scrollCopyModeDown(focusedWindow)
+					scrollCopyModeDown(focusedWindow, &o.Settings)
 					leaveCopyModeAtBottom(focusedWindow)
 				}
 			}

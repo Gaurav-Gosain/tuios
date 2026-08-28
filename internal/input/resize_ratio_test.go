@@ -75,9 +75,9 @@ func TestNestedRatioSurvivesAnOutAndBackDrag(t *testing.T) {
 
 	for _, shared := range []bool{false, true} {
 		t.Run(fmt.Sprintf("shared=%v", shared), func(t *testing.T) {
-			prev := config.SharedBorders
-			config.SharedBorders = shared
-			t.Cleanup(func() { config.SharedBorders = prev })
+			prev := config.Global.SharedBorders
+			config.Global.SharedBorders = shared
+			t.Cleanup(func() { config.Global.SharedBorders = prev })
 
 			m := ratioOS(t)
 			wantRatio := nestedRatio(m)
@@ -126,9 +126,9 @@ func TestGrowingARegionDistributesItAcrossTheNestedSplit(t *testing.T) {
 
 	for _, shared := range []bool{false, true} {
 		t.Run(fmt.Sprintf("shared=%v", shared), func(t *testing.T) {
-			prev := config.SharedBorders
-			config.SharedBorders = shared
-			t.Cleanup(func() { config.SharedBorders = prev })
+			prev := config.Global.SharedBorders
+			config.Global.SharedBorders = shared
+			t.Cleanup(func() { config.Global.SharedBorders = prev })
 
 			m := ratioOS(t)
 			startTop, startBottom := pair(m)

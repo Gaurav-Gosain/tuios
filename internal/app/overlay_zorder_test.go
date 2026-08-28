@@ -23,6 +23,7 @@ func TestEveryOverlayKindHasAPlaceInTheStack(t *testing.T) {
 
 	// Every flag on, so openOverlayKinds names every kind there is.
 	m := &OS{
+		Settings: config.Global,
 		ShowHelp: true, ShowCommandPalette: true, ShowSessionSwitcher: true,
 		ShowWorkspaceSwitcher: true, ShowLayoutPicker: true, ShowAggregateView: true,
 		ShowSettings: true, ShowThemePicker: true, ShowAccentPicker: true,

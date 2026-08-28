@@ -76,7 +76,7 @@ func (m *OS) dockSessionStripWidth() int {
 func (m *OS) dockSessionCell(a DockSessionAction, pal overlay.Palette) dockSessionCell {
 	// A column of padding either side, so the target is a button and not a
 	// glyph, and so the two controls do not touch.
-	body := " " + dockSessionIcon(a) + " "
+	body := " " + dockSessionIcon(a, &m.Settings) + " "
 
 	st := lipgloss.NewStyle()
 	hovered := m.dockSessionHover == a

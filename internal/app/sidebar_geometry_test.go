@@ -14,15 +14,15 @@ import (
 // toggles or reorders never touches the developer's real state.
 func withSidebar(t *testing.T, enabled bool, pos string, width int) {
 	t.Helper()
-	pe, pp, pw := config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth
-	config.SidebarEnabled = enabled
-	config.SidebarPosition = pos
-	config.SidebarWidth = width
+	pe, pp, pw := config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth
+	config.Global.SidebarEnabled = enabled
+	config.Global.SidebarPosition = pos
+	config.Global.SidebarWidth = width
 	dir := t.TempDir()
 	prevDir := sidebarStateDir
 	sidebarStateDir = func() string { return dir }
 	t.Cleanup(func() {
-		config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth = pe, pp, pw
+		config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth = pe, pp, pw
 		sidebarStateDir = prevDir
 	})
 }
@@ -50,7 +50,7 @@ func TestGetSidebarWidthBreakpoints(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.wantName, func(t *testing.T) {
-			m := &OS{Width: c.renderW, Height: 40}
+			m := &OS{Settings: config.Global, Width: c.renderW, Height: 40}
 			got := m.GetSidebarWidth()
 			if got != c.wantW {
 				t.Errorf("render %d: GetSidebarWidth = %d, want %d", c.renderW, got, c.wantW)
@@ -70,7 +70,7 @@ func TestGetSidebarWidthBreakpoints(t *testing.T) {
 // content area.
 func TestGetSidebarWidthOversizedConfigStepsDown(t *testing.T) {
 	withSidebar(t, true, "left", 100) // absurdly wide for a 100-col screen
-	m := &OS{Width: 100, Height: 40}
+	m := &OS{Settings: config.Global, Width: 100, Height: 40}
 	w := m.GetSidebarWidth()
 	if w == 0 {
 		t.Fatalf("sidebar hidden entirely; expected a step-down variant")
@@ -83,19 +83,20 @@ func TestGetSidebarWidthOversizedConfigStepsDown(t *testing.T) {
 // TestMarginsFollowPosition checks left/right margins track the configured side
 // and that a hidden or disabled sidebar reserves nothing.
 func TestMarginsFollowPosition(t *testing.T) {
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	m.Settings = config.Global
 	if m.GetLeftMargin() != config.SidebarDefaultWidth || m.GetRightMargin() != 0 {
 		t.Errorf("left sidebar: left=%d right=%d", m.GetLeftMargin(), m.GetRightMargin())
 	}
 
-	config.SidebarPosition = "right"
+	m.Settings.SidebarPosition = "right"
 	if m.GetLeftMargin() != 0 || m.GetRightMargin() != config.SidebarDefaultWidth {
 		t.Errorf("right sidebar: left=%d right=%d", m.GetLeftMargin(), m.GetRightMargin())
 	}
 
-	config.SidebarEnabled = false
+	m.Settings.SidebarEnabled = false
 	if m.GetLeftMargin() != 0 || m.GetRightMargin() != 0 || m.GetContentWidth() != 120 {
 		t.Errorf("disabled sidebar still reserves space: left=%d right=%d content=%d",
 			m.GetLeftMargin(), m.GetRightMargin(), m.GetContentWidth())
@@ -115,11 +116,12 @@ func tileDaemonWindows(t *testing.T, width, height, count int) *OS {
 // run against every tiling path, not only the BSP one.
 func tileDaemonWindowsMode(t *testing.T, width, height, count int, layoutMode string) *OS {
 	t.Helper()
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
 	m := &OS{
+		Settings:             config.Global,
 		NumWorkspaces:        9,
 		CurrentWorkspace:     1,
 		WorkspaceFocus:       make(map[int]int),
@@ -232,6 +234,7 @@ func TestSidebarFloatingClampRespectsReservedRegion(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 
 	m := &OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
@@ -333,6 +336,8 @@ func TestSidebarResizeCannotEnterReservedBand(t *testing.T) {
 		withSidebar(t, true, "right", config.SidebarDefaultWidth)
 
 		m := tileDaemonWindowsMode(t, width, height, 2, LayoutModeMasterStack)
+
+		m.Settings = config.Global
 		contentRight := m.GetLeftMargin() + m.GetContentWidth()
 		for i, w := range m.Windows {
 			if w.X+w.Width == contentRight {
@@ -365,7 +370,7 @@ func TestSidebarSnapBoundsUseContentRegion(t *testing.T) {
 	const width, height = 120, 40
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 
-	m := &OS{Width: width, Height: height}
+	m := &OS{Settings: config.Global, Width: width, Height: height}
 	leftMargin := m.GetLeftMargin()
 	contentW := m.GetContentWidth()
 

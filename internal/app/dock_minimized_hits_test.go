@@ -67,10 +67,10 @@ func TestDockMinimizedEntriesAreClickableWhereTheyAreDrawn(t *testing.T) {
 				name = "strip-on"
 			}
 			t.Run(name+"/"+pos, func(t *testing.T) {
-				prevStrip, prevPos := config.DockWorkspaceTabs, config.DockbarPosition
-				config.DockWorkspaceTabs, config.DockbarPosition = strip, pos
+				prevStrip, prevPos := config.Global.DockWorkspaceTabs, config.Global.DockbarPosition
+				config.Global.DockWorkspaceTabs, config.Global.DockbarPosition = strip, pos
 				t.Cleanup(func() {
-					config.DockWorkspaceTabs, config.DockbarPosition = prevStrip, prevPos
+					config.Global.DockWorkspaceTabs, config.Global.DockbarPosition = prevStrip, prevPos
 				})
 
 				m := dockMinimizedOS(t)
@@ -92,7 +92,7 @@ func TestDockMinimizedEntriesAreClickableWhereTheyAreDrawn(t *testing.T) {
 				}
 				// The dock is one row.
 				above := y - 1
-				if config.DockbarPosition == "top" {
+				if config.Global.DockbarPosition == "top" {
 					above = y + 1
 				}
 				if got := m.DockItemAt(x0, above); got != -1 {

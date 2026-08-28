@@ -206,19 +206,19 @@ func contentSizes(m *OS) string {
 // they would have laid the panes out in the same box even if it were not.
 func twoClientsDisagreeingOnChrome(t *testing.T) (*rig, *peer, *exchange) {
 	t.Helper()
-	prevAnim := config.AnimationsEnabled
-	prevEnabled := config.SidebarEnabled
-	prevWidth := config.SidebarWidth
-	prevPos := config.SidebarPosition
-	config.AnimationsEnabled = false
-	config.SidebarEnabled = true
-	config.SidebarWidth = 24
-	config.SidebarPosition = "left"
+	prevAnim := config.Global.AnimationsEnabled
+	prevEnabled := config.Global.SidebarEnabled
+	prevWidth := config.Global.SidebarWidth
+	prevPos := config.Global.SidebarPosition
+	config.Global.AnimationsEnabled = false
+	config.Global.SidebarEnabled = true
+	config.Global.SidebarWidth = 24
+	config.Global.SidebarPosition = "left"
 	t.Cleanup(func() {
-		config.AnimationsEnabled = prevAnim
-		config.SidebarEnabled = prevEnabled
-		config.SidebarWidth = prevWidth
-		config.SidebarPosition = prevPos
+		config.Global.AnimationsEnabled = prevAnim
+		config.Global.SidebarEnabled = prevEnabled
+		config.Global.SidebarWidth = prevWidth
+		config.Global.SidebarPosition = prevPos
 	})
 
 	r := newRigSized(t, 2, holderCols, holderRows)
@@ -289,9 +289,9 @@ func TestTwoClientsAgreeOnEveryPaneSize(t *testing.T) {
 // already on its way.
 func twoClientsMidSizeChange(t *testing.T) (*rig, *peer, *exchange) {
 	t.Helper()
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
 	r := newRigSized(t, 2, holderCols, holderRows)
 	r.tile()

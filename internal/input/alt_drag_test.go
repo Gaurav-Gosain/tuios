@@ -28,9 +28,9 @@ func altRightClickMsg(x, y int) tea.MouseClickMsg {
 // withAltDrag sets the gesture on or off for a test and restores it after.
 func withAltDrag(t *testing.T, on bool) {
 	t.Helper()
-	prev := config.AltDrag
-	config.AltDrag = on
-	t.Cleanup(func() { config.AltDrag = prev })
+	prev := config.Global.AltDrag
+	config.Global.AltDrag = on
+	t.Cleanup(func() { config.Global.AltDrag = prev })
 }
 
 // TestAltDragMovesThePaneFromItsContent is the gesture the maintainer asked for:

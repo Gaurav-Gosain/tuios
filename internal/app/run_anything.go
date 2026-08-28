@@ -6,7 +6,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 )
@@ -164,7 +163,7 @@ func (m *OS) TypeProgram(e applist.Entry) tea.Cmd {
 	}
 
 	if len(m.Windows) == before {
-		m.ShowNotification("Could not open a pane for "+e.Name, "error", config.NotificationDuration*2)
+		m.ShowNotification("Could not open a pane for "+e.Name, "error", m.Settings.NotificationDuration*2)
 		return save
 	}
 	// Typing it out means the user is about to keep typing, so the pane is
@@ -175,7 +174,7 @@ func (m *OS) TypeProgram(e applist.Entry) tea.Cmd {
 	m.EnterTerminalMode()
 	if err := m.SendToWindow(m.Windows[before].ID, []byte(line)); err != nil {
 		m.ShowNotification("Could not type "+e.Name+": "+err.Error(),
-			"error", config.NotificationDuration*2)
+			"error", m.Settings.NotificationDuration*2)
 	}
 	return save
 }
@@ -239,7 +238,7 @@ func (m *OS) seedAdoptedWindows(created []*terminal.Window) {
 			m.pendingSeeds = slices.Delete(m.pendingSeeds, i, i+1)
 			if err := m.SendToWindow(w.ID, []byte(p.line)); err != nil {
 				m.ShowNotification("Could not type "+p.name+": "+err.Error(),
-					"error", config.NotificationDuration*2)
+					"error", m.Settings.NotificationDuration*2)
 			}
 			break
 		}

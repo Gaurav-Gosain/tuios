@@ -1,8 +1,9 @@
 package sessiontree
 
-import "strings"
-
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRollUpStatePriority(t *testing.T) {
 	cases := []struct {

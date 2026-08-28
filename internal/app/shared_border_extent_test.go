@@ -30,29 +30,30 @@ func extentOS(t *testing.T, n int, dock, sidebar string) *OS {
 // extentOSStyled is the same session drawn in a given border style.
 func extentOSStyled(t *testing.T, n int, dock, sidebar, borderStyle string) *OS {
 	t.Helper()
-	shared, anim, ascii := config.SharedBorders, config.AnimationsEnabled, config.UseASCIIOnly
-	style, dockPos := config.BorderStyle, config.DockbarPosition
-	sidebarOn, sidebarPos := config.SidebarEnabled, config.SidebarPosition
-	config.SharedBorders = true
-	config.AnimationsEnabled = false
-	config.UseASCIIOnly = false
-	config.BorderStyle = borderStyle
-	config.DockbarPosition = dock
-	config.SidebarEnabled = sidebar != ""
+	shared, anim, ascii := config.Global.SharedBorders, config.Global.AnimationsEnabled, config.Global.UseASCIIOnly
+	style, dockPos := config.Global.BorderStyle, config.Global.DockbarPosition
+	sidebarOn, sidebarPos := config.Global.SidebarEnabled, config.Global.SidebarPosition
+	config.Global.SharedBorders = true
+	config.Global.AnimationsEnabled = false
+	config.Global.UseASCIIOnly = false
+	config.Global.BorderStyle = borderStyle
+	config.Global.DockbarPosition = dock
+	config.Global.SidebarEnabled = sidebar != ""
 	if sidebar != "" {
-		config.SidebarPosition = sidebar
+		config.Global.SidebarPosition = sidebar
 	}
 	t.Cleanup(func() {
-		config.SharedBorders, config.AnimationsEnabled, config.UseASCIIOnly = shared, anim, ascii
-		config.BorderStyle, config.DockbarPosition = style, dockPos
-		config.SidebarEnabled, config.SidebarPosition = sidebarOn, sidebarPos
+		config.Global.SharedBorders, config.Global.AnimationsEnabled, config.Global.UseASCIIOnly = shared, anim, ascii
+		config.Global.BorderStyle, config.Global.DockbarPosition = style, dockPos
+		config.Global.SidebarEnabled, config.Global.SidebarPosition = sidebarOn, sidebarPos
 	})
 
 	m := &OS{
+		Settings: config.Global,
 		// The layout reads the model's session-settled geometry, seeded from
 		// the globals the way NewOS seeds it.
-		SharedBorders:    config.SharedBorders,
-		PaneGap:          config.PaneGap,
+		SharedBorders:    config.Global.SharedBorders,
+		PaneGap:          config.Global.PaneGap,
 		Windows:          make([]*terminal.Window, 0, n),
 		FocusedWindow:    0,
 		WorkspaceFocus:   map[int]int{},
@@ -90,7 +91,7 @@ func frameCells(t *testing.T, m *OS) [][]rune {
 // where the region runs to the screen edge instead.
 func dockRuleRow(m *OS) int {
 	b := m.GetBSPBounds()
-	switch config.DockbarPosition {
+	switch m.Settings.DockbarPosition {
 	case "top":
 		return b.Y - 1
 	case "hidden":
@@ -138,7 +139,7 @@ func TestVerticalDividerRunsItsWholeDivision(t *testing.T) {
 				t.Run(style+"/"+dock+"-dock/"+sidebarName(side), func(t *testing.T) {
 					m := extentOSStyled(t, 2, dock, side, style)
 					b := m.GetBSPBounds()
-					border := config.GetBorderForStyle()
+					border := config.Global.GetBorderForStyle()
 					vert := firstRune(border.Left, '│')
 					s := firstSplit(t, m, true)
 					g := frameCells(t, m)
@@ -151,8 +152,8 @@ func TestVerticalDividerRunsItsWholeDivision(t *testing.T) {
 					}
 
 					rule := dockRuleRow(m)
-					if !config.BorderJoinsChromeRules() {
-						want := firstRune(config.GetWindowSeparatorChar(), '─')
+					if !config.Global.BorderJoinsChromeRules() {
+						want := firstRune(config.Global.GetWindowSeparatorChar(), '─')
 						if got := cellAt(g, s.Pos, rule); got != want {
 							t.Errorf("the dock hairline at row %d is %s under the divider, want the hairline's own %q",
 								rule, cellIn(g, s.Pos, rule), string(want))
@@ -187,7 +188,7 @@ func TestHorizontalDividerRunsItsWholeDivision(t *testing.T) {
 			t.Run(style+"/"+sidebarName(side), func(t *testing.T) {
 				m := extentOSStyled(t, 3, "bottom", side, style)
 				b := m.GetBSPBounds()
-				border := config.GetBorderForStyle()
+				border := config.Global.GetBorderForStyle()
 				horiz := firstRune(border.Top, '─')
 				s := firstSplit(t, m, false)
 				g := frameCells(t, m)
@@ -211,10 +212,10 @@ func TestHorizontalDividerRunsItsWholeDivision(t *testing.T) {
 					return
 				}
 				edge, want, caps := b.X+b.W, firstRune(border.MiddleRight, '┤'), border.TopRight+border.BottomRight
-				if !config.BorderJoinsChromeRules() {
+				if !config.Global.BorderJoinsChromeRules() {
 					// The rail draws its edge rule in the same style, so the two fills
 					// touch on the column they share and the divider adds nothing.
-					want := firstRune(config.GetWindowBorderLeft(), '│')
+					want := firstRune(config.Global.GetWindowBorderLeft(), '│')
 					if got := cellAt(g, edge, s.Pos); got != want {
 						t.Errorf("the sidebar's edge rule at column %d is %s under the divider, want the rule's own %q",
 							edge, cellIn(g, edge, s.Pos), string(want))
@@ -238,7 +239,7 @@ func TestDividerStopsAtACrossing(t *testing.T) {
 		for _, n := range []int{3, 4} {
 			t.Run(fmt.Sprintf("%s/%d-panes", style, n), func(t *testing.T) {
 				m := extentOSStyled(t, n, "bottom", "", style)
-				border := config.GetBorderForStyle()
+				border := config.Global.GetBorderForStyle()
 				junctions := junctionGlyphs(border)
 				g := frameCells(t, m)
 				b := m.GetBSPBounds()

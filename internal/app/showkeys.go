@@ -198,7 +198,7 @@ func (m *OS) renderShowkeysFitted(maxWidth int) string {
 	keys := m.RecentKeys
 	for len(keys) > 1 && lipgloss.Width(out) > maxWidth {
 		keys = keys[1:]
-		out = renderShowkeysFrom(keys)
+		out = renderShowkeysFrom(keys, &m.Settings)
 	}
 	if lipgloss.Width(out) > maxWidth {
 		out = ansi.Truncate(out, maxWidth, "")
@@ -209,11 +209,11 @@ func (m *OS) renderShowkeysFitted(maxWidth int) string {
 // renderShowkeys renders the showkeys overlay with styled key display.
 // Returns the rendered content as a styled lipgloss string.
 func (m *OS) renderShowkeys() string {
-	return renderShowkeysFrom(m.RecentKeys)
+	return renderShowkeysFrom(m.RecentKeys, &m.Settings)
 }
 
 // renderShowkeysFrom renders a specific run of key events as the pill strip.
-func renderShowkeysFrom(recentKeys []KeyEvent) string {
+func renderShowkeysFrom(recentKeys []KeyEvent, s *config.Settings) string {
 	if len(recentKeys) == 0 {
 		return ""
 	}
@@ -276,20 +276,20 @@ func renderShowkeysFrom(recentKeys []KeyEvent) string {
 		}
 
 		// Check if this is the leader key
-		isLeaderKey := normalizedKeyCombination == strings.ToLower(config.LeaderKey)
+		isLeaderKey := normalizedKeyCombination == strings.ToLower(s.LeaderKey)
 
 		// Create pill-style element using Powerline semicircles: ▌ key ▐
 		var left, content, right string
 		if isLeaderKey {
 			// Use accent colors for leader key
-			left = leaderKeyPillStyle2.Render(config.GetWindowPillLeft())
+			left = leaderKeyPillStyle2.Render(s.GetWindowPillLeft())
 			content = leaderKeyPillStyle.Render(" " + keyStr + " ")
-			right = leaderKeyPillStyle2.Render(config.GetWindowPillRight())
+			right = leaderKeyPillStyle2.Render(s.GetWindowPillRight())
 		} else {
 			// Use default colors for regular keys
-			left = pillStyle.Render(config.GetWindowPillLeft())
+			left = pillStyle.Render(s.GetWindowPillLeft())
 			content = keyPillStyle.Render(" " + keyStr + " ")
-			right = pillStyle.Render(config.GetWindowPillRight())
+			right = pillStyle.Render(s.GetWindowPillRight())
 		}
 
 		renderedKeys = append(renderedKeys, left+content+right)

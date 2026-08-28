@@ -21,7 +21,7 @@ func lastMessage(m *OS) string {
 // used to wait for ever with nothing on screen. The answer is known in advance,
 // so the paste says so at once and names the key that does work.
 func TestBrowserPasteSaysWhyInsteadOfWaiting(t *testing.T) {
-	m := &OS{BrowserClient: true, RemoteClient: true, Mode: TerminalMode}
+	m := &OS{Settings: config.DefaultSettings(), BrowserClient: true, RemoteClient: true, Mode: TerminalMode}
 
 	if reason := m.ClipboardReadUnsupportedReason(); reason == "" {
 		t.Fatalf("a browser client claims it can read the clipboard")
@@ -63,7 +63,7 @@ func TestTerminalPasteAsksTheTerminal(t *testing.T) {
 // TestUnansweredPasteIsReported covers a terminal that refuses the read query,
 // which kitty does by default. Without the deadline the key looks broken.
 func TestUnansweredPasteIsReported(t *testing.T) {
-	m := &OS{Mode: TerminalMode, KeybindRegistry: config.NewKeybindRegistry(config.DefaultConfig())}
+	m := &OS{Settings: config.DefaultSettings(), Mode: TerminalMode, KeybindRegistry: config.NewKeybindRegistry(config.DefaultConfig())}
 	m.RequestHostPaste()
 	seq := m.pasteSeq
 
@@ -87,7 +87,7 @@ func TestUnansweredPasteIsReported(t *testing.T) {
 // TestAnsweredPasteIsNotReported checks that a reply disarms the deadline, so a
 // paste that worked never also complains that it did not.
 func TestAnsweredPasteIsNotReported(t *testing.T) {
-	m := &OS{Mode: TerminalMode, KeybindRegistry: config.NewKeybindRegistry(config.DefaultConfig())}
+	m := &OS{Settings: config.DefaultSettings(), Mode: TerminalMode, KeybindRegistry: config.NewKeybindRegistry(config.DefaultConfig())}
 	m.RequestHostPaste()
 	seq := m.pasteSeq
 
@@ -110,7 +110,7 @@ func TestBrowserPaneMenuDimsPaste(t *testing.T) {
 		return ContextMenuItem{}, false
 	}
 
-	local := &OS{Mode: TerminalMode, KeybindRegistry: config.NewKeybindRegistry(config.DefaultConfig())}
+	local := &OS{Settings: config.DefaultSettings(), Mode: TerminalMode, KeybindRegistry: config.NewKeybindRegistry(config.DefaultConfig())}
 	_, items := local.paneMenu(-1)
 	row, ok := find(items, "paste_clipboard")
 	if !ok {
@@ -120,7 +120,7 @@ func TestBrowserPaneMenuDimsPaste(t *testing.T) {
 		t.Fatalf("a terminal client cannot paste from its own menu")
 	}
 
-	web := &OS{Mode: TerminalMode, BrowserClient: true, RemoteClient: true,
+	web := &OS{Settings: config.DefaultSettings(), Mode: TerminalMode, BrowserClient: true, RemoteClient: true,
 		KeybindRegistry: config.NewKeybindRegistry(config.DefaultConfig())}
 	_, items = web.paneMenu(-1)
 	row, ok = find(items, "paste_clipboard")

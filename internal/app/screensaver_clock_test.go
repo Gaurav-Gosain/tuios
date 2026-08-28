@@ -14,7 +14,7 @@ import (
 // written in seconds still lasts that many seconds. The fraction is one over
 // the frame rate, and NewEngine assumes sixty.
 //
-// The saver does not paint at sixty. It ticks at config.NormalFPS, which
+// The saver does not paint at sixty. It ticks at the session's NormalFPS, which
 // max_fps sets and which is 240 on a machine whose screen will take it. Left
 // at the library's default, the engine's clock ran four times faster than the
 // wall: matrix rained for a quarter of the seconds it was asked for,
@@ -42,37 +42,42 @@ func clockTestCapture(width, height int) [][]tfx.InputCell {
 	return capture
 }
 
-// withNormalFPS runs body with the program's frame rate set to rate.
-func withNormalFPS(t *testing.T, rate int, body func()) {
-	t.Helper()
-	original := config.NormalFPS
-	t.Cleanup(func() { config.NormalFPS = original })
-	config.NormalFPS = rate
-	body()
+// saverSettings is the settings a saver engine is built from, with the frame
+// rate the caller names. NormalFPS is the only field screensaverBuild reads,
+// and it is per session now, so a test says the rate by handing one over
+// instead of writing a package variable another session could read.
+func saverSettings(rate int) *config.Settings {
+	s := config.DefaultSettings()
+	s.NormalFPS = rate
+	return &s
+}
+
+// defaultSaverSettings is saverSettings at the rate a session starts on, for
+// the tests that build an engine but make no claim about its clock.
+func defaultSaverSettings() *config.Settings {
+	return saverSettings(config.DefaultSettings().NormalFPS)
 }
 
 // TestSaverClockRunsAtTheRateThePaintingDoes is the direct measurement: one
 // second of painting has to move the engine's clock one second.
 func TestSaverClockRunsAtTheRateThePaintingDoes(t *testing.T) {
 	for _, rate := range []int{60, 120, 240} {
-		withNormalFPS(t, rate, func() {
-			d, ok := tfx.Lookup("highlight")
-			if !ok {
-				t.Fatal("the engine no longer has highlight")
-			}
-			engine, ok := screensaverBuild(clockTestCapture(60, 20), 60, 20, d.New(), d.NeedsFillCharacters)
-			if !ok {
-				t.Fatal("the effect would not build over the capture")
-			}
-			start := engine.Clock.Elapsed()
-			for i := 0; i < rate; i++ {
-				engine.Update()
-			}
-			if moved := engine.Clock.Elapsed() - start; moved < 0.999 || moved > 1.001 {
-				t.Errorf("at %d fps, one second of paint moved the clock %.3f seconds, want 1.000",
-					rate, moved)
-			}
-		})
+		d, ok := tfx.Lookup("highlight")
+		if !ok {
+			t.Fatal("the engine no longer has highlight")
+		}
+		engine, ok := screensaverBuild(clockTestCapture(60, 20), 60, 20, d.New(), d.NeedsFillCharacters, saverSettings(rate))
+		if !ok {
+			t.Fatal("the effect would not build over the capture")
+		}
+		start := engine.Clock.Elapsed()
+		for i := 0; i < rate; i++ {
+			engine.Update()
+		}
+		if moved := engine.Clock.Elapsed() - start; moved < 0.999 || moved > 1.001 {
+			t.Errorf("at %d fps, one second of paint moved the clock %.3f seconds, want 1.000",
+				rate, moved)
+		}
 	}
 }
 
@@ -82,36 +87,34 @@ func TestSaverClockRunsAtTheRateThePaintingDoes(t *testing.T) {
 func TestSaverRunsTheRainForItsFullTime(t *testing.T) {
 	const rainTime = 15.0
 	for _, rate := range []int{60, 120, 240} {
-		withNormalFPS(t, rate, func() {
-			effect := tfx.NewMatrix(tfx.DefaultMatrixConfig())
-			engine, ok := screensaverBuild(clockTestCapture(60, 20), 60, 20, effect, false)
-			if !ok {
-				t.Fatal("matrix would not build over the capture")
+		effect := tfx.NewMatrix(tfx.DefaultMatrixConfig())
+		engine, ok := screensaverBuild(clockTestCapture(60, 20), 60, 20, effect, false, saverSettings(rate))
+		if !ok {
+			t.Fatal("matrix would not build over the capture")
+		}
+		// The rain is over once the first character has stopped wearing a
+		// rain symbol and settled, which the effect signals by moving off
+		// its rain phase; from outside, the readable mark is the frame on
+		// which the run stops changing every cell. Counting frames until
+		// the effect leaves the rain is not reachable from here, so this
+		// counts the frames of the whole run and reads the rain out of the
+		// clock the effect was given, which is the thing under test.
+		frames := 0
+		for effect.Advance(engine) {
+			frames++
+			if frames > 200000 {
+				t.Fatal("matrix never finished")
 			}
-			// The rain is over once the first character has stopped wearing a
-			// rain symbol and settled, which the effect signals by moving off
-			// its rain phase; from outside, the readable mark is the frame on
-			// which the run stops changing every cell. Counting frames until
-			// the effect leaves the rain is not reachable from here, so this
-			// counts the frames of the whole run and reads the rain out of the
-			// clock the effect was given, which is the thing under test.
-			frames := 0
-			for effect.Advance(engine) {
-				frames++
-				if frames > 200000 {
-					t.Fatal("matrix never finished")
-				}
-			}
-			// Every frame is one tick of the saver's timer, so the run's
-			// length in seconds of paint is frames over the rate. The rain is
-			// the part of it the clock decides, and it cannot be shorter than
-			// the time it was asked for.
-			seconds := float64(frames) / float64(rate)
-			if seconds < rainTime {
-				t.Errorf("at %d fps the whole run lasted %.2f seconds of paint, "+
-					"which is less than the %.0f seconds of rain it was asked for",
-					rate, seconds, rainTime)
-			}
-		})
+		}
+		// Every frame is one tick of the saver's timer, so the run's
+		// length in seconds of paint is frames over the rate. The rain is
+		// the part of it the clock decides, and it cannot be shorter than
+		// the time it was asked for.
+		seconds := float64(frames) / float64(rate)
+		if seconds < rainTime {
+			t.Errorf("at %d fps the whole run lasted %.2f seconds of paint, "+
+				"which is less than the %.0f seconds of rain it was asked for",
+				rate, seconds, rainTime)
+		}
 	}
 }

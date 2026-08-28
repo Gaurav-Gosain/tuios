@@ -4,6 +4,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // TestPacedCoalescerStillEmitsAfterTheFloodStops guards the failure mode that
@@ -18,7 +20,7 @@ import (
 // at the ceiling, where the wait is longest.
 func TestPacedCoalescerStillEmitsAfterTheFloodStops(t *testing.T) {
 	ptyData := make(chan struct{}, 1)
-	w := NewDaemonWindow("coal-tail", "pane", 0, 0, 80, 24, 0, "pty-coal-tail", ptyData)
+	w := NewDaemonWindow("coal-tail", "pane", 0, 0, 80, 24, 0, "pty-coal-tail", ptyData, config.DefaultScrollbackLines)
 	if w == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}

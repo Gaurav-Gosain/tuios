@@ -16,7 +16,7 @@ func TestSnapZonesFollowTheContentRegion(t *testing.T) {
 	for _, side := range []string{"right", "left"} {
 		t.Run(side, func(t *testing.T) {
 			swapSidebar(t, side, rail)
-			m := &OS{Width: cols, Height: rows}
+			m := &OS{Settings: config.Global, Width: cols, Height: rows}
 
 			left := m.GetLeftMargin()
 			right := m.GetRenderWidth() - m.GetRightMargin()
@@ -57,9 +57,9 @@ func TestSnapZonesFollowTheContentRegion(t *testing.T) {
 // content-region rule has to reduce to.
 func TestSnapZonesWithoutASidebarSitOnTheScreen(t *testing.T) {
 	swapSidebar(t, "right", 0)
-	config.SidebarEnabled = false
+	config.Global.SidebarEnabled = false
 
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 	midY := m.GetTopMargin() + m.GetUsableHeight()/2
 
 	if got := m.SnapZoneAt(m.GetRenderWidth()-1, midY); got != SnapRight {
@@ -75,9 +75,9 @@ func TestSnapZonesWithoutASidebarSitOnTheScreen(t *testing.T) {
 
 func swapSidebar(t *testing.T, pos string, width int) {
 	t.Helper()
-	oe, op, ow := config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth
-	config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth = true, pos, width
+	oe, op, ow := config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth
+	config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth = true, pos, width
 	t.Cleanup(func() {
-		config.SidebarEnabled, config.SidebarPosition, config.SidebarWidth = oe, op, ow
+		config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth = oe, op, ow
 	})
 }

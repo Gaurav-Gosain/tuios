@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -21,7 +22,7 @@ func releaseNative(t *testing.T, flagsSeq string, mode app.Mode, msg tea.KeyRele
 	}
 	pty := &capturePty{}
 	win := &terminal.Window{ID: "release-native-001", Terminal: em, Pty: pty, X: 0, Y: 0, Width: 82, Height: 26}
-	o := &app.OS{Mode: mode, FocusedWindow: 0, Windows: []*terminal.Window{win}}
+	o := &app.OS{Settings: config.Global, Mode: mode, FocusedWindow: 0, Windows: []*terminal.Window{win}}
 	HandleInput(msg, o)
 	return string(pty.got)
 }
@@ -84,7 +85,7 @@ func TestForwardKeyReleaseDaemonPath(t *testing.T) {
 		DaemonWriteFunc: func(b []byte) error { got = append(got, b...); return nil },
 		X:               0, Y: 0, Width: 82, Height: 26,
 	}
-	o := &app.OS{Mode: app.TerminalMode, FocusedWindow: 0, Windows: []*terminal.Window{win}}
+	o := &app.OS{Settings: config.Global, Mode: app.TerminalMode, FocusedWindow: 0, Windows: []*terminal.Window{win}}
 	HandleInput(tea.KeyReleaseMsg{Code: 'a', Text: "a"}, o)
 	if string(got) != "\x1b[97;1:3u" {
 		t.Errorf("daemon release = %q, want %q", got, "\x1b[97;1:3u")

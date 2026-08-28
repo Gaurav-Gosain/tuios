@@ -17,6 +17,7 @@ func twoPaneBSP(t *testing.T) (*OS2, *terminal.Window, *terminal.Window) {
 	const cols, rows = 120, 40
 
 	m := &app.OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
@@ -26,7 +27,7 @@ func twoPaneBSP(t *testing.T) (*OS2, *terminal.Window, *terminal.Window) {
 		UseBSPLayout:     true,
 		// The layout reads the model's session-settled value, not the global;
 		// seed it from the global the caller just set. NewOS does the same.
-		SharedBorders:        config.SharedBorders,
+		SharedBorders:        config.Global.SharedBorders,
 		FocusedWindow:        0,
 		PendingResizes:       make(map[string][2]int),
 		WorkspaceHasCustom:   map[int]bool{},
@@ -47,7 +48,7 @@ func twoPaneBSP(t *testing.T) (*OS2, *terminal.Window, *terminal.Window) {
 			}
 		}()
 		t.Cleanup(func() { close(done) })
-		win := terminal.NewDaemonWindow(id, "test", 0, 0, cols, rows, 0, "pty-"+id, ptyData)
+		win := terminal.NewDaemonWindow(id, "test", 0, 0, cols, rows, 0, "pty-"+id, ptyData, config.DefaultScrollbackLines)
 		if win == nil {
 			t.Fatal("NewDaemonWindow returned nil")
 		}
@@ -95,9 +96,9 @@ func releaseMsg(x, y int) tea.MouseReleaseMsg {
 // widening one pane and narrowing its neighbor, with the PTY resize deferred to
 // release.
 func TestBorderDragMovesSharedDivider(t *testing.T) {
-	prev := config.SharedBorders
-	config.SharedBorders = true
-	defer func() { config.SharedBorders = prev }()
+	prev := config.Global.SharedBorders
+	config.Global.SharedBorders = true
+	defer func() { config.Global.SharedBorders = prev }()
 
 	o, wa, wb := twoPaneBSP(t)
 	left, right := leftPaneOf(wa, wb)
@@ -135,9 +136,9 @@ func TestBorderDragMovesSharedDivider(t *testing.T) {
 // TestBorderDragIgnoresContent proves the gesture is border-only: a press on a
 // pane's content never arms a border resize.
 func TestBorderDragIgnoresContent(t *testing.T) {
-	prev := config.SharedBorders
-	config.SharedBorders = true
-	defer func() { config.SharedBorders = prev }()
+	prev := config.Global.SharedBorders
+	config.Global.SharedBorders = true
+	defer func() { config.Global.SharedBorders = prev }()
 
 	o, wa, wb := twoPaneBSP(t)
 	left, _ := leftPaneOf(wa, wb)
@@ -155,7 +156,7 @@ func TestBorderDragIgnoresContent(t *testing.T) {
 // the same terms app.OS.separatorGap does. These tests drive the layout
 // directly, so they answer the question the app would answer for them.
 func sharedGap() int {
-	if config.SharedBorders {
+	if config.Global.SharedBorders {
 		return 1
 	}
 	return 0

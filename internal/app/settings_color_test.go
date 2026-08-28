@@ -172,8 +172,8 @@ func TestPickedBorderColourAppliesLive(t *testing.T) {
 // the hex form the config accepts.
 func TestTintKeywordsReachableAndHexToo(t *testing.T) {
 	useTempConfig(t)
-	orig := config.ScrollbarTint
-	t.Cleanup(func() { config.ScrollbarTint = orig })
+	orig := config.Global.ScrollbarTint
+	t.Cleanup(func() { config.Global.ScrollbarTint = orig })
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
 
 	openPickerOn(t, m, "Scrollbar tint")
@@ -185,8 +185,8 @@ func TestTintKeywordsReachableAndHexToo(t *testing.T) {
 	if got := m.UserConfig.Appearance.Scrollbar.Tint; got != config.ScrollbarTintMuted {
 		t.Errorf("the keyword stored as %q, want muted", got)
 	}
-	if config.ScrollbarTint != config.ScrollbarTintMuted {
-		t.Errorf("the live tint is %q; the keyword was written and never applied", config.ScrollbarTint)
+	if m.Settings.ScrollbarTint != config.ScrollbarTintMuted {
+		t.Errorf("the live tint is %q; the keyword was written and never applied", m.Settings.ScrollbarTint)
 	}
 
 	// The literal the enum cycler could never produce.
@@ -207,7 +207,7 @@ func TestTintKeywordsReachableAndHexToo(t *testing.T) {
 	if got := m.UserConfig.Appearance.Scrollbar.Tint; got != "" {
 		t.Errorf("clearing the tint left %q behind", got)
 	}
-	if got := config.ScrollbarTintResolved(); got != config.ScrollbarTintQuiet {
+	if got := m.Settings.ScrollbarTintResolved(); got != config.ScrollbarTintQuiet {
 		t.Errorf("an unset tint resolves to %q, want quiet", got)
 	}
 }
@@ -222,7 +222,7 @@ func TestColourRowShowsTheColourInForce(t *testing.T) {
 		t.Fatal("the row has no swatch")
 	}
 	pal := theme.UI()
-	if !sameColor(item.swatch(pal.Surface), theme.BorderUnfocused()) {
+	if !sameColor(item.swatch(pal.Surface, &m.Settings), theme.BorderUnfocused()) {
 		t.Error("the swatch is not the colour the border is actually drawn in")
 	}
 

@@ -31,6 +31,7 @@ func TestClientWindowStateDoesNotOutliveTheWindows(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 
 	m := &OS{
+		Settings: config.Global,
 		Windows: []*terminal.Window{
 			{ID: "w1", CustomName: "one", AgentState: "done"},
 			{ID: "w2", CustomName: "two", AgentState: "done"},
@@ -97,6 +98,7 @@ func TestForeignSessionStateSurvivesThePrune(t *testing.T) {
 		{Name: "other", WindowCount: 1, Windows: []session.WindowSummary{{ID: "f1", Title: "far"}}},
 	})
 	m := &OS{
+		Settings:      config.Global,
 		Windows:       []*terminal.Window{{ID: "w1", CustomName: "one", AgentState: "done"}},
 		FocusedWindow: 0,
 		Width:         120,
@@ -150,6 +152,7 @@ func TestPruneHoldsOffWhileTheListingIsIncomplete(t *testing.T) {
 	for name, build := range cases {
 		t.Run(name, func(t *testing.T) {
 			m := &OS{
+				Settings:     config.Global,
 				Windows:      []*terminal.Window{{ID: "w1", CustomName: "one"}},
 				Width:        120,
 				Height:       40,
@@ -178,7 +181,7 @@ func benchSignatureOS(stale int) *OS {
 	for i := range 6 {
 		wins = append(wins, &terminal.Window{ID: "w" + string(rune('a'+i)), CustomName: "window"})
 	}
-	m := &OS{Windows: wins, Width: 120, Height: 40, SessionName: "s"}
+	m := &OS{Settings: config.Global, Windows: wins, Width: 120, Height: 40, SessionName: "s"}
 	m.SidebarAgentSeen = make(map[string]bool, stale)
 	for i := range stale {
 		m.SidebarAgentSeen["window-"+strconv.Itoa(i)] = true
@@ -198,6 +201,7 @@ func TestPruneRefusesAnotherDaemonsState(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 
 	m := &OS{
+		Settings:     config.Global,
 		Windows:      []*terminal.Window{{ID: "w1", CustomName: "one"}},
 		Width:        120,
 		Height:       40,
@@ -229,10 +233,10 @@ func TestPruneRefusesAnotherDaemonsState(t *testing.T) {
 // the rail every frame: the fold runs over every entry, live or not, so the
 // per-frame cost grows with the map rather than with the windows on screen.
 func BenchmarkSidebarSignatureStaleSeen(b *testing.B) {
-	config.SidebarEnabled = true
-	config.SidebarPosition = "left"
-	config.SidebarWidth = config.SidebarDefaultWidth
-	defer func() { config.SidebarEnabled = false }()
+	config.Global.SidebarEnabled = true
+	config.Global.SidebarPosition = "left"
+	config.Global.SidebarWidth = config.SidebarDefaultWidth
+	defer func() { config.Global.SidebarEnabled = false }()
 
 	for _, stale := range []int{0, 1000, 20000} {
 		b.Run(strconv.Itoa(stale), func(b *testing.B) {

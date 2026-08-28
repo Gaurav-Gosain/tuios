@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -109,7 +108,7 @@ func (m *OS) dockEditorLine(row dockEditorRow, selected bool, pal overlay.Palett
 		// than as one list with words in it.
 		rule := max(width-lipgloss.Width(head)-1, 0)
 		return head + overlay.Style(bg).Foreground(pal.FgMute).
-			Render(" "+strings.Repeat(config.GetWindowSeparatorChar(), rule))
+			Render(" "+strings.Repeat(m.Settings.GetWindowSeparatorChar(), rule))
 	}
 
 	nameColor := pal.FgDim

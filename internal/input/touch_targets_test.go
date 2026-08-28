@@ -12,9 +12,9 @@ import (
 // is a quarter of what either mobile platform asks a target to be, so a touch
 // client gets the columns either side of it as well.
 func TestTouchWidensATiledDividerGrab(t *testing.T) {
-	prev := config.SharedBorders
-	config.SharedBorders = true
-	defer func() { config.SharedBorders = prev }()
+	prev := config.Global.SharedBorders
+	config.Global.SharedBorders = true
+	defer func() { config.Global.SharedBorders = prev }()
 
 	for _, off := range []int{-1, 0, 1} {
 		o, wa, wb := twoPaneBSP(t)
@@ -34,9 +34,9 @@ func TestTouchWidensATiledDividerGrab(t *testing.T) {
 // The desktop keeps the exact cell. The cells either side belong to somebody's
 // shell, and a pointer can hit one column.
 func TestAPointerStillNeedsTheDividerItself(t *testing.T) {
-	prev := config.SharedBorders
-	config.SharedBorders = true
-	defer func() { config.SharedBorders = prev }()
+	prev := config.Global.SharedBorders
+	config.Global.SharedBorders = true
+	defer func() { config.Global.SharedBorders = prev }()
 
 	for _, off := range []int{-1, 1} {
 		o, wa, wb := twoPaneBSP(t)
@@ -51,9 +51,9 @@ func TestAPointerStillNeedsTheDividerItself(t *testing.T) {
 // The slop is one cell and no more: two cells off is a click in a pane, and a
 // grab that reached that far would swallow the content column beside it.
 func TestTheTouchGrabStopsAtOneCell(t *testing.T) {
-	prev := config.SharedBorders
-	config.SharedBorders = true
-	defer func() { config.SharedBorders = prev }()
+	prev := config.Global.SharedBorders
+	config.Global.SharedBorders = true
+	defer func() { config.Global.SharedBorders = prev }()
 
 	for _, off := range []int{-3, 3} {
 		o, wa, wb := twoPaneBSP(t)

@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -25,7 +26,7 @@ func osWithWindow(t *testing.T, id string) (*OS, *terminal.Window) {
 	m.Width, m.Height = 100, 40
 	m.CurrentWorkspace = 1
 
-	w := terminal.NewDaemonWindow(id, id, 0, 0, 40, 12, 0, "pty-"+id, nil)
+	w := terminal.NewDaemonWindow(id, id, 0, 0, 40, 12, 0, "pty-"+id, nil, config.DefaultScrollbackLines)
 	if w == nil {
 		t.Fatal("NewDaemonWindow returned nil")
 	}

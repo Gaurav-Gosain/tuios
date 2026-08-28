@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 )
 
@@ -19,6 +20,7 @@ func TestSwitchToWorkspaceFiresHook(t *testing.T) {
 	mgr.Register(hooks.AfterWorkspaceSwitch, "touch "+marker)
 
 	m := &OS{
+		Settings:             config.Global,
 		HookManager:          mgr,
 		NumWorkspaces:        4,
 		CurrentWorkspace:     1,
@@ -53,6 +55,7 @@ func TestSwitchToSameWorkspaceDoesNotFireHook(t *testing.T) {
 	mgr.Register(hooks.AfterWorkspaceSwitch, "touch "+marker)
 
 	m := &OS{
+		Settings:             config.Global,
 		HookManager:          mgr,
 		NumWorkspaces:        4,
 		CurrentWorkspace:     1,

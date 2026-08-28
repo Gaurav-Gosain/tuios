@@ -21,7 +21,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	// already composed, so a client launched with ascii_only painted its first
 	// frame with unicode glyphs in the rail and only corrected itself on the
 	// next redraw.
-	syncOverlayASCII()
+	syncOverlayASCII(&m.Settings)
 
 	// Reuse the canvas across frames. Allocating a fresh one each frame was the
 	// single largest source of allocations (a full-screen cell buffer per frame).
@@ -149,7 +149,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			// Scrollbar layer (always fresh, not cached). Alt-screen apps (btop,
 			// vim) have no scrollback, so drawing a scrollback thumb over them
 			// only flickers as their content redraws.
-			if windowNeedsScrollbar(window) {
+			if windowNeedsScrollbar(window, &m.Settings) {
 				if sbLayer := m.renderScrollbarLayer(window, rightClip, zIndex+1, isFocused); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
@@ -172,7 +172,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 				traceLayerHold(window, isFocused, "sync-2026")
 			}
 			layers = append(layers, window.CachedLayer)
-			if windowNeedsScrollbar(window) {
+			if windowNeedsScrollbar(window, &m.Settings) {
 				if sbLayer := m.renderScrollbarLayer(window, rightClip, zIndex+1, isFocused); sbLayer != nil {
 					layers = append(layers, sbLayer)
 				}
@@ -215,7 +215,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		layers = append(layers, window.CachedLayer)
 
 		// Scrollbar layer (always fresh, not cached). See the alt-screen note above.
-		if windowNeedsScrollbar(window) {
+		if windowNeedsScrollbar(window, &m.Settings) {
 			if sbLayer := m.renderScrollbarLayer(window, rightClip, zIndex+1, isFocused); sbLayer != nil {
 				layers = append(layers, sbLayer)
 			}
@@ -247,7 +247,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		overlays := m.renderOverlays()
 		layers = append(layers, overlays...)
 
-		if config.DockbarPosition != "hidden" {
+		if m.Settings.DockbarPosition != "hidden" {
 			dockLayer := m.renderDock()
 			layers = append(layers, dockLayer)
 		}
@@ -317,7 +317,7 @@ const zenModeMouseIdleTimeout = 2 * time.Second
 // the given focus state hidden. The focused window always keeps its frame so
 // the user retains an anchor; zen mode melts the unfocused frames away.
 func (m *OS) zenBordersHidden(isFocused bool) bool {
-	switch config.ZenMode {
+	switch m.Settings.ZenMode {
 	case config.ZenModeAlways:
 		return !isFocused
 	case config.ZenModeMouse:
@@ -405,7 +405,7 @@ func (m *OS) renderWindowBox(window *terminal.Window, index int, isFocused bool,
 	box := sizeContentBox(lipgloss.NewStyle().
 		Align(lipgloss.Left).
 		AlignVertical(lipgloss.Top).
-		Border(getBorder()).
+		Border(getBorder(&m.Settings)).
 		BorderTop(false), window, preShaped)
 	// The title bar keeps showing the name the window still has while a rename
 	// is in flight: the dialog owns the new one, so the two together are the
@@ -551,7 +551,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// draws as a separate layer. Fall back so a lone tiled/fullscreen window
 	// does not silently lose it. At the live tail there is no thumb, so a deep
 	// scrollback no longer costs the fast path.
-	if windowNeedsScrollbar(window) {
+	if windowNeedsScrollbar(window, &m.Settings) {
 		return nil, false
 	}
 	rw, topMargin, usableH := m.GetRenderWidth(), m.GetTopMargin(), m.GetUsableHeight()
@@ -601,11 +601,11 @@ func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
 	// rewinding the window a frame. Keep CachedContent for the render fast path.
 	window.CachedLayer = nil
 
-	if config.DockbarPosition == "hidden" {
+	if m.Settings.DockbarPosition == "hidden" {
 		return boxContent
 	}
 	dockStr, _ := m.renderDockString()
-	if config.DockbarPosition == "top" {
+	if m.Settings.DockbarPosition == "top" {
 		return dockStr + "\n" + boxContent
 	}
 	return boxContent + "\n" + dockStr

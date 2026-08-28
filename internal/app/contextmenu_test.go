@@ -364,7 +364,7 @@ func TestContextMenuHintsMatchRegistry(t *testing.T) {
 				}
 				continue
 			}
-			if want := contextMenuHint(m.KeybindRegistry, it.Action); it.Hint != want {
+			if want := contextMenuHint(m.KeybindRegistry, it.Action, &config.Global); it.Hint != want {
 				t.Errorf("%s: row %q hint = %q, registry says %q", a.name, it.Label, it.Hint, want)
 			}
 			keys := m.KeybindRegistry.GetKeys(it.Action)
@@ -421,9 +421,9 @@ func TestContextMenuPrefixHintIncludesLeader(t *testing.T) {
 		if !strings.HasPrefix(it.Action, "prefix_") {
 			continue
 		}
-		if !strings.HasPrefix(it.Hint, config.LeaderKey+" ") {
+		if !strings.HasPrefix(it.Hint, config.Global.LeaderKey+" ") {
 			t.Errorf("row %q runs the prefix action %q but its hint %q does not start with the leader %q",
-				it.Label, it.Action, it.Hint, config.LeaderKey)
+				it.Label, it.Action, it.Hint, config.Global.LeaderKey)
 		}
 	}
 }
@@ -463,9 +463,9 @@ func TestContextMenuTargetResolution(t *testing.T) {
 // pushes the layout down. Every shift+right-click on that row opened the dock's
 // menu, and the window under the pointer was never consulted.
 func TestContextMenuDockBandExcludesTopWindowRow(t *testing.T) {
-	oldPos := config.DockbarPosition
-	defer func() { config.DockbarPosition = oldPos }()
-	config.DockbarPosition = "top"
+	oldPos := config.Global.DockbarPosition
+	defer func() { config.Global.DockbarPosition = oldPos }()
+	config.Global.DockbarPosition = "top"
 
 	m := newNarrowOS(t, 120, 40)
 	// With the dock at the top the layout starts below it, so the window's first

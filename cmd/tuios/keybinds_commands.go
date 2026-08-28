@@ -38,7 +38,7 @@ func generateWorkspaceActions() []string {
 func printKeybindingsTable(registry *config.KeybindRegistry) {
 	leader := registry.GetConfig().Keybindings.LeaderKey
 	if leader == "" {
-		leader = config.LeaderKey
+		leader = config.Global.LeaderKey
 	}
 
 	headerStyle := lipgloss.NewStyle().

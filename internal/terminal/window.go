@@ -495,7 +495,7 @@ func shortID(id string) string {
 // way because bytes typed at a shell are re-parsed by whatever shell it is,
 // and the window closes when the program exits, the same way it does when a
 // shell does.
-func NewWindow(id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}, command ...string) (*Window, error) {
+func NewWindow(id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}, scrollbackLines int, command ...string) (*Window, error) {
 	if title == "" {
 		title = "Terminal " + shortID(id)
 	}
@@ -505,8 +505,10 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	terminalHeight := max(height-2, 1)
 	// Create terminal with scrollback buffer support
 	terminal := vt.New(terminalWidth, terminalHeight)
-	// Set scrollback buffer size from config (default: 10000, configurable via --scrollback-lines or config file)
-	terminal.SetScrollbackMaxLines(config.ScrollbackLines)
+	// How deep the scrollback goes is the session's setting, handed in rather
+	// than read from a package global: one server process holds several
+	// sessions and they need not agree about it.
+	terminal.SetScrollbackMaxLines(scrollbackLines)
 
 	// Set cell size for XTWINOPS terminal size reporting
 	// Using 10x20 pixels as reasonable defaults for a typical monospace font
@@ -706,7 +708,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 // NewDaemonWindow creates a new terminal window that uses a daemon-managed PTY.
 // Unlike NewWindow, this doesn't spawn a local PTY - I/O is proxied through the daemon.
 // The caller is responsible for subscribing to PTY output and handling I/O.
-func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string, ptyDataChan chan struct{}) *Window {
+func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string, ptyDataChan chan struct{}, scrollbackLines int) *Window {
 	if title == "" {
 		title = "Terminal " + shortID(id)
 	}
@@ -715,7 +717,7 @@ func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string,
 	terminalWidth := max(width-2, 1)
 	terminalHeight := max(height-2, 1)
 	terminal := vt.New(terminalWidth, terminalHeight)
-	terminal.SetScrollbackMaxLines(config.ScrollbackLines)
+	terminal.SetScrollbackMaxLines(scrollbackLines)
 	terminal.SetCellSize(10, 20)
 
 	window := &Window{

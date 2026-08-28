@@ -163,7 +163,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		content := lipgloss.JoinVertical(lipgloss.Center, squeezeLines(parts, availRows)...)
 
 		boxStyle := lipgloss.NewStyle().
-			Border(getNormalBorder()).
+			Border(getNormalBorder(&m.Settings)).
 			BorderForeground(ui.Accent).
 			Padding(1, 2).
 			MaxWidth(contentW)
@@ -478,7 +478,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				barWidth := 15
 				filledWidth := (progress * barWidth) / 100
 				full, empty := "█", "░"
-				if config.UseASCIIOnly {
+				if m.Settings.UseASCIIOnly {
 					full, empty = "#", "-"
 				}
 				var bar strings.Builder
@@ -519,7 +519,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = append(layers, scriptLayer)
 	}
 
-	if m.PrefixActive && !m.ShowHelp && config.WhichKeyEnabled && time.Since(m.LastPrefixTime) > config.WhichKeyDelay {
+	if m.PrefixActive && !m.ShowHelp && m.Settings.WhichKeyEnabled && time.Since(m.LastPrefixTime) > config.WhichKeyDelay {
 		var title string
 		var bindings []config.Keybinding
 
@@ -638,7 +638,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		renderWidth := m.GetRenderWidth()
 		renderHeight := m.GetRenderHeight()
-		switch config.WhichKeyPosition {
+		switch m.Settings.WhichKeyPosition {
 		case "top-left":
 			overlayX = 2
 			overlayY = 1
@@ -730,7 +730,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			contentHeight := lipgloss.Height(showkeysContent)
 
 			dockOffset := 0
-			if config.DockbarPosition == "bottom" {
+			if m.Settings.DockbarPosition == "bottom" {
 				dockOffset = config.DockHeight
 			}
 

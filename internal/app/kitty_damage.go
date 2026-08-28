@@ -132,7 +132,7 @@ func (kp *KittyPassthrough) emitBitmap(
 		return bitmapUnchanged
 	}
 
-	if !GetHostCapabilities().KittyAnimation || prev.patches >= resyncAfterPatches {
+	if !kp.hostCaps().KittyAnimation || prev.patches >= resyncAfterPatches {
 		kp.rememberBitmap(windowID, hostID, format, width, height, raw, false)
 		return bitmapFull
 	}
@@ -163,7 +163,7 @@ func (kp *KittyPassthrough) emitBitmap(
 // That answer is what makes it fall back, and a fallback that renders beats
 // silence that does not.
 func (kp *KittyPassthrough) forwardAnimation(cmd *vt.KittyCommand, rawData []byte, windowID string, ptyInput func([]byte)) {
-	if !GetHostCapabilities().KittyAnimation {
+	if !kp.hostCaps().KittyAnimation {
 		if ptyInput != nil && cmd.Quiet < 2 {
 			ptyInput(vt.BuildKittyResponse(false, cmd.ImageID,
 				"ENOTSUPPORTED:host terminal does not support animation"))
@@ -306,7 +306,7 @@ func (kp *KittyPassthrough) absorbDirectFrame(cmd *vt.KittyCommand, rawData []by
 // gains nothing from the diff and would lose the async queue that keeps its
 // large writes off this goroutine.
 func (kp *KittyPassthrough) canPatchBitmap(windowID string, hostID uint32) bool {
-	if !GetHostCapabilities().KittyAnimation {
+	if !kp.hostCaps().KittyAnimation {
 		return false
 	}
 	entry := kp.bitmapCacheFor(windowID, hostID)

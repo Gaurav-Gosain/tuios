@@ -306,7 +306,7 @@ func (m *OS) evaluateTapeDir(dir string) {
 		return
 	}
 
-	message, notifType := tapeBanner(res)
+	message, notifType := tapeBanner(res, &m.Settings)
 	m.ShowNotification(message, notifType, tapeBannerDuration)
 }
 
@@ -320,10 +320,10 @@ func (m *OS) tapeAutoReviewEnabled() bool {
 // result. It is informational and never steals focus: it states what was found,
 // its trust status, and how to act on it (open the review dialog). Nothing runs
 // from the banner.
-func tapeBanner(res trust.Result) (string, string) {
+func tapeBanner(res trust.Result, s *config.Settings) (string, string) {
 	// The tape prefix chord that opens the review dialog. The leader is
 	// configurable, so read it rather than hard-coding ctrl+b.
-	hint := config.LeaderKey + " T t"
+	hint := s.LeaderKey + " T t"
 	switch res.Status {
 	case trust.StatusTrusted:
 		return "Project tape ready (trusted). Press " + hint + " to run.", "info"

@@ -113,7 +113,7 @@ func (m *OS) FileConfirmOpen() bool { return m.filePrompt.Kind == filePromptConf
 // to allow it: a rail beside a terminal is not everyone's idea of where to
 // delete things from, so it can be switched off and the keys then do nothing.
 func (m *OS) FileActionsOn() bool {
-	return config.SidebarFileActions && m.filesSectionEnabled() && m.filesView.Dir != ""
+	return m.Settings.SidebarFileActions && m.filesSectionEnabled() && m.filesView.Dir != ""
 }
 
 // fileActionTarget is the entry an action acts on, as an absolute path.
@@ -157,16 +157,16 @@ func (m *OS) fileActionRefuse() bool {
 		// One gate, two reasons. Both go through FileActionsOn so there is a
 		// single place that decides, and the setting cannot be honoured on one
 		// path and forgotten on another.
-		if !config.SidebarFileActions {
+		if !m.Settings.SidebarFileActions {
 			m.ShowNotification("File actions are off. Turn them on in the settings.",
-				"info", config.NotificationDuration)
+				"info", m.Settings.NotificationDuration)
 		} else {
-			m.ShowNotification("Open the files section first.", "info", config.NotificationDuration)
+			m.ShowNotification("Open the files section first.", "info", m.Settings.NotificationDuration)
 		}
 		return true
 	}
 	if m.filePrompt.Busy {
-		m.ShowNotification("Wait for the last file action to finish.", "info", config.NotificationDuration)
+		m.ShowNotification("Wait for the last file action to finish.", "info", m.Settings.NotificationDuration)
 		return true
 	}
 	return false
@@ -200,7 +200,7 @@ func (m *OS) SidebarFileRename() bool {
 		return false
 	}
 	if m.filePrompt.Busy {
-		m.ShowNotification("Wait for the last file action to finish.", "info", config.NotificationDuration)
+		m.ShowNotification("Wait for the last file action to finish.", "info", m.Settings.NotificationDuration)
 		return true
 	}
 	m.filePrompt = filePromptState{
@@ -225,14 +225,14 @@ func (m *OS) SidebarFileDelete(permanent bool) {
 	}
 	_, path, ok := m.fileActionTarget()
 	if !ok {
-		m.ShowNotification("Put the cursor on a file first.", "info", config.NotificationDuration)
+		m.ShowNotification("Put the cursor on a file first.", "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.filePrompt = filePromptState{
 		Kind:     filePromptConfirm,
 		Dir:      m.fileActionDir(),
 		Paths:    []string{path},
-		Trash:    !permanent && config.SidebarFileDelete == config.SidebarFileDeleteTrash && trashAvailable(),
+		Trash:    !permanent && m.Settings.SidebarFileDelete == config.SidebarFileDeleteTrash && trashAvailable(),
 		Selected: fileConfirmRowCancel,
 	}
 }
@@ -276,7 +276,7 @@ func (m *OS) captureFileClipboard(move bool) {
 	}
 	name, path, ok := m.fileActionTarget()
 	if !ok {
-		m.ShowNotification("Put the cursor on a file first.", "info", config.NotificationDuration)
+		m.ShowNotification("Put the cursor on a file first.", "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.fileClip = fileClipboard{Paths: []string{path}, Move: move}
@@ -284,7 +284,7 @@ func (m *OS) captureFileClipboard(move bool) {
 	if move {
 		verb = "Cut"
 	}
-	m.ShowNotification(verb+" "+name+".", "success", config.NotificationDuration)
+	m.ShowNotification(verb+" "+name+".", "success", m.Settings.NotificationDuration)
 }
 
 // SidebarFilePaste puts the clipboard into the listed folder.
@@ -299,7 +299,7 @@ func (m *OS) SidebarFilePaste() tea.Cmd {
 		return nil
 	}
 	if m.fileClip.Empty() {
-		m.ShowNotification("Copy or cut a file first.", "info", config.NotificationDuration)
+		m.ShowNotification("Copy or cut a file first.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	dir, clip := m.fileActionDir(), m.fileClip
@@ -488,11 +488,11 @@ func (m *OS) HandleFileOp(msg fileOpMsg) tea.Cmd {
 	case msg.Err != "" && msg.OK != "":
 		// A batch that half worked. The failure is the half the user has to act
 		// on, so it is the half that gets the sentence and the warning colour.
-		m.ShowNotification(msg.OK+" "+msg.Err, "warning", config.NotificationDuration)
+		m.ShowNotification(msg.OK+" "+msg.Err, "warning", m.Settings.NotificationDuration)
 	case msg.Err != "":
-		m.ShowNotification(msg.Err, "error", config.NotificationDuration)
+		m.ShowNotification(msg.Err, "error", m.Settings.NotificationDuration)
 	case msg.OK != "":
-		m.ShowNotification(msg.OK, "success", config.NotificationDuration)
+		m.ShowNotification(msg.OK, "success", m.Settings.NotificationDuration)
 	}
 	return m.RefreshFileView()
 }

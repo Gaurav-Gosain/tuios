@@ -44,7 +44,7 @@ func TestAgentsPriorityRankTable(t *testing.T) {
 // state, because "what just happened" is a different question from "what is
 // loudest".
 func TestAgentsSortByRecency(t *testing.T) {
-	m := &OS{SidebarAgentSort: sidebarAgentsRecent}
+	m := &OS{Settings: config.Global, SidebarAgentSort: sidebarAgentsRecent}
 	agents := []sidebarAgentEntry{
 		{WindowID: "old", State: "errored", StateAt: 100},
 		{WindowID: "new", State: "idle", StateAt: 300},
@@ -199,11 +199,11 @@ func TestAgentsControlsAreInTheSignature(t *testing.T) {
 // survive a restart beside the order and the width.
 func TestAgentsControlsPersist(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.SidebarCycleAgentsFilter()
 	m.SidebarCycleAgentsSort()
 
-	restored := &OS{}
+	restored := &OS{Settings: config.Global}
 	restored.loadSidebarState()
 	if restored.sidebarAgentsFilter() != sidebarAgentsSession || restored.sidebarAgentsSort() != sidebarAgentsRecent {
 		t.Errorf("after a restart filter=%q sort=%q, want session/recent",
@@ -213,7 +213,7 @@ func TestAgentsControlsPersist(t *testing.T) {
 	// Back to the defaults, which are written as empty and read back as defaults.
 	m.SidebarCycleAgentsFilter()
 	m.SidebarCycleAgentsSort()
-	restored = &OS{}
+	restored = &OS{Settings: config.Global}
 	restored.loadSidebarState()
 	if restored.sidebarAgentsFilter() != sidebarAgentsAll || restored.sidebarAgentsSort() != sidebarAgentsPriority {
 		t.Errorf("after flipping back filter=%q sort=%q, want all/priority",
@@ -225,7 +225,7 @@ func TestAgentsControlsPersist(t *testing.T) {
 // tuios the user runs next, and a value this build does not know must read back
 // as the default rather than emptying the section.
 func TestAgentsControlsDefaultOnAGarbageStateFile(t *testing.T) {
-	m := &OS{SidebarAgentFilter: "nonsense", SidebarAgentSort: "nonsense"}
+	m := &OS{Settings: config.Global, SidebarAgentFilter: "nonsense", SidebarAgentSort: "nonsense"}
 	if m.sidebarAgentsFilter() != sidebarAgentsAll || m.sidebarAgentsSort() != sidebarAgentsPriority {
 		t.Errorf("unknown values read back as filter=%q sort=%q", m.sidebarAgentsFilter(), m.sidebarAgentsSort())
 	}

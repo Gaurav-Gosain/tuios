@@ -57,7 +57,7 @@ func TestOverlayPanelRendersSolid(t *testing.T) {
 // TestSettingsPanelRendersSolid renders the real settings overlay for every
 // category and checks each is a solid rectangle with sane hit geometry.
 func TestSettingsPanelRendersSolid(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.SettingsSelected = 1
 	out, geo, rows := m.renderSettings()
 	assertSolidRect(t, "settings", out)
@@ -76,7 +76,7 @@ func TestSettingsPanelRendersSolid(t *testing.T) {
 // TestThemePickerRenders renders the theme picker (with swatches) and checks it
 // is a solid rectangle with per-row hit geometry.
 func TestThemePickerRenders(t *testing.T) {
-	m := &OS{}
+	m := &OS{Settings: config.Global}
 	m.OpenThemePicker()
 	out, geo, rows := m.renderThemePicker()
 	t.Logf("\n%s", out)
@@ -89,7 +89,7 @@ func TestThemePickerRenders(t *testing.T) {
 // TestHelpPanelRenders renders the real help overlay (category and search
 // modes) and checks it is a solid rectangle.
 func TestHelpPanelRenders(t *testing.T) {
-	m := &OS{KeybindRegistry: config.NewKeybindRegistry(config.DefaultConfig())}
+	m := &OS{Settings: config.Global, KeybindRegistry: config.NewKeybindRegistry(config.DefaultConfig())}
 	m.HelpCategory = -1
 	out, geo := m.RenderHelpMenu()
 	assertSolidRect(t, "help", out)

@@ -18,9 +18,9 @@ import (
 // hiddenTitlesOS is a two-pane client drawn with no window titles at all.
 func hiddenTitlesOS(t *testing.T) *app.OS {
 	t.Helper()
-	prev := config.WindowTitlePosition
-	config.WindowTitlePosition = "hidden"
-	t.Cleanup(func() { config.WindowTitlePosition = prev })
+	prev := config.Global.WindowTitlePosition
+	config.Global.WindowTitlePosition = "hidden"
+	t.Cleanup(func() { config.Global.WindowTitlePosition = prev })
 	return twoPaneOS(t)
 }
 
@@ -49,9 +49,9 @@ func TestPrefixRenameOpensWithTitlesHidden(t *testing.T) {
 func TestDirectRenameKeyOpensWithTitlesHidden(t *testing.T) {
 	// The rail is off as well, since it was the only reason the direct key
 	// still worked with titles hidden.
-	prev := config.SidebarEnabled
-	config.SidebarEnabled = false
-	t.Cleanup(func() { config.SidebarEnabled = prev })
+	prev := config.Global.SidebarEnabled
+	config.Global.SidebarEnabled = false
+	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
 
 	o := hiddenTitlesOS(t)
 	o.FocusedWindow = 0
@@ -89,7 +89,7 @@ func TestPaletteRenameOpensWithTitlesHidden(t *testing.T) {
 // runPaletteCommandForTest runs a command-palette row by name.
 func runPaletteCommandForTest(t *testing.T, o *app.OS, name string) *app.OS {
 	t.Helper()
-	for _, c := range app.GetCommandPaletteItems() {
+	for _, c := range app.GetCommandPaletteItems(&o.Settings) {
 		if c.Name == name {
 			out, _ := c.Action(o)
 			return out

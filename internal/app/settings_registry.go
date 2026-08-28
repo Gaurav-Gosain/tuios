@@ -258,7 +258,7 @@ func (m *OS) setOption(path, value string) {
 		m.ConfigReadOnly = true
 	}
 	if err := m.setConfigFromRegistry(path, value); err != nil {
-		m.ShowNotification(err.Error(), "error", config.NotificationDuration)
+		m.ShowNotification(err.Error(), "error", m.Settings.NotificationDuration)
 	}
 }
 

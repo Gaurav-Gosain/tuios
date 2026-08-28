@@ -2,7 +2,6 @@ package app
 
 import (
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // OverlayActive reports whether any hit-testable floating overlay panel is on
@@ -439,9 +438,9 @@ func (m *OS) sessionSwitcherActivate(idx int) {
 		return
 	}
 	if selected.IsCurrent {
-		m.ShowNotification("Already on this session", "info", config.NotificationDuration)
+		m.ShowNotification("Already on this session", "info", m.Settings.NotificationDuration)
 	} else if err := m.SwitchToSession(selected.ID); err != nil {
-		m.ShowNotification("Switch failed: "+err.Error(), "error", config.NotificationDuration*2)
+		m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 	}
 	m.closeOverlay("session")
 }
@@ -455,7 +454,7 @@ func (m *OS) layoutPickerActivate(idx int) {
 	}
 	selected := filtered[idx]
 	ApplyLayoutTemplate(selected, m)
-	m.ShowNotification("Layout applied: "+selected.Name, "success", config.NotificationDuration)
+	m.ShowNotification("Layout applied: "+selected.Name, "success", m.Settings.NotificationDuration)
 	m.closeOverlay("layout")
 }
 

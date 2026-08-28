@@ -27,6 +27,7 @@ func scrollPane(t *testing.T) (*app.OS, *terminal.Window) {
 	}
 	win := &terminal.Window{Terminal: em, Width: 42, Height: 22}
 	o := &app.OS{
+		Settings:      config.Global,
 		Mode:          app.TerminalMode,
 		FocusedWindow: 0,
 		Windows:       []*terminal.Window{win},
@@ -58,10 +59,10 @@ func TestWheelUpScrollsOnTheFirstClickWhateverTheCursorRow(t *testing.T) {
 
 			wheel(o, tea.MouseWheelUp, 1)
 
-			if win.CopyMode.ScrollOffset != config.ScrollLines {
+			if win.CopyMode.ScrollOffset != config.Global.ScrollLines {
 				t.Fatalf("one wheel click from cursor row %d scrolled %d lines, want %d. "+
 					"The wheel is walking the cursor instead of moving the viewport.",
-					cursorRow, win.CopyMode.ScrollOffset, config.ScrollLines)
+					cursorRow, win.CopyMode.ScrollOffset, config.Global.ScrollLines)
 			}
 			if win.ScrollbackOffset != win.CopyMode.ScrollOffset {
 				t.Errorf("ScrollbackOffset = %d, want it in step with the copy-mode offset %d",
@@ -183,7 +184,7 @@ func TestWheelOverAPaneWithNoScrollbackDoesNothing(t *testing.T) {
 	em := vt.NewEmulator(40, 20)
 	t.Cleanup(func() { _ = em.Close() })
 	win := &terminal.Window{Terminal: em, Width: 42, Height: 22}
-	o := &app.OS{Mode: app.TerminalMode, FocusedWindow: 0, Windows: []*terminal.Window{win}}
+	o := &app.OS{Settings: config.Global, Mode: app.TerminalMode, FocusedWindow: 0, Windows: []*terminal.Window{win}}
 
 	wheel(o, tea.MouseWheelUp, 3)
 
@@ -282,8 +283,8 @@ func TestWindowModeWheelIsSilentAndYieldsToBindings(t *testing.T) {
 	o.Mode = app.WindowManagementMode
 
 	wheel(o, tea.MouseWheelUp, 2)
-	if win.CopyMode.ScrollOffset != 2*config.ScrollLines {
-		t.Fatalf("ScrollOffset = %d, want %d", win.CopyMode.ScrollOffset, 2*config.ScrollLines)
+	if win.CopyMode.ScrollOffset != 2*config.Global.ScrollLines {
+		t.Fatalf("ScrollOffset = %d, want %d", win.CopyMode.ScrollOffset, 2*config.Global.ScrollLines)
 	}
 	if len(o.Notifications) != 0 {
 		t.Fatalf("the wheel raised %q in window management mode", o.Notifications[0].Message)

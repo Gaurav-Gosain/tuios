@@ -7,10 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// GlyphSet names the chrome glyph set, or "default" for the shipped one. It is
-// the shape half of a rice, beside Theme's colour half.
-var GlyphSet = theme.GlyphSetNone
-
 // BorderStyleGlyphs is the appearance.border_style value meaning "take the
 // border from the active glyph set".
 //
@@ -28,11 +24,11 @@ const BorderStyleGlyphs = "glyphs"
 // roles it can be keeps those roles under --ascii-only and gives up only the
 // ones it cannot draw. A set-wide test would have thrown away a whole
 // hand-written set over one arrow.
-func glyphOr(role func(*theme.GlyphSet) string, def, asciiDef string) string {
-	if g := role(theme.Glyphs()); g != "" && (!UseASCIIOnly || overlay.IsASCII(g)) {
+func (s *Settings) glyphOr(role func(*theme.GlyphSet) string, def, asciiDef string) string {
+	if g := role(theme.Glyphs()); g != "" && (!s.UseASCIIOnly || overlay.IsASCII(g)) {
 		return g
 	}
-	if UseASCIIOnly {
+	if s.UseASCIIOnly {
 		return asciiDef
 	}
 	return def
@@ -43,23 +39,23 @@ func glyphOr(role func(*theme.GlyphSet) string, def, asciiDef string) string {
 // editing Go.
 
 // GetRailFocusMark is the one-cell gutter mark saying "you are here".
-func GetRailFocusMark() string {
-	return glyphOr(func(g *theme.GlyphSet) string { return g.Focus }, "▎", ">")
+func (s *Settings) GetRailFocusMark() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Focus }, "▎", ">")
 }
 
 // GetRailAttentionMark is the gutter mark saying "this one wants a human".
-func GetRailAttentionMark() string {
-	return glyphOr(func(g *theme.GlyphSet) string { return g.Attention }, "▎", "!")
+func (s *Settings) GetRailAttentionMark() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Attention }, "▎", "!")
 }
 
 // GetRailBullet is the quiet mark a resting row carries.
-func GetRailBullet() string {
-	return glyphOr(func(g *theme.GlyphSet) string { return g.Bullet }, "·", ".")
+func (s *Settings) GetRailBullet() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Bullet }, "·", ".")
 }
 
 // GetRailAddGlyph is the new-session and new-window control.
-func GetRailAddGlyph() string {
-	return glyphOr(func(g *theme.GlyphSet) string { return g.Add }, "+", "+")
+func (s *Settings) GetRailAddGlyph() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Add }, "+", "+")
 }
 
 // The files section's three marks. Each is one cell, so a row of the listing
@@ -71,20 +67,20 @@ func GetRailAddGlyph() string {
 // kinds of row stay apart with no font at all.
 
 // GetRailFolderGlyph is the mark on a directory row.
-func GetRailFolderGlyph() string {
-	return glyphOr(func(g *theme.GlyphSet) string { return g.Folder }, "▸", ">")
+func (s *Settings) GetRailFolderGlyph() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Folder }, "▸", ">")
 }
 
 // GetRailParentGlyph is the mark on the ".." row. Distinct from the folder mark
 // because ".." is the one row that moves the listing out rather than in, and a
 // listing where every row wore the same mark gave the user nothing to aim at.
-func GetRailParentGlyph() string {
-	return glyphOr(func(g *theme.GlyphSet) string { return g.Parent }, "▴", "^")
+func (s *Settings) GetRailParentGlyph() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Parent }, "▴", "^")
 }
 
 // GetRailFileGlyph is the mark on a plain file row.
-func GetRailFileGlyph() string {
-	return glyphOr(func(g *theme.GlyphSet) string { return g.File }, "·", ".")
+func (s *Settings) GetRailFileGlyph() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.File }, "·", ".")
 }
 
 // GetRailCollapseGlyph is the arrow that folds the rail down to its strip.
@@ -93,13 +89,13 @@ func GetRailFileGlyph() string {
 // footer of a column of one-cell marks reads as one more mark rather than as a
 // control. The rail measures its own footer, so unlike a window button this
 // role is not held to a width.
-func GetRailCollapseGlyph() string {
-	return glyphOr(func(g *theme.GlyphSet) string { return g.Collapse }, "«", "<<")
+func (s *Settings) GetRailCollapseGlyph() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Collapse }, "«", "<<")
 }
 
 // GetRailExpandGlyph is the arrow that opens it again.
-func GetRailExpandGlyph() string {
-	return glyphOr(func(g *theme.GlyphSet) string { return g.Expand }, "»", ">>")
+func (s *Settings) GetRailExpandGlyph() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Expand }, "»", ">>")
 }
 
 // ResolvedGlyphs reports what is actually drawn for every role: the active
@@ -110,29 +106,29 @@ func GetRailExpandGlyph() string {
 // for a file a person writes and the wrong answer to "what will this look
 // like". The describe verb reports this rather than the set's own fields, so a
 // caller ricing over the protocol sees the frame it is going to get.
-func ResolvedGlyphs() map[string]string {
+func (s *Settings) ResolvedGlyphs() map[string]string {
 	out := map[string]string{
-		"close":           GetWindowButtonCloseMark(),
-		"maximize":        GetWindowButtonMaximizeMark(),
-		"minimize":        GetWindowButtonMinimizeMark(),
-		"dot":             GetWindowButtonDot(),
-		"pill_left":       GetWindowPillLeft(),
-		"pill_right":      GetWindowPillRight(),
-		"rule":            GetWindowSeparatorChar(),
-		"separator":       GetDockSeparator(),
-		"arrow_left":      GetDockWorkspaceMoreLeft(),
-		"arrow_right":     GetDockWorkspaceMoreRight(),
-		"focus":           GetRailFocusMark(),
-		"attention":       GetRailAttentionMark(),
-		"bullet":          GetRailBullet(),
-		"add":             GetRailAddGlyph(),
-		"folder":          GetRailFolderGlyph(),
-		"parent":          GetRailParentGlyph(),
-		"file":            GetRailFileGlyph(),
-		"collapse":        GetRailCollapseGlyph(),
-		"expand":          GetRailExpandGlyph(),
-		"scrollbar_thumb": GetScrollbarThumbChar(),
-		"scrollbar_track": GetScrollbarTrackChar(),
+		"close":           s.GetWindowButtonCloseMark(),
+		"maximize":        s.GetWindowButtonMaximizeMark(),
+		"minimize":        s.GetWindowButtonMinimizeMark(),
+		"dot":             s.GetWindowButtonDot(),
+		"pill_left":       s.GetWindowPillLeft(),
+		"pill_right":      s.GetWindowPillRight(),
+		"rule":            s.GetWindowSeparatorChar(),
+		"separator":       s.GetDockSeparator(),
+		"arrow_left":      s.GetDockWorkspaceMoreLeft(),
+		"arrow_right":     s.GetDockWorkspaceMoreRight(),
+		"focus":           s.GetRailFocusMark(),
+		"attention":       s.GetRailAttentionMark(),
+		"bullet":          s.GetRailBullet(),
+		"add":             s.GetRailAddGlyph(),
+		"folder":          s.GetRailFolderGlyph(),
+		"parent":          s.GetRailParentGlyph(),
+		"file":            s.GetRailFileGlyph(),
+		"collapse":        s.GetRailCollapseGlyph(),
+		"expand":          s.GetRailExpandGlyph(),
+		"scrollbar_thumb": s.GetScrollbarThumbChar(),
+		"scrollbar_track": s.GetScrollbarTrackChar(),
 		"ellipsis":        overlay.Ellipsis(),
 		"sigil":           overlay.SigilMark(),
 		"dash_rule":       overlay.DashRuleGlyph(),
@@ -144,7 +140,7 @@ func ResolvedGlyphs() map[string]string {
 	// draw, which is what a caller inspecting a set is asking. The describe
 	// verb reports border_style alongside so the caller can tell whether the
 	// two are currently the same thing.
-	b := glyphSetBorder()
+	b := s.glyphSetBorder()
 	for role, glyph := range map[string]string{
 		"border.top": b.Top, "border.bottom": b.Bottom,
 		"border.left": b.Left, "border.right": b.Right,
@@ -175,12 +171,12 @@ var glyphBorrowMu sync.Mutex
 // The borrow is process-local state that no frame is composed from while it is
 // held, so a caller on the render goroutine is safe. It is still not free, so
 // callers building a list of previews should do it once rather than per frame.
-func GlyphsForSet(id string) map[string]string {
+func (s *Settings) GlyphsForSet(id string) map[string]string {
 	glyphBorrowMu.Lock()
 	defer glyphBorrowMu.Unlock()
 	prev := theme.ActiveGlyphSetID()
 	theme.SetActiveGlyphs(id)
-	drawn := ResolvedGlyphs()
+	drawn := s.ResolvedGlyphs()
 	theme.SetActiveGlyphs(prev)
 	return drawn
 }

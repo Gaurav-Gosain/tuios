@@ -37,7 +37,7 @@ func (m *OS) OpenColorSetting(path string) {
 	}
 	pal := theme.UI()
 	value := cs.value(m)
-	start := toRGBA(cs.effective(pal.Canvas))
+	start := toRGBA(cs.effective(pal.Canvas, &m.Settings))
 
 	src, word := accentSourceOwn, ""
 	switch {

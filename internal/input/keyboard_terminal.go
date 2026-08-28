@@ -242,7 +242,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	// Check for prefix key in terminal mode
-	if isLeaderKey(msg) {
+	if isLeaderKey(msg, &o.Settings) {
 		// If prefix is already active, send the leader key to terminal
 		if o.PrefixActive {
 			o.PrefixActive = false
@@ -449,7 +449,7 @@ func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 // like it worked when it did not.
 func snapCornerFromPrefix(o *app.OS, corner app.SnapQuarter) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
-		o.ShowNotification("Corner snapping needs tiling off", "info", config.NotificationDuration)
+		o.ShowNotification("Corner snapping needs tiling off", "info", o.Settings.NotificationDuration)
 		return o, nil
 	}
 	if len(o.Windows) == 0 || o.FocusedWindow < 0 {

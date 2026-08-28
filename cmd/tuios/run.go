@@ -199,7 +199,7 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 	// the reveal.
 	if mm, ok := msg.(tea.MouseMotionMsg); ok && os.WindowButtonHoverActive() {
 		return msg
-	} else if ok && config.WindowButtonStyle == config.WindowButtonStyleDots && !config.HideWindowButtons {
+	} else if ok && os.Settings.WindowButtonStyle == config.WindowButtonStyleDots && !os.Settings.HideWindowButtons {
 		mouse := mm.Mouse()
 		if os.WindowButtonContains(mouse.X, mouse.Y) {
 			return msg
@@ -220,7 +220,7 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 	// live downstream of this whitelist, so both are dead unless their motion is
 	// let through here. Without this, the opted-in focus-follows setting simply
 	// does nothing and non-context menus never track the cursor.
-	if config.FocusFollowsMouse || os.AnyOverlayOpen() {
+	if os.Settings.FocusFollowsMouse || os.AnyOverlayOpen() {
 		return msg
 	}
 
@@ -241,9 +241,9 @@ func loadAndApplyConfig() *config.UserConfig {
 
 	// Appearance globals are the baseline; CLI flags win. LoadUserConfig no longer
 	// applies globals itself, so this must run before ApplyOverrides.
-	config.ApplyAppearanceConfig(userConfig)
+	config.ApplyAppearanceConfig(userConfig, &config.Global)
 
-	config.ApplyOverrides(flagOverrides())
+	config.ApplyOverrides(flagOverrides(), &config.Global)
 
 	return userConfig
 }

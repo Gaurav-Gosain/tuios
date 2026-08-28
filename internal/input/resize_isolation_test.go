@@ -34,17 +34,18 @@ func isoOS(tb testing.TB, n int) *app.OS {
 	// on a retile leaves geometry untouched at the instant it returns and the
 	// snap-back this test is looking for would land after the assertions rather
 	// than before them.
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	tb.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	tb.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
 	m := &app.OS{
+		Settings:         config.Global,
 		NumWorkspaces:    9,
 		CurrentWorkspace: 1,
 		WorkspaceFocus:   make(map[int]int),
 		// The layout reads the model's session-settled value, not the global;
 		// seed it from the global the caller just set. NewOS does the same.
-		SharedBorders:  config.SharedBorders,
+		SharedBorders:  config.Global.SharedBorders,
 		Width:          160,
 		Height:         48,
 		AutoTiling:     true,
@@ -72,13 +73,13 @@ func isoOS(tb testing.TB, n int) *app.OS {
 		}()
 		tb.Cleanup(func() { close(done) })
 
-		win := terminal.NewDaemonWindow(id, "test", 0, 0, 40, 12, 0, "pty-"+id, ptyData)
+		win := terminal.NewDaemonWindow(id, "test", 0, 0, 40, 12, 0, "pty-"+id, ptyData, config.DefaultScrollbackLines)
 		if win == nil {
 			tb.Fatal("NewDaemonWindow returned nil")
 		}
 		tb.Cleanup(win.Close)
 		win.Workspace = 1
-		win.Tiled = config.SharedBorders
+		win.Tiled = m.Settings.SharedBorders
 		m.Windows = append(m.Windows, win)
 	}
 
@@ -280,9 +281,9 @@ func TestKeyboardResizeMovesOnlyTheDividersSubtrees(t *testing.T) {
 		for _, c := range isoCases {
 			label := fmt.Sprintf("shared=%v/%s/keyboard", shared, c.name)
 			t.Run(label, func(t *testing.T) {
-				prev := config.SharedBorders
-				config.SharedBorders = shared
-				t.Cleanup(func() { config.SharedBorders = prev })
+				prev := config.Global.SharedBorders
+				config.Global.SharedBorders = shared
+				t.Cleanup(func() { config.Global.SharedBorders = prev })
 
 				m := isoOS(t, c.count)
 				buildTree(m, c.build)
@@ -318,9 +319,9 @@ func TestMouseResizeMovesOnlyTheDividersSubtrees(t *testing.T) {
 		for _, c := range isoCases {
 			label := fmt.Sprintf("shared=%v/%s/mouse", shared, c.name)
 			t.Run(label, func(t *testing.T) {
-				prev := config.SharedBorders
-				config.SharedBorders = shared
-				t.Cleanup(func() { config.SharedBorders = prev })
+				prev := config.Global.SharedBorders
+				config.Global.SharedBorders = shared
+				t.Cleanup(func() { config.Global.SharedBorders = prev })
 
 				m := isoOS(t, c.count)
 				buildTree(m, c.build)
@@ -393,14 +394,14 @@ func TestResizeSurvivesAnInFlightSnapAnimation(t *testing.T) {
 
 	for _, shared := range []bool{false, true} {
 		t.Run(fmt.Sprintf("shared=%v", shared), func(t *testing.T) {
-			prev := config.SharedBorders
-			config.SharedBorders = shared
-			t.Cleanup(func() { config.SharedBorders = prev })
+			prev := config.Global.SharedBorders
+			config.Global.SharedBorders = shared
+			t.Cleanup(func() { config.Global.SharedBorders = prev })
 
 			m := isoOS(t, 4)
 			// isoOS turns animations off for the other tests; this one is about
 			// what happens when they are on.
-			config.AnimationsEnabled = true
+			m.Settings.AnimationsEnabled = true
 			buildTree(m, func(leaf func(int) *layout.TileNode) *layout.TileNode {
 				return v(0.5, h(0.5, leaf(1), leaf(2)), h(0.5, leaf(3), leaf(4)))
 			})

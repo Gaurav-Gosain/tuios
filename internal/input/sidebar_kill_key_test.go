@@ -13,9 +13,9 @@ import (
 // on screen. The assertion is the rendered frame, because the complaint was
 // about what the menu said, not about which struct it was built from.
 func TestRailKillKeyOnATerminalRowShowsThatPanesMenu(t *testing.T) {
-	prev := config.SidebarEnabled
-	config.SidebarEnabled = true
-	t.Cleanup(func() { config.SidebarEnabled = prev })
+	prev := config.Global.SidebarEnabled
+	config.Global.SidebarEnabled = true
+	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
 
 	o := twoPaneOS(t)
 	o.SessionName = "main"
@@ -45,9 +45,9 @@ func TestRailKillKeyOnATerminalRowShowsThatPanesMenu(t *testing.T) {
 // TestRailKillKeyOnASessionRowStillShowsTheSessionMenu is the other half: the
 // fix must not cost the row kind the key already handled.
 func TestRailKillKeyOnASessionRowStillShowsTheSessionMenu(t *testing.T) {
-	prev := config.SidebarEnabled
-	config.SidebarEnabled = true
-	t.Cleanup(func() { config.SidebarEnabled = prev })
+	prev := config.Global.SidebarEnabled
+	config.Global.SidebarEnabled = true
+	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
 
 	o := twoPaneOS(t)
 	o.SessionName = "main"

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -335,7 +334,7 @@ func TestFileMenuKeyOpensTheCursorRowsMenu(t *testing.T) {
 func TestFileMenuIsAllDimWhenFileActionsAreOff(t *testing.T) {
 	dir := fileViewTree(t)
 	m := filesOS(t, dir, "")
-	config.SidebarFileActions = false
+	m.Settings.SidebarFileActions = false
 
 	rightClickFile(t, m, "README.md")
 	for _, label := range []string{"Copy", "Cut", "Paste", "New file or folder", "Rename", "Delete"} {

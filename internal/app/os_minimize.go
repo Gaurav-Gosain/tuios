@@ -2,8 +2,6 @@ package app
 
 import (
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // MinimizeWindow minimizes the window at the specified index.
@@ -169,8 +167,8 @@ func (m *OS) toggleZoom() {
 		contentWidth := m.GetContentWidth()
 		zoomWidth := contentWidth
 		// If ZoomMaxWidth is set, cap width and center horizontally
-		if config.ZoomMaxWidth > 0 && config.ZoomMaxWidth < contentWidth {
-			zoomWidth = config.ZoomMaxWidth
+		if m.Settings.ZoomMaxWidth > 0 && m.Settings.ZoomMaxWidth < contentWidth {
+			zoomWidth = m.Settings.ZoomMaxWidth
 		}
 		fw.X = leftMargin + (contentWidth-zoomWidth)/2
 		fw.Y = topMargin

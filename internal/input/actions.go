@@ -5,7 +5,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
@@ -417,9 +416,9 @@ func makeSnapCornerHandler(corner app.SnapQuarter) ActionHandler {
 func handleToggleTiling(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ToggleAutoTiling()
 	if o.AutoTiling {
-		o.ShowNotification("Tiling on [T]", "success", config.NotificationDuration)
+		o.ShowNotification("Tiling on [T]", "success", o.Settings.NotificationDuration)
 	} else {
-		o.ShowNotification("Tiling off", "info", config.NotificationDuration)
+		o.ShowNotification("Tiling off", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }
@@ -540,7 +539,7 @@ func handleToggleZoom(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ToggleZoom()
 	fw := o.GetFocusedWindow()
 	if fw != nil && fw.Zoomed {
-		o.ShowNotification("ZOOM", "info", config.NotificationDuration)
+		o.ShowNotification("ZOOM", "info", o.Settings.NotificationDuration)
 	} else {
 		o.ShowNotification("", "info", 0) // clear
 	}
@@ -550,7 +549,7 @@ func handleToggleZoom(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleSmartSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.SmartSplitFocused()
-		o.ShowNotification("Smart split", "info", config.NotificationDuration)
+		o.ShowNotification("Smart split", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }
@@ -558,7 +557,7 @@ func handleSmartSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleSplitHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.SplitFocusedHorizontal()
-		o.ShowNotification("Split horizontal", "info", config.NotificationDuration)
+		o.ShowNotification("Split horizontal", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }
@@ -566,7 +565,7 @@ func handleSplitHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleSplitVertical(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.SplitFocusedVertical()
-		o.ShowNotification("Split vertical", "info", config.NotificationDuration)
+		o.ShowNotification("Split vertical", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }
@@ -574,7 +573,7 @@ func handleSplitVertical(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleRotateSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.RotateFocusedSplit()
-		o.ShowNotification("Split rotated", "info", config.NotificationDuration)
+		o.ShowNotification("Split rotated", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }
@@ -582,7 +581,7 @@ func handleRotateSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleEqualizeSplits(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
 		o.EqualizeSplits()
-		o.ShowNotification("Splits equalized", "info", config.NotificationDuration)
+		o.ShowNotification("Splits equalized", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
 }
@@ -625,7 +624,7 @@ func handleEnterTerminalMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if focusedWindow != nil {
 			o.LogInfo("Entering terminal mode for window: %s", focusedWindow.Title())
 		}
-		o.ShowNotification("Terminal mode", "info", config.NotificationDuration)
+		o.ShowNotification("Terminal mode", "info", o.Settings.NotificationDuration)
 		// Enter terminal mode and start raw input reader
 		return o, o.EnterTerminalMode()
 	}
@@ -637,7 +636,7 @@ func handleEnterWindowMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LogInfo("Entering window management mode")
 	// Exit terminal mode to window management mode
 	cmd := o.ExitTerminalMode()
-	o.ShowNotification("Window management mode", "info", config.NotificationDuration)
+	o.ShowNotification("Window management mode", "info", o.Settings.NotificationDuration)
 	if focusedWindow := o.GetFocusedWindow(); focusedWindow != nil {
 		focusedWindow.InvalidateCache()
 	}

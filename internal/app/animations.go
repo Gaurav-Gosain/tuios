@@ -21,7 +21,7 @@ func (m *OS) CreateRestoreAnimation(i int) *ui.Animation {
 	// Calculate dock position for this window
 	dockX, dockY := m.calculateDockPosition(i)
 
-	return ui.NewRestoreAnimation(window, dockX, dockY, config.GetAnimationDuration())
+	return ui.NewRestoreAnimation(window, dockX, dockY, m.Settings.GetAnimationDuration())
 }
 
 // CreateSnapAnimation creates a snap animation for the window at index i
@@ -39,7 +39,7 @@ func (m *OS) CreateSnapAnimation(i int, quarter SnapQuarter) *ui.Animation {
 	targetWidth = max(targetWidth, config.DefaultWindowWidth)
 	targetHeight = max(targetHeight, config.DefaultWindowHeight)
 
-	return ui.NewSnapAnimation(window, targetX, targetY, targetWidth, targetHeight, config.GetAnimationDuration())
+	return ui.NewSnapAnimation(window, targetX, targetY, targetWidth, targetHeight, m.Settings.GetAnimationDuration())
 }
 
 // HasActiveAnimations returns true if there are any active animations

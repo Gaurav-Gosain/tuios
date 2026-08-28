@@ -15,7 +15,7 @@ import (
 func unbindInputOS(t *testing.T) *app.OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
-	o := &app.OS{UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)}
+	o := &app.OS{Settings: config.Global, UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)}
 	o.OpenKeybindManager()
 	return o
 }

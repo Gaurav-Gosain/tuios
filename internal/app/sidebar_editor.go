@@ -101,7 +101,7 @@ func (m *OS) sectionLayout() string {
 	if raw := m.sectionLayoutRaw(); raw != "" {
 		return raw
 	}
-	return config.SidebarSections
+	return m.Settings.SidebarSections
 }
 
 // sectionLayoutRaw is the layout as the config file holds it, empty included.
@@ -243,7 +243,7 @@ func (m *OS) SectionEditorToggle() tea.Cmd {
 			// shipped one on the next parse, so the edit would appear to undo
 			// itself, which is worse than being told no.
 			m.ShowNotification("The rail keeps one section. Add another first.",
-				"info", config.NotificationDuration)
+				"info", m.Settings.NotificationDuration)
 			return nil
 		}
 		entries = slices.Delete(entries, row.Index, row.Index+1)

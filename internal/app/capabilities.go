@@ -91,13 +91,25 @@ func GetHostCapabilities() *HostCapabilities {
 // graphics is the one the user connected from, reached over the session, not
 // the (often headless) machine running the server.
 //
-// This is a process-global. A server handling several simultaneous clients with
-// different terminals shares the last-installed value for the live consumers
-// (image cell math, cell size); the per-connection graphics-enable decision is
-// snapshotted at construction and is not affected. Single-client connections,
-// the common case, are fully correct.
+// This is a process-global, and it is now only the seed for a connection that
+// arrives with nothing better. Every consumer inside a session reads OS.Caps,
+// which the server sets per connection, so two clients on different terminals
+// no longer share the last-installed value. See OS.Caps.
 func SetClientCapabilities(caps *HostCapabilities) {
 	clientCapabilities.Store(caps)
+}
+
+// hostCaps is the terminal this session draws to.
+//
+// It is the one read every graphics decision in the app goes through, so a
+// server holding several sessions decides each one from the terminal that
+// session is actually on. The fallback covers an OS built as a struct literal,
+// which is what the tests and the benchmarks do; NewOS always fills the field.
+func (m *OS) hostCaps() *HostCapabilities {
+	if m.Caps != nil {
+		return m.Caps
+	}
+	return GetHostCapabilities()
 }
 
 func DetectHostCapabilities() *HostCapabilities {

@@ -21,7 +21,7 @@ import (
 // session's other clients, and shared state cannot live in a process global.
 func TestSidebarEdgeResizeClampAndPersist(t *testing.T) {
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
-	m := &OS{Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40}
 	top := m.GetTopMargin()
 
 	w := m.GetSidebarWidth()
@@ -66,15 +66,15 @@ func TestSidebarEdgeResizeClampAndPersist(t *testing.T) {
 	}
 
 	// The stored width wins over the config default on load.
-	config.SidebarWidth = config.SidebarDefaultWidth
-	m2 := &OS{Width: 120, Height: 40}
+	m.Settings.SidebarWidth = config.SidebarDefaultWidth
+	m2 := &OS{Settings: config.Global, Width: 120, Height: 40}
 	m2.loadSidebarState()
 	if got := m2.sidebarWidthPreference(); got != 40 {
 		t.Errorf("loaded width = %d, want the stored 40", got)
 	}
-	if config.SidebarWidth != config.SidebarDefaultWidth {
+	if m2.Settings.SidebarWidth != config.SidebarDefaultWidth {
 		t.Errorf("loading a stored width moved the config global to %d; it is process-wide and several sessions read it",
-			config.SidebarWidth)
+			m2.Settings.SidebarWidth)
 	}
 }
 

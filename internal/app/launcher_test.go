@@ -7,6 +7,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
@@ -15,6 +16,7 @@ import (
 func runTestOS(t *testing.T) *OS {
 	t.Helper()
 	return &OS{
+		Settings: config.Global,
 		// Open, because applyPathApps declines to build rows for a launcher
 		// nobody is looking at.
 		ShowLauncher: true,
