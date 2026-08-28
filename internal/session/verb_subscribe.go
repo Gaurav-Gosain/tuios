@@ -174,6 +174,7 @@ func (d *Daemon) verbWaitFor(_ *connState, params json.RawMessage) (any, *verbEr
 		Source    string `json:"source"`
 		Until     string `json:"until"`
 		Idle      int    `json:"idle"`
+		Thread    uint64 `json:"thread"`
 		Timeout   int    `json:"timeout"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -198,7 +199,7 @@ func (d *Daemon) verbWaitFor(_ *connState, params json.RawMessage) (any, *verbEr
 	case "agent-state":
 		return d.waitAgentState(p.Session, p.Window, p.Until, deadline)
 	case "agent-message":
-		return d.waitAgentMessage(p.Session, p.Window, deadline)
+		return d.waitAgentMessage(p.Session, p.Window, p.Thread, deadline)
 	default:
 		message := "unknown condition " + p.Condition
 		if p.Condition == "" {
@@ -517,7 +518,12 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 // anything is said here", which cannot use the same rule because the ring is
 // almost never empty, so it takes the newest message id as a baseline and
 // matches only what arrives after.
-func (d *Daemon) waitAgentMessage(sessionName, window string, deadline <-chan time.Time) (any, *verbError) {
+//
+// A thread narrows either shape to one conversation and changes nothing else.
+// A thread the ring holds nothing from simply never matches, and times out like
+// any other wait: the ring forgets, so a thread nobody has started and a thread
+// that has aged out are the same thing to a reader.
+func (d *Daemon) waitAgentMessage(sessionName, window string, thread uint64, deadline <-chan time.Time) (any, *verbError) {
 	sess, verr := d.resolveVerbSession(sessionName)
 	if verr != nil {
 		return nil, verr
@@ -538,6 +544,10 @@ func (d *Daemon) waitAgentMessage(sessionName, window string, deadline <-chan ti
 	// missed.
 	baseline := d.agents.highestID()
 
+	// Any id in the thread names the thread, the same rule read-agent-messages
+	// follows, so a caller can wait on the id of the message it just sent.
+	thread = d.agents.resolveThread(sess.Name, thread)
+
 	types := map[string]bool{EventAgentMessage: true}
 	if inbox != "" {
 		// A watched inbox closing has to fail the wait rather than run out the
@@ -549,9 +559,9 @@ func (d *Daemon) waitAgentMessage(sessionName, window string, deadline <-chan ti
 
 	check := func() (AgentMessage, bool) {
 		if inbox != "" {
-			return d.agents.firstUnread(sess.Name, inbox)
+			return d.agents.firstUnread(sess.Name, inbox, thread)
 		}
-		return d.agents.newerThan(sess.Name, baseline)
+		return d.agents.newerThan(sess.Name, baseline, thread)
 	}
 
 	if m, ok := check(); ok {
@@ -589,5 +599,7 @@ func agentMessageMatch(inbox string, m AgentMessage) map[string]any {
 		"from":       m.From,
 		"from_name":  m.FromLabel,
 		"subject":    m.Subject,
+		"reply_to":   m.ReplyTo,
+		"thread_id":  m.ThreadID,
 	})
 }
