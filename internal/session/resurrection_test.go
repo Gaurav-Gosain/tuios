@@ -30,9 +30,10 @@ func TestResurrectionRoundTripMultiWindowMultiWorkspace(t *testing.T) {
 			1: "win-b",
 			2: "win-c",
 		},
-		WindowToBSPID:   map[string]int{"win-a": 1, "win-b": 2},
-		NextBSPWindowID: 3,
-		TilingScheme:    1,
+		WorkspaceMasterRatio: map[int]float64{1: 0.4, 2: 0.65},
+		WindowToBSPID:        map[string]int{"win-a": 1, "win-b": 2},
+		NextBSPWindowID:      3,
+		TilingScheme:         1,
 		WorkspaceTrees: map[int]*SerializedBSPTree{
 			1: {
 				AutoScheme:   1,
@@ -64,6 +65,12 @@ func TestResurrectionRoundTripMultiWindowMultiWorkspace(t *testing.T) {
 	}
 	if loaded.FocusedWindowID != "win-c" {
 		t.Errorf("FocusedWindowID = %q, want win-c", loaded.FocusedWindowID)
+	}
+	// The per-workspace master ratios are session state, so they are on disk with
+	// the rest of it: a resurrected session that came back at each client's own
+	// configured ratio would have thrown away every split the user had tuned.
+	if got := loaded.WorkspaceMasterRatio; got[1] != 0.4 || got[2] != 0.65 || len(got) != 2 {
+		t.Errorf("WorkspaceMasterRatio = %v, want map[1:0.4 2:0.65]", got)
 	}
 	if len(loaded.Windows) != 3 {
 		t.Fatalf("windows = %d, want 3", len(loaded.Windows))

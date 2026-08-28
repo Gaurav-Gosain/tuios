@@ -117,6 +117,20 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	// that reads it did not.
 	state.LayoutMode = m.LayoutModeName()
 	state.NumWorkspaces = m.NumWorkspaces
+	// The master ratio for every workspace this client holds one for, so a peer
+	// that has never visited a workspace lays it out at the session's ratio rather
+	// than at its own config's and pushes that back over everyone else's. The
+	// workspace on screen is folded in from the live value: SaveCurrentLayout only
+	// flushes that into the map on the way out of a workspace, so the map alone
+	// would be one tune behind for exactly the workspace being tuned.
+	state.WorkspaceMasterRatio = make(map[int]float64, len(m.WorkspaceMasterRatio)+1)
+	maps.Copy(state.WorkspaceMasterRatio, m.WorkspaceMasterRatio)
+	if m.AutoTiling {
+		state.WorkspaceMasterRatio[m.CurrentWorkspace] = m.MasterRatio
+	}
+	if len(state.WorkspaceMasterRatio) == 0 {
+		state.WorkspaceMasterRatio = nil
+	}
 	// The rail travels with the session it is drawn beside. See
 	// SessionState.SidebarWidth.
 	state.SidebarWidth = m.SidebarWidthPref
@@ -190,6 +204,11 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.CurrentWorkspace = clampWorkspace(state.CurrentWorkspace)
 	m.MasterRatio = state.MasterRatio
 	m.AutoTiling = state.AutoTiling
+	// A whole session is being adopted, and on a session switch it is a different
+	// session, so the ratios this client remembers are cleared rather than merged
+	// with: they belong to the session being left.
+	m.WorkspaceMasterRatio = make(map[int]float64, len(state.WorkspaceMasterRatio))
+	m.adoptWorkspaceMasterRatio(state)
 	m.adoptSidebarState(state)
 	// The pane geometry inputs are the session's, adopted before the layout
 	// below is computed so a joining client tiles with the session's arithmetic
@@ -529,6 +548,7 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	workspaceChanged := previousWorkspace != m.CurrentWorkspace
 	m.MasterRatio = state.MasterRatio
 	m.AutoTiling = state.AutoTiling
+	m.adoptWorkspaceMasterRatio(state)
 
 	// Update focused window index
 	m.FocusedWindow = -1
@@ -739,6 +759,24 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 
 	m.MarkAllDirty()
 	return nil
+}
+
+// adoptWorkspaceMasterRatio takes the session's per-workspace master ratios onto
+// this client.
+//
+// Entries are merged rather than replacing the map. Nothing ever removes one, so
+// a merge loses nothing, and a sync that lags a ratio this client has just moved
+// cannot take that ratio away again. A state that says nothing - a peer too old
+// to send the field, or a client that had tiling off - leaves what this client
+// holds alone, which is what makes the field additive: MasterRatio still carries
+// the ratio in force on the workspace the state names, and RestoreWorkspaceLayout
+// still falls back to the configured ratio for a workspace nobody has a value
+// for, exactly as it did before this existed.
+func (m *OS) adoptWorkspaceMasterRatio(state *session.SessionState) {
+	if m.WorkspaceMasterRatio == nil {
+		m.WorkspaceMasterRatio = make(map[int]float64, len(state.WorkspaceMasterRatio))
+	}
+	maps.Copy(m.WorkspaceMasterRatio, state.WorkspaceMasterRatio)
 }
 
 // adoptSidebarState takes the rail as the session has it. A zero width is a
