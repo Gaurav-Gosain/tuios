@@ -102,9 +102,9 @@ func newScrollingFleet(t *testing.T, panes, cols, rows int) *scrollingFleet {
 // which is the case a shared offset has to be safe under.
 func newScrollingFleetSized(t *testing.T, panes, aCols, aRows, bCols, bRows int) *scrollingFleet {
 	t.Helper()
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
 	r := newRigSized(t, panes, aCols, aRows)
 	ex := &exchange{t: t}
@@ -309,9 +309,9 @@ func TestJoiningClientLandsOnTheSessionsStrip(t *testing.T) {
 // does not put it, which is the same thing the box test means and the only
 // thing it is for: catching a rectangle computed by somebody else.
 func TestScrolledStripIsNotStale(t *testing.T) {
-	prevAnim := config.AnimationsEnabled
-	config.AnimationsEnabled = false
-	t.Cleanup(func() { config.AnimationsEnabled = prevAnim })
+	prevAnim := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	t.Cleanup(func() { config.Global.AnimationsEnabled = prevAnim })
 
 	m := nPaneTiledOS(t, 3, 160, 48)
 	m.UseBSPLayout, m.UseScrollingLayout = false, true
