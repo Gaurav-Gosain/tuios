@@ -57,16 +57,17 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				o.ScrollingScrollViewport(-1 * dir)
 			case tea.MouseWheelDown:
 				o.ScrollingScrollViewport(1 * dir)
+			// A horizontal wheel moves the viewport under the same modifier as
+			// a vertical one, rather than on its own. A trackpad puts a little
+			// sideways drift into almost every vertical scroll and the terminal
+			// forwards that as a left/right wheel button, so answering it
+			// unmodified walked the whole layout sideways whenever someone
+			// scrolled back through a pane.
+			case tea.MouseWheelLeft:
+				o.ScrollingScrollViewport(-1)
+			case tea.MouseWheelRight:
+				o.ScrollingScrollViewport(1)
 			}
-			return o, nil
-		}
-		// Also intercept horizontal scroll events (MouseWheelLeft/Right) if available
-		switch msg.Button {
-		case tea.MouseWheelLeft:
-			o.ScrollingScrollViewport(-1)
-			return o, nil
-		case tea.MouseWheelRight:
-			o.ScrollingScrollViewport(1)
 			return o, nil
 		}
 	}
