@@ -91,6 +91,12 @@ type AgentAttachment struct {
 	MediaType string `json:"media_type,omitempty"`
 	Bytes     int64  `json:"bytes,omitempty"`
 	Missing   bool   `json:"missing,omitempty"`
+	// Stashed says the daemon owns this file rather than the sender: it was put
+	// in the session's stash, so it is there until the session ends. It is
+	// resolved at send time, when the daemon is already looking at the path, and
+	// it exists so a reader can tell the two kinds of reference apart. A sender-
+	// owned path may be gone by the time it is read; a stashed one may not.
+	Stashed bool `json:"stashed,omitempty"`
 }
 
 // AgentMessage is one entry in a session's ring.
