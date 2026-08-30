@@ -59,16 +59,31 @@ func queryTerminalSize(caps *HostCapabilities) {
 	}
 }
 
-// pollReadable uses poll to wait for the file descriptor to be readable with a timeout
+// pollReadable waits for the file descriptor to be readable, with a timeout.
+//
+// It uses select(2) rather than poll(2) because this fd is always a tty, and
+// Darwin's poll() does not report readability for character devices: it
+// returns 1 with revents=POLLNVAL while the data sits in the buffer waiting,
+// so a POLLIN test reads as "nothing there" and the caller gives up on a
+// terminal that answered. That made every capability probe on macOS come back
+// empty, and every graphics capability come back false. select() reports the
+// same tty correctly.
 func pollReadable(fd uintptr, timeout time.Duration) (bool, error) {
-	fds := []unix.PollFd{
-		{Fd: int32(fd), Events: unix.POLLIN},
+	if fd >= 1024 {
+		// Outside select's descriptor table; assume readable and let the
+		// read block or return, rather than reporting a false negative.
+		return true, nil
 	}
-	timeoutMs := max(int(timeout.Milliseconds()), 1)
+	var rfds unix.FdSet
+	rfds.Bits[fd/32] |= 1 << (fd % 32)
 
-	n, err := unix.Poll(fds, timeoutMs)
+	tv := unix.NsecToTimeval(timeout.Nanoseconds())
+	n, err := unix.Select(int(fd)+1, &rfds, nil, nil, &tv)
 	if err != nil {
+		if err == unix.EINTR {
+			return false, nil
+		}
 		return false, err
 	}
-	return n > 0 && (fds[0].Revents&unix.POLLIN) != 0, nil
+	return n > 0, nil
 }

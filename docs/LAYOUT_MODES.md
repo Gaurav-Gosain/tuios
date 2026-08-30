@@ -70,7 +70,7 @@ moves focus to its left.
 | `Alt+P` / `Alt+N` | Focus the column left/right (these cycle windows in the other layout modes) |
 | `Opt+Shift+Tab` / `Opt+Tab` (macOS) | Focus the column left/right |
 | `Alt+Wheel` or `Shift+Wheel` | Scroll the viewport horizontally, one fifth of a screen per notch |
-| Horizontal wheel (if your terminal sends it) | Scroll the viewport |
+| `Alt` or `Shift` + horizontal wheel (if your terminal sends it) | Scroll the viewport |
 | `H` / `L` or `Ctrl+Left` / `Ctrl+Right` (window mode) | Move the focused column left/right along the strip |
 | `<` and `>` (window mode) | Shrink and grow the focused column |
 
@@ -87,6 +87,12 @@ across the session, so one offset shows every client the same columns whatever
 size their terminals are.
 
 `niri_reverse_scroll = true` in `[appearance]` inverts the wheel direction.
+
+The wheel only moves the viewport while `Alt` or `Shift` is held, horizontal
+wheel included. A trackpad reports a little sideways drift on almost every
+vertical scroll and the terminal forwards that as a horizontal wheel button, so
+answering it on its own walked the strip sideways whenever someone scrolled back
+through a pane. Unmodified, the wheel belongs to the pane under the pointer.
 
 ### Column commands
 
