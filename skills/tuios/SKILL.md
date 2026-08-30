@@ -644,6 +644,50 @@ With `-w` the wait also matches mail already sitting in the inbox, so it cannot
 miss something sent a moment before it started. With no `-w` it matches anything
 said in the session after the wait began.
 
+### Replying, and what an acknowledgement means
+
+Answer a message by its id rather than starting a fresh one:
+
+```sh
+tuios send-agent-message -s work -w build --from "$TUIOS_PANE_ID" --reply-to 12 'retested, still green'
+```
+
+A reply is the only acknowledgement between two agents that means anything.
+`read_at` says the message was handed over. It does not say the other agent
+understood it, agreed with it, or did anything about it. A reply does.
+
+Every message carries a `thread_id`. It is the id of the message the thread
+started from, so a message that starts one carries its own id and a reply
+carries the thread of what it answered. A reply to a reply lands in the same
+thread as the first. Thread ids are message ids: there is no second numbering.
+
+Read one conversation back, oldest first:
+
+```sh
+tuios read-agent-messages -s work --thread 12
+```
+
+`--thread` takes any id in the thread, not only the first, so the id of the
+reply you have just read works. Wait for an answer to your own message rather
+than for any mail at all:
+
+```sh
+tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --thread 12 --timeout 600000
+```
+
+Without `--thread` that wait wakes on any message. That is right for "am I
+wanted" and wrong for "did anyone answer me".
+
+The ring is bounded, so the message you are answering may already be gone. The
+reply is stored anyway: it starts its thread from the id you named, and the
+answer says `reply_to_missing`. Only an older root is lost, and every reply to
+that same message still reads back together. An id that was never issued is
+refused instead, because that is a typo rather than the ring forgetting.
+
+A thread means something in one session and nowhere else. Ids come from one
+daemon's counter, rings do not cross sessions, and nothing that leaves this host
+carries a message id.
+
 ### Being reachable yourself
 
 Nothing polls your inbox for you, so an agent that wants to be reachable has to
@@ -763,6 +807,10 @@ which ended the wait.
 
 `--force` skips step 1 and interleaves deliberately. `--lines` caps the reply.
 
+`ask-agent` does not use the mailbox. The reply is what the pane printed, so it
+has no message id and no thread, and `--reply-to` has nothing to name. Threads
+are for messages you send with `send-agent-message`.
+
 ```sh
 tuios ask-agent -s work -w review --timeout 900000 --lines 400 'please review the whole diff and summarise the risks'
 ```
@@ -819,10 +867,12 @@ it in the raw JSON.
 - **The ring is bounded and drops its oldest.** 256 messages or 512 KiB per
   session, 8 KiB per message. A read reports how many were dropped, and a
   non-zero count means something was never read by anyone.
-- **There is no acknowledgement and no delivery guarantee.** A message being in
-  the ring means it was stored, not that anyone read it. `read_at` is the only
-  evidence, and only after the fact.
-- **Rings do not cross sessions.** One session, one ring.
+- **There is no transport acknowledgement and no delivery guarantee.** A message
+  being in the ring means it was stored, not that anyone read it. `read_at` is
+  evidence of delivery and nothing more. The acknowledgement that means
+  something is a reply, and nothing makes one arrive.
+- **Rings do not cross sessions.** One session, one ring, and a thread id names
+  a conversation in that ring only.
 - **There is no verb that stops another agent.** If you mean to interrupt one,
   send it `ctrl+c` with `send-keys`, and be sure that is what you want.
 - **The stash is not storage.** It holds files for one session, on one host, and

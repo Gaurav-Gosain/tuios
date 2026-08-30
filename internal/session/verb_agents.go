@@ -144,6 +144,7 @@ func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any
 		From        string   `json:"from"`
 		Subject     string   `json:"subject"`
 		Text        string   `json:"text"`
+		ReplyTo     uint64   `json:"reply_to"`
 		Attachments []string `json:"attachments"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -164,6 +165,17 @@ func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any
 	if len(p.Attachments) > agentMsgMaxAttachments {
 		return nil, invalidParam("attachments", "a message carries at most 8 attachments")
 	}
+	// An id past the last one issued names a message that has never existed, so
+	// it is a caller mistake rather than the ring having forgotten. The two are
+	// worth separating: a parent that aged out is normal and is threaded on the
+	// id anyway, while a typed id is a reply nobody will ever find.
+	if p.ReplyTo > d.agents.highestID() {
+		return nil, hintedVerbError(ErrVerbInvalidParams, "reply_to names a message that has never existed", &VerbHint{
+			Param:   "reply_to",
+			Command: "tuios read-agent-messages",
+			Detail:  "No message has been sent with that id. Read the ring to find the id you meant to answer.",
+		})
+	}
 
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
@@ -171,7 +183,7 @@ func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any
 	}
 	state := sess.GetState()
 
-	msg := AgentMessage{Kind: agentMsgNotice, Text: p.Text, Subject: p.Subject}
+	msg := AgentMessage{Kind: agentMsgNotice, Text: p.Text, Subject: p.Subject, ReplyTo: p.ReplyTo}
 
 	if p.From != "" {
 		idx, err := findWindowStateIndex(state.Windows, p.From)
@@ -243,6 +255,13 @@ func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any
 		"to_name":    stored.ToLabel,
 		"from":       stored.From,
 		"sent_at":    stored.SentAt,
+		"reply_to":   stored.ReplyTo,
+		// The thread is reported on every send, not only on a reply, because a
+		// message that starts a thread is the one whose id the next reply needs.
+		"thread_id": stored.ThreadID,
+		// True when the message being answered had already been dropped from the
+		// ring. The reply still stands, and it is threaded on the id it named.
+		"reply_to_missing": stored.ReplyToMissing,
 	}, nil
 }
 
@@ -258,6 +277,7 @@ func (d *Daemon) verbReadAgentMessages(_ *connState, params json.RawMessage) (an
 		Unread  bool   `json:"unread"`
 		Notices bool   `json:"notices"`
 		Peek    bool   `json:"peek"`
+		Thread  uint64 `json:"thread"`
 		Limit   int    `json:"limit"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -270,6 +290,10 @@ func (d *Daemon) verbReadAgentMessages(_ *connState, params json.RawMessage) (an
 	state := sess.GetState()
 
 	q := readQuery{unreadOnly: p.Unread, notices: p.Notices, peek: p.Peek, limit: p.Limit}
+	// The filter takes any id in the thread, not only the root's, so a caller
+	// that read a reply can pass the id it has rather than tracing back to the
+	// first message.
+	q.thread = d.agents.resolveThread(sess.Name, p.Thread)
 	if p.To != "" {
 		idx, err := findWindowStateIndex(state.Windows, p.To)
 		if err != nil {
@@ -289,6 +313,10 @@ func (d *Daemon) verbReadAgentMessages(_ *connState, params json.RawMessage) (an
 		"type":    "agent_messages",
 		"session": sess.Name,
 		"inbox":   q.inbox,
+		// The thread the filter resolved to, zero when the read was not filtered.
+		// It can differ from what the caller passed: any id in the thread names
+		// the thread, and this is the one it named.
+		"thread": q.thread,
 		// untrusted is a constant, and that is deliberate. Every body here was
 		// written by something other than the reader, so a consumer that keys on
 		// this field is right every time, and a consumer that never read the

@@ -116,6 +116,29 @@ type AgentMessage struct {
 	Subject string `json:"subject,omitempty"`
 	Text    string `json:"text"`
 
+	// ReplyTo is the id of the message this one answers, zero when it answers
+	// nothing. It is what "acked" means between two agents: no transport
+	// receipt says anything about whether the other side understood, and a
+	// reply does.
+	ReplyTo uint64 `json:"reply_to,omitempty"`
+	// ThreadID is the id of the message the thread started from, and a message
+	// that starts one carries its own id here. It is resolved once, at send
+	// time, rather than walked from ReplyTo at read time: the ring is bounded,
+	// so a walk would stop finding the root the moment the root aged out, and
+	// the same thread would answer to two different ids depending on when it
+	// was read.
+	//
+	// It is not a second namespace. A thread id is a message id, so the number
+	// send prints is the number a filter takes.
+	ThreadID uint64 `json:"thread_id"`
+	// ReplyToMissing records that ReplyTo named a message the ring no longer
+	// held when this one was threaded, so the thread was rooted at the parent's
+	// own id instead of the parent's thread. Refusing the reply would be worse
+	// (a bounded ring forgets, and a reply to something it forgot is still a
+	// reply), and silently starting a fresh thread would be worse still: it
+	// would lose the one fact the reader wanted. This says which happened.
+	ReplyToMissing bool `json:"reply_to_missing,omitempty"`
+
 	Attachments []AgentAttachment `json:"attachments,omitempty"`
 	SentAt      int64             `json:"sent_at"`
 	// ReadAt is zero while the message is unread. Reading marks rather than
@@ -231,8 +254,10 @@ func (b *agentBus) send(session string, m AgentMessage) AgentMessage {
 	m.ID = b.nextID
 	m.Session = session
 	m.SentAt = time.Now().UnixNano()
+	mb := b.box(session)
+	m.ThreadID, m.ReplyToMissing = mb.threadFor(m.ID, m.ReplyTo)
 	stored := &m
-	b.box(session).append(stored)
+	mb.append(stored)
 	return *stored
 }
 
@@ -256,6 +281,11 @@ type readQuery struct {
 	notices bool
 	// peek reads without marking anything read.
 	peek bool
+	// thread restricts the answer to one thread, by its id. Zero means every
+	// thread. A thread the ring no longer holds anything from matches nothing,
+	// which is the same answer an empty inbox gives: the ring forgets, so an
+	// unknown thread and a forgotten one cannot be told apart.
+	thread uint64
 	// limit bounds the answer to the newest n. Zero means the default.
 	limit int
 	// live reports whether a window id still exists, for the undeliverable flag.
@@ -296,6 +326,9 @@ func (b *agentBus) collect(session string, q readQuery) readResult {
 
 	var picked []*AgentMessage
 	for _, m := range mb.msgs {
+		if q.thread != 0 && m.ThreadID != q.thread {
+			continue
+		}
 		if m.Kind == agentMsgNotice {
 			if q.unreadOnly || (q.inbox != "" && !q.notices) {
 				continue
@@ -383,11 +416,15 @@ func (b *agentBus) highestID() uint64 {
 	return b.nextID
 }
 
-// newerThan returns the oldest message in the session's ring past baseline.
-func (b *agentBus) newerThan(session string, baseline uint64) (AgentMessage, bool) {
+// newerThan returns the oldest message in the session's ring past baseline,
+// restricted to one thread when thread is not zero.
+func (b *agentBus) newerThan(session string, baseline, thread uint64) (AgentMessage, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for _, m := range b.box(session).msgs {
+		if thread != 0 && m.ThreadID != thread {
+			continue
+		}
 		if m.ID > baseline {
 			return *m, true
 		}
@@ -395,16 +432,80 @@ func (b *agentBus) newerThan(session string, baseline uint64) (AgentMessage, boo
 	return AgentMessage{}, false
 }
 
-// firstUnread returns the oldest unread message for one inbox.
-func (b *agentBus) firstUnread(session, inbox string) (AgentMessage, bool) {
+// firstUnread returns the oldest unread message for one inbox, restricted to one
+// thread when thread is not zero.
+func (b *agentBus) firstUnread(session, inbox string, thread uint64) (AgentMessage, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for _, m := range b.box(session).msgs {
+		if thread != 0 && m.ThreadID != thread {
+			continue
+		}
 		if m.Kind == agentMsgDirect && m.To == inbox && m.ReadAt == 0 {
 			return *m, true
 		}
 	}
 	return AgentMessage{}, false
+}
+
+// The threading block. A thread id is a message id: the id of the message the
+// thread started from. Everything below turns one id into another and holds one
+// rule, which is that a reply belongs to the same thread as the message it
+// answers, however deep the chain and whatever the ring has since dropped.
+//
+// A thread means something in one session's ring and nowhere else. Ids are
+// issued by one daemon and the rings do not cross sessions, so a thread id is
+// not an address, does not travel, and nothing that leaves this host carries
+// one. list-host-agents reports counts, never ids, and that is deliberate.
+
+// find returns the message with this id, or nil when the ring no longer holds
+// it. Callers hold b.mu. The ring is capped at 256, so a scan is the right
+// shape: an index would be a second structure to keep true through eviction.
+func (mb *agentMailbox) find(id uint64) *AgentMessage {
+	for _, m := range mb.msgs {
+		if m.ID == id {
+			return m
+		}
+	}
+	return nil
+}
+
+// threadFor answers which thread a new message with this id and this reply_to
+// belongs to, and whether the parent had already aged out.
+//
+// Three cases, and the middle one is the one the bound forces:
+//   - No reply_to: the message starts its own thread, so the thread is its id.
+//   - The parent is in the ring: its thread, which is what makes a reply to a
+//     reply land where the first reply did.
+//   - The parent has been evicted: the parent's own id, because it is the one
+//     stable name left for it. Every reply to that same parent still lands
+//     together, and the id is unique and monotonic so it can never collide with
+//     a live thread. What is lost is only the older root, and ReplyToMissing
+//     says so rather than leaving the reader to guess.
+func (mb *agentMailbox) threadFor(id, replyTo uint64) (uint64, bool) {
+	if replyTo == 0 {
+		return id, false
+	}
+	if parent := mb.find(replyTo); parent != nil {
+		return parent.ThreadID, false
+	}
+	return replyTo, true
+}
+
+// resolveThread turns any message id into the thread it belongs to, so a filter
+// can be given the id of a reply rather than only the id of the root. An id the
+// ring no longer holds resolves to itself, which is the same rule threadFor
+// follows and keeps a filter matching the replies to an evicted parent.
+func (b *agentBus) resolveThread(session string, id uint64) uint64 {
+	if id == 0 {
+		return 0
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if m := b.box(session).find(id); m != nil {
+		return m.ThreadID
+	}
+	return id
 }
 
 // openAsk records an in-flight ask edge from -> to, refusing it when it would
