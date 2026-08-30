@@ -209,6 +209,7 @@ func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any
 				Detail: "An attachment is an absolute path to an existing file on the daemon's host. The queue stores the path, never the bytes, so the file has to be there when the reader looks.",
 			})
 		}
+		att.Stashed = d.stash.owns(sess.ID, att.Path)
 		msg.Attachments = append(msg.Attachments, att)
 	}
 

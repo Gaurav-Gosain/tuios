@@ -685,6 +685,44 @@ That means an image in a message is a path both sides can open, not something
 tuios renders for you. Say in the message text what the picture shows: the
 reader may be an agent that cannot see it, or a client that cannot draw it.
 
+### The session stash: a file the reader can still open
+
+An attachment is your file. If you delete it, the reader gets `MISSING`. When you
+hand a file to another agent and will not keep it yourself, put it in the
+session's stash first and attach the path the stash gives you.
+
+```sh
+tuios stash put /tmp/flame.png
+tuios send-agent-message -s work -w review --attach /run/user/1000/tuios/stash/<session>/<hash>.png 'the hot path is in decode'
+tuios stash list -s work
+```
+
+`stash put` prints the stored path on the first line and a short note on the
+second, so a script can read the first line and pass it straight to `--attach`. A
+stashed path is an ordinary absolute path: `--attach` takes it like any other,
+and a message that carries one reads back with `"stashed": true`.
+
+What the stash promises, and what it does not:
+
+- **The file lives as long as the session.** It is deleted when the session is
+  killed and when the daemon stops. A restored session does not get it back.
+  Nothing here survives a restart, for the same reason mail does not.
+- **The same bytes are stored once.** Put a file twice, or two agents put the
+  same file, and you both get one path back. The second put stores nothing.
+- **It is capped.** One file at 16 MB, one session at 256 MB. A put over the file
+  cap is refused. A put that would pass the session cap deletes stored files to
+  make room, oldest first, and never one a message in the ring still points at.
+  `stash list` and `stash put` both report how many have been deleted; a number
+  that moved means a file you stashed earlier may be gone.
+- **You cannot delete from it.** The session ending, the daemon stopping and the
+  cap are the only things that remove a file, because a delete verb could take a
+  file another agent's message still names.
+- **The daemon reads the file, not you.** The path must be absolute and readable
+  by the user that started the daemon.
+
+Keep using a plain `--attach /your/path` when you will keep the file. That path
+copies nothing and stays the fast one.
+
 ### Asking a question and waiting for the answer
 
 ```sh
@@ -787,6 +825,9 @@ it in the raw JSON.
 - **Rings do not cross sessions.** One session, one ring.
 - **There is no verb that stops another agent.** If you mean to interrupt one,
   send it `ctrl+c` with `send-keys`, and be sure that is what you want.
+- **The stash is not storage.** It holds files for one session, on one host, and
+  deletes them when that session ends. It is not a cache, not a workspace, and
+  not a way to move a file to another machine.
 
 ### Orchestrating one agent from another, end to end
 

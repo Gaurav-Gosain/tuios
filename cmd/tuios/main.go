@@ -2317,6 +2317,7 @@ It does not start a daemon. If no daemon runs here, the caller is told so.`,
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd)
 	rootCmd.AddCommand(listDockComponentsCmd, refreshDockCmd)
 	rootCmd.AddCommand(hostsCmd, stdioProxyCmd)
+	rootCmd.AddCommand(newStashCommand())
 
 	return rootCmd
 }

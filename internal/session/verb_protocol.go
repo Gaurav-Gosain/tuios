@@ -826,6 +826,55 @@ func init() {
 			},
 			handler: (*Daemon).verbAskAgent,
 		},
+
+		// The session stash. Two verbs and one contiguous block, because the
+		// store's whole surface is put and list; see stash.go for why there is
+		// no get and no delete.
+		"stash-put": {
+			description: "Copy a file into the session's own file store and answer with the stored path. The stored file lives as long as the session and is deleted when the session is killed or the daemon stops. Attach the stored path to a message like any other path.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "path", Type: "string", Required: true, Description: "Absolute path to an existing regular file on the daemon's host. The daemon opens and copies it as the user that started it."},
+			},
+			returns: []verbParam{
+				{Name: "path", Type: "string", Description: "The stored path. Attach this, or hand it to another agent."},
+				{Name: "hash", Type: "string", Description: "The sha256 of the content, hex. The stored name is this plus the source's extension."},
+				{Name: "bytes", Type: "int", Description: "How many bytes were stored."},
+				{Name: "media_type", Type: "string", Description: "The type read from the extension, the same way an attachment's is."},
+				{Name: "kind", Type: "string", Description: "image or file, from the media type.", Accepted: []string{"image", "file"}},
+				{Name: "stored_at", Type: "int", Description: "Unix-nano time the file was stored, or last asked for."},
+				{Name: "deduped", Type: "bool", Description: "True when these bytes were already stored. Nothing new was written and the path is the one that already existed."},
+				{Name: "evicted", Type: "int", Description: "How many files this put deleted to make room."},
+				{Name: "evictions", Type: "int", Description: "How many files this session's store has deleted in total. A number that moved means a file stashed earlier may be gone."},
+				{Name: "session_bytes", Type: "int", Description: "How many bytes this session's store holds now."},
+				{Name: "session_entries", Type: "int", Description: "How many files this session's store holds now."},
+				{Name: "max_file_bytes", Type: "int", Description: "The per-file cap in bytes."},
+				{Name: "max_bytes", Type: "int", Description: "The per-session cap in bytes."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"stash-put","params":{"session":"work","path":"/tmp/flame.png"}}`,
+			},
+			handler: (*Daemon).verbStashPut,
+		},
+		"stash-list": {
+			description: "List the files in a session's store, with the size of each, whether a message still names it, and how many the store has evicted. The oldest file no message names is the next one dropped when the session hits its cap.",
+			params: []verbParam{
+				sessionParam,
+			},
+			returns: []verbParam{
+				{Name: "dir", Type: "string", Description: "The directory holding this session's stored files."},
+				{Name: "entries", Type: "[]object", Description: "One entry per file, oldest use first: path, name, hash, bytes, media_type, kind, source, stored_at, referenced, missing."},
+				{Name: "total", Type: "int", Description: "How many files are stored."},
+				{Name: "bytes", Type: "int", Description: "How many bytes they take together."},
+				{Name: "evicted", Type: "int", Description: "How many files this store has deleted to make room since the session started."},
+				{Name: "max_file_bytes", Type: "int", Description: "The per-file cap in bytes."},
+				{Name: "max_bytes", Type: "int", Description: "The per-session cap in bytes."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"stash-list","params":{"session":"work"}}`,
+			},
+			handler: (*Daemon).verbStashList,
+		},
 	}
 }
 

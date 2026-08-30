@@ -63,6 +63,13 @@ type Daemon struct {
 	// pane whose shell is new. See verb_mailbox.go.
 	agents *agentBus
 
+	// stash is the per-session file store the stash verbs write into. It is held
+	// beside agents for the same reason: it must never reach disk as state, and
+	// its lifetime is the session's. Unlike the ring it does put bytes on disk,
+	// which is why the daemon deletes them on session deletion, on shutdown, and
+	// again on the next start. See stash.go.
+	stash *stashStore
+
 	// Goroutine tracking for clean shutdown
 	wg sync.WaitGroup
 
@@ -255,6 +262,9 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		agentStallTimeout:  resolveAgentStallTimeout(cfg.AgentStallTimeout),
 		agentMatcher:       newAgentMatcher(resolveAgentBinaries(cfg.AgentBinaries)),
 	}
+	// The socket path is read through a closure rather than copied, because the
+	// line below may still change it and the stash root is derived from it.
+	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 
 	// A daemon with no watcher is a working daemon: every transcript join falls
@@ -399,6 +409,10 @@ func (d *Daemon) onSessionDeleted(s *Session) {
 	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name})
 	// A session with no windows has no inboxes, so its ring is dropped with it.
 	d.agents.forget(s.Name)
+	// And its stashed files go with it. This is the lifetime the stash promises,
+	// and it runs on the manager's delete hook, so every path that kills a
+	// session takes the files with it.
+	d.stash.forget(s.ID)
 	d.broadcastToSession(s.ID, MsgSessionEnded, &SessionEndedPayload{
 		SessionName: s.Name,
 		Reason:      "the session was terminated",
@@ -465,6 +479,12 @@ func (d *Daemon) Start() error {
 	// Sweep the previous daemon's leftovers before reading the directory. Runs
 	// whether or not auto-restore is on, since the residue is there either way.
 	CleanResurrectionDir()
+
+	// The stash root is cleared before anything is served. A daemon that was
+	// killed rather than stopped could not delete its own stashed files, so this
+	// is where they go. A restored session does not get its old stash back, for
+	// the same reason it does not get its old mail: its panes are new processes.
+	d.stash.sweep()
 
 	// Restore sessions saved before the previous shutdown/crash before we start
 	// accepting clients, so an attach immediately after start finds them. Runs
@@ -567,6 +587,11 @@ func (d *Daemon) shutdown() error {
 		// writes its final resurrection state synchronously. When this returns,
 		// everything that will be persisted has been persisted.
 		d.manager.Shutdown()
+
+		// Every stashed file goes now. Sessions are stopped above, so nothing is
+		// still writing, and the promise the stash makes is that its files do not
+		// outlive the daemon that owns them.
+		d.stash.sweep()
 
 		// Unlinking the socket is deliberately the last thing the daemon does,
 		// after the final resurrection saves and after the pid file. It is the
