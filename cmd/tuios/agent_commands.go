@@ -133,7 +133,7 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool) error {
 }
 
 // runSendAgentMessage queues a message for another agent.
-func runSendAgentMessage(sessionName, to, from, subject, text string, attachments []string, jsonOutput bool) error {
+func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo uint64, attachments []string, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -150,6 +150,9 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, attachment
 	if subject != "" {
 		params["subject"] = subject
 	}
+	if replyTo > 0 {
+		params["reply_to"] = replyTo
+	}
 	if len(attachments) > 0 {
 		params["attachments"] = attachments
 	}
@@ -162,37 +165,51 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, attachment
 		return printVerbResult(raw, jsonOutput)
 	}
 	var res struct {
-		MessageID uint64 `json:"message_id"`
-		Kind      string `json:"kind"`
-		ToName    string `json:"to_name"`
-		To        string `json:"to"`
+		MessageID      uint64 `json:"message_id"`
+		Kind           string `json:"kind"`
+		ToName         string `json:"to_name"`
+		To             string `json:"to"`
+		ThreadID       uint64 `json:"thread_id"`
+		ReplyToMissing bool   `json:"reply_to_missing"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	if res.To == "" {
-		fmt.Printf("notice %d posted to the session\n", res.MessageID)
-		return nil
+	// The thread is worth printing only when it is not the message itself, which
+	// is every reply and no first message.
+	thread := ""
+	if res.ThreadID != 0 && res.ThreadID != res.MessageID {
+		thread = fmt.Sprintf(" in thread %d", res.ThreadID)
 	}
-	fmt.Printf("message %d queued for %s (%s)\n", res.MessageID, orNone(res.ToName), shortWindowID(res.To))
+	if res.To == "" {
+		fmt.Printf("notice %d posted to the session%s\n", res.MessageID, thread)
+	} else {
+		fmt.Printf("message %d queued for %s (%s)%s\n", res.MessageID, orNone(res.ToName), shortWindowID(res.To), thread)
+	}
+	if res.ReplyToMissing {
+		fmt.Println("the message you answered has been dropped from the ring. The reply stands, and it starts the thread from the id you named.")
+	}
 	return nil
 }
 
 // agentMessageRow is one message of the read-agent-messages result.
 type agentMessageRow struct {
-	ID            uint64          `json:"id"`
-	Kind          string          `json:"kind"`
-	From          string          `json:"from"`
-	FromLabel     string          `json:"from_label"`
-	To            string          `json:"to"`
-	ToLabel       string          `json:"to_label"`
-	Subject       string          `json:"subject"`
-	Text          string          `json:"text"`
-	Attachments   []attachmentRow `json:"attachments"`
-	SentAt        int64           `json:"sent_at"`
-	ReadAt        int64           `json:"read_at"`
-	Undeliverable bool            `json:"undeliverable"`
-	WasUnread     bool            `json:"was_unread"`
+	ID             uint64          `json:"id"`
+	Kind           string          `json:"kind"`
+	From           string          `json:"from"`
+	FromLabel      string          `json:"from_label"`
+	To             string          `json:"to"`
+	ToLabel        string          `json:"to_label"`
+	Subject        string          `json:"subject"`
+	Text           string          `json:"text"`
+	ReplyTo        uint64          `json:"reply_to"`
+	ThreadID       uint64          `json:"thread_id"`
+	ReplyToMissing bool            `json:"reply_to_missing"`
+	Attachments    []attachmentRow `json:"attachments"`
+	SentAt         int64           `json:"sent_at"`
+	ReadAt         int64           `json:"read_at"`
+	Undeliverable  bool            `json:"undeliverable"`
+	WasUnread      bool            `json:"was_unread"`
 }
 
 type attachmentRow struct {
@@ -204,7 +221,7 @@ type attachmentRow struct {
 }
 
 // runReadAgentMessages reads the ring and prints it with every body fenced.
-func runReadAgentMessages(sessionName, to string, unread, notices, peek bool, limit int, jsonOutput bool) error {
+func runReadAgentMessages(sessionName, to string, unread, notices, peek bool, thread uint64, limit int, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -219,6 +236,9 @@ func runReadAgentMessages(sessionName, to string, unread, notices, peek bool, li
 	}
 	if to != "" {
 		params["to"] = to
+	}
+	if thread > 0 {
+		params["thread"] = thread
 	}
 	if limit > 0 {
 		params["limit"] = limit
@@ -240,11 +260,16 @@ func printAgentMessages(w io.Writer, raw json.RawMessage) error {
 		Unread   int               `json:"unread"`
 		Total    int               `json:"total"`
 		Evicted  uint64            `json:"evicted"`
+		Thread   uint64            `json:"thread"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 	if len(res.Messages) == 0 {
+		if res.Thread != 0 {
+			fmt.Fprintf(w, "No messages in thread %d. The ring may have dropped them, or nothing was ever sent there.\n", res.Thread)
+			return nil
+		}
 		fmt.Fprintln(w, "No messages.")
 		return nil
 	}
@@ -258,6 +283,14 @@ func printAgentMessages(w io.Writer, raw json.RawMessage) error {
 			who = fmt.Sprintf("%s (%s)", who, shortWindowID(m.From))
 		}
 		head := fmt.Sprintf("#%d  %s  from %s  %s", m.ID, m.Kind, who, agoOf(m.SentAt))
+		if m.ReplyTo != 0 {
+			head += fmt.Sprintf("  reply to #%d", m.ReplyTo)
+		}
+		// A thread is worth naming only when it is not the message itself, so a
+		// listing of unthreaded mail reads exactly as it did before.
+		if m.ThreadID != 0 && m.ThreadID != m.ID {
+			head += fmt.Sprintf("  thread #%d", m.ThreadID)
+		}
 		if m.WasUnread {
 			head += "  new"
 		}
@@ -265,6 +298,9 @@ func printAgentMessages(w io.Writer, raw json.RawMessage) error {
 			head += "  undeliverable: the recipient window is gone"
 		}
 		fmt.Fprintln(w, head)
+		if m.ReplyToMissing {
+			fmt.Fprintln(w, "the message this answers has been dropped from the ring")
+		}
 		if m.Subject != "" {
 			fmt.Fprintf(w, "subject: %s\n", m.Subject)
 		}
@@ -280,7 +316,11 @@ func printAgentMessages(w io.Writer, raw json.RawMessage) error {
 		fmt.Fprintln(w, untrustedClose)
 	}
 
-	fmt.Fprintf(w, "\n%d message(s), %d unread.\n", res.Total, res.Unread)
+	if res.Thread != 0 {
+		fmt.Fprintf(w, "\n%d message(s) in thread %d, %d unread.\n", res.Total, res.Thread, res.Unread)
+	} else {
+		fmt.Fprintf(w, "\n%d message(s), %d unread.\n", res.Total, res.Unread)
+	}
 	if res.Evicted > 0 {
 		fmt.Fprintf(w, "%d older message(s) were dropped: the ring was full, and they were never read.\n", res.Evicted)
 	}
