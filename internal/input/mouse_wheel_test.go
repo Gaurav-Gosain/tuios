@@ -87,3 +87,70 @@ func TestMouseWheelClampsAtScrollbackBounds(t *testing.T) {
 		t.Errorf("ScrollbackOffset = %d, want 0", win.ScrollbackOffset)
 	}
 }
+
+// A trackpad reports a little sideways drift on almost every vertical scroll,
+// and the terminal forwards that as a left or right wheel button. The
+// scrolling layout used to answer those on their own, so scrolling back
+// through a pane walked the whole strip sideways. The horizontal wheel now
+// moves the viewport under the same modifier the vertical one needs.
+//
+// The strip needs more columns than fit, or every scroll clamps to zero and
+// the test would pass against code that does nothing.
+//
+// Control: move the two horizontal cases back outside the modifier check in
+// handleMouseWheel, and the unmodified subtest reports the strip moving.
+func TestTheHorizontalWheelNeedsTheSameModifierAsTheVertical(t *testing.T) {
+	newFleet := func(t *testing.T) *app.OS {
+		t.Helper()
+		wins := make([]*terminal.Window, 6)
+		for i := range wins {
+			wins[i] = windowWithScrollback(t)
+		}
+		o := &app.OS{
+			Settings:           config.Global,
+			Mode:               app.WindowManagementMode,
+			UseScrollingLayout: true,
+			AutoTiling:         true,
+			FocusedWindow:      0,
+			Windows:            wins,
+			EffectiveWidth:     40,
+			EffectiveHeight:    20,
+		}
+		o.TileAllWindows()
+		return o
+	}
+
+	// Right from home has room whenever the strip is wider than the view.
+	if sl := newFleet(t).GetOrCreateScrollingLayout(); sl == nil {
+		t.Fatal("no scrolling layout")
+	}
+
+	for _, tc := range []struct {
+		name  string
+		mod   tea.KeyMod
+		moves bool
+	}{
+		{"unmodified", 0, false},
+		{"alt", tea.ModAlt, true},
+		{"shift", tea.ModShift, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := newFleet(t)
+			before := o.GetOrCreateScrollingLayout().ViewportX
+			_, _ = handleMouseWheel(tea.MouseWheelMsg{Button: tea.MouseWheelRight, Mod: tc.mod}, o)
+			after := o.GetOrCreateScrollingLayout().ViewportX
+			if (after != before) != tc.moves {
+				t.Fatalf("wheel right with mod %v: viewport %d -> %d, moved=%v, want moved=%v",
+					tc.mod, before, after, after != before, tc.moves)
+			}
+			if !tc.moves {
+				return
+			}
+			// And back again, which only has room because we just moved.
+			_, _ = handleMouseWheel(tea.MouseWheelMsg{Button: tea.MouseWheelLeft, Mod: tc.mod}, o)
+			if back := o.GetOrCreateScrollingLayout().ViewportX; back != before {
+				t.Fatalf("wheel left with mod %v did not undo it: %d -> %d, want %d", tc.mod, after, back, before)
+			}
+		})
+	}
+}
