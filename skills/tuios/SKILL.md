@@ -215,6 +215,33 @@ unless you were asked to, and when you do mean to address an agent, use
 `ask-agent` rather than `send-text`: it waits until the agent is not mid-turn,
 and tells you when it has answered.
 
+## A session of your own
+
+To set up a workspace instead of driving one that exists, create the session
+first:
+
+```sh
+tuios new --detach scratch
+tuios new-window -s scratch build --cwd /src/api
+```
+
+Over the control protocol this is the `new-session` verb, which does both in one
+call and returns the ids:
+
+```json
+{"id":1,"verb":"new-session","params":{"name":"scratch","window_name":"build","cwd":"/src/api"}}
+```
+
+```json
+{"type":"session_created","session":"scratch","session_id":"...","windows":1,
+ "window_id":"...","window_name":"build","pty_id":"...","width":80,"height":24}
+```
+
+The session runs detached until somebody attaches. Pass `"window": false` for an
+empty session you place every pane in yourself. A name the daemon already holds
+comes back as `session_exists` with the names that do exist, so pick another
+name rather than assuming you took it over.
+
 ## Opening a pane and running work in it
 
 ```sh

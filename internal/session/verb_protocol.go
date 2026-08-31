@@ -42,6 +42,7 @@ const (
 	ErrVerbUnknownVerb     = "unknown_verb"      // no such verb
 	ErrVerbInvalidParams   = "invalid_params"    // params failed to decode or a required field was missing
 	ErrVerbSessionNotFound = "session_not_found" // named session does not exist
+	ErrVerbSessionExists   = "session_exists"    // new-session was given a name the daemon already holds
 	ErrVerbWindowNotFound  = "window_not_found"  // window target did not resolve
 	ErrVerbNoWindows       = "no_windows"        // session has no windows to act on
 	ErrVerbPTYNotFound     = "pty_not_found"     // the target window has no live PTY
@@ -225,6 +226,34 @@ func init() {
 			description: "List all sessions the daemon holds.",
 			examples:    []string{`{"id":1,"verb":"list-sessions"}`},
 			handler:     (*Daemon).verbListSessions,
+		},
+		"new-session": {
+			description: "Create a session in the daemon, with its first window. The session runs detached until a client attaches to it.",
+			params: []verbParam{
+				{Name: "name", Type: "string", Description: "Name for the new session. Omit to have one generated. A name the daemon already holds is refused."},
+				{Name: "width", Type: "int", Description: "Nominal width in columns. An attached client replaces it with its own viewport.", Default: "80"},
+				{Name: "height", Type: "int", Description: "Nominal height in rows. An attached client replaces it with its own viewport.", Default: "24"},
+				{Name: "window", Type: "bool", Description: "Create the first window. Pass false for an empty session you place every window in yourself.", Default: "true"},
+				{Name: "window_name", Type: "string", Description: "Name for the first window. Omit to use the shell's title."},
+				{Name: "cwd", Type: "string", Description: "Directory to start the first window's shell in. Omit to inherit the daemon's."},
+				{Name: "command", Type: "[]string", Description: "Argv to exec as the first window's process instead of a shell. No shell parses it, so nothing needs quoting."},
+			},
+			returns: []verbParam{
+				{Name: "session", Type: "string", Description: "Name of the new session. Use it as the session parameter of every later call."},
+				{Name: "session_id", Type: "string", Description: "Id of the new session."},
+				{Name: "width", Type: "int", Description: "Nominal width the session was created at."},
+				{Name: "height", Type: "int", Description: "Nominal height the session was created at."},
+				{Name: "windows", Type: "int", Description: "How many windows the session holds: 1, or 0 when window was false."},
+				{Name: "window_id", Type: "string", Description: "Id of the first window. Absent when window was false."},
+				{Name: "window_name", Type: "string", Description: "Name of the first window. Absent when window was false."},
+				{Name: "pty_id", Type: "string", Description: "Id of the first window's PTY. Absent when window was false."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"new-session"}`,
+				`{"id":1,"verb":"new-session","params":{"name":"work","window_name":"build","cwd":"/src/api"}}`,
+				`{"id":1,"verb":"new-session","params":{"name":"empty","window":false}}`,
+			},
+			handler: (*Daemon).verbNewSession,
 		},
 		"list-hosts": {
 			description: "List the machines named in the [hosts] config table, with the state of each link.",
