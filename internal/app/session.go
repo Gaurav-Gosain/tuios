@@ -454,6 +454,13 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// the daemon and must not be allowed to suppress the next one.
 	m.forgetSyncedState()
 
+	// The round trip has landed. Whatever this client asked the daemon to open
+	// or close, it is about to learn the answer, so the snapshot it holds from
+	// here on is current and may be pushed again. This is also what stops an
+	// intent sent from somewhere other than an input - a tape command, say -
+	// from leaving the guard set with no push behind it to spend it.
+	m.daemonWindowIntent = false
+
 	// Nothing may be pushed while this is being applied. See applyingPeerSync:
 	// a layout worked out here because this client disagreed with the arriving
 	// one is a local display decision, not news, and sending it is the edge that
@@ -1716,6 +1723,27 @@ func (m *OS) SyncStateToDaemon() {
 	// daemon could not - says so here and is sent once the sync is applied.
 	if m.applyingPeerSync {
 		m.syncAnswerOwed = true
+		return
+	}
+
+	// A window this client asked the daemon to open or close is not in the
+	// snapshot below, because the client does not open or close windows: it
+	// sends the intent and waits. So the snapshot describes the window set as it
+	// was before the mutation, and it loses the race to the daemon's own change
+	// every time - the daemon reconciles it as stale and keeps the rectangles in
+	// it, which are a layout for a window set that no longer exists. That layout
+	// then becomes canonical and reaches every client, and nothing downstream
+	// can tell it from a current one: the panes of the older, smaller set span
+	// the box exactly, so the staleness check that measures them against the box
+	// is satisfied by them alone and no client retiles. The pane that was to be
+	// split for the new one stays at its full width.
+	//
+	// The intent itself is what carries this client's request, and the answer
+	// comes back as a state push. There is nothing here to add to it, so the
+	// snapshot is dropped rather than sent. Dropping it costs nothing: syncedFP
+	// is left alone, so whatever this state does say is sent by the next push.
+	if m.daemonWindowIntent {
+		m.daemonWindowIntent = false
 		return
 	}
 

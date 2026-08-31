@@ -539,6 +539,12 @@ type OS struct {
 	// placed. That is an answer to a question, not an echo of a layout, so it is
 	// sent once, after the sync has been applied and the guard is down.
 	syncAnswerOwed bool
+	// daemonWindowIntent is set from the moment this client asks the daemon to
+	// open or close a window until it learns what the daemon did. While it is
+	// set this client does not know the session's window set, so the snapshot it
+	// holds describes a session that no longer exists and must not be pushed.
+	// See SyncStateToDaemon, AddWindow and DeleteWindow.
+	daemonWindowIntent bool
 	// Keyboard enhancement support (Kitty protocol)
 	KeyboardEnhancementsEnabled bool // True when terminal supports keyboard enhancements
 	// KeyboardFlags is the flag set the host answered the enhancement query

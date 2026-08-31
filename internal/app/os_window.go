@@ -433,6 +433,11 @@ func (m *OS) AddWindow(name string, command ...string) *OS {
 		}
 		if err := m.DaemonClient.SendIntent("NewWindow", args...); err != nil {
 			m.LogError("Failed to ask the daemon for a new window: %v", err)
+		} else {
+			// From here until the daemon says what it did, this client does not
+			// know the session's window set, so the state it holds must not be
+			// pushed. See SyncStateToDaemon.
+			m.daemonWindowIntent = true
 		}
 		return m
 	}
@@ -613,6 +618,11 @@ func (m *OS) DeleteWindow(i int) *OS {
 		windowID := m.Windows[i].ID
 		if err := m.DaemonClient.SendIntent("CloseWindow", windowID); err != nil {
 			m.LogError("Failed to ask the daemon to close window %s: %v", shortID(windowID), err)
+		} else {
+			// The same as opening one: the window set is the daemon's answer to
+			// give, and until it does the snapshot here still has the window in
+			// it. See SyncStateToDaemon.
+			m.daemonWindowIntent = true
 		}
 		return m
 	}

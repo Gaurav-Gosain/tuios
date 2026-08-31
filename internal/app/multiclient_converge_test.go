@@ -391,21 +391,20 @@ func (f *fleet) route(fc *fleetClient) {
 // the daemon was not running. WindowState.Zoomed is what closed that, and the
 // switch went with it: the action guards the thing now.
 //
-// TUIOS_CONVERGE_STALEPUSH restores the state push that internal/input makes
-// after every input, including the one that asks the daemon for a pane. That
-// push carries the state as it was before the pane existed, so it reaches the
-// daemon after the creation it raced and is reconciled as stale - and
-// reconcileStale keeps the pushing client's rectangles, so the old pane's
-// whole-box rectangle becomes canonical and is broadcast to everyone. Nothing
-// downstream can tell it from a current layout: tiledLayoutStale measures the
-// box the panes span, and one pane covering the box spans it exactly. The
-// client that adopts it draws a shell at twice the width the daemon runs it at.
-// Reproduce with
-// TUIOS_CONVERGE_STALEPUSH=1 TUIOS_CONVERGE_SEED=8709371129874198873.
-var convergeStalePush = os.Getenv("TUIOS_CONVERGE_STALEPUSH") != ""
+// Opening and closing a pane push the state afterwards the way every other
+// action does, and they used not to. They were behind TUIOS_CONVERGE_STALEPUSH
+// for as long as a client pushed a snapshot it built before the mutation it had
+// asked the daemon for: the push carried the window set as it was, lost the race
+// to the daemon's own change and was reconciled as stale, and reconcileStale
+// keeps the pushing client's rectangles, so a layout for the older window set
+// became canonical and was broadcast to everyone. Nothing downstream could tell
+// it from a current layout: tiledLayoutStale measures the box the panes span,
+// and the panes of the smaller set span it exactly, so no client retiled and the
+// pane that was to be split stayed at its full width. SyncStateToDaemon declines
+// that snapshot now, and the switch went with it: the action guards the thing.
 
 // TUIOS_CONVERGE_MODES makes the "another tiling layout" action cycle the three
-// tiling modes. It is off for the same reason the two above are: this tree does
+// tiling modes. It is off for the same reason the two above were: this tree does
 // not converge under it, and the three ways it does not are none of them about
 // the action itself.
 //
@@ -850,12 +849,10 @@ func (f *fleet) step() string {
 			return ""
 		}
 		m.AddWindow("")
-		// The push that a real keystroke makes alongside the intent is behind a
-		// switch, and it is off by default because it fails on this tree. See
-		// convergeStalePush.
-		if convergeStalePush {
-			fc.commit()
-		}
+		// The push a real keystroke makes alongside the intent, which is the
+		// whole point of running it here: it races the daemon-side creation it
+		// asked for. See the note above the action set.
+		fc.commit()
 		return fmt.Sprintf("client %s opened a pane", fc.name)
 
 	case 2: // close a pane
@@ -866,12 +863,9 @@ func (f *fleet) step() string {
 		i := vis[f.rng.IntN(len(vis))]
 		id := shortID(m.Windows[i].PTYID)
 		m.DeleteWindow(i)
-		// As with opening a pane: the push a real keystroke makes alongside the
-		// intent is behind convergeStalePush, because it races the daemon-side
+		// As with opening a pane: the keystroke's own push races the daemon-side
 		// close it asked for.
-		if convergeStalePush {
-			fc.commit()
-		}
+		fc.commit()
 		return fmt.Sprintf("client %s closed pane %s", fc.name, id)
 
 	case 3: // focus another pane
@@ -1011,9 +1005,9 @@ func convergeEnvInt(name string, def int) int {
 //	TUIOS_CONVERGE_SEED=12345 go test ./internal/app -run Convergence
 //	TUIOS_CONVERGE_SEED=random TUIOS_CONVERGE_SEQS=50 go test ./internal/app -run Convergence
 //
-// Two switches turn on actions this tree does not converge under; both name the
-// bug they reproduce above. TUIOS_CONVERGE_TRACE prints a line per delivery,
-// which is how a failing seed is read.
+// TUIOS_CONVERGE_MODES turns on an action this tree does not converge under, and
+// names the three bugs it reproduces above. TUIOS_CONVERGE_TRACE prints a line
+// per delivery, which is how a failing seed is read.
 func TestMultiClientConvergence(t *testing.T) {
 	seqs := convergeEnvInt("TUIOS_CONVERGE_SEQS", convergeSeqs)
 	steps := convergeEnvInt("TUIOS_CONVERGE_STEPS", convergeSteps)
