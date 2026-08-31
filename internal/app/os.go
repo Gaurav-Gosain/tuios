@@ -579,6 +579,21 @@ type OS struct {
 	ShowKeys          bool       // True when the showkeys overlay is enabled
 	RecentKeys        []KeyEvent // Ring buffer of recently pressed keys
 	KeyHistoryMaxSize int        // Maximum number of keys to display (default: 5)
+	// crash is the recovered panic the crash overlay is showing, or nil.
+	//
+	// It is a snapshot and not a view: nothing in it points back into this
+	// struct, so the overlay can be drawn when the rest of the model cannot be
+	// trusted. See crash_overlay.go.
+	crash *CrashReport
+	// crashNotice is what the crash overlay says about the last key pressed on
+	// it. The overlay carries its own because the dock, where a notification
+	// normally lands, is drawn by the compositor and a render-path crash is the
+	// compositor failing. See CopyCrashReport.
+	crashNotice string
+	// recentActions is the ring of keybind action names the crash report reads
+	// for its closest honest answer to "what were you doing". Names only,
+	// never keystrokes or text. See NoteAction.
+	recentActions []string
 	// Tape scripting support
 	ScriptPlayer       *tape.Player          // script playback engine
 	ScriptMode         bool                  // True when running a tape script

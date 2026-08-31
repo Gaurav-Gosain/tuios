@@ -485,6 +485,53 @@ var fastPathDisabled = os.Getenv("TUIOS_NO_FASTPATH") == "1"
 // output and cost on one binary. See sizeContentBox.
 var preShapedDisabled = os.Getenv("TUIOS_NO_PRESHAPED") == "1"
 
+// crashView is the whole frame while the crash overlay is up.
+//
+// It sets only what it can set from constants. Every other field View fills in
+// is a model read: getRealCursor walks the focused window's emulator and
+// keyboardEnhancements reads the settings, and on this path either could be the
+// thing that panicked. A crash screen with no cursor and the mouse modes tuios
+// always asks for is worth more than a richer one that cannot be drawn.
+func (m *OS) crashView() tea.View {
+	m.hideGraphicsForCrash()
+	var view tea.View
+	view.SetContent(RenderCrashScreen(m.crash, m.crashNotice, m.Width, m.Height))
+	view.AltScreen = true
+	view.MouseMode = tea.MouseModeAllMotion
+	view.ReportFocus = true
+	return view
+}
+
+// safeComposeFrame composes the frame behind a panic barrier, reporting whether
+// it got one.
+//
+// This is the gap the crash overlay was built to close, and it was a real one.
+// Update has had a per-event barrier for a while and the graphics flush has had
+// its render-side twin, but between them sat composeFrame, which is the whole
+// of the text render: the compositor, every pane's border box, the sidebar, the
+// dock and every overlay. A panic in any of that escaped View into bubbletea,
+// which recovers at the top of Program.Run, prints "Caught panic" and a Go
+// traceback to stderr, and stops. Locally that means the terminal is restored
+// and the traceback is the last thing on the screen. Over SSH the wish session
+// ends; in a browser the tab's program ends. In all three the panes are still
+// alive in the daemon and the user has no idea, because the one artifact is a
+// traceback with no version, no client kind and nothing to press.
+//
+// Catching it here turns that into a frame that says what happened. The model
+// is not repaired and is not claimed to be: the barrier reports failure, View
+// draws the overlay instead of a frame, and the panes keep running underneath.
+func (m *OS) safeComposeFrame() (frame string, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			stack := debug.Stack()
+			m.NoteCrash("drawing the screen", r, stack)
+			m.LogError("recovered panic in render: %v (crash log: %s)\n%s", r, m.crashLogPath(), stack)
+			frame, ok = "", false
+		}
+	}()
+	return m.composeFrame(), true
+}
+
 // composeFrame renders the full frame, using the fullscreen fast path when it is
 // eligible and falling back to the compositor otherwise.
 func (m *OS) composeFrame() string {
@@ -644,6 +691,24 @@ func (m *OS) View() tea.View {
 		return view
 	}
 
+	// The crash overlay, drawn before anything else and instead of everything
+	// else.
+	//
+	// It is placed here, above the frame cache and above composeFrame, because
+	// this is the only point in the render path that is independent of the state
+	// that broke. RenderCrashScreen takes a snapshot and two ints and reads no
+	// model at all, so it draws the same whether the compositor is sound or is
+	// the thing that just panicked. Routing it through renderOverlays instead,
+	// the way every picker goes, would put it back inside composeFrame and it
+	// would panic on the way to reporting a panic.
+	//
+	// m.Width and m.Height rather than GetRenderWidth and GetRenderHeight for
+	// the same reason: they are the two plain ints the resize handler sets, and
+	// the accessors are arithmetic over the sidebar, the dock and the margins.
+	if m.crash != nil {
+		return m.crashView()
+	}
+
 	// Fast path: return cached content when frame-skip determined nothing changed.
 	// This avoids the expensive GetCanvas → ultraviolet render pipeline on idle ticks.
 	if m.renderSkipped && m.cachedViewContent != "" {
@@ -661,8 +726,16 @@ func (m *OS) View() tea.View {
 		// knows nothing about the drag.
 		m.FlushPendingBSPSync()
 		composeStart := time.Now()
-		content := m.composeFrame()
+		content, ok := m.safeComposeFrame()
 		m.chargeRenderCost(time.Since(composeStart))
+		if !ok {
+			// The frame could not be drawn and the barrier has armed the crash
+			// overlay. Draw that instead of this frame rather than waiting for
+			// the next one: the panic is in the compositor, so the next frame
+			// would fail the same way and the user would sit in front of a
+			// screen that never changed.
+			return m.crashView()
+		}
 		m.cachedViewContent = content
 		m.zenHidden = m.zenBordersHidden(false)
 		view.SetContent(content)
@@ -717,8 +790,8 @@ func (m *OS) flushGraphicsForView() {
 	defer func() {
 		if r := recover(); r != nil {
 			stack := debug.Stack()
-			path := WriteCrashLog(r, stack)
-			m.LogError("recovered panic in graphics flush: %v (crash log: %s)\n%s", r, path, stack)
+			m.NoteCrash("drawing images", r, stack)
+			m.LogError("recovered panic in graphics flush: %v (crash log: %s)\n%s", r, m.crashLogPath(), stack)
 		}
 	}()
 

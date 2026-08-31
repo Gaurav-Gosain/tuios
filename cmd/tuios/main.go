@@ -59,6 +59,11 @@ var (
 )
 
 func main() {
+	// The build identity, handed to internal/app before anything can crash.
+	// A crash report that cannot say which build produced it cannot be placed
+	// against a commit, and internal/app cannot read these vars itself.
+	app.SetBuildStamp(version, commit)
+
 	rootCmd := newRootCommand()
 
 	// Command failures are printed here rather than by fang, which would query

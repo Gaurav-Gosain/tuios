@@ -649,17 +649,36 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleMsg is Update's body: one switch over every message the client can see.
 func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
+	// The crash overlay owns the keyboard while it is up, and it is answered
+	// here rather than in internal/input because everything the input package
+	// consults to route a key is model state, and the model is what has just
+	// failed. Three keys, read before any of it. See crash_overlay.go.
+	if m.crash != nil {
+		if key, ok := msg.(tea.KeyPressMsg); ok {
+			if c, consumed := m.handleCrashKey(key); consumed {
+				m.renderSkipped = false
+				return m, c
+			}
+		}
+	}
+
 	// Per-event panic isolation. A panic in a single message handler (reachable
 	// from malformed guest input, a bad tape/state-sync payload, or a rarely-hit
 	// UI branch) must not tear down every window: bubbletea only recovers at the
 	// top of Program.Run, where it restores the terminal and exits. Recover here,
-	// write a crash log, and return the model unchanged so the other windows
-	// survive the bad event. Named returns let the deferred recover set them.
+	// put the crash overlay up, and return the model unchanged so the other
+	// windows survive the bad event. Named returns let the deferred recover set
+	// them.
+	//
+	// It used to recover, log and say nothing. LogError draws nothing on its own
+	// (the log ring is behind leader D l), so the whole of what a user saw when
+	// tuios hit an impossible state was a frame that did not update, and a bug
+	// nobody can see is a bug nobody reports. The overlay is what changed.
 	defer func() {
 		if r := recover(); r != nil {
 			stack := debug.Stack()
-			path := WriteCrashLog(r, stack)
-			m.LogError("recovered panic in Update: %v (crash log: %s)\n%s", r, path, stack)
+			m.NoteCrash("handling an event", r, stack)
+			m.LogError("recovered panic in Update: %v (crash log: %s)\n%s", r, m.crashLogPath(), stack)
 			model = m
 			cmd = nil
 		}

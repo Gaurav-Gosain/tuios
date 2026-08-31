@@ -236,6 +236,12 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 		if o.TapeRecorder != nil && o.TapeRecorder.IsRecording() {
 			o.TapeRecorder.RecordAction(action)
 		}
+		// And record it for a crash report, which needs the same fact and
+		// cannot ask the user to have been recording. This is the one choke
+		// point every keybinding, prefix chord and context menu row passes
+		// through, so one line here covers all three. Names only: see
+		// NoteAction.
+		o.NoteAction(action)
 		return handler(msg, o)
 	}
 	return o, nil
