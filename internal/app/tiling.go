@@ -411,11 +411,24 @@ func (m *OS) RestoreWorkspaceLayout(workspace int) {
 		m.MasterRatio = m.Settings.MasterRatioFraction()
 	}
 
-	// Check if we have a saved layout for this workspace
-	savedLayouts, hasCustom := m.WorkspaceLayouts[workspace]
-	if !hasCustom || len(savedLayouts) == 0 {
-		// No custom layout - use default tiling
-		m.WorkspaceHasCustom[workspace] = false
+	// The rectangles this client cached the last time it left this workspace.
+	//
+	// Having none is not an answer about whether the workspace is custom. It used
+	// to be read as one, and the flag was cleared here - which was harmless while
+	// the flag was this client's own private memory, because a client only ever
+	// asked about a workspace it had been to. The flag is the session's now (see
+	// SessionState.WorkspaceHasCustom), and a client that has never been to a
+	// workspace caches nothing for it, so clearing the flag here was the whole
+	// bug: the first visit threw away the flag another client had set, retiled the
+	// workspace and pushed the tiler's rectangles over the layout a user had
+	// arranged.
+	//
+	// Nothing to re-apply is now just that. The panes are already at the session's
+	// rectangles, which arrived on the windows themselves, so they are left where
+	// they are and the flag is left as the session set it. The cache fills itself
+	// in on the way out of the workspace, from those same rectangles.
+	savedLayouts := m.WorkspaceLayouts[workspace]
+	if len(savedLayouts) == 0 {
 		return
 	}
 
