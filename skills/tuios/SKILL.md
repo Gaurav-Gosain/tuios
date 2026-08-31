@@ -215,6 +215,33 @@ unless you were asked to, and when you do mean to address an agent, use
 `ask-agent` rather than `send-text`: it waits until the agent is not mid-turn,
 and tells you when it has answered.
 
+## A session of your own
+
+To set up a workspace instead of driving one that exists, create the session
+first:
+
+```sh
+tuios new --detach scratch
+tuios new-window -s scratch build --cwd /src/api
+```
+
+Over the control protocol this is the `new-session` verb, which does both in one
+call and returns the ids:
+
+```json
+{"id":1,"verb":"new-session","params":{"name":"scratch","window_name":"build","cwd":"/src/api"}}
+```
+
+```json
+{"type":"session_created","session":"scratch","session_id":"...","windows":1,
+ "window_id":"...","window_name":"build","pty_id":"...","width":80,"height":24}
+```
+
+The session runs detached until somebody attaches. Pass `"window": false` for an
+empty session you place every pane in yourself. A name the daemon already holds
+comes back as `session_exists` with the names that do exist, so pick another
+name rather than assuming you took it over.
+
 ## Opening a pane and running work in it
 
 ```sh
@@ -1364,9 +1391,10 @@ Be honest with the user about these rather than working around them:
   cannot set it back to that. Tell the user which options you changed and cannot
   restore, rather than leaving them to find out.
 
-- **There is no verb for keybindings or hooks.** Both are maps rather than fixed
-  paths, so `list-options` does not carry them and `set-config` cannot set one.
-  They are edited in the config file.
+- **There is no verb for keybindings, and hooks are read only.** Both are maps
+  rather than fixed paths, so `list-options` does not carry them and `set-config`
+  cannot set one. They are edited in the config file. `tuios list-hooks` reads
+  the hook table back and says what each command last did.
 
 - **A glyph set cannot change the dock's semantic icons.** The mode chip, the
   window and workspace counts and the session controls are Nerd Font pictures of
@@ -1454,6 +1482,34 @@ failures it stops being polled; `tuios refresh-dock NAME` revives it, which is
 what to run after fixing the script.
 
 Never conclude a component works because the config parsed. Read it back.
+
+### When a hook does not fire
+
+A hook is the other half of the same loop, and it fails the same way: it runs a
+command for its side effects, so a command that was never found and one that
+worked used to look identical.
+
+```sh
+tuios list-hooks
+```
+
+Every registered command, with how many times it ran, its last exit code, when
+it last ran and its last error. Read it the way you read
+`list-dock-components`:
+
+- No row at all means the hook was never loaded. The event name is misspelled.
+- `RUNS` of 0 means the command is fine and the event never happened.
+- A non-zero exit means the command ran and failed. The error says why.
+
+The `SIDE` column says which process runs it. The daemon runs the hooks for the
+facts it owns, so `after-new-window`, `after-close-window`, `after-focus-change`,
+`after-workspace-switch` and `after-agent-state` fire on a detached session, and
+fire once however many clients are attached. `after-attach`, `after-detach`,
+`after-resize` and `after-layout-change` need a client's terminal, so they are
+only listed while one is attached.
+
+The daemon reads the `[hooks]` table when it starts, so a hook it runs needs a
+`tuios kill-server` before it takes effect.
 
 ### Two things to know before you write one
 

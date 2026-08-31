@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -920,11 +921,20 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 		daemonCfg.AgentDetectInterval = time.Duration(userConfig.Daemon.AgentDetectSeconds) * time.Second
 		daemonCfg.AgentBinaries = userConfig.Daemon.AgentBinaries
 		daemonCfg.Hosts = hostsFromConfig(userConfig)
+		// The daemon runs the hooks for the facts it owns, so a session with
+		// nobody attached still runs them. The client keeps the hooks that need
+		// a terminal.
+		daemonCfg.ApplyUserHooks(userConfig)
 	}
 
 	// Install the log sinks before the daemon is built. NewDaemon already logs,
 	// and the level is settled by now, so the file header names the right one.
 	session.InstallDaemonLogging(daemonCfg.Foreground, daemonCfg.LogFile)
+
+	// One log line per firing, at the level that already logs connections. It
+	// is what answers "did my hook run at all". The sinks are in place above,
+	// so the line reaches the ring and the file in a background daemon.
+	hooks.SetVerbose(session.GetDebugLevel() >= session.DebugBasic)
 
 	daemon := session.NewDaemon(daemonCfg)
 

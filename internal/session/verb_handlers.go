@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -187,17 +186,8 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2. Omit it for the current one")
 	}
 	// A directory that cannot be entered is refused rather than quietly ignored.
-	// The PTY falls back to the daemon's own directory, which means a caller that
-	// mistyped a path gets a working shell in the wrong place and no way to tell
-	// from the response.
-	if p.Cwd != "" {
-		info, err := os.Stat(p.Cwd)
-		switch {
-		case err != nil:
-			return nil, invalidParam("cwd", "cannot start a shell in "+echoName(p.Cwd)+": "+err.Error())
-		case !info.IsDir():
-			return nil, invalidParam("cwd", echoName(p.Cwd)+" is not a directory")
-		}
+	if verr := checkWindowCwd(p.Cwd); verr != nil {
+		return nil, verr
 	}
 	// An empty argv head would only fail later inside exec with a message that
 	// names nothing; refuse it as the parameter mistake it is.

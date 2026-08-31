@@ -1574,6 +1574,40 @@ The dock is composed by the attached client, so this needs one attached.`,
 	listDockComponentsCmd.Flags().BoolVar(&listDockComponentsJSON, "json", false, "Output as JSON")
 	_ = listDockComponentsCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var listHooksSession string
+	var listHooksEvent string
+	var listHooksJSON bool
+	listHooksCmd := &cobra.Command{
+		Use:   "list-hooks",
+		Short: "List the hooks and what each one last did",
+		Long: `List every hook command in your config, and what each one last did: how many
+times it ran, its last exit code, when it last ran and its last error.
+
+A hook that never fires is the commonest complaint and it used to have no
+answer, because a hook ran with its output discarded and its error dropped.
+Zero runs means the event never happened, so check the event name. A non-zero
+exit means the command ran and failed, and the error says why.
+
+The SIDE column says which process runs the hook. The daemon runs the hooks for
+the facts it owns, so they fire with nobody attached. A client runs the ones
+that need its terminal, so they are only listed while a client is attached.`,
+		Example: `  # What is registered, and did it run
+  tuios list-hooks
+
+  # Only one event
+  tuios list-hooks --event after-agent-state
+
+  # Every hook that failed
+  tuios list-hooks --json | jq '.hooks[] | select(.last_error != "")'`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runListHooks(listHooksSession, listHooksEvent, listHooksJSON)
+		},
+	}
+	listHooksCmd.Flags().StringVarP(&listHooksSession, "session", "s", "", "Target session (default: most recently active)")
+	listHooksCmd.Flags().StringVar(&listHooksEvent, "event", "", "Only the hooks on this event")
+	listHooksCmd.Flags().BoolVar(&listHooksJSON, "json", false, "Output as JSON")
+	_ = listHooksCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
 	var refreshDockSession string
 	var refreshDockJSON bool
 	refreshDockCmd := &cobra.Command{
@@ -2350,7 +2384,7 @@ It does not start a daemon. If no daemon runs here, the caller is told so.`,
 	rootCmd.AddCommand(splitWindowCmd, focusWindowCmd, moveWindowCmd, setWindowCmd)
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd)
-	rootCmd.AddCommand(listDockComponentsCmd, refreshDockCmd)
+	rootCmd.AddCommand(listDockComponentsCmd, refreshDockCmd, listHooksCmd)
 	rootCmd.AddCommand(hostsCmd, stdioProxyCmd)
 	rootCmd.AddCommand(newStashCommand())
 

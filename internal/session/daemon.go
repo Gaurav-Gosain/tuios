@@ -15,7 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 )
 
 // Daemon manages the persistent TUIOS server process.
@@ -44,6 +46,19 @@ type Daemon struct {
 	// events is the control-plane event hub backing the subscribe verb's event
 	// stream and the wait-for verb's blocking waits.
 	events *eventHub
+
+	// hooks is the session-side hook table: the commands the daemon runs when a
+	// window, a workspace or an agent state changes. It is nil when no hooks are
+	// configured, so a daemon without hooks pays one nil check per event. See
+	// daemon_hooks.go.
+	hooks *hooks.Manager
+	// agentAlerts is the [notifications.agent] policy the after-agent-state hook
+	// is gated by. It is the same policy the client applies to the dock message
+	// and the sound, read from the same config table.
+	agentAlerts config.AgentAlertPolicy
+	// agentHooks holds the settle timers for after-agent-state. Nil when hooks
+	// are not loaded.
+	agentHooks *agentHookGate
 
 	// federation holds the outbound links to the hosts named in config. It is
 	// nil when no hosts are configured, which is the default, and every reader
@@ -253,6 +268,15 @@ type DaemonConfig struct {
 	// default, means the daemon holds no links and every federation verb reports
 	// an empty table.
 	Hosts []federation.Host
+	// Hooks is the [hooks] table from the user config. Empty, the default, means
+	// the daemon fires no hooks and a detached session runs no commands.
+	Hooks map[string]any
+	// AgentAlerts is the [notifications.agent] table. The after-agent-state hook
+	// is gated by it, exactly as it is in the client.
+	AgentAlerts *config.AgentAlertsConfig
+	// AgentHookCommand is [notifications.agent].command, the shorthand spelling
+	// of an after-agent-state hook.
+	AgentHookCommand string
 }
 
 // NewDaemon creates a new daemon instance.
@@ -278,6 +302,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
+	d.loadHooks(cfg)
 
 	// A daemon with no watcher is a working daemon: every transcript join falls
 	// back to reading on its pane's own output. So the error is dropped rather
@@ -393,6 +418,10 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				}
 			}
 		}
+		// Hooks run before the fan-out because a hook is a side effect of the
+		// fact and a subscriber is a reader of it. Fire itself only starts
+		// goroutines, so nothing here waits on a command.
+		d.fireSessionHooks(s, ev)
 		d.events.publish(streamEvent{
 			Type:      ev.Type,
 			Session:   name,
@@ -578,6 +607,17 @@ func (d *Daemon) shutdown() error {
 		// daemon that owns it.
 		if d.federation != nil {
 			d.federation.Stop()
+		}
+
+		// Parked agent-state firings are dropped and the hooks already running
+		// are given a moment to finish. Hooks run in their own goroutines, which
+		// the process exit would otherwise discard unrun, and the timeout is
+		// what keeps a hook that never returns from holding the daemon open.
+		if d.agentHooks != nil {
+			d.agentHooks.stop()
+		}
+		if d.hooks != nil {
+			d.hooks.WaitTimeout(hookDrainTimeout)
 		}
 
 		d.clientsMu.Lock()

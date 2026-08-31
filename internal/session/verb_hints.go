@@ -67,6 +67,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbUnknownVerb, "No such verb. The hint carries the closest match and the full verb list."},
 	{ErrVerbInvalidParams, "A parameter was missing, malformed, or outside its accepted set. The hint names the parameter."},
 	{ErrVerbSessionNotFound, "The named session does not exist. The hint lists the sessions that do."},
+	{ErrVerbSessionExists, "new-session was given a name the daemon already holds. Choose another name or omit it to have one generated."},
 	{ErrVerbWindowNotFound, "The window target did not resolve. The hint lists the addressable windows."},
 	{ErrVerbNoWindows, "The session exists but holds no windows to act on."},
 	{ErrVerbPTYNotFound, "The target window has no live PTY. Its shell has already exited."},

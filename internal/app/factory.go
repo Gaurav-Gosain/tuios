@@ -232,6 +232,9 @@ func NewOS(opts OSOptions) *OS {
 	// per-connection server paths, race other sessions). Loading is now pure and
 	// has no package-global side effects, so the fallback is safe too.
 	os.HookManager = hooks.NewManager()
+	// One log line per firing, at the same verbosity that records INFO logs. It
+	// is what answers "did my hook run at all".
+	hooks.SetVerbose(verboseLog)
 	cfg := opts.UserConfig
 	if cfg == nil {
 		if loaded, err := config.LoadUserConfig(); err == nil {

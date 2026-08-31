@@ -381,11 +381,15 @@ func runWebServer() error {
 // config, mirroring what runDaemon does in cmd/tuios so a daemon autostarted by
 // the web server behaves like one started by `tuios daemon`.
 func daemonConfigFrom(userConfig *config.UserConfig) *session.DaemonConfig {
-	return &session.DaemonConfig{
+	cfg := &session.DaemonConfig{
 		AgentAutoDetect:     userConfig.Daemon.AgentAutoDetect,
 		AgentDetectInterval: time.Duration(userConfig.Daemon.AgentDetectSeconds) * time.Second,
 		AgentBinaries:       userConfig.Daemon.AgentBinaries,
 	}
+	// The daemon runs the hooks for the facts it owns, and a browser client
+	// leaves them to it. Without this they would stop running here.
+	cfg.ApplyUserHooks(userConfig)
+	return cfg
 }
 
 // isLoopbackHost reports whether a bind address keeps traffic inside this
