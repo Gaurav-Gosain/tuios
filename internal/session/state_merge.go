@@ -88,6 +88,25 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		}
 	}
 
+	// The custom-layout flags are unioned on the same terms and for the same
+	// reason. A client only holds an entry for a workspace it has been told about
+	// or arranged itself, so replacing the set would drop the flag for every
+	// workspace the pushing client never heard of - the failure the field exists
+	// to stop, one layer lower down. The incoming value wins where both sides hold
+	// one, including an incoming false: a client that moved a pane off a workspace
+	// clears the flag there, and that is news. A push with no entry for a
+	// workspace is saying nothing about it and keeps what the session holds.
+	if len(canonical.WorkspaceHasCustom) > 0 {
+		if incoming.WorkspaceHasCustom == nil {
+			incoming.WorkspaceHasCustom = make(map[int]bool, len(canonical.WorkspaceHasCustom))
+		}
+		for ws, custom := range canonical.WorkspaceHasCustom {
+			if _, ok := incoming.WorkspaceHasCustom[ws]; !ok {
+				incoming.WorkspaceHasCustom[ws] = custom
+			}
+		}
+	}
+
 	cwds := make(map[string]string, len(canonical.Windows))
 	// The foreground command is read daemon-side on the detector's poll and no
 	// client ever sends it, so canonical is always the truth: carrying it over by
@@ -191,6 +210,14 @@ func reconcileStale(incoming, canonical *SessionState, hasLivePTY func(ptyID str
 	if canonical.CurrentWorkspace != incoming.CurrentWorkspace {
 		incoming.ScrollStrip = canonical.ScrollStrip
 	}
+
+	// WorkspaceHasCustom is deliberately not taken from canonical here, for the
+	// reason spelled out for the master ratio below: the daemon never marks a
+	// layout custom and never clears one, so canonical is not newer there by
+	// construction, and a stale snapshot still reports a flag the client itself
+	// just set correctly. What a stale snapshot can do is omit an entry it never
+	// learned, and the union in retainDaemonExclusive, which runs on this path
+	// too, is what stops that.
 
 	// WorkspaceMasterRatio is deliberately not taken from canonical here. The
 	// daemon never moves a master ratio - no headless operation touches it - so

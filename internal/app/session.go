@@ -139,6 +139,18 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	if len(state.WorkspaceMasterRatio) == 0 {
 		state.WorkspaceMasterRatio = nil
 	}
+	// Which workspaces hold a layout a user arranged, for the reason the ratios
+	// above travel: a peer that has never visited a workspace has no entry for it,
+	// reads that as the tiler owning the workspace, and retiles over a layout
+	// somebody arranged by hand. The rectangles are already carried on the windows
+	// themselves; see SessionState.WorkspaceHasCustom. Written straight from the
+	// map with no live value folded in, because MarkLayoutCustom writes the flag
+	// the moment the user resizes rather than on the way out of the workspace.
+	state.WorkspaceHasCustom = make(map[int]bool, len(m.WorkspaceHasCustom))
+	maps.Copy(state.WorkspaceHasCustom, m.WorkspaceHasCustom)
+	if len(state.WorkspaceHasCustom) == 0 {
+		state.WorkspaceHasCustom = nil
+	}
 	// The rail travels with the session it is drawn beside. See
 	// SessionState.SidebarWidth.
 	state.SidebarWidth = m.SidebarWidthPref
@@ -217,6 +229,10 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// with: they belong to the session being left.
 	m.WorkspaceMasterRatio = make(map[int]float64, len(state.WorkspaceMasterRatio))
 	m.adoptWorkspaceMasterRatio(state)
+	// Same for the custom-layout flags, and for the same reason: they belong to
+	// the session being left.
+	m.WorkspaceHasCustom = make(map[int]bool, len(state.WorkspaceHasCustom))
+	m.adoptWorkspaceHasCustom(state)
 	m.adoptSidebarState(state)
 	// The pane geometry inputs are the session's, adopted before the layout
 	// below is computed so a joining client tiles with the session's arithmetic
@@ -575,6 +591,7 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	m.MasterRatio = state.MasterRatio
 	m.AutoTiling = state.AutoTiling
 	m.adoptWorkspaceMasterRatio(state)
+	m.adoptWorkspaceHasCustom(state)
 
 	// Update focused window index
 	m.FocusedWindow = -1
@@ -786,10 +803,25 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	// the layout, which is what zoomRetile says. One settlement for both, so a
 	// pane the unzoom returns to the tiling is told the tiled size once instead
 	// of being told the pre-zoom size on the way there.
+
+	// A workspace switch adopted from a sync retiles for the border allowance (see
+	// workspaceChanged above), and a workspace holding a custom layout is the one
+	// case where that is wrong: the rectangles a user arranged arrive in this same
+	// sync, and the retile replaces them with the tiler's. SwitchToWorkspace
+	// already gives a local switch the other answer - settle the border mode, move
+	// nothing - and this gives that answer to the switch that arrives over the
+	// wire. Without it the flag reaching this client saves nothing: the client
+	// whose user pressed the key keeps the layout and every peer retiles it away.
+	workspaceRetile := workspaceChanged
+	if workspaceRetile && m.AutoTiling && m.WorkspaceHasCustom[m.CurrentWorkspace] {
+		workspaceRetile = false
+		m.settleBorderMode(m.CurrentWorkspace)
+	}
+
 	m.settleSizes(func() {
 		zoomRetile := m.applyZoomState(unzoomed)
 		if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 &&
-			(geometryChanged || workspaceChanged || zoomRetile || m.tiledLayoutStale()) {
+			(geometryChanged || workspaceRetile || zoomRetile || m.tiledLayoutStale()) {
 			m.TileAllWindows()
 		}
 	})
@@ -814,6 +846,23 @@ func (m *OS) adoptWorkspaceMasterRatio(state *session.SessionState) {
 		m.WorkspaceMasterRatio = make(map[int]float64, len(state.WorkspaceMasterRatio))
 	}
 	maps.Copy(m.WorkspaceMasterRatio, state.WorkspaceMasterRatio)
+}
+
+// adoptWorkspaceHasCustom takes the session's custom-layout flags onto this
+// client.
+//
+// Merged rather than replacing the map, exactly as the ratios beside it are: a
+// state that says nothing about a workspace - an older peer, or a client that
+// never heard of it - leaves what this client holds alone, which is what makes
+// the field additive and what lets a workspace nobody has an entry for still
+// mean "the tiler owns it", as it did before this existed. An entry that is
+// present wins, false included, because a client that stopped a workspace being
+// custom is saying so.
+func (m *OS) adoptWorkspaceHasCustom(state *session.SessionState) {
+	if m.WorkspaceHasCustom == nil {
+		m.WorkspaceHasCustom = make(map[int]bool, len(state.WorkspaceHasCustom))
+	}
+	maps.Copy(m.WorkspaceHasCustom, state.WorkspaceHasCustom)
 }
 
 // adoptSidebarState takes the rail as the session has it. A zero width is a
