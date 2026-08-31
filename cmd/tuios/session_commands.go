@@ -19,6 +19,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"golang.org/x/term"
 )
 
 func runAttach(sessionName string, createIfMissing bool) error {
@@ -904,6 +905,11 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 	daemonCfg := &session.DaemonConfig{
 		Version:            version,
 		DisableAutoRestore: disableAutoRestore,
+		// A terminal on stderr is what makes this daemon a foreground one for
+		// logging. `tuios daemon` is also the command startDaemonBackground
+		// spawns for a detached daemon, with stderr pointed at the log file, so
+		// echoing there would write every line to that file twice.
+		Foreground: term.IsTerminal(int(os.Stderr.Fd())),
 	}
 
 	if userConfig, err := config.LoadUserConfig(); err == nil {
@@ -915,6 +921,10 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 		daemonCfg.AgentBinaries = userConfig.Daemon.AgentBinaries
 		daemonCfg.Hosts = hostsFromConfig(userConfig)
 	}
+
+	// Install the log sinks before the daemon is built. NewDaemon already logs,
+	// and the level is settled by now, so the file header names the right one.
+	session.InstallDaemonLogging(daemonCfg.Foreground, daemonCfg.LogFile)
 
 	daemon := session.NewDaemon(daemonCfg)
 

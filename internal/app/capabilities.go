@@ -5,12 +5,15 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/adrg/xdg"
 )
 
 // HostCapabilities holds information about the host terminal's capabilities.
@@ -130,17 +133,42 @@ func DetectHostCapabilities() *HostCapabilities {
 	// Apply environment overrides
 	applyEnvironmentOverrides(caps)
 
-	// Debug output if requested - writes to /tmp/tuios_caps.log
+	// Debug output if requested. See capabilitiesDebugPath.
 	if os.Getenv("TUIOS_DEBUG_CAPS") == "1" {
-		if f, err := os.OpenFile("/tmp/tuios_caps.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644); err == nil {
-			_, _ = fmt.Fprintf(f, "Terminal: %s\nKitty: %v\nSixel: %v\nTrueColor: %v\nCell: %dx%d\nPixel: %dx%d\n",
-				caps.TerminalName, caps.KittyGraphics, caps.SixelGraphics, caps.TrueColor,
-				caps.CellWidth, caps.CellHeight, caps.PixelWidth, caps.PixelHeight)
-			_ = f.Close()
-		}
+		writeCapabilitiesDebug(caps)
 	}
 
 	return caps
+}
+
+// capabilitiesDebugPath is where TUIOS_DEBUG_CAPS writes.
+//
+// It used to be a fixed /tmp/tuios_caps.log, which on a shared machine is one
+// name every user races for and anyone can read. The state directory is
+// per-user, and the pid keeps two clients on one machine apart.
+func capabilitiesDebugPath() string {
+	name := fmt.Sprintf("tuios-caps.%d.log", os.Getpid())
+	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" {
+		return filepath.Join(dir, "tuios", name)
+	}
+	return filepath.Join(xdg.StateHome, "tuios", name)
+}
+
+// writeCapabilitiesDebug records what the probe found. A failure is silent:
+// this is a diagnostic, and stdout is the TUI.
+func writeCapabilitiesDebug(caps *HostCapabilities) {
+	path := capabilitiesDebugPath()
+	if dir := filepath.Dir(path); dir != "" {
+		_ = os.MkdirAll(dir, 0o700)
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return
+	}
+	_, _ = fmt.Fprintf(f, "Terminal: %s\nKitty: %v\nSixel: %v\nTrueColor: %v\nCell: %dx%d\nPixel: %dx%d\n",
+		caps.TerminalName, caps.KittyGraphics, caps.SixelGraphics, caps.TrueColor,
+		caps.CellWidth, caps.CellHeight, caps.PixelWidth, caps.PixelHeight)
+	_ = f.Close()
 }
 
 func detectTerminalName(caps *HostCapabilities) {

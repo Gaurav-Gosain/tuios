@@ -9,6 +9,10 @@ import (
 	"github.com/google/uuid"
 )
 
+// optionDaemonLogLevel is the one option path that describes the daemon process
+// rather than a session. See verbSetOption.
+const optionDaemonLogLevel = "daemon.log_level"
+
 // This file makes the configuration surface reachable and, more to the point,
 // findable. set-option would take any string at all: a misspelled path was
 // recorded, reported as set, and did nothing, and there was no verb that would
@@ -156,7 +160,7 @@ func resolveOptionPath(key string) (config.Option, string, bool) {
 // does not know is refused, but the recorded value is kept for the paths it
 // does, because the record is what get-option reads and what a client picks up
 // when it attaches later.
-func (d *Daemon) verbSetOption(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSetOption(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Key     string `json:"key"`
@@ -203,6 +207,29 @@ func (d *Daemon) verbSetOption(_ *connState, params json.RawMessage) (any, *verb
 			hint.DidYouMean = closestMatch(p.Value, theme.AvailableThemes())
 		}
 		return nil, hintedVerbError(ErrVerbInvalidParams, err.Error(), hint)
+	}
+
+	// daemon.log_level names a property of this daemon process, not of one
+	// session, so it is applied here and does not go on to the session record.
+	//
+	// The level used to be read once at startup, which made the only way to look
+	// at a fault in more detail a daemon restart, and a restart is what ends the
+	// run the fault was in. Now a caller raises the level, reproduces, reads
+	// `tuios logs -f`, and lowers it again. It answers with no session because a
+	// daemon serving none can still be the thing that is wrong.
+	if path == optionDaemonLogLevel {
+		previous := GetDebugLevel()
+		SetDebugLevel(ParseDebugLevel(p.Value))
+		LogBasic("Client %s set the log level to %s (was %s)", cs.clientID, GetDebugLevel(), previous)
+		return map[string]any{
+			"type":     "option_set",
+			"key":      path,
+			"value":    p.Value,
+			"applied":  true,
+			"scope":    "daemon",
+			"previous": previous.String(),
+			"reason":   "the log level applies to the daemon at once. It is not saved to the config file",
+		}, nil
 	}
 
 	sess, verr := d.resolveVerbSession(p.Session)
