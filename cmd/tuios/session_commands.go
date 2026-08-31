@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -914,7 +915,15 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 		daemonCfg.AgentDetectInterval = time.Duration(userConfig.Daemon.AgentDetectSeconds) * time.Second
 		daemonCfg.AgentBinaries = userConfig.Daemon.AgentBinaries
 		daemonCfg.Hosts = hostsFromConfig(userConfig)
+		// The daemon runs the hooks for the facts it owns, so a session with
+		// nobody attached still runs them. The client keeps the hooks that need
+		// a terminal.
+		daemonCfg.ApplyUserHooks(userConfig)
 	}
+
+	// One log line per firing, at the level that already logs connections. It
+	// is what answers "did my hook run at all".
+	hooks.SetVerbose(session.GetDebugLevel() >= session.DebugBasic)
 
 	daemon := session.NewDaemon(daemonCfg)
 

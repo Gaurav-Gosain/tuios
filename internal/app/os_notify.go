@@ -6,6 +6,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // Log adds a new log message to the log buffer.
@@ -76,12 +77,56 @@ func (m *OS) FireHook(event hooks.Event, windowID, windowName string) {
 	})
 }
 
+// sessionSideHooks are the events the daemon fires for a daemon session. The
+// set is the daemon's own list rather than a copy, so the two sides cannot
+// disagree about which events each owns.
+var sessionSideHooks = func() map[hooks.Event]bool {
+	set := make(map[hooks.Event]bool)
+	for _, ev := range session.SessionSideHookEvents() {
+		set[ev] = true
+	}
+	return set
+}()
+
+// firesHere reports whether this client runs the command for an event.
+//
+// A daemon session's window set, focus, workspace and agent states belong to the
+// daemon, and the daemon fires their hooks. This client stays silent on those,
+// which is what makes three attached clients produce one firing rather than
+// three, and what makes the same hook fire when nobody is attached at all. A
+// standalone tuios has no daemon, so it fires everything itself.
+func (m *OS) firesHere(event hooks.Event) bool {
+	return !m.IsDaemonSession || !sessionSideHooks[event]
+}
+
+// HookRows reports what this client's hook table holds and what each command
+// last did, for the list-hooks verb.
+//
+// It reports only the hooks this client fires. A daemon session's client still
+// holds the session-side commands in its table, and listing one here would show
+// it with no runs, which reads as "your hook never fired" when the daemon fired
+// it. The daemon drops the other half of the split for the same reason.
+func (m *OS) HookRows() []map[string]any {
+	rows := m.HookManager.Rows("client")
+	mine := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		name, _ := row["event"].(string)
+		if m.firesHere(hooks.Event(name)) {
+			mine = append(mine, row)
+		}
+	}
+	return mine
+}
+
 // FireHookContext fires a hook event with an event-specific context. The
 // workspace and session are filled in here so no caller has to remember them,
 // and so every event carries them; leaving SessionID unset was why hook scripts
 // could not tell which session invoked them.
+//
+// The dock is notified either way. A dock component watching an event is drawn
+// by this client and has to refresh in it, whichever side ran the command.
 func (m *OS) FireHookContext(event hooks.Event, ctx hooks.Context) {
-	if m.HookManager == nil {
+	if m.HookManager == nil || !m.firesHere(event) {
 		m.NotifyDockEvent(string(event))
 		return
 	}

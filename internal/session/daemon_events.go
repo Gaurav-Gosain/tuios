@@ -87,6 +87,22 @@ type SessionEvent struct {
 	Enabled   bool
 	State     string
 	Workspace int
+
+	// The fields below carry everything the hook dispatcher needs, so it can
+	// build a hook's environment from the event alone. That is not a
+	// convenience: the sink runs with the session's state lock held, so a
+	// dispatcher that read the session back would deadlock it.
+	//
+	// They are unexported so they cannot reach the wire. The subscribe stream
+	// reports the state a session arrived at, and these say what it left, what a
+	// window that is already gone was called, and which agent a transition was
+	// about.
+	hookTitle         string
+	hookWorkspace     int
+	hookPrevState     string
+	hookPrevWorkspace int
+	hookHarness       string
+	hookMessage       string
 }
 
 // eventFilter selects which events a subscriber receives. A zero value matches

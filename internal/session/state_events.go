@@ -26,6 +26,11 @@ type lifecycleWindow struct {
 	workspace  int
 	minimized  bool
 	agentState AgentState
+	// agentHarness and agentMessage ride the snapshot only so the hook a
+	// transition raises can name them. The lifecycle events themselves do not
+	// report them and neither field alone raises an event.
+	agentHarness string
+	agentMessage string
 }
 
 // lifecycleSnapshot is a copy of the lifecycle-relevant parts of a SessionState.
@@ -52,13 +57,15 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 		w := &state.Windows[i]
 		snap.index[w.ID] = len(snap.windows)
 		snap.windows = append(snap.windows, lifecycleWindow{
-			id:         w.ID,
-			ptyID:      w.PTYID,
-			title:      w.Title,
-			customName: w.CustomName,
-			workspace:  w.Workspace,
-			minimized:  w.Minimized,
-			agentState: w.AgentState,
+			id:           w.ID,
+			ptyID:        w.PTYID,
+			title:        w.Title,
+			customName:   w.CustomName,
+			workspace:    w.Workspace,
+			minimized:    w.Minimized,
+			agentState:   w.AgentState,
+			agentHarness: w.AgentHarness,
+			agentMessage: w.AgentMessage,
 		})
 	}
 	return snap
@@ -78,9 +85,11 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 		w := &before.windows[i]
 		if _, ok := after.index[w.id]; !ok {
 			events = append(events, SessionEvent{
-				Type:   EventWindowClosed,
-				Window: w.id,
-				PTYID:  w.ptyID,
+				Type:          EventWindowClosed,
+				Window:        w.id,
+				PTYID:         w.ptyID,
+				hookTitle:     w.displayTitle(),
+				hookWorkspace: w.workspace,
 			})
 		}
 	}
@@ -89,10 +98,12 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 		w := &after.windows[i]
 		if _, ok := before.index[w.id]; !ok {
 			events = append(events, SessionEvent{
-				Type:   EventWindowCreated,
-				Window: w.id,
-				PTYID:  w.ptyID,
-				Title:  w.displayTitle(),
+				Type:          EventWindowCreated,
+				Window:        w.id,
+				PTYID:         w.ptyID,
+				Title:         w.displayTitle(),
+				hookTitle:     w.displayTitle(),
+				hookWorkspace: w.workspace,
 			})
 		}
 	}
@@ -142,18 +153,24 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 		// ceasing to be an agent says "none" rather than vanishing silently.
 		if w.agentState != prev.agentState {
 			events = append(events, SessionEvent{
-				Type:   EventAgentState,
-				Window: w.id,
-				PTYID:  w.ptyID,
-				State:  w.agentState.Name(),
+				Type:          EventAgentState,
+				Window:        w.id,
+				PTYID:         w.ptyID,
+				State:         w.agentState.Name(),
+				hookTitle:     w.displayTitle(),
+				hookWorkspace: w.workspace,
+				hookPrevState: prev.agentState.Name(),
+				hookHarness:   w.agentHarness,
+				hookMessage:   w.agentMessage,
 			})
 		}
 	}
 
 	if after.workspace != before.workspace && after.workspace > 0 {
 		events = append(events, SessionEvent{
-			Type:      EventWorkspaceSwitched,
-			Workspace: after.workspace,
+			Type:              EventWorkspaceSwitched,
+			Workspace:         after.workspace,
+			hookPrevWorkspace: before.workspace,
 		})
 	}
 
@@ -164,6 +181,8 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 		ev := SessionEvent{Type: EventWindowFocused, Window: after.focused}
 		if idx, ok := after.index[after.focused]; ok {
 			ev.PTYID = after.windows[idx].ptyID
+			ev.hookTitle = after.windows[idx].displayTitle()
+			ev.hookWorkspace = after.windows[idx].workspace
 		}
 		events = append(events, ev)
 	}

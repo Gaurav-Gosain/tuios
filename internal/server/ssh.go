@@ -121,9 +121,17 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		hostKeyPath = filepath.Join(homeDir, ".ssh", "tuios_host_key")
 	}
 
-	// If using daemon mode, ensure daemon is running
+	// If using daemon mode, ensure daemon is running.
+	//
+	// The hook tables go with it. This daemon runs in this process, and a served
+	// client leaves the session-side events to it, so a daemon started here
+	// without them would stop running those commands rather than run them twice.
 	if !cfg.Ephemeral {
-		if err := session.EnsureDaemonRunning(cfg.Version); err != nil {
+		daemonCfg := &session.DaemonConfig{}
+		if userConfig, err := config.LoadUserConfig(); err == nil {
+			daemonCfg.ApplyUserHooks(userConfig)
+		}
+		if err := session.EnsureDaemonRunningWith(cfg.Version, daemonCfg); err != nil {
 			log.Printf("Warning: Failed to start daemon, falling back to ephemeral mode: %v", err)
 			cfg.Ephemeral = true
 		}
