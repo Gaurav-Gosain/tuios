@@ -50,6 +50,17 @@ settled across a session rather than kept per client: change one on any client
 and every client attached to that session follows. The purely visual settings -
 theme, border style, glyphs, title position, dimming - stay per client.
 
+### Resizing a pane by percentage
+
+The focused pane can be sized to a percentage of the content region (width) or
+of the usable height (height) with the `resize_width_N` and `resize_height_N`
+actions, `N` in 10..90. Under the layout prefix (`Ctrl+B L`), the digits `5`
+through `9` set the width to 50-90% and `Shift+5` through `Shift+9` the height;
+every percentage is a named keybind, so any of them can be rebound or removed in
+`[keybindings.layout_prefix]`. The layout still applies its own constraints -
+minimum pane size, gaps, and the pane's neighbours - so the resulting size is
+the requested percentage wherever the layout allows it.
+
 ## Scrolling Layout
 
 The scrolling layout is modeled on the niri window manager. Windows are arranged

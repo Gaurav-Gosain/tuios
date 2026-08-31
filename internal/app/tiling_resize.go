@@ -168,6 +168,41 @@ func (m *OS) ResizeFocusedWindowHeightTop(deltaPixels int) {
 	m.AdjustTilingNeighbors(focusedWindow, newX, newY, newWidth, newHeight)
 }
 
+// SetFocusedWindowWidthPercent resizes the focused window so its width is pct
+// percent of the content region, driving the same edge logic the plain width
+// keys use. It is what issue #29 asks for: a window sized by percentage rather
+// than by a fixed number of columns. The percent is clamped to 10..100.
+func (m *OS) SetFocusedWindowWidthPercent(pct int) {
+	if pct < 10 || pct > 100 || !m.AutoTiling || m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
+		return
+	}
+	w := m.Windows[m.FocusedWindow]
+	if w.Workspace != m.CurrentWorkspace || w.Minimized {
+		return
+	}
+	target := m.GetContentWidth() * pct / 100
+	if delta := target - w.Width; delta != 0 {
+		m.ResizeFocusedWindowWidth(delta)
+	}
+}
+
+// SetFocusedWindowHeightPercent resizes the focused window so its height is
+// pct percent of the usable height, the vertical counterpart of
+// SetFocusedWindowWidthPercent. The percent is clamped to 10..100.
+func (m *OS) SetFocusedWindowHeightPercent(pct int) {
+	if pct < 10 || pct > 100 || !m.AutoTiling || m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
+		return
+	}
+	w := m.Windows[m.FocusedWindow]
+	if w.Workspace != m.CurrentWorkspace || w.Minimized {
+		return
+	}
+	target := m.GetUsableHeight() * pct / 100
+	if delta := target - w.Height; delta != 0 {
+		m.ResizeFocusedWindowHeight(delta)
+	}
+}
+
 // resizeOp defines how a window should be resized during tiling adjustments
 type resizeOp func(m *OS, win *terminal.Window, width, height int)
 

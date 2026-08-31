@@ -1,6 +1,7 @@
 package input
 
 import (
+	"fmt"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -123,6 +124,15 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("resize_master_grow_left", handleResizeMasterGrowLeft)
 	d.Register("resize_height_shrink_top", handleResizeHeightShrinkTop)
 	d.Register("resize_height_grow_top", handleResizeHeightGrowTop)
+
+	// Percentage resizing of the focused pane (issue #29): one action per
+	// ten-point step, so a user can bind exactly the percentages they use.
+	// resize_width_N sizes the width to N% of the content region,
+	// resize_height_N the height to N% of the usable height.
+	for pct := 10; pct <= 90; pct += 10 {
+		d.Register(fmt.Sprintf("resize_width_%d", pct), makeResizeWidthPercentHandler(pct))
+		d.Register(fmt.Sprintf("resize_height_%d", pct), makeResizeHeightPercentHandler(pct))
+	}
 
 	// Window actions
 	d.Register("toggle_zoom", handleToggleZoom)
@@ -519,6 +529,24 @@ func handleResizeHeightGrowTop(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 		o.ResizeFocusedWindowHeightTop(-2) // Grow from top by 2 rows (negative shrinks top edge)
 	}
 	return o, nil
+}
+
+// makeResizeWidthPercentHandler returns a handler that sizes the focused
+// window's width to pct percent of the content region (issue #29).
+func makeResizeWidthPercentHandler(pct int) ActionHandler {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		o.SetFocusedWindowWidthPercent(pct)
+		return o, nil
+	}
+}
+
+// makeResizeHeightPercentHandler returns a handler that sizes the focused
+// window's height to pct percent of the usable height (issue #29).
+func makeResizeHeightPercentHandler(pct int) ActionHandler {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		o.SetFocusedWindowHeightPercent(pct)
+		return o, nil
+	}
 }
 
 // ============================================================================
