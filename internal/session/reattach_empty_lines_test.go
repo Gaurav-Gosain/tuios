@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,28 +22,56 @@ import (
 // snapshot (ApplyTerminalState) and then the stream resumes from the position
 // the snapshot ends at. The client's screen must converge on the daemon's.
 
+// lockedClient wraps a client emulator so the live-stream goroutine that
+// writes it and the test body that reads it cannot race. The race detector
+// is on in the project's CI, and a goroutine writing an emulator the test
+// reads through emulatorText without a lock is exactly the report it makes.
+type lockedClient struct {
+	mu   sync.Mutex
+	term *vt.Emulator
+}
+
+func newLockedClient(w, h int) *lockedClient {
+	return &lockedClient{term: vt.NewEmulator(w, h)}
+}
+
+// Write applies stream bytes under the lock.
+func (c *lockedClient) Write(data []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, _ = c.term.Write(data)
+}
+
+// Text renders the visible grid under the lock.
+func (c *lockedClient) Text() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return emulatorText(c.term)
+}
+
+// Close closes the emulator.
+func (c *lockedClient) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_ = c.term.Close()
+}
+
 // newEmulatedPTY builds a PTY with a live emulator and its vtWriter goroutine,
-// but no real shell: tests feed it bytes directly.
+// but no real shell: tests feed it bytes directly. The vtWriteChan is small so
+// the emulator can be pushed behind the ring with a test-sized burst; the real
+// daemon's channel is 256 x 16KB chunks, which can hold 4MB of unprocessed
+// output.
 func newEmulatedPTY(t *testing.T, w, h int) *PTY {
 	t.Helper()
 	p := &PTY{
 		ID:           "ptytest-emulated",
 		subscribers:  make(map[string]*ptySubscriber),
 		outputBuffer: make([]byte, 64*1024),
-		// Small vtWriteChan: the real daemon's is 256 x 16KB chunks, which can
-		// hold 4MB of unprocessed output and lets the emulator fall 4MB behind
-		// the ring. With a small channel the same "emulator behind the ring"
-		// condition is reachable with a test-sized burst.
-		vtWriteChan: make(chan vtChunk, 8),
-		ctx:         context.Background(),
-		terminal:    vt.NewEmulator(w, h),
+		vtWriteChan:  make(chan vtChunk, 8),
+		ctx:          context.Background(),
+		terminal:     vt.NewEmulator(w, h),
 	}
 	go p.vtWriter()
-	t.Cleanup(func() {
-		p.outputMu.Lock()
-		defer p.outputMu.Unlock()
-		p.vtWriteChan <- vtChunk{} // never used; closes nothing
-	})
 	return p
 }
 
@@ -134,29 +163,30 @@ func topRepaint(base int) string {
 // reattach rebuilds a client emulator from the daemon's snapshot, resumes the
 // stream from the snapshot's position, and keeps applying the live stream to
 // the client emulator, exactly what restoreTerminalContent plus the subscribe
-// handler (WriteOutputAsync) do. It returns the client and the subscription.
-func reattachFrom(p *PTY, clientID string) (*vt.Emulator, <-chan ptyChunk) {
+// handler (WriteOutputAsync) do. It returns the locked client and the
+// subscription channel; the caller owns closing the client and unsubscribing.
+func reattachFrom(p *PTY, clientID string) (*lockedClient, <-chan ptyChunk) {
 	state := p.GetTerminalState(0, 0)
 	if state == nil {
 		return nil, nil
 	}
-	client := vt.NewEmulator(state.Width, state.Height)
-	ApplyTerminalState(client, state)
+	client := newLockedClient(state.Width, state.Height)
+	client.mu.Lock()
+	ApplyTerminalState(client.term, state)
+	client.mu.Unlock()
 
-	// The daemon-side path a reattaching client takes: it tells the daemon it
-	// restored a snapshot, so a rolled catch-up replays on top of it instead
-	// of clearing it (issue #123).
 	ch := p.SubscribeFromSnapshot(clientID, state.Seq)
 	replay := drain(ch)
 	if len(replay) > 0 {
-		_, _ = client.Write(replay)
+		client.Write(replay)
 	}
 	// The live stream: every chunk the daemon broadcasts after the replay is
-	// applied to the client, as the client's output handler does.
+	// applied to the client, as the client's output handler does. All writes
+	// go through the lock the test reads under.
 	go func() {
 		for chunk := range ch {
 			if len(chunk.data) > 0 {
-				_, _ = client.Write(chunk.data)
+				client.Write(chunk.data)
 			}
 		}
 	}()
@@ -175,12 +205,12 @@ func TestReattachAfterTopDrewOnce(t *testing.T) {
 	if client == nil {
 		t.Fatal("reattach produced no client emulator")
 	}
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 	defer func() { _ = p.Unsubscribe("repro-quiet") }()
 	_ = ch
 
 	want := normalizeText(p.daemonText())
-	got := normalizeText(emulatorText(client))
+	got := normalizeText(client.Text())
 	if want != got {
 		t.Errorf("quiet reattach diverged (issue #123):\n--- daemon ---\n%s\n--- client ---\n%s", want, got)
 	}
@@ -206,7 +236,7 @@ func TestReattachWhileTopRedraws(t *testing.T) {
 	if client == nil {
 		t.Fatal("reattach produced no client emulator")
 	}
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 	defer func() { _ = p.Unsubscribe("repro-moving") }()
 
 	// More repaints after the resume, then let everything settle.
@@ -220,14 +250,14 @@ func TestReattachWhileTopRedraws(t *testing.T) {
 	// up to the daemon's latest repaint before comparing.
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if strings.Contains(emulatorText(client), "2042 seba     bash") {
+		if strings.Contains(client.Text(), "2042 seba     bash") {
 			break
 		}
 		time.Sleep(2 * time.Millisecond)
 	}
 
 	want := normalizeText(p.daemonText())
-	got := normalizeText(emulatorText(client))
+	got := normalizeText(client.Text())
 	if want != got {
 		t.Errorf("reattach while top redraws diverged (issue #123):\n--- daemon ---\n%s\n--- client ---\n%s", want, got)
 	}
@@ -236,8 +266,8 @@ func TestReattachWhileTopRedraws(t *testing.T) {
 // TestReattachSnapshotWhileEmulatorBehind takes the snapshot while the daemon
 // emulator is still chewing on a large batch of output, so vtSeq trails
 // outputSeq and the catch-up ring has rolled past the snapshot's position. The
-// client must lay the snapshot down and then replay whole chunks, converging
-// on the daemon with no rows skipped, doubled, or blanked.
+// client must lay the snapshot down and then replay the tail, converging on
+// the daemon with no rows skipped, doubled, or blanked.
 func TestReattachSnapshotWhileEmulatorBehind(t *testing.T) {
 	p := newEmulatedPTY(t, 80, 24)
 	p.feed([]byte(topDraw))
@@ -245,20 +275,29 @@ func TestReattachSnapshotWhileEmulatorBehind(t *testing.T) {
 
 	// A goroutine feeds a burst of repaints batched into 16KB chunks, exactly
 	// as readOutput reads from the PTY pipe. The small vtWriteChan lets the
-	// emulator fall behind while the ring keeps rolling.
+	// emulator fall behind while the ring keeps rolling. Each chunk is copied
+	// out of the scratch buffer before it is handed to feed, because feed's
+	// emulator and subscriber paths hold the slice by reference: reusing the
+	// backing array for the next chunk would race the vtWriter and the client
+	// stream goroutines against this one.
 	feedDone := make(chan struct{})
 	go func() {
 		defer close(feedDone)
-		chunk := make([]byte, 0, 16*1024)
+		scratch := make([]byte, 0, 16*1024)
+		send := func() {
+			data := make([]byte, len(scratch))
+			copy(data, scratch)
+			p.feed(data)
+			scratch = scratch[:0]
+		}
 		for i := 0; i < 20000; i++ {
-			chunk = append(chunk, []byte(topRepaint(10000+i%3000))...)
-			if len(chunk) >= 16*1024 {
-				p.feed(chunk)
-				chunk = chunk[:0]
+			scratch = append(scratch, []byte(topRepaint(10000+i%3000))...)
+			if len(scratch) >= 16*1024 {
+				send()
 			}
 		}
-		if len(chunk) > 0 {
-			p.feed(chunk)
+		if len(scratch) > 0 {
+			send()
 		}
 	}()
 
@@ -292,21 +331,24 @@ func TestReattachSnapshotWhileEmulatorBehind(t *testing.T) {
 		t.Fatal("GetTerminalState returned nil")
 	}
 
-	client := vt.NewEmulator(state.Width, state.Height)
-	ApplyTerminalState(client, state)
+	client := newLockedClient(state.Width, state.Height)
+	client.mu.Lock()
+	ApplyTerminalState(client.term, state)
+	client.mu.Unlock()
+
 	ch := p.SubscribeFromSnapshot("repro-behind", state.Seq)
 	replay := drain(ch)
 	if len(replay) > 0 {
-		_, _ = client.Write(replay)
+		client.Write(replay)
 	}
 	go func() {
 		for chunk := range ch {
 			if len(chunk.data) > 0 {
-				_, _ = client.Write(chunk.data)
+				client.Write(chunk.data)
 			}
 		}
 	}()
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 	defer func() { _ = p.Unsubscribe("repro-behind") }()
 
 	// Let the burst finish and both sides settle on the final repaint.
@@ -314,14 +356,14 @@ func TestReattachSnapshotWhileEmulatorBehind(t *testing.T) {
 	p.fedThrough(t, "burst after reattach")
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if strings.Contains(emulatorText(client), "11999 seba     top") {
+		if strings.Contains(client.Text(), "11999 seba     top") {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 
 	want := normalizeText(p.daemonText())
-	got := normalizeText(emulatorText(client))
+	got := normalizeText(client.Text())
 	if want != got {
 		t.Errorf("reattach with emulator behind diverged (issue #123):\n--- daemon ---\n%s\n--- client ---\n%s", want, got)
 	}
@@ -330,7 +372,7 @@ func TestReattachSnapshotWhileEmulatorBehind(t *testing.T) {
 // TestReattachThenQuitAltScreen covers the reported "it still shows like this
 // even after quitting top": the client reattaches while top runs (alternate
 // screen), then the guest quits top. The shell's main screen underneath must
-// come back intact, and a fresh full-screen program must draw cleanly.
+// come back intact.
 func TestReattachThenQuitAltScreen(t *testing.T) {
 	p := newEmulatedPTY(t, 80, 24)
 	p.feed([]byte(topDraw))
@@ -340,7 +382,7 @@ func TestReattachThenQuitAltScreen(t *testing.T) {
 	if client == nil {
 		t.Fatal("reattach produced no client emulator")
 	}
-	defer func() { _ = client.Close() }()
+	defer client.Close()
 	defer func() { _ = p.Unsubscribe("repro-quit") }()
 	_ = ch
 
@@ -350,14 +392,14 @@ func TestReattachThenQuitAltScreen(t *testing.T) {
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if strings.Contains(emulatorText(client), "$") {
+		if strings.Contains(client.Text(), "$") {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 
 	want := normalizeText(p.daemonText())
-	got := normalizeText(emulatorText(client))
+	got := normalizeText(client.Text())
 	if want != got {
 		t.Errorf("client after quitting the alt screen diverged (issue #123):\n--- daemon ---\n%s\n--- client ---\n%s", want, got)
 	}

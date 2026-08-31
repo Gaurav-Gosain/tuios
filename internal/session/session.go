@@ -416,14 +416,6 @@ type PTY struct {
 	// the newest one behind the ring, which is the width the ring's first
 	// byte was laid out at.
 	resizeMarks []resizeMark
-	// chunkMarks are the stream positions each appended chunk began at,
-	// oldest first, kept while the ring still holds that byte. A rolled
-	// catch-up starts at the first chunk mark inside the ring rather than at
-	// the ring's raw start, so the replay never hands a client the tail of a
-	// chunk it never saw: that truncated tail is what painted a reattached
-	// full-screen program's rows out of step, one blank line between each
-	// line it drew (issue #123).
-	chunkMarks []int64
 
 	// Subscribers for raw output streaming.
 	subscribers   map[string]*ptySubscriber
@@ -1646,18 +1638,6 @@ func (p *PTY) subscribe(clientID string, fromSeq int64, fromSnapshot bool) <-cha
 	rolled := fromSeq > 0 && fromSeq < bufStart
 	if fromSeq > bufStart {
 		start = min(int(fromSeq-bufStart), p.outputPos)
-	} else if rolled {
-		// The ring's first byte may be the tail of a chunk whose start has
-		// rolled out: handing that tail to a client that never saw the chunk
-		// writes it against cursor and mode state that never happened, and a
-		// full-screen program's rows come back one blank line apart (issue
-		// #123). Start at the first whole chunk inside the ring instead.
-		for _, m := range p.chunkMarks {
-			if m >= bufStart {
-				start = int(m - bufStart)
-				break
-			}
-		}
 	}
 	if n := p.outputPos - start; n > 0 {
 		debugLog("[DEBUG] PTY %s: sending %d buffered bytes to new subscriber", p.ID[:8], n)
@@ -2313,15 +2293,15 @@ func styleToWire(s uv.Style, link uv.Link) StyleState {
 // styleFromWire is styleToWire read back into the emulator that will hold it.
 func styleFromWire(t vt.Terminal, ss StyleState) (uv.Style, uv.Link) {
 	return uv.Style{
-		Fg:             colorFromWire(t, ss.FgColor),
-		Bg:             colorFromWire(t, ss.BgColor),
-		UnderlineColor: colorFromWire(t, ss.UlColor),
-		Underline:      ansi.Underline(ss.Underline),
-		Attrs:          ss.Attrs,
-	}, uv.Link{
-		URL:    ss.LinkURL,
-		Params: ss.LinkParams,
-	}
+			Fg:             colorFromWire(t, ss.FgColor),
+			Bg:             colorFromWire(t, ss.BgColor),
+			UnderlineColor: colorFromWire(t, ss.UlColor),
+			Underline:      ansi.Underline(ss.Underline),
+			Attrs:          ss.Attrs,
+		}, uv.Link{
+			URL:    ss.LinkURL,
+			Params: ss.LinkParams,
+		}
 }
 
 // colorToWire encodes a cell color so the client gets back the kind of color the
@@ -2585,9 +2565,6 @@ func (p *PTY) vtWriter() {
 // appendToBuffer records a chunk in the catch-up buffer and returns the stream
 // position it ends at.
 func (p *PTY) appendToBuffer(data []byte) int64 {
-	// The position this chunk begins at, recorded before the stream advances
-	// so a rolled catch-up can pick a whole chunk as its starting point.
-	chunkStart := p.outputSeq
 	p.outputSeq += int64(len(data))
 	// Marks the ring has rolled past stop being split points, but the newest
 	// of them is still the width the ring's first byte was laid out at, so a
@@ -2595,15 +2572,6 @@ func (p *PTY) appendToBuffer(data []byte) int64 {
 	bufStart := p.outputSeq - int64(len(p.outputBuffer))
 	for len(p.resizeMarks) > 1 && p.resizeMarks[1].seq <= bufStart {
 		p.resizeMarks = p.resizeMarks[1:]
-	}
-	// Same roll for chunk marks: a mark behind the ring's first byte can
-	// never be a replay start again. The newest mark is kept only while the
-	// ring still holds its byte; a chunk bigger than the ring leaves none.
-	for len(p.chunkMarks) > 1 && p.chunkMarks[1] <= bufStart {
-		p.chunkMarks = p.chunkMarks[1:]
-	}
-	if chunkStart >= bufStart {
-		p.chunkMarks = append(p.chunkMarks, chunkStart)
 	}
 	bufLen := len(p.outputBuffer)
 	// If data is bigger than the buffer, keep only the tail
