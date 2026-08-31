@@ -631,6 +631,14 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	// A resize sent straight after a subscribe used to be broadcast to nobody,
 	// and the pane it belonged to kept the size it had before, on a client that
 	// was by then waiting to be told.
+	// A client that restored a snapshot before subscribing holds an
+	// authoritative copy of the pane's state at resume, so a rolled catch-up
+	// must replay the tail on top of it rather than clear it (issue #123).
+	if payload.FromSnapshot {
+		outputCh := pty.SubscribeFromSnapshot(cs.clientID, resume)
+		go d.streamPTYOutput(cs, pty, outputCh)
+		return nil
+	}
 	outputCh := pty.Subscribe(cs.clientID, resume)
 	go d.streamPTYOutput(cs, pty, outputCh)
 

@@ -573,12 +573,15 @@ func (c *TUIClient) ClosePTY(ptyID string) error {
 // The handler receives raw byte streams (MsgPTYOutput). fromSeq is the stream
 // position the caller's emulator has been restored to, so the daemon replays
 // only what came after it; zero leaves the resume position to the daemon.
-func (c *TUIClient) SubscribePTY(ptyID string, fromSeq int64, handler func([]byte)) error {
+// fromSnapshot tells the daemon the emulator was just laid down from an
+// authoritative snapshot ending at fromSeq, so a rolled catch-up must not
+// clear it (issue #123).
+func (c *TUIClient) SubscribePTY(ptyID string, fromSeq int64, fromSnapshot bool, handler func([]byte)) error {
 	c.ptyHandlersMu.Lock()
 	c.ptyHandlers[ptyID] = handler
 	c.ptyHandlersMu.Unlock()
 
-	msg, err := NewMessageWithCodec(MsgSubscribePTY, &SubscribePTYPayload{PTYID: ptyID, FromSeq: fromSeq}, c.codec)
+	msg, err := NewMessageWithCodec(MsgSubscribePTY, &SubscribePTYPayload{PTYID: ptyID, FromSeq: fromSeq, FromSnapshot: fromSnapshot}, c.codec)
 	if err != nil {
 		return err
 	}

@@ -416,6 +416,14 @@ type PTY struct {
 	// the newest one behind the ring, which is the width the ring's first
 	// byte was laid out at.
 	resizeMarks []resizeMark
+	// chunkMarks are the stream positions each appended chunk began at,
+	// oldest first, kept while the ring still holds that byte. A rolled
+	// catch-up starts at the first chunk mark inside the ring rather than at
+	// the ring's raw start, so the replay never hands a client the tail of a
+	// chunk it never saw: that truncated tail is what painted a reattached
+	// full-screen program's rows out of step, one blank line between each
+	// line it drew (issue #123).
+	chunkMarks []int64
 
 	// Subscribers for raw output streaming.
 	subscribers   map[string]*ptySubscriber
@@ -1601,6 +1609,21 @@ var resyncPrefix = []byte("\x1b[H\x1b[2J\x1b[3J")
 // history a second time below the paint already there, which is the stacked
 // prompts a workspace switch used to leave behind.
 func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan ptyChunk {
+	return p.subscribe(clientID, fromSeq, false)
+}
+
+// SubscribeFromSnapshot is Subscribe for a client that has just laid down an
+// authoritative snapshot of the pane ending at fromSeq. When the catch-up ring
+// has rolled past fromSeq, a plain Subscribe clears the client's screen before
+// replaying the tail so the tail paints against a known state; that clear
+// throws away the snapshot's rows, which are exactly what a full-screen program
+// drew and cannot be recovered from the ring (issue #123). A snapshot is the
+// whole of the stream up to fromSeq, so the tail replays on top of it.
+func (p *PTY) SubscribeFromSnapshot(clientID string, fromSeq int64) <-chan ptyChunk {
+	return p.subscribe(clientID, fromSeq, true)
+}
+
+func (p *PTY) subscribe(clientID string, fromSeq int64, fromSnapshot bool) <-chan ptyChunk {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
 
@@ -1623,6 +1646,18 @@ func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan ptyChunk {
 	rolled := fromSeq > 0 && fromSeq < bufStart
 	if fromSeq > bufStart {
 		start = min(int(fromSeq-bufStart), p.outputPos)
+	} else if rolled {
+		// The ring's first byte may be the tail of a chunk whose start has
+		// rolled out: handing that tail to a client that never saw the chunk
+		// writes it against cursor and mode state that never happened, and a
+		// full-screen program's rows come back one blank line apart (issue
+		// #123). Start at the first whole chunk inside the ring instead.
+		for _, m := range p.chunkMarks {
+			if m >= bufStart {
+				start = int(m - bufStart)
+				break
+			}
+		}
 	}
 	if n := p.outputPos - start; n > 0 {
 		debugLog("[DEBUG] PTY %s: sending %d buffered bytes to new subscriber", p.ID[:8], n)
@@ -1649,7 +1684,7 @@ func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan ptyChunk {
 			}
 		}
 		var prefix []byte
-		if rolled {
+		if rolled && !fromSnapshot {
 			// The client still holds the screen it drew up to fromSeq, and the
 			// bytes between there and the buffer's start are gone. Appending the
 			// tail to that screen splices two halves of the stream that never
@@ -1657,6 +1692,11 @@ func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan ptyChunk {
 			// tail is written against, so the guest's output lands wherever the
 			// old screen had left off. Clear first, so the tail repaints from a
 			// known state instead of over a stale one.
+			//
+			// A client that just restored a snapshot is not in that state: the
+			// snapshot is the whole of the stream up to fromSeq, and clearing
+			// it throws away rows a full-screen program drew that the ring no
+			// longer holds (issue #123). The tail replays on top of it.
 			prefix = resyncPrefix
 		}
 		segStart := start
@@ -2545,6 +2585,9 @@ func (p *PTY) vtWriter() {
 // appendToBuffer records a chunk in the catch-up buffer and returns the stream
 // position it ends at.
 func (p *PTY) appendToBuffer(data []byte) int64 {
+	// The position this chunk begins at, recorded before the stream advances
+	// so a rolled catch-up can pick a whole chunk as its starting point.
+	chunkStart := p.outputSeq
 	p.outputSeq += int64(len(data))
 	// Marks the ring has rolled past stop being split points, but the newest
 	// of them is still the width the ring's first byte was laid out at, so a
@@ -2552,6 +2595,15 @@ func (p *PTY) appendToBuffer(data []byte) int64 {
 	bufStart := p.outputSeq - int64(len(p.outputBuffer))
 	for len(p.resizeMarks) > 1 && p.resizeMarks[1].seq <= bufStart {
 		p.resizeMarks = p.resizeMarks[1:]
+	}
+	// Same roll for chunk marks: a mark behind the ring's first byte can
+	// never be a replay start again. The newest mark is kept only while the
+	// ring still holds its byte; a chunk bigger than the ring leaves none.
+	for len(p.chunkMarks) > 1 && p.chunkMarks[1] <= bufStart {
+		p.chunkMarks = p.chunkMarks[1:]
+	}
+	if chunkStart >= bufStart {
+		p.chunkMarks = append(p.chunkMarks, chunkStart)
 	}
 	bufLen := len(p.outputBuffer)
 	// If data is bigger than the buffer, keep only the tail

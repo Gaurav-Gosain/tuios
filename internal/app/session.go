@@ -1573,7 +1573,11 @@ func (m *OS) subscribeToPTY(window *terminal.Window, fromSeq int64) {
 	// cannot arrive with nothing listening for it.
 	m.DaemonClient.OnPTYResized(ptyID, window.ResizeFromStream)
 	window.SetStreamOwnsSize(true)
-	err := m.DaemonClient.SubscribePTY(ptyID, fromSeq, func(data []byte) {
+	// A subscribe that follows a restored snapshot is told to the daemon: a
+	// rolled catch-up must replay the tail on top of the snapshot, not clear
+	// it (issue #123). The only path that subscribes with fromSeq zero is the
+	// no-snapshot fallback, so fromSeq > 0 is exactly "a snapshot was applied".
+	err := m.DaemonClient.SubscribePTY(ptyID, fromSeq, fromSeq > 0, func(data []byte) {
 		window.WriteOutputAsync(data)
 	})
 	if err != nil {
