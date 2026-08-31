@@ -32,6 +32,10 @@ import (
 // survives a terminal with no nerd font, and the rail is wide enough to say it.
 const fileTokenCd = "cd"
 
+// fileSpoofRow is the listing's own mark for a folder the pane named and /proc
+// contradicted: the names are still there, and nothing on them can be changed.
+const fileSpoofRow = "read only: wrong folder"
+
 // sidebarFilesLabel is the footer control that puts the section on the rail,
 // and its width in cells.
 const (
@@ -96,7 +100,16 @@ func (m *OS) sidebarFileRows() []fileRowSpec {
 		return []fileRowSpec{{Note: true, Name: "loading"}}
 	}
 
-	rows := make([]fileRowSpec, 0, len(m.filesView.Entries)+2)
+	rows := make([]fileRowSpec, 0, len(m.filesView.Entries)+3)
+	if m.FileViewSpoofed() {
+		// First, above the way out, and in the warning ink. It is the one thing
+		// the section can say that changes what the rows below will do, so it
+		// cannot be a row the user has to scroll to find. It stays short
+		// because the rail has about twenty-four cells for it; the sentence
+		// that says what to do arrives when a file action is pressed. See
+		// fileSpoofRefusal.
+		rows = append(rows, fileRowSpec{Note: true, Warn: true, Name: fileSpoofRow})
+	}
 	if filepath.Dir(m.filesView.Dir) != m.filesView.Dir {
 		rows = append(rows, fileRowSpec{Kind: sidebarRowFileUp, Index: -1, Key: "..", Name: "..", Dir: true})
 	}

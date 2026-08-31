@@ -493,3 +493,23 @@ func TestTheParentRowIsNotADeleteTarget(t *testing.T) {
 		t.Errorf("the parent folder went: %v", err)
 	}
 }
+
+// TestAPasteSaysWhereItLanded: a paste raises no dialog, so its notification is
+// the only place it can name the folder it wrote into. That folder came from
+// the pane, and a paste that says only "Copied 1 file" says nothing about it.
+//
+// Negative control: drop the folder from the sentence in SidebarFilePaste and
+// this fails with the destination missing.
+func TestAPasteSaysWhereItLanded(t *testing.T) {
+	src := t.TempDir()
+	dst := t.TempDir()
+	mustWrite(t, filepath.Join(src, "report.txt"), "body")
+
+	m := filesOS(t, dst, "")
+	m.fileClip = fileClipboard{Paths: []string{filepath.Join(src, "report.txt")}}
+	runOp(t, m, m.SidebarFilePaste())
+
+	if got := lastMessage(m); !strings.Contains(got, shortenHome(dst)) {
+		t.Fatalf("the paste said %q, which does not name %q", got, shortenHome(dst))
+	}
+}

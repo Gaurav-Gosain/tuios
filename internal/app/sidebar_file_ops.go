@@ -43,6 +43,15 @@ import (
 // in flight, from before the delete, could land afterwards and put the deleted
 // name back on the rail.
 
+// fileSpoofRefusal is what the rail says when a pane named a folder the kernel
+// says its shell is not in. It is one sentence for what happened and one for
+// what to do instead, because a refusal the user cannot act on is a dead end.
+//
+// It does not say "OSC 7". The user did not print the escape and cannot see it,
+// and naming it would explain the mechanism instead of the situation.
+const fileSpoofRefusal = "This pane reports a folder it is not in. " +
+	"Open the folder in another pane to change files."
+
 // filePromptKind is what the open dialog is asking.
 type filePromptKind int
 
@@ -108,12 +117,29 @@ func (m *OS) FileConfirmOpen() bool { return m.filePrompt.Kind == filePromptConf
 
 // FileActionsOn reports whether the rail offers file actions at all.
 //
-// Two gates. The section has to be on screen, because an action on a listing
-// nobody can see has no target a person could have chosen. And the setting has
-// to allow it: a rail beside a terminal is not everyone's idea of where to
-// delete things from, so it can be switched off and the keys then do nothing.
+// Three gates. The section has to be on screen, because an action on a listing
+// nobody can see has no target a person could have chosen. The setting has to
+// allow it: a rail beside a terminal is not everyone's idea of where to delete
+// things from, so it can be switched off and the keys then do nothing. And the
+// pane has to have told the truth about where it is.
+//
+// The third gate is the narrow one. The folder came from OSC 7, which is a
+// string the pane printed, and it decides where a delete, a rename and a paste
+// land. When /proc says the pane's shell is somewhere else, the folder on
+// screen is not the folder the user is working in, and acting on it is acting
+// on a target the pane chose. When nothing can corroborate the pane, which is
+// every daemon-backed pane and every pane on a system with no /proc, this gate
+// is open and the actions are exactly what they were. See cwdIsSpoofed.
 func (m *OS) FileActionsOn() bool {
-	return m.Settings.SidebarFileActions && m.filesSectionEnabled() && m.filesView.Dir != ""
+	return m.Settings.SidebarFileActions && m.filesSectionEnabled() &&
+		m.filesView.Dir != "" && !m.filesView.Spoofed
+}
+
+// FileViewSpoofed reports whether the listing on screen is one the pane steered
+// somewhere /proc says it is not. It is exported for the rail's own render and
+// for the tests that read the frame.
+func (m *OS) FileViewSpoofed() bool {
+	return m.filesView.Spoofed && m.filesView.Dir != ""
 }
 
 // fileActionTarget is the entry an action acts on, as an absolute path.
@@ -154,13 +180,20 @@ func (m *OS) fileActionTarget() (name, path string, ok bool) {
 // area. It answers true when it refused.
 func (m *OS) fileActionRefuse() bool {
 	if !m.FileActionsOn() {
-		// One gate, two reasons. Both go through FileActionsOn so there is a
-		// single place that decides, and the setting cannot be honoured on one
-		// path and forgotten on another.
-		if !m.Settings.SidebarFileActions {
+		// One gate, three reasons. All of them go through FileActionsOn so
+		// there is a single place that decides, and the setting cannot be
+		// honoured on one path and forgotten on another.
+		//
+		// The order matters: a user who switched the actions off is told that
+		// first, because it is the answer to why the key did nothing and it is
+		// the one they can act on from the settings row below.
+		switch {
+		case !m.Settings.SidebarFileActions:
 			m.ShowNotification("File actions are off. Turn them on in the settings.",
 				"info", m.Settings.NotificationDuration)
-		} else {
+		case m.FileViewSpoofed():
+			m.ShowNotification(fileSpoofRefusal, "warning", m.Settings.NotificationDuration)
+		default:
 			m.ShowNotification("Open the files section first.", "info", m.Settings.NotificationDuration)
 		}
 		return true
@@ -193,6 +226,14 @@ func (m *OS) SidebarFileCreate() {
 // name it already has.
 func (m *OS) SidebarFileRename() bool {
 	if !m.FileActionsOn() {
+		// A rename refused for the setting or for a closed section falls
+		// through to the rail's own rename binding, which is what the key does
+		// when the cursor is not on a file. A rename refused because the pane
+		// lied is a different event and says so.
+		if m.FileViewSpoofed() {
+			m.ShowNotification(fileSpoofRefusal, "warning", m.Settings.NotificationDuration)
+			return true
+		}
 		return false
 	}
 	name, _, ok := m.fileActionTarget()
@@ -294,6 +335,10 @@ func (m *OS) captureFileClipboard(move bool) {
 // "name (N).ext" instead, so there is no destructive branch in a paste for a
 // dialog to gate. The notification says how many were renamed, because a file
 // that arrived under a different name is a fact the user has to be told.
+//
+// With no dialog, the notification is the only place a paste can name where it
+// landed, and it names it. The folder came from the pane, so a paste that says
+// only "Copied 3 files" says nothing about the one thing the user cannot see.
 func (m *OS) SidebarFilePaste() tea.Cmd {
 	if m.fileActionRefuse() {
 		return nil
@@ -317,7 +362,7 @@ func (m *OS) SidebarFilePaste() tea.Cmd {
 		}
 		msg := fileOpMsg{}
 		if done > 0 {
-			msg.OK = verb + " " + countOf(done, "file") + "."
+			msg.OK = verb + " " + countOf(done, "file") + " to " + shortenHome(dir) + "."
 			if renamed > 0 {
 				msg.OK += " " + countOf(renamed, "file") + " got a new name."
 			}

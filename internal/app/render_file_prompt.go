@@ -69,6 +69,15 @@ func (m *OS) renderFileNamePrompt() (string, overlay.Geometry, []overlayRowHit) 
 
 	var body []string
 	body = append(body, fileDialogLine(m.filePromptContext(width), width, pal.FgDim, bg))
+	// A rename is the second thing here that changes a file that already
+	// exists, and the folder it acts in comes from the pane rather than from
+	// the user. So it names the whole path, the way the delete confirmation
+	// does and for the same reason: "Rename notes.txt" is true of a file in
+	// every folder on the disk. A create says its folder on the line above
+	// already, because that is the whole of what it has to say.
+	if m.filePrompt.Kind == filePromptRename {
+		body = append(body, fileDialogLine(m.filePromptTargetPath(width), width, pal.FgMute, bg))
+	}
 
 	// The field windows to its tail, so a name longer than the dialog scrolls
 	// left and what you are typing stays under the cursor.
@@ -108,6 +117,13 @@ func (m *OS) filePromptContext(width int) string {
 		return "Rename " + printableTitle(m.filePrompt.Target)
 	}
 	return "In " + truncPathLeft(shortenHome(m.filePrompt.Dir), max(width-4, 1))
+}
+
+// filePromptTargetPath is the full path of the entry a rename acts on, cut from
+// the front like every other path in these dialogs so the tail survives.
+func (m *OS) filePromptTargetPath(width int) string {
+	full := filepath.Join(m.filePrompt.Dir, m.filePrompt.Target)
+	return truncPathLeft(shortenHome(full), max(width-4, 1))
 }
 
 // filePromptNote is the standing hint under the field.

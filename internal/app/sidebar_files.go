@@ -110,6 +110,9 @@ type fileViewState struct {
 	// Capped says the directory held more names than were read, so the listing
 	// is the first fileViewMaxEntries of it and not the whole thing.
 	Capped bool
+	// Spoofed says the pane named this folder over OSC 7 and /proc disagreed.
+	// The listing stays; the file actions do not. See cwdIsSpoofed.
+	Spoofed bool
 }
 
 // fileViewMaxEntries bounds one listing.
@@ -128,6 +131,10 @@ type fileListMsg struct {
 	Entries []fileEntry
 	Capped  bool
 	Err     string
+	// Spoofed is the corroboration verdict for a listing the pane steered. It
+	// is worked out in the command, beside the read, because it costs a /proc
+	// readlink and two stats and neither belongs on the update goroutine.
+	Spoofed bool
 }
 
 // readDirFunc is the reader the file command calls. It is a variable so a test
@@ -291,8 +298,26 @@ func (m *OS) clearFileView() {
 // requestFileList stamps a new request and returns the command that answers it.
 // The read, the cap and the sort all run in the command's own goroutine; this
 // only writes down what was asked for.
+//
+// The corroboration goes in the same command, for the same reason the read
+// does: it costs a readlink and two stats, and a client with the rail open asks
+// for a listing every time a shell cds. What is taken here on the loop is one
+// int off the window, which is a field written once when the pane was spawned.
 func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 	dir = filepath.Clean(dir)
+	// Only a listing the pane steered is checked. A folder the user walked into
+	// by hand is a folder they named, so it is theirs whatever the pane says,
+	// and a pinned listing keeps the verdict of the pane-driven listing it was
+	// reached from: walking into a subfolder of a spoofed directory does not
+	// launder it.
+	pgid, wasSpoofed := 0, m.filesView.Spoofed
+	if !pinned && origin != "" {
+		wasSpoofed = false
+		if w := m.windowByID(origin); w != nil {
+			pgid = w.ShellPgid
+		}
+	}
+
 	m.filesView.Want = dir
 	m.filesView.Origin = origin
 	m.filesView.Pinned = pinned
@@ -302,9 +327,10 @@ func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 	m.filesView.Gen++
 	gen := m.filesView.Gen
 	return func() tea.Msg {
+		spoofed := wasSpoofed || cwdIsSpoofed(pgid, dir)
 		items, capped, err := readDirFunc(dir, fileViewMaxEntries)
 		if err != nil {
-			return fileListMsg{Gen: gen, Dir: dir, Err: fileViewError(err)}
+			return fileListMsg{Gen: gen, Dir: dir, Err: fileViewError(err), Spoofed: spoofed}
 		}
 		entries := make([]fileEntry, 0, len(items))
 		for _, it := range items {
@@ -326,8 +352,73 @@ func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 			}
 			return strings.ToLower(a.Name) < strings.ToLower(b.Name)
 		})
-		return fileListMsg{Gen: gen, Dir: dir, Entries: entries, Capped: capped}
+		return fileListMsg{Gen: gen, Dir: dir, Entries: entries, Capped: capped, Spoofed: spoofed}
 	}
+}
+
+// cwdIsSpoofed reports whether /proc says the pane's shell is somewhere other
+// than the folder the pane named over OSC 7.
+//
+// # Why this is asked at all
+//
+// OSC 7 is a string any program in a pane can print, and the rail's delete,
+// rename and paste act on the folder it names. A program that prints one naming
+// a folder it is not in steers a destructive action at that folder. The pane's
+// shell has a working directory the kernel knows, and that is the one fact in
+// this the pane cannot write.
+//
+// # Only a positive disagreement counts
+//
+// The answer is false whenever there is no evidence. There is no /proc on
+// macOS, the shell's process group is recorded only for a pane whose PTY this
+// client spawned, and a daemon-backed pane, which is the default, has no pgid
+// on the client at all. Treating any of those as a disagreement would take the
+// file actions away from almost every user to catch a case nobody has hit.
+// Unknown is unknown, and it leaves the feature exactly as it was.
+//
+// # How the two paths are compared
+//
+// Not as strings, past the first try. /proc hands back a path the kernel has
+// already resolved; a shell prints $PWD, which keeps whatever symlink the user
+// walked in through. "/home/g/work" and "/mnt/big/work" are then the same
+// folder spelled two ways, and a string compare would call every such pane a
+// liar. So a mismatch is confirmed by stat'ing both and comparing the device
+// and inode, which is the only comparison that answers "the same directory"
+// rather than "the same spelling", and which takes symlinks, bind mounts and a
+// ".." through a symlink together.
+//
+// A folder that cannot be stat'ed is a disagreement, because /proc has already
+// named a directory that exists and this is not it.
+//
+// # What it costs to be wrong
+//
+// A false positive is a read-only listing: the names, the navigation and the
+// path copy all still work, and only the six file actions go. A file manager
+// running in a pane and reporting its own browsing over OSC 7 is the one honest
+// program this will refuse, and refusing it is the same answer as for the
+// dishonest one, because from here they are the same event.
+func cwdIsSpoofed(pgid int, dir string) bool {
+	procDir, ok := terminal.ShellCWD(pgid)
+	if !ok {
+		return false
+	}
+	return !sameDir(procDir, dir)
+}
+
+// sameDir reports whether two paths name one directory.
+func sameDir(a, b string) bool {
+	if filepath.Clean(a) == filepath.Clean(b) {
+		return true
+	}
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Stat(b)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(ai, bi)
 }
 
 // HandleFileList applies a finished read, or drops it.
@@ -346,6 +437,7 @@ func (m *OS) HandleFileList(msg fileListMsg) {
 	m.filesView.Err = msg.Err
 	m.filesView.Entries = msg.Entries
 	m.filesView.Capped = msg.Capped
+	m.filesView.Spoofed = msg.Spoofed
 }
 
 // recordWindowCwd stores a pane's reported directory.
@@ -360,11 +452,8 @@ func (m *OS) recordWindowCwd(windowID, raw string) {
 	if !ok {
 		return
 	}
-	for _, w := range m.Windows {
-		if w != nil && w.ID == windowID {
-			w.Cwd = dir
-			return
-		}
+	if w := m.windowByID(windowID); w != nil {
+		w.Cwd = dir
 	}
 }
 
@@ -596,12 +685,7 @@ func (m *OS) fileViewOriginWindow() *terminal.Window {
 	if m.filesView.Origin == "" {
 		return nil
 	}
-	for _, w := range m.Windows {
-		if w != nil && w.ID == m.filesView.Origin {
-			return w
-		}
-	}
-	return nil
+	return m.windowByID(m.filesView.Origin)
 }
 
 // paneBusyReason reports whether a pane is at a shell prompt, and when it is
