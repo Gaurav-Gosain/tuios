@@ -2100,3 +2100,71 @@ func maybeCopyScreenshot(path, format string, req screenshotRequest) (bool, []st
 	}
 	return true, nil
 }
+
+// popupOptions is the `tuios popup` command line, gathered so the runner reads
+// as one thing rather than as seven positional arguments.
+type popupOptions struct {
+	session   string
+	name      string
+	cwd       string
+	width     string
+	height    string
+	workspace int
+	command   []string
+	jsonOut   bool
+}
+
+// runPopup opens a popup and reports its id, which is the handle every later
+// call needs.
+//
+// The command is refused here as well as in the daemon so the message names the
+// flag the user typed rather than the parameter the wire carries.
+func runPopup(o popupOptions) error {
+	if len(o.command) == 0 {
+		return fmt.Errorf("popup needs a command to run, e.g. tuios popup -- fzf")
+	}
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	params := map[string]any{
+		"session": o.session,
+		"command": o.command,
+	}
+	// Only the parameters the user named are sent. The daemon refuses a params
+	// key a verb does not declare and fills its own defaults for the rest, so
+	// sending an empty width would ask for a size nobody chose.
+	if o.width != "" {
+		params["width"] = o.width
+	}
+	if o.height != "" {
+		params["height"] = o.height
+	}
+	if o.name != "" {
+		params["name"] = o.name
+	}
+	if o.cwd != "" {
+		params["cwd"] = o.cwd
+	}
+	if o.workspace != 0 {
+		params["workspace"] = o.workspace
+	}
+	raw, err := client.Call("popup", params)
+	if err != nil {
+		return reportVerbError(explainVerbError("popup", err), o.jsonOut)
+	}
+	if o.jsonOut {
+		return printVerbResult(raw, o.jsonOut)
+	}
+	var res struct {
+		WindowID string `json:"window_id"`
+		Name     string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	fmt.Printf("%s  %s\n", shortWindowID(res.WindowID), res.Name)
+	return nil
+}

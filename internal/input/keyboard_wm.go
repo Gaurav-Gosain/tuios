@@ -195,6 +195,30 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return o, nil
 	}
 
+	// Esc closes the focused popup.
+	//
+	// It reaches this function only in window mode, because the pane owns esc in
+	// terminal mode: fzf, gum and vim all quit on it, and taking it from them
+	// would break the programs a popup exists to run. So closing a popup from
+	// the keyboard is esc to leave the pane, then esc to close the box. A popup
+	// whose command exits closes itself and needs neither.
+	//
+	// It runs before the registry dispatch because esc is bound to
+	// enter_window_mode, which is what already has the key here and does nothing
+	// with it: this is window mode. So nothing is taken from the user - and to
+	// keep that true for a user who bound esc to something of their own, the
+	// claim is made only while that default binding is the one in force.
+	if key == "esc" && o.FocusedPopup() != nil {
+		action := ""
+		if o.KeybindRegistry != nil {
+			action = lookupAction(msg, o.KeybindRegistry.GetAction)
+		}
+		if action == "" || action == "enter_window_mode" {
+			o.CloseFocusedPopup()
+			return o, nil
+		}
+	}
+
 	// Try config-based dispatch first (if registry is available)
 	if o.KeybindRegistry != nil {
 		action := lookupAction(msg, o.KeybindRegistry.GetAction)

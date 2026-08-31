@@ -349,6 +349,31 @@ func init() {
 			},
 			handler: (*Daemon).verbNewWindow,
 		},
+		"popup": {
+			description: "Open a popup: a floating pane that runs one command and closes when the command exits. Needs an attached client.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "command", Type: "[]string", Required: true, Description: "Argv to run in the popup. No shell parses it, so nothing needs quoting. The popup closes when the program exits."},
+				{Name: "width", Type: "string", Description: "Popup width, in cells (\"60\") or as a share of the pane region (\"60%\").", Default: PopupDefaultWidth},
+				{Name: "height", Type: "string", Description: "Popup height, in cells (\"20\") or as a share of the pane region (\"50%\").", Default: PopupDefaultHeight},
+				{Name: "name", Type: "string", Description: "Name for the popup. Omit to use the program's title."},
+				{Name: "cwd", Type: "string", Description: "Directory to run the command in. Omit to inherit the daemon's."},
+				{Name: "workspace", Type: "int", Description: "Workspace to open the popup on. Omit for the current one."},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "Id of the popup. Use it to address the popup in later calls."},
+				{Name: "name", Type: "string", Description: "The popup's name, generated when none was given."},
+				{Name: "workspace", Type: "int", Description: "Workspace the popup was opened on."},
+				{Name: "pty_id", Type: "string", Description: "Id of the popup's PTY."},
+				{Name: "width", Type: "string", Description: "The width the popup uses, with the default filled in."},
+				{Name: "height", Type: "string", Description: "The height the popup uses, with the default filled in."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"popup","params":{"session":"work","command":["fzf"]}}`,
+				`{"id":1,"verb":"popup","params":{"session":"work","command":["htop"],"width":"90%","height":"80%"}}`,
+			},
+			handler: (*Daemon).verbPopup,
+		},
 		"split-window": {
 			description: "Split a pane and put a new one beside it. Needs an attached client and tiling on.",
 			params: []verbParam{

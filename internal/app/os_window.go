@@ -143,18 +143,31 @@ func (m *OS) GetMultifocusWindows() []int {
 	return indices
 }
 
+// cyclableWindows lists the indexes the window cycle steps through: the visible
+// panes on the current workspace, with popups left out.
+//
+// A popup is left out because it is not a pane the user is arranging. It is one
+// command with a lifetime, focused the moment it opens and gone when the command
+// exits, so cycling onto it would put the focus in a box that is about to
+// disappear, and cycling off it would leave the box on screen with the focus
+// somewhere else. It is still reachable with the mouse and by name.
+func (m *OS) cyclableWindows() []int {
+	out := []int{}
+	for i, w := range m.Windows {
+		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing && !w.IsPopup {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
 // CycleToNextVisibleWindow cycles focus to the next visible window in the current workspace.
 func (m *OS) CycleToNextVisibleWindow() {
 	if len(m.Windows) == 0 {
 		return
 	}
 	// Find next visible (non-minimized and non-minimizing) window in current workspace
-	visibleWindows := []int{}
-	for i, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
-			visibleWindows = append(visibleWindows, i)
-		}
-	}
+	visibleWindows := m.cyclableWindows()
 	if len(visibleWindows) == 0 {
 		return
 	}
@@ -182,12 +195,7 @@ func (m *OS) CycleToPreviousVisibleWindow() {
 		return
 	}
 	// Find previous visible (non-minimized and non-minimizing) window in current workspace
-	visibleWindows := []int{}
-	for i, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
-			visibleWindows = append(visibleWindows, i)
-		}
-	}
+	visibleWindows := m.cyclableWindows()
 	if len(visibleWindows) == 0 {
 		return
 	}

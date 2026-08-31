@@ -64,6 +64,20 @@ func (m *OS) TileAllWindows() {
 
 // tileAllWindows is TileAllWindows with the announcements already held.
 func (m *OS) tileAllWindows() {
+	// Ends a deferral whose gesture is over, so the popup pass below, the
+	// master-stack branch and ApplyBSPLayout further down agree about which path
+	// they are on.
+	deferring := m.resizeDeferralActive()
+
+	// A popup is floating, so every branch below skips it - but skipping is not
+	// the whole answer, for the reason it is not the whole answer for a zoomed
+	// pane: the popup box is this client's own and it moves whenever the box the
+	// panes go in moves. A retile is exactly when that has happened, and every
+	// resize path ends here. This runs before the empty-list return below,
+	// because a session whose only pane is a popup has no tiled windows at all
+	// and still has a popup to place.
+	m.applyPopupRects(deferring)
+
 	// Get list of visible windows in current workspace (not minimized)
 	var visibleWindows []*terminal.Window
 	for _, w := range m.Windows {
@@ -97,10 +111,6 @@ func (m *OS) tileAllWindows() {
 			w.Opening = false
 		}
 	}
-
-	// Ends a deferral whose gesture is over, so the master-stack branch below
-	// and ApplyBSPLayout further down agree about which path they are on.
-	deferring := m.resizeDeferralActive()
 
 	// A zoomed pane is not tiled, and the three branches below all skip its
 	// rectangle - but skipping is not the whole answer, because the zoom box is

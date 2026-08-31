@@ -442,6 +442,42 @@ the placement you want when the panes should sit side by side. It needs tiling
 on. Reading, writing, waiting, creating and moving never need a client, and
 neither does anything in the agent chapter below.
 
+### A popup for one command
+
+`tuios popup` runs one command in a floating pane centred over the layout. The
+pane closes when the command exits. It is not tiled, it is not in the window
+cycle, and it cannot be minimized, so it disturbs nothing that is open.
+
+```sh
+tuios popup -s work -- fzf
+tuios popup -s work --width 60 --height 20 -- gum choose one two three
+tuios popup -s work --json -- htop
+```
+
+`--width` and `--height` take cells (`60`) or a share of the pane region
+(`60%`). The defaults are 80% and 60%. A size larger than the region is cut down
+to the region. Neither flag has a short form: `-w` selects a window everywhere
+else, and `-h` is help.
+
+A popup needs a client attached, and says `needs_client` when there is none.
+
+The popup writes to its own screen, not to the output of the command that opened
+it. To keep an answer, redirect inside the popup or send it somewhere:
+
+```sh
+tuios popup -s work -- sh -c 'ls | fzf > /tmp/pick'
+tuios popup -s work -- sh -c 'tuios send-text -w main "$(ls | fzf)"'
+```
+
+A popup lives as long as its command. Detaching leaves it running, and it is
+still there on the next attach. A daemon restart does not bring it back: the
+restore respawns a shell rather than the command, which is not the popup. The
+user closes one by hand with esc in window mode, or you close it like any pane:
+
+```sh
+tuios run-command -s work CloseWindow
+```
+
 ### The escape hatch
 
 A keybinding with no verb of its own is still reachable by name:

@@ -1180,6 +1180,71 @@ when the program exits.
 	newWindowCmd.Flags().BoolVar(&newWindowJSON, "json", false, "Output result as JSON")
 	_ = newWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var popupSession string
+	var popupWidth string
+	var popupHeight string
+	var popupName string
+	var popupCwd string
+	var popupWorkspace int
+	var popupJSON bool
+	popupCmd := &cobra.Command{
+		Use:   "popup -- <command> [args...]",
+		Short: "Run a command in a floating pane that closes when it exits",
+		Long: `Run a command in a floating pane centred over the layout, and print its id.
+
+The pane closes when the command exits. Nothing re-parses the arguments after
+--, so nothing needs quoting. This is how a picker becomes an overlay: run fzf,
+gum or any other full-screen program in it.
+
+Needs an attached client, because a popup is a thing on a screen. It is not
+tiled, it is not in the window cycle, and it cannot be minimized.
+
+The popup writes to its own screen, not to this command's output. To keep a
+selection, redirect inside the popup or send it to another pane.
+
+--width and --height take cells or a percentage of the pane region. A size
+larger than the region is cut down to the region. Neither has a short form: -w
+selects a window everywhere else, and -h is help.`,
+		Example: `  # Pick a file in a centred popup and keep the answer
+  tuios popup -- sh -c 'ls | fzf > /tmp/pick'
+
+  # Send the selection straight to the pane you came from
+  tuios popup -- sh -c 'tuios send-text -w main "$(ls | fzf)"'
+
+  # A small popup, in cells
+  tuios popup --width 60 --height 20 -- gum choose one two three
+
+  # Watch something, then press q to close it
+  tuios popup --width 90% --height 80% -- htop
+
+  # Capture the popup's id for scripting
+  tuios popup --json -- fzf | jq -r .window_id`,
+		Args: cobra.ArbitraryArgs,
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runPopup(popupOptions{
+				session:   popupSession,
+				name:      popupName,
+				cwd:       popupCwd,
+				width:     popupWidth,
+				height:    popupHeight,
+				workspace: popupWorkspace,
+				command:   args,
+				jsonOut:   popupJSON,
+			})
+		},
+	}
+	popupCmd.Flags().StringVarP(&popupSession, "session", "s", "", "Target session (default: most recently active)")
+	// Spelled out, with no shorthands. -w is the window selector in every other
+	// tuios command and -h is cobra's help, so both of the short forms a reader
+	// would reach for already mean something else here.
+	popupCmd.Flags().StringVar(&popupWidth, "width", "", "Popup width in cells or percent (default: 80%)")
+	popupCmd.Flags().StringVar(&popupHeight, "height", "", "Popup height in cells or percent (default: 60%)")
+	popupCmd.Flags().StringVar(&popupName, "name", "", "Name for the popup")
+	popupCmd.Flags().StringVar(&popupCwd, "cwd", "", "Directory to run the command in (default: the daemon's)")
+	popupCmd.Flags().IntVar(&popupWorkspace, "workspace", 0, "Workspace to open the popup on (default: the current one)")
+	popupCmd.Flags().BoolVar(&popupJSON, "json", false, "Output result as JSON")
+	_ = popupCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
 	var splitWindowSession string
 	var splitWindowWindow string
 	var splitWindowName string
@@ -2386,7 +2451,7 @@ It does not start a daemon. If no daemon runs here, the caller is told so.`,
 	rootCmd.AddCommand(listAgentsCmd, sendAgentMessageCmd, readAgentMessagesCmd, askAgentCmd)
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd)
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
-	rootCmd.AddCommand(splitWindowCmd, focusWindowCmd, moveWindowCmd, setWindowCmd)
+	rootCmd.AddCommand(splitWindowCmd, popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd)
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd)
 	rootCmd.AddCommand(listDockComponentsCmd, refreshDockCmd, listHooksCmd)

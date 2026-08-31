@@ -174,6 +174,15 @@ type NewWindowOptions struct {
 	// name it asked for, and adopting it unnamed meant the match never happened
 	// on any later push either, because a window is only ever new once.
 	Name string
+	// Popup makes the window a popup: a floating pane that closes when its
+	// command exits. It is set at creation for the reason the workspace is. A
+	// window created plain and marked afterwards is an ordinary pane for as long
+	// as the two calls take, and an attached client tiles it in that gap.
+	Popup bool
+	// PopupWidth and PopupHeight are the size the caller asked for, as written.
+	// See WindowState.PopupWidth. They mean nothing unless Popup is set.
+	PopupWidth  string
+	PopupHeight string
 }
 
 // AddDaemonWindowWith creates a daemon-owned window with explicit placement.
@@ -242,6 +251,13 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			// The daemon has no viewport, so this box is a placeholder that keeps
 			// the PTY a usable size until a client places the window properly.
 			Unplaced: true,
+			// A popup is always floating. The daemon marks it here rather than
+			// leaving the client to infer it, because every peer reads the float
+			// as layout intent and a peer that missed it tiles the popup away.
+			Popup:       opts.Popup,
+			IsFloating:  opts.Popup,
+			PopupWidth:  opts.PopupWidth,
+			PopupHeight: opts.PopupHeight,
 		}
 		state.Windows = append(state.Windows, win)
 		// The workspace's own focus points at the new window either way: it is
