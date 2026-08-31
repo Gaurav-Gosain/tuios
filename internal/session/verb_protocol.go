@@ -195,6 +195,24 @@ func init() {
 			},
 			handler: (*Daemon).verbListVerbs,
 		},
+		"list-hooks": {
+			description: "List the hook table and what each hook command last did: how many times it ran, its last exit code, when it last ran and its last error.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "event", Type: "string", Description: "Only the hooks on this event. Omit for every event."},
+			},
+			returns: []verbParam{
+				{Name: "hooks", Type: "[]object", Description: "One row per registered command: event, side, command, runs, last_exit, last_run, last_error and last_ms. Side is session for the hooks the daemon runs and client for the ones an attached client runs."},
+				{Name: "total", Type: "int", Description: "How many rows the filter matched."},
+				{Name: "events", Type: "[]string", Description: "Every event a hook can be written on. An event outside this list is ignored when the config loads."},
+				{Name: "client_attached", Type: "bool", Description: "Whether a client answered for its half of the table. False means the client rows are missing because nobody is attached, not that no client hooks exist."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"list-hooks"}`,
+				`{"id":1,"verb":"list-hooks","params":{"event":"after-new-window"}}`,
+			},
+			handler: (*Daemon).verbListHooks,
+		},
 		"list-dock-components": {
 			description: "List the dock's components: what the bar is made of, what each cell reads, and what each component's command last did.",
 			params:      []verbParam{sessionParam},

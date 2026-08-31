@@ -1804,6 +1804,21 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				}
 			}
 			return m, relisten
+		case "list_hooks":
+			// Read-only: what this client's hook table holds and what each
+			// command last did. The daemon merges it with its own table, so
+			// list-hooks answers for both sides at once.
+			resultData = map[string]any{
+				"type":  "hook_list",
+				"hooks": m.HookRows(),
+			}
+			if m.DaemonClient != nil && msg.RequestID != "" {
+				if sendErr := m.DaemonClient.SendCommandResultWithData(
+					msg.RequestID, true, "command executed", resultData); sendErr != nil {
+					m.LogError("hooks: could not answer list-hooks: %v", sendErr)
+				}
+			}
+			return m, relisten
 		case "refresh_dock":
 			// Re-run one component now, or every one when unnamed.
 			name := ""

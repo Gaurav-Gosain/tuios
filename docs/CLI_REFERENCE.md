@@ -893,6 +893,68 @@ tuios list-verbs capture-pane
 tuios list-verbs --json | jq '.verbs[].verb'
 ```
 
+### `tuios list-hooks`
+
+List the hooks and what each one last did.
+
+**Usage:**
+```bash
+tuios list-hooks [flags]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `--event <name>` - Only the hooks on this event
+- `--json` - Output as JSON (default is human-readable table)
+
+**Example output:**
+```
+╭────────────────────┬─────────┬──────────────────────────┬──────┬────────┬───────────────────────────╮
+│ EVENT              │ SIDE    │ COMMAND                  │ RUNS │ STATE  │ LAST                      │
+├────────────────────┼─────────┼──────────────────────────┼──────┼────────┼───────────────────────────┤
+│ after-new-window   │ session │ ~/.config/tuios/new.sh   │ 2    │ ran    │ 2026-08-31T21:16:32+04:00 │
+│ after-agent-state  │ session │ notify-send "$TUIOS_AG…  │ 0    │ waiting│                           │
+│ after-attach       │ client  │ tmux-style-banner        │ 1    │ failed │ exit 127: command not fo… │
+╰────────────────────┴─────────┴──────────────────────────┴──────┴────────┴───────────────────────────╯
+```
+
+A hook runs its command for the side effect, so a command that was never found
+used to look exactly like one that worked. This is where the difference is
+visible. `RUNS` of 0 means the command is fine and the event never happened. A
+row that is missing altogether means the event name is misspelled and the hook
+was never loaded.
+
+`SIDE` says which process runs it. The daemon runs the hooks for the facts it
+owns, so those fire on a detached session and fire once however many clients are
+attached. The client runs the ones that need its terminal, so they are only
+listed while a client is attached.
+
+**JSON Output Structure:**
+```json
+{
+  "success": true,
+  "hooks": [
+    {
+      "event": "after-new-window",
+      "side": "session",
+      "command": "~/.config/tuios/new.sh",
+      "runs": 2,
+      "last_exit": 0,
+      "last_run": "2026-08-31T21:16:32+04:00",
+      "last_error": "",
+      "last_ms": 16
+    }
+  ],
+  "total": 1,
+  "events": ["after-new-window", "..."],
+  "client_attached": false
+}
+```
+
+`events` lists every name a hook can be written on. `client_attached` says
+whether a client answered for its half of the table: false means the client rows
+are missing because nobody is attached, not that no client hooks exist.
+
 ### `tuios list-dock-components`
 
 List the dock's components: what the bar is made of, what each cell reads, and
