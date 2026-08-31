@@ -5,6 +5,7 @@
 package hooks
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -83,9 +84,13 @@ type Context struct {
 type Manager struct {
 	mu    sync.RWMutex
 	hooks map[Event][]string // event -> list of shell commands
-	// run executes one hook command. It is a field so tests can observe which
-	// hooks fired, with what context, without spawning a shell per event.
-	run func(command string, ctx Context)
+	// run executes one hook command and reports what it did. It is a field so
+	// tests can observe which hooks fired, with what context, without spawning
+	// a shell per event.
+	run func(command string, ctx Context) hookResult
+	// status is what each registered command last did, keyed by its event and
+	// its position in that event's list. See status.go.
+	status map[statusKey]*Status
 	// inFlight tracks running hooks so a test (or a caller that needs the
 	// side effects to have landed) can join them instead of sleeping.
 	inFlight sync.WaitGroup
@@ -101,11 +106,15 @@ func NewManager() *Manager {
 
 // SetRunner replaces the command runner. It exists for tests: the real runner
 // spawns a shell, which makes asserting that an event fired with the right
-// payload both slow and timing-dependent.
+// payload both slow and timing-dependent. A replaced runner reports success, so
+// a test that only watches for firings does not have to describe an exit code.
 func (m *Manager) SetRunner(run func(command string, ctx Context)) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.run = run
+	m.run = func(command string, ctx Context) hookResult {
+		run(command, ctx)
+		return hookResult{}
+	}
 }
 
 // Wait blocks until every hook fired so far has finished.
@@ -138,11 +147,19 @@ func (m *Manager) Register(event Event, command string) {
 	m.hooks[event] = append(m.hooks[event], command)
 }
 
+// HasEvent reports whether any command is registered for an event.
+func (m *Manager) HasEvent(event Event) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.hooks[event]) > 0
+}
+
 // Clear removes all hooks for a given event.
 func (m *Manager) Clear(event Event) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.hooks, event)
+	m.clearStatus()
 }
 
 // ClearAll removes all hooks.
@@ -150,6 +167,7 @@ func (m *Manager) ClearAll() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.hooks = make(map[Event][]string)
+	m.clearStatus()
 }
 
 // LoadFromConfig loads hooks from a map (parsed from TOML config).
@@ -158,6 +176,7 @@ func (m *Manager) LoadFromConfig(hookConfig map[string]any) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.hooks = make(map[Event][]string)
+	m.clearStatus()
 
 	for key, val := range hookConfig {
 		event, ok := ParseEventName(key)
@@ -194,9 +213,12 @@ func (m *Manager) Fire(event Event, ctx Context) {
 
 	ctx.EventType = event
 
-	for _, cmdStr := range commands {
+	for i, cmdStr := range commands {
 		m.inFlight.Go(func() {
-			run(cmdStr, ctx)
+			if Verbose() {
+				log.Printf("hooks: the %s event fires: %s", event, cmdStr)
+			}
+			m.record(event, i, cmdStr, run(cmdStr, ctx))
 		})
 	}
 }
@@ -208,8 +230,10 @@ func (m *Manager) HasHooks() bool {
 	return len(m.hooks) > 0
 }
 
-// executeHook runs a shell command with context as environment variables.
-func executeHook(cmdStr string, ctx Context) {
+// executeHook runs a shell command with context as environment variables. It
+// reports the exit code, how long the command took, and the tail of its stderr,
+// which is what makes a failing hook visible instead of silent.
+func executeHook(cmdStr string, ctx Context) hookResult {
 	// Use sh -c for shell interpretation
 	cmd := exec.Command("sh", "-c", cmdStr)
 
@@ -230,11 +254,32 @@ func executeHook(cmdStr string, ctx Context) {
 		fmt.Sprintf("TUIOS_AGENT_MESSAGE=%s", ctx.AgentMessage),
 	)
 
-	// Run silently - don't capture output or block
+	// Stdout stays discarded: a hook is run for its side effects and nothing
+	// reads what it prints. Stderr is kept, but only its tail, because that is
+	// the one thing that explains a failure and a user command may write
+	// without limit.
 	cmd.Stdout = nil
-	cmd.Stderr = nil
+	tail := &tailBuffer{limit: stderrTailLimit}
+	cmd.Stderr = tail
 
-	_ = cmd.Run()
+	start := time.Now()
+	err := cmd.Run()
+	res := hookResult{duration: time.Since(start), stderr: tail.String()}
+	if err != nil {
+		res.err = err
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			res.exitCode = exit.ExitCode()
+			// The error text for an exit status says only "exit status 3",
+			// which the exit code already says. Drop it so the message is the
+			// stderr the user actually needs.
+			res.err = nil
+			if res.stderr == "" {
+				res.stderr = "the hook wrote nothing to stderr"
+			}
+		}
+	}
+	return res
 }
 
 // ParseEventName validates and returns an Event from a string.
