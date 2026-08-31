@@ -975,45 +975,39 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 	var req verbRequest
 	if err := json.Unmarshal(line, &req); err != nil {
-		return d.writeVerbResponse(cs, &verbResponse{
-			Error: newVerbError(ErrVerbInvalidRequest, "malformed JSON request: "+err.Error()),
-		})
+		return d.writeVerbError(cs, nil, "", newVerbError(ErrVerbInvalidRequest, "malformed JSON request: "+err.Error()))
 	}
 
 	if req.Verb == "" {
-		return d.writeVerbResponse(cs, &verbResponse{
-			ID: req.ID,
-			Error: hintedVerbError(ErrVerbInvalidRequest, "request is missing the \"verb\" field", &VerbHint{
+		return d.writeVerbError(cs, req.ID, "",
+			hintedVerbError(ErrVerbInvalidRequest, "request is missing the \"verb\" field", &VerbHint{
 				Param:     "verb",
 				Verb:      "list-verbs",
 				Available: knownVerbNames(),
 				Detail:    `Every request line is an object of the form {"id":1,"verb":"list-verbs","params":{}}.`,
-			}),
-		})
+			}))
 	}
 
 	entry, ok := verbRegistry[req.Verb]
 	if !ok {
 		known := knownVerbNames()
-		return d.writeVerbResponse(cs, &verbResponse{
-			ID: req.ID,
-			Error: hintedVerbError(ErrVerbUnknownVerb, "unknown verb "+echoName(req.Verb), &VerbHint{
+		return d.writeVerbError(cs, req.ID, req.Verb,
+			hintedVerbError(ErrVerbUnknownVerb, "unknown verb "+echoName(req.Verb), &VerbHint{
 				Verb:       "list-verbs",
 				Command:    "tuios list-verbs",
 				DidYouMean: closestMatch(req.Verb, known),
 				Available:  known,
 				Detail:     "Call list-verbs for every verb with its parameter schema and examples.",
-			}),
-		})
+			}))
 	}
 
 	if verr := checkParamNames(req.Verb, entry, req.Params); verr != nil {
-		return d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Error: verr})
+		return d.writeVerbError(cs, req.ID, req.Verb, verr)
 	}
 
 	result, verr := entry.handler(d, cs, req.Params)
 	if verr != nil {
-		return d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Error: verr})
+		return d.writeVerbError(cs, req.ID, req.Verb, verr)
 	}
 	if err := d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Result: result}); err != nil {
 		return err
@@ -1069,6 +1063,33 @@ func checkParamNames(verb string, entry verbEntry, params json.RawMessage) *verb
 			})
 	}
 	return nil
+}
+
+// writeVerbError records the refusal and writes the error envelope. Every verb
+// failure leaves the daemon through here, so the log line and the response
+// cannot drift apart.
+//
+// The caller already learns why its call failed, from the code and the hint. The
+// gap this closes is on the other side: the daemon kept no memory of what it
+// refused, so a harness author debugging a wrapper could see their own traffic
+// but not the daemon's reading of it. One line per refusal in `tuios logs -f`
+// is that reading.
+//
+// The line carries the verb name, the client id and the refusal code, and not
+// the message. A message quotes what the caller sent, which for a path or a
+// title is content, and the level boundary keeps content out of basic.
+func (d *Daemon) writeVerbError(cs *connState, id json.RawMessage, verb string, verr *verbError) error {
+	name := verb
+	if name == "" {
+		name = "<none>"
+	}
+	client := "<unknown>"
+	if cs != nil {
+		client = cs.clientID
+	}
+	LogBasic("Verb %s refused for client %s: %s", name, client, verr.Code)
+
+	return d.writeVerbResponse(cs, &verbResponse{ID: id, Error: verr})
 }
 
 // writeVerbResponse serializes resp as one newline-terminated JSON line and

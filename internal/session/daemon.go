@@ -89,6 +89,11 @@ type Daemon struct {
 	// with the resurrect verb.
 	disableAutoRestore bool
 
+	// foreground and logFile are the logging settings this daemon was started
+	// with. Run installs them; see logsink.go.
+	foreground bool
+	logFile    string
+
 	// agentStallTimeout is how long a pane may report working while producing no
 	// output before the stall heuristic demotes it to idle. Zero disables the
 	// heuristic. It is resolved once in NewDaemon from config or the
@@ -218,8 +223,13 @@ type connState struct {
 type DaemonConfig struct {
 	Version    string
 	SocketPath string
+	// Foreground is true for `tuios daemon`, which owns a terminal. A foreground
+	// daemon echoes its log to stderr; a background one does not, because its
+	// stderr belongs to the process that spawned it.
 	Foreground bool
-	LogFile    string
+	// LogFile is the file the daemon appends its log to. Empty, the default,
+	// means DefaultDaemonLogPath.
+	LogFile string
 	// DisableAutoRestore skips restoring saved sessions on daemon start.
 	DisableAutoRestore bool
 	// AgentStallTimeout overrides how long a pane may report working with no
@@ -259,6 +269,8 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		agents:             newAgentBus(),
 		version:            cfg.Version,
 		disableAutoRestore: cfg.DisableAutoRestore,
+		foreground:         cfg.Foreground,
+		logFile:            cfg.LogFile,
 		agentStallTimeout:  resolveAgentStallTimeout(cfg.AgentStallTimeout),
 		agentMatcher:       newAgentMatcher(resolveAgentBinaries(cfg.AgentBinaries)),
 	}
@@ -511,6 +523,13 @@ func (d *Daemon) Start() error {
 
 // Run starts the daemon and blocks until shutdown.
 func (d *Daemon) Run() error {
+	// The daemon process installs this before it builds the daemon, so this
+	// call is normally a no-op. It stays as the backstop for a Run reached any
+	// other way. Only Run installs it: an in-process daemon inside a client
+	// calls Start, and must not take over that client's standard logger.
+	InstallDaemonLogging(d.foreground, d.logFile)
+	LogBasic("Daemon %s starting (pid %d, log level %s)", d.version, os.Getpid(), GetDebugLevel())
+
 	if err := d.Start(); err != nil {
 		return err
 	}

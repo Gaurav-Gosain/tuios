@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -34,6 +35,32 @@ func ensureDaemon() error {
 	return nil
 }
 
+// daemonStderr opens the daemon log file for the child to write its stderr to,
+// and returns nil when it cannot be opened.
+//
+// The child's stderr used to go nowhere. That is fine for everything the daemon
+// logs, which now reaches the same file through its own sink, and wrong for the
+// one thing it cannot log: a Go runtime panic the recover in handleConnection
+// does not catch writes its message and stack straight to stderr and then the
+// process is gone. Sending it here is what makes a crashed daemon leave a
+// reason behind.
+//
+// The daemon appends to this file too, and may rotate it. Both ends open it
+// O_APPEND, so no line is interleaved with another mid-line. A rotation renames
+// the file rather than deleting it, so this descriptor keeps writing to what is
+// then daemon.log.old and nothing is lost.
+func daemonStderr() *os.File {
+	path := session.DefaultDaemonLogPath()
+	if dir := filepath.Dir(path); dir != "" {
+		_ = os.MkdirAll(dir, 0o700)
+	}
+	fh, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return nil
+	}
+	return fh
+}
+
 // startDaemonBackground spawns a detached daemon and returns once a daemon is
 // reachable.
 //
@@ -49,7 +76,7 @@ func startDaemonBackground() error {
 	cmd := exec.Command(executable, "daemon")
 	cmd.Stdin = nil
 	cmd.Stdout = nil
-	cmd.Stderr = nil
+	cmd.Stderr = daemonStderr()
 	cmd.SysProcAttr = daemonSysProcAttr()
 
 	if err := cmd.Start(); err != nil {

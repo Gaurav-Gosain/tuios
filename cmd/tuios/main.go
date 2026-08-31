@@ -1832,7 +1832,14 @@ For single tape commands, use: tuios run-command <Command> [args...]`,
 		Long: `View recent log entries from the TUIOS daemon.
 
 This is useful for debugging issues with remote commands, sessions, and PTY handling.
-Logs are stored in a ring buffer (1000 entries by default).`,
+Logs are stored in a ring buffer (1000 entries by default).
+
+The ring buffer stops at the daemon. The daemon also appends errors and basic
+events to $XDG_STATE_HOME/tuios/daemon.log, so a crash leaves a record.
+
+Raise the detail with 'tuios set-config daemon.log_level messages'. The daemon
+applies it at once. Levels verbose and trace also record pane content, window
+titles and paths.`,
 		Example: `  # View last 50 log entries
   tuios logs
 

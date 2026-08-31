@@ -184,10 +184,22 @@ func init() {
 }
 
 // SetDebugLevel sets the global debug level.
+//
+// Levels through messages record identifiers, sizes, counts, states and error
+// text. Verbose and trace also record pane content, window titles and paths, so
+// raising the level to one of those says so once. A machine caller that turns
+// the level up to reproduce a fault gets the same notice as a person, in the
+// same place it will read the capture back from.
 func SetDebugLevel(level DebugLevel) {
 	debugMu.Lock()
-	defer debugMu.Unlock()
+	previous := currentDebugLevel
 	currentDebugLevel = level
+	debugMu.Unlock()
+
+	if level >= DebugVerbose && previous < DebugVerbose {
+		logRaw(DebugErrors, "[WARNING] Log level "+level.String()+
+			" records pane content, window titles and paths. Set the level to messages or lower when you finish.")
+	}
 }
 
 // GetDebugLevel returns the current debug level.
@@ -206,8 +218,16 @@ func SetDebugOutput(w io.Writer) {
 
 // ProtocolLog logs a message at the specified level.
 func ProtocolLog(level DebugLevel, format string, args ...any) {
-	message := fmt.Sprintf(format, args...)
+	logRaw(level, fmt.Sprintf(format, args...))
+}
 
+// logRaw records one already-formatted line. Every sink the daemon has is fed
+// from here, so a line cannot reach the ring and miss the file.
+//
+// It takes the message rather than a format string because the callers that do
+// not own their text (the standard library logger, an error string) would have
+// their per-cent signs read as verbs.
+func logRaw(level DebugLevel, message string) {
 	// Always store in buffer (regardless of debug level)
 	if logBuffer != nil {
 		logBuffer.Add(level.String(), message)
@@ -219,6 +239,12 @@ func ProtocolLog(level DebugLevel, format string, args ...any) {
 		logger := debugLogger
 		debugMu.RUnlock()
 		logger.Print(message)
+	}
+
+	// The file keeps errors and basic events whatever the level, and follows the
+	// level for anything above them.
+	if alwaysFile(level) || GetDebugLevel() >= level {
+		writeDaemonLogFile(level.String(), message)
 	}
 }
 
@@ -326,7 +352,18 @@ func MessageTypeName(t MessageType) string {
 }
 
 // DebugPayload decodes and formats a payload for debugging.
+//
+// It redacts a window title below the verbose level. A title is not a label a
+// user picked: a shell rewrites it on every prompt, so it routinely carries the
+// working directory and the command line. That is pane content, and the level
+// boundary says content starts at verbose.
 func DebugPayload(msg *Message, codec Codec) string {
+	return debugPayloadAt(GetDebugLevel(), msg, codec)
+}
+
+// debugPayloadAt is DebugPayload with the level passed in, so the redaction can
+// be tested without moving a global.
+func debugPayloadAt(level DebugLevel, msg *Message, codec Codec) string {
 	if len(msg.Payload) == 0 {
 		return "<empty>"
 	}
@@ -379,12 +416,12 @@ func DebugPayload(msg *Message, codec Codec) string {
 	case MsgCreatePTY:
 		var p CreatePTYPayload
 		if err := codec.Decode(msg.Payload, &p); err == nil {
-			return fmt.Sprintf("CreatePTY{Title:%q, %dx%d}", p.Title, p.Width, p.Height)
+			return fmt.Sprintf("CreatePTY{Title:%s, %dx%d}", redactTitle(level, p.Title), p.Width, p.Height)
 		}
 	case MsgPTYCreated:
 		var p PTYCreatedPayload
 		if err := codec.Decode(msg.Payload, &p); err == nil {
-			return fmt.Sprintf("PTYCreated{ID:%s, Title:%q}", truncateID(p.ID), p.Title)
+			return fmt.Sprintf("PTYCreated{ID:%s, Title:%s}", truncateID(p.ID), redactTitle(level, p.Title))
 		}
 	case MsgClosePTY:
 		var p ClosePTYPayload
@@ -417,6 +454,16 @@ func DebugPayload(msg *Message, codec Codec) string {
 	}
 
 	return fmt.Sprintf("<%d bytes>", len(msg.Payload))
+}
+
+// redactTitle renders a window title for a log line. Below verbose it reports
+// the length only, which is what the level boundary allows and is still enough
+// to tell an empty title from a set one.
+func redactTitle(level DebugLevel, title string) string {
+	if level >= DebugVerbose {
+		return fmt.Sprintf("%q", title)
+	}
+	return fmt.Sprintf("<%d chars>", len(title))
 }
 
 // truncateID shortens a UUID for display.
