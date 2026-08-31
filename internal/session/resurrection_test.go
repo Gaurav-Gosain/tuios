@@ -31,6 +31,7 @@ func TestResurrectionRoundTripMultiWindowMultiWorkspace(t *testing.T) {
 			2: "win-c",
 		},
 		WorkspaceMasterRatio: map[int]float64{1: 0.4, 2: 0.65},
+		WorkspaceHasCustom:   map[int]bool{1: true, 2: false},
 		WindowToBSPID:        map[string]int{"win-a": 1, "win-b": 2},
 		NextBSPWindowID:      3,
 		TilingScheme:         1,
@@ -71,6 +72,12 @@ func TestResurrectionRoundTripMultiWindowMultiWorkspace(t *testing.T) {
 	// configured ratio would have thrown away every split the user had tuned.
 	if got := loaded.WorkspaceMasterRatio; got[1] != 0.4 || got[2] != 0.65 || len(got) != 2 {
 		t.Errorf("WorkspaceMasterRatio = %v, want map[1:0.4 2:0.65]", got)
+	}
+	// The custom-layout flags are session state for the same reason and travel
+	// with it: a resurrected session that came back with every workspace handed
+	// to the tiler would have retiled away the layouts the user arranged.
+	if got := loaded.WorkspaceHasCustom; !got[1] || got[2] || len(got) != 2 {
+		t.Errorf("WorkspaceHasCustom = %v, want map[1:true 2:false]", got)
 	}
 	if len(loaded.Windows) != 3 {
 		t.Fatalf("windows = %d, want 3", len(loaded.Windows))

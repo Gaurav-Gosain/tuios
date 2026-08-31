@@ -98,6 +98,7 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 	copy(restored.Windows, state.Windows)
 	restored.WorkspaceFocus = maps.Clone(state.WorkspaceFocus)
 	restored.WorkspaceMasterRatio = maps.Clone(state.WorkspaceMasterRatio)
+	restored.WorkspaceHasCustom = maps.Clone(state.WorkspaceHasCustom)
 
 	// A window whose shell will not start is dropped rather than kept. Keeping it
 	// left its PTYID naming the dead daemon's PTY, which nothing will ever answer

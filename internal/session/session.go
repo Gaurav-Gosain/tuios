@@ -250,6 +250,31 @@ type SessionState struct {
 	// way, which matters because gob drops a nil map and sends an empty one, so
 	// both forms reach a reader.
 	WorkspaceMasterRatio map[int]float64 `json:"workspace_master_ratio,omitempty"`
+	// WorkspaceHasCustom says, per workspace, whether the panes there sit where a
+	// user put them rather than where the tiler would. It is what the retile on a
+	// workspace switch is skipped on, and it is the session's answer for the same
+	// reason the master ratio above is: a PTY has one size, so two clients showing
+	// one workspace have to agree about whether the tiler owns it.
+	//
+	// It was each client's own before this. A client that had never been to a
+	// workspace held no entry for it, read that as "not custom", retiled the
+	// workspace on its first visit and pushed the tiler's rectangles - which took
+	// away, for every client, the layout another client had arranged by hand.
+	//
+	// The rectangles themselves are not carried with it. They are already here,
+	// on WindowState.X/Y/W/H, for every window on every workspace, and a second
+	// copy of them keyed by workspace would be the older of two answers to one
+	// question. This says which of the two authorities owns the rectangles that
+	// are already on the wire, and nothing more.
+	//
+	// Absent means what state written before this field existed meant: no
+	// workspace is custom, which is how a client with no entries behaved and how
+	// an older peer still behaves. An entry-less map says the same nothing and is
+	// read the same way, which matters because gob drops a nil map and sends an
+	// empty one, so both forms reach a reader. An entry that is present and false
+	// is a client saying a workspace stopped being custom, which is not the same
+	// as saying nothing, and the merges below keep the two apart.
+	WorkspaceHasCustom map[int]bool `json:"workspace_has_custom,omitempty"`
 	// LayoutMode is which tiling layout the session uses: "bsp", "master-stack"
 	// or "scrolling". It sits beside the BSP topology it selects between, which
 	// was already carried here; without it a scrolling session came back as a BSP
@@ -1103,6 +1128,9 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	}
 	if s.state.WorkspaceMasterRatio != nil {
 		stateCopy.WorkspaceMasterRatio = maps.Clone(s.state.WorkspaceMasterRatio)
+	}
+	if s.state.WorkspaceHasCustom != nil {
+		stateCopy.WorkspaceHasCustom = maps.Clone(s.state.WorkspaceHasCustom)
 	}
 	return &stateCopy
 }
