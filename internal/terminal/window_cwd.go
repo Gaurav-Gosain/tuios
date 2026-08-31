@@ -40,11 +40,27 @@ func (w *Window) CWD() string {
 	}
 	w.cwd.fetchedAt = time.Now()
 
-	cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", w.ShellPgid))
-	if err != nil {
-		w.cwd.value = ""
-		return ""
-	}
+	cwd, _ := ShellCWD(w.ShellPgid)
 	w.cwd.value = cwd
 	return cwd
+}
+
+// ShellCWD reads the working directory of the process group leader pgid, and
+// says whether it got one. It is the uncached body of CWD, and it takes a
+// number rather than a window so a caller off the update goroutine can ask
+// without touching a live Window.
+//
+// The false answer is "nobody looked": there is no /proc on this system, the
+// process is gone, or the pgid was never recorded. Only a true answer is
+// evidence of anything, and a caller must not read the empty string as the root
+// directory.
+func ShellCWD(pgid int) (string, bool) {
+	if pgid <= 0 {
+		return "", false
+	}
+	cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", pgid))
+	if err != nil || cwd == "" {
+		return "", false
+	}
+	return cwd, true
 }

@@ -305,3 +305,25 @@ func rowCenter(h overlayPanelHit, idx int) (int, int) {
 	r := h.Rows[idx].Rect
 	return h.OriginX + (r.X0+r.X1)/2, h.OriginY + r.Y0
 }
+
+// TestTheRenamePromptNamesTheWholePath is the second half of the OSC 7 fix. The
+// folder a rename acts in came from the pane, so a dialog that says only
+// "Rename report.txt" names a file that exists in a hundred folders.
+//
+// Negative control: drop the path line from renderFileNamePrompt and this fails
+// with the tail of the folder missing from the frame.
+func TestTheRenamePromptNamesTheWholePath(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "report.txt"), "body")
+	m := filesOS(t, dir, "report.txt")
+
+	if !m.SidebarFileRename() {
+		t.Fatal("the rename did not open")
+	}
+	frame := strings.Join(dialogFrame(t, m), "\n")
+	want := filepath.Join(filepath.Base(dir), "report.txt")
+	if !strings.Contains(frame, want) {
+		t.Errorf("the rename prompt does not say which %s it renames (want %q):\n%s",
+			"report.txt", want, frame)
+	}
+}
