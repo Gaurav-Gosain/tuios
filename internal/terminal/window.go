@@ -276,6 +276,17 @@ type Window struct {
 	// Floating pane support
 	IsFloating bool // True when window is floating (not in BSP tiling)
 	IsPinned   bool // True when floating pane persists across workspace switches
+	// IsPopup marks a transient floating pane that runs one command and closes
+	// when the command exits. It rides with IsFloating rather than replacing it,
+	// because everything that skips a float has to skip a popup too.
+	//
+	// PopupWidth and PopupHeight are the size the caller asked for, as written:
+	// "60" for cells, "60%" for a share of the pane region. The request is kept
+	// rather than the box it resolves to, because the box is this client's and
+	// the request is the session's. See session.WindowState.PopupWidth.
+	IsPopup     bool
+	PopupWidth  string
+	PopupHeight string
 	// Cell dimensions in pixels (for TIOCGWINSZ pixel reporting to child processes)
 	CellPixelWidth  int
 	CellPixelHeight int

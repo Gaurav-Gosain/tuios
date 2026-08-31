@@ -1,6 +1,7 @@
 package session
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -244,6 +245,104 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 		"pty_id":    win.PTYID,
 		"focused":   focus,
 		"unplaced":  win.Unplaced,
+	}, nil
+}
+
+// verbPopup opens a popup: a floating pane that runs one command and closes
+// when the command exits.
+//
+// Creation goes through the same daemon-side path new-window uses, because a
+// popup is a window and there is no second way to make one. What the daemon
+// adds is the mark, the float and the size the caller asked for; where the box
+// lands is the attached client's answer, exactly as it is for any window the
+// daemon creates (see WindowState.Unplaced).
+//
+// It needs an attached client, which new-window does not. The difference is what
+// a popup is for: it is a thing on a screen for the length of one command, and
+// opening one on a session nobody is looking at runs a program in a box no one
+// can see or type into. Refusing says so while the caller can still do something
+// about it.
+func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Session   string   `json:"session"`
+		Name      string   `json:"name"`
+		Cwd       string   `json:"cwd"`
+		Width     string   `json:"width"`
+		Height    string   `json:"height"`
+		Command   []string `json:"command"`
+		Workspace int      `json:"workspace"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+	if len(p.Command) == 0 || p.Command[0] == "" {
+		return nil, invalidParam("command", "a popup runs one command and closes when it exits, so name the command to run")
+	}
+	if err := ValidatePopupSize(p.Width); err != nil {
+		return nil, invalidParam("width", err.Error())
+	}
+	if err := ValidatePopupSize(p.Height); err != nil {
+		return nil, invalidParam("height", err.Error())
+	}
+	if p.Workspace < 0 {
+		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2. Omit it for the current one")
+	}
+	// The same refusal new-window makes, for the same reason: a directory that
+	// cannot be entered would leave the command running in the wrong place with
+	// nothing in the reply to say so.
+	if p.Cwd != "" {
+		info, err := os.Stat(p.Cwd)
+		switch {
+		case err != nil:
+			return nil, invalidParam("cwd", "cannot start a popup in "+echoName(p.Cwd)+": "+err.Error())
+		case !info.IsDir():
+			return nil, invalidParam("cwd", echoName(p.Cwd)+" is not a directory")
+		}
+	}
+	if !d.hasTUIClient(sess) {
+		return nil, hintedVerbError(ErrVerbNeedsClient,
+			"a popup is drawn on a screen, so it needs an attached client",
+			&VerbHint{
+				Command: "tuios attach " + sess.Name,
+				Detail:  "the daemon has no viewport, so it cannot place a popup nobody is displaying. Attach a client and retry.",
+			})
+	}
+
+	onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
+	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
+		Title:       p.Name,
+		Cwd:         p.Cwd,
+		Workspace:   p.Workspace,
+		Focus:       true,
+		Command:     p.Command,
+		Name:        p.Name,
+		Popup:       true,
+		PopupWidth:  p.Width,
+		PopupHeight: p.Height,
+	}, onExit)
+	if err != nil {
+		return nil, newWindowErr(err, sess, p.Workspace)
+	}
+
+	displayName := win.Title
+	if p.Name != "" {
+		displayName = p.Name
+	}
+	return map[string]any{
+		"type":      "popup_opened",
+		"window_id": win.ID,
+		"name":      displayName,
+		"workspace": win.Workspace,
+		"pty_id":    win.PTYID,
+		// The size the popup will use, with the default filled in, so a caller
+		// that named none learns what it got instead of reading back its own
+		// silence.
+		"width":  cmp.Or(win.PopupWidth, PopupDefaultWidth),
+		"height": cmp.Or(win.PopupHeight, PopupDefaultHeight),
 	}, nil
 }
 

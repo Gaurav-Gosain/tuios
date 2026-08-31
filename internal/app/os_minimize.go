@@ -7,7 +7,15 @@ import (
 )
 
 // MinimizeWindow minimizes the window at the specified index.
+//
+// A popup cannot be minimized. Minimizing puts a pane on the dock as a pill the
+// user picks up again later, and a popup has no later: it holds one command and
+// closes when the command exits, which would leave a pill for a pane that is
+// gone. Close it instead.
 func (m *OS) MinimizeWindow(i int) {
+	if i >= 0 && i < len(m.Windows) && m.Windows[i].IsPopup {
+		return
+	}
 	if i >= 0 && i < len(m.Windows) && !m.Windows[i].Minimized && !m.Windows[i].Minimizing {
 		// Get pointer to the actual window (not a copy)
 		window := m.Windows[i]

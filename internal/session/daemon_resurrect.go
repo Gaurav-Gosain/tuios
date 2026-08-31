@@ -109,6 +109,16 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 	for i := range restored.Windows {
 		w := &restored.Windows[i]
 
+		// A popup does not survive the daemon. It is a pane for one command, and
+		// a restore respawns a shell rather than the command, so bringing one
+		// back gives the user a floating box holding a shell that will never
+		// exit and that nothing asked for. Dropping it is the same answer the
+		// loop gives a window whose shell will not start.
+		if w.Popup {
+			debugLog("[DEBUG] dropping restored popup %s, a popup lives only as long as its command", shortID(w.ID))
+			continue
+		}
+
 		// WindowState dimensions are the outer window box (including the border);
 		// the shell gets the inner content size, matching AddDaemonWindow.
 		ptyWidth := max(w.Width-2, 1)

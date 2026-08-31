@@ -95,8 +95,13 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			continue
 		}
 
-		// When any window is zoomed, only render the zoomed window
-		if zoomedWindow != nil && window != zoomedWindow {
+		// When any window is zoomed, only render the zoomed window - and the
+		// popups over it. A popup covers a rectangle in the middle of the
+		// region and closes when its command exits, so it has to be drawn over
+		// whatever is underneath or it runs where nobody can see or type into
+		// it. That is the whole of what the skip is for: a zoomed pane owns the
+		// region and no tiled pane may show through it.
+		if zoomedWindow != nil && window != zoomedWindow && !window.IsPopup {
 			continue
 		}
 

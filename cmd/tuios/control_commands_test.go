@@ -61,6 +61,11 @@ func TestControlCommandsAreRegistered(t *testing.T) {
 			args:    []string{"new-window", "build", "--workspace", "2", "--cwd", "/tmp", "--no-focus", "--json"},
 			flags:   []string{"workspace", "cwd", "no-focus", "json", "session"},
 		},
+		{
+			command: "popup",
+			args:    []string{"popup", "--width", "60", "--height", "20", "--name", "pick", "--cwd", "/tmp", "--workspace", "2", "--json", "--", "fzf"},
+			flags:   []string{"width", "height", "name", "cwd", "workspace", "json", "session"},
+		},
 	}
 
 	for _, tc := range cases {

@@ -414,6 +414,33 @@ Response:
 {"result": {"type": "window_created", "window_id": "9a3c...", "name": "build"}}
 ```
 
+### popup
+
+Open a popup: a floating pane that runs one command and closes when the command
+exits. Needs an attached client, and fails with `needs_client` when there is
+none.
+
+Params: `command` (required argv), `session` (optional), `width` and `height`
+(optional, cells such as `"60"` or a share of the pane region such as `"60%"`,
+default `"80%"` and `"60%"`), `name`, `cwd` and `workspace` (all optional).
+
+The size the caller asks for is session state and the rectangle it resolves to
+is not. Each attached client centres the popup in its own pane region, the way
+each client computes its own zoom box.
+
+Request:
+
+```json
+{"verb": "popup", "params": {"session": "work", "command": ["fzf"], "width": "60%"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "popup_opened", "window_id": "9a3c...", "name": "fzf",
+            "workspace": 1, "pty_id": "4bff...", "width": "60%", "height": "60%"}}
+```
+
 ### close-window
 
 Close a window.

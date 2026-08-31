@@ -545,6 +545,64 @@ tuios new-window --json build
 tuios new-window -s mysession dev
 ```
 
+### `tuios popup`
+
+Run a command in a floating pane centred over the layout, and print its id.
+
+The pane closes when the command exits. Nothing re-parses the arguments after
+`--`, so nothing needs quoting. This is how a picker becomes an overlay: run
+fzf, gum or any other full-screen program in it.
+
+It needs an attached client, because a popup is a thing on a screen. The pane is
+not tiled, it is not in the window cycle, and it cannot be minimized.
+
+The popup writes to its own screen, not to this command's output. To keep a
+selection, redirect inside the popup or send it to another pane.
+
+**Usage:**
+```bash
+tuios popup [flags] -- <command> [args...]
+```
+
+**Flags:**
+- `-s, --session <name>` - Target session (default: most recently active)
+- `--width <size>` - Width in cells (`60`) or percent (`60%`). Default `80%`
+- `--height <size>` - Height in cells (`20`) or percent (`50%`). Default `60%`
+
+Neither size flag has a short form: `-w` selects a window everywhere else, and
+`-h` is help.
+- `--name <name>` - Name for the popup
+- `--cwd <dir>` - Directory to run the command in
+- `--workspace <n>` - Workspace to open the popup on
+- `--json` - Output result as JSON
+
+A size larger than the pane region is cut down to the region.
+
+**Lifetime:**
+
+A popup lives as long as its command. Detaching leaves it running, and it is
+still there on the next attach. A daemon restart does not bring it back: the
+restore respawns a shell rather than the command, which is not the popup. Press
+esc in window mode to close one by hand, or close it like any other pane.
+
+**Examples:**
+```bash
+# Pick a file in a centred popup and keep the answer
+tuios popup -- sh -c 'ls | fzf > /tmp/pick'
+
+# Send the selection straight to the pane you came from
+tuios popup -- sh -c 'tuios send-text -w main "$(ls | fzf)"'
+
+# A small popup, in cells
+tuios popup --width 60 --height 20 -- gum choose one two three
+
+# Watch something, then press q to close it
+tuios popup --width 90% --height 80% -- htop
+
+# Capture the popup's id for scripting
+tuios popup --json -- fzf | jq -r .window_id
+```
+
 ### `tuios run-command`
 
 Execute a TUIOS command (same commands available via tape scripts).

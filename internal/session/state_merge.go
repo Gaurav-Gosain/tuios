@@ -122,10 +122,23 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		at      int64
 	}
 	agents := make(map[string]agent, len(canonical.Windows))
+	// The popup mark and the size the popup was asked for are stamped once, when
+	// the daemon creates the window, and nothing ever changes them. So canonical
+	// is always the truth and they are carried over by id the way Cwd is.
+	// Without this one client sync that omits them turns a popup back into an
+	// ordinary floating pane on every screen, which tiles it away.
+	type popup struct {
+		width  string
+		height string
+	}
+	popups := make(map[string]popup, len(canonical.Windows))
 	for i := range canonical.Windows {
 		w := &canonical.Windows[i]
 		if cwd := w.Cwd; cwd != "" {
 			cwds[w.ID] = cwd
+		}
+		if w.Popup {
+			popups[w.ID] = popup{w.PopupWidth, w.PopupHeight}
 		}
 		if cmd := w.ForegroundCmd; cmd != "" {
 			fgCmds[w.ID] = cmd
@@ -141,6 +154,12 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		}
 		if w.ForegroundCmd == "" {
 			w.ForegroundCmd = fgCmds[w.ID]
+		}
+		if p, ok := popups[w.ID]; ok {
+			w.Popup = true
+			w.IsFloating = true
+			w.PopupWidth = p.width
+			w.PopupHeight = p.height
 		}
 		if a, ok := agents[w.ID]; ok && w.AgentState == AgentStateNone && w.AgentMessage == "" && w.AgentHarness == "" && w.AgentStateAt == 0 {
 			w.AgentState = a.state

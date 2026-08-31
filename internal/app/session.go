@@ -81,6 +81,12 @@ func (m *OS) BuildSessionState() *session.SessionState {
 			PreZoomY: w.PreZoomY,
 			PreZoomW: w.PreZoomWidth,
 			PreZoomH: w.PreZoomHeight,
+			// A popup is the same kind of intent again: the flag and the size
+			// the caller asked for are the session's, the box above is this
+			// client's and a peer declines it. See WindowState.Popup.
+			Popup:       w.IsPopup,
+			PopupWidth:  w.PopupWidth,
+			PopupHeight: w.PopupHeight,
 		}
 	}
 
@@ -407,6 +413,10 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	if zw := m.zoomedWindow(); zw != nil {
 		m.applyZoomRect(zw, false)
 	}
+
+	// A popup came in the same way and is answered the same way: the mark and
+	// the asked-for size are the session's, the box is this client's.
+	m.applyPopupRects(false)
 
 	m.MarkAllDirty()
 	m.LogInfo("[RESTORE] Restored session state: %d windows, FocusedWindow=%d, AutoTiling=%v, Workspace=%d", len(m.Windows), m.FocusedWindow, m.AutoTiling, m.CurrentWorkspace)
@@ -826,6 +836,11 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	}
 
 	m.settleSizes(func() {
+		// A popup that arrived in this sync, and every popup already open, is
+		// centred against this client's own bounds. Unconditional for the reason
+		// applyZoomState is: the box moves when the region does, not only when
+		// the flag changes.
+		m.applyPopupRects(false)
 		zoomRetile := m.applyZoomState(unzoomed)
 		if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 &&
 			(geometryChanged || workspaceRetile || zoomRetile || m.tiledLayoutStale()) {
@@ -909,7 +924,11 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// rectangle is not shared state (see the retile at the end of
 	// ApplyStateSync). The flag is adopted below and applyZoomState recomputes
 	// the box against this client's own bounds.
-	adoptGeometry := !ws.Unplaced && !ws.Zoomed
+	// A popup's box is declined for the same reason, and it is a stronger case:
+	// the box is derived entirely from the size the caller asked for and this
+	// client's content region, so a peer's rectangle carries nothing this client
+	// could want. See popupRect.
+	adoptGeometry := !ws.Unplaced && !ws.Zoomed && !ws.Popup
 
 	// Check if size changed
 	sizeChanged := adoptGeometry && (w.Width != ws.Width || w.Height != ws.Height)
@@ -932,6 +951,11 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// Zoom is layout intent too, and the caller watches for it changing so the
 	// rectangle can be recomputed here rather than adopted. See applyZoomState.
 	w.Zoomed = ws.Zoomed
+	// A popup is layout intent too. Its box is declined above for the reason the
+	// zoom box is, and applyPopupRects recomputes it here.
+	w.IsPopup = ws.Popup
+	w.PopupWidth = ws.PopupWidth
+	w.PopupHeight = ws.PopupHeight
 	w.PreZoomX = ws.PreZoomX
 	w.PreZoomY = ws.PreZoomY
 	w.PreZoomWidth = ws.PreZoomW
@@ -1024,6 +1048,12 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	// and the rectangle it implies is this client's to compute. See
 	// WindowState.Zoomed.
 	window.Zoomed = ws.Zoomed
+	// A popup is a float with a lifetime, and the same split applies: the mark
+	// and the asked-for size are adopted, the box is recomputed. See
+	// WindowState.Popup.
+	window.IsPopup = ws.Popup
+	window.PopupWidth = ws.PopupWidth
+	window.PopupHeight = ws.PopupHeight
 	window.PreZoomX = ws.PreZoomX
 	window.PreZoomY = ws.PreZoomY
 	window.PreZoomWidth = ws.PreZoomW
@@ -1182,7 +1212,15 @@ func (m *OS) placeUnplacedWindows(state *session.SessionState, firstSeen []*term
 		if w == nil {
 			continue
 		}
+		// A popup is not placed where a new pane would be. Its box is the one
+		// the caller asked for, centred, and computing it here rather than
+		// letting the generic placement run and correcting it afterwards is
+		// what stops the popup being drawn once at half the screen before it
+		// settles.
 		x, y, width, height := m.NewWindowPlacement()
+		if w.IsPopup {
+			x, y, width, height = m.popupRect(w)
+		}
 		w.X, w.Y = x, y
 		// Resize rather than assigning the size and telling the daemon by hand:
 		// it resizes the emulator and announces the same number downstream, and

@@ -125,6 +125,29 @@ type WindowState struct {
 	// the ranked source that won stays daemon-side, where get-agent-state reads
 	// it from the claim.
 	AgentHarness string `json:"agent_harness,omitempty"`
+	// Popup marks a transient floating pane that runs one command and closes
+	// when the command exits. It is session state, not a client's own, for the
+	// two reasons IsFloating and Zoomed are: a peer that does not know the pane
+	// is a popup counts it among the tiled panes and tiles it back into the box,
+	// which destroys the popup on the client that opened it; and the box sizes
+	// the shared PTY, so two clients disagreeing about it hand one shell two
+	// sizes. A popup is always floating, so both flags travel together.
+	//
+	// The flag travels; the rectangle does not. See PopupWidth below. The zero
+	// value is an ordinary window, which is what every older client and older
+	// state reads as.
+	Popup bool `json:"popup,omitempty"`
+	// PopupWidth and PopupHeight are the size the caller asked for, as the
+	// caller wrote it: "60" for cells, "60%" for a share of the content region.
+	// The request travels rather than the resolved box because the box is
+	// measured against one client's content region, and a peer of another size
+	// measures the same request against its own. This is the split zoom makes
+	// between its flag and its rectangle, applied to a size the user chose.
+	//
+	// Empty means the caller named no size and the client uses
+	// PopupDefaultWidth or PopupDefaultHeight.
+	PopupWidth  string `json:"popup_width,omitempty"`
+	PopupHeight string `json:"popup_height,omitempty"`
 	// ForegroundCmd is the base name of the program running in the pane's
 	// foreground, empty while the pane sits at its login shell. It is what lets a
 	// row say "nvim" instead of repeating a title every pane in one directory
