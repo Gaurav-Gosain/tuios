@@ -165,6 +165,10 @@ Client features:
 	rootCmd.Flags().BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
 	rootCmd.Flags().BoolVar(&noAnimations, "no-animations", false, "Disable UI animations for instant transitions")
 
+	// See cmd/tuios/main.go: a crash report names the build it came from, and
+	// internal/app cannot read these vars itself.
+	app.SetBuildStamp(version, commit)
+
 	rootCmd.AddCommand(newCertCmd())
 
 	// Execute with fang

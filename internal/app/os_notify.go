@@ -184,6 +184,19 @@ func (m *OS) showNotification(message, notifType string, duration time.Duration,
 		return
 	}
 
+	// The crash overlay stands in for the dock while it is up.
+	//
+	// A notification is drawn in the dock, and the dock is drawn by the
+	// compositor, which the crash overlay replaces entirely. So a message
+	// raised while the overlay is up has nowhere to go: pressing c copies the
+	// report and the screen does not change, which reads as a key that does not
+	// work. Mirroring it onto the overlay is done here, before the lifetime
+	// gate below, so a message that would be dropped for being too short-lived
+	// still reaches the one surface that is on screen. See CopyCrashReport.
+	if m.crash != nil {
+		m.crashNotice = message
+	}
+
 	effective, sticky := notificationLifetime(notifType, duration, &m.Settings)
 	if effective <= 0 && !sticky {
 		return
