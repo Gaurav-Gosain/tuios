@@ -670,16 +670,6 @@ func (w *Window) handleIOOperations() {
 					return
 				}
 				if n > 0 {
-					w.HasNewOutput.Store(true)
-
-					// Signal bubbletea that PTY data arrived (non-blocking, coalesces rapid updates)
-					if w.PTYDataChan != nil {
-						select {
-						case w.PTYDataChan <- struct{}{}:
-						default:
-						}
-					}
-
 					// Debug: Log all data from PTY (applications sending queries)
 					if n >= 2 && buf[0] == '\x1b' {
 						debugLogf("[%s] PTY->Terminal query: %q (hex: % x)\n",
@@ -694,6 +684,28 @@ func (w *Window) handleIOOperations() {
 						_, _ = w.Terminal.Write(buf[:n])
 					}
 					w.ioMu.Unlock()
+
+					// Said after the write, never before it.
+					//
+					// MarkTerminalsWithNewContent consumes HasNewOutput with a
+					// Swap on the UI goroutine. Set before the write, a UI pass
+					// that lands in between takes the flag away and composes the
+					// grid the bytes have not reached yet, so the pane holds
+					// output that nothing will ever draw. Only more output sets
+					// the flag again, and a shell that has printed its prompt and
+					// is waiting for a key produces none: the prompt then stays
+					// invisible until the user types. The daemon path has always
+					// said this after its write (see noteOutput in
+					// outputWriter); this reader had it the other way round.
+					w.HasNewOutput.Store(true)
+
+					// Signal bubbletea that PTY data arrived (non-blocking, coalesces rapid updates)
+					if w.PTYDataChan != nil {
+						select {
+						case w.PTYDataChan <- struct{}{}:
+						default:
+						}
+					}
 				}
 			}
 		}
