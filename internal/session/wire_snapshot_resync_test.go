@@ -14,9 +14,13 @@ import (
 // clear must still be there for a client resuming a screen it drew byte by
 // byte.
 //
-// The branch is what switches the fix on in production. Make
-// daemon_handlers.go's FromSnapshot branch unreachable, or make the app pass
-// false, and this test fails.
+// The branch is what switches the fix on in production: make
+// daemon_handlers.go's FromSnapshot branch unreachable and this test fails.
+//
+// It calls the client API itself, so it says nothing about whether the app
+// sets the flag in the first place. That half is covered by
+// TestReattachKeepsSnapshotRowsWhenRingRolled in e2e/tui, which fails when
+// internal/app/session.go passes false.
 func TestWireFromSnapshotSkipsTheResyncWhenRolled(t *testing.T) {
 	d, _ := startTestDaemon(t)
 	sess := makeSessionWithWindow(t, d, "wire-snapshot")
