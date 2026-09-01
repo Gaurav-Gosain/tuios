@@ -2,9 +2,9 @@ package app
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -71,19 +71,30 @@ func detectClipboardTool(env detectClipboardToolEnv) *clipboardTool {
 // Write sends text to the native clipboard. The tool owns the data: wl-copy
 // forks a keeper process that holds the selection until it is replaced, which
 // is exactly the semantics we want (the text stays available after we exit).
-// The write is started but not waited on: waiting would block until the keeper
-// is replaced, which for a copy that nobody pastes is effectively forever.
-// cmd.Start returns as soon as the keeper has the content, and a later copy
-// replaces it naturally (wl-clipboard handles the handoff). The goroutine
-// reaps the keeper so it never lingers as a zombie in the process table.
+//
+// The write itself is reported: a keeper that died before consuming stdin
+// (compositor gone mid-copy) surfaces as an error from the pipe instead of
+// being lost. The process is not waited on — waiting would block until the
+// keeper is replaced, which for a copy that nobody pastes is effectively
+// forever — so the reaping stays in a goroutine, and a write only blocks while
+// the text is larger than the pipe buffer and the keeper is slow to consume
+// it, which is fine on the Cmd goroutine the write runs on.
 func (t *clipboardTool) Write(text string) error {
 	cmd := exec.Command(t.copyCmd[0], t.copyCmd[1:]...)
-	cmd.Stdin = strings.NewReader(text)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	_, werr := io.WriteString(stdin, text)
+	cerr := stdin.Close()
 	go cmd.Wait() // reap the keeper so it does not become a zombie
-	return nil
+	if werr != nil {
+		return werr
+	}
+	return cerr
 }
 
 // pasteTimeout bounds a clipboard read. A hung xclip (X server gone, selinux
@@ -103,37 +114,38 @@ func (t *clipboardTool) Read() (string, error) {
 	return string(out), err
 }
 
-// localClipboardAvailable reports whether a native clipboard tool is usable
-// right now. Called on every copy/paste so a tool disappearing (session end,
-// compositor exit) degrades gracefully back to OSC 52.
-func LocalClipboardAvailable() bool {
-	return DetectClipboardTool() != nil
-}
-
-// ShouldUseNativeClipboard is the single decision point for the clipboard
-// fallback. The native tool is only reached for when ALL of these hold:
-//  1. the config option is on,
-//  2. the host terminal is VTE (the only family that never implements OSC 52;
+// nativeClipboardTool is the single decision point for the clipboard fallback:
+// it returns the native tool to use for this session, or nil when tuios must
+// go through OSC 52 alone. The paste path (RequestHostPaste) and the write
+// path (WriteClipboard) both call it once, on the Update loop, and hand the
+// result to their Cmd, so the goroutine only ever sees a plain tool pointer
+// and never touches the model.
+//
+// The native tool is reached only when ALL of these hold:
+//  1. the session is local — not SSH, not a browser client: under tuios ssh /
+//     tuios-web the human is elsewhere, and WAYLAND_DISPLAY / DISPLAY describe
+//     the operator's desktop, so a native read or write would move data
+//     between two people,
+//  2. the config option is on,
+//  3. the host terminal is VTE (the only family that never implements OSC 52;
 //     everywhere else OSC 52 already works and spawning wl-copy/xclip would
 //     just duplicate entries in the clipboard manager on every selection),
-//  3. a tool is actually reachable.
-//
-// The SSH/browser gate lives at the call sites (clipboardWriteCmd and the
-// paste path): only those know whether the human is sitting at this machine.
-// Under tuios ssh / tuios-web, WAYLAND_DISPLAY/DISPLAY describe the operator's
-// desktop, so a native read/write would move data between two people.
-func ShouldUseNativeClipboard(fallbackEnabled bool) bool {
-	return shouldUseNativeClipboard(detectClipboardToolEnv{os.Getenv, lookPath}, config.HostIsVTE(), fallbackEnabled)
+//  4. a tool is actually reachable.
+func (m *OS) nativeClipboardTool() *clipboardTool {
+	if m.IsSSHMode || m.BrowserClient {
+		return nil
+	}
+	return nativeClipboardToolFor(detectClipboardToolEnv{os.Getenv, lookPath}, config.HostIsVTE(), m.Settings.ClipboardLocalFallback)
 }
 
-func shouldUseNativeClipboard(env detectClipboardToolEnv, hostIsVTE, fallbackEnabled bool) bool {
-	if !fallbackEnabled {
-		return false
+// nativeClipboardToolFor is nativeClipboardTool with the environment, the host
+// detection and the setting injected, so the VTE/setting/tool half of the
+// decision stays a table test with no compositor and no real env.
+func nativeClipboardToolFor(env detectClipboardToolEnv, hostIsVTE, fallbackEnabled bool) *clipboardTool {
+	if !fallbackEnabled || !hostIsVTE {
+		return nil
 	}
-	if !hostIsVTE {
-		return false
-	}
-	return detectClipboardTool(env) != nil
+	return detectClipboardTool(env)
 }
 
 func lookPath(name string) bool {

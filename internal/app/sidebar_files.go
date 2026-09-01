@@ -549,7 +549,7 @@ func (m *OS) fileViewOpen(dir, name string, isDir bool) tea.Cmd {
 		return cmd
 	}
 	m.ShowNotification("Copied the path.", "success", m.Settings.NotificationDuration)
-	return tea.SetClipboard(full)
+	return m.WriteClipboard(full)
 }
 
 // FileViewCd sends a cd to the pane the section was opened from, for the

@@ -38,34 +38,30 @@ func (m *OS) CopyToClipboard(text string) tea.Cmd {
 	}
 	m.CancelPendingCopy()
 	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
-	return m.clipboardWriteCmd(text)
+	return m.WriteClipboard(text)
 }
 
-// clipboardWriteCmd prefers a native system clipboard (wl-copy, xclip, pbcopy)
-// when one is reachable, and falls back to OSC 52 (tea.SetClipboard) otherwise.
-// OSC 52 is the right channel for remote clients with no local clipboard of
-// their own; a native tool is the right channel for terminals like GNOME
-// Terminal/Ptyxis whose VTE never implements OSC 52.
+// WriteClipboard writes text to the system clipboard and is the one write
+// path: copy mode's y, the scrollback browser, link and path copies, drag and
+// multi-click selections, and the pane menu all land here. It prefers a native
+// system clipboard (wl-copy, xclip, pbcopy) when one is reachable for this
+// session, and always returns the OSC 52 message (tea.SetClipboard) on top.
 //
-// The native path is only taken for a session that is both local (not SSH, not
-// a browser client: under tuios ssh / tuios-web, WAYLAND_DISPLAY/DISPLAY
-// describe the operator's desktop, and a native read/write would move data
-// between two people) and VTE-hosted (the only family that never implements
-// OSC 52; everywhere else spawning wl-copy/xclip would just duplicate entries
-// in the clipboard manager on every selection for no gain).
-func (m *OS) clipboardWriteCmd(text string) tea.Cmd {
-	local := !m.IsSSHMode && !m.BrowserClient
-	// The write is wrapped so the native path runs *and* the same
-	// setClipboardMsg that tea.SetClipboard produces is still returned: Bubble
-	// Tea forwards that message as OSC 52, which is harmless in terminals that do
-	// not implement it and a second, redundant path in those that do. The
-	// double write is idempotent (same text), and the native one is what makes
-	// VTE-based terminals (GNOME Terminal, Ptyxis) work at all.
+// The native write is decided by nativeClipboardTool, here on the Update loop;
+// the Cmd it returns only closes over the tool pointer and the text. The OSC
+// 52 message is still returned when the native path ran: in the VTE terminals
+// the gate allows it is ignored (they do not implement OSC 52, which is why
+// the native tool exists at all), and if the host detection ever misfires on a
+// terminal that does implement it, the query lands the text anyway. Nothing
+// ever writes twice: where OSC 52 works, the native path is off, and where the
+// native path is on, OSC 52 is ignored.
+func (m *OS) WriteClipboard(text string) tea.Cmd {
+	tool := m.nativeClipboardTool()
 	return func() tea.Msg {
-		if local && ShouldUseNativeClipboard(m.Settings.ClipboardLocalFallback) {
+		if tool != nil {
 			// Best-effort: if the native write fails (permissions, compositor
 			// gone), the OSC 52 message below is still the safety net.
-			_ = DetectClipboardTool().Write(text)
+			_ = tool.Write(text)
 		}
 		return tea.SetClipboard(text)()
 	}
@@ -109,7 +105,7 @@ func (m *OS) HandlePendingCopy(seq uint64) tea.Cmd {
 	text := m.pendingCopy
 	m.pendingCopy = ""
 	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
-	return m.clipboardWriteCmd(text)
+	return m.WriteClipboard(text)
 }
 
 // PendingCopyText reports the text a deferred write is holding, for tests and

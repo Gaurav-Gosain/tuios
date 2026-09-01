@@ -172,9 +172,10 @@ func copyModeLineCells(window *terminal.Window, absY int) []uv.Cell {
 // the highlight up rather than clearing it, so the user can see what they got;
 // the next press clears it, as does typing.
 //
-// The clipboard path is the same tea.SetClipboard (OSC 52) that copy mode's y
-// has always used, so it reaches exactly the environments that already did,
-// including over SSH, and no more.
+// The clipboard write is WriteClipboard, the one write path copy mode's y and
+// the scrollback browser also use. Its native tool is gated to local VTE
+// sessions, so over SSH this reaches the operator's terminal exactly the way
+// OSC 52 always did, and no more.
 func finishMouseSelection(o *app.OS, window *terminal.Window) tea.Cmd {
 	cm := window.CopyMode
 	if cm == nil || !cm.Active {

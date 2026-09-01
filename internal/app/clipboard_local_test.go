@@ -1,11 +1,14 @@
 package app
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // detectClipboardToolEnv built from explicit getenv/lookPath closures, so the
@@ -113,11 +116,11 @@ func TestDetectClipboardToolTable(t *testing.T) {
 	}
 }
 
-// TestShouldUseNativeClipboardDecision pins the gating that prevents the data
-// leak Gaurav flagged: the native path must be refused on any non-VTE host even
-// when a tool exists, and refused when the config option is off. The getenv
+// TestNativeClipboardToolDecision pins the gating that prevents the data leak
+// Gaurav flagged: the native path must be refused on any non-VTE host even when
+// a tool exists, and refused when the config option is off. The getenv
 // injection makes the whole matrix testable with no compositor and no real env.
-func TestShouldUseNativeClipboardDecision(t *testing.T) {
+func TestNativeClipboardToolDecision(t *testing.T) {
 	waylandWithTool := envWith(
 		func(k string) string {
 			m := map[string]string{"XDG_RUNTIME_DIR": "/run/user/1000", "WAYLAND_DISPLAY": "wayland-0"}
@@ -179,9 +182,9 @@ func TestShouldUseNativeClipboardDecision(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := shouldUseNativeClipboard(tt.env, tt.hostIsVTE, tt.fallbackEnabled)
+			got := nativeClipboardToolFor(tt.env, tt.hostIsVTE, tt.fallbackEnabled) != nil
 			if got != tt.want {
-				t.Fatalf("shouldUseNativeClipboard() = %v, want %v", got, tt.want)
+				t.Fatalf("nativeClipboardToolFor() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -246,16 +249,80 @@ func TestClipboardToolWriteReadLogic(t *testing.T) {
 	}
 }
 
-// TestClipboardToolRoundTrip writes a sentinel through the real native tool
-// and reads it back. It only runs when a Wayland socket is actually reachable
-// from the test process: the package TestMain redirects XDG_RUNTIME_DIR to a
-// throwaway tree, so under `go test` this always skips — which is exactly what
-// we want, because the isolated tree has no compositor socket. Run it manually
-// (or in a non-isolated harness) to validate against a live session.
+// TestNativeClipboardToolGate pins the session half of the gate, which the
+// table above cannot see: a remote session (SSH or browser client) must never
+// reach for the native tool, because WAYLAND_DISPLAY / DISPLAY describe the
+// operator's desktop and a native read or write would move data between two
+// people. The tool must also be refused when the config option is off. These
+// rows return before any environment probing, so they are deterministic.
+func TestNativeClipboardToolGate(t *testing.T) {
+	if !config.DefaultSettings().ClipboardLocalFallback {
+		t.Fatalf("the fallback is off by default; this gate test assumes it on")
+	}
+	rows := []struct {
+		name string
+		os   *OS
+	}{
+		{"ssh session", &OS{Settings: config.DefaultSettings(), IsSSHMode: true}},
+		{"browser client", &OS{Settings: config.DefaultSettings(), BrowserClient: true}},
+		{"fallback off", &OS{Settings: func() config.Settings {
+			s := config.DefaultSettings()
+			s.ClipboardLocalFallback = false
+			return s
+		}()}},
+	}
+	for _, tt := range rows {
+		if got := tt.os.nativeClipboardTool(); got != nil {
+			t.Fatalf("%s reached for the native clipboard: %v", tt.name, got.name)
+		}
+	}
+}
+
+// TestClipboardToolRoundTrip writes a sentinel through a tool discovered the
+// way the real one is — DetectClipboardTool walking PATH — and reads it back.
+// The package TestMain points the environment at a throwaway tree, so
+// detection can never see the host session's compositor or real tools; this
+// test stubs wl-clipboard with shell scripts in a temp dir on PATH instead,
+// which exercises the same detection → Write → Read plumbing with no
+// compositor, and runs everywhere.
 func TestClipboardToolRoundTrip(t *testing.T) {
+	bin := t.TempDir()
+	clip := filepath.Join(bin, "clipboard")
+	stubs := map[string]string{
+		filepath.Join(bin, "wl-copy"):  "#!/bin/sh\ncat > " + clip + "\n",
+		filepath.Join(bin, "wl-paste"): "#!/bin/sh\nexec cat " + clip + "\n",
+	}
+	for path, body := range stubs {
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+			t.Fatalf("stub %s: %v", path, err)
+		}
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// Detection needs a Wayland session; name one explicitly, since the
+	// isolated test tree never has one. The scripts above stand in for the
+	// compositor.
+	t.Setenv("XDG_RUNTIME_DIR", bin)
+	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+
 	tool := DetectClipboardTool()
 	if tool == nil {
-		t.Skip("no native clipboard tool detected in this environment")
+		t.Fatalf("detection did not find the stubbed wl-clipboard on PATH")
 	}
-	t.Skip("live round trip requires a compositor socket; run manually in a session")
+
+	const sentinel = "tuios-round-trip-sentinel"
+	if err := tool.Write(sentinel); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+	// The stub keeper lands the bytes asynchronously (Start semantics, like
+	// the real wl-copy), so poll briefly instead of sleeping a fixed amount.
+	var got string
+	var err error
+	for i := 0; i < 100; i++ {
+		got, err = tool.Read()
+		if err == nil && got == sentinel {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("round trip mismatch: wrote %q, read back %q (err=%v)", sentinel, got, err)
 }

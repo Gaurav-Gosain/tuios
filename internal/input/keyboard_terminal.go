@@ -320,10 +320,12 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return m, cmd
 	}
 
-	// Handle paste shortcuts - intercept and request the clipboard. Prefer a
-	// native system clipboard (wl-paste, xclip, pbcopy) when one is reachable;
-	// fall back to OSC 52 (tea.ReadClipboard) which terminals that implement it
-	// answer with a tea.ClipboardMsg. Both paths end in the same message, which
+	// Handle paste shortcuts - intercept and request the clipboard. The whole
+	// decision lives in RequestHostPaste: it says why paste cannot work when it
+	// cannot, decides on the Update loop whether a native tool is reachable,
+	// arms the OSC 52 deadline, and returns one Cmd that does the reading, so
+	// the key path stays a plain return and nothing touches the model off the
+	// loop. Both the native and the OSC 52 read end in the same message, which
 	// handler.go routes to handleClipboardPaste, so the paste destination logic
 	// is shared. Plain ctrl+v is deliberately not bound to terminal_paste_host
 	// so it falls through to the passthrough block and reaches the child PTY as
@@ -331,30 +333,6 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// convention.
 	if sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction) == "terminal_paste_host" {
 		if focusedWindow != nil {
-			// Native clipboard read only for a local, VTE-hosted session: under
-			// tuios ssh / tuios-web the human is elsewhere, and WAYLAND_DISPLAY /
-			// DISPLAY describe the operator's desktop, so a native read would pull
-			// the operator's clipboard into a remote pane. VTE never implements
-			// OSC 52, so everywhere else the OSC 52 read below is the right path.
-			local := !o.IsSSHMode && !o.BrowserClient
-			if local && app.ShouldUseNativeClipboard(o.Settings.ClipboardLocalFallback) {
-				tool := app.DetectClipboardTool()
-				return o, func() tea.Msg {
-					text, err := tool.Read()
-					if err != nil {
-						// Native read failed (hung tool, empty selection,
-						// compositor gone): fall back to the host paste path
-						// so the OSC 52 read still arms the deadline and the
-						// browser client still hears why paste cannot work.
-						return o.RequestHostPaste()()
-					}
-					return tea.ClipboardMsg{Content: text, Selection: 'c'}
-				}
-			}
-			// Request the clipboard via the host paste path: it routes through
-			// RequestHostPaste so the browser client is told why paste cannot
-			// work and the OSC 52 deadline is armed (a terminal that never
-			// answers is reported instead of looking broken).
 			return o, o.RequestHostPaste()
 		}
 		return o, nil
