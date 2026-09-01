@@ -65,7 +65,7 @@ func TestResubscribeOverTheWireReplaysOnlyWhatWasMissed(t *testing.T) {
 	client := attachTestClient(t, "switching")
 
 	var got collector
-	if err := client.SubscribePTY(ptyID, 0, got.add); err != nil {
+	if err := client.SubscribePTY(ptyID, 0, false, got.add); err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
 
@@ -90,7 +90,7 @@ func TestResubscribeOverTheWireReplaysOnlyWhatWasMissed(t *testing.T) {
 			defer pty.subscribersMu.RUnlock()
 			return len(pty.subscribers) == 0
 		})
-		if err := client.SubscribePTY(ptyID, 0, got.add); err != nil {
+		if err := client.SubscribePTY(ptyID, 0, false, got.add); err != nil {
 			t.Fatalf("resubscribe: %v", err)
 		}
 		waitFor(t, "the daemon to take the subscription", func() bool {
@@ -120,7 +120,7 @@ func TestDetachReplaysTheWholePaneOnTheWayBack(t *testing.T) {
 	client := attachTestClient(t, "switching")
 
 	var got collector
-	if err := client.SubscribePTY(ptyID, 0, got.add); err != nil {
+	if err := client.SubscribePTY(ptyID, 0, false, got.add); err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
 
@@ -147,7 +147,7 @@ func TestDetachReplaysTheWholePaneOnTheWayBack(t *testing.T) {
 	if _, err := client.SwitchSession("switching", 80, 24); err != nil {
 		t.Fatalf("switch: %v", err)
 	}
-	if err := client.SubscribePTY(ptyID, 0, got.add); err != nil {
+	if err := client.SubscribePTY(ptyID, 0, false, got.add); err != nil {
 		t.Fatalf("resubscribe: %v", err)
 	}
 

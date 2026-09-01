@@ -359,9 +359,18 @@ type ResizePTYPayload struct {
 // so the daemon replays only what came after it. Zero means the client has no
 // claim to make and the daemon uses whatever position it recorded for this
 // connection, which is what an older client sends.
+//
+// FromSnapshot marks a subscribe that follows a freshly restored snapshot: the
+// client holds an authoritative copy of the pane's state at FromSeq, so a
+// rolled catch-up (whose ring has moved past FromSeq) must not clear that
+// state before replaying the tail. The clear exists for a client resuming a
+// screen it drew byte by byte, whose missing bytes would otherwise splice two
+// halves of the stream; a snapshot is already the whole of it, and clearing
+// it is what emptied rows a full-screen program had drawn (issue #123).
 type SubscribePTYPayload struct {
-	PTYID   string `json:"pty_id"`
-	FromSeq int64  `json:"from_seq,omitempty"`
+	PTYID        string `json:"pty_id"`
+	FromSeq      int64  `json:"from_seq,omitempty"`
+	FromSnapshot bool   `json:"from_snapshot,omitempty"`
 }
 
 // PTYResizedPayload announces the size the daemon's emulator took, delivered in

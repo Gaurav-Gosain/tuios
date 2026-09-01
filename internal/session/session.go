@@ -1652,6 +1652,21 @@ var resyncPrefix = []byte("\x1b[H\x1b[2J\x1b[3J")
 // history a second time below the paint already there, which is the stacked
 // prompts a workspace switch used to leave behind.
 func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan ptyChunk {
+	return p.subscribe(clientID, fromSeq, false)
+}
+
+// SubscribeFromSnapshot is Subscribe for a client that has just laid down an
+// authoritative snapshot of the pane ending at fromSeq. When the catch-up ring
+// has rolled past fromSeq, a plain Subscribe clears the client's screen before
+// replaying the tail so the tail paints against a known state; that clear
+// throws away the snapshot's rows, which are exactly what a full-screen program
+// drew and cannot be recovered from the ring (issue #123). A snapshot is the
+// whole of the stream up to fromSeq, so the tail replays on top of it.
+func (p *PTY) SubscribeFromSnapshot(clientID string, fromSeq int64) <-chan ptyChunk {
+	return p.subscribe(clientID, fromSeq, true)
+}
+
+func (p *PTY) subscribe(clientID string, fromSeq int64, fromSnapshot bool) <-chan ptyChunk {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
 
@@ -1700,7 +1715,7 @@ func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan ptyChunk {
 			}
 		}
 		var prefix []byte
-		if rolled {
+		if rolled && !fromSnapshot {
 			// The client still holds the screen it drew up to fromSeq, and the
 			// bytes between there and the buffer's start are gone. Appending the
 			// tail to that screen splices two halves of the stream that never
@@ -1708,6 +1723,11 @@ func (p *PTY) Subscribe(clientID string, fromSeq int64) <-chan ptyChunk {
 			// tail is written against, so the guest's output lands wherever the
 			// old screen had left off. Clear first, so the tail repaints from a
 			// known state instead of over a stale one.
+			//
+			// A client that just restored a snapshot is not in that state: the
+			// snapshot is the whole of the stream up to fromSeq, and clearing
+			// it throws away rows a full-screen program drew that the ring no
+			// longer holds (issue #123). The tail replays on top of it.
 			prefix = resyncPrefix
 		}
 		segStart := start
