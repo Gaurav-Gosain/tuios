@@ -61,6 +61,19 @@ every percentage is a named keybind, so any of them can be rebound or removed in
 minimum pane size, gaps, and the pane's neighbours - so the resulting size is
 the requested percentage wherever the layout allows it.
 
+Two layout caveats, documented rather than hidden:
+
+- **Scrolling layout: width only.** The width actions reach the focused
+  column through the scrolling column resizer, which clamps to the column
+  width range; the height actions have no scrolling branch, so
+  `Shift+5`..`Shift+9` do nothing there (column heights are recomputed as
+  equal spans on the next layout pass).
+- **Master-stack: not durable.** In master-stack the rectangles are
+  recomputed from `appearance.master_ratio` on every retile, so a percentage
+  resize is dropped the next time the layout is recomputed. This is older
+  than the percentage feature itself; BSP (the default) keeps the split
+  ratio, so the percentage survives there.
+
 ## Scrolling Layout
 
 The scrolling layout is modeled on the niri window manager. Windows are arranged

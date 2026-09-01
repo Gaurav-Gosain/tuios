@@ -130,14 +130,17 @@ func TestHeightPercentShrinksBack(t *testing.T) {
 
 // TestPercentGuardrails pins the guards: out-of-range percentages and tiling
 // off are no-ops, and a percentage equal to the current size changes nothing.
+// The accepted range is 10..90, matching the resize_width_N/resize_height_N
+// actions: there is no resize_width_100, so 100 is out of range too.
 func TestPercentGuardrails(t *testing.T) {
 	m, _, right := twoPaneSideBySide(t)
 	m.FocusedWindow = 1
 	beforeRight := right.Width
 
-	// Out of the 10..100 range: ignored.
+	// Out of the 10..90 range: ignored (100 included — no resize_width_100).
 	m.SetFocusedWindowWidthPercent(5)
-	m.SetFocusedWindowWidthPercent(105)
+	m.SetFocusedWindowWidthPercent(95)
+	m.SetFocusedWindowWidthPercent(100)
 	if right.Width != beforeRight {
 		t.Errorf("out-of-range percent moved the window: %d -> %d", beforeRight, right.Width)
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // Corner snapping moved off the bare digits in window mode, where it shadowed
@@ -82,5 +83,64 @@ func TestBareDigitsNoLongerCornerSnap(t *testing.T) {
 		if want := "select_window_" + digit; got != want {
 			t.Errorf("%q in window mode runs %q, want %q", digit, got, want)
 		}
+	}
+}
+
+// TestLayoutChordPercentDigitsRunTheResize is the reachability test for issue
+// #29. TestLayoutPrefixDigitsResolveToPercentActions proves the key names the
+// width action and TestDefaultLayoutPrefixHasPercentageResize proves the
+// defaults exist, but neither proves the action runs: the layout prefix was a
+// hand-written switch, so a digit resolved to resize_width_N and then fell
+// through to the branch that just dismissed the chord. Driving the real chord
+// and watching the focused pane change width proves the dispatcher is reached.
+func TestLayoutChordPercentDigitsRunTheResize(t *testing.T) {
+	// Width 200 with a 100/100 split: every target leaves the yielding pane
+	// at or above the minimum width, so the resize lands exactly on the
+	// percentage (the 120-wide fixture would clamp 90% to 100 cells).
+	const width, height = 200, 40
+	for _, tc := range []struct {
+		key       string
+		wantWidth int
+	}{
+		{"5", 100}, // 200 * 50%
+		{"6", 120}, // 200 * 60%
+		{"7", 140}, // 200 * 70%
+		{"8", 160}, // 200 * 80%
+		{"9", 180}, // 200 * 90%
+	} {
+		o := layoutPrefixOS(t)
+		left := &terminal.Window{ID: "left-1", Workspace: o.CurrentWorkspace, X: 0, Y: 0, Width: 100, Height: height, Tiled: true}
+		right := &terminal.Window{ID: "right-2", Workspace: o.CurrentWorkspace, X: 100, Y: 0, Width: 100, Height: height, Tiled: true}
+		o.Windows = []*terminal.Window{left, right}
+		o.FocusedWindow = 1 // focus the RIGHT (boundary) pane
+		o.AutoTiling = true
+		o.Width = width
+		o.Height = height
+		o.LayoutPrefixActive = true
+		o.PrefixActive = true
+
+		o, _ = handleTerminalLayoutPrefix(press(tc.key), o)
+
+		if right.Width != tc.wantWidth {
+			t.Errorf("layout chord then %q: focused pane width = %d, want %d (resize_width_%s0)",
+				tc.key, right.Width, tc.wantWidth, tc.key)
+		}
+	}
+}
+
+// TestLayoutChordClearsThePrefixForPercentDigits, so a resize digit does not
+// leave the chord armed and swallow the next key either.
+func TestLayoutChordClearsThePrefixForPercentDigits(t *testing.T) {
+	o := layoutPrefixOS(t)
+	o.Windows = []*terminal.Window{{ID: "w1", Workspace: o.CurrentWorkspace, X: 0, Y: 0, Width: 60, Height: 40, Tiled: true}}
+	o.FocusedWindow = 0
+	o.AutoTiling = true
+	o.LayoutPrefixActive = true
+	o.PrefixActive = true
+
+	o, _ = handleTerminalLayoutPrefix(press("5"), o)
+
+	if o.LayoutPrefixActive || o.PrefixActive {
+		t.Errorf("the chord stayed armed: layout=%v prefix=%v", o.LayoutPrefixActive, o.PrefixActive)
 	}
 }

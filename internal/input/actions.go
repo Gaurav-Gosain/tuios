@@ -422,7 +422,15 @@ func handleUnsnap(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func makeSnapCornerHandler(corner app.SnapQuarter) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-		if !o.AutoTiling && len(o.Windows) > 0 && o.FocusedWindow >= 0 {
+		if o.AutoTiling {
+			// Corner snapping moves a floating window, so with tiling on there
+			// is nothing for it to move; saying so keeps the binding honest
+			// (the window-mode path and the layout chord both reach this
+			// handler now that the layout prefix routes through the dispatcher).
+			o.ShowNotification("Corner snapping needs tiling off", "info", o.Settings.NotificationDuration)
+			return o, nil
+		}
+		if len(o.Windows) > 0 && o.FocusedWindow >= 0 {
 			o.Snap(o.FocusedWindow, corner)
 		}
 		return o, nil
