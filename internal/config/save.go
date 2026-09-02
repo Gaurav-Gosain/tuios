@@ -114,7 +114,7 @@ func configFileHeader(configPath string) string {
 	sb.WriteString("#   [dock]\n")
 	sb.WriteString("#   left   = [\"mode\", \"workspaces\", \"trail\", \"tape\"]\n")
 	sb.WriteString("#   center = [\"windows\"]\n")
-	sb.WriteString("#   right  = [\"notifications\", \"copy-help\", \"cpu\", \"ram\", \"session-controls\"]\n")
+	sb.WriteString("#   right  = [\"notifications\", \"copy-help\", \"cpu\", \"ram\", \"clock\", \"session-controls\"]\n")
 	sb.WriteString("#\n")
 	sb.WriteString("# A cell of your own is a command whose first line of stdout is the text:\n")
 	sb.WriteString("#\n")

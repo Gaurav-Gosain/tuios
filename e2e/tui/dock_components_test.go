@@ -44,7 +44,7 @@ func TestDockDefaultListsDrawTheSameBar(t *testing.T) {
 [dock]
 left   = ["mode", "workspaces", "trail", "tape"]
 center = ["windows"]
-right  = ["notifications", "copy-help", "cpu", "ram", "session-controls"]
+right  = ["notifications", "copy-help", "cpu", "ram", "clock", "session-controls"]
 `)
 	listed := startIn(t, base, startOpts{})
 	waitBoot(t, listed)

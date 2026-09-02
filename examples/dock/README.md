@@ -26,7 +26,7 @@ refresh = "event:after-focus-change"
 [dock]
 left   = ["mode", "workspaces", "trail", "tape"]
 center = ["windows"]
-right  = ["notifications", "copy-help", "cpu", "ram", "session-controls"]
+right  = ["notifications", "copy-help", "cpu", "ram", "clock", "session-controls"]
 ```
 
 That is the default. Omit the whole `[dock]` table and you get exactly this;
