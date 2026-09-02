@@ -206,6 +206,16 @@ type foregroundInfo struct {
 	// pid is the foreground process itself, kept so the transcript source can
 	// read its working directory. Zero when the process could not be resolved.
 	pid int
+	// shellPID is the pane's shell, not its foreground process. It rides here
+	// because the resolver is handed the shell pid to begin with, so nothing has
+	// to be read to know it, and because this is the one value the detector's
+	// poll already has for every pane. Zero when the pane has no live PTY.
+	//
+	// It is set whether or not the foreground process resolved: a pane whose
+	// foreground group cannot be read still has a shell, and clearing the pid
+	// there would drop the client's only way to check the pane's reported
+	// directory. See WindowState.ShellPID.
+	shellPID int
 }
 
 // proc is the process in the shape both matchers read it in.
@@ -312,6 +322,15 @@ func (s *Session) applyAgentDetection(
 			// process was read for the agent check either way.
 			if cmd := foregroundCommand(info, running, shell); cmd != w.ForegroundCmd {
 				w.ForegroundCmd = cmd
+				labels++
+			}
+			// The shell's pid rides the same poll, for the same reason and at the
+			// same price: the resolver already held it. It is counted with the
+			// labels rather than the agent states because it is not one, but it
+			// still has to reach the clients, which is what a pane needs before
+			// its reported directory can be checked. See WindowState.ShellPID.
+			if info.shellPID != w.ShellPID {
+				w.ShellPID = info.shellPID
 				labels++
 			}
 			harnessID, isAgent := identify(info)

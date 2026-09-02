@@ -973,6 +973,15 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// state rather than the ones it replaced.
 	m.noteAgentState(w, string(ws.AgentState))
 	w.ForegroundCmd = ws.ForegroundCmd
+	// The shell's pid, as the daemon that spawned it knows it, and the only
+	// second source a daemon-backed pane has for the directory it reports over
+	// OSC 7. A locally spawned pane records its own at spawn time, so the daemon
+	// has nothing to say about one and must not clear it: only a pane with a
+	// daemon PTY takes this. Zero is "nobody knows", which leaves the pane
+	// exactly as it was. See session.WindowState.ShellPID.
+	if w.PTYID != "" {
+		w.ShellPgid = ws.ShellPID
+	}
 
 	if renderTraceEnabled && !sizeChanged {
 		traceSync(w, ws.IsAltScreen, false, w.Width, w.Height, "SetAltScreen; no resize")
@@ -1068,6 +1077,15 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.AgentHarness = ws.AgentHarness
 	window.AgentStateAt = ws.AgentStateAt
 	window.ForegroundCmd = ws.ForegroundCmd
+	// The shell's pid, as the daemon that spawned it knows it, and the only
+	// second source a daemon-backed pane has for the directory it reports over
+	// OSC 7. A locally spawned pane records its own at spawn time, so the daemon
+	// has nothing to say about one and must not clear it: only a pane with a
+	// daemon PTY takes this. Zero is "nobody knows", which leaves the pane
+	// exactly as it was. See session.WindowState.ShellPID.
+	if window.PTYID != "" {
+		window.ShellPgid = ws.ShellPID
+	}
 }
 
 // createWindowFromSync creates a new window from sync state

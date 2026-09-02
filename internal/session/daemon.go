@@ -1039,7 +1039,15 @@ func (d *Daemon) foregroundResolver(sess *Session) func(ptyID string) (foregroun
 		if pty == nil || pty.IsExited() {
 			return foregroundInfo{}, false
 		}
-		return foregroundProcess(pty.ShellPID())
+		shellPID := pty.ShellPID()
+		info, running := foregroundProcess(shellPID)
+		// Stamped after the resolve, and outside the running check, because the
+		// shell pid is a fact about the pane rather than about what the pane is
+		// running: foregroundProcess reports not-running whenever it cannot read
+		// the foreground group, and the shell is alive either way. See
+		// WindowState.ShellPID.
+		info.shellPID = shellPID
+		return info, running
 	}
 }
 

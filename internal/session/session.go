@@ -155,6 +155,38 @@ type WindowState struct {
 	// so it costs no extra process reads and may be one poll out of date, which
 	// is fine for a label.
 	ForegroundCmd string `json:"foreground_cmd,omitempty"`
+	// ShellPID is the process id of the pane's shell, as the daemon that spawned
+	// it knows it. Zero means the daemon has no live process for the pane, which
+	// is every window with no PTY and every window on a build that predates the
+	// field.
+	//
+	// It is here so the client can corroborate the directory the pane reports
+	// over OSC 7 against the one the kernel holds for its shell (see
+	// app.cwdIsSpoofed). The pane writes the OSC 7 string, so it is the pane's
+	// word; the shell's working directory is the kernel's, and it is the only
+	// second source there is. Without this a daemon-backed pane, which is every
+	// pane in the default deployment, had nothing to check against and a pane
+	// could steer the rail's delete at a folder it is not in.
+	//
+	// The pid rather than a daemon-resolved path, for two reasons. A path stamped
+	// on the detector's poll is up to one poll old, so every `cd` would read as a
+	// disagreement for two seconds and blink the file actions off; the pid does
+	// not go stale, because the client reads /proc at the moment it lists. And
+	// the pid costs nothing to collect: it is a field on the PTY, not a read.
+	//
+	// The client process always runs on the pane machine, in every deployment
+	// tuios has, including `tuios ssh` and `tuios-web` (see app/link_open.go), so
+	// a pid from the daemon names a process the client can read.
+	//
+	// json:"-" keeps it off disk. Resurrection state is JSON and outlives the
+	// processes it describes, so a pid saved there would name whatever process
+	// later reused the number, and the client would corroborate against a
+	// stranger. The wire is gob, which ignores the json tag, so the field still
+	// travels. It is stamped where the PTY is created, so a new pane is checkable
+	// at once, and refreshed on the agent detector's poll, like ForegroundCmd.
+	// The poll is the authority: it corrects the stamp and clears it when the
+	// shell goes.
+	ShellPID int `json:"-"`
 }
 
 // SerializedBSPNode represents a BSP tree node for serialization
