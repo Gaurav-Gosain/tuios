@@ -203,6 +203,10 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if focusedWindow != nil {
 		scroll := sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction)
 		if scroll == "terminal_scroll_up" || scroll == "terminal_scroll_down" {
+			// Recorded here because this route answers the key itself instead of
+			// going through Dispatch, and a route that records nothing is a route
+			// the reachability table cannot see. See NoteAction.
+			o.NoteAction(scroll)
 			// One line per press, the way it has always been, but through the
 			// same viewport helpers the wheel uses.
 			if scroll == "terminal_scroll_up" {
@@ -325,6 +329,9 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// through to the passthrough block and reaches the child PTY as 0x16 (needed
 	// for vim visual-block, etc.), matching the tmux/zellij convention.
 	if sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction) == "terminal_paste_host" {
+		// Recorded here for the same reason the scroll binds above are. See
+		// NoteAction.
+		o.NoteAction("terminal_paste_host")
 		if focusedWindow != nil {
 			// Ask the terminal for its clipboard via OSC 52. The reply arrives
 			// as a tea.ClipboardMsg, handled in handler.go, and a terminal that
@@ -403,39 +410,36 @@ func recordTerminalKey(o *app.OS, msg tea.KeyPressMsg) {
 // handleTerminalLayoutPrefix handles layout prefix commands (leader, L, ...),
 // resolved through the [keybindings.layout_prefix] section like every other
 // sub-prefix.
+//
+// Every key in the section goes through the dispatcher, load and save included.
+// They used to be two cases of a hand-written switch here while the rest fell
+// through to dispatchAction. A section with two routes drifts: an action added
+// to the table stayed invisible until someone added a case, and the key it was
+// bound to silently dismissed the chord instead. One route, one table.
 func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LayoutPrefixActive = false
 	o.PrefixActive = false
-	action := sectionAction(msg, o, (*config.KeybindRegistry).GetLayoutPrefixAction)
-	switch action {
-	case "layout_prefix_load":
-		// Load layout
-		templates, _ := app.LoadLayoutTemplates()
-		o.ShowLayoutPicker = true
-		o.LayoutPickerMode = "load"
-		o.LayoutPickerItems = templates
-		o.LayoutPickerQuery = ""
-		o.LayoutPickerSelected = 0
-		o.LayoutPickerScroll = 0
-		return o, nil
-	case "layout_prefix_save":
-		// Save layout
-		o.ShowLayoutPicker = true
-		o.LayoutPickerMode = "save"
-		o.LayoutPickerQuery = ""
-		o.LayoutPickerSelected = 0
-		o.LayoutPickerScroll = 0
-		return o, nil
-	default:
-		// Everything else goes through the action dispatcher: snap_corner_1..4,
-		// resize_width_10..90 and resize_height_10..90 (issue #29), and any key
-		// that resolves to nothing at all. The old switch was hand written, so
-		// an action added to the layout_prefix table stayed invisible until
-		// someone added a case; without one the key fell through to the branch
-		// that just dismissed the chord. dispatchAction reports whether it ran,
-		// and for an unbound key (or layout_prefix_cancel) nothing runs and the
-		// chord is dismissed, which is what the old default branch did.
-		m, cmd, _ := dispatchAction(action, msg, o)
-		return m, cmd
-	}
+	return runPrefix(msg, o, (*config.KeybindRegistry).GetLayoutPrefixAction)
+}
+
+// handleLayoutPrefixLoad opens the layout picker on the saved layouts.
+func handleLayoutPrefixLoad(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	templates, _ := app.LoadLayoutTemplates()
+	o.ShowLayoutPicker = true
+	o.LayoutPickerMode = "load"
+	o.LayoutPickerItems = templates
+	o.LayoutPickerQuery = ""
+	o.LayoutPickerSelected = 0
+	o.LayoutPickerScroll = 0
+	return o, nil
+}
+
+// handleLayoutPrefixSave opens the layout picker to name and save the layout.
+func handleLayoutPrefixSave(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.ShowLayoutPicker = true
+	o.LayoutPickerMode = "save"
+	o.LayoutPickerQuery = ""
+	o.LayoutPickerSelected = 0
+	o.LayoutPickerScroll = 0
+	return o, nil
 }

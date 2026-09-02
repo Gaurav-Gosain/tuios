@@ -35,10 +35,16 @@ func sectionAction(msg tea.KeyPressMsg, o *app.OS, lookup sectionLookup) string 
 // literals they were invisible to `tuios keybinds doctor`, unrebindable, and
 // silently ahead of anything a user had put on the same key.
 func handleGlobalBinds(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
-	switch sectionAction(msg, o, (*config.KeybindRegistry).GetGlobalAction) {
+	// Each case records the action it ran, the way Dispatch does for every
+	// action that goes through the dispatcher. These two do not, so without the
+	// line here the one probe that says whether a key reached its action is
+	// blind to the whole global section. See NoteAction.
+	switch action := sectionAction(msg, o, (*config.KeybindRegistry).GetGlobalAction); action {
 	case "command_palette":
+		o.NoteAction(action)
 		return o, o.OpenCommandPalette(), true
 	case "launcher":
+		o.NoteAction(action)
 		return o, o.OpenLauncher(), true
 	}
 	return o, nil, false

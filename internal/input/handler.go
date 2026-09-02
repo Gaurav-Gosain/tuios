@@ -312,6 +312,10 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// palette has the key back.
 	if o.ScriptMode &&
 		sectionAction(msg, o, (*config.KeybindRegistry).GetScriptAction) == "script_pause" {
+		// Recorded here for the same reason the global binds record theirs: this
+		// route does not go through Dispatch, and an unrecorded route is one the
+		// reachability table cannot see. See NoteAction.
+		o.NoteAction("script_pause")
 		o.ScriptPaused = !o.ScriptPaused
 		return o, nil
 	}

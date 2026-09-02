@@ -807,7 +807,7 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 			"terminal_focus_down":  {"alt+down"},
 			"terminal_scroll_up":   {"shift+up"},
 			"terminal_scroll_down": {"shift+down"},
-			"terminal_paste_host":  {"ctrl+shift+v", "super+v", "super+shift+v"},
+			"terminal_paste_host":  {"ctrl+shift+v", "super+v", "shift+super+v"},
 		}
 	}
 	return map[string][]string{
@@ -827,7 +827,13 @@ func getDefaultTerminalModeKeybinds() map[string][]string {
 		"terminal_scroll_down": {"shift+down"},
 		// Plain ctrl+v is deliberately not here: it has to reach the pane as 0x16
 		// for vim's visual block, which is the tmux and zellij convention.
-		"terminal_paste_host": {"ctrl+shift+v", "super+v", "super+shift+v"},
+		//
+		// The third spelling is "shift+super+v". Written "super+shift+v" it is
+		// dead: a key event names its modifiers in one fixed order, shift
+		// before super, and the lookup compares the spelling as written. The
+		// chord was dead for as long as it was written the other way round, and
+		// nothing said so until the reachability table pressed it.
+		"terminal_paste_host": {"ctrl+shift+v", "super+v", "shift+super+v"},
 	}
 }
 

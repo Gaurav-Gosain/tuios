@@ -106,6 +106,14 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("tape_prefix_stop", handleTapeStop)
 	d.Register("tape_prefix_cancel", handlePrefixCancel)
 
+	// Layout prefix (leader, L, ...). Load and save used to be a hand-written
+	// switch in handleTerminalLayoutPrefix while every other key in the section
+	// went through the dispatcher. Two routes for one table is what let the
+	// section drift; now there is one.
+	d.Register("layout_prefix_load", handleLayoutPrefixLoad)
+	d.Register("layout_prefix_save", handleLayoutPrefixSave)
+	d.Register("layout_prefix_cancel", handlePrefixCancel)
+
 	// Terminal mode direct binds (no prefix)
 	d.Register("terminal_next_window", handleTerminalNextWindow)
 	d.Register("terminal_prev_window", handleTerminalPrevWindow)

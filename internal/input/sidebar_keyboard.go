@@ -45,6 +45,7 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// row the lookup finds nothing and the rail's own binding runs, unchanged.
 	if o.SidebarCursorOnFile() {
 		if act := lookupAction(msg, o.KeybindRegistry.GetSidebarFilesAction); act != "" {
+			o.NoteAction(act)
 			return o, handleSidebarFileAction(act, o)
 		}
 	}
@@ -69,10 +70,19 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Workspace/session jumps share a numeric suffix.
 	if after, ok := strings.CutPrefix(action, sidebarActJumpPrefix); ok {
 		if n, err := strconv.Atoi(after); err == nil {
+			o.NoteAction(action)
 			o.SidebarJumpToSession(n)
 		}
 		return o, nil
 	}
+
+	// handled says whether the switch below has a branch for the action. The
+	// rail is the one keyboard scope that does not go through Dispatch, so the
+	// recording Dispatch does has to happen here instead, and it has to be
+	// recorded only when a branch actually ran. An action the switch has no
+	// branch for is a rail key that resolves and then does nothing, which is
+	// the fault the recording exists to expose. See NoteAction.
+	handled := true
 
 	switch action {
 	case sidebarActCursorDown:
@@ -102,6 +112,7 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// session and filters it by who needs a human. Rail focus is kept, so
 		// closing the palette comes back to the row the cursor was on; a row that
 		// actually relocates the user drops it on the way out.
+		o.NoteAction(action)
 		return o, o.OpenCommandPalette()
 	case sidebarActAgentFilter:
 		o.SidebarCycleAgentsFilter()
@@ -131,6 +142,11 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ExitSidebarFocus() // the new pane is what was asked for
 	case sidebarActExit:
 		o.ExitSidebarFocus()
+	default:
+		handled = false
+	}
+	if handled {
+		o.NoteAction(action)
 	}
 	// Two rows of the rail's file view answer with a command rather than with a
 	// state change: copying a path is a clipboard write. The switch above cannot

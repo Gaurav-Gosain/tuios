@@ -1,0 +1,88 @@
+name: Go unit tests
+
+# The root module's suite, which no workflow ran until this one. The end-to-end
+# job covers e2e/tui and the ghostty job covers a -short subset of three
+# packages, so "the full gate is green" in a pull request was a claim by the
+# person who typed it. This is the machine that checks it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # 03:17 UTC daily, for the race build below.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: go test ./...
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    # Measured on a developer machine: internal/testutil 252 s, internal/app
+    # 231 s, everything else under 35 s, about ten minutes if nothing runs in
+    # parallel. A runner has fewer cores, so thirty is the room a slow one
+    # needs. It is above the 20 m the test command carries on purpose: the test
+    # timeout has to fire first, because it prints the goroutine dump and the
+    # job timeout only prints that the job was killed.
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt would change these files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        # No -race here. internal/app takes over ten minutes under the detector
+        # on a developer machine and longer on a runner, and a job that times
+        # out is a job somebody switches off. The race build runs nightly
+        # instead, where the wall time costs nobody a review.
+        #
+        # -count=1 because the test cache replays a pass across a change the
+        # cache key does not see, which is how a mutation sweep can come back
+        # green on code that no longer exists.
+        run: go test ./... -count=1 -timeout 20m
+
+  race:
+    name: go test -race ./...
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # The detector costs about ten times the wall time on internal/app. This is
+    # a backstop, not a budget to fill.
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Test with the race detector
+        run: go test ./... -race -count=1 -timeout 80m
