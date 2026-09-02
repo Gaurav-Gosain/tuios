@@ -498,13 +498,43 @@ func (e *dockEngine) commandEnv(name string, extra ...string) []string {
 	return append(env, extra...)
 }
 
+// dockKillGrace bounds how long a wait may go on after the kill.
+//
+// Killing the group is what normally ends a timed out component, and it ends it
+// in microseconds. This is the backstop for the child that got out of the group
+// anyway, by calling setsid or by being handed to a helper that does. When the
+// grace passes, os/exec closes the pipes itself and the wait returns, so an
+// escaped grandchild costs one stale process and not a stuck cell.
+const dockKillGrace = 250 * time.Millisecond
+
+// dockSupervise ties a component's command to its deadline.
+//
+// Three parts, and each covers what the others cannot. Setpgid gives the command
+// a group. Cancel kills that group when the deadline passes, so the shell's
+// children die with it and release the stdout pipe. WaitDelay bounds the wait
+// for anything that escaped the group.
+//
+// The plain os/exec default does none of this: it kills the direct child and
+// then waits for EOF on a pipe that child's children still hold. See
+// dock_process_unix.go for why that is the normal case and not a rare one.
+func dockSupervise(cmd *exec.Cmd) {
+	dockGroupCommand(cmd)
+	cmd.Cancel = func() error { return dockKillGroup(cmd) }
+	cmd.WaitDelay = dockKillGrace
+}
+
 // runOnce executes a component's command and reports its first line of stdout.
 //
 // The four ways a subprocess misbehaves are all handled here and all end the
 // same way, with an empty cell and a recorded reason: it can be slow (the
 // context timeout kills it), it can fail (a nonzero exit is not a value), it can
-// never exit (the timeout again), and it can write without stopping (the read is
-// bounded, and only the first line is used anyway).
+// never exit (the timeout again, which kills the whole process group), and it
+// can write without stopping (the read is bounded, and only the first line is
+// used anyway).
+//
+// Output a component wrote before it hung is dropped, not shown. A cell that
+// timed out is a failed cell, and a half written value is the confidently wrong
+// reading applyUpdate blanks a failure to avoid.
 func (e *dockEngine) runOnce(c *dockComponent) {
 	e.mu.Lock()
 	if c.running {
@@ -524,6 +554,7 @@ func (e *dockEngine) runOnce(c *dockComponent) {
 	cmd.Env = e.commandEnv(c.Name)
 	cmd.Stdin = nil
 	cmd.Stderr = nil
+	dockSupervise(cmd)
 
 	out, err := cmd.Output()
 	if len(out) > config.DockCustomMaxOutput {
@@ -586,6 +617,10 @@ func (e *dockEngine) readPushed(c *dockComponent) {
 		cmd := exec.CommandContext(e.ctx, "sh", "-c", command)
 		cmd.Env = e.commandEnv(c.Name)
 		cmd.Stderr = nil
+		// Same tree, same rule. Stop promises that every command the engine
+		// started dies with it; without the group a push script that forks
+		// leaves the fork holding the pipe, and the reader parks on it forever.
+		dockSupervise(cmd)
 		pipe, err := cmd.StdoutPipe()
 		lines := 0
 		if err == nil && cmd.Start() == nil {
