@@ -63,6 +63,8 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"l", "Load layout"},
 			{"s", "Save layout"},
 			{"1-4", "Snap window to a corner"},
+			{"5-9", "Resize focused window width (%)"},
+			{"Shift+5-9", "Resize focused window height (%)"},
 			{"Esc", "Cancel"},
 		}
 	default: // general prefix

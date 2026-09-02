@@ -406,7 +406,8 @@ func recordTerminalKey(o *app.OS, msg tea.KeyPressMsg) {
 func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.LayoutPrefixActive = false
 	o.PrefixActive = false
-	switch sectionAction(msg, o, (*config.KeybindRegistry).GetLayoutPrefixAction) {
+	action := sectionAction(msg, o, (*config.KeybindRegistry).GetLayoutPrefixAction)
+	switch action {
 	case "layout_prefix_load":
 		// Load layout
 		templates, _ := app.LoadLayoutTemplates()
@@ -425,36 +426,16 @@ func handleTerminalLayoutPrefix(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		o.LayoutPickerSelected = 0
 		o.LayoutPickerScroll = 0
 		return o, nil
-	case "snap_corner_1":
-		return snapCornerFromPrefix(o, app.SnapTopLeft)
-	case "snap_corner_2":
-		return snapCornerFromPrefix(o, app.SnapTopRight)
-	case "snap_corner_3":
-		return snapCornerFromPrefix(o, app.SnapBottomLeft)
-	case "snap_corner_4":
-		return snapCornerFromPrefix(o, app.SnapBottomRight)
 	default:
-		// layout_prefix_cancel and any unbound key both dismiss the chord.
-		return o, nil
+		// Everything else goes through the action dispatcher: snap_corner_1..4,
+		// resize_width_10..90 and resize_height_10..90 (issue #29), and any key
+		// that resolves to nothing at all. The old switch was hand written, so
+		// an action added to the layout_prefix table stayed invisible until
+		// someone added a case; without one the key fell through to the branch
+		// that just dismissed the chord. dispatchAction reports whether it ran,
+		// and for an unbound key (or layout_prefix_cancel) nothing runs and the
+		// chord is dismissed, which is what the old default branch did.
+		m, cmd, _ := dispatchAction(action, msg, o)
+		return m, cmd
 	}
-}
-
-// snapCornerFromPrefix snaps the focused window to a corner, reached through
-// the layout chord rather than through the window-mode keymap.
-//
-// It says why nothing happened when tiling is on, which the window-mode path
-// never did. Corner snapping moves a floating window, so with tiling on there
-// is nothing for it to move; pressing the chord and getting silence reads as a
-// broken binding, and that silence is most of why the old digit binding looked
-// like it worked when it did not.
-func snapCornerFromPrefix(o *app.OS, corner app.SnapQuarter) (*app.OS, tea.Cmd) {
-	if o.AutoTiling {
-		o.ShowNotification("Corner snapping needs tiling off", "info", o.Settings.NotificationDuration)
-		return o, nil
-	}
-	if len(o.Windows) == 0 || o.FocusedWindow < 0 {
-		return o, nil
-	}
-	o.Snap(o.FocusedWindow, corner)
-	return o, nil
 }

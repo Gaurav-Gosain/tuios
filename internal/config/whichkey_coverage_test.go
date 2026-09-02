@@ -16,6 +16,10 @@ func whichKeyRowKeys(key string) []string {
 		return []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}
 	case "1-4":
 		return []string{"1", "2", "3", "4"}
+	case "5-9":
+		return []string{"5", "6", "7", "8", "9"}
+	case "Shift+5-9":
+		return []string{"shift+5", "shift+6", "shift+7", "shift+8", "shift+9"}
 	case "Shift+1-9":
 		return strings.Split("!@#$%^&*(", "")
 	case "Shift+M":

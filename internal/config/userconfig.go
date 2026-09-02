@@ -675,6 +675,20 @@ func DefaultConfig() *UserConfig {
 				"snap_corner_2": {"2"},
 				"snap_corner_3": {"3"},
 				"snap_corner_4": {"4"},
+				// Percentage resizing of the focused pane (issue #29): a digit
+				// sizes the width, shift+digit the height. The action names
+				// carry the percent, so any of them can be rebound or bound to
+				// another key entirely; alt+1..9 are already the workspaces.
+				"resize_width_50":  {"5"},
+				"resize_width_60":  {"6"},
+				"resize_width_70":  {"7"},
+				"resize_width_80":  {"8"},
+				"resize_width_90":  {"9"},
+				"resize_height_50": {"shift+5"},
+				"resize_height_60": {"shift+6"},
+				"resize_height_70": {"shift+7"},
+				"resize_height_80": {"shift+8"},
+				"resize_height_90": {"shift+9"},
 			},
 			TerminalMode: getDefaultTerminalModeKeybinds(),
 			Sidebar:      getDefaultSidebarKeybinds(),
