@@ -7,6 +7,39 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## Two rules for every control
+
+Three green suites hid three real defects in one week. All three had a negative
+control, and all three controls passed. These two rules are what the misses have
+in common. They apply to every test in the project, not only this suite.
+
+### 1. A negative test needs its positive half
+
+A test that asserts "X does not happen when Y" must also assert, in the same
+fixture, "X happens when not Y".
+
+Without the positive half, the negative half may never have tested Y at all. A
+gate written `if A && B && C` is only a test of `C` while `A` and `B` are true.
+One privacy gate was asserted by a fixture that failed an earlier term, so the
+test read the right answer off the wrong reason, and the gate could be deleted
+with three packages still green.
+
+The positive half costs one more row in the table. If it fails, the negative
+half was never testing what its name says.
+
+### 2. The control deletes the call site, not the function
+
+When a pull request adds a feature, cut its wiring: the `case`, the `Register`,
+the route, the gate line. Do not cut the function under it.
+
+A control on the function proves the test and the function are bound to each
+other. It says nothing about whether anything calls the function. One feature
+registered 18 actions that no key reached. Its eight controls all passed,
+because all eight cut the handler and the fault was the switch above it.
+
+Cut the wiring, run the named test, and watch it fail. If it does not fail, the
+test enters the code below the fault, and the fault is what nobody is testing.
+
 ## How to rebuild a control
 
 The controls are built by removing one fix from the current tree, so they differ

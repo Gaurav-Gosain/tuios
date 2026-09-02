@@ -42,6 +42,28 @@ Include steps to test this on different platforms/install methods:
 
 ---
 
+## Negative controls
+
+A test that has never been seen to fail is not evidence. For each test you
+added, break the thing it covers and paste the failure it prints.
+
+Two rules, from three green suites that hid three real defects. See
+`e2e/tui/NEGATIVE_CONTROLS.md`.
+
+- [ ] **The control deletes the call site, not the function.** Cut the `case`,
+      the `Register`, the route or the gate line. A control on the function
+      proves the test and the function match. It does not prove anything calls
+      the function.
+- [ ] **Every negative test has its positive half.** A test that asserts "X does
+      not happen when Y" also asserts, in the same fixture, "X happens when not
+      Y". Without it, the test may never have reached Y.
+
+Control run:
+- Wiring cut: `<file:line, what you removed>`
+- Test that failed: `<name, and the message it printed>`
+
+---
+
 ## Checklist
 
 - [ ] Code changes compile and tests pass
