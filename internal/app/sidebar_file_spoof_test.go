@@ -179,16 +179,18 @@ func dirNames(t *testing.T, dir string) string {
 }
 
 // TestAnUncorroboratedPaneKeepsItsFileActions is the case that decides whether
-// this change is shippable. A daemon-backed pane has no shell process group on
-// the client, so nothing can corroborate it, and unknown is not disagreement.
+// this change is shippable. A pane whose shell nothing can name cannot be
+// corroborated, and unknown is not disagreement.
 //
-// It is also every pane on macOS, where there is no /proc to read.
+// That is every pane on macOS, where there is no /proc to read, and any pane
+// whose shell process is gone. It was also every daemon-backed pane until the
+// daemon started sending the pid; see sidebar_file_spoof_daemon_test.go.
 func TestAnUncorroboratedPaneKeepsItsFileActions(t *testing.T) {
 	real, victim, bait := spoofDirs(t)
 	m := spoofPane(t, real, victim)
 
-	// The one thing that separates a daemon-backed pane from the local one
-	// above: the client never learned the shell's process group.
+	// The one thing that separates an uncheckable pane from the local one above:
+	// nothing ever told the client which process the shell is.
 	m.Windows[0].ShellPgid = 0
 	m.filesView.Pinned = false
 	m.filesView.Want = ""

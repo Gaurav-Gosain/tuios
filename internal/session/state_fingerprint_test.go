@@ -122,10 +122,14 @@ func TestStateFingerprintNoticesEveryChange(t *testing.T) {
 		// all: if the flag is not in here the push looks like a repeat, the
 		// daemon does not re-broadcast it, and the other clients never hear that
 		// anything happened.
-		"window zoomed":    func(s *SessionState) { s.Windows[0].Zoomed = true },
-		"window pre-zoom":  func(s *SessionState) { s.Windows[0].PreZoomW = 40 },
-		"agent state":      func(s *SessionState) { s.Windows[0].AgentState = AgentStateWorking },
-		"foreground cmd":   func(s *SessionState) { s.Windows[0].ForegroundCmd = "nvim" },
+		"window zoomed":   func(s *SessionState) { s.Windows[0].Zoomed = true },
+		"window pre-zoom": func(s *SessionState) { s.Windows[0].PreZoomW = 40 },
+		"agent state":     func(s *SessionState) { s.Windows[0].AgentState = AgentStateWorking },
+		"foreground cmd":  func(s *SessionState) { s.Windows[0].ForegroundCmd = "nvim" },
+		// The shell pid is the only thing a client can check a pane's reported
+		// directory against. A pid the daemon stamps and does not broadcast is a
+		// pane that stays uncheckable until something else happens to change.
+		"shell pid":        func(s *SessionState) { s.Windows[0].ShellPID = 4242 },
 		"window dropped":   func(s *SessionState) { s.Windows = s.Windows[:1] },
 		"window order":     func(s *SessionState) { s.Windows[0], s.Windows[1] = s.Windows[1], s.Windows[0] },
 		"workspace focus":  func(s *SessionState) { s.WorkspaceFocus[1] = "win-2" },

@@ -112,6 +112,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// client ever sends it, so canonical is always the truth: carrying it over by
 	// id both preserves a live command and lets one that exited clear.
 	fgCmds := make(map[string]string, len(canonical.Windows))
+	// The shell pid is daemon-owned for the same reason and carried the same way:
+	// only the daemon holds the process, and a client sync never reports one.
+	// Without this every client push would strip the pid the corroboration needs.
+	shellPIDs := make(map[string]int, len(canonical.Windows))
 	// Agent state is daemon-owned and clients never set it, so it is carried over
 	// by window id exactly as Cwd is; without this a client sync (which omits it)
 	// would wipe every pane's reported state.
@@ -143,6 +147,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if cmd := w.ForegroundCmd; cmd != "" {
 			fgCmds[w.ID] = cmd
 		}
+		if pid := w.ShellPID; pid != 0 {
+			shellPIDs[w.ID] = pid
+		}
 		if w.AgentState != AgentStateNone || w.AgentMessage != "" || w.AgentHarness != "" || w.AgentStateAt != 0 {
 			agents[w.ID] = agent{w.AgentState, w.AgentMessage, w.AgentHarness, w.AgentStateAt}
 		}
@@ -154,6 +161,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		}
 		if w.ForegroundCmd == "" {
 			w.ForegroundCmd = fgCmds[w.ID]
+		}
+		if w.ShellPID == 0 {
+			w.ShellPID = shellPIDs[w.ID]
 		}
 		if p, ok := popups[w.ID]; ok {
 			w.Popup = true

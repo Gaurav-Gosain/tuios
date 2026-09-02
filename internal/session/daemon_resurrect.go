@@ -130,6 +130,10 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 			continue
 		}
 		w.PTYID = pty.ID
+		// The pid of the shell just respawned. Resurrection state carries no pid
+		// (see WindowState.ShellPID), so without this a restored pane waits for
+		// the detector's poll before the rail can check what it reports.
+		w.ShellPID = pty.ShellPID()
 		kept = append(kept, *w)
 	}
 	restored.Windows = kept

@@ -248,6 +248,11 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			Height:     height,
 			Workspace:  workspace,
 			PTYID:      pty.ID,
+			// Stamped here as well as on the detector's poll, because the pid is
+			// already in hand and a pane that waits a poll for it is a pane the
+			// rail cannot check for two seconds. The poll stays the authority: it
+			// corrects this and clears it when the shell goes.
+			ShellPID: pty.ShellPID(),
 			// The daemon has no viewport, so this box is a placeholder that keeps
 			// the PTY a usable size until a client places the window properly.
 			Unplaced: true,

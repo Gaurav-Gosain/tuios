@@ -370,11 +370,17 @@ func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 // # Only a positive disagreement counts
 //
 // The answer is false whenever there is no evidence. There is no /proc on
-// macOS, the shell's process group is recorded only for a pane whose PTY this
-// client spawned, and a daemon-backed pane, which is the default, has no pgid
-// on the client at all. Treating any of those as a disagreement would take the
-// file actions away from almost every user to catch a case nobody has hit.
-// Unknown is unknown, and it leaves the feature exactly as it was.
+// macOS, a pane whose PTY has gone has no process to read, and a daemon older
+// than WindowState.ShellPID sends no pid at all. Treating any of those as a
+// disagreement would take the file actions away from users who did nothing
+// wrong. Unknown is unknown, and it leaves the feature exactly as it was.
+//
+// Where the number comes from is the difference between a feature and a
+// decoration. A pane this client spawned records its own shell at spawn time;
+// a daemon-backed pane, which is every pane in the default deployment, is sent
+// its shell's pid by the daemon that holds the process (see
+// session.WindowState.ShellPID). Before the daemon sent it this check had
+// nothing to compare against on any shipped pane and passed every spoof.
 //
 // # How the two paths are compared
 //

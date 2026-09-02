@@ -108,6 +108,7 @@ func StateFingerprint(s *SessionState) uint64 {
 		str(w.PopupWidth)
 		str(w.PopupHeight)
 		str(w.ForegroundCmd)
+		num(w.ShellPID)
 	}
 
 	hashIntStr := func(m map[int]string) {
