@@ -211,3 +211,32 @@ func TestAPopupRecentresWhenTheClientResizes(t *testing.T) {
 		t.Errorf("the popup runs off the narrowed screen: [%d,%d) of 60", popup.X, popup.X+popup.Width)
 	}
 }
+
+// TestAPopupIsNotSizedByPercent is the follow-up from the #140 merge: the
+// popup guard in the percentage setters (SetFocusedWindowWidthPercent and
+// SetFocusedWindowHeightPercent) had no test of its own, so removing w.IsPopup
+// from either setter left the whole suite green. A popup carries its own
+// percentage model (PopupWidth/PopupHeight) and applyPopupRects re-centres it
+// on the next tile, so a percent resize must leave the focused popup's box
+// exactly where it is.
+//
+// Negative control, confirmed red: drop the || w.IsPopup term from either
+// setter and the popup's box moves to the tiled percentage.
+func TestAPopupIsNotSizedByPercent(t *testing.T) {
+	m, popup := popupOS(t, "50%", "40%")
+	// The percentage setters drive the tiling resize path; the popup helpers
+	// leave the layout maps nil because their tests never resize.
+	m.AutoTiling = true
+	m.WorkspaceHasCustom = map[int]bool{}
+	m.WorkspaceLayouts = map[int][]WindowLayout{}
+	m.WorkspaceMasterRatio = map[int]float64{}
+	before := struct{ x, y, w, h int }{popup.X, popup.Y, popup.Width, popup.Height}
+
+	m.SetFocusedWindowWidthPercent(80)
+	m.SetFocusedWindowHeightPercent(80)
+
+	if popup.X != before.x || popup.Y != before.y || popup.Width != before.w || popup.Height != before.h {
+		t.Fatalf("percent resize moved the focused popup: box (%d,%d %dx%d) -> (%d,%d %dx%d)",
+			before.x, before.y, before.w, before.h, popup.X, popup.Y, popup.Width, popup.Height)
+	}
+}
