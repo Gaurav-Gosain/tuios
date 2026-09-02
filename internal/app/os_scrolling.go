@@ -253,9 +253,27 @@ func (m *OS) ScrollingScrollViewport(delta int) {
 	m.scrollingSetPositionsInstant()
 }
 
-// ScrollingOnFocusChange is called when the OS focus changes (click, etc.)
-// to sync the scrolling layout and scroll the focused column into view.
-// Only updates viewport/positions, never changes dimensions.
+// ScrollingOnFocusChange points the strip at the focused window and brings its
+// column on screen if none of it is there. It moves no pane's size.
+//
+// It runs on every focus change that is not the user walking the strip: a
+// click, a workspace switch restoring the workspace's own focus, a focus the
+// daemon moved. Those all get the least-scroll rule, EnsureFocusedVisible: a
+// column the user can already see does not need the strip to move under them.
+// ScrollToFocusedColumn is the other rule and it belongs to the eight keyboard
+// paths above, where the user asked to be taken to a column and wants all of
+// it. This called that one, so any of the three events above scrolled the strip
+// to the focused column even when that column had never left the screen.
+//
+// The report was the workspace switch. Switching away and back restores the
+// workspace's saved focus, so a round trip threw away wherever the user had
+// scrolled that workspace's strip to. The offset is per workspace and no client
+// and no sync loses it; this call overwrote it in place.
+//
+// Still open, and deliberately not decided here: a strip parked so that the
+// focused column is entirely off screen is revealed on the way back, because
+// every retile reveals it (tileAllWindows, a resize, a peer sync) and this is
+// not the place to change that rule.
 func (m *OS) ScrollingOnFocusChange() {
 	sl := m.GetOrCreateScrollingLayout()
 	fw := m.GetFocusedWindow()
@@ -268,7 +286,7 @@ func (m *OS) ScrollingOnFocusChange() {
 		sl.FocusColumnContaining(intID)
 	}
 
-	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
+	sl.EnsureFocusedVisible(m.ScrollingViewWidth())
 	m.scrollingSetPositions()
 }
 
