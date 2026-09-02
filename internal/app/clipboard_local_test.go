@@ -194,8 +194,8 @@ func TestNativeClipboardToolDecision(t *testing.T) {
 // built from shell commands that need no compositor (tee/cat to a temp file).
 // This is the deterministic part of the contract: Write launches the keeper
 // without blocking and reaps it, Read captures stdout. The real wl-copy round
-// trip is covered by TestClipboardToolRoundTrip, which runs only when a Wayland
-// socket is actually reachable (never in the isolated test tree).
+// trip is covered by TestClipboardToolRoundTrip, which stubs wl-clipboard with
+// shell scripts on a temp PATH and runs everywhere.
 func TestClipboardToolWriteReadLogic(t *testing.T) {
 	clipFile := filepath.Join(t.TempDir(), "clip.txt")
 
@@ -253,12 +253,25 @@ func TestClipboardToolWriteReadLogic(t *testing.T) {
 // table above cannot see: a remote session (SSH or browser client) must never
 // reach for the native tool, because WAYLAND_DISPLAY / DISPLAY describe the
 // operator's desktop and a native read or write would move data between two
-// people. The tool must also be refused when the config option is off. These
-// rows return before any environment probing, so they are deterministic.
+// people. The tool must also be refused when the config option is off.
+//
+// The environment is set up so a local client WOULD reach the tool: VTE_VERSION
+// is set and wl-clipboard is stubbed on PATH. That is what makes the rows below
+// meaningful — an earlier draft ran in a bare tree where no local client could
+// reach the tool either, so every row returned nil and deleting the session
+// gate below changed nothing. Here the SSH, browser and fallback-off rows are
+// the only thing that can return nil.
 func TestNativeClipboardToolGate(t *testing.T) {
+	clip := stubClipboardSession(t)
 	if !config.DefaultSettings().ClipboardLocalFallback {
 		t.Fatalf("the fallback is off by default; this gate test assumes it on")
 	}
+
+	local := &OS{Settings: config.DefaultSettings()}
+	if got := local.nativeClipboardTool(); got == nil {
+		t.Fatalf("a local VTE session with wl-clipboard on PATH did not reach the native tool (clip=%s); the gate rows below are vacuous", clip)
+	}
+
 	rows := []struct {
 		name string
 		os   *OS
@@ -286,23 +299,7 @@ func TestNativeClipboardToolGate(t *testing.T) {
 // which exercises the same detection → Write → Read plumbing with no
 // compositor, and runs everywhere.
 func TestClipboardToolRoundTrip(t *testing.T) {
-	bin := t.TempDir()
-	clip := filepath.Join(bin, "clipboard")
-	stubs := map[string]string{
-		filepath.Join(bin, "wl-copy"):  "#!/bin/sh\ncat > " + clip + "\n",
-		filepath.Join(bin, "wl-paste"): "#!/bin/sh\nexec cat " + clip + "\n",
-	}
-	for path, body := range stubs {
-		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
-			t.Fatalf("stub %s: %v", path, err)
-		}
-	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	// Detection needs a Wayland session; name one explicitly, since the
-	// isolated test tree never has one. The scripts above stand in for the
-	// compositor.
-	t.Setenv("XDG_RUNTIME_DIR", bin)
-	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+	stubClipboardSession(t)
 
 	tool := DetectClipboardTool()
 	if tool == nil {
@@ -325,4 +322,72 @@ func TestClipboardToolRoundTrip(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("round trip mismatch: wrote %q, read back %q (err=%v)", sentinel, got, err)
+}
+
+// stubClipboardSession points the test process at a throwaway wl-clipboard:
+// shell-script stubs on a temp PATH, a named Wayland session, and VTE_VERSION
+// set, so config.HostIsVTE() and detection both see a local VTE session with a
+// reachable tool. It returns the file the wl-copy stub writes to, so a test can
+// assert the native path really ran. t.Setenv restores the real environment
+// when the test ends, so no other test sees it.
+func stubClipboardSession(t *testing.T) string {
+	t.Helper()
+	bin := t.TempDir()
+	clip := filepath.Join(bin, "clipboard")
+	stubs := map[string]string{
+		filepath.Join(bin, "wl-copy"):  "#!/bin/sh\ncat > " + clip + "\n",
+		filepath.Join(bin, "wl-paste"): "#!/bin/sh\nexec cat " + clip + "\n",
+	}
+	for path, body := range stubs {
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+			t.Fatalf("stub %s: %v", path, err)
+		}
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("XDG_RUNTIME_DIR", bin)
+	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+	t.Setenv("VTE_VERSION", "1")
+	// VTE_VERSION is the LAST marker detectHostTerminal consults, after
+	// TERM_PROGRAM, KITTY_WINDOW_ID, WEZTERM_EXECUTABLE, TERM, etc. A dev
+	// machine's real terminal would otherwise win over the stubbed session, so
+	// blank every earlier marker and leave VTE_VERSION as the only one.
+	for _, k := range []string{
+		"TERM_PROGRAM", "KITTY_WINDOW_ID", "GHOSTTY_RESOURCES_DIR",
+		"GHOSTTY_BIN_DIR", "ALACRITTY_WINDOW_ID", "ALACRITTY_SOCKET",
+		"WEZTERM_EXECUTABLE", "TERM",
+	} {
+		t.Setenv(k, "")
+	}
+	return clip
+}
+
+// TestWriteClipboardReachesNativeTool connects the single write path to the
+// native tool. TestClipboardToolWriteReadLogic exercises clipboardTool.Write on
+// its own and TestNativeClipboardToolDecision pins the decision table, but
+// nothing used to prove that WriteClipboard — the method every copy in the app
+// goes through — actually runs the native write when one is available. Making
+// the native write unreachable (nativeClipboardTool returning nil) leaves the
+// wl-copy stub untouched, so this test is the guard that fails.
+func TestWriteClipboardReachesNativeTool(t *testing.T) {
+	clip := stubClipboardSession(t)
+	m := &OS{Settings: config.DefaultSettings()}
+
+	const sentinel = "tuios-writeclipboard-sentinel"
+	cmd := m.WriteClipboard(sentinel)
+	if cmd == nil {
+		t.Fatalf("WriteClipboard returned no command")
+	}
+	cmd() // the Cmd runs the native write, then returns the OSC 52 message
+
+	// The wl-copy stub keeper lands the bytes asynchronously (Start semantics),
+	// so poll briefly instead of sleeping a fixed amount.
+	for i := 0; i < 100; i++ {
+		got, err := os.ReadFile(clip)
+		if err == nil && string(got) == sentinel {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	got, _ := os.ReadFile(clip)
+	t.Fatalf("the native write never reached wl-copy: clip holds %q, want %q", got, sentinel)
 }
