@@ -71,6 +71,22 @@ known bugs all broke, so it is stated separately. Invariants 6 and 7 are the
 second round: a pane can satisfy 1-5 exactly and still be wrong the moment it
 prints its next line or the guest quits.
 
+Invariant 2 is a floor and not the whole rule. It permits a route to throw the
+client's own history away and keep only what the daemon sent, because a shorter
+suffix is still a suffix. The stronger rule is:
+
+8. **A surviving emulator's history only ever gets longer.** A route that finds
+   an emulator that already holds history hands it the lines that scrolled off
+   while it was away, and never replaces what it has. The daemon sends a bounded
+   window of its scrollback and a client keeps far more than that, so replacing
+   the buffer would cut a long history down to the size of that window on every
+   workspace switch.
+
+`ApplyTerminalState` has said this in a comment for as long as its incremental
+branch has existed. It is written here because the ghostty backend breaks it and
+invariant 2 alone did not call that a bug: see issue #146. On the pure emulator,
+the default, it holds.
+
 Two tests assert this, and they are not redundant.
 
 `TestRehydrationMatrix` (`internal/app/rehydration_matrix_test.go`) proves a

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // The anchor rule, pinned per case. The e2e suite drives the same rule through
@@ -13,12 +14,13 @@ import (
 // on screen can tell one end of the clamp from the other.
 //
 // NEGATIVE CONTROLS, each run by mutating the shipped code and watching the
-// named tests fail:
+// named tests fail. Every one of them was run twice, once on the pure emulator
+// and once under -tags ghostty, and the two agree:
 //
 //   - RecordScrollAnchor returning at the top, so nothing is ever anchored:
 //     TestAnchorHoldsUnderNewOutput fails saying the scroll was recorded as
 //     line 0 with anchored=false, TestAnchorHoldsWhenHistoryIsMergedNotPrinted
-//     fails saying merged history moved the view from line 59 to line 359,
+//     fails saying the history grew by 300 lines and the offset stayed at 20,
 //     TestAClearedHistoryPutsThePaneBackOnLiveOutput fails with an offset of 20
 //     against an empty history, and
 //     TestOutputBetweenTheTwoHalvesIsNotMistakenForAScroll fails saying the
@@ -111,27 +113,65 @@ func TestAnchorHoldsUnderNewOutput(t *testing.T) {
 }
 
 // TestAnchorHoldsWhenHistoryIsMergedNotPrinted is the control on the shape of
-// the fix. A workspace switch primes the pane from the daemon's copy, and those
-// rows are pushed straight into the ring rather than scrolled off the screen.
-// Counting the lines the emulator scrolls would miss every one of them.
+// the fix, and it drives the real rehydration path rather than an imitation of
+// it: session.TerminalStateOf takes the daemon's snapshot and
+// session.ApplyTerminalState merges it into the client's emulator, which is
+// what primePaneFromDaemon does on a workspace switch.
+//
+// The rows it merges never pass through the emulator's scroll path, so a count
+// of the lines the emulator scrolled would miss every one of them and the view
+// would jump by the whole merge. What is asserted is that the offset grew by
+// exactly as much as the history did, which is the same thing said without
+// naming an index: the viewport top stayed where it was while the end of the
+// history moved away from it.
+//
+// It asserts that rather than the text of the top row, and the reason is worth
+// writing down. On the ghostty backend the merge does not extend the history,
+// it replaces it: the client's own oldest lines are dropped and the daemon's
+// window becomes the whole of the pane's history, so the content under any
+// index moves. That is a defect in ApplyTerminalState's incremental branch
+// against that backend, not in the anchor, and the anchor cannot paper over it.
+// Filed as issue #146 with the reproduction. Until it is fixed a pane on the
+// ghostty backend still jumps on a workspace switch, for that reason and not
+// this one.
+//
+// It also used to push lines into the ring by hand, reading each one back out
+// of the emulator to get a line to push. That passed on the pure emulator and
+// failed under ghostty, and the backend was right: ScrollbackLine flushes a
+// pending restore and PushScrollbackLine buffers into one, so reading between
+// pushes tore the restore in half and its hard reset threw the history away.
+// Production never interleaves the two, and neither does this now.
 func TestAnchorHoldsWhenHistoryIsMergedNotPrinted(t *testing.T) {
+	// The daemon's copy of the pane is further along than the client's, which
+	// is what one PTY stream read by two emulators gives you.
+	daemon := anchorWindow(t, "anchor-merge-daemon")
+	printLines(t, daemon, "OLD", 400)
+
 	w := anchorWindow(t, "anchor-merge")
 	printLines(t, w, "OLD", 100)
 
 	before := w.ScrollbackLen()
 	scrollBackTo(w, 20)
 
-	// The rehydration path's own move: decoded lines appended to the ring, with
-	// nothing passing through the emulator's scroll path.
-	for i := range 300 {
-		w.Terminal.PushScrollbackLine(w.Terminal.ScrollbackLine(i % before))
-	}
+	state := session.TerminalStateOf(daemon.Terminal, daemon.Terminal.Width(),
+		daemon.Terminal.Height(), config.DefaultScrollbackLines, 0)
+	session.ApplyTerminalState(w.Terminal, state)
 	w.ApplyScrollAnchor()
 
-	if got := w.ScrollbackLen() - w.ScrollbackOffset; got != before-20 {
-		t.Fatalf("merged history moved the view from line %d to line %d; the anchor must be "+
-			"a place in the history, not a count of lines the emulator scrolled",
-			before-20, got)
+	grown := w.ScrollbackLen()
+	if grown <= before {
+		t.Fatalf("the merge left the history at %d lines, up from %d; this test is not "+
+			"exercising a history that grew", grown, before)
+	}
+	if got, want := w.ScrollbackOffset, 20+(grown-before); got != want {
+		t.Fatalf("merged history moved the view: the history grew by %d lines and the "+
+			"offset went from 20 to %d, want %d. A merge must move the end of the history "+
+			"away from the viewport, not drag the viewport along with it.",
+			grown-before, got, want)
+	}
+	if w.CopyMode.ScrollOffset != w.ScrollbackOffset {
+		t.Fatalf("copy mode is at offset %d and the render path at %d; the two must agree",
+			w.CopyMode.ScrollOffset, w.ScrollbackOffset)
 	}
 }
 
