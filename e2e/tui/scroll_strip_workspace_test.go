@@ -158,3 +158,154 @@ func TestWorkspaceRoundTripRevealsAHiddenColumn(t *testing.T) {
 		t.Errorf("the round trip left the focused column off screen\nAFTER:\n%s", after)
 	}
 }
+
+// A strip parked so that the focused column is entirely off screen is a place
+// the user chose. The rows below are the events that used to take it away, and
+// none of them is something the user did.
+//
+// tileAllWindows revealed the focused column on every retile, and a retile is
+// not a focus change: a second client attaching, a routed set-config, a config
+// file reload, a peer opening its sidebar or moving its dock, any client adding
+// or closing a window on any workspace. The strip snapped to the focused column
+// and, because the offset is session state, pushed that snap to every peer. The
+// note this answers is the one left open on ScrollingOnFocusChange.
+//
+// It looked random because the state-sync path repaired its own damage:
+// ApplyStateSync retiles in adoptSyncedWindows and then restores the session's
+// offset in adoptScrollStrip, so a sync survived and everything else did not.
+//
+// NEGATIVE CONTROLS, each run by mutating the shipped code and watching the
+// named row fail:
+//
+//   - tileAllWindows' scrolling branch revealing again, which is the shipped
+//     code before this fix: TestAPeerJoiningLeavesTheParkedStripAlone and
+//     TestARemoteConfigChangeLeavesTheParkedStripAlone both fail with ALPHA
+//     drawn back on screen, ten times out of ten.
+//   - The same mutation leaves TestWorkspaceRoundTripKeepsTheScrolledStrip and
+//     TestWorkspaceRoundTripRevealsAHiddenColumn passing, which is how the
+//     reveal is known to belong to ScrollingOnFocusChange and not to the
+//     retile.
+//   - TestAParkedStripSurvivesNothingHappening passes under every mutation
+//     above. It is the row that says the two above are measuring an event
+//     rather than the passage of time.
+//   - The reveal moved out of the retile and into GetOrCreateScrollingLayout,
+//     where a strip is built for the first time. Taking it out of there
+//     instead fails internal/app.TestJoiningClientLandsOnTheSessionsStrip and
+//     TestWorkspaceSwitchLandsBothClientsOnOneStrip, both saying the strip is
+//     at home with the focused column off screen. That is the pair that keeps
+//     a client from starting up scrolled away from the pane it is typing into.
+
+// parkStripPastFocus scrolls the strip until the focused column is entirely off
+// screen, and returns the frame it settled on.
+func parkStripPastFocus(t *testing.T, term *tuitest.Terminal) string {
+	t.Helper()
+	wheelStrip(t, term, 5)
+	band := stripBand(term)
+	if strings.Contains(band, "ALPHA") {
+		t.Fatalf("five notches left the focused column on screen, so nothing below "+
+			"proves anything about a parked strip:\n%s", band)
+	}
+	return band
+}
+
+// TestAPeerJoiningLeavesTheParkedStripAlone is the plainest of them: a second
+// client attaches and the first client's strip jumps. The joining client tiles
+// on startup, snaps its own strip to the focused column, and pushes the offset
+// to the session, so the snap reaches the client whose user was reading.
+func TestAPeerJoiningLeavesTheParkedStripAlone(t *testing.T) {
+	base := t.TempDir()
+	a := stripClient(t, base)
+
+	before := parkStripPastFocus(t, a)
+	t.Logf("the parked strip:\n%s", before)
+
+	b := attachIn(t, base, "wsstrip", startOpts{cols: 100, rows: 30})
+	time.Sleep(3 * time.Second)
+
+	after := stripBand(a)
+	if strings.Contains(after, "ALPHA") {
+		t.Fatalf("a second client attaching dragged the strip back to the focused column:\n"+
+			"BEFORE:\n%s\nAFTER:\n%s", before, after)
+	}
+	if after != before {
+		t.Errorf("a second client attaching moved the strip:\nBEFORE:\n%s\nAFTER:\n%s",
+			before, after)
+	}
+
+	// The joiner's own screen, because the offset is session state and the
+	// screen is the only place this suite can read it. A joiner that snapped
+	// its own strip to the focused column would have pushed that offset to the
+	// session, and the row above would then be passing on timing alone.
+	joined := stripBand(b)
+	if strings.Contains(joined, "ALPHA") {
+		t.Errorf("the joining client landed on the focused column instead of the session's "+
+			"strip, so it pushed its own offset to every peer:\n%s", joined)
+	}
+}
+
+// TestClosingTheFocusedColumnStillRevealsTheStrip is the positive control on
+// the row above. Taking the reveal out of the retile must not take it out of
+// the events that really changed which column is focused: closing the focused
+// column moves focus to a neighbour, and the strip has to go and show it.
+func TestClosingTheFocusedColumnStillRevealsTheStrip(t *testing.T) {
+	base := t.TempDir()
+	a := stripClient(t, base)
+
+	before := parkStripPastFocus(t, a)
+	t.Logf("the parked strip:\n%s", before)
+
+	// ALPHA is the focused column and it is off screen. Closing it hands focus
+	// to a column that must be brought on screen.
+	if out, err := tuiosCLI(t, base, "send-text", "exit\n", "--window", "ALPHA"); err != nil {
+		t.Fatalf("close ALPHA: %v: %s", err, out)
+	}
+	if err := a.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "ALPHA")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ALPHA never closed, so this row proves nothing: %v\n%s", err, a.Snapshot())
+	}
+	time.Sleep(2 * time.Second)
+
+	after := stripBand(a)
+	if !strings.Contains(after, "BRAVO") && !strings.Contains(after, "CHARLIE") {
+		t.Fatalf("closing the focused column left the strip pointing at nothing on screen:\n%s",
+			after)
+	}
+	alive(t, a, "after closing the focused column")
+}
+
+// TestARemoteConfigChangeLeavesTheParkedStripAlone is the same fault reached
+// from the other side: a setting changed from the CLI or by an agent is routed
+// to every client, and absorbing it retiles.
+func TestARemoteConfigChangeLeavesTheParkedStripAlone(t *testing.T) {
+	base := t.TempDir()
+	a := stripClient(t, base)
+
+	before := parkStripPastFocus(t, a)
+
+	if out, err := tuiosCLI(t, base, "set-config", "border_style", "rounded"); err != nil {
+		t.Fatalf("set-config: %v: %s", err, out)
+	}
+	time.Sleep(3 * time.Second)
+
+	after := stripBand(a)
+	if strings.Contains(after, "ALPHA") {
+		t.Fatalf("a remote setting change dragged the strip back to the focused column:\n"+
+			"BEFORE:\n%s\nAFTER:\n%s", before, after)
+	}
+}
+
+// TestAParkedStripSurvivesNothingHappening is the control on both rows above. A
+// parked strip left alone must stay where it is, so a failure there is an event
+// and not the clock.
+func TestAParkedStripSurvivesNothingHappening(t *testing.T) {
+	a := stripClient(t, t.TempDir())
+
+	before := parkStripPastFocus(t, a)
+	time.Sleep(8 * time.Second)
+
+	if after := stripBand(a); after != before {
+		t.Errorf("the strip moved with nothing happening at all:\nBEFORE:\n%s\nAFTER:\n%s",
+			before, after)
+	}
+}

@@ -636,7 +636,14 @@ func refreshForeignSessionsCmd(client *session.TUIClient) tea.Cmd {
 // one somebody writes. One comparison, once, is the whole cost, and it answers
 // nil without allocating for a client whose rail has no files section.
 func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.applyScrollAnchors()
 	model, cmd := m.handleMsg(msg)
+	m.recordScrollAnchors()
+	// Asked again after the handler, not only before it, because the handler
+	// itself is one of the things that lengthens a pane's history: a workspace
+	// switch primes every pane it shows from the daemon's copy. Deriving only
+	// on the next message would draw one frame with the viewport already slid.
+	m.applyScrollAnchors()
 	sync := m.FilesSyncCmd()
 	if sync == nil {
 		return model, cmd

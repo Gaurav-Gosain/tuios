@@ -263,6 +263,22 @@ type Window struct {
 	ClickCount    int
 	// ScrollbackOffset mirrors CopyMode.ScrollOffset for rendering
 	ScrollbackOffset int // Number of lines scrolled back (0 = at bottom, viewing live output)
+	// scrollAnchorLine is the same viewport top said as a place in the history
+	// rather than as a distance from its end: the absolute scrollback line the
+	// first drawn row holds. It means nothing unless scrollAnchored is set, so
+	// a zero-valued window is on live output rather than pinned to the oldest
+	// line it ever had.
+	//
+	// ScrollbackOffset alone cannot hold a scrolled pane still, because the end
+	// it counts back from moves. See window_scroll_anchor.go.
+	scrollAnchorLine int
+	// scrollAnchored says the pane is parked in its history. Only a scrolled
+	// pane has an anchor; a live one follows the end of the output by design.
+	scrollAnchored bool
+	// scrollOffsetSeen is the offset this window had the last time the anchor
+	// was reconciled, so the record half can tell a deliberate scroll from an
+	// offset it derived itself.
+	scrollOffsetSeen int
 	// Alternate screen buffer tracking for TUI detection.
 	// Written on PTY/monitor goroutine, read on UI goroutine.
 	isAltScreen atomic.Bool // True when application is using alternate screen buffer (nvim, vim, etc.)

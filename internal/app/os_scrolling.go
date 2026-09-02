@@ -15,7 +15,8 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 		m.WorkspaceScrollingLayouts = make(map[int]*layout.ScrollingLayout)
 	}
 	sl, ok := m.WorkspaceScrollingLayouts[m.CurrentWorkspace]
-	if !ok || sl == nil {
+	created := !ok || sl == nil
+	if created {
 		sl = layout.NewScrollingLayout()
 		m.WorkspaceScrollingLayouts[m.CurrentWorkspace] = sl
 
@@ -28,7 +29,22 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 		}
 
 		// Sync FocusedCol with the OS focused window so the viewport
-		// shows the correct column instead of always the last one.
+		// shows the correct column instead of always the last one, and put the
+		// strip where that column is on screen.
+		//
+		// The reveal belongs here, at the one moment a strip has no position
+		// yet, rather than in tileAllWindows where it used to be. A workspace
+		// laid out for the first time - a client starting up, a session
+		// restored, a workspace entered - has focus on a column that nothing
+		// has scrolled to, and without this the user is typing into a pane off
+		// the left of the screen. Every later retile reuses this strip and so
+		// leaves the offset alone, which is the whole point: a retile is not a
+		// focus change.
+		//
+		// A peer's offset arriving afterwards still wins. adoptScrollStrip
+		// reaches the strip through here and then writes the session's offset
+		// over whatever this chose, so a joining client lands on the session's
+		// strip and not on its own idea of home.
 		if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 			fw := m.Windows[m.FocusedWindow]
 			if fw.Workspace == m.CurrentWorkspace && !fw.IsFloating {
@@ -46,6 +62,11 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 	// one place that has to be right.
 	sl.Gap = m.PaneGap
 	sl.DefaultWidth = m.ScrollColumnWidthFraction()
+	// Revealed after the geometry above, because the reveal measures columns
+	// with it, and only on the pass that built the strip.
+	if created {
+		sl.EnsureFocusedVisible(m.ScrollingViewWidth())
+	}
 	return sl
 }
 
