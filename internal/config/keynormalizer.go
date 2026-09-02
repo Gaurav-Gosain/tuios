@@ -389,7 +389,7 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 			"shift": true,
 			// Super only reaches a terminal that has negotiated the Kitty
 			// keyboard protocol, but the input path has always acted on super+v
-			// and super+shift+v for the host paste. Rejecting it here would make
+			// and shift+super+v for the host paste. Rejecting it here would make
 			// the working default unwritable the moment it became a binding.
 			"super":  true,
 			"opt":    kn.isMacOS, // opt only valid on macOS
