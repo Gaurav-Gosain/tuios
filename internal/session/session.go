@@ -2375,16 +2375,22 @@ func styleToWire(s uv.Style, link uv.Link) StyleState {
 
 // styleFromWire is styleToWire read back into the emulator that will hold it.
 func styleFromWire(t vt.Terminal, ss StyleState) (uv.Style, uv.Link) {
-	return uv.Style{
+	// The two values are named rather than returned as inline composite
+	// literals, because gofmt 1.26 and 1.27 indent that construct differently
+	// and each rejects the other's output. Naming them keeps the file
+	// formatted the same way under both toolchains.
+	style := uv.Style{
 		Fg:             colorFromWire(t, ss.FgColor),
 		Bg:             colorFromWire(t, ss.BgColor),
 		UnderlineColor: colorFromWire(t, ss.UlColor),
 		Underline:      ansi.Underline(ss.Underline),
 		Attrs:          ss.Attrs,
-	}, uv.Link{
+	}
+	link := uv.Link{
 		URL:    ss.LinkURL,
 		Params: ss.LinkParams,
 	}
+	return style, link
 }
 
 // colorToWire encodes a cell color so the client gets back the kind of color the
