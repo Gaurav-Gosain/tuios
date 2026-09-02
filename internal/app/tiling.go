@@ -123,10 +123,24 @@ func (m *OS) tileAllWindows() {
 	}
 
 	// Scrolling layout mode (niri-like)
+	//
+	// It lays the strip out where the strip already is. It does not reveal the
+	// focused column, which is the one thing this branch used to do that a
+	// retile has no business doing: a retile is not a focus change. The events
+	// that reach here are mostly not even this client's user - a peer
+	// attaching, a routed setting change, a config file reload, a peer opening
+	// its sidebar, any client adding or closing a window on any workspace - and
+	// each of them dragged a strip the user had deliberately scrolled past the
+	// focused column back to it, then pushed that offset to every peer as
+	// session state.
+	//
+	// Revealing belongs to the events where the focus or the column set really
+	// changed, and each of those has its own call: ScrollingOnFocusChange,
+	// ScrollingOnWindowRemoved, adoptScrollStrip, and the restore in
+	// os_minimize.go. scrollingSetPositions still clamps, so a retile that
+	// narrowed the box or removed columns pulls the viewport back into range.
 	if m.UseScrollingLayout {
-		sl := m.GetOrCreateScrollingLayout()
 		m.LogInfo("[SCROLL-TILE] TileAllWindows scrolling path, %d visible windows", len(visibleWindows))
-		sl.EnsureFocusedVisible(m.ScrollingViewWidth())
 		m.scrollingSetPositions()
 		return
 	}
