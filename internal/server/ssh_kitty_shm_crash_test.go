@@ -305,7 +305,15 @@ func runKittyFloodSession(addr, floodScript, textMarker string) error {
 	// threshold in a later attempt window than the byte jump.
 	command := fmt.Sprintf("\x15sh %s\r", floodScript)
 	graphicsSeen, textSeen := false, false
-	for attempt := 0; attempt < 20 && !(graphicsSeen && textSeen); attempt++ {
+	// Under the race detector every session's writes are instrumented, so eight
+	// concurrent sessions need more attempts to all get their floods running.
+	// The budget scales rather than being widened for every build, so a plain
+	// run still fails fast on a session that never starts.
+	attempts := 20
+	if raceEnabled {
+		attempts = 60
+	}
+	for attempt := 0; attempt < attempts && !(graphicsSeen && textSeen); attempt++ {
 		if _, err := fmt.Fprint(stdin, command); err != nil {
 			return fmt.Errorf("write command: %w", err)
 		}
