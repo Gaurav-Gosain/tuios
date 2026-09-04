@@ -35,6 +35,13 @@ go run ./cmd/tuios-web --debug
 # Run tests
 go test ./...
 
+# Leave the machine usable. The maintainer works on this box while the suite
+# runs, and an uncapped build or test run takes every core. taskset confines the
+# whole process tree to half the cores, and the affinity is inherited, so it
+# also holds for the daemons and shells the e2e suite spawns. GOMAXPROCS and
+# `go test -p` do not, because they only bind the Go runtime.
+nice -n 10 taskset -c 0-7 go test ./... -timeout 20m
+
 # Run specific package tests
 go test ./internal/config/...
 go test ./internal/tape/...

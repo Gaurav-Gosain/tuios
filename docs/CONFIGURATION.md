@@ -21,7 +21,7 @@ component:
 [dock]
 left   = ["mode", "workspaces", "trail", "tape"]
 center = ["windows"]
-right  = ["notifications", "copy-help", "cpu", "ram", "session-controls"]
+right  = ["notifications", "copy-help", "cpu", "ram", "clock", "session-controls"]
 
 [dock.clock]
 format = "15:04"

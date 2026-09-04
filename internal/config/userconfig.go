@@ -154,33 +154,34 @@ type DaemonConfig struct {
 
 // AppearanceConfig holds appearance-related settings
 type AppearanceConfig struct {
-	BorderStyle          string  `toml:"border_style"`           // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
-	ZenMode              string  `toml:"zen_mode"`               // Zen mode: disabled, always, mouse (default: disabled)
-	Links                string  `toml:"links"`                  // Links tuios acts on: off, marked, all (default: all)
-	HideWindowButtons    bool    `toml:"hide_window_buttons"`    // Hide window control buttons (minimize, maximize, close)
-	WindowButtonStyle    string  `toml:"window_button_style"`    // Window control style: pill, dots (default: pill)
-	WindowButtonPosition string  `toml:"window_button_position"` // Which end of the title bar the window controls sit on: right, left (default: right)
-	HideScrollbar        bool    `toml:"hide_scrollbar"`         // Hide the window scrollbar thumb on the border
-	ScrollbackLines      int     `toml:"scrollback_lines"`       // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
-	ScrollLines          int     `toml:"scroll_lines"`           // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
-	CopyOnSelect         *bool   `toml:"copy_on_select"`         // Copy a mouse selection to the clipboard on release (default: true)
-	FocusFollowsMouse    *bool   `toml:"focus_follows_mouse"`    // Focus the pane under the cursor as the mouse moves (default: false)
-	AltDrag              *bool   `toml:"alt_drag"`               // Alt + left-drag moves a pane (default: true)
-	ClickToType          string  `toml:"click_to_type"`          // What a click on a pane's content does in window-management mode: single, double, off (default: single)
-	WordCharacters       *string `toml:"word_characters"`        // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
-	DockbarPosition      string  `toml:"dockbar_position"`       // Dockbar position: bottom, top, hidden
-	PreferredShell       string  `toml:"preferred_shell"`        // Preferred shell: if empty, auto-detect based on platform.
-	AnimationsEnabled    *bool   `toml:"animations_enabled"`     // Enable UI animations (default: true). Set to false for instant transitions.
-	ConfirmQuit          *bool   `toml:"confirm_quit"`           // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
-	WhichKeyEnabled      *bool   `toml:"whichkey_enabled"`       // Show which-key popup after pressing leader key (default: true)
-	WhichKeyPosition     string  `toml:"whichkey_position"`      // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
-	WindowTitlePosition  string  `toml:"window_title_position"`  // Window title position: bottom, top, hidden (default: bottom). Shows CustomName if set, else terminal title.
-	HideClock            bool    `toml:"hide_clock"`             // Hide the clock overlay (deprecated, use show_clock)
-	ShowClock            bool    `toml:"show_clock"`             // Show the clock overlay (default: false)
-	ShowCPU              bool    `toml:"show_cpu"`               // Show CPU graph in dock (default: false)
-	ShowRAM              bool    `toml:"show_ram"`               // Show RAM usage in dock (default: false)
-	Theme                string  `toml:"theme"`                  // Color theme name (e.g., dracula, nord, my-custom-theme)
-	SharedBorders        *bool   `toml:"shared_borders"`         // Share borders between adjacent tiled windows (default: false)
+	BorderStyle              string                  `toml:"border_style"`                 // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (borderless mode not yet implemented)
+	ZenMode                  string                  `toml:"zen_mode"`                     // Zen mode: disabled, always, mouse (default: disabled)
+	Links                    string                  `toml:"links"`                        // Links tuios acts on: off, marked, all (default: all)
+	HideWindowButtons        bool                    `toml:"hide_window_buttons"`          // Hide window control buttons (minimize, maximize, close)
+	WindowButtonStyle        string                  `toml:"window_button_style"`          // Window control style: pill, dots (default: pill)
+	WindowButtonPosition     string                  `toml:"window_button_position"`       // Which end of the title bar the window controls sit on: right, left (default: right)
+	HideScrollbar            bool                    `toml:"hide_scrollbar"`               // Hide the window scrollbar thumb on the border
+	ScrollbackLines          int                     `toml:"scrollback_lines"`             // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
+	ScrollLines              int                     `toml:"scroll_lines"`                 // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
+	CopyOnSelect             *bool                   `toml:"copy_on_select"`               // Copy a mouse selection to the clipboard on release (default: true)
+	FocusFollowsMouse        *bool                   `toml:"focus_follows_mouse"`          // Focus the pane under the cursor as the mouse moves (default: false)
+	AltDrag                  *bool                   `toml:"alt_drag"`                     // Alt + left-drag moves a pane (default: true)
+	AutoEnterTerminalOnFocus AutoEnterTerminalPolicy `toml:"auto_enter_terminal_on_focus"` // When a keyboard focus command should start typing in that pane: off, targeted, all (default: off)
+	ClickToType              string                  `toml:"click_to_type"`                // What a click on a pane's content does in window-management mode: single, double, off (default: single)
+	WordCharacters           *string                 `toml:"word_characters"`              // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
+	DockbarPosition          string                  `toml:"dockbar_position"`             // Dockbar position: bottom, top, hidden
+	PreferredShell           string                  `toml:"preferred_shell"`              // Preferred shell: if empty, auto-detect based on platform.
+	AnimationsEnabled        *bool                   `toml:"animations_enabled"`           // Enable UI animations (default: true). Set to false for instant transitions.
+	ConfirmQuit              *bool                   `toml:"confirm_quit"`                 // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
+	WhichKeyEnabled          *bool                   `toml:"whichkey_enabled"`             // Show which-key popup after pressing leader key (default: true)
+	WhichKeyPosition         string                  `toml:"whichkey_position"`            // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
+	WindowTitlePosition      string                  `toml:"window_title_position"`        // Window title position: bottom, top, hidden (default: bottom). Shows CustomName if set, else terminal title.
+	HideClock                bool                    `toml:"hide_clock"`                   // Hide the clock overlay (deprecated, use show_clock)
+	ShowClock                bool                    `toml:"show_clock"`                   // Show the clock overlay (default: false)
+	ShowCPU                  bool                    `toml:"show_cpu"`                     // Show CPU graph in dock (default: false)
+	ShowRAM                  bool                    `toml:"show_ram"`                     // Show RAM usage in dock (default: false)
+	Theme                    string                  `toml:"theme"`                        // Color theme name (e.g., dracula, nord, my-custom-theme)
+	SharedBorders            *bool                   `toml:"shared_borders"`               // Share borders between adjacent tiled windows (default: false)
 	// Customization
 	BorderFocusedColor     string `toml:"border_focused_color"`      // Hex color for focused pane border (e.g., "#89b4fa")
 	BorderUnfocusedColor   string `toml:"border_unfocused_color"`    // Hex color for unfocused pane border (e.g., "#585b70")
@@ -237,6 +238,45 @@ const (
 
 // ClickToTypeModes lists the valid values for appearance.click_to_type.
 var ClickToTypeModes = []string{ClickToTypeSingle, ClickToTypeDouble, ClickToTypeOff}
+
+// AutoEnterTerminalPolicy is appearance.auto_enter_terminal_on_focus.
+// A leftover true/false from the unreleased bool shape unmarshals here
+// rather than failing the whole config file: true becomes all, false off.
+type AutoEnterTerminalPolicy string
+
+// UnmarshalText accepts the three policies and the two bool leftovers.
+func (p *AutoEnterTerminalPolicy) UnmarshalText(text []byte) error {
+	switch s := string(text); s {
+	case "true":
+		*p = AutoEnterTerminalAll
+	case "false":
+		*p = AutoEnterTerminalOff
+	default:
+		*p = AutoEnterTerminalPolicy(s)
+	}
+	return nil
+}
+
+const (
+	// AutoEnterTerminalOff never changes mode from a keyboard focus command.
+	AutoEnterTerminalOff AutoEnterTerminalPolicy = "off"
+	// AutoEnterTerminalTargeted enters terminal mode when a command picks a
+	// pane (numbered select, directional arrows, scrolling left/right), not
+	// when Tab or prefix n/p cycle through them.
+	AutoEnterTerminalTargeted AutoEnterTerminalPolicy = "targeted"
+	// AutoEnterTerminalAll enters terminal mode on every covered focus
+	// command that actually moves focus, including next/prev window.
+	AutoEnterTerminalAll AutoEnterTerminalPolicy = "all"
+)
+
+// AutoEnterTerminalModes lists the valid values for
+// appearance.auto_enter_terminal_on_focus. off is first: it is the default,
+// and the settings cycler draws the first accepted value for an unset enum.
+var AutoEnterTerminalModes = []string{
+	string(AutoEnterTerminalOff),
+	string(AutoEnterTerminalTargeted),
+	string(AutoEnterTerminalAll),
+}
 
 // Zen-mode policies. See AppearanceConfig.ZenMode.
 const (
@@ -441,23 +481,24 @@ type KeybindingsConfig struct {
 func DefaultConfig() *UserConfig {
 	cfg := &UserConfig{
 		Appearance: AppearanceConfig{
-			BorderStyle:          "rounded",
-			ZenMode:              ZenModeDisabled,
-			Links:                LinksAll,
-			HideWindowButtons:    false,
-			WindowButtonStyle:    WindowButtonStylePill,
-			WindowButtonPosition: WindowButtonPositionRight,
-			ScrollbackLines:      10000,
-			ScrollLines:          3,
-			DockbarPosition:      "bottom",
-			PreferredShell:       "",
-			ClickToType:          ClickToTypeSingle,
-			Glyphs:               theme.GlyphSetNone,
-			PanelPadding:         overlay.DefaultPanelPadding,
-			ClockFormat:          DefaultClockFormat,
-			MasterRatio:          MasterRatioDefault,
-			ScrollColumnWidth:    ScrollColumnWidthDefault,
-			Scrollbar:            ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
+			BorderStyle:              "rounded",
+			ZenMode:                  ZenModeDisabled,
+			Links:                    LinksAll,
+			HideWindowButtons:        false,
+			WindowButtonStyle:        WindowButtonStylePill,
+			WindowButtonPosition:     WindowButtonPositionRight,
+			ScrollbackLines:          10000,
+			ScrollLines:              3,
+			DockbarPosition:          "bottom",
+			PreferredShell:           "",
+			ClickToType:              ClickToTypeSingle,
+			AutoEnterTerminalOnFocus: AutoEnterTerminalOff,
+			Glyphs:                   theme.GlyphSetNone,
+			PanelPadding:             overlay.DefaultPanelPadding,
+			ClockFormat:              DefaultClockFormat,
+			MasterRatio:              MasterRatioDefault,
+			ScrollColumnWidth:        ScrollColumnWidthDefault,
+			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
 			Sidebar: SidebarConfig{
 				Position:    "left",
 				Width:       SidebarDefaultWidth,
@@ -1108,6 +1149,9 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	if cfg.Appearance.ClickToType == "" {
 		cfg.Appearance.ClickToType = defaultCfg.Appearance.ClickToType
 	}
+	if cfg.Appearance.AutoEnterTerminalOnFocus == "" {
+		cfg.Appearance.AutoEnterTerminalOnFocus = defaultCfg.Appearance.AutoEnterTerminalOnFocus
+	}
 	if cfg.Appearance.Glyphs == "" {
 		cfg.Appearance.Glyphs = defaultCfg.Appearance.Glyphs
 	}
@@ -1402,6 +1446,16 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// survives the default being on.
 	if cfg.Appearance.AltDrag != nil {
 		s.AltDrag = *cfg.Appearance.AltDrag
+	}
+
+	// AutoEnterTerminalOnFocus only takes one of its three values, so a typo
+	// in the config lands on the default the validator warned it would fall
+	// back to. Empty (an older file, or DefaultConfig before the key existed)
+	// leaves this session's default.
+	if slices.Contains(AutoEnterTerminalModes, string(cfg.Appearance.AutoEnterTerminalOnFocus)) {
+		s.AutoEnterTerminalOnFocus = cfg.Appearance.AutoEnterTerminalOnFocus
+	} else if cfg.Appearance.AutoEnterTerminalOnFocus != "" {
+		s.AutoEnterTerminalOnFocus = AutoEnterTerminalOff
 	}
 
 	// ClickToType only takes one of its three values, so a typo in the config

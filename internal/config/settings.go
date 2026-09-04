@@ -264,6 +264,20 @@ type Settings struct {
 	// Set via appearance.alt_drag config.
 	AltDrag bool
 
+	// AutoEnterTerminalOnFocus enters terminal mode when a window-management
+	// keyboard command actually moves focus to another pane. Hover-focus and
+	// click-to-type keep their own policies; this is only those explicit focus
+	// commands. A no-op that leaves the already-focused pane focused does not
+	// change mode.
+	//
+	// off (the default): Tab keeps cycling in window-management mode.
+	// targeted: numbered select and directional arrows enter terminal mode; Tab
+	// does not.
+	// all: every covered focus command that actually moves focus also enters
+	// terminal mode, including next/prev window.
+	// Set via appearance.auto_enter_terminal_on_focus config.
+	AutoEnterTerminalOnFocus AutoEnterTerminalPolicy
+
 	// ClickToType decides what a left click on a pane's content does while the
 	// keyboard is driving the window manager. "single" enters terminal mode on the
 	// release, which is what a newcomer expects a click to do and so the default.
@@ -416,6 +430,7 @@ func DefaultSettings() Settings {
 		FocusFollowsMouse:           false,
 		AltDrag:                     true,
 		ClickToType:                 ClickToTypeSingle,
+		AutoEnterTerminalOnFocus:    AutoEnterTerminalOff,
 		WordCharacters:              `@-./_~?&=%+#`,
 		NiriReverseScroll:           false,
 		LeaderKey:                   DefaultLeaderKey,
