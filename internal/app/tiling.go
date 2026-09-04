@@ -207,11 +207,21 @@ func (m *OS) tileAllWindows() {
 			}
 		}
 
-		// If tree has stale windows, clear it and rebuild
+		// Drop the stale windows and keep the splits around them. Rebuilding
+		// the whole tree here used to throw the arrangement away whenever a
+		// pane closed while tiling was off, which was every time the toggle
+		// remembered a layout worth keeping.
 		if hasStaleWindows {
-			m.LogInfo("BSP: Clearing stale tree and rebuilding")
-			m.WorkspaceTrees[m.CurrentWorkspace] = nil
-			tree = nil
+			m.LogInfo("BSP: Removing stale windows from the tree")
+			for _, id := range treeIDs {
+				if !visibleIDs[id] {
+					tree.RemoveWindow(id)
+				}
+			}
+			if tree.IsEmpty() {
+				m.WorkspaceTrees[m.CurrentWorkspace] = nil
+				tree = nil
+			}
 		}
 	}
 
@@ -271,16 +281,32 @@ func (m *OS) tileAllWindows() {
 
 // ToggleAutoTiling toggles automatic tiling mode
 func (m *OS) ToggleAutoTiling() {
-	m.settleSizes(func() { m.toggleAutoTiling() })
+	m.SetAutoTiling(!m.AutoTiling)
 }
 
-// toggleAutoTiling is ToggleAutoTiling with the announcements already held.
-func (m *OS) toggleAutoTiling() {
+// SetAutoTiling turns tiling on or off.
+//
+// It is the one transition every entry point goes through: the tiling key,
+// the two palette rows, the tape commands, and the set-layout verb behind
+// them. There used to be five copies, each writing the fields it remembered.
+// The tape copy left every pane flagged borderless, so turning tiling off
+// from a tape or the CLI drew panes with no borders and no dividers between
+// them. The palette copy forgot the same flag on other workspaces and left a
+// preselection armed. None of them brought a scrolling strip back on screen.
+func (m *OS) SetAutoTiling(on bool) {
+	m.settleSizes(func() { m.setAutoTiling(on) })
+}
+
+// setAutoTiling is SetAutoTiling with the announcements already held.
+func (m *OS) setAutoTiling(on bool) {
 	// Switching mode is structural: the layout it lands on is final, not a step
 	// on the way to a size the user is still choosing.
 	m.requireRealLayout()
 
-	m.AutoTiling = !m.AutoTiling
+	if m.AutoTiling == on {
+		return
+	}
+	m.AutoTiling = on
 	// Both deferred because the enabling branch returns early for scrolling
 	// mode. The sync is the one that has to be: the daemon holds AutoTiling and
 	// echoes it back to every client on the next push, so a client that turns
@@ -292,82 +318,101 @@ func (m *OS) toggleAutoTiling() {
 	defer m.FireLayoutChanged()
 	defer m.SyncStateToDaemon()
 
-	if m.AutoTiling {
-		// If scrolling mode was active, re-enable it
-		if m.UseScrollingLayout {
-			m.LogInfo("Scrolling: Re-enabling scrolling tiling mode")
-			// Clear old scrolling layout to rebuild from current windows
-			delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
-			sl := m.GetOrCreateScrollingLayout()
-			sl.EnsureFocusedVisible(m.ScrollingViewWidth())
-			m.scrollingSetPositions()
-			for _, w := range m.Windows {
-				if w.Workspace == m.CurrentWorkspace {
-					w.InvalidateCache()
-				}
-			}
-			return
-		}
+	if !on {
+		m.leaveTiling()
+		return
+	}
 
-		m.LogInfo("BSP: Enabling tiling mode")
-
-		// Initialize the workspace trees map if needed
-		if m.WorkspaceTrees == nil {
-			m.WorkspaceTrees = make(map[int]*layout.BSPTree)
-		}
-
-		// When enabling, create a fresh BSP tree and add all visible windows
-		m.WorkspaceTrees[m.CurrentWorkspace] = nil
-		tree := m.GetOrCreateBSPTree()
-
-		var visibleWindows []*terminal.Window
+	// If scrolling mode was active, re-enable it
+	if m.UseScrollingLayout {
+		m.LogInfo("Scrolling: Re-enabling scrolling tiling mode")
+		// Clear old scrolling layout to rebuild from current windows
+		delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
+		sl := m.GetOrCreateScrollingLayout()
+		sl.EnsureFocusedVisible(m.ScrollingViewWidth())
+		m.scrollingSetPositions()
 		for _, w := range m.Windows {
-			if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing && !w.IsFloating {
-				visibleWindows = append(visibleWindows, w)
+			if w.Workspace == m.CurrentWorkspace {
+				w.InvalidateCache()
 			}
 		}
+		return
+	}
 
-		bounds := m.GetBSPBounds()
-		var lastInsertedID = 0
+	// The BSP tree a workspace was tiled with is kept while tiling is off, and
+	// tileAllWindows lays the panes out from it again, dropping the panes that
+	// closed in between and adding the ones that opened. Building a fresh tree
+	// here, as this used to, threw a deliberately arranged layout away on every
+	// toggle. A master-stack layout has nothing to keep: its order is the
+	// window order and its ratio is already remembered per workspace.
+	m.LogInfo("Tiling: enabling, mode=%s", m.LayoutModeName())
+	m.tileAllWindows()
+	for _, w := range m.Windows {
+		if w.Workspace == m.CurrentWorkspace {
+			w.InvalidateCache()
+		}
+	}
+}
 
-		for i, win := range visibleWindows {
-			windowIntID := m.getWindowIntID(win.ID)
-			tree.InsertWindow(windowIntID, lastInsertedID, layout.SplitNone, 0.5, bounds, m.separatorGap())
-			lastInsertedID = windowIntID
-			m.LogInfo("BSP: Added window %d (int ID %d) with target %d, split count now: %d",
-				i+1, windowIntID, lastInsertedID, tree.WindowCount())
-		}
+// leaveTiling is the half of setAutoTiling that runs when tiling goes off. It
+// gives every pane its own border back and makes sure every pane is somewhere
+// the user can reach it.
+func (m *OS) leaveTiling() {
+	m.LogInfo("Tiling: disabling")
+	// Clear preselection when disabling tiling
+	m.PreselectionDir = layout.PreselectionNone
+	// Every pane draws its own border again, so the column each split was
+	// holding open for a divider now draws nothing at all. Hand it back to
+	// the panes on either side instead of leaving it empty between them.
+	//
+	// First, so each tilable pane hears its new box once. The loop below used
+	// to clear the flag at the pane's old rectangle and reclaim then gave it
+	// the real one, which is two SIGWINCHes for one settled size.
+	m.reclaimSeparatorGaps()
+	// A scrolling strip is longer than the screen, and the panes past its edge
+	// keep the rectangles the strip gave them: with nothing left to scroll the
+	// strip, they were floating panes at x = -144 that no click could reach.
+	m.bringPanesIntoView()
+	for i := range m.Windows {
+		// Still needed for the panes reclaim does not place - minimized and
+		// floating ones - which keep their rectangle and owe the guest the two
+		// columns and rows their border has just taken back. A no-op for the
+		// panes reclaim already settled.
+		m.Windows[i].SetTiled(false)
+		m.Windows[i].InvalidateCache()
+		m.Windows[i].ContentDirty = true
+		m.Windows[i].Dirty = true
+		m.Windows[i].PositionDirty = true
+		m.Windows[i].HasNewOutput.Store(true)
+	}
+	m.MarkAllDirty()
+}
 
-		m.ApplyBSPLayout()
-		for _, win := range visibleWindows {
-			win.InvalidateCache()
+// bringPanesIntoView moves every pane that lies partly outside the content
+// region to the nearest place inside it. A pane wider or taller than the region
+// keeps its size and is pinned to the region's top-left edge.
+func (m *OS) bringPanesIntoView() {
+	left := m.GetLeftMargin()
+	top := m.GetTopMargin()
+	width := m.GetContentWidth()
+	height := m.GetUsableHeight()
+	if width <= 0 || height <= 0 {
+		return
+	}
+	for _, w := range m.Windows {
+		// A floating pane was never under the tiler, and where it sits is where
+		// its user dragged it, edge and all.
+		if w.Minimized || w.Minimizing || w.IsFloating {
+			continue
 		}
-		m.LogInfo("BSP: Tiling enabled with %d windows", len(visibleWindows))
-	} else {
-		m.LogInfo("BSP: Disabling tiling mode")
-		// Clear preselection when disabling tiling
-		m.PreselectionDir = layout.PreselectionNone
-		// Every pane draws its own border again, so the column each split was
-		// holding open for a divider now draws nothing at all. Hand it back to
-		// the panes on either side instead of leaving it empty between them.
-		//
-		// First, so each tilable pane hears its new box once. The loop below used
-		// to clear the flag at the pane's old rectangle and reclaim then gave it
-		// the real one, which is two SIGWINCHes for one settled size.
-		m.reclaimSeparatorGaps()
-		for i := range m.Windows {
-			// Still needed for the panes reclaim does not place - minimized and
-			// floating ones - which keep their rectangle and owe the guest the two
-			// columns and rows their border has just taken back. A no-op for the
-			// panes reclaim already settled.
-			m.Windows[i].SetTiled(false)
-			m.Windows[i].InvalidateCache()
-			m.Windows[i].ContentDirty = true
-			m.Windows[i].Dirty = true
-			m.Windows[i].PositionDirty = true
-			m.Windows[i].HasNewOutput.Store(true)
+		x := min(max(w.X, left), left+max(width-w.Width, 0))
+		y := min(max(w.Y, top), top+max(height-w.Height, 0))
+		if x == w.X && y == w.Y {
+			continue
 		}
-		m.MarkAllDirty()
+		m.CancelSnapAnimation(w)
+		w.X, w.Y = x, y
+		w.MarkPositionDirty()
 	}
 }
 

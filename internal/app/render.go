@@ -143,13 +143,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		// paths place the window and its scrollbar at the same depth. Computing
 		// it only in the fresh path left the cached path's scrollbar at a
 		// different depth, so it flickered as the window toggled dirty/clean.
-		zIndex := window.Z
-		if window.IsFloating {
-			zIndex = config.ZIndexSeparators + 1 + window.Z
-		}
-		if (isAnimating || window.IsBeingManipulated) && !window.Tiled {
-			zIndex = config.ZIndexAnimating
-		}
+		zIndex := windowLayerZ(window, isAnimating)
 
 		if window.CachedLayer != nil && !window.Dirty && !window.ContentDirty && !window.PositionDirty {
 			if renderTraceEnabled {
@@ -194,7 +188,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 			window.Dirty || window.ContentDirty || window.PositionDirty ||
 			window.CachedLayer.GetX() != window.X ||
 			window.CachedLayer.GetY() != window.Y ||
-			window.CachedLayer.GetZ() != window.Z
+			window.CachedLayer.GetZ() != zIndex
 
 		if !needsRedraw || (!isFocused && !isFullyVisible && !window.ContentDirty && !window.PositionDirty && !window.IsBeingManipulated && window.CachedLayer != nil) {
 			// renderTerminal is never entered on this path, so without a line
@@ -287,6 +281,27 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	canvas.Compose(lipgloss.NewCompositor(layers...))
 
 	return canvas
+}
+
+// windowLayerZ is the z-index a window's layer is composed at.
+//
+// Tiled windows are drawn at their own Z, which counts up from ZIndexBase and
+// stays under the separator overlay. Floating windows are lifted into a band of
+// their own above the separators, in their own stacking order, and that band is
+// capped at ZIndexFloatingTop so no number of floating panes can reach the dock
+// or an overlay. A window in motion that draws its own border goes to
+// ZIndexAnimating, above the tiled panes it is sliding across.
+func windowLayerZ(window *terminal.Window, animating bool) int {
+	if window.IsFloating {
+		// A floating window stays in its band while it moves. Lifting it to
+		// ZIndexAnimating used to drop a dragged float under the other floats,
+		// because their band started at the same number.
+		return min(config.ZIndexFloating+max(window.Z, 0), config.ZIndexFloatingTop)
+	}
+	if (animating || window.IsBeingManipulated) && !window.Tiled {
+		return config.ZIndexAnimating
+	}
+	return window.Z
 }
 
 // fitToContentBox trims a rendered pane body to the window's content

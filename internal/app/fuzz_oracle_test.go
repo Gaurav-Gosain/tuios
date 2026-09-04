@@ -597,11 +597,10 @@ func fuzzPaneDrawsAbove(a *terminal.Window, ai int, b *terminal.Window, bi int) 
 	return ai > bi
 }
 
+// fuzzPaneZ asks the renderer where it puts a pane rather than keeping a copy
+// of the arithmetic: the copy drifted once, when the floating band moved.
 func fuzzPaneZ(w *terminal.Window) int {
-	if w.IsFloating {
-		return config.ZIndexSeparators + 1 + w.Z
-	}
-	return w.Z
+	return windowLayerZ(w, false)
 }
 
 // deferring reports whether a resize is still in flight, which is the one state

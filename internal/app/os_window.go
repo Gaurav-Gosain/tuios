@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 
@@ -19,9 +20,22 @@ func (m *OS) ToggleFloating() {
 	fw.IsFloating = !fw.IsFloating
 
 	if fw.IsFloating {
-		// Remove from BSP tree when floating
+		// Lift the pane out of the tiling structure. The strip and the tree are
+		// asked the way a peer's sync asks them (ApplyStateSync): the BSP call
+		// used to be the only one here, and it does nothing under a scrolling
+		// layout, so the float kept its column and the strip laid an empty slot
+		// out where it had been, while every peer removed it.
 		if m.AutoTiling {
-			m.RemoveWindowFromBSPTree(fw)
+			if m.UseScrollingLayout {
+				// Not ScrollingOnWindowRemoved: that is for a pane that closed
+				// and moves the focus to the strip's column, and the pane the
+				// user just floated is the pane they are still in.
+				sl := m.GetOrCreateScrollingLayout()
+				sl.RemoveWindow(m.getWindowIntID(fw.ID))
+				m.scrollingSetPositions()
+			} else {
+				m.RemoveWindowFromBSPTree(fw)
+			}
 		}
 		fw.SetTiled(false)
 		fw.InvalidateCache()
@@ -277,34 +291,42 @@ func (m *OS) FocusWindow(i int) *OS {
 	return m
 }
 
-// RecalcZOrder recalculates Z-index values for all windows, ensuring floating
-// windows are always above non-floating windows. Call after toggling IsFloating.
+// RecalcZOrder renumbers every window's Z so that floating windows sit above
+// tiled ones and the focused window sits on top of its band. Call after
+// toggling IsFloating or moving the focus.
+//
+// Within a band the existing stacking order is kept. It used to be renumbered
+// by position in the window list, which is creation order, so raising one
+// window silently reshuffled the others: with three floating panes stacked
+// A, C, B, clicking A put B back under C. Sorting by the current Z first
+// means the only window that moves is the one being raised.
 func (m *OS) RecalcZOrder() {
 	focused := m.FocusedWindow
+	if focused < 0 || focused >= len(m.Windows) {
+		focused = -1
+	}
+	order := make([]int, len(m.Windows))
+	for j := range order {
+		order[j] = j
+	}
+	slices.SortStableFunc(order, func(a, b int) int {
+		return cmp.Compare(m.Windows[a].Z, m.Windows[b].Z)
+	})
 	z := 0
-	// Non-floating, non-focused first
-	for j := range m.Windows {
-		if j != focused && !m.Windows[j].IsFloating {
-			m.Windows[j].Z = z
+	place := func(floating bool) {
+		for _, j := range order {
+			if j != focused && m.Windows[j].IsFloating == floating {
+				m.Windows[j].Z = z
+				z++
+			}
+		}
+		if focused >= 0 && m.Windows[focused].IsFloating == floating {
+			m.Windows[focused].Z = z
 			z++
 		}
 	}
-	// Focused non-floating
-	if focused >= 0 && focused < len(m.Windows) && !m.Windows[focused].IsFloating {
-		m.Windows[focused].Z = z
-		z++
-	}
-	// Non-focused floating
-	for j := range m.Windows {
-		if j != focused && m.Windows[j].IsFloating {
-			m.Windows[j].Z = z
-			z++
-		}
-	}
-	// Focused floating (very top)
-	if focused >= 0 && focused < len(m.Windows) && m.Windows[focused].IsFloating {
-		m.Windows[focused].Z = z
-	}
+	place(false)
+	place(true)
 	m.MarkAllDirty()
 }
 

@@ -90,7 +90,7 @@ func TestPaneDrawOrderMatchesTheCompositor(t *testing.T) {
 	if !fuzzPaneDrawsAbove(floating, 0, raised, 1) {
 		t.Error("a floating pane does not draw above a raised tiled one")
 	}
-	if got, want := fuzzPaneZ(floating), config.ZIndexSeparators+1; got != want {
+	if got, want := fuzzPaneZ(floating), config.ZIndexFloating; got != want {
 		t.Errorf("a floating pane sits at z %d, the compositor puts it at %d", got, want)
 	}
 }

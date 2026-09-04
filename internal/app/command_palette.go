@@ -176,14 +176,12 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Shortcut: "prefix+space",
 			Category: "Layout",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.AutoTiling = !m.AutoTiling
+				m.ToggleAutoTiling()
 				if m.AutoTiling {
-					m.TileAllWindows()
 					m.ShowNotification("Tiling on", "success", s.NotificationDuration)
 				} else {
 					m.ShowNotification("Tiling off", "info", s.NotificationDuration)
 				}
-				m.FireLayoutChanged()
 				return m, nil
 			},
 		},
