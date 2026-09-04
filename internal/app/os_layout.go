@@ -264,26 +264,17 @@ func (m *OS) enableMasterStackLayout() {
 	m.FireLayoutChanged()
 }
 
-// DisableAllTiling disables all tiling modes and resets window state.
+// DisableAllTiling turns tiling off. The layout mode is remembered, so turning
+// tiling back on, or reattaching, returns to the layout the session had.
 func (m *OS) DisableAllTiling() {
-	m.settleSizes(func() { m.disableAllTiling() })
-}
-
-// disableAllTiling is DisableAllTiling with the announcements already held.
-func (m *OS) disableAllTiling() {
-	m.AutoTiling = false
-	// The scheme is remembered. Clearing UseScrollingLayout here made this the
-	// one path that forgot it: LayoutModeName then reported bsp, that answer was
-	// pushed into session state, and turning tiling back on - or reattaching -
-	// gave a scrolling session a BSP layout it never asked for. The tiling
-	// toggle has always kept the mode; this now agrees with it.
-	m.resetTiledFlags()
-	// The panes draw their own borders again, so the column every split held
-	// open for a divider now draws nothing. Give it back to them, the same way
-	// the tiling toggle does.
-	m.reclaimSeparatorGaps()
+	wasOn := m.AutoTiling
+	m.SetAutoTiling(false)
+	if !wasOn {
+		// Nothing moved, but the row was chosen, and a hook on the layout
+		// hears about it the way it does for the rows that pick a layout.
+		m.FireLayoutChanged()
+	}
 	m.ShowNotification("Tiling off", "info", m.Settings.NotificationDuration)
-	m.FireLayoutChanged()
 }
 
 // NextLayout cycles to the next saved layout template.

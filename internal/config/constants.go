@@ -1255,11 +1255,25 @@ const (
 	// ZIndexBase is the base z-index for regular windows
 	ZIndexBase = 0
 
-	// ZIndexSeparators is the z-index for shared border separator lines (above windows, below overlays)
-	ZIndexSeparators = 998
+	// ZIndexSeparators is the z-index for shared border separator lines. It is
+	// above every tiled window, whose Z counts up from ZIndexBase, and below
+	// the floating band.
+	ZIndexSeparators = 500
 
-	// ZIndexAnimating is the z-index for windows currently animating
-	ZIndexAnimating = 999
+	// ZIndexAnimating is the z-index for windows currently animating.
+	ZIndexAnimating = 501
+
+	// ZIndexFloating is where the floating band starts: a floating window is
+	// drawn at ZIndexFloating plus its Z, capped at ZIndexFloatingTop. The band
+	// used to start one above the separators at 998, which put a floating
+	// window with Z >= 2 over the dock, the clock, the log viewer, the which-key
+	// overlay and the scrollback browser: every overlay between 1000 and 1003
+	// was reachable with a handful of panes open.
+	ZIndexFloating = 502
+
+	// ZIndexFloatingTop is the highest z-index a floating window can be drawn
+	// at. Every overlay and the dock sit above it.
+	ZIndexFloatingTop = 999
 
 	// ZIndexHelp is the z-index for help overlay
 	ZIndexHelp = 1000

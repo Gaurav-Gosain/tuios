@@ -606,6 +606,7 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 	m.CurrentWorkspace = clampWorkspace(state.CurrentWorkspace)
 	workspaceChanged := previousWorkspace != m.CurrentWorkspace
 	m.MasterRatio = state.MasterRatio
+	tilingWasOn := m.AutoTiling
 	m.AutoTiling = state.AutoTiling
 	m.adoptWorkspaceMasterRatio(state)
 	m.adoptWorkspaceHasCustom(state)
@@ -842,6 +843,20 @@ func (m *OS) ApplyStateSync(state *session.SessionState) error {
 		// the flag changes.
 		m.applyPopupRects(false)
 		zoomRetile := m.applyZoomState(unzoomed)
+		// Tiling switched by a peer. The rectangles arrive in this sync, but the
+		// border each pane draws is this client's own flag, and nothing else
+		// here writes it: a peer turning tiling off left every pane on this
+		// client borderless, with no dividers between them, until something
+		// happened to retile. Off clears the flag everywhere, the way the local
+		// switch does; on settles it where the layout can say what it should be.
+		switch {
+		case tilingWasOn && !m.AutoTiling:
+			for _, w := range m.Windows {
+				w.SetTiled(false)
+			}
+		case !tilingWasOn && m.AutoTiling:
+			m.settleBorderMode(m.CurrentWorkspace)
+		}
 		if m.AutoTiling && len(m.Windows) > 0 && len(created) == 0 && len(removed) == 0 &&
 			(geometryChanged || workspaceRetile || zoomRetile || m.tiledLayoutStale()) {
 			m.TileAllWindows()

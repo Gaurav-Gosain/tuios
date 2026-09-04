@@ -1299,7 +1299,8 @@ The `display name`, `accent` and `named` lines appear only when those are set.
   "total_windows": 3,
   "mode": "terminal",
   "tiling_enabled": true,
-  "tiling_mode": "bsp",
+  "tiling_mode": "tiling",
+  "layout_mode": "bsp",
   "theme": "tokyonight",
   "dockbar_position": "bottom",
   "animations_enabled": true,
@@ -1315,7 +1316,8 @@ The `display name`, `accent` and `named` lines appear only when those are set.
 | `total_windows` | Total number of windows across all workspaces |
 | `mode` | Current input mode: `terminal` or `window_management` |
 | `tiling_enabled` | Whether tiling mode is active |
-| `tiling_mode` | Tiling algorithm: `bsp`, `horizontal`, `vertical` |
+| `tiling_mode` | `tiling` or `floating`. The same two words the `session-info` verb reports. |
+| `layout_mode` | The tiling layout in use: `bsp`, `master-stack` or `scrolling` |
 | `theme` | Current color theme |
 | `dockbar_position` | Dockbar location: `top`, `bottom`, `left`, `right` |
 | `animations_enabled` | Whether animations are enabled |

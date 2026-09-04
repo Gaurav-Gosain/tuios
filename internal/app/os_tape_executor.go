@@ -338,10 +338,12 @@ func (m *OS) GetSessionInfoData() map[string]any {
 		mode = "terminal"
 	}
 
-	// Get tiling mode string
+	// The same two words the daemon's session-info uses, so a caller can
+	// dispatch on the field without caring which side answered. This copy
+	// used to say "bsp" for every tiling layout, scrolling included.
 	tilingMode := "floating"
 	if m.AutoTiling {
-		tilingMode = "bsp"
+		tilingMode = "tiling"
 	}
 
 	// Get dockbar position - it's stored as a string in config
@@ -378,6 +380,7 @@ func (m *OS) GetSessionInfoData() map[string]any {
 		"mode":               mode,
 		"tiling_enabled":     m.AutoTiling,
 		"tiling_mode":        tilingMode,
+		"layout_mode":        m.LayoutModeName(),
 		"theme":              themeName,
 		"dockbar_position":   dockbarPosition,
 		"animations_enabled": m.Settings.AnimationsEnabled,
@@ -489,12 +492,8 @@ func (m *OS) SwitchWorkspace(workspace int) error {
 
 // ToggleTiling toggles tiling mode.
 func (m *OS) ToggleTiling() error {
-	m.AutoTiling = !m.AutoTiling
-	if m.AutoTiling {
-		m.TileAllWindows()
-	}
+	m.ToggleAutoTiling()
 	m.MarkAllDirty()
-	m.FireLayoutChanged()
 	return nil
 }
 
@@ -633,17 +632,14 @@ func (m *OS) RestoreWindowByName(name string) error {
 
 // EnableTiling enables tiling mode.
 func (m *OS) EnableTiling() error {
-	if !m.AutoTiling {
-		m.AutoTiling = true
-		m.TileAllWindows()
-		m.MarkAllDirty()
-	}
+	m.SetAutoTiling(true)
+	m.MarkAllDirty()
 	return nil
 }
 
 // DisableTiling disables tiling mode.
 func (m *OS) DisableTiling() error {
-	m.AutoTiling = false
+	m.SetAutoTiling(false)
 	m.MarkAllDirty()
 	return nil
 }
