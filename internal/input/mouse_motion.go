@@ -251,6 +251,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.UseScrollingLayout {
 			return o, nil
 		}
+		// The pointer has moved with the button down, so this gesture really is
+		// a move and the pane can give up its shared-border allowance now. The
+		// press did not: see untilePaneForDrag.
+		untilePaneForDrag(focusedWindow)
 		// Calculate new position - allow windows to go partially off-screen for edge snapping
 		newX := mouse.X - o.DragOffsetX
 		newY := mouse.Y - o.DragOffsetY

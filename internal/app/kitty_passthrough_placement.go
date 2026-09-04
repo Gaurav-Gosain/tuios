@@ -117,14 +117,14 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		// horizontal stretch that lasted until a click (press sets the flag,
 		// release clears it on every window) let the correct c=78,r=38 out.
 		// Keyed on the CONTENT rectangle, not the outer one. The two do not
-		// move together: a press on a tiled pane untiles it for the length of
-		// the gesture (beginWindowDrag), which leaves the outer rectangle
+		// move together: dragging a tiled pane untiles it for the length of
+		// the gesture (untilePaneForDrag), which leaves the outer rectangle
 		// exactly where it was and takes a border's worth off every edge of the
 		// content. Watching the outer rectangle sees nothing happen, so the
 		// hold never arms and the placement is recomputed against a content
 		// area two cells narrower and two shorter than the bitmap the host is
 		// holding - the image jumps a cell and loses its right-hand and bottom
-		// edges for the length of a click. The content rectangle is also the
+		// edges for the length of a drag. The content rectangle is also the
 		// one the guest is told about and the one the placement is measured in,
 		// so it is the rectangle whose movement matters here.
 		cw, chh := paneContentCells(info)
