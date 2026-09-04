@@ -334,7 +334,8 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Re-tile / re-layout after drag or resize.
 		// For scrolling mode: only on actual resize (avoid viewport reset on click).
 		// For BSP shared borders: always re-tile to restore the Tiled flag that
-		// was temporarily cleared during drag setup (line 327).
+		// a drag cleared (untilePaneForDrag). A gesture that never moved never
+		// cleared it, and the retile then finds nothing to change.
 		if wasResizing && o.AutoTiling && o.UseScrollingLayout {
 			o.ScrollingSetPositions()
 		} else if o.PanesBorderless() {

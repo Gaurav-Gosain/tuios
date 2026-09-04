@@ -41,8 +41,9 @@ type GeometrySnapshot struct {
 	// which is not always Width and Height less the border allowance. Those two
 	// move apart whenever the layout changes a pane's drawable area before
 	// telling it: a live resize drag moves the rectangle every frame and defers
-	// the announcement to the gesture's end, and a press on a tiled pane drops
-	// its borderless allowance without moving the rectangle at all.
+	// the announcement to the gesture's end, and a pane dragged out of a
+	// shared-border layout drops its borderless allowance without moving the
+	// rectangle at all.
 	//
 	// Anything measuring an image against its pane wants this pair and not the
 	// other one. The guest draws to the size it was given, so a bitmap can only
