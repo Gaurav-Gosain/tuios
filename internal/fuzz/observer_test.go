@@ -180,6 +180,14 @@ func TestObserverWorksWithoutARuleLister(t *testing.T) {
 // The off switch has to be free, not cheap. A nil observer must build no event
 // values at all, or every run in CI pays for a display nobody attached.
 func TestNilObserverAllocatesNothing(t *testing.T) {
+	if raceEnabled {
+		// The detector's own allocations swamp the difference this measures:
+		// the two figures land within a percent of each other and their order
+		// flips run to run. Measured 3 of 8 runs failing, on this commit and on
+		// one from before the observer existed, so it is the instrument and not
+		// the code. The plain build still asserts it on every push.
+		t.Skip("allocation counts are not measurable under the race detector")
+	}
 	actions := Generate(11, 200)
 	run := func() {
 		_, _ = Run(func() (Target, error) { return newTraceTarget(0), nil },
