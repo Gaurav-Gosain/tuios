@@ -1,32 +1,38 @@
 package config
 
-import "testing"
+import (
+	"strconv"
+	"testing"
+)
 
-// TestSpotlightDefaultsAreTheOnesTheRegistryPublishes. The section's accessors
-// answer for a config that named nothing, and an agent reading list-options has
-// to be told the same numbers.
+// TestSpotlightDefaultsAreTheOnesTheRegistryPublishes. Three things answer for
+// a setting nobody wrote down: the section's accessors, the table DefaultConfig
+// builds, and the registry an agent reads through list-options. All three have
+// to say the same thing, so this compares every one of them against the
+// registry rather than against the constants they are all built from. A
+// constant changed on its own is the way the three drift apart.
 func TestSpotlightDefaultsAreTheOnesTheRegistryPublishes(t *testing.T) {
 	var unset SpotlightConfig
 	if unset.IsEnabled() {
 		t.Error("an unset [spotlight] section starts with the beam on")
 	}
-	for _, tc := range []struct{ path, got string }{
-		{"spotlight.follow", unset.FollowMode()},
-		{"spotlight.edge", unset.EdgeStyle()},
+	built := DefaultConfig().Spotlight
+	for _, tc := range []struct{ path, accessor, table string }{
+		{"spotlight.follow", unset.FollowMode(), built.FollowMode()},
+		{"spotlight.edge", unset.EdgeStyle(), built.EdgeStyle()},
+		{"spotlight.radius", strconv.Itoa(unset.RadiusRows()), strconv.Itoa(built.RadiusRows())},
+		{"spotlight.dim", strconv.Itoa(unset.DimPercent()), strconv.Itoa(built.DimPercent())},
 	} {
 		opt, ok := LookupOption(tc.path)
 		if !ok {
 			t.Fatalf("%s has no registry entry", tc.path)
 		}
-		if tc.got != opt.Default {
-			t.Errorf("%s resolves to %q, the registry publishes %q", tc.path, tc.got, opt.Default)
+		if tc.accessor != opt.Default {
+			t.Errorf("%s resolves to %q, the registry publishes %q", tc.path, tc.accessor, opt.Default)
 		}
-	}
-	if unset.RadiusRows() != SpotlightDefaultRadius {
-		t.Errorf("an unset radius resolves to %d, want %d", unset.RadiusRows(), SpotlightDefaultRadius)
-	}
-	if unset.DimPercent() != SpotlightDefaultDim {
-		t.Errorf("an unset dim resolves to %d, want %d", unset.DimPercent(), SpotlightDefaultDim)
+		if tc.table != opt.Default {
+			t.Errorf("%s is %q in DefaultConfig, the registry publishes %q", tc.path, tc.table, opt.Default)
+		}
 	}
 }
 
@@ -43,8 +49,8 @@ func TestSpotlightClampsWhatTheFileSays(t *testing.T) {
 	}
 	// A value outside the accepted set falls back rather than being carried
 	// into the render path, where it would read as the beam not working.
-	if got := wild.FollowMode(); got != SpotlightFollowCursor {
-		t.Errorf("follow %q resolves to %q, want %q", wild.Follow, got, SpotlightFollowCursor)
+	if got := wild.FollowMode(); got != SpotlightFollowMouse {
+		t.Errorf("follow %q resolves to %q, want %q", wild.Follow, got, SpotlightFollowMouse)
 	}
 	if got := wild.EdgeStyle(); got != SpotlightEdgeHard {
 		t.Errorf("edge %q resolves to %q, want %q", wild.Edge, got, SpotlightEdgeHard)

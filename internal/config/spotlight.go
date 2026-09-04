@@ -1,7 +1,7 @@
 package config
 
 // SpotlightConfig is the [spotlight] section: a beam that lights one part of
-// the screen and carries everything outside it toward the ground.
+// the screen and turns the light down on everything outside it.
 //
 // It is a presentation aid, not a mode. Nothing about it is session state: a
 // second client attached to the same session sees its own screen unchanged,
@@ -13,18 +13,30 @@ package config
 // survives a reload rather than reading as "unset" and snapping back on.
 type SpotlightConfig struct {
 	Enabled *bool  `toml:"enabled"` // draw the beam from startup (default: false)
-	Follow  string `toml:"follow"`  // what the beam is anchored to (default: cursor)
+	Follow  string `toml:"follow"`  // what the beam is anchored to (default: mouse)
 	Radius  int    `toml:"radius"`  // half the beam's height, in rows (default: 10)
-	Dim     int    `toml:"dim"`     // how far an unlit cell goes toward the ground (default: 60)
+	Dim     int    `toml:"dim"`     // percent of its light an unlit cell loses (default: 75)
 	Edge    string `toml:"edge"`    // hard cut or soft rim (default: hard)
 }
 
 // What the beam follows.
 //
-// Cursor is the default because it costs nothing: the position is the one
-// getRealCursor already resolves for the hardware cursor, and it moves only on
-// frames that are being composed anyway. Mouse asks for a frame per pointer
-// move, which the motion throttle then caps at the frame rate.
+// Mouse is the default because it is what a person means by a spotlight: they
+// point at the thing they are talking about. Cursor was the first default and
+// it was chosen on cost rather than on what anyone asked for, which is the
+// wrong way round for a feature whose whole job is to put the light where the
+// audience should look.
+//
+// The cost is real and it is why cursor stays. A cursor-anchored beam moves
+// only on frames that are being composed anyway, because getRealCursor already
+// resolves the position for the hardware cursor. A mouse-anchored one asks for
+// a frame per pointer move, which the motion throttle caps at the frame rate:
+// about 1.8 KB per frame with a hard edge and 4.9 KB with a soft one, and only
+// while the pointer is moving. On a local terminal that is nothing. Over SSH or
+// in the browser client a continuous swipe is a steady tens of KB a second, so
+// a remote client that wants the beam should set follow = "cursor".
+//
+// Neither costs anything at all with the beam off, which is how it ships.
 //
 // The two never mix. A rule that picked whichever moved last would put two
 // sources on one beam and make the screen jump for a reason the user cannot
@@ -54,9 +66,19 @@ const (
 	SpotlightDefaultRadius = 10
 	SpotlightMinRadius     = 2
 	SpotlightMaxRadius     = 200
-	SpotlightDefaultDim    = 60
-	SpotlightMinDim        = 10
-	SpotlightMaxDim        = 95
+	// SpotlightDefaultDim leaves an unlit cell at a quarter of its light.
+	//
+	// It was 60 while the pass carried each colour toward the theme's ground,
+	// which barely moved a background and left a colourless one alone, so the
+	// number never meant what it said. Now that it does - dim N leaves the
+	// screen at (100-N) percent of its light - 60 reads as a screen merely a bit
+	// darker, and the text outside the beam still competes with the text
+	// inside it. A quarter is near tuiffects' own unlit character, which sits
+	// at a fifth, and it leaves the layout visible while giving the beam the
+	// whole of the reader's attention.
+	SpotlightDefaultDim = 75
+	SpotlightMinDim     = 10
+	SpotlightMaxDim     = 95
 	// SpotlightFalloff is how much of the radius is soft rim, as a fraction.
 	// It is the screen saver's own BeamFalloff, because the two draw the same
 	// light and a beam that faded differently in the two places would read as
@@ -80,7 +102,7 @@ var (
 // defaultSpotlightConfig returns the section DefaultConfig carries.
 func defaultSpotlightConfig() SpotlightConfig {
 	return SpotlightConfig{
-		Follow: SpotlightFollowCursor,
+		Follow: SpotlightFollowMouse,
 		Radius: SpotlightDefaultRadius,
 		Dim:    SpotlightDefaultDim,
 		Edge:   SpotlightEdgeHard,
@@ -111,12 +133,12 @@ func fillMissingSpotlight(cfg, defaultCfg *UserConfig) {
 // IsEnabled reports whether the beam is drawn from startup.
 func (s SpotlightConfig) IsEnabled() bool { return s.Enabled != nil && *s.Enabled }
 
-// FollowMode is what the beam is anchored to, defaulting to the cursor.
+// FollowMode is what the beam is anchored to, defaulting to the mouse.
 func (s SpotlightConfig) FollowMode() string {
-	if s.Follow == SpotlightFollowMouse {
-		return SpotlightFollowMouse
+	if s.Follow == SpotlightFollowCursor {
+		return SpotlightFollowCursor
 	}
-	return SpotlightFollowCursor
+	return SpotlightFollowMouse
 }
 
 // RadiusRows is the effective radius in rows.
@@ -127,7 +149,7 @@ func (s SpotlightConfig) RadiusRows() int {
 	return min(max(s.Radius, SpotlightMinRadius), SpotlightMaxRadius)
 }
 
-// DimPercent is how far an unlit cell is carried toward the ground.
+// DimPercent is the percent of its light an unlit cell loses.
 func (s SpotlightConfig) DimPercent() int {
 	if s.Dim <= 0 {
 		return SpotlightDefaultDim
