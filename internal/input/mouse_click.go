@@ -517,8 +517,9 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 // beginWindowDrag puts a window into the move gesture the title-bar drag uses:
-// it focuses and grabs the pane at (x, y), untiles it for free rendering, and
-// in tiling mode records the slot to swap back into. The title-bar press and a
+// it focuses and grabs the pane at (x, y) and, in tiling mode, records the slot
+// to swap back into. Untiling a borderless pane for free rendering waits for
+// the first motion; see untilePaneForDrag. The title-bar press and a
 // committed ctrl-drag both route through here, so the two share one movement
 // path (motion in handleMouseMotion, drop in handleMouseRelease). Motion moves
 // the focused window, so the grab focuses it; the mode switch keeps a drag from
@@ -537,11 +538,6 @@ func beginWindowDrag(o *app.OS, idx, x, y int) {
 	o.DragOffsetX = x - win.X
 	o.DragOffsetY = y - win.Y
 	win.IsBeingManipulated = true
-	// Temporarily untile for border rendering during drag.
-	if win.Tiled {
-		win.Tiled = false
-		win.Resize(win.Width, win.Height)
-	}
 	// In tiling mode (non-scrolling), complete pending animations to avoid state
 	// conflicts, then record the slot for the swap-on-release. Scrolling mode
 	// doesn't drag windows, so let its slide animations play.
@@ -552,6 +548,28 @@ func beginWindowDrag(o *app.OS, idx, x, y int) {
 		o.TiledWidth = win.Width
 		o.TiledHeight = win.Height
 	}
+}
+
+// untilePaneForDrag drops a borderless pane's shared-border allowance so the
+// drag can draw it as a free-floating window with its own border.
+//
+// It is deliberately not part of beginWindowDrag, which runs on the press. A
+// press is not yet a drag: with shared borders on, dropping the allowance
+// shrinks the pane by the two cells the border now costs, and that is a real
+// resize the guest is told about. A click that only picks a pane then cost the
+// shell a SIGWINCH on the press and a second one on the retile at release, and
+// a shell repaints its prompt on each, so focusing a pane with the mouse left a
+// new prompt line behind it every time. The gesture that needs the allowance
+// gone is the one that moves the pane, so the motion path asks for it.
+//
+// Safe to call on every motion event: a pane that has already given the
+// allowance up is left alone.
+func untilePaneForDrag(win *terminal.Window) {
+	if !win.Tiled {
+		return
+	}
+	win.Tiled = false
+	win.Resize(win.Width, win.Height)
 }
 
 // finalizeCtrlDrag drops a committed ctrl-drag at (x, y) by running the normal
