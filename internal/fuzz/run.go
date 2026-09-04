@@ -73,8 +73,11 @@ type RuleInfo struct {
 // them, because that is what makes "everything after the break went unrun" true.
 type RuleLister interface{ Rules() []RuleInfo }
 
-// NopObserver is the default. Embed it to implement only the methods a display
-// cares about.
+// NopObserver does nothing. Embed it to implement only the methods a display
+// cares about. It is not what a nil Config.Observer becomes on the hot path:
+// Run skips the per-action reporting outright when nothing is attached, and
+// uses the nop only for the calls that happen once per run or per shrink
+// candidate.
 type NopObserver struct{}
 
 func (NopObserver) Start(uint64, int)             {}
@@ -146,8 +149,13 @@ func (r Result) Repro() string {
 // newTarget is called once per replay rather than once per run, because
 // shrinking needs to re-run a candidate sequence from a clean start.
 func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
-	obs := cfg.Observer
-	if obs == nil {
+	// watch is whether anything is attached. The first replay reports per
+	// action only when it is, so a run with no observer pays for none of the
+	// reporting: no rule registry fetch, no dispatch per action, no dispatch
+	// per rule per action. The nop stands in only for the once-per-run and
+	// once-per-candidate calls, which keeps nil checks off the call sites.
+	obs, watch := cfg.Observer, cfg.Observer != nil
+	if !watch {
 		obs = NopObserver{}
 	}
 	actions := cfg.Actions
@@ -208,7 +216,7 @@ func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
 		return -1, nil, nil
 	}
 
-	step, vs, err := replay(actions, true)
+	step, vs, err := replay(actions, watch)
 	res.Executed = len(actions)
 	if err != nil {
 		res.Replays = replays

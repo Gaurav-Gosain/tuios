@@ -177,33 +177,107 @@ func TestObserverWorksWithoutARuleLister(t *testing.T) {
 	}
 }
 
-// The off switch has to be free, not cheap. A nil observer must build no event
-// values at all, or every run in CI pays for a display nobody attached.
-func TestNilObserverAllocatesNothing(t *testing.T) {
+// registryProbe counts registry fetches. The fetch sits behind the same guard
+// as the per-action dispatch, so it is the one observable sign that the engine
+// is reporting to nobody.
+type registryProbe struct {
+	*traceTarget
+	fetches int
+}
+
+func (p *registryProbe) Rules() []RuleInfo { p.fetches++; return p.traceTarget.Rules() }
+
+// With no observer the engine must not report, and the registry fetch is the
+// first thing reporting does. A nop standing in for nil would fetch it once
+// per replay and dispatch once per rule per action after that. This is the
+// check the allocation bound cannot make: one slice per replay is inside it.
+func TestNilObserverSkipsTheRegistry(t *testing.T) {
+	probe := &registryProbe{traceTarget: newTraceTarget(0)}
+	if _, err := Run(func() (Target, error) { return probe, nil },
+		Config{Actions: allocsActions, NoShrink: true}); err != nil {
+		t.Fatal(err)
+	}
+	if probe.fetches != 0 {
+		t.Errorf("no observer attached and the registry was fetched %d times", probe.fetches)
+	}
+	probe = &registryProbe{traceTarget: newTraceTarget(0)}
+	if _, err := Run(func() (Target, error) { return probe, nil },
+		Config{Actions: allocsActions, NoShrink: true, Observer: newRecorder()}); err != nil {
+		t.Fatal(err)
+	}
+	if probe.fetches != 1 {
+		t.Errorf("an observer attached and the registry was fetched %d times, want once per replay", probe.fetches)
+	}
+}
+
+// skipUnderRace opts an allocation assertion out of the detector build.
+func skipUnderRace(t *testing.T) {
+	t.Helper()
 	if raceEnabled {
-		// The detector's own allocations swamp the difference this measures:
-		// the two figures land within a percent of each other and their order
-		// flips run to run. Measured 3 of 8 runs failing, on this commit and on
-		// one from before the observer existed, so it is the instrument and not
-		// the code. The plain build still asserts it on every push.
+		// The detector's own allocations swamp the differences these tests
+		// measure: the figures wander by about ten either way between runs,
+		// and each difference here is one. Measured 8 of 12 runs failing for
+		// each test with the skip removed, so it is the instrument and not the
+		// code. The plain build still asserts them on every push, and
+		// TestNilObserverSkipsTheRegistry runs under the detector as well.
 		t.Skip("allocation counts are not measurable under the race detector")
 	}
-	actions := Generate(11, 200)
-	run := func() {
-		_, _ = Run(func() (Target, error) { return newTraceTarget(0), nil },
-			Config{Actions: actions, NoShrink: true})
-	}
-	// Two targets and their slices are the floor; what matters is that the
-	// figure does not move when the observer calls are the only difference.
-	base := testing.AllocsPerRun(3, run)
+}
 
-	rec := newRecorder()
-	withObs := testing.AllocsPerRun(3, func() {
+// allocsActions is the sequence the allocation tests replay. The target's own
+// per-action allocations are the bulk of every figure below, which is why each
+// assertion is a difference and not an absolute.
+var allocsActions = Generate(11, 200)
+
+func allocsRun(obs Observer) float64 {
+	return testing.AllocsPerRun(3, func() {
 		_, _ = Run(func() (Target, error) { return newTraceTarget(0), nil },
-			Config{Actions: actions, NoShrink: true, Observer: rec})
+			Config{Actions: allocsActions, NoShrink: true, Observer: obs})
 	})
+}
+
+// The off switch has to be free, not cheap. With no observer attached, Run
+// must allocate what the target allocates plus a fixed setup cost, or every
+// run in CI pays per action for a display nobody attached.
+//
+// The floor is the target driven by hand, so the figure is the engine's own
+// overhead and nothing else. A nop observer standing in for nil would not
+// show here as allocations, since its calls build no values, but it would
+// still fetch the rule registry per replay and dispatch once per rule per
+// action. Run keeps nil as nil so that neither happens.
+func TestNilObserverAllocatesNothing(t *testing.T) {
+	skipUnderRace(t)
+	bare := testing.AllocsPerRun(3, func() {
+		tg := newTraceTarget(0)
+		_ = tg.Reset()
+		for _, a := range allocsActions {
+			_ = tg.Apply(a)
+			_ = tg.Check()
+		}
+	})
+	base := allocsRun(nil)
+	t.Logf("%.0f allocations driving the target by hand, %.0f through Run, over %d actions",
+		bare, base, len(allocsActions))
+	if base < bare {
+		t.Fatalf("Run cannot allocate less than the target it drives: %.0f then %.0f", bare, base)
+	}
+	// The setup is one closure. Anything per-action would put this in the
+	// hundreds.
+	if extra := base - bare; extra > 8 {
+		t.Errorf("Run with no observer cost %.0f allocations over the bare target across %d actions, which is per-action work",
+			extra, len(allocsActions))
+	}
+}
+
+// Attaching an observer costs one registry fetch per replay and nothing per
+// action. The events are handed over as arguments, never built as values, so
+// a display's cost is the display's own and the engine adds none.
+func TestAttachedObserverCostsNothingPerAction(t *testing.T) {
+	skipUnderRace(t)
+	base := allocsRun(nil)
+	withObs := allocsRun(newRecorder())
 	t.Logf("%.0f allocations without an observer, %.0f with one, over %d actions",
-		base, withObs, len(actions))
+		base, withObs, len(allocsActions))
 	if withObs < base {
 		t.Fatalf("attaching an observer cannot reduce allocations: %.0f then %.0f", base, withObs)
 	}
@@ -211,6 +285,6 @@ func TestNilObserverAllocatesNothing(t *testing.T) {
 	// this in the hundreds.
 	if extra := withObs - base; extra > 8 {
 		t.Errorf("an attached observer cost %.0f extra allocations over %d actions, which is per-action work",
-			extra, len(actions))
+			extra, len(allocsActions))
 	}
 }
