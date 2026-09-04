@@ -346,10 +346,20 @@ type OS struct {
 	// maintenance tick: arming is one deferred timer and the running animation
 	// drives its own frames. See screensaver.go.
 	screensaver screensaverState
+	// spotlight is the beam that lights one part of the screen and dims the
+	// rest. Client-local appearance, like ShowKeys: nothing about it crosses
+	// the wire and a peer sees its own screen unchanged. See spotlight.go.
+	spotlight spotlightState
 	// lastInteractionRender is when a drag/resize motion event last produced a
 	// frame. Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.
 	lastInteractionRender time.Time
+	// spotlightMotionPending is set when a mouse-anchored spotlight dropped a
+	// motion frame to the frame budget. It is the one term that flushes that
+	// position, because the beam has no tick of its own. False whenever the
+	// beam is off or the pointer is at rest, which is what keeps the idle tick
+	// idle. See update.go.
+	spotlightMotionPending bool
 	// viewportResizing is set while terminal sizes are still arriving. A retile
 	// it drives places panes directly instead of easing them into position, and
 	// resizes them visually only, exactly as a mouse resize drag does: a resize

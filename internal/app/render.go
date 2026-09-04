@@ -543,7 +543,14 @@ func (m *OS) composeFrame() string {
 	if window, ok := m.fullscreenFastWindow(); ok && !fastPathDisabled {
 		return m.buildFullscreenFrame(window)
 	}
-	return lipgloss.Sprint(m.GetCanvas(true).Render())
+	canvas := m.GetCanvas(true)
+	// The spotlight goes here and nowhere else: after every pane's cached layer
+	// has been consumed, before the canvas becomes a string. The saver owns the
+	// whole screen while it runs, so the two never draw in one frame.
+	if m.spotlight.on && !m.screensaver.active {
+		m.applySpotlight(canvas)
+	}
+	return lipgloss.Sprint(canvas.Render())
 }
 
 // fullscreenFastWindow returns the single window that fills the content area with
@@ -577,6 +584,14 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// Only fall back while there are keys to show; an empty history draws nothing, so
 	// the fast path stays eligible when the overlay is idle.
 	if m.ShowKeys && len(m.RecentKeys) > 0 {
+		return nil, false
+	}
+	// The spotlight is a pass over the composed canvas, and the fast path
+	// builds no canvas to pass over. Falling back is what a lone fullscreen
+	// pane pays for the beam, and the keycast above already pays most of it on
+	// a recording. The saver needs no mention here: it took the fast path away
+	// several checks above, and it suspends the pass anyway.
+	if m.spotlight.on {
 		return nil, false
 	}
 	if m.panesBorderless() {
@@ -742,6 +757,11 @@ func (m *OS) View() tea.View {
 			return m.crashView()
 		}
 		m.cachedViewContent = content
+		// This frame carries the beam at the pointer's newest position, so the
+		// skipped move it was waiting for has been drawn. Cleared here rather
+		// than on the motion path so a frame composed for any other reason - a
+		// keystroke, pane output - counts too.
+		m.spotlightMotionPending = false
 		m.zenHidden = m.zenBordersHidden(false)
 		view.SetContent(content)
 	}

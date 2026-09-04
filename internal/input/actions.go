@@ -214,6 +214,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	// System actions
 	d.Register("toggle_logs", handleToggleLogs)
 	d.Register("toggle_cache_stats", handleToggleCacheStats)
+	d.Register("toggle_spotlight", handleToggleSpotlight)
 
 	// Tape manager actions
 	d.Register("toggle_tape_manager", handleToggleTapeManager)
@@ -705,6 +706,16 @@ func handleQuit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // ============================================================================
 // System Action Handlers
 // ============================================================================
+
+// handleToggleSpotlight turns the beam on the focused pane's cursor on and off.
+//
+// One key in window mode rather than a chord: it is switched on while somebody
+// is watching the screen, and three keystrokes is the wrong shape for that.
+func handleToggleSpotlight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	save := o.ToggleSpotlight()
+	toggleNotify(o, "Spotlight", o.SpotlightOn())
+	return o, save
+}
 
 func handleToggleLogs(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	wasShowing := o.ShowLogs
