@@ -249,6 +249,17 @@ type Settings struct {
 	// Set via appearance.copy_on_select config.
 	CopyOnSelect bool
 
+	// ClipboardLocalFallback writes to and reads from a native system clipboard
+	// tool (wl-copy/wl-paste, xclip, pbcopy) when one is reachable, instead of
+	// depending on the terminal implementing OSC 52. Terminals built on VTE
+	// (GNOME Terminal, Ptyxis) never implement OSC 52, so copy/paste silently
+	// failed there. The native path also emits OSC 52, so terminals that do
+	// implement it get the same text twice (idempotent) and remote clients with
+	// no native clipboard of their own still work. Turn it off to force the pure
+	// OSC 52 path.
+	// Set via appearance.clipboard_local_fallback config.
+	ClipboardLocalFallback bool
+
 	// FocusFollowsMouse focuses the pane under the cursor as the mouse moves over
 	// it, without a click and without entering terminal mode. It is a divisive
 	// window-manager habit, so it defaults off and users opt in.
@@ -413,6 +424,7 @@ func DefaultSettings() Settings {
 		ScrollbackLines:             DefaultScrollbackLines,
 		ScrollLines:                 3,
 		CopyOnSelect:                true,
+		ClipboardLocalFallback:      true,
 		FocusFollowsMouse:           false,
 		AltDrag:                     true,
 		ClickToType:                 ClickToTypeSingle,

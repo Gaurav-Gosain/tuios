@@ -88,8 +88,8 @@ func (fx *copyModeEffects) apply(o *app.OS, window *terminal.Window) (*app.OS, t
 	if fx.enterTerminal && o != nil {
 		cmd = o.EnterTerminalMode()
 	}
-	if fx.setClipboard {
-		cmd = tea.SetClipboard(fx.clipboard)
+	if fx.setClipboard && o != nil {
+		cmd = o.WriteClipboard(fx.clipboard)
 	}
 	return o, cmd
 }

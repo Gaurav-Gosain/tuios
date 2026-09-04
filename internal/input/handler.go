@@ -82,9 +82,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		}
 		return o, nil
 	case tea.ClipboardMsg:
-		// Handle OSC 52 clipboard read response (from tea.ReadClipboard).
-		// The terminal answered, so the pending query's timeout is disarmed
-		// whatever mode this client is in.
+		// A paste answer arrived - the terminal's OSC 52 reply or the native
+		// tool's read, both end here - so the pending query's timeout is
+		// disarmed whatever mode this client is in.
 		o.NotePasteArrived()
 		// Only handle paste in terminal mode
 		if o.Mode == app.TerminalMode {

@@ -38,7 +38,33 @@ func (m *OS) CopyToClipboard(text string) tea.Cmd {
 	}
 	m.CancelPendingCopy()
 	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
-	return tea.SetClipboard(text)
+	return m.WriteClipboard(text)
+}
+
+// WriteClipboard writes text to the system clipboard and is the one write
+// path: copy mode's y, the scrollback browser, link and path copies, drag and
+// multi-click selections, and the pane menu all land here. It prefers a native
+// system clipboard (wl-copy, xclip, pbcopy) when one is reachable for this
+// session, and always returns the OSC 52 message (tea.SetClipboard) on top.
+//
+// The native write is decided by nativeClipboardTool, here on the Update loop;
+// the Cmd it returns only closes over the tool pointer and the text. The OSC
+// 52 message is still returned when the native path ran: in the VTE terminals
+// the gate allows it is ignored (they do not implement OSC 52, which is why
+// the native tool exists at all), and if the host detection ever misfires on a
+// terminal that does implement it, the query lands the text anyway. Nothing
+// ever writes twice: where OSC 52 works, the native path is off, and where the
+// native path is on, OSC 52 is ignored.
+func (m *OS) WriteClipboard(text string) tea.Cmd {
+	tool := m.nativeClipboardTool()
+	return func() tea.Msg {
+		if tool != nil {
+			// Best-effort: if the native write fails (permissions, compositor
+			// gone), the OSC 52 message below is still the safety net.
+			_ = tool.Write(text)
+		}
+		return tea.SetClipboard(text)()
+	}
 }
 
 // DeferCopyToClipboard holds text back until delay has passed with no further
@@ -79,7 +105,7 @@ func (m *OS) HandlePendingCopy(seq uint64) tea.Cmd {
 	text := m.pendingCopy
 	m.pendingCopy = ""
 	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
-	return tea.SetClipboard(text)
+	return m.WriteClipboard(text)
 }
 
 // PendingCopyText reports the text a deferred write is holding, for tests and

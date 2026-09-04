@@ -143,7 +143,7 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 				fmt.Sprintf("Copied %d chars", len(text)),
 				"success", o.Settings.NotificationDuration,
 			)
-			return o, tea.SetClipboard(text)
+			return o, o.WriteClipboard(text)
 		}
 		o.ShowNotification("Nothing to copy", "warning", o.Settings.NotificationDuration)
 
@@ -155,7 +155,7 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 				fmt.Sprintf("Copied: %s", truncateForNotif(text, 30)),
 				"success", o.Settings.NotificationDuration,
 			)
-			return o, tea.SetClipboard(text)
+			return o, o.WriteClipboard(text)
 		}
 
 	// Paste selected command back to terminal
@@ -471,7 +471,7 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 					"success", o.Settings.NotificationDuration,
 				)
 				vim.EnsureVisible()
-				return o, tea.SetClipboard(text)
+				return o, o.WriteClipboard(text)
 			}
 		} else {
 			text := vim.SelectedText()
@@ -481,7 +481,7 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 					"success", o.Settings.NotificationDuration,
 				)
 				vim.EnsureVisible()
-				return o, tea.SetClipboard(text)
+				return o, o.WriteClipboard(text)
 			}
 		}
 		o.ShowNotification("Nothing to copy", "warning", o.Settings.NotificationDuration)

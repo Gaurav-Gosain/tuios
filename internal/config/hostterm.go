@@ -19,6 +19,7 @@ const (
 	HostKitty         HostTerminal = "kitty"
 	HostWezTerm       HostTerminal = "WezTerm"
 	HostAlacritty     HostTerminal = "Alacritty"
+	HostVTE           HostTerminal = "VTE"
 	HostVSCode        HostTerminal = "VS Code"
 	HostRio           HostTerminal = "Rio"
 	HostWarp          HostTerminal = "Warp"
@@ -69,6 +70,12 @@ func detectHostTerminal(getenv func(string) string) HostTerminal {
 		return HostAlacritty
 	case strings.Contains(term, "rio"):
 		return HostRio
+	}
+	// VTE-based terminals (GNOME Terminal, Ptyxis, Tilix) set VTE_VERSION.
+	// This is the marker the native clipboard fallback keys off: VTE never
+	// implements OSC 52, so the host needs the system tool instead.
+	if getenv("VTE_VERSION") != "" {
+		return HostVTE
 	}
 	return HostUnknown
 }
@@ -131,3 +138,12 @@ func MacOptionAdvice(host HostTerminal, chord string) string {
 // reach tuios even with macos-option-as-alt on and the Kitty protocol negotiated.
 const GhosttyAltArrowAdvice = "Ghostty rewrites alt+left/alt+right to word motions: " +
 	"add keybind = alt+left=unbind and keybind = alt+right=unbind to unbind them"
+
+// HostIsVTE reports whether the outer terminal is built on VTE (GNOME Terminal,
+// Ptyxis, Tilix...). VTE terminals never implement OSC 52, so tuios needs the
+// native system clipboard path to reach the user's clipboard there. Everywhere
+// else, OSC 52 is the preferred channel and a spawned clipboard tool would only
+// duplicate entries in the clipboard manager.
+func HostIsVTE() bool {
+	return detectHostTerminal(os.Getenv) == HostVTE
+}

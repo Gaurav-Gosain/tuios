@@ -54,7 +54,7 @@ func (m *OS) CopyLink(rawURL string) tea.Cmd {
 		return nil
 	}
 	m.ShowNotification("Copied the link.", "success", m.Settings.NotificationDuration)
-	return tea.SetClipboard(rawURL)
+	return m.WriteClipboard(rawURL)
 }
 
 // OpenLink performs the default action for a link.
@@ -76,20 +76,20 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 	if !linkOpenableScheme(rawURL) {
 		m.ShowNotification("tuios can not open that kind of link. The address is on your clipboard.",
 			"warning", m.Settings.NotificationDuration)
-		return tea.SetClipboard(rawURL)
+		return m.WriteClipboard(rawURL)
 	}
 
 	// Not a local file, so it needs the viewer's own machine.
 	if m.IsRemoteClient() {
 		m.ShowNotification("Copied the link. A remote client can not open it for you.",
 			"info", m.Settings.NotificationDuration)
-		return tea.SetClipboard(rawURL)
+		return m.WriteClipboard(rawURL)
 	}
 	if err := openInOSViewer(rawURL); err != nil {
 		m.LogError("Failed to open link %s: %v", rawURL, err)
 		m.ShowNotification("Could not open the link. It is on your clipboard.",
 			"error", m.Settings.NotificationDuration)
-		return tea.SetClipboard(rawURL)
+		return m.WriteClipboard(rawURL)
 	}
 	m.ShowNotification("Opened the link.", "success", m.Settings.NotificationDuration)
 	return nil
@@ -147,7 +147,7 @@ func (m *OS) openLocalPath(path, rawURL string) tea.Cmd {
 	if err != nil {
 		m.ShowNotification("That file is gone. The link is on your clipboard.",
 			"warning", m.Settings.NotificationDuration)
-		return tea.SetClipboard(rawURL)
+		return m.WriteClipboard(rawURL)
 	}
 	if info.IsDir() {
 		return m.openDirectoryLink(path)
@@ -175,7 +175,7 @@ func (m *OS) openDirectoryLink(path string) tea.Cmd {
 	}
 	m.ShowNotification("Copied the folder path. Turn the sidebar on to browse it.",
 		"info", m.Settings.NotificationDuration)
-	return tea.SetClipboard(path)
+	return m.WriteClipboard(path)
 }
 
 // linkEditor is the argv the editor pane runs. $EDITOR then $VISUAL then vi, in

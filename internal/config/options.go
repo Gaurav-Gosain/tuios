@@ -132,6 +132,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.clipboard_local_fallback", Type: OptionBool, Section: "appearance",
+		Description: "Use the native system clipboard (wl-copy/xclip/pbcopy) when available",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.focus_follows_mouse", Type: OptionBool, Section: "appearance",
 		Description: "Focus the pane under the cursor as the mouse moves",
 		Default:     "false",

@@ -324,18 +324,22 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return m, cmd
 	}
 
-	// Handle paste shortcuts - intercept and request clipboard via OSC 52.
-	// Plain ctrl+v is deliberately not bound to terminal_paste_host so it falls
-	// through to the passthrough block and reaches the child PTY as 0x16 (needed
-	// for vim visual-block, etc.), matching the tmux/zellij convention.
+	// Handle paste shortcuts - intercept and request the clipboard. The whole
+	// decision lives in RequestHostPaste: it says why paste cannot work when it
+	// cannot, decides on the Update loop whether a native tool is reachable,
+	// arms the OSC 52 deadline, and returns one Cmd that does the reading, so
+	// the key path stays a plain return and nothing touches the model off the
+	// loop. Both the native and the OSC 52 read end in the same message, which
+	// handler.go routes to handleClipboardPaste, so the paste destination logic
+	// is shared. Plain ctrl+v is deliberately not bound to terminal_paste_host
+	// so it falls through to the passthrough block and reaches the child PTY as
+	// 0x16 (needed for vim visual-block, etc.), matching the tmux/zellij
+	// convention.
 	if sectionAction(msg, o, (*config.KeybindRegistry).GetTerminalModeAction) == "terminal_paste_host" {
 		// Recorded here for the same reason the scroll binds above are. See
 		// NoteAction.
 		o.NoteAction("terminal_paste_host")
 		if focusedWindow != nil {
-			// Ask the terminal for its clipboard via OSC 52. The reply arrives
-			// as a tea.ClipboardMsg, handled in handler.go, and a terminal that
-			// never replies is reported instead. See app.RequestHostPaste.
 			return o, o.RequestHostPaste()
 		}
 		return o, nil

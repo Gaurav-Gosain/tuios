@@ -41,6 +41,21 @@ func (m *OS) ClipboardReadUnsupportedReason() string {
 // RequestHostPaste asks the terminal for its clipboard, or says why it cannot.
 // It is the one way in: the paste key and the pane menu's Paste row both call
 // it, so neither can offer a paste the other has already found impossible.
+//
+// Everything the model owns happens here, on the Update loop: the
+// unsupported-notice, the sequence bump, the deadline, and the decision of
+// whether a native tool is reachable (one detection, in nativeClipboardTool).
+// The deadline is armed up front for both read paths: the native read is
+// bounded by its own timeout inside the tool, and if it eats into or outlives
+// the deadline, the report fires on time and a late answer still pastes.
+//
+// The Cmd this returns closes over plain local values — the sequence and the
+// tool — and only reads: the native clipboard when a tool was found and
+// answers, and, when that read fails, the OSC 52 query the terminal itself may
+// answer. Nothing touches the model off the loop; an earlier draft of the
+// native fallback re-entered RequestHostPaste from inside the Cmd goroutine,
+// bumping pasteSeq under the Update loop's feet, which is the race this shape
+// removes.
 func (m *OS) RequestHostPaste() tea.Cmd {
 	if reason := m.ClipboardReadUnsupportedReason(); reason != "" {
 		m.ShowNotification(reason, "warning", m.Settings.NotificationDuration)
@@ -49,9 +64,21 @@ func (m *OS) RequestHostPaste() tea.Cmd {
 	m.pasteSeq++
 	m.pastePending = true
 	seq := m.pasteSeq
+
+	tool := m.nativeClipboardTool()
 	return tea.Batch(
-		tea.ReadClipboard,
 		tea.Tick(hostPasteTimeout, func(time.Time) tea.Msg { return PasteTimeoutMsg{Seq: seq} }),
+		func() tea.Msg {
+			if tool != nil {
+				if text, err := tool.Read(); err == nil {
+					return tea.ClipboardMsg{Content: text, Selection: 'c'}
+				}
+				// Native read failed (hung tool, empty selection, compositor
+				// gone): fall back to the OSC 52 read, which terminals that
+				// implement it answer with a tea.ClipboardMsg.
+			}
+			return tea.ReadClipboard()
+		},
 	)
 }
 
