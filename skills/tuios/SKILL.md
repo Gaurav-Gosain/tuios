@@ -1054,14 +1054,16 @@ file, which is why both have a verb of their own rather than a row in
 `list-options`.
 
 The `[spotlight]` table is the one appearance option that is not shared. It
-lights the area around the focused pane's cursor and carries everything outside
-it toward the ground, which is what a recording or a demo wants. `enabled`
-starts it, `follow` is `cursor` or `mouse`, `radius` is half its height in rows,
-`dim` is how far an unlit cell goes, and `edge` cuts the beam at its radius or
-fades it out. A fade sends about three times the bytes each time the beam moves,
-which is why the cut is the default. The
-beam belongs to one client: a second client attached to the same session sees
-its own screen unchanged. A person toggles it with `b` in window mode, or from the command palette.
+lights one area of the screen and turns the light down on the rest, which is
+what a recording or a demo wants. `enabled` starts it, `follow` is `mouse` or
+`cursor`, `radius` is half its height in rows, `dim` is the percent of its light
+an unlit cell loses, and `edge` cuts the beam at its radius or fades it out. A
+fade sends about three times the bytes each time the beam moves, which is why
+the cut is the default. A mouse-anchored beam asks for a frame per pointer move,
+so set `follow = "cursor"` for a client over SSH or in the browser. The beam
+belongs to one client: a second client attached to the same session sees its own
+screen unchanged. A person toggles it with `b` in window mode, or from the
+command palette.
 
 Everything here is also reachable by a person, from the settings page (`,` in
 window mode): its rows are derived from the same registry `list-options` reads,

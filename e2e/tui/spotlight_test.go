@@ -54,6 +54,24 @@ func spotlightConfigFile(t *testing.T, body string) string {
 // the way out and an assertion about it would be an assertion about nothing.
 func spotlightProbe(t *testing.T, body string) (lit, far, farBorder tuitest.Cell) {
 	t.Helper()
+	term, at := spotlightMarkers(t, body)
+	s := term.Screen()
+	return s.Cell(at.botCol, at.botRow), s.Cell(at.topCol, at.topRow), s.Cell(at.topCol, at.borderRow)
+}
+
+// spotlightMarks is where spotlightMarkers found the three cells, so a test
+// that has to act on the screen before it reads it can aim at them.
+type spotlightMarks struct {
+	topCol, topRow int
+	botCol, botRow int
+	borderRow      int
+}
+
+// spotlightMarkers is spotlightProbe up to the point of reading a cell: it
+// boots tuios, prints the two markers, and returns the running terminal with
+// the places they landed.
+func spotlightMarkers(t *testing.T, body string) (*tuitest.Terminal, spotlightMarks) {
+	t.Helper()
 	base := spotlightConfigFile(t, body)
 	term := startIn(t, base, startOpts{cols: 120, rows: 40})
 	waitBoot(t, term)
@@ -91,12 +109,21 @@ func spotlightProbe(t *testing.T, body string) (lit, far, farBorder tuitest.Cell
 		t.Fatalf("the two markers are %d rows apart; too close to be one inside the beam "+
 			"and one outside\n%s", botRow-topRow, term.Snapshot())
 	}
-	return s.Cell(botCol, botRow), s.Cell(topCol, topRow), s.Cell(topCol, borderRow)
+	return term, spotlightMarks{
+		topCol: topCol, topRow: topRow,
+		botCol: botCol, botRow: botRow,
+		borderRow: borderRow,
+	}
 }
 
 const spotlightTheme = "[appearance]\ntheme = \"catppuccin_mocha\"\n"
 
-const spotlightOn = spotlightTheme + "\n[spotlight]\nenabled = true\nradius = 5\n"
+// follow is pinned rather than left at the default. The beam follows the mouse
+// unless told otherwise, and no test using this config moves a pointer, so a
+// beam left at the default would sit where it was seeded and every assertion
+// about the cursor would be about a beam that is not on it.
+// TestSpotlightFollowsTheMouse is where the default is driven instead.
+const spotlightOn = spotlightTheme + "\n[spotlight]\nenabled = true\nradius = 5\nfollow = \"cursor\"\n"
 
 // TestSpotlightDimsAwayFromTheCursor is the on-screen form of the whole
 // feature. The beam sits on the cursor at the foot of the pane, so the border
@@ -132,6 +159,94 @@ func TestSpotlightDimsTextLeftAtTheTerminalDefault(t *testing.T) {
 	}
 	if beamFar.Fg.Kind == 0 {
 		t.Error("text at the terminal default outside the beam was left undimmed")
+	}
+}
+
+// TestSpotlightTurnsTheBackgroundDownOnScreen is the maintainer's report, read
+// off a real screen.
+//
+// The first version of the pass carried every colour toward the theme's own
+// ground, and a cell that named no background was given none at all. So the
+// text outside the beam went dark while the screen it sat on stayed exactly as
+// bright as the screen inside the beam, at any setting up to the maximum. The
+// beam did not read as a light, because nothing around it had been turned down.
+//
+// This reads the background of a marker the shell printed, which carries no
+// colour of its own, and requires it to come back darker than the ground the
+// theme paints it with.
+func TestSpotlightTurnsTheBackgroundDownOnScreen(t *testing.T) {
+	_, plainFar, _ := spotlightProbe(t, spotlightTheme)
+	_, beamFar, _ := spotlightProbe(t, spotlightOn)
+
+	if plainFar.Bg.Kind != 0 {
+		t.Fatalf("the marker already carries a background with the beam off (%+v); "+
+			"it cannot show what the beam did", plainFar.Bg)
+	}
+	if beamFar.Bg.Kind == 0 {
+		t.Fatal("the marker outside the beam came back with no background at all; the " +
+			"light was never turned down on it")
+	}
+	// catppuccin_mocha's base, which is what the host paints a cell that names
+	// no background of its own. Half of it is the bar: the default leaves an
+	// unlit cell at a quarter of its light, and the room between the two is
+	// what the 256-colour palette this harness runs on costs.
+	const ground = 30 + 30 + 46
+	if got := spotlightLight(t, beamFar.Bg); got > ground/2 {
+		t.Errorf("the background outside the beam carries %d of light against the "+
+			"ground's %d; the screen still reads as lit", got, ground)
+	}
+}
+
+// spotlightLight is how much light a cell colour carries, as the sum of its
+// three channels.
+//
+// It resolves an indexed colour itself because this harness runs on
+// TERM=xterm-256color with no COLORTERM, so tuios downsamples the frame and a
+// dimmed colour reaches the screen as a palette entry. Reading the number
+// through the downsample is the point: a 256-colour terminal is what a lot of
+// people are on, and the beam has to work there too.
+func spotlightLight(t *testing.T, c tuitest.Color) int {
+	t.Helper()
+	switch c.Kind {
+	case tuitest.ColorRGB:
+		return int(c.R) + int(c.G) + int(c.B)
+	case tuitest.ColorIndexed:
+		switch {
+		case c.Index >= 232: // the 24-step greyscale ramp
+			return 3 * (8 + 10*int(c.Index-232))
+		case c.Index >= 16: // the 6x6x6 cube
+			levels := [6]int{0, 95, 135, 175, 215, 255}
+			i := int(c.Index - 16)
+			return levels[i/36] + levels[(i/6)%6] + levels[i%6]
+		default:
+			t.Fatalf("colour %+v is one of the sixteen the host's own palette owns, so "+
+				"there is no honest number for it", c)
+		}
+	}
+	t.Fatalf("colour %+v carries no channels", c)
+	return 0
+}
+
+// TestSpotlightFollowsTheMouse drives the default anchor.
+//
+// The beam follows the pointer unless the config says otherwise, so this sets
+// nothing but enabled and radius, moves the pointer to the marker at the head
+// of the pane, and requires that marker to be lit while the cursor at the foot
+// of the pane, which the beam was seeded on, has gone dark.
+func TestSpotlightFollowsTheMouse(t *testing.T) {
+	const mouseBeam = spotlightTheme + "\n[spotlight]\nenabled = true\nradius = 5\n"
+	term, at := spotlightMarkers(t, mouseBeam)
+
+	mouseHover(t, term, at.topCol, at.topRow)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return s.Cell(at.topCol, at.topRow).Fg.Kind == 0
+	}, shellTimeout); err != nil {
+		t.Fatalf("the marker at (%d,%d) never came back to full brightness after the "+
+			"pointer moved onto it: %v\n%s", at.topCol, at.topRow, err, term.Snapshot())
+	}
+	if bot := term.Screen().Cell(at.botCol, at.botRow); bot.Fg.Kind == 0 {
+		t.Errorf("the marker at the cursor is still lit with the pointer %d rows above it; "+
+			"the beam did not move", at.botRow-at.topRow)
 	}
 }
 

@@ -301,11 +301,93 @@ func TestSpotlightDimsTextTheGuestLeftAtTheDefault(t *testing.T) {
 	if isNilColor(style.Fg) {
 		t.Error("a cell at the terminal default was left undimmed outside the beam")
 	}
-	// The background stays absent: the cell already shows the ground it would
-	// be carried toward, and the whole unlit region then shares one style
-	// instead of carrying a background per cell.
-	if !isNilColor(style.Bg) {
-		t.Errorf("the pass painted a background on a cell that had none: %v", style.Bg)
+	// And it is given a background, which the first version did not do. A cell
+	// with none of its own is showing the terminal's ground at full brightness,
+	// so leaving it alone leaves the unlit region lit under dimmed text. See
+	// TestSpotlightTurnsTheLightDownOnTheBackground.
+	if isNilColor(style.Bg) {
+		t.Error("a cell at the terminal default kept a background at full brightness")
+	}
+}
+
+// spotlightBrightness is how much light a colour carries, as the mean of its
+// three channels over 255. It is not a luminance and does not need to be: the
+// tests below compare one colour with a scaled copy of itself, so any monotonic
+// reading of the channels answers them.
+func spotlightBrightness(t *testing.T, c color.Color) float64 {
+	t.Helper()
+	if isNilColor(c) {
+		t.Fatal("no colour to measure")
+	}
+	r, g, b, _ := c.RGBA()
+	return float64(r>>8+g>>8+b>>8) / (3 * 255)
+}
+
+// TestSpotlightTurnsTheLightDownOnTheBackground is the bug the first version of
+// this shipped with, and the reason the feature read as not working at any
+// setting.
+//
+// That version carried each colour toward the theme's own ground. A pane's
+// background already is close to the ground, so there was nowhere for it to
+// travel: at dim 95, the maximum, a background went from (40,40,60) to
+// (30,30,46), and a cell that named no background of its own was not given one
+// at all. Every cell outside the beam kept a background as bright as the cells
+// inside it, and the screen still read as lit however dark the text got.
+//
+// Both cells here name no colour of their own, which is what most of a real
+// screen is: a shell prompt, ls output, a blank pane.
+func TestSpotlightTurnsTheLightDownOnTheBackground(t *testing.T) {
+	for _, themeID := range []string{"catppuccin_mocha", "catppuccin_latte"} {
+		t.Run(themeID, func(t *testing.T) {
+			withTheme(t, themeID)
+			canvas := lipgloss.NewCanvas(80, 24)
+			canvas.SetCell(40, 12, &uv.Cell{Content: "x", Width: 1})
+			canvas.SetCell(2, 2, &uv.Cell{Content: "x", Width: 1})
+
+			newSpotlightTestState().apply(canvas, 40, 12, 8, config.SpotlightDefaultDim, false)
+
+			outside := cellStyleAt(canvas, 2, 2).Bg
+			if isNilColor(outside) {
+				t.Fatal("a cell outside the beam was given no background, so it is still " +
+					"showing the terminal's ground at full brightness")
+			}
+			lit := spotlightBrightness(t, theme.TerminalBg())
+			unlit := spotlightBrightness(t, outside)
+			// The default is 75, so the unlit ground is at a quarter of the
+			// light. Half is the bar, which leaves room for the default to be
+			// tuned without rewriting the test and still fails the version that
+			// could not move the background at all.
+			if unlit > lit/2 {
+				t.Errorf("the ground outside the beam is at %.2f of the light against %.2f "+
+					"inside it; the screen still reads as lit", unlit, lit)
+			}
+			if inside := cellStyleAt(canvas, 40, 12); !inside.IsZero() {
+				t.Errorf("the cell under the beam was painted: %v on %v", inside.Fg, inside.Bg)
+			}
+		})
+	}
+}
+
+// TestSpotlightDimsALightThemeDownwards is the half a dark theme cannot show.
+//
+// Carrying a colour toward the theme's ground does not merely fail on a light
+// theme, it runs backwards: the ground is bright there, so at dim 95 the text
+// went from (76,79,105) to (230,232,238) and the screen washed out rather than
+// going quiet. Both inks have to end up carrying less light than they started
+// with, on every theme.
+func TestSpotlightDimsALightThemeDownwards(t *testing.T) {
+	withTheme(t, "catppuccin_latte")
+	canvas := lipgloss.NewCanvas(80, 24)
+	canvas.SetCell(2, 2, &uv.Cell{Content: "x", Width: 1})
+
+	newSpotlightTestState().apply(canvas, 40, 12, 8, config.SpotlightDefaultDim, false)
+
+	style := cellStyleAt(canvas, 2, 2)
+	if got, want := spotlightBrightness(t, style.Fg), spotlightBrightness(t, theme.TerminalFg()); got >= want {
+		t.Errorf("the foreground outside the beam went from %.2f to %.2f; the beam brightened it", want, got)
+	}
+	if got, want := spotlightBrightness(t, style.Bg), spotlightBrightness(t, theme.TerminalBg()); got >= want {
+		t.Errorf("the background outside the beam went from %.2f to %.2f; the beam brightened it", want, got)
 	}
 }
 
@@ -468,6 +550,61 @@ func TestSpotlightAnchorStartsInTheMiddle(t *testing.T) {
 	if x != m.GetRenderWidth()/2 || y != m.GetRenderHeight()/2 {
 		t.Errorf("the first beam with no anchor sat at (%d,%d), want the middle (%d,%d)",
 			x, y, m.GetRenderWidth()/2, m.GetRenderHeight()/2)
+	}
+}
+
+// TestSpotlightStandsAMouseBeamOnTheCursor. The beam follows the mouse by
+// default, and a pointer that has not moved since the client started has never
+// reported a position. The cursor stands in until it does.
+//
+// The stand-in has to be recomputed every frame, not latched. The first frame
+// is composed before the client knows its size, so a latched one would put the
+// beam in the top left corner and leave it there for the whole session on any
+// client nobody touches with a mouse. A real frame is what found that.
+//
+// It is a stand-in and not a mix: the first pointer move latches the anchor and
+// nothing reads the cursor after that.
+func TestSpotlightStandsAMouseBeamOnTheCursor(t *testing.T) {
+	win := newTestWindow(t, "spotlight-seed", 60, 12)
+	m := newTestOS(win)
+	m.Width, m.Height = 90, 30
+	m.Mode = TerminalMode
+	win.Tiled = true
+	m.UserConfig = config.DefaultConfig()
+	m.UserConfig.Spotlight.Follow = config.SpotlightFollowMouse
+
+	cursor := m.getRealCursor()
+	if cursor == nil {
+		t.Fatal("the fixture has no cursor, so it cannot show what the seed is")
+	}
+	x, y := m.spotlightAnchor()
+	if x != cursor.X || y != cursor.Y {
+		t.Errorf("a mouse beam with no pointer position started at (%d,%d), want the cursor (%d,%d)",
+			x, y, cursor.X, cursor.Y)
+	}
+
+	// The stand-in is recomputed rather than latched. A position nothing else
+	// would produce is written over it, so a latched beam is caught by the
+	// number rather than by the fact that it did not change.
+	const staleX, staleY = 71, 23
+	if staleX == cursor.X && staleY == cursor.Y {
+		t.Fatal("the stale position is the cursor, so this cannot tell the two apart")
+	}
+	m.spotlight.x, m.spotlight.y = staleX, staleY
+	if x, y = m.spotlightAnchor(); x != cursor.X || y != cursor.Y {
+		t.Errorf("the beam held (%d,%d) rather than standing on the cursor (%d,%d); "+
+			"the stand-in was latched on the first frame", x, y, cursor.X, cursor.Y)
+	}
+
+	// And the pointer takes it from there.
+	m.LastMouseX, m.LastMouseY = 11, 4
+	if x, y = m.spotlightAnchor(); x != 11 || y != 4 {
+		t.Errorf("the beam sat at (%d,%d) after the pointer moved to (11,4)", x, y)
+	}
+	// The pointer owns it now, so the cursor is never read again.
+	m.spotlight.x, m.spotlight.y = 11, 4
+	if x, y = m.spotlightAnchor(); x != 11 || y != 4 {
+		t.Errorf("the beam moved to (%d,%d) with the pointer still at (11,4)", x, y)
 	}
 }
 

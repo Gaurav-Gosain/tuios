@@ -12,12 +12,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The spotlight is one pass over the composed canvas that carries every cell
-// outside an ellipse toward the ground. It is a presentation aid: a demo
-// viewer looks where the light is, and the rest of the screen goes quiet
-// without going away.
+// The spotlight is one pass over the composed canvas that turns the light down
+// on every cell outside an ellipse. It is a presentation aid: a demo viewer
+// looks where the light is, and the rest of the screen goes quiet without going
+// away.
 //
-// Three decisions are load-bearing, and each of them was a measurement.
+// Four decisions are load-bearing, and each of them was a measurement.
 //
 // Where it runs. The pass mutates m.renderCanvas in composeFrame, after
 // GetCanvas has consumed every pane's cached layer and before Render turns the
@@ -42,13 +42,18 @@ import (
 // optimisation and is the opposite: it splits every word run in half at the
 // space, and the frame goes from 11 KB to 40 KB.
 //
-// A cell the guest left at the terminal default gets the theme's foreground and
-// is dimmed from there. That is most of a real screen - a shell prompt, ls
-// output - and tuios emits no colour for any of it, so the version that
-// followed dim_unfocused's rule and left a colourless cell alone dimmed the
-// syntax highlighting and nothing else. No unit fixture full of explicit SGR
-// can see that; the e2e that reads Cell.Fg off a real pane is what found it,
-// and TestSpotlightDimsTextLeftAtTheTerminalDefault is what holds it.
+// A cell the guest left at the terminal default gets the theme's pair and is
+// dimmed from there. That is most of a real screen - a shell prompt, ls output,
+// a blank pane - and tuios emits no colour for any of it, so a pass that left
+// such a cell alone dimmed the syntax highlighting and nothing else. No unit
+// fixture full of explicit SGR can see that; the e2es that read Cell.Fg and
+// Cell.Bg off a real pane are what found both halves of it.
+//
+// What it carries a cell toward. Black, and not the theme's ground. The first
+// version carried every colour toward the ground, which is the colour a pane's
+// background already is, so at dim 95 a background came out a quarter darker
+// and no more: the screen stayed lit however dark the text went. See
+// spotlightDark.
 //
 // It is client-local, like the showkeys overlay. Nothing crosses the wire and a
 // peer attached to the same session sees its own screen unchanged. The screen
@@ -67,18 +72,39 @@ const (
 	spotlightCacheMax = 4096
 )
 
-// spotBlendKey names one cached blend: a source colour, the colour it is
-// carried toward, and which of the 16 levels it is carried to.
+// spotlightDark is the colour every unlit cell is carried toward.
 //
-// The colours are packed to 8 bits per channel rather than held as interface
-// values. Packing is what makes the key safe: a color.Color whose dynamic type
-// is not comparable would panic a map lookup, and packing asks each colour for
+// Black, and not the theme's own ground. Carrying a cell toward the ground was
+// the first spelling of this and it cannot dim a screen, because a pane's
+// background already is the ground: at the maximum setting a background moved
+// from (40,40,60) to (30,30,46), a quarter darker, so the screen still read as
+// lit however dark the text got. On a light theme it was worse than nothing.
+// The ground is bright there, so "dim" carried every colour up and washed the
+// text out instead of hiding it.
+//
+// Blending toward black by t is the same arithmetic as scaling every channel by
+// 1-t, so the setting is a brightness control: the unlit part of the screen is
+// the picture the compositor drew with the light turned down. Hue survives it,
+// a light theme and a dark theme behave the same way, and it is the model
+// tuiffects' own spotlights effect uses - spotlightsDarkBrightness is 0.2, an
+// unlit character at a fifth of its brightness.
+//
+// Boxed once at package level. Assigning a color.RGBA into a color.Color per
+// cell is the line that used to cost 8,000 allocations a frame.
+var spotlightDark color.Color = color.RGBA{A: 0xFF}
+
+// spotBlendKey names one cached blend: a source colour and which of the 16
+// levels it is carried to. Those two are the whole input, because every cell is
+// carried toward the one colour spotlightDark names.
+//
+// The colour is packed to 8 bits per channel rather than held as an interface
+// value. Packing is what makes the key safe: a color.Color whose dynamic type
+// is not comparable would panic a map lookup, and packing asks the colour for
 // its channels instead of comparing the box it came in. It loses nothing,
 // because blendColors reduces both operands to 8 bits anyway.
 type spotBlendKey struct {
-	src    uint32
-	toward uint32
-	level  uint8
+	src   uint32
+	level uint8
 }
 
 // spotlightRun is the last cell the pass transformed, kept so a word or a line
@@ -92,7 +118,6 @@ type spotlightRun struct {
 	level        uint8
 	have         bool
 	outFg, outBg color.Color
-	writeBg      bool
 }
 
 // spotlightState is the beam this client is drawing. It is not session state:
@@ -107,9 +132,11 @@ type spotlightState struct {
 	x, y     int
 	anchored bool
 
-	// groundFg, groundBg are the pair every colour is carried toward, boxed
-	// once. Assigning a color.RGBA into a color.Color per cell was the single
-	// line that cost 8,000 allocations a frame.
+	// groundFg, groundBg are what the terminal paints a cell that names no
+	// colour of its own, boxed once. They are what such a cell is dimmed from,
+	// not what anything is carried toward: see spotlightDark. Assigning a
+	// color.RGBA into a color.Color per cell was the single line that cost
+	// 8,000 allocations a frame.
 	groundFg, groundBg color.Color
 	groundTheme        string
 	groundValid        bool
@@ -154,14 +181,25 @@ func (m *OS) SetSpotlight(on bool) {
 
 // spotlightAnchor is where the beam is centred this frame, in screen cells.
 //
-// Cursor is the primary anchor because it costs nothing: getRealCursor already
-// resolves the focused pane's cursor for the hardware cursor, under a try-lock
-// with a cached fallback, and it moves exactly when a frame is being composed
-// anyway. Mouse is the setting for a demo driven by the pointer.
+// Mouse is the default anchor: a person pointing at what they are talking about
+// is what the feature is for. Cursor is the setting for a client where the
+// bytes matter, because getRealCursor already resolves the focused pane's
+// cursor for the hardware cursor, under a try-lock with a cached fallback, and
+// it moves exactly when a frame is being composed anyway.
 //
-// When neither has an answer the beam holds its last position. The first time
-// it has never had one, it starts in the middle of the screen, because a beam
-// that draws nothing at all would read as a toggle that did not work.
+// Once the anchor has answered at least once the beam holds that position when
+// it goes quiet, so an overlay that hides the cursor does not make it jump.
+//
+// Before the first answer the beam stands in: the cursor if there is one, and
+// otherwise the middle of the screen. The stand-in is recomputed every frame
+// rather than latched, because a beam that follows the pointer has no answer at
+// all until the pointer first moves, and a client that has not been touched
+// with a mouse yet would otherwise hold whatever the very first frame said. The
+// first frame is composed before the client knows its size, so that position is
+// the top left corner and the beam sits there for the whole session.
+//
+// It is a stand-in and not a mix. The first answer the configured anchor gives
+// latches it, and nothing reads the other source after that.
 func (m *OS) spotlightAnchor() (int, int) {
 	if m.spotlightConfig().FollowMode() == config.SpotlightFollowMouse {
 		if m.LastMouseX > 0 || m.LastMouseY > 0 {
@@ -173,9 +211,12 @@ func (m *OS) spotlightAnchor() (int, int) {
 		m.spotlight.anchored = true
 	}
 	if !m.spotlight.anchored {
-		m.spotlight.x = m.GetRenderWidth() / 2
-		m.spotlight.y = m.GetRenderHeight() / 2
-		m.spotlight.anchored = true
+		if c := m.getRealCursor(); c != nil {
+			m.spotlight.x, m.spotlight.y = c.X, c.Y
+		} else {
+			m.spotlight.x = m.GetRenderWidth() / 2
+			m.spotlight.y = m.GetRenderHeight() / 2
+		}
 	}
 	return m.spotlight.x, m.spotlight.y
 }
@@ -199,11 +240,12 @@ func (s *spotlightState) apply(canvas *lipgloss.Canvas, cx, cy, radius, dim int,
 		return
 	}
 	s.syncGround()
-	// No theme means no RGB to carry anything toward: tuios emits colour
-	// indices and the host terminal decides what they look like, which is the
-	// case dimGround already returns nil for. Faint (SGR 2) is what a terminal
-	// can honestly do there, and every terminal that matters honours it. It has
-	// no rim, so the edge is a hard cut.
+	// No theme means no RGB to work in. tuios emits colour indices there and
+	// the host terminal decides what they look like, so there is no honest
+	// answer to what a cell is painted with and no honest darker version of it
+	// to write back. That is the case dimGround already returns nil for. Faint
+	// (SGR 2) is what a terminal can do instead, and every terminal that
+	// matters honours it. It has no rim, so the edge is a hard cut.
 	faint := s.groundBg == nil
 	if faint {
 		s.applyFaint(canvas, width, height, cx, cy, radius)
@@ -252,6 +294,18 @@ func (s *spotlightState) apply(canvas *lipgloss.Canvas, cx, cy, radius, dim int,
 }
 
 // applyFaint is the no-theme path: SGR 2 outside the beam, nothing inside.
+//
+// It is a weaker light than the themed pass and it is meant to be. SGR 2 is a
+// foreground attribute, so an unlit cell keeps its background at full
+// brightness, and how far the foreground drops is the host terminal's choice
+// rather than the dim setting's. The themed pass is what a person who wants the
+// screen dark should be on, and every tuios that ships a theme is on it: this
+// branch is reached only when appearance.theme names nothing.
+//
+// Painting a background here instead would be worse than the weakness. The only
+// colours in reach are ANSI indices, whose RGB is the host's own palette and
+// not anything tuios knows, so darkening one means replacing the user's palette
+// with a guess at it.
 func (s *spotlightState) applyFaint(canvas *lipgloss.Canvas, width, height, cx, cy, radius int) {
 	rad := float64(radius)
 	for y := range height {
@@ -301,35 +355,39 @@ func spotlightLevel(dx, dy, full, rim float64) uint8 {
 	return uint8(min(max(level, 0), config.SpotlightLevels-1))
 }
 
-// dimCell carries one cell's colours to the given level.
+// dimCell turns the light down on one cell, to the given level.
 //
-// The foreground goes toward the cell's own background where it has one, so a
-// word painted on a block of colour dims into that block and the block stays
-// readable as a block; the background goes toward the terminal ground. That is
-// the rule dim_unfocused already uses, and it is why the cache key names two
-// colours rather than one.
+// Both inks move, and they move by the same factor. The foreground and the
+// background are each scaled toward black, so a word painted on a block of
+// colour keeps its shape inside a block that is equally darker, and the whole
+// cell is the cell the compositor drew with less light on it.
 //
-// A cell that names no foreground gets the theme's, and is dimmed from there.
-// This is the case most of a real screen is in and it is easy to get wrong:
-// tuios emits no colour for text the guest left at the terminal default, which
-// is a shell prompt, ls output and most of everything else, so a pass that left
-// those cells alone dimmed the syntax highlighting and nothing else. The
-// substitution is honest because a theme is set - that is the branch this is on
-// - and the theme's own foreground is what the host is painting them with.
+// A cell that names no colour is dimmed from the one the terminal paints it
+// with. That is the case most of a real screen is in and both halves of it are
+// easy to get wrong.
 //
-// A cell that names no background keeps none. It is already showing the ground
-// it would be carried toward, and the whole unlit region then shares one style
-// rather than carrying a background per cell.
+// The foreground half was found by an e2e: tuios emits no colour for text the
+// guest left at the terminal default - a shell prompt, ls output, most of
+// everything - so a pass that left those cells alone dimmed the syntax
+// highlighting and nothing else.
+//
+// The background half is what made the whole feature read as not working. A
+// cell with no background of its own is showing the terminal's ground, and
+// leaving it alone leaves it at full brightness, so the unlit region kept a lit
+// background under dimmed text however far the setting was pushed. It now gets
+// the ground, dimmed like everything else. Both substitutions are honest
+// because a theme is set - that is the branch this is on - and the theme's own
+// pair is what the host is painting those cells with.
+//
+// The unlit region still shares one style: every cell in it that named no
+// colour comes out of the cache as the same pair.
 func (s *spotlightState) dimCell(cell *uv.Cell, level uint8) {
 	fg, bg := cell.Style.Fg, cell.Style.Bg
 	r := &s.run
 	if !r.have || r.level != level || r.inFg != fg || r.inBg != bg {
 		s.buildRun(fg, bg, level)
 	}
-	cell.Style.Fg = r.outFg
-	if r.writeBg {
-		cell.Style.Bg = r.outBg
-	}
+	cell.Style.Fg, cell.Style.Bg = r.outFg, r.outBg
 }
 
 // buildRun computes the blend for one (foreground, background, level) triple
@@ -338,7 +396,6 @@ func (s *spotlightState) dimCell(cell *uv.Cell, level uint8) {
 func (s *spotlightState) buildRun(fg, bg color.Color, level uint8) {
 	r := &s.run
 	r.inFg, r.inBg, r.level, r.have = fg, bg, level, true
-	r.writeBg = false
 
 	// isNilColor rather than == nil: a cell's style colour can be an interface
 	// holding a nil pointer, and color.Color's RGBA has a value receiver, so
@@ -346,25 +403,23 @@ func (s *spotlightState) buildRun(fg, bg color.Color, level uint8) {
 	if isNilColor(fg) {
 		fg = s.groundFg
 	}
-	t := s.levels[level]
-	toward := s.groundBg
-	if !isNilColor(bg) {
-		toward = bg
-		r.outBg = s.blendCached(bg, s.groundBg, level, t)
-		r.writeBg = true
+	if isNilColor(bg) {
+		bg = s.groundBg
 	}
-	r.outFg = s.blendCached(fg, toward, level, t)
+	t := s.levels[level]
+	r.outFg = s.blendCached(fg, level, t)
+	r.outBg = s.blendCached(bg, level, t)
 }
 
 // blendCached is blendColors behind a cache of the levels the rim quantises to.
 // The cached value is already boxed, so a hit writes an interface and allocates
 // nothing.
-func (s *spotlightState) blendCached(src, toward color.Color, level uint8, t float64) color.Color {
-	key := spotBlendKey{src: packColor8(src), toward: packColor8(toward), level: level}
+func (s *spotlightState) blendCached(src color.Color, level uint8, t float64) color.Color {
+	key := spotBlendKey{src: packColor8(src), level: level}
 	if c, ok := s.blend[key]; ok {
 		return c
 	}
-	c := blendColors(src, toward, t)
+	c := blendColors(src, spotlightDark, t)
 	if s.blend == nil {
 		s.blend = make(map[spotBlendKey]color.Color, 256)
 	} else if len(s.blend) >= spotlightCacheMax {
@@ -384,8 +439,8 @@ func packColor8(c color.Color) uint32 {
 	return (r>>8)<<16 | (g>>8)<<8 | (b >> 8)
 }
 
-// syncGround re-reads the pair every colour is carried toward, when the theme
-// has changed or nothing has been read yet.
+// syncGround re-reads the pair a cell that names no colour is dimmed from, when
+// the theme has changed or nothing has been read yet.
 func (s *spotlightState) syncGround() {
 	id := theme.CurrentThemeID()
 	if s.groundValid && s.groundTheme == id {
@@ -393,14 +448,17 @@ func (s *spotlightState) syncGround() {
 	}
 	s.groundTheme, s.groundValid = id, true
 	s.groundFg, s.groundBg = dimGround()
-	// Every cached blend named the old ground, so none of them survives it.
+	// The old ground was the source of every blend a colourless cell got, so
+	// none of those survives it. Clearing the whole cache is cheaper than
+	// picking them out and it happens once per theme change.
 	clear(s.blend)
 	s.run.have = false
 }
 
 // syncLevels rebuilds the 16 blend fractions when the configured dim changes.
-// Level 0 is always zero, which is what makes a cell inside the beam identical
-// to the one the compositor drew.
+// A fraction of t leaves the cell at 1-t of its brightness, so dim 75 is the
+// screen at a quarter of the light. Level 0 is always zero, which is what makes
+// a cell inside the beam identical to the one the compositor drew.
 func (s *spotlightState) syncLevels(dim int) {
 	if s.levelsDim == dim {
 		return

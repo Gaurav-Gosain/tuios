@@ -763,8 +763,8 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "spotlight.follow", Type: OptionString, Section: "spotlight",
-		Description: "What the beam follows: the focused pane's cursor, or the mouse",
-		Accepted:    SpotlightFollowModes, Default: SpotlightFollowCursor,
+		Description: "What the beam follows: the mouse, or the focused pane's cursor. The cursor sends fewer bytes to a remote client",
+		Accepted:    SpotlightFollowModes, Default: SpotlightFollowMouse,
 	},
 	{
 		Path: "spotlight.radius", Type: OptionInt, Section: "spotlight",
@@ -773,8 +773,8 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "spotlight.dim", Type: OptionInt, Section: "spotlight",
-		Description: "Percent an unlit cell is carried toward the ground",
-		Default:     "60", Min: SpotlightMinDim, Max: SpotlightMaxDim,
+		Description: "Percent of its light an unlit cell loses",
+		Default:     "75", Min: SpotlightMinDim, Max: SpotlightMaxDim,
 	},
 	{
 		Path: "spotlight.edge", Type: OptionString, Section: "spotlight",
