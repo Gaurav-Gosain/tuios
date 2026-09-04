@@ -122,6 +122,7 @@ func TestSetOptionValueRejectsBadInput(t *testing.T) {
 	cases := []struct{ name, path, value string }{
 		{"unknown path", "appearance.no_such_key", "1"},
 		{"outside the accepted set", "appearance.border_style", "wobbly"},
+		{"outside auto-enter set", "appearance.auto_enter_terminal_on_focus", "sometimes"},
 		{"non-numeric int", "appearance.scroll_lines", "several"},
 		{"out-of-range int", "appearance.scroll_lines", "9999"},
 		{"unparseable bool", "appearance.hide_window_buttons", "maybe"},

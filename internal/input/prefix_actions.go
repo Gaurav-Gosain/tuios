@@ -137,6 +137,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 // pressed, which is the whole of what the key claims to do.
 func handleTerminalFocusDirection(dir string) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		prev := o.FocusedWindow
 		if o.AutoTiling && o.UseScrollingLayout {
 			switch dir {
 			case "left":
@@ -144,13 +145,13 @@ func handleTerminalFocusDirection(dir string) ActionHandler {
 			case "right":
 				o.ScrollingFocusRight()
 			}
-			return o, nil
+			return maybeEnterTerminalOnFocusChange(o, prev, focusEnterTargeted)
 		}
 		// A direction with nothing in it is a no-op, which is what stopping at the
 		// edge of the layout looks like.
 		_ = o.FocusDirection(dir)
 		refreshFocusedWindow(o)
-		return o, nil
+		return maybeEnterTerminalOnFocusChange(o, prev, focusEnterTargeted)
 	}
 }
 
@@ -268,19 +269,21 @@ func handlePrefixKeybinds(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 func handlePrefixNextWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	prev := o.FocusedWindow
 	if len(o.Windows) > 0 {
 		o.CycleToNextVisibleWindow()
 		refreshFocusedWindow(o)
 	}
-	return o, nil
+	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterCycle)
 }
 
 func handlePrefixPrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	prev := o.FocusedWindow
 	if len(o.Windows) > 0 {
 		o.CycleToPreviousVisibleWindow()
 		refreshFocusedWindow(o)
 	}
-	return o, nil
+	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterCycle)
 }
 
 // makePrefixSelectHandler focuses the num-th window of the current workspace.
@@ -288,6 +291,7 @@ func handlePrefixPrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // keys wraps around.
 func makePrefixSelectHandler(num int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		prev := o.FocusedWindow
 		position := 0
 		for i, win := range o.Windows {
 			if win.Workspace != o.CurrentWorkspace {
@@ -305,7 +309,7 @@ func makePrefixSelectHandler(num int) ActionHandler {
 			}
 		}
 		refreshFocusedWindow(o)
-		return o, nil
+		return maybeEnterTerminalOnFocusChange(o, prev, focusEnterTargeted)
 	}
 }
 
@@ -567,23 +571,25 @@ func handleTapeStop(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // handleTerminalNextWindow moves focus forward. In the scrolling layout the
 // windows form a strip rather than a cycle, so focus moves along it instead.
 func handleTerminalNextWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	prev := o.FocusedWindow
 	if o.AutoTiling && o.UseScrollingLayout {
 		o.ScrollingFocusRight()
 	} else {
 		o.CycleToNextVisibleWindow()
 	}
 	refreshFocusedWindow(o)
-	return o, nil
+	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterCycle)
 }
 
 func handleTerminalPrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	prev := o.FocusedWindow
 	if o.AutoTiling && o.UseScrollingLayout {
 		o.ScrollingFocusLeft()
 	} else {
 		o.CycleToPreviousVisibleWindow()
 	}
 	refreshFocusedWindow(o)
-	return o, nil
+	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterCycle)
 }
 
 func handleTerminalExitMode(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
