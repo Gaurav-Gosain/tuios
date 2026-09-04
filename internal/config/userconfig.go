@@ -1437,11 +1437,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// AutoEnterTerminalOnFocus only takes one of its three values, so a typo
 	// in the config lands on the default the validator warned it would fall
 	// back to. Empty (an older file, or DefaultConfig before the key existed)
-	// leaves the package default.
+	// leaves this session's default.
 	if slices.Contains(AutoEnterTerminalModes, string(cfg.Appearance.AutoEnterTerminalOnFocus)) {
-		AutoEnterTerminalOnFocus = cfg.Appearance.AutoEnterTerminalOnFocus
+		s.AutoEnterTerminalOnFocus = cfg.Appearance.AutoEnterTerminalOnFocus
 	} else if cfg.Appearance.AutoEnterTerminalOnFocus != "" {
-		AutoEnterTerminalOnFocus = AutoEnterTerminalOff
+		s.AutoEnterTerminalOnFocus = AutoEnterTerminalOff
 	}
 
 	// ClickToType only takes one of its three values, so a typo in the config

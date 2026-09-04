@@ -9,12 +9,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// withAutoEnterTerminalOnFocus sets the policy for a test and restores it after.
-func withAutoEnterTerminalOnFocus(t *testing.T, mode config.AutoEnterTerminalPolicy) {
-	t.Helper()
-	prev := config.AutoEnterTerminalOnFocus
-	config.AutoEnterTerminalOnFocus = mode
-	t.Cleanup(func() { config.AutoEnterTerminalOnFocus = prev })
+// withAutoEnterTerminalOnFocus sets the policy on one session. The setting is
+// per client, so it needs no restore: the next test builds its own OS.
+func withAutoEnterTerminalOnFocus(o *app.OS, mode config.AutoEnterTerminalPolicy) *app.OS {
+	o.Settings.AutoEnterTerminalOnFocus = mode
+	return o
 }
 
 // twoPaneWM is two tiled panes in window-management mode, with the real
@@ -53,8 +52,7 @@ func threePaneWM(t *testing.T) *app.OS {
 // window-management mode focuses the other pane and leaves the user typing in
 // it, without a separate enter_terminal_mode key.
 func TestNextWindowFromWindowModeEntersTerminalMode(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t, config.AutoEnterTerminalAll)
-	o := twoPaneWM(t)
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalAll)
 	start := focusedID(o)
 
 	model, _ := HandleInput(press("tab"), o)
@@ -70,8 +68,7 @@ func TestNextWindowFromWindowModeEntersTerminalMode(t *testing.T) {
 
 // TestPrevWindowFromWindowModeEntersTerminalMode is the other cycle key, all.
 func TestPrevWindowFromWindowModeEntersTerminalMode(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t, config.AutoEnterTerminalAll)
-	o := twoPaneWM(t)
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalAll)
 	start := focusedID(o)
 
 	o, _ = HandleKeyPress(shiftTab(), o)
@@ -89,8 +86,7 @@ func TestPrevWindowFromWindowModeEntersTerminalMode(t *testing.T) {
 // snap-corner keys; numbered select is the action (and the leader-then-digit
 // chord).
 func TestNumberedSelectFromWindowModeEntersTerminalMode(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t, config.AutoEnterTerminalTargeted)
-	o := twoPaneWM(t)
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalTargeted)
 	if focusedID(o) != "a" {
 		t.Fatalf("fixture focused %q, want a", focusedID(o))
 	}
@@ -108,8 +104,7 @@ func TestNumberedSelectFromWindowModeEntersTerminalMode(t *testing.T) {
 // TestPrefixNumberedSelectFromWindowModeEntersTerminalMode is the chord users
 // actually press: leader, then a digit.
 func TestPrefixNumberedSelectFromWindowModeEntersTerminalMode(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t, config.AutoEnterTerminalTargeted)
-	o := twoPaneWM(t)
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalTargeted)
 
 	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl}, o)
 	if !o.PrefixActive {
@@ -129,8 +124,7 @@ func TestPrefixNumberedSelectFromWindowModeEntersTerminalMode(t *testing.T) {
 // Alt+arrows binding, which is honoured in window-management mode as well as
 // terminal mode. targeted treats that as picking a pane.
 func TestDirectionalFocusFromWindowModeEntersTerminalMode(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t, config.AutoEnterTerminalTargeted)
-	o := twoPaneWM(t)
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalTargeted)
 	start := focusedID(o)
 
 	o, _ = HandleKeyPress(altArrow("right"), o)
@@ -147,8 +141,7 @@ func TestDirectionalFocusFromWindowModeEntersTerminalMode(t *testing.T) {
 // registry routes next_window to, so a rebind of the key still gets the mode
 // change when the policy is all.
 func TestRegisteredNextWindowActionEntersTerminalMode(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t, config.AutoEnterTerminalAll)
-	o := twoPaneWM(t)
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalAll)
 	start := focusedID(o)
 
 	o, _ = GetDispatcher().Dispatch("next_window", tea.KeyPressMsg{}, o)
@@ -164,8 +157,7 @@ func TestRegisteredNextWindowActionEntersTerminalMode(t *testing.T) {
 // TestFocusingTheAlreadyFocusedPaneStaysInWindowMode is the no-op: selecting
 // the pane that already has focus must not steal window-management keys.
 func TestFocusingTheAlreadyFocusedPaneStaysInWindowMode(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t, config.AutoEnterTerminalTargeted)
-	o := twoPaneWM(t)
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalTargeted)
 	start := focusedID(o)
 
 	o, _ = GetDispatcher().Dispatch("select_window_1", press("1"), o)
@@ -181,8 +173,7 @@ func TestFocusingTheAlreadyFocusedPaneStaysInWindowMode(t *testing.T) {
 // TestDirectionalNoOpAtEdgeStaysInWindowMode is the other no-op: nothing that
 // way, so focus and mode stay put.
 func TestDirectionalNoOpAtEdgeStaysInWindowMode(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t, config.AutoEnterTerminalTargeted)
-	o := twoPaneWM(t)
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalTargeted)
 	start := focusedID(o)
 
 	o, _ = HandleKeyPress(altArrow("left"), o)
@@ -198,8 +189,7 @@ func TestDirectionalNoOpAtEdgeStaysInWindowMode(t *testing.T) {
 // TestAutoEnterOffKeepsWindowManagementMode is the opt-out: Tab still moves
 // focus, and n/w remain the window-manager keys they were.
 func TestAutoEnterOffKeepsWindowManagementMode(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t, config.AutoEnterTerminalOff)
-	o := twoPaneWM(t)
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalOff)
 	start := focusedID(o)
 
 	o, _ = HandleKeyPress(press("tab"), o)
@@ -216,10 +206,10 @@ func TestAutoEnterOffKeepsWindowManagementMode(t *testing.T) {
 // the shipped default, Tab must keep cycling in window-management mode, or the
 // second Tab goes to the shell and the third pane is unreachable.
 func TestDefaultOffLetsTabCycleThreePanes(t *testing.T) {
-	if config.AutoEnterTerminalOnFocus != config.AutoEnterTerminalOff {
-		t.Fatalf("package default is %q; this test needs the shipped off default", config.AutoEnterTerminalOnFocus)
-	}
 	o := threePaneWM(t)
+	if o.Settings.AutoEnterTerminalOnFocus != config.AutoEnterTerminalOff {
+		t.Fatalf("session default is %q; this test needs the shipped off default", o.Settings.AutoEnterTerminalOnFocus)
+	}
 
 	o, _ = HandleKeyPress(press("tab"), o)
 	if got := focusedID(o); got != "b" {
@@ -241,8 +231,7 @@ func TestDefaultOffLetsTabCycleThreePanes(t *testing.T) {
 // TestTargetedLetsTabCycleThreePanes is the design: targeted is click-like
 // (select, arrows), not cycle. Tab must still walk A → B → C.
 func TestTargetedLetsTabCycleThreePanes(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t, config.AutoEnterTerminalTargeted)
-	o := threePaneWM(t)
+	o := withAutoEnterTerminalOnFocus(threePaneWM(t), config.AutoEnterTerminalTargeted)
 
 	o, _ = HandleKeyPress(press("tab"), o)
 	if got := focusedID(o); got != "b" {
@@ -265,10 +254,10 @@ func TestTargetedLetsTabCycleThreePanes(t *testing.T) {
 // HandleKeyPress, the same path a user presses, so a dispatcher-only test
 // cannot hide a routing miss. Focus still moves; mode stays window-management.
 func TestDirectionalFocusFromWindowModeWithDefaultOff(t *testing.T) {
-	if config.AutoEnterTerminalOnFocus != config.AutoEnterTerminalOff {
-		t.Fatalf("package default is %q; this test needs the shipped off default", config.AutoEnterTerminalOnFocus)
-	}
 	o := twoPaneWM(t)
+	if o.Settings.AutoEnterTerminalOnFocus != config.AutoEnterTerminalOff {
+		t.Fatalf("session default is %q; this test needs the shipped off default", o.Settings.AutoEnterTerminalOnFocus)
+	}
 	start := focusedID(o)
 
 	o, _ = HandleKeyPress(altArrow("right"), o)
@@ -285,8 +274,7 @@ func TestDirectionalFocusFromWindowModeWithDefaultOff(t *testing.T) {
 // and click-to-type=off both call FocusWindow, and must not inherit this
 // policy. Only the registered focus commands enter.
 func TestFocusWindowItselfDoesNotEnterTerminalMode(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t, config.AutoEnterTerminalAll)
-	o := twoPaneWM(t)
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalAll)
 
 	o.FocusWindow(1)
 
@@ -302,8 +290,7 @@ func TestFocusWindowItselfDoesNotEnterTerminalMode(t *testing.T) {
 // window-management key that is not a focus command must not dump the user
 // into terminal mode. Zoom is the stand-in that does not spawn a PTY.
 func TestNonFocusWindowCommandStaysInWindowMode(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t, config.AutoEnterTerminalAll)
-	o := twoPaneWM(t)
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalAll)
 
 	o, _ = HandleKeyPress(press("z"), o)
 
@@ -316,8 +303,7 @@ func TestNonFocusWindowCommandStaysInWindowMode(t *testing.T) {
 // toast "Terminal mode" on every keypress. The explicit enter binding still
 // does.
 func TestAutoEnterPathIsSilent(t *testing.T) {
-	withAutoEnterTerminalOnFocus(t, config.AutoEnterTerminalAll)
-	o := twoPaneWM(t)
+	o := withAutoEnterTerminalOnFocus(twoPaneWM(t), config.AutoEnterTerminalAll)
 	before := len(o.Notifications)
 
 	o, _ = HandleKeyPress(press("tab"), o)

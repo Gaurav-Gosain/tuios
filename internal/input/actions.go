@@ -689,7 +689,7 @@ func maybeEnterTerminalOnFocusChange(o *app.OS, previousFocused int, kind focusE
 	if o.FocusedWindow == previousFocused || o.FocusedWindow < 0 || len(o.Windows) == 0 {
 		return o, nil
 	}
-	switch config.AutoEnterTerminalOnFocus {
+	switch o.Settings.AutoEnterTerminalOnFocus {
 	case config.AutoEnterTerminalAll:
 		return enterTerminalModeSilent(o)
 	case config.AutoEnterTerminalTargeted:

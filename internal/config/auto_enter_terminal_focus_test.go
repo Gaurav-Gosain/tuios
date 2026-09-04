@@ -6,29 +6,31 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
+// withAutoEnterTerminalOnFocus restores the setting after a test that moves
+// it, since config.Global is shared with every other test in the run.
 func withAutoEnterTerminalOnFocus(t *testing.T) {
 	t.Helper()
-	prev := config.AutoEnterTerminalOnFocus
-	t.Cleanup(func() { config.AutoEnterTerminalOnFocus = prev })
+	prev := config.Global.AutoEnterTerminalOnFocus
+	t.Cleanup(func() { config.Global.AutoEnterTerminalOnFocus = prev })
 }
 
 func TestAutoEnterTerminalOnFocusDefaultsToOff(t *testing.T) {
-	if got := config.AutoEnterTerminalOnFocus; got != config.AutoEnterTerminalOff {
-		t.Errorf("package default AutoEnterTerminalOnFocus = %q, want %q", got, config.AutoEnterTerminalOff)
+	if got := config.DefaultSettings().AutoEnterTerminalOnFocus; got != config.AutoEnterTerminalOff {
+		t.Errorf("default AutoEnterTerminalOnFocus = %q, want %q", got, config.AutoEnterTerminalOff)
 	}
 	if got := config.DefaultConfig().Appearance.AutoEnterTerminalOnFocus; got != config.AutoEnterTerminalOff {
 		t.Errorf("DefaultConfig auto_enter_terminal_on_focus = %q, want %q", got, config.AutoEnterTerminalOff)
 	}
 }
 
-func TestAutoEnterTerminalOnFocusReachesTheGlobal(t *testing.T) {
+func TestAutoEnterTerminalOnFocusReachesTheSettings(t *testing.T) {
 	withAutoEnterTerminalOnFocus(t)
 
 	for _, mode := range config.AutoEnterTerminalModes {
 		cfg := config.DefaultConfig()
 		cfg.Appearance.AutoEnterTerminalOnFocus = config.AutoEnterTerminalPolicy(mode)
-		config.ApplyAppearanceConfig(cfg)
-		if got := config.AutoEnterTerminalOnFocus; got != config.AutoEnterTerminalPolicy(mode) {
+		config.ApplyAppearanceConfig(cfg, &config.Global)
+		if got := config.Global.AutoEnterTerminalOnFocus; got != config.AutoEnterTerminalPolicy(mode) {
 			t.Errorf("AutoEnterTerminalOnFocus = %q after applying %q", got, mode)
 		}
 	}
@@ -42,7 +44,7 @@ func TestAutoEnterTerminalOnFocusReachesTheGlobal(t *testing.T) {
 
 func TestAutoEnterTerminalOnFocusRejectsAnUnknownValue(t *testing.T) {
 	withAutoEnterTerminalOnFocus(t)
-	config.AutoEnterTerminalOnFocus = config.AutoEnterTerminalAll
+	config.Global.AutoEnterTerminalOnFocus = config.AutoEnterTerminalAll
 
 	cfg := config.DefaultConfig()
 	cfg.Appearance.AutoEnterTerminalOnFocus = "sometimes"
@@ -55,9 +57,9 @@ func TestAutoEnterTerminalOnFocusRejectsAnUnknownValue(t *testing.T) {
 		t.Error("an unknown auto_enter_terminal_on_focus value was accepted without a warning")
 	}
 
-	config.ApplyAppearanceConfig(cfg)
-	if config.AutoEnterTerminalOnFocus != config.AutoEnterTerminalOff {
-		t.Errorf("AutoEnterTerminalOnFocus = %q after an unknown value, want the default %q", config.AutoEnterTerminalOnFocus, config.AutoEnterTerminalOff)
+	config.ApplyAppearanceConfig(cfg, &config.Global)
+	if config.Global.AutoEnterTerminalOnFocus != config.AutoEnterTerminalOff {
+		t.Errorf("AutoEnterTerminalOnFocus = %q after an unknown value, want the default %q", config.Global.AutoEnterTerminalOnFocus, config.AutoEnterTerminalOff)
 	}
 }
 
