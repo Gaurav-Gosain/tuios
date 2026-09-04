@@ -36,7 +36,12 @@ type overlayPanelHit struct {
 // only be opened over the rail, with no other panel to lose a tie against. Now
 // that a settings row opens it, the tie was with the panel it was drawn on top
 // of, and every click inside the picker went to the settings row behind it.
-var overlayKindOrder = []string{"help", "palette", "launcher", "session", "workspace", "layout", "aggregate", "settings", "keybinds", "themepicker", "glyphpicker", "dockeditor", "accent", "screenshot", "quit", "sessionclose", "filedialog"}
+//
+// "effectpicker" and "sectioneditor" were missing the same way, and a settings
+// row opens each of them over the panel too. The guard against a fourth is
+// TestEveryOverlayKindHasAPlaceInTheStack, which reads openOverlayKinds itself
+// rather than a second copy of this list.
+var overlayKindOrder = []string{"help", "palette", "launcher", "session", "workspace", "layout", "aggregate", "settings", "keybinds", "themepicker", "glyphpicker", "effectpicker", "dockeditor", "sectioneditor", "accent", "screenshot", "quit", "sessionclose", "filedialog"}
 
 // openOverlayKinds returns the set of draggable overlay kinds currently shown.
 func (m *OS) openOverlayKinds() map[string]bool {
