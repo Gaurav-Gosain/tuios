@@ -136,24 +136,33 @@ const (
 // tuiosBin is the binary under test, resolved once by TestMain.
 var tuiosBin string
 
+// TestMain exists only to turn runE2E's return into an exit status. The build
+// directory is removed by a defer inside runE2E, and os.Exit runs no defers, so
+// every statement that needs cleaning up lives in the function below rather
+// than here. A build directory holds a linked tuios binary, and on a machine
+// where /tmp is a tmpfs each leaked one is memory that never comes back.
 func TestMain(m *testing.M) {
+	os.Exit(runE2E(m))
+}
+
+func runE2E(m *testing.M) int {
 	if os.Getenv("TUIOS_E2E") == "" {
 		fmt.Fprintln(os.Stderr, "e2e: skipping, set TUIOS_E2E=1 to run (spawns real multiplexer daemons)")
-		os.Exit(0)
+		return 0
 	}
 
 	if bin := os.Getenv("TUIOS_E2E_BIN"); bin != "" {
 		abs, err := filepath.Abs(bin)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "e2e: resolve TUIOS_E2E_BIN: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		tuiosBin = abs
 	} else {
 		dir, err := os.MkdirTemp("", "tuios-e2e-bin")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "e2e: temp dir: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 		defer os.RemoveAll(dir)
 		tuiosBin = filepath.Join(dir, "tuios")
@@ -163,12 +172,11 @@ func TestMain(m *testing.M) {
 		build.Stdout = os.Stderr
 		if err := build.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "e2e: build tuios: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 	}
 
-	code := m.Run()
-	os.Exit(code)
+	return m.Run()
 }
 
 // startOpts configures a tuios instance for a test.
