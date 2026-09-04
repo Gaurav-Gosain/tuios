@@ -1047,11 +1047,21 @@ like "make it look like X" usually means some of each:
 | **Spacing** | ground between panes, padding inside overlay panels | `appearance.gap`, `appearance.panel_padding` |
 | **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
 
-The 122 options above are scalars, and spacing and composition are set with them
+The 127 options above are scalars, and spacing and composition are set with them
 like any other. Colour and shape are not: each is a name from an open set
 standing for a document kept in a directory rather than a value in the config
 file, which is why both have a verb of their own rather than a row in
 `list-options`.
+
+The `[spotlight]` table is the one appearance option that is not shared. It
+lights the area around the focused pane's cursor and carries everything outside
+it toward the ground, which is what a recording or a demo wants. `enabled`
+starts it, `follow` is `cursor` or `mouse`, `radius` is half its height in rows,
+`dim` is how far an unlit cell goes, and `edge` cuts the beam at its radius or
+fades it out. A fade sends about three times the bytes each time the beam moves,
+which is why the cut is the default. The
+beam belongs to one client: a second client attached to the same session sees
+its own screen unchanged. A person toggles it with `b` in window mode, or from the command palette.
 
 Everything here is also reachable by a person, from the settings page (`,` in
 window mode): its rows are derived from the same registry `list-options` reads,

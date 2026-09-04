@@ -32,6 +32,10 @@ type UserConfig struct {
 	// Screensaver is the [screensaver] table: whether the screen animates
 	// itself after a spell of quiet, and with what. See screensaver.go.
 	Screensaver ScreensaverConfig `toml:"screensaver"`
+	// Spotlight is the [spotlight] table: the beam that lights one part of the
+	// screen and dims the rest. Client-local appearance, like the theme. See
+	// spotlight.go.
+	Spotlight SpotlightConfig `toml:"spotlight"`
 	// Dock is the [dock] table: the bar as ordered lists of named components.
 	// It sits outside the option registry for the same reason [hooks] and
 	// [keybindings] do, being file-plane config rather than a settable option.
@@ -518,6 +522,7 @@ func DefaultConfig() *UserConfig {
 		},
 		Screenshot:  defaultScreenshotConfig(),
 		Screensaver: defaultScreensaverConfig(),
+		Spotlight:   defaultSpotlightConfig(),
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
@@ -575,8 +580,16 @@ func DefaultConfig() *UserConfig {
 				// to turn it on.
 			},
 			System: map[string][]string{
-				// Debug commands (logs, cache stats) are accessed via Ctrl+B D submenu
-				// and are not directly configurable as keybindings
+				// The log viewer and the cache stats are reached through the
+				// debug submenu (leader, D) rather than a key of their own.
+				//
+				// The spotlight is not a debug command, and a chord is the wrong
+				// shape for it: it is a thing you switch on while somebody is
+				// watching your screen, so it has to be one key. b for beam,
+				// which is the word the whole feature is written in. It is free
+				// in window mode, and the leader chord that spells the sidebar
+				// (leader, b) is a different scope, so the two do not meet.
+				"toggle_spotlight": {"b"},
 			},
 			Navigation: map[string][]string{
 				"nav_up":    {"up"},
@@ -1052,6 +1065,7 @@ func LoadUserConfig() (*UserConfig, error) {
 	fillMissingKeybinds(&cfg, defaultCfg)
 	fillMissingScreenshot(&cfg, defaultCfg)
 	fillMissingScreensaver(&cfg, defaultCfg)
+	fillMissingSpotlight(&cfg, defaultCfg)
 
 	// Validate configuration
 	validation := ValidateConfig(&cfg)

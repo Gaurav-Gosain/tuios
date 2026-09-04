@@ -439,6 +439,7 @@ var ActionDescriptions = map[string]string{
 	"toggle_logs":        "Toggle log viewer",
 	"toggle_cache_stats": "Toggle cache statistics",
 	"toggle_showkeys":    "Toggle showkeys overlay",
+	"toggle_spotlight":   "Toggle spotlight",
 
 	// Prefix Mode
 	"prefix_new_window":         "Create new window",

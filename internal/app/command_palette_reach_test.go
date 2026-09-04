@@ -148,17 +148,44 @@ func TestPaletteStateFilterDropsCommands(t *testing.T) {
 	}
 }
 
-// TestPaletteQueryWithoutATokenIsUnchanged: the filter is opt-in, and a query
-// that does not open with "@" must rank exactly as it did.
+// TestPaletteQueryWithoutATokenIsUnchanged: the state filter is opt-in, and a
+// query that does not open with "@" must reach what it always reached.
+//
+// Stated as "a row carrying an agent state is still matched", because that is
+// the property the name promises and the one that can fail. Comparing the
+// result against matchPaletteItems would be a tautology: with no token,
+// FilterCommandPalette is a call to matchPaletteItems. The earlier form
+// asserted that every hit contained the query as a substring, which held by
+// luck over the command names of the day and broke the first time one was
+// added: the matcher is fuzzy, and "split" is a subsequence of "spotlight".
 func TestPaletteQueryWithoutATokenIsUnchanged(t *testing.T) {
-	items := GetCommandPaletteItems(&config.Global)
+	stateful := CommandPaletteItem{
+		Name: "Split a working pane", Category: "Sessions", AgentState: "working",
+	}
+	items := append(GetCommandPaletteItems(&config.Global), stateful)
+
 	got := FilterCommandPalette(items, "split")
 	if len(got) == 0 {
 		t.Fatal("an ordinary query stopped matching")
 	}
+
+	var reachedStateful, reachedCommand bool
 	for _, it := range got {
-		if !strings.Contains(strings.ToLower(it.Name+it.Category), "split") {
-			t.Errorf("%q matched a query it does not contain", it.Name)
+		if it.Keybind {
+			t.Errorf("an untokened query returned the action row %q; those belong to #", it.Name)
 		}
+		if it.Name == stateful.Name {
+			reachedStateful = true
+		}
+		if it.AgentState == "" && strings.Contains(strings.ToLower(it.Name), "split") {
+			reachedCommand = true
+		}
+	}
+	if !reachedStateful {
+		t.Errorf("an untokened query dropped a row by its agent state; the filter is not opt-in:\n%s",
+			paletteNames(got))
+	}
+	if !reachedCommand {
+		t.Errorf("%q no longer reaches a split command:\n%s", "split", paletteNames(got))
 	}
 }

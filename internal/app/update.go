@@ -447,7 +447,7 @@ func (m *OS) tickNeedsWork() bool {
 	if len(m.Animations) > 0 || m.InteractionMode || m.Dragging || m.Resizing ||
 		m.PrefixActive || m.ScriptMode || len(m.Notifications) > 0 ||
 		m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending ||
-		len(m.pendingAgentAlerts) > 0 {
+		len(m.pendingAgentAlerts) > 0 || m.spotlightMotionPending {
 		return true
 	}
 	// Zen mode (mouse): the borders melt away once the pointer sits still past
@@ -989,7 +989,8 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Render on tick if something periodic needs visual updates OR background windows changed
 		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
 			hasBackgroundChanges || hasNotifications || notifExpired || leftScriptMode ||
-			m.SidebarMarqueeActive() || m.TooltipPending() || railTitleChanged || zenCrossed
+			m.SidebarMarqueeActive() || m.TooltipPending() || railTitleChanged || zenCrossed ||
+			m.spotlightMotionPending
 		if !needsRender {
 			m.renderSkipped = true
 			if len(cmds) > 1 {
@@ -998,6 +999,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, nextTick
 		}
 		m.renderSkipped = false
+		m.spotlightMotionPending = false
 		m.tickStats.Render++
 		// This tick is about to draw, so it counts against the interaction frame
 		// budget too. Without this a motion event landing just after a tick
@@ -1275,10 +1277,24 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// forces a render while InteractionMode is set, so a skipped motion is
 		// always flushed within one tick, and mouse release is not a motion
 		// event so the final position is drawn unconditionally.
-		if _, isMotion := msg.(tea.MouseMotionMsg); isMotion && m.InteractionMode {
+		// The mouse-anchored spotlight is throttled for the same reason a drag
+		// is: the beam moves with the pointer, so every motion event makes the
+		// frame differ from the last one and the compose stops being thrown
+		// away. Without this a fast swipe composes once per cell crossed.
+		beamFollowsMouse := m.spotlight.on &&
+			m.spotlightConfig().FollowMode() == config.SpotlightFollowMouse
+		if _, isMotion := msg.(tea.MouseMotionMsg); isMotion && (m.InteractionMode || beamFollowsMouse) {
 			now := time.Now()
 			if now.Sub(m.lastInteractionRender) < time.Second/time.Duration(m.Settings.NormalFPS) {
 				m.renderSkipped = true
+				// A drag has the interaction tick to flush the position it
+				// skipped. A beam following the pointer has no tick of its own,
+				// and adding one would cost every idle client a wake-up for a
+				// setting it is not using. This flag is the flush instead: it
+				// is true only between a skipped move and the next frame, so a
+				// client with the beam off, or with the pointer at rest, never
+				// sees it and the idle tick stays idle.
+				m.spotlightMotionPending = beamFollowsMouse
 			} else {
 				m.lastInteractionRender = now
 			}

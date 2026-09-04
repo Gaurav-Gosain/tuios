@@ -446,6 +446,17 @@ func (m *OS) settingsCategories() []settingsCategory {
 		}),
 	}
 
+	spotlight := settingsCategory{
+		Name: "Spotlight",
+		Items: m.resolveRows([]settingsRow{
+			custom("spotlight.enabled", m.spotlightItem()),
+			opt("spotlight.follow"),
+			opt("spotlight.radius"),
+			opt("spotlight.dim"),
+			opt("spotlight.edge"),
+		}),
+	}
+
 	daemon := settingsCategory{
 		Name: "Daemon",
 		Items: m.resolveRows([]settingsRow{
@@ -496,7 +507,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 
 	return []settingsCategory{
 		appearance, sidebar, dock, behavior,
-		notifications, startup, screenshot, screensaver, advanced, daemon, tape,
+		notifications, startup, screenshot, screensaver, spotlight, advanced, daemon, tape,
 	}
 }
 
@@ -636,6 +647,18 @@ func (m *OS) showKeysItem() settingItem {
 		func(m *OS, v bool) {
 			m.ShowKeys = v
 			m.setOption("debug.show_key_events", strconv.FormatBool(v))
+		})
+}
+
+// spotlightItem is the beam toggle. Hand-written because the live state is a
+// model field the render path reads directly, so the row has to move both it
+// and the config. The keycast row is hand-written for the same reason.
+func (m *OS) spotlightItem() settingItem {
+	return boolItem("Spotlight", "Light the area around the cursor and dim the rest.",
+		func() bool { return m.SpotlightOn() },
+		func(m *OS, v bool) {
+			m.SetSpotlight(v)
+			m.setOption("spotlight.enabled", strconv.FormatBool(v))
 		})
 }
 

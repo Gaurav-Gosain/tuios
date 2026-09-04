@@ -752,6 +752,35 @@ var optionSpecs = []Option{
 		Description: "Start even when a pane is running a command or an agent",
 		Default:     "false",
 	},
+
+	// [spotlight]. Off by default, and client-local while it runs: the beam is
+	// what this client's screen looks like, not what the session holds, so a
+	// peer attached to the same panes sees nothing.
+	{
+		Path: "spotlight.enabled", Type: OptionBool, Section: "spotlight",
+		Description: "Light one part of the screen and dim the rest",
+		Default:     "false",
+	},
+	{
+		Path: "spotlight.follow", Type: OptionString, Section: "spotlight",
+		Description: "What the beam follows: the focused pane's cursor, or the mouse",
+		Accepted:    SpotlightFollowModes, Default: SpotlightFollowCursor,
+	},
+	{
+		Path: "spotlight.radius", Type: OptionInt, Section: "spotlight",
+		Description: "Half the beam's height, in rows",
+		Default:     "10", Min: SpotlightMinRadius, Max: SpotlightMaxRadius,
+	},
+	{
+		Path: "spotlight.dim", Type: OptionInt, Section: "spotlight",
+		Description: "Percent an unlit cell is carried toward the ground",
+		Default:     "60", Min: SpotlightMinDim, Max: SpotlightMaxDim,
+	},
+	{
+		Path: "spotlight.edge", Type: OptionString, Section: "spotlight",
+		Description: "Cut the beam at its edge, or fade it out. A fade sends about three times the bytes each time the beam moves",
+		Accepted:    SpotlightEdges, Default: SpotlightEdgeHard,
+	},
 }
 
 // optionsByPath indexes the registry for lookup. Built once at init so a caller

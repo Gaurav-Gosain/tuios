@@ -265,6 +265,9 @@ func NewOS(opts OSOptions) *OS {
 		if cfg.Debug.ShowKeyEvents {
 			os.ShowKeys = true
 		}
+		if cfg.Spotlight.IsEnabled() {
+			os.spotlight.on = true
+		}
 		if cfg.Hooks != nil {
 			os.HookManager.LoadFromConfig(cfg.Hooks)
 		}
