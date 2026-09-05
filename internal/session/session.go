@@ -1890,11 +1890,16 @@ func (p *PTY) Resize(width, height int) error {
 	// be recorded as the pane's own.
 	p.terminalMu.Lock()
 	unchanged := width > 0 && height > 0 && p.width == width && p.height == height
+	oldW, oldH := p.width, p.height
 	p.width, p.height = width, height
 	p.terminalMu.Unlock()
 	if unchanged {
 		return nil
 	}
+	// A size change is rare and is the one thing a shell repaints its prompt
+	// for, so it is worth a line in `tuios logs`: a pane that gains blank lines
+	// on a focus move is answered by whether this line appears with it.
+	LogBasic("PTY %s resized %dx%d -> %dx%d", shortID(p.ID), oldW, oldH, width, height)
 
 	p.streamMu.Lock()
 	if !p.vtClosed {

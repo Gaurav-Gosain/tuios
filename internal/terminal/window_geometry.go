@@ -151,6 +151,13 @@ func (w *Window) ReleaseAnnouncements() {
 // AnnouncementsHeld reports whether any hold is open on this pane.
 func (w *Window) AnnouncementsHeld() bool { return w.announceHolds > 0 }
 
+// AnnounceTrace, when set, is called with every size handed to a guest, from
+// the goroutine that hands it over. It is a diagnostic hook for the client's
+// render trace, which records the size and the code path that announced it,
+// so a pane whose shell repaints on a focus move can say what resized it. Nil
+// in a normal run, where tellGuest pays one nil check per real resize.
+var AnnounceTrace func(w *Window, cols, rows int)
+
 // tellGuest sends one size downstream. Both the local PTY and the daemon turn
 // it into a SIGWINCH, so it is only ever called for a size the guest does not
 // already have - re-sending an unchanged size makes the shell repaint its
@@ -158,6 +165,9 @@ func (w *Window) AnnouncementsHeld() bool { return w.announceHolds > 0 }
 // switch were.
 func (w *Window) tellGuest(termWidth, termHeight int) {
 	w.toldW, w.toldH = termWidth, termHeight
+	if AnnounceTrace != nil {
+		AnnounceTrace(w, termWidth, termHeight)
+	}
 	if w.Pty != nil {
 		if err := w.Pty.Resize(termWidth, termHeight); err != nil {
 			_ = err

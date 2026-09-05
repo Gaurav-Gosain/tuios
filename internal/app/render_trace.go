@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +53,7 @@ func init() {
 	renderTraceFH = fh
 	renderTraceT0 = time.Now()
 	renderTraceEnabled = true
+	terminal.AnnounceTrace = traceAnnounce
 	fmt.Fprintf(fh, "\n=== tuios render trace started %s pid=%d ===\n",
 		renderTraceT0.Format(time.RFC3339), os.Getpid())
 }
@@ -252,4 +254,34 @@ func traceSync(w *terminal.Window, incomingAlt bool, resized bool, newW, newH in
 		shortID(w.ID), w.Title(), incomingAlt, resized, newW, newH,
 		altMode, altBuf, w.IsAltScreen(), w.Tiled, note,
 	))
+}
+
+// traceAnnounce records a size handed to a guest and the path that handed it.
+// One of these per SIGWINCH the shell gets, so a pane that repaints its prompt
+// when focus moves is explained by the frames on the line that appears with
+// it, or by the absence of the line.
+func traceAnnounce(w *terminal.Window, cols, rows int) {
+	traceWrite(fmt.Sprintf("announce id=%s title=%q size=%dx%d rect=%dx%d tiled=%t via %s",
+		shortID(w.ID), w.Title(), cols, rows, w.Width, w.Height, w.Tiled, traceCallers(3, 8)))
+}
+
+// traceCallers names the frames above the caller, innermost first, without
+// their package paths.
+func traceCallers(skip, n int) string {
+	pcs := make([]uintptr, n)
+	got := runtime.Callers(skip, pcs)
+	frames := runtime.CallersFrames(pcs[:got])
+	var names []string
+	for {
+		f, more := frames.Next()
+		name := f.Function
+		if i := strings.LastIndex(name, "/"); i >= 0 {
+			name = name[i+1:]
+		}
+		names = append(names, name)
+		if !more {
+			break
+		}
+	}
+	return strings.Join(names, " < ")
 }
