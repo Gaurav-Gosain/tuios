@@ -4,8 +4,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	toml "github.com/pelletier/go-toml/v2"
 )
 
 // keySeeds are key spellings the normalizer has to survive: the ordinary
@@ -193,19 +191,20 @@ func FuzzLoadConfigPipeline(f *testing.F) {
 			src = src[:1<<16]
 		}
 
-		var cfg UserConfig
-		if err := toml.Unmarshal([]byte(src), &cfg); err != nil {
-			// Malformed TOML is reported, not parsed. That is the contract.
-			return
-		}
-
+		var cfg *UserConfig
 		done := make(chan *ValidationResult, 1)
 		go func() {
-			defaultCfg := DefaultConfig()
-			fillMissingAppearance(&cfg, defaultCfg)
-			fillMissingDaemon(&cfg, defaultCfg)
-			fillMissingKeybinds(&cfg, defaultCfg)
-			done <- ValidateConfig(&cfg)
+			// The one parse function, every fill included. This used to
+			// repeat three of its seven fills, so the fuzzer never reached
+			// the other four.
+			parsed, err := ParseUserConfig([]byte(src))
+			if err != nil {
+				// Malformed TOML is reported, not parsed. That is the contract.
+				done <- nil
+				return
+			}
+			cfg = parsed
+			done <- ValidateConfig(parsed)
 		}()
 
 		var result *ValidationResult
@@ -213,6 +212,9 @@ func FuzzLoadConfigPipeline(f *testing.F) {
 		case result = <-done:
 		case <-time.After(30 * time.Second):
 			t.Fatalf("config pipeline did not terminate for %d bytes", len(src))
+		}
+		if result == nil {
+			return
 		}
 
 		// The fill stage exists so the rest of the app can read these without
@@ -247,7 +249,7 @@ func FuzzLoadConfigPipeline(f *testing.F) {
 
 		// Validating twice must agree: a second load of the same file cannot
 		// suddenly start rejecting it.
-		second := ValidateConfig(&cfg)
+		second := ValidateConfig(cfg)
 		if len(second.Errors) != len(result.Errors) {
 			t.Fatalf("re-validating changed the error count: %d then %d",
 				len(result.Errors), len(second.Errors))

@@ -34,15 +34,16 @@ func layoutNames(t *testing.T) []string {
 }
 
 // loadTOML parses src the way LoadUserConfig does, defaults and all, so a test
-// exercises the same migration and fill order a real config file gets.
+// exercises the same migration and fill order a real config file gets. It
+// calls the one parse function rather than repeating its fill list here, which
+// is how this helper had drifted to one fill of seven.
 func loadTOML(t *testing.T, src string) *UserConfig {
 	t.Helper()
-	var cfg UserConfig
-	if err := toml.Unmarshal([]byte(src), &cfg); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	cfg, err := ParseUserConfig([]byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
 	}
-	fillMissingAppearance(&cfg, DefaultConfig())
-	return &cfg
+	return cfg
 }
 
 // TestLegacyFlatSidebarKeysStillApply is the backward-compatibility contract: a

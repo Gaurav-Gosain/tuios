@@ -6,8 +6,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/pelletier/go-toml/v2"
 )
 
 // These cases are about one claim: an unbind has to look different in the file
@@ -16,15 +14,15 @@ import (
 
 // loadFromTOML parses text the way LoadUserConfig does, without the XDG lookup:
 // unmarshal, then fill the defaults in. That order is the whole point of the
-// encoding, so a test that skipped fillMissingKeybinds would prove nothing.
+// encoding, so a test that skipped the fill would prove nothing, and it is the
+// one parse function's order rather than a copy of it.
 func loadFromTOML(t *testing.T, text string) *UserConfig {
 	t.Helper()
-	var cfg UserConfig
-	if err := toml.Unmarshal([]byte(text), &cfg); err != nil {
+	cfg, err := ParseUserConfig([]byte(text))
+	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	fillMissingKeybinds(&cfg, DefaultConfig())
-	return &cfg
+	return cfg
 }
 
 // TestAbsentActionGetsItsDefaultBack is the control the encoding is measured
