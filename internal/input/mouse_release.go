@@ -14,9 +14,15 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// idempotent so the cleanup at the bottom stays the normal way a gesture
 	// ends. See OS.EndStrayGesture. The mode the gesture borrowed goes back the
 	// same way, for the same reason.
+	//
+	// The announcement hold the press armed ends here too, and last of all: the
+	// drop has been laid out by then, so what each pane is told is the size it
+	// settled at. A drop that put a pane back in a slot the same size as the one
+	// it left tells it nothing, which is the point.
 	defer func() {
 		o.EndStrayGesture()
 		o.EndPointerGesture()
+		o.ReleaseGestureAnnouncements()
 	}()
 
 	// Armed by the cleanup below and returned from whichever branch gets there.

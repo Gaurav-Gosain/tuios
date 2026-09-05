@@ -117,9 +117,9 @@ func (w *Window) AnnouncedSize() (int, int) {
 	return w.announcedW, w.announcedH
 }
 
-// HoldAnnouncements stops Resize from telling the guest anything until
-// ReleaseAnnouncements, which then sends the settled size if it differs from
-// what the guest already has.
+// HoldAnnouncements stops Resize from telling the guest anything until the
+// matching ReleaseAnnouncements, which then sends the settled size if it
+// differs from what the guest already has.
 //
 // One layout update is several steps: settle the border allowance, place the
 // rectangle, reclaim the columns a divider was holding, drain a deferred
@@ -127,18 +127,29 @@ func (w *Window) AnnouncedSize() (int, int) {
 // full-screen program repaints on every one, so a switch that left a pane
 // exactly the size it started at still cost it two full repaints. Only the
 // size the pane settles at was ever real.
-func (w *Window) HoldAnnouncements() { w.announceHeld = true }
+//
+// Holds nest, so a caller must pair every Hold with exactly one Release. A
+// mouse gesture holds for its whole length and every retile inside it holds
+// again; only the last release sends anything.
+func (w *Window) HoldAnnouncements() { w.announceHolds++ }
 
-// ReleaseAnnouncements ends a hold and sends the size the pane settled at.
+// ReleaseAnnouncements ends one hold. The size the pane settled at is sent
+// when the last hold ends; an inner release only drops the depth.
 func (w *Window) ReleaseAnnouncements() {
-	if !w.announceHeld {
+	if w.announceHolds == 0 {
 		return
 	}
-	w.announceHeld = false
+	w.announceHolds--
+	if w.announceHolds > 0 {
+		return
+	}
 	if w.announcedW != w.toldW || w.announcedH != w.toldH {
 		w.tellGuest(w.announcedW, w.announcedH)
 	}
 }
+
+// AnnouncementsHeld reports whether any hold is open on this pane.
+func (w *Window) AnnouncementsHeld() bool { return w.announceHolds > 0 }
 
 // tellGuest sends one size downstream. Both the local PTY and the daemon turn
 // it into a SIGWINCH, so it is only ever called for a size the guest does not
@@ -197,7 +208,7 @@ func (w *Window) Resize(width, height int) {
 		}
 		w.ioMu.Unlock()
 	}
-	if sizeChanged && !w.announceHeld {
+	if sizeChanged && w.announceHolds == 0 {
 		w.tellGuest(termWidth, termHeight)
 	}
 	w.Width = width

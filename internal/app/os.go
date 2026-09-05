@@ -388,6 +388,10 @@ type OS struct {
 	// pointerDown tracks whether a mouse button is held, so a gesture cannot
 	// outlive the button that started it even when no further event arrives.
 	pointerDown bool
+	// announceGestureHeld is whether the pointer gesture's announcement hold is
+	// open. See announce_batch.go: while it is, no pane is told a size, so the
+	// sizes a drag passes through never reach a guest as a SIGWINCH.
+	announceGestureHeld bool
 	// pendingBSPSync is set when a resize motion changed window geometry and the
 	// BSP tree's ratios have not been re-derived from it yet. The sync exists so
 	// the shared-borders separator overlay follows the drag, so it only has to

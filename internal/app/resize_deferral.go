@@ -166,6 +166,9 @@ func (m *OS) endLostGesture() {
 
 	m.EndPointerGesture()
 	m.endResizeDeferral()
+	// The gesture is over, so the size the panes are left at is the real one.
+	// endResizeDeferral above has just recorded it; this is what sends it.
+	m.releaseGestureAnnouncements()
 	m.clearStaleManipulation()
 
 	// A resize drag is what the BSP tree derives its ratios from; without this

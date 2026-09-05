@@ -63,6 +63,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		} else {
 			result, cmd = handleMouseRelease(msg, o)
 		}
+		// The button is up, so the announcement hold the press armed is over
+		// whichever of the three handled it. The window handler has already
+		// ended it after laying the drop out; this is for the other two, which
+		// move no pane and would otherwise leave the hold to the maintenance
+		// tick.
+		o.ReleaseGestureAnnouncements()
 	case tea.MouseWheelMsg:
 		if o.ScreenshotPreviewOpen() {
 			result, cmd = handleScreenshotPreviewWheel(msg, o)
