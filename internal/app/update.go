@@ -1264,12 +1264,28 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// handler runs, so a slow handler does not shorten the next wait.
 		m.screensaver.lastInput = time.Now()
 
+		// A shake of the pointer toggles the beam, when the person asked for
+		// that gesture. It is fed here rather than from the motion handler
+		// because motion is routed away from that handler whenever capture
+		// mode or the scrollback browser is up, and the handler itself returns
+		// early for a context menu, a rail drag, a workspace pill drag and an
+		// overlay drag. Every motion event passes this line exactly once, and
+		// it passes before the handler, so the frame this event composes
+		// already carries the beam the shake asked for. See shake.go.
+		var shakeCmd tea.Cmd
+		if mm, isMotion := msg.(tea.MouseMotionMsg); isMotion {
+			shakeCmd = m.noteShakeMotion(mm, time.Now())
+		}
+
 		// Delegate to the registered input handler
 		handler := getInputHandler()
 		if handler == nil {
-			return m, m.armScreensaver()
+			return m, tea.Batch(shakeCmd, m.armScreensaver())
 		}
 		newModel, cmd := handler(msg, m)
+		if shakeCmd != nil {
+			cmd = tea.Batch(cmd, shakeCmd)
+		}
 		// Arming happens after the handler, not before, because the keystroke
 		// that switches the saver on in the settings page is itself an input
 		// event: arming first would read the old setting and leave a session

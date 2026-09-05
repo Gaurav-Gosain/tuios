@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -411,5 +412,128 @@ func TestSpotlightKeepsAThemedScreenOffTheFaintPath(t *testing.T) {
 	if beamFar.Fg.Kind == 0 || beamFar.Bg.Kind == 0 {
 		t.Errorf("a themed cell outside the beam came back with no colour: fg %+v bg %+v",
 			beamFar.Fg, beamFar.Bg)
+	}
+}
+
+// The shake gesture, driven with a real pointer against the real binary.
+//
+// It has to be driven here. The local program installs filterMouseMotion as a
+// bubbletea filter, and that filter is a whitelist: it drops every motion event
+// it does not recognise, so a gesture read off bare motion sees nothing at all
+// until it has a clause of its own. The detector passed every unit test in the
+// tree while the events could not reach it. This is the test that says a person
+// shaking a mouse turns the beam on.
+
+// shakeConfig turns the gesture on and nothing else, so the beam starts off and
+// the gesture is the only thing that can turn it on.
+const shakeConfig = spotlightTheme + "\n[spotlight]\nradius = 5\nshake = true\n"
+
+// shakePointer moves the pointer left and right about the middle of the screen,
+// far enough and often enough to be a shake. The harness sends each report as
+// it is called, so the events arrive as fast as the program can read them,
+// which is what a shake looks like.
+func shakePointer(t *testing.T, term *tuitest.Terminal, turns int) {
+	t.Helper()
+	const row, mid, leg = 20, 60, 20
+	at, dir := mid, 1
+	mouseHover(t, term, at, row)
+	for range turns + 1 {
+		at += dir * leg
+		dir = -dir
+		mouseHover(t, term, at, row)
+	}
+}
+
+// TestShakingTheMouseTogglesTheSpotlight is the gesture, end to end. The
+// notification is the assertion because it is what a person sees, and it is the
+// same line the key shows.
+func TestShakingTheMouseTogglesTheSpotlight(t *testing.T) {
+	base := spotlightConfigFile(t, shakeConfig)
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+
+	shakePointer(t, term, 12)
+	if err := term.WaitForText("Spotlight: ON", uiTimeout); err != nil {
+		t.Fatalf("shaking the pointer did not turn the beam on: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after shaking the spotlight on")
+}
+
+// noShakeBudget is how long a shake that was going to fire has to show its
+// notification. A gesture that fired is on screen in a frame or two, so this is
+// generous, and it is the budget behind every "did not toggle" below.
+const noShakeBudget = 2 * time.Second
+
+// TestSweepingTheMouseLeavesTheSpotlightAlone is the negative half, driven the
+// same way. Crossing the screen and coming back is the pointer movement people
+// make all day, and it is as fast and as wide as a shake.
+func TestSweepingTheMouseLeavesTheSpotlightAlone(t *testing.T) {
+	base := spotlightConfigFile(t, shakeConfig)
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+
+	for col := 10; col <= 110; col += 10 {
+		mouseHover(t, term, col, 20)
+	}
+	for col := 110; col >= 10; col -= 10 {
+		mouseHover(t, term, col, 20)
+	}
+	if err := term.WaitForText("Spotlight:", noShakeBudget); err == nil {
+		t.Errorf("a sweep across the screen and back toggled the beam\n%s", term.Snapshot())
+	}
+
+	// The positive half, in the same fixture. Without it the check above could
+	// pass on a client whose pointer never reaches the program at all.
+	shakePointer(t, term, 12)
+	if err := term.WaitForText("Spotlight: ON", uiTimeout); err != nil {
+		t.Fatalf("the pointer never reached the program at all: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// TestShakingTheMouseWorksWithLinkHoverOff is what pins the filter clause.
+//
+// The whitelist has a clause for link hover that passes bare motion over pane
+// content, and with links on - which is the default - that clause carries the
+// shake by accident. Turn links off, as anyone who wants the CPU guard does,
+// and the gesture has nothing left but its own clause.
+func TestShakingTheMouseWorksWithLinkHoverOff(t *testing.T) {
+	const noLinks = spotlightTheme + "links = \"off\"\n" +
+		"\n[spotlight]\nradius = 5\nshake = true\n"
+	base := spotlightConfigFile(t, noLinks)
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+
+	shakePointer(t, term, 12)
+	if err := term.WaitForText("Spotlight: ON", uiTimeout); err != nil {
+		t.Fatalf("shaking the pointer with links off did not turn the beam on; "+
+			"the motion filter is dropping every event the gesture needs: %v\n%s",
+			err, term.Snapshot())
+	}
+}
+
+// TestTheShakeGestureIsOffByDefault. It ships off, and the same shake against a
+// client that did not ask for it must leave the screen alone.
+func TestTheShakeGestureIsOffByDefault(t *testing.T) {
+	base := spotlightConfigFile(t, spotlightTheme)
+	term := startIn(t, base, startOpts{cols: 120, rows: 40})
+	waitBoot(t, term)
+	newWindow(t, term)
+
+	shakePointer(t, term, 12)
+	if err := term.WaitForText("Spotlight:", noShakeBudget); err == nil {
+		t.Errorf("the shake fired with spotlight.shake unset, which is how it ships\n%s",
+			term.Snapshot())
+	}
+
+	// The positive half, in the same fixture: this client can show a spotlight
+	// notification, it just did not have one to show.
+	if err := term.SendKeys("b"); err != nil {
+		t.Fatalf("press b: %v", err)
+	}
+	if err := term.WaitForText("Spotlight: ON", uiTimeout); err != nil {
+		t.Fatalf("the key did not turn the beam on: %v\n%s", err, term.Snapshot())
 	}
 }

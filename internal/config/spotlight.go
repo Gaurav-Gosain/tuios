@@ -17,6 +17,7 @@ type SpotlightConfig struct {
 	Radius  int    `toml:"radius"`  // half the beam's height, in rows (default: 10)
 	Dim     int    `toml:"dim"`     // percent of its light an unlit cell loses (default: 75)
 	Edge    string `toml:"edge"`    // hard cut or soft rim (default: hard)
+	Shake   bool   `toml:"shake"`   // a shake of the pointer toggles the beam (default: false)
 }
 
 // What the beam follows.
@@ -129,6 +130,13 @@ func fillMissingSpotlight(cfg, defaultCfg *UserConfig) {
 	s.Radius = min(max(s.Radius, SpotlightMinRadius), SpotlightMaxRadius)
 	s.Dim = min(max(s.Dim, SpotlightMinDim), SpotlightMaxDim)
 }
+
+// ShakeToggles reports whether a shake of the pointer toggles the beam.
+//
+// Off by default. The gesture is one a person can make by accident, and a
+// screen that goes dark for a reason nobody typed is worse than a gesture
+// nobody has. A person who wants it turns it on and knows what it does.
+func (s SpotlightConfig) ShakeToggles() bool { return s.Shake }
 
 // IsEnabled reports whether the beam is drawn from startup.
 func (s SpotlightConfig) IsEnabled() bool { return s.Enabled != nil && *s.Enabled }

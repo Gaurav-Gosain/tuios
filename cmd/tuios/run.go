@@ -112,6 +112,22 @@ func filterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// A shake of the pointer toggles the spotlight, and the detector reads it
+	// off bare motion. This filter is a whitelist, so the gesture is dead until
+	// it has a clause here however well the detector works: that is the fault
+	// the context menu's hover shipped with.
+	//
+	// Only a motion that reaches a different column is passed. The detector
+	// reads the column and nothing else, so an event that moves the pointer
+	// down a row carries it no news. The clause is false for every client that
+	// has not asked for the gesture, which is how it ships, and the guard is
+	// then exactly what it was.
+	if os.ShakeGestureOn() {
+		if mm, ok := msg.(tea.MouseMotionMsg); ok && mm.Mouse().X != os.LastMouseX {
+			return msg
+		}
+	}
+
 	// An open context menu highlights the row under the pointer, which it can
 	// only do if it is told the pointer moved. This filter is a whitelist that
 	// drops every motion event it does not recognise, so a hover handler added

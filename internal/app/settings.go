@@ -454,6 +454,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("spotlight.radius"),
 			opt("spotlight.dim"),
 			opt("spotlight.edge"),
+			opt("spotlight.shake"),
 		}),
 	}
 
