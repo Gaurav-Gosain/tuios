@@ -40,6 +40,10 @@ type SSHServerConfig struct {
 	// Empty searches ~/.config/tuios/authorized_keys, then
 	// ~/.ssh/authorized_keys. See auth.go.
 	AuthorizedKeysPath string
+	// ShowKeys turns the key display overlay on in every served session. It is
+	// the --show-keys flag `tuios ssh` registers with the rest of the interface
+	// flags, and it used to be registered and then ignored.
+	ShowKeys bool
 	// NoAuth accepts every connection without checking who it is. It is the
 	// opt-out that lets a non-loopback bind run with no authorized keys, and
 	// the way back in for an operator whose key file locked them out.
@@ -127,9 +131,13 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	// client leaves the session-side events to it, so a daemon started here
 	// without them would stop running those commands rather than run them twice.
 	if !cfg.Ephemeral {
-		daemonCfg := &session.DaemonConfig{}
+		// The [daemon] section, the hosts and the hooks, mapped the same way
+		// `tuios daemon` maps them. This server used to hand over the hooks
+		// alone, so a daemon it started ran with no agent detection settings
+		// and no hosts.
+		daemonCfg := session.DaemonConfigFromUser(nil)
 		if userConfig, err := config.LoadUserConfig(); err == nil {
-			daemonCfg.ApplyUserHooks(userConfig)
+			daemonCfg = session.DaemonConfigFromUser(userConfig)
 		}
 		if err := session.EnsureDaemonRunningWith(cfg.Version, daemonCfg); err != nil {
 			log.Printf("Warning: Failed to start daemon, falling back to ephemeral mode: %v", err)
@@ -272,18 +280,20 @@ func tuiosSessionMiddleware() wish.Middleware {
 			}
 
 			out := &serialWriter{w: sess}
-			model, opts := buildSessionModel(sess, out)
+			model := buildSessionModel(sess, out)
 			if model == nil {
 				next(sess)
 				return
 			}
 
-			// MakeOptions wires input/output/env for the session; WithOutput
-			// afterwards replaces the raw session writer with the serialized
-			// one shared with the graphics path. This server never allocates a
+			// MakeOptions wires input/output/env for the session. The shared
+			// list goes after it, because both carry a WithFilter and the
+			// last one set wins (see app.ProgramOptions). WithOutput last
+			// replaces the raw session writer with the serialized one shared
+			// with the graphics path. This server never allocates a
 			// server-side PTY (no ssh.AllocatePty), so the session itself is
 			// always the right output to wrap.
-			opts = append(opts, bubbletea.MakeOptions(sess)...)
+			opts := append(bubbletea.MakeOptions(sess), app.ProgramOptions()...)
 			opts = append(opts, tea.WithOutput(out))
 			program := tea.NewProgram(model, opts...)
 
@@ -327,7 +337,7 @@ func tuiosSessionMiddleware() wish.Middleware {
 // buildSessionModel creates a TUIOS instance for an SSH session. graphicsOut
 // is the serialized session writer that kitty/sixel APC sequences are routed
 // through; it must be the same writer the bubbletea program renders to.
-func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) (tea.Model, []tea.ProgramOption) {
+func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) tea.Model {
 	pty, _, _ := sshSession.Pty()
 
 	cfg := sshServerConfig
@@ -363,12 +373,12 @@ func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) (tea.Model
 	}
 
 	// Try to connect to daemon
-	model, opts, err := createDaemonTUIOSInstance(sshSession, graphicsOut, sessionName, pty.Window.Width, pty.Window.Height, cfg, clientCaps, hostCaps)
+	model, err := createDaemonTUIOSInstance(sshSession, graphicsOut, sessionName, pty.Window.Width, pty.Window.Height, cfg, clientCaps, hostCaps)
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
 		return createEphemeralTUIOSInstance(sshSession, graphicsOut, pty.Window.Width, pty.Window.Height, hostCaps)
 	}
-	return model, opts
+	return model
 }
 
 // determineSessionName determines which session to attach to based on SSH context
@@ -395,7 +405,12 @@ func determineSessionName(sshSession ssh.Session, cfg *SSHServerConfig) string {
 }
 
 // createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
-func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, width, height int, hostCaps *app.HostCapabilities) (tea.Model, []tea.ProgramOption) {
+func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, width, height int, hostCaps *app.HostCapabilities) tea.Model {
+	cfg := sshServerConfig
+	if cfg == nil {
+		cfg = &SSHServerConfig{Ephemeral: true}
+	}
+
 	// Load user configuration and create keybind registry
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
@@ -407,44 +422,33 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer,
 	// Set up the input handler
 	app.SetInputHandler(input.HandleInput)
 
+	// The kind says the rest: read-only config, no desktop, file-medium
+	// graphics re-encoded for a terminal that cannot read server paths.
 	tuiosInstance := app.NewOS(app.OSOptions{
+		Client:          app.ClientSSH,
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
+		ShowKeys:        cfg.ShowKeys,
 		Width:           width,
 		Height:          height,
-		IsSSHMode:       true,
 		SSHSession:      sshSession,
-		// The config file belongs to the server operator, and several SSH
-		// clients each hold a stale snapshot of it; the same reasoning that
-		// makes a web-served session read-only (see OSOptions) applies here.
-		// Settings still apply live, they are just not written back.
-		ConfigReadOnly: true,
 		// Route kitty/sixel APC sequences to the SSH session so they reach the
 		// client's terminal, via the serialized writer shared with the
 		// bubbletea renderer so graphics and text writes never interleave on
 		// the SSH channel. The passthrough enables itself only when the
 		// client's detected capabilities (installed via SetClientCapabilities)
 		// say the terminal can render them, so this is a no-op for a plain
-		// client. RemoteClient forces file-medium transmissions to be
-		// re-encoded as direct data, since the client cannot read server paths.
-		GraphicsOutput:       graphicsOut,
-		GraphicsRemoteClient: true,
-		// This process is beside the daemon with the user at the far end of a
-		// network, so nothing here may touch the host's own desktop: a
-		// clipboard helper or a file viewer opened here acts on the operator's
-		// machine and not on the user's.
-		RemoteClient: true,
+		// client.
+		GraphicsOutput: graphicsOut,
 		// The terminal this client connected from, not the last one to connect.
 		Caps: hostCaps,
 	})
 
-	return tuiosInstance, []tea.ProgramOption{
-		tea.WithFPS(config.MaxFPSCap),
-	}
+	return tuiosInstance
 }
 
 // createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon
-func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, sessionName string, width, height int, cfg *SSHServerConfig, clientCaps *session.ClientCapabilities, hostCaps *app.HostCapabilities) (tea.Model, []tea.ProgramOption, error) {
+func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, sessionName string, width, height int, cfg *SSHServerConfig, clientCaps *session.ClientCapabilities, hostCaps *app.HostCapabilities) (tea.Model, error) {
 	// Connect to daemon
 	client := session.NewTUIClient()
 	version := cfg.Version
@@ -457,7 +461,7 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 	// mouse reporting (DEC 1016) and kitty geometry. These must describe the
 	// terminal the user connected from, not the server.
 	if err := client.ConnectWithCapabilities(version, width, height, clientCaps); err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to daemon: %w", err)
+		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
 	}
 
 	// If no session name specified, show picker or get default
@@ -481,7 +485,7 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 	state, err := client.AttachSession(sessionName, true, width, height)
 	if err != nil {
 		_ = client.Close()
-		return nil, nil, fmt.Errorf("failed to attach to session: %w", err)
+		return nil, fmt.Errorf("failed to attach to session: %w", err)
 	}
 
 	// Start read loop for daemon messages
@@ -498,144 +502,33 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 	// Set up the input handler
 	app.SetInputHandler(input.HandleInput)
 
-	// Create TUIOS instance connected to daemon
+	// Create TUIOS instance connected to daemon. The kind says the rest, as
+	// in the ephemeral path above.
 	tuiosInstance := app.NewOS(app.OSOptions{
+		Client:          app.ClientSSH,
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
+		ShowKeys:        cfg.ShowKeys,
 		Width:           width,
 		Height:          height,
-		IsSSHMode:       true,
 		SSHSession:      sshSession,
-		// Read-only for the same reason as the ephemeral path above.
-		ConfigReadOnly:  true,
 		IsDaemonSession: true,
 		DaemonClient:    client,
 		SessionName:     sessionName,
 		// Route graphics to the SSH session (through the serialized writer
 		// shared with the renderer) so kitty/sixel APCs reach the client's
-		// terminal, and re-encode file-medium transmissions as direct data
-		// since the client cannot read server-local paths.
-		GraphicsOutput:       graphicsOut,
-		GraphicsRemoteClient: true,
-		// This process is beside the daemon with the user at the far end of a
-		// network, so nothing here may touch the host's own desktop: a
-		// clipboard helper or a file viewer opened here acts on the operator's
-		// machine and not on the user's.
-		RemoteClient: true,
+		// terminal.
+		GraphicsOutput: graphicsOut,
 		// The terminal this client connected from, not the last one to connect.
 		Caps: hostCaps,
 	})
 
-	// Restore state from daemon if available
-	if state != nil && len(state.Windows) > 0 {
-		log.Printf("[SSH] Restoring %d windows from session state", len(state.Windows))
-		if err := tuiosInstance.RestoreFromState(state); err != nil {
-			log.Printf("Warning: Failed to restore session state: %v", err)
-		}
+	// Everything the daemon sends an attached client, then the windows it
+	// handed over. The same two calls every client makes.
+	tuiosInstance.WireDaemonClient(client)
+	tuiosInstance.RestoreAttachedSession(state)
 
-		// Restore terminal states
-		if err := tuiosInstance.RestoreTerminalStates(); err != nil {
-			log.Printf("Warning: Failed to restore terminal states: %v", err)
-		}
-
-		// Set up PTY output handlers for existing windows (workspace-aware)
-		// This only subscribes to PTYs for windows in the current workspace
-		if err := tuiosInstance.SetupPTYOutputHandlers(); err != nil {
-			log.Printf("Warning: Failed to setup PTY handlers: %v", err)
-		}
-
-		// Sync daemon PTY dimensions to match window dimensions from state
-		// This fixes the issue where PTYs have stale dimensions after detach/reattach
-		tuiosInstance.SyncDaemonPTYDimensions()
-	}
-
-	// Register multi-client handlers
-	registerMultiClientHandlers(tuiosInstance, client)
-
-	return tuiosInstance, []tea.ProgramOption{
-		tea.WithFPS(config.MaxFPSCap),
-	}, nil
-}
-
-// registerMultiClientHandlers registers handlers for multi-client messages
-func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
-	// Handle verbs the daemon routed to this client. The local attach client
-	// Sends straight into its tea.Program; here the program belongs to a
-	// per-connection goroutine, so the command goes through the model's channel
-	// and is applied in Update like any other message. Without this,
-	// set-option, send-keys and refresh-dock all timed out against an SSH
-	// session while the daemon still reported a client attached.
-	client.OnRemoteCommand(func(payload *session.RemoteCommandPayload) error {
-		if m.QueueRemoteCommand(payload) {
-			log.Printf("[SSH] RemoteCommandChan full, dropped a routed %s", payload.CommandType)
-		}
-		return nil
-	})
-	// Handle state sync from other clients via channel (thread-safe)
-	client.OnStateSync(func(state *session.SessionState, triggerType, sourceID string) {
-		log.Printf("[SSH] Received state sync: trigger=%s, source=%s", triggerType, shortID(sourceID))
-		// Send state to channel for processing in Bubble Tea event loop
-		// This ensures thread-safe access to m.Windows
-		if m.QueueStateSync(state) {
-			log.Printf("[SSH] StateSyncChan full, superseded the queued snapshot")
-		}
-	})
-
-	// Handle client join notifications via channel (thread-safe)
-	client.OnClientJoined(func(clientID string, clientCount int, width, height int) {
-		log.Printf("[SSH] Client joined: %s (total: %d, size: %dx%d)", shortID(clientID), clientCount, width, height)
-		if m.ClientEventChan != nil {
-			select {
-			case m.ClientEventChan <- app.ClientEvent{Type: "joined", ClientID: clientID, ClientCount: clientCount, Width: width, Height: height}:
-			default:
-				log.Printf("[SSH] Warning: ClientEventChan full, dropping client joined event")
-			}
-		}
-	})
-
-	// Handle client leave notifications via channel (thread-safe)
-	client.OnClientLeft(func(clientID string, clientCount int) {
-		log.Printf("[SSH] Client left: %s (remaining: %d)", shortID(clientID), clientCount)
-		if m.ClientEventChan != nil {
-			select {
-			case m.ClientEventChan <- app.ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount}:
-			default:
-				log.Printf("[SSH] Warning: ClientEventChan full, dropping client left event")
-			}
-		}
-	})
-
-	// Handle session resize (min of all clients). The callback runs on the daemon
-	// read-loop goroutine, so the actual geometry mutation (TileAllWindows,
-	// emulator resizes) must happen in Update; route it through the event channel.
-	client.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
-		log.Printf("[SSH] Session resize: %dx%d chrome %+v (clients: %d)", width, height, reserve, clientCount)
-		if m.ClientEventChan != nil {
-			select {
-			case m.ClientEventChan <- app.ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height, Reserve: reserve}:
-			default:
-				log.Printf("[SSH] Warning: ClientEventChan full, dropping session resize event")
-			}
-		}
-	})
-
-	// Handle the session being killed out from under this client, and an
-	// unexpected loss of the daemon. Both leave nothing to render and nothing to
-	// reconnect to, so the client says why and quits. Without these two the SSH
-	// client kept the last frame on screen for ever, where the local client
-	// exits. The queue is separate from ClientEventChan, which drops when full.
-	client.OnSessionEnded(func(name, reason string) {
-		log.Printf("[SSH] Session ended: %s (%s)", name, reason)
-		if m.QueueSessionEnded(name, reason) {
-			log.Printf("[SSH] DaemonExitChan full, dropped the session end")
-		}
-	})
-	client.OnDisconnect(func(err error) {
-		log.Printf("[SSH] Daemon connection lost: %v", err)
-		if m.QueueDaemonDisconnect(err) {
-			log.Printf("[SSH] DaemonExitChan full, dropped the disconnect")
-		}
-	})
+	return tuiosInstance, nil
 }
 
 // Window is an alias for terminal.Window for use in this package

@@ -221,12 +221,6 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("toggle_tape_manager", handleToggleTapeManager)
 	d.Register("stop_recording", handleStopRecording)
 
-	// Navigation actions (arrow keys)
-	d.Register("nav_up", handleUpKey)
-	d.Register("nav_down", handleDownKey)
-	d.Register("nav_left", handleLeftKey)
-	d.Register("nav_right", handleRightKey)
-
 	// Restore minimized by index (shift+1-9)
 	for i := range 9 {
 		d.Register("restore_minimized_"+string(rune('1'+i)), makeRestoreMinimizedHandler(i))

@@ -591,12 +591,10 @@ func DefaultConfig() *UserConfig {
 				// (leader, b) is a different scope, so the two do not meet.
 				"toggle_spotlight": {"b"},
 			},
-			Navigation: map[string][]string{
-				"nav_up":    {"up"},
-				"nav_down":  {"down"},
-				"nav_left":  {"left"},
-				"nav_right": {"right"},
-			},
+			// The arrow keys belong to whatever overlay is up, and each overlay
+			// takes them by key before any binding is consulted. The section
+			// stays so a file that names it still parses.
+			Navigation: map[string][]string{},
 			RestoreMinimized: map[string][]string{
 				"restore_minimized_1": {"shift+1", "!"},
 				"restore_minimized_2": {"shift+2", "@"},

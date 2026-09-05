@@ -305,6 +305,11 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 
+	// Follow the config file, for every client that has a kind.
+	if cmd := m.startConfigWatch(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// Listen for state sync from other clients (daemon/SSH/web mode)
 	if m.StateSyncChan != nil {
 		cmds = append(cmds, ListenForStateSync(m.StateSyncChan))
@@ -315,14 +320,12 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, ListenForClientEvents(m.ClientEventChan))
 	}
 
-	// Listen for the daemon events that end this client (SSH and web mode; the
-	// local attach client Sends the same two messages into its program).
+	// Listen for the daemon events that end this client.
 	if cmd := ListenForDaemonExit(m.daemonExitChan()); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 
-	// Listen for verbs the daemon routed here (SSH and web mode; the local
-	// attach client Sends into the program instead).
+	// Listen for verbs the daemon routed here.
 	if m.RemoteCommandChan != nil {
 		cmds = append(cmds, ListenForRemoteCommands(m.RemoteCommandChan))
 	}
@@ -1663,6 +1666,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.ExitReason = ExitSessionKilled
 		}
 		return m, tea.Quit
+
+	case configWatchMsg:
+		// A delivery from the file watcher: re-arm the listener, then apply it
+		// like a reload from anywhere else.
+		_, cmd := m.Update(msg.msg)
+		return m, tea.Batch(cmd, listenForConfigReload(m.configReloads))
 
 	case ConfigReloadedMsg:
 		// Apply the config parsed by the watcher goroutine here, on the Bubble
