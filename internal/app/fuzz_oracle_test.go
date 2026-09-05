@@ -603,12 +603,15 @@ func fuzzPaneZ(w *terminal.Window) int {
 	return windowLayerZ(w, false)
 }
 
-// deferring reports whether a resize is still in flight, which is the one state
-// where a stale announcement is correct. It reads the flags rather than calling
+// deferring reports whether an announcement is being held back on purpose,
+// which is the one state where a stale announcement is correct. A resize still
+// in flight is one; a pointer gesture holding every pane's announcement until
+// the button comes up is the other. It reads the flags rather than calling
 // resizeDeferralActive, because that call ends a stale deferral as a side
 // effect and an oracle must not move the state it is judging.
 func (f *fuzzOS) deferring() bool {
-	return f.m.viewportResizing || f.m.Resizing || len(f.m.PendingResizes) > 0
+	return f.m.viewportResizing || f.m.Resizing || len(f.m.PendingResizes) > 0 ||
+		f.m.announceGestureHeld
 }
 
 // A divider is drawn in the style the frame is drawn in, so every cell it owns

@@ -91,20 +91,27 @@ func TestClickToFocusAddsNoLineToThePane(t *testing.T) {
 	alive(t, term, "after click-to-focus round trips")
 }
 
-// TestDraggingAPaneDoesResizeIt is the positive half of the test above, in the
-// same fixture. A pane being moved has to draw its own border, so it does give
-// the borderless allowance up and the guest is told. Without this row, the test
-// above could pass because the fixture never resizes anything at all.
-func TestDraggingAPaneDoesResizeIt(t *testing.T) {
+// TestDraggingTheDividerResizesOnce is the positive half of the test above, in
+// the same fixture. Dragging the shared border between the two panes really does
+// change how many columns each of them has, so the guest has to be told - once,
+// for the width it settled at, not once per column the pointer crossed.
+//
+// Without this row the test above could pass because the fixture never resizes
+// anything at all. Moving the pane is no longer that control: a pane dropped in
+// a slot the same size as the one it left is told nothing now, which is what
+// TestDragIntoASameSizeSlotResizesNothing requires.
+func TestDraggingTheDividerResizesOnce(t *testing.T) {
 	term := clickFocusPanes(t)
 
-	// Press inside the armed pane and move far enough to be a drag.
-	mouseDrag(t, term, 100, 20, 100, 28, tuitest.MouseLeft, 0)
-	time.Sleep(2 * time.Second)
+	// The divider between the two tiles, dragged twelve columns to the left.
+	mouseDrag(t, term, 80, 20, 68, 20, tuitest.MouseLeft, 0)
+	time.Sleep(3 * time.Second)
 
-	if n := countRows(term.Screen(), "WINCH"); n == 0 {
-		t.Errorf("dragging the pane resized nothing, so the fixture cannot see a resize "+
-			"and TestClickToFocusAddsNoLineToThePane proves nothing\n%s", term.Snapshot())
+	if n := countRows(term.Screen(), "WINCH"); n != 1 {
+		t.Errorf("dragging the divider across twelve columns announced %d resizes, want 1; "+
+			"either the fixture cannot see a resize at all, in which case "+
+			"TestClickToFocusAddsNoLineToThePane proves nothing, or the columns the "+
+			"pointer crossed on the way are reaching the guest\n%s", n, term.Snapshot())
 	}
-	alive(t, term, "after dragging a pane")
+	alive(t, term, "after dragging the divider")
 }

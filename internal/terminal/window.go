@@ -210,8 +210,14 @@ type Window struct {
 	// through several rectangles and only the last one is real, so the hold lets
 	// Resize record the intent step by step and sends the settled size once.
 	// See HoldAnnouncements.
-	toldW, toldH  int
-	announceHeld  bool
+	toldW, toldH int
+	// announceHolds counts the holds currently open on this pane. It is a depth
+	// count rather than a flag because two holds now overlap: a layout update
+	// holds for the length of one call (settleSizes), and a pointer gesture
+	// holds from the press until the button comes up, which spans many. A
+	// retile inside a gesture must not end the gesture's hold, so the inner one
+	// releases to a depth of one and only the outer release reaches the guest.
+	announceHolds int
 	UpdateCounter int                // Counter for throttling background updates
 	cancelFunc    context.CancelFunc // For graceful goroutine cleanup
 	// ioMu guards the emulator cell buffer and the Pty/Terminal handles. See

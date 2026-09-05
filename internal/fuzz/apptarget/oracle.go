@@ -236,11 +236,14 @@ func checkFrameFitsTheHost(t *Target) []fuzz.Violation {
 	return nil
 }
 
-// deferring reports whether a resize is still in flight, which is the one state
-// where a stale announcement is correct.
+// deferring reports whether an announcement is being held back on purpose,
+// which is the one state where a stale announcement is correct. A resize still
+// in flight is one; a pointer gesture holding every pane's announcement until
+// the button comes up is the other.
 func (t *Target) deferring() bool {
 	_, viewport := t.m.PendingViewportResize()
-	return viewport || t.m.Resizing || len(t.m.PendingResizes) > 0
+	return viewport || t.m.Resizing || len(t.m.PendingResizes) > 0 ||
+		t.m.AnnounceGestureHeld()
 }
 
 // hasRoomToDraw reports whether there is a content region at all. On a viewport

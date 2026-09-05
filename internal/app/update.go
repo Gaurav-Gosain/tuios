@@ -450,6 +450,12 @@ func (m *OS) tickNeedsWork() bool {
 		len(m.pendingAgentAlerts) > 0 || m.spotlightMotionPending {
 		return true
 	}
+	// A gesture's announcement hold that nothing is holding any more. The sweep
+	// below is what ends it, and a hold the idle diet slept through is exactly
+	// the stranded hold this has to catch: one bool, then one comparison.
+	if m.staleAnnounceHold() {
+		return true
+	}
 	// Zen mode (mouse): the borders melt away once the pointer sits still past
 	// the reveal window, and come back the instant it moves again. The motion
 	// event forces its own frame, but the timeout crossing has no event, so a
@@ -833,6 +839,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		m.endGestureWithoutButton()
 
+		// And a gesture's announcement hold cannot outlive the button either.
+		m.releaseStaleAnnounceHold()
+
 		// Retire interaction state no gesture is holding any more. A mouse
 		// release is the only thing that clears IsBeingManipulated, and it is
 		// lost whenever the pointer leaves the surface the events come from
@@ -1210,6 +1219,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		case tea.MouseClickMsg:
 			m.notePointerEvent(time.Now())
 			m.pointerDown = true
+			// A button is down, so a gesture may be starting and the sizes it
+			// passes through are none of the guest's business until it ends.
+			// Armed here rather than in each gesture's own setup so that every
+			// gesture is covered, including ones added later: see
+			// announce_batch.go. The release is not armed here, because the
+			// handler still has the drop to lay out; it ends the hold itself.
+			m.holdGestureAnnouncements()
 		case tea.MouseReleaseMsg:
 			m.notePointerEvent(time.Now())
 			m.pointerDown = false
