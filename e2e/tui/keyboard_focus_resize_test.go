@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +35,11 @@ type focusFixture struct {
 	standalone bool
 	// layout is a palette search that picks a layout after tiling is on.
 	layout string
+	// animations keeps the UI animations on, which is the default a user has.
+	animations bool
+	// fish runs fish in the panes instead of bash. Its trap is spelled
+	// differently and its prompt repaints differently on SIGWINCH.
+	fish bool
 }
 
 // focusPanes builds two tiled panes and arms a SIGWINCH counter in the second
@@ -42,12 +48,16 @@ func focusPanes(t *testing.T, f focusFixture) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
 	writeConfig(t, base, f.config)
-	env := append([]string{"SHELL=/bin/bash", "HOME=" + base, "ZDOTDIR=" + base}, f.env...)
+	shell := "SHELL=/bin/bash"
+	if f.fish {
+		shell = "SHELL=/usr/bin/fish"
+	}
+	env := append([]string{shell, "HOME=" + base, "ZDOTDIR=" + base}, f.env...)
 	args := []string{"new", "kbfocus"}
 	if f.standalone {
 		args = nil
 	}
-	term := startIn(t, base, startOpts{cols: 160, rows: 45, args: args, env: env})
+	term := startIn(t, base, startOpts{cols: 160, rows: 45, args: args, env: env, animations: f.animations})
 	if !f.standalone {
 		killDaemon(t, base)
 	}
@@ -65,9 +75,11 @@ func focusPanes(t *testing.T, f focusFixture) *tuitest.Terminal {
 		time.Sleep(time.Second)
 	}
 	enterTerminalMode(t, term)
-	runInShell(t, term,
-		`trap 'printf "WI%sCH\n" N' WINCH; clear; printf "AR%sED\n" M`,
-		"ARMED", shellTimeout)
+	arm := `trap 'printf "WI%sCH\n" N' WINCH; clear; printf "AR%sED\n" M`
+	if f.fish {
+		arm = `function __w --on-signal WINCH; printf "WI%sCH\n" N; end; clear; printf "AR%sED\n" M`
+	}
+	runInShell(t, term, arm, "ARMED", shellTimeout)
 	// The trap is armed once the marker is on screen, and the clear has left
 	// the command echo behind it, so every WINCH row after this came from a
 	// signal.
@@ -89,7 +101,9 @@ func winchRows(t *testing.T, term *tuitest.Terminal, what string) int {
 
 func requireNoWinch(t *testing.T, term *tuitest.Terminal, what string) {
 	t.Helper()
-	if n := winchRows(t, term, what); n != 0 {
+	n := winchRows(t, term, what)
+	t.Logf("%s: %d WINCH rows\n%s", what, n, term.Snapshot())
+	if n != 0 {
 		t.Errorf("the pane took %d resizes across %s, and printed a line for each; "+
 			"moving focus must resize nothing\n%s", n, what, term.Snapshot())
 	}
@@ -167,11 +181,18 @@ func tabRoundTrips(t *testing.T, term *tuitest.Terminal) {
 // pane.
 func runFocusCase(t *testing.T, c focusCase) {
 	t.Helper()
+	shells := []string{}
+	if c.fixture.fish {
+		shells = append(shells, "/usr/bin/fish")
+	}
 	for _, kv := range c.fixture.env {
 		if shell, ok := strings.CutPrefix(kv, "SHELL="); ok {
-			if _, err := os.Stat(shell); err != nil {
-				t.Skipf("%s is not installed", shell)
-			}
+			shells = append(shells, shell)
+		}
+	}
+	for _, shell := range shells {
+		if _, err := os.Stat(shell); err != nil {
+			t.Skipf("%s is not installed", shell)
 		}
 	}
 	term := focusPanes(t, c.fixture)
@@ -256,4 +277,72 @@ func TestSwapIntoANarrowerSlotIsTold(t *testing.T) {
 			"the fixture cannot see a resize, so the TestFocus* tests prove nothing\n%s",
 			n, term.Snapshot())
 	}
+}
+
+func TestFocusAltArrowsFishAddNoLine(t *testing.T) {
+	runFocusCase(t, focusCase{focusFixture{config: sharedBordersConfig, fish: true}, altArrowRoundTrips})
+}
+
+func TestFocusTabFishAddsNoLine(t *testing.T) {
+	runFocusCase(t, focusCase{focusFixture{config: sharedBordersConfig, fish: true}, tabRoundTrips})
+}
+
+func TestFocusAltArrowsFishStandaloneAddNoLine(t *testing.T) {
+	runFocusCase(t, focusCase{focusFixture{config: sharedBordersConfig, fish: true, standalone: true}, altArrowRoundTrips})
+}
+
+func TestFocusAltArrowsFishPixelHostAddNoLine(t *testing.T) {
+	runFocusCase(t, focusCase{focusFixture{config: sharedBordersConfig, fish: true, env: []string{"TUIOS_CELL_SIZE=9x20"}}, altArrowRoundTrips})
+}
+
+func TestFocusAltArrowsFishOwnBordersAddNoLine(t *testing.T) {
+	runFocusCase(t, focusCase{focusFixture{config: "[appearance]\nshared_borders = false\n", fish: true}, altArrowRoundTrips})
+}
+
+func TestFocusAltArrowsFishKittyHostAddNoLine(t *testing.T) {
+	runFocusCase(t, focusCase{focusFixture{config: sharedBordersConfig, fish: true,
+		env: []string{"TUIOS_KITTY_GRAPHICS=1", "KITTY_WINDOW_ID=1", "TERM=xterm-kitty", "TUIOS_CELL_SIZE=9x20", "KITTY_SHELL_INTEGRATION=enabled"}}, altArrowRoundTrips})
+}
+
+func TestFocusAltArrowsFishAnimatedAddNoLine(t *testing.T) {
+	runFocusCase(t, focusCase{focusFixture{config: sharedBordersConfig, fish: true, animations: true,
+		env: []string{"TUIOS_KITTY_GRAPHICS=1", "KITTY_WINDOW_ID=1", "TERM=xterm-kitty", "TUIOS_CELL_SIZE=9x20"}}, altArrowRoundTrips})
+}
+
+func TestFocusAltArrowsFishAnimatedOwnBordersAddNoLine(t *testing.T) {
+	runFocusCase(t, focusCase{focusFixture{config: "[appearance]\nshared_borders = false\n", fish: true, animations: true,
+		env: []string{"TUIOS_KITTY_GRAPHICS=1", "KITTY_WINDOW_ID=1", "TERM=xterm-kitty", "TUIOS_CELL_SIZE=9x20"}}, altArrowRoundTrips})
+}
+
+func TestFocusTabFishAnimatedOwnBordersAddsNoLine(t *testing.T) {
+	runFocusCase(t, focusCase{focusFixture{config: "[appearance]\nshared_borders = false\n", fish: true, animations: true,
+		env: []string{"TUIOS_CELL_SIZE=9x20"}}, tabRoundTrips})
+}
+
+// TestRenderTraceRecordsEachAnnouncement is the diagnostic the macOS report
+// is asked to run: with TUIOS_RENDER_TRACE set, every size handed to a guest
+// is written to the trace with the code path that handed it. A swap under
+// shared borders announces one size per pane, so the trace has to show it.
+func TestRenderTraceRecordsEachAnnouncement(t *testing.T) {
+	trace := filepath.Join(t.TempDir(), "trace.log")
+	term := focusPanes(t, focusFixture{config: sharedBordersConfig, env: []string{"TUIOS_RENDER_TRACE=" + trace}})
+	leaveTerminalMode(t, term)
+	send(t, term, "H")
+	if n := winchRows(t, term, "one swap to the left"); n < 1 {
+		t.Fatalf("the swap announced nothing, so there is nothing for the trace to record\n%s", term.Snapshot())
+	}
+	body, err := os.ReadFile(trace)
+	if err != nil {
+		t.Fatalf("the trace file was not written: %v", err)
+	}
+	var announced int
+	for _, line := range strings.Split(string(body), "\n") {
+		if strings.Contains(line, "announce id=") && strings.Contains(line, " via ") {
+			announced++
+		}
+	}
+	if announced < 2 {
+		t.Fatalf("the trace holds %d announce lines after a swap of two panes, want at least 2\n%s", announced, body)
+	}
+	t.Logf("trace:\n%s", body)
 }

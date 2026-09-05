@@ -193,6 +193,10 @@ type startOpts struct {
 	// stream carries both directions, which is harmless for that purpose since
 	// nothing the tests send contains an OSC 52.
 	out io.Writer
+	// animations keeps the UI animations on. The default passes
+	// --no-animations, because animations make frames non-deterministic; a
+	// test of what an animation leaves behind needs them.
+	animations bool
 }
 
 // start spawns tuios in a hermetic environment and returns the terminal plus
@@ -254,7 +258,9 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	argv := append([]string{tuiosBin}, o.args...)
 	// Animations make frames non-deterministic without testing anything these
 	// assertions care about.
-	argv = append(argv, "--no-animations")
+	if !o.animations {
+		argv = append(argv, "--no-animations")
+	}
 
 	logPath := filepath.Join(t.TempDir(), "pty.log")
 	logFile, err := os.Create(logPath)
