@@ -438,7 +438,6 @@ var ActionDescriptions = map[string]string{
 	// System
 	"toggle_logs":        "Toggle log viewer",
 	"toggle_cache_stats": "Toggle cache statistics",
-	"toggle_showkeys":    "Toggle showkeys overlay",
 	"toggle_spotlight":   "Toggle spotlight",
 
 	// Prefix Mode
@@ -468,7 +467,6 @@ var ActionDescriptions = map[string]string{
 	"prefix_exit_mode":          "Leave terminal mode",
 	"prefix_selection":          "Enter copy/scrollback mode",
 	"prefix_help":               "Toggle help",
-	"prefix_logs":               "Toggle log viewer",
 	"prefix_debug":              "Enter debug prefix",
 	"prefix_tape":               "Enter tape manager prefix",
 	"prefix_quit":               "Quit (daemon: kills session)",

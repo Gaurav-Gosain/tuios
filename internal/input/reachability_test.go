@@ -1,10 +1,14 @@
 package input
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -425,4 +429,48 @@ func modeName(m app.Mode) string {
 		return "terminal"
 	}
 	return "window"
+}
+
+// TestEveryDescribedActionIsHandled holds the description catalogue to the
+// code that runs actions. A description for an action nothing handles is a row
+// in help, which-key and the keybind manager that names something no key can
+// run: toggle_showkeys and prefix_logs sat there while the live actions were
+// debug_prefix_showkeys and debug_prefix_logs.
+//
+// Both sides come from the code. The catalogue is config.ActionDescriptions.
+// The handled set is the dispatcher's table plus every action this package
+// names by string in a handler that takes it by section instead: the terminal
+// mode's own keys, the script keys, the global binds. The hold layer's held
+// key is read through its constant.
+func TestEveryDescribedActionIsHandled(t *testing.T) {
+	handled := map[string]bool{app.HoldModeAction: true}
+	d := GetDispatcher()
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", name, err)
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if ok && lit.Kind == token.STRING {
+				if v, err := strconv.Unquote(lit.Value); err == nil {
+					handled[v] = true
+				}
+			}
+			return true
+		})
+	}
+	for action := range config.ActionDescriptions {
+		if !d.HasAction(action) && !handled[action] {
+			t.Errorf("ActionDescriptions names %q, which nothing in this package handles; the row describes an action no key can run", action)
+		}
+	}
 }
