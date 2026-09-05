@@ -361,15 +361,21 @@ func runLocal() error {
 	// parses the config; it must not apply the appearance globals directly
 	// because the render loop reads them concurrently. Delivery goes through
 	// p.Send so the apply happens on the Bubble Tea goroutine.
+	//
+	// A file that cannot be used is delivered too, as a failure. It used to go
+	// to the log, so a typo in the config meant every later save was ignored
+	// with nothing on screen to say why.
 	if configPath, err := config.GetConfigPath(); err == nil {
 		if watcher, err := config.NewWatcher(configPath, func(newConfig *config.UserConfig, err error) {
 			if err != nil {
-				log.Printf("Config reload error: %v", err)
+				p.Send(app.ConfigReloadFailedMsg{Err: err})
 				return
 			}
 			p.Send(app.ConfigReloadedMsg{Config: newConfig})
 		}); err == nil {
 			defer watcher.Stop()
+		} else {
+			log.Printf("Config watcher unavailable, edits need a restart: %v", err)
 		}
 	}
 

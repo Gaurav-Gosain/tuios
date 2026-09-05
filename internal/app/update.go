@@ -1633,28 +1633,17 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, tea.Quit
 
 	case ConfigReloadedMsg:
-		// Apply the appearance config parsed by the watcher goroutine here, on
-		// the Bubble Tea goroutine, so the render loop never reads this
-		// session's settings mid-write.
-		if msg.Config != nil {
-			config.ApplyAppearanceConfig(msg.Config, &m.Settings)
-			// Retiled, not just repainted. The sidebar's width and side, the
-			// dock's position and the pane gap all change how much room the
-			// panes have, and this path had only ever repainted them: a gap
-			// edited in the file moved the global and left the rectangles where
-			// they were. The other two ways in already retile.
-			m.applyAppearanceLive(true)
-			// The file can move the sidebar and the dock, which is the chrome
-			// the session's reserve is settled from.
-			m.AnnounceLayoutReserve()
-			// The dock section is rebuilt here too rather than only at startup.
-			// A feature whose distribution story is "copy a file" that then
-			// needed a restart to see the file would be most of the story
-			// missing. Retile first: a component list that changed the dock's
-			// height has to land before the panes are measured.
-			cmd := m.ReloadDockComponents(msg.Config)
-			m.MarkAllDirty()
-			return m, cmd
+		// Apply the config parsed by the watcher goroutine here, on the Bubble
+		// Tea goroutine, so the render loop never reads this session's settings
+		// mid-write.
+		return m, m.ApplyReloadedConfig(msg.Config)
+
+	case ConfigReloadFailedMsg:
+		// The file on disk cannot be used and the running config stands. The
+		// user is told which, because a save that changed nothing for a reason
+		// nobody can see is the worst answer available.
+		if msg.Err != nil {
+			m.ShowNotification("Config not reloaded: "+msg.Err.Error(), "error", 0)
 		}
 		return m, nil
 
