@@ -1047,7 +1047,7 @@ like "make it look like X" usually means some of each:
 | **Spacing** | ground between panes, padding inside overlay panels | `appearance.gap`, `appearance.panel_padding` |
 | **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
 
-The 127 options above are scalars, and spacing and composition are set with them
+The 128 options above are scalars, and spacing and composition are set with them
 like any other. Colour and shape are not: each is a name from an open set
 standing for a document kept in a directory rather than a value in the config
 file, which is why both have a verb of their own rather than a row in
@@ -1063,7 +1063,12 @@ the cut is the default. A mouse-anchored beam asks for a frame per pointer move,
 so set `follow = "cursor"` for a client over SSH or in the browser. The beam
 belongs to one client: a second client attached to the same session sees its own
 screen unchanged. A person toggles it with `b` in window mode, or from the
-command palette.
+command palette. `shake` adds a gesture. Turn it on, and move the mouse
+left and right fast to turn the beam on and off. A message says which it did. It
+is off by default, because it is a gesture a person can make by accident. A
+shake never counts while a mouse button is held, so it cannot fire during a
+drag. A shake does not move the beam: `follow` decides where the beam goes, so
+a shake with `follow = "cursor"` lights the focused pane's cursor.
 
 Everything here is also reachable by a person, from the settings page (`,` in
 window mode): its rows are derived from the same registry `list-options` reads,

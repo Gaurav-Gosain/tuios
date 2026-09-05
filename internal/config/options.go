@@ -781,6 +781,11 @@ var optionSpecs = []Option{
 		Description: "Cut the beam at its edge, or fade it out. A fade sends about three times the bytes each time the beam moves",
 		Accepted:    SpotlightEdges, Default: SpotlightEdgeHard,
 	},
+	{
+		Path: "spotlight.shake", Type: OptionBool, Section: "spotlight",
+		Description: "Move the mouse left and right fast to turn the beam on and off. A shake does not move the beam. The follow setting decides where it goes",
+		Default:     "false",
+	},
 }
 
 // optionsByPath indexes the registry for lookup. Built once at init so a caller

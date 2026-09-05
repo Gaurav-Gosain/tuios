@@ -350,6 +350,10 @@ type OS struct {
 	// rest. Client-local appearance, like ShowKeys: nothing about it crosses
 	// the wire and a peer sees its own screen unchanged. See spotlight.go.
 	spotlight spotlightState
+
+	// shake is the pointer gesture that toggles the beam, when the person
+	// turned it on. Fixed size, no timer, no tick: see shake.go.
+	shake shakeState
 	// lastInteractionRender is when a drag/resize motion event last produced a
 	// frame. Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.
