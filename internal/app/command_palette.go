@@ -12,9 +12,56 @@ import (
 // can be applied on the Bubble Tea goroutine. The watcher must not touch the
 // appearance globals directly (the render loop reads them concurrently); it
 // delivers this message via the program's Send instead, and Update applies it
-// with config.ApplyAppearanceConfig.
+// with ApplyReloadedConfig.
 type ConfigReloadedMsg struct {
 	Config *config.UserConfig
+}
+
+// ConfigReloadFailedMsg says the config file on disk cannot be used. The
+// running config stands, and the client says so on screen.
+//
+// The watcher used to write this to the log and stop there, so a typo in the
+// file meant every later save was ignored for a reason nobody could see.
+type ConfigReloadFailedMsg struct {
+	Err error
+}
+
+// ApplyReloadedConfig puts a config read from disk into force. It is the one
+// path for both ways in: the file watcher and the palette's "Reload config".
+//
+// The file wins. Everything the file names replaces what is running, including
+// a beam somebody switched on with a key, because that is what the sidebar and
+// the pane gap on this same path already do and two rules would be worse than
+// one. What the file does not name is untouched: the focused pane, the mode,
+// where the beam is pointing, and whether this session may write the file at
+// all.
+func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
+	if cfg == nil {
+		return nil
+	}
+	// Runs on the Bubble Tea goroutine, so applying it to this session's
+	// settings is single-threaded and reaches nobody else's session.
+	config.ApplyAppearanceConfig(cfg, &m.Settings)
+	// Retiled, not just repainted. The sidebar's width and side, the dock's
+	// position and the pane gap all change how much room the panes have, and
+	// this path had only ever repainted them: a gap edited in the file moved
+	// the global and left the rectangles where they were.
+	m.applyAppearanceLive(true)
+	// The file can move the sidebar and the dock, which is the chrome the
+	// session's reserve is settled from.
+	m.AnnounceLayoutReserve()
+	// The dock section is rebuilt here too rather than only at startup. A
+	// feature whose distribution story is "copy a file" that then needed a
+	// restart to see the file would be most of the story missing. This is also
+	// what puts the new config on the model, which every section outside
+	// [appearance] is read from live.
+	cmd := m.ReloadDockComponents(cfg)
+	// The beam is client-local, so nothing else carries it: without this the
+	// screen and the config disagree about whether it is on, and the next
+	// toggle writes the disagreement back to the file.
+	m.SetSpotlight(cfg.Spotlight.IsEnabled())
+	m.MarkAllDirty()
+	return cmd
 }
 
 // CommandPaletteItem represents a single command in the command palette.
@@ -592,20 +639,15 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 				}
 				newCfg, err := config.ReloadConfig(configPath)
 				if err != nil {
-					m.ShowNotification("Config error: "+err.Error(), "error", 0)
+					// The running config stands. Saying so is the point: a
+					// reload that quietly did nothing reads as a reload that
+					// worked.
+					m.ShowNotification("Config not reloaded: "+err.Error(), "error", 0)
 					return m, nil
 				}
-				// Runs on the Bubble Tea goroutine, so applying it to this
-				// session's settings is single-threaded and takes effect
-				// immediately, and reaches nobody else's session.
-				config.ApplyAppearanceConfig(newCfg, &m.Settings)
-				// Land the globals the same way the file watcher does: a reload
-				// that moved the pane gap or the sidebar has to retile, not just
-				// repaint.
-				m.applyAppearanceLive(true)
-				m.AnnounceLayoutReserve()
+				cmd := m.ApplyReloadedConfig(newCfg)
 				m.ShowNotification("Config reloaded", "success", 0)
-				return m, nil
+				return m, cmd
 			},
 		},
 		{

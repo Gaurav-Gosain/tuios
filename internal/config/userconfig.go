@@ -1052,23 +1052,13 @@ func LoadUserConfig() (*UserConfig, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	var cfg UserConfig
-	if err := toml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	cfg, err := ParseUserConfig(data)
+	if err != nil {
+		return nil, err
 	}
 
-	// Validate and fill in missing sections with defaults
-	defaultCfg := DefaultConfig()
-	fillMissingAppearance(&cfg, defaultCfg)
-	fillMissingDaemon(&cfg, defaultCfg)
-	fillMissingTape(&cfg, defaultCfg)
-	fillMissingKeybinds(&cfg, defaultCfg)
-	fillMissingScreenshot(&cfg, defaultCfg)
-	fillMissingScreensaver(&cfg, defaultCfg)
-	fillMissingSpotlight(&cfg, defaultCfg)
-
 	// Validate configuration
-	validation := ValidateConfig(&cfg)
+	validation := ValidateConfig(cfg)
 	if validation.HasErrors() {
 		// Log all errors
 		for _, err := range validation.Errors {
@@ -1089,6 +1079,30 @@ func LoadUserConfig() (*UserConfig, error) {
 	// ApplyOverrides (which lets CLI flags win) and/or ApplyAppearanceConfig.
 	// This keeps a second load (e.g. inside NewOS) from clobbering CLI flags and
 	// stops the per-connection server paths from racing other sessions' globals.
+	return cfg, nil
+}
+
+// ParseUserConfig turns the bytes of a config file into a config with every
+// missing section filled from the defaults. It does not validate.
+//
+// It is one function rather than a list of calls at each call site because the
+// list is the part that goes wrong. A live reload used to fill four sections
+// of the seven, so a file reloaded from disk came back with an empty
+// [spotlight], [tape], [screenshot] and [screensaver], and a beam whose radius
+// had been read as zero.
+func ParseUserConfig(data []byte) (*UserConfig, error) {
+	var cfg UserConfig
+	if err := toml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+	defaultCfg := DefaultConfig()
+	fillMissingAppearance(&cfg, defaultCfg)
+	fillMissingDaemon(&cfg, defaultCfg)
+	fillMissingTape(&cfg, defaultCfg)
+	fillMissingKeybinds(&cfg, defaultCfg)
+	fillMissingScreenshot(&cfg, defaultCfg)
+	fillMissingScreensaver(&cfg, defaultCfg)
+	fillMissingSpotlight(&cfg, defaultCfg)
 	return &cfg, nil
 }
 

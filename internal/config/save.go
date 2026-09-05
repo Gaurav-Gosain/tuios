@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -30,7 +31,11 @@ func configFileHeader(configPath string) string {
 	sb.WriteString("#\n")
 	sb.WriteString("# Configuration location: " + configPath + "\n")
 	sb.WriteString("# Documentation: https://github.com/Gaurav-Gosain/tuios\n")
-	sb.WriteString("# For keybindings documentation, run: tuios keybinds list\n\n")
+	sb.WriteString("# For keybindings documentation, run: tuios keybinds list\n")
+	sb.WriteString("#\n")
+	sb.WriteString("# tuios watches this file. A save takes effect at once, with no restart.\n")
+	sb.WriteString("# tuios does not apply a file that has an error. It keeps the settings that\n")
+	sb.WriteString("# are in use and shows the error on screen.\n\n")
 
 	sb.WriteString("# ============================================================================\n")
 	sb.WriteString("# APPEARANCE SETTINGS\n")
@@ -158,7 +163,46 @@ func writeConfigBytes(data []byte, configPath string) error {
 	if err := os.WriteFile(configPath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
+	noteSelfWrite(data)
 	return nil
+}
+
+// selfWrites remembers the content tuios itself last put in the config file, so
+// the watcher can tell its own saves from somebody's edit.
+//
+// Every row on the settings page saves. Without this, one arrow key would come
+// back through the watcher 200 ms later as an edit, and each repeat would cost a
+// retile of a config that was already in force. Worse, a save still in flight
+// when the watcher read the file would put the value one keypress back into the
+// model, and the screen would step backwards for a frame.
+//
+// A short ring rather than one hash: two saves can be in flight at once, so the
+// file the watcher reads may be either of them.
+var selfWrites struct {
+	sync.Mutex
+	hashes [8][sha256.Size]byte
+	next   int
+}
+
+// noteSelfWrite records what tuios just wrote.
+func noteSelfWrite(data []byte) {
+	sum := sha256.Sum256(data)
+	selfWrites.Lock()
+	selfWrites.hashes[selfWrites.next] = sum
+	selfWrites.next = (selfWrites.next + 1) % len(selfWrites.hashes)
+	selfWrites.Unlock()
+}
+
+// isSelfWrite reports whether the given content is one tuios itself wrote.
+func isSelfWrite(sum [sha256.Size]byte) bool {
+	selfWrites.Lock()
+	defer selfWrites.Unlock()
+	for _, h := range selfWrites.hashes {
+		if h == sum {
+			return true
+		}
+	}
+	return false
 }
 
 // WriteConfigFile marshals cfg to TOML (with the documented header) and writes
