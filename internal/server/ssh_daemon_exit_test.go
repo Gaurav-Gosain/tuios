@@ -49,7 +49,7 @@ func newDaemonExitFixture(t *testing.T, name string) *daemonExitFixture {
 		Width:           80,
 		Height:          24,
 	})
-	registerMultiClientHandlers(m, client)
+	m.WireDaemonClient(client)
 	client.StartReadLoop()
 
 	return &daemonExitFixture{daemon: d, client: client, model: m, name: name}

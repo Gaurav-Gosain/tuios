@@ -287,9 +287,15 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	prw := app.NewPostRenderWriter(os.Stdout)
 
 	initialOS := app.NewOS(app.OSOptions{
+		Client:          app.ClientLocal,
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
 		ShowKeys:        showKeys,
+		// The size this client told the daemon, so the restored windows are
+		// tiled into a real box rather than a zero one the first WindowSizeMsg
+		// then has to undo. The servers have always passed theirs.
+		Width:           width,
+		Height:          height,
 		IsDaemonSession: true,
 		DaemonClient:    client,
 		SessionName:     client.SessionName(),
@@ -300,126 +306,15 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	})
 	initialOS.PostRenderWriter = prw
 
-	windowCount := 0
-	if state != nil {
-		windowCount = len(state.Windows)
-	}
-	log.Printf("[CLIENT] State from daemon: %v, windows: %d", state != nil, windowCount)
-	if state != nil && len(state.Windows) > 0 {
-		log.Printf("[CLIENT] Restoring %d windows from session state", len(state.Windows))
-		if err := initialOS.RestoreFromState(state); err != nil {
-			log.Printf("Warning: Failed to restore session state: %v", err)
-		}
-		log.Printf("[CLIENT] RestoreFromState complete")
+	// Everything the daemon sends an attached client, queued for Update. The
+	// same call the SSH server and tuios-web make.
+	initialOS.WireDaemonClient(client)
 
-		log.Printf("[CLIENT] Restoring terminal states from daemon")
-		if err := initialOS.RestoreTerminalStates(); err != nil {
-			log.Printf("Warning: Failed to restore terminal states: %v", err)
-		}
+	initialOS.RestoreAttachedSession(state)
 
-		log.Printf("[CLIENT] Setting up PTY output handlers")
-		if err := initialOS.SetupPTYOutputHandlers(); err != nil {
-			log.Printf("Warning: Failed to set up PTY handlers: %v", err)
-		}
-
-		// Re-tile to set correct dimensions for current screen size
-		if initialOS.AutoTiling {
-			log.Printf("[CLIENT] Re-tiling windows for current screen")
-			initialOS.TileAllWindows()
-		}
-
-		// Sync daemon PTY dimensions to match tiled layout
-		log.Printf("[CLIENT] Syncing daemon PTY dimensions")
-		initialOS.SyncDaemonPTYDimensions()
-
-		log.Printf("[CLIENT] Restore complete, %d windows in OS", len(initialOS.Windows))
-	} else {
-		log.Printf("[CLIENT] No existing state to restore")
-	}
-
-	// The session is now whole: state restored, PTYs wired, layout applied. A
-	// hook that inspects the session here sees what the user is about to see.
-	initialOS.FireAttached()
-
-	p := tea.NewProgram(
-		initialOS,
-		tea.WithFPS(config.MaxFPSCap),
-		tea.WithoutSignalHandler(),
-		tea.WithFilter(filterMouseMotion),
-		tea.WithOutput(prw),
-	)
-
-	// Set up remote command handler for CLI-initiated commands
-	// This handler sends messages to the Bubble Tea program which processes them in the main loop
-	log.Printf("[CLIENT] Setting up remote command handler")
-	client.OnRemoteCommand(func(payload *session.RemoteCommandPayload) error {
-		// Send a Bubble Tea message to handle the command in the main loop
-		// Use Send which is safe to call from any goroutine
-		go func() {
-			p.Send(app.RemoteCommandMsg{
-				CommandType:  payload.CommandType,
-				TapeCommand:  payload.TapeCommand,
-				TapeArgs:     payload.TapeArgs,
-				TapeScript:   payload.TapeScript,
-				Keys:         payload.Keys,
-				Literal:      payload.Literal,
-				Raw:          payload.Raw,
-				WindowTarget: payload.WindowTarget,
-				ConfigPath:   payload.ConfigPath,
-				ConfigValue:  payload.ConfigValue,
-				RequestID:    payload.RequestID,
-			})
-		}()
-		return nil // Don't report error here - it will be handled by the Update loop
-	})
-
-	// Set up multi-client handlers for state sync, join/leave notifications, and resize
-	log.Printf("[CLIENT] Setting up multi-client handlers")
-
-	// Handle state sync from other clients
-	client.OnStateSync(func(state *session.SessionState, triggerType, sourceID string) {
-		// Send a message to apply state in the main loop
-		go func() {
-			p.Send(app.StateSyncMsg{State: state, TriggerType: triggerType, SourceID: sourceID})
-		}()
-	})
-
-	// Handle client join notifications
-	client.OnClientJoined(func(clientID string, clientCount int, width, height int) {
-		go func() {
-			p.Send(app.ClientJoinedMsg{ClientID: clientID, ClientCount: clientCount, Width: width, Height: height})
-		}()
-	})
-
-	// Handle client leave notifications
-	client.OnClientLeft(func(clientID string, clientCount int) {
-		go func() {
-			p.Send(app.ClientLeftMsg{ClientID: clientID, ClientCount: clientCount})
-		}()
-	})
-
-	// Handle session resize (min of all clients)
-	client.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
-		go func() {
-			p.Send(app.SessionResizeMsg{Width: width, Height: height, ClientCount: clientCount, Reserve: reserve})
-		}()
-	})
-
-	// Handle unexpected daemon disconnect (crash/reset/desync): quit cleanly
-	// instead of leaving the TUI frozen.
-	client.OnDisconnect(func(err error) {
-		go func() {
-			p.Send(app.DaemonDisconnectedMsg{Err: err})
-		}()
-	})
-
-	// Handle the session being killed out from under this client. The session
-	// no longer exists, so the client must exit rather than sit in a dead UI.
-	client.OnSessionEnded(func(name, reason string) {
-		go func() {
-			p.Send(app.SessionEndedMsg{SessionName: name, Reason: reason})
-		}()
-	})
+	// The shared list, then the one option that is this transport's: the
+	// writer every frame and every graphics sequence serialize on.
+	p := tea.NewProgram(initialOS, append(app.ProgramOptions(), tea.WithOutput(prw))...)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -903,29 +798,21 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 		return startDaemonBackground()
 	}
 
-	daemonCfg := &session.DaemonConfig{
-		Version:            version,
-		DisableAutoRestore: disableAutoRestore,
-		// A terminal on stderr is what makes this daemon a foreground one for
-		// logging. `tuios daemon` is also the command startDaemonBackground
-		// spawns for a detached daemon, with stderr pointed at the log file, so
-		// echoing there would write every line to that file twice.
-		Foreground: term.IsTerminal(int(os.Stderr.Fd())),
-	}
-
+	// The file's daemon settings first, the same way every other starter maps
+	// them, then what only this command knows.
+	var daemonCfg *session.DaemonConfig
 	if userConfig, err := config.LoadUserConfig(); err == nil {
-		if session.GetDebugLevel() == session.DebugOff && userConfig.Daemon.LogLevel != "" {
-			session.SetDebugLevel(session.ParseDebugLevel(userConfig.Daemon.LogLevel))
-		}
-		daemonCfg.AgentAutoDetect = userConfig.Daemon.AgentAutoDetect
-		daemonCfg.AgentDetectInterval = time.Duration(userConfig.Daemon.AgentDetectSeconds) * time.Second
-		daemonCfg.AgentBinaries = userConfig.Daemon.AgentBinaries
-		daemonCfg.Hosts = hostsFromConfig(userConfig)
-		// The daemon runs the hooks for the facts it owns, so a session with
-		// nobody attached still runs them. The client keeps the hooks that need
-		// a terminal.
-		daemonCfg.ApplyUserHooks(userConfig)
+		daemonCfg = session.DaemonConfigFromUser(userConfig)
+	} else {
+		daemonCfg = session.DaemonConfigFromUser(nil)
 	}
+	daemonCfg.Version = version
+	daemonCfg.DisableAutoRestore = disableAutoRestore
+	// A terminal on stderr is what makes this daemon a foreground one for
+	// logging. `tuios daemon` is also the command startDaemonBackground
+	// spawns for a detached daemon, with stderr pointed at the log file, so
+	// echoing there would write every line to that file twice.
+	daemonCfg.Foreground = term.IsTerminal(int(os.Stderr.Fd()))
 
 	// Install the log sinks before the daemon is built. NewDaemon already logs,
 	// and the level is settled by now, so the file header names the right one.

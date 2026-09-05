@@ -262,9 +262,6 @@ func runWebServer() error {
 		// them (see runDaemon). Without this a daemon autostarted here ran on
 		// the built-in defaults, so whether agent detection was on depended on
 		// which command happened to start the daemon first.
-		if session.GetDebugLevel() == session.DebugOff && userConfig.Daemon.LogLevel != "" {
-			session.SetDebugLevel(session.ParseDebugLevel(userConfig.Daemon.LogLevel))
-		}
 		if err := session.EnsureDaemonRunningWith(version, daemonConfigFrom(userConfig)); err != nil {
 			log.Printf("Warning: Failed to start daemon, falling back to ephemeral mode: %v", err)
 			webServerConfig.ephemeral = true
@@ -377,23 +374,36 @@ func runWebServer() error {
 		log.Printf("Insecure: %s is served over plain HTTP, so anyone on this network can read what you type", serverURL())
 	}
 
-	// Serve TUIOS using sip
-	return server.Serve(ctx, createTUIOSHandler)
+	// Serve TUIOS using sip. The program is built here rather than by sip so
+	// the shared options go on last: sip's MakeOptions carries a WithFilter of
+	// its own, and Serve would append it after ours (see app.ProgramOptions).
+	return server.ServeWithProgram(ctx, createTUIOSProgram)
+}
+
+// createTUIOSProgram builds the program for one web session.
+func createTUIOSProgram(sess sip.Session) *tea.Program {
+	model := createTUIOSHandler(sess)
+	if model == nil {
+		return nil
+	}
+	program := tea.NewProgram(model, append(sip.MakeOptions(sess), app.ProgramOptions()...)...)
+	// Tear down after the program has fully stopped, the way the SSH server
+	// does. Closing on the session context instead ran Cleanup while the last
+	// frames were still going out.
+	if o, ok := model.(*app.OS); ok {
+		go func() {
+			program.Wait()
+			o.Cleanup()
+		}()
+	}
+	return program
 }
 
 // daemonConfigFrom maps the user's [daemon] section onto the daemon's own
 // config, mirroring what runDaemon does in cmd/tuios so a daemon autostarted by
 // the web server behaves like one started by `tuios daemon`.
 func daemonConfigFrom(userConfig *config.UserConfig) *session.DaemonConfig {
-	cfg := &session.DaemonConfig{
-		AgentAutoDetect:     userConfig.Daemon.AgentAutoDetect,
-		AgentDetectInterval: time.Duration(userConfig.Daemon.AgentDetectSeconds) * time.Second,
-		AgentBinaries:       userConfig.Daemon.AgentBinaries,
-	}
-	// The daemon runs the hooks for the facts it owns, and a browser client
-	// leaves them to it. Without this they would stop running here.
-	cfg.ApplyUserHooks(userConfig)
-	return cfg
+	return session.DaemonConfigFromUser(userConfig)
 }
 
 // isLoopbackHost reports whether a bind address keeps traffic inside this
@@ -526,7 +536,7 @@ func checkTransportSecurity(w io.Writer) error {
 // so APC sequences emitted by child processes (chafa -f kitty, kitten
 // icat, etc.) flow through the same pipe as bubbletea's text output and
 // get rendered by the browser's image addon.
-func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
+func createTUIOSHandler(sess sip.Session) tea.Model {
 	pty := sess.Pty()
 	graphicsOut := sess.PtySlave()
 	touch := sessionIsTouch(sess.Context())
@@ -541,22 +551,12 @@ func createTUIOSHandler(sess sip.Session) (tea.Model, []tea.ProgramOption) {
 
 	// Try to connect to daemon
 	cellW, cellH := cellSize(pty)
-	model, opts, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height, cellW, cellH, graphicsOut, touch)
+	model, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height, cellW, cellH, graphicsOut, touch)
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
 		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut, touch)
 	}
-
-	// Close the daemon client when the web session ends, otherwise the client
-	// read loop, its socket, and the daemon-side connState leak per connection.
-	if o, ok := model.(*app.OS); ok {
-		go func() {
-			<-sess.Context().Done()
-			o.Cleanup()
-		}()
-	}
-
-	return model, opts
+	return model
 }
 
 // webFallbackCellWidth and webFallbackCellHeight are what a cell is taken to
@@ -578,7 +578,7 @@ func shortID(id string) string {
 }
 
 // createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
-func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch bool) (tea.Model, []tea.ProgramOption) {
+func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch bool) tea.Model {
 	// Load user configuration
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
@@ -595,25 +595,21 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch
 	// sip PTY slave. sip v0.1.12+ bundles xterm.js's image addon with
 	// kittySupport enabled, so APC sequences we forward here are rendered
 	// by the browser terminal.
+	//
+	// The kind says the rest: read-only config, no desktop, graphics forced
+	// on because stdin is not a TTY here.
 	tuiosInstance := app.NewOS(app.OSOptions{
-		KeybindRegistry:      keybindRegistry,
-		UserConfig:           userConfig,
-		ConfigReadOnly:       true,
-		BrowserClient:        true,
-		ShowKeys:             showKeys,
-		Width:                width,
-		Height:               height,
-		ForceGraphicsEnabled: true,
-		GraphicsOutput:       graphicsOut,
-		TouchClient:          touch,
-		// The TUI runs beside the daemon and the user is in a browser
-		// somewhere else, so nothing here may touch the host's own desktop.
-		RemoteClient: true,
+		Client:          app.ClientBrowser,
+		KeybindRegistry: keybindRegistry,
+		UserConfig:      userConfig,
+		ShowKeys:        showKeys,
+		Width:           width,
+		Height:          height,
+		GraphicsOutput:  graphicsOut,
+		TouchClient:     touch,
 	})
 
-	return tuiosInstance, []tea.ProgramOption{
-		tea.WithFPS(config.MaxFPSCap),
-	}
+	return tuiosInstance
 }
 
 // cellSize works out what one cell measures in the browser's pixels, from the
@@ -641,7 +637,7 @@ func cellSize(pty sip.Pty) (cellWidth, cellHeight int) {
 
 // createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon.
 // cellWidth and cellHeight are this browser's own, from cellSize.
-func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth, cellHeight int, graphicsOut *os.File, touch bool) (tea.Model, []tea.ProgramOption, error) {
+func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth, cellHeight int, graphicsOut *os.File, touch bool) (tea.Model, error) {
 	// Connect to daemon
 	client := session.NewTUIClient()
 	v := webServerConfig.version
@@ -668,7 +664,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth,
 		CellHeight:    cellHeight,
 	}
 	if err := client.ConnectWithCapabilities(v, width, height, webCaps); err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to daemon: %w", err)
+		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
 	}
 
 	// Determine which session to attach to. The previous behavior  - picking
@@ -686,7 +682,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth,
 	state, err := client.AttachSession(sessionName, true, width, height)
 	if err != nil {
 		_ = client.Close()
-		return nil, nil, fmt.Errorf("failed to attach to session: %w", err)
+		return nil, fmt.Errorf("failed to attach to session: %w", err)
 	}
 
 	// Start read loop for daemon messages
@@ -707,22 +703,17 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth,
 	// force-enabled and routed through the sip PTY slave so kitty/sixel
 	// sequences reach the browser's xterm.js image addon (sip v0.1.12+).
 	tuiosInstance := app.NewOS(app.OSOptions{
-		KeybindRegistry:      keybindRegistry,
-		UserConfig:           userConfig,
-		ConfigReadOnly:       true,
-		BrowserClient:        true,
-		ShowKeys:             showKeys,
-		Width:                width,
-		Height:               height,
-		IsDaemonSession:      true,
-		DaemonClient:         client,
-		SessionName:          sessionName,
-		ForceGraphicsEnabled: true,
-		GraphicsOutput:       graphicsOut,
-		TouchClient:          touch,
-		// The TUI runs beside the daemon and the user is in a browser
-		// somewhere else, so nothing here may touch the host's own desktop.
-		RemoteClient: true,
+		Client:          app.ClientBrowser,
+		KeybindRegistry: keybindRegistry,
+		UserConfig:      userConfig,
+		ShowKeys:        showKeys,
+		Width:           width,
+		Height:          height,
+		IsDaemonSession: true,
+		DaemonClient:    client,
+		SessionName:     sessionName,
+		GraphicsOutput:  graphicsOut,
+		TouchClient:     touch,
 		// This browser's own cell measurement, not the process-wide placeholder
 		// installed at startup before any browser had connected. One process
 		// serves several readers at several font sizes, and the image cell math
@@ -737,114 +728,10 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth,
 		},
 	})
 
-	// Restore state from daemon if available
-	if state != nil && len(state.Windows) > 0 {
-		log.Printf("[WEB] Restoring %d windows from session state", len(state.Windows))
-		if err := tuiosInstance.RestoreFromState(state); err != nil {
-			log.Printf("Warning: Failed to restore session state: %v", err)
-		}
+	// Everything the daemon sends an attached client, then the windows it
+	// handed over. The same two calls every client makes.
+	tuiosInstance.WireDaemonClient(client)
+	tuiosInstance.RestoreAttachedSession(state)
 
-		// Restore terminal states
-		if err := tuiosInstance.RestoreTerminalStates(); err != nil {
-			log.Printf("Warning: Failed to restore terminal states: %v", err)
-		}
-
-		// Set up PTY output handlers for existing windows (workspace-aware)
-		// This only subscribes to PTYs for windows in the current workspace
-		if err := tuiosInstance.SetupPTYOutputHandlers(); err != nil {
-			log.Printf("Warning: Failed to setup PTY handlers: %v", err)
-		}
-
-		// Sync daemon PTY dimensions to match window dimensions from state
-		// This fixes the issue where PTYs have stale dimensions after detach/reattach
-		tuiosInstance.SyncDaemonPTYDimensions()
-	}
-
-	// Register multi-client handlers
-	registerMultiClientHandlers(tuiosInstance, client)
-
-	return tuiosInstance, []tea.ProgramOption{
-		tea.WithFPS(config.MaxFPSCap),
-	}, nil
-}
-
-// registerMultiClientHandlers registers handlers for multi-client messages
-func registerMultiClientHandlers(m *app.OS, client *session.TUIClient) {
-	// Handle verbs the daemon routed to this client. The local attach client
-	// Sends straight into its tea.Program; here the program belongs to a
-	// per-connection goroutine, so the command goes through the model's channel
-	// and is applied in Update like any other message. Without this,
-	// set-option, send-keys and refresh-dock all timed out against a browser
-	// session while the daemon still reported a client attached.
-	client.OnRemoteCommand(func(payload *session.RemoteCommandPayload) error {
-		if m.QueueRemoteCommand(payload) {
-			log.Printf("[WEB] RemoteCommandChan full, dropped a routed %s", payload.CommandType)
-		}
-		return nil
-	})
-	// Handle state sync from other clients via channel (thread-safe)
-	client.OnStateSync(func(state *session.SessionState, triggerType, sourceID string) {
-		log.Printf("[WEB] Received state sync: trigger=%s, source=%s", triggerType, shortID(sourceID))
-		// Send state to channel for processing in Bubble Tea event loop
-		// This ensures thread-safe access to m.Windows
-		if m.QueueStateSync(state) {
-			log.Printf("[WEB] StateSyncChan full, superseded the queued snapshot")
-		}
-	})
-
-	// Handle client join notifications via channel (thread-safe)
-	client.OnClientJoined(func(clientID string, clientCount int, width, height int) {
-		log.Printf("[WEB] Client joined: %s (total: %d, size: %dx%d)", shortID(clientID), clientCount, width, height)
-		if m.ClientEventChan != nil {
-			select {
-			case m.ClientEventChan <- app.ClientEvent{Type: "joined", ClientID: clientID, ClientCount: clientCount, Width: width, Height: height}:
-			default:
-				log.Printf("[WEB] Warning: ClientEventChan full, dropping client joined event")
-			}
-		}
-	})
-
-	// Handle client leave notifications via channel (thread-safe)
-	client.OnClientLeft(func(clientID string, clientCount int) {
-		log.Printf("[WEB] Client left: %s (remaining: %d)", shortID(clientID), clientCount)
-		if m.ClientEventChan != nil {
-			select {
-			case m.ClientEventChan <- app.ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount}:
-			default:
-				log.Printf("[WEB] Warning: ClientEventChan full, dropping client left event")
-			}
-		}
-	})
-
-	// Handle session resize (min of all clients). The callback runs on the daemon
-	// read-loop goroutine, so the actual geometry mutation (TileAllWindows,
-	// emulator resizes) must happen in Update; route it through the event channel.
-	client.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
-		log.Printf("[WEB] Session resize: %dx%d chrome %+v (clients: %d)", width, height, reserve, clientCount)
-		if m.ClientEventChan != nil {
-			select {
-			case m.ClientEventChan <- app.ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height, Reserve: reserve}:
-			default:
-				log.Printf("[WEB] Warning: ClientEventChan full, dropping session resize event")
-			}
-		}
-	})
-
-	// Handle the session being killed out from under this client, and an
-	// unexpected loss of the daemon. Both leave nothing to render and nothing to
-	// reconnect to, so the client says why and quits. Without these two the browser
-	// client kept the last frame on screen for ever, where the local client
-	// exits. The queue is separate from ClientEventChan, which drops when full.
-	client.OnSessionEnded(func(name, reason string) {
-		log.Printf("[WEB] Session ended: %s (%s)", name, reason)
-		if m.QueueSessionEnded(name, reason) {
-			log.Printf("[WEB] DaemonExitChan full, dropped the session end")
-		}
-	})
-	client.OnDisconnect(func(err error) {
-		log.Printf("[WEB] Daemon connection lost: %v", err)
-		if m.QueueDaemonDisconnect(err) {
-			log.Printf("[WEB] DaemonExitChan full, dropped the disconnect")
-		}
-	})
+	return tuiosInstance, nil
 }

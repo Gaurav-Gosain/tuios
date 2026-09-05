@@ -15,6 +15,12 @@ import (
 
 // OSOptions configures the creation of an OS instance.
 type OSOptions struct {
+	// Client says where the person looking at the screen is sitting. NewOS
+	// derives the per-client flags below from it (see applyClientKind), so an
+	// entry point names its kind and does not set them by hand. Zero is a
+	// model nobody named, which is what the tests build.
+	Client ClientKind
+
 	// KeybindRegistry is required for keybinding support.
 	KeybindRegistry *config.KeybindRegistry
 
@@ -109,6 +115,8 @@ type OSOptions struct {
 // This is the preferred way to create an OS instance, ensuring all required
 // fields are properly initialized.
 func NewOS(opts OSOptions) *OS {
+	opts.applyClientKind()
+
 	numWorkspaces := opts.NumWorkspaces
 	if numWorkspaces <= 0 {
 		numWorkspaces = 9
@@ -162,6 +170,7 @@ func NewOS(opts OSOptions) *OS {
 		Height: opts.Height,
 
 		// Mode flags
+		Client:          opts.Client,
 		IsDaemonSession: opts.IsDaemonSession,
 		IsSSHMode:       opts.IsSSHMode,
 		SSHSession:      opts.SSHSession,

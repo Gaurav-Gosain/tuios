@@ -332,7 +332,12 @@ func newModel(options Options) *Model {
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
 	// Create the model using the factory function
+	kind := app.ClientLocal
+	if options.SSHMode {
+		kind = app.ClientSSH
+	}
 	return app.NewOS(app.OSOptions{
+		Client:          kind,
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
 		ShowKeys:        options.ShowKeys,
@@ -343,63 +348,21 @@ func newModel(options Options) *Model {
 	})
 }
 
-// ProgramOptions returns recommended tea.ProgramOption values for running TUIOS.
-// Use these when creating a tea.Program:
+// ProgramOptions returns the tea.ProgramOption values every tuios client runs
+// with: the frame rate cap, no signal handler, and the mouse motion filter.
+// The caller owns the process signals. Use these when creating a tea.Program:
 //
 //	model := tuios.New()
 //	p := tea.NewProgram(model, tuios.ProgramOptions()...)
 func ProgramOptions() []tea.ProgramOption {
-	return []tea.ProgramOption{
-		tea.WithFPS(config.Global.NormalFPS),
-	}
+	return app.ProgramOptions()
 }
 
-// FilterMouseMotion is a tea.WithFilter function that reduces CPU usage
-// by filtering out redundant mouse motion events.
-// Only passes through mouse motion during drag/resize/selection operations.
-//
-// Usage:
-//
-//	p := tea.NewProgram(model, tea.WithFilter(tuios.FilterMouseMotion))
+// FilterMouseMotion is the tea.WithFilter function ProgramOptions installs. It
+// drops the mouse motion nothing on screen reacts to. It is exported for a
+// caller that composes its own option list.
 func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
-	// Allow all non-motion events through
-	if _, ok := msg.(tea.MouseMotionMsg); !ok {
-		return msg
-	}
-
-	// Type assert to our OS model
-	os, ok := model.(*Model)
-	if !ok {
-		return msg
-	}
-
-	// Allow motion events during active interactions
-	if os.Dragging || os.Resizing {
-		return msg
-	}
-
-	// Allow motion events while a floating overlay panel is being dragged.
-	// Overlay drags don't set os.Dragging, so without this the motion events
-	// that move the panel would be filtered out and the drag would never track.
-	if os.OverlayDragActive() {
-		return msg
-	}
-
-	// Allow motion events for scrollback browser drag-to-select
-	if os.ShowScrollbackBrowser {
-		return msg
-	}
-
-	// Allow motion events when in terminal mode with alt screen apps
-	if os.Mode == TerminalMode {
-		focusedWindow := os.GetFocusedWindow()
-		if focusedWindow != nil && focusedWindow.IsAltScreen() {
-			return msg
-		}
-	}
-
-	// Filter out motion events when not interacting
-	return nil
+	return app.FilterMouseMotion(model, msg)
 }
 
 // Config re-exports the config package for customization.

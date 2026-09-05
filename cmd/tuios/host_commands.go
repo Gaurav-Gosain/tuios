@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/lipgloss"
@@ -372,24 +371,4 @@ func runStdioProxy() error {
 	return federation.ServeProxy(os.Stdin, os.Stdout, func() (net.Conn, error) {
 		return net.DialTimeout("unix", socketPath, 5*time.Second)
 	})
-}
-
-// hostsFromConfig turns the [hosts] config table into the daemon's host list.
-// Nothing is validated here; the federation table does that and reports what it
-// dropped, so the reason reaches 'tuios hosts' rather than only the log.
-func hostsFromConfig(cfg *config.UserConfig) []federation.Host {
-	if cfg == nil || len(cfg.Hosts) == 0 {
-		return nil
-	}
-	out := make([]federation.Host, 0, len(cfg.Hosts))
-	for name, h := range cfg.Hosts {
-		out = append(out, federation.Host{
-			Name:           name,
-			Addr:           h.Addr,
-			ConnectTimeout: time.Duration(h.ConnectTimeout) * time.Second,
-			Command:        h.Command,
-			SSHOptions:     h.SSHOptions,
-		})
-	}
-	return out
 }

@@ -12,7 +12,8 @@ import (
 )
 
 // TestSSHSessionsDoNotWriteTheHostConfig pins that every TUI this package
-// starts is ConfigReadOnly.
+// starts is built as an SSH client, which is what makes it ConfigReadOnly, and
+// that it takes the server's --show-keys.
 //
 // `tuios ssh` authenticates no client: the session is chosen by the SSH
 // username, and with --host 0.0.0.0 anyone who can reach the port gets a
@@ -52,9 +53,13 @@ func TestSSHSessionsDoNotWriteTheHostConfig(t *testing.T) {
 				found++
 				pos := fset.Position(lit.Pos())
 				where := fmt.Sprintf("%s:%d", filepath.Base(name), pos.Line)
-				if !setsTrue(lit, "ConfigReadOnly") {
-					t.Errorf("app.OSOptions at %s does not set ConfigReadOnly: true; "+
+				if !setsSelector(lit, "Client", "app", "ClientSSH") {
+					t.Errorf("app.OSOptions at %s does not set Client: app.ClientSSH; "+
 						"an SSH client would write the host's config file", where)
+				}
+				if !setsSelector(lit, "ShowKeys", "cfg", "ShowKeys") {
+					t.Errorf("app.OSOptions at %s does not pass ShowKeys: cfg.ShowKeys; "+
+						"`tuios ssh --show-keys` is registered and ignored", where)
 				}
 				return true
 			})
@@ -65,9 +70,9 @@ func TestSSHSessionsDoNotWriteTheHostConfig(t *testing.T) {
 	}
 }
 
-// setsTrue reports whether the literal assigns the named field the untyped
-// constant true.
-func setsTrue(lit *ast.CompositeLit, field string) bool {
+// setsSelector reports whether the literal assigns the named field the value
+// pkg.name.
+func setsSelector(lit *ast.CompositeLit, field, pkg, name string) bool {
 	for _, elt := range lit.Elts {
 		kv, ok := elt.(*ast.KeyValueExpr)
 		if !ok {
@@ -77,8 +82,12 @@ func setsTrue(lit *ast.CompositeLit, field string) bool {
 		if !ok || key.Name != field {
 			continue
 		}
-		value, ok := kv.Value.(*ast.Ident)
-		return ok && value.Name == "true"
+		sel, ok := kv.Value.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != name {
+			return false
+		}
+		x, ok := sel.X.(*ast.Ident)
+		return ok && x.Name == pkg
 	}
 	return false
 }

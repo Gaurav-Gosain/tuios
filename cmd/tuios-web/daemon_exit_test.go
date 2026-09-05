@@ -49,7 +49,7 @@ func newWebExitFixture(t *testing.T, name string) *webExitFixture {
 		Width:           80,
 		Height:          24,
 	})
-	registerMultiClientHandlers(m, client)
+	m.WireDaemonClient(client)
 	client.StartReadLoop()
 
 	return &webExitFixture{daemon: d, model: m, name: name}

@@ -67,7 +67,7 @@ func startWebExitRun(t *testing.T, name string) *webExitRun {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	serveErr := make(chan error, 1)
-	go func() { serveErr <- sip.NewServer(cfg).Serve(ctx, createTUIOSHandler) }()
+	go func() { serveErr <- sip.NewServer(cfg).ServeWithProgram(ctx, createTUIOSProgram) }()
 	t.Cleanup(func() {
 		cancel()
 		select {

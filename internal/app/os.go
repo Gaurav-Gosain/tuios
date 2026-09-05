@@ -437,7 +437,15 @@ type OS struct {
 	placementScrollbackLen map[string]int
 	// SSH mode fields
 	SSHSession ssh.Session // SSH session reference (nil in local mode)
-	IsSSHMode  bool        // True when running over SSH
+	// configReloads is this session's subscription to the config file, and
+	// stopConfigWatch ends it. See config_watch.go.
+	configReloads   <-chan tea.Msg
+	stopConfigWatch func()
+	// Client is where the person looking at this screen is sitting. The
+	// booleans around it are what it implies, kept because they are what the
+	// code reads and what the tests set. See ClientKind.
+	Client    ClientKind
+	IsSSHMode bool // True when running over SSH
 	// Daemon mode fields
 	IsDaemonSession bool               // True when running as part of a persistent daemon session
 	DaemonClient    *session.TUIClient // Client for daemon communication (nil in local mode)
@@ -1276,19 +1284,7 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 	m.EffectiveWidth = savedWidth
 	m.EffectiveHeight = savedHeight
 
-	if err := m.RestoreTerminalStates(); err != nil {
-		m.LogError("Failed to restore terminal states: %v", err)
-	}
-	if err := m.SetupPTYOutputHandlers(); err != nil {
-		m.LogError("Failed to setup PTY handlers: %v", err)
-	}
-	// Re-tile to set correct window dimensions for current screen
-	if m.AutoTiling {
-		m.TileAllWindows()
-	}
-	// Sync PTY dimensions to match the tiled layout
-	m.SyncDaemonPTYDimensions()
-	// Trigger redraws for alt-screen apps
+	m.rehydrateWindows()
 	m.TriggerAltScreenRedraws()
 }
 
@@ -1300,6 +1296,7 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 // State should be synced to the daemon before Cleanup, on the UI goroutine.
 func (m *OS) Cleanup() {
 	m.stopWindowExitDrain()
+	m.endConfigWatch()
 	// The dock's components are subprocesses this client started, and a push
 	// component is a process that never exits on its own. An ephemeral SSH or
 	// web session is a goroutine inside a long-lived server, so without this

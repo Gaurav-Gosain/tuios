@@ -13,7 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -64,41 +63,22 @@ func runTapeInteractive(tapeFile string) error {
 
 	player := tape.NewPlayer(commands)
 
-	initialOS := &app.OS{
-		// The seed, the same copy NewOS takes. This path builds the model by
-		// hand rather than through the factory, so it has to say so.
-		Settings:             config.Global,
-		FocusedWindow:        -1,
-		WindowExitChan:       make(chan string, 10),
-		StateSyncChan:        make(chan *session.SessionState, 10),
-		ClientEventChan:      make(chan app.ClientEvent, 10),
-		MouseSnapping:        false,
-		MasterRatio:          0.5,
-		CurrentWorkspace:     1,
-		NumWorkspaces:        9,
-		WorkspaceFocus:       make(map[int]int),
-		WorkspaceLayouts:     make(map[int][]app.WindowLayout),
-		WorkspaceHasCustom:   make(map[int]bool),
-		WorkspaceMasterRatio: make(map[int]float64),
-		PendingResizes:       make(map[string][2]int),
-		KeybindRegistry:      keybindRegistry,
-		ShowKeys:             showKeys,
-		RecentKeys:           []app.KeyEvent{},
-		KeyHistoryMaxSize:    5,
-		ScriptMode:           true,
-		ScriptPlayer:         player,
-		ScriptPaused:         false,
-		ScriptExecutor:       tape.NewCommandExecutor(nil),
-	}
-
+	// The factory, the same as every other client, so the tape's model has
+	// what a session has: capabilities, passthroughs, hooks, channels. It used
+	// to be a struct literal that named a dozen fields by hand and had none of
+	// the rest.
+	initialOS := app.NewOS(app.OSOptions{
+		Client:          app.ClientLocal,
+		KeybindRegistry: keybindRegistry,
+		UserConfig:      userConfig,
+		ShowKeys:        showKeys,
+	})
+	initialOS.ScriptMode = true
+	initialOS.ScriptPlayer = player
+	initialOS.ScriptPaused = false
 	initialOS.ScriptExecutor = tape.NewCommandExecutor(initialOS)
 
-	p := tea.NewProgram(
-		initialOS,
-		tea.WithFPS(config.MaxFPSCap),
-		tea.WithoutSignalHandler(),
-		tea.WithFilter(filterMouseMotion),
-	)
+	p := tea.NewProgram(initialOS, app.ProgramOptions()...)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)

@@ -1,16 +1,15 @@
-package main
+package app
 
 import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // filterOS builds a model with the rail on the left and one pane beside it.
-func filterOS(t *testing.T) *app.OS {
+func filterOS(t *testing.T) *OS {
 	t.Helper()
 	pe, pp, pw := config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth
 	config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth = true, "left", 30
@@ -22,7 +21,7 @@ func filterOS(t *testing.T) *app.OS {
 	})
 
 	cfg := config.DefaultConfig()
-	o := app.NewOS(app.OSOptions{UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)})
+	o := NewOS(OSOptions{UserConfig: cfg, KeybindRegistry: config.NewKeybindRegistry(cfg)})
 	o.Width, o.Height = 120, 40
 	o.EffectiveWidth, o.EffectiveHeight = 120, 40
 	o.Windows = []*terminal.Window{
@@ -40,10 +39,10 @@ func filterOS(t *testing.T) *app.OS {
 func TestMotionFilterPassesRailHover(t *testing.T) {
 	for _, mode := range []struct {
 		name string
-		mode app.Mode
+		mode Mode
 	}{
-		{"window management", app.WindowManagementMode},
-		{"terminal", app.TerminalMode},
+		{"window management", WindowManagementMode},
+		{"terminal", TerminalMode},
 	} {
 		t.Run(mode.name, func(t *testing.T) {
 			o := filterOS(t)
@@ -52,7 +51,7 @@ func TestMotionFilterPassesRailHover(t *testing.T) {
 			// Deep inside the rail band, well below the rows, where the footer
 			// controls live.
 			onRail := tea.MouseMotionMsg{X: 3, Y: 35}
-			if filterMouseMotion(o, onRail) == nil {
+			if FilterMouseMotion(o, onRail) == nil {
 				t.Error("motion over the rail was dropped; nothing downstream can hover")
 			}
 
@@ -64,7 +63,7 @@ func TestMotionFilterPassesRailHover(t *testing.T) {
 			o.Settings.Links = config.LinksOff
 
 			offRail := tea.MouseMotionMsg{X: 50, Y: 10}
-			if filterMouseMotion(o, offRail) != nil {
+			if FilterMouseMotion(o, offRail) != nil {
 				t.Error("motion over a plain pane was passed; the guard is what keeps a mouse sweep cheap")
 			}
 		})
@@ -79,7 +78,7 @@ func TestMotionFilterPassesRailHover(t *testing.T) {
 // pointer that made it, with nothing left to take it down.
 func TestMotionFilterPassesTheBandExitEvent(t *testing.T) {
 	o := filterOS(t)
-	o.Mode = app.TerminalMode
+	o.Mode = TerminalMode
 
 	// Links off, so the rail's own clause is the only thing that can pass this
 	// event and the assertions below are about it and nothing else.
@@ -88,14 +87,14 @@ func TestMotionFilterPassesTheBandExitEvent(t *testing.T) {
 	// The pointer is in the band and hovering, then steps out over a plain pane.
 	o.SidebarHoverActive = true
 	exit := tea.MouseMotionMsg{X: 50, Y: 10}
-	if filterMouseMotion(o, exit) == nil {
+	if FilterMouseMotion(o, exit) == nil {
 		t.Fatal("the band-exit event was dropped; the peek and the hover highlight both outlive the pointer")
 	}
 
 	// And once it has been delivered the guard closes again: the handler clears
 	// HoverActive, so the next event over the same pane is noise once more.
 	o.SidebarHoverActive = false
-	if filterMouseMotion(o, exit) != nil {
+	if FilterMouseMotion(o, exit) != nil {
 		t.Error("motion over a plain pane stayed whitelisted after the exit event")
 	}
 }
@@ -115,16 +114,16 @@ func TestMotionFilterPassesTheBandExitEvent(t *testing.T) {
 // Update, which is the state this test's first assertion is written against.
 func TestMotionFilterPassesPaneContentForLinks(t *testing.T) {
 	o := filterOS(t)
-	o.Mode = app.WindowManagementMode
+	o.Mode = WindowManagementMode
 
 	o.Settings.Links = config.LinksAll
-	if filterMouseMotion(o, tea.MouseMotionMsg{X: 50, Y: 10}) == nil {
+	if FilterMouseMotion(o, tea.MouseMotionMsg{X: 50, Y: 10}) == nil {
 		t.Error("motion over pane content was dropped; no link can ever underline itself")
 	}
 
 	// Off is off: the guard the two tests above pin is restored exactly.
 	o.Settings.Links = config.LinksOff
-	if filterMouseMotion(o, tea.MouseMotionMsg{X: 50, Y: 10}) != nil {
+	if FilterMouseMotion(o, tea.MouseMotionMsg{X: 50, Y: 10}) != nil {
 		t.Error("appearance.links = off still passed pane motion")
 	}
 
@@ -132,14 +131,14 @@ func TestMotionFilterPassesPaneContentForLinks(t *testing.T) {
 	// buys nothing. The pane above starts at X=31 with a border, so column 31 is
 	// the border and column 32 the first content cell.
 	o.Settings.Links = config.LinksAll
-	if filterMouseMotion(o, tea.MouseMotionMsg{X: 31, Y: 10}) != nil {
+	if FilterMouseMotion(o, tea.MouseMotionMsg{X: 31, Y: 10}) != nil {
 		t.Error("motion on a pane's border was passed as content")
 	}
 
 	// And a motion that lands on the cell the pointer is already on resolves to
 	// the run it is already showing, so it is dropped.
 	o.LastMouseX, o.LastMouseY = 50, 10
-	if filterMouseMotion(o, tea.MouseMotionMsg{X: 50, Y: 10}) != nil {
+	if FilterMouseMotion(o, tea.MouseMotionMsg{X: 50, Y: 10}) != nil {
 		t.Error("a motion that changed no cell was passed")
 	}
 }

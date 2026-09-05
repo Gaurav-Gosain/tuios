@@ -46,7 +46,7 @@ func TestStateSyncFloodLeavesTheClientOnTheNewestSnapshot(t *testing.T) {
 		Width:           80,
 		Height:          24,
 	})
-	registerMultiClientHandlers(m, viewer)
+	m.WireDaemonClient(viewer)
 	viewer.StartReadLoop()
 
 	// The other client, making the changes this one has to hear about.
