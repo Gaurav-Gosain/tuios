@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -83,6 +84,13 @@ func spotlightMarkers(t *testing.T, body string) (*tuitest.Terminal, spotlightMa
 		`printf '%sTOP\n' "$(echo INK)"; printf '\n%.0s' $(seq 1 12); printf '%sBOT\n' "$(echo INK)"`,
 		"INKBOT", shellTimeout)
 
+	return term, findSpotlightMarks(t, term)
+}
+
+// findSpotlightMarks locates the two markers and the pane's top border on a
+// screen that already has them.
+func findSpotlightMarks(t *testing.T, term *tuitest.Terminal) spotlightMarks {
+	t.Helper()
 	s := term.Screen()
 	_, rows := s.Size()
 	topRow, topCol, botRow, botCol, borderRow := -1, -1, -1, -1, -1
@@ -109,7 +117,7 @@ func spotlightMarkers(t *testing.T, body string) (*tuitest.Terminal, spotlightMa
 		t.Fatalf("the two markers are %d rows apart; too close to be one inside the beam "+
 			"and one outside\n%s", botRow-topRow, term.Snapshot())
 	}
-	return term, spotlightMarks{
+	return spotlightMarks{
 		topCol: topCol, topRow: topRow,
 		botCol: botCol, botRow: botRow,
 		borderRow: borderRow,
@@ -315,4 +323,93 @@ func TestSpotlightIsInTheCommandPalette(t *testing.T) {
 		t.Fatalf("the palette row did not turn the spotlight on: %v\n%s", err, term.Snapshot())
 	}
 	alive(t, term, "after the palette toggled the spotlight")
+}
+
+// The no-theme screen. His config has theme = '', which is the case the pass
+// used to answer with SGR 2 for the whole screen: a foreground attribute the
+// host scales by an amount of its own choosing, so the dim setting was read and
+// thrown away and 10 and 95 drew the same frame.
+//
+// A themeless screen now comes back mixed, which is what these read off it. The
+// chrome carries hex colours, so it is scaled toward black by the setting. Text
+// the shell printed at the terminal default carries no colour anybody can
+// resolve, so it keeps SGR 2. Both halves are asserted, because a pass that did
+// one of them and not the other looks right in a screenshot of the other half.
+
+const spotlightNoTheme = "[appearance]\ntheme = \"\"\n"
+
+// spotlightNoThemeBeam is the beam on a themeless client at one dim setting.
+func spotlightNoThemeBeam(dim int) string {
+	return spotlightNoTheme + "\n[spotlight]\nenabled = true\nradius = 5\nfollow = \"cursor\"\ndim = " +
+		strconv.Itoa(dim) + "\n"
+}
+
+// TestSpotlightDimsAThemelessScreenByTheSetting is the maintainer's report read
+// off a real screen with no theme set.
+//
+// The pane border carries a colour tuios chose and can therefore scale. It has
+// to reach the host darker with the beam on, and darker again at the higher
+// setting. The second half is the report itself: the two settings used to draw
+// the same frame.
+func TestSpotlightDimsAThemelessScreenByTheSetting(t *testing.T) {
+	_, _, plain := spotlightProbe(t, spotlightNoTheme)
+	_, _, low := spotlightProbe(t, spotlightNoThemeBeam(10))
+	_, _, high := spotlightProbe(t, spotlightNoThemeBeam(95))
+
+	if plain.Fg == low.Fg {
+		t.Errorf("with no theme the far border was painted %+v with the beam off and %+v "+
+			"with it on; the chrome outside the light was not dimmed", plain.Fg, low.Fg)
+	}
+	plainLight := spotlightLight(t, plain.Fg)
+	lowLight := spotlightLight(t, low.Fg)
+	highLight := spotlightLight(t, high.Fg)
+	if lowLight >= plainLight {
+		t.Errorf("dim 10 left the far border at %d against %d with the beam off; "+
+			"the light did not go down", lowLight, plainLight)
+	}
+	if highLight >= lowLight {
+		t.Errorf("dim 10 left the far border at %d and dim 95 at %d; the setting draws "+
+			"the same frame at both ends", lowLight, highLight)
+	}
+}
+
+// TestSpotlightGoesFaintOnWhatItCannotResolve is the other half of the mixed
+// screen, and the reason "mixed" is the honest answer rather than a compromise.
+//
+// The marker is text the shell printed with no colour of its own, which is most
+// of a real screen. With no theme there is nothing to stand in for the colour
+// the host paints it with, so no darker version of it can be written. SGR 2 is
+// what a terminal can do instead, and it is what the cell has to come back
+// carrying.
+func TestSpotlightGoesFaintOnWhatItCannotResolve(t *testing.T) {
+	_, plainFar, _ := spotlightProbe(t, spotlightNoTheme)
+	_, beamFar, _ := spotlightProbe(t, spotlightNoThemeBeam(95))
+
+	if plainFar.Faint {
+		t.Fatalf("the marker is already faint with the beam off; it cannot show what the beam did")
+	}
+	if !beamFar.Faint {
+		t.Error("with no theme a cell carrying no colour was left at full brightness outside the beam")
+	}
+	if beamFar.Fg.Kind != 0 {
+		t.Errorf("the pass invented a colour for a cell it cannot resolve: %+v", beamFar.Fg)
+	}
+}
+
+// TestSpotlightKeepsAThemedScreenOffTheFaintPath is the no-regression half. A
+// theme means tuios owns the sixteen and knows the ground, so every cell is
+// scaled and nothing falls back to SGR 2.
+func TestSpotlightKeepsAThemedScreenOffTheFaintPath(t *testing.T) {
+	_, beamFar, beamBorder := spotlightProbe(t, spotlightOn)
+
+	if beamFar.Faint {
+		t.Error("a themed cell outside the beam was put on SGR 2 rather than dimmed")
+	}
+	if beamBorder.Faint {
+		t.Error("themed chrome outside the beam was put on SGR 2 rather than dimmed")
+	}
+	if beamFar.Fg.Kind == 0 || beamFar.Bg.Kind == 0 {
+		t.Errorf("a themed cell outside the beam came back with no colour: fg %+v bg %+v",
+			beamFar.Fg, beamFar.Bg)
+	}
 }

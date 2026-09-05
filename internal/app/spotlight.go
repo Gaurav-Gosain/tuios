@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -54,6 +55,18 @@ import (
 // background already is, so at dim 95 a background came out a quarter darker
 // and no more: the screen stayed lit however dark the text went. See
 // spotlightDark.
+//
+// What it can turn down, and what it cannot. Every colour the pass can read
+// channels off is scaled toward black by the dim setting. That is every
+// truecolor cell and every 256-cube index from 16 up, whose RGB is a fixed
+// standard mapping. Two things are not readable and each gets SGR 2 instead:
+// one of the sixteen the host's own palette owns, and a cell that names no
+// colour at all with no theme to stand in for it. See dimmable.
+//
+// A screen with a theme is therefore dimmed whole, and a screen with none comes
+// back mixed: the coloured parts scale, the rest goes faint. Mixed is the
+// honest answer. The alternative was to put the whole no-theme screen on SGR 2,
+// which ignored the dim setting entirely, so 10 and 95 drew the same frame.
 //
 // It is client-local, like the showkeys overlay. Nothing crosses the wire and a
 // peer attached to the same session sees its own screen unchanged. The screen
@@ -118,6 +131,9 @@ type spotlightRun struct {
 	level        uint8
 	have         bool
 	outFg, outBg color.Color
+	// outFaint is set when the foreground is one the pass cannot read channels
+	// off, so SGR 2 stands in for the blend. See dimmable.
+	outFaint bool
 }
 
 // spotlightState is the beam this client is drawing. It is not session state:
@@ -240,17 +256,6 @@ func (s *spotlightState) apply(canvas *lipgloss.Canvas, cx, cy, radius, dim int,
 		return
 	}
 	s.syncGround()
-	// No theme means no RGB to work in. tuios emits colour indices there and
-	// the host terminal decides what they look like, so there is no honest
-	// answer to what a cell is painted with and no honest darker version of it
-	// to write back. That is the case dimGround already returns nil for. Faint
-	// (SGR 2) is what a terminal can do instead, and every terminal that
-	// matters honours it. It has no rim, so the edge is a hard cut.
-	faint := s.groundBg == nil
-	if faint {
-		s.applyFaint(canvas, width, height, cx, cy, radius)
-		return
-	}
 	s.syncLevels(dim)
 	s.run.have = false
 
@@ -289,37 +294,6 @@ func (s *spotlightState) apply(canvas *lipgloss.Canvas, cx, cy, radius, dim int,
 				continue
 			}
 			s.dimCell(cell, level)
-		}
-	}
-}
-
-// applyFaint is the no-theme path: SGR 2 outside the beam, nothing inside.
-//
-// It is a weaker light than the themed pass and it is meant to be. SGR 2 is a
-// foreground attribute, so an unlit cell keeps its background at full
-// brightness, and how far the foreground drops is the host terminal's choice
-// rather than the dim setting's. The themed pass is what a person who wants the
-// screen dark should be on, and every tuios that ships a theme is on it: this
-// branch is reached only when appearance.theme names nothing.
-//
-// Painting a background here instead would be worse than the weakness. The only
-// colours in reach are ANSI indices, whose RGB is the host's own palette and
-// not anything tuios knows, so darkening one means replacing the user's palette
-// with a guess at it.
-func (s *spotlightState) applyFaint(canvas *lipgloss.Canvas, width, height, cx, cy, radius int) {
-	rad := float64(radius)
-	for y := range height {
-		dy := float64(y - cy)
-		lit, x0, x1 := spotlightRowSpan(cx, dy, rad, width)
-		for x := range width {
-			if lit && x >= x0 && x <= x1 {
-				continue
-			}
-			cell := canvas.CellAt(x, y)
-			if cell == nil || cell.Content == "" {
-				continue
-			}
-			cell.Style.Attrs |= uv.AttrFaint
 		}
 	}
 }
@@ -375,9 +349,10 @@ func spotlightLevel(dx, dy, full, rim float64) uint8 {
 // cell with no background of its own is showing the terminal's ground, and
 // leaving it alone leaves it at full brightness, so the unlit region kept a lit
 // background under dimmed text however far the setting was pushed. It now gets
-// the ground, dimmed like everything else. Both substitutions are honest
-// because a theme is set - that is the branch this is on - and the theme's own
-// pair is what the host is painting those cells with.
+// the ground, dimmed like everything else. Both substitutions need a theme,
+// because the theme's own pair is what the host is painting those cells with.
+// With no theme there is no pair to stand in, so such a cell takes SGR 2 on the
+// foreground and keeps whatever ground the host paints.
 //
 // The unlit region still shares one style: every cell in it that named no
 // colour comes out of the cache as the same pair.
@@ -388,6 +363,9 @@ func (s *spotlightState) dimCell(cell *uv.Cell, level uint8) {
 		s.buildRun(fg, bg, level)
 	}
 	cell.Style.Fg, cell.Style.Bg = r.outFg, r.outBg
+	if r.outFaint {
+		cell.Style.Attrs |= uv.AttrFaint
+	}
 }
 
 // buildRun computes the blend for one (foreground, background, level) triple
@@ -407,8 +385,70 @@ func (s *spotlightState) buildRun(fg, bg color.Color, level uint8) {
 		bg = s.groundBg
 	}
 	t := s.levels[level]
-	r.outFg = s.blendCached(fg, level, t)
-	r.outBg = s.blendCached(bg, level, t)
+	// Each ink is decided on its own. A cell can carry a foreground the pass
+	// can scale on a background it cannot, which is most of a coloured screen
+	// with no theme, and the half it can do is worth doing.
+	if s.dimmable(fg) {
+		r.outFg, r.outFaint = s.blendCached(fg, level, t), false
+	} else {
+		r.outFg, r.outFaint = fg, true
+	}
+	if s.dimmable(bg) {
+		r.outBg = s.blendCached(bg, level, t)
+	} else {
+		r.outBg = bg
+	}
+}
+
+// dimmable reports whether the pass can write a darker version of c.
+//
+// It can when it knows what c is painted with. A truecolor cell says so
+// outright, and a 256-cube index from 16 up resolves through a fixed standard
+// mapping every terminal shares, so both are scaled toward black by the dim
+// setting.
+//
+// Two colours it does not know. One of the sixteen the host's own palette owns
+// is whatever the user's terminal says it is, and tuios never asks: it emits no
+// OSC 4 and it queries none. theme.GetANSIPalette says the same thing in the
+// same words, and it is why the colour picker shows the user's own sixteen
+// rather than the xterm defaults. Substituting those defaults here would
+// replace the user's palette with a guess at it, and a "dim" that changes the
+// hue is worse than one that does nothing.
+//
+// A cell that names no colour is the other. It is showing the terminal's own
+// ground, which tuios knows only when a theme is set: that is what groundFg and
+// groundBg hold, and they are nil otherwise. Painting a guessed ground under
+// such a cell would put a hard black rectangle over whatever the user's
+// terminal really paints there.
+//
+// With a theme set every colour is dimmable, and that is not a shortcut. tuios
+// pushes theme.GetANSIPalette into every emulator, so an index a themed cell
+// carries is one tuios itself defined, and the ground is the theme's own pair.
+//
+// SGR 2 is what stands in for the blend when this is false. It is weaker: it
+// moves the foreground only, by an amount the host picks rather than the dim
+// setting.
+func (s *spotlightState) dimmable(c color.Color) bool {
+	if isNilColor(c) {
+		return false
+	}
+	if s.groundBg != nil {
+		return true
+	}
+	return !hostPaletteColor(c)
+}
+
+// hostPaletteColor reports whether c is one of the sixteen the host's own
+// palette owns. Both spellings reach a cell: the emulator writes ansi.BasicColor
+// for an SGR 30-37 or 90-97, and lipgloss.Color("3") is an ansi.IndexedColor.
+func hostPaletteColor(c color.Color) bool {
+	if _, ok := c.(ansi.BasicColor); ok {
+		return true
+	}
+	if i, ok := c.(ansi.IndexedColor); ok {
+		return i < 16
+	}
+	return false
 }
 
 // blendCached is blendColors behind a cache of the levels the rim quantises to.

@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -137,20 +138,33 @@ func TestSpotlightDimsAColouredBlank(t *testing.T) {
 // matters, which is bytes on the wire. A pass that dimmed only the glyphs would
 // double the escape sequences in the rendered frame.
 func TestSpotlightDoesNotSplitStyleRuns(t *testing.T) {
-	withTheme(t, "catppuccin_mocha")
-	canvas := spotlightTestCanvas(t, 80, 24)
-	plainSGR := strings.Count(canvas.Render(), "\x1b[")
+	// Both screens: a themed one, where every cell is scaled, and a themeless
+	// one, where the pass writes a colour to some cells and SGR 2 to others. A
+	// mixed screen must not defeat the run cache - the cells that share a
+	// source colour and a level still come out of it as one style.
+	for _, themeID := range []string{"catppuccin_mocha", ""} {
+		name := themeID
+		if name == "" {
+			name = "no theme"
+		}
+		t.Run(name, func(t *testing.T) {
+			withTheme(t, themeID)
+			canvas := spotlightMixedCanvas(t, 80, 24)
+			plainSGR := strings.Count(canvas.Render(), "\x1b[")
 
-	newSpotlightTestState().apply(canvas, 40, 12, 8, 60, true)
-	dimmedSGR := strings.Count(canvas.Render(), "\x1b[")
+			newSpotlightTestState().apply(canvas, 40, 12, 8, 60, true)
+			dimmedSGR := strings.Count(canvas.Render(), "\x1b[")
 
-	// A row that crosses the beam pays a handful of style changes for the two
-	// rim crossings and nothing else, because the levels inside a row change
-	// only where the rim passes. Splitting at every blank instead costs one per
-	// word: on this fixture that is 712 sequences against 208.
-	if limit := plainSGR + 8*canvas.Height(); dimmedSGR > limit {
-		t.Errorf("the pass produced %d escape sequences against %d before it (limit %d); "+
-			"the style runs were split", dimmedSGR, plainSGR, limit)
+			// A row that crosses the beam pays a handful of style changes for
+			// the two rim crossings and nothing else, because the levels inside
+			// a row change only where the rim passes. Splitting at every blank
+			// instead costs one per word: on this fixture that is 712 sequences
+			// against 208.
+			if limit := plainSGR + 8*canvas.Height(); dimmedSGR > limit {
+				t.Errorf("the pass produced %d escape sequences against %d before it (limit %d); "+
+					"the style runs were split", dimmedSGR, plainSGR, limit)
+			}
+		})
 	}
 }
 
@@ -202,51 +216,224 @@ func TestSpotlightAllocatesNothing(t *testing.T) {
 	}
 }
 
-// TestSpotlightFaintPathAllocatesNothing holds the same bar for the branch a
-// client with no theme takes.
-func TestSpotlightFaintPathAllocatesNothing(t *testing.T) {
+// spotlightMixedCanvas is what a themeless screen looks like to the pass: some
+// cells carrying a colour it can scale, some carrying one of the host's own
+// sixteen, and some carrying none at all.
+func spotlightMixedCanvas(t testing.TB, w, h int) *lipgloss.Canvas {
+	t.Helper()
+	canvas := lipgloss.NewCanvas(w, h)
+	var rgba color.Color = color.RGBA{R: 200, G: 200, B: 200, A: 0xFF}
+	var cube color.Color = ansi.IndexedColor(214)
+	var basic color.Color = ansi.BasicColor(2)
+	inks := []color.Color{rgba, cube, basic, nil}
+	const word = "hello world "
+	for y := range h {
+		for x := range w {
+			cell := uv.Cell{
+				Content: string(word[x%len(word)]),
+				Width:   1,
+				Style:   uv.Style{Fg: inks[(x/8+y)%len(inks)]},
+			}
+			canvas.SetCell(x, y, &cell)
+		}
+	}
+	return canvas
+}
+
+// spotlightRestoreMixed puts a mixed canvas back the way spotlightMixedCanvas
+// left it, without allocating.
+func spotlightRestoreMixed(canvas *lipgloss.Canvas, inks []color.Color) {
+	for y := range canvas.Height() {
+		for x := range canvas.Width() {
+			cell := canvas.CellAt(x, y)
+			cell.Style.Fg, cell.Style.Bg, cell.Style.Attrs = inks[(x/8+y)%len(inks)], nil, 0
+		}
+	}
+}
+
+// TestSpotlightMixedPathAllocatesNothing holds the same bar for a themeless
+// screen, which since the resolvability rule is two paths interleaved on one
+// canvas.
+//
+// The blend cache is keyed on the source colour and the level, and a mixed
+// screen must not defeat it: the cells the pass can scale keep hitting it, and
+// the cells it cannot never reach it at all.
+func TestSpotlightMixedPathAllocatesNothing(t *testing.T) {
 	withTheme(t, "")
 	// Boxed once, outside the measurement: an interface parameter taking a
 	// color.RGBA value allocates at every call, which would be counted as the
 	// pass's own.
-	var fg color.Color = color.RGBA{R: 200, G: 200, B: 200, A: 0xFF}
-	var bg color.Color = color.RGBA{R: 40, G: 40, B: 60, A: 0xFF}
+	var rgba color.Color = color.RGBA{R: 200, G: 200, B: 200, A: 0xFF}
+	var cube color.Color = ansi.IndexedColor(214)
+	var basic color.Color = ansi.BasicColor(2)
+	inks := []color.Color{rgba, cube, basic, nil}
+	canvas := spotlightMixedCanvas(t, realCols, realRows)
+	s := newSpotlightTestState()
+
+	if base := testing.AllocsPerRun(20, func() { spotlightRestoreMixed(canvas, inks) }); base != 0 {
+		t.Fatalf("restoring the canvas allocates %.0f times; the measurement below would not be the pass's", base)
+	}
+
+	allocs := testing.AllocsPerRun(20, func() {
+		s.apply(canvas, realCols/2, realRows/2, 10, 60, true)
+		spotlightRestoreMixed(canvas, inks)
+	})
+	if allocs != 0 {
+		t.Errorf("the mixed pass allocated %.0f times per frame; it must allocate none", allocs)
+	}
+}
+
+// TestSpotlightFaintPathAllocatesNothing holds the same bar for a screen with
+// nothing the pass can resolve at all, which is every cell on SGR 2.
+func TestSpotlightFaintPathAllocatesNothing(t *testing.T) {
+	withTheme(t, "")
+	var basic color.Color = ansi.BasicColor(2)
 	canvas := spotlightTestCanvas(t, realCols, realRows)
+	spotlightRestore(canvas, basic, nil)
 	s := newSpotlightTestState()
 
 	allocs := testing.AllocsPerRun(20, func() {
 		s.apply(canvas, realCols/2, realRows/2, 10, 60, true)
-		spotlightRestore(canvas, fg, bg)
+		spotlightRestore(canvas, basic, nil)
 	})
 	if allocs != 0 {
 		t.Errorf("the faint pass allocated %.0f times per frame", allocs)
 	}
 }
 
-// TestSpotlightWithoutAThemeGoesFaint is the degrade rule. Untheme there is no
-// RGB to carry anything toward - the case dimGround already returns nil for -
-// so the honest answer is SGR 2 and a hard edge.
-func TestSpotlightWithoutAThemeGoesFaint(t *testing.T) {
+// spotlightInk is the pair of style facts these tests read off one cell: what
+// the pass wrote, and whether it reached for SGR 2 instead.
+type spotlightInk struct {
+	fg, bg color.Color
+	faint  bool
+}
+
+func spotlightInkAt(canvas *lipgloss.Canvas, x, y int) spotlightInk {
+	st := cellStyleAt(canvas, x, y)
+	return spotlightInk{fg: st.Fg, bg: st.Bg, faint: st.Attrs&uv.AttrFaint != 0}
+}
+
+// spotlightOneCell runs the pass over a canvas holding one cell of the given
+// style, far outside a beam in the corner, and returns what came back.
+func spotlightOneCell(t *testing.T, themeID string, style uv.Style, dim int) spotlightInk {
+	t.Helper()
+	withTheme(t, themeID)
+	canvas := lipgloss.NewCanvas(40, 12)
+	canvas.SetCell(30, 9, &uv.Cell{Content: "x", Width: 1, Style: style})
+	newSpotlightTestState().apply(canvas, 0, 0, 3, dim, false)
+	return spotlightInkAt(canvas, 30, 9)
+}
+
+// TestSpotlightDimsWhatItCanResolveWithNoTheme is the maintainer's report and
+// the rule that answers it.
+//
+// The pass used to put a whole themeless screen on SGR 2, which is a foreground
+// attribute the host scales by an amount of its own choosing. The dim setting
+// was read and thrown away, so 10 and 95 drew the same frame and the slider did
+// nothing.
+//
+// A colour the pass can read channels off does not need a theme to be scaled
+// toward black. Truecolor says what it is outright, and a 256-cube index from
+// 16 up resolves through a fixed standard mapping. Those are dimmed by the
+// setting, with no theme anywhere.
+//
+// The rows below are the positive and negative halves of one rule, in one
+// fixture: what is resolvable moves with the setting, what is not takes SGR 2
+// and does not move at all.
+func TestSpotlightDimsWhatItCanResolveWithNoTheme(t *testing.T) {
+	rgba := color.RGBA{R: 200, G: 200, B: 200, A: 0xFF}
+	cases := []struct {
+		name string
+		// style is the cell the compositor drew.
+		style uv.Style
+		// scaled says the pass must write a darker colour that follows dim.
+		// Otherwise it must reach for SGR 2 and leave the colour alone.
+		scaled bool
+	}{
+		{"truecolor", uv.Style{Fg: rgba}, true},
+		{"cube index 214", uv.Style{Fg: ansi.IndexedColor(214)}, true},
+		{"greyscale index 244", uv.Style{Fg: ansi.IndexedColor(244)}, true},
+		{"host palette index 3", uv.Style{Fg: ansi.IndexedColor(3)}, false},
+		{"host palette basic 2", uv.Style{Fg: ansi.BasicColor(2)}, false},
+		{"no colour at all", uv.Style{}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			low := spotlightOneCell(t, "", tc.style, config.SpotlightMinDim)
+			high := spotlightOneCell(t, "", tc.style, config.SpotlightMaxDim)
+			if !tc.scaled {
+				if !low.faint || !high.faint {
+					t.Errorf("a colour the pass cannot read was not made faint: "+
+						"dim %d faint=%v, dim %d faint=%v",
+						config.SpotlightMinDim, low.faint, config.SpotlightMaxDim, high.faint)
+				}
+				if low.fg != tc.style.Fg || high.fg != tc.style.Fg {
+					t.Errorf("the pass repainted a colour it cannot read: %v and %v, was %v",
+						low.fg, high.fg, tc.style.Fg)
+				}
+				return
+			}
+			if low.faint || high.faint {
+				t.Errorf("a colour the pass can read was put on SGR 2: dim %d faint=%v, dim %d faint=%v",
+					config.SpotlightMinDim, low.faint, config.SpotlightMaxDim, high.faint)
+			}
+			lowLight := spotlightBrightness(t, low.fg)
+			highLight := spotlightBrightness(t, high.fg)
+			start := spotlightBrightness(t, tc.style.Fg)
+			if lowLight >= start {
+				t.Errorf("dim %d did not turn the light down: %.3f, was %.3f",
+					config.SpotlightMinDim, lowLight, start)
+			}
+			// The whole report: the two settings have to draw different frames.
+			if highLight >= lowLight {
+				t.Errorf("dim %d left the cell at %.3f and dim %d at %.3f; the setting does nothing",
+					config.SpotlightMinDim, lowLight, config.SpotlightMaxDim, highLight)
+			}
+		})
+	}
+}
+
+// TestSpotlightKeepsAThemedScreenWhole is the other side of the rule. With a
+// theme set tuios owns the sixteen - it pushes theme.GetANSIPalette into every
+// emulator - so nothing on a themed screen falls back to SGR 2, and the pass
+// stays the single blend it was.
+func TestSpotlightKeepsAThemedScreenWhole(t *testing.T) {
+	styles := []uv.Style{
+		{Fg: color.RGBA{R: 200, G: 200, B: 200, A: 0xFF}},
+		{Fg: ansi.IndexedColor(214)},
+		{Fg: ansi.IndexedColor(3)},
+		{Fg: ansi.BasicColor(2)},
+		{},
+	}
+	for _, style := range styles {
+		got := spotlightOneCell(t, "catppuccin_mocha", style, config.SpotlightDefaultDim)
+		if got.faint {
+			t.Errorf("a themed cell (%v) was put on SGR 2 rather than dimmed", style.Fg)
+		}
+		if isNilColor(got.fg) || isNilColor(got.bg) {
+			t.Errorf("a themed cell (%v) came back with no colour: %v on %v", style.Fg, got.fg, got.bg)
+		}
+	}
+}
+
+// TestSpotlightLeavesTheBeamAloneWithNoTheme. The light must not dim its own
+// middle on either path, and the no-theme screen is now two paths at once.
+func TestSpotlightLeavesTheBeamAloneWithNoTheme(t *testing.T) {
 	withTheme(t, "")
-	canvas := spotlightTestCanvas(t, 80, 24)
-	inBefore := cellStyleAt(canvas, 40, 12)
-	outBefore := cellStyleAt(canvas, 2, 2)
+	canvas := lipgloss.NewCanvas(40, 12)
+	canvas.SetCell(20, 6, &uv.Cell{
+		Content: "x", Width: 1,
+		Style: uv.Style{Fg: color.RGBA{R: 200, G: 200, B: 200, A: 0xFF}},
+	})
+	canvas.SetCell(21, 6, &uv.Cell{Content: "y", Width: 1, Style: uv.Style{Fg: ansi.BasicColor(2)}})
+	before := []uv.Style{cellStyleAt(canvas, 20, 6), cellStyleAt(canvas, 21, 6)}
 
-	newSpotlightTestState().apply(canvas, 40, 12, 8, 60, true)
+	newSpotlightTestState().apply(canvas, 20, 6, 6, config.SpotlightMaxDim, true)
 
-	in, out := cellStyleAt(canvas, 40, 12), cellStyleAt(canvas, 2, 2)
-	if out.Attrs&uv.AttrFaint == 0 {
-		t.Error("a cell outside the beam did not get AttrFaint with no theme set")
-	}
-	if in.Attrs&uv.AttrFaint != 0 {
-		t.Error("a cell inside the beam was made faint")
-	}
-	// And no colour was invented for either.
-	if out.Fg != outBefore.Fg || out.Bg != outBefore.Bg {
-		t.Errorf("the faint path repainted a colour: %v on %v", out.Fg, out.Bg)
-	}
-	if !in.Equal(&inBefore) {
-		t.Error("the faint path touched a cell inside the beam")
+	for i, x := range []int{20, 21} {
+		if after := cellStyleAt(canvas, x, 6); !after.Equal(&before[i]) {
+			t.Errorf("the cell at (%d,6) under the beam changed: %v -> %v", x, before[i].Fg, after.Fg)
+		}
 	}
 }
 
