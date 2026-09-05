@@ -37,27 +37,11 @@ func selectWindowByIndex(num int, o *app.OS) {
 	}
 }
 
-// The arrow keys belong to whatever overlay is up. Help scrolling is handled in
-// HandleTerminalModeKey and HandleWindowManagementModeKey, so what is left here
-// is the log viewer and the help's category strip.
-func handleUpKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.ShowLogs {
-		if o.LogScrollOffset > 0 {
-			o.LogScrollOffset--
-		}
-		return o, nil
-	}
-	return o, nil
-}
-
-func handleDownKey(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.ShowLogs {
-		o.LogScrollOffset++
-		return o, nil
-	}
-	return o, nil
-}
-
+// The left and right arrows walk the help's category strip. The help intercepts
+// them by key in HandleTerminalModeKey and HandleWindowManagementModeKey and
+// calls these directly; they are not bound actions. Up and down used to have the
+// same shape for the log viewer, which takes its own arrows in handleLogViewerKey,
+// so the nav_* actions dispatched to no-ops on every path that reached them.
 func handleLeftKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Help menu category navigation
 	if o.ShowHelp && !o.HelpSearchMode {
