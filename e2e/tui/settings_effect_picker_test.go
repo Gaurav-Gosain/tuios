@@ -30,6 +30,21 @@ var effectBands = []string{"none", "short", "medium", "long"}
 
 // effectRowsOnScreen returns the screen rows of the picker's effect list, in
 // order, paired with their text.
+// effectNameIn returns the effect a picker row names.
+//
+// The picker is drawn over the settings panel, so one screen row can carry a
+// settings label on the left and an effect on the right: "> Effect
+// binarypath long". The name is always the field before the duration band,
+// never the first field, which is what made this test click the wrong column
+// when the fifth match happened to be one of those rows.
+func effectNameIn(line string) string {
+	fields := strings.Fields(line)
+	if len(fields) < 2 {
+		return ""
+	}
+	return fields[len(fields)-2]
+}
+
 func effectRowsOnScreen(s tuitest.Screen) (rows []int, text []string) {
 	_, height := s.Size()
 	for row := range height {
@@ -109,7 +124,10 @@ func TestEffectPickerTakesTheClicksOverTheSettingsPanel(t *testing.T) {
 	// the settings panel.
 	rows, text := effectRowsOnScreen(term.Screen())
 	target, line := rows[4], text[4]
-	name := strings.Fields(line)[0]
+	name := effectNameIn(line)
+	if name == "" {
+		t.Fatalf("no effect name in the row to click: %q", line)
+	}
 	if name == before {
 		t.Fatalf("the row being clicked already holds the current value %q, so the click proves nothing", before)
 	}
