@@ -743,3 +743,105 @@ matrix both run every shape under both cell forms.
 `TestOlderPeerReadsTheWire` covers the two skews this package cannot build from
 its own daemon and client: an older daemon reads the new request, and a newer
 client reads the older answer.
+
+## 2026-09 client draw path
+
+Profiled `composeFrame` plus the diff-and-emit half of a client frame
+(`frameSink`, see `frame_pipeline_bench_test.go`) for the frame a multiplexer
+draws most: one character typed into one of N panes, the rest idle
+(`BenchmarkKeystrokeFrame`, `BenchmarkKeystrokeFrameTiled`). Half of that frame
+was the compose, and more than half of the compose was work the frame did not
+need: lipgloss's Compositor measured every layer's string twice per frame, then
+re-parsed every layer's string into cells, the unchanged panes included, onto a
+canvas that paid a damage comparison per cell for a buffer rebuilt from scratch
+each frame. Turning the cells back into the frame string cost a fresh SGR diff
+per style change and two more copies to trim it.
+
+### What changed
+
+`composeLayers` (`compose.go`) replaces the Compositor and the Canvas. It keeps
+the Compositor's order, root and unstable sort included, and draws each layer
+from a `cellLayer`: the cells its string parsed to the last time it was seen,
+kept by layer id while the layer is on screen. A pane's layer keeps its string
+between keystrokes in other panes, so it is parsed once per rebuild and copied
+afterwards, a row copy when its edges meet no wide cell. `frameRenderer`
+(`frame_render.go`) writes the same bytes as `Lines.Render` plus `TrimSpace`,
+remembering the diff for each pair of styles and trimming each line as it is
+written. The output is identical: `TestComposeLayersRandomMatchesCompositor`
+and `TestFrameRenderMatchesUltraviolet` draw random inputs through both.
+
+The focused pane's cell loop no longer holds a `*uv.Cell` across the next
+`CellAt` call; it keeps the previous style as a value. Same output
+(`TestRenderTerminalKeepsEveryStyleRun` parses the frame back and compares
+every cell), and it lets the VT layer stop handing out stable cell addresses.
+
+### Numbers
+
+Taken against main at 9b640746, twenty rounds of A, B and a second A
+interleaved in one session on an otherwise idle machine, `nice -n 10 taskset -c
+0-7`. The noise floor is the same main binary against itself across those
+rounds: every benchmark reads `~`, intervals of +/-6% to +/-25%, geomean
++2.65%. Every figure below clears that floor with p <= 0.001. Allocation counts
+do not move with load: on the noise floor every one of them is identical.
+
+| Benchmark (207x55) | main | branch | |
+|---|---|---|---|
+| `CompositorGetCanvas/windows-9/one-dirty` | 862 us | 149 us | -83% (p<0.001, n=20) |
+| `CompositorGetCanvas/windows-4/one-dirty` | 966 us | 239 us | -75% (p<0.001) |
+| `CompositorGetCanvas/windows-1/one-dirty` | 1.52 ms | 708 us | -53% (p<0.001) |
+| `CompositorGetCanvas/windows-9/all-dirty` | 1.57 ms | 890 us | -43% (p<0.001) |
+| `ClientFrame/panes-9/compose` (flood) | 10.12 ms | 6.77 ms | -33% (p<0.001) |
+| `ClientFrame/panes-9/whole` (flood) | 17.65 ms | 14.92 ms | -15% (p<0.001) |
+| `KeystrokeFrame/panes-9` (compose+emit) | 3.72 ms | 2.52 ms | -32% (p<0.001) |
+| `KeystrokeFrame/panes-1` | 4.13 ms | 3.29 ms | -20% (p=0.001) |
+| `KeystrokeFrameTiled/panes-9` | 4.10 ms | 2.81 ms | -31% (p<0.001) |
+| `IdleTick` | | | unchanged |
+
+The cell loop was measured on its own, forty rounds against a +/-1% to +/-8%
+floor, because the style-as-a-value change touches every cell of the focused
+pane. Every `RenderTerminalReal` case reads `~`: geomean -1.55% against a
+-1.83% floor for main against itself. It costs nothing and allocates nothing
+extra.
+
+| Allocations per frame | main | branch |
+|---|---|---|
+| `KeystrokeFrame/panes-1` | 2853 allocs | 1800 allocs |
+| `KeystrokeFrame/panes-9` | 4228 allocs | 1417 allocs |
+| `KeystrokeFrameTiled/panes-9` | 4027 allocs | 2196 allocs |
+| `CompositorGetCanvas/windows-9/one-dirty` | 138 allocs | 111 allocs |
+| `ClientFrame/panes-9/compose` (flood) | 79.2k allocs | 42.5k allocs |
+| `ClientFrame/panes-9/whole` (flood) | 98.2k allocs | 61.9k allocs |
+| `RenderTerminalReal/*` (cell loop) | unchanged | unchanged |
+
+`bytes/frame` is the same on both sides of every benchmark that reports it, so
+the frame that leaves the client is unchanged.
+
+### What it costs
+
+The cells are kept, so the client holds more. Nine panes at 207x55, three
+thousand keystroke frames, live heap after two collections:
+
+| | main | branch |
+|---|---|---|
+| live heap | 10.81 MiB | 12.51 MiB |
+| resident | 42-51 MiB | 46-55 MiB |
+
+The live heap is +1.7 MiB and repeats to within 1 KiB across runs. Resident sits
+well above live heap on both sides and the two ranges overlap. That gap is Go
+headroom at the default GOGC, not a leak. The cache holds only the layers on the
+current frame, so it grows with the panes on screen and not with the panes that
+exist.
+
+The whole keystroke frame moved less than the compose did, because the compose is
+only half of it. The other half is bubbletea's renderer: it parses the frame
+string into cells again, and its `cellbuf.Clear()` touches every line, so the
+diff's `transformLine` runs on all 55 rows each frame and `lineHasDrift` calls
+`StringWidth` twice per cell on each of them. In the keystroke profile that one
+function was 37% of the emit half and about a fifth of the frame. It lives in
+ultraviolet's `TerminalRenderer`, outside this repo.
+
+### Invariants held
+
+```
+BenchmarkIdleTick-8   0 render/tick   0 work/tick   296 B/op   5 allocs/op
+```
