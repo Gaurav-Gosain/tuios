@@ -33,3 +33,6 @@ zz_*_test.go
 /clienttests/node_modules
 /clienttests/test-results
 .ghostty-vt/
+
+# Test binaries left behind by go test -cpuprofile
+*.test

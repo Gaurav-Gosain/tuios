@@ -842,19 +842,21 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		default:
 		}
 
-		// Short deadline only detects the message boundary (for done/ctx
-		// checks); the body gets a longer deadline so a large payload cannot be
-		// cut mid-frame and desync framing.
-		msg, codecType, err := ReadMessageBuffered(conn, br, 100*time.Millisecond, 30*time.Second)
+		// No deadline between frames: the wait costs nothing until a frame
+		// arrives or the connection is closed, and both drop and shutdown
+		// close it. The body gets a deadline so a large payload cannot be cut
+		// mid-frame and desync framing.
+		msg, codecType, err := ReadMessageBuffered(conn, br, 0, 30*time.Second)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return
 			}
 			var netErr net.Error
 			if errors.As(err, &netErr) && netErr.Timeout() {
-				// The short deadline is only there to give the loop a chance to
-				// see ctx.Done and cs.done; a timeout is not an error.
-				continue
+				// A body that stalled past its deadline. The frame is now cut
+				// in the middle, so the stream cannot be resumed.
+				LogError("Read timeout from %s mid-frame", clientID)
+				return
 			}
 			LogError("Read error from %s: %v", clientID, err)
 			return

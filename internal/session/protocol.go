@@ -423,6 +423,10 @@ type GetTerminalStatePayload struct {
 	// which is what the caller already handles, so the two directions of
 	// version skew are both safe.
 	HaveScrollback int `json:"have_scrollback,omitempty"`
+	// Packed asks for the cells in their packed form (TerminalState.Styles and
+	// the Packed fields) instead of as [][]CellState. A daemon that predates
+	// the field ignores it and sends cells, which every client reads.
+	Packed bool `json:"packed,omitempty"`
 }
 
 // TerminalStatePayload contains the terminal state response.
@@ -633,40 +637,20 @@ func ReadMessageWithCodec(r io.Reader) (*Message, CodecType, error) {
 	return readMessageBody(r, totalLen)
 }
 
-// ReadMessageConn reads a framed message from conn, applying boundaryTimeout
-// only to the 4-byte length prefix and bodyTimeout to the header and payload.
-// Splitting the deadline keeps idle-connection keepalive timeouts short while
-// preventing a large payload that arrives across several reads from being cut
-// mid-frame, which would otherwise desync the stream. A bodyTimeout of 0
-// clears the read deadline for the body.
-func ReadMessageConn(conn net.Conn, boundaryTimeout, bodyTimeout time.Duration) (*Message, CodecType, error) {
-	_ = conn.SetReadDeadline(time.Now().Add(boundaryTimeout))
-
-	var totalLen uint32
-	if err := binary.Read(conn, binary.BigEndian, &totalLen); err != nil {
-		if err == io.EOF {
-			return nil, CodecGob, err
-		}
-		return nil, CodecGob, fmt.Errorf("failed to read message length: %w", err)
-	}
-
-	if bodyTimeout > 0 {
-		_ = conn.SetReadDeadline(time.Now().Add(bodyTimeout))
-	} else {
-		_ = conn.SetReadDeadline(time.Time{})
-	}
-
-	return readMessageBody(conn, totalLen)
-}
-
-// ReadMessageBuffered reads a framed binary message the same way as
-// ReadMessageConn, but reads the bytes from r (typically a *bufio.Reader
-// wrapping conn) while still applying the split boundary/body deadlines to conn.
-// The daemon wraps each accepted connection in a bufio.Reader to peek the first
-// byte for JSON-versus-binary detection, so the binary read loop must continue
-// through that same buffered reader rather than reading conn directly.
+// ReadMessageBuffered reads a framed message from r, a *bufio.Reader over
+// conn, applying boundaryTimeout only to the 4-byte length prefix and
+// bodyTimeout to the header and payload. Splitting the deadline keeps a large
+// payload that arrives across several reads from being cut mid-frame, which
+// would desync the stream. A timeout of 0 clears the read deadline for that
+// part: at the boundary, the read then waits for the next frame with no
+// wakeup at all.
+//
+// Both read loops go through here. The daemon wraps each accepted connection
+// in a bufio.Reader to peek the first byte for JSON-versus-binary detection,
+// and the client wraps its connection so a frame is one read rather than
+// three; neither may read conn directly once the reader holds bytes.
 func ReadMessageBuffered(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeout time.Duration) (*Message, CodecType, error) {
-	_ = conn.SetReadDeadline(time.Now().Add(boundaryTimeout))
+	setBoundaryDeadline(conn, boundaryTimeout)
 
 	var totalLen uint32
 	if err := binary.Read(r, binary.BigEndian, &totalLen); err != nil {
@@ -683,6 +667,23 @@ func ReadMessageBuffered(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeou
 	}
 
 	return readMessageBody(r, totalLen)
+}
+
+// setBoundaryDeadline arms the deadline for the wait between frames, or
+// clears it when there is none.
+//
+// Both read loops used to wait with a 100 ms deadline so they could look at
+// their done channels between frames, and an idle connection paid for that
+// ten times a second, on each side, forever: a timer, a wakeup and a read
+// that returned nothing. Neither loop needs it. The only things that close
+// those channels close the connection with them, and a closed connection
+// wakes the read on its own.
+func setBoundaryDeadline(conn net.Conn, timeout time.Duration) {
+	if timeout > 0 {
+		_ = conn.SetReadDeadline(time.Now().Add(timeout))
+		return
+	}
+	_ = conn.SetReadDeadline(time.Time{})
 }
 
 // readMessageBody reads the header and payload after the length prefix has

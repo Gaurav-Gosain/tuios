@@ -542,7 +542,18 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	}
 
 	accepted := session.UpdateState(&state)
-	merged := session.GetState()
+
+	// The merged state is a full copy of the session's, retitled from every
+	// live emulator. It is read only by the reconcile reply and the peer
+	// broadcast below, so a sync from the one attached client that the daemon
+	// accepted as it stands, which is nearly every sync, does not build it.
+	var merged *SessionState
+	mergedState := func() *SessionState {
+		if merged == nil {
+			merged = session.GetState()
+		}
+		return merged
+	}
 
 	// A sync built before a daemon-side mutation was reconciled against it, so
 	// what is canonical now is not what this client pushed. Send the merged state
@@ -550,7 +561,7 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	// pushes it again on the next sync.
 	if !accepted {
 		if err := d.sendMessage(cs, MsgStateSync, &StateSyncPayload{
-			State:       merged,
+			State:       mergedState(),
 			TriggerType: "reconcile",
 		}); err != nil {
 			return err
@@ -573,9 +584,9 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	// sender, whose state is by definition not the merged one.
 	clientCount := d.getSessionClientCount(cs.sessionID)
 	if clientCount > 1 {
-		fp := StateFingerprint(merged)
+		fp := StateFingerprint(mergedState())
 		if session.NoteBroadcastFingerprint(fp) {
-			d.broadcastStateSync(cs.sessionID, merged, "update", cs.clientID)
+			d.broadcastStateSync(cs.sessionID, mergedState(), "update", cs.clientID)
 		}
 	}
 
@@ -711,6 +722,9 @@ func (d *Daemon) handleGetTerminalState(cs *connState, msg *Message) error {
 		maxScrollback = payload.MaxScrollbackLines
 	}
 	state := pty.GetTerminalState(maxScrollback, payload.HaveScrollback)
+	if payload.Packed {
+		state.Pack()
+	}
 	return d.sendMessage(cs, MsgTerminalState, &TerminalStatePayload{
 		PTYID: payload.PTYID,
 		State: state,

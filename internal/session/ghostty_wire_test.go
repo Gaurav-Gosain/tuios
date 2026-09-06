@@ -17,15 +17,17 @@ import (
 )
 
 // wireCase writes a stream, snapshots the source, restores into the
-// destination and compares.
-func runWireCase(t *testing.T, name, stream string, src, dst vt.Terminal) {
+// destination and compares. packed picks the form the snapshot takes on the
+// wire; a client on this backend may be answered by a daemon of either age,
+// so the callers run both.
+func runWireCase(t *testing.T, name, stream string, src, dst vt.Terminal, packed bool) {
 	t.Helper()
 	if _, err := src.Write([]byte(stream)); err != nil {
 		t.Fatalf("%s: write: %v", name, err)
 	}
 	w, h := src.Width(), src.Height()
 	state := TerminalStateOf(src, w, h, 200, 0)
-	ApplyTerminalState(dst, state)
+	ApplyTerminalState(dst, throughWire(t, state, packed))
 	compareEmulators(t, src, dst)
 	// Screen text agrees cell by cell.
 	for y := 0; y < h; y++ {
@@ -245,39 +247,45 @@ var wireStreams = []struct {
 // TestGhosttyWireFromPure: pure daemon snapshot restored into a ghostty
 // client.
 func TestGhosttyWireFromPure(t *testing.T) {
-	for _, tc := range wireStreams {
-		t.Run(tc.name, func(t *testing.T) {
-			src := vt.NewEmulator(40, 6)
-			dst := vt.NewGhosttyTerminal(40, 6)
-			defer dst.Close()
-			runWireCase(t, tc.name, tc.stream, src, dst)
-		})
+	for _, form := range wireForms {
+		for _, tc := range wireStreams {
+			t.Run(form.name+"/"+tc.name, func(t *testing.T) {
+				src := vt.NewEmulator(40, 6)
+				dst := vt.NewGhosttyTerminal(40, 6)
+				defer dst.Close()
+				runWireCase(t, tc.name, tc.stream, src, dst, form.packed)
+			})
+		}
 	}
 }
 
 // TestGhosttyWireFromGhostty: ghostty daemon snapshot restored into a pure
 // client.
 func TestGhosttyWireFromGhostty(t *testing.T) {
-	for _, tc := range wireStreams {
-		t.Run(tc.name, func(t *testing.T) {
-			src := vt.NewGhosttyTerminal(40, 6)
-			defer src.Close()
-			dst := vt.NewEmulator(40, 6)
-			runWireCase(t, tc.name, tc.stream, src, dst)
-		})
+	for _, form := range wireForms {
+		for _, tc := range wireStreams {
+			t.Run(form.name+"/"+tc.name, func(t *testing.T) {
+				src := vt.NewGhosttyTerminal(40, 6)
+				defer src.Close()
+				dst := vt.NewEmulator(40, 6)
+				runWireCase(t, tc.name, tc.stream, src, dst, form.packed)
+			})
+		}
 	}
 }
 
 // TestGhosttyWireGhosttyToGhostty: both sides on the library, which is what
 // a ghostty-tagged release runs.
 func TestGhosttyWireGhosttyToGhostty(t *testing.T) {
-	for _, tc := range wireStreams {
-		t.Run(tc.name, func(t *testing.T) {
-			src := vt.NewGhosttyTerminal(40, 6)
-			defer src.Close()
-			dst := vt.NewGhosttyTerminal(40, 6)
-			defer dst.Close()
-			runWireCase(t, tc.name, tc.stream, src, dst)
-		})
+	for _, form := range wireForms {
+		for _, tc := range wireStreams {
+			t.Run(form.name+"/"+tc.name, func(t *testing.T) {
+				src := vt.NewGhosttyTerminal(40, 6)
+				defer src.Close()
+				dst := vt.NewGhosttyTerminal(40, 6)
+				defer dst.Close()
+				runWireCase(t, tc.name, tc.stream, src, dst, form.packed)
+			})
+		}
 	}
 }

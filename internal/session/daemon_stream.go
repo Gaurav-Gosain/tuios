@@ -154,10 +154,15 @@ func (d *Daemon) sendMessage(cs *connState, msgType MessageType, payload any) er
 	if err != nil {
 		return err
 	}
+	return d.sendEncoded(cs, msg)
+}
 
+// sendEncoded writes an already encoded message to one client, dropping the
+// client if the write fails.
+func (d *Daemon) sendEncoded(cs *connState, msg *Message) error {
 	cs.sendMu.Lock()
 	_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	err = WriteMessageWithCodec(cs.conn, msg, cs.codec)
+	err := WriteMessageWithCodec(cs.conn, msg, cs.codec)
 	cs.sendMu.Unlock()
 	if err != nil {
 		// A mid-frame write failure permanently desyncs framing for this
@@ -215,6 +220,15 @@ func (d *Daemon) sendAttachReply(cs *connState, payload *AttachedPayload) error 
 // broadcastToSession sends a message to all TUI clients attached to a session.
 // If excludeClientID is non-empty, that client is excluded from the broadcast.
 func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, payload any, excludeClientID string) {
+	// Encoded once. Every client speaks the one codec there is, and a state
+	// push is the whole session, so encoding it on each client's goroutine
+	// was the same gob of the same state as many times as there were peers.
+	msg, err := NewMessageWithCodec(msgType, payload, DefaultCodec())
+	if err != nil {
+		debugLog("[DEBUG] broadcastToSession: encode: %v", err)
+		return
+	}
+
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
 
@@ -240,7 +254,7 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 					log.Printf("PANIC in broadcastToSession send goroutine: %v\n%s", r, debug.Stack())
 				}
 			}()
-			if err := d.sendMessage(client, msgType, payload); err != nil {
+			if err := d.sendEncoded(client, msg); err != nil {
 				debugLog("[DEBUG] broadcastToSession: failed to send to client %s: %v", client.clientID, err)
 			}
 		}(cs)

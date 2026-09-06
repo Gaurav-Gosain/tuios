@@ -568,3 +568,178 @@ that fails a named assertion (`TestMotionFilterPassesPaneContentForLinks`,
 `TestMotionFilterRecordsThePointerItDrops`, `TestMotionFilterPassesTheDockBand`,
 `TestProgramOptionsReachTheProgram`,
 `TestKeysTypedRightAfterEnteringTerminalModeReachThePTY`).
+
+## 2026-09 daemon and wire pass
+
+What `internal/session` costs between the PTY and the client's emulator,
+measured on a real daemon over a real unix socket with a real shell in the
+pane. The harness is `internal/session/wire_e2e_bench_test.go`: it starts a
+daemon, attaches a `TUIClient`, subscribes to one pane and counts every read
+and write on the client's socket, so a syscall per keystroke is a number and
+not an inference.
+
+```
+go test ./internal/session/ -run '^$' -bench 'E2E'                     # keystroke echo, flood
+go test ./internal/session/ -run '^$' -bench 'WireTerminalStateApply'  # the snapshot, both sides
+go test ./internal/session/ -run '^$' -bench 'SnapshotPack'            # the packed form alone
+```
+
+### Measurement conditions
+
+Timings are rounds under the bench lock with `nice -n 10 taskset -c 0-7`,
+compared with `benchstat`. Each round runs old, new, new, old. That order
+cancels any drift across the round, and the two old runs sit at the widest
+positions apart, so old against old is an upper bound on what position and
+ambient load alone can produce.
+
+That floor is what decides which timings are quoted:
+
+- Client decode and apply: old against old is -2.5% by geomean and neither
+  case is significant (p=0.21 and p=0.27), on 18 samples a side. The measured
+  effect is -36% to -44%. It is quoted.
+- Daemon snapshot build: old against old is -14.5% by geomean, and two of the
+  three cases come out "significant" on identical code (p=0.011 and p=0.019).
+  The effect is the same size as that floor, so **no daemon-side timing is
+  quoted here**. The allocation counts carry that claim instead, and they are
+  exact.
+
+The benchmark is GC-bound, which is why its floor is so much wider than the
+client's: one op churns 23 MB, and when the collector runs depends on what
+else has the machine.
+
+Counts, allocations and wire bytes do not move with load and are exact.
+
+### Where the time went
+
+**The flood is the emulator's.** A pane printing 16 MiB as fast as it can into
+one client spends 84% of the process in `internal/vt` parsing those bytes on
+the daemon side, 3.3% in `readOutput` (ring append, broadcast, event publish)
+and 1.6% in `streamPTYOutput` (batch and socket write). The wire is not where a
+flood is slow, and nothing in this package was changed for it.
+
+**The keystroke is syscalls and scheduler.** The echo of one key, client write
+to client handler, is 33% in syscalls and most of the rest in goroutine
+wakeups. The client read three times per frame: the length prefix, the two
+header bytes and the payload, each straight off the socket.
+
+**The snapshot is where the wire is expensive.** `TerminalState` carries its
+cells as `[][]CellState`, and gob writes every cell as a struct, so a 207x55
+screen is 147 KB and a thousand rows of history 2.9 MB, per pane, and the
+client decodes every one of those structs by reflection on its UI goroutine
+during a workspace switch and then resolves each cell's colours through
+`fmt.Sscanf`. One palette pane cost the client 11 ms per switch on the box
+these numbers were taken on, before any of its cells were painted, and a pane
+with a thousand rows of history behind it cost 123 ms.
+
+### What moved
+
+**The snapshot's cells travel packed** (`snapshot_pack.go`). A style table
+once, cells in one style run together, two bytes per plain letter, blank row
+tails left off. Negotiated per request with `GetTerminalStatePayload.Packed`,
+so no protocol bump: a daemon that predates the field answers with cells and a
+client that predates it never asks. The client unpacks the reply as soon as it
+is decoded, so everything past `TUIClient.GetTerminalState` still reads cells.
+Wire bytes per pane, at 207x55, exact:
+
+| | cells | packed | |
+|---|---|---|---|
+| palette colours, screen only (a workspace switch) | 146,716 | **22,749** | 6.4x |
+| palette colours, 1000 rows of history (a cold attach) | 2,879,037 | **416,713** | 6.9x |
+| truecolor in runs of eight, screen only | 195,611 | **42,149** | 4.6x |
+| truecolor in runs of eight, 1000 rows | 3,704,103 | **587,539** | 6.3x |
+| a different colour on every cell, screen only | 195,611 | 170,850 | 1.1x |
+
+The last row is the worst case for any style table and is quoted so nobody
+expects the packed form to help an image viewer's pane.
+
+The gob decode alone, cells against packed in one build, is 11,161 allocations
+to **435** for a palette screen and 206,965 to **580** for a thousand rows of
+history.
+
+What the client pays for a whole snapshot, decode and apply together, is the
+number a workspace switch waits on. Old cells against new packed:
+
+| | before | after | |
+|---|---|---|---|
+| palette colours, screen only | 11.25 ms | **7.25 ms** | -36% (p<0.001) |
+| palette colours, 1000 rows of history | 123.3 ms | **68.8 ms** | -44% (p<0.001) |
+
+Allocations for the same two: 23,113 to **889**, and 427,712 to **4,035**.
+Bytes allocated fall by a third. The two timings are taken on a loaded box, so
+read the ratio and not the absolute figures. The noise floor for that pair, on
+identical code, is -2.5% and not significant.
+
+**Colours are parsed and printed by hand.** `colorFromWire` used `fmt.Sscanf`
+per cell and `colorToWire` built a string per styled cell. Palette strings are
+now built once for the process, RGB strings once per distinct colour per
+snapshot, and the hex is read by hand. A client answered by an older daemon
+gets this part too, because it does not depend on the packed form.
+
+**The apply path allocates nothing per cell.** `stateToCell` returned a fresh
+`*uv.Cell` for every cell, and both emulators copy what they are handed. One
+cell now serves a whole snapshot.
+
+Those two, with the pooled rows in `TerminalStateOf`, are what the daemon side
+gained. Building and encoding one snapshot in the cell form is what an older
+client is still answered with, and its allocations are:
+
+| | before | after | |
+|---|---|---|---|
+| screen only | 10,775 | **107** | -99.0% |
+| 100 rows of history | 43,695 | **118** | -99.7% |
+| 1000 rows of history | 510,544 | **194,130** | -62.0% |
+
+Bytes allocated fall 3.7% to 5.7% over the same three. The wall time falls too,
+but by no more than this benchmark's own noise floor, so it is not quoted. See
+"Measurement conditions". The depth-1000 count is still large because
+`ScrollbackLine` builds the cells it hands back, which this pass did not touch.
+
+One cost, not a saving: the four new fields put 102 more bytes of gob type
+description into every snapshot, packed or not. That is 0.07% of a screen.
+
+**The client reads a frame in one syscall.** `TUIClient` reads through a
+`bufio.Reader`. `TestClientReadsAFrameInOneSyscall` counts 40 echoed keystrokes
+at one read each; make the client read the socket directly again and the same
+test counts 120 reads for the same 40 frames, which is the length prefix, the
+two header bytes and the payload each on their own. The keystroke's wall time
+is within noise on this box.
+
+**Neither read loop polls.** Both loops waited between frames with a 100 ms
+deadline so they could look at their done channels, ten wakeups a second per
+side per connection, forever, and every one of them a read that returned
+nothing. Neither needed it: everything that closes those channels closes the
+connection with them. `TestIdleConnectionMakesNoReads` holds an idle client at
+zero reads on its socket and the process under ten read syscalls over 1.5 s.
+Put either deadline back and the same test counts 15 client reads and 20
+process reads in that 1.5 s, which is the ten-a-second poll.
+
+**A state sync from one client no longer builds the merged state unless
+something reads it**, which is the reconcile reply and the peer broadcast; the
+one-client accepted case, which is nearly every sync, skipped a full state
+copy. **A broadcast encodes once** instead of once per peer goroutine.
+
+### Measured and deliberately not changed
+
+- **Per-chunk copies on the daemon.** A chunk is copied out of the read buffer,
+  into the ring, into the batch and into the frame. In the flood profile all
+  of `readOutput` is 3.3% and `writePTYFrame` 1.2%; removing a copy would not
+  show.
+- **The per-chunk event publish and settle timer.** Already priced in the
+  2026-08 pass; invisible in the flood profile behind the emulator.
+- **The client's second copy of every pane's history.** Still there. The
+  packed form makes the cold attach seven times smaller but does not change
+  who holds what. `docs/REHYDRATION.md` sketches fetch-on-scroll, which is the
+  change that would; it is not built.
+
+### Invariants held
+
+```
+BenchmarkIdleTick-8   0 render/tick   0 work/tick   296 B/op   5 allocs/op
+```
+
+`ProtocolVersion` is still 3 and `VerbProtocolVersion` still 1. Every message
+type keeps its number. `TestWireCarriesTheWholeCell` and the ghostty wire
+matrix both run every shape under both cell forms.
+`TestOlderPeerReadsTheWire` covers the two skews this package cannot build from
+its own daemon and client: an older daemon reads the new request, and a newer
+client reads the older answer.

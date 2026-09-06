@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -38,7 +39,13 @@ type DisconnectHandler func(err error)
 // TUIClient is used by the TUIOS TUI to communicate with the daemon.
 // It handles PTY I/O and state synchronization.
 type TUIClient struct {
-	conn   net.Conn
+	conn net.Conn
+	// br is the only reader of conn. A frame is read in three pieces, the
+	// length, the header and the payload, and reading them off the socket
+	// directly was three read syscalls per message: for the echo of a
+	// keystroke, three where one does. Everything that reads goes through br
+	// under readMu, so no byte it has buffered is ever skipped.
+	br     *bufio.Reader
 	mu     sync.Mutex
 	readMu sync.Mutex
 
@@ -190,6 +197,7 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 		return fmt.Errorf("failed to connect to daemon: %w", err)
 	}
 	c.conn = conn
+	c.br = nil
 
 	// Build hello payload with capabilities
 	hello := &HelloPayload{
@@ -928,6 +936,7 @@ func (c *TUIClient) GetTerminalState(ptyID string, maxScrollback, have int) (*Te
 		IncludeScrollback:  maxScrollback >= 0,
 		MaxScrollbackLines: max(maxScrollback, 0),
 		HaveScrollback:     max(have, 0),
+		Packed:             true,
 	}, c.codec)
 	if err != nil {
 		return nil, err
@@ -943,6 +952,11 @@ func (c *TUIClient) GetTerminalState(ptyID string, maxScrollback, have int) (*Te
 		var payload TerminalStatePayload
 		if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
 			return nil, err
+		}
+		// The cells were asked for packed and are unpacked here, so every
+		// reader of the state sees the cells it has always read.
+		if err := payload.State.unpack(); err != nil {
+			return nil, fmt.Errorf("get terminal state: %w", err)
 		}
 		return payload.State, nil
 
@@ -978,18 +992,14 @@ func (c *TUIClient) readLoop() {
 		}
 
 		c.readMu.Lock()
-		// Short deadline detects the message boundary for done-channel checks;
-		// the body then gets a longer deadline so a large payload cannot be cut
-		// mid-frame and desync framing.
-		msg, _, err := ReadMessageConn(c.conn, 100*time.Millisecond, 30*time.Second)
+		// No deadline between frames: Close closes the connection, which
+		// wakes this read, so an idle client sleeps until the daemon speaks.
+		// The body gets a deadline so a large payload cannot be cut mid-frame
+		// and desync framing.
+		msg, _, err := ReadMessageBuffered(c.conn, c.reader(), 0, 30*time.Second)
 		c.readMu.Unlock()
 
 		if err != nil {
-			var netErr net.Error
-			if errors.As(err, &netErr) && netErr.Timeout() {
-				// Deadline hit at a message boundary; loop to re-check c.done.
-				continue
-			}
 			if errors.Is(err, io.EOF) {
 				// Clean daemon-side close.
 				c.handleDisconnect(err)
@@ -1542,9 +1552,24 @@ func (c *TUIClient) recv() (*Message, error) {
 	defer c.readMu.Unlock()
 
 	_ = c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
-	msg, _, err := ReadMessageWithCodec(c.conn)
+	msg, _, err := ReadMessageWithCodec(c.reader())
 	return msg, err
 }
+
+// reader is the buffered reader over conn, built on first use so a client
+// handed a connection directly, as the tests do, reads the same way as one
+// that dialled. Called with readMu held.
+func (c *TUIClient) reader() *bufio.Reader {
+	if c.br == nil {
+		c.br = bufio.NewReaderSize(c.conn, clientReadBuffer)
+	}
+	return c.br
+}
+
+// clientReadBuffer is how much of the daemon's stream the client reads ahead:
+// every control message and the echo of a keystroke in one read, and a full
+// 256 KiB output batch in four. Larger only holds memory.
+const clientReadBuffer = 64 * 1024
 
 // sendAndWaitResponse sends a message and waits for a response of the expected type.
 // This works even after readLoop has started by registering a pending response channel.
