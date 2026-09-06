@@ -10,7 +10,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"charm.land/ssh"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
@@ -413,7 +412,12 @@ type OS struct {
 	// bspResizeScratch holds the layout rebuilt on each resize step. It is
 	// reused so a mouse drag does not allocate a map per motion event.
 	bspResizeScratch map[int]layout.Rect
-	renderCanvas     *lipgloss.Canvas // Reused across frames; resized on change, cleared per frame
+	renderCanvas     *frameCanvas // Reused across frames; resized on change, cleared per frame
+	// layerCells is each identified layer's string parsed to cells, kept across
+	// frames so an unchanged layer is copied rather than parsed. See compose.go.
+	layerCells     map[string]*cellLayer
+	composeGen     uint64
+	composeScratch []composedLayer
 	// scrollbarRects is where each pane's scrollbar was drawn on the last frame,
 	// keyed by window ID. Recorded by the renderer, read by input.
 	scrollbarRects map[string]ScrollbarRect

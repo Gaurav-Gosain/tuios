@@ -5,7 +5,6 @@ import (
 	"math"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
@@ -22,7 +21,7 @@ import (
 //
 // Where it runs. The pass mutates m.renderCanvas in composeFrame, after
 // GetCanvas has consumed every pane's cached layer and before Render turns the
-// canvas into a string. lipgloss.Canvas.CellAt hands back a pointer into the
+// canvas into a string. The canvas's CellAt hands back a pointer into the
 // buffer, so the pass edits in place and no cache upstream is invalidated. That
 // is what lets the beam move on every frame for the price of the pass alone.
 // Doing it in the pane cell loop instead would put the beam position in each
@@ -237,9 +236,17 @@ func (m *OS) spotlightAnchor() (int, int) {
 	return m.spotlight.x, m.spotlight.y
 }
 
+// cellCanvas is what the pass needs of a canvas: its size and a pointer to
+// each cell. The frame's own canvas and a lipgloss.Canvas both provide it.
+type cellCanvas interface {
+	Width() int
+	Height() int
+	CellAt(x, y int) *uv.Cell
+}
+
 // applySpotlight runs the pass over the composed canvas. composeFrame calls it
 // between GetCanvas and Render, and nowhere else does.
-func (m *OS) applySpotlight(canvas *lipgloss.Canvas) {
+func (m *OS) applySpotlight(canvas cellCanvas) {
 	cfg := m.spotlightConfig()
 	cx, cy := m.spotlightAnchor()
 	m.spotlight.apply(canvas, cx, cy, cfg.RadiusRows(), cfg.DimPercent(),
@@ -250,7 +257,7 @@ func (m *OS) applySpotlight(canvas *lipgloss.Canvas) {
 //
 // The ellipse is a circle on screen: a terminal cell is about twice as tall as
 // it is wide, so a radius given in rows reaches twice as many columns.
-func (s *spotlightState) apply(canvas *lipgloss.Canvas, cx, cy, radius, dim int, soft bool) {
+func (s *spotlightState) apply(canvas cellCanvas, cx, cy, radius, dim int, soft bool) {
 	width, height := canvas.Width(), canvas.Height()
 	if width <= 0 || height <= 0 || radius <= 0 {
 		return
