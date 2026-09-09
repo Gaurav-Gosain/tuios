@@ -537,7 +537,11 @@ tuios set-agent-state done
 tuios set-agent-state none                  # clear it
 ```
 
-The states are `none`, `working`, `needs_input`, `idle`, `done`, `errored`. With
+The states are `none`, `working`, `needs_input`, `idle`, `done`, `errored` and
+`unknown`. `unknown` is what the daemon writes to a pane it has lost track of:
+an agent is there and nothing says what it is doing. Read `needs_you` from
+`get-agent-state` or `list-agents` when the question is "does a person have to
+act", and `message` for what the agent waits for. With
 no `-w` the report lands on the focused window, which is wrong when you are not
 the focused pane. From inside a pane, always name yourself, and name your harness
 so anything reading the state knows what reported it:
@@ -562,16 +566,27 @@ reads them from the pane. Setting a bar maps to `working`, clearing it to
 
 Without either, tuios recognises 22 agent CLIs by their foreground process,
 claude-code and codex and gemini-cli and cursor-agent among them, and marks the
-pane `working` while one runs. The set comes from manifest files rather than a
-hardcoded list, and a user can add their own, so ask rather than assume:
+pane `working` while one runs. It reads the process's own name, its executable
+and, for an interpreter, the script it runs. It also reads the processes behind
+a shell, an interpreter or a launcher such as `timeout` or `npx`, so an agent
+started through a wrapper is found. A directory named after an agent is never
+evidence. The set comes from manifest files rather than a hardcoded list, and a
+user can add their own, so ask rather than assume:
 
 ```sh
 tuios explain-agent-detect -s work -w build --json | jq -r '.manifests[].id'
 ```
 
+`explain-agent-detect` answers with a verdict in plain words, the evidence it
+rests on, and every word on the command line that looks like an agent's name
+and was not counted. Run it first when a pane is, or is not, marked as an agent
+and you do not see why.
+
 Process detection is a coarse fallback: it can never say `needs_input`, which is
 the state a human actually acts on, and it cannot tell a busy agent from one
-sitting at its prompt. Your own report always outranks it.
+sitting at its prompt. Your own report always outranks it, and it is the only
+report that is certain: a process name is strong evidence, a screen rule is a
+guess, and `confidence` in `get-agent-state` says which one named the pane.
 
 ### Who wins when reports disagree
 

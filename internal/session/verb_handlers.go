@@ -762,6 +762,15 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 		// harness_id is empty until something names one.
 		"source":     claim.source.Name(),
 		"harness_id": claim.harness,
+		// identity and confidence say what kind of evidence named the harness:
+		// a report from the harness itself is certain, a process name is strong,
+		// and a pane nothing has named has none.
+		"identity":   string(claim.identity),
+		"confidence": claim.identity.confidence(),
+		// needs_you is the one question a person asks of a pane, answered as a
+		// bool so a consumer does not have to know which states mean it.
+		"needs_you": w.AgentState.NeedsYou(),
+		"activity":  w.AgentState.Activity(),
 	}, nil
 }
 
@@ -775,6 +784,12 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 // agent's name anywhere in its arguments went unnoticed until users found
 // unrelated panes turning into agents. This is the counterpart to
 // explain-agent-screen: that one explains a state, this one explains the name.
+//
+// The answer leads with a verdict in plain words and the evidence it rests on,
+// then lists every word on the command line that looks like an agent's name and
+// was not counted. A person who reports a false positive should be able to read
+// the answer once and see either the rule that fired or the word they took for
+// one.
 func (d *Daemon) verbExplainAgentDetect(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p commonParams
 	if verr := decodeParams(params, &p); verr != nil {
@@ -800,16 +815,30 @@ func (d *Daemon) verbExplainAgentDetect(_ *connState, params json.RawMessage) (a
 	}
 	w := state.Windows[idx]
 	claim := sess.agentClaimFor(w.ID)
+	// A pane nothing has claimed has no source. The zero claim names itself
+	// report, and printing that would say a shell prompt reported for itself.
+	source := ""
+	if isAgentWindow(w) {
+		source = claim.source.Name()
+	}
 
 	out := map[string]any{
 		"type":          "agent_detect",
 		"window_id":     w.ID,
 		"state":         w.AgentState.Name(),
-		"source":        claim.source.Name(),
+		"source":        source,
 		"harness_id":    w.AgentHarness,
 		"auto_detected": claim.auto,
+		"identity":      string(claim.identity),
+		"confidence":    claim.identity.confidence(),
+		"needs_you":     w.AgentState.NeedsYou(),
+		"activity":      w.AgentState.Activity(),
 		"running":       false,
 		"matched":       false,
+	}
+	var evidence []string
+	if claim.identity == identityReport && claim.harness != "" {
+		evidence = append(evidence, "The harness "+claim.harness+" named itself in a report. That is certain.")
 	}
 
 	// Read the process now rather than reporting what the last poll happened to
@@ -818,9 +847,11 @@ func (d *Daemon) verbExplainAgentDetect(_ *connState, params json.RawMessage) (a
 	info, running := d.foregroundResolver(sess)(w.PTYID)
 	out["running"] = running
 	if !running {
-		// Not an error: a pane sitting at its shell prompt with nothing running is
-		// the ordinary case, and saying so is the answer.
-		out["reason"] = "no foreground process could be read for this pane"
+		// Not an error: a pane with no live process is the ordinary case, and
+		// saying so is the answer.
+		out["reason"] = "No foreground process can be read for this pane."
+		out["verdict"] = "This pane runs no process that tuios can read."
+		out["evidence"] = evidence
 		return out, nil
 	}
 
@@ -832,20 +863,79 @@ func (d *Daemon) verbExplainAgentDetect(_ *connState, params json.RawMessage) (a
 	if rule, ok := d.agentMatcher.nameRule(proc); ok {
 		out["name_list"] = rule
 	}
-	if id, rule, ok := d.agentMatcher.identifyDetail(info); ok {
-		out["matched"] = true
-		out["matched_rule"] = rule
-		if id != "" {
-			out["matched_harness"] = id
-		} else {
-			// The flat name list matched. It names no harness, so the pane gets no
-			// screen rules, which is worth stating rather than leaving to be
-			// inferred from an empty field.
-			out["matched_harness"] = ""
-			out["note"] = "matched the built-in name list, not a manifest: no harness is named, so no screen rules run"
+	det, ok := d.agentMatcher.identifyDetail(info)
+	if len(det.visited) > 0 {
+		group := make([]map[string]any, 0, len(det.visited))
+		for _, member := range det.visited {
+			_, matched := d.agentMatcher.matchProc(member)
+			group = append(group, map[string]any{
+				"pid":     member.pid,
+				"depth":   member.depth,
+				"comm":    member.comm,
+				"argv":    member.argv,
+				"exe":     member.exe,
+				"matched": matched,
+			})
 		}
+		out["group"] = group
 	}
+	label := processLabel(info)
+	switch {
+	case ok:
+		out["matched"] = true
+		out["matched_rule"] = det.rule
+		out["matched_harness"] = det.harness
+		out["matched_via"] = det.via
+		if claim.identity != identityReport {
+			out["confidence"] = det.tier.confidence()
+			out["identity"] = string(det.tier)
+		}
+		name := det.harness
+		if name == "" {
+			name = "an agent named " + processLabel(det.proc)
+			out["note"] = "The name list matched, not a manifest. No harness is named, so no screen rules run."
+		}
+		what := "The process " + processLabel(det.proc) + " matched " + describeRule(det)
+		if len(det.via) > 0 {
+			out["verdict"] = "This pane runs " + name + " behind " + strings.Join(det.via, ", ") + "."
+			evidence = append(evidence, "The foreground process "+label+" is a wrapper, so tuios read the processes behind it.")
+		} else {
+			out["verdict"] = "This pane runs " + name + "."
+		}
+		evidence = append(evidence, what)
+		if det.harness == "" {
+			evidence = append(evidence, "A process name is strong evidence. It names no harness.")
+		} else {
+			evidence = append(evidence, "A process name is strong evidence.")
+		}
+	case info.atShell():
+		out["verdict"] = "This pane is at its shell prompt. It runs no agent."
+	default:
+		out["verdict"] = "This pane does not run an agent. The foreground process is " + label + "."
+		if proc.Wraps() {
+			if len(det.visited) == 0 {
+				evidence = append(evidence, "The process "+label+" is a wrapper. Nothing runs behind it.")
+			} else {
+				evidence = append(evidence, fmt.Sprintf("The process %s is a wrapper. None of the %d processes behind it is an agent.",
+					label, len(det.visited)))
+			}
+		}
+		if info.pid > 0 && info.group == nil && proc.Wraps() {
+			evidence = append(evidence, "This platform cannot list the processes behind a wrapper.")
+		}
+		out["ignored"] = d.agentMatcher.mentions(info)
+	}
+	out["evidence"] = evidence
 	return out, nil
+}
+
+// describeRule spells a detection's rule as a sentence fragment: which manifest
+// or list it came from, and the predicate.
+func describeRule(det detection) string {
+	if det.harness != "" {
+		return "the manifest " + det.harness + " on " + det.rule + "."
+	}
+	return "the name list on " + strings.TrimPrefix(det.rule, "name ") + "."
 }
 
 // verbExplainAgentScreen dumps a pane's tail exactly as the screen tier reads

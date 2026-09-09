@@ -106,6 +106,58 @@ func readProcArgs(pid int) (string, []string) {
 	return exe, argv
 }
 
+// foregroundGroup walks the descendants of leader that share its process group,
+// depth first, reading at most limit processes no deeper than depth.
+//
+// One sysctl, kern.proc.pgrp, lists every member of the group with its parent
+// pid, so the tree is built from that answer and only the members on the path
+// down from the leader are then asked for their arguments. A member outside the
+// group is never in the answer at all, which is the same boundary the Linux
+// walk draws by reading each child's pgrp.
+func foregroundGroup(leader, limit, depth int) func(yield func(foregroundInfo) bool) {
+	return func(yield func(foregroundInfo) bool) {
+		members, err := unix.SysctlKinfoProcSlice("kern.proc.pgrp", leader)
+		if err != nil || len(members) == 0 {
+			return
+		}
+		children := make(map[int][]int, len(members))
+		for i := range members {
+			pid, ppid := int(members[i].Proc.P_pid), int(members[i].Eproc.Ppid)
+			if pid == leader {
+				continue
+			}
+			children[ppid] = append(children[ppid], pid)
+		}
+		read := 0
+		var walk func(pid, d int) bool
+		walk = func(pid, d int) bool {
+			if d > depth {
+				return true
+			}
+			for _, child := range children[pid] {
+				if read >= limit {
+					return false
+				}
+				info := readProcessInfo(child)
+				if info.comm == "" && len(info.argv) == 0 {
+					continue
+				}
+				read++
+				info.pid = child
+				info.depth = d
+				if !yield(info) {
+					return false
+				}
+				if !walk(child, d+1) {
+					return false
+				}
+			}
+			return true
+		}
+		walk(leader, 1)
+	}
+}
+
 func indexNUL(b []byte) int {
 	for i, c := range b {
 		if c == 0 {

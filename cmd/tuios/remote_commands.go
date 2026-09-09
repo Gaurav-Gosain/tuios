@@ -1168,15 +1168,34 @@ type detectExplanation struct {
 	Source         string                 `json:"source"`
 	HarnessID      string                 `json:"harness_id"`
 	AutoDetected   bool                   `json:"auto_detected"`
+	Identity       string                 `json:"identity"`
+	Confidence     string                 `json:"confidence"`
+	NeedsYou       bool                   `json:"needs_you"`
+	Activity       string                 `json:"activity"`
 	Running        bool                   `json:"running"`
 	Reason         string                 `json:"reason"`
+	Verdict        string                 `json:"verdict"`
+	Evidence       []string               `json:"evidence"`
+	Ignored        []string               `json:"ignored"`
 	Process        harness.ProcReport     `json:"process"`
 	Manifests      []harness.DetectReport `json:"manifests"`
+	Group          []detectGroupMember    `json:"group"`
 	NameList       string                 `json:"name_list"`
 	Matched        bool                   `json:"matched"`
 	MatchedHarness string                 `json:"matched_harness"`
 	MatchedRule    string                 `json:"matched_rule"`
+	MatchedVia     []string               `json:"matched_via"`
 	Note           string                 `json:"note"`
+}
+
+// detectGroupMember is one process the detector read behind a wrapper.
+type detectGroupMember struct {
+	PID     int      `json:"pid"`
+	Depth   int      `json:"depth"`
+	Comm    string   `json:"comm"`
+	Argv    []string `json:"argv"`
+	Exe     string   `json:"exe"`
+	Matched bool     `json:"matched"`
 }
 
 // runExplainAgentDetect prints what the detector saw in a pane and what every
@@ -1206,14 +1225,34 @@ func runExplainAgentDetect(sessionName, windowTarget string, jsonOutput bool) er
 	return nil
 }
 
-// printDetectExplanation writes the human form: what the pane is attributed to,
-// what the detector read, and what each manifest did with it.
+// printDetectExplanation writes the human form. It leads with the verdict and
+// the evidence, because that is the answer; what the detector read and what
+// each manifest did with it follow, for the person writing a rule.
 func printDetectExplanation(w io.Writer, res detectExplanation) {
+	fmt.Fprintln(w, res.Verdict)
+	for _, line := range res.Evidence {
+		fmt.Fprintf(w, "  %s\n", line)
+	}
+	if len(res.Ignored) > 0 {
+		fmt.Fprintln(w, "\nwords tuios saw and did not count:")
+		for _, line := range res.Ignored {
+			fmt.Fprintf(w, "  %s\n", line)
+		}
+	}
+
 	harnessName := res.HarnessID
 	if harnessName == "" {
 		harnessName = "none"
 	}
-	fmt.Fprintf(w, "pane %s  state %s (%s)\nharness %s", res.WindowID, res.State, res.Source, harnessName)
+	state := res.State
+	if res.Source != "" {
+		state += " (" + res.Source + ")"
+	}
+	fmt.Fprintf(w, "\npane %s  state %s  needs you: %s\n", res.WindowID, state, yesNo(res.NeedsYou))
+	fmt.Fprintf(w, "harness %s  confidence %s", harnessName, orNone(res.Confidence))
+	if res.Identity != "" {
+		fmt.Fprintf(w, " (%s)", res.Identity)
+	}
 	if res.AutoDetected {
 		fmt.Fprint(w, "  held by auto-detection")
 	}
@@ -1237,6 +1276,17 @@ func printDetectExplanation(w io.Writer, res detectExplanation) {
 		fmt.Fprintln(w, "  run    (none: an interpreter, but it was given nothing to run)")
 	default:
 		fmt.Fprintln(w, "  run    (none: not an interpreter, so no argument is read as identity)")
+	}
+
+	if len(res.Group) > 0 {
+		fmt.Fprintln(w, "\nprocesses behind the wrapper:")
+		for _, m := range res.Group {
+			mark := " "
+			if m.Matched {
+				mark = "*"
+			}
+			fmt.Fprintf(w, "  %s %*spid %d  %s  %s\n", mark, 2*(m.Depth-1), "", m.PID, orNone(m.Comm), strings.Join(m.Argv, " "))
+		}
 	}
 
 	fmt.Fprintln(w, "\nmanifests, in lookup order:")
@@ -1263,6 +1313,13 @@ func printDetectExplanation(w io.Writer, res detectExplanation) {
 			fmt.Fprintf(w, "        the name list alone would have matched: %s\n", res.NameList)
 		}
 	}
+}
+
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
 }
 
 func orNone(s string) string {

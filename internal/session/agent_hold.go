@@ -32,7 +32,7 @@ func agentLoudness(state AgentState) int {
 		return 3
 	case AgentStateWorking:
 		return 2
-	case AgentStateIdle, AgentStateDone:
+	case AgentStateIdle, AgentStateDone, AgentStateUnknown:
 		return 1
 	default: // AgentStateNone
 		return 0

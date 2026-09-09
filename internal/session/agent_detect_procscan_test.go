@@ -45,11 +45,11 @@ func TestProcScanFalsePositives(t *testing.T) {
 		if info.comm == "" && len(info.argv) == 0 {
 			continue
 		}
-		if id, rule, ok := m.identifyDetail(info); ok {
-			now = append(now, describeMatch(pid, id, info))
-			if strings.Contains(rule, "argv_path=") && info.proc().RunToken() == "" {
+		if d, ok := m.identifyDetail(info); ok {
+			now = append(now, describeMatch(pid, d.harness, info))
+			if strings.Contains(d.rule, "argv_path=") && info.proc().RunToken() == "" {
 				t.Errorf("pid %d matched %q on %s, but it is not an interpreter: "+
-					"an argument is not an identity", pid, id, rule)
+					"an argument is not an identity", pid, d.harness, d.rule)
 			}
 		}
 		if id, ok := legacyIdentify(reg, info); ok {

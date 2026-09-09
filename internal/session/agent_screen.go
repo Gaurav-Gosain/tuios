@@ -62,7 +62,7 @@ func (s *Session) scanScreenForAgent(ptyID string, reg *harness.Registry) bool {
 	if len(tail) == 0 {
 		return false
 	}
-	state, _, ok := reg.Classify(hid, tail)
+	state, rule, ok := reg.Classify(hid, tail)
 	if !ok {
 		// Nothing on the screen now, so any claim a blocker took here is given
 		// back. This look is the only thing that runs when the prompt goes away,
@@ -73,6 +73,7 @@ func (s *Session) scanScreenForAgent(ptyID string, reg *harness.Registry) bool {
 	}
 	s.ApplyAgentReport(winID, AgentReport{
 		State:       AgentState(state),
+		Message:     reg.RuleMessage(hid, rule),
 		Source:      AgentSourceScreen,
 		Harness:     hid,
 		paneWroteAt: pty.LastOutput(),

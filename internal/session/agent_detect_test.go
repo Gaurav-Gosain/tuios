@@ -46,7 +46,10 @@ func TestAgentMatcher(t *testing.T) {
 		{"cursor-agent", foregroundInfo{comm: "cursor-agent", argv: []string{"cursor-agent"}}, true},
 		{"plain shell", foregroundInfo{comm: "bash", argv: []string{"-bash"}}, false},
 		{"unrelated tool", foregroundInfo{comm: "vim", argv: []string{"vim", "notes.md"}}, false},
-		{"node wrapper running claude", foregroundInfo{comm: "node", argv: []string{"node", "/home/u/.npm/claude/cli.js"}}, true},
+		{"node wrapper running claude", foregroundInfo{comm: "node", argv: []string{"node", "/usr/lib/node_modules/claude/cli.js"}}, true},
+		// The same generic entry point outside a package directory is a script in
+		// a checkout, and a checkout's name is not evidence.
+		{"node running a script in a checkout named claude", foregroundInfo{comm: "node", argv: []string{"node", "/home/u/dev/claude/cli.js"}}, false},
 		{"npx opencode", foregroundInfo{comm: "npx", argv: []string{"npx", "opencode"}}, true},
 		{"node without agent arg", foregroundInfo{comm: "node", argv: []string{"node", "server.js"}}, false},
 		{"user-added name", foregroundInfo{comm: "mycli", argv: []string{"mycli"}}, true},
@@ -132,7 +135,7 @@ func TestDetectionNamesTheHarness(t *testing.T) {
 		exe:  "/home/u/.local/share/claude/versions/2.1.222",
 	}, true}})
 
-	if n := sess.applyAgentDetection(running, agent.identify); n != 1 {
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
 		t.Fatalf("promotion changed %d windows, want 1", n)
 	}
 	for _, w := range sess.GetState().Windows {
@@ -216,7 +219,7 @@ func TestAgentDetectionPromotesAndClears(t *testing.T) {
 
 	// Foreground is the shell: nothing happens.
 	shell := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "bash", argv: []string{"-bash"}}, true}})
-	if n := sess.applyAgentDetection(shell, agent.identify); n != 0 {
+	if n := sess.applyAgentDetection(shell, agent.identifyDetail); n != 0 {
 		t.Fatalf("shell foreground changed %d windows, want 0", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNone {
@@ -225,7 +228,7 @@ func TestAgentDetectionPromotesAndClears(t *testing.T) {
 
 	// An agent appears: the pane is promoted to working.
 	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
-	if n := sess.applyAgentDetection(running, agent.identify); n != 1 {
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
 		t.Fatalf("agent appearance changed %d windows, want 1", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
@@ -233,7 +236,7 @@ func TestAgentDetectionPromotesAndClears(t *testing.T) {
 	}
 
 	// Still running, no change reported and state held.
-	if n := sess.applyAgentDetection(running, agent.identify); n != 0 {
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 0 {
 		t.Fatalf("steady agent changed %d windows, want 0", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
@@ -241,7 +244,7 @@ func TestAgentDetectionPromotesAndClears(t *testing.T) {
 	}
 
 	// Agent exits (foreground back to shell): cleared to none.
-	if n := sess.applyAgentDetection(shell, agent.identify); n != 1 {
+	if n := sess.applyAgentDetection(shell, agent.identifyDetail); n != 1 {
 		t.Fatalf("agent exit changed %d windows, want 1", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNone {
@@ -265,7 +268,7 @@ func TestAgentDetectionNeverClobbersManual(t *testing.T) {
 	// An agent is in the foreground, but the pane already has a manual state: the
 	// detector must not take ownership or overwrite it.
 	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
-	if n := sess.applyAgentDetection(running, agent.identify); n != 0 {
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 0 {
 		t.Fatalf("detection over a manual state changed %d windows, want 0", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {
@@ -275,7 +278,7 @@ func TestAgentDetectionNeverClobbersManual(t *testing.T) {
 	// The agent then exits: since the detector never owned the window, it leaves
 	// the manual state alone.
 	shell := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "bash", argv: []string{"-bash"}}, true}})
-	if n := sess.applyAgentDetection(shell, agent.identify); n != 0 {
+	if n := sess.applyAgentDetection(shell, agent.identifyDetail); n != 0 {
 		t.Fatalf("agent exit over a manual state changed %d windows, want 0", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {
@@ -293,7 +296,7 @@ func TestAgentDetectionYieldsToExplicitWhileOwned(t *testing.T) {
 	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
 
 	// Detector promotes the pane to working (takes ownership).
-	if n := sess.applyAgentDetection(running, agent.identify); n != 1 {
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
 		t.Fatalf("promotion changed %d windows, want 1", n)
 	}
 
@@ -304,7 +307,7 @@ func TestAgentDetectionYieldsToExplicitWhileOwned(t *testing.T) {
 
 	// A detection tick with the agent still running must not stomp the explicit
 	// report back to working.
-	if n := sess.applyAgentDetection(running, agent.identify); n != 0 {
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 0 {
 		t.Fatalf("owned tick over explicit state changed %d windows, want 0", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {
@@ -313,7 +316,7 @@ func TestAgentDetectionYieldsToExplicitWhileOwned(t *testing.T) {
 
 	// When the agent exits, ownership is released and the window clears to none.
 	shell := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "bash", argv: []string{"-bash"}}, true}})
-	if n := sess.applyAgentDetection(shell, agent.identify); n != 1 {
+	if n := sess.applyAgentDetection(shell, agent.identifyDetail); n != 1 {
 		t.Fatalf("agent exit changed %d windows, want 1", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNone {
@@ -333,17 +336,17 @@ func TestClearExitedAgent(t *testing.T) {
 	shell := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "bash", argv: []string{"-bash"}}, true}})
 
 	// Unowned: an output probe must not touch a window the detector never claimed.
-	if sess.reconcileAgentOnOutput(ptyID, shell, agent.identify) {
+	if sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail) {
 		t.Fatal("reconcileAgentOnOutput changed an unowned window")
 	}
 
 	// Detector takes ownership of the pane.
-	if n := sess.applyAgentDetection(running, agent.identify); n != 1 {
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
 		t.Fatalf("promotion changed %d windows, want 1", n)
 	}
 
 	// Agent still in the foreground: a probe on output leaves it working.
-	if sess.reconcileAgentOnOutput(ptyID, running, agent.identify) {
+	if sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail) {
 		t.Fatal("reconcileAgentOnOutput cleared a window whose agent is still running")
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
@@ -351,7 +354,7 @@ func TestClearExitedAgent(t *testing.T) {
 	}
 
 	// Agent quits: the very next output probe clears it, no detection poll needed.
-	if !sess.reconcileAgentOnOutput(ptyID, shell, agent.identify) {
+	if !sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail) {
 		t.Fatal("reconcileAgentOnOutput did not clear after the agent left the foreground")
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNone {
@@ -372,7 +375,7 @@ func TestAgentResumesAfterStall(t *testing.T) {
 	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
 
 	// The detector finds the agent and promotes the pane.
-	if n := sess.applyAgentDetection(running, agent.identify); n != 1 {
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
 		t.Fatalf("promotion changed %d windows, want 1", n)
 	}
 
@@ -387,7 +390,7 @@ func TestAgentResumesAfterStall(t *testing.T) {
 
 	// The user sends a prompt: the agent produces output again while still in the
 	// foreground. The pane has to go back to working.
-	if !sess.reconcileAgentOnOutput(ptyID, running, agent.identify) {
+	if !sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail) {
 		t.Fatal("output from a resumed agent did not change the pane's state")
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
@@ -400,7 +403,7 @@ func TestAgentResumesAfterStall(t *testing.T) {
 	}
 
 	// A detection poll must not undo the resume.
-	if n := sess.applyAgentDetection(running, agent.identify); n != 0 {
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 0 {
 		t.Fatalf("detection poll after resume changed %d windows, want 0", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
@@ -418,13 +421,13 @@ func TestAgentResumeRespectsHigherSource(t *testing.T) {
 	agent := newAgentMatcher(nil)
 	running := fakeResolver(map[string]fakeProc{ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}}, true}})
 
-	if n := sess.applyAgentDetection(running, agent.identify); n != 1 {
+	if n := sess.applyAgentDetection(running, agent.identifyDetail); n != 1 {
 		t.Fatalf("promotion changed %d windows, want 1", n)
 	}
 	if err := sess.SetDaemonWindowAgentState(id, AgentStateNeedsInput, "approve?"); err != nil {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
 	}
-	if sess.reconcileAgentOnOutput(ptyID, running, agent.identify) {
+	if sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail) {
 		t.Fatal("output overwrote a reported needs_input")
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {
@@ -443,7 +446,7 @@ func TestClearExitedAgentRespectsManual(t *testing.T) {
 	if err := sess.SetDaemonWindowAgentState(id, AgentStateNeedsInput, "waiting"); err != nil {
 		t.Fatalf("SetDaemonWindowAgentState: %v", err)
 	}
-	if sess.reconcileAgentOnOutput(ptyID, shell, agent.identify) {
+	if sess.reconcileAgentOnOutput(ptyID, shell, agent.identifyDetail) {
 		t.Fatal("reconcileAgentOnOutput cleared a manual state")
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {

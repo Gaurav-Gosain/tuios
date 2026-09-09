@@ -23,25 +23,120 @@ func readForegroundPGID(pid int) (int, bool) {
 }
 
 // parseStatTPGID extracts the tpgid (foreground process group id, field 8) from
-// the contents of a /proc/<pid>/stat line. The comm field (2) is wrapped in
-// parentheses and may itself contain spaces or parentheses, so the numeric fields
-// are parsed from after the final ')'.
-func parseStatTPGID(s string) (int, bool) {
+// the contents of a /proc/<pid>/stat line.
+func parseStatTPGID(s string) (int, bool) { return parseStatField(s, 8) }
+
+// parseStatPGRP extracts the pgrp (process group id, field 5).
+func parseStatPGRP(s string) (int, bool) { return parseStatField(s, 5) }
+
+// parseStatField extracts one numeric field, numbered as proc(5) numbers them,
+// from the contents of a /proc/<pid>/stat line. The comm field (2) is wrapped
+// in parentheses and may itself contain spaces or parentheses, so the numeric
+// fields are parsed from after the final ')'.
+func parseStatField(s string, field int) (int, bool) {
 	rparen := strings.LastIndex(s, ")")
-	if rparen < 0 || rparen+2 >= len(s) {
+	if rparen < 0 || rparen+2 >= len(s) || field < 3 {
 		return 0, false
 	}
 	// Fields after "(comm) ": state(3) ppid(4) pgrp(5) session(6) tty_nr(7)
-	// tpgid(8). Splitting the remainder gives tpgid at index 5 (state at 0).
+	// tpgid(8). Splitting the remainder puts field n at index n-3.
 	fields := strings.Fields(s[rparen+1:])
-	if len(fields) < 6 {
+	if len(fields) < field-2 {
 		return 0, false
 	}
-	tpgid, err := strconv.Atoi(fields[5])
+	v, err := strconv.Atoi(fields[field-3])
 	if err != nil {
 		return 0, false
 	}
-	return tpgid, true
+	return v, true
+}
+
+// readPGRP reads the process group of a pid, or 0 when it cannot be read.
+func readPGRP(pid int) int {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return 0
+	}
+	pgrp, _ := parseStatPGRP(string(data))
+	return pgrp
+}
+
+// readChildren lists the children of a pid across all of its threads, from
+// /proc/<pid>/task/<tid>/children. A child is listed under the thread that
+// forked it, and a Go or Rust launcher forks from whichever thread was running,
+// so reading only the main thread's list would miss the program a launcher
+// started. A kernel built without CONFIG_PROC_CHILDREN has no such file, and the
+// answer is then no children, which leaves detection reading the leader alone
+// as it always did.
+func readChildren(pid int) []int {
+	dir := "/proc/" + strconv.Itoa(pid) + "/task"
+	tids, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []int
+	for i, tid := range tids {
+		if i >= maxThreadsListed {
+			break
+		}
+		data, err := os.ReadFile(dir + "/" + tid.Name() + "/children")
+		if err != nil {
+			continue
+		}
+		for f := range strings.FieldsSeq(string(data)) {
+			if child, err := strconv.Atoi(f); err == nil {
+				out = append(out, child)
+			}
+		}
+	}
+	return out
+}
+
+// maxThreadsListed bounds how many of a wrapper's threads are read for
+// children. Every wrapper that matters has a handful; the bound is against a
+// process with hundreds, which is not a wrapper.
+const maxThreadsListed = 64
+
+// foregroundGroup walks the descendants of leader that share its process group,
+// depth first, reading at most limit processes no deeper than depth. Each
+// yielded process carries its depth below the leader.
+//
+// The group is the honest boundary. A descendant in another process group is a
+// background job or a daemon the wrapper started, and neither is what the pane
+// is running in the foreground.
+func foregroundGroup(leader, limit, depth int) func(yield func(foregroundInfo) bool) {
+	return func(yield func(foregroundInfo) bool) {
+		read := 0
+		var walk func(pid, d int) bool
+		walk = func(pid, d int) bool {
+			if d > depth {
+				return true
+			}
+			for _, child := range readChildren(pid) {
+				if read >= limit {
+					return false
+				}
+				if readPGRP(child) != leader {
+					continue
+				}
+				info := readProcessInfo(child)
+				if info.comm == "" && len(info.argv) == 0 {
+					continue
+				}
+				read++
+				info.pid = child
+				info.depth = d
+				if !yield(info) {
+					return false
+				}
+				if !walk(child, d+1) {
+					return false
+				}
+			}
+			return true
+		}
+		walk(leader, 1)
+	}
 }
 
 // readProcessInfo reads the three descriptions of a process from its procfs
