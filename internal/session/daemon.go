@@ -409,6 +409,9 @@ func (d *Daemon) setupFederation(hosts []federation.Host) {
 		ClientVersion:   d.version,
 		VerbProtocol:    VerbProtocolVersion,
 		MinVerbProtocol: MinVerbProtocolVersion,
+		Log: func(format string, args ...any) {
+			log.Printf("[FEDERATION] "+format, args...)
+		},
 	})
 }
 

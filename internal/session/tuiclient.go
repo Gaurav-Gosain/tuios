@@ -380,6 +380,15 @@ type attachRefused struct{ msg string }
 
 func (e *attachRefused) Error() string { return "attach failed: " + e.msg }
 
+// AttachRefused reports an attach the daemon answered and declined, which a
+// client that is trying to get a lost session back needs to tell apart from an
+// attach that never reached anyone. A refusal means the session is not there,
+// so asking again cannot help. Anything else is worth another attempt.
+func AttachRefused(err error) bool {
+	var refused *attachRefused
+	return errors.As(err, &refused)
+}
+
 // Detach detaches from the current session.
 func (c *TUIClient) Detach() error {
 	msg, err := NewMessageWithCodec(MsgDetach, nil, c.codec)

@@ -119,9 +119,25 @@ func hostConnectionError(host string, err error) *verbError {
 // the client's, which caps a message at what it caps a local daemon's at.
 func (d *Daemon) relayHostConnection(cs *connState, br *bufio.Reader, remote io.ReadWriteCloser) {
 	conn := cs.conn
-	// The JSON loop set no deadline and the relay wants none either: a pane
-	// can be silent for hours.
+	// Both deadlines are cleared, and the write one is the whole reason this
+	// feature was unusable.
+	//
+	// The JSON loop wrote the reply that opened this relay under a ten second
+	// write deadline (writeVerbResponse). A deadline on a net.Conn is an
+	// absolute time and not a per-write budget, so it stayed armed at that
+	// instant plus ten seconds, and every byte the relay wrote afterwards was
+	// racing it. About eleven seconds into an attached session the far pane
+	// printed something, that write failed with "i/o timeout", the relay
+	// ended, and the client reported a lost link and put the person back on
+	// this machine. It did the same thing eleven seconds after the next
+	// attach, and after the one after that.
+	//
+	// So the link was not what kept dropping. Nothing crossed a network in the
+	// reproduction at all. A pane can be silent for hours and a relay can
+	// write to a busy client for hours, and neither is a failure, so the relay
+	// runs with no deadline in either direction.
 	_ = conn.SetReadDeadline(time.Time{})
+	_ = conn.SetWriteDeadline(time.Time{})
 
 	done := make(chan struct{})
 	go func() {
@@ -146,7 +162,15 @@ func (d *Daemon) relayHostConnection(cs *connState, br *bufio.Reader, remote io.
 		_ = remote.Close()
 		_ = conn.Close()
 	}()
-	_, _ = io.Copy(conn, remote)
+	_, cerr := io.Copy(conn, remote)
+	// Which of the two ends gave up decides what a person should do about it,
+	// and both used to end here silently. A stalled stream is this client not
+	// reading; anything else is the link.
+	if errors.Is(cerr, federation.ErrStreamStalled) {
+		LogBasic("Client %s stopped reading its connection to a host for too long and the stream was dropped. The link is still up.", cs.clientID)
+	} else if cerr != nil {
+		LogBasic("Client %s lost its connection to a host: %v", cs.clientID, cerr)
+	}
 	// Nothing more can cross once the remote end is gone, so the client's
 	// connection is closed whole rather than half: a client that only ever
 	// reads sees the end at once.

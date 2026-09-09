@@ -102,8 +102,12 @@ func (m *OS) ExitNotice() string {
 			"Connect again after the daemon starts."
 
 	case ExitHostLost:
-		return "The link to " + m.AttachedHost + " closed.\n" +
-			"The session keeps running on " + m.AttachedHost + ".\n" +
+		reason := m.hostReconnectReason
+		if reason == "" {
+			reason = "The link to " + m.AttachedHost + " closed."
+		}
+		return reason + "\n" +
+			"tuios tried to connect again and stopped.\n" +
 			"Connect again when the link is back."
 
 	default:

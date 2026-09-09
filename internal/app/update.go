@@ -1747,10 +1747,18 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// After a deliberate quit the drop is the expected consequence of
 		// killing the session, not a failure, so leave the reason alone.
 		if m.AttachedHost != "" && !m.QuitRequested {
-			// A link to another machine dropping is recoverable: the session
-			// there keeps running, and this client comes back to the session
-			// it left here when it has one.
-			if m.recoverFromHostLoss(msg.Err) {
+			// A link to another machine dropping is recoverable, and the first
+			// thing to try is getting it back. The session on the host keeps
+			// running, so the panes on screen stay where they are while this
+			// client dials again. Only when that has genuinely failed does it
+			// come back to the session it left here.
+			if cmd := m.beginHostReconnect(msg.Err); cmd != nil {
+				return m, cmd
+			}
+			if m.ReconnectingToHost() {
+				// A connection that is already being replaced reporting its
+				// own end a second time must not start a second attempt, and
+				// must not throw the panes away.
 				return m, nil
 			}
 			m.ExitReason = ExitHostLost
@@ -1760,6 +1768,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.ExitReason = ExitDaemonLost
 		}
 		return m, tea.Quit
+
+	case hostReconnectTickMsg:
+		return m, m.handleHostReconnectTick(msg)
+
+	case hostReconnectResultMsg:
+		return m, m.handleHostReconnectResult(msg)
 
 	case SessionEndedMsg:
 		// The session was destroyed underneath this client. Its windows are

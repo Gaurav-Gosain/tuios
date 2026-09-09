@@ -255,8 +255,12 @@ func TestLinkFindsTuiosAtAKnownPathAndRedialsWithIt(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if _, err := m.Call(ctx, "build", "list-sessions", nil); err == nil {
-		t.Fatal("the call against the hanging stub succeeded; the redial cannot be forced")
+	// One slow listing no longer ends a link: it must not, or an attached
+	// session would die every time a listing was slow. A run of them does.
+	for range maxControlFailures {
+		if _, err := m.Call(ctx, "build", "list-sessions", nil); err == nil {
+			t.Fatal("the call against the hanging stub succeeded; the redial cannot be forced")
+		}
 	}
 	// The link was torn down. Wait for the redial to bring it back, then read
 	// what that dial ran.

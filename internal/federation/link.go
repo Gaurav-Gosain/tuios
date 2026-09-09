@@ -37,6 +37,17 @@ const (
 	// build does not serve. Section 8: skew is normal, so it is reported as its
 	// own state with both versions rather than as a failure.
 	StatusIncompatible Status = "incompatible"
+	// StatusReconnecting means the link was up, it dropped, and this daemon is
+	// dialing again. It is not the same fact as unreachable: unreachable is a
+	// machine that has not answered, and reconnecting is a machine that was
+	// answering a moment ago and probably still is. A client that lost a
+	// session to this state is coming back to it, and the rail says so rather
+	// than showing the host as offline for the second it takes.
+	//
+	// Nothing is queued against it. Up is still the only state that can be
+	// called, so a reconnecting host fails a call at once, exactly as an
+	// unreachable one does.
+	StatusReconnecting Status = "reconnecting"
 )
 
 // Handshake is what a remote daemon reported about itself. The field names
@@ -64,6 +75,20 @@ type link struct {
 	shake   Handshake
 	lastOK  time.Time
 	lastTry time.Time
+
+	// drops counts the times a link that was up went down, and dropReason is
+	// the plain sentence for the last of them. They are reported so a person
+	// whose link keeps dropping can see how often and why, which is the
+	// difference between a keepalive timeout, a stalled stream and a dead
+	// sshd. Without them all three read as "the link closed".
+	drops      int
+	dropReason string
+	// stalls counts streams dropped for a reader that stopped reading, over
+	// the life of this link.
+	stalls int
+	// ctrlFailures counts control calls that failed in a row on the live
+	// link. It resets on any call that answers.
+	ctrlFailures int
 
 	// ctrl is the live control stream's caller, nil unless status is up.
 	ctrl *caller
@@ -138,6 +163,9 @@ func (l *link) report() HostReport {
 		PID:           l.shake.PID,
 		Sessions:      l.shake.Sessions,
 		Command:       l.command,
+		Drops:         l.drops,
+		DropReason:    l.dropReason,
+		Stalls:        l.stalls,
 	}
 	if !l.lastOK.IsZero() {
 		r.LastOK = l.lastOK.Unix()
@@ -267,6 +295,13 @@ func (l *link) attempt(ctx context.Context) bool {
 	// a peer a stream. Section 1, invariant 1 of the design document.
 	m := newMuxRW(br, tr, tr, nil, dialerFirstID)
 	m.stallLimit = l.opts.stallLimit
+	m.onStall = func(id uint32) {
+		l.mu.Lock()
+		l.stalls++
+		count := l.stalls
+		l.mu.Unlock()
+		l.logf("host %s: a stream stopped being read and was dropped. The link is still up. Streams dropped so far: %d.", l.host.Name, count)
+	}
 	muxDone := make(chan struct{})
 	go func() {
 		defer close(muxDone)
@@ -313,13 +348,58 @@ func (l *link) attempt(ctx context.Context) bool {
 	l.ctrl = nil
 	l.mux = nil
 	l.tearDown = nil
+	l.ctrlFailures = 0
 	l.mu.Unlock()
 	closeAll()
 	<-muxDone
-	if ctx.Err() == nil {
-		l.set(StatusUnreachable, "The link to the host closed.", trimDetail(tr.Diagnostic()))
+
+	if ctx.Err() != nil {
+		return true
 	}
+	// Why the link went down, said in one sentence a person can act on. The
+	// three causes need three different fixes and used to read identically, so
+	// the reason is worked out here rather than left as "the link closed".
+	reason, detail := lossCause(tr, m.Err())
+	l.mu.Lock()
+	l.drops++
+	l.dropReason = reason
+	drops := l.drops
+	l.mu.Unlock()
+	l.logf("host %s: the link dropped after %d up. %s %s", l.host.Name, drops, reason, detail)
+	// Reconnecting, not unreachable. The machine answered a moment ago, this
+	// daemon is about to dial it again, and a listing that called that offline
+	// would be reporting a failure that has not happened yet.
+	l.set(StatusReconnecting, reason, detail)
 	return true
+}
+
+// lossCause turns a dead link into the sentence its report carries.
+//
+// Three failures end a link and they are not the same event. ssh gave up, which
+// its own stderr explains and its exit code confirms. The pipe ended with ssh
+// still running, which is the far proxy or the far daemon going away. Or this
+// side read a frame it could not use, which is a protocol fault and not a
+// network one. Naming which is what lets a person fix the right thing.
+func lossCause(tr Transport, muxErr error) (reason, detail string) {
+	diag := trimDetail(tr.Diagnostic())
+	exited, code := awaitChildExit(tr)
+	switch {
+	case exited && code == sshExitCode:
+		return "The connection to the host ended. tuios is connecting again.", diag
+	case exited:
+		return "The tuios on the host stopped. tuios is connecting again.", trimDetail(joinDetail(diag, fmt.Sprintf("the remote command exited with %d", code)))
+	case muxErr != nil && !errors.Is(muxErr, io.EOF) && !errors.Is(muxErr, io.ErrUnexpectedEOF) && !errors.Is(muxErr, ErrLinkClosed):
+		return "The host sent something this link cannot read. tuios is connecting again.", trimDetail(joinDetail(muxErr.Error(), diag))
+	default:
+		return "The link to the host closed. tuios is connecting again.", diag
+	}
+}
+
+// logf writes one line to whatever the manager was given, or nowhere.
+func (l *link) logf(format string, args ...any) {
+	if l.opts.Log != nil {
+		l.opts.Log(format, args...)
+	}
 }
 
 // awaitChildExit tells the two no-preamble failures apart. A child that has
@@ -449,25 +529,78 @@ func (l *link) call(ctx context.Context, verb string, params any) (json.RawMessa
 	callCtx, cancel := context.WithTimeout(ctx, l.opts.CallTimeout)
 	defer cancel()
 	raw, err := c.call(callCtx, verb, params)
-	if err != nil && (errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)) {
-		// A control stream that timed out or ended cannot be reused. Tearing
-		// the link down is what makes the next call fail fast instead of
-		// queueing behind the same wedged stream, and the supervisor redials.
-		//
-		// The status is set here rather than left to the supervisor, which
-		// notices a moment later. A listing taken in that moment would say the
-		// host is up when the call that just failed proved otherwise, and a
-		// listing that is wrong for one round trip is still wrong.
+	if err == nil {
 		l.mu.Lock()
-		down := l.tearDown
-		l.ctrl = nil
+		l.ctrlFailures = 0
 		l.mu.Unlock()
-		if down != nil {
-			l.set(StatusUnreachable, "The host stopped answering.", "")
-			down()
-		}
+		return raw, nil
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		l.controlStreamFailed(c)
 	}
 	return raw, err
+}
+
+// maxControlFailures is how many control calls may fail in a row on a link
+// whose pipe is still carrying traffic before the link is torn down anyway.
+// Three is enough to tell a slow answer from a wedged remote and small enough
+// that a genuinely stuck daemon is redialed within a minute.
+const maxControlFailures = 3
+
+// controlStreamFailed runs when a call on the control stream did not answer.
+//
+// It used to tear the whole link down, and that is the bug the maintainer felt.
+// The control stream is one stream among many on a shared pipe, and an attached
+// session is another. A listing that missed its eight second deadline - which a
+// busy pane on a link across an ocean does on its own - killed the ssh child,
+// and killing the ssh child threw away the session the person was typing into.
+// The rail polls that listing every five seconds while it is open, so the link
+// had five seconds to be slow once, over and over, and every miss was fatal.
+//
+// What happens instead: the stream is replaced, because a stream with an
+// unanswered request on it can never be reused, and the link is left alone
+// while the pipe is still carrying frames. Only a pipe that has gone quiet, or
+// a remote that has failed maxControlFailures calls in a row, ends the link.
+func (l *link) controlStreamFailed(failed *caller) {
+	l.mu.Lock()
+	if l.ctrl != failed {
+		// Another call already replaced this stream. Nothing to do, and
+		// nothing to count twice.
+		l.mu.Unlock()
+		return
+	}
+	m, down := l.mux, l.tearDown
+	l.ctrlFailures++
+	failures := l.ctrlFailures
+	l.mu.Unlock()
+
+	if m != nil && failures < maxControlFailures && m.alive(l.opts.linkQuietLimit) {
+		if s, err := m.Open(); err == nil {
+			l.mu.Lock()
+			if l.ctrl == failed {
+				l.ctrl = newCaller(s)
+				l.mu.Unlock()
+				l.logf("host %s: a listing did not answer in time. The link is still carrying traffic, so it is kept and the control stream is replaced.", l.host.Name)
+				return
+			}
+			l.mu.Unlock()
+			_ = s.Close()
+			return
+		}
+	}
+
+	// The pipe is quiet or the remote has stopped answering. The status is set
+	// here rather than left to the supervisor, which notices a moment later. A
+	// listing taken in that moment would say the host is up when the call that
+	// just failed proved otherwise.
+	l.mu.Lock()
+	l.ctrl = nil
+	l.mu.Unlock()
+	if down != nil {
+		l.set(StatusUnreachable, "The host stopped answering.", "")
+		l.logf("host %s: the link is being dialed again, because %d control calls in a row did not answer.", l.host.Name, failures)
+		down()
+	}
 }
 
 // openConnection opens a fresh stream on the live link. On the far side the
@@ -490,15 +623,19 @@ func (l *link) openConnection() (*Stream, error) {
 	if m == nil {
 		return nil, &UnreachableError{Host: l.host.Name, Status: status, Reason: reason}
 	}
-	s, err := m.Open()
-	if err != nil {
+	// What this stream carries is an attached session, not a listing, so it
+	// gets the limit that was chosen for one. See connectionStallLimit.
+	s, err := m.OpenWithStall(l.opts.connStallLimit)
+	if err == nil {
+		return s, nil
+	}
+	{
 		if errors.Is(err, ErrTooManyStreams) {
 			return nil, &RefusedError{Host: l.host.Name, Err: err,
 				Reason: fmt.Sprintf("This daemon already holds %d connections to the host. Close one before you open another.", maxStreams)}
 		}
 		return nil, &UnreachableError{Host: l.host.Name, Status: StatusUnreachable, Reason: "The link to the host closed."}
 	}
-	return s, nil
 }
 
 // RefusedError is what an open against a host that is up returns when the link

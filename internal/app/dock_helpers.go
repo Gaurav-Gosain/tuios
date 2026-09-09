@@ -643,6 +643,16 @@ func (m *OS) buildDockLeftText() (modeLabel, trail, tape string, width int, mode
 	} else {
 		trail = ""
 	}
+	// A link that is being dialed again outranks the workspace readout, and it
+	// is drawn whether or not the plan lists the trail. The person has a frozen
+	// pane in front of them, and one quiet line saying why is the least the
+	// dock can do. A modal would be worse: it would cover the frame that is the
+	// only picture of the session there is.
+	if note := m.hostLinkNote(); note != "" {
+		width -= lipgloss.Width(trail)
+		trail = note
+		width += lipgloss.Width(trail)
+	}
 	if m.dockPlan.Has(config.DockComponentTape) {
 		width += lipgloss.Width(tape)
 	} else {

@@ -384,6 +384,8 @@ func hostStatusLabel(status string) string {
 		return "version"
 	case federation.StatusConnecting:
 		return "connecting"
+	case federation.StatusReconnecting:
+		return "reconnecting"
 	default:
 		return "offline"
 	}

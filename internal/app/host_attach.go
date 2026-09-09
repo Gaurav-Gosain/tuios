@@ -86,6 +86,12 @@ func (m *OS) SwitchToHostSession(host, name string, create bool) error {
 // one down without letting its disconnect be heard, and rebuilds the screen
 // from state. It is the host-crossing half of SwitchToSession.
 func (m *OS) adoptClient(client *session.TUIClient, state *session.SessionState, host string) {
+	// A switch the user asked for ends any attempt to get a lost link back.
+	// The two are different events, and a dial that lands after this must not
+	// pull the user off the session they just chose.
+	m.hostReconnect = nil
+	m.hostReconnectGen++
+
 	old := m.DaemonClient
 	if old != nil {
 		// Its disconnect is this switch, not a loss, so nothing must hear it.
@@ -164,27 +170,6 @@ func freeSessionName(taken []string) string {
 			return name
 		}
 	}
-}
-
-// recoverFromHostLoss runs when the connection through a host ends under this
-// client. The session on the host keeps running; that is the point of the
-// daemon there. What this client does is come back to the session on this
-// machine it left, when there is one, and say what happened. It reports
-// whether the client is still on screen.
-func (m *OS) recoverFromHostLoss(cause error) bool {
-	lost := m.AttachedHost
-	back := m.hostReturn
-	m.LogWarn("The connection to %s ended: %v", lost, cause)
-	if back == "" {
-		return false
-	}
-	if err := m.SwitchToHostSession(federation.LocalHostName, back, false); err != nil {
-		m.LogWarn("Could not return to %q: %v", back, err)
-		return false
-	}
-	m.ShowNotification(fmt.Sprintf("The link to %s closed. The session keeps running there.", lost),
-		"warning", m.Settings.NotificationWarningDuration*2)
-	return true
 }
 
 // hostAttachRefusal turns an attach error into the sentence the rail shows.

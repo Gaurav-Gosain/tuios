@@ -2455,9 +2455,10 @@ on the + beside a host to create a session there. While you are on a host, the
 rail lists this machine's sessions under a host named local. Press enter on
 one to come back.
 
-The session keeps running on the host when the link drops. The client comes
-back to the session it left here, and says so. Run the attach command again
-when the link is back.
+The session keeps running on the host when the link drops. The client keeps the
+pane on screen and connects again on its own. The dock says it is reconnecting.
+tuios stops after three minutes and says why. It then comes back to the session
+it left on this machine.
 
 Add --ssh to run ssh to the host and the tuios there instead. Use it when the
 tuios on the host is too old to serve this client. The client you see is then
@@ -2470,6 +2471,7 @@ Statuses:
   no_tuios      The machine is up and the link cannot find tuios on it. Run
                 'tuios hosts test' to see where it looked.
   unreachable   The last attempt failed. The line below the table says why.
+  reconnecting  The link was up, it dropped, and tuios is dialing again.
   incompatible  The remote daemon speaks a control protocol this build does not
                 serve. Upgrade tuios on one of the two machines.
   connecting    The first attempt has not finished yet.

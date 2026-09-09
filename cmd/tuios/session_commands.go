@@ -399,8 +399,8 @@ func reportSessionExit(sessionName, host string, reason app.ExitReason, killed b
 	switch reason {
 	case app.ExitHostLost:
 		return &diagnosticError{
-			What:  fmt.Sprintf("The link to %s closed.", host),
-			Cause: "ssh to the host dropped, or its daemon stopped. The session keeps running on " + host + ".",
+			What:  fmt.Sprintf("The link to %s closed and did not come back.", host),
+			Cause: "ssh to the host dropped, or its daemon stopped. tuios dialed again and stopped. The session keeps running on " + host + ".",
 			Fix:   "run 'tuios hosts' to see the link, then 'tuios attach --host " + host + " " + sessionName + "' to attach again.",
 		}
 
