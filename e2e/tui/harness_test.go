@@ -187,11 +187,19 @@ type startOpts struct {
 	args []string
 	// env are extra KEY=VALUE entries layered over the isolated defaults.
 	env []string
-	// out receives a copy of the PTY traffic, so a test can assert on output
-	// that never reaches the grid. OSC 52 clipboard writes are the reason it
-	// exists: a copy is invisible on screen but unmistakable on the wire. The
-	// stream carries both directions, which is harmless for that purpose since
-	// nothing the tests send contains an OSC 52.
+	// out receives a copy of what tuios wrote to the PTY, so a test can assert
+	// on output that never reaches the grid. OSC 52 clipboard writes are the
+	// reason it exists: a copy is invisible on screen but unmistakable on the
+	// wire.
+	//
+	// It carries the host direction only. It used to be fed from the debug
+	// log, which mirrors both directions, and the test goroutine's keystrokes
+	// were then written into the stream between two reads of the child's
+	// output, which is the middle of whatever escape sequence straddled that
+	// read boundary. An arrow key landing inside a kitty graphics delete left
+	// that delete unparseable, and the launcher icon tests then reported a
+	// placement the host had in fact taken down. A stream a test replays as
+	// the host's has to be the host's.
 	out io.Writer
 	// animations keeps the UI animations on. The default passes
 	// --no-animations, because animations make frames non-deterministic; a
@@ -241,6 +249,23 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 		}
 		env = append(env, key+"="+dir)
 	}
+	// fish generates its man-page completions the first time it starts
+	// interactively against an empty cache: it forks a python that reads every
+	// manual page on the machine into XDG_CACHE_HOME/fish/generated_completions,
+	// several seconds of CPU, and it orphans that process on purpose so the
+	// shell exiting does not stop it. Nothing here can reap an orphan it never
+	// saw spawned, and t.TempDir removes the directory while the python is
+	// still filling it, which fails with "directory not empty" on whichever
+	// fish test finished first. The directory already existing is fish's own
+	// record that the work was done, so it is created up front and the
+	// generator never starts. Both places are made because fish moved the
+	// directory from the data home to the cache home between major versions.
+	for _, key := range []string{"XDG_CACHE_HOME", "XDG_DATA_HOME"} {
+		dir := filepath.Join(base, key, "fish", "generated_completions")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatalf("start: mkdir %s: %v", dir, err)
+		}
+	}
 	// A predictable POSIX shell, and no user rc files changing the prompt.
 	env = append(env, "SHELL=/bin/sh", "ENV=", "PS1=$ ")
 	// startup.daemon ships on, so a bare "tuios" is a daemon client. Every test
@@ -283,16 +308,16 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	}
 	t.Cleanup(func() { _ = logFile.Close() })
 
-	var mirror io.Writer = logFile
-	if o.out != nil {
-		mirror = io.MultiWriter(logFile, o.out)
-	}
-	return tuitest.StartT(t, argv,
+	opts := []tuitest.Option{
 		tuitest.WithSize(cols, rows),
 		tuitest.WithTerm("xterm-256color"),
 		tuitest.WithEnv(env...),
-		tuitest.WithLog(mirror),
-	)
+		tuitest.WithLog(logFile),
+	}
+	if o.out != nil {
+		opts = append(opts, tuitest.WithOutputMirror(o.out))
+	}
+	return tuitest.StartT(t, argv, opts...)
 }
 
 // attachIn starts a client attached to an existing daemon session and returns

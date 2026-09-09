@@ -1953,6 +1953,18 @@ func (p *PTY) Resize(width, height int) error {
 	//
 	// Zero is not a size and is left to the layers below to reject; it must not
 	// be recorded as the pane's own.
+	//
+	// The size is recorded, queued for the emulator and applied to the real PTY
+	// under one lock, because every client of a session announces sizes on
+	// its own connection and two of them can arrive here at once. Recording
+	// under one lock and queueing under another let a pair of resizes be
+	// recorded in one order and queued in the other: the pane then said 26
+	// columns while its emulator sat at 22, and the next 26 from anyone was
+	// declined above as unchanged, so nothing ever put the emulator right. A
+	// client attached to that pane was handed a snapshot laid out at a width
+	// no client was drawing.
+	p.streamMu.Lock()
+	defer p.streamMu.Unlock()
 	p.terminalMu.Lock()
 	unchanged := width > 0 && height > 0 && p.width == width && p.height == height
 	oldW, oldH := p.width, p.height
@@ -1966,7 +1978,6 @@ func (p *PTY) Resize(width, height int) error {
 	// on a focus move is answered by whether this line appears with it.
 	LogBasic("PTY %s resized %dx%d -> %dx%d", shortID(p.ID), oldW, oldH, width, height)
 
-	p.streamMu.Lock()
 	if !p.vtClosed {
 		// Recorded against the ring before it is broadcast, so a catch-up cut
 		// from the ring later replays it between the same two bytes every
@@ -1980,7 +1991,6 @@ func (p *PTY) Resize(width, height int) error {
 		case <-p.ctx.Done():
 		}
 	}
-	p.streamMu.Unlock()
 
 	// The real PTY is resized now regardless, so the guest gets its SIGWINCH
 	// without waiting for the emulator to catch up with the backlog.
