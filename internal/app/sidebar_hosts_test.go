@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // hostRailOS is the sidebar fixture with a federated snapshot already stored,
@@ -854,5 +855,107 @@ func TestKeyboardReordersMachines(t *testing.T) {
 	}
 	if railLineIndex(railText(t, m), hostHeader(m, "local", false)) != 1 {
 		t.Errorf("ASSERTION: this machine is no longer first:\n%s", strings.Join(railText(t, m), "\n"))
+	}
+}
+
+// TestRailInksARemoteRowByItsLink: a session row under a machine that answers
+// reads at the strength of a local resting row, because a click on it attaches
+// the session and the ink must not say less than the row does. A row under a
+// machine that does not answer is a listing nobody can act on, and it is muted
+// with its header.
+func TestRailInksARemoteRowByItsLink(t *testing.T) {
+	m := sidebarTestOS(t, 120, 40, "left")
+	m.SessionName = "home"
+	// The machine that is not answering keeps the listing it gave when it
+	// last did, which is the case the ink has to tell apart from a live one.
+	m.applyFederationSnapshot(FederationHostsMsg{
+		Configured: 2,
+		Snapshot: FederationSnapshot{Hosts: []FederationHost{
+			{
+				Name:     federation.LocalHostName,
+				Status:   string(federation.StatusUp),
+				Sessions: []FederationSession{{Name: "home", WindowCount: 3}},
+			},
+			{
+				Name:     "build",
+				Status:   string(federation.StatusUp),
+				Sessions: []FederationSession{{Name: "live-one", WindowCount: 3}},
+			},
+			{
+				Name:     "workstation",
+				Status:   string(federation.StatusUnreachable),
+				Reason:   "The host did not answer.",
+				Sessions: []FederationSession{{Name: "stale-one", WindowCount: 2}},
+			},
+		}},
+	})
+
+	lines, _ := m.sidebarPanelLines()
+	live := sidebarStyle(nil, theme.UI().FgDim).Render("live-one")
+	stale := sidebarStyle(nil, theme.UI().FgMute).Render("stale-one")
+	var sawLive, sawStale bool
+	for _, l := range lines {
+		plain := stripANSIForTrace(l)
+		if strings.Contains(plain, "live-one") {
+			sawLive = true
+			if !strings.Contains(l, live) {
+				t.Errorf("ASSERTION: the row of a session on a machine that answers is not drawn in the resting ink:\n%q", l)
+			}
+		}
+		if strings.Contains(plain, "stale-one") {
+			sawStale = true
+			if !strings.Contains(l, stale) {
+				t.Errorf("ASSERTION: the row of a session on a machine that does not answer is not muted:\n%q", l)
+			}
+		}
+	}
+	if !sawLive || !sawStale {
+		t.Fatalf("ASSERTION: the rail is missing a remote row (live=%v stale=%v):\n%s", sawLive, sawStale, hostRailText(t, m))
+	}
+}
+
+// TestNarrowRailDropsTheRemoteCount: a rail too narrow for a name and a number
+// keeps the name, on a row on another machine as on a local one. The local row
+// has always dropped its count here, and a machine's rows that kept theirs
+// would put a number where the rail says there is no room for one.
+//
+// It drives drawHostRow, which is what the render loop calls, so the variant
+// reaching the row is under test and not only the row's use of it.
+func TestNarrowRailDropsTheRemoteCount(t *testing.T) {
+	m := hostRailOS(t)
+	var row sessiontree.Node
+	for _, n := range m.hostGroupNodes() {
+		if n.Kind == sessiontree.KindSession && n.Host == "build" {
+			row = n
+			break
+		}
+	}
+	if row.ID == "" {
+		t.Fatalf("the fixture has no session row on build: %+v", m.hostGroupNodes())
+	}
+	if row.WindowCount == 0 {
+		t.Fatalf("ASSERTION: the fixture's row carries no count to drop: %+v", row)
+	}
+
+	draw := func(variant int) string {
+		var lines []string
+		m.drawHostRow(row, 40, variant, theme.UI(), false, true,
+			func(sidebarRowKind, string, string) bool { return false },
+			func(sidebarRowKind, string, string, int, int) {},
+			func(sidebarTokenSpan, string) {},
+			-1, func(s string) string { return s }, &lines)
+		if len(lines) != 1 {
+			t.Fatalf("drawHostRow drew %d lines, want 1", len(lines))
+		}
+		return stripANSIForTrace(lines[0])
+	}
+
+	if narrow := draw(sidebarVariantNarrow); strings.ContainsAny(narrow, "0123456789") {
+		t.Errorf("ASSERTION: a row on another machine keeps its count on a rail too narrow for one:\n%q", narrow)
+	}
+	// The positive half: the same row carries the count on a rail with room,
+	// so the assertion above tests the width and not the row.
+	if full := draw(sidebarVariantFull); !strings.ContainsAny(full, "0123456789") {
+		t.Errorf("ASSERTION: a row on another machine has no count on a rail with room for one:\n%q", full)
 	}
 }

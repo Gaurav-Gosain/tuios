@@ -1432,7 +1432,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				continue
 			}
 			if isRemoteNode(s) {
-				m.drawHostRow(s, cw, pal, idx == hoverRow[sidebarSectionSessions], canCreate,
+				m.drawHostRow(s, cw, variant, pal, idx == hoverRow[sidebarSectionSessions], canCreate,
 					isCursor, recordHit, recordToken, headerHoverX[sidebarSectionSessions], compose, &lines)
 				continue
 			}

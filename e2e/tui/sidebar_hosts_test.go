@@ -17,6 +17,11 @@ const (
 	hostShut = "▸"
 )
 
+// hostPollActive mirrors hostRefreshActive in internal/app: the cadence the
+// rail polls the daemon for hosts at while it is on screen. A test that waits
+// out a poll waits this long.
+const hostPollActive = 5 * time.Second
+
 // This is federation stage 1 driven the way a user reaches it: a real config
 // file with a [hosts] table, a real daemon, a real ssh subprocess, the real
 // stdio proxy, and the real rail.
@@ -108,6 +113,61 @@ func TestSidebarGroupsSessionsByHost(t *testing.T) {
 
 	t.Logf("rail with host groups:\n%s", term.Snapshot())
 	saveFrame(t, term, "rail-host-groups")
+}
+
+// TestDraggingAMachineHeaderReordersTheRail is the on-screen proof for the
+// second half of "the rail should stay fixed and the user should be able to
+// reorder": the machines start in the daemon's sorted order, a drag on a
+// header puts them in the user's, and a poll later they are still in it.
+//
+// What would pass a weaker test and fail this one: a drag that reorders the
+// rail for one frame and is then overwritten by the next host poll, which
+// rebuilds the section from the daemon's own order.
+func TestDraggingAMachineHeaderReordersTheRail(t *testing.T) {
+	base := t.TempDir()
+	ssh := writeFakeSSH(t, base)
+	writeHostsConfig(t, base, tuiosBin)
+
+	term := startIn(t, base, startOpts{args: []string{"new", "fed-drag"}, env: []string{"TUIOS_SSH=" + ssh}})
+	waitBoot(t, term)
+	toggleSidebarViaPalette(t, term)
+
+	// The daemon sorts its table, so build comes before offline.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		b, o := railRowOf(s, hostOpen+" build"), railRowOf(s, hostOpen+" offline")
+		return b >= 0 && o >= 0 && b < o
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the rail never listed build above offline: %v\n%s", err, term.Snapshot())
+	}
+	t.Logf("before the drag:\n%s", term.Snapshot())
+	saveFrame(t, term, "rail-machine-order-before")
+
+	time.Sleep(insertGuard)
+	s := term.Screen()
+	from, to := railRowOf(s, hostOpen+" offline"), railRowOf(s, hostOpen+" build")
+	mouseDrag(t, term, 3, from, 3, to, tuitest.MouseLeft, 0)
+
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		b, o := railRowOf(s, hostOpen+" build"), railRowOf(s, hostOpen+" offline")
+		return b >= 0 && o >= 0 && o < b
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the drag did not put offline above build: %v\n%s", err, term.Snapshot())
+	}
+	t.Logf("after the drag:\n%s", term.Snapshot())
+	saveFrame(t, term, "rail-machine-order-after")
+
+	// This machine is not dragged: it stays at the top of the section.
+	if l, o := railRowOf(term.Screen(), hostOpen+" local"), railRowOf(term.Screen(), hostOpen+" offline"); l < 0 || l > o {
+		t.Errorf("ASSERTION: the drag moved this machine out of the first slot (local=%d offline=%d):\n%s", l, o, term.Snapshot())
+	}
+
+	// The order holds across a host poll, which is the whole complaint: the
+	// rail must not rebuild itself back into the daemon's order.
+	time.Sleep(2 * hostPollActive)
+	if b, o := railRowOf(term.Screen(), hostOpen+" build"), railRowOf(term.Screen(), hostOpen+" offline"); o > b {
+		t.Errorf("ASSERTION: a host poll put the machines back in the daemon's order (build=%d offline=%d):\n%s", b, o, term.Snapshot())
+	}
+	alive(t, term, "after dragging a machine header")
 }
 
 // TestRailShowsAHostAddedWhileAttached is the refresh proof. The client is

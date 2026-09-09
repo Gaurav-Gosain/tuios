@@ -464,7 +464,7 @@ func (m *OS) setSidebarSessionOrder(host string, order []string) {
 // is not up is drawn and is not a target, because its listing is cached and
 // the machine cannot be reached right now.
 func (m *OS) drawHostRow(
-	node sessiontree.Node, cw int, pal overlay.Palette, hovered, canCreate bool,
+	node sessiontree.Node, cw, variant int, pal overlay.Palette, hovered, canCreate bool,
 	isCursor func(kind sidebarRowKind, sessionID, windowID string) bool,
 	recordHit func(kind sidebarRowKind, sessionID, windowID string, windowIndex, h int),
 	recordToken func(tk sidebarTokenSpan, sessionID string),
@@ -502,7 +502,7 @@ func (m *OS) drawHostRow(
 		hovered = hovered || isCursor(sidebarRowHostSession, node.Host, remoteSessionName(node))
 		recordHit(sidebarRowHostSession, node.Host, remoteSessionName(node), -1, 1)
 	}
-	*lines = append(*lines, compose(m.sidebarRemoteSessionRow(node, cw, pal, hovered)))
+	*lines = append(*lines, compose(m.sidebarRemoteSessionRow(node, cw, variant, pal, hovered)))
 }
 
 // openRemoteSession attaches a session that lives on another machine, in this
@@ -640,20 +640,32 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 // is not attached to. It sits on the same spine as a local session's row, with
 // the resting mark in the glyph cell, so a machine's rows read the same
 // whether the client is on it or not; what says it is elsewhere is the header
-// above it, and what says it is a listing rather than a place is the muted ink.
-func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw int, pal overlay.Palette, hovered bool) string {
+// above it.
+//
+// The ink follows the link. A row under a machine that is answering reads at
+// the strength of a local resting row, because a click on it attaches the
+// session and the row must not look weaker than what it does. A row under a
+// machine that is not answering is a listing nobody can act on, and it is
+// muted with its header to say so.
+//
+// The count takes the same gate a local session row's count takes: a rail too
+// narrow for a name and a number keeps the name.
+func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal overlay.Palette, hovered bool) string {
 	var rowBg color.Color
 	if hovered {
 		rowBg = pal.Surface
 	}
 	right, rightW := "", 0
-	if m.Settings.SidebarShowCounts && node.WindowCount > 0 {
+	if m.Settings.SidebarShowCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
 		count := strconv.Itoa(node.WindowCount)
 		right = sidebarStyle(rowBg, pal.FgMute).Render(count)
 		rightW = lipgloss.Width(count)
 	}
 	ink := pal.FgMute
-	if hovered {
+	switch {
+	case hovered:
+		ink = pal.Fg
+	case m.hostIsUp(node.Host):
 		ink = pal.FgDim
 	}
 	name := sidebarStyle(rowBg, ink).Render(
