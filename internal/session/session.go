@@ -2072,24 +2072,32 @@ func TerminalStateOf(t vt.Terminal, width, height, maxScrollback, have int) *Ter
 	// as a block, because that is what a fresh emulator is.
 	state.CursorShape = decscusrParam(t.CursorStyle())
 
-	// Capture visible screen with full styling
+	// Capture visible screen with full styling. The rows share one backing
+	// array: gob writes each row by its own length, so the shape on the wire
+	// is the same and the allocation count is one instead of one per row.
+	// Colours are encoded through one cache for the whole snapshot: a
+	// truecolor cell's hex string was one allocation per cell, eleven
+	// thousand per screen, for what is usually a few dozen distinct colours.
+	colors := colorWireCache{}
+	cells := make([]CellState, width*height)
 	for y := range height {
-		state.Screen[y] = make([]CellState, width)
+		state.Screen[y] = cells[y*width : (y+1)*width : (y+1)*width]
 		for x := range width {
 			cell := t.CellAt(x, y)
 			if cell != nil {
-				state.Screen[y][x] = CellStateOf(cell)
+				state.Screen[y][x] = colors.cellState(cell)
 			}
 		}
 	}
 
 	if state.IsAltScreen {
 		state.MainScreen = make([][]CellState, height)
+		cells := make([]CellState, width*height)
 		for y := range height {
-			state.MainScreen[y] = make([]CellState, width)
+			state.MainScreen[y] = cells[y*width : (y+1)*width : (y+1)*width]
 			for x := range width {
 				if cell := t.MainCellAt(x, y); cell != nil {
-					state.MainScreen[y][x] = CellStateOf(cell)
+					state.MainScreen[y][x] = colors.cellState(cell)
 				}
 			}
 		}
@@ -2118,15 +2126,24 @@ func TerminalStateOf(t vt.Terminal, width, height, maxScrollback, have int) *Ter
 		first = scrollbackLen - maxScrollback
 	}
 
+	// One backing array for the history too, cut into rows as they are read.
+	// A row wider than the screen, from before a narrowing resize, is rare and
+	// merely starts a new array.
+	var pool []CellState
 	for i := first; i < scrollbackLen; i++ {
 		line := t.ScrollbackLine(i)
-		if line != nil {
-			row := make([]CellState, len(line))
-			for x, cell := range line {
-				row[x] = CellStateOf(&cell)
-			}
-			state.Scrollback = append(state.Scrollback, row)
+		if line == nil {
+			continue
 		}
+		if cap(pool) < len(line) {
+			pool = make([]CellState, max(len(line), width*(scrollbackLen-i)))
+		}
+		row := pool[:len(line):len(line)]
+		pool = pool[len(line):]
+		for x := range line {
+			row[x] = colors.cellState(&line[x])
+		}
+		state.Scrollback = append(state.Scrollback, row)
 	}
 
 	return state
@@ -2142,6 +2159,12 @@ func TerminalStateOf(t vt.Terminal, width, height, maxScrollback, have int) *Ter
 func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	if t == nil || state == nil {
 		return
+	}
+	// A packed snapshot is the same cells in a smaller form (snapshot_pack.go).
+	// The client unpacks on receipt, so this is a no-op on the ordinary path
+	// and covers a caller handing over a packed one directly.
+	if err := state.unpack(); err != nil {
+		debugLog("[CLIENT] snapshot cells dropped: %v", err)
 	}
 
 	// A snapshot too big for the emulator it is going into used to be taken
@@ -2238,19 +2261,21 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	// repaint itself, which asks the guest to do the client's job: a program
 	// that does not redraw on SIGWINCH, or one that is between frames, leaves
 	// the pane blank.
+	var cell uv.Cell
 	if len(state.Screen) > 0 {
 		for y := 0; y < len(state.Screen) && y < state.Height; y++ {
 			if state.Screen[y] == nil {
 				continue
 			}
 			for x := 0; x < len(state.Screen[y]) && x < state.Width; x++ {
-				cellState := state.Screen[y][x]
+				cellState := &state.Screen[y][x]
 				// A wide rune's continuation column is empty and is written by
 				// SetCell from the lead cell's width, so skipping it is right.
 				if cellState.Content == "" {
 					continue
 				}
-				t.SetCell(x, y, stateToCell(t, cellState))
+				stateToCell(t, cellState, &cell)
+				t.SetCell(x, y, &cell)
 			}
 		}
 		// The cursor was serialized and thrown away. Whatever came next was
@@ -2265,20 +2290,23 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	// vim exited, because the buffer underneath had nothing in it.
 	for y := 0; y < len(state.MainScreen) && y < state.Height; y++ {
 		for x := 0; x < len(state.MainScreen[y]) && x < state.Width; x++ {
-			cs := state.MainScreen[y][x]
+			cs := &state.MainScreen[y][x]
 			if cs.Content == "" {
 				continue
 			}
-			t.SetMainCell(x, y, stateToCell(t, cs))
+			stateToCell(t, cs, &cell)
+			t.SetMainCell(x, y, &cell)
 		}
 	}
 }
 
-// stateToLine converts one serialized scrollback row to a line for t.
+// stateToLine converts one serialized scrollback row to a line for t. The
+// line is fresh each time: the ghostty terminal keeps what it is pushed until
+// its next flush, so one buffer cannot serve every row.
 func stateToLine(t vt.Terminal, row []CellState) uv.Line {
 	line := make(uv.Line, len(row))
-	for x, cs := range row {
-		line[x] = *stateToCell(t, cs)
+	for x := range row {
+		stateToCell(t, &row[x], &line[x])
 	}
 	return line
 }
@@ -2403,6 +2431,15 @@ type TerminalState struct {
 	// such treatment: entering it clears it, so what it held before is never
 	// seen again.
 	MainScreen [][]CellState `json:"main_screen,omitempty"`
+
+	// The three grids above in packed form, sent instead of them when the
+	// request asked (GetTerminalStatePayload.Packed). Styles is the table the
+	// packed cells index, and is never empty when the cells are packed. See
+	// snapshot_pack.go for the layout and why it exists.
+	Styles           []StyleState `json:"styles,omitempty"`
+	PackedScreen     []byte       `json:"packed_screen,omitempty"`
+	PackedScrollback []byte       `json:"packed_scrollback,omitempty"`
+	PackedMain       []byte       `json:"packed_main,omitempty"`
 }
 
 // CellState represents a single terminal cell with full styling information.
@@ -2477,9 +2514,12 @@ func colorToWire(c color.Color) string {
 	case nil:
 		return ""
 	case ansi.BasicColor:
+		if int(v) < len(basicColorWire) {
+			return basicColorWire[v]
+		}
 		return "a" + strconv.Itoa(int(v))
 	case ansi.IndexedColor:
-		return "i" + strconv.Itoa(int(v))
+		return indexedColorWire[v]
 	}
 	// A color.Color interface can hold a typed-nil pointer such as
 	// (*color.RGBA)(nil). The case nil above matches only an untyped nil, and
@@ -2489,7 +2529,30 @@ func colorToWire(c color.Color) string {
 		return ""
 	}
 	r, g, b, _ := c.RGBA()
-	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
+	const digits = "0123456789abcdef"
+	buf := [7]byte{'#'}
+	for i, v := range [3]byte{byte(r >> 8), byte(g >> 8), byte(b >> 8)} {
+		buf[1+2*i] = digits[v>>4]
+		buf[2+2*i] = digits[v&0xf]
+	}
+	return string(buf[:])
+}
+
+// basicColorWire and indexedColorWire are every palette encoding colorToWire
+// can produce, built once. A snapshot encodes a colour per cell, so building
+// the string each time was one allocation per styled cell, per pane, per
+// workspace switch.
+var (
+	basicColorWire   = paletteWire('a', 16)
+	indexedColorWire = paletteWire('i', 256)
+)
+
+func paletteWire(prefix byte, n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = string(prefix) + strconv.Itoa(i)
+	}
+	return out
 }
 
 // colorFromWire is colorToWire read back. Palette entries are resolved through
@@ -2500,11 +2563,22 @@ func colorFromWire(t vt.Terminal, s string) color.Color {
 		return nil
 	}
 	if s[0] == '#' {
-		var r, g, b uint8
-		if _, err := fmt.Sscanf(s, "#%02x%02x%02x", &r, &g, &b); err != nil {
+		// Read by hand rather than through fmt.Sscanf: this runs once per
+		// coloured cell on the client's UI goroutine, and Sscanf was over
+		// two microseconds of reflection per call, which put a truecolor
+		// pane at twenty milliseconds per workspace switch.
+		if len(s) != 7 {
 			return nil
 		}
-		return color.RGBA{R: r, G: g, B: b, A: 0xff}
+		var rgb [3]byte
+		for i := range rgb {
+			hi, lo := hexNibble(s[1+2*i]), hexNibble(s[2+2*i])
+			if hi < 0 || lo < 0 {
+				return nil
+			}
+			rgb[i] = byte(hi<<4 | lo)
+		}
+		return color.RGBA{R: rgb[0], G: rgb[1], B: rgb[2], A: 0xff}
 	}
 	n, err := strconv.Atoi(s[1:])
 	if err != nil {
@@ -2517,6 +2591,55 @@ func colorFromWire(t vt.Terminal, s string) color.Color {
 		return t.IndexedColor(n)
 	}
 	return nil
+}
+
+// hexNibble is the value of one hex digit, or -1 for anything else.
+func hexNibble(c byte) int {
+	switch {
+	case c >= '0' && c <= '9':
+		return int(c - '0')
+	case c >= 'a' && c <= 'f':
+		return int(c-'a') + 10
+	case c >= 'A' && c <= 'F':
+		return int(c-'A') + 10
+	}
+	return -1
+}
+
+// colorWireCache remembers the wire form of each RGB colour it has encoded.
+// Palette colours have their strings built once for the process
+// (basicColorWire, indexedColorWire); an RGB string is built per distinct
+// colour per snapshot instead of per cell.
+type colorWireCache map[color.RGBA]string
+
+func (c colorWireCache) encode(col color.Color) string {
+	rgba, ok := col.(color.RGBA)
+	if !ok {
+		return colorToWire(col)
+	}
+	if s, ok := c[rgba]; ok {
+		return s
+	}
+	s := colorToWire(col)
+	c[rgba] = s
+	return s
+}
+
+// cellState is CellStateOf through the cache.
+func (c colorWireCache) cellState(cell *uv.Cell) CellState {
+	return CellState{
+		Content: cell.Content,
+		Width:   cell.Width,
+		StyleState: StyleState{
+			FgColor:    c.encode(cell.Style.Fg),
+			BgColor:    c.encode(cell.Style.Bg),
+			UlColor:    c.encode(cell.Style.UnderlineColor),
+			Attrs:      cell.Style.Attrs,
+			Underline:  uint8(cell.Style.Underline),
+			LinkURL:    cell.Link.URL,
+			LinkParams: cell.Link.Params,
+		},
+	}
 }
 
 // CellStateOf converts a VT cell to a serializable CellState.
@@ -2532,10 +2655,14 @@ func CellStateOf(cell *uv.Cell) CellState {
 	}
 }
 
-// stateToCell converts a CellState back to a VT cell for restoration into t.
-func stateToCell(t vt.Terminal, cs CellState) *uv.Cell {
-	style, link := styleFromWire(t, cs.StyleState)
-	return &uv.Cell{Content: cs.Content, Width: cs.Width, Style: style, Link: link}
+// stateToCell converts a CellState back to a VT cell for restoration into t,
+// writing it into cell. The emulators copy what SetCell is handed, so one cell
+// serves a whole snapshot; returning a fresh one was an allocation per cell,
+// eleven thousand of them for a screen and a million for a deep scrollback.
+func stateToCell(t vt.Terminal, cs *CellState, cell *uv.Cell) {
+	cell.Style, cell.Link = styleFromWire(t, cs.StyleState)
+	cell.Content = cs.Content
+	cell.Width = cs.Width
 }
 
 // Close terminates the PTY.

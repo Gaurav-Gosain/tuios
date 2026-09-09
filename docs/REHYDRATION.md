@@ -288,6 +288,19 @@ Two things had to be true for that rule to hold, and neither was:
   modes said it had left. The blit landed in the buffer nobody was looking at,
   and everything the pane printed next scrolled into the alternate screen's
   scrollback, which is switched off.
+- **The cells travel packed when the client asks.** As `[][]CellState`, gob
+  writes every cell as a struct, about thirteen bytes for a plain letter: a
+  207x55 screen was 147 KB and a thousand rows of history 2.9 MB, per pane, and
+  the client decoded every struct by reflection on its UI goroutine during a
+  workspace switch. `GetTerminalStatePayload.Packed` asks for the same cells in
+  the form `snapshot_pack.go` describes: a style table once, cells in one style
+  run together, two bytes for a plain letter, blank row tails left off. The
+  request field is what keeps it compatible in both directions. A daemon that
+  predates it does not see the request and answers with cells, which the client
+  still reads; a client that predates it never asks. `TUIClient.GetTerminalState`
+  unpacks the reply as soon as it is decoded, so every reader of a snapshot,
+  `ApplyTerminalState` and every test that reads `Screen`, sees the cells it
+  always has. `TestWireCarriesTheWholeCell` runs every shape under both forms.
 
 ## A resize is a point in the stream
 
@@ -411,6 +424,20 @@ see that, and the pane came back with the client's emulator at one size and the
 shell at another. The snapshot carries the daemon's real size, so priming a pane
 seeds the announcement record from it and reconciles before the snapshot it will
 restore from is taken.
+
+## Where the history should come from next
+
+A client still holds a full second copy of every pane's scrollback, seeded on
+attach and topped up on every switch, and the daemon holds the first. That is
+accepted for now because it is what lets the pane scroll without a round trip.
+The shape that removes it is to fetch history on scroll: the snapshot carries
+the screen and the count of rows behind it, the client's emulator keeps only
+what has scrolled off since it was primed, and a scroll that reaches past what
+it holds asks the daemon for a page of rows above a given position. The packed
+form is what makes such a page cheap, and the `have` field is already the
+client telling the daemon how much it holds; the missing piece is a request
+that names a row range instead of a count, and a scrollback anchor the client
+can hold across a page arriving. Nothing here is built yet.
 
 ## The ring's size
 

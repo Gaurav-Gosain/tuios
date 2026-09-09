@@ -132,21 +132,35 @@ func colouredLines(n int) string {
 }
 
 func TestWireCarriesTheWholeCell(t *testing.T) {
-	for _, shape := range wireShapes {
-		t.Run(shape.name, func(t *testing.T) {
-			daemon := vt.NewEmulator(fidelityCols, fidelityRows)
-			defer func() { _ = daemon.Close() }()
-			if _, err := daemon.Write([]byte(shape.out)); err != nil {
-				t.Fatalf("feed the daemon emulator: %v", err)
-			}
+	for _, form := range wireForms {
+		for _, shape := range wireShapes {
+			t.Run(form.name+"/"+shape.name, func(t *testing.T) {
+				daemon := vt.NewEmulator(fidelityCols, fidelityRows)
+				defer func() { _ = daemon.Close() }()
+				if _, err := daemon.Write([]byte(shape.out)); err != nil {
+					t.Fatalf("feed the daemon emulator: %v", err)
+				}
 
-			client := vt.NewEmulator(fidelityCols, fidelityRows)
-			defer func() { _ = client.Close() }()
-			ApplyTerminalState(client, TerminalStateOf(daemon, fidelityCols, fidelityRows, 20000, 0))
+				client := vt.NewEmulator(fidelityCols, fidelityRows)
+				defer func() { _ = client.Close() }()
+				state := TerminalStateOf(daemon, fidelityCols, fidelityRows, 20000, 0)
+				ApplyTerminalState(client, throughWire(t, state, form.packed))
 
-			compareEmulators(t, daemon, client)
-		})
+				compareEmulators(t, daemon, client)
+			})
+		}
 	}
+}
+
+// wireForms is the two shapes a snapshot's cells take on the wire. The tests
+// that compare emulators across the wire run under both, since a client may
+// be answered by a daemon of either age.
+var wireForms = []struct {
+	name   string
+	packed bool
+}{
+	{"cells", false},
+	{"packed", true},
 }
 
 // TestWireLeavesTheAlternateScreen covers the pane whose emulator survives a
