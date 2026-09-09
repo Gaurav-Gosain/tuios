@@ -26,6 +26,10 @@ const (
 	// listings and nothing else, so nothing addresses them and nothing selects
 	// them.
 	KindHost
+	// KindRepo is a repository's group header. Its rows are the worktree
+	// sessions of that repository, which follow it in the same list. See
+	// GroupByRepo in worktree.go.
+	KindRepo
 )
 
 // Node is one row in the tree: a session or a window under it.
@@ -86,6 +90,14 @@ type Node struct {
 	HostNote string
 	// HostLastOK is when a host last answered, as Unix seconds, zero for never.
 	HostLastOK int64
+	// Worktree is the git worktree this session sits in, nil for a session
+	// that is not one. It is what puts the row under a repository parent and
+	// labels it with its branch.
+	Worktree *WorktreeRef
+	// GroupLast marks the last member of a repository group, so the row can
+	// draw the tree glyph that closes the group. Set by GroupByRepo and
+	// meaningless anywhere else.
+	GroupLast bool
 	// Children are the window nodes of a session. Nil for a window node, and nil
 	// for a session whose windows are not known yet (a non-attached session over
 	// the coarse control protocol), which still carries a rolled-up glyph and a
@@ -145,7 +157,10 @@ type SessionInput struct {
 	// CurrentWorkspace is the workspace this session is showing, or 0 when the
 	// caller does not know.
 	CurrentWorkspace int
-	Windows          []WindowInput
+	// Worktree is the git worktree this session sits in, nil for a session
+	// that is not one.
+	Worktree *WorktreeRef
+	Windows  []WindowInput
 }
 
 // AgentRank ranks agent states for both the session roll-up and the sidebar's
@@ -214,6 +229,7 @@ func BuildSession(s SessionInput) Node {
 		WindowCount: s.WindowCount,
 		Workspace:   s.CurrentWorkspace,
 		Restored:    s.Restored,
+		Worktree:    s.Worktree,
 	}
 	if len(s.Windows) == 0 {
 		return node

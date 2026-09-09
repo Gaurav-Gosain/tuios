@@ -100,6 +100,12 @@ const (
 	// the split between that section and the ones over it; a double-click, or
 	// enter with the cursor on it, resets the split. See sidebar_split.go.
 	sidebarRowDivider
+	// sidebarRowRepo is a repository's group header in the sessions section,
+	// over the worktree sessions of that repository. Activating it folds the
+	// group shut or opens it again. It carries the repository name in
+	// SessionID, which is what the folded set is keyed by. See
+	// sidebar_worktrees.go.
+	sidebarRowRepo
 )
 
 // sidebarAddGlyph is the mark both add controls wear. One cell, so it costs a
@@ -1033,6 +1039,13 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			cursorTarget.Kind == kind && cursorTarget.SessionID == sessionID && cursorTarget.WindowID == windowID
 	}
 
+	// The sessions section's own rows: the worktree sessions gathered under a
+	// row for their repository, with a folded repository's members left out.
+	// Every other section keeps reading the ungrouped list, so a folded group
+	// hides rows here and hides no pane and no waiting agent. See
+	// sidebar_worktrees.go.
+	sessionRows := m.sidebarSessionRows(sessions)
+
 	// The lists, built before anything is drawn: the budget needs their counts,
 	// and hover has to resolve against the same arithmetic the draw uses.
 	shown, peeking := m.sidebarShownSession(sessions)
@@ -1052,7 +1065,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// whatever the last reply left behind. Nothing here stats, opens or spawns.
 	files := m.sidebarFileRows()
 
-	nS := len(sessions)
+	nS := len(sessionRows)
 	nT := len(terminals)
 	nA := len(agents)
 	if emptyFilter {
@@ -1279,7 +1292,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// See sidebar_reveal.go.
 	m.sidebarRevealFocus(sessions, terminals, capRows[sidebarSectionTerminals], capRows[sidebarSectionSessions])
 	if m.SidebarFocused && haveCursorTarget {
-		if sec, idx, ok := m.sidebarCursorIndex(cursorTarget, sessions, terminals, agents, files); ok {
+		if sec, idx, ok := m.sidebarCursorIndex(cursorTarget, sessionRows, terminals, agents, files); ok {
 			if rows := capRows[sec]; rows > 0 {
 				if idx < *scroll[sec] {
 					*scroll[sec] = idx
@@ -1403,7 +1416,15 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		lines = append(lines, compose(sidebarHeaderRow(label, add, cw, pal)))
 		for i := range count[sidebarSectionSessions] {
 			idx := start[sidebarSectionSessions] + i
-			s := sessions[idx]
+			s := sessionRows[idx]
+			if s.Kind == sessiontree.KindRepo {
+				// A repository's group header. It is a nav row like any other,
+				// and activating it folds the group.
+				hovered := idx == hoverRow[sidebarSectionSessions] || isCursor(sidebarRowRepo, s.ID, "")
+				recordHit(sidebarRowRepo, s.ID, "", -1, 1)
+				lines = append(lines, compose(m.sidebarRepoRow(s, cw, pal, hovered)))
+				continue
+			}
 			if isRemoteNode(s) {
 				m.drawHostRow(s, cw, pal, isCursor, recordHit, recordToken, headerHoverX[sidebarSectionSessions], compose, &lines)
 				continue
@@ -1749,7 +1770,13 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Nod
 	switch target.Kind {
 	case sidebarRowSession:
 		for i, s := range sessions {
-			if s.ID == target.SessionID {
+			if s.Kind != sessiontree.KindRepo && s.ID == target.SessionID {
+				return sidebarSectionSessions, i, true
+			}
+		}
+	case sidebarRowRepo:
+		for i, s := range sessions {
+			if s.Kind == sessiontree.KindRepo && s.ID == target.SessionID {
 				return sidebarSectionSessions, i, true
 			}
 		}
@@ -1961,6 +1988,17 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 		right = sidebarStyle(rowBg, pal.FgMute).Render(countStr)
 		rightW = lipgloss.Width(countStr)
 	}
+	// A worktree session whose directory has been removed says so in the same
+	// slot, for the same reason: the session still runs and the place it ran
+	// in is not there any more.
+	if node.Worktree != nil && node.Worktree.Gone && variant == sidebarVariantFull {
+		tag := sidebarWorktreeGoneTag
+		if rightW > 0 {
+			tag += " "
+		}
+		right = sidebarStyle(rowBg, pal.FgMute).Render(tag) + right
+		rightW += lipgloss.Width(tag)
+	}
 	// The restored tag rides the right slot, dim, and only where there is room
 	// for a word: it says the layout came back without its processes, which is
 	// worth a column or two off the name until someone attaches and it goes.
@@ -1982,11 +2020,18 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	}
 	title := printableTitle(node.Title)
 	avail := sidebarNameAvail(cw, rightW)
+	// A worktree session is named by its branch under its repository's row,
+	// behind the mark that says whether the group goes on below it. The branch
+	// is the whole label there, so nothing rides after it.
+	grouped := false
+	if label, ok := m.sidebarWorktreeLabel(node); ok {
+		title, grouped = label, true
+	}
 	// The branch rides after the name in muted ink, and only when the two fit
 	// together: a name that has to scroll wants every column, and a branch
 	// with its name cut from under it says nothing.
 	branch := ""
-	if b := printableTitle(node.Branch); b != "" && variant == sidebarVariantFull {
+	if b := printableTitle(node.Branch); b != "" && !grouped && variant == sidebarVariantFull {
 		if need := lipgloss.Width(title) + 1 + lipgloss.Width(b); need <= avail {
 			branch = sidebarStyle(rowBg, nil).Render(" ") + sidebarStyle(rowBg, pal.FgMute).Render(b)
 			avail -= 1 + lipgloss.Width(b)

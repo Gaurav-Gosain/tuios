@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/google/uuid"
 )
 
@@ -224,8 +225,27 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		return WindowState{}, err
 	}
 
+	// The session's directory is its first window's, so the first window is
+	// the one that can make this a worktree session. Detection runs here,
+	// before the mutation, so the window and the record reach clients in one
+	// push rather than two.
+	first := len(s.GetState().Windows) == 0
+	var detected *WorktreeInfo
+	if first {
+		cwd := opts.Cwd
+		if cwd == "" {
+			cwd, _ = pty.ProcessCwd()
+		}
+		if info, ok := worktree.Detect(cwd); ok {
+			detected = &WorktreeInfo{Info: info}
+		}
+	}
+
 	var win WindowState
 	_ = s.mutateState(func(state *SessionState) error {
+		if first && (state.Worktree == nil || !state.Worktree.Managed) {
+			state.Worktree = detected
+		}
 		if state.WorkspaceFocus == nil {
 			state.WorkspaceFocus = make(map[int]string)
 		}

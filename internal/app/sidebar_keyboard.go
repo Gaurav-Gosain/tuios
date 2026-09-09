@@ -161,7 +161,7 @@ func (m *OS) sidebarStepSection(delta int) {
 // control that belongs to none.
 func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 	switch kind {
-	case sidebarRowSession, sidebarRowHostSession, sidebarRowHostNew:
+	case sidebarRowSession, sidebarRowHostSession, sidebarRowHostNew, sidebarRowRepo:
 		return sidebarSectionSessions
 	case sidebarRowWindow:
 		return sidebarSectionTerminals
@@ -238,6 +238,10 @@ func (m *OS) SidebarActivateCursor() bool {
 		return true
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
+	case sidebarRowRepo:
+		// Folding a group is a change to the rail, not a place to go, so the
+		// keyboard stays in the rail on the row that was folded.
+		m.SidebarToggleRepoCollapsed(row.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:

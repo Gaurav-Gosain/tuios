@@ -16,6 +16,14 @@ func (m *OS) adoptSessionLabels(state *session.SessionState) {
 	m.SessionDisplayName = state.DisplayName
 	m.SessionAccent = state.Accent
 	m.SessionRestored = state.Restored
+	// The worktree record travels with the state, so the attached row is drawn
+	// from the same push every other label on it comes from. A copy, because
+	// the state snapshot is the daemon's and this outlives the call.
+	m.SessionWorktree = nil
+	if state.Worktree != nil {
+		wt := *state.Worktree
+		m.SessionWorktree = &wt
+	}
 	// A drag in flight owns the arrangement until the pointer comes up. Adopting
 	// mid-drag would snap the pills back under the pointer on any push that
 	// happened to land, and the push that matters is this client's own.

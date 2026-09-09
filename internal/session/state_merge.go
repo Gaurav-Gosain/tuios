@@ -39,6 +39,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// daemon-side. A bool cannot say "not sent", so canonical simply wins: no
 	// client can either raise the mark or clear it by syncing.
 	incoming.Restored = canonical.Restored
+	// The worktree record is written by detection and by the worktree verbs,
+	// both daemon-side, so canonical wins the same way Restored does.
+	incoming.Worktree = canonical.Worktree
 	if incoming.WorkspaceNames == nil {
 		incoming.WorkspaceNames = canonical.WorkspaceNames
 	}

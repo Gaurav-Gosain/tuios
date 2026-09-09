@@ -5,7 +5,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strings"
 )
 
 //go:embed manifests/*.toml
@@ -152,4 +154,40 @@ func (r *Registry) IdentifyDetail(p ProcInfo) (id, rule string, ok bool) {
 		}
 	}
 	return "", "", false
+}
+
+// Resolve finds the harness a person named, by manifest id ("claude-code") or
+// by the name of the program that runs it ("claude"), and returns it with the
+// command that starts it. The command is the first name the manifest detects
+// the harness under, which is the name it is installed as.
+//
+// It exists so a command that starts an agent for the person can take the
+// name they already type at their shell, and refuse a name nothing here knows
+// rather than exec something and hope it is an agent.
+func (r *Registry) Resolve(name string) (m *Manifest, command string, ok bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, "", false
+	}
+	if m := r.Lookup(name); m != nil {
+		return m, m.Command(), true
+	}
+	for _, m := range r.manifests {
+		if slices.Contains(m.Detect.Argv0, name) || slices.Contains(m.Detect.Comm, name) {
+			return m, m.Command(), true
+		}
+	}
+	return nil, "", false
+}
+
+// Command is the program name that starts this harness: the first argv0 the
+// manifest detects it under, or the first comm when it names no argv0.
+func (m *Manifest) Command() string {
+	if len(m.Detect.Argv0) > 0 {
+		return m.Detect.Argv0[0]
+	}
+	if len(m.Detect.Comm) > 0 {
+		return m.Detect.Comm[0]
+	}
+	return m.ID
 }

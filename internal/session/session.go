@@ -247,7 +247,12 @@ type SessionState struct {
 	//
 	// Daemon-owned: clients never send it, and false is what every older client
 	// and every pre-existing state file reads back as.
-	Restored         bool           `json:"restored,omitempty"`
+	Restored bool `json:"restored,omitempty"`
+	// Worktree is the daemon's record of the git worktree this session's
+	// directory is, or nil for a session that is not in one. Daemon-owned and
+	// omitted when nil, which is what every older client and state file reads.
+	// See worktree.go.
+	Worktree         *WorktreeInfo  `json:"worktree,omitempty"`
 	Windows          []WindowState  `json:"windows"`
 	FocusedWindowID  string         `json:"focused_window_id,omitempty"`
 	CurrentWorkspace int            `json:"current_workspace"`
@@ -1340,6 +1345,13 @@ func (s *Session) ResurrectionState() *SessionState {
 			}
 		}
 	}
+	// The first window's directory is the session's, and this is the one place
+	// it is read on a cadence: a save happens only when the state changed, so a
+	// shell that moved into or out of a worktree is noticed here and an idle
+	// session is never looked at.
+	if len(state.Windows) > 0 {
+		s.refreshWorktree(state.Windows[0].Cwd)
+	}
 	return state
 }
 
@@ -1568,6 +1580,7 @@ func (s *Session) Info() SessionInfo {
 		Restored:         restored,
 		Dir:              dir,
 		Branch:           branch,
+		Worktree:         s.worktreeListing(),
 	}
 }
 

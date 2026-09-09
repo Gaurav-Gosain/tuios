@@ -96,6 +96,12 @@ type GlyphSet struct {
 	Collapse  string `json:"collapse,omitempty"`
 	Expand    string `json:"expand,omitempty"`
 
+	// The rail's two tree marks, three cells each. They run in front of a row
+	// that belongs to a group above it: TreeBranch while siblings follow,
+	// TreeLast on the one that closes the group.
+	TreeBranch string `json:"tree_branch,omitempty"`
+	TreeLast   string `json:"tree_last,omitempty"`
+
 	// The files section's three marks, one cell each. They are roles rather
 	// than a table of file types on purpose: a set says what a folder, a parent
 	// and a plain file look like, and the per-type icons are a separate,
@@ -143,6 +149,7 @@ var builtinGlyphSets = map[string]*GlyphSet{
 		Rule: "─", ArrowLeft: "‹", ArrowRight: "›",
 		Focus: "▎", Attention: "▎", Bullet: "·",
 		Add: "+", Collapse: "«", Expand: "»",
+		TreeBranch: "├─ ", TreeLast: "└─ ",
 		Folder: "▸", Parent: "▴", File: "·",
 		Ellipsis: "…", Sigil: "›", DashRule: "╌",
 	},
@@ -178,6 +185,7 @@ var builtinGlyphSets = map[string]*GlyphSet{
 		Rule: "-", Separator: " | ", ArrowLeft: "<", ArrowRight: ">",
 		Focus: ">", Attention: "!", Bullet: ".",
 		Add: "+", Collapse: "<<", Expand: ">>",
+		TreeBranch: "|- ", TreeLast: "`- ",
 		Folder: ">", Parent: "^", File: ".",
 		ScrollbarThumb: "|", ScrollbarTrack: ".",
 		Ellipsis: "...", Sigil: ">", DashRule: "-",
@@ -321,6 +329,11 @@ var glyphRoles = []glyphRole{
 	{"attention", func(g *GlyphSet) *string { return &g.Attention }, 1},
 	{"bullet", func(g *GlyphSet) *string { return &g.Bullet }, 1},
 	{"add", func(g *GlyphSet) *string { return &g.Add }, 1},
+	// The tree marks run in front of a name rather than in the gutter, so they
+	// are budgeted three cells: the mark, its arm, and the space before the
+	// name. A wider one would step every grouped name out of the rail's spine.
+	{"tree_branch", func(g *GlyphSet) *string { return &g.TreeBranch }, 3},
+	{"tree_last", func(g *GlyphSet) *string { return &g.TreeLast }, 3},
 	{"folder", func(g *GlyphSet) *string { return &g.Folder }, 1},
 	{"parent", func(g *GlyphSet) *string { return &g.Parent }, 1},
 	{"file", func(g *GlyphSet) *string { return &g.File }, 1},

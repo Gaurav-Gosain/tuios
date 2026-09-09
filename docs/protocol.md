@@ -198,6 +198,9 @@ catalog.
 | `timeout` | A wait-for condition did not match before its timeout elapsed. |
 | `protocol_mismatch` | The caller's protocol version is outside the range this daemon serves. Only `hello` produces it. |
 | `internal` | An unexpected server side failure. |
+| `not_worktree` | The session is not in a git worktree, so there is nothing to remove. |
+| `worktree_dirty` | remove-worktree refused: the worktree holds uncommitted changes and neither `stash` nor `force` was passed. Nothing was removed. |
+| `git_failed` | A git command failed. The message is git's own. The repository is as it was. |
 
 Codes are stable and additive: existing codes never change meaning, and a new
 code is only ever introduced for a condition that previously had none. A client
@@ -667,6 +670,118 @@ Response:
 
 ```json
 {"result": {"type": "ok"}}
+```
+
+### new-worktree
+
+Create a git worktree of a repository and a session in it. The worktree goes
+under `$XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>`, and the session is
+named `<repo>-<branch>` with every slash in the branch turned into a hyphen. A
+branch that does not exist is created from `base`, or from HEAD.
+
+Params: `repo` (required, a directory inside the repository), `branch`
+(required), `base`, `name`, `command` (argv for the first window instead of a
+shell).
+
+Request:
+
+```json
+{"verb": "new-worktree", "params": {"repo": "/src/api", "branch": "feat/retry", "base": "main", "command": ["claude"]}}
+```
+
+Response:
+
+```json
+{"result": {"type": "worktree_created", "session": "api-feat-retry", "repo": "api", "repo_root": "/src/api",
+ "branch": "feat/retry", "created_branch": true, "path": "/home/u/.local/share/tuios/worktrees/api/feat-retry",
+ "window_id": "...", "pty_id": "..."}}
+```
+
+A session whose first window starts inside a worktree made by hand is recorded
+the same way, by reading the directory. `list-sessions` carries the record as
+`worktree` on the session, and it is what the rail groups by.
+
+### list-worktrees
+
+List the sessions whose directory is a git worktree.
+
+Params: `repo` (filter by repository name), `group` (filter by fan-out stem),
+`changes` (run git status in each and report `changes` and `ahead`; off by
+default).
+
+Request:
+
+```json
+{"verb": "list-worktrees", "params": {"changes": true}}
+```
+
+Response:
+
+```json
+{"result": {"type": "worktree_list", "total": 1, "worktrees": [
+  {"session": "api-feat-retry", "repo": "api", "repo_root": "/src/api", "branch": "feat/retry",
+   "path": "/home/u/.local/share/tuios/worktrees/api/feat-retry", "base": "main", "group": "",
+   "managed": true, "gone": false, "state": "working", "harness": "claude-code", "windows": 1,
+   "attached": false, "prompt_status": "", "prompt_note": "", "changes": 3, "ahead": 1}]}}
+```
+
+`gone` is true when the worktree directory no longer exists. The session is
+kept, so what its agent printed can still be read. `state` is the agent state
+rolled up over the session's windows.
+
+### remove-worktree
+
+Remove a worktree session's worktree with `git worktree remove`, and kill the
+session. Uncommitted changes are refused with `worktree_dirty` unless `stash`
+moves them into the repository's stash as `tuios: <branch>` or `force` discards
+them. `force` is the only option that discards work. The branch is never
+deleted, and the daemon never runs `git worktree prune`.
+
+Params: `session` (required), `stash`, `force`, `keep_session`.
+
+Request:
+
+```json
+{"verb": "remove-worktree", "params": {"session": "api-feat-retry", "stash": true}}
+```
+
+Response:
+
+```json
+{"result": {"type": "worktree_removed", "session": "api-feat-retry", "branch": "feat/retry",
+ "path": "/home/u/.local/share/tuios/worktrees/api/feat-retry", "repo": "api", "changes": 3,
+ "stashed": true, "stash_message": "tuios: feat/retry", "discarded": false, "session_killed": true, "branch_kept": true}}
+```
+
+### fan
+
+Fan one prompt out across several agents. Creates `count` worktrees and
+sessions, starts the agent in each, and types the prompt into each agent once
+it is ready to read: `idle`, `done`, or `unknown` for an agent that reports
+nothing and has gone quiet. An agent in `needs_input` is left for the person
+to answer, and the prompt is typed after. The verb returns as soon as the
+sessions exist. `list-worktrees` reports `prompt_status` per session:
+`pending`, `sent`, or `not_sent` with a `prompt_note`.
+
+Params: `count` (required, 1 to 16), `agent` (required, a harness id or the
+program name: `claude`, `codex`, `gemini`), `prompt` (required), `repo`
+(required), `base`, `name` (branch stem), `ready_timeout` (milliseconds,
+default 600000).
+
+Request:
+
+```json
+{"verb": "fan", "params": {"count": 3, "agent": "claude", "prompt": "Add a retry to the client.", "repo": "/src/api"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "fan_started", "group": "fan/add-retry-client", "repo": "api", "agent": "claude-code",
+ "command": "claude", "prompt": "Add a retry to the client.", "total": 3, "sessions": [
+  {"session": "api-fan-add-retry-client", "branch": "fan/add-retry-client", "path": "...", "window_id": "..."},
+  {"session": "api-fan-add-retry-client-2", "branch": "fan/add-retry-client-2", "path": "...", "window_id": "..."},
+  {"session": "api-fan-add-retry-client-3", "branch": "fan/add-retry-client-3", "path": "...", "window_id": "..."}]}}
 ```
 
 ### set-option
