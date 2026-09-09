@@ -53,6 +53,22 @@ func (s *Settings) GetRailBullet() string {
 	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Bullet }, "·", ".")
 }
 
+// GetRailTreeBranch is the mark in front of a grouped row that has a sibling
+// below it, and GetRailTreeLast is the mark on the row that closes the group.
+// The rail draws them in front of the name of every worktree session under its
+// repository, which is what says the rows belong to the row above them.
+//
+// Three cells each, the trailing space included, so a grouped name starts on
+// the same column whichever mark it wears.
+func (s *Settings) GetRailTreeBranch() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.TreeBranch }, "├─ ", "|- ")
+}
+
+// GetRailTreeLast is the mark on the last row of a group.
+func (s *Settings) GetRailTreeLast() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.TreeLast }, "└─ ", "`- ")
+}
+
 // GetRailAddGlyph is the new-session and new-window control.
 func (s *Settings) GetRailAddGlyph() string {
 	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Add }, "+", "+")
@@ -122,6 +138,8 @@ func (s *Settings) ResolvedGlyphs() map[string]string {
 		"attention":       s.GetRailAttentionMark(),
 		"bullet":          s.GetRailBullet(),
 		"add":             s.GetRailAddGlyph(),
+		"tree_branch":     s.GetRailTreeBranch(),
+		"tree_last":       s.GetRailTreeLast(),
 		"folder":          s.GetRailFolderGlyph(),
 		"parent":          s.GetRailParentGlyph(),
 		"file":            s.GetRailFileGlyph(),

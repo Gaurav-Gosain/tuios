@@ -237,6 +237,32 @@ func (m *OS) sidebarSignature() uint64 {
 		mixS(o)
 	}
 
+	// The worktree groups. Which repositories are folded decides which rows the
+	// sessions section draws at all, and the attached session's own record is
+	// the one the client's cache generation below cannot speak for: it arrives
+	// on the session state instead. Order-independent over the folded set, so
+	// map iteration order does not matter.
+	var repoFold uint64
+	for repo, collapsed := range m.SidebarCollapsedRepos {
+		if !collapsed {
+			continue
+		}
+		e := uint64(1469598103934665603)
+		for i := range len(repo) {
+			e ^= uint64(repo[i])
+			e *= prime
+		}
+		repoFold ^= e
+	}
+	mixU(repoFold)
+	if m.SessionWorktree != nil {
+		mixS(m.SessionWorktree.Repo)
+		mixS(m.SessionWorktree.Branch)
+		mixB(m.SessionWorktree.Gone)
+	} else {
+		mixI(-1)
+	}
+
 	// Foreign-session data, folded by generation instead of by locking the client.
 	if m.DaemonClient != nil {
 		mixU(m.DaemonClient.CacheGen())

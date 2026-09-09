@@ -95,6 +95,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 		IsCurrent:        true,
 		Restored:         m.SessionRestored,
 		CurrentWorkspace: m.CurrentWorkspace,
+		Worktree:         worktreeRef(m.SessionWorktree),
 		Windows:          windows,
 	}
 }
@@ -130,6 +131,7 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 		Branch:           branch,
 		Restored:         client.SessionRestored(name),
 		CurrentWorkspace: client.SessionCurrentWorkspace(name),
+		Worktree:         worktreeRef(client.SessionWorktree(name)),
 		Windows:          windows,
 	}
 }

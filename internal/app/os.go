@@ -492,6 +492,12 @@ type OS struct {
 	// Distinct from RestoredFromState below, which is this client's own
 	// bookkeeping about having applied a state snapshot.
 	SessionRestored bool
+	// SessionWorktree is the attached session's daemon-owned worktree record,
+	// nil when its directory is not a linked git worktree. Every other
+	// session's arrives with the cached listing; this one comes down with the
+	// session state, so the rail reads the attached row from live state exactly
+	// as it reads the rest of that row.
+	SessionWorktree *session.WorktreeInfo
 	// WorkspaceNames maps a workspace number to its daemon-owned label. The
 	// number stays the workspace's identity and is what an unnamed workspace
 	// shows, so an absent entry is not a missing label but the normal case.
@@ -982,6 +988,12 @@ type OS struct {
 	// breakpoints fold over it exactly as they fold over the stored width.
 	// Persisted in the sidebar state file.
 	SidebarCollapsed bool
+	// SidebarCollapsedRepos is the set of repositories whose worktree group is
+	// folded shut on the rail, keyed by repository name. A group holds whatever
+	// sessions that repository has right now, so the name is the only key that
+	// survives the sessions in it being replaced. Persisted in the sidebar
+	// state file. See sidebar_worktrees.go.
+	SidebarCollapsedRepos map[string]bool
 	// SidebarOrder is the user's drag-defined session order, applied over the
 	// daemon's creation-order list (sessions not named here keep their natural
 	// order after the named ones). Persisted in the sidebar state file.

@@ -62,6 +62,10 @@ type sidebarStateFile struct {
 	// percent. Absent means the layout's own share, so a file written before
 	// the divider existed lays the rail out as it always did.
 	SectionSplit int `json:"section_split,omitempty"`
+	// ReposCollapsed names the repositories whose worktree group is folded
+	// shut. A list rather than a map, sorted on the way out, so the file is
+	// stable between writes and a person can read it.
+	ReposCollapsed []string `json:"repos_collapsed,omitempty"`
 	// Socket is the daemon socket the window IDs in this file were written
 	// against. Window IDs are only unique within one daemon, and this file is
 	// keyed by the XDG state directory, so two daemons on different sockets
@@ -98,6 +102,12 @@ func (m *OS) loadSidebarState() {
 	if st.SectionSplit >= sidebarSplitMin && st.SectionSplit <= sidebarSplitMax {
 		m.SidebarSectionSplit = st.SectionSplit
 	}
+	if len(st.ReposCollapsed) > 0 {
+		m.SidebarCollapsedRepos = make(map[string]bool, len(st.ReposCollapsed))
+		for _, repo := range st.ReposCollapsed {
+			m.SidebarCollapsedRepos[repo] = true
+		}
+	}
 	m.sidebarStateSocket = st.Socket
 	// A stored drag width wins over the config default; GetSidebarWidth still
 	// folds it against the breakpoints and pane floor, so an out-of-range value
@@ -117,21 +127,39 @@ func (m *OS) saveSidebarState() {
 	}
 	slots, colors := accentsToFile(m.SidebarAccents)
 	data, err := json.Marshal(sidebarStateFile{
-		Order:        m.SidebarOrder,
-		Width:        m.sidebarWidthPreference(),
-		Accents:      slots,
-		AccentColors: colors,
-		AgentSeen:    m.SidebarAgentSeen,
-		AgentsFilter: m.SidebarAgentFilter,
-		AgentsSort:   m.SidebarAgentSort,
-		Collapsed:    m.SidebarCollapsed,
-		SectionSplit: m.SidebarSectionSplit,
-		Socket:       m.sidebarStateSocket,
+		Order:          m.SidebarOrder,
+		Width:          m.sidebarWidthPreference(),
+		Accents:        slots,
+		AccentColors:   colors,
+		AgentSeen:      m.SidebarAgentSeen,
+		AgentsFilter:   m.SidebarAgentFilter,
+		AgentsSort:     m.SidebarAgentSort,
+		Collapsed:      m.SidebarCollapsed,
+		SectionSplit:   m.SidebarSectionSplit,
+		ReposCollapsed: collapsedRepoList(m.SidebarCollapsedRepos),
+		Socket:         m.sidebarStateSocket,
 	})
 	if err != nil {
 		return
 	}
 	_ = os.WriteFile(filepath.Join(dir, sidebarStateFileName), data, 0o600)
+}
+
+// collapsedRepoList is the folded-repository set as the sorted list the file
+// holds. Sorted because a set has no order and a file that reshuffles itself on
+// every write is a file nobody can diff.
+func collapsedRepoList(repos map[string]bool) []string {
+	if len(repos) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(repos))
+	for repo, collapsed := range repos {
+		if collapsed {
+			out = append(out, repo)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // pruneWindowKeyedState drops the accents and unread bits of windows that are

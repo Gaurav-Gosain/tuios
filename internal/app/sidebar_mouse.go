@@ -224,6 +224,8 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 		m.createRemoteSession(hit.SessionID)
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
+	case sidebarRowRepo:
+		m.SidebarToggleRepoCollapsed(hit.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
@@ -358,6 +360,8 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 		m.createRemoteSession(hit.SessionID)
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
+	case sidebarRowRepo:
+		m.SidebarToggleRepoCollapsed(hit.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
@@ -583,11 +587,12 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 	}
 
 	switch hit.Kind {
-	case sidebarRowHostSession, sidebarRowHostNew:
-		// A remote row names a machine, not a local session. There is no
-		// per-row menu for it in this release, so the right-click opens the
-		// rail's own settings the way a click on blank rail would, rather than
-		// building a session menu for a name that is not a local session.
+	case sidebarRowHostSession, sidebarRowHostNew, sidebarRowRepo:
+		// A remote row names a machine and a group header names a repository,
+		// and neither is a local session. There is no per-row menu for either
+		// in this release, so the right-click opens the rail's own settings the
+		// way a click on blank rail would, rather than building a session menu
+		// for a name that is not a local session.
 		m.openRailSettingsMenu(x, y)
 		return
 	case sidebarRowFileCd, sidebarRowFileUp, sidebarRowFileEntry:
