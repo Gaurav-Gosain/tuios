@@ -5,9 +5,22 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
+
+// hostOpen and hostShut are the fold marks a machine's header wears on the
+// rail, open and folded, in the glyph set the harness's terminal draws.
+const (
+	hostOpen = "▾"
+	hostShut = "▸"
+)
+
+// hostPollActive mirrors hostRefreshActive in internal/app: the cadence the
+// rail polls the daemon for hosts at while it is on screen. A test that waits
+// out a poll waits this long.
+const hostPollActive = 5 * time.Second
 
 // This is federation stage 1 driven the way a user reaches it: a real config
 // file with a [hosts] table, a real daemon, a real ssh subprocess, the real
@@ -85,20 +98,121 @@ func TestSidebarGroupsSessionsByHost(t *testing.T) {
 	// the daemon has run ssh, spoken the framing to the proxy, and had a
 	// listing come back.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "@ build")
+		return strings.Contains(s.Text(), hostOpen+" build")
 	}, uiTimeout); err != nil {
-		t.Fatalf("the rail never showed the host group: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: the rail never showed the host group: %v\n%s", err, term.Snapshot())
 	}
 
 	// The host that cannot be reached keeps its row and says so.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		return strings.Contains(text, "@ offline") && strings.Contains(text, "offline")
+		return strings.Contains(text, hostOpen+" offline") && strings.Contains(text, "offline")
 	}, uiTimeout); err != nil {
-		t.Fatalf("the rail never showed the unreachable host: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: the rail never showed the unreachable host: %v\n%s", err, term.Snapshot())
 	}
 
 	t.Logf("rail with host groups:\n%s", term.Snapshot())
+	saveFrame(t, term, "rail-host-groups")
+}
+
+// TestDraggingAMachineHeaderReordersTheRail is the on-screen proof for the
+// second half of "the rail should stay fixed and the user should be able to
+// reorder": the machines start in the daemon's sorted order, a drag on a
+// header puts them in the user's, and a poll later they are still in it.
+//
+// What would pass a weaker test and fail this one: a drag that reorders the
+// rail for one frame and is then overwritten by the next host poll, which
+// rebuilds the section from the daemon's own order.
+func TestDraggingAMachineHeaderReordersTheRail(t *testing.T) {
+	base := t.TempDir()
+	ssh := writeFakeSSH(t, base)
+	writeHostsConfig(t, base, tuiosBin)
+
+	term := startIn(t, base, startOpts{args: []string{"new", "fed-drag"}, env: []string{"TUIOS_SSH=" + ssh}})
+	waitBoot(t, term)
+	toggleSidebarViaPalette(t, term)
+
+	// The daemon sorts its table, so build comes before offline.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		b, o := railRowOf(s, hostOpen+" build"), railRowOf(s, hostOpen+" offline")
+		return b >= 0 && o >= 0 && b < o
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the rail never listed build above offline: %v\n%s", err, term.Snapshot())
+	}
+	t.Logf("before the drag:\n%s", term.Snapshot())
+	saveFrame(t, term, "rail-machine-order-before")
+
+	time.Sleep(insertGuard)
+	s := term.Screen()
+	from, to := railRowOf(s, hostOpen+" offline"), railRowOf(s, hostOpen+" build")
+	mouseDrag(t, term, 3, from, 3, to, tuitest.MouseLeft, 0)
+
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		b, o := railRowOf(s, hostOpen+" build"), railRowOf(s, hostOpen+" offline")
+		return b >= 0 && o >= 0 && o < b
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the drag did not put offline above build: %v\n%s", err, term.Snapshot())
+	}
+	t.Logf("after the drag:\n%s", term.Snapshot())
+	saveFrame(t, term, "rail-machine-order-after")
+
+	// This machine is not dragged: it stays at the top of the section.
+	if l, o := railRowOf(term.Screen(), hostOpen+" local"), railRowOf(term.Screen(), hostOpen+" offline"); l < 0 || l > o {
+		t.Errorf("ASSERTION: the drag moved this machine out of the first slot (local=%d offline=%d):\n%s", l, o, term.Snapshot())
+	}
+
+	// The order holds across a host poll, which is the whole complaint: the
+	// rail must not rebuild itself back into the daemon's order.
+	time.Sleep(2 * hostPollActive)
+	if b, o := railRowOf(term.Screen(), hostOpen+" build"), railRowOf(term.Screen(), hostOpen+" offline"); o > b {
+		t.Errorf("ASSERTION: a host poll put the machines back in the daemon's order (build=%d offline=%d):\n%s", b, o, term.Snapshot())
+	}
+	alive(t, term, "after dragging a machine header")
+}
+
+// TestRailShowsAHostAddedWhileAttached is the refresh proof. The client is
+// attached to a daemon with no hosts, which is the default install and the
+// state in which the rail stops asking about hosts. A host is then added from
+// the command line, and the rail shows it without the client reattaching.
+//
+// What would pass a weaker test and fail this one: a client whose only way to
+// learn about the first host is its own poll, since that poll stopped for
+// good on the daemon's first answer. The daemon has to tell it, and the wait
+// below is what proves it did.
+func TestRailShowsAHostAddedWhileAttached(t *testing.T) {
+	base := t.TempDir()
+	ssh := writeFakeSSH(t, base)
+	env := []string{"TUIOS_SSH=" + ssh}
+
+	term := startIn(t, base, startOpts{args: []string{"new", "fed-live"}, env: env})
+	waitBoot(t, term)
+	toggleSidebarViaPalette(t, term)
+	railShows(t, term, "sessions")
+	// The first poll is one local verb call. It has answered, and stopped the
+	// polling, long before this returns; the wait is what keeps the add from
+	// racing it, since an add that lands before the first answer would be
+	// found by that answer and prove nothing.
+	time.Sleep(2 * time.Second)
+	if strings.Contains(term.Screen().Text(), hostOpen+" local") {
+		t.Fatalf("the rail shows a machine group with no hosts configured:\n%s", term.Snapshot())
+	}
+	saveFrame(t, term, "rail-host-add-before")
+
+	out, err := tuiosCLIEnv(t, base, env, "hosts", "add", "build", "someone@buildbox",
+		"--command", tuiosBin, "--connect-timeout", "5")
+	if err != nil {
+		t.Fatalf("tuios hosts add: %v\n%s", err, out)
+	}
+
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, hostOpen+" build") && strings.Contains(text, hostOpen+" local")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the rail did not show the host added while the client was attached: %v\n%s", err, term.Snapshot())
+	}
+	t.Logf("the rail after a host was added on the command line:\n%s", term.Snapshot())
+	saveFrame(t, term, "rail-host-add-after")
+	alive(t, term, "after a host was added while attached")
 }
 
 // TestHostsCommandReportsALinkEndToEnd drives `tuios hosts` against the same

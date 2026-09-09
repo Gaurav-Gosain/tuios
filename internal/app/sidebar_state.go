@@ -66,6 +66,14 @@ type sidebarStateFile struct {
 	// shut. A list rather than a map, sorted on the way out, so the file is
 	// stable between writes and a person can read it.
 	ReposCollapsed []string `json:"repos_collapsed,omitempty"`
+	// HostsOrder is the user's drag-defined order of the other machines' groups
+	// in the sessions section, and HostsCollapsed names the machines whose
+	// group is folded shut, sorted for the same reason ReposCollapsed is.
+	// HostSessionOrder is each other machine's drag-defined session order,
+	// keyed by host name; Order above is this machine's.
+	HostsOrder       []string            `json:"hosts_order,omitempty"`
+	HostsCollapsed   []string            `json:"hosts_collapsed,omitempty"`
+	HostSessionOrder map[string][]string `json:"host_session_order,omitempty"`
 	// Socket is the daemon socket the window IDs in this file were written
 	// against. Window IDs are only unique within one daemon, and this file is
 	// keyed by the XDG state directory, so two daemons on different sockets
@@ -108,6 +116,18 @@ func (m *OS) loadSidebarState() {
 			m.SidebarCollapsedRepos[repo] = true
 		}
 	}
+	if len(st.HostsOrder) > 0 {
+		m.SidebarHostOrder = st.HostsOrder
+	}
+	if len(st.HostsCollapsed) > 0 {
+		m.SidebarCollapsedHosts = make(map[string]bool, len(st.HostsCollapsed))
+		for _, host := range st.HostsCollapsed {
+			m.SidebarCollapsedHosts[host] = true
+		}
+	}
+	if len(st.HostSessionOrder) > 0 {
+		m.SidebarHostSessionOrder = st.HostSessionOrder
+	}
 	m.sidebarStateSocket = st.Socket
 	// A stored drag width wins over the config default; GetSidebarWidth still
 	// folds it against the breakpoints and pane floor, so an out-of-range value
@@ -127,17 +147,20 @@ func (m *OS) saveSidebarState() {
 	}
 	slots, colors := accentsToFile(m.SidebarAccents)
 	data, err := json.Marshal(sidebarStateFile{
-		Order:          m.SidebarOrder,
-		Width:          m.sidebarWidthPreference(),
-		Accents:        slots,
-		AccentColors:   colors,
-		AgentSeen:      m.SidebarAgentSeen,
-		AgentsFilter:   m.SidebarAgentFilter,
-		AgentsSort:     m.SidebarAgentSort,
-		Collapsed:      m.SidebarCollapsed,
-		SectionSplit:   m.SidebarSectionSplit,
-		ReposCollapsed: collapsedRepoList(m.SidebarCollapsedRepos),
-		Socket:         m.sidebarStateSocket,
+		Order:            m.SidebarOrder,
+		Width:            m.sidebarWidthPreference(),
+		Accents:          slots,
+		AccentColors:     colors,
+		AgentSeen:        m.SidebarAgentSeen,
+		AgentsFilter:     m.SidebarAgentFilter,
+		AgentsSort:       m.SidebarAgentSort,
+		Collapsed:        m.SidebarCollapsed,
+		SectionSplit:     m.SidebarSectionSplit,
+		ReposCollapsed:   collapsedRepoList(m.SidebarCollapsedRepos),
+		HostsOrder:       m.SidebarHostOrder,
+		HostsCollapsed:   collapsedRepoList(m.SidebarCollapsedHosts),
+		HostSessionOrder: m.SidebarHostSessionOrder,
+		Socket:           m.sidebarStateSocket,
 	})
 	if err != nil {
 		return

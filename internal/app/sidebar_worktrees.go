@@ -42,15 +42,23 @@ func worktreeRef(info *session.WorktreeInfo) *sessiontree.WorktreeRef {
 	}
 }
 
-// sidebarSessionRows is the sessions section's own row list: the tree's
-// sessions with the worktree ones gathered under their repository, and the
-// members of a folded repository left out.
+// sidebarSessionRows is the sessions section's own row list: the attached
+// machine's sessions with the worktree ones gathered under their repository
+// and the members of a folded repository left out, then laid out by machine
+// with the other machines' rows (see sidebarMachineRows).
 //
 // Only the sessions section reads it. The terminals and agents sections keep
-// reading the ungrouped list, so folding a repository hides its rows here and
-// never hides its panes or its waiting agents, which is the difference between
-// tidying a list and losing work.
+// reading the ungrouped list, so folding a repository or a machine hides its
+// rows here and never hides its panes or its waiting agents, which is the
+// difference between tidying a list and losing work.
 func (m *OS) sidebarSessionRows(sessions []sessiontree.Node) []sessiontree.Node {
+	local := localSessionNodes(sessions)
+	return m.sidebarMachineRows(m.sidebarRepoRows(local), sessions[len(local):])
+}
+
+// sidebarRepoRows gathers one machine's worktree sessions under their
+// repository and leaves a folded repository's members out.
+func (m *OS) sidebarRepoRows(sessions []sessiontree.Node) []sessiontree.Node {
 	rows := sessiontree.GroupByRepo(sessions)
 	if len(m.SidebarCollapsedRepos) == 0 {
 		return rows

@@ -88,7 +88,20 @@ const (
 	// attached client is the one reader that cannot poll: an idle client must do
 	// no work, and a message an agent leaves has to reach the person anyway.
 	MsgAgentMail
+	// MsgHostsChanged tells every attached TUI client that the daemon's [hosts]
+	// table changed: a host was added, removed or redialed. It is pushed for
+	// the same reason MsgAgentMail is: a client whose daemon has no hosts stops
+	// polling for them, so the only way it can learn about the first host is
+	// to be told. It carries no listing; the client polls once on receipt.
+	MsgHostsChanged
 )
+
+// HostsChangedPayload names the change behind a MsgHostsChanged push.
+type HostsChangedPayload struct {
+	Added    []string
+	Removed  []string
+	Redialed []string
+}
 
 // Message is the base protocol message structure.
 // Wire format (v2): [4 bytes length][1 byte type][1 byte codec][payload]

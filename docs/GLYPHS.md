@@ -124,7 +124,10 @@ reports it under `problems` with the reason.
 - **Rules and separators:** `rule` (the hairline, repeated), `separator` (the
   dock's gap between groups), `arrow_left`, `arrow_right` (overflow chevrons)
 - **Rail marks:** `focus` ("you are here"), `attention` ("this one wants a
-  human"), `bullet` (a resting row), `add`, `collapse`, `expand`
+  human"), `bullet` (a resting row), `add`, `collapse`, `expand`,
+  `tree_branch` and `tree_last` (in front of a worktree session under its
+  repository), `fold_open` and `fold_shut` (on a machine's group header in the
+  sessions section, saying whether its rows are on screen under it)
 - **Files section:** `folder`, `parent` (the `..` row), `file`. These are what
   the rail's listing draws when `appearance.sidebar.file_icons` is off or the
   terminal is in ASCII mode; with icons on, a nerd font codepoint per file type

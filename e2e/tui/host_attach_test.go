@@ -130,7 +130,7 @@ func TestAttachOnAHostIsDrawnByThisClient(t *testing.T) {
 
 	// The rail names the machine.
 	toggleSidebarViaPalette(t, term)
-	railShows(t, term, "@ build")
+	railShows(t, term, hostOpen+" build")
 	t.Logf("a session on build, drawn by this client:\n%s", term.Snapshot())
 
 	// It is the far daemon's session: this machine's daemon does not hold
@@ -144,10 +144,44 @@ func TestAttachOnAHostIsDrawnByThisClient(t *testing.T) {
 	alive(t, term, "after attaching a session on a host")
 }
 
+// railCurrentIs reports whether the rail marks the session named want as the
+// one this client is on: its row wears the focus mark in the rail's gutter,
+// which is the screen's first column for a left rail.
+func railCurrentIs(s tuitest.Screen, want string) bool {
+	r := railRowOf(s, want)
+	if r < 0 {
+		return false
+	}
+	return strings.HasPrefix(s.Line(r), "▎")
+}
+
+// waitRailCurrent blocks until the rail marks want as the attached session.
+func waitRailCurrent(t *testing.T, term *tuitest.Terminal, want string) {
+	t.Helper()
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railCurrentIs(s, want) }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the rail never marked %q as the attached session: %v\n%s", want, err, term.Snapshot())
+	}
+}
+
+// railRows is where each of the named rows is on screen right now.
+func railRows(s tuitest.Screen, wants ...string) map[string]int {
+	out := make(map[string]int, len(wants))
+	for _, w := range wants {
+		out[w] = railRowOf(s, w)
+	}
+	return out
+}
+
 // TestRailAttachesARemoteSessionInThisClient is the on-screen proof for the
-// rail: enter on a session under a host switches this client onto it, with no
-// pane opened and no nested client, and this machine's sessions stay
-// reachable under a host named local.
+// rail: a click on a session under a host switches this client onto it, with
+// no pane opened and no nested client, and not one row of the rail moves. The
+// machine groups keep their order, this machine first, and the attached
+// session is marked current in place under the machine that holds it.
+//
+// What would pass a weaker test and fail this one: the rail that used to be
+// drawn, with build hoisted to the top of the section and this machine's
+// sessions pushed down into a group of their own, so the clicked row moved out
+// from under the pointer.
 func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
@@ -162,41 +196,46 @@ func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
 	waitBoot(t, term)
 	toggleSidebarViaPalette(t, term)
-	railShows(t, term, "@ build")
-	railShows(t, term, "far-shell")
+	rows := []string{hostOpen + " local", "home", hostOpen + " build", "far-shell"}
+	for _, want := range rows {
+		railShows(t, term, want)
+	}
+	waitRailCurrent(t, term, "home")
 	panesBefore := -1
 	if wl, err := daemonWindows(base, "home"); err == nil {
 		panesBefore = len(wl.Windows)
 	}
 
-	// The keyboard path: the cursor to the remote row, then enter.
-	rowOf := func(want string) int {
-		s := term.Screen()
-		_, rows := s.Size()
-		for r := 0; r < rows; r++ {
-			if c := strings.Index(s.Line(r), want); c >= 0 && c < sidebarBand {
-				return r
-			}
-		}
-		return -1
-	}
 	time.Sleep(insertGuard)
-	row := rowOf("far-shell")
-	if row < 0 {
-		t.Fatalf("no remote session row:\n%s", term.Snapshot())
+	before := railRows(term.Screen(), rows...)
+	if !(before[rows[0]] < before[rows[1]] && before[rows[1]] < before[rows[2]] && before[rows[2]] < before[rows[3]]) {
+		t.Fatalf("ASSERTION: the rail is not laid out local first (%v):\n%s", before, term.Snapshot())
 	}
-	mouseClick(t, term, 3, row, tuitest.MouseLeft, 0)
+	t.Logf("before the click:\n%s", term.Snapshot())
+	saveFrame(t, term, "rail-switch-before")
 
-	// The proof: the main group is now build's, and this machine's sessions
-	// are the host group named local.
-	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return !strings.Contains(s.Text(), "sessions") && strings.Contains(s.Text(), "@ build")
-	}, uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: the rail did not switch onto build: %v\n%s", err, term.Snapshot())
+	// The click on the remote row.
+	mouseClick(t, term, 3, before["far-shell"], tuitest.MouseLeft, 0)
+	waitRailCurrent(t, term, "far-shell")
+	t.Logf("after the click:\n%s", term.Snapshot())
+	saveFrame(t, term, "rail-switch-after")
+
+	// The proof: every row is where it was, and only the mark moved.
+	after := railRows(term.Screen(), rows...)
+	for _, want := range rows {
+		if after[want] != before[want] {
+			t.Errorf("ASSERTION: the row %q moved from screen row %d to %d on the switch:\n%s",
+				want, before[want], after[want], term.Snapshot())
+		}
 	}
-	railShows(t, term, "@ local")
-	railShows(t, term, "home")
-	t.Logf("after the rail switched onto build:\n%s", term.Snapshot())
+	if railCurrentIs(term.Screen(), "home") {
+		t.Errorf("ASSERTION: this machine's session is still marked current after the switch:\n%s", term.Snapshot())
+	}
+	// The rail band only: the dock still says "far-shell @ build", which is
+	// the one place the qualifier belongs.
+	if railRowOf(term.Screen(), "@ ") >= 0 {
+		t.Errorf("ASSERTION: the rail still marks the attached machine with @:\n%s", term.Snapshot())
+	}
 
 	// No pane was opened for it on this machine, and no nested client runs.
 	if wl, err := daemonWindows(base, "home"); err == nil && len(wl.Windows) != panesBefore {
@@ -204,17 +243,36 @@ func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 	}
 	noNestedClient(t, "far-shell")
 
-	// And back: the local session row under @ local.
+	// A click on the machine's header folds its group: far-shell leaves the
+	// rail, the header wears the shut mark and says how many it holds.
 	time.Sleep(insertGuard)
-	row = rowOf("home")
-	if row < 0 {
-		t.Fatalf("no local session row under @ local:\n%s", term.Snapshot())
-	}
-	mouseClick(t, term, 3, row, tuitest.MouseLeft, 0)
+	mouseClick(t, term, 3, after[hostOpen+" build"], tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "sessions") && !strings.Contains(s.Text(), "@ local")
+		r := railRowOf(s, hostShut+" build")
+		return r >= 0 && railRowOf(s, "far-shell") < 0 && strings.Contains(s.Line(r), "1")
 	}, uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: the rail did not come back to this machine: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: the click on the header did not fold the group: %v\n%s", err, term.Snapshot())
+	}
+	if railRowOf(term.Screen(), "home") != before["home"] {
+		t.Errorf("ASSERTION: folding build moved this machine's rows:\n%s", term.Snapshot())
+	}
+	t.Logf("with build folded:\n%s", term.Snapshot())
+	saveFrame(t, term, "rail-host-folded")
+
+	// And open again.
+	mouseClick(t, term, 3, after[hostOpen+" build"], tuitest.MouseLeft, 0)
+	railShows(t, term, "far-shell")
+
+	// And back: the local session row under this machine's header.
+	time.Sleep(insertGuard)
+	mouseClick(t, term, 3, before["home"], tuitest.MouseLeft, 0)
+	waitRailCurrent(t, term, "home")
+	back := railRows(term.Screen(), rows...)
+	for _, want := range rows {
+		if back[want] != before[want] {
+			t.Errorf("ASSERTION: the row %q is on screen row %d after coming back, was %d:\n%s",
+				want, back[want], before[want], term.Snapshot())
+		}
 	}
 	alive(t, term, "after coming back from build")
 }
