@@ -73,12 +73,31 @@ func (s *Session) scanScreenForAgent(ptyID string, reg *harness.Registry) bool {
 	}
 	s.ApplyAgentReport(winID, AgentReport{
 		State:       AgentState(state),
-		Message:     reg.RuleMessage(hid, rule),
+		Message:     screenRuleMessage(reg, hid, rule, tail),
 		Source:      AgentSourceScreen,
 		Harness:     hid,
 		paneWroteAt: pty.LastOutput(),
 	})
 	return true
+}
+
+// screenRuleMessage is what a screen claim says about itself: the prompt line
+// the rule matched, fronted by whether it is an approval or a question, so the
+// alert and the rail can say what the agent asked rather than only that it
+// asked. A rule whose match carried no readable line falls back to the
+// manifest's own sentence, which is what every claim said before the line was
+// read.
+//
+// Only the screen tier builds a message this way. A report or an OSC claim
+// carries its own words and nothing here touches them.
+func screenRuleMessage(reg *harness.Registry, hid string, rule int, tail []string) string {
+	if prompt := reg.RulePrompt(hid, rule, tail); prompt != "" {
+		if kind := reg.RuleKind(hid, rule); kind != "" {
+			return kind + ": " + prompt
+		}
+		return prompt
+	}
+	return reg.RuleMessage(hid, rule)
 }
 
 // agentHarnessOf names the window backed by ptyID and the harness running in it,

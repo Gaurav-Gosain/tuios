@@ -5,6 +5,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sound"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -136,6 +137,12 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 		name = "pane"
 	}
 	text := name + " " + word
+	// The reason, when the pane gave one: the question a blocked agent asked,
+	// or the note a report carried. Without it the alert says that the agent
+	// needs somebody and not what it wants, and the person has to go and look.
+	if note := printableTitle(w.AgentMessage); note != "" {
+		text += agentAlertSep() + note
+	}
 
 	if policy.Dock {
 		m.ShowNotificationFrom(text, sev, m.Settings.NotificationDuration,
@@ -176,4 +183,13 @@ func (m *OS) fireAgentAlert(w *terminal.Window, from, to string, policy config.A
 		AgentHarness:   w.AgentHarness,
 		AgentMessage:   w.AgentMessage,
 	})
+}
+
+// agentAlertSep joins an alert's headline to the reason behind it, in the
+// separator the rail uses everywhere else.
+func agentAlertSep() string {
+	if overlay.UseASCII() {
+		return " - "
+	}
+	return " · "
 }
