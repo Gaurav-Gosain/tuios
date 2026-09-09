@@ -1145,6 +1145,52 @@ and takes lines, and it is the one name the list may carry more than once, so
 with a percent keeps that much of the rail; one without takes the lines nothing
 else wants, which puts what follows it at the bottom.
 
+The split between the sections above and the block the rail pins to its
+bottom (agents, in the shipped layout) is also a divider row on the rail
+itself: drag it, or put the rail's cursor on it and press `<` or `>`. The
+share it sets lives in the sidebar state file as `section_split`, not in
+config.toml, and a double-click on the divider (or enter on it) puts the
+layout's own share back.
+
+An agent row is drawn from named tokens, and `[appearance.sidebar.agent_row]`
+says which ones, in what order, and how each is inked. It is a table, not a
+scalar option, so it is set in config.toml rather than with `set-config`:
+
+```toml
+[appearance.sidebar.agent_row]
+# Left to right. Leave a token out to hide it. The names are
+# harness, name, state, elapsed, message, session, host.
+tokens = ["session", "harness", "name", "elapsed", "message"]
+
+# A token's own look. Each key is optional: an absent one keeps the rail's
+# own choice. fg is a palette name (text, dim, muted, accent, warning,
+# error, success, info) or #rrggbb.
+[appearance.sidebar.agent_row.name]
+bold = false
+
+# Value rules, first match wins, at most eight per token. A rule has exactly
+# one test: equals, contains, starts_with, gt or lt. Text tests read the
+# token as drawn; gt and lt read it as a number, which for elapsed is the
+# minutes since the pane entered its state. No regular expressions.
+[[appearance.sidebar.agent_row.elapsed.rule]]
+gt = 30
+fg = "warning"
+
+[[appearance.sidebar.agent_row.name.rule]]
+contains = "deploy"
+ignore_case = true
+fg = "accent"
+bold = true
+```
+
+The row keeps its shape whatever the order says: tokens before `name` front
+it as a `session/harness/` prefix, tokens after it follow the name, `elapsed`
+sits at the right edge, and `message` takes the row's second line when the
+rail has room for one, with `harness` moving down beside it. A token with no
+value vanishes with its separator. A value the reader does not understand is
+dropped and named in the config warnings tuios shows at start. The rest of the
+file still loads.
+
 Then set it and read it back:
 
 ```sh
