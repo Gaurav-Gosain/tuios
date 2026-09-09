@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -386,17 +387,64 @@ func createTUIOSProgram(sess sip.Session) *tea.Program {
 	if model == nil {
 		return nil
 	}
-	program := tea.NewProgram(model, append(sip.MakeOptions(sess), app.ProgramOptions()...)...)
+	// running closes when the program's loop reaches the model. See
+	// programStart for why the teardown goroutine below has to wait for it.
+	running := make(chan struct{})
+	started := &programStart{Model: model, start: sync.OnceFunc(func() { close(running) })}
+	program := tea.NewProgram(started, append(sip.MakeOptions(sess), app.ProgramOptions()...)...)
 	// Tear down after the program has fully stopped, the way the SSH server
 	// does. Closing on the session context instead ran Cleanup while the last
 	// frames were still going out.
 	if o, ok := model.(*app.OS); ok {
-		go func() {
-			program.Wait()
-			o.Cleanup()
-		}()
+		go cleanupAfterProgram(program, running, o.Cleanup)
 	}
 	return program
+}
+
+// cleanupAfterProgram runs cleanup once the program has stopped for good.
+//
+// It waits for running before it waits on the program, which is what makes the
+// second wait safe from another goroutine. See programStart.
+func cleanupAfterProgram(program *tea.Program, running <-chan struct{}, cleanup func()) {
+	<-running
+	program.Wait()
+	cleanup()
+}
+
+// programStart is the model a web session's program runs. It reports when the
+// program's own loop has reached the model, and delegates everything else.
+//
+// The report is what makes the teardown goroutine above safe. tea.Program.Wait
+// reads a channel that Run creates, and no lock or channel orders that write
+// against a Wait on another goroutine (bubbletea v2.0.8 writes it at tea.go:1000
+// and reads it at tea.go:1210). sip builds the program through this factory and
+// starts the goroutine that calls Run only afterwards, so a Wait started here
+// can read the field before Run writes it. That is a data race, and a read that
+// lands on the nil zero value blocks for ever, which drops Cleanup in silence.
+//
+// Run calls the model's Init on its own goroutine, after it creates that
+// channel. Closing running from Init therefore puts the write before every
+// receive on running, and the receive before Wait. The order is the Go memory
+// model's, not a guess about timing.
+//
+// Init is the only method here. Update and View come from the model, and the
+// model returns itself from Update, so this wrapper is gone after the first
+// message. The shared motion filter sees it for that one message and passes the
+// message on, which is what it does for any model it does not recognise.
+//
+// One case stays open: Run can fail before it calls Init, while it prepares the
+// terminal or the input reader. Then running never closes and Cleanup does not
+// run. Closing that needs Run's channel to exist before Run, which only
+// bubbletea can do. See the note on Wait in the upstream report.
+type programStart struct {
+	tea.Model
+	start func()
+}
+
+// Init reports that the program's loop is running, then inits the model.
+func (p *programStart) Init() tea.Cmd {
+	p.start()
+	return p.Model.Init()
 }
 
 // daemonConfigFrom maps the user's [daemon] section onto the daemon's own
