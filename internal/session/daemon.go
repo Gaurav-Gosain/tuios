@@ -401,7 +401,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 					s.applyAgentProgress(ev.Window, state)
 				}
 				if d.agentDetectInterval > 0 && pty.probeAgentExitDue(time.Now().UnixNano()) {
-					s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.identify)
+					s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.identifyDetail)
 				}
 				// The screen tier. Throttled like the probe, and armed to run once
 				// more after the pane goes quiet: a harness waiting on a human
@@ -1031,7 +1031,7 @@ func (d *Daemon) agentMonitor() {
 		case <-ticker.C:
 			reg := d.agentMatcher.registry
 			for _, sess := range d.manager.AllSessions() {
-				sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identify)
+				sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyDetail)
 				// The transcript joins ride this tick rather than one of their
 				// own. It runs only for a pane already known to be running a
 				// harness that has a transcript and that has no join yet, so a
@@ -1052,6 +1052,12 @@ func (d *Daemon) paneAgentIdentifier(sess *Session) func(ptyID string) (string, 
 		info, running := resolve(ptyID)
 		if !running {
 			return "", ""
+		}
+		// The agent's own process, not the wrapper above it: a transcript is
+		// checked against the agent's directory and build, and a shell that
+		// launched it has neither.
+		if det, ok := d.agentMatcher.identifyDetail(info); ok {
+			info = det.proc
 		}
 		return paneAgentIdentity(info)
 	}

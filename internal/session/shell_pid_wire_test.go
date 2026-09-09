@@ -130,7 +130,7 @@ func TestTheShellPidReachesAClientOverTheSocket(t *testing.T) {
 	// TestAgentDetectSweepIsIdempotentWhenIdle holds, asked of the real resolver
 	// rather than a fake one, because only the real one stamps a pid at all.
 	for i := range 3 {
-		sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identify)
+		sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyDetail)
 		if pid := stateWindow(t, sess.GetState(), winID).ShellPID; pid != want {
 			t.Fatalf("poll %d moved the pid to %d, want %d", i+1, pid, want)
 		}
@@ -306,7 +306,7 @@ func TestThePollRestoresAShellPidThatWentMissing(t *testing.T) {
 
 	// The count the poll returns is agent states only, so the pid coming back is
 	// read off the state rather than out of the return.
-	sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identify)
+	sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyDetail)
 	if pid := stateWindow(t, sess.GetState(), winID).ShellPID; pid != want {
 		t.Fatalf("the poll left shell pid %d, want %d", pid, want)
 	}

@@ -48,10 +48,12 @@ type Detect struct {
 	// shim runs as "node /home/u/.bun/bin/gemini" with comm rewritten to
 	// "MainThread", and the only place it says gemini is that second token.
 	Argv0 []string `toml:"argv0"`
-	// ArgvPath matches path components of the token an interpreter was asked to
-	// run. It is how an npm package name identifies a harness whose entry point
-	// is a generic cli.js. It is the one predicate that reads argv, so it is the
-	// one predicate that is gated: see ProcInfo.RunToken for why.
+	// ArgvPath matches a package name in the path of the token an interpreter was
+	// asked to run. It is how an npm package name identifies a harness whose
+	// entry point is a generic cli.js. It is the one predicate that reads argv,
+	// so it is the one predicate that is gated: see ProcInfo.RunToken for why
+	// only one token is read, and packageSegments for why the name has to sit
+	// under a package directory rather than anywhere in the path.
 	ArgvPath []string `toml:"argv_path"`
 	// ExeGlob matches the resolved executable path against a component-wise glob.
 	// It is how an installer that names its binary after the release is
@@ -141,11 +143,15 @@ type Screen struct {
 // every pattern in Regex must match, and no pattern in NotRegex may match. An
 // empty list is satisfied, so a rule with only Any is an "any of these".
 type ScreenRule struct {
-	State    string   `toml:"state"`
-	Priority int      `toml:"priority"`
-	All      []string `toml:"all"`
-	Any      []string `toml:"any"`
-	Not      []string `toml:"not"`
+	State    string `toml:"state"`
+	Priority int    `toml:"priority"`
+	// Message is the reason the rule reports with its state, in plain words:
+	// what the agent waits for. A blocked state is one state with a reason
+	// attached, not a family of states, and this is where the reason lives.
+	Message string   `toml:"message"`
+	All     []string `toml:"all"`
+	Any     []string `toml:"any"`
+	Not     []string `toml:"not"`
 	// Regex and NotRegex hold RE2 patterns, compiled once at load and matched
 	// with ^ and $ anchoring lines rather than the whole tail, because the tail
 	// is lines and a rule almost always means "some line looks like this".
@@ -353,7 +359,7 @@ func (d *Detect) matches(p ProcInfo, run string) (string, bool) {
 	if run != "" {
 		have := segments(run)
 		for i, want := range d.argvSegments {
-			if containsSegments(have, want) {
+			if packageSegments(have, want) {
 				return "argv_path=" + d.ArgvPath[i], true
 			}
 		}

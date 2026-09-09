@@ -179,6 +179,22 @@ func (r *Registry) Explain(id string, tail []string) (state string, rule int, re
 	return best, bestIdx, reports
 }
 
+// RuleMessage is the reason a harness's rule reports with its state, or a
+// default in the rule's state's own words when the manifest gives none.
+func (r *Registry) RuleMessage(id string, rule int) string {
+	m := r.Lookup(id)
+	if m == nil || rule < 0 || rule >= len(m.Screen.Rule) {
+		return ""
+	}
+	if msg := m.Screen.Rule[rule].Message; msg != "" {
+		return msg
+	}
+	if m.Screen.Rule[rule].State == "needs_input" {
+		return "Waits for your answer on the screen."
+	}
+	return ""
+}
+
 // ScreenLines is how many lines from the bottom this harness's rules see, or the
 // default when the manifest does not say. Callers read the tail before they know
 // whether any rule will match, so this has to be answerable without classifying.

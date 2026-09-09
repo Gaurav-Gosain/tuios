@@ -32,6 +32,11 @@ var agentRestStates = map[string]bool{
 	AgentStateDone.Name():       true,
 	AgentStateErrored.Name():    true,
 	AgentStateNone.Name():       true,
+	// unknown is in the set for the same reason idle is: it is what the silence
+	// timer writes to a pane that has said nothing for the stall window, which
+	// was idle before unknown existed, and an ask must not wait forever on a
+	// pane that is silent because it is at rest.
+	AgentStateUnknown.Name(): true,
 }
 
 // askDefaults bound the three waits ask-agent performs.
@@ -110,6 +115,8 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 			"focused":        w.ID == state.FocusedWindowID,
 			"unread":         unread[w.ID],
 			"ready":          agentRestStates[w.AgentState.Name()],
+			"needs_you":      w.AgentState.NeedsYou(),
+			"confidence":     claim.identity.confidence(),
 		})
 	}
 

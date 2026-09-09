@@ -32,6 +32,20 @@ alongside the rest of the pane-driving surface.
 | `idle`        | Not working and not blocked                      |
 | `done`        | Finished its task                                |
 | `errored`     | Stopped because of an error                      |
+| `unknown`     | An agent is present and nothing says what it does |
+
+`needs_input` is one state with a reason attached, not a family of states. An
+agent waiting for approval of a tool call and one asking a question are both
+blocked on a person; the `message` says which. `get-agent-state`, `list-agents`
+and `explain-agent-detect` also report `needs_you`, true for `needs_input` and
+`errored`, so a consumer that only wants "does a person have to act" does not
+have to know which states mean it.
+
+`unknown` exists so that no evidence is never reported as at rest. The silence
+timer writes it, not `idle`, when the screen tier looked at a quiet pane and
+found nothing: `idle` says nothing needs you, and a pane that went quiet on a
+prompt no rule knows would be lying. A client that predates the state draws no
+glyph for it.
 
 State is daemon-owned per-window state. It rides the same versioned state sync
 every other window property uses, so it survives detach/reattach and reaches all
@@ -91,6 +105,30 @@ Omitting `source` means `report`, so a caller that never sets it behaves exactly
 as it always has. `get-agent-state` reports the winning `source` and, when one
 was named, the `harness_id`, so a surprising indicator can be traced to the thing
 that set it.
+
+### Confidence
+
+The ranking is the confidence model, for state and for identity alike. A rank
+rather than a score is deliberate: a score invites adding weak signals together
+until they clear a threshold, which is how a directory name in a script path
+once came to count as an agent. A rank means a weak signal can never add up to
+a strong verdict, because nothing is added.
+
+For state, the source says how much to trust it: a `report` or a `transcript`
+is the agent's own account, `osc` is a sequence it emitted, `screen` is a rule
+reading its display, `detect` is the detector assuming `working` from presence,
+and `stall` is a timer. For identity, `get-agent-state` reports `identity` and
+`confidence`:
+
+| `identity`  | `confidence` | Meaning                                              |
+| ----------- | ------------ | ---------------------------------------------------- |
+| `report`    | `certain`    | The harness named itself with `--harness`            |
+| `manifest`  | `strong`     | A manifest rule matched the process's own identity   |
+| `list`      | `strong`     | The built-in or user name list matched its name      |
+| (empty)     | `none`       | Nothing has named a harness                          |
+
+A screen rule never names a harness, and a word inside an argument never counts
+at all, so there is no `weak` tier: evidence that weak creates no claim.
 
 ### Attribution outlives a report
 
@@ -154,7 +192,52 @@ reliable alone:
 
 A manifest in `internal/harness/manifests` matches on any of them. `comm` and
 `argv0` match a base name, `exe_glob` matches the executable path, and
-`argv_path` matches path components of the command line.
+`argv_path` matches a package name in the path of the script an interpreter
+runs.
+
+### A directory name is not a program name
+
+Only the process's own identity counts: its name, its `argv[0]`, its
+executable, and for an interpreter the script it was asked to run. No other
+directory in any of those paths is read. A deploy script under `~/claude/`, a
+tool under `~/dev/codex/` and a binary built under `~/dev/claude-code/` were all
+agents to the shipped matcher, which scanned every path component of the
+executable and of the run token against the name list; none of them is one.
+
+`argv_path` is the one predicate that reads a directory, and it reads a package
+directory: the name must sit right after `node_modules`, `site-packages` or
+`dist-packages` (or after an npm scope that does), or be an npm scope itself
+(`@openai/codex`), or be the whole token (`npx opencode@latest`). So
+`node_modules/@anthropic-ai/claude-code/cli.js` is Claude Code and
+`~/dev/crush/scripts/build.sh` is a script in a checkout. `explain-agent-detect`
+lists every such word it saw and did not count.
+
+### Behind a wrapper
+
+The foreground process group leader is not always the agent. `sh -c 'claude;
+true'`, a wrapper script that does not `exec`, `timeout 600 claude`, `npx
+@openai/codex`, `uvx aider-chat`, `mise exec -- opencode` and `nix develop -c
+claude` all leave a shell, an interpreter or a launcher as the leader with the
+agent as a child of it. When the leader is not an agent but is one of those, the
+detector reads the other members of its foreground process group, depth first
+and bounded (24 processes, 4 levels), and attributes the pane to the first agent
+it finds. `explain-agent-detect` names the wrapper chain. A leader that is
+neither an agent nor a wrapper, an editor say, ends the search: its children are
+not its identity. On Linux the walk reads `/proc/<pid>/task/*/children`; on
+macOS one `kern.proc.pgrp` sysctl lists the group. A process in another process
+group, a background job, is never read.
+
+Not covered: an agent in a container or over `ssh`, whose process is not a
+descendant of the pane, and an agent run under `go run` or `cargo run`, since
+build tools are not walked.
+
+### Losing an agent
+
+A held claim clears at once when the pane's own shell is back in the
+foreground, which is the agent exiting. Any other program in the foreground, an
+editor or a pager the agent opened, is counted, and the claim clears after six
+consecutive ticks of it (twelve seconds at the default interval). One missed
+read is not an exit.
 
 ### argv is read only for an interpreter, and only one token of it
 
@@ -217,10 +300,29 @@ tuios explain-agent-detect                 # the focused pane
 tuios explain-agent-detect -w build --json
 ```
 
-It prints the `comm`, `argv` and `exe` the daemon read, whether the process
-counted as an interpreter and which token was eligible to name an agent, then
-every manifest in lookup order: which one matched and on which predicate, and for
-each that refused, what it was comparing against.
+It leads with a verdict in plain words and the evidence it rests on:
+
+```
+This pane runs claude-code behind timeout.
+  The foreground process timeout is a wrapper, so tuios read the processes behind it.
+  The process claude matched the manifest claude-code on comm=claude.
+  A process name is strong evidence.
+```
+
+or, for a pane that is not an agent, every word it saw and did not count:
+
+```
+This pane does not run an agent. The foreground process is build.sh.
+  The process build.sh is a wrapper. None of the 1 processes behind it is an agent.
+
+words tuios saw and did not count:
+  The argument "/home/u/dev/crush/scripts/build.sh" contains the word "crush". A word inside an argument is not evidence.
+```
+
+Then the `comm`, `argv` and `exe` the daemon read, whether the process counted
+as an interpreter and which token was eligible to name an agent, the processes
+read behind a wrapper, and every manifest in lookup order: which one matched and
+on which predicate, and for each that refused, what it was comparing against.
 
 ## Screen rules
 
@@ -271,14 +373,15 @@ Silence alone is not enough to act on, because an agent that finished and an
 agent waiting on a human produce exactly the same silence, and `idle` reads as
 "finished and fine". So before demoting a pane, the daemon hands it to the screen
 tier for a last look, and leaves alone any pane whose screen answers. A look that
-finds nothing still demotes: the screen was read and said nothing, which is as
-much evidence as there is going to be.
+finds nothing still demotes, to `unknown`: the screen was read and said nothing,
+which is as much evidence as there is going to be, and none of it says the pane
+is at rest. Only a daemon with no screen tier at all writes `idle`.
 
 The fallback is strictly secondary to explicit reporting:
 
-- It only ever moves a pane out of `working`, and only ever into `idle`. Any
-  other state (`needs_input`, `done`, `errored`) is never touched, so an explicit
-  report is never overridden.
+- It only ever moves a pane out of `working`, and only ever into `unknown` (or
+  `idle` with no screen tier). Any other state (`needs_input`, `done`,
+  `errored`) is never touched, so an explicit report is never overridden.
 - The silence clock is the later of the pane's last output and the time its
   `working` state was set, so a working report is given the full window before it
   can be demoted, and output keeps a pane looking busy.
@@ -299,6 +402,7 @@ tuios draws a one-cell glyph in each window's title:
 | `idle`        | `○`       |
 | `done`        | `■`       |
 | `errored`     | `×`       |
+| `unknown`     | (nothing) |
 | `none`        | (nothing) |
 
 The glyphs are distinct shapes rather than the same shape in different colors, so

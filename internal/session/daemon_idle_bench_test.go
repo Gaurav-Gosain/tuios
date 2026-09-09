@@ -73,12 +73,12 @@ func BenchmarkDaemonAgentDetectSweep(b *testing.B) {
 			resolve := fakeResolver(table)
 			// Settle, so the measured ticks are the steady state rather than
 			// the first one that has labels to write.
-			sess.applyAgentDetection(resolve, matcher.identify)
+			sess.applyAgentDetection(resolve, matcher.identifyDetail)
 
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
-				_ = sess.applyAgentDetection(resolve, matcher.identify)
+				_ = sess.applyAgentDetection(resolve, matcher.identifyDetail)
 			}
 		})
 	}
@@ -121,9 +121,9 @@ func TestAgentDetectSweepIsIdempotentWhenIdle(t *testing.T) {
 		comm: "bash", argv: []string{"bash"}, exe: "/usr/bin/bash",
 	}, true}})
 
-	sess.applyAgentDetection(resolve, matcher.identify)
+	sess.applyAgentDetection(resolve, matcher.identifyDetail)
 	for i := range 3 {
-		if n := sess.applyAgentDetection(resolve, matcher.identify); n != 0 {
+		if n := sess.applyAgentDetection(resolve, matcher.identifyDetail); n != 0 {
 			t.Errorf("sweep %d over an unchanged session reported %d changes, want 0", i+2, n)
 		}
 	}

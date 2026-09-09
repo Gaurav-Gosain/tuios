@@ -6,7 +6,7 @@ priority       = 50
 [detect]
 comm      = ["crush"]
 argv0     = ["crush"]
-argv_path = ["/crush/"]
+argv_path = ["@charmland/crush", "/crush/"]
 
 [screen]
 enabled = false

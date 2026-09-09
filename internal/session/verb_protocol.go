@@ -763,13 +763,13 @@ func init() {
 			handler: (*Daemon).verbSetAgentState,
 		},
 		"get-agent-state": {
-			description: "Read the agent state a window's pane last reported, with its optional message, the time it was set, and which source and harness it came from.",
+			description: "Read the agent state a window's pane last reported, with its optional message, the time it was set, which source and harness it came from, how confident the harness attribution is, and whether the pane needs a person.",
 			params:      []verbParam{sessionParam, windowParam},
 			examples:    []string{`{"id":1,"verb":"get-agent-state","params":{"session":"work","window":"build"}}`},
 			handler:     (*Daemon).verbGetAgentState,
 		},
 		"explain-agent-detect": {
-			description: "Show what the foreground-process detector read from a pane (comm, argv and executable), which harness manifest matched and on which predicate, and for each manifest that did not match, what it compared against.",
+			description: "Say in plain words whether a pane runs an agent and on what evidence. Lists every agent name seen on the command line that did not count, what the detector read (comm, argv, executable, and the processes behind a wrapper), which harness manifest matched and on which predicate, and for each manifest that did not match, what it compared against.",
 			params:      []verbParam{sessionParam, windowParam},
 			examples: []string{
 				`{"id":1,"verb":"explain-agent-detect","params":{"session":"work","window":"build"}}`,

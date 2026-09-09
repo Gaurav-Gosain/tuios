@@ -187,7 +187,7 @@ func TestAReportThatNamesNoHarnessLeavesTheAttributionAlone(t *testing.T) {
 		argv: []string{"claude"},
 		exe:  "/home/u/.local/share/claude/versions/2.1.222",
 	}, true}})
-	if n := sess.applyAgentDetection(running, matcher.identify); n != 1 {
+	if n := sess.applyAgentDetection(running, matcher.identifyDetail); n != 1 {
 		t.Fatalf("detection promoted %d windows, want 1", n)
 	}
 
@@ -493,7 +493,8 @@ func TestExplainAgentScreenVerbAnswersForAPaneWithNoHarness(t *testing.T) {
 // TestStallTimerStillDemotesAPaneWithNothingOnItsScreen keeps the fallback the
 // timer exists for. A look that finds no rule is not a reason to leave a pane
 // looking busy forever: the screen was read and said nothing, which is as much
-// evidence as there is going to be.
+// evidence as there is going to be. What it writes is unknown, not idle: idle
+// says nothing needs you, and a screen no rule knows cannot say that.
 func TestStallTimerStillDemotesAPaneWithNothingOnItsScreen(t *testing.T) {
 	reg, errs := harness.Load()
 	if len(errs) != 0 {
@@ -509,7 +510,7 @@ func TestStallTimerStillDemotesAPaneWithNothingOnItsScreen(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("demoted %d panes whose screen says nothing, want 1", n)
 	}
-	if got := agentStateOf(t, sess, winID); got != AgentStateIdle {
-		t.Fatalf("state = %q, want idle", got)
+	if got := agentStateOf(t, sess, winID); got != AgentStateUnknown {
+		t.Fatalf("state = %q, want unknown: the screen was read and said nothing", got)
 	}
 }

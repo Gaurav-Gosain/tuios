@@ -106,7 +106,7 @@ func (d *Detect) refusal(p ProcInfo, run string) string {
 				"argv_path%v was not consulted: this process is not an interpreter, so its arguments are not its identity",
 				d.ArgvPath))
 		} else {
-			parts = append(parts, fmt.Sprintf("run token %q matched none of %v", run, d.ArgvPath))
+			parts = append(parts, fmt.Sprintf("run token %q names none of %v as a package under a package directory", run, d.ArgvPath))
 		}
 	}
 	if len(parts) == 0 {

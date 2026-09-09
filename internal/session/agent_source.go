@@ -112,6 +112,15 @@ type agentClaim struct {
 	source AgentSource
 	// harness is the harness id the source named, empty when unknown.
 	harness string
+	// identity says what kind of evidence named harness, so a reader can tell a
+	// harness that reported itself from one the detector recognised by name.
+	// It is empty when nothing has named one.
+	identity identityTier
+	// misses counts consecutive detection ticks that found no agent in a pane
+	// the detector holds while something other than the pane's shell was in
+	// the foreground. The claim clears when the shell returns, or when this
+	// reaches agentDetectMissLimit: one missed read is not an exit.
+	misses int
 	// auto records that the foreground-process detector promoted this window and
 	// so is the one that clears it when the agent leaves the foreground. It is a
 	// lifecycle claim, not a precedence one, which is why it survives a

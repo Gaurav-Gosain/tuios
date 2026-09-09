@@ -76,26 +76,61 @@ func TestRunToken(t *testing.T) {
 	}
 }
 
-func TestContainsSegments(t *testing.T) {
+func TestPackageSegments(t *testing.T) {
 	tests := []struct {
 		have, want string
 		match      bool
 	}{
-		{"/u/n_m/@anthropic-ai/claude-code/cli.js", "@anthropic-ai/claude-code", true},
+		// A package under a package-manager directory.
+		{"/u/n_m/node_modules/@anthropic-ai/claude-code/cli.js", "@anthropic-ai/claude-code", true},
 		{"/u/lib/python3/site-packages/aider/main.py", "/aider/", true},
-		{"/u/dev/opencode/main.go", "/opencode/", true},
-		// A substring test said yes to all of these.
-		{"/u/dev/opencode-legacy/main.go", "/opencode/", false},
-		{"/u/dev/myopencode/main.go", "/opencode/", false},
-		{"/u/opencode-ai-fork/x", "opencode-ai", false},
-		// A version pin still names the package.
+		{"/u/.bun/install/global/node_modules/opencode/index.ts", "/opencode/", true},
+		{"/u/.npm/_npx/1a2b/node_modules/cline/bin/cline", "cline/bin/cline", true},
+		{"/u/.bun/install/cache/opencode-ai@1.2.3@@@1/bin/opencode", "opencode-ai", true},
+		// A scoped name is an npm scope wherever it sits.
+		{"/u/n_m/@openai/codex/bin/codex.js", "@openai/codex", true},
+		// A bare token names a package rather than a path.
 		{"opencode@latest", "/opencode/", true},
 		{"aider==0.1.0", "/aider/", true},
+		// A directory in a person's checkout is not a package. The shipped
+		// matcher said yes to all of these.
+		{"/u/dev/opencode/main.go", "/opencode/", false},
+		{"/u/dev/crush/scripts/build.sh", "/crush/", false},
+		{"/u/dev/crush/node_modules/vite/bin/vite.js", "/crush/", false},
+		{"/u/.dotfiles/crush/x.sh", "/crush/", false},
+		// A substring test said yes to all of these.
+		{"/u/n_m/node_modules/opencode-legacy/main.js", "/opencode/", false},
+		{"/u/n_m/node_modules/myopencode/main.js", "/opencode/", false},
+		{"/u/n_m/node_modules/opencode-ai-fork/x", "opencode-ai", false},
 	}
 	for _, tt := range tests {
-		got := containsSegments(segments(tt.have), segments(tt.want))
+		got := packageSegments(segments(tt.have), segments(tt.want))
 		if got != tt.match {
-			t.Errorf("containsSegments(%q, %q) = %v, want %v", tt.have, tt.want, got, tt.match)
+			t.Errorf("packageSegments(%q, %q) = %v, want %v", tt.have, tt.want, got, tt.match)
+		}
+	}
+}
+
+// TestWraps pins which processes are worth looking behind: interpreters and
+// resident launchers, by name or by executable, and nothing else.
+func TestWraps(t *testing.T) {
+	tests := []struct {
+		name string
+		proc ProcInfo
+		want bool
+	}{
+		{"a shell", ProcInfo{Comm: "sh", Exe: "/usr/bin/bash"}, true},
+		{"a renamed shell script", ProcInfo{Comm: "agent-launcher", Exe: "/usr/bin/bash"}, true},
+		{"timeout", ProcInfo{Comm: "timeout", Exe: "/usr/bin/timeout"}, true},
+		{"npm exec", ProcInfo{Comm: "npm exec", Exe: "/usr/bin/node"}, true},
+		{"a version manager", ProcInfo{Comm: "mise", Exe: "/u/.local/bin/mise"}, true},
+		{"an editor", ProcInfo{Comm: "vim", Exe: "/usr/bin/vim"}, false},
+		{"a build", ProcInfo{Comm: "go", Exe: "/usr/lib/go/bin/go"}, false},
+		{"an agent", ProcInfo{Comm: "claude", Exe: "/u/.local/share/claude/versions/2.1.266"}, false},
+	}
+	for _, tt := range tests {
+		if got := tt.proc.Wraps(); got != tt.want {
+			t.Errorf("%s: Wraps() = %v, want %v", tt.name, got, tt.want)
 		}
 	}
 }

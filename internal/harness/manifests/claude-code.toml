@@ -47,6 +47,7 @@ lines   = 8
 [[screen.rule]]
 state    = "needs_input"
 priority = 30
+message  = "Waits for approval of a tool call."
 all      = ["Do you want"]
 any      = ["1. Yes", "❯ 1."]
 
@@ -56,12 +57,14 @@ any      = ["1. Yes", "❯ 1."]
 [[screen.rule]]
 state    = "needs_input"
 priority = 20
+message  = "Asks you to trust the folder."
 all      = ["Do you trust the files in this folder"]
 
 # Plan mode, where the agent has stopped and is waiting on approval to act.
 [[screen.rule]]
 state    = "needs_input"
 priority = 10
+message  = "Waits for approval of the plan."
 all      = ["Would you like to proceed"]
 any      = ["1. Yes", "❯ 1."]
 

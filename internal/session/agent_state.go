@@ -32,6 +32,11 @@ const (
 	AgentStateDone AgentState = "done"
 	// AgentStateErrored means the agent stopped because of an error.
 	AgentStateErrored AgentState = "errored"
+	// AgentStateUnknown means an agent is present and nothing says what it is
+	// doing. It is what the silence timer writes when the screen tier looked
+	// and found nothing, in place of idle: idle says nothing needs you, and a
+	// pane that went quiet on a prompt no rule knows would be lying.
+	AgentStateUnknown AgentState = "unknown"
 )
 
 // agentStateByName maps every accepted wire value to its AgentState. "none" is
@@ -44,12 +49,13 @@ var agentStateByName = map[string]AgentState{
 	"idle":        AgentStateIdle,
 	"done":        AgentStateDone,
 	"errored":     AgentStateErrored,
+	"unknown":     AgentStateUnknown,
 }
 
 // AgentStateNames lists the accepted wire values in a stable order, for the
 // verb's accepted-value schema and for input validation. It is part of the
 // public protocol surface; keep the values stable.
-var AgentStateNames = []string{"none", "working", "needs_input", "idle", "done", "errored"}
+var AgentStateNames = []string{"none", "working", "needs_input", "idle", "done", "errored", "unknown"}
 
 // ParseAgentState resolves a wire value to an AgentState, reporting whether the
 // value was one of the accepted names. An empty input is not accepted here: the
@@ -70,6 +76,32 @@ func (a AgentState) Name() string {
 		return "none"
 	}
 	return string(a)
+}
+
+// NeedsYou reports whether a person has to act on the pane now. It is the
+// question every consumer of agent state is really asking, answered in one
+// place so the rail, the alert policy and a script all agree on which states
+// mean it: a blocked agent and one that stopped on an error.
+func (a AgentState) NeedsYou() bool {
+	return a == AgentStateNeedsInput || a == AgentStateErrored
+}
+
+// Activity is the coarse reading of a state: what the agent is doing, with the
+// reason for a block left to the message. It is the shape the states reduce to
+// when a reader wants "working, waiting, or at rest" and not the full enum.
+func (a AgentState) Activity() string {
+	switch a {
+	case AgentStateWorking:
+		return "working"
+	case AgentStateNeedsInput:
+		return "waiting"
+	case AgentStateIdle, AgentStateDone, AgentStateErrored:
+		return "resting"
+	case AgentStateUnknown:
+		return "unknown"
+	default:
+		return "none"
+	}
 }
 
 // AgentReport is one source's claim on a window's agent state. Source empty
@@ -134,7 +166,8 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 			}
 			override = true
 		}
-		next := agentClaim{source: r.Source, harness: harnessAfterReport(w, r), auto: claim.auto}
+		next := agentClaim{source: r.Source, harness: harnessAfterReport(w, r), auto: claim.auto, misses: claim.misses}
+		next.identity = identityAfterReport(claim, r, next.harness)
 		switch {
 		case override:
 			next.blocker = true
@@ -144,6 +177,16 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 			// override, not a fresh claim. Forgetting what it displaced here
 			// would leave nothing to hand back, and the pane would stick.
 			next.blocker, next.prior = true, claim.prior
+		case r.Source == AgentSourceScreen && agentStateBlocks(r.State) && held:
+			// A screen rule reads a prompt, and a prompt is true only while it
+			// is on the screen. So every claim the screen tier takes is a loan,
+			// whether it outranked the claim it displaced or overrode it: when
+			// the prompt is painted over, the displaced claim comes back. Without
+			// this a pane the detector held stayed on needs_input through the
+			// whole turn that followed the answer, because the screen tier
+			// asserts no other state and outranks the detector.
+			next.blocker = true
+			next.prior = agentPriorClaim{source: claim.source, state: prev, harness: w.AgentHarness}
 		}
 		w.AgentState = r.State
 		w.AgentMessage = r.Message
@@ -188,6 +231,21 @@ func harnessAfterReport(w *WindowState, r AgentReport) string {
 		return r.Harness
 	}
 	return w.AgentHarness
+}
+
+// identityAfterReport decides what kind of evidence stands behind a window's
+// harness once r is applied. A report that names a harness is the harness
+// speaking for itself, the one certain source; a report that names none leaves
+// the evidence as it was, the same way harnessAfterReport leaves the harness.
+func identityAfterReport(claim agentClaim, r AgentReport, harness string) identityTier {
+	switch {
+	case harness == "":
+		return ""
+	case r.Harness != "" && r.Source == AgentSourceReport:
+		return identityReport
+	default:
+		return claim.identity
+	}
 }
 
 // agentBlockerOverrideGrace is how long a higher-ranked claim must have stood
@@ -318,15 +376,17 @@ func (agentClaimHeld) Error() string { return "agent state is held by a higher-r
 //
 // look is given each stalled pane's PTY and reports whether the screen tier
 // found a rule matching it. A pane whose screen answers is left alone: the
-// answer came from looking, and looking beats a timer. A nil look, or a harness
-// with no screen rules, restores the timer-only behaviour, which is still the
-// best available when there is nothing to read.
+// answer came from looking, and looking beats a timer. A pane whose screen
+// answered nothing is demoted to unknown rather than idle: the screen was
+// read, it said nothing, and idle would say nothing needs you when nothing here
+// knows that. A nil look restores the timer-only behaviour, which writes idle,
+// the best available when there is nothing to read at all.
 //
 // It is deliberately conservative and strictly secondary to explicit reporting:
 //
-//   - It only ever reads AgentStateWorking and only ever writes AgentStateIdle.
-//     Any window in any other state is untouched, so an explicit needs_input,
-//     done, or errored report is never overridden.
+//   - It only ever reads AgentStateWorking and only ever writes AgentStateIdle
+//     or AgentStateUnknown. Any window in any other state is untouched, so an
+//     explicit needs_input, done, or errored report is never overridden.
 //   - The silence clock is the later of the window's last output and the time
 //     its working state was set, so an agent that is genuinely working (and thus
 //     producing output) is never demoted, and a working report just made is given
@@ -366,6 +426,14 @@ func (s *Session) applyStallHeuristic(now time.Time, stall time.Duration, lastOu
 		return 0
 	}
 
+	// With a look, silence after the screen said nothing is the absence of
+	// evidence, and the state that says so is unknown. Without one, the timer
+	// is on its own and idle is the guess it has always made.
+	quiet := AgentStateIdle
+	if look != nil {
+		quiet = AgentStateUnknown
+	}
+
 	if look != nil {
 		kept := pending[:0]
 		for _, c := range pending {
@@ -390,7 +458,7 @@ func (s *Session) applyStallHeuristic(now time.Time, stall time.Duration, lastOu
 			if w.AgentState != AgentStateWorking || !stalledAt(w.AgentStateAt, w.PTYID, cutoff, lastOutput) {
 				continue
 			}
-			w.AgentState = AgentStateIdle
+			w.AgentState = quiet
 			w.AgentStateAt = now.UnixNano()
 			claim := s.agentClaims[w.ID]
 			claim.source = AgentSourceStall
