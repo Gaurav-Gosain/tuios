@@ -5,6 +5,11 @@ go 1.26.5
 require github.com/Gaurav-Gosain/tuitest v0.0.0-20260726152020-d8180855c594
 
 require (
+	github.com/adrg/xdg v0.5.3 // indirect
+	go.mitchellh.com/libghostty v0.0.0-20260904160725-d815d1633c05 // indirect
+)
+
+require (
 	github.com/Gaurav-Gosain/tuios v0.0.0
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260812204455-68fa937c71be // indirect

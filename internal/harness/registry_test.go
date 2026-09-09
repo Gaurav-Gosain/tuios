@@ -254,3 +254,24 @@ func write(t *testing.T, dir, name, body string) {
 		t.Fatalf("write %s: %v", name, err)
 	}
 }
+
+// TestResolveTakesAnIdOrTheProgramName pins the two spellings a person uses
+// for an agent: the manifest id and the name they type at a shell.
+func TestResolveTakesAnIdOrTheProgramName(t *testing.T) {
+	reg, _ := Load()
+	for _, name := range []string{"claude-code", "claude"} {
+		m, cmd, ok := reg.Resolve(name)
+		if !ok || m == nil {
+			t.Fatalf("Resolve(%q) found nothing", name)
+		}
+		if m.ID != "claude-code" || cmd != "claude" {
+			t.Errorf("Resolve(%q) = %s, %q; want claude-code, claude", name, m.ID, cmd)
+		}
+	}
+	if _, _, ok := reg.Resolve("not-an-agent"); ok {
+		t.Error("Resolve accepted a name no manifest knows")
+	}
+	if _, _, ok := reg.Resolve(""); ok {
+		t.Error("Resolve accepted an empty name")
+	}
+}

@@ -276,6 +276,98 @@ func init() {
 			},
 			handler: (*Daemon).verbNewSession,
 		},
+		"new-worktree": {
+			description: "Create a git worktree of a repository and a session in it. The worktree goes under tuios's worktree directory, named by repository and branch. The branch is created from base when it does not exist.",
+			params: []verbParam{
+				{Name: "repo", Type: "string", Required: true, Description: "A directory inside the repository: its main checkout or any of its worktrees."},
+				{Name: "branch", Type: "string", Required: true, Description: "Branch to check out in the worktree. Created from base when it does not exist."},
+				{Name: "base", Type: "string", Description: "Ref a new branch starts from. Omit for HEAD of the main checkout."},
+				{Name: "name", Type: "string", Description: "Name for the session. Omit for <repo>-<branch>, with every slash in the branch turned into a hyphen."},
+				{Name: "command", Type: "[]string", Description: "Argv to exec as the first window's process instead of a shell. No shell parses it, so nothing needs quoting."},
+			},
+			returns: []verbParam{
+				{Name: "session", Type: "string", Description: "Name of the new session."},
+				{Name: "session_id", Type: "string", Description: "Id of the new session."},
+				{Name: "repo", Type: "string", Description: "The repository's name: the base name of its main checkout."},
+				{Name: "repo_root", Type: "string", Description: "The repository's main checkout."},
+				{Name: "branch", Type: "string", Description: "The branch the worktree has checked out."},
+				{Name: "created_branch", Type: "bool", Description: "True when the branch was created by this call."},
+				{Name: "path", Type: "string", Description: "The worktree's directory."},
+				{Name: "window_id", Type: "string", Description: "Id of the first window."},
+				{Name: "pty_id", Type: "string", Description: "Id of the first window's PTY."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry"}}`,
+				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry","base":"main","command":["claude"]}}`,
+			},
+			handler: (*Daemon).verbNewWorktree,
+		},
+		"list-worktrees": {
+			description: "List the sessions whose directory is a git worktree, with the repository, branch, agent state and fan prompt status of each.",
+			params: []verbParam{
+				{Name: "repo", Type: "string", Description: "Only worktrees of this repository, by name."},
+				{Name: "group", Type: "string", Description: "Only the sessions of this fan-out, by its branch stem."},
+				{Name: "changes", Type: "bool", Description: "Run git status in every worktree and report the count of uncommitted changes, and the commits ahead of base. Off by default because it runs git.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "worktrees", Type: "[]object", Description: "One entry per worktree session: session, repo, repo_root, branch, path, base, group, managed, gone, state, harness, windows, attached, prompt_status, prompt_note, and with changes: changes and ahead."},
+				{Name: "total", Type: "int", Description: "How many entries."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"list-worktrees"}`,
+				`{"id":1,"verb":"list-worktrees","params":{"repo":"api","changes":true}}`,
+			},
+			handler: (*Daemon).verbListWorktrees,
+		},
+		"remove-worktree": {
+			description: "Remove a worktree session's worktree with git worktree remove, and kill the session. Uncommitted changes are refused unless stash keeps them in git stash or force discards them. The branch is never deleted.",
+			params: []verbParam{
+				{Name: "session", Type: "string", Required: true, Description: "The worktree session to remove. Never guessed."},
+				{Name: "stash", Type: "bool", Description: "Move uncommitted changes into git stash before removing, under the message \"tuios: <branch>\".", Default: "false"},
+				{Name: "force", Type: "bool", Description: "Discard uncommitted changes. This is the one destructive option, and it does nothing without being passed.", Default: "false"},
+				{Name: "keep_session", Type: "bool", Description: "Leave the session running after the worktree is removed.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "session", Type: "string", Description: "The session the worktree belonged to."},
+				{Name: "branch", Type: "string", Description: "The branch, which still exists."},
+				{Name: "path", Type: "string", Description: "The directory that was removed."},
+				{Name: "changes", Type: "int", Description: "How many uncommitted changes the worktree held."},
+				{Name: "stashed", Type: "bool", Description: "True when the changes went into git stash."},
+				{Name: "discarded", Type: "bool", Description: "True when the changes were discarded by force."},
+				{Name: "session_killed", Type: "bool", Description: "True when the session was killed."},
+				{Name: "branch_kept", Type: "bool", Description: "Always true."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"remove-worktree","params":{"session":"api-feat-retry"}}`,
+				`{"id":1,"verb":"remove-worktree","params":{"session":"api-feat-retry","stash":true}}`,
+			},
+			handler: (*Daemon).verbRemoveWorktree,
+		},
+		"fan": {
+			description: "Fan one prompt out across several agents. Creates count worktrees and sessions, starts the named agent in each, and types the prompt into each agent once it is ready. Returns as soon as the sessions exist.",
+			params: []verbParam{
+				{Name: "count", Type: "int", Required: true, Description: "How many worktrees and agents, 1 to 16."},
+				{Name: "agent", Type: "string", Required: true, Description: "The agent to run, by harness id or program name: claude, codex, gemini. list-verbs and the harness manifests name the ones tuios recognises."},
+				{Name: "prompt", Type: "string", Required: true, Description: "The prompt every agent gets."},
+				{Name: "repo", Type: "string", Required: true, Description: "A directory inside the repository."},
+				{Name: "base", Type: "string", Description: "Ref every branch starts from. Omit for HEAD of the main checkout."},
+				{Name: "name", Type: "string", Description: "Branch stem. The branches are the stem, then stem-2, stem-3 and so on. Omit for fan/ and the first words of the prompt."},
+				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for each agent to be ready before giving up on its prompt.", Default: "600000"},
+			},
+			returns: []verbParam{
+				{Name: "group", Type: "string", Description: "The branch stem, which is the group's name in list-worktrees."},
+				{Name: "repo", Type: "string", Description: "The repository's name."},
+				{Name: "agent", Type: "string", Description: "The harness id that was started."},
+				{Name: "command", Type: "string", Description: "The program that was started in every session."},
+				{Name: "prompt", Type: "string", Description: "The prompt, as given."},
+				{Name: "sessions", Type: "[]object", Description: "One entry per session: session, branch, path, window_id."},
+				{Name: "total", Type: "int", Description: "How many sessions were started."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"fan","params":{"count":3,"agent":"claude","prompt":"Add a retry to the client.","repo":"/src/api"}}`,
+			},
+			handler: (*Daemon).verbFan,
+		},
 		"list-hosts": {
 			description: "List the machines named in the [hosts] config table, with the state of each link.",
 			returns: []verbParam{

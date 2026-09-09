@@ -76,6 +76,15 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"stash-put#0":          {errCode: ErrVerbInvalidParams, why: "/tmp/flame.png does not exist here"},
 	"stash-get#0":          {errCode: ErrVerbInvalidParams, why: "the example path is a placeholder, not a file this session stashed"},
 
+	// /src/api is not a repository here, and no agent is installed in the
+	// fixture. The verbs are proved against throwaway repositories in
+	// verb_worktree_test.go.
+	"new-worktree#0":    {errCode: ErrVerbGitFailed, why: "/src/api is not a git repository here"},
+	"new-worktree#1":    {errCode: ErrVerbGitFailed, why: "/src/api is not a git repository here"},
+	"remove-worktree#0": {errCode: ErrVerbSessionNotFound, why: "api-feat-retry does not exist here"},
+	"remove-worktree#1": {errCode: ErrVerbSessionNotFound, why: "api-feat-retry does not exist here"},
+	"fan#0":             {errCode: ErrVerbGitFailed, why: "/src/api is not a git repository here"},
+
 	// No hosts are configured in the fixture.
 	"list-host-agents#1":   {errCode: ErrVerbUnknownHost, why: "no hosts are configured here"},
 	"list-host-sessions#1": {errCode: ErrVerbUnknownHost, why: "no hosts are configured here"},

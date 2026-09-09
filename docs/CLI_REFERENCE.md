@@ -347,6 +347,65 @@ tuios kill-session <session-name>
 tuios kill-session mysession   # Kill session named "mysession"
 ```
 
+### `tuios worktree`
+
+A git worktree as a session. `worktree new` makes a worktree of the repository
+you are in and a session whose directory is that worktree. The rail groups these
+sessions under the repository and labels each by its branch.
+
+**Usage:**
+```bash
+tuios worktree new <branch> [--repo <dir>] [--base <ref>] [--name <session>] [--agent <cli>] [--detach]
+tuios worktree ls [--repo <name>] [--group <stem>] [--json]
+tuios worktree rm <session> [--stash | --force] [--keep-session]
+tuios worktree diff <session> [--stat]
+```
+
+**Examples:**
+```bash
+tuios worktree new feat/retry                          # A new branch from HEAD, attached
+tuios worktree new feat/retry --agent claude --detach  # Headless, running Claude Code
+tuios worktree ls                                      # Repo, branch, agent state, changes
+tuios worktree rm api-feat-retry --stash               # Keep the changes in git stash
+```
+
+The session is named `<repo>-<branch>`, with every slash turned into a hyphen.
+Worktrees go under `$XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>`.
+
+`worktree rm` refuses a worktree with uncommitted changes and removes nothing.
+`--stash` keeps the changes in git stash as `tuios: <branch>`. `--force`
+discards them, and is the only option that does. The branch is never deleted.
+A session whose worktree directory was removed under it shows `gone` in the
+listing and is kept.
+
+### `tuios fan`
+
+Fan one prompt out across several agents, each in its own worktree.
+
+**Usage:**
+```bash
+tuios fan <count> --agent <cli> [--repo <dir>] [--base <ref>] [--name <stem>] [--wait] <prompt>
+tuios fan keep <session> [--stash | --force]
+```
+
+**Examples:**
+```bash
+tuios fan 3 --agent claude 'Add a retry with backoff to the HTTP client.'
+tuios worktree ls --group fan/add-retry-backoff-http   # Which prompts were sent, what changed
+tuios worktree diff api-fan-add-retry-backoff-http-2   # What one of them produced
+tuios fan keep api-fan-add-retry-backoff-http-2 --stash
+```
+
+The branches are a stem, then `stem-2`, `stem-3`. The stem is `fan/` and the
+first words of the prompt, or `--name`. Each prompt is typed once its agent is
+ready to read, so the command returns at once and `tuios worktree ls` shows
+`pending`, `sent` or `not sent` per session. `--wait` blocks until every prompt
+is sent or given up on.
+
+`fan keep` removes every sibling of the session you keep, the way `worktree rm`
+does: a sibling with uncommitted changes is left in place unless `--stash` or
+`--force` is passed, and the command exits 1 to say so.
+
 ### `tuios kill-server`
 
 Stop the TUIOS daemon process. This stops all sessions.

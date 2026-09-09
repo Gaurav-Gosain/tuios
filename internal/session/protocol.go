@@ -279,6 +279,11 @@ type SessionInfo struct {
 	// attach to find out. Omitted when false, which is what an older daemon
 	// sends and what every client reads as "an ordinary live session".
 	Restored bool `json:"restored,omitempty"`
+	// Worktree is set for a session whose directory is a git worktree: which
+	// repository, which branch, and whether the directory still exists. It is
+	// what the rail groups by. Omitted for every other session, which is also
+	// what an older daemon sends.
+	Worktree *WorktreeInfo `json:"worktree,omitempty"`
 }
 
 // SessionListPayload contains list of available sessions.

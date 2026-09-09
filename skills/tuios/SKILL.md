@@ -1099,6 +1099,104 @@ tuios read-agent-messages -s work -w "$TUIOS_PANE_ID" --unread
 The second shape only works if the reviewer reads its inbox. The first works
 against any agent, and is what to reach for when you do not know.
 
+## A worktree as a session, and one prompt across several
+
+A git worktree is the unit of isolation for one agent: its own checkout, its
+own branch, nothing shared with the person's working copy. tuios makes one and
+a session in it with one command, and the rail groups every such session under
+its repository, labelled by branch.
+
+```sh
+tuios worktree new feat/retry --base main --detach
+tuios worktree new feat/retry-2 --agent claude --detach
+tuios worktree ls
+```
+
+```
+Created branch feat/retry in /home/u/.local/share/tuios/worktrees/api/feat-retry.
+Created session 'api-feat-retry'.
+Attach with 'tuios attach api-feat-retry'.
+```
+
+The session is named `<repo>-<branch>` with every slash turned into a hyphen,
+because a session name cannot hold a slash. `--agent` names an agent CLI the
+way you type it (`claude`, `codex`, `gemini`) and starts it in the session
+instead of a shell. A session started by hand inside a worktree is recognised
+too: the daemon reads the directory, never git, so it costs nothing.
+
+The verbs are `new-worktree`, `list-worktrees` and `remove-worktree`:
+
+```json
+{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry","base":"main","command":["claude"]}}
+```
+
+```json
+{"type":"worktree_created","session":"api-feat-retry","branch":"feat/retry","created_branch":true,
+ "path":"/home/u/.local/share/tuios/worktrees/api/feat-retry","repo":"api","window_id":"..."}
+```
+
+`list-worktrees` reports every worktree session with its `state` (the agent
+state rolled up over its windows), `gone` when the directory was removed under
+the session, and with `"changes": true` the count of uncommitted changes and
+the commits ahead of `base`. The session of a removed directory is kept, so
+what the agent printed is still there to read.
+
+### Fan-out
+
+One prompt across several agents at once, each in its own worktree:
+
+```sh
+tuios fan 3 --agent claude 'Add a retry with backoff to the HTTP client.'
+tuios worktree ls --group fan/add-retry-backoff-http
+tuios worktree diff api-fan-add-retry-backoff-http-2 --stat
+tuios fan keep api-fan-add-retry-backoff-http-2 --stash
+```
+
+```
+Started 3 agents on fan/add-retry-backoff-http. Each prompt is sent when its agent is ready.
+  api-fan-add-retry-backoff-http    fan/add-retry-backoff-http    /home/u/.local/share/tuios/worktrees/api/fan-add-retry-backoff-http
+  api-fan-add-retry-backoff-http-2  fan/add-retry-backoff-http-2  ...
+  api-fan-add-retry-backoff-http-3  fan/add-retry-backoff-http-3  ...
+Watch them with 'tuios worktree ls --group fan/add-retry-backoff-http'. Keep one with 'tuios fan keep <session>'.
+```
+
+The branches are a stem and then `stem-2`, `stem-3`. The stem is `fan/` and
+the first words of the prompt, or `--name`. The prompt is not typed the moment
+the agent starts. The daemon waits for the agent to be at its prompt (`idle`,
+`done`, or `unknown` for an agent that reports nothing and has gone quiet) and
+types it then, so it is never interleaved with a start-up screen. An agent
+asking to trust the folder is `needs_input`, and the prompt waits for the
+person to answer. `list-worktrees` says `prompt_status` per session: `pending`,
+`sent`, or `not_sent` with a note. `--wait` makes the command block until
+every prompt is sent or given up on.
+
+The verb is `fan`, with the same parameters:
+
+```json
+{"id":1,"verb":"fan","params":{"count":3,"agent":"claude","prompt":"Add a retry with backoff to the HTTP client.","repo":"/src/api"}}
+```
+
+### Removing a worktree is the sharp edge
+
+`remove-worktree` and `tuios worktree rm` run `git worktree remove` and kill the
+session. A worktree with uncommitted changes is refused with `worktree_dirty`,
+and nothing is removed:
+
+```
+remove-worktree failed: /home/u/.local/share/tuios/worktrees/api/feat-retry holds 3 uncommitted changes. Nothing was removed.
+Most likely cause: Pass stash to keep the changes in git stash, or force to discard them. The branch feat/retry is kept either way.
+Fix: run 'tuios worktree rm api-feat-retry --stash'.
+```
+
+`--stash` (`"stash": true`) moves the changes into the repository's stash as
+`tuios: <branch>` and then removes a clean worktree. `--force` (`"force": true`)
+discards them, and is the only option that does. The branch is never deleted:
+every commit made in the worktree stays. `tuios fan keep <session>` applies the
+same rule to every sibling of the session you keep, and leaves a dirty sibling
+in place rather than guess. Nothing here ever runs `git worktree prune`. When a
+directory was removed under a session, `remove-worktree` says so and names the
+prune as the person's step.
+
 ## Naming things for the human watching
 
 ```sh

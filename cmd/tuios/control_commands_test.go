@@ -17,6 +17,36 @@ func TestControlCommandsAreRegistered(t *testing.T) {
 		flags   []string
 	}{
 		{
+			command: "new",
+			args:    []string{"worktree", "new", "feat/retry", "--repo", "/src/api", "--base", "main", "--name", "api-retry", "--agent", "claude", "--detach", "--json"},
+			flags:   []string{"repo", "base", "name", "agent", "detach", "json"},
+		},
+		{
+			command: "ls",
+			args:    []string{"worktree", "ls", "--repo", "api", "--group", "fan/x", "--json"},
+			flags:   []string{"repo", "group", "json"},
+		},
+		{
+			command: "rm",
+			args:    []string{"worktree", "rm", "api-retry", "--stash", "--force", "--keep-session", "--json"},
+			flags:   []string{"stash", "force", "keep-session", "json"},
+		},
+		{
+			command: "diff",
+			args:    []string{"worktree", "diff", "api-retry", "--stat"},
+			flags:   []string{"stat"},
+		},
+		{
+			command: "fan",
+			args:    []string{"fan", "3", "Add a retry.", "--agent", "claude", "--repo", "/src/api", "--base", "main", "--name", "try", "--wait", "--json"},
+			flags:   []string{"agent", "repo", "base", "name", "wait", "json"},
+		},
+		{
+			command: "keep",
+			args:    []string{"fan", "keep", "api-try-2", "--stash", "--force", "--json"},
+			flags:   []string{"stash", "force", "json"},
+		},
+		{
 			command: "list-options",
 			args:    []string{"list-options", "appearance.", "--section", "appearance", "--json", "-s", "work"},
 			flags:   []string{"section", "json", "session"},
