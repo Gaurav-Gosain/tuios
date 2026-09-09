@@ -28,6 +28,16 @@ var agentMailEmptyLines = []string{
 	"An agent writes to you with: tuios send-agent-message -w human",
 }
 
+// agentMailLinkGlyph is the mark a row wears when a message in it arrived
+// from another machine. It replaces the kind's mark, because where the mail
+// came from matters more than what kind it is.
+func agentMailLinkGlyph() string {
+	if overlay.UseASCII() {
+		return "~"
+	}
+	return "⇄"
+}
+
 // agentMailGlyph is the mark a row wears for its kind.
 func agentMailGlyph(kind string) string {
 	if overlay.UseASCII() {
@@ -136,6 +146,9 @@ func (m *OS) agentMailThreadRow(th agentMailThread, selected bool, rowBg color.C
 	}
 	who := th.From + arrow + th.To
 	glyph := agentMailGlyph(th.Kind) + " "
+	if th.Link {
+		glyph = agentMailLinkGlyph() + " "
+	}
 
 	avail := max(width-lipgloss.Width(right)-lipgloss.Width(glyph)-4, 1)
 	whoW := min(lipgloss.Width(who), avail)
@@ -171,6 +184,7 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 	mute := overlay.Style(bg).Foreground(pal.FgMute)
 	dim := overlay.Style(bg).Foreground(pal.FgDim)
 	strong := overlay.Style(bg).Foreground(pal.Fg).Bold(true)
+	caution := overlay.Style(bg).Foreground(pal.Warning)
 
 	var lines []string
 	title := "Mail"
@@ -181,9 +195,9 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 		if i > 0 {
 			lines = append(lines, "")
 		}
-		who := agentMailName(mm.From, mm.FromLabel, false) + arrow + agentMailName(mm.To, mm.ToLabel, true)
+		who := agentMailSender(mm) + arrow + agentMailName(mm.To, mm.ToLabel, true)
 		if mm.Kind == "ask" {
-			who = agentMailName(mm.From, mm.FromLabel, false) + " asked " + agentMailName(mm.To, mm.ToLabel, true)
+			who = agentMailSender(mm) + " asked " + agentMailName(mm.To, mm.ToLabel, true)
 		}
 		age := agentMailAge(mm.SentAt, now)
 		if mm.Kind == "message" && mm.To == session.AgentInboxHuman && mm.ReadAt == 0 {
@@ -192,6 +206,12 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 		gap := max(width-lipgloss.Width(who)-lipgloss.Width(age)-1, 1)
 		lines = append(lines, strong.Render(overlay.Truncate(who, max(width-lipgloss.Width(age)-2, 1)))+
 			mute.Render(strings.Repeat(" ", gap)+age))
+		if agentMailFromLink(mm) {
+			// Said in words under the header, not only in the name: a
+			// message from another machine was written by a program this
+			// machine's owner does not run.
+			lines = append(lines, caution.Render(overlay.Truncate("  "+agentMailLinkGlyph()+" from "+agentMailOriginHost(mm)+", over a link. Written on another machine.", width)))
+		}
 		if mm.Subject != "" {
 			for _, l := range wrapPlain(printableTitle(mm.Subject), width-2) {
 				lines = append(lines, dim.Render("  "+l))
