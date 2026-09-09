@@ -138,15 +138,27 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		}
 	}
 
-	if err := d.sendMessage(tuiClient, MsgRemoteCommand, remoteCmd); err != nil {
-		return d.sendCommandResult(cs, payload.RequestID, false, fmt.Sprintf("failed to send to TUI: %v", err))
-	}
-
-	// Track this request so we can route the result back to the original client
-	if cs.clientID != tuiClient.clientID {
+	// The request is recorded before the command goes out, not after. The TUI
+	// answers on its own connection, and it can do so in the time it takes this
+	// goroutine to get from the write back to the map; a result that finds no
+	// entry is dropped, and the requester then waited out its whole read
+	// deadline for an answer the client had already given. On a loaded runner
+	// that showed as `run-command` failing with an i/o timeout thirty seconds
+	// after a ToggleTiling the client had run at once.
+	forwarded := cs.clientID != tuiClient.clientID
+	if forwarded {
 		d.pendingRequestsMu.Lock()
 		d.pendingRequests[payload.RequestID] = &pendingRequest{requester: cs, created: time.Now()}
 		d.pendingRequestsMu.Unlock()
+	}
+
+	if err := d.sendMessage(tuiClient, MsgRemoteCommand, remoteCmd); err != nil {
+		if forwarded {
+			d.pendingRequestsMu.Lock()
+			delete(d.pendingRequests, payload.RequestID)
+			d.pendingRequestsMu.Unlock()
+		}
+		return d.sendCommandResult(cs, payload.RequestID, false, fmt.Sprintf("failed to send to TUI: %v", err))
 	}
 
 	// Don't send response here - wait for TUI to send result via handleCommandResult
