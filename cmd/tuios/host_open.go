@@ -243,7 +243,9 @@ func explainRemoteFailure(host, addr string, remote []string, err error) error {
 		// ssh's own code: it never reached a shell on the far side.
 		return fmt.Errorf("ssh could not reach %s (%s). Run 'tuios hosts test %s' to see why", host, addr, host)
 	case 127:
-		return fmt.Errorf("%s has no tuios on its PATH. Set 'command' for the host with 'tuios hosts add %s %s --command /path/to/tuios'", host, host, addr)
+		// The probe's own code when it found nothing, and the shell's when a
+		// configured command is not there.
+		return fmt.Errorf("tuios was not found on %s. Run 'tuios hosts test %s' to see where the link looked", host, host)
 	default:
 		return fmt.Errorf("tuios on %s could not %s the session. Its message is above", host, verb)
 	}

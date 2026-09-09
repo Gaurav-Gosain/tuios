@@ -123,6 +123,8 @@ func hostStateSentence(status, reason, detail string) string {
 		head = "The host answers."
 	case federation.StatusNoDaemon:
 		head = "The host is up and no tuios daemon runs on it."
+	case federation.StatusNoBinary:
+		head = "The host is up and the link cannot find tuios on it."
 	case federation.StatusUnreachable:
 		head = "The host does not answer."
 	case federation.StatusIncompatible:

@@ -83,7 +83,7 @@ type Node struct {
 	// is set on a KindHost header and on every session node under it.
 	Host string
 	// HostStatus is a KindHost header's link state, as the federation package
-	// names it ("up", "unreachable", "no_daemon", "incompatible",
+	// names it ("up", "unreachable", "no_daemon", "no_tuios", "incompatible",
 	// "connecting"). Empty on every other node.
 	HostStatus string
 	// HostNote is the one plain sentence a host header shows when it is not up.

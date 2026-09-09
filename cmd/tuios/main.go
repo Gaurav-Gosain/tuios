@@ -2467,6 +2467,8 @@ key to it.
 Statuses:
   up            The link is open and the remote daemon answers.
   no_daemon     The machine is up and no tuios daemon runs on it.
+  no_tuios      The machine is up and the link cannot find tuios on it. Run
+                'tuios hosts test' to see where it looked.
   unreachable   The last attempt failed. The line below the table says why.
   incompatible  The remote daemon speaks a control protocol this build does not
                 serve. Upgrade tuios on one of the two machines.
@@ -2482,7 +2484,11 @@ running daemon follows the file, so no command here needs a restart.
 
 The address is anything ssh understands, including an ssh_config alias. The
 daemon runs ssh with BatchMode on, so a link never asks for a password and never
-asks about a host key. Run ssh to the host once by hand to accept its key.`,
+asks about a host key. Run ssh to the host once by hand to accept its key.
+
+The link finds tuios on the host by itself. It looks on the PATH, then at the
+known install paths, then in a login shell. 'tuios hosts test' prints the path
+it found. Add --command to 'tuios hosts add' to run a given binary instead.`,
 		Example: `  tuios hosts
   tuios hosts --json
   tuios hosts add build gaurav@buildbox`,

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,10 @@ const (
 	// StatusNoDaemon means ssh and the proxy worked and the remote machine has
 	// no daemon running. Nothing is wrong with the link.
 	StatusNoDaemon Status = "no_daemon"
+	// StatusNoBinary means ssh worked and the link could not find tuios on the
+	// machine: not on the PATH, not at any known install path, and not
+	// through the login shell. The fix is on that machine, or is --command.
+	StatusNoBinary Status = "no_tuios"
 	// StatusIncompatible means the remote daemon speaks a control protocol this
 	// build does not serve. Section 8: skew is normal, so it is reported as its
 	// own state with both versions rather than as a failure.
@@ -67,6 +72,16 @@ type link struct {
 	mux *mux
 	// tearDown ends the current attempt. The supervisor waits on it.
 	tearDown func()
+
+	// resolved is the tuios path the probe found on this host. It is kept for
+	// the life of the link so a redial runs it directly instead of probing
+	// again, and dropped when a dial that used it reached the machine and
+	// still found no program there. Unused when the host has a configured
+	// command.
+	resolved string
+	// command is the binary the last dial that reached one ran on the host,
+	// for the report.
+	command string
 
 	// settled closes after the first attempt finishes either way, so a listing
 	// can wait for first contact instead of reporting "connecting" forever.
@@ -122,6 +137,7 @@ func (l *link) report() HostReport {
 		MinProtocol:   l.shake.MinProtocol,
 		PID:           l.shake.PID,
 		Sessions:      l.shake.Sessions,
+		Command:       l.command,
 	}
 	if !l.lastOK.IsZero() {
 		r.LastOK = l.lastOK.Unix()
@@ -161,14 +177,22 @@ func (l *link) supervise(ctx context.Context) {
 // returns whether the link was ever up, which is what decides whether the
 // backoff resets.
 func (l *link) attempt(ctx context.Context) bool {
+	// The host dialed is the configured one, with the path an earlier probe
+	// found filled in as its command. That is what makes a redial run the
+	// binary directly: the probe happens once per link, not once per dial.
+	h := l.host
 	l.mu.Lock()
 	l.lastTry = l.opts.now()
+	fromCache := h.Command == "" && l.resolved != ""
+	if fromCache {
+		h.Command = l.resolved
+	}
 	l.mu.Unlock()
 
-	dialCtx, cancelDial := context.WithTimeout(ctx, l.host.connectTimeout())
+	dialCtx, cancelDial := context.WithTimeout(ctx, h.connectTimeout())
 	defer cancelDial()
 
-	tr, err := l.opts.Dial(dialCtx, l.host)
+	tr, err := l.opts.Dial(dialCtx, h)
 	if err != nil {
 		l.set(StatusUnreachable, "The host did not answer.", trimDetail(err.Error()))
 		return false
@@ -184,18 +208,60 @@ func (l *link) attempt(ctx context.Context) bool {
 	// goroutine parked forever. This is the "accepts then hangs" case, and it
 	// is the one that would otherwise look like success.
 	br := bufio.NewReaderSize(tr, 32<<10)
-	preambleErr := make(chan error, 1)
-	go func() { preambleErr <- readPreamble(br) }()
+	type preambleResult struct {
+		note preambleNote
+		err  error
+	}
+	preambleDone := make(chan preambleResult, 1)
+	go func() {
+		note, err := readPreamble(br)
+		preambleDone <- preambleResult{note, err}
+	}()
+	var note preambleNote
 	select {
-	case err := <-preambleErr:
-		if err != nil {
-			l.set(StatusUnreachable, noPreambleReason(tr), trimDetail(tr.Diagnostic()))
+	case res := <-preambleDone:
+		note = res.note
+		if res.err != nil {
+			exited, code := awaitChildExit(tr)
+			switch {
+			case note.missing:
+				// The machine answered, ran the probe, and the probe found
+				// nothing. That is a state of the machine, not of the link,
+				// and it is reported as its own status so the listing says
+				// where the problem is.
+				l.set(StatusNoBinary, "The link cannot find tuios on the host.", trimDetail(tr.Diagnostic()))
+			case exited:
+				l.set(StatusUnreachable, "The host did not answer.", trimDetail(tr.Diagnostic()))
+			default:
+				l.set(StatusUnreachable, "The host did not answer as a tuios link.", trimDetail(tr.Diagnostic()))
+			}
+			// A cached path that reached the machine and ran nothing is
+			// stale: the binary moved or was removed. The next dial probes
+			// again. 255 is ssh's own code and means the machine was never
+			// reached, so the path it knows is kept for when it is.
+			if fromCache && exited && code != sshExitCode {
+				l.mu.Lock()
+				l.resolved = ""
+				l.mu.Unlock()
+			}
 			return false
 		}
 	case <-dialCtx.Done():
 		l.set(StatusUnreachable, "The host did not answer in time.", trimDetail(tr.Diagnostic()))
 		return false
 	}
+
+	// What the far side runs is known now: the path the probe announced, or
+	// the command that was sent when no probe ran.
+	l.mu.Lock()
+	l.command = h.command()
+	if note.command != "" {
+		l.command = note.command
+		if l.host.Command == "" && cacheableRemotePath(note.command) {
+			l.resolved = note.command
+		}
+	}
+	l.mu.Unlock()
 
 	// nil accept: the hub answers an inbound open with a close and never hands
 	// a peer a stream. Section 1, invariant 1 of the design document.
@@ -256,14 +322,18 @@ func (l *link) attempt(ctx context.Context) bool {
 	return true
 }
 
-// noPreambleReason says which of the two no-preamble failures happened. A child
-// that has already exited is ssh giving up, or the remote tuios being missing,
-// and its stderr says which. A child still running that never identified itself
-// reached something that is not a tuios proxy.
-func noPreambleReason(tr Transport) string {
+// awaitChildExit tells the two no-preamble failures apart. A child that has
+// already exited is ssh giving up, or the remote tuios being missing, and its
+// stderr says which. A child still running that never identified itself
+// reached something that is not a tuios proxy. The exit code comes back with
+// the answer, because it is what says whether ssh reached the machine.
+//
+// A transport that is not a child process is reported as still running, which
+// is the answer that blames the link rather than the machine.
+func awaitChildExit(tr Transport) (exited bool, code int) {
 	er, ok := tr.(exitReporter)
 	if !ok {
-		return "The host did not answer as a tuios link."
+		return false, 0
 	}
 	// The pipe closing and the child being reaped are two events, and the pipe
 	// wins the race often enough that asking once would misreport ssh's own
@@ -272,19 +342,27 @@ func noPreambleReason(tr Transport) string {
 	// longer.
 	deadline := time.Now().Add(exitGrace)
 	for {
-		if exited, _ := er.Exited(); exited {
-			return "The host did not answer."
+		if exited, err := er.Exited(); exited {
+			var ee *exec.ExitError
+			if errors.As(err, &ee) {
+				return true, ee.ExitCode()
+			}
+			return true, 0
 		}
 		if time.Now().After(deadline) {
-			return "The host did not answer as a tuios link."
+			return false, 0
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 }
 
-// exitGrace is how long noPreambleReason waits for a child that closed its pipe
+// exitGrace is how long awaitChildExit waits for a child that closed its pipe
 // to be reaped.
 const exitGrace = 250 * time.Millisecond
+
+// sshExitCode is what ssh exits with for its own failures: it could not reach
+// the machine, or was refused by it. Any other code came from the far side.
+const sshExitCode = 255
 
 // handshakeError carries the state a failed handshake should leave behind.
 type handshakeError struct {
