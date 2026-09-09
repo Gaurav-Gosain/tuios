@@ -147,6 +147,10 @@ type Settings struct {
 	// SidebarFileDelete is where a deleted file goes: the trash, or nowhere.
 	SidebarFileDelete string
 
+	// SidebarAgentRow is what an agent row draws and how each token is inked,
+	// from [appearance.sidebar.agent_row]. See sidebar_agent_row.go.
+	SidebarAgentRow SidebarAgentRowSpec
+
 	// Tooltips pops a one-row label naming whatever icon-only control the
 	// pointer is over: a row of the collapsed rail, or one of the dock's session
 	// controls. A glyph is enough to steer by and not enough to read.
@@ -404,6 +408,7 @@ func DefaultSettings() Settings {
 		SidebarFolderClick:          SidebarFolderClickNavigate,
 		SidebarFileActions:          true,
 		SidebarFileDelete:           SidebarFileDeleteTrash,
+		SidebarAgentRow:             DefaultSidebarAgentRow(),
 		Tooltips:                    true,
 		SessionColors:               true,
 		DockWorkspaceTabs:           true,

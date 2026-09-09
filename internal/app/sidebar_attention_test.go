@@ -77,9 +77,12 @@ func TestAgentsSectionPriorityOrder(t *testing.T) {
 
 // TestRailDrawsAgentsAtTheBottom checks the pinned layout on screen: the
 // sessions header is the rail's first row, and the agents header comes last,
-// with a blank row of slack opening its section. Blank rather than a
+// with the divider's resting grip opening its section. A grip rather than a
 // hairline: that rule was the third on one screen beside the rail edge and
 // the dock separator, and empty space separates as well while saying nothing.
+// The grip is the least the divider can draw and still be found; the rule
+// comes out only under the pointer, the cursor or a drag. See
+// sidebar_split.go.
 func TestRailDrawsAgentsAtTheBottom(t *testing.T) {
 	m, tree := attentionOS(t, 120, 40)
 	lines, _ := m.sidebarPanelLinesForTree(tree)
@@ -97,11 +100,12 @@ func TestRailDrawsAgentsAtTheBottom(t *testing.T) {
 	if agentsRow <= 0 {
 		t.Fatalf("agents header at row %d, want it below the sessions section", agentsRow)
 	}
-	if got := strings.TrimSpace(stripANSIForTrace(lines[agentsRow-1])); got != "│" && got != "" {
-		t.Fatalf("row %d = %q, want a blank row opening the agents section", agentsRow-1, lines[agentsRow-1])
+	grip := strings.Repeat(sidebarDividerGlyph(&config.Global), sidebarDividerGrip)
+	if got := strings.Join(strings.Fields(stripANSIForTrace(lines[agentsRow-1])), " "); got != grip+" │" && got != grip {
+		t.Fatalf("row %d = %q, want the divider's grip opening the agents section", agentsRow-1, lines[agentsRow-1])
 	}
 	if rule := config.Global.GetWindowSeparatorChar(); strings.Contains(lines[agentsRow-1], strings.Repeat(rule, 4)) {
-		t.Fatalf("row %d still draws the hairline: %q", agentsRow-1, lines[agentsRow-1])
+		t.Fatalf("row %d still draws the hairline at rest: %q", agentsRow-1, lines[agentsRow-1])
 	}
 }
 

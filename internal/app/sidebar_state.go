@@ -58,6 +58,10 @@ type sidebarStateFile struct {
 	// Collapsed is the rail folded to its glyph strip. Absent means expanded,
 	// which is what every file written before the toggle existed says.
 	Collapsed bool `json:"collapsed,omitempty"`
+	// SectionSplit is the pinned section's dragged share of the rail in
+	// percent. Absent means the layout's own share, so a file written before
+	// the divider existed lays the rail out as it always did.
+	SectionSplit int `json:"section_split,omitempty"`
 	// Socket is the daemon socket the window IDs in this file were written
 	// against. Window IDs are only unique within one daemon, and this file is
 	// keyed by the XDG state directory, so two daemons on different sockets
@@ -91,6 +95,9 @@ func (m *OS) loadSidebarState() {
 	}
 	m.SidebarAgentFilter, m.SidebarAgentSort = st.AgentsFilter, st.AgentsSort
 	m.SidebarCollapsed = st.Collapsed
+	if st.SectionSplit >= sidebarSplitMin && st.SectionSplit <= sidebarSplitMax {
+		m.SidebarSectionSplit = st.SectionSplit
+	}
 	m.sidebarStateSocket = st.Socket
 	// A stored drag width wins over the config default; GetSidebarWidth still
 	// folds it against the breakpoints and pane floor, so an out-of-range value
@@ -118,6 +125,7 @@ func (m *OS) saveSidebarState() {
 		AgentsFilter: m.SidebarAgentFilter,
 		AgentsSort:   m.SidebarAgentSort,
 		Collapsed:    m.SidebarCollapsed,
+		SectionSplit: m.SidebarSectionSplit,
 		Socket:       m.sidebarStateSocket,
 	})
 	if err != nil {

@@ -50,6 +50,11 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarRelease(mouse.X, mouse.Y)
 		return o, nil
 	}
+	if o.SidebarSplitActive() {
+		mouse := msg.Mouse()
+		o.SidebarSplitRelease(mouse.X, mouse.Y)
+		return o, nil
+	}
 	if o.SidebarEdgeActive() {
 		mouse := msg.Mouse()
 		o.SidebarEdgeRelease(mouse.X, mouse.Y)

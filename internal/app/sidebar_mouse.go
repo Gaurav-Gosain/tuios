@@ -52,14 +52,6 @@ func (m *OS) ToggleSidebar() {
 	} else {
 		m.ClampWindowsToView()
 	}
-	// The listing the rail labels sessions from is polled slowly, or not at
-	// all, while the rail is hidden, and the poll re-plans only when its timer
-	// fires. A rail that opens should read as it is now rather than as of half
-	// a minute ago, so the open asks Update to re-plan the poll; see
-	// foreignSessionReplanCmd.
-	if m.Settings.SidebarEnabled {
-		m.foreignSessionReplan = true
-	}
 }
 
 // SidebarActive reports whether the sidebar reserves any columns this frame, so
@@ -232,6 +224,10 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 		m.queueSidebarCmd(m.FileViewUp())
 	case sidebarRowFileEntry:
 		m.queueSidebarCmd(m.FileViewEnter(hit.WindowIndex))
+	case sidebarRowDivider:
+		// A press arms the split drag; a second press inside the double-click
+		// window resets the split instead.
+		m.sidebarSplitPress()
 	case sidebarRowSession:
 		m.SidebarDrag = sidebarDragState{
 			PressActive: true,
@@ -362,6 +358,8 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 		m.queueSidebarCmd(m.FileViewUp())
 	case sidebarRowFileEntry:
 		m.queueSidebarCmd(m.FileViewEnter(hit.WindowIndex))
+	case sidebarRowDivider:
+		m.SidebarResetSplit()
 	case sidebarRowSession:
 		m.sidebarSwitchSession(hit.SessionID)
 	}

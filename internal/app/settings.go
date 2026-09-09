@@ -350,6 +350,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.sidebar.position"),
 			opt("appearance.sidebar.width"),
 			custom("appearance.sidebar.sections", m.sectionLayoutItem()),
+			custom("", m.agentRowItem()),
 			opt("appearance.sidebar.show_glyphs"),
 			opt("appearance.sidebar.show_counts"),
 			opt("appearance.sidebar.file_icons"),
@@ -615,6 +616,38 @@ func (m *OS) sectionLayoutItem() settingItem {
 			return strconv.Itoa(n) + " sections"
 		},
 		activate: func(m *OS) tea.Cmd { m.OpenSectionEditor(); return nil },
+	}
+}
+
+// agentRowItem shows what the agent rows are configured to draw: the tokens in
+// force and how many value rules colour them. The table behind it is a list of
+// tables with an ordered rule list under each, which is not a shape a settings
+// row can edit, so this row says what is set and where to set it. Enter names
+// the file.
+func (m *OS) agentRowItem() settingItem {
+	return settingItem{
+		Label:   "Agent row",
+		Desc:    "The tokens an agent row shows, and the value rules that colour them. Set them in config.toml under [appearance.sidebar.agent_row].",
+		Control: controlEnum,
+		value: func(m *OS) string {
+			spec := m.sidebarAgentRowSpec()
+			if !spec.Custom() {
+				return "default"
+			}
+			tokens := strconv.Itoa(len(spec.Tokens)) + " " + plural("token", len(spec.Tokens))
+			if n := spec.RuleCount(); n > 0 {
+				return tokens + ", " + strconv.Itoa(n) + " " + plural("rule", n)
+			}
+			return tokens
+		},
+		activate: func(m *OS) tea.Cmd {
+			path, err := config.GetConfigPath()
+			if err != nil {
+				path = "config.toml"
+			}
+			m.ShowNotification("Edit [appearance.sidebar.agent_row] in "+path, "info", m.Settings.NotificationDuration*2)
+			return nil
+		},
 	}
 }
 

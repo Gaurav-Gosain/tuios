@@ -125,6 +125,13 @@ func (m *OS) sidebarSignature() uint64 {
 	// it was missing from this key for as long as it has existed: a rail redrawn
 	// after the layout moved and nothing else did was served the old frame.
 	mixS(m.Settings.SidebarSections)
+	// The dragged split rewrites the pinned section's share, and the drag
+	// itself brightens the divider.
+	mixI(m.SidebarSectionSplit)
+	// The agent row's tokens and their value rules decide what every agent
+	// row prints and in what ink.
+	mixS(m.Settings.SidebarAgentRow.Fingerprint)
+	mixB(m.sidebarSplit.Active)
 	mixB(m.Settings.SidebarShowGlyphs)
 	mixB(m.Settings.SidebarShowCounts)
 	// The mailbox mirror: an unread count beside an agent row, and the count
@@ -152,6 +159,11 @@ func (m *OS) sidebarSignature() uint64 {
 	mixS(m.sidebarAgentAnchor.SessionID)
 	mixS(m.sidebarAgentAnchor.WindowID)
 	mixI(m.FocusedWindow)
+	// The reveal is not folded. It acts on the difference between this frame's
+	// focus and the last one's, and both halves of that are already here: the
+	// focused pane above, the attached session and the offsets it moves below.
+	// A cache hit is a frame whose focus did not change, which is exactly a
+	// frame the reveal would have left alone.
 	mixB(m.SidebarHoverActive)
 	mixI(m.SidebarHoverX)
 	mixI(m.SidebarHoverY)

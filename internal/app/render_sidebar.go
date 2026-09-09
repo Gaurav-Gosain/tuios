@@ -96,6 +96,10 @@ const (
 	// creates a session on that machine and opens it. It carries the host name
 	// in SessionID.
 	sidebarRowHostNew
+	// sidebarRowDivider is the rule above the pinned section. Dragging it moves
+	// the split between that section and the ones over it; a double-click, or
+	// enter with the cursor on it, resets the split. See sidebar_split.go.
+	sidebarRowDivider
 )
 
 // sidebarAddGlyph is the mark both add controls wear. One cell, so it costs a
@@ -328,6 +332,8 @@ type sidebarAgentEntry struct {
 	// Foreign marks a pane of a session other than the attached one, whose row
 	// carries the session name for context.
 	Foreign bool
+	// Host is the machine the pane's session is on, empty for this one.
+	Host string
 }
 
 // sidebarTerminalEntry is one pane of the session the terminals section is
@@ -549,6 +555,126 @@ func sidebarHeaderLabelW(label string) int { return 1 + lipgloss.Width(label) }
 type sidebarTokenSpan struct {
 	Kind   sidebarRowKind
 	X0, X1 int
+	// WindowID tells two tokens of one kind apart in the nav list, which
+	// matches rows by identity. The agents header's count token cycles the
+	// filter exactly as the filter token does, so it shares that kind; without
+	// a mark of its own the keyboard cursor could not say which of the two it
+	// was on.
+	WindowID string
+}
+
+// sidebarCountTokenID is the WindowID the agents header's count token carries.
+const sidebarCountTokenID = "count"
+
+// sidebarAgentCountInfo is the agents header's readout: how many of the listed
+// panes want a human, how many have finished and not been looked at, and the
+// worst of the blocked states, which colours the short form.
+type sidebarAgentCountInfo struct {
+	Blocked, Done int
+	Worst         string
+}
+
+// sidebarAgentCounts counts the listed panes the way the collapsed strip's
+// badge counts the rail as a whole: a state wanting a human is blocked, and a
+// finished pane nobody has looked at is done. Counted over the rows the section
+// lists rather than over every session, so the figure and the rows under it
+// never disagree while the filter is on.
+func sidebarAgentCounts(agents []sidebarAgentEntry) sidebarAgentCountInfo {
+	var c sidebarAgentCountInfo
+	rank := 0
+	for _, e := range agents {
+		b, d := sidebarAttentionCounts(e.State, e.DoneSeen)
+		if b {
+			c.Blocked++
+			if r := sessiontree.AgentRank(e.State, e.DoneSeen); r > rank {
+				c.Worst, rank = e.State, r
+			}
+		}
+		if d {
+			c.Done++
+		}
+	}
+	return c
+}
+
+// words is the readout in full: "2 blocked · 1 done", leaving out a figure
+// that is zero and saying nothing when both are.
+func (c sidebarAgentCountInfo) words() string {
+	var parts []string
+	if c.Blocked > 0 {
+		parts = append(parts, strconv.Itoa(c.Blocked)+" blocked")
+	}
+	if c.Done > 0 {
+		parts = append(parts, strconv.Itoa(c.Done)+" done")
+	}
+	return strings.Join(parts, sidebarAgentSep())
+}
+
+// The count's three forms, longest first. A rail takes the first that fits
+// beside the controls.
+const (
+	countWords   = iota // "2 blocked · 1 done"
+	countGlyphs         // "2▲ 1●", the strip badge's language
+	countBlocked        // "2▲", the alarm alone, which is all the strip badge counts
+)
+
+// glyphs is the readout in the strip badge's language, for a rail with no room
+// for the words: each count against its state's glyph, "2▲ 1●", or the blocked
+// figure alone.
+func (c sidebarAgentCountInfo) glyphs(blockedOnly bool) string {
+	var parts []string
+	if c.Blocked > 0 {
+		parts = append(parts, strconv.Itoa(c.Blocked)+agentStateIndicator(c.Worst))
+	}
+	if c.Done > 0 && !blockedOnly {
+		parts = append(parts, strconv.Itoa(c.Done)+agentStateIndicator("done"))
+	}
+	return strings.Join(parts, " ")
+}
+
+// text is the readout in one form.
+func (c sidebarAgentCountInfo) text(form int) string {
+	switch form {
+	case countWords:
+		return c.words()
+	case countGlyphs:
+		return c.glyphs(false)
+	default:
+		return c.glyphs(true)
+	}
+}
+
+// render draws one form. The words are muted, the glyph forms carry each
+// figure in its state's colour, and any of them reads Fg under the pointer.
+func (c sidebarAgentCountInfo) render(form int, hover bool, pal overlay.Palette) string {
+	if hover {
+		return sidebarStyle(nil, pal.Fg).Render(c.text(form))
+	}
+	if form == countWords {
+		return sidebarStyle(nil, pal.FgMute).Render(c.words())
+	}
+	var parts []string
+	if c.Blocked > 0 {
+		parts = append(parts, sidebarStyle(nil, sidebarSeverityColor(c.Worst, pal)).
+			Render(strconv.Itoa(c.Blocked)+agentStateIndicator(c.Worst)))
+	}
+	if c.Done > 0 && form == countGlyphs {
+		parts = append(parts, sidebarStyle(nil, pal.Success).Render(strconv.Itoa(c.Done)+agentStateIndicator("done")))
+	}
+	return strings.Join(parts, " ")
+}
+
+// sidebarAgentCountText is the words form, for callers that only need the
+// text.
+func sidebarAgentCountText(blocked, done int) string {
+	return sidebarAgentCountInfo{Blocked: blocked, Done: done}.words()
+}
+
+// sidebarAttentionCounts is the one predicate behind every "N blocked" and "N
+// done" the rail prints: a state wanting a human counts as blocked, and a
+// finished pane nobody has looked at counts as done.
+func sidebarAttentionCounts(state string, doneSeen bool) (blocked, done bool) {
+	return sidebarAttention(state), state == "done" && !doneSeen
 }
 
 // sidebarAgentsControls renders the agents header's filter and sort tokens,
@@ -559,7 +685,15 @@ type sidebarTokenSpan struct {
 //
 // Returns nothing when the header has no room for both tokens: half a control
 // is half a click target.
-func (m *OS) sidebarAgentsControls(cw, headerW int, pal overlay.Palette, hoverX int) (string, []sidebarTokenSpan) {
+//
+// count is the section's "2 blocked · 1 done" readout, drawn in muted ink in
+// front of the two controls when the header has room for a third element. It
+// gives way in steps: the words go first, for the strip badge's glyph form
+// with both figures; then the done figure goes, leaving the alarm alone,
+// which is all the strip badge counts; then the count goes. It never displaces
+// the mail token or the two controls: all three were here before it, and a
+// rail that fit them must keep fitting them.
+func (m *OS) sidebarAgentsControls(cw, headerW int, pal overlay.Palette, hoverX int, count sidebarAgentCountInfo) (string, []sidebarTokenSpan) {
 	filter, sort := "all", "pri"
 	filterOn, sortOn := false, false
 	if m.sidebarAgentsFilter() == sidebarAgentsSession {
@@ -577,26 +711,58 @@ func (m *OS) sidebarAgentsControls(cw, headerW int, pal overlay.Palette, hoverX 
 	// is the same rule the other two tokens follow for a non-default value.
 	mail, mailOn := sidebarMailToken(m.AgentMailUnread())
 
-	fw, sw, mw := lipgloss.Width(filter), lipgloss.Width(sort), lipgloss.Width(mail)
+	fw, sw := lipgloss.Width(filter), lipgloss.Width(sort)
 	sepW := lipgloss.Width(sep)
-	total := fw + sepW + sw + sepW + mw
-	x0 := cw - 1 - total
-	// The mail token gives way first: the two controls that shape the section
-	// were here before it, and a rail that fit them must keep fitting them.
-	if x0 < headerW+1 {
-		mail, mw = "", 0
-		total = fw + sepW + sw
-		x0 = cw - 1 - total
+	room := cw - 1 - (headerW + 1)
+	fits := func(countText, mailText string) bool {
+		total := fw + sepW + sw
+		if mailText != "" {
+			total += sepW + lipgloss.Width(mailText)
+		}
+		if countText != "" {
+			total += lipgloss.Width(countText) + sepW
+		}
+		return total <= room
 	}
-	if x0 < headerW+1 {
+	// The mail token yields before the count is even asked, as it did before
+	// the count existed.
+	if !fits("", mail) {
+		mail = ""
+	}
+	if !fits("", "") {
 		return "", nil
 	}
-	spans := []sidebarTokenSpan{
-		{Kind: sidebarRowAgentFilter, X0: x0, X1: x0 + fw},
-		{Kind: sidebarRowAgentSort, X0: x0 + fw + sepW, X1: x0 + fw + sepW + sw},
+	countText, form := "", countWords
+	if count.words() != "" {
+		for form = countWords; form <= countBlocked; form++ {
+			if text := count.text(form); text != "" && fits(text, mail) {
+				countText = text
+				break
+			}
+		}
 	}
+	mw, kw := lipgloss.Width(mail), lipgloss.Width(countText)
+	total := fw + sepW + sw
+	if mw > 0 {
+		total += sepW + mw
+	}
+	if kw > 0 {
+		total += kw + sepW
+	}
+	x0 := cw - 1 - total
+	var spans []sidebarTokenSpan
+	x := x0
+	if countText != "" {
+		spans = append(spans, sidebarTokenSpan{Kind: sidebarRowAgentFilter, X0: x, X1: x + kw, WindowID: sidebarCountTokenID})
+		x += kw + sepW
+	}
+	filterSpan := sidebarTokenSpan{Kind: sidebarRowAgentFilter, X0: x, X1: x + fw}
+	sortSpan := sidebarTokenSpan{Kind: sidebarRowAgentSort, X0: x + fw + sepW, X1: x + fw + sepW + sw}
+	spans = append(spans, filterSpan, sortSpan)
+	var mailSpan sidebarTokenSpan
 	if mail != "" {
-		spans = append(spans, sidebarTokenSpan{Kind: sidebarRowAgentMail, X0: x0 + total - mw, X1: x0 + total})
+		mailSpan = sidebarTokenSpan{Kind: sidebarRowAgentMail, X0: x0 + total - mw, X1: x0 + total}
+		spans = append(spans, mailSpan)
 	}
 	ink := func(on bool, s sidebarTokenSpan) color.Color {
 		if on || (hoverX >= s.X0 && hoverX < s.X1) {
@@ -604,11 +770,16 @@ func (m *OS) sidebarAgentsControls(cw, headerW int, pal overlay.Palette, hoverX 
 		}
 		return pal.FgMute
 	}
-	out := sidebarStyle(nil, ink(filterOn, spans[0])).Render(filter) +
+	out := ""
+	if countText != "" {
+		hover := hoverX >= spans[0].X0 && hoverX < spans[0].X1
+		out = count.render(form, hover, pal) + sidebarStyle(nil, pal.FgMute).Render(sep)
+	}
+	out += sidebarStyle(nil, ink(filterOn, filterSpan)).Render(filter) +
 		sidebarStyle(nil, pal.FgMute).Render(sep) +
-		sidebarStyle(nil, ink(sortOn, spans[1])).Render(sort)
+		sidebarStyle(nil, ink(sortOn, sortSpan)).Render(sort)
 	if mail != "" {
-		mailInk := ink(mailOn, spans[2])
+		mailInk := ink(mailOn, mailSpan)
 		if mailOn {
 			mailInk = pal.AccentBright
 		}
@@ -936,6 +1107,8 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	if sidebarLayoutPins(plans) {
 		pinned = plans[len(plans)-1].Section
 	}
+	// The dragged split, written over the pinned section's share.
+	plans = m.sidebarApplySplit(plans, pinned)
 
 	// A second line per agent row carries the harness and the note the pane
 	// reported, which is the one thing on the rail no other row can say. It is
@@ -974,7 +1147,12 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	}
 	avail := height - footerH - chrome
 	budget := sidebarBudgetLines(avail, plans, planRows, planRowH)
-	if nA > 0 && !emptyFilter && sidebarAgentsHaveNotes(agents) {
+	// The row heights before the tall test, which is what the divider's drag
+	// re-runs the test against.
+	shortRowH := make([]int, len(planRowH))
+	copy(shortRowH, planRowH)
+	var tallRowH []int
+	if nA > 0 && !emptyFilter && m.sidebarAgentsHaveNotes(agents, variant) {
 		tall := make([]int, len(plans))
 		copy(tall, planRowH)
 		at := -1
@@ -984,6 +1162,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			}
 		}
 		if at >= 0 {
+			tallRowH = tall
 			if grown := sidebarBudgetLines(avail, plans, planRows, tall); grown[at] >= nA*sidebarAgentRowTall {
 				budget, planRowH, agentRowH = grown, tall, sidebarAgentRowTall
 				rowH[sidebarSectionAgents] = sidebarAgentRowTall
@@ -995,6 +1174,21 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		used += n
 	}
 	slack := max(avail-used, 0)
+	// The divider stands on the floating line above the pinned block, and only
+	// when something is drawn above it to split from. What the drag needs to
+	// turn a pointer row into a share is written down here, in this frame's
+	// numbers.
+	hasDivider := pinned != sidebarSectionCount && rowsIn[pinned] > 0 && drawn > 1
+	pinnedAt := -1
+	for i, p := range plans {
+		if !p.Spacer && p.Section == pinned {
+			pinnedAt = i
+		}
+	}
+	m.sidebarSplitGeom = sidebarSplitGeom{
+		Plans: plans, Rows: planRows, RowH: shortRowH, TallH: tallRowH,
+		Pinned: pinnedAt, Agents: nA, Avail: avail, Bottom: height - footerH, Valid: hasDivider,
+	}
 
 	// Where each section's lines land, in the rail's own coordinates. Computed
 	// before any row is rendered so hover resolves against the draw's arithmetic
@@ -1078,6 +1272,12 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	for s := range capRows {
 		capRows[s] = place[s].lines / rowH[s]
 	}
+	// The reveal: a focus change scrolls the terminals section to the focused
+	// pane and the sessions section to the attached session. After the agents
+	// anchor above and before the cursor's auto-scroll below, so the three
+	// mechanisms agree on what is on screen and the cursor keeps the last word.
+	// See sidebar_reveal.go.
+	m.sidebarRevealFocus(sessions, terminals, capRows[sidebarSectionTerminals], capRows[sidebarSectionSessions])
 	if m.SidebarFocused && haveCursorTarget {
 		if sec, idx, ok := m.sidebarCursorIndex(cursorTarget, sessions, terminals, agents, files); ok {
 			if rows := capRows[sec]; rows > 0 {
@@ -1095,6 +1295,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		*scroll[s] = start[s]
 	}
 	m.sidebarRecordAgentAnchor(agents, start[sidebarSectionAgents], count[sidebarSectionAgents])
+	m.sidebarRecordReveal()
 
 	// Hover, derived from the last motion seen inside the band, resolved against
 	// the placement above. Hover yields entirely to a drag.
@@ -1103,6 +1304,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		hoverRow[s] = -1
 	}
 	footerHoverLine, footerHoverX := -1, -1
+	dividerHover := false
 	// Every header now carries click targets of its own (the add controls, the
 	// agents section's filter and sort, the files section's cd), so the
 	// pointer's column on a header line matters as well as which line it is on.
@@ -1124,6 +1326,8 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			footerHoverLine, footerHoverX = delta-footerTop, m.SidebarHoverX-contentX0
 		case onHeader >= 0:
 			headerHoverX[onHeader] = m.SidebarHoverX - contentX0
+		case hasDivider && delta == place[pinned].y0:
+			dividerHover = true
 		default:
 			for s := range place {
 				if place[s].header < 0 {
@@ -1178,9 +1382,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			Y0: y, Y1: y + 1,
 			Kind:        tk.Kind,
 			SessionID:   sessionID,
+			WindowID:    tk.WindowID,
 			WindowIndex: -1,
 		})
-		nav = append(nav, sidebarNavRow{Kind: tk.Kind, SessionID: sessionID, WindowIndex: -1})
+		nav = append(nav, sidebarNavRow{Kind: tk.Kind, SessionID: sessionID, WindowID: tk.WindowID, WindowIndex: -1})
 	}
 
 	drawSessions := func() {
@@ -1296,8 +1501,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		// a pane running an agent CLI, which is exactly what the terminals section
 		// makes. A "+" on this header would be a second name for new-terminal
 		// pointing at a list the rail only observes.
+		// The count is over the rows the section lists, so a filter that hides
+		// a session hides its figures with it.
 		controls, tokens := m.sidebarAgentsControls(cw, sidebarHeaderLabelW("agents"), pal,
-			headerHoverX[sidebarSectionAgents])
+			headerHoverX[sidebarSectionAgents], sidebarAgentCounts(agents))
 		for _, tk := range tokens {
 			recordToken(tk, "")
 		}
@@ -1319,7 +1526,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex, rowH[sidebarSectionAgents])
 			lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, hovered, tall)))
 			if tall {
-				lines = append(lines, compose(m.sidebarAgentNoteRow(e, cw, pal, hovered)))
+				lines = append(lines, compose(m.sidebarAgentNoteRow(e, variant, cw, pal, hovered)))
 			}
 		}
 		if h := hidden[sidebarSectionAgents]; h > 0 {
@@ -1347,7 +1554,13 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			for range slack {
 				lines = append(lines, blank)
 			}
-			lines = append(lines, blank)
+			if hasDivider {
+				recordHit(sidebarRowDivider, "", "", -1, 1)
+				active := dividerHover || m.sidebarSplit.Active || isCursor(sidebarRowDivider, "", "")
+				lines = append(lines, compose(m.sidebarDividerRow(cw, pal, active)))
+			} else {
+				lines = append(lines, blank)
+			}
 		}
 		draw[p.Section]()
 	}
@@ -1518,6 +1731,7 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 				Message:      win.Message,
 				WindowIndex:  idx,
 				Foreign:      !s.IsCurrent,
+				Host:         s.Host,
 			})
 		}
 	}
@@ -1766,20 +1980,8 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	if node.IsCurrent || hovered || dragged {
 		fg = pal.Fg
 	}
-	title := printableTitle(node.Title)
-	avail := sidebarNameAvail(cw, rightW)
-	// The branch rides after the name in muted ink, and only when the two fit
-	// together: a name that has to scroll wants every column, and a branch
-	// with its name cut from under it says nothing.
-	branch := ""
-	if b := printableTitle(node.Branch); b != "" && variant == sidebarVariantFull {
-		if need := lipgloss.Width(title) + 1 + lipgloss.Width(b); need <= avail {
-			branch = sidebarStyle(rowBg, nil).Render(" ") + sidebarStyle(rowBg, pal.FgMute).Render(b)
-			avail -= 1 + lipgloss.Width(b)
-		}
-	}
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).
-		Render(m.sidebarMarquee("s:"+node.ID, title, avail, hovered)) + branch
+		Render(m.sidebarMarquee("s:"+node.ID, printableTitle(node.Title), sidebarNameAvail(cw, rightW), hovered))
 
 	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal, &m.Settings)
 	if tint != nil && stated && !node.IsCurrent && !sidebarAttention(node.AgentState) {
@@ -1911,87 +2113,9 @@ func sidebarHarnessLabel(harness string) string {
 	return overlay.Truncate(strings.ToLower(id), sidebarHarnessMax)
 }
 
-// sidebarAgentPrefix is the muted context in front of an agent row's name: which
-// session the pane is in when it is not this one, and which agent is running in
-// it. It returns what fits, including the trailing separator, or "".
-//
-// Two facts compete for the same cells, so they yield in order. The session goes
-// first because the row's gutter already carries a tint for a pane that is
-// somewhere else, while nothing else on the row says which agent it is. Whatever
-// survives that is still dropped whole before a single cell of the pane name
-// goes, which is the rule the session prefix has always followed.
-func sidebarAgentPrefix(session, harness, name string, avail int) string {
-	var parts []string
-	if session != "" {
-		parts = append(parts, session)
-	}
-	// A pane running an agent is usually already labelled with its command, so a
-	// row reading "claude/claude" would spend half its width saying one thing
-	// twice. The prefix earns its cells only when it adds a name.
-	if h := sidebarHarnessLabel(harness); h != "" && !strings.EqualFold(h, name) {
-		parts = append(parts, h)
-	}
-	for len(parts) > 0 {
-		if s := strings.Join(parts, "/") + "/"; lipgloss.Width(s)+2 <= avail {
-			return s
-		}
-		parts = parts[1:]
-	}
-	return ""
-}
-
 // sidebarAgentRowTall is how many lines a tall agent row takes: the identity
 // line, and the note under it.
 const sidebarAgentRowTall = 2
-
-// sidebarAgentsHaveNotes reports whether any of these agents has something to
-// put on a second line. A section where none of them does would pay two lines a
-// row for a column of blanks.
-func sidebarAgentsHaveNotes(agents []sidebarAgentEntry) bool {
-	// Wider than any rail, so what is asked here is whether the note exists at
-	// all rather than whether it would fit at some particular width.
-	const unbounded = 1 << 20
-	for _, e := range agents {
-		if sidebarAgentNote(e, unbounded) != "" {
-			return true
-		}
-	}
-	return false
-}
-
-// sidebarAgentNote is the second line's text: which agent this is, and the note
-// it reported, joined by the separator the rail uses everywhere else.
-//
-// The note gives way before the harness name. Which agent a row is stays true
-// at any width, where half a sentence is not a shorter sentence, so a rail
-// squeezed narrow keeps "claude" and drops what it was doing.
-func sidebarAgentNote(e sidebarAgentEntry, avail int) string {
-	harness, note := sidebarHarnessLabel(e.Harness), printableTitle(e.Message)
-	// The same rule the prefix followed on the line above: a pane running an
-	// agent is usually already named after it, and "claude" over "claude" spends
-	// a line saying one thing twice.
-	if strings.EqualFold(harness, sidebarAgentName(e)) {
-		harness = ""
-	}
-	switch {
-	case harness == "" && note == "":
-		return ""
-	case note == "":
-		return overlay.Truncate(harness, avail)
-	case harness == "":
-		return overlay.Truncate(note, avail)
-	}
-	sep := " · "
-	if overlay.UseASCII() {
-		sep = " . "
-	}
-	// Two cells is the least a truncated note can say that a bare ellipsis does
-	// not; below that the row is better off spending everything on the name.
-	if room := avail - lipgloss.Width(harness) - lipgloss.Width(sep); room >= 2 {
-		return harness + sep + overlay.Truncate(note, room)
-	}
-	return overlay.Truncate(harness, avail)
-}
 
 // sidebarAgentName is what an agent row calls the pane it points at.
 func sidebarAgentName(e sidebarAgentEntry) string {
@@ -2012,22 +2136,65 @@ func sidebarAgentName(e sidebarAgentEntry) string {
 //
 // It is drawn in the quiet tier, which is the point: the loud thing on an agent
 // row is the state, and a sentence in the same ink as the name would outrank the
-// pane it is about.
-func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, cw int, pal overlay.Palette, hovered bool) string {
+// pane it is about. The note gives way before the harness name: which agent a
+// row is stays true at any width, where half a sentence is not a shorter
+// sentence.
+func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, hovered bool) string {
 	var rowBg color.Color
 	if hovered {
 		rowBg = pal.Surface
 	}
 	indent := sidebarNameCol + 1
-	text := sidebarAgentNote(e, sidebarNameAvail(cw, 0)-1)
-	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent))+
-		sidebarStyle(rowBg, pal.FgMute).Render(text), cw, rowBg)
+	avail := sidebarNameAvail(cw, 0) - 1
+	plan := m.sidebarAgentTokensFor(e, variant, true, time.Now())
+	quiet := sidebarStyle(rowBg, pal.FgMute)
+	text := m.sidebarAgentNoteText(plan.Note, quiet, avail, pal)
+	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent))+text, cw, rowBg)
+}
+
+// sidebarAgentNoteText draws the note line's tokens in avail cells. The last
+// token is cut before any earlier one is dropped, so a long message loses its
+// tail while the harness in front of it stays whole; below two cells of it the
+// line is better off spending everything on what comes first.
+func (m *OS) sidebarAgentNoteText(tokens []sidebarAgentToken, quiet lipgloss.Style, avail int, pal overlay.Palette) string {
+	sep := sidebarAgentSep()
+	for len(tokens) > 0 {
+		head := tokens[:len(tokens)-1]
+		last := tokens[len(tokens)-1]
+		headW := 0
+		for i, tk := range head {
+			if i > 0 {
+				headW += lipgloss.Width(sep)
+			}
+			headW += lipgloss.Width(tk.Text)
+		}
+		room := avail - headW
+		if len(head) > 0 {
+			room -= lipgloss.Width(sep)
+		}
+		if room >= 2 || (len(head) == 0 && room >= 1) {
+			var b strings.Builder
+			for i, tk := range head {
+				if i > 0 {
+					b.WriteString(quiet.Render(sep))
+				}
+				b.WriteString(m.sidebarTokenStyle(quiet, tk, pal).Render(tk.Text))
+			}
+			if len(head) > 0 {
+				b.WriteString(quiet.Render(sep))
+			}
+			b.WriteString(m.sidebarTokenStyle(quiet, last, pal).Render(overlay.Truncate(last.Text, room)))
+			return b.String()
+		}
+		tokens = head
+	}
+	return ""
 }
 
 // sidebarAgentRow renders the identity line of one row of the agents section:
-// state glyph, the agent and pane it names (session-qualified when the pane
-// lives in another session), and, in the full variant, how long it has been in
-// its state, right-aligned.
+// state glyph, the tokens the row is configured to carry around the pane's
+// name (session-qualified when the pane lives in another session), and, in the
+// full variant, how long it has been in its state, right-aligned.
 //
 // tall says the row has a note line under it, which is where the harness name
 // goes: carrying it here as well would print one thing twice, and the line has
@@ -2043,24 +2210,20 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 		fg = pal.Fg
 	}
 
-	name := sidebarAgentName(e)
-	// A pane in another session carries that session as a prefix. It is context,
-	// not the answer, so it renders muted against the full-strength pane name and
-	// gives its cells up first when the row runs out of room.
-	session := ""
-	if e.Foreign {
-		session = printableTitle(e.SessionLabel)
+	plan := m.sidebarAgentTokensFor(e, variant, tall, time.Now())
+	name := plan.Name.Text
+	// A row whose list leaves the name out still needs one thing to be the
+	// row: the name is what every other token is about.
+	if name == "" && len(plan.Prefix) == 0 && len(plan.After) == 0 {
+		plan.Name = m.sidebarAgentTokenValue("name", e, variant, time.Now())
+		name = plan.Name.Text
 	}
 
 	// How long the pane has been in this state, in place of a state word: the
 	// glyph, colour and sort position already say which state it is, while the
 	// duration is the part nothing else carries. A pane waiting twenty minutes
 	// on input reads very differently from one that just asked.
-	label, labelW := "", 0
-	if variant == sidebarVariantFull {
-		label = agentElapsed(e.State, e.StateAt, time.Now())
-		labelW = lipgloss.Width(label)
-	}
+	label, labelW := plan.Right.Text, lipgloss.Width(plan.Right.Text)
 	// Mail waiting in this pane's inbox, after the elapsed time: it is the one
 	// thing about an agent that nothing on its screen shows.
 	mail, mailW := "", 0
@@ -2081,14 +2244,30 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 		nameStyle = nameStyle.Bold(true)
 		timeFg = sidebarStateColor(e.State, e.DoneSeen, pal)
 	}
-	harness := e.Harness
-	if tall {
-		harness = ""
+	quiet := sidebarStyle(rowBg, pal.FgMute)
+	// The tokens after the name give way before the prefix does, and the
+	// prefix before a cell of the name: the name is the answer, the rest is
+	// context, and the state token is the one thing after the name that
+	// carries its own colour.
+	after, afterW := "", 0
+	if len(plan.After) > 0 {
+		baseFor := func(tk sidebarAgentToken) lipgloss.Style {
+			if tk.Name == "state" {
+				return sidebarStyle(rowBg, sidebarStateColor(e.State, e.DoneSeen, pal))
+			}
+			return quiet
+		}
+		after, afterW = m.sidebarAgentRun(plan.After, sidebarAgentSep(), baseFor, quiet,
+			max(avail-lipgloss.Width(name)-lipgloss.Width(sidebarAgentSep()), 0), pal)
+		if after != "" {
+			after = quiet.Render(sidebarAgentSep()) + after
+			afterW += lipgloss.Width(sidebarAgentSep())
+		}
 	}
-	shown := sidebarAgentPrefix(session, harness, name, avail)
+	shown, shownW := m.sidebarAgentPrefixRun(plan.Prefix, quiet, avail-afterW, pal)
 	right := ""
 	if label != "" {
-		right = sidebarStyle(rowBg, timeFg).Render(label)
+		right = m.sidebarTokenStyle(sidebarStyle(rowBg, timeFg), plan.Right, pal).Render(label)
 	}
 	if mail != "" {
 		if right != "" {
@@ -2108,9 +2287,10 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 			gutter = sidebarStyle(rowBg, tint).Render(accentMark())
 		}
 	}
-	body := sidebarStyle(rowBg, pal.FgMute).Render(shown) +
-		nameStyle.Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name,
-			max(avail-lipgloss.Width(shown), 1), hovered))
+	nameRoom := max(avail-shownW-afterW, 1)
+	body := shown +
+		m.sidebarTokenStyle(nameStyle, plan.Name, pal).Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, nameRoom, hovered)) +
+		after
 	return sidebarComposeRow(gutter,
 		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal, &m.Settings), body, right, cw, rowBg)
 }

@@ -1311,20 +1311,6 @@ func (c *TUIClient) SessionLabel(name string) (display, accent string) {
 	return "", ""
 }
 
-// SessionPlace returns the directory label and git branch the daemon reports
-// for the named session's focused pane, both empty when unknown. Read from the
-// cached listing, so it costs no round trip and no file read.
-func (c *TUIClient) SessionPlace(name string) (dir, branch string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, s := range c.availableSessions {
-		if s.Name == name {
-			return s.Dir, s.Branch
-		}
-	}
-	return "", ""
-}
-
 // SessionRestored reports whether the named session came back from saved state
 // and has not been attached to since, from the cached listing. False for an
 // unknown session and for an older daemon that does not send the field, which
@@ -1535,10 +1521,6 @@ func listingsAgree(a, b []SessionInfo) bool {
 		// Attaching to a restored session moves no window either, and the tag has
 		// to come off the row when it does.
 		if a[i].Restored != b[i].Restored {
-			return false
-		}
-		// A cd moves no window either, and the row's label is the directory.
-		if a[i].Dir != b[i].Dir || a[i].Branch != b[i].Branch {
 			return false
 		}
 		if !slices.Equal(a[i].Windows, b[i].Windows) {

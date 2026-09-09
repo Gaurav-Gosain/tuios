@@ -71,10 +71,6 @@ type Node struct {
 	// has attached to since: its layout is back and its shells are new. Always
 	// false for window nodes.
 	Restored bool
-	// Branch is the git branch the session's focused pane is in, empty when
-	// it is not in a checkout or the daemon did not say. Always empty for
-	// window nodes.
-	Branch string
 	// Host is the machine a node belongs to, empty for anything on this one. It
 	// is set on a KindHost header and on every session node under it.
 	Host string
@@ -129,13 +125,6 @@ type SessionInput struct {
 	// never reaches ID: the name stays the identity every keyed map, every
 	// switch and the daemon's own addressing use, and only Title moves.
 	DisplayName string
-	// Dir is where the session's focused pane is, as a short label, and it is
-	// the title when there is no DisplayName. The caller offers it only for a
-	// session whose name tuios made up: a name a person chose says more than a
-	// directory does. Branch is the git branch there, and follows whichever
-	// title wins.
-	Dir         string
-	Branch      string
 	Attached    bool
 	IsCurrent   bool
 	WindowCount int
@@ -198,9 +187,6 @@ func RollUpState(states []string) string {
 // and leaves Children nil.
 func BuildSession(s SessionInput) Node {
 	title := s.Name
-	if s.Dir != "" {
-		title = s.Dir
-	}
 	if s.DisplayName != "" {
 		title = s.DisplayName
 	}
@@ -208,7 +194,6 @@ func BuildSession(s SessionInput) Node {
 		Kind:        KindSession,
 		ID:          s.Name,
 		Title:       title,
-		Branch:      s.Branch,
 		Attached:    s.Attached,
 		IsCurrent:   s.IsCurrent,
 		WindowCount: s.WindowCount,

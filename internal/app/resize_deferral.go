@@ -219,6 +219,12 @@ func (m *OS) EndPointerGrabs() {
 		m.SidebarEdge = sidebarEdgeState{}
 		m.saveSidebarState()
 	}
+	// The divider drag ends the same way the edge drag does, keeping the share
+	// it had reached.
+	if m.sidebarSplit.Active {
+		m.sidebarSplit.Active = false
+		m.saveSidebarState()
+	}
 }
 
 // EndStrayGesture ends a drag or resize that something other than the window
