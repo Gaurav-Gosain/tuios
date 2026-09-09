@@ -11,16 +11,16 @@ import (
 // the socket is the whole remedy.
 var ErrDaemonStarting = errors.New("another TUIOS daemon is starting")
 
-// startLockPath returns the lock file guarding daemon startup. It sits beside
-// the socket and is never removed: a lock is an inode, and deleting it would let
-// two starters hold locks on two different inodes, which is the race it exists
-// to prevent.
-func startLockPath() (string, error) {
-	socketPath, err := GetSocketPath()
-	if err != nil {
-		return "", err
-	}
-	return socketPath + ".lock", nil
+// startLockPath returns the lock file guarding the startup of the daemon on
+// socketPath. It sits beside the socket and is never removed: a lock is an
+// inode, and deleting it would let two starters hold locks on two different
+// inodes, which is the race it exists to prevent.
+//
+// It is keyed by the daemon's own socket rather than the default one, so a
+// daemon on a chosen socket locks itself and not the daemon of the runtime
+// directory.
+func startLockPath(socketPath string) string {
+	return socketPath + ".lock"
 }
 
 // acquireStartLock takes the exclusive startup lock, returning ErrDaemonStarting
@@ -35,12 +35,8 @@ func startLockPath() (string, error) {
 //
 // The returned file must stay open for the daemon's life; closing it releases
 // the lock.
-func acquireStartLock() (*os.File, error) {
-	path, err := startLockPath()
-	if err != nil {
-		return nil, err
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0600)
+func acquireStartLock(socketPath string) (*os.File, error) {
+	f, err := os.OpenFile(startLockPath(socketPath), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open daemon start lock: %w", err)
 	}

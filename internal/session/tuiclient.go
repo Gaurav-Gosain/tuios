@@ -121,8 +121,11 @@ type TUIClient struct {
 
 	// clientBuild and daemonBuild are the two builds that met at the handshake.
 	// See BuildMismatch.
-	clientBuild         string
-	daemonBuild         string
+	clientBuild string
+	daemonBuild string
+	// viaHost is the host this client reached the daemon through, or "" for
+	// the daemon on this machine. See ConnectThroughHost.
+	viaHost             string
 	disconnectHandler   DisconnectHandler
 	sessionEndedHandler SessionEndedHandler
 	// agentMailHandler takes each message the daemon pushes from the session's
@@ -199,6 +202,18 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 	c.conn = conn
 	c.br = nil
 
+	if err := c.handshake(version, width, height, caps); err != nil {
+		_ = conn.Close()
+		return err
+	}
+	return nil
+}
+
+// handshake sends the hello on c.conn and reads the welcome. It is the same
+// exchange whether the daemon on the other end is this machine's or, through
+// ConnectThroughHost, another machine's. The caller closes the connection on
+// an error.
+func (c *TUIClient) handshake(version string, width, height int, caps *ClientCapabilities) error {
 	// Build hello payload with capabilities
 	hello := &HelloPayload{
 		Version:        version,
@@ -222,19 +237,16 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 	// Send hello with capabilities
 	msg, err := NewMessageWithCodec(MsgHello, hello, c.codec)
 	if err != nil {
-		_ = conn.Close()
 		return err
 	}
 
 	if err := c.send(msg); err != nil {
-		_ = conn.Close()
 		return err
 	}
 
 	// Wait for welcome
 	resp, err := c.recv()
 	if err != nil {
-		_ = conn.Close()
 		return err
 	}
 
@@ -243,7 +255,6 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 		// and its message already names the fix.
 		var errPayload ErrorPayload
 		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
-		_ = conn.Close()
 		return fmt.Errorf("the daemon refused this client: %s", errPayload.Message)
 	}
 	if resp.Type != MsgWelcome {
@@ -252,14 +263,12 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 		// pre-v0.8.0 daemon does, since its MsgWelcome is 22 and this build's is
 		// 23, and it is the same fault the version check exists for, so it is
 		// reported the same way rather than as a type number nobody can act on.
-		_ = conn.Close()
 		return numberingMismatch(version, resp.Type)
 	}
 
 	// Parse welcome to get negotiated codec
 	var welcome WelcomePayload
 	if err := resp.ParsePayloadWithCodec(&welcome, c.codec); err != nil {
-		_ = conn.Close()
 		return fmt.Errorf("failed to parse welcome: %w", err)
 	}
 
@@ -267,7 +276,6 @@ func (c *TUIClient) ConnectWithCapabilities(version string, width, height int, c
 	// other side does not speak turns a clear message here into a decode error
 	// or a stall somewhere far from its cause.
 	if protocolMismatch(welcome.Protocol) {
-		_ = conn.Close()
 		return daemonProtocolMismatch(version, &welcome)
 	}
 
@@ -1139,6 +1147,14 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		}
 
 		debugLog("[REMOTE] Received command: type=%s, tapeCmd=%s, args=%v, keys=%s", payload.CommandType, payload.TapeCommand, payload.TapeArgs, payload.Keys)
+
+		if why := c.refuseHostCommand(&payload); why != "" {
+			// A daemon on another machine may drive the session it owns and
+			// nothing else on this machine. See hostCommandAllowed.
+			debugLog("[REMOTE] Refused a command from host %s: %s", c.viaHost, why)
+			_ = c.SendCommandResult(payload.RequestID, false, why)
+			return
+		}
 
 		c.remoteCommandMu.RLock()
 		handler := c.remoteCommandHandler

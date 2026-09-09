@@ -66,6 +66,8 @@ type Daemon struct {
 	// never gets a channel into it (federation package, section 1 of the design
 	// document).
 	federation *federation.Manager
+	// hostDial is DaemonConfig.HostDial, kept for setupFederation.
+	hostDial federation.Dialer
 	// federationMu guards federationProblems and the hosts watcher, both of
 	// which a config reload rewrites while a verb is reading them.
 	federationMu sync.Mutex
@@ -220,6 +222,12 @@ type connState struct {
 	// TUI clients can receive and execute remote commands
 	isTUIClient bool
 
+	// takeover, when a verb sets it, runs after that verb's reply line has been
+	// written and owns the connection from then on; the JSON loop returns
+	// when it does. open-host-connection sets it to relay the connection to
+	// another machine's daemon.
+	takeover func(br *bufio.Reader)
+
 	// attached says the attach reply has been written to this connection, and
 	// it is what broadcastToSession requires before it will send anything.
 	//
@@ -308,6 +316,10 @@ type DaemonConfig struct {
 	// [hosts] table. DaemonConfigFromUser fills it, so every real starter has
 	// it and a hand-built config in a test does not.
 	ConfigPath string
+	// HostDial opens the transport to a host. Nil, the default, runs ssh. A
+	// test sets it to reach a second daemon in the same process without an ssh
+	// server.
+	HostDial federation.Dialer
 }
 
 // NewDaemon creates a new daemon instance.
@@ -354,6 +366,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.manager.SetSessionHooks(d.onSessionCreated, d.onSessionDeleted)
 
 	d.configPath = cfg.ConfigPath
+	d.hostDial = cfg.HostDial
 	d.setupFederation(cfg.Hosts)
 
 	return d
@@ -372,11 +385,15 @@ func (d *Daemon) setupFederation(hosts []federation.Host) {
 		d.federationProblems = append(d.federationProblems, p.Error())
 		log.Printf("[FEDERATION] %v", p)
 	}
-	d.federation = federation.New(table, federation.Options{
+	dial := d.hostDial
+	if dial == nil {
 		// TUIOS_SSH names the ssh program to run. It exists for a machine where
 		// ssh is not on the daemon's PATH, and it is what lets the link layer be
 		// exercised end to end without an ssh server.
-		Dial:            federation.SSHDialer(os.Getenv("TUIOS_SSH")),
+		dial = federation.SSHDialer(os.Getenv("TUIOS_SSH"))
+	}
+	d.federation = federation.New(table, federation.Options{
+		Dial:            dial,
 		ClientName:      "tuios-daemon",
 		ClientVersion:   d.version,
 		VerbProtocol:    VerbProtocolVersion,
@@ -497,7 +514,7 @@ func (d *Daemon) Start() error {
 
 	// Held until shutdown so the stale-socket recovery below can never run
 	// against a daemon that is itself between bind and listen.
-	startLock, err := acquireStartLock()
+	startLock, err := acquireStartLock(socketPath)
 	if err != nil {
 		return err
 	}

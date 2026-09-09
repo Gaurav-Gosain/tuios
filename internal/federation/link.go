@@ -62,6 +62,9 @@ type link struct {
 
 	// ctrl is the live control stream's caller, nil unless status is up.
 	ctrl *caller
+	// mux is the live link's multiplexer, nil unless status is up. It is what
+	// a connection to the remote daemon is opened on.
+	mux *mux
 	// tearDown ends the current attempt. The supervisor waits on it.
 	tearDown func()
 
@@ -197,6 +200,7 @@ func (l *link) attempt(ctx context.Context) bool {
 	// nil accept: the hub answers an inbound open with a close and never hands
 	// a peer a stream. Section 1, invariant 1 of the design document.
 	m := newMuxRW(br, tr, tr, nil, dialerFirstID)
+	m.stallLimit = l.opts.stallLimit
 	muxDone := make(chan struct{})
 	go func() {
 		defer close(muxDone)
@@ -226,6 +230,7 @@ func (l *link) attempt(ctx context.Context) bool {
 	l.mu.Lock()
 	l.shake = shake
 	l.ctrl = c
+	l.mux = m
 	l.tearDown = closeAll
 	l.mu.Unlock()
 	l.set(StatusUp, "The host is answering.", "")
@@ -240,6 +245,7 @@ func (l *link) attempt(ctx context.Context) bool {
 
 	l.mu.Lock()
 	l.ctrl = nil
+	l.mux = nil
 	l.tearDown = nil
 	l.mu.Unlock()
 	closeAll()
@@ -385,6 +391,51 @@ func (l *link) call(ctx context.Context, verb string, params any) (json.RawMessa
 	}
 	return raw, err
 }
+
+// openConnection opens a fresh stream on the live link. On the far side the
+// proxy answers it by dialing that machine's daemon socket, so what comes back
+// is a raw connection to the remote daemon: whatever is written on it reaches
+// that daemon exactly as a local client's bytes would, and whatever the daemon
+// writes comes back the same way.
+//
+// It is the one primitive under every verb that is not a listing. Nothing here
+// reads or interprets what crosses; the caller that owns the two ends does.
+//
+// Like call, a link that is not up fails at once with UnreachableError. A link
+// that is up but cannot take another stream fails with RefusedError, which is a
+// different remedy: the machine is fine, this side has too many connections
+// open to it.
+func (l *link) openConnection() (*Stream, error) {
+	l.mu.Lock()
+	m, status, reason := l.mux, l.status, l.reason
+	l.mu.Unlock()
+	if m == nil {
+		return nil, &UnreachableError{Host: l.host.Name, Status: status, Reason: reason}
+	}
+	s, err := m.Open()
+	if err != nil {
+		if errors.Is(err, ErrTooManyStreams) {
+			return nil, &RefusedError{Host: l.host.Name, Err: err,
+				Reason: fmt.Sprintf("This daemon already holds %d connections to the host. Close one before you open another.", maxStreams)}
+		}
+		return nil, &UnreachableError{Host: l.host.Name, Status: StatusUnreachable, Reason: "The link to the host closed."}
+	}
+	return s, nil
+}
+
+// RefusedError is what an open against a host that is up returns when the link
+// itself cannot carry another connection. Like UnreachableError it is final.
+type RefusedError struct {
+	Host   string
+	Reason string
+	Err    error
+}
+
+func (e *RefusedError) Error() string {
+	return fmt.Sprintf("host %s refused the connection. %s", e.Host, e.Reason)
+}
+
+func (e *RefusedError) Unwrap() error { return e.Err }
 
 // UnreachableError is what a call against a host that is not up returns. It is
 // final: the caller reports it, it does not retry a different name.
