@@ -16,11 +16,11 @@ import (
 	"golang.org/x/term"
 )
 
-// The CLI half of federation stage 1: `tuios hosts`, the --all-hosts listings,
-// and the stdio-proxy subcommand the far side of every link runs.
+// The CLI half of federation: `tuios hosts`, the --all-hosts listings, and the
+// stdio-proxy subcommand the far side of every link runs.
 //
-// Everything here reads. Nothing in this file can create, kill or change
-// anything on another machine, and the daemon has no verb that would let it.
+// Everything here reads. Attaching and creating a session on a host is in
+// host_open.go, over a connection the daemon opens on the same link.
 
 // hostReport is one row of the list-hosts result.
 type hostReport struct {
@@ -120,7 +120,7 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 			}
 		})
 	fmt.Fprintln(w, t.Render())
-	fmt.Fprintf(w, "\n%d host(s). No writes cross a link. These listings are read only.\n", res.Total)
+	fmt.Fprintf(w, "\n%d host(s). Attach a session on a host with 'tuios attach --host NAME SESSION'.\n", res.Total)
 
 	// The reason a host is not usable is the only thing the table cannot say in
 	// a column, so it goes below, one line per host that has one.

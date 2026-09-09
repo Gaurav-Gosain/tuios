@@ -112,10 +112,10 @@ attached       true
 named          2=review
 ```
 
-## Other machines, read only
+## Other machines
 
 The user names other machines with `tuios hosts add`. This daemon then holds an
-ssh link to each one and can read their listings.
+ssh link to each one. The link carries listings and connections.
 
 ```sh
 tuios hosts add build gaurav@buildbox   # add a machine
@@ -132,25 +132,33 @@ changing or removing a host takes effect at once. The daemon follows the config
 file, so no restart is needed. The [hosts] table in the config file is still
 there and can still be edited by hand.
 
-Only listings cross the daemon's link. To open a session on a host, tuios runs
-ssh in a terminal or a pane, the way you would by hand:
+A session on a host opens in this client. The connection goes through the
+daemon on this machine and its link. The session is drawn here, with this
+machine's theme, config and prefix key. Nothing is nested.
 
 ```sh
-tuios attach --host build api   # ssh -t build tuios attach api
-tuios new --host build          # ssh -t build tuios new
-tuios new --host build --detach # create it there and return
+tuios attach --host build api        # attach the session api on build
+tuios new --host build               # create a session on build and attach it
+tuios new --host build ci --detach   # create the session ci on build and return
+tuios attach --host build api --ssh  # the old way: ssh -t build tuios attach api
 ```
 
-In the rail, press enter on a session under a host to open it. Press enter on
-the + beside a host to create a session there. The client you see is the one on
-the remote machine. It draws with that machine's config and theme, and it is
-nested in this one. Press the prefix key twice to send it to the remote client.
-For example, `ctrl+b ctrl+b d` detaches the remote client and closes the pane.
+In the rail, press enter on a session under a host to attach it. Press enter on
+the + beside a host to create a session there. While you are on a host, the
+rail lists this machine's sessions under a host named local. Press enter on one
+to come back.
 
-No verb writes across the link. Nothing on another machine can be typed into or
-messaged from a verb, and there is no verb that would let you. An address you
-write in a verb is local, always. Host names appear in the listings above and
-nowhere else.
+When the link drops, the session keeps running on the host. The client comes
+back to the session it left here and says so. Attach again when the link is
+back. `tuios hosts` says why the link is down.
+
+`--ssh` runs ssh to the host and the tuios there instead. Use it when the tuios
+on the host is too old to serve this client. The client you see is then the one
+on the host, nested in this one. Press the prefix key twice to send a key to it.
+
+An address you write in a verb is local, always. No verb takes a host name yet.
+A connection through a host carries the host's own verbs, and what comes back
+is that machine's word about its own sessions.
 
 A host name is matched exactly. A miss is `unknown_host` with the configured
 names, never a guess, because reaching the wrong machine is worse than reaching

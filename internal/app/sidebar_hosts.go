@@ -2,8 +2,6 @@ package app
 
 import (
 	"encoding/json"
-	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -137,19 +135,20 @@ func refreshFederationCmd() tea.Cmd {
 			return FederationHostsMsg{}
 		}
 
-		// list-host-sessions carries the local machine as its first entry. The
-		// rail already draws local sessions from live state, so that entry is
-		// dropped here rather than drawn twice.
+		// list-host-sessions carries the local machine as its first entry. It
+		// is kept: while this client is attached on another machine, the rail
+		// draws this machine's sessions from it as a host group named local.
+		// hostGroupNodes drops it the rest of the time, when the rail draws the
+		// local sessions from live state.
 		msg := FederationHostsMsg{}
 		lastOK := map[string]int64{}
 		for _, h := range hostStatusReports(client) {
 			lastOK[h.Host] = h.LastOK
 		}
 		for _, h := range res.Hosts {
-			if h.Host == federation.LocalHostName {
-				continue
+			if h.Host != federation.LocalHostName {
+				msg.Configured++
 			}
-			msg.Configured++
 			fh := FederationHost{Name: h.Host, Status: h.Status, Reason: h.Reason, LastOK: lastOK[h.Host]}
 			for _, s := range h.Sessions {
 				fh.Sessions = append(fh.Sessions, FederationSession{
@@ -202,6 +201,15 @@ func (m *OS) hostGroupNodes() []sessiontree.Node {
 	}
 	out := make([]sessiontree.Node, 0, len(m.FederationHosts)*2)
 	for _, h := range m.FederationHosts {
+		// The machine whose sessions the main group shows is not listed
+		// twice: this machine while the client is here, the attached host
+		// while it is away.
+		if h.Name == federation.LocalHostName && m.AttachedHost == "" {
+			continue
+		}
+		if h.Name == m.AttachedHost {
+			continue
+		}
 		out = append(out, sessiontree.Node{
 			Kind:        sessiontree.KindHost,
 			ID:          hostNodeID(h.Name),
@@ -256,8 +264,11 @@ func (m *OS) hostStatusByName(name string) string {
 
 // hostIsUp reports whether a host's link is up, which is the one state a remote
 // session can be opened from. A listing from any other state is cached, so its
-// rows are shown and are not targets.
+// rows are shown and are not targets. This machine is always up.
 func (m *OS) hostIsUp(name string) bool {
+	if name == federation.LocalHostName {
+		return true
+	}
 	return m.hostStatusByName(name) == string(federation.StatusUp)
 }
 
@@ -304,63 +315,44 @@ func (m *OS) drawHostRow(
 	*lines = append(*lines, compose(m.sidebarRemoteSessionRow(node, cw, pal)))
 }
 
-// openRemoteSession opens a session that lives on another machine, in a local
-// pane, over ssh.
-//
-// Nothing crosses the daemon's link. The pane runs this machine's own tuios
-// with 'attach --host', which runs ssh to the host and attaches with the tuios
-// on that machine. The client in the pane is the remote one: it draws with the
-// remote machine's config and theme, and it is nested in this one. See the
-// hosts help for what nesting costs.
+// openRemoteSession attaches a session that lives on another machine, in this
+// client. The connection goes through this machine's daemon over its link,
+// and the session is drawn here with this machine's theme and config. See
+// SwitchToHostSession.
 func (m *OS) openRemoteSession(host, sessionName string) {
 	if !m.hostIsUp(host) {
 		m.ShowNotification(host+" is unavailable", "warning", m.Settings.NotificationWarningDuration)
 		return
 	}
-	argv, err := remoteOpenArgv("attach", host, sessionName)
-	if err != nil {
-		m.ShowNotification(err.Error(), "error", m.Settings.NotificationDuration*2)
-		return
-	}
 	m.clearSidebarReturn() // opening the session is where the user asked to end up
-	m.AddWindow(host+"/"+sessionName, argv...)
+	if err := m.SwitchToHostSession(host, sessionName, false); err != nil {
+		m.ShowNotification(hostAttachRefusal(host, err), "error", m.Settings.NotificationDuration*3)
+	}
 }
 
-// createRemoteSession creates a session on another machine and opens it, in a
-// local pane, over ssh. The pane runs 'new --host', which creates the session
-// on the far side and attaches to it in one connection.
+// createRemoteSession creates a session on another machine and attaches it in
+// this client. The host's daemon creates it under the first free name.
 func (m *OS) createRemoteSession(host string) {
 	if !m.hostIsUp(host) {
 		m.ShowNotification(host+" is unavailable", "warning", m.Settings.NotificationWarningDuration)
 		return
 	}
-	argv, err := remoteOpenArgv("new", host, "")
-	if err != nil {
-		m.ShowNotification(err.Error(), "error", m.Settings.NotificationDuration*2)
+	m.clearSidebarReturn()
+	if err := m.SwitchToHostSession(host, "", true); err != nil {
+		m.ShowNotification(hostAttachRefusal(host, err), "error", m.Settings.NotificationDuration*3)
 		return
 	}
-	m.clearSidebarReturn()
-	m.AddWindow("new @ "+host, argv...)
+	m.applyStartupTiling()
 }
 
-// remoteOpenArgv is the argv a pane runs to open or create a session on a host.
-// It is this machine's own tuios, so the pane reuses every part of the CLI
-// path: the host is read from this machine's [hosts] table, ssh carries the
-// options and the address, a failure says what happened, and --hold keeps the
-// pane open so that message can be read.
-//
-// verb is "attach" or "new". A session name is passed for attach and is empty
-// for new, which lets the far side pick the name.
-func remoteOpenArgv(verb, host, sessionName string) ([]string, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return nil, fmt.Errorf("cannot find the tuios program to open the session. %w", err)
+// sessionsHeaderLabel is the sessions section's header: "sessions" for this
+// machine's, and the host's name when the client is attached on another
+// machine and the sessions listed are that machine's.
+func (m *OS) sessionsHeaderLabel() string {
+	if m.AttachedHost == "" {
+		return "sessions"
 	}
-	argv := []string{exe, verb, "--host", host}
-	if sessionName != "" {
-		argv = append(argv, sessionName)
-	}
-	return append(argv, "--hold"), nil
+	return "@ " + m.AttachedHost
 }
 
 // localSessionNodes drops the host groups from a tree's session list. The

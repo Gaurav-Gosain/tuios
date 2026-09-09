@@ -234,6 +234,10 @@ const (
 	ExitSessionKilled
 	// ExitDaemonLost means the daemon connection was lost unrecoverably.
 	ExitDaemonLost
+	// ExitHostLost means the connection through a host ended and there was no
+	// session on this machine to come back to. The session on the host keeps
+	// running.
+	ExitHostLost
 )
 
 // InputHandler is a function type that handles input messages.
@@ -1705,6 +1709,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// so the user is not left staring at a frozen, unresponsive session.
 		// After a deliberate quit the drop is the expected consequence of
 		// killing the session, not a failure, so leave the reason alone.
+		if m.AttachedHost != "" && !m.QuitRequested {
+			// A link to another machine dropping is recoverable: the session
+			// there keeps running, and this client comes back to the session
+			// it left here when it has one.
+			if m.recoverFromHostLoss(msg.Err) {
+				return m, nil
+			}
+			m.ExitReason = ExitHostLost
+			return m, tea.Quit
+		}
 		if !m.QuitRequested {
 			m.ExitReason = ExitDaemonLost
 		}

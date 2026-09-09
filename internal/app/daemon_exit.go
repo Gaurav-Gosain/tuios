@@ -101,6 +101,11 @@ func (m *OS) ExitNotice() string {
 			"The daemon stopped, or it failed.\n" +
 			"Connect again after the daemon starts."
 
+	case ExitHostLost:
+		return "The link to " + m.AttachedHost + " closed.\n" +
+			"The session keeps running on " + m.AttachedHost + ".\n" +
+			"Connect again when the link is back."
+
 	default:
 		return ""
 	}

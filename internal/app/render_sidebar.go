@@ -1185,14 +1185,17 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 
 	drawSessions := func() {
 		add := ""
+		// The header names the machine when the sessions listed under it are
+		// another machine's.
+		label := m.sessionsHeaderLabel()
 		if canCreate {
-			if tok, span, ok := sidebarHeaderAdd(sidebarRowNewSession, cw, sidebarHeaderLabelW("sessions"),
+			if tok, span, ok := sidebarHeaderAdd(sidebarRowNewSession, cw, sidebarHeaderLabelW(label),
 				pal, headerHoverX[sidebarSectionSessions], isCursor(sidebarRowNewSession, "", ""), &m.Settings); ok {
 				add = tok
 				recordToken(span, "")
 			}
 		}
-		lines = append(lines, compose(sidebarHeaderRow("sessions", add, cw, pal)))
+		lines = append(lines, compose(sidebarHeaderRow(label, add, cw, pal)))
 		for i := range count[sidebarSectionSessions] {
 			idx := start[sidebarSectionSessions] + i
 			s := sessions[idx]

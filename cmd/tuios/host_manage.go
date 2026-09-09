@@ -54,7 +54,7 @@ opens the link. You do not have to restart it.
 
 Run 'tuios hosts test NAME' after this to see whether the link works.
 
-Only listings cross a link. To open a session on the host, run
+To open a session on the host in this client, run
 'tuios attach --host NAME SESSION', or press enter on its row in the rail.`,
 		Example: `  # A machine you reach as user@host
   tuios hosts add build gaurav@buildbox

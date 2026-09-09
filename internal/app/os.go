@@ -462,6 +462,12 @@ type OS struct {
 	IsDaemonSession bool               // True when running as part of a persistent daemon session
 	DaemonClient    *session.TUIClient // Client for daemon communication (nil in local mode)
 	SessionName     string             // Name of the daemon session (if attached)
+	// AttachedHost is the host DaemonClient reaches its daemon through, or ""
+	// for the daemon on this machine. See SwitchToHostSession.
+	AttachedHost string
+	// hostReturn is the session on this machine to come back to if the link
+	// to AttachedHost drops, or "" when the client started on the host.
+	hostReturn string
 	// SessionDisplayName and SessionAccent are the attached session's
 	// daemon-owned label and accent slot, both empty when unset. They are
 	// labels only: SessionName stays the identity every keyed map, every
