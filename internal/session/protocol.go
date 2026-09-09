@@ -268,6 +268,12 @@ type SessionInfo struct {
 	// Additive and omitted when zero; a client reading zero tags nothing, which
 	// is the same graceful silence it had before the field existed.
 	CurrentWorkspace int `json:"current_workspace,omitempty"`
+	// Dir and Branch say where the focused pane's shell is: the directory's
+	// base name ("~" for home) and the git branch checked out there. A rail
+	// labels an unnamed session with Dir and follows any label with Branch.
+	// Both are omitted when unknown, which an older daemon always is.
+	Dir    string `json:"dir,omitempty"`
+	Branch string `json:"branch,omitempty"`
 	// Restored marks a session rebuilt from saved state that nobody has attached
 	// to yet, so a listing can say why it is here without the client having to
 	// attach to find out. Omitted when false, which is what an older daemon

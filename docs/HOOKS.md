@@ -26,7 +26,9 @@ A client's terminal size, its attach and its detach belong to that one client, a
 
 A tuios with no daemon runs every hook itself.
 
-The daemon reads the `[hooks]` table when it starts. Restart the daemon with `tuios kill-server` after you change a hook the daemon runs.
+The daemon reads the `[hooks]` table when it starts. Restart the daemon with `tuios kill-server` after you change a hook the daemon runs. The daemon does not reload hooks when the file changes.
+
+A hook the daemon runs gets the daemon's environment, not your shell's. A daemon started by `tuios new` keeps the environment of that first shell. Put full paths in the command when in doubt.
 
 ## When a hook does not fire
 
