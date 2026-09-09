@@ -185,8 +185,12 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if draggedWindow.IsFloating {
 			o.DraggedWindowIndex = -1
 		} else if o.UseScrollingLayout {
-			// Scrolling mode: windows don't move during drag.
-			// For actual drags, check if cursor ended on a different window for swap.
+			// Scrolling mode: the pane followed the pointer, and the drop swaps
+			// its column with the one under the pointer. A drop that swaps
+			// nothing snaps the pane back into its slot, exactly as the BSP
+			// branch below does; the strip is only re-laid when the columns
+			// really changed, so a dropped pane never scrolls the strip.
+			swapped := false
 			if dragDistance >= dragThreshold {
 				sl := o.GetOrCreateScrollingLayout()
 				draggedIntID := o.GetWindowIntID(draggedWindow.ID)
@@ -211,11 +215,27 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 						if dragCol >= 0 && targetCol >= 0 && dragCol != targetCol {
 							sl.Columns[dragCol], sl.Columns[targetCol] = sl.Columns[targetCol], sl.Columns[dragCol]
 							sl.FocusedCol = targetCol
+							// The drop hands the pane back to the layout. With the
+							// manipulation mark still on it the strip would leave it
+							// at the pointer and only note its slot (see
+							// LiveWindowDrag); the cleanup below clears the mark on
+							// every pane in any case.
+							draggedWindow.IsBeingManipulated = false
 							o.ScrollingSetPositions()
+							swapped = true
 						}
 						break
 					}
 				}
+			}
+			if !swapped {
+				draggedWindow.X = o.TiledX
+				draggedWindow.Y = o.TiledY
+				draggedWindow.Width = o.TiledWidth
+				draggedWindow.Height = o.TiledHeight
+				draggedWindow.Resize(o.TiledWidth, o.TiledHeight)
+				draggedWindow.MarkPositionDirty()
+				draggedWindow.InvalidateCache()
 			}
 			o.DraggedWindowIndex = -1
 		} else if dragDistance >= dragThreshold {

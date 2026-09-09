@@ -538,10 +538,11 @@ func beginWindowDrag(o *app.OS, idx, x, y int) {
 	o.DragOffsetX = x - win.X
 	o.DragOffsetY = y - win.Y
 	win.IsBeingManipulated = true
-	// In tiling mode (non-scrolling), complete pending animations to avoid state
-	// conflicts, then record the slot for the swap-on-release. Scrolling mode
-	// doesn't drag windows, so let its slide animations play.
-	if o.AutoTiling && !o.UseScrollingLayout {
+	// In tiling mode, complete pending animations to avoid state conflicts,
+	// then record the slot for the swap-on-release. The scrolling strip
+	// included: its pane follows the pointer like any other tiled pane now, and
+	// a slide still in flight would stamp its own rectangle over the drag.
+	if o.AutoTiling {
 		o.CompleteAllAnimations()
 		o.TiledX = win.X
 		o.TiledY = win.Y

@@ -155,6 +155,11 @@ func (m *OS) tileAllWindows() {
 				if visibleWindows[i].Zoomed {
 					continue
 				}
+				// A pane the pointer is dragging keeps its rectangle; the slot
+				// is recorded for the drop. See LiveWindowDrag.
+				if m.noteDragSlot(visibleWindows[i], layout.Rect{X: l.X, Y: l.Y, W: l.Width, H: l.Height}) {
+					continue
+				}
 				// A snap still in flight owns this window's geometry and stamps
 				// its own rectangle back on the next tick, without resizing the
 				// emulator with it. ApplyBSPLayout and placePane both retire it
