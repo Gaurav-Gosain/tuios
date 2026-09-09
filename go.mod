@@ -7,7 +7,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.6
 	charm.land/ssh v0.4.3
 	charm.land/wish/v2 v2.0.3
-	github.com/Gaurav-Gosain/sip v0.7.1-0.20260909045207-e68723afbe8e
+	github.com/Gaurav-Gosain/sip v0.7.1
 	github.com/Gaurav-Gosain/tuiffects v0.7.0
 	github.com/adrg/xdg v0.5.3
 	github.com/charmbracelet/colorprofile v0.4.3
