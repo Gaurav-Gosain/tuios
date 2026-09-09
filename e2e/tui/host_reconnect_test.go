@@ -56,7 +56,10 @@ func attachOnBuild(t *testing.T, base string, env []string, farSession string) *
 		t.Fatalf("no remote session row for %s:\n%s", farSession, term.Snapshot())
 	}
 	mouseClick(t, term, 3, row, tuitest.MouseLeft, 0)
-	railShows(t, term, "@ local")
+	// The rail marks the far session as the one this client is on. It used to
+	// name this machine "@ local" in a group of its own; the section is laid
+	// out by machine now and the mark moves in place. See sidebar_hosts.go.
+	waitRailCurrent(t, term, farSession)
 	// The switch lands with the pane focused and the client in terminal mode,
 	// so a caller types straight into the far session's shell.
 	time.Sleep(insertGuard)
@@ -152,7 +155,7 @@ func TestALinkThatDropsIsDialedAgainAndThePaneComesBack(t *testing.T) {
 	if s := term.Screen().Text(); !strings.Contains(s, "BEFORE-DROP-42") {
 		t.Fatalf("ASSERTION: the last frame of the far session was thrown away while the link was down. A dropped pipe is not a session that ended.\n%s", term.Snapshot())
 	}
-	if s := term.Screen().Text(); strings.Contains(s, "@ local") == false && strings.Contains(s, "home") && !strings.Contains(s, "far-shell") {
+	if railCurrentIs(term.Screen(), "home") {
 		t.Fatalf("ASSERTION: the client switched away from the pane while the link was being dialed again\n%s", term.Snapshot())
 	}
 
@@ -279,7 +282,7 @@ func TestAHostThatNeverComesBackGivesUpAndSaysWhy(t *testing.T) {
 	// The person is back on the session they left on this machine, which is
 	// the fallback that always existed.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "sessions") && !strings.Contains(s.Text(), "@ local")
+		return railCurrentIs(s, "home")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the client did not come back to this machine after giving up: %v\n%s", err, term.Snapshot())
 	}
