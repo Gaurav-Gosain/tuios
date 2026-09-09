@@ -11,44 +11,21 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// startInLogged is like startIn but returns the path to the raw PTY log so a
+// startInLogged is startIn returning the path of the raw PTY log as well, so a
 // test can read what tuios printed to stdout after the TUI exited (the
 // detach/kill message lands there, past the alt-screen reset).
+//
+// It used to be a second copy of startIn's environment, and a copy is where a
+// harness fix goes missing: the seven tests that start here ran without the
+// output-only host stream and without fish's completion directory. Every
+// caller attaches, and TUIOS_NO_DAEMON only decides what a bare "tuios" does,
+// so daemonDefault keeps their environment exactly what it was.
 func startInLogged(t *testing.T, base string, o startOpts) (*tuitest.Terminal, string) {
 	t.Helper()
-
-	env := make([]string, 0, len(xdgKeys)+len(o.env)+2)
-	for _, key := range xdgKeys {
-		dir := filepath.Join(base, key)
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			t.Fatalf("start: mkdir %s: %v", key, err)
-		}
-		env = append(env, key+"="+dir)
-	}
-	env = append(env, "SHELL=/bin/sh", "ENV=", "PS1=$ ")
-	env = append(env, o.env...)
-
-	cols, rows := o.cols, o.rows
-	if cols == 0 {
-		cols, rows = 120, 40
-	}
-
-	argv := append([]string{tuiosBin}, o.args...)
-	argv = append(argv, "--no-animations")
-
-	logPath := filepath.Join(t.TempDir(), "pty.log")
-	logFile, err := os.Create(logPath)
-	if err != nil {
-		t.Fatalf("start: create pty log: %v", err)
-	}
-	t.Cleanup(func() { _ = logFile.Close() })
-
-	term := tuitest.StartT(t, argv,
-		tuitest.WithSize(cols, rows),
-		tuitest.WithTerm("xterm-256color"),
-		tuitest.WithEnv(env...),
-		tuitest.WithLog(logFile),
-	)
+	var logPath string
+	o.logPath = &logPath
+	o.daemonDefault = true
+	term := startIn(t, base, o)
 	return term, logPath
 }
 
