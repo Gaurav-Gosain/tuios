@@ -246,11 +246,19 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 
 	if o.Dragging && o.InteractionMode {
-		// In scrolling mode, don't move windows during drag  - layout controls positions.
-		// Swap detection happens on release.
-		if o.UseScrollingLayout {
-			return o, nil
+		// The pane the gesture holds is the one the press recorded, not the
+		// focused one. The two part company mid-gesture: a peer's state sync
+		// carries the peer's focus, so a sync landing during a drag handed the
+		// rest of the motion to whichever pane the peer had focused, and the
+		// drop left that pane parked at the pointer over the tiled layout.
+		if o.DraggedWindowIndex >= 0 && o.DraggedWindowIndex < len(o.Windows) {
+			focusedWindow = o.Windows[o.DraggedWindowIndex]
 		}
+		// The pane follows the pointer in every layout. The scrolling strip
+		// used to hold its pane still until the drop, so a drag there showed
+		// nothing until the button came up and read as doing nothing at all;
+		// the column swap on release is unchanged.
+		//
 		// The pointer has moved with the button down, so this gesture really is
 		// a move and the pane can give up its shared-border allowance now. The
 		// press did not: see untilePaneForDrag.

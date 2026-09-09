@@ -987,6 +987,13 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// client's content region, so a peer's rectangle carries nothing this client
 	// could want. See popupRect.
 	adoptGeometry := !ws.Unplaced && !ws.Zoomed && !ws.Popup
+	// A pane the pointer is dragging belongs to the pointer until the drop.
+	// See LiveWindowDrag. The daemon's rectangle is not taken as the slot
+	// either: it can lag this client's own layout, and the slot the drop uses
+	// is the one the layout pass records (noteDragSlot).
+	if adoptGeometry && w == m.LiveWindowDrag() {
+		adoptGeometry = false
+	}
 
 	// Check if size changed
 	sizeChanged := adoptGeometry && (w.Width != ws.Width || w.Height != ws.Height)

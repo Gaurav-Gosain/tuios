@@ -179,6 +179,11 @@ func (m *OS) ApplyBSPLayout() {
 		if win.Zoomed {
 			continue
 		}
+		// A pane the pointer is dragging keeps its rectangle; the slot is
+		// recorded for the drop. See LiveWindowDrag.
+		if m.noteDragSlot(win, rect) {
+			continue
+		}
 
 		wasTiled := win.Tiled
 
@@ -730,16 +735,19 @@ func (m *OS) tiledLayoutStale() bool {
 		if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized || w.Minimizing || w.IsFloating {
 			continue
 		}
+		// A pane in mid-drag is read at the slot it left, not where the
+		// pointer has it. See dragSlotOf.
+		wx, wy, ww, wh := m.dragSlotOf(w)
 		// Outside the box on any side: unambiguously stale.
-		if w.X < bounds.X || w.Y < bounds.Y ||
-			w.X+w.Width > bounds.X+bounds.W || w.Y+w.Height > bounds.Y+bounds.H {
+		if wx < bounds.X || wy < bounds.Y ||
+			wx+ww > bounds.X+bounds.W || wy+wh > bounds.Y+bounds.H {
 			return true
 		}
 		any = true
-		left = min(left, w.X)
-		top = min(top, w.Y)
-		right = max(right, w.X+w.Width)
-		bottom = max(bottom, w.Y+w.Height)
+		left = min(left, wx)
+		top = min(top, wy)
+		right = max(right, wx+ww)
+		bottom = max(bottom, wy+wh)
 	}
 	if !any {
 		return false

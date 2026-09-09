@@ -409,4 +409,79 @@ test.describe('a finger on tuios itself', () => {
     expect(after.top, 'the drag did not move the pane down').toBeGreaterThan(before.top);
     expect(after.left, 'the drag did not move the pane left').toBeLessThan(before.left);
   });
+
+  // The same finger on a tiled pane, which is what a new install has: tiling
+  // ships on. The pane has to be drawn following the finger while it is down,
+  // and the drop has to leave the tiles where the layout puts them, swapped or
+  // not. Read mid-drag rather than after, because a tiled pane always ends the
+  // gesture in a slot: an end-state check cannot tell a drag from a tap.
+  test('press, hold and drag moves a tiled pane', async ({ page }) => {
+    await boot(page);
+    const cdp = await page.context().newCDPSession(page);
+
+    // Every pane corner on screen, in cells.
+    const corners = () => page.evaluate(() => {
+      const t = window.sipTerm.term;
+      const b = t.buffer.active;
+      const out = [];
+      for (let row = 0; row < t.rows; row++) {
+        const line = b.getLine(b.viewportY + row)?.translateToString(true) ?? '';
+        for (let col = 0; col < line.length; col++) {
+          if (/[╭┌╔┏]/.test(line[col])) out.push({ col, row });
+        }
+      }
+      return out;
+    });
+    const key = (c) => `${c.col},${c.row}`;
+    const sorted = (cs) => cs.map(key).sort();
+    // Two panes partition the box from its origin, so both corners sit on the
+    // top row or the left column. Floating panes are inset and do neither.
+    const tiled = (cs) => cs.length === 2 && cs.every((c) => c.col === 0 || c.row === 0);
+
+    // Nothing open, then two panes. Tiling ships on, so they come up tiled
+    // unless an earlier test left the session floating; the chord is sent
+    // from the keyboard because the bar's tile button can sit behind a pan.
+    for (let i = 0; i < 8 && !(await onSplash(page)); i++) {
+      await press(page, cdp, 'close');
+    }
+    await press(page, cdp, 'new', 2500);
+    await press(page, cdp, 'new', 2500);
+    if (!tiled(await corners())) {
+      await page.keyboard.press('Control+b');
+      await page.keyboard.press('t');
+      await page.waitForTimeout(2500);
+    }
+
+    const before = await corners();
+    expect(tiled(before), 'two tiled panes should draw two corners on the box edge').toBe(true);
+    // On a phone the two tiles stack, so grab the top pane's title row: its top
+    // edge is the screen's, not a shared divider a touch would resize instead.
+    const target = before.reduce((a, b) => (b.row + b.col < a.row + a.col ? b : a));
+    const other = before.find((c) => key(c) !== key(target));
+    const cols = await page.evaluate(() => window.sipTerm.term.cols);
+    const rows = await page.evaluate(() => window.sipTerm.term.rows);
+    const g = await geom(page);
+    // The middle of the title row, clear of the window buttons at the left end.
+    const grab = cell(g, Math.floor(cols / 2), target.row);
+    // Down onto the other tile, so the drop swaps the two.
+    const dropRow = other.row + 4;
+
+    const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', {
+      type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }],
+    });
+    await touch('touchStart', grab.x, grab.y);
+    await page.waitForTimeout(700);
+    const stepRows = Math.max(1, dropRow - target.row);
+    for (let i = 1; i <= stepRows; i++) await touch('touchMove', grab.x, grab.y + Math.round(i * g.h));
+    await page.waitForTimeout(600);
+
+    const mid = await corners();
+    expect(mid.some((c) => key(c) === key(target)), 'the grabbed pane is still drawn in its slot mid-drag').toBe(false);
+    expect(mid.some((c) => c.row > target.row + 1),
+      'no pane corner is drawn lower than the slot mid-drag: the finger is not moving the pane').toBe(true);
+
+    await touch('touchEnd', grab.x, grab.y + Math.round(stepRows * g.h));
+    await page.waitForTimeout(1500);
+    expect(tiled(await corners()), 'the drop did not leave two tiled panes').toBe(true);
+  });
 });

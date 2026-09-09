@@ -125,6 +125,11 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		if win.Zoomed {
 			continue
 		}
+		// A pane the pointer is dragging keeps its rectangle; the slot is
+		// recorded for the drop. See LiveWindowDrag.
+		if m.noteDragSlot(win, rect) {
+			continue
+		}
 		// The strip has no dividers to share, so its panes always draw their own
 		// border. Settle that allowance before the rectangle, as placePane does:
 		// it decides how much of the rectangle the guest gets, so settling it
@@ -372,7 +377,10 @@ func (m *OS) scrollingLayoutStale() bool {
 		if m.windowHasAnimationTo(w, rect.X, rect.Y, rect.W, rect.H) {
 			continue
 		}
-		if w.X != rect.X || w.Y != rect.Y || w.Width != rect.W || w.Height != rect.H {
+		// A pane in mid-drag is read at the slot it left, not where the
+		// pointer has it. See dragSlotOf.
+		wx, wy, ww, wh := m.dragSlotOf(w)
+		if wx != rect.X || wy != rect.Y || ww != rect.W || wh != rect.H {
 			return true
 		}
 	}
