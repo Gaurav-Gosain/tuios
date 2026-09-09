@@ -12,11 +12,19 @@ package config
 //
 // It sits outside the option registry for the reason [hooks], [keybindings] and
 // [dock.custom] do: it is a map of named tables, not a scalar with a settable
-// value, so there is no single path the set-option verb or the settings panel
-// could write. Editing it is a file edit, and the daemon reads it at start.
+// value, so there is no single path the set-option verb could write.
 //
-// Discovery is refused on purpose (design document, section 3): a host exists
-// because the user named it, and a name resolves exactly or not at all.
+// It is not edited by hand any more, though it still can be. `tuios hosts add`,
+// `tuios hosts remove` and the Hosts section of the settings page write it, and
+// the daemon follows the file, so a change takes effect with no restart. See
+// hosts_edit.go for the write and internal/session's daemon_hosts.go for the
+// reload.
+//
+// Discovery of machines is refused on purpose (design document, section 3): a
+// host exists because the user named it, and a name resolves exactly or not at
+// all. What is offered instead is discovery of what to type: the ssh_config
+// Host aliases, as candidates for an addr. See internal/federation's
+// sshalias.go.
 
 // HostConfig is one [hosts.NAME] table.
 type HostConfig struct {

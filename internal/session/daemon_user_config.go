@@ -35,6 +35,15 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.AgentDetectInterval = time.Duration(uc.Daemon.AgentDetectSeconds) * time.Second
 	cfg.AgentBinaries = uc.Daemon.AgentBinaries
 	cfg.Hosts = HostsFromConfig(uc)
+	// The path, not the table, is what lets the daemon follow later edits to
+	// [hosts]. Every real starter goes through here, so every real daemon
+	// watches the file; a daemon built from a hand-made config in a test does
+	// not, and neither does one whose config file could not be loaded at all.
+	// LoadUserConfig writes a default file when there is none, so the machine
+	// that has never saved a setting still arrives here with a path.
+	if path, err := config.GetConfigPath(); err == nil {
+		cfg.ConfigPath = path
+	}
 	// The daemon owns every pane's history, so the depth the user asked for
 	// has to reach it: the client's emulator honoured the setting and the
 	// daemon's kept ten thousand lines whatever it said.

@@ -114,14 +114,23 @@ named          2=review
 
 ## Other machines, read only
 
-The user can name other machines in the config file, under `[hosts]`. This
-daemon then holds an ssh link to each one and can read their listings.
+The user names other machines with `tuios hosts add`. This daemon then holds an
+ssh link to each one and can read their listings.
 
 ```sh
-tuios hosts
+tuios hosts add build gaurav@buildbox   # add a machine
+tuios hosts test build                  # dial it and say what happened
+tuios hosts remove build                # drop it
+
+tuios hosts                             # every host and its link state
 tuios ls --all-hosts
 tuios list-agents --all-hosts
 ```
+
+The address is anything ssh understands, including an ssh_config alias. Adding,
+changing or removing a host takes effect at once. The daemon follows the config
+file, so no restart is needed. The [hosts] table in the config file is still
+there and can still be edited by hand.
 
 Only listings cross a link. Nothing on another machine can be started, stopped,
 typed into, messaged or attached to, and there is no verb that would let you.
@@ -131,7 +140,8 @@ and nowhere else.
 A host name is matched exactly. A miss is `unknown_host` with the configured
 names, never a guess, because reaching the wrong machine is worse than reaching
 none. A host that is not answering is `host_unreachable`, nothing is queued for
-it, and `tuios hosts` says why.
+it, and `tuios hosts` says why. `tuios hosts test NAME` dials the machine again
+and prints what ssh said.
 
 ## Reading another pane
 
@@ -1710,7 +1720,7 @@ unchanged will fail the same way.
 are final. A host name is matched exactly against the `[hosts]` config table, so
 a near miss is refused rather than resolved for you: reaching the wrong machine
 is worse than reaching none. Nothing is queued for a host that is not answering.
-Run `tuios hosts` to see why.
+Run `tuios hosts` to see why, or `tuios hosts test NAME` to dial it again.
 
 A parameter the verb does not take is refused rather than ignored, and the
 failure lists what the verb does take. This matters more than it sounds: a call

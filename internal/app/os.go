@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/ssh"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -782,6 +783,13 @@ type OS struct {
 	// starts true so the first poll happens, and the first answer turns it off
 	// for a daemon with no hosts, which is the default install.
 	federationPolling bool
+	// hostTests are the results of the settings page's last link test, keyed by
+	// host name. A row prefers its test result to the daemon's snapshot: the
+	// test is newer, and it is what the user just asked for.
+	hostTests map[string]federation.HostReport
+	// hostTestRunning is true while a link test is in flight, so the row cannot
+	// start a second one.
+	hostTestRunning bool
 	// Workspace switcher overlay, scoped to the attached session
 	ShowWorkspaceSwitcher     bool
 	WorkspaceSwitcherQuery    string

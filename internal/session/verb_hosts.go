@@ -92,8 +92,8 @@ type remoteAgentRow struct {
 // machine, the daemon, or the version.
 func (d *Daemon) verbListHosts(_ *connState, _ json.RawMessage) (any, *verbError) {
 	out := map[string]any{"type": "host_list"}
-	if len(d.federationProblems) > 0 {
-		out["config_problems"] = d.federationProblems
+	if problems := d.configProblems(); len(problems) > 0 {
+		out["config_problems"] = problems
 	}
 	if d.federation == nil {
 		out["hosts"] = []federation.HostReport{}
@@ -228,13 +228,13 @@ func (d *Daemon) checkHostParam(name string) *verbError {
 	if name == "" {
 		return nil
 	}
-	if d.federation == nil {
+	if !d.hasHosts() {
 		return hintedVerbError(ErrVerbUnknownHost,
 			"unknown host "+echoName(name)+". No hosts are configured.",
 			&VerbHint{
 				Param:   "host",
-				Command: "tuios hosts",
-				Detail:  "Add a [hosts." + name + "] table to the config file with an addr, then restart the daemon.",
+				Command: "tuios hosts add " + name + " user@machine",
+				Detail:  "Add the machine with 'tuios hosts add'. The daemon opens the link at once.",
 			})
 	}
 	if _, err := d.federation.Table().Lookup(name); err != nil {
