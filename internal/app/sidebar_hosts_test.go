@@ -87,29 +87,139 @@ func TestSidebarShowsAnUnreachableHost(t *testing.T) {
 	}
 }
 
-// TestRemoteRowsAreNotTargets is the read-only rule enforced where it can
-// actually be broken. A remote row that recorded a hit would be clickable, and
-// a click resolves to a session switch, which is an attach across a link that
-// this release does not carry.
-func TestRemoteRowsAreNotTargets(t *testing.T) {
+// TestRemoteSessionsAreNotDragTargets keeps a remote session out of the local
+// session machinery. It is opened over ssh, never switched to or reordered, so
+// its namespaced id must not reach the drag-and-switch id list.
+func TestRemoteSessionsAreNotDragTargets(t *testing.T) {
 	m := hostRailOS(t)
 	if _, w := m.sidebarPanelLines(); w <= 0 {
 		t.Fatal("the rail drew nothing")
 	}
-
 	for _, id := range m.SidebarSessionIDs {
 		if strings.HasPrefix(id, "\x00host/") {
-			t.Errorf("a remote row is in the clickable id list: %q", id)
+			t.Errorf("a remote row is in the local switch/drag id list: %q", id)
 		}
 	}
-	for _, hit := range m.SidebarHits {
-		if strings.HasPrefix(hit.SessionID, "\x00host/") {
-			t.Errorf("a remote row recorded a hit rectangle: %+v", hit)
+}
+
+// cachedDownHostOS is the rail with a host whose link is not up but whose last
+// listing is still cached. It is the fixture the two halves of the reachability
+// rule need: an up host with sessions, and a down host with sessions.
+func cachedDownHostOS(t *testing.T) *OS {
+	t.Helper()
+	m := sidebarTestOS(t, 120, 40, "left")
+	m.applyFederationSnapshot(FederationHostsMsg{
+		Configured: 2,
+		Snapshot: FederationSnapshot{Hosts: []FederationHost{
+			{
+				Name:   "build",
+				Status: string(federation.StatusUp),
+				Sessions: []FederationSession{
+					{Name: "api", WindowCount: 3},
+				},
+			},
+			{
+				// A cached listing shown while the link redials. Its rows are
+				// stale, so they are drawn and must not be reachable.
+				Name:   "stale",
+				Status: string(federation.StatusConnecting),
+				Sessions: []FederationSession{
+					{Name: "old", WindowCount: 1},
+				},
+			},
+		}},
+	})
+	return m
+}
+
+// TestRemoteSessionIsATargetOnlyWhenTheHostIsUp is the reachability rule for
+// #171, both halves in one fixture. A session under an up host is a keyboard
+// and mouse target of kind sidebarRowHostSession. A session under a host that
+// is not up is drawn and is not a target, because its listing is cached.
+func TestRemoteSessionIsATargetOnlyWhenTheHostIsUp(t *testing.T) {
+	m := cachedDownHostOS(t)
+	if _, w := m.sidebarPanelLines(); w <= 0 {
+		t.Fatal("the rail drew nothing")
+	}
+
+	upTarget, downTarget := false, false
+	for _, nav := range m.SidebarNav {
+		if nav.Kind != sidebarRowHostSession {
+			continue
 		}
+		switch {
+		case nav.SessionID == "build" && nav.WindowID == "api":
+			upTarget = true
+		case nav.SessionID == "stale" && nav.WindowID == "old":
+			downTarget = true
+		}
+	}
+	if !upTarget {
+		t.Error("ASSERTION: a session under an up host is not a keyboard target")
+	}
+	if downTarget {
+		t.Error("ASSERTION: a session under a host that is not up is a keyboard target")
+	}
+
+	// The same rule on the mouse hit list: the up host's session records a
+	// rectangle, the stale one does not.
+	upHit, downHit := false, false
+	for _, h := range m.SidebarHits {
+		if h.Kind != sidebarRowHostSession {
+			continue
+		}
+		if h.SessionID == "build" {
+			upHit = true
+		}
+		if h.SessionID == "stale" {
+			downHit = true
+		}
+	}
+	if !upHit {
+		t.Error("ASSERTION: a session under an up host records no click rectangle")
+	}
+	if downHit {
+		t.Error("ASSERTION: a session under a host that is not up is clickable")
+	}
+}
+
+// TestUpHostOffersANewControl proves the create affordance is present and
+// reachable on an up host, and absent on one that is not up.
+func TestUpHostOffersANewControl(t *testing.T) {
+	m := cachedDownHostOS(t)
+	if _, w := m.sidebarPanelLines(); w <= 0 {
+		t.Fatal("the rail drew nothing")
+	}
+	up, down := false, false
+	for _, h := range m.SidebarHits {
+		if h.Kind != sidebarRowHostNew {
+			continue
+		}
+		if h.SessionID == "build" {
+			up = true
+		}
+		if h.SessionID == "stale" {
+			down = true
+		}
+	}
+	if !up {
+		t.Error("ASSERTION: an up host has no + control to create a session")
+	}
+	if down {
+		t.Error("ASSERTION: a host that is not up offers a + control")
+	}
+}
+
+// TestHostHeaderIsNeverATarget keeps the group header itself inert: it names a
+// machine, and there is nothing to do to a machine from its header row.
+func TestHostHeaderIsNeverATarget(t *testing.T) {
+	m := hostRailOS(t)
+	if _, w := m.sidebarPanelLines(); w <= 0 {
+		t.Fatal("the rail drew nothing")
 	}
 	for _, nav := range m.SidebarNav {
-		if strings.HasPrefix(nav.SessionID, "\x00host/") {
-			t.Errorf("a remote row is a keyboard target: %+v", nav)
+		if nav.Kind == sidebarRowHostSession && nav.WindowID == "" {
+			t.Errorf("a host header is a keyboard target: %+v", nav)
 		}
 	}
 }

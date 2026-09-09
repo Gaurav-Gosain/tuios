@@ -474,6 +474,8 @@ in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 	tapeCmd.AddCommand(tapePlayCmd, tapeValidateCmd, tapeListCmd, tapeDirCmd, tapeDeleteCmd, tapeShowCmd)
 
 	var createIfMissing bool
+	var attachHost string
+	var attachHold bool
 
 	attachCmd := &cobra.Command{
 		Use:   "attach [session-name]",
@@ -485,7 +487,12 @@ If no session name is provided, attaches to the most recent session.
 If the daemon is not running, it is started and restores every session
 saved on disk. Attach then opens one of those. With nothing saved and no
 name given, a new session is opened instead. A name that matches no session
-is an error unless -c is given.`,
+is an error unless -c is given.
+
+With --host the session is on another machine. tuios runs ssh to the host
+named in the [hosts] table and attaches with the tuios on that machine. The
+client you see is the remote one. Press the prefix key twice to send it to
+the remote client. See 'tuios hosts --help'.`,
 		Example: `  # Attach to the most recent session
   tuios attach
 
@@ -493,19 +500,30 @@ is an error unless -c is given.`,
   tuios attach mysession
 
   # Attach and create if session doesn't exist
-  tuios attach mysession -c`,
+  tuios attach mysession -c
+
+  # Attach to a session on the machine named build
+  tuios attach --host build mysession`,
 		Aliases: []string{"a"},
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := ""
 			if len(args) > 0 {
 				name = args[0]
 			}
+			if attachHost != "" {
+				return runAttachOnHost(attachHost, name, createIfMissing, attachHold)
+			}
 			return runAttach(name, createIfMissing)
 		},
 	}
 	attachCmd.Flags().BoolVarP(&createIfMissing, "create", "c", false, "Create session if it doesn't exist")
+	attachCmd.Flags().StringVar(&attachHost, "host", "", "Attach to a session on this host from the [hosts] table, over ssh")
+	attachCmd.Flags().BoolVar(&attachHold, "hold", false, "After a failure, wait for enter before the command exits")
+	registerHostNameCompletion(attachCmd, "host")
 
 	var newDetach bool
+	var newHost string
+	var newHold bool
 	newCmd := &cobra.Command{
 		Use:   "new [session-name]",
 		Short: "Create a new TUIOS session",
@@ -519,7 +537,12 @@ gets an initial window, is immediately usable by control commands
 (send-keys, run-command, capture-pane), and can be attached later.
 
 Sessions persist even when you detach, allowing you to reconnect later
-with 'tuios attach'.`,
+with 'tuios attach'.
+
+With --host the session is created on another machine. tuios runs ssh to the
+host named in the [hosts] table and runs 'tuios new' there. The client you
+see is the remote one. With --detach the far side creates the session and
+returns. See 'tuios hosts --help'.`,
 		Example: `  # Create a new session with auto-generated name
   tuios new
 
@@ -527,12 +550,21 @@ with 'tuios attach'.`,
   tuios new mysession
 
   # Create a headless session without attaching
-  tuios new mysession --detach`,
+  tuios new mysession --detach
+
+  # Create a session on the machine named build and attach to it
+  tuios new --host build
+
+  # Create a named session on that machine without attaching
+  tuios new --host build mysession --detach`,
 		Aliases: []string{"n"},
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := ""
 			if len(args) > 0 {
 				name = args[0]
+			}
+			if newHost != "" {
+				return runNewOnHost(newHost, name, newDetach, newHold)
 			}
 			if newDetach {
 				return runNewSessionDetached(name)
@@ -541,6 +573,9 @@ with 'tuios attach'.`,
 		},
 	}
 	newCmd.Flags().BoolVarP(&newDetach, "detach", "d", false, "Create the session headless without attaching a client")
+	newCmd.Flags().StringVar(&newHost, "host", "", "Create the session on this host from the [hosts] table, over ssh")
+	newCmd.Flags().BoolVar(&newHold, "hold", false, "After a failure, wait for enter before the command exits")
+	registerHostNameCompletion(newCmd, "host")
 
 	var lsJSON bool
 	var lsAllHosts bool
@@ -2403,8 +2438,17 @@ The daemon holds one ssh link to each host in the [hosts] table. This command
 shows what state each link is in, which tuios version the far side runs, and
 which control protocol it speaks.
 
-Only listings cross a link. Nothing on another machine can be started, changed
-or stopped from here.
+Only listings cross a link. To open or create a session on a host, tuios runs
+ssh in a terminal or a pane, the way you would by hand:
+
+  tuios attach --host build api     # ssh -t build tuios attach api
+  tuios new --host build            # ssh -t build tuios new
+
+In the rail, press enter on a session under a host to open it. Press enter on
+the + beside a host to create a session there. The client you see is the one
+on the remote machine. It uses that machine's config and theme. It is nested
+in this one. Press the prefix key twice to send it to the remote client. For
+example, ctrl+b ctrl+b d detaches the remote client and closes the pane.
 
 Statuses:
   up            The link is open and the remote daemon answers.

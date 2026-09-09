@@ -86,6 +86,16 @@ const (
 	// index in the WindowIndex field, which is the only integer a row hit has;
 	// nothing in this section points at a window, so the field is free.
 	sidebarRowFileEntry
+	// sidebarRowHostSession is one session on another machine, under an up
+	// host. Activating it opens that session in a local pane over ssh. It
+	// carries the host name in SessionID and the remote session name in
+	// WindowID. A session under a host that is not up is drawn but is not a
+	// target, so it never gets this kind.
+	sidebarRowHostSession
+	// sidebarRowHostNew is the "+" on an up host's header. Activating it
+	// creates a session on that machine and opens it. It carries the host name
+	// in SessionID.
+	sidebarRowHostNew
 )
 
 // sidebarAddGlyph is the mark both add controls wear. One cell, so it costs a
@@ -1187,11 +1197,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			idx := start[sidebarSectionSessions] + i
 			s := sessions[idx]
 			if isRemoteNode(s) {
-				// Federation stage 1 carries listings and nothing else, so a row for
-				// another machine is drawn and is not a target: no hit rectangle, no
-				// nav entry, no drag, no click. Nothing can reach a remote session
-				// from the rail, which is the point rather than an omission.
-				lines = append(lines, compose(m.sidebarHostRow(s, cw, pal)))
+				m.drawHostRow(s, cw, pal, isCursor, recordHit, recordToken, headerHoverX[sidebarSectionSessions], compose, &lines)
 				continue
 			}
 			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID

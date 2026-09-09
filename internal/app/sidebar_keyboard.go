@@ -161,7 +161,7 @@ func (m *OS) sidebarStepSection(delta int) {
 // control that belongs to none.
 func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 	switch kind {
-	case sidebarRowSession:
+	case sidebarRowSession, sidebarRowHostSession, sidebarRowHostNew:
 		return sidebarSectionSessions
 	case sidebarRowWindow:
 		return sidebarSectionTerminals
@@ -227,6 +227,14 @@ func (m *OS) SidebarActivateCursor() bool {
 	case sidebarRowNewWindow:
 		// The new pane is the request, so the rail hands the keyboard back to it.
 		m.SidebarNewWindow(row.SessionID)
+		return true
+	case sidebarRowHostSession:
+		// The remote session opens in a pane, which is where the user asked to
+		// go, so the rail hands the keyboard back.
+		m.openRemoteSession(row.SessionID, row.WindowID)
+		return true
+	case sidebarRowHostNew:
+		m.createRemoteSession(row.SessionID)
 		return true
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
