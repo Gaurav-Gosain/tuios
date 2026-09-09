@@ -176,6 +176,19 @@ type connState struct {
 	doneOnce sync.Once // gates close(done) so shutdown is safe to call twice
 	sendMu   sync.Mutex
 
+	// Broadcasts to this client are written in the order they were made.
+	// broadcastToSession hands each one a ticket while it still holds the
+	// clients lock, so the tickets are in broadcast order, and the goroutine
+	// that writes a broadcast waits for its turn. The write itself stays off
+	// the broadcaster's goroutine, so a slow client still stalls nobody but
+	// its own queue. Without the tickets two pushes from one client could
+	// reach a peer swapped, and a peer adopting the older tree last kept a
+	// layout the session had moved on from.
+	bcastMu   sync.Mutex
+	bcastCond *sync.Cond // built on first use, under bcastMu
+	bcastNext uint64     // the next ticket handed out
+	bcastDone uint64     // broadcasts written so far
+
 	// Codec negotiated for this connection (gob by default)
 	codec Codec
 
@@ -606,6 +619,41 @@ func (cs *connState) closeDone() {
 // loop, whose deferred cleanup then unsubscribes every PTY, removes the client,
 // and purges its pending requests. Safe to call from any goroutine and more than
 // once (closeDone is once-guarded and Close is idempotent).
+// takeBroadcastTicket reserves this client's next place in the broadcast
+// order. It is called by the broadcaster, so the tickets are handed out in
+// the order the broadcasts were made.
+func (cs *connState) takeBroadcastTicket() uint64 {
+	cs.bcastMu.Lock()
+	defer cs.bcastMu.Unlock()
+	ticket := cs.bcastNext
+	cs.bcastNext++
+	return ticket
+}
+
+// awaitBroadcastTurn blocks until every broadcast with an earlier ticket has
+// been written.
+func (cs *connState) awaitBroadcastTurn(ticket uint64) {
+	cs.bcastMu.Lock()
+	defer cs.bcastMu.Unlock()
+	if cs.bcastCond == nil {
+		cs.bcastCond = sync.NewCond(&cs.bcastMu)
+	}
+	for cs.bcastDone != ticket {
+		cs.bcastCond.Wait()
+	}
+}
+
+// finishBroadcast releases the next ticket. It runs whether the write
+// succeeded or not, so a dropped client cannot wedge the broadcasts behind it.
+func (cs *connState) finishBroadcast() {
+	cs.bcastMu.Lock()
+	defer cs.bcastMu.Unlock()
+	cs.bcastDone++
+	if cs.bcastCond != nil {
+		cs.bcastCond.Broadcast()
+	}
+}
+
 func (cs *connState) drop() {
 	cs.closeDone()
 	_ = cs.conn.Close()
