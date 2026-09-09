@@ -61,15 +61,31 @@ func TestRaisingToVerboseWarns(t *testing.T) {
 	restoreLevel(t, DebugOff)
 	ClearLogBuffer()
 
+	// The buffer is package state and other tests in this package log into it
+	// while this one runs, so the warning is not reliably the last entry. Read
+	// the length first and look only at what this call appended: that still
+	// fails if raising the level logs no warning, which is the property here.
+	before := len(GetLogEntries(0))
+
 	SetDebugLevel(DebugVerbose)
 
 	entries := GetLogEntries(0)
-	if len(entries) == 0 {
+	if len(entries) <= before {
 		t.Fatal("raising the level to verbose logged nothing")
 	}
-	last := entries[len(entries)-1].Message
-	if !strings.Contains(last, "records pane content, window titles and paths") {
-		t.Fatalf("no content warning on raising the level, got %q", last)
+	warned := false
+	for _, e := range entries[before:] {
+		if strings.Contains(e.Message, "records pane content, window titles and paths") {
+			warned = true
+			break
+		}
+	}
+	if !warned {
+		got := make([]string, 0, len(entries)-before)
+		for _, e := range entries[before:] {
+			got = append(got, e.Message)
+		}
+		t.Fatalf("no content warning on raising the level, got %q", got)
 	}
 
 	// Lowering must not warn, and neither must a level at or below messages.
