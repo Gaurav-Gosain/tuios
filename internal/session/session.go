@@ -776,6 +776,10 @@ type SessionConfig struct {
 	// The manager stamps it from the daemon's config; zero means the
 	// emulator's default.
 	ScrollbackLines int
+	// HostName is the name of the machine the session runs on, exported into
+	// every pane as TUIOS_HOST. The manager stamps it from the daemon's own
+	// hostname. Empty leaves the variable unset.
+	HostName string
 }
 
 // scrollbackLines is the history depth a new pane in this session keeps.
@@ -1643,6 +1647,13 @@ func (s *Session) buildEnv(windowID string, restored bool) []string {
 	env = append(env, "TERM_PROGRAM="+guestenv.TermProgram(kitty, sixel))
 	env = append(env, "TERM_PROGRAM_VERSION=0.1.0")
 	env = append(env, "TUIOS_SESSION="+s.Name)
+	// TUIOS_HOST names the machine this pane runs on. A pane is always local
+	// to the daemon that made it, so this is the daemon's own hostname, on
+	// every machine: a program that wants to know where it is reads it, and a
+	// program that sends mail to another machine signs with it.
+	if s.config != nil && s.config.HostName != "" {
+		env = append(env, "TUIOS_HOST="+s.config.HostName)
+	}
 	if windowID != "" {
 		env = append(env, "TUIOS_WINDOW_ID="+windowID)
 		// TUIOS_PANE_ID is an alias a state-reporting shim guards on, mirroring

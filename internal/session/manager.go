@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"sync"
 )
@@ -18,6 +19,9 @@ type Manager struct {
 	// scrollbackLines is stamped into every session made here, so each pane
 	// keeps the history depth the daemon was configured with.
 	scrollbackLines int
+	// hostName is the name this machine gives itself, stamped into every
+	// session for TUIOS_HOST. Empty means the operating system's hostname.
+	hostName string
 
 	// Lifecycle hooks (set by the daemon). onCreate fires after a session is
 	// registered; onDelete fires after it is removed but before it is stopped.
@@ -54,6 +58,27 @@ func (m *Manager) SetScrollbackLines(n int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.scrollbackLines = n
+}
+
+// SetHostName sets the name this machine gives itself, for TUIOS_HOST.
+func (m *Manager) SetHostName(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.hostName = name
+}
+
+// HostName is the name this machine gives itself: what SetHostName set, else
+// the hostname the operating system reports. Callers hold m.mu or do not
+// care about a concurrent SetHostName, which only tests make.
+func (m *Manager) HostName() string {
+	if m.hostName != "" {
+		return m.hostName
+	}
+	h, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	return h
 }
 
 // SetSocketPath sets the socket path (for testing).
@@ -98,6 +123,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.ScrollbackLines == 0 {
 		cfg.ScrollbackLines = m.scrollbackLines
+	}
+	if cfg.HostName == "" {
+		cfg.HostName = m.HostName()
 	}
 
 	// Create the session
