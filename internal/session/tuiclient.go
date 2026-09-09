@@ -118,9 +118,12 @@ type TUIClient struct {
 	daemonBuild         string
 	disconnectHandler   DisconnectHandler
 	sessionEndedHandler SessionEndedHandler
-	sessionEndedOnce    sync.Once // gates the single session-ended notification
-	disconnectOnce      sync.Once // gates the single disconnect notification
-	multiClientMu       sync.RWMutex
+	// agentMailHandler takes each message the daemon pushes from the session's
+	// agent ring. Guarded by multiClientMu like the other broadcast handlers.
+	agentMailHandler AgentMailHandler
+	sessionEndedOnce sync.Once // gates the single session-ended notification
+	disconnectOnce   sync.Once // gates the single disconnect notification
+	multiClientMu    sync.RWMutex
 
 	// Request/response handling for synchronous calls after readLoop starts
 	pendingResponses   map[MessageType]chan *Message
@@ -734,6 +737,19 @@ func (c *TUIClient) OnSessionEnded(handler SessionEndedHandler) {
 	c.multiClientMu.Unlock()
 }
 
+// AgentMailHandler takes one MsgAgentMail push: a message from the session's
+// agent ring as the daemon stores it, or a read receipt for messages an inbox
+// read just marked. It runs on the read-loop goroutine, so it only queues.
+type AgentMailHandler func(payload AgentMailPayload)
+
+// OnAgentMail registers the handler for MsgAgentMail, the daemon's push of
+// every message an agent leaves in the attached session's ring.
+func (c *TUIClient) OnAgentMail(handler AgentMailHandler) {
+	c.multiClientMu.Lock()
+	c.agentMailHandler = handler
+	c.multiClientMu.Unlock()
+}
+
 // OnDisconnect registers a handler invoked when the daemon connection is torn
 // down unexpectedly (crash, reset, or framing desync). It fires at most once and
 // runs on the read-loop goroutine, so the handler should only signal the UI
@@ -1085,6 +1101,19 @@ func (c *TUIClient) handleMessage(msg *Message) {
 				handler(name, payload.Reason)
 			}
 		})
+
+	case MsgAgentMail:
+		var payload AgentMailPayload
+		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			debugLog("[CLIENT] Failed to parse agent mail: %v", err)
+			return
+		}
+		c.multiClientMu.RLock()
+		handler := c.agentMailHandler
+		c.multiClientMu.RUnlock()
+		if handler != nil {
+			handler(payload)
+		}
 
 	case MsgDetached:
 		// Session detached  - handled via pendingResponses in SwitchSession.

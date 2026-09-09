@@ -3,6 +3,7 @@ package app
 import (
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -242,6 +243,22 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 	tree := m.BuildSessionTree()
 
 	items := make([]CommandPaletteItem, 0, len(tree.Sessions))
+	// A thread with mail waiting for the person is findable by what it says,
+	// and selecting it opens the mailbox on that thread.
+	for _, th := range m.agentMailThreads() {
+		if !th.Unread {
+			continue
+		}
+		thread := th.ID
+		items = append(items, CommandPaletteItem{
+			Name:     "Mail #" + strconv.FormatUint(th.ID, 10) + " " + th.From + " → " + th.To + ": " + th.Subject,
+			Shortcut: "unread",
+			Category: "Sessions",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.OpenAgentMailThread(thread)
+			},
+		})
+	}
 	for _, s := range tree.Sessions {
 		sessionName := s.ID
 		isCurrent := s.IsCurrent

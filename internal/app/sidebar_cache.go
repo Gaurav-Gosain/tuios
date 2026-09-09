@@ -127,6 +127,9 @@ func (m *OS) sidebarSignature() uint64 {
 	mixS(m.Settings.SidebarSections)
 	mixB(m.Settings.SidebarShowGlyphs)
 	mixB(m.Settings.SidebarShowCounts)
+	// The mailbox mirror: an unread count beside an agent row, and the count
+	// on the agents header, come from it.
+	mixU(m.AgentMail.Gen)
 
 	// The glyph set the rows are drawn from. ASCII mode swaps the collapse
 	// chevrons and the agent-state indicators for their fallbacks, and both it

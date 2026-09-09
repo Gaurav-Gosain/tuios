@@ -51,6 +51,13 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 		clientLog("Client joined: %s (total: %d, size: %dx%d)", shortClientID(clientID), clientCount, width, height)
 		m.QueueClientEvent(ClientEvent{Type: "joined", ClientID: clientID, ClientCount: clientCount, Width: width, Height: height})
 	})
+	// Mail an agent left in the session's ring, and receipts for mail an agent
+	// read. Queued like every other broadcast; the mirror is touched in Update.
+	client.OnAgentMail(func(payload session.AgentMailPayload) {
+		if m.QueueClientEvent(ClientEvent{Type: "agent-mail", Mail: payload}) {
+			clientLog("ClientEventChan full, displaced an event for agent mail")
+		}
+	})
 	client.OnClientLeft(func(clientID string, clientCount int) {
 		clientLog("Client left: %s (remaining: %d)", shortClientID(clientID), clientCount)
 		m.QueueClientEvent(ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount})

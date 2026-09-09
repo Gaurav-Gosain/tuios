@@ -31,6 +31,7 @@ const (
 	sidebarActSection     = "section"
 	sidebarActAgentFilter = "agents_filter"
 	sidebarActAgentSort   = "agents_sort"
+	sidebarActMail        = "mail"
 	sidebarActNarrow      = "narrow"
 	sidebarActWiden       = "widen"
 	sidebarActPalette     = "palette"

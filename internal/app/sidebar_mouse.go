@@ -204,6 +204,8 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 		m.SidebarCycleAgentsFilter()
 	case sidebarRowAgentSort:
 		m.SidebarCycleAgentsSort()
+	case sidebarRowAgentMail:
+		m.queueSidebarCmd(m.OpenAgentMail())
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
 	case sidebarRowNewWindow:
@@ -328,6 +330,8 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 		m.SidebarCycleAgentsFilter()
 	case sidebarRowAgentSort:
 		m.SidebarCycleAgentsSort()
+	case sidebarRowAgentMail:
+		m.queueSidebarCmd(m.OpenAgentMail())
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
 	case sidebarRowNewWindow:

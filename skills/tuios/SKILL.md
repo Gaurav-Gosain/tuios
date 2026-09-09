@@ -687,6 +687,30 @@ surface, and it is the same store rather than a second one.
 tuios send-agent-message -s work 'deploying in five minutes'
 ```
 
+### The person has an address
+
+The person watching the session is not a window, and until now nothing could
+address them. `human` is their inbox. It is reserved: it resolves before any
+window, so a pane that happens to be called human is still reached by its id.
+
+```sh
+tuios send-agent-message -s work -w human --from "$TUIOS_PANE_ID" --subject 'which retry policy?' 'exponential or fixed? both pass the suite'
+tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --timeout 600000
+```
+
+The message reaches the attached client at once. The rail's agents header shows
+the unread count, the dock says who wrote, and the person reads the thread and
+answers it in the mail overlay (`prefix M`, or the palette's "Mail: open
+inbox"). The answer comes back as a reply in your thread, from `human`, and the
+wait above returns on it. `list-agents` reports `human_unread`, which is how
+many messages are waiting for the person.
+
+`ask-agent -w human` is refused with `no_keyboard`: there is no pane to type
+into. Send the message and wait for the reply instead. The person can also see
+every ask between two agents: a finished `ask-agent` leaves a record of kind
+`ask` in the ring, with the question as its subject and what the pane printed
+as its text. It is never unread and nothing waits on it.
+
 ### Reading your mail
 
 ```sh
@@ -1700,9 +1724,9 @@ Over the socket, every failure carries a stable code in the error envelope, for
 when you are matching rather than reading: `invalid_request`, `unknown_verb`,
 `invalid_params`, `session_not_found`, `window_not_found`, `no_windows`,
 `pty_not_found`, `needs_client`, `option_not_found`, `command_failed`,
-`timeout`, `not_ready`, `loop_refused`, `rate_limited`, `protocol_mismatch`,
-`unknown_host`, `host_unreachable`, `internal`. The CLI folds the same
-information into its messages.
+`timeout`, `not_ready`, `loop_refused`, `rate_limited`, `no_keyboard`,
+`protocol_mismatch`, `unknown_host`, `host_unreachable`, `internal`. The CLI
+folds the same information into its messages.
 
 `option_not_found` means the path names no option in this build, and its hint
 carries the closest match; `list-options` describes them all.
@@ -1711,10 +1735,11 @@ carries the closest match; `list-options` describes them all.
 nobody attached. Reading, writing, waiting, creating, moving and everything in
 the agent chapter never need one; splitting, tiling and directional focus do.
 
-`not_ready`, `loop_refused` and `rate_limited` come only from the cross-agent
-verbs, and each has a different remedy: wait for the target, restructure what
-you were doing, or stop sending. They are not timeouts, and retrying them
-unchanged will fail the same way.
+`not_ready`, `loop_refused`, `rate_limited` and `no_keyboard` come only from
+the cross-agent verbs, and each has a different remedy: wait for the target,
+restructure what you were doing, stop sending, or send a message to `human`
+instead of asking it. They are not timeouts, and retrying them unchanged will
+fail the same way.
 
 `unknown_host` and `host_unreachable` come only from the host verbs, and both
 are final. A host name is matched exactly against the `[hosts]` config table, so

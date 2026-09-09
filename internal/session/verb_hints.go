@@ -78,6 +78,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbNotReady, "The target agent was mid-turn, so the call declined to type at it. Wait for it, leave a message instead, or force it."},
 	{ErrVerbLoopRefused, "The call was refused because it would loop: a pane addressing itself, or an ask that closes a cycle with one in flight."},
 	{ErrVerbRateLimited, "The sender is over the cross-agent message rate cap."},
+	{ErrVerbNoKeyboard, "The target is the person's inbox, human, which has no pane to type into. Leave a message with send-agent-message -w human and wait for the reply on your own inbox."},
 	{ErrVerbProtocolMismatch, "The caller's protocol version is outside the range this daemon accepts."},
 	{ErrVerbUnknownHost, "No host by that name is configured. The hint lists the hosts that are. A host name is matched exactly, so nothing is guessed."},
 	{ErrVerbHostUnreachable, "The host is configured and is not answering. Nothing was queued. Read the host's status with list-hosts."},

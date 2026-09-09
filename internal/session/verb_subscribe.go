@@ -531,12 +531,11 @@ func (d *Daemon) waitAgentMessage(sessionName, window string, thread uint64, dea
 
 	inbox := ""
 	if window != "" {
-		state := sess.GetState()
-		idx, err := findWindowStateIndex(state.Windows, window)
+		id, _, err := resolveMailParty(sess.GetState(), window)
 		if err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
-		inbox = state.Windows[idx].ID
+		inbox = id
 	}
 
 	// The baseline is taken before the subscription so a message published in

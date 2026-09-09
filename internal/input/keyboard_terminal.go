@@ -149,6 +149,11 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleSessionSwitcherInput(msg, o)
 	}
 
+	// The mailbox, the same way: a reply typed into it must not reach the shell.
+	if o.ShowAgentMail {
+		return handleAgentMailInput(msg, o)
+	}
+
 	// Handle workspace switcher overlay
 	if o.ShowWorkspaceSwitcher {
 		return handleWorkspaceSwitcherInput(msg, o)

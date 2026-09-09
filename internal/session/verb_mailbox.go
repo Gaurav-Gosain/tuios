@@ -37,7 +37,20 @@ const (
 	// it, and it is never unread for a particular reader. One store and two
 	// addressing modes, rather than two subsystems that drift apart.
 	agentMsgNotice = "notice"
+	// agentMsgAsk is the record of one ask-agent call: the question in the
+	// subject, what the pane printed in answer in the text, and SettledBy saying
+	// which signal ended the wait. It is written after the ask has finished, so
+	// it changes nothing about how an ask works; it exists so the person at the
+	// client can see the exchanges that happen between two agents' keyboards,
+	// which were otherwise visible to nobody.
+	agentMsgAsk = "ask"
 )
+
+// AgentInboxHuman is the reserved inbox id of the person at the attached
+// client. It is the one address in the mailbox that is not a window: a message
+// to it is read from the client's mail overlay, and a reply from there is sent
+// from it. It cannot be asked, because there is no keyboard behind it.
+const AgentInboxHuman = "human"
 
 // Caps. Every one of these exists because an unread queue with no bound is a
 // memory leak with a friendly name.
@@ -145,6 +158,9 @@ type AgentMessage struct {
 	// consumes: a consumed message leaves nothing behind for a human to look at
 	// afterwards, and the cap already bounds the ring.
 	ReadAt int64 `json:"read_at,omitempty"`
+	// SettledBy is set on an ask record only: which signal ended the wait, as
+	// ask-agent reported it ("agent-state", "idle", "timeout", ...).
+	SettledBy string `json:"settled_by,omitempty"`
 	// Undeliverable is resolved at read time and means the recipient window is
 	// gone. A message is never re-homed onto a new pane that happens to carry
 	// the old one's name, because that pane is a different agent holding
@@ -329,11 +345,19 @@ func (b *agentBus) collect(session string, q readQuery) readResult {
 		if q.thread != 0 && m.ThreadID != q.thread {
 			continue
 		}
-		if m.Kind == agentMsgNotice {
+		switch m.Kind {
+		case agentMsgNotice:
 			if q.unreadOnly || (q.inbox != "" && !q.notices) {
 				continue
 			}
-		} else {
+		case agentMsgAsk:
+			// An ask record is about the pane that was asked, so an inbox read
+			// of that pane sees it; it is never unread, so an unread read does
+			// not.
+			if q.unreadOnly || (q.inbox != "" && m.To != q.inbox) {
+				continue
+			}
+		default:
 			if q.inbox != "" && m.To != q.inbox {
 				continue
 			}

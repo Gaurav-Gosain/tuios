@@ -41,7 +41,7 @@ type overlayPanelHit struct {
 // row opens each of them over the panel too. The guard against a fourth is
 // TestEveryOverlayKindHasAPlaceInTheStack, which reads openOverlayKinds itself
 // rather than a second copy of this list.
-var overlayKindOrder = []string{"help", "palette", "launcher", "session", "workspace", "layout", "aggregate", "settings", "keybinds", "themepicker", "glyphpicker", "effectpicker", "dockeditor", "sectioneditor", "accent", "screenshot", "quit", "sessionclose", "filedialog"}
+var overlayKindOrder = []string{"help", "palette", "launcher", "session", "agentmail", "workspace", "layout", "aggregate", "settings", "keybinds", "themepicker", "glyphpicker", "effectpicker", "dockeditor", "sectioneditor", "accent", "screenshot", "quit", "sessionclose", "filedialog"}
 
 // openOverlayKinds returns the set of draggable overlay kinds currently shown.
 func (m *OS) openOverlayKinds() map[string]bool {
@@ -60,6 +60,9 @@ func (m *OS) openOverlayKinds() map[string]bool {
 	}
 	if m.ShowSessionSwitcher {
 		open["session"] = true
+	}
+	if m.ShowAgentMail {
+		open["agentmail"] = true
 	}
 	if m.ShowWorkspaceSwitcher {
 		open["workspace"] = true

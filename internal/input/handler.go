@@ -283,7 +283,9 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// swallows what it does not bind, so leaving it in front would strand the
 	// overlay's scroll, search and close keys (and every character of a palette
 	// query) behind an esc that also drops the rail's focus.
-	if o.SidebarFocused && !o.ShowHelp && !o.ShowCommandPalette && !o.PrefixActive && !isLeaderKey(msg, &o.Settings) {
+	// The mailbox is the third exception, for the same reason: the rail opens
+	// it, and a reply typed into it must reach it and not the rail.
+	if o.SidebarFocused && !o.ShowHelp && !o.ShowCommandPalette && !o.ShowAgentMail && !o.PrefixActive && !isLeaderKey(msg, &o.Settings) {
 		return HandleSidebarKey(msg, o)
 	}
 

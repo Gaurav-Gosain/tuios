@@ -687,6 +687,16 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			// The agent mailbox: the messages agents leave for each other and
+			// for the person, and the place to answer one.
+			Name:     "Mail: open inbox",
+			Shortcut: "prefix+M",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				return m, m.OpenAgentMail()
+			},
+		},
+		{
 			Name:     "Show help",
 			Shortcut: "prefix+?",
 			Category: "Session",
