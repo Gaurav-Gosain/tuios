@@ -1980,8 +1980,20 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	if node.IsCurrent || hovered || dragged {
 		fg = pal.Fg
 	}
+	title := printableTitle(node.Title)
+	avail := sidebarNameAvail(cw, rightW)
+	// The branch rides after the name in muted ink, and only when the two fit
+	// together: a name that has to scroll wants every column, and a branch
+	// with its name cut from under it says nothing.
+	branch := ""
+	if b := printableTitle(node.Branch); b != "" && variant == sidebarVariantFull {
+		if need := lipgloss.Width(title) + 1 + lipgloss.Width(b); need <= avail {
+			branch = sidebarStyle(rowBg, nil).Render(" ") + sidebarStyle(rowBg, pal.FgMute).Render(b)
+			avail -= 1 + lipgloss.Width(b)
+		}
+	}
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).
-		Render(m.sidebarMarquee("s:"+node.ID, printableTitle(node.Title), sidebarNameAvail(cw, rightW), hovered))
+		Render(m.sidebarMarquee("s:"+node.ID, title, avail, hovered)) + branch
 
 	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal, &m.Settings)
 	if tint != nil && stated && !node.IsCurrent && !sidebarAttention(node.AgentState) {

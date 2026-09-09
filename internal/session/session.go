@@ -579,6 +579,9 @@ type PTY struct {
 	// only sees the windows it is subscribed to, and its copy of the title stops
 	// where its subscription did.
 	title atomic.Pointer[string]
+	// place is where the shell is: its directory from OSC 7 (seeded from the
+	// spawn directory) and the git branch there. See session_place.go.
+	place placeRecord
 }
 
 // Title returns the last title this PTY's application set, or "" if it has set
@@ -1030,6 +1033,9 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		AltScreen: func(on bool) {
 			pty.emit(SessionEvent{Type: EventModeChanged, Mode: "alt-screen", Enabled: on})
 		},
+		// Recorded, not applied: this fires with the terminal lock held, and
+		// the record is two atomics plus one branch read on its own goroutine.
+		WorkingDirectory: func(raw string) { pty.place.setCwd(raw) },
 		// Parked rather than applied: this fires with the terminal lock held, and
 		// applying it mutates session state. The read goroutine picks it up on the
 		// output event carrying these same bytes.
@@ -1047,6 +1053,15 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 			return
 		}
 	})
+
+	// The shell's first directory is known before it prints a prompt, so the
+	// pane has a place from the start even under a shell that never reports
+	// OSC 7, which bash and zsh mostly do not.
+	if seed := cmd.Dir; seed != "" {
+		pty.place.setCwd(seed)
+	} else if wd, err := os.Getwd(); err == nil {
+		pty.place.setCwd(wd)
+	}
 
 	s.ptys[id] = pty
 
@@ -1524,7 +1539,18 @@ func (s *Session) Info() SessionInfo {
 	displayName, accent := s.state.DisplayName, s.state.Accent
 	currentWorkspace := s.state.CurrentWorkspace
 	restored := s.state.Restored
+	focusedPTY := ""
+	if w, ok := findWindowState(s.state, s.state.FocusedWindowID); ok {
+		focusedPTY = w.PTYID
+	}
 	s.stateMu.RUnlock()
+
+	// The focused pane's place labels the session. Read after stateMu is
+	// released: the PTY table has its own lock and the two are never nested.
+	var dir, branch string
+	if p := s.GetPTY(focusedPTY); p != nil {
+		dir, branch = p.place.place()
+	}
 
 	return SessionInfo{
 		Name:             s.Name,
@@ -1540,6 +1566,8 @@ func (s *Session) Info() SessionInfo {
 		Accent:           accent,
 		CurrentWorkspace: currentWorkspace,
 		Restored:         restored,
+		Dir:              dir,
+		Branch:           branch,
 	}
 }
 

@@ -468,6 +468,12 @@ type OS struct {
 	// hostReturn is the session on this machine to come back to if the link
 	// to AttachedHost drops, or "" when the client started on the host.
 	hostReturn string
+	// foreignTickGen is the generation of the listing poll timer now armed, and
+	// foreignSessionReplan asks Update to arm a new one. See
+	// foreignSessionReplanCmd.
+	foreignTickGen       uint64
+	foreignSessionReplan bool
+
 	// SessionDisplayName and SessionAccent are the attached session's
 	// daemon-owned label and accent slot, both empty when unset. They are
 	// labels only: SessionName stays the identity every keyed map, every

@@ -38,9 +38,12 @@ func (m *OS) RefreshSessionList() []sessiontree.Node {
 
 	items := make([]sessiontree.Node, 0, len(sessions))
 	for _, s := range sessions {
+		dir, branch := m.sessionPlace(s.Name)
 		items = append(items, sessiontree.BuildSession(sessiontree.SessionInput{
 			Name:        s.Name,
 			DisplayName: s.DisplayName,
+			Dir:         dir,
+			Branch:      branch,
 			IsCurrent:   s.Name == currentSession,
 			WindowCount: s.WindowCount,
 			Restored:    s.Restored,

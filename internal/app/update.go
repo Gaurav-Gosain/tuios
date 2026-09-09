@@ -360,7 +360,7 @@ func (m *OS) Init() tea.Cmd {
 		if refresh {
 			cmds = append(cmds, refreshForeignSessionsCmd(m.DaemonClient))
 		}
-		cmds = append(cmds, foreignSessionRefreshTick(after))
+		cmds = append(cmds, m.foreignSessionRefreshTick(after))
 
 		// One poll for the federated hosts. The answer says whether any are
 		// configured, and a daemon with none never gets asked again.
@@ -619,12 +619,40 @@ const (
 )
 
 // ForeignSessionRefreshTickMsg fires to kick a background session-list refresh.
-type ForeignSessionRefreshTickMsg struct{}
+type ForeignSessionRefreshTickMsg struct {
+	// Gen is the timer generation this tick was armed under. A tick from an
+	// older generation is dropped, which is what lets a re-plan retire a slow
+	// timer without ending up with two of them.
+	Gen uint64
+}
 
-func foreignSessionRefreshTick(after time.Duration) tea.Cmd {
+// foreignSessionRefreshTick arms the next listing poll under a new generation.
+func (m *OS) foreignSessionRefreshTick(after time.Duration) tea.Cmd {
+	m.foreignTickGen++
+	gen := m.foreignTickGen
 	return tea.Tick(after, func(time.Time) tea.Msg {
-		return ForeignSessionRefreshTickMsg{}
+		return ForeignSessionRefreshTickMsg{Gen: gen}
 	})
+}
+
+// foreignSessionReplanCmd is what opening the rail returns: one refresh now,
+// and the poll re-armed at the cadence the open rail wants. The idle plan
+// armed at attach, thirty seconds and no refresh for a lone session, would
+// otherwise keep running until it fired, and the rail would label sessions as
+// of half a minute ago. Nil when nothing asked for a re-plan.
+func (m *OS) foreignSessionReplanCmd() tea.Cmd {
+	if !m.foreignSessionReplan {
+		return nil
+	}
+	m.foreignSessionReplan = false
+	if m.DaemonClient == nil {
+		return nil
+	}
+	after, refresh := m.foreignSessionRefreshPlan()
+	if !refresh {
+		return m.foreignSessionRefreshTick(after)
+	}
+	return tea.Batch(refreshForeignSessionsCmd(m.DaemonClient), m.foreignSessionRefreshTick(after))
 }
 
 // foreignSessionRefreshPlan decides whether the next poll should hit the daemon
@@ -681,13 +709,17 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// on the next message would draw one frame with the viewport already slid.
 	m.applyScrollAnchors()
 	sync := m.FilesSyncCmd()
-	if sync == nil {
+	// Same shape as the files sync: the rail opening is one of the fifty
+	// handlers, and the poll it re-plans is armed here rather than in each of
+	// the five places that can open it.
+	replan := m.foreignSessionReplanCmd()
+	if sync == nil && replan == nil {
 		return model, cmd
 	}
-	if cmd == nil {
+	if cmd == nil && replan == nil {
 		return model, sync
 	}
-	return model, tea.Batch(cmd, sync)
+	return model, tea.Batch(cmd, sync, replan)
 }
 
 // handleMsg is Update's body: one switch over every message the client can see.
@@ -1177,15 +1209,20 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case ForeignSessionRefreshTickMsg:
+		if msg.Gen != m.foreignTickGen {
+			// A timer a re-plan already replaced. Letting it re-arm would run
+			// two poll loops from here on.
+			return m, nil
+		}
 		// The listing this tick refreshes is also the only thing that knows which
 		// windows still exist anywhere, so the client's window-keyed state is
 		// pruned here, against the listing the last refresh left behind.
 		m.pruneWindowKeyedState()
 		after, refresh := m.foreignSessionRefreshPlan()
 		if !refresh {
-			return m, foreignSessionRefreshTick(after)
+			return m, m.foreignSessionRefreshTick(after)
 		}
-		return m, tea.Batch(refreshForeignSessionsCmd(m.DaemonClient), foreignSessionRefreshTick(after))
+		return m, tea.Batch(refreshForeignSessionsCmd(m.DaemonClient), m.foreignSessionRefreshTick(after))
 
 	case FederationHostsMsg:
 		// Storing a snapshot is the whole handler. The network work happened in
