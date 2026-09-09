@@ -146,31 +146,3 @@ func TestBuildSessionLeavesDistinctRowsAlone(t *testing.T) {
 		t.Errorf("the colliding rows still read %q", node.Children[1].Title)
 	}
 }
-
-// TestSessionTitleFallsBackToItsDirectory pins the label precedence: a name the
-// user gave wins, the directory stands in when there is none, and the session
-// name is the last resort. The branch rides the node whichever title won.
-func TestSessionTitleFallsBackToItsDirectory(t *testing.T) {
-	cases := []struct {
-		in         SessionInput
-		wantTitle  string
-		wantBranch string
-	}{
-		{SessionInput{Name: "session-0", Dir: "repo", Branch: "main"}, "repo", "main"},
-		{SessionInput{Name: "session-0", Dir: "repo", Branch: "main", DisplayName: "api"}, "api", "main"},
-		{SessionInput{Name: "session-0", Branch: "main"}, "session-0", "main"},
-		{SessionInput{Name: "session-0", Dir: "repo"}, "repo", ""},
-	}
-	for _, c := range cases {
-		node := BuildSession(c.in)
-		if node.Title != c.wantTitle {
-			t.Errorf("%+v: Title = %q, want %q", c.in, node.Title, c.wantTitle)
-		}
-		if node.Branch != c.wantBranch {
-			t.Errorf("%+v: Branch = %q, want %q", c.in, node.Branch, c.wantBranch)
-		}
-		if node.ID != "session-0" {
-			t.Errorf("%+v: ID = %q, the label must never move the identity", c.in, node.ID)
-		}
-	}
-}

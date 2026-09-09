@@ -67,6 +67,12 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarEdgeMotion(mouse.X, mouse.Y)
 		return o, nil
 	}
+	// The divider between the rail's sections owns the pointer the same way
+	// the edge rule does while it is being dragged.
+	if o.SidebarSplitActive() {
+		o.SidebarSplitMotion(mouse.X, mouse.Y)
+		return o, nil
+	}
 
 	// A pressed or dragged workspace pill owns the pointer until release, for
 	// the same reason a rail row does: the motion is what turns the press into a

@@ -124,9 +124,20 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.NoteAction(action)
 		return o, o.SidebarOpenMail()
 	case sidebarActNarrow:
-		o.SidebarSetCollapsed(true)
+		// On the divider the two width keys move the split instead: narrow
+		// gives lines back to the sections above, widen gives them to the
+		// pinned block.
+		if o.SidebarCursorOnDivider() {
+			o.SidebarSplitStep(-1)
+		} else {
+			o.SidebarSetCollapsed(true)
+		}
 	case sidebarActWiden:
-		o.SidebarSetCollapsed(false)
+		if o.SidebarCursorOnDivider() {
+			o.SidebarSplitStep(1)
+		} else {
+			o.SidebarSetCollapsed(false)
+		}
 	case sidebarActKill:
 		o.SidebarOpenCursorMenu(true) // the cursor row's menu, opened on its destructive row
 	case sidebarActMenu:

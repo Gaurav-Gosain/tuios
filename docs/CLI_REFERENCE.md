@@ -326,13 +326,6 @@ Shows a table with:
 ╰───────────────┴─────────┴──────────┴───────────────┴─────────────────╯
 ```
 
-`tuios ls --json` prints one object per session. Two fields say where the session's focused pane is:
-
-- `dir` is the base name of the shell's directory. It is `~` for the home directory.
-- `branch` is the git branch checked out there. A detached HEAD reads as its short hash.
-
-Both come from the directory the shell last reported over OSC 7, or the directory the shell started in. Both are omitted when unknown. The sidebar labels a session with a generated name (`session-0`) by `dir`, and shows `branch` after any session name.
-
 ### `tuios kill-session`
 
 Kill a specific session.

@@ -427,6 +427,11 @@ type SidebarConfig struct {
 	// FileDelete is where a delete sends the file: trash or permanent
 	// (default: trash).
 	FileDelete string `toml:"file_delete"`
+	// AgentRow is the [appearance.sidebar.agent_row] table: the tokens an
+	// agent row draws and the value rules that colour them. Decoded as generic
+	// TOML and read by ParseSidebarAgentRow, so a wrong value in it is a
+	// warning rather than a config file that will not load.
+	AgentRow map[string]any `toml:"agent_row"`
 }
 
 // Tape autorun modes. See TapeConfig.Autorun.
@@ -1336,6 +1341,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if sb.FileDelete != "" {
 		s.SidebarFileDelete = sb.FileDelete
 	}
+	s.SidebarAgentRow = ParseSidebarAgentRow(sb.AgentRow)
 	if sb.Tooltips != nil {
 		s.Tooltips = *sb.Tooltips
 	}

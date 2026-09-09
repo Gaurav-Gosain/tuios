@@ -85,12 +85,9 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 		// session so the surfaces still have a root to show.
 		name = "local"
 	}
-	dir, branch := m.sessionPlace(name)
 	return sessiontree.SessionInput{
 		Name:             name,
 		DisplayName:      m.SessionDisplayName,
-		Dir:              dir,
-		Branch:           branch,
 		Attached:         true,
 		IsCurrent:        true,
 		Restored:         m.SessionRestored,
@@ -122,12 +119,9 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 		})
 	}
 	display, _ := client.SessionLabel(name)
-	dir, branch := m.sessionPlace(name)
 	return sessiontree.SessionInput{
 		Name:             name,
 		DisplayName:      display,
-		Dir:              dir,
-		Branch:           branch,
 		Restored:         client.SessionRestored(name),
 		CurrentWorkspace: client.SessionCurrentWorkspace(name),
 		Windows:          windows,

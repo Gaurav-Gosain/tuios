@@ -112,7 +112,7 @@ func sidebarStripBadgeFor(sessions []sessiontree.Node) sidebarStripBadgeInfo {
 	best := 0
 	for _, s := range sessions {
 		for _, win := range s.Children {
-			if !sidebarAttention(win.AgentState) {
+			if blocked, _ := sidebarAttentionCounts(win.AgentState, win.DoneSeen); !blocked {
 				continue
 			}
 			info.Count++

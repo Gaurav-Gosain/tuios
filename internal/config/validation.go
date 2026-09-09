@@ -291,6 +291,12 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 			Message: problem,
 		})
 	}
+	for _, problem := range ParseSidebarAgentRow(cfg.Appearance.Sidebar.AgentRow).Problems {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "appearance.sidebar.agent_row",
+			Message: problem,
+		})
+	}
 	checkEnum("sidebar.folder_click", cfg.Appearance.Sidebar.FolderClick, SidebarFolderClicks)
 	checkEnum("sidebar.file_delete", cfg.Appearance.Sidebar.FileDelete, SidebarFileDeletes)
 	if cfg.Appearance.Sidebar.Workspaces != "" {

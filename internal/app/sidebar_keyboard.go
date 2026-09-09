@@ -246,6 +246,10 @@ func (m *OS) SidebarActivateCursor() bool {
 		m.queueSidebarCmd(m.FileViewUp())
 	case sidebarRowFileEntry:
 		m.queueSidebarCmd(m.FileViewEnter(row.WindowIndex))
+	case sidebarRowDivider:
+		// Enter on the divider is the keyboard's double-click: the split goes
+		// back to the layout's own share.
+		m.SidebarResetSplit()
 	case sidebarRowSession:
 		m.sidebarSwitchSession(row.SessionID)
 		m.sidebarFollowSession = row.SessionID

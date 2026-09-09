@@ -43,22 +43,6 @@ func (m *OS) SessionLabel(name string) string {
 	return name
 }
 
-// sessionPlace is where a session is, as the rail shows it: the directory label
-// for its focused pane and the git branch there, both from the daemon's listing
-// and both empty until the listing has said. The directory is offered only for
-// a name tuios generated, since "session-3" says nothing and a name a person
-// chose says more than a directory. The branch follows either.
-func (m *OS) sessionPlace(name string) (dir, branch string) {
-	if m.DaemonClient == nil {
-		return "", ""
-	}
-	dir, branch = m.DaemonClient.SessionPlace(name)
-	if !session.IsGeneratedSessionName(name) {
-		dir = ""
-	}
-	return dir, branch
-}
-
 // WorkspaceLabel is what to show for a workspace of the attached session. An
 // unnamed workspace reads back as its number, which is both its identity and
 // the label it has always shown.

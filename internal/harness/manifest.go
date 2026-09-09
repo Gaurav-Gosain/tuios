@@ -148,10 +148,16 @@ type ScreenRule struct {
 	// Message is the reason the rule reports with its state, in plain words:
 	// what the agent waits for. A blocked state is one state with a reason
 	// attached, not a family of states, and this is where the reason lives.
-	Message string   `toml:"message"`
-	All     []string `toml:"all"`
-	Any     []string `toml:"any"`
-	Not     []string `toml:"not"`
+	Message string `toml:"message"`
+	// Kind says what sort of block a needs_input rule reads: "approval" for a
+	// prompt that wants a yes or a no on something the agent proposed, and
+	// "question" for one that wants an answer in words. It fronts the prompt
+	// line in the pane's message ("approval: Do you want to ..."). Empty means
+	// guess from the rule's own words; see RuleKind.
+	Kind string   `toml:"kind"`
+	All  []string `toml:"all"`
+	Any  []string `toml:"any"`
+	Not  []string `toml:"not"`
 	// Regex and NotRegex hold RE2 patterns, compiled once at load and matched
 	// with ^ and $ anchoring lines rather than the whole tail, because the tail
 	// is lines and a rule almost always means "some line looks like this".
@@ -219,6 +225,10 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 		}
 		if err := r.compile(m.Screen.FoldCase); err != nil {
 			return nil, fmt.Errorf("%s: manifest %q screen rule %d: %w", name, m.ID, i, err)
+		}
+		if r.Kind = strings.ToLower(strings.TrimSpace(r.Kind)); r.Kind != "" && !promptKinds[r.Kind] {
+			return nil, fmt.Errorf("%s: manifest %q screen rule %d: unknown kind %q (approval or question)",
+				name, m.ID, i, r.Kind)
 		}
 	}
 	if m.Screen.Lines <= 0 {

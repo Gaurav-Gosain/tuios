@@ -468,12 +468,6 @@ type OS struct {
 	// hostReturn is the session on this machine to come back to if the link
 	// to AttachedHost drops, or "" when the client started on the host.
 	hostReturn string
-	// foreignTickGen is the generation of the listing poll timer now armed, and
-	// foreignSessionReplan asks Update to arm a new one. See
-	// foreignSessionReplanCmd.
-	foreignTickGen       uint64
-	foreignSessionReplan bool
-
 	// SessionDisplayName and SessionAccent are the attached session's
 	// daemon-owned label and accent slot, both empty when unset. They are
 	// labels only: SessionName stays the identity every keyed map, every
@@ -927,7 +921,19 @@ type OS struct {
 	// left on rather than on the index that row happened to have, since that
 	// section resorts itself on live agent state. See sidebar_anchor.go.
 	sidebarAgentAnchor sidebarScrollAnchor
-	sidebarSectionY    [sidebarSectionCount][2]int
+	// sidebarReveal is what the last frame was drawn for, so a focus change
+	// can scroll the terminals and sessions sections to the row that now
+	// matters and a frame with no change leaves them alone. See
+	// sidebar_reveal.go.
+	sidebarReveal   sidebarRevealState
+	sidebarSectionY [sidebarSectionCount][2]int
+	// SidebarSectionSplit is the pinned section's dragged share of the rail in
+	// percent, or 0 for the layout's own. Persisted in the sidebar state file.
+	// sidebarSplit is the drag on the divider and sidebarSplitGeom what the
+	// last frame wrote down for it. See sidebar_split.go.
+	SidebarSectionSplit int
+	sidebarSplit        sidebarSplitState
+	sidebarSplitGeom    sidebarSplitGeom
 	// sidebarStripRows is what the collapsed strip drew on each of its lines,
 	// recorded by the renderer as it draws. The hover tooltip reads it to name
 	// what is under the pointer, including the badge, which is a readout rather
