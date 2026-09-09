@@ -132,10 +132,25 @@ changing or removing a host takes effect at once. The daemon follows the config
 file, so no restart is needed. The [hosts] table in the config file is still
 there and can still be edited by hand.
 
-Only listings cross a link. Nothing on another machine can be started, stopped,
-typed into, messaged or attached to, and there is no verb that would let you.
-An address you write is local, always. Host names appear in the listings above
-and nowhere else.
+Only listings cross the daemon's link. To open a session on a host, tuios runs
+ssh in a terminal or a pane, the way you would by hand:
+
+```sh
+tuios attach --host build api   # ssh -t build tuios attach api
+tuios new --host build          # ssh -t build tuios new
+tuios new --host build --detach # create it there and return
+```
+
+In the rail, press enter on a session under a host to open it. Press enter on
+the + beside a host to create a session there. The client you see is the one on
+the remote machine. It draws with that machine's config and theme, and it is
+nested in this one. Press the prefix key twice to send it to the remote client.
+For example, `ctrl+b ctrl+b d` detaches the remote client and closes the pane.
+
+No verb writes across the link. Nothing on another machine can be typed into or
+messaged from a verb, and there is no verb that would let you. An address you
+write in a verb is local, always. Host names appear in the listings above and
+nowhere else.
 
 A host name is matched exactly. A miss is `unknown_host` with the configured
 names, never a guess, because reaching the wrong machine is worse than reaching

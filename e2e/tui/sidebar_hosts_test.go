@@ -29,6 +29,7 @@ func writeFakeSSH(t *testing.T, dir string) string {
 		"  case \"$1\" in\n" +
 		"    -o) shift 2 ;;\n" +
 		"    -T) shift ;;\n" +
+		"    -t) shift ;;\n" +
 		"    *) break ;;\n" +
 		"  esac\n" +
 		"done\n" +

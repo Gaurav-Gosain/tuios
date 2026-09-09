@@ -54,8 +54,8 @@ opens the link. You do not have to restart it.
 
 Run 'tuios hosts test NAME' after this to see whether the link works.
 
-Only listings cross a link. Nothing on another machine can be started, changed
-or stopped from here.`,
+Only listings cross a link. To open a session on the host, run
+'tuios attach --host NAME SESSION', or press enter on its row in the rail.`,
 		Example: `  # A machine you reach as user@host
   tuios hosts add build gaurav@buildbox
 
@@ -189,37 +189,11 @@ const hostTestBudget = 20 * time.Second
 // command useful before a daemon has ever started, and what makes it a test of
 // the host rather than a reading of a link that came up minutes ago.
 func runHostTest(name string) error {
-	path, err := config.GetConfigPath()
-	if err != nil {
-		return fmt.Errorf("cannot find the config file: %w", err)
-	}
-	hosts, err := config.HostsInFile(path)
+	host, err := resolveConfiguredHost(name)
 	if err != nil {
 		return err
 	}
-	entry, ok := hosts[name]
-	if !ok {
-		names := make([]string, 0, len(hosts))
-		for n := range hosts {
-			names = append(names, n)
-		}
-		sort.Strings(names)
-		if len(names) == 0 {
-			return fmt.Errorf("no host is named %q. No hosts are configured. Add one with 'tuios hosts add %s user@machine'", name, name)
-		}
-		return fmt.Errorf("no host is named %q. Configured hosts: %s", name, strings.Join(names, ", "))
-	}
-
-	table, problems := federation.NewTable([]federation.Host{{
-		Name:           name,
-		Addr:           entry.Addr,
-		ConnectTimeout: time.Duration(entry.ConnectTimeout) * time.Second,
-		Command:        entry.Command,
-		SSHOptions:     entry.SSHOptions,
-	}})
-	if len(problems) > 0 {
-		return problems[0]
-	}
+	table, _ := federation.NewTable([]federation.Host{host})
 
 	m := federation.New(table, federation.Options{
 		Dial:            federation.SSHDialer(os.Getenv("TUIOS_SSH")),

@@ -2,7 +2,10 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -232,12 +235,132 @@ func (m *OS) hostGroupNodes() []sessiontree.Node {
 // cache and the row loop have a stable key per row.
 func hostNodeID(host string) string { return "\x00host/" + host }
 
-// isRemoteNode reports whether a tree node belongs to another machine. Every
-// interactive path in the rail checks it: a remote row is drawn and never
-// clicked, dragged, renamed, deleted or switched to, because no write and no
-// attach crosses a link in this release.
+// isRemoteNode reports whether a tree node belongs to another machine. It is
+// drawn in its host group, never dragged, renamed, deleted, or switched to as a
+// local session. A session under an up host is the one thing a remote row can
+// be: a target that opens it in a local pane over ssh. See drawHostRow.
 func isRemoteNode(n sessiontree.Node) bool {
 	return n.Kind == sessiontree.KindHost || n.Host != ""
+}
+
+// hostStatusByName is the link state the last snapshot reported for a host, or
+// "" when the snapshot does not name it.
+func (m *OS) hostStatusByName(name string) string {
+	for _, h := range m.FederationHosts {
+		if h.Name == name {
+			return h.Status
+		}
+	}
+	return ""
+}
+
+// hostIsUp reports whether a host's link is up, which is the one state a remote
+// session can be opened from. A listing from any other state is cached, so its
+// rows are shown and are not targets.
+func (m *OS) hostIsUp(name string) bool {
+	return m.hostStatusByName(name) == string(federation.StatusUp)
+}
+
+// remoteSessionName recovers the raw session name from a remote session node's
+// namespaced id. The id is hostNodeID(host)+":"+name, so the name is what
+// follows the last colon after the host prefix.
+func remoteSessionName(node sessiontree.Node) string {
+	prefix := hostNodeID(node.Host) + ":"
+	return strings.TrimPrefix(node.ID, prefix)
+}
+
+// drawHostRow draws one federated row and records what a person can reach on
+// it. A host header of an up host carries a "+" that creates a session there. A
+// session row under an up host is a target that opens the session. Every row
+// under a host that is not up is drawn and is not a target, because its listing
+// is cached and the machine cannot be reached right now.
+func (m *OS) drawHostRow(
+	node sessiontree.Node, cw int, pal overlay.Palette,
+	isCursor func(kind sidebarRowKind, sessionID, windowID string) bool,
+	recordHit func(kind sidebarRowKind, sessionID, windowID string, windowIndex, h int),
+	recordToken func(tk sidebarTokenSpan, sessionID string),
+	headerHoverX int,
+	compose func(content string) string,
+	lines *[]string,
+) {
+	if node.Kind == sessiontree.KindHost {
+		add := ""
+		if node.HostStatus == string(federation.StatusUp) {
+			labelW := sidebarHeaderLabelW("@ " + node.Title)
+			if tok, span, ok := sidebarHeaderAdd(sidebarRowHostNew, cw, labelW, pal,
+				headerHoverX, isCursor(sidebarRowHostNew, node.Host, ""), &m.Settings); ok {
+				add = tok
+				recordToken(span, node.Host)
+			}
+		}
+		*lines = append(*lines, compose(m.sidebarHostRow(node, cw, pal, add)))
+		return
+	}
+
+	// A session row. It is a target only when its host is up.
+	if m.hostIsUp(node.Host) {
+		recordHit(sidebarRowHostSession, node.Host, remoteSessionName(node), -1, 1)
+	}
+	*lines = append(*lines, compose(m.sidebarRemoteSessionRow(node, cw, pal)))
+}
+
+// openRemoteSession opens a session that lives on another machine, in a local
+// pane, over ssh.
+//
+// Nothing crosses the daemon's link. The pane runs this machine's own tuios
+// with 'attach --host', which runs ssh to the host and attaches with the tuios
+// on that machine. The client in the pane is the remote one: it draws with the
+// remote machine's config and theme, and it is nested in this one. See the
+// hosts help for what nesting costs.
+func (m *OS) openRemoteSession(host, sessionName string) {
+	if !m.hostIsUp(host) {
+		m.ShowNotification(host+" is unavailable", "warning", m.Settings.NotificationWarningDuration)
+		return
+	}
+	argv, err := remoteOpenArgv("attach", host, sessionName)
+	if err != nil {
+		m.ShowNotification(err.Error(), "error", m.Settings.NotificationDuration*2)
+		return
+	}
+	m.clearSidebarReturn() // opening the session is where the user asked to end up
+	m.AddWindow(host+"/"+sessionName, argv...)
+}
+
+// createRemoteSession creates a session on another machine and opens it, in a
+// local pane, over ssh. The pane runs 'new --host', which creates the session
+// on the far side and attaches to it in one connection.
+func (m *OS) createRemoteSession(host string) {
+	if !m.hostIsUp(host) {
+		m.ShowNotification(host+" is unavailable", "warning", m.Settings.NotificationWarningDuration)
+		return
+	}
+	argv, err := remoteOpenArgv("new", host, "")
+	if err != nil {
+		m.ShowNotification(err.Error(), "error", m.Settings.NotificationDuration*2)
+		return
+	}
+	m.clearSidebarReturn()
+	m.AddWindow("new @ "+host, argv...)
+}
+
+// remoteOpenArgv is the argv a pane runs to open or create a session on a host.
+// It is this machine's own tuios, so the pane reuses every part of the CLI
+// path: the host is read from this machine's [hosts] table, ssh carries the
+// options and the address, a failure says what happened, and --hold keeps the
+// pane open so that message can be read.
+//
+// verb is "attach" or "new". A session name is passed for attach and is empty
+// for new, which lets the far side pick the name.
+func remoteOpenArgv(verb, host, sessionName string) ([]string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("cannot find the tuios program to open the session. %w", err)
+	}
+	argv := []string{exe, verb, "--host", host}
+	if sessionName != "" {
+		argv = append(argv, sessionName)
+	}
+	return append(argv, "--hold"), nil
 }
 
 // localSessionNodes drops the host groups from a tree's session list. The
@@ -288,16 +411,24 @@ func hostStatusLabel(status string) string {
 // The mark is "@" in both glyph modes rather than a nerd font icon: it is the
 // character a machine address already carries, it is one cell wide in every
 // font, and the rail's other marks are about panes rather than machines.
-func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette) string {
+func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, add string) string {
 	if node.Kind != sessiontree.KindHost {
 		return m.sidebarRemoteSessionRow(node, cw, pal)
 	}
 
 	right, rightW := "", 0
-	if label := hostStatusLabel(node.HostStatus); label != "" {
+	switch {
+	case hostStatusLabel(node.HostStatus) != "":
+		// A host that is not up says why, in the slot the add control would take.
+		// An unreachable machine has nothing to add a session to.
+		label := hostStatusLabel(node.HostStatus)
 		right = sidebarStyle(nil, pal.FgMute).Render(label)
 		rightW = lipgloss.Width(label)
-	} else if m.Settings.SidebarShowCounts && node.WindowCount > 0 {
+	case add != "":
+		// An up host offers a "+" that creates a session on it.
+		right = add
+		rightW = lipgloss.Width(add)
+	case m.Settings.SidebarShowCounts && node.WindowCount > 0:
 		count := strconv.Itoa(node.WindowCount)
 		right = sidebarStyle(nil, pal.FgMute).Render(count)
 		rightW = lipgloss.Width(count)
