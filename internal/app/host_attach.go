@@ -89,14 +89,7 @@ func (m *OS) adoptClient(client *session.TUIClient, state *session.SessionState,
 	old := m.DaemonClient
 	if old != nil {
 		// Its disconnect is this switch, not a loss, so nothing must hear it.
-		old.OnDisconnect(nil)
-		old.OnSessionEnded(nil)
-		old.OnRemoteCommand(nil)
-		old.OnStateSync(nil)
-		old.OnSessionResize(nil)
-		old.OnAgentMail(nil)
-		old.OnClientJoined(nil)
-		old.OnClientLeft(nil)
+		m.UnwireDaemonClient(old)
 		// Every pane's stream ends here; rebuildForSession closes the panes.
 		_ = old.Detach()
 		_ = old.Close()

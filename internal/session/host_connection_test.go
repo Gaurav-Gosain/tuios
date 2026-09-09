@@ -491,10 +491,11 @@ func TestOpenHostConnectionSendsNothingBeforeTheReply(t *testing.T) {
 			n, _ := br.Read(make([]byte, 1))
 			extra <- n
 		}()
+		// The reply is written either way, so a client that spoke early is
+		// reported by the assertion below rather than by its own timeout.
 		select {
 		case n := <-extra:
-			sent <- line + " and " + string(rune('0'+n)) + " early byte(s)"
-			return
+			line += " and " + string(rune('0'+n)) + " early byte(s)"
 		case <-time.After(200 * time.Millisecond):
 		}
 		sent <- line
@@ -509,11 +510,11 @@ func TestOpenHostConnectionSendsNothingBeforeTheReply(t *testing.T) {
 		t.Errorf("info = %+v", info)
 	}
 	line := <-sent
+	if strings.Contains(line, "early") {
+		t.Fatalf("ASSERTION: the client wrote before the reply: %s", line)
+	}
 	var req verbRequest
 	if err := json.Unmarshal([]byte(strings.TrimSuffix(line, "\n")), &req); err != nil || req.Verb != "open-host-connection" {
 		t.Fatalf("ASSERTION: the request line is %q", line)
-	}
-	if strings.Contains(line, "early") {
-		t.Fatalf("ASSERTION: the client wrote before the reply: %s", line)
 	}
 }

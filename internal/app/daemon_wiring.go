@@ -85,6 +85,24 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 	})
 }
 
+// UnwireDaemonClient removes every handler WireDaemonClient registered, so a
+// connection this model is about to replace cannot report its own closing as
+// a loss, or hand a stale push to the session that took its place. It is the
+// same list as WireDaemonClient, and the test that pins that list pins this.
+func (m *OS) UnwireDaemonClient(client *session.TUIClient) {
+	if client == nil {
+		return
+	}
+	client.OnRemoteCommand(nil)
+	client.OnStateSync(nil)
+	client.OnClientJoined(nil)
+	client.OnAgentMail(nil)
+	client.OnClientLeft(nil)
+	client.OnSessionResize(nil)
+	client.OnSessionEnded(nil)
+	client.OnDisconnect(nil)
+}
+
 // clientLog is the standard logger, when verbose logging is on.
 func clientLog(format string, args ...any) {
 	if verboseLog {

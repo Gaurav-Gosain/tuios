@@ -117,6 +117,8 @@ func TestAttachOnAHostIsDrawnByThisClient(t *testing.T) {
 	}, bootTimeout); err != nil {
 		t.Fatalf("ASSERTION: the client never drew the far session: %v\n%s", err, term.Snapshot())
 	}
+	// Drawn by this client, not by one on the far side.
+	noNestedClient(t, "far-shell")
 
 	// Keystrokes cross to the far shell and its output crosses back.
 	if err := term.SendKeys("echo REMOTE-$((6*7))\r"); err != nil {
@@ -139,7 +141,6 @@ func TestAttachOnAHostIsDrawnByThisClient(t *testing.T) {
 	if out := remoteSessionsListed(t, remote); !strings.Contains(out, "far-shell") {
 		t.Fatalf("the far daemon lost its session:\n%s", out)
 	}
-	noNestedClient(t, "far-shell")
 	alive(t, term, "after attaching a session on a host")
 }
 
@@ -188,13 +189,13 @@ func TestRailAttachesARemoteSessionInThisClient(t *testing.T) {
 
 	// The proof: the main group is now build's, and this machine's sessions
 	// are the host group named local.
-	railShows(t, term, "@ local")
-	railShows(t, term, "home")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "sessions") && strings.Contains(s.Text(), "@ build")
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the rail did not switch onto build: %v\n%s", err, term.Snapshot())
 	}
+	railShows(t, term, "@ local")
+	railShows(t, term, "home")
 	t.Logf("after the rail switched onto build:\n%s", term.Snapshot())
 
 	// No pane was opened for it on this machine, and no nested client runs.
