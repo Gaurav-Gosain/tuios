@@ -220,7 +220,7 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 				}
 			})
 		}),
-		gh.WithClipboardWrite(func(_ *gh.Terminal, w gh.ClipboardWrite) gh.ClipboardWriteResult {
+		gh.WithClipboardWrite(func(_ *gh.Terminal, w gh.ClipboardWrite) gh.ClipboardWriteReply {
 			selection := "c"
 			if w.Location == gh.ClipboardLocationPrimary {
 				selection = "p"
@@ -234,7 +234,11 @@ func newGhosttyTerminal(w, h, maxLines int) *GhosttyTerminal {
 				})
 				break // tuios's callback carries one payload per selection
 			}
-			return gh.ClipboardWriteSuccess
+			// The reply is mandatory. libghostty denies a write that returns
+			// without one, so this must stay a success even when the host has
+			// no ClipboardSet callback: the guest already handed the payload
+			// over and a denial would report a failure that did not happen.
+			return gh.ClipboardWriteReply{Result: gh.ClipboardWriteSuccess}
 		}),
 		gh.WithDesktopNotification(func(_ *gh.Terminal, n gh.TerminalDesktopNotification) {
 			t.queue(func(cb Callbacks) {
