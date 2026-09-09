@@ -469,7 +469,13 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// instead of rebuilding them via styleToANSI. currentStyleCached gates that.
 	var currentStyleCached bool
 	var currentPrefix, currentSuffix string
-	var prevCell *uv.Cell
+	// The previous cell's style, held as a value rather than as the pointer
+	// CellAt handed back. A pointer kept across the next CellAt call pins the
+	// emulator to handing out stable addresses, which is what stands between
+	// the VT layer and a packed grid; a style is what the batching compares,
+	// so a style is what is kept.
+	var prevStyle uv.Style
+	var prevValid bool
 	var prevIsCursor bool
 
 	flushBatch := func() {
@@ -498,16 +504,22 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	// safeColorEquals is defined at package scope (color_nil.go) so it can guard
 	// against wrapped-nil colors and be exercised directly by tests.
 	styleMatches := func(cell *uv.Cell, isCursorPos bool) bool {
-		if prevCell == nil && cell == nil {
+		if !prevValid && cell == nil {
 			return prevIsCursor == isCursorPos
 		}
-		if prevCell == nil || cell == nil {
+		if !prevValid || cell == nil {
 			return false
 		}
 		return prevIsCursor == isCursorPos &&
-			safeColorEquals(prevCell.Style.Fg, cell.Style.Fg) &&
-			safeColorEquals(prevCell.Style.Bg, cell.Style.Bg) &&
-			prevCell.Style.Attrs == cell.Style.Attrs
+			safeColorEquals(prevStyle.Fg, cell.Style.Fg) &&
+			safeColorEquals(prevStyle.Bg, cell.Style.Bg) &&
+			prevStyle.Attrs == cell.Style.Attrs
+	}
+	// notePrev records the cell just emitted for the next comparison.
+	notePrev := func(cell *uv.Cell) {
+		if prevValid = cell != nil; prevValid {
+			prevStyle = cell.Style
+		}
 	}
 
 	for y := range maxY {
@@ -517,7 +529,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 		batchBuilder.Reset()
 		batchHasStyle = false
-		prevCell = nil
+		prevValid = false
 
 		lineEndX := maxX - 1
 		if inVisualMode && visualSelection != nil && visualSelection.HasRow(y) {
@@ -608,7 +620,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 				builder.WriteString(renderStyledText(copyModeCursorStyle, char))
 
-				prevCell = nil
+				prevValid = false
 				prevIsCursor = false
 
 				x += charWidth
@@ -643,7 +655,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				flushBatch()
 
 				builder.WriteString(renderStyledText(visualSelectionStyle, char))
-				prevCell = cell
+				notePrev(cell)
 				prevIsCursor = false
 				cellWidth := 1
 				if cell != nil && cell.Width > 1 {
@@ -658,7 +670,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 					flushBatch()
 
 					builder.WriteString(renderStyledText(currentMatchStyle, char))
-					prevCell = cell
+					notePrev(cell)
 					prevIsCursor = false
 					cellWidth := 1
 					if cell != nil && cell.Width > 1 {
@@ -672,7 +684,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 					flushBatch()
 
 					builder.WriteString(renderStyledText(searchMatchStyle, char))
-					prevCell = cell
+					notePrev(cell)
 					prevIsCursor = false
 					cellWidth := 1
 					if cell != nil && cell.Width > 1 {
@@ -691,7 +703,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				flushBatch()
 
 				builder.WriteString(renderStyledText(linkHoverStyle, char))
-				prevCell = cell
+				notePrev(cell)
 				prevIsCursor = false
 				cellWidth := 1
 				if cell != nil && cell.Width > 1 {
@@ -746,7 +758,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			}
 			batchBuilder.WriteString(char)
 
-			prevCell = cell
+			notePrev(cell)
 			prevIsCursor = isCursorPos
 
 			cellWidth := 1

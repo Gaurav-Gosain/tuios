@@ -13,9 +13,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
-func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
+func (m *OS) GetCanvas(render bool) *frameCanvas {
 	// Before anything is built. The overlay package's glyph set used to be
 	// synced inside renderOverlays, which runs after the sidebar layer is
 	// already composed, so a client launched with ascii_only painted its first
@@ -29,7 +30,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 	// in place. Safe because GetCanvas is only called from View on one goroutine.
 	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
 	if m.renderCanvas == nil {
-		m.renderCanvas = lipgloss.NewCanvas(rw, rh)
+		m.renderCanvas = &frameCanvas{Buffer: *uv.NewBuffer(rw, rh)}
 	} else {
 		m.renderCanvas.Resize(rw, rh)
 		m.renderCanvas.Clear()
@@ -278,7 +279,7 @@ func (m *OS) GetCanvas(render bool) *lipgloss.Canvas {
 		m.SidebarHits = m.SidebarHits[:0]
 	}
 
-	canvas.Compose(lipgloss.NewCompositor(layers...))
+	m.composeLayers(canvas, layers)
 
 	return canvas
 }
