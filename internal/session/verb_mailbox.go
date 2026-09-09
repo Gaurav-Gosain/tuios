@@ -74,7 +74,21 @@ const (
 	agentSendBurst = 10
 	// agentSendPerMinute is the sustained rate one sender's bucket refills at.
 	agentSendPerMinute = 30
+	// agentLinkMaxQueued bounds what other machines can leave in one ring at
+	// once: unread direct messages that arrived over a link, and notices
+	// that did, counted separately. A message from another machine was
+	// written by a program this machine's owner does not run, so it gets a
+	// smaller share of the ring than local traffic, and reading is what
+	// makes room. Notices are never read, so the bound on them is on how
+	// many are held.
+	agentLinkMaxQueued = 32
+	// agentMsgMaxHostName bounds the name a sender claims for its machine.
+	agentMsgMaxHostName = 64
 )
+
+// AgentOriginLink is the Origin of a message that arrived over a link. It is
+// the only value Origin takes: a message from this machine has none.
+const AgentOriginLink = "link"
 
 var (
 	errAttachNotAbsolute = errors.New("attachment path must be absolute")
@@ -161,6 +175,16 @@ type AgentMessage struct {
 	// SettledBy is set on an ask record only: which signal ended the wait, as
 	// ask-agent reported it ("agent-state", "idle", "timeout", ...).
 	SettledBy string `json:"settled_by,omitempty"`
+	// Origin is AgentOriginLink when the send arrived on the daemon's link
+	// socket, which is to say from another machine, and empty when it came
+	// from a process on this one. It is set by the daemon from the connection
+	// the send arrived on and never from anything in the request, so a
+	// message cannot claim to be local. OriginHost is what the sender said
+	// its machine is called: a claim, bounded and shown as one. A reader,
+	// human or agent, is told both, because who wrote a message is the
+	// first thing that decides how much of it to believe.
+	Origin     string `json:"origin,omitempty"`
+	OriginHost string `json:"origin_host,omitempty"`
 	// Undeliverable is resolved at read time and means the recipient window is
 	// gone. A message is never re-homed onto a new pane that happens to carry
 	// the old one's name, because that pane is a different agent holding
@@ -412,6 +436,28 @@ func resolveAttachments(in []AgentAttachment) []AgentAttachment {
 		}
 	}
 	return out
+}
+
+// linkQueued counts what other machines have left in a session's ring that
+// nobody has dealt with: unread direct messages that arrived over a link, and
+// link notices, which are never read and so are counted while they are held.
+func (b *agentBus) linkQueued(session string) (unread, notices int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, m := range b.box(session).msgs {
+		if m.Origin != AgentOriginLink {
+			continue
+		}
+		switch m.Kind {
+		case agentMsgDirect:
+			if m.ReadAt == 0 {
+				unread++
+			}
+		case agentMsgNotice:
+			notices++
+		}
+	}
+	return unread, notices
 }
 
 // unreadCounts returns the unread count for every inbox in a session in one

@@ -369,6 +369,20 @@ func runStdioProxy() error {
 		return err
 	}
 	return federation.ServeProxy(os.Stdin, os.Stdout, func() (net.Conn, error) {
-		return net.DialTimeout("unix", socketPath, 5*time.Second)
+		return dialForLink(socketPath)
 	})
+}
+
+// dialForLink connects a link stream to this machine's daemon.
+//
+// It dials the link socket, so the daemon knows the connection came from
+// another machine and marks what arrives on it. A daemon from before the link
+// socket existed has only the main socket, and the proxy falls back to that
+// so an older daemon still links; what is lost then is only the mark.
+func dialForLink(socketPath string) (net.Conn, error) {
+	conn, err := net.DialTimeout("unix", session.LinkSocketPath(socketPath), 5*time.Second)
+	if err == nil {
+		return conn, nil
+	}
+	return net.DialTimeout("unix", socketPath, 5*time.Second)
 }

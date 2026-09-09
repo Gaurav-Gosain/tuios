@@ -643,17 +643,17 @@ func formatTimeAgo(unixTime int64) string {
 }
 
 func runKillSession(sessionName string) error {
-	client, err := dialVerb()
+	t, err := dialSessionTarget(sessionName)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	if _, err := client.Call("kill-session", map[string]any{"session": sessionName}); err != nil {
-		return explainVerbError("kill-session", err)
+	if _, err := t.client.Call("kill-session", t.params(nil)); err != nil {
+		return t.explain("kill-session", err)
 	}
 
-	fmt.Printf("Killed session '%s'.\n", sessionName)
+	fmt.Printf("Killed session '%s'%s.\n", t.session, t.on())
 	return nil
 }
 

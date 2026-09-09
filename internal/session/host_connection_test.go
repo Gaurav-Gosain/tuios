@@ -49,6 +49,31 @@ type farSide struct {
 
 	mu    sync.Mutex
 	links []*pipeTransport
+	// dials counts every transport the hub has opened to this side. It is
+	// what tells a redial from the link it replaced: the hub's status reads
+	// up for the old link until its supervisor has noticed the drop, so a
+	// test that wants the new link waits for the dial first.
+	dials int
+}
+
+// dialCount is how many times the hub has dialed this side so far.
+func (f *farSide) dialCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.dials
+}
+
+// waitForDial blocks until the hub has dialed this side more than n times.
+func (f *farSide) waitForDial(t *testing.T, n int) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if f.dialCount() > n {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("the hub never dialed the far side again: %d dial(s), had %d", f.dialCount(), n)
 }
 
 // breakLink closes every link transport, which is the ssh child dying.
@@ -77,6 +102,7 @@ func (f *farSide) dialer(dialFar func() (net.Conn, error)) federation.Dialer {
 		remote := &pipeTransport{r: remoteR, w: remoteW}
 		f.mu.Lock()
 		f.links = append(f.links, hub, remote)
+		f.dials++
 		f.mu.Unlock()
 		go func() {
 			_ = federation.ServeProxy(remote, remote, dialFar)
@@ -291,6 +317,7 @@ func TestALinkThatDropsEndsTheClientAndKeepsTheFarSession(t *testing.T) {
 	lost := make(chan error, 1)
 	c.OnDisconnect(func(err error) { lost <- err })
 
+	dialsBefore := far.dialCount()
 	far.breakLink()
 
 	select {
@@ -308,6 +335,14 @@ func TestALinkThatDropsEndsTheClientAndKeepsTheFarSession(t *testing.T) {
 	}
 
 	// The link comes back on its own and the session is there to attach.
+	//
+	// The client hears the drop from the relay, which can run ahead of the
+	// link's supervisor: for a moment after the transport dies the hub still
+	// reports the old link up, and a connect made in that moment lands on a
+	// mux that is closing. So the redial is waited for first, which the hub
+	// only makes after it has marked the old link down, and then the new
+	// link's own up.
+	far.waitForDial(t, dialsBefore)
 	waitForHostUp(t, hub, "build")
 	again, state := connectThrough(t, "build", "survivor")
 	if state == nil || len(state.Windows) != 1 {

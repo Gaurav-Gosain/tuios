@@ -82,13 +82,16 @@ func TestStashListSaysWhenItIsEmpty(t *testing.T) {
 	}
 }
 
-// TestStashCommandTreeResolves checks the two subcommands are reachable with the
+// TestStashCommandTreeResolves checks the subcommands are reachable with the
 // arguments the skill shows, since the skill is asserted against this tree.
 func TestStashCommandTreeResolves(t *testing.T) {
 	for _, args := range [][]string{
 		{"stash", "put", "/tmp/flame.png"},
+		{"stash", "put", "-s", "build:api", "/tmp/flame.png"},
 		{"stash", "list"},
 		{"stash", "list", "-s", "work"},
+		{"stash", "get", "-s", "build:api", "/run/user/1000/tuios/stash/x/y.png", "flame.png"},
+		{"stash", "get", "-s", "build:api", "/run/user/1000/tuios/stash/x/y.png"},
 	} {
 		root := newRootCommand()
 		cmd, rest, err := root.Find(args)

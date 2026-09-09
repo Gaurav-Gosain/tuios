@@ -74,6 +74,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"send-agent-message#2": {errCode: ErrVerbInvalidParams, why: "/tmp/flame.png does not exist here"},
 	"send-agent-message#3": {errCode: ErrVerbInvalidParams, why: "message 12 does not exist here"},
 	"stash-put#0":          {errCode: ErrVerbInvalidParams, why: "/tmp/flame.png does not exist here"},
+	"stash-get#0":          {errCode: ErrVerbInvalidParams, why: "the example path is a placeholder, not a file this session stashed"},
 
 	// No hosts are configured in the fixture.
 	"list-host-agents#1":   {errCode: ErrVerbUnknownHost, why: "no hosts are configured here"},

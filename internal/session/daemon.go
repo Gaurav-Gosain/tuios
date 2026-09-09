@@ -25,8 +25,12 @@ import (
 type Daemon struct {
 	manager  *Manager
 	listener net.Listener
-	ctx      context.Context
-	cancel   context.CancelFunc
+	// linkListener is the second socket, the one `tuios stdio-proxy` dials
+	// for a connection that arrived over another machine's link. Every
+	// connection accepted on it is marked viaLink; see LinkSocketPath.
+	linkListener net.Listener
+	ctx          context.Context
+	cancel       context.CancelFunc
 
 	// Connection tracking
 	clients   map[string]*connState
@@ -227,6 +231,13 @@ type connState struct {
 	// when it does. open-host-connection sets it to relay the connection to
 	// another machine's daemon.
 	takeover func(br *bufio.Reader)
+
+	// viaLink says this connection was accepted on the link socket, which
+	// only the proxy on this machine dials, for a stream that came in over a
+	// hub's link. It is a fact about the connection, not a claim in any
+	// message: whatever arrives on it was written on another machine, and
+	// the mailbox marks what it stores from it as such.
+	viaLink bool
 
 	// attached says the attach reply has been written to this connection, and
 	// it is what broadcastToSession requires before it will send anything.
@@ -557,6 +568,27 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("failed to set socket permissions: %w", err)
 	}
 
+	// The link socket. It is optional: a daemon that cannot bind it still
+	// serves, and the proxy falls back to the main socket, at the cost of a
+	// message from another machine not being marked as one. The start lock
+	// is held, so a stale file here is a dead daemon's and is removed.
+	linkPath := LinkSocketPath(socketPath)
+	_ = os.Remove(linkPath)
+	if ll, err := net.Listen("unix", linkPath); err != nil {
+		log.Printf("The link socket %s could not be opened: %v. Mail from other machines is not marked.", linkPath, err)
+	} else {
+		if ul, ok := ll.(*net.UnixListener); ok {
+			ul.SetUnlinkOnClose(false)
+		}
+		if err := os.Chmod(linkPath, 0700); err != nil {
+			_ = ll.Close()
+			_ = os.Remove(linkPath)
+			log.Printf("The link socket %s could not be secured: %v. Mail from other machines is not marked.", linkPath, err)
+		} else {
+			d.linkListener = ll
+		}
+	}
+
 	if err := d.writePidFile(); err != nil {
 		_ = listener.Close()
 		_ = os.Remove(socketPath) // Close no longer unlinks; a failed start must not leave a stale socket
@@ -594,6 +626,9 @@ func (d *Daemon) Start() error {
 
 	go d.handleSignals()
 	go d.acceptLoop()
+	if d.linkListener != nil {
+		go d.acceptLinkLoop()
+	}
 	go d.cleanupLoop()
 	go d.stallMonitor()
 	go d.agentMonitor()
@@ -682,6 +717,10 @@ func (d *Daemon) shutdown() error {
 
 		if d.listener != nil {
 			_ = d.listener.Close()
+		}
+		if d.linkListener != nil {
+			_ = d.linkListener.Close()
+			_ = os.Remove(LinkSocketPath(d.manager.SocketPath()))
 		}
 
 		// Closing the watcher ends its goroutine and returns every inotify watch
@@ -785,6 +824,34 @@ func (d *Daemon) acceptLoop() {
 	}
 }
 
+// acceptLinkLoop is acceptLoop for the link socket. A connection from it is
+// served exactly like any other, with one difference: it is marked as having
+// come over a link before a byte of it is read.
+func (d *Daemon) acceptLinkLoop() {
+	for {
+		conn, err := d.linkListener.Accept()
+		if err != nil {
+			select {
+			case <-d.ctx.Done():
+				return
+			default:
+				log.Printf("Accept error on the link socket: %v", err)
+				continue
+			}
+		}
+		go d.handleConnectionFrom(conn, true)
+	}
+}
+
+// LinkSocketPath is the socket the local proxy dials for a connection that
+// arrived over a hub's link, beside the daemon's own socket. The daemon marks
+// everything accepted on it as from another machine. A proxy that finds no
+// such socket dials the main one, which is what an older daemon has, so the
+// two builds still link; the mark is then simply absent.
+func LinkSocketPath(socketPath string) string {
+	return socketPath + ".link"
+}
+
 // shortID returns the first 8 bytes of s, or all of s if it is shorter. IDs
 // reaching the daemon can be client-controlled and arbitrarily short, so a
 // plain s[:8] slice would panic; this makes ID truncation for logs safe.
@@ -796,6 +863,12 @@ func shortID(s string) string {
 }
 
 func (d *Daemon) handleConnection(conn net.Conn) {
+	d.handleConnectionFrom(conn, false)
+}
+
+// handleConnectionFrom serves one connection. viaLink marks it as accepted on
+// the link socket.
+func (d *Daemon) handleConnectionFrom(conn net.Conn, viaLink bool) {
 	// A panic on the untrusted client-parsed message surface must not take down
 	// the daemon and every other session. Recover, log, and drop just this
 	// client. Registered before the cleanup defer below so cleanup (which closes
@@ -817,9 +890,14 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		codec:            DefaultCodec(), // Default to gob, may be changed in handleHello
 		ptySubscriptions: make(map[string]struct{}),
 		ptyResume:        make(map[string]int64),
+		viaLink:          viaLink,
 	}
 
-	LogBasic("Client %s connected", clientID)
+	if viaLink {
+		LogBasic("Client %s connected over a link", clientID)
+	} else {
+		LogBasic("Client %s connected", clientID)
+	}
 
 	d.clientsMu.Lock()
 	d.clients[clientID] = cs

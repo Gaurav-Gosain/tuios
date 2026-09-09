@@ -144,17 +144,3 @@ func (t *Table) Lookup(name string) (Host, error) {
 	}
 	return h, nil
 }
-
-// SplitTarget splits a possibly qualified address into its host and target
-// parts. An address with no qualifier is local, always, which is what keeps
-// every existing address meaning exactly what it meant before.
-//
-// It is here in stage 1 so the one parser exists in one place. Stage 1 has no
-// verb that takes a qualified target; stage 2 adds them and uses this.
-func SplitTarget(addr string) (host, target string) {
-	before, after, ok := strings.Cut(addr, ":")
-	if !ok || before == "" {
-		return LocalHostName, addr
-	}
-	return before, after
-}

@@ -221,6 +221,17 @@ func (s *stashStore) put(sessionID, src string, referenced func() map[string]boo
 	}
 	defer func() { _ = f.Close() }()
 
+	return s.putFrom(sessionID, src, f, referenced)
+}
+
+// putFrom stores the bytes read from r under the session, labelled as coming
+// from src. src decides the extension the file is stored with and is kept as
+// the listing's source column; it is never opened. It is what a put of bytes
+// that crossed a link uses, with the sender's own path as the label.
+func (s *stashStore) putFrom(sessionID, src string, r io.Reader, referenced func() map[string]bool) (stashResult, error) {
+	if s == nil {
+		return stashResult{}, errors.New("this daemon has no stash")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -249,7 +260,7 @@ func (s *stashStore) put(sessionID, src string, referenced func() map[string]boo
 	sum := sha256.New()
 	// One byte past the cap, so a source that grew after the stat above is
 	// refused rather than allowed to walk over the per-file bound.
-	written, err := io.Copy(io.MultiWriter(tmp, sum), io.LimitReader(f, stashMaxFileBytes+1))
+	written, err := io.Copy(io.MultiWriter(tmp, sum), io.LimitReader(r, stashMaxFileBytes+1))
 	if err != nil {
 		return stashResult{}, err
 	}
@@ -436,6 +447,32 @@ func (s *stashStore) owns(sessionID, path string) bool {
 	}
 	e, _ := b.find(filepath.Base(filepath.Clean(path)))
 	return e != nil && e.Path == filepath.Clean(path)
+}
+
+// open returns a stored file for reading, or nil when the path is not one this
+// session's store put there. It is the one way bytes leave the store through
+// the socket, and it exists for a file that has to cross a link: on one
+// machine a path is enough, and between two it is not.
+func (s *stashStore) open(sessionID, path string) (*os.File, *stashEntry, error) {
+	if !s.owns(sessionID, path) {
+		return nil, nil, os.ErrNotExist
+	}
+	s.mu.Lock()
+	b := s.boxes[sessionID]
+	var entry *stashEntry
+	if b != nil {
+		entry, _ = b.find(filepath.Base(filepath.Clean(path)))
+	}
+	s.mu.Unlock()
+	if entry == nil {
+		return nil, nil, os.ErrNotExist
+	}
+	f, err := os.Open(entry.Path)
+	if err != nil {
+		return nil, nil, err
+	}
+	copied := *entry
+	return f, &copied, nil
 }
 
 // forget deletes a session's whole store. It runs on session deletion, so the

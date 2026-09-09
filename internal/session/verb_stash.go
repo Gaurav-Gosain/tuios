@@ -1,30 +1,42 @@
 package session
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"strconv"
 )
 
-// This file holds the two stash verbs. They are the whole surface: put bytes in,
-// list what is in. There is no get and no delete on purpose.
+// This file holds the stash verbs: put bytes in, list what is in, and get
+// bytes out for a file that has to cross a link. There is no delete on purpose.
 //
-// No get, because the answer to a put is a path, and a path is already the thing
-// every reader on this host can open. A verb that streamed the bytes back
-// through the socket would be the copy the design exists to avoid.
+// On one machine the answer to a put is a path, and a path is already the
+// thing every reader on this host can open. Between two machines a path means
+// nothing, so a put may carry the bytes themselves and a get may hand them
+// back, both bounded well under what one request line may hold. That is the
+// only copy through the socket, and it is the one the link makes necessary.
 //
 // No delete, because the lifetime is the session's and an agent that could
 // delete could delete a file another agent's message still names. The only
 // deletions are the session ending, the daemon stopping, and the cap forcing a
 // reclaim, and all three are the daemon's own.
 
+// stashTransferMaxBytes bounds a file that crosses the socket as bytes, in
+// either direction. It is under the per-file cap because the bytes travel
+// base64 in one request or reply line, and that line is capped at 16 MiB.
+const stashTransferMaxBytes = 8 << 20
+
 // verbStashPut copies a file into the session's store and answers with the
-// stored path.
+// stored path. With content the bytes come in the request, for a file on
+// another machine, and path is only the name they are stored under.
 func (d *Daemon) verbStashPut(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Path    string `json:"path"`
+		Content string `json:"content"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -38,9 +50,34 @@ func (d *Daemon) verbStashPut(_ *connState, params json.RawMessage) (any, *verbE
 		return nil, verr
 	}
 
-	res, err := d.stash.put(sess.ID, p.Path, func() map[string]bool {
+	referenced := func() map[string]bool {
 		return d.agents.referencedPaths(sess.Name)
-	})
+	}
+	var res stashResult
+	var err error
+	if p.Content != "" {
+		if len(p.Content) > base64.StdEncoding.EncodedLen(stashTransferMaxBytes) {
+			return nil, hintedVerbError(ErrVerbInvalidParams, "stash put "+echoName(p.Path)+": the content is larger than the transfer cap", &VerbHint{
+				Param:  "content",
+				Detail: "A file that crosses the socket as bytes is capped at " + strconv.Itoa(stashTransferMaxBytes>>20) + " MB.",
+			})
+		}
+		data, derr := base64.StdEncoding.DecodeString(p.Content)
+		if derr != nil {
+			return nil, invalidParam("content", "content is not base64")
+		}
+		// The encoded check above is coarse: padding lets a byte or two
+		// past it. The decoded size is the bound.
+		if len(data) > stashTransferMaxBytes {
+			return nil, hintedVerbError(ErrVerbInvalidParams, "stash put "+echoName(p.Path)+": the content is larger than the transfer cap", &VerbHint{
+				Param:  "content",
+				Detail: "A file that crosses the socket as bytes is capped at " + strconv.Itoa(stashTransferMaxBytes>>20) + " MB.",
+			})
+		}
+		res, err = d.stash.putFrom(sess.ID, p.Path, bytes.NewReader(data), referenced)
+	} else {
+		res, err = d.stash.put(sess.ID, p.Path, referenced)
+	}
 	if err != nil {
 		return nil, stashPutError(p.Path, err)
 	}
@@ -125,6 +162,59 @@ func (d *Daemon) verbStashList(_ *connState, params json.RawMessage) (any, *verb
 		"evicted":        listing.Evicted,
 		"max_file_bytes": stashMaxFileBytes,
 		"max_bytes":      stashMaxSessionBytes,
+	}, nil
+}
+
+// verbStashGet hands back the bytes of one stashed file, so a file can cross a
+// link. Only a path this session's store put there is served: the stash is
+// not a way to read the daemon's disk.
+func (d *Daemon) verbStashGet(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Session string `json:"session"`
+		Path    string `json:"path"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if p.Path == "" {
+		return nil, invalidParam("path", "path is required: name the stashed file to read")
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+	f, entry, err := d.stash.open(sess.ID, p.Path)
+	if err != nil {
+		return nil, hintedVerbError(ErrVerbInvalidParams, "stash get "+echoName(p.Path)+": not a file in this session's stash", &VerbHint{
+			Param:   "path",
+			Command: "tuios stash list -s " + sess.Name,
+			Detail:  "Only a path the stash printed can be read back. The listing shows them.",
+		})
+	}
+	defer func() { _ = f.Close() }()
+	if entry.Bytes > stashTransferMaxBytes {
+		return nil, hintedVerbError(ErrVerbInvalidParams, "stash get "+echoName(p.Path)+": the file is larger than the transfer cap", &VerbHint{
+			Param:  "path",
+			Detail: "A file that crosses the socket as bytes is capped at " + strconv.Itoa(stashTransferMaxBytes>>20) + " MB. Copy it another way.",
+		})
+	}
+	data, err := io.ReadAll(io.LimitReader(f, stashTransferMaxBytes+1))
+	if err != nil {
+		return nil, newVerbError(ErrVerbInternal, "cannot read the stashed file: "+err.Error())
+	}
+	if len(data) > stashTransferMaxBytes {
+		return nil, newVerbError(ErrVerbInternal, "the stashed file grew past the transfer cap")
+	}
+	return map[string]any{
+		"type":       "stash_content",
+		"session":    sess.Name,
+		"path":       entry.Path,
+		"name":       entry.Name,
+		"hash":       entry.Hash,
+		"bytes":      len(data),
+		"media_type": entry.MediaType,
+		"kind":       entry.Kind,
+		"content":    base64.StdEncoding.EncodeToString(data),
 	}, nil
 }
 

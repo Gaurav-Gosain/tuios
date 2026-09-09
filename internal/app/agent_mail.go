@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -116,6 +117,36 @@ type agentMailThread struct {
 	Unread bool
 	// New is true while the thread holds a message the person has not seen.
 	New bool
+	// Link is true when a message in this thread arrived from another
+	// machine. The row wears a different mark for it, so a person scanning
+	// the list can tell mail from this machine from mail that came over a
+	// link without opening either.
+	Link bool
+}
+
+// agentMailFromLink reports whether a message arrived from another machine.
+func agentMailFromLink(m session.AgentMessage) bool {
+	return m.Origin == session.AgentOriginLink
+}
+
+// agentMailOriginHost is what to call the machine a message came from: the
+// name it claimed, else "another machine".
+func agentMailOriginHost(m session.AgentMessage) string {
+	if host := printableTitle(m.OriginHost); host != "" {
+		return host
+	}
+	return "another machine"
+}
+
+// agentMailSender is the sender's name as the overlay draws it. A sender on
+// another machine is named with that machine, "REVIEWER @ buildbox", so the
+// origin is in the name itself and not only in a mark beside it.
+func agentMailSender(m session.AgentMessage) string {
+	name := agentMailName(m.From, m.FromLabel, false)
+	if agentMailFromLink(m) {
+		return name + " @ " + agentMailOriginHost(m)
+	}
+	return name
 }
 
 // agentMailName is what to call a party to a message: its label, "you" for
@@ -256,7 +287,7 @@ func (m *OS) considerMailAlert(msg session.AgentMessage) {
 	if !policy.Enabled || policy.Quiet(time.Now()) {
 		return
 	}
-	text := agentMailName(msg.From, msg.FromLabel, false) + " to " + agentMailName(msg.To, msg.ToLabel, true) + ": " + agentMailSummary(msg)
+	text := agentMailSender(msg) + " to " + agentMailName(msg.To, msg.ToLabel, true) + ": " + agentMailSummary(msg)
 
 	if policy.Dock {
 		m.ShowNotificationFrom(text, "info", m.Settings.NotificationDuration,
@@ -317,8 +348,29 @@ func (m *OS) agentMailLoad() tea.Cmd {
 		return nil
 	}
 	m.AgentMail.Loading = true
-	return agentMailLoadCmd(name)
+	return agentMailLoadCmd(m.agentMailDialer(), name)
 }
+
+// agentMailDialer is how a mailbox command reaches the daemon that holds the
+// ring: this machine's daemon directly, or, while this client is attached to
+// a session on another machine, that machine's daemon through the link. The
+// ring is the session's, so it lives where the session does.
+func (m *OS) agentMailDialer() agentMailDial {
+	host, build := m.AttachedHost, ""
+	if m.DaemonClient != nil {
+		build = m.DaemonClient.ClientVersion()
+	}
+	return func() (*session.VerbClient, error) {
+		if host == "" {
+			return session.DialVerbClient()
+		}
+		c, _, err := session.DialVerbClientThroughHost(host, build)
+		return c, err
+	}
+}
+
+// agentMailDial opens a verb connection to the daemon that holds the ring.
+type agentMailDial func() (*session.VerbClient, error)
 
 // OpenAgentMailThread shows one conversation, the way a dock message about it
 // does when it is clicked. It returns the command that marks the person's mail
@@ -361,9 +413,9 @@ func (m *OS) resetAgentMail() {
 
 // agentMailLoadCmd reads the whole ring without marking anything read: the
 // person looking at a message is not the agent it was addressed to.
-func agentMailLoadCmd(sessionName string) tea.Cmd {
+func agentMailLoadCmd(dial agentMailDial, sessionName string) tea.Cmd {
 	return func() tea.Msg {
-		client, err := session.DialVerbClient()
+		client, err := dial()
 		if err != nil {
 			return AgentMailLoadedMsg{Err: err}
 		}
@@ -432,12 +484,15 @@ func (m *OS) agentMailThreads() []agentMailThread {
 			th = &agentMailThread{
 				ID:      mm.ThreadID,
 				Kind:    mm.Kind,
-				From:    agentMailName(mm.From, mm.FromLabel, false),
+				From:    agentMailSender(mm),
 				To:      agentMailName(mm.To, mm.ToLabel, true),
 				Subject: agentMailSummary(mm),
 			}
 			byThread[mm.ThreadID] = th
 			order = append(order, mm.ThreadID)
+		}
+		if agentMailFromLink(mm) {
+			th.Link = true
 		}
 		th.Count++
 		th.LastID = mm.ID
@@ -526,14 +581,14 @@ func (m *OS) agentMailMarkRead(thread uint64) tea.Cmd {
 	if name == "" {
 		name = m.SessionName
 	}
-	return agentMailMarkCmd(name, thread)
+	return agentMailMarkCmd(m.agentMailDialer(), name, thread)
 }
 
 // agentMailMarkCmd is the marking read of the person's inbox for one thread.
 // The receipt the daemon pushes back is what updates the mirror.
-func agentMailMarkCmd(sessionName string, thread uint64) tea.Cmd {
+func agentMailMarkCmd(dial agentMailDial, sessionName string, thread uint64) tea.Cmd {
 	return func() tea.Msg {
-		client, err := session.DialVerbClient()
+		client, err := dial()
 		if err != nil {
 			return AgentMailMarkedMsg{Err: err}
 		}
@@ -578,7 +633,23 @@ func (m *OS) agentMailReplyTarget() (inbox string, replyTo uint64, ok bool) {
 			return msgs[i].From, replyTo, true
 		}
 	}
+	// A sender on another machine is not a window here, so a reply to it
+	// is a notice in this ring: the sender reads it back over the link, in
+	// the thread it started, and nothing is typed at anyone.
 	return "", replyTo, true
+}
+
+// thisMachineName is the name this client signs a reply with when the ring
+// is on another machine.
+func thisMachineName() string {
+	if h := os.Getenv("TUIOS_HOST"); h != "" {
+		return h
+	}
+	h, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	return h
 }
 
 // AgentMailStartReply opens the reply line under the open thread.
@@ -650,13 +721,15 @@ func (m *OS) AgentMailSendReply() tea.Cmd {
 	}
 	st.Sending = true
 	st.Error = ""
-	return agentMailSendCmd(name, inbox, replyTo, text)
+	return agentMailSendCmd(m.agentMailDialer(), m.AttachedHost != "", name, inbox, replyTo, text)
 }
 
-// agentMailSendCmd is the send-agent-message call a reply makes.
-func agentMailSendCmd(sessionName, inbox string, replyTo uint64, text string) tea.Cmd {
+// agentMailSendCmd is the send-agent-message call a reply makes. remote says
+// the ring is on another machine, in which case the reply signs with this
+// machine's name, as any sender over a link does.
+func agentMailSendCmd(dial agentMailDial, remote bool, sessionName, inbox string, replyTo uint64, text string) tea.Cmd {
 	return func() tea.Msg {
-		client, err := session.DialVerbClient()
+		client, err := dial()
 		if err != nil {
 			return AgentMailSentMsg{Err: err}
 		}
@@ -666,6 +739,9 @@ func agentMailSendCmd(sessionName, inbox string, replyTo uint64, text string) te
 			"text":     text,
 			"reply_to": replyTo,
 			"from":     session.AgentInboxHuman,
+		}
+		if remote {
+			params["from_host"] = thisMachineName()
 		}
 		if inbox != "" {
 			params["to"] = inbox

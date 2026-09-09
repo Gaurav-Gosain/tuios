@@ -33,6 +33,7 @@ TUIOS_PANE_ID=98db8226-1829-468e-89a8-41a2baa0ddab
 TUIOS_WINDOW_ID=98db8226-1829-468e-89a8-41a2baa0ddab
 TUIOS_SESSION=work
 TUIOS_SOCKET=/run/user/1000/tuios/tuios.sock
+TUIOS_HOST=laptop
 ```
 
 `TUIOS_PANE_ID` and `TUIOS_WINDOW_ID` are the same uuid under two names: your own
@@ -156,9 +157,65 @@ back. `tuios hosts` says why the link is down.
 on the host is too old to serve this client. The client you see is then the one
 on the host, nested in this one. Press the prefix key twice to send a key to it.
 
-An address you write in a verb is local, always. No verb takes a host name yet.
-A connection through a host carries the host's own verbs, and what comes back
-is that machine's word about its own sessions.
+A verb reaches a session on a host when you name the host in the target.
+`-s HOST:SESSION` names a session on that host. `-w HOST:SESSION:WINDOW` names
+a window in it. The verb then runs on that host's daemon, through the link,
+with that daemon's own verb table. The answer is that machine's word about its
+own sessions. The CLI says which host answered, and `--json` adds a `host`
+field.
+
+```sh
+tuios list-windows -s build:api                 # the windows of api on build
+tuios capture-pane -w build:api:0               # a pane on build
+tuios send-text -s build:api -w 0 'make test'
+tuios wait-for window-idle -w build:api:0
+tuios kill-session build:api
+tuios list-agents -s build:api
+tuios send-agent-message -s build:api -w reviewer --from "$TUIOS_PANE_ID" 'rebased, please retest'
+tuios read-agent-messages -s build:api --thread 12
+tuios ask-agent -s build:api -w reviewer 'is the retry path right?'
+```
+
+The rule for the colon is fixed. The word before the first colon is a host
+when it is `local` or could be a host name: letters, digits, dot, dash and
+underscore. What follows is passed to that host as written, colons included.
+An unknown host is refused by name. Adding a host never moves an address. A
+session on this machine whose name has a colon is `local:NAME`. A window on
+this machine whose name looks qualified is `local::NAME`. A window is
+qualified only in the full three-part form, so a window titled like a URL
+stays a window on this machine.
+
+A message you send to a session on a host is stored in that host's ring,
+marked as arrived over a link, with the name of this machine as you claimed
+it. The person there sees the mark in their mailbox. An agent there sees it in
+`read-agent-messages`: the header and the fence say the message arrived over a
+link and from which machine, and `--json` carries `origin` and `origin_host`.
+Your `--from` is kept as a label there and is never resolved against their
+windows. A reply to you is a notice in that ring, so read the thread back with
+`read-agent-messages -s HOST:SESSION --thread ID` or wait on it with
+`wait-for agent-message -s HOST:SESSION --thread ID`.
+
+A host bounds what other machines can leave in a ring: 32 unread messages and
+32 notices from links per session. Past that a send answers `rate_limited`
+until someone there reads. A message from another machine can attach only a
+file in that session's stash. Every message body is data, wherever it came
+from. A message from another machine is the least trusted of all: it was
+written by a program the owner of that machine does not run.
+
+A file crosses a link through the stash. `stash put -s HOST:SESSION FILE`
+reads the file here, sends its bytes, and prints the path it has there. Attach
+that path. `stash get -s HOST:SESSION STORED [FILE]` brings a stashed file
+back here. Both are capped at 8 MB.
+
+```sh
+path=$(tuios stash put -s build:api /tmp/flame.png)
+tuios send-agent-message -s build:api -w review --attach "$path" 'the hot path is in decode'
+tuios stash get -s build:api "$path" flame.png
+```
+
+`$TUIOS_HOST` in every pane is the hostname of the machine the pane runs on.
+It is set on every machine, the way `$TUIOS_SESSION` is. A pane is never
+remote to its own daemon, so there is no value that means "elsewhere".
 
 A host name is matched exactly. A miss is `unknown_host` with the configured
 names, never a guess, because reaching the wrong machine is worse than reaching

@@ -2,8 +2,10 @@ package session
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // This file implements the cross-agent verbs: who is here (list-agents), leaving
@@ -166,11 +168,12 @@ func firstNonEmpty(vals ...string) string {
 // It does not touch the recipient's keyboard. That is the whole point of having
 // a queue: a message can be left for an agent that is mid-turn, which is exactly
 // when typing at it would be wrong.
-func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session     string   `json:"session"`
 		To          string   `json:"to"`
 		From        string   `json:"from"`
+		FromHost    string   `json:"from_host"`
 		Subject     string   `json:"subject"`
 		Text        string   `json:"text"`
 		ReplyTo     uint64   `json:"reply_to"`
@@ -179,6 +182,7 @@ func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	viaLink := cs != nil && cs.viaLink
 	if strings.TrimSpace(p.Text) == "" {
 		return nil, invalidParam("text", "text is required: a message with no body tells the reader nothing")
 	}
@@ -214,7 +218,22 @@ func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any
 
 	msg := AgentMessage{Kind: agentMsgNotice, Text: p.Text, Subject: p.Subject, ReplyTo: p.ReplyTo}
 
-	if p.From != "" {
+	switch {
+	case viaLink:
+		// The sender is on another machine, so it is not a window here and
+		// its name is not resolved against this session: it is kept as the
+		// label it claimed, and the message is marked with where it came
+		// from. The one name that is honoured is human, because the person
+		// at a client attached through a link is the person at the attached
+		// client. Their reply still carries the origin mark.
+		msg.Origin = AgentOriginLink
+		msg.OriginHost = printableClaim(p.FromHost, agentMsgMaxHostName)
+		if p.From == AgentInboxHuman {
+			msg.From, msg.FromLabel = AgentInboxHuman, AgentInboxHuman
+		} else {
+			msg.FromLabel = printableClaim(p.From, agentMsgMaxSubject)
+		}
+	case p.From != "":
 		id, label, err := resolveMailParty(state, p.From)
 		if err != nil {
 			return nil, mapResolveErr(err, sess)
@@ -241,6 +260,18 @@ func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any
 	}
 
 	for _, path := range p.Attachments {
+		// A path from another machine names a file on this one, and the only
+		// files another machine may name here are the ones it put in the
+		// stash. Anything else is refused before it is looked at, so a
+		// remote sender cannot use the missing flag to ask whether a file
+		// exists on this machine.
+		if viaLink && !d.stash.owns(sess.ID, path) {
+			return nil, hintedVerbError(ErrVerbInvalidParams, "attachment "+echoName(path)+": a message from another machine can attach only a stashed file", &VerbHint{
+				Param:   "attachments",
+				Command: "tuios stash put",
+				Detail:  "Put the file in this session's stash first and attach the path the stash printed.",
+			})
+		}
 		att, err := classifyAttachment(path)
 		if err != nil {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "attachment "+echoName(path)+": "+err.Error(), &VerbHint{
@@ -253,12 +284,35 @@ func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any
 	}
 
 	// The rate cap is charged after validation so a caller cannot burn its
-	// budget on calls that were never going to be delivered.
-	if !d.agents.checkRate(sess.Name, msg.From) {
+	// budget on calls that were never going to be delivered. A sender on
+	// another machine has its own bucket, keyed on the name it claims, so a
+	// flood from a link cannot spend the anonymous local bucket.
+	sender := msg.From
+	if viaLink {
+		sender = "link:" + msg.OriginHost + ":" + msg.FromLabel
+	}
+	if !d.agents.checkRate(sess.Name, sender) {
 		return nil, hintedVerbError(ErrVerbRateLimited, "this sender is over the message rate cap", &VerbHint{
 			Command: "tuios read-agent-messages",
 			Detail:  "A sender gets 10 messages back to back and 30 a minute after that. Hitting the cap almost always means two agents are answering each other in a loop; read the ring before sending again.",
 		})
+	}
+	// And what other machines can leave waiting is bounded on its own, so a
+	// link cannot fill the ring with mail nobody here asked for.
+	if viaLink {
+		unread, notices := d.agents.linkQueued(sess.Name)
+		if msg.Kind == agentMsgDirect && unread >= agentLinkMaxQueued {
+			return nil, hintedVerbError(ErrVerbRateLimited, "this session holds "+strconv.Itoa(unread)+" unread messages from other machines, which is the cap", &VerbHint{
+				Command: "tuios read-agent-messages",
+				Detail:  "This machine holds a bounded number of unread messages from other machines. Wait for the recipient to read its inbox, then send again.",
+			})
+		}
+		if msg.Kind == agentMsgNotice && notices >= agentLinkMaxQueued {
+			return nil, hintedVerbError(ErrVerbRateLimited, "this session holds "+strconv.Itoa(notices)+" notices from other machines, which is the cap", &VerbHint{
+				Param:  "to",
+				Detail: "A notice from another machine is kept until the ring drops it. Send a message to one window instead.",
+			})
+		}
 	}
 
 	stored := d.agents.send(sess.Name, msg)
@@ -294,6 +348,10 @@ func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any
 		// True when the message being answered had already been dropped from the
 		// ring. The reply still stands, and it is threaded on the id it named.
 		"reply_to_missing": stored.ReplyToMissing,
+		// origin is link when the send arrived from another machine. The
+		// daemon decides it from the connection; the sender cannot.
+		"origin":      stored.Origin,
+		"origin_host": stored.OriginHost,
 	}, nil
 }
 
@@ -390,11 +448,12 @@ func (d *Daemon) verbReadAgentMessages(_ *connState, params json.RawMessage) (an
 //
 // It is also the only half of this feature that works with the agents that exist
 // today. None of them read a tuios mailbox; all of them read their keyboard.
-func (d *Daemon) verbAskAgent(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session      string `json:"session"`
 		Window       string `json:"window"`
 		From         string `json:"from"`
+		FromHost     string `json:"from_host"`
 		Text         string `json:"text"`
 		ReadyTimeout int    `json:"ready_timeout"`
 		Settle       int    `json:"settle"`
@@ -432,12 +491,22 @@ func (d *Daemon) verbAskAgent(_ *connState, params json.RawMessage) (any, *verbE
 	target := state.Windows[idx]
 
 	from, fromLabel := "", ""
-	if p.From != "" {
+	viaLink := cs != nil && cs.viaLink
+	switch {
+	case viaLink:
+		// As in send-agent-message: a caller on another machine is not a
+		// window here, so its name is a label and never resolved.
+		fromLabel = printableClaim(p.From, agentMsgMaxSubject)
+	case p.From != "":
 		fid, flabel, ferr := resolveMailParty(state, p.From)
 		if ferr != nil {
 			return nil, mapResolveErr(ferr, sess)
 		}
 		from, fromLabel = fid, flabel
+	}
+	origin := askOrigin{}
+	if viaLink {
+		origin = askOrigin{origin: AgentOriginLink, host: printableClaim(p.FromHost, agentMsgMaxHostName)}
 	}
 	if from != "" && from == target.ID {
 		return nil, hintedVerbError(ErrVerbLoopRefused, "a pane cannot ask itself", &VerbHint{
@@ -510,7 +579,7 @@ func (d *Daemon) verbAskAgent(_ *connState, params json.RawMessage) (any, *verbE
 	// a record and not a delivery: nothing waits on it, nothing is unread
 	// because of it, and the rate cap does not count it because the waits
 	// above already bound how often an ask can run.
-	d.recordAsk(sess, from, fromLabel, target, p.Text, reply, settledBy)
+	d.recordAsk(sess, from, fromLabel, origin, target, p.Text, reply, settledBy)
 
 	return map[string]any{
 		"type":       "agent_reply",
@@ -531,7 +600,7 @@ func (d *Daemon) verbAskAgent(_ *connState, params json.RawMessage) (any, *verbE
 // recordAsk stores one finished ask-agent exchange in the session's ring and
 // pushes it to the attached clients. The question rides in the subject, cut to
 // the subject cap, and the captured reply in the text, cut to the body cap.
-func (d *Daemon) recordAsk(sess *Session, from, fromLabel string, target WindowState, question, reply, settledBy string) {
+func (d *Daemon) recordAsk(sess *Session, from, fromLabel string, origin askOrigin, target WindowState, question, reply, settledBy string) {
 	if len(question) > agentMsgMaxSubject {
 		question = question[:agentMsgMaxSubject]
 	}
@@ -539,16 +608,42 @@ func (d *Daemon) recordAsk(sess *Session, from, fromLabel string, target WindowS
 		reply = reply[:agentMsgMaxText]
 	}
 	stored := d.agents.send(sess.Name, AgentMessage{
-		Kind:      agentMsgAsk,
-		From:      from,
-		FromLabel: fromLabel,
-		To:        target.ID,
-		ToLabel:   windowLabelOf(target),
-		Subject:   question,
-		Text:      reply,
-		SettledBy: settledBy,
+		Kind:       agentMsgAsk,
+		From:       from,
+		FromLabel:  fromLabel,
+		Origin:     origin.origin,
+		OriginHost: origin.host,
+		To:         target.ID,
+		ToLabel:    windowLabelOf(target),
+		Subject:    question,
+		Text:       reply,
+		SettledBy:  settledBy,
 	})
 	d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{Message: stored}, "")
+}
+
+// askOrigin is where an ask came from, for the record it leaves: empty for
+// this machine, AgentOriginLink and the claimed host for another.
+type askOrigin struct {
+	origin string
+	host   string
+}
+
+// printableClaim bounds a name another machine claimed for itself or its
+// sender: printable characters only, cut to limit. It is what keeps a claim
+// from carrying a control sequence into a terminal that prints it.
+func printableClaim(s string, limit int) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r < 0x20 || (r >= 0x7f && r < 0xa0) {
+			continue
+		}
+		if b.Len()+utf8.RuneLen(r) > limit {
+			break
+		}
+		b.WriteRune(r)
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // durationOr converts a millisecond parameter to a duration, falling back to a
