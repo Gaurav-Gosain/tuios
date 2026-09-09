@@ -45,6 +45,64 @@ func trimRowEdge(line string) string {
 	return strings.TrimRight(line, " \u2502\u2503|")
 }
 
+// pickerSpan finds the columns the picker panel occupies.
+//
+// The picker previews the effect it is highlighting, and the preview animates
+// over the whole screen, not only behind the panel. Particles therefore land in
+// a row's text on both sides of the panel, and the row's last field stops being
+// the duration band. Reading a whole screen line is only safe while the preview
+// has not drawn yet, which is why this test passed locally and failed under
+// load in CI.
+//
+// The panel's own divider is the anchor: it is the longest unbroken run of the
+// horizontal box glyph on screen, and the settings panel behind it draws a
+// shorter one. Its span is the panel's content columns.
+func pickerSpan(s tuitest.Screen) (start, end int, ok bool) {
+	_, height := s.Size()
+	lines := make([]string, height)
+	for row := range height {
+		lines[row] = s.Line(row)
+	}
+	return pickerSpanLines(lines)
+}
+
+// pickerSpanLines is pickerSpan over plain lines, so the rule can be tested
+// against a screen captured from a real run.
+func pickerSpanLines(lines []string) (start, end int, ok bool) {
+	for _, raw := range lines {
+		line := []rune(raw)
+		for i := 0; i < len(line); {
+			if line[i] != '\u2500' {
+				i++
+				continue
+			}
+			j := i
+			for j < len(line) && line[j] == '\u2500' {
+				j++
+			}
+			if j-i > end-start {
+				start, end, ok = i, j, true
+			}
+			i = j
+		}
+	}
+	return start, end, ok
+}
+
+// maskToPicker blanks everything outside the picker's columns, so the preview's
+// particles cannot be read as a row's fields. It blanks rather than cuts,
+// because the caller turns the row's text back into a screen column with
+// strings.Index and a cut line would shift every one of those.
+func maskToPicker(line string, start, end int) string {
+	r := []rune(line)
+	for i := range r {
+		if i < start || i >= end {
+			r[i] = ' '
+		}
+	}
+	return trimRowEdge(string(r))
+}
+
 func effectNameIn(line string) string {
 	fields := strings.Fields(trimRowEdge(line))
 	if len(fields) < 2 {
@@ -54,9 +112,13 @@ func effectNameIn(line string) string {
 }
 
 func effectRowsOnScreen(s tuitest.Screen) (rows []int, text []string) {
+	start, end, ok := pickerSpan(s)
 	_, height := s.Size()
 	for row := range height {
 		line := trimRowEdge(s.Line(row))
+		if ok {
+			line = maskToPicker(s.Line(row), start, end)
+		}
 		fields := strings.Fields(line)
 		if len(fields) < 2 {
 			continue
@@ -200,5 +262,43 @@ func TestEffectRowDetectorReadsABorderedRow(t *testing.T) {
 	last := fields[len(fields)-1]
 	if !slices.Contains(effectBands, last) {
 		t.Errorf("the row's last field is %q, which is not one of the bands %v", last, effectBands)
+	}
+}
+
+// TestEffectRowSurvivesTheLivePreview pins the row helpers against a screen
+// captured from a real CI run, where the picker's own preview was animating.
+//
+// The picker previews the effect it highlights, and the preview draws over the
+// whole screen. Particles land in a row's text on both sides of the panel, so
+// the row's last field is a particle and not the duration band. Before this was
+// handled, the list read as empty while it was plainly on screen, and the test
+// waited ten seconds for rows it could already see.
+func TestEffectRowSurvivesTheLivePreview(t *testing.T) {
+	// Captured from run 34313515028, trimmed to the rows that matter.
+	lines := []string{
+		"                       ¤   •                                                                                                                ¤                    °•",
+		"                                                 Appearance Sideba   󰤄 Screen saver effect                                           ¤",
+		"              ¤   •                   *`   '       Enabled            ──────────────────────────────────────────────────────────",
+		"                         °                  •    › Effect               binarypath                                          long       *           ·              ¤",
+		"                              °                    While busy           blackhole                                           long",
+	}
+
+	start, end, ok := pickerSpanLines(lines)
+	if !ok {
+		t.Fatal("the picker's divider was not found, so its columns are unknown")
+	}
+
+	const wantName = "binarypath"
+	row := maskToPicker(lines[3], start, end)
+	if got := effectNameIn(row); got != wantName {
+		t.Errorf("effectNameIn read %q, want %q", got, wantName)
+	}
+
+	fields := strings.Fields(row)
+	if len(fields) == 0 {
+		t.Fatal("the masked row carries no fields")
+	}
+	if last := fields[len(fields)-1]; !slices.Contains(effectBands, last) {
+		t.Errorf("the masked row's last field is %q, which is not one of the bands %v", last, effectBands)
 	}
 }
