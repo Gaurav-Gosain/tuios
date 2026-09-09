@@ -790,15 +790,20 @@ func TestGhosttyDivergence_SurplusCSIParameters(t *testing.T) {
 // TestGhosttyDivergence_ControlCodePointsPrinted is the second largest class,
 // 76 of 150 seeds, and the one with a side that is plainly wrong.
 //
-// DEL and the C1 code points are controls. The pure emulator discards them.
-// The library backend puts them on the screen as visible cells and advances
-// the cursor over them, so a stream containing a stray 0x7f gains a character
-// that was never sent. ECMA-48 has DEL ignored, and xterm, kitty and foot all
-// ignore it, so the library side of this is a defect rather than a choice.
+// DEL is a control. The pure emulator discards it. The library backend puts
+// it on the screen as a visible cell and advances the cursor over it, so a
+// stream containing a stray 0x7f gains a character that was never sent.
+// ECMA-48 has DEL ignored, and xterm, kitty and foot all ignore it, so the
+// library side of this is a defect rather than a choice.
 //
 // It reaches tuios directly: readline and anything that filters terminal
 // output emit DEL, and a pane on the library backend would show a glyph for
 // each one and be one column further right than the guest believes.
+//
+// The C1 code points used to belong here too. libghostty commit 40a40f848
+// ignores a UTF-8-decoded C1 control in the ground state, which is what the
+// pure emulator already did, so the two now agree. That agreement is pinned
+// by TestGhosttyUTF8C1ControlsAgree below.
 func TestGhosttyDivergence_ControlCodePointsPrinted(t *testing.T) {
 	// The control is counted by how far the cursor moved: a backend that
 	// discards it advances only over the real characters, one that prints it
@@ -811,9 +816,6 @@ func TestGhosttyDivergence_ControlCodePointsPrinted(t *testing.T) {
 	}{
 		{"DEL alone", "\x7f", 0, 1, 0},
 		{"DEL after text", "abc\x7f", 3, 4, 3},
-		{"U+0084 as text", "AB", 2, 3, 1},
-		{"U+0085 as text", "AB", 2, 3, 1},
-		{"U+009B as text", "AB", 2, 3, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1036,4 +1038,44 @@ func TestGhosttyDivergence_UnderlineStyleOutOfRange(t *testing.T) {
 			t.Errorf("ghostty underline for 4:7 = 0, expected it to clamp to a real style")
 		}
 	})
+}
+
+// TestGhosttyUTF8C1ControlsAgree pins an agreement, not a divergence.
+//
+// A C1 code point written as UTF-8 is a control. The pure emulator has always
+// discarded it. The library used to print it as a cell and step the cursor
+// over it, which put the two backends one column apart on the same bytes.
+// libghostty commit 40a40f848 makes the library ignore it too.
+//
+// tuios needs the agreement, not either behaviour on its own: a daemon and a
+// client can be built on different backends, and a pane that rehydrates from
+// a snapshot must land on the same screen it left. This test fails if either
+// side starts printing the control again.
+func TestGhosttyUTF8C1ControlsAgree(t *testing.T) {
+	cases := []struct{ name, in string }{
+		{"U+0084 index", "A\u0084B"},
+		{"U+0085 next line", "A\u0085B"},
+		{"U+009B CSI", "A\u009bB"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := probeBoth(t, tc.in, 1, 0)
+			if p.pureCursor.X != p.ghCursor.X {
+				t.Fatalf("cursor column: pure %d, ghostty %d; the backends "+
+					"disagree about a UTF-8 C1 control again",
+					p.pureCursor.X, p.ghCursor.X)
+			}
+			if got := p.pureCursor.X; got != 2 {
+				t.Errorf("cursor column = %d, want 2: the control was printed "+
+					"rather than discarded", got)
+			}
+			if p.pureCell != p.ghCell {
+				t.Fatalf("cell at (1,0): pure %q, ghostty %q", p.pureCell, p.ghCell)
+			}
+			if p.ghCell != "B" {
+				t.Errorf("cell at (1,0) = %q, want %q: the control took a column",
+					p.ghCell, "B")
+			}
+		})
+	}
 }
