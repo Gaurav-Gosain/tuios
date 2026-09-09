@@ -176,7 +176,7 @@ type ClientLeftMsg struct {
 // event loop so the work happens on the program goroutine instead of the daemon
 // read-loop goroutine.
 type ClientEvent struct {
-	Type        string // "joined", "left", "resize", or "refresh"
+	Type        string // "joined", "left", "resize", "refresh", "agent-mail", or "agent-mail-load"
 	ClientID    string
 	ClientCount int
 	Width       int    // "joined" and "resize"
@@ -184,6 +184,8 @@ type ClientEvent struct {
 	Reason      string // "refresh"
 	// Reserve is the session's agreed chrome reserve, on "resize".
 	Reserve session.LayoutReserve
+	// Mail is the push behind an "agent-mail" event.
+	Mail session.AgentMailPayload
 }
 
 // SessionResizeMsg is sent when the effective session size changes (min of all clients).
@@ -323,6 +325,12 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, ListenForClientEvents(m.ClientEventChan))
 	}
 
+	// The session's mail so far, read once. Everything after this arrives as
+	// a push, so an idle client never asks again.
+	if cmd := m.agentMailLoad(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// Listen for the daemon events that end this client.
 	if cmd := ListenForDaemonExit(m.daemonExitChan()); cmd != nil {
 		cmds = append(cmds, cmd)
@@ -426,6 +434,18 @@ func ListenForClientEvents(eventChan chan ClientEvent) tea.Cmd {
 			}
 		case "refresh":
 			return ForceRefreshMsg{Reason: event.Reason}
+		case "agent-mail":
+			return AgentMailMsg{Payload: event.Mail}
+		case "agent-mail-load":
+			return AgentMailLoadMsg{}
+		case "agent-mail-mark":
+			// The payload carries the thread to mark in ReadIDs[0]; see
+			// jumpToNotifTarget.
+			var thread uint64
+			if len(event.Mail.ReadIDs) > 0 {
+				thread = event.Mail.ReadIDs[0]
+			}
+			return AgentMailMarkMsg{Thread: thread}
 		default:
 			return ClientLeftMsg{
 				ClientID:    event.ClientID,
@@ -1592,6 +1612,35 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.ShowNotification(fmt.Sprintf("Client joined (%d connected)", msg.ClientCount), "info", 2*time.Second)
 		// Continue listening for more client events
 		return m, ListenForClientEvents(m.ClientEventChan)
+
+	case AgentMailMsg:
+		// A message an agent left, or a receipt for one an agent read. Applied
+		// here and nowhere else, so the mirror is only ever touched on this
+		// goroutine.
+		m.noteAgentMail(msg.Payload)
+		return m, ListenForClientEvents(m.ClientEventChan)
+
+	case AgentMailLoadMsg:
+		// A session switch asked for the new session's ring. The read runs in
+		// the command, off this goroutine.
+		return m, tea.Batch(m.agentMailLoad(), ListenForClientEvents(m.ClientEventChan))
+
+	case AgentMailMarkMsg:
+		return m, tea.Batch(m.agentMailMarkRead(msg.Thread), ListenForClientEvents(m.ClientEventChan))
+
+	case AgentMailLoadedMsg:
+		m.applyAgentMailLoaded(msg)
+		return m, nil
+
+	case AgentMailSentMsg:
+		m.applyAgentMailSent(msg)
+		return m, nil
+
+	case AgentMailMarkedMsg:
+		if msg.Err != nil {
+			m.AgentMail.Error = "The mail could not be marked read. " + msg.Err.Error()
+		}
+		return m, nil
 
 	case ClientLeftMsg:
 		// Another client left the session

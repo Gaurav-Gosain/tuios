@@ -97,6 +97,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return handleSessionSwitcherInput(msg, o)
 	}
 
+	// The mailbox owns the keyboard while it is up, like the switcher.
+	if o.ShowAgentMail {
+		return handleAgentMailInput(msg, o)
+	}
+
 	// Handle workspace switcher overlay
 	if o.ShowWorkspaceSwitcher {
 		return handleWorkspaceSwitcherInput(msg, o)

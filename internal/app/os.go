@@ -762,6 +762,9 @@ type OS struct {
 	// pendingSeeds holds command lines waiting for the daemon-created panes
 	// they are to be typed into.
 	pendingSeeds []pendingSeed
+	// The agent mailbox overlay and the mirror behind it. See agent_mail.go.
+	ShowAgentMail bool
+	AgentMail     AgentMailState
 	// Session switcher overlay
 	ShowSessionSwitcher          bool
 	SessionSwitcherQuery         string
@@ -1162,6 +1165,9 @@ type Notification struct {
 type NotifTarget struct {
 	SessionID string
 	WindowID  string
+	// Thread, when set, is the mail thread the message is about: activating
+	// the message opens the mailbox on it rather than jumping to a pane.
+	Thread uint64
 }
 
 // LogMessage represents a log entry with timestamp and level.
@@ -1237,6 +1243,11 @@ func (m *OS) SwitchToSession(targetSession string) error {
 	// The components tell their commands which session they are drawing for,
 	// and that answer just changed.
 	m.SyncDockContext()
+	// The mailbox is per session too. The read of the new session's ring is
+	// asked for through the client event queue, because this runs inside a
+	// handler that returns no command and the read must not run here.
+	m.resetAgentMail()
+	m.QueueClientEvent(ClientEvent{Type: "agent-mail-load"})
 
 	m.MarkAllDirty()
 	m.LogInfo("Session switch complete: now on %s with %d windows", m.SessionName, len(m.Windows))

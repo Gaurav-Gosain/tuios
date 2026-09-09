@@ -295,6 +295,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		row("section", "Cycle the sessions, terminals and agents sections"),
 		row("agents_filter", "Agents: all sessions, or this one"),
 		row("agents_sort", "Agents: by priority, or by recency"),
+		row("mail", "Open the mailbox, for the pane under the cursor"),
 		row("palette", "Find a pane in any session, or filter by @state"),
 		row("narrow", "Collapse the rail to its glyph strip"),
 		row("widen", "Expand the rail back to its width"),
@@ -424,7 +425,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 		"prefix_scrollback", "prefix_screenshot", "prefix_command_palette", "prefix_session_switcher",
 		"prefix_workspace_switcher",
 		"prefix_toggle_sidebar", "prefix_explore",
-		"prefix_jump_notif",
+		"prefix_jump_notif", "prefix_mail",
 	}
 
 	// Debug commands are deliberately not listed here. They used to be, built

@@ -337,22 +337,46 @@ func TestWaitForAThreadIgnoresEverythingElse(t *testing.T) {
 	}
 }
 
-// TestAskAgentStillPutsNothingInTheRing records a decision as much as a fact.
+// TestAskAgentRecordsItsExchangeInTheRing records a decision as much as a fact.
 // ask-agent types at a keyboard and reads back what the pane printed; its reply
-// is pane output, not mail. Making it post an ask into the ring and wait for a
-// message answering it would read as precision and would in fact break it
-// against every harness that exists, because none of them send mail. So the
-// mailbox's threading stops at the mailbox, and ask-agent is unchanged.
-func TestAskAgentStillPutsNothingInTheRing(t *testing.T) {
+// is pane output, not mail, and nothing about the ask waits on the ring. What
+// the ring gets is a record, written after the ask is over: the question, the
+// captured reply and which signal ended the wait, so the person at the client
+// can see an exchange that otherwise happened between two keyboards. It is
+// never unread, because nobody is meant to answer it.
+func TestAskAgentRecordsItsExchangeInTheRing(t *testing.T) {
 	d, sp := startTestDaemon(t)
-	_, a, b := twoWindowSession(t, d, "asknomail")
+	_, a, b := twoWindowSession(t, d, "askrecord")
 	c := dialVerb(t, sp)
 
-	result(t, c.call(t, `{"id":1,"verb":"ask-agent","params":{"session":"asknomail","window":"`+b+`","from":"`+a+`","text":"echo tuios_ask_reply","settle":700,"timeout":15000}}`))
+	result(t, c.call(t, `{"id":1,"verb":"ask-agent","params":{"session":"askrecord","window":"`+b+`","from":"`+a+`","text":"echo tuios_ask_reply","settle":700,"timeout":15000}}`))
 
-	read := result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"asknomail"}}`))
-	if n, _ := read["messages"].([]any); len(n) != 0 {
-		t.Errorf("ask-agent left %d message(s) in the ring, want none", len(n))
+	read := result(t, c.call(t, `{"id":2,"verb":"read-agent-messages","params":{"session":"askrecord"}}`))
+	msgs, _ := read["messages"].([]any)
+	if len(msgs) != 1 {
+		t.Fatalf("ask-agent left %d message(s) in the ring, want one record", len(msgs))
+	}
+	rec := msgs[0].(map[string]any)
+	if rec["kind"] != agentMsgAsk {
+		t.Errorf("kind = %v, want %s", rec["kind"], agentMsgAsk)
+	}
+	if rec["from"] != a || rec["to"] != b {
+		t.Errorf("the record is addressed from %v to %v, want %s to %s", rec["from"], rec["to"], a, b)
+	}
+	if rec["subject"] != "echo tuios_ask_reply" {
+		t.Errorf("the record's subject is %v, want the question", rec["subject"])
+	}
+	if settled, _ := rec["settled_by"].(string); settled == "" {
+		t.Error("the record does not say what ended the wait")
+	}
+	if read["unread"] != float64(0) {
+		t.Errorf("an ask record counts as unread: %v", read["unread"])
+	}
+	// And it is invisible to an unread read of the asked pane's inbox, which is
+	// what an agent polls for work.
+	inbox := result(t, c.call(t, `{"id":3,"verb":"read-agent-messages","params":{"session":"askrecord","to":"`+b+`","unread":true}}`))
+	if n, _ := inbox["messages"].([]any); len(n) != 0 {
+		t.Errorf("an unread inbox read returned the ask record: %v", inbox)
 	}
 }
 

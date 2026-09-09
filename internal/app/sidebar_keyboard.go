@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -164,7 +165,7 @@ func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 		return sidebarSectionSessions
 	case sidebarRowWindow:
 		return sidebarSectionTerminals
-	case sidebarRowAgent, sidebarRowAgentFilter, sidebarRowAgentSort:
+	case sidebarRowAgent, sidebarRowAgentFilter, sidebarRowAgentSort, sidebarRowAgentMail:
 		return sidebarSectionAgents
 	case sidebarRowFileUp, sidebarRowFileEntry, sidebarRowFileCd:
 		return sidebarSectionFiles
@@ -219,6 +220,8 @@ func (m *OS) SidebarActivateCursor() bool {
 		m.SidebarCycleAgentsFilter()
 	case sidebarRowAgentSort:
 		m.SidebarCycleAgentsSort()
+	case sidebarRowAgentMail:
+		m.queueSidebarCmd(m.OpenAgentMail())
 	case sidebarRowNewSession:
 		m.SidebarNewSession()
 	case sidebarRowNewWindow:
@@ -568,4 +571,17 @@ func (m *OS) SidebarAccentCursor() {
 		return
 	}
 	m.ShowNotification("Accents work on a pane or a session row", "info", m.Settings.NotificationDuration)
+}
+
+// SidebarOpenMail opens the mailbox from the rail: narrowed to the pane under
+// the cursor when the cursor is on a pane row, else the whole session's mail.
+// The keyboard twin of the agents header's mail token.
+func (m *OS) SidebarOpenMail() tea.Cmd {
+	if row, ok := m.sidebarCursorRow(); ok && row.WindowID != "" {
+		switch row.Kind {
+		case sidebarRowAgent, sidebarRowWindow:
+			return m.OpenAgentMailForWindow(row.WindowID)
+		}
+	}
+	return m.OpenAgentMail()
 }

@@ -197,6 +197,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.SectionEditorSelected = idx
 	case "session":
 		m.SessionSwitcherSelected = idx
+	case "agentmail":
+		m.AgentMailSelect(idx)
 	case "workspace":
 		m.WorkspaceSwitcherSelected = idx
 	case "aggregate":
@@ -264,6 +266,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	case "session":
 		n := len(FilterSessionItems(m.SessionSwitcherItems, m.SessionSwitcherQuery))
 		moveListSelection(&m.SessionSwitcherSelected, &m.SessionSwitcherScroll, n, 10, wheelDelta(up))
+	case "agentmail":
+		m.AgentMailMove(wheelDelta(up))
 	case "workspace":
 		n := len(FilterWorkspaceItems(m.WorkspaceSwitcherItems, m.WorkspaceSwitcherQuery))
 		moveListSelection(&m.WorkspaceSwitcherSelected, &m.WorkspaceSwitcherScroll, n, workspaceSwitcherRows, wheelDelta(up))
@@ -391,6 +395,10 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		// switch" was reportable at all.
 		m.SessionSwitcherSelected = row.Idx
 		m.sessionSwitcherActivate(row.Idx)
+	case "agentmail":
+		// A click opens, exactly like enter on the selected row.
+		m.AgentMailSelect(row.Idx)
+		return m.AgentMailOpenSelected()
 	case "workspace":
 		m.WorkspaceSwitcherSelected = row.Idx
 		m.WorkspaceSwitcherActivate(row.Idx)
@@ -498,6 +506,8 @@ func (m *OS) closeOverlay(kind string) {
 		m.SessionSwitcherQuery = ""
 		m.SessionSwitcherSelected = 0
 		m.SessionSwitcherScroll = 0
+	case "agentmail":
+		m.CloseAgentMail()
 	case "workspace":
 		m.CloseWorkspaceSwitcher()
 	case overlayKindShot:

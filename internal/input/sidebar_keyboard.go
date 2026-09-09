@@ -118,6 +118,11 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SidebarCycleAgentsFilter()
 	case sidebarActAgentSort:
 		o.SidebarCycleAgentsSort()
+	case sidebarActMail:
+		// The mailbox, narrowed to the pane under the cursor when there is one.
+		// Rail focus is kept, like the palette, so closing it comes back here.
+		o.NoteAction(action)
+		return o, o.SidebarOpenMail()
 	case sidebarActNarrow:
 		o.SidebarSetCollapsed(true)
 	case sidebarActWiden:

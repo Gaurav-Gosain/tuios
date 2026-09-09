@@ -61,6 +61,9 @@ const (
 	// flight. Its remedy is to restructure, which is why it does not share a
 	// code with the rate cap, whose remedy is to wait.
 	ErrVerbLoopRefused = "loop_refused"
+	// ErrVerbNoKeyboard reports an ask addressed to the person, who has an
+	// inbox and no pane. The remedy is a message, which the hint spells out.
+	ErrVerbNoKeyboard = "no_keyboard"
 	// ErrVerbRateLimited reports a sender over the message rate cap.
 	ErrVerbRateLimited = "rate_limited"
 
@@ -828,7 +831,7 @@ func init() {
 			description: "Leave a message in a session's agent ring, addressed to one window's inbox or, with no recipient, to the session as a notice. It queues rather than typing, so it is safe to send to an agent that is mid-turn.",
 			params: []verbParam{
 				sessionParam,
-				{Name: "to", Type: "string", Description: "Recipient window id or name. Omit to post a notice everyone in the session can read."},
+				{Name: "to", Type: "string", Description: "Recipient window id or name, or human for the person at the attached client. Omit to post a notice everyone in the session can read."},
 				{Name: "from", Type: "string", Description: "The sending window, normally $TUIOS_PANE_ID. It is a claim the daemon cannot verify, and it is what the rate cap and the loop guards are keyed on."},
 				{Name: "subject", Type: "string", Description: "Optional one-line summary, at most 120 characters."},
 				{Name: "text", Type: "string", Required: true, Description: "The message body, at most 8 KiB."},

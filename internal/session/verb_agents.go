@@ -118,7 +118,29 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 		"session": sess.Name,
 		"agents":  agents,
 		"total":   len(agents),
+		// The person's inbox, which is not a row because it is not a pane: it
+		// cannot be asked, focused or captured, and a row would invite all three.
+		// It is addressed as "human" and read from the attached client's mail
+		// overlay.
+		"human_inbox":  AgentInboxHuman,
+		"human_unread": unread[AgentInboxHuman],
 	}, nil
+}
+
+// resolveMailParty turns a send, read or wait target into an inbox id and the
+// label to print for it. "human" is the person at the attached client and
+// resolves to itself; anything else is a window, addressed the way every
+// window verb addresses one. The reserved name wins over a window that happens
+// to be called human, so an agent addressing the person always reaches them.
+func resolveMailParty(state *SessionState, target string) (id, label string, err error) {
+	if target == AgentInboxHuman {
+		return AgentInboxHuman, AgentInboxHuman, nil
+	}
+	idx, err := findWindowStateIndex(state.Windows, target)
+	if err != nil {
+		return "", "", err
+	}
+	return state.Windows[idx].ID, windowLabelOf(state.Windows[idx]), nil
 }
 
 // firstNonEmpty returns the first argument that is not empty.
@@ -186,22 +208,20 @@ func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any
 	msg := AgentMessage{Kind: agentMsgNotice, Text: p.Text, Subject: p.Subject, ReplyTo: p.ReplyTo}
 
 	if p.From != "" {
-		idx, err := findWindowStateIndex(state.Windows, p.From)
+		id, label, err := resolveMailParty(state, p.From)
 		if err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
-		msg.From = state.Windows[idx].ID
-		msg.FromLabel = windowLabelOf(state.Windows[idx])
+		msg.From, msg.FromLabel = id, label
 	}
 
 	if p.To != "" {
-		idx, err := findWindowStateIndex(state.Windows, p.To)
+		id, label, err := resolveMailParty(state, p.To)
 		if err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
 		msg.Kind = agentMsgDirect
-		msg.To = state.Windows[idx].ID
-		msg.ToLabel = windowLabelOf(state.Windows[idx])
+		msg.To, msg.ToLabel = id, label
 	}
 
 	// A pane messaging itself is the shortest loop there is, and no legitimate
@@ -235,6 +255,11 @@ func (d *Daemon) verbSendAgentMessage(_ *connState, params json.RawMessage) (any
 	}
 
 	stored := d.agents.send(sess.Name, msg)
+
+	// The attached clients get the whole message, not only the event: they
+	// are the readers that cannot come back and read the ring on their own
+	// schedule, because the person they draw for is not polling anything.
+	d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{Message: stored}, "")
 
 	// The event carries only what a subscriber needs to filter on. Everything
 	// else is read back from the ring, the discipline the other waits follow: a
@@ -295,19 +320,35 @@ func (d *Daemon) verbReadAgentMessages(_ *connState, params json.RawMessage) (an
 	// first message.
 	q.thread = d.agents.resolveThread(sess.Name, p.Thread)
 	if p.To != "" {
-		idx, err := findWindowStateIndex(state.Windows, p.To)
+		id, _, err := resolveMailParty(state, p.To)
 		if err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
-		q.inbox = state.Windows[idx].ID
+		q.inbox = id
 	}
-	live := map[string]bool{}
+	// The person's inbox is always live: it has no window to close.
+	live := map[string]bool{AgentInboxHuman: true}
 	for i := range state.Windows {
 		live[state.Windows[i].ID] = true
 	}
 	q.live = func(id string) bool { return live[id] }
 
 	res := d.agents.read(sess.Name, q)
+
+	// A read that marked something read is news to the attached clients: the
+	// unread count they draw beside a pane just changed, and nothing else would
+	// tell them.
+	var marked []uint64
+	var readAt int64
+	for _, m := range res.Messages {
+		if m.WasUnread && m.ReadAt != 0 {
+			marked = append(marked, m.ID)
+			readAt = m.ReadAt
+		}
+	}
+	if len(marked) > 0 {
+		d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{ReadIDs: marked, ReadAt: readAt}, "")
+	}
 
 	return map[string]any{
 		"type":    "agent_messages",
@@ -368,19 +409,28 @@ func (d *Daemon) verbAskAgent(_ *connState, params json.RawMessage) (any, *verbE
 		return nil, verr
 	}
 	state := sess.GetState()
+	// The person has an inbox and no keyboard, so a question for them is left
+	// as mail and answered from the client, never typed anywhere.
+	if p.Window == AgentInboxHuman {
+		return nil, hintedVerbError(ErrVerbNoKeyboard, "human has no pane to type into", &VerbHint{
+			Param:   "window",
+			Command: "tuios send-agent-message -w human '<your question>'",
+			Detail:  "human is the person at the attached client. They read mail in the tuios mail overlay and reply from it. Send the question with send-agent-message -w human, then wait-for agent-message on your own inbox.",
+		})
+	}
 	idx, err := findWindowStateIndex(state.Windows, p.Window)
 	if err != nil {
 		return nil, mapResolveErr(err, sess)
 	}
 	target := state.Windows[idx]
 
-	from := ""
+	from, fromLabel := "", ""
 	if p.From != "" {
-		fidx, ferr := findWindowStateIndex(state.Windows, p.From)
+		fid, flabel, ferr := resolveMailParty(state, p.From)
 		if ferr != nil {
 			return nil, mapResolveErr(ferr, sess)
 		}
-		from = state.Windows[fidx].ID
+		from, fromLabel = fid, flabel
 	}
 	if from != "" && from == target.ID {
 		return nil, hintedVerbError(ErrVerbLoopRefused, "a pane cannot ask itself", &VerbHint{
@@ -448,6 +498,13 @@ func (d *Daemon) verbAskAgent(_ *connState, params json.RawMessage) (any, *verbE
 	after := pty.CaptureContent(true, false)
 	reply, truncated := tailLines(after, before, lines)
 
+	// The exchange goes in the ring once it is over, so the person at the
+	// client can see what one agent asked another and what came back. It is
+	// a record and not a delivery: nothing waits on it, nothing is unread
+	// because of it, and the rate cap does not count it because the waits
+	// above already bound how often an ask can run.
+	d.recordAsk(sess, from, fromLabel, target, p.Text, reply, settledBy)
+
 	return map[string]any{
 		"type":       "agent_reply",
 		"session":    sess.Name,
@@ -462,6 +519,29 @@ func (d *Daemon) verbAskAgent(_ *connState, params json.RawMessage) (any, *verbE
 		"lines":     countLines(reply),
 		"truncated": truncated,
 	}, nil
+}
+
+// recordAsk stores one finished ask-agent exchange in the session's ring and
+// pushes it to the attached clients. The question rides in the subject, cut to
+// the subject cap, and the captured reply in the text, cut to the body cap.
+func (d *Daemon) recordAsk(sess *Session, from, fromLabel string, target WindowState, question, reply, settledBy string) {
+	if len(question) > agentMsgMaxSubject {
+		question = question[:agentMsgMaxSubject]
+	}
+	if len(reply) > agentMsgMaxText {
+		reply = reply[:agentMsgMaxText]
+	}
+	stored := d.agents.send(sess.Name, AgentMessage{
+		Kind:      agentMsgAsk,
+		From:      from,
+		FromLabel: fromLabel,
+		To:        target.ID,
+		ToLabel:   windowLabelOf(target),
+		Subject:   question,
+		Text:      reply,
+		SettledBy: settledBy,
+	})
+	d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{Message: stored}, "")
 }
 
 // durationOr converts a millisecond parameter to a duration, falling back to a

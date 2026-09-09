@@ -95,6 +95,7 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"b", "Toggle sidebar"},
 			{"e", "Focus/leave sidebar"},
 			{"j", "Jump to newest message"},
+			{"M", "Mail"},
 			{"X", "Close session"},
 		}
 

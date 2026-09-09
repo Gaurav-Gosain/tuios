@@ -207,6 +207,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "session", content, geo, rows)
 	}
 
+	if m.ShowAgentMail {
+		content, geo, rows := m.renderAgentMail()
+		layers = m.placeOverlayPanel(layers, "agentmail", content, geo, rows)
+	}
+
 	if m.ShowWorkspaceSwitcher {
 		content, geo, rows := m.renderWorkspaceSwitcher()
 		layers = m.placeOverlayPanel(layers, "workspace", content, geo, rows)

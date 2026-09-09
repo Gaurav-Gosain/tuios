@@ -60,6 +60,9 @@ const (
 	// controls these two are narrower than their line, so they carry their own
 	// columns rather than claiming the whole header.
 	sidebarRowAgentSort
+	// sidebarRowAgentMail is the mail token at the end of the agents header,
+	// carrying how many messages wait for the person. It opens the mailbox.
+	sidebarRowAgentMail
 	// sidebarRowNewSession is the "+" in the sessions header, and the same
 	// control on the collapsed strip. It targets nothing that exists yet.
 	sidebarRowNewSession
@@ -559,16 +562,31 @@ func (m *OS) sidebarAgentsControls(cw, headerW int, pal overlay.Palette, hoverX 
 	if overlay.UseASCII() {
 		sep = " . "
 	}
+	// The mailbox token: the mail glyph, and the count of messages waiting for
+	// the person when there are any. It reads Fg while something waits, which
+	// is the same rule the other two tokens follow for a non-default value.
+	mail, mailOn := sidebarMailToken(m.AgentMailUnread())
 
-	fw, sw := lipgloss.Width(filter), lipgloss.Width(sort)
-	total := fw + lipgloss.Width(sep) + sw
+	fw, sw, mw := lipgloss.Width(filter), lipgloss.Width(sort), lipgloss.Width(mail)
+	sepW := lipgloss.Width(sep)
+	total := fw + sepW + sw + sepW + mw
 	x0 := cw - 1 - total
+	// The mail token gives way first: the two controls that shape the section
+	// were here before it, and a rail that fit them must keep fitting them.
+	if x0 < headerW+1 {
+		mail, mw = "", 0
+		total = fw + sepW + sw
+		x0 = cw - 1 - total
+	}
 	if x0 < headerW+1 {
 		return "", nil
 	}
 	spans := []sidebarTokenSpan{
 		{Kind: sidebarRowAgentFilter, X0: x0, X1: x0 + fw},
-		{Kind: sidebarRowAgentSort, X0: x0 + fw + lipgloss.Width(sep), X1: x0 + total},
+		{Kind: sidebarRowAgentSort, X0: x0 + fw + sepW, X1: x0 + fw + sepW + sw},
+	}
+	if mail != "" {
+		spans = append(spans, sidebarTokenSpan{Kind: sidebarRowAgentMail, X0: x0 + total - mw, X1: x0 + total})
 	}
 	ink := func(on bool, s sidebarTokenSpan) color.Color {
 		if on || (hoverX >= s.X0 && hoverX < s.X1) {
@@ -576,9 +594,35 @@ func (m *OS) sidebarAgentsControls(cw, headerW int, pal overlay.Palette, hoverX 
 		}
 		return pal.FgMute
 	}
-	return sidebarStyle(nil, ink(filterOn, spans[0])).Render(filter) +
+	out := sidebarStyle(nil, ink(filterOn, spans[0])).Render(filter) +
 		sidebarStyle(nil, pal.FgMute).Render(sep) +
-		sidebarStyle(nil, ink(sortOn, spans[1])).Render(sort), spans
+		sidebarStyle(nil, ink(sortOn, spans[1])).Render(sort)
+	if mail != "" {
+		mailInk := ink(mailOn, spans[2])
+		if mailOn {
+			mailInk = pal.AccentBright
+		}
+		out += sidebarStyle(nil, pal.FgMute).Render(sep) + sidebarStyle(nil, mailInk).Render(mail)
+	}
+	return out, spans
+}
+
+// sidebarMailGlyph is the mark unread mail wears on the rail.
+func sidebarMailGlyph() string {
+	if overlay.UseASCII() {
+		return "@"
+	}
+	return "✉"
+}
+
+// sidebarMailToken is the agents header's mail token and whether it is live:
+// the glyph alone when nothing waits, the glyph and a count when something
+// does.
+func sidebarMailToken(unread int) (string, bool) {
+	if unread <= 0 {
+		return sidebarMailGlyph(), false
+	}
+	return sidebarMailGlyph() + " " + strconv.Itoa(unread), true
 }
 
 // sidebarComposeRow assembles one rail row on the single spine: gutter, glyph,
@@ -1996,8 +2040,18 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 		label = agentElapsed(e.State, e.StateAt, time.Now())
 		labelW = lipgloss.Width(label)
 	}
+	// Mail waiting in this pane's inbox, after the elapsed time: it is the one
+	// thing about an agent that nothing on its screen shows.
+	mail, mailW := "", 0
+	if n := m.agentMailUnreadFor(e.WindowID); n > 0 {
+		mail = sidebarMailGlyph() + " " + strconv.Itoa(n)
+		mailW = lipgloss.Width(mail)
+		if labelW > 0 {
+			mailW++ // the gap between the two figures
+		}
+	}
 
-	avail := sidebarNameAvail(cw, labelW)
+	avail := sidebarNameAvail(cw, labelW+mailW)
 	nameStyle := sidebarStyle(rowBg, fg)
 	timeFg := pal.FgMute
 	if sidebarAttention(e.State) {
@@ -2014,6 +2068,12 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	right := ""
 	if label != "" {
 		right = sidebarStyle(rowBg, timeFg).Render(label)
+	}
+	if mail != "" {
+		if right != "" {
+			right += sidebarStyle(rowBg, nil).Render(" ")
+		}
+		right += sidebarStyle(rowBg, pal.AccentBright).Render(mail)
 	}
 	// An agent row is only ever "current" through the pane it points at, which
 	// the terminals section already marks, so its gutter carries severity, and

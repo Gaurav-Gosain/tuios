@@ -519,6 +519,7 @@ var ActionDescriptions = map[string]string{
 	"prefix_toggle_sidebar":     "Toggle the session sidebar",
 	"prefix_explore":            "Focus/leave sidebar",
 	"prefix_jump_notif":         "Jump to newest message",
+	"prefix_mail":               "Open the mailbox",
 	"prefix_session_switcher":   "Open the session switcher",
 	"prefix_workspace_switcher": "Open the workspace switcher",
 	"prefix_layout":             "Enter layout prefix",

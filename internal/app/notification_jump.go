@@ -2,6 +2,8 @@ package app
 
 import (
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // A message about a pane is a pointer to that pane, so it may as well be
@@ -56,6 +58,15 @@ func (m *OS) JumpToNotification() bool {
 // disagree about what "go there" means: FocusWindow already switches workspace,
 // and sidebarFocusWindow already switches session first.
 func (m *OS) jumpToNotifTarget(t NotifTarget) {
+	// A message about mail lands on the thread, where the reply is, rather than
+	// on the pane that wrote. The marking read it may need is queued, since
+	// this runs inside handlers that return no command.
+	if t.Thread != 0 {
+		if m.OpenAgentMailThread(t.Thread) != nil {
+			m.QueueClientEvent(ClientEvent{Type: "agent-mail-mark", Mail: session.AgentMailPayload{ReadIDs: []uint64{t.Thread}}})
+		}
+		return
+	}
 	foreign := t.SessionID != "" && t.SessionID != m.sidebarCurrentSessionID()
 	if foreign && !m.sessionCached(t.SessionID) {
 		m.ShowNotification("Source session closed", "info", m.Settings.NotificationDuration)

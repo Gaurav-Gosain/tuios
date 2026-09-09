@@ -52,6 +52,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_workspace_switcher", handlePrefixWorkspaceSwitcher)
 	d.Register("prefix_explore", handleToggleFocusSidebar)
 	d.Register("prefix_jump_notif", handlePrefixJumpNotif)
+	d.Register("prefix_mail", handlePrefixMail)
 	d.Register("prefix_detach", handlePrefixDetach)
 	d.Register("prefix_close_session", handlePrefixCloseSession)
 	d.Register("prefix_exit_mode", handlePrefixExitMode)
@@ -407,6 +408,10 @@ func handlePrefixJumpNotif(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ShowNotification("No message to jump to", "info", o.Settings.NotificationDuration)
 	}
 	return o, nil
+}
+
+func handlePrefixMail(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.OpenAgentMail()
 }
 
 func handlePrefixSessionSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

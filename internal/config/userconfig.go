@@ -662,6 +662,9 @@ func DefaultConfig() *UserConfig {
 				"prefix_layout":             {"L"},
 				"prefix_explore":            {"e"}, // the same key goes to the rail and comes back
 				"prefix_jump_notif":         {"j"}, // the keyboard twin of clicking a message
+				// Capital M: m is the minimize prefix, and a slip into it costs
+				// nothing. The mailbox is where agents' messages are read.
+				"prefix_mail": {"M"},
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},
@@ -789,6 +792,8 @@ func getDefaultSidebarKeybinds() map[string][]string {
 		// it is a browse, not a command.
 		"agents_filter": {"f"},
 		"agents_sort":   {"o"},
+		// The mailbox for the pane under the cursor: i as in inbox.
+		"mail": {"i"},
 		// The rail lists; the palette searches. "/" is what searches everywhere
 		// else, and the rail is the one scope with nothing else to spend it on.
 		"palette":     {"/"},

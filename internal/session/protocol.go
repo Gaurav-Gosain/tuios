@@ -83,6 +83,11 @@ const (
 	// older clients that share this iota order.
 	MsgResurrect  // Restore a saved session on demand (cold-start restore)
 	MsgPTYResized // A pane's emulator changed size at this point in its output stream
+	// MsgAgentMail is one message stored in the session's agent ring, pushed to
+	// every attached TUI client at the moment it is stored. It exists because an
+	// attached client is the one reader that cannot poll: an idle client must do
+	// no work, and a message an agent leaves has to reach the person anyway.
+	MsgAgentMail
 )
 
 // Message is the base protocol message structure.
@@ -381,6 +386,21 @@ type PTYResizedPayload struct {
 	PTYID  string `json:"pty_id"`
 	Width  int    `json:"width"`
 	Height int    `json:"height"`
+}
+
+// AgentMailPayload is the MsgAgentMail body: the stored message, as the ring
+// holds it. The client keeps its own mirror of the ring from these, so opening
+// the mailbox costs no round trip and a message that arrived while the person
+// was looking elsewhere is already there when they look.
+//
+// A push carries either a stored message or a read receipt, never both. The
+// receipt lists the ids a read just marked read, so the count a client draws
+// beside a pane's inbox follows the agent actually reading rather than the
+// client's guess.
+type AgentMailPayload struct {
+	Message AgentMessage `json:"message"`
+	ReadIDs []uint64     `json:"read_ids,omitempty"`
+	ReadAt  int64        `json:"read_at,omitempty"`
 }
 
 // UnsubscribePTYPayload requests unsubscribing from PTY output.
