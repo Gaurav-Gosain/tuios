@@ -27,8 +27,9 @@ const DefaultConnectTimeout = 10 * time.Second
 // the supervisor tears it down and redials.
 const DefaultCallTimeout = 8 * time.Second
 
-// DefaultRemoteCommand is what the hub runs on the far side.
-const DefaultRemoteCommand = "tuios"
+// DefaultRemoteCommand is the name the link looks for on the far side. What
+// it runs is the path it finds; see remote.go.
+const DefaultRemoteCommand = RemoteBinary
 
 // Host is one configured peer.
 type Host struct {
@@ -38,9 +39,10 @@ type Host struct {
 	Addr string
 	// ConnectTimeout bounds one dial. Zero means DefaultConnectTimeout.
 	ConnectTimeout time.Duration
-	// Command is the remote tuios binary. Zero means DefaultRemoteCommand. It
-	// exists for a machine where tuios is not on the non-interactive PATH,
-	// which is common with per-user installs.
+	// Command is the remote tuios binary. Empty means the link finds one
+	// itself: on the PATH, at the known install paths, or through the login
+	// shell (see remote.go). Set, it is run as written and nothing is looked
+	// for. It is the override for a machine where the search is wrong.
 	Command string
 	// SSHOptions are extra arguments placed before the address. They are the
 	// escape hatch for a host that needs a flag ssh_config cannot carry.

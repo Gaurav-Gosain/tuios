@@ -19,6 +19,11 @@ import (
 // ssh would carry, and reaches this test's own daemon instead of a machine
 // somewhere. Nothing here reads the developer's ssh config, known_hosts or
 // agent, and no network connection is made.
+//
+// The command runs through `sh -c` on the joined words, which is what sshd
+// does on the far side: the command reaches a shell as one string and the
+// shell re-parses it. That is what lets the link's own probe for the tuios
+// binary, which is a quoted shell script, run here the way it runs over ssh.
 
 // writeFakeSSH puts an ssh stand-in in dir and returns its path.
 func writeFakeSSH(t *testing.T, dir string) string {
@@ -34,7 +39,7 @@ func writeFakeSSH(t *testing.T, dir string) string {
 		"  esac\n" +
 		"done\n" +
 		"shift\n" + // the address
-		"exec \"$@\"\n"
+		"exec /bin/sh -c \"$*\"\n"
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		t.Fatalf("write the ssh stand-in: %v", err)
 	}

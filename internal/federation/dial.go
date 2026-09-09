@@ -68,7 +68,11 @@ func SSHDialer(sshBinary string) Dialer {
 			"-T",
 		}
 		args = append(args, h.SSHOptions...)
-		args = append(args, h.Addr, h.command(), "stdio-proxy")
+		// One string: ssh joins its command words with spaces and the far
+		// side's login shell re-parses them, so what is sent is what that
+		// shell reads. See remote.go for what it says when no command is
+		// configured.
+		args = append(args, h.Addr, h.remoteCommand(true, "stdio-proxy"))
 		return CommandDialer(sshBinary, args...)(ctx, h)
 	}
 }

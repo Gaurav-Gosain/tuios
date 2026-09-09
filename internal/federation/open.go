@@ -67,9 +67,11 @@ func QuoteRemoteArg(arg string) (string, error) {
 // host and runs its tuios with remote as the arguments: `-t <options> <addr>
 // <command> <remote...>`.
 //
-// The command is passed as the [hosts] table spells it, unquoted, exactly as
-// the link passes it, so a "~/.local/bin/tuios" is expanded by the remote
-// shell on both paths. The remote arguments are quoted by QuoteRemoteArg.
+// The command is the link's own: a configured one is passed as the [hosts]
+// table spells it, unquoted, so a "~/.local/bin/tuios" is expanded by the
+// remote shell on both paths, and without one the same probe the link runs
+// finds the binary (see remote.go). The remote arguments are quoted by
+// QuoteRemoteArg.
 func (h Host) OpenArgs(remote ...string) ([]string, error) {
 	secs := int(h.connectTimeout().Seconds())
 	if secs < 1 {
@@ -80,13 +82,14 @@ func (h Host) OpenArgs(remote ...string) ([]string, error) {
 		"-o", "ConnectTimeout=" + strconv.Itoa(secs),
 	}
 	args = append(args, h.SSHOptions...)
-	args = append(args, h.Addr, h.command())
+	quoted := make([]string, 0, len(remote))
 	for _, r := range remote {
 		q, err := QuoteRemoteArg(r)
 		if err != nil {
 			return nil, err
 		}
-		args = append(args, q)
+		quoted = append(quoted, q)
 	}
+	args = append(args, h.Addr, h.remoteCommand(false, quoted...))
 	return args, nil
 }

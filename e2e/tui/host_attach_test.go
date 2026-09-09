@@ -39,7 +39,7 @@ func writeFakeSSHTo(t *testing.T, dir, remoteBase string) string {
 	for _, key := range xdgKeys {
 		b.WriteString("export " + key + "=" + filepath.Join(remoteBase, key) + "\n")
 	}
-	b.WriteString("exec \"$@\"\n")
+	b.WriteString("exec /bin/sh -c \"$*\"\n")
 	if err := os.WriteFile(path, []byte(b.String()), 0o700); err != nil {
 		t.Fatalf("write the ssh stand-in: %v", err)
 	}

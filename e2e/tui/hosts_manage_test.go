@@ -115,23 +115,19 @@ func TestAddingAHostReachesTheRunningDaemon(t *testing.T) {
 // reach the person who ran the command.
 func TestHostTestReportsWhatSSHSaid(t *testing.T) {
 	base := t.TempDir()
-	// An ssh stand-in that fails the way ssh does: a message on stderr and a
-	// non-zero exit.
-	dir := filepath.Join(base, "bin")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	ssh := filepath.Join(dir, "failing-ssh")
-	script := "#!/bin/sh\necho 'someone@buildbox: Permission denied (publickey).' >&2\nexit 255\n"
-	if err := os.WriteFile(ssh, []byte(script), 0o700); err != nil { //nolint:gosec // an ssh stand-in this test runs
-		t.Fatalf("write the ssh stand-in: %v", err)
-	}
-	env := []string{"TUIOS_SSH=" + ssh}
+	env := []string{"TUIOS_SSH=" + writeRefusingSSH(t, filepath.Join(base, "bin"))}
 
+	// The add dials once and says what ssh said, and the host is added all
+	// the same: a refusal is something to fix, not a reason to forget the
+	// machine.
 	out, err := tuiosCLIEnv(t, base, env, "hosts", "add", "build", "someone@buildbox", "--connect-timeout", "2")
 	if err != nil {
-		t.Fatalf("tuios hosts add: %v\n%s", err, out)
+		t.Fatalf("ASSERTION: 'tuios hosts add' failed against a host ssh refused; the host must be added anyway: %v\n%s", err, out)
 	}
+	if !strings.Contains(out, "Permission denied") {
+		t.Errorf("ASSERTION: what ssh said never reached the user at add time:\n%s", out)
+	}
+	t.Logf("tuios hosts add against a refused host:\n%s", out)
 
 	out, err = tuiosCLIEnv(t, base, env, "hosts", "test", "build")
 	if err == nil {
@@ -143,10 +139,28 @@ func TestHostTestReportsWhatSSHSaid(t *testing.T) {
 	t.Logf("tuios hosts test against a refused host:\n%s", out)
 }
 
+// writeRefusingSSH puts an ssh stand-in in dir that fails the way ssh does
+// against a machine that refuses the key: a message on stderr and exit 255.
+func writeRefusingSSH(t *testing.T, dir string) string {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	ssh := filepath.Join(dir, "failing-ssh")
+	script := "#!/bin/sh\necho 'someone@buildbox: Permission denied (publickey).' >&2\nexit 255\n"
+	if err := os.WriteFile(ssh, []byte(script), 0o700); err != nil { //nolint:gosec // an ssh stand-in this test runs
+		t.Fatalf("write the ssh stand-in: %v", err)
+	}
+	return ssh
+}
+
 // TestAddingAHostKeepsTheRestOfTheConfigFile is the file half. A command that
 // adds one machine must not rewrite what the user hand-wrote around it.
 func TestAddingAHostKeepsTheRestOfTheConfigFile(t *testing.T) {
 	base := t.TempDir()
+	// The add dials the host once. The stand-in refuses, so nothing reaches
+	// the network and nothing reads the developer's ssh configuration.
+	env := []string{"TUIOS_SSH=" + writeRefusingSSH(t, filepath.Join(base, "bin"))}
 	dir := filepath.Join(base, "XDG_CONFIG_HOME", "tuios")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("mkdir config: %v", err)
@@ -157,7 +171,7 @@ func TestAddingAHostKeepsTheRestOfTheConfigFile(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	out, err := tuiosCLI(t, base, "hosts", "add", "build", "someone@buildbox")
+	out, err := tuiosCLIEnv(t, base, env, "hosts", "add", "build", "someone@buildbox")
 	if err != nil {
 		t.Fatalf("tuios hosts add: %v\n%s", err, out)
 	}

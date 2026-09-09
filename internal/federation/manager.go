@@ -73,6 +73,10 @@ type HostReport struct {
 	Protocol      int    `json:"protocol,omitempty"`
 	MinProtocol   int    `json:"min_protocol,omitempty"`
 	PID           int    `json:"pid,omitempty"`
+	// Command is the tuios binary the link runs on the host: the configured
+	// command, or the path the link found on its last dial that reached one.
+	// Empty until a dial has reached one.
+	Command string `json:"command,omitempty"`
 	// Sessions is what the handshake reported when the link came up. It is a
 	// handshake fact, not a live count; a listing that needs the live set calls
 	// Sessions on the manager.

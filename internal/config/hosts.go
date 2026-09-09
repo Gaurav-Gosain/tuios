@@ -35,8 +35,10 @@ type HostConfig struct {
 	// called unreachable. Zero uses the built-in default. It is also handed to
 	// ssh, so a machine that is powered off is reported rather than waited on.
 	ConnectTimeout int `toml:"connect_timeout,omitempty"`
-	// Command is the tuios binary on the far side. Empty means "tuios". Set it
-	// when a per-user install is not on the non-interactive PATH.
+	// Command is the tuios binary on the far side. Empty means the link finds
+	// one itself: on the PATH, at the known install paths, or through the
+	// login shell. Set it to run a given binary instead; nothing is then
+	// looked for.
 	Command string `toml:"command,omitempty"`
 	// SSHOptions are extra arguments passed to ssh before the address, for a
 	// host that needs a flag ssh_config cannot carry.

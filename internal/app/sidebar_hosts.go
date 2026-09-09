@@ -378,6 +378,8 @@ func hostStatusLabel(status string) string {
 		return ""
 	case federation.StatusNoDaemon:
 		return "no daemon"
+	case federation.StatusNoBinary:
+		return "no tuios"
 	case federation.StatusIncompatible:
 		return "version"
 	case federation.StatusConnecting:

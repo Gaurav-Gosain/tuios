@@ -82,19 +82,27 @@ func (p *rwc) Close() error                { return nil }
 // readPreamble consumes lines from br until it sees the link preamble, so
 // banner text ahead of the proxy is discarded. It gives up after
 // preambleScanLimit bytes rather than reading a remote that will never send it.
-func readPreamble(br *bufio.Reader) error {
+//
+// The lines ahead of the preamble are where the probe script says which binary
+// it chose, or that it found none. Those are kept; everything else ahead of
+// the preamble is noise and is dropped. The note is returned with the error
+// too, because "found nothing" arrives as a note followed by no preamble.
+func readPreamble(br *bufio.Reader) (preambleNote, error) {
+	var note preambleNote
 	read := 0
 	for {
 		line, err := br.ReadString('\n')
 		read += len(line)
-		if trimCR(line) == LinkPreamble {
-			return nil
+		line = trimCR(line)
+		if line == LinkPreamble {
+			return note, nil
 		}
+		note.noteLine(line)
 		if err != nil {
-			return ErrNoPreamble
+			return note, ErrNoPreamble
 		}
 		if read > preambleScanLimit {
-			return ErrNoPreamble
+			return note, ErrNoPreamble
 		}
 	}
 }

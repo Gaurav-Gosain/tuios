@@ -134,6 +134,9 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 			// labelled so a reader cannot mistake it for something tuios said.
 			fmt.Fprintf(w, "  the link reported: %s\n", h.Detail)
 		}
+		if h.Status == string(federation.StatusNoBinary) {
+			fmt.Fprintf(w, "  Run 'tuios hosts test %s' to see where the link looked.\n", h.Host)
+		}
 	}
 	printConfigProblems(w, res.ConfigProblems)
 	return nil
@@ -151,7 +154,7 @@ func hostStatusColor(status string) lipgloss.Color {
 		return lipgloss.Color("2")
 	case federation.StatusUnreachable:
 		return lipgloss.Color("1")
-	case federation.StatusIncompatible:
+	case federation.StatusIncompatible, federation.StatusNoBinary:
 		return lipgloss.Color("3")
 	default:
 		return lipgloss.Color("8")
