@@ -18,6 +18,7 @@ type sidebarRenderCache struct {
 	w          int
 	hits       []sidebarRowHit
 	sessionIDs []string
+	hostIDs    []string
 	nav        []sidebarNavRow
 	sections   [sidebarSectionCount][2]int
 	stripRows  []sidebarStripRow
@@ -60,6 +61,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		// truncates and refills these buffers on a real rebuild, so hand back copies.
 		m.SidebarHits = append(m.SidebarHits[:0], m.sidebarCache.hits...)
 		m.SidebarSessionIDs = append(m.SidebarSessionIDs[:0], m.sidebarCache.sessionIDs...)
+		m.SidebarHostIDs = append(m.SidebarHostIDs[:0], m.sidebarCache.hostIDs...)
 		m.SidebarNav = append(m.SidebarNav[:0], m.sidebarCache.nav...)
 		m.sidebarSectionY = m.sidebarCache.sections
 		m.sidebarStripRows = append(m.sidebarStripRows[:0], m.sidebarCache.stripRows...)
@@ -75,6 +77,7 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 		w:          w,
 		hits:       append([]sidebarRowHit(nil), m.SidebarHits...),
 		sessionIDs: append([]string(nil), m.SidebarSessionIDs...),
+		hostIDs:    append([]string(nil), m.SidebarHostIDs...),
 		nav:        append([]sidebarNavRow(nil), m.SidebarNav...),
 		sections:   m.sidebarSectionY,
 		stripRows:  append([]sidebarStripRow(nil), m.sidebarStripRows...),
@@ -255,6 +258,41 @@ func (m *OS) sidebarSignature() uint64 {
 		repoFold ^= e
 	}
 	mixU(repoFold)
+
+	// The machine groups: which machine the rows come from, the user's order
+	// over the others, their session orders, and which are folded. The
+	// snapshot's own generation is folded below.
+	mixS(m.AttachedHost)
+	for _, h := range m.SidebarHostOrder {
+		mixS(h)
+	}
+	var hostFold uint64
+	for host, collapsed := range m.SidebarCollapsedHosts {
+		if !collapsed {
+			continue
+		}
+		e := uint64(1469598103934665603)
+		for i := range len(host) {
+			e ^= uint64(host[i])
+			e *= prime
+		}
+		hostFold ^= e
+	}
+	mixU(hostFold)
+	var hostOrder uint64
+	for host, order := range m.SidebarHostSessionOrder {
+		e := uint64(1469598103934665603)
+		for _, s := range append([]string{host}, order...) {
+			for i := range len(s) {
+				e ^= uint64(s[i])
+				e *= prime
+			}
+			e ^= 0x2f
+			e *= prime
+		}
+		hostOrder ^= e
+	}
+	mixU(hostOrder)
 	if m.SessionWorktree != nil {
 		mixS(m.SessionWorktree.Repo)
 		mixS(m.SessionWorktree.Branch)

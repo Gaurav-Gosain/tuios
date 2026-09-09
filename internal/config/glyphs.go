@@ -99,6 +99,24 @@ func (s *Settings) GetRailFileGlyph() string {
 	return s.glyphOr(func(g *theme.GlyphSet) string { return g.File }, "·", ".")
 }
 
+// GetRailFoldOpenGlyph is the mark on a group header whose rows are on screen
+// under it, and GetRailFoldShutGlyph the mark on one that is folded shut. The
+// rail draws them on a machine's row in the sessions section. One cell each,
+// so the header's name lands on the same spine every other row's does.
+//
+// A pointing triangle in both modes rather than a machine icon: the one thing
+// the mark has to say is that the row folds, and which way it is folded now.
+// The ASCII pair is "v" and ">", the shape the same arrows take in every
+// seven-bit tree.
+func (s *Settings) GetRailFoldOpenGlyph() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.FoldOpen }, "▾", "v")
+}
+
+// GetRailFoldShutGlyph is the mark on a group header that is folded shut.
+func (s *Settings) GetRailFoldShutGlyph() string {
+	return s.glyphOr(func(g *theme.GlyphSet) string { return g.FoldShut }, "▸", ">")
+}
+
 // GetRailCollapseGlyph is the arrow that folds the rail down to its strip.
 //
 // Two cells in ASCII, where "«" has no one-cell stand-in: a lone "<" in the
@@ -143,6 +161,8 @@ func (s *Settings) ResolvedGlyphs() map[string]string {
 		"folder":          s.GetRailFolderGlyph(),
 		"parent":          s.GetRailParentGlyph(),
 		"file":            s.GetRailFileGlyph(),
+		"fold_open":       s.GetRailFoldOpenGlyph(),
+		"fold_shut":       s.GetRailFoldShutGlyph(),
 		"collapse":        s.GetRailCollapseGlyph(),
 		"expand":          s.GetRailExpandGlyph(),
 		"scrollbar_thumb": s.GetScrollbarThumbChar(),

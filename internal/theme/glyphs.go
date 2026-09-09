@@ -102,6 +102,11 @@ type GlyphSet struct {
 	TreeBranch string `json:"tree_branch,omitempty"`
 	TreeLast   string `json:"tree_last,omitempty"`
 
+	// The rail's fold marks, one cell each, on a group header: FoldOpen while
+	// the group's rows are on screen under it, FoldShut while it is folded.
+	FoldOpen string `json:"fold_open,omitempty"`
+	FoldShut string `json:"fold_shut,omitempty"`
+
 	// The files section's three marks, one cell each. They are roles rather
 	// than a table of file types on purpose: a set says what a folder, a parent
 	// and a plain file look like, and the per-type icons are a separate,
@@ -150,6 +155,7 @@ var builtinGlyphSets = map[string]*GlyphSet{
 		Focus: "▎", Attention: "▎", Bullet: "·",
 		Add: "+", Collapse: "«", Expand: "»",
 		TreeBranch: "├─ ", TreeLast: "└─ ",
+		FoldOpen: "▾", FoldShut: "▸",
 		Folder: "▸", Parent: "▴", File: "·",
 		Ellipsis: "…", Sigil: "›", DashRule: "╌",
 	},
@@ -186,6 +192,7 @@ var builtinGlyphSets = map[string]*GlyphSet{
 		Focus: ">", Attention: "!", Bullet: ".",
 		Add: "+", Collapse: "<<", Expand: ">>",
 		TreeBranch: "|- ", TreeLast: "`- ",
+		FoldOpen: "v", FoldShut: ">",
 		Folder: ">", Parent: "^", File: ".",
 		ScrollbarThumb: "|", ScrollbarTrack: ".",
 		Ellipsis: "...", Sigil: ">", DashRule: "-",
@@ -334,6 +341,8 @@ var glyphRoles = []glyphRole{
 	// name. A wider one would step every grouped name out of the rail's spine.
 	{"tree_branch", func(g *GlyphSet) *string { return &g.TreeBranch }, 3},
 	{"tree_last", func(g *GlyphSet) *string { return &g.TreeLast }, 3},
+	{"fold_open", func(g *GlyphSet) *string { return &g.FoldOpen }, 1},
+	{"fold_shut", func(g *GlyphSet) *string { return &g.FoldShut }, 1},
 	{"folder", func(g *GlyphSet) *string { return &g.Folder }, 1},
 	{"parent", func(g *GlyphSet) *string { return &g.Parent }, 1},
 	{"file", func(g *GlyphSet) *string { return &g.File }, 1},

@@ -818,6 +818,10 @@ type OS struct {
 	// starts true so the first poll happens, and the first answer turns it off
 	// for a daemon with no hosts, which is the default install.
 	federationPolling bool
+	// federationTickGen is the generation of the host poll timer now armed. A
+	// tick from an older generation is dropped, so the snapshot's re-arm and
+	// the tick's own re-arm cannot leave two loops running.
+	federationTickGen uint64
 	// hostTests are the results of the settings page's last link test, keyed by
 	// host name. A row prefers its test result to the daemon's snapshot: the
 	// test is newer, and it is what the user just asked for.
@@ -1004,6 +1008,22 @@ type OS struct {
 	// survives the sessions in it being replaced. Persisted in the sidebar
 	// state file. See sidebar_worktrees.go.
 	SidebarCollapsedRepos map[string]bool
+	// SidebarCollapsedHosts is the set of machines whose group is folded shut
+	// on the rail, keyed by host name. Persisted in the sidebar state file.
+	// See sidebar_hosts.go.
+	SidebarCollapsedHosts map[string]bool
+	// SidebarHostOrder is the user's drag-defined order of the machine groups,
+	// applied over the daemon's sorted table (machines not named here keep
+	// their sorted order after the named ones). This machine is always first
+	// and is not in it. SidebarHostIDs is the machine order displayed last
+	// frame, which is what a starting drag snapshots. Persisted in the sidebar
+	// state file.
+	SidebarHostOrder []string
+	SidebarHostIDs   []string
+	// SidebarHostSessionOrder is the drag-defined session order of each other
+	// machine, keyed by host name, kept apart from SidebarOrder so a drag while
+	// attached on build cannot write build's names over this machine's order.
+	SidebarHostSessionOrder map[string][]string
 	// SidebarOrder is the user's drag-defined session order, applied over the
 	// daemon's creation-order list (sessions not named here keep their natural
 	// order after the named ones). Persisted in the sidebar state file.

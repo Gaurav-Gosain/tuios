@@ -106,6 +106,11 @@ const (
 	// SessionID, which is what the folded set is keyed by. See
 	// sidebar_worktrees.go.
 	sidebarRowRepo
+	// sidebarRowHost is a machine's group header in the sessions section, over
+	// that machine's sessions. Activating it folds the group shut or opens it
+	// again, and dragging it reorders the machines. It carries the host name in
+	// SessionID. See sidebar_hosts.go.
+	sidebarRowHost
 )
 
 // sidebarAddGlyph is the mark both add controls wear. One cell, so it costs a
@@ -1403,10 +1408,11 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 
 	drawSessions := func() {
 		add := ""
-		// The header names the machine when the sessions listed under it are
-		// another machine's.
-		label := m.sessionsHeaderLabel()
-		if canCreate {
+		const label = "sessions"
+		// With the section laid out by machine, each machine's header carries
+		// its own control and the section header none: two "+" for one
+		// machine would be one more than the rail can explain.
+		if canCreate && len(m.SidebarHostIDs) == 0 {
 			if tok, span, ok := sidebarHeaderAdd(sidebarRowNewSession, cw, sidebarHeaderLabelW(label),
 				pal, headerHoverX[sidebarSectionSessions], isCursor(sidebarRowNewSession, "", ""), &m.Settings); ok {
 				add = tok
@@ -1426,7 +1432,8 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				continue
 			}
 			if isRemoteNode(s) {
-				m.drawHostRow(s, cw, pal, isCursor, recordHit, recordToken, headerHoverX[sidebarSectionSessions], compose, &lines)
+				m.drawHostRow(s, cw, pal, idx == hoverRow[sidebarSectionSessions], canCreate,
+					isCursor, recordHit, recordToken, headerHoverX[sidebarSectionSessions], compose, &lines)
 				continue
 			}
 			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
@@ -1777,6 +1784,19 @@ func (m *OS) sidebarCursorIndex(target sidebarNavRow, sessions []sessiontree.Nod
 	case sidebarRowRepo:
 		for i, s := range sessions {
 			if s.Kind == sessiontree.KindRepo && s.ID == target.SessionID {
+				return sidebarSectionSessions, i, true
+			}
+		}
+	case sidebarRowHost, sidebarRowHostNew:
+		for i, s := range sessions {
+			if s.Kind == sessiontree.KindHost && s.Host == target.SessionID {
+				return sidebarSectionSessions, i, true
+			}
+		}
+	case sidebarRowHostSession:
+		for i, s := range sessions {
+			if s.Kind == sessiontree.KindSession && s.Host == target.SessionID &&
+				remoteSessionName(s) == target.WindowID {
 				return sidebarSectionSessions, i, true
 			}
 		}

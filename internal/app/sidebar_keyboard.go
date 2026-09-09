@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -161,7 +162,7 @@ func (m *OS) sidebarStepSection(delta int) {
 // control that belongs to none.
 func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 	switch kind {
-	case sidebarRowSession, sidebarRowHostSession, sidebarRowHostNew, sidebarRowRepo:
+	case sidebarRowSession, sidebarRowHostSession, sidebarRowHostNew, sidebarRowHost, sidebarRowRepo:
 		return sidebarSectionSessions
 	case sidebarRowWindow:
 		return sidebarSectionTerminals
@@ -242,6 +243,8 @@ func (m *OS) SidebarActivateCursor() bool {
 		// Folding a group is a change to the rail, not a place to go, so the
 		// keyboard stays in the rail on the row that was folded.
 		m.SidebarToggleRepoCollapsed(row.SessionID)
+	case sidebarRowHost:
+		m.SidebarToggleHostCollapsed(row.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
@@ -263,10 +266,19 @@ func (m *OS) SidebarActivateCursor() bool {
 
 // SidebarReorderCursor moves the cursor's session up or down in the rail order
 // and persists it, the keyboard equivalent of a drag-reorder. The cursor rides
-// with the moved session so successive presses keep moving the same one.
+// with the moved session so successive presses keep moving the same one. On a
+// machine's header it moves the machine among the others, the keyboard twin
+// of dragging the header; this machine stays first.
 func (m *OS) SidebarReorderCursor(delta int) {
 	row, ok := m.sidebarCursorRow()
-	if !ok || row.Kind != sidebarRowSession {
+	if !ok {
+		return
+	}
+	if row.Kind == sidebarRowHost {
+		m.sidebarReorderHost(row.SessionID, delta)
+		return
+	}
+	if row.Kind != sidebarRowSession {
 		return
 	}
 	order := append([]string(nil), m.SidebarSessionIDs...)
@@ -282,11 +294,26 @@ func (m *OS) SidebarReorderCursor(delta int) {
 		return
 	}
 	order[from], order[to] = order[to], order[from]
-	m.SidebarOrder = order
+	m.setSidebarSessionOrder(m.attachedMachine(), order)
 	m.saveSidebarState()
 	// The rail relays out next frame; follow the moved session so the cursor and
 	// its highlight ride to the new slot rather than staying on a fixed index.
 	m.sidebarFollowSession = row.SessionID
+}
+
+// sidebarReorderHost moves one machine's group delta places among the other
+// machines and persists the order. The cursor tracks the header by identity,
+// so it rides with the moved group on its own.
+func (m *OS) sidebarReorderHost(host string, delta int) {
+	order := append([]string(nil), m.SidebarHostIDs...)
+	from := slices.Index(order, host)
+	to := from + delta
+	if from < 0 || to < 0 || to >= len(order) {
+		return
+	}
+	order[from], order[to] = order[to], order[from]
+	m.SidebarHostOrder = order
+	m.saveSidebarState()
 }
 
 // SidebarCycleSection walks the cursor forward through the rail's three

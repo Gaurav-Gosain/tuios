@@ -344,6 +344,7 @@ func MessageTypeName(t MessageType) string {
 		MsgRemoteCommand:    "RemoteCommand",
 		MsgGetLogs:          "GetLogs",
 		MsgLogsData:         "LogsData",
+		MsgHostsChanged:     "HostsChanged",
 	}
 	if name, ok := names[t]; ok {
 		return name

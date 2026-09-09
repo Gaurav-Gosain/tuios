@@ -176,7 +176,7 @@ type ClientLeftMsg struct {
 // event loop so the work happens on the program goroutine instead of the daemon
 // read-loop goroutine.
 type ClientEvent struct {
-	Type        string // "joined", "left", "resize", "refresh", "agent-mail", or "agent-mail-load"
+	Type        string // "joined", "left", "resize", "refresh", "agent-mail", "agent-mail-load", or "hosts-changed"
 	ClientID    string
 	ClientCount int
 	Width       int    // "joined" and "resize"
@@ -442,6 +442,8 @@ func ListenForClientEvents(eventChan chan ClientEvent) tea.Cmd {
 			return AgentMailMsg{Payload: event.Mail}
 		case "agent-mail-load":
 			return AgentMailLoadMsg{}
+		case "hosts-changed":
+			return HostsChangedMsg{}
 		case "agent-mail-mark":
 			// The payload carries the thread to mark in ReadIDs[0]; see
 			// jumpToNotifTarget.
@@ -1231,9 +1233,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyFederationSnapshot(msg)
 		m.sidebarCache.invalidate()
 		if after, refresh := m.federationRefreshPlan(); refresh {
-			return m, federationRefreshTick(after)
+			return m, m.federationRefreshTick(after)
 		}
 		return m, nil
+
+	case HostsChangedMsg:
+		// The daemon's host table changed under this client. The poll is armed
+		// again whatever it was doing, because the daemon with no hosts, which
+		// stopped it, may now have one; the answer says whether to keep going.
+		m.federationPolling = true
+		return m, refreshFederationCmd()
 
 	case HostTestDoneMsg:
 		// Storing the results is the whole handler. The ssh children ran in the
@@ -1242,11 +1251,17 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case FederationRefreshTickMsg:
+		if msg.Gen != m.federationTickGen {
+			// A timer the snapshot's own re-arm already replaced. Letting it
+			// fire would run a second poll loop beside the first, and the pair
+			// would double every period.
+			return m, nil
+		}
 		after, refresh := m.federationRefreshPlan()
 		if !refresh {
 			return m, nil
 		}
-		return m, tea.Batch(refreshFederationCmd(), federationRefreshTick(after))
+		return m, tea.Batch(refreshFederationCmd(), m.federationRefreshTick(after))
 
 	case TriggerAltScreenRedrawMsg:
 		// Force alt screen apps to redraw by sending resize (fake then real)

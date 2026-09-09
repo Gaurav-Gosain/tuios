@@ -245,25 +245,32 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 		if cs.clientID == excludeClientID {
 			continue
 		}
-		// Sent off this goroutine so a slow client blocks nobody else, and
-		// behind a ticket so two broadcasts to one client cannot pass each
-		// other on the way: a goroutine per send with no order between them
-		// delivered a client's two pushes to a peer swapped, and the peer that
-		// adopted the older one last held a tree the session had moved on from.
-		ticket := cs.takeBroadcastTicket()
-		d.wg.Add(1)
-		go func(client *connState) {
-			defer d.wg.Done()
-			defer client.finishBroadcast()
-			defer func() {
-				if r := recover(); r != nil {
-					log.Printf("PANIC in broadcastToSession send goroutine: %v\n%s", r, debug.Stack())
-				}
-			}()
-			client.awaitBroadcastTurn(ticket)
-			if err := d.sendEncoded(client, msg); err != nil {
-				debugLog("[DEBUG] broadcastToSession: failed to send to client %s: %v", client.clientID, err)
-			}
-		}(cs)
+		d.queueBroadcast(cs, msg, "broadcastToSession")
 	}
+}
+
+// queueBroadcast writes one already encoded broadcast to one client, off this
+// goroutine and in turn.
+//
+// Sent off this goroutine so a slow client blocks nobody else, and behind a
+// ticket so two broadcasts to one client cannot pass each other on the way: a
+// goroutine per send with no order between them delivered a client's two
+// pushes to a peer swapped, and the peer that adopted the older one last held a
+// tree the session had moved on from. what names the caller in the log.
+func (d *Daemon) queueBroadcast(cs *connState, msg *Message, what string) {
+	ticket := cs.takeBroadcastTicket()
+	d.wg.Add(1)
+	go func(client *connState) {
+		defer d.wg.Done()
+		defer client.finishBroadcast()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("PANIC in %s send goroutine: %v\n%s", what, r, debug.Stack())
+			}
+		}()
+		client.awaitBroadcastTurn(ticket)
+		if err := d.sendEncoded(client, msg); err != nil {
+			debugLog("[DEBUG] %s: failed to send to client %s: %v", what, client.clientID, err)
+		}
+	}(cs)
 }

@@ -5,8 +5,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
+)
+
+// hostOpen and hostShut are the fold marks a machine's header wears on the
+// rail, open and folded, in the glyph set the harness's terminal draws.
+const (
+	hostOpen = "▾"
+	hostShut = "▸"
 )
 
 // This is federation stage 1 driven the way a user reaches it: a real config
@@ -85,20 +93,66 @@ func TestSidebarGroupsSessionsByHost(t *testing.T) {
 	// the daemon has run ssh, spoken the framing to the proxy, and had a
 	// listing come back.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "@ build")
+		return strings.Contains(s.Text(), hostOpen+" build")
 	}, uiTimeout); err != nil {
-		t.Fatalf("the rail never showed the host group: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: the rail never showed the host group: %v\n%s", err, term.Snapshot())
 	}
 
 	// The host that cannot be reached keeps its row and says so.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		return strings.Contains(text, "@ offline") && strings.Contains(text, "offline")
+		return strings.Contains(text, hostOpen+" offline") && strings.Contains(text, "offline")
 	}, uiTimeout); err != nil {
-		t.Fatalf("the rail never showed the unreachable host: %v\n%s", err, term.Snapshot())
+		t.Fatalf("ASSERTION: the rail never showed the unreachable host: %v\n%s", err, term.Snapshot())
 	}
 
 	t.Logf("rail with host groups:\n%s", term.Snapshot())
+	saveFrame(t, term, "rail-host-groups")
+}
+
+// TestRailShowsAHostAddedWhileAttached is the refresh proof. The client is
+// attached to a daemon with no hosts, which is the default install and the
+// state in which the rail stops asking about hosts. A host is then added from
+// the command line, and the rail shows it without the client reattaching.
+//
+// What would pass a weaker test and fail this one: a client whose only way to
+// learn about the first host is its own poll, since that poll stopped for
+// good on the daemon's first answer. The daemon has to tell it, and the wait
+// below is what proves it did.
+func TestRailShowsAHostAddedWhileAttached(t *testing.T) {
+	base := t.TempDir()
+	ssh := writeFakeSSH(t, base)
+	env := []string{"TUIOS_SSH=" + ssh}
+
+	term := startIn(t, base, startOpts{args: []string{"new", "fed-live"}, env: env})
+	waitBoot(t, term)
+	toggleSidebarViaPalette(t, term)
+	railShows(t, term, "sessions")
+	// The first poll is one local verb call. It has answered, and stopped the
+	// polling, long before this returns; the wait is what keeps the add from
+	// racing it, since an add that lands before the first answer would be
+	// found by that answer and prove nothing.
+	time.Sleep(2 * time.Second)
+	if strings.Contains(term.Screen().Text(), hostOpen+" local") {
+		t.Fatalf("the rail shows a machine group with no hosts configured:\n%s", term.Snapshot())
+	}
+	saveFrame(t, term, "rail-host-add-before")
+
+	out, err := tuiosCLIEnv(t, base, env, "hosts", "add", "build", "someone@buildbox",
+		"--command", tuiosBin, "--connect-timeout", "5")
+	if err != nil {
+		t.Fatalf("tuios hosts add: %v\n%s", err, out)
+	}
+
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		text := s.Text()
+		return strings.Contains(text, hostOpen+" build") && strings.Contains(text, hostOpen+" local")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the rail did not show the host added while the client was attached: %v\n%s", err, term.Snapshot())
+	}
+	t.Logf("the rail after a host was added on the command line:\n%s", term.Snapshot())
+	saveFrame(t, term, "rail-host-add-after")
+	alive(t, term, "after a host was added while attached")
 }
 
 // TestHostsCommandReportsALinkEndToEnd drives `tuios hosts` against the same

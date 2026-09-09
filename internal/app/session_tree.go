@@ -176,17 +176,22 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 		// last, which is where the creation order will put it anyway.
 		sessions = append(sessions, current)
 	}
-	sessions = orderByKey(sessions, func(s sessiontree.SessionInput) string { return s.Name }, m.SidebarOrder)
+	// The drag order of the machine these sessions are on. Keyed by machine,
+	// because session names repeat across machines: build's session-0 must not
+	// take this machine's slot for the same name.
+	sessions = orderByKey(sessions, func(s sessiontree.SessionInput) string { return s.Name },
+		m.sidebarSessionOrderFor(m.attachedMachine()))
 	return m.withHostGroups(sessiontree.Build(sessions))
 }
 
-// withHostGroups appends the federated host rows to a tree.
+// withHostGroups appends the other machines' rows to a tree.
 //
-// They go after this machine's sessions, always, and after the user's drag
-// order has been applied to them. Local first is the rule from section 5 of the
-// federation design, and appending here is also what keeps a remote row out of
-// SidebarOrder: that order is keyed by session name, and a host row is never
-// dragged.
+// They go after the attached machine's sessions, always, and after the user's
+// drag order has been applied to them. The tree's order is not the rail's: the
+// sessions section lays the machines out in its own fixed order (see
+// sidebarMachineRows), and appending here is what keeps a remote row out of
+// the surfaces that read the tree by position, which take the attached
+// machine's sessions as the prefix.
 func (m *OS) withHostGroups(tree sessiontree.Tree) sessiontree.Tree {
 	tree.Sessions = append(tree.Sessions, m.hostGroupNodes()...)
 	return tree
@@ -196,9 +201,11 @@ func (m *OS) withHostGroups(tree sessiontree.Tree) sessiontree.Tree {
 // the rail's own order, wrapping at both ends, or "" when there is nowhere to go.
 // Reading the order from BuildSessionTree rather than the raw daemon listing is
 // what makes "next" mean the row below the current one even after the user has
-// dragged the rail into a different order.
+// dragged the rail into a different order. Only the attached machine's
+// sessions are cycled: a row on another machine is a different connection,
+// which a cycle key must not open by surprise.
 func (m *OS) railNeighbourSession(delta int) string {
-	sessions := m.BuildSessionTree().Sessions
+	sessions := localSessionNodes(m.BuildSessionTree().Sessions)
 	current := slices.IndexFunc(sessions, func(s sessiontree.Node) bool { return s.IsCurrent })
 	if len(sessions) < 2 || current < 0 {
 		return ""

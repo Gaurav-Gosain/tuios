@@ -108,6 +108,35 @@ func (d *Daemon) ApplyHosts(hosts []federation.Host) {
 	}
 	if change.Changed() {
 		log.Printf("[FEDERATION] The host table changed: %s", describeTableChange(change))
+		d.broadcastHostsChanged(change)
+	}
+}
+
+// broadcastHostsChanged tells every attached TUI client, whatever session it is
+// on, that the host table changed.
+//
+// It exists because the client's poll for hosts stops for good once the daemon
+// reports none, which is the default install, and a host added from the
+// command line while a client is attached would otherwise stay invisible in
+// that client until it reattached. The push costs nothing while the table is
+// still: it runs from ApplyHosts and only on a change.
+func (d *Daemon) broadcastHostsChanged(change federation.TableChange) {
+	payload := &HostsChangedPayload{Added: change.Added, Removed: change.Removed, Redialed: change.Redialed}
+	msg, err := NewMessageWithCodec(MsgHostsChanged, payload, DefaultCodec())
+	if err != nil {
+		debugLog("[DEBUG] broadcastHostsChanged: encode: %v", err)
+		return
+	}
+	d.clientsMu.RLock()
+	defer d.clientsMu.RUnlock()
+	for _, cs := range d.clients {
+		cs.mu.Lock()
+		match := cs.isTUIClient && cs.attached
+		cs.mu.Unlock()
+		if !match {
+			continue
+		}
+		d.queueBroadcast(cs, msg, "broadcastHostsChanged")
 	}
 }
 

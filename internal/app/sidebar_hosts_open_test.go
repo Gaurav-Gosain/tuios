@@ -37,11 +37,11 @@ func TestOpenRemoteSessionOnADownHostSaysUnavailable(t *testing.T) {
 	_ = federation.StatusUp
 }
 
-// TestRailShowsThisMachineAsAHostWhileAttachedElsewhere pins what the rail
-// draws when the client is on another machine: the main group is named for
-// that machine, the machine's own group is not drawn a second time, and this
-// machine's sessions appear as a host group named local so they can be
-// returned to.
+// TestRailShowsThisMachineAsAHostWhileAttachedElsewhere pins what the tree
+// holds when the client is on another machine: the attached machine's own
+// group is not drawn a second time, and this machine's sessions appear as a
+// host group named local so they can be returned to. This machine is always
+// a target, which is the way back.
 func TestRailShowsThisMachineAsAHostWhileAttachedElsewhere(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 	m.applyFederationSnapshot(FederationHostsMsg{
@@ -65,19 +65,16 @@ func TestRailShowsThisMachineAsAHostWhileAttachedElsewhere(t *testing.T) {
 	if got := names(); got != "build/build build/api" {
 		t.Fatalf("ASSERTION: at home the host groups are %q, want only build", got)
 	}
-	if m.sessionsHeaderLabel() != "sessions" {
-		t.Errorf("at home the header is %q", m.sessionsHeaderLabel())
-	}
 
 	// Away on build: local becomes a group, build is the main group.
 	m.AttachedHost = "build"
 	if got := names(); got != "local/local local/here" {
 		t.Errorf("ASSERTION: away on build the host groups are %q, want only local", got)
 	}
-	if m.sessionsHeaderLabel() != "@ build" {
-		t.Errorf("ASSERTION: away on build the header is %q, want @ build", m.sessionsHeaderLabel())
-	}
 	if !m.hostIsUp(federation.LocalHostName) {
 		t.Errorf("ASSERTION: this machine is not a target, so there is no way back")
+	}
+	if !m.hostIsUp("build") {
+		t.Errorf("ASSERTION: the machine the client is attached to is not up")
 	}
 }

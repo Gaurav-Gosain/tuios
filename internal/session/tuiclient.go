@@ -131,9 +131,12 @@ type TUIClient struct {
 	// agentMailHandler takes each message the daemon pushes from the session's
 	// agent ring. Guarded by multiClientMu like the other broadcast handlers.
 	agentMailHandler AgentMailHandler
-	sessionEndedOnce sync.Once // gates the single session-ended notification
-	disconnectOnce   sync.Once // gates the single disconnect notification
-	multiClientMu    sync.RWMutex
+	// hostsChangedHandler takes the daemon's MsgHostsChanged push. See
+	// OnHostsChanged.
+	hostsChangedHandler HostsChangedHandler
+	sessionEndedOnce    sync.Once // gates the single session-ended notification
+	disconnectOnce      sync.Once // gates the single disconnect notification
+	multiClientMu       sync.RWMutex
 
 	// Request/response handling for synchronous calls after readLoop starts
 	pendingResponses   map[MessageType]chan *Message
@@ -778,6 +781,19 @@ func (c *TUIClient) OnAgentMail(handler AgentMailHandler) {
 	c.multiClientMu.Unlock()
 }
 
+// HostsChangedHandler takes one MsgHostsChanged push: the daemon's [hosts]
+// table changed under this client. It runs on the read-loop goroutine, so it
+// only queues.
+type HostsChangedHandler func(payload HostsChangedPayload)
+
+// OnHostsChanged registers the handler for MsgHostsChanged, the daemon's push
+// when a host is added, removed or redialed while this client is attached.
+func (c *TUIClient) OnHostsChanged(handler HostsChangedHandler) {
+	c.multiClientMu.Lock()
+	c.hostsChangedHandler = handler
+	c.multiClientMu.Unlock()
+}
+
 // OnDisconnect registers a handler invoked when the daemon connection is torn
 // down unexpectedly (crash, reset, or framing desync). It fires at most once and
 // runs on the read-loop goroutine, so the handler should only signal the UI
@@ -1140,6 +1156,24 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		}
 		c.multiClientMu.RLock()
 		handler := c.agentMailHandler
+		c.multiClientMu.RUnlock()
+		if handler != nil {
+			handler(payload)
+		}
+
+	case MsgHostsChanged:
+		if c.viaHost != "" {
+			// The push is about the far daemon's table. The rail lists this
+			// machine's hosts, which that table says nothing about.
+			return
+		}
+		var payload HostsChangedPayload
+		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			debugLog("[CLIENT] Failed to parse a hosts change: %v", err)
+			return
+		}
+		c.multiClientMu.RLock()
+		handler := c.hostsChangedHandler
 		c.multiClientMu.RUnlock()
 		if handler != nil {
 			handler(payload)

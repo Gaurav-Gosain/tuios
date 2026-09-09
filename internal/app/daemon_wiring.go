@@ -58,6 +58,13 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 			clientLog("ClientEventChan full, displaced an event for agent mail")
 		}
 	})
+	// The daemon's host table changed. The rail re-polls in Update, where the
+	// poll gate lives; see HostsChangedMsg.
+	client.OnHostsChanged(func(session.HostsChangedPayload) {
+		if m.QueueClientEvent(ClientEvent{Type: "hosts-changed"}) {
+			clientLog("ClientEventChan full, displaced an event for a hosts change")
+		}
+	})
 	client.OnClientLeft(func(clientID string, clientCount int) {
 		clientLog("Client left: %s (remaining: %d)", shortClientID(clientID), clientCount)
 		m.QueueClientEvent(ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount})

@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
 // sidebarDragState is the click-or-drag gesture on a session row. A left press
@@ -11,11 +12,15 @@ import (
 // the plain click (switch or toggle).
 type sidebarDragState struct {
 	PressActive bool
-	SessionID   string
-	PressX      int
-	PressY      int
-	Dragging    bool
-	Order       []string
+	// SessionID is the pressed row's session, or its host name when Host is
+	// set: the gesture then reorders the machine groups rather than the
+	// sessions, and a plain click folds the group.
+	SessionID string
+	Host      bool
+	PressX    int
+	PressY    int
+	Dragging  bool
+	Order     []string
 }
 
 // sidebarEdgeState is the width-resize gesture on the rail's edge rule. A left
@@ -245,6 +250,16 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 			PressX:      x,
 			PressY:      y,
 		}
+	case sidebarRowHost:
+		// The same gesture as a session row: a release on the row folds the
+		// group, a drag reorders the machines.
+		m.SidebarDrag = sidebarDragState{
+			PressActive: true,
+			SessionID:   hit.SessionID,
+			Host:        true,
+			PressX:      x,
+			PressY:      y,
+		}
 	}
 	return true
 }
@@ -362,6 +377,8 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:
 		m.SidebarToggleRepoCollapsed(hit.SessionID)
+	case sidebarRowHost:
+		m.SidebarToggleHostCollapsed(hit.SessionID)
 	case sidebarRowFiles:
 		m.queueSidebarCmd(m.ToggleFileView())
 	case sidebarRowFileCd:
@@ -390,11 +407,24 @@ func (m *OS) SidebarDragMotion(x, y int) bool {
 		if y == d.PressY {
 			return true // horizontal jitter is still a click
 		}
+		if d.Host && d.SessionID == federation.LocalHostName {
+			// This machine is pinned first. Its header folds and is not dragged.
+			return true
+		}
 		d.Dragging = true
-		d.Order = append([]string(nil), m.SidebarSessionIDs...)
+		if d.Host {
+			d.Order = append([]string(nil), m.SidebarHostIDs...)
+		} else {
+			d.Order = append([]string(nil), m.SidebarSessionIDs...)
+		}
 	}
 
-	targetID := m.sidebarSessionRowIDAt(y)
+	var targetID string
+	if d.Host {
+		targetID = m.sidebarHostRowIDAt(y)
+	} else {
+		targetID = m.sidebarSessionRowIDAt(y)
+	}
 	if targetID == "" || targetID == d.SessionID {
 		return true
 	}
@@ -444,10 +474,33 @@ func (m *OS) sidebarSessionRowIDAt(y int) string {
 	return id
 }
 
+// sidebarHostRowIDAt is sidebarSessionRowIDAt for the machine groups: the
+// machine whose group holds screen row y, which is the last machine header at
+// or above it. This machine's group is never an answer, since it is pinned
+// first and nothing can be dropped over it.
+func (m *OS) sidebarHostRowIDAt(y int) string {
+	id, first := "", ""
+	for _, h := range m.SidebarHits {
+		if h.Kind != sidebarRowHost || h.SessionID == federation.LocalHostName {
+			continue
+		}
+		if first == "" {
+			first = h.SessionID
+		}
+		if y >= h.Y0 {
+			id = h.SessionID
+		}
+	}
+	if id == "" {
+		return first
+	}
+	return id
+}
+
 // SidebarRelease finishes the click-or-drag gesture: a drag commits its draft
 // order and persists it; a plain release on the pressed row attaches to that
-// session. One gesture, one meaning: a release on the session already attached
-// is simply nothing to do.
+// session, or folds that machine's group. One gesture, one meaning: a release
+// on the session already attached is simply nothing to do.
 func (m *OS) SidebarRelease(x, y int) bool {
 	d := m.SidebarDrag
 	if !d.PressActive && !d.Dragging {
@@ -456,16 +509,25 @@ func (m *OS) SidebarRelease(x, y int) bool {
 	m.SidebarDrag = sidebarDragState{}
 
 	if d.Dragging {
-		m.SidebarOrder = d.Order
+		if d.Host {
+			m.SidebarHostOrder = d.Order
+		} else {
+			m.setSidebarSessionOrder(m.attachedMachine(), d.Order)
+		}
 		m.saveSidebarState()
 		return true
 	}
 
 	hit, ok := m.sidebarRowAt(x, y)
-	if !ok || hit.Kind != sidebarRowSession || hit.SessionID != d.SessionID {
+	if !ok || hit.SessionID != d.SessionID {
 		return true // the pointer left the row; the click is void
 	}
-	m.sidebarSwitchSession(hit.SessionID)
+	switch {
+	case d.Host && hit.Kind == sidebarRowHost:
+		m.SidebarToggleHostCollapsed(hit.SessionID)
+	case !d.Host && hit.Kind == sidebarRowSession:
+		m.sidebarSwitchSession(hit.SessionID)
+	}
 	return true
 }
 
@@ -587,7 +649,7 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 	}
 
 	switch hit.Kind {
-	case sidebarRowHostSession, sidebarRowHostNew, sidebarRowRepo:
+	case sidebarRowHostSession, sidebarRowHostNew, sidebarRowHost, sidebarRowRepo:
 		// A remote row names a machine and a group header names a repository,
 		// and neither is a local session. There is no per-row menu for either
 		// in this release, so the right-click opens the rail's own settings the
