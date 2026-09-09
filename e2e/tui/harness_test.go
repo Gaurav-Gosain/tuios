@@ -319,6 +319,7 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 		tuitest.WithTerm("xterm-256color"),
 		tuitest.WithEnv(env...),
 		tuitest.WithLog(logFile),
+		tuitest.WithDir(workDirIn(t, base)),
 	}
 	if o.out != nil {
 		opts = append(opts, tuitest.WithOutputMirror(o.out))
@@ -644,12 +645,33 @@ func waitForAll(t *testing.T, term *tuitest.Terminal, timeout time.Duration, wha
 func tuiosCLI(t *testing.T, base string, args ...string) (string, error) {
 	t.Helper()
 	cmd := exec.Command(tuiosBin, args...)
+	cmd.Dir = workDirIn(t, base)
 	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
 	for _, key := range xdgKeys {
 		cmd.Env = append(cmd.Env, key+"="+filepath.Join(base, key))
 	}
 	out, err := cmd.CombinedOutput()
 	return string(out), err
+}
+
+// workDirIn is the directory every tuios this suite spawns starts in, and so
+// the directory the daemon and every shell under it start in: a plain
+// directory under the isolation root, never the checkout the suite runs from.
+//
+// The suite used to inherit the test binary's directory, which is a checkout
+// of tuios. That was invisible until the daemon started reading a session's
+// directory: run from a linked worktree, every session the suite made became a
+// worktree session of tuios, grouped under a "tuios" row and labelled by the
+// branch instead of its name, and nine rail tests failed for anyone working in
+// a worktree while passing for anyone working in the main checkout. A suite
+// whose result depends on where the repository sits is not hermetic.
+func workDirIn(t *testing.T, base string) string {
+	t.Helper()
+	dir := filepath.Join(base, "cwd")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("workDirIn: mkdir %s: %v", dir, err)
+	}
+	return dir
 }
 
 // daemonKey identifies one (test, isolation root) pair so killDaemon registers
