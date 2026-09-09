@@ -68,11 +68,25 @@ const configDebounce = 200 * time.Millisecond
 // the running config stands.
 type ConfigReloadCallback func(newConfig *UserConfig, err error)
 
+// WatcherOptions tune one watcher.
+type WatcherOptions struct {
+	// DeliverSelfWrites delivers a change tuios itself wrote, which is normally
+	// dropped (see the note above on why some saves are dropped).
+	//
+	// The daemon sets it. The settings page writes the config file from the
+	// client, and in a server that holds a daemon in the same process the two
+	// share the ring of hashes, so the daemon's watcher would call its own
+	// client's save a self write and never see the [hosts] table it changed.
+	// The daemon writes no config of its own, so it has nothing to suppress.
+	DeliverSelfWrites bool
+}
+
 // Watcher watches the config file for changes and triggers reloads.
 type Watcher struct {
 	watcher  *fsnotify.Watcher
 	path     string
 	callback ConfigReloadCallback
+	opts     WatcherOptions
 	stopCh   chan struct{}
 	once     sync.Once
 
@@ -86,6 +100,11 @@ type Watcher struct {
 // NewWatcher creates a file watcher for the config file.
 // The callback is called with the new config (or error) when changes are detected.
 func NewWatcher(configPath string, callback ConfigReloadCallback) (*Watcher, error) {
+	return NewWatcherWithOptions(configPath, callback, WatcherOptions{})
+}
+
+// NewWatcherWithOptions is NewWatcher with the options set.
+func NewWatcherWithOptions(configPath string, callback ConfigReloadCallback, opts WatcherOptions) (*Watcher, error) {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -95,6 +114,7 @@ func NewWatcher(configPath string, callback ConfigReloadCallback) (*Watcher, err
 		watcher:  w,
 		path:     filepath.Clean(configPath),
 		callback: callback,
+		opts:     opts,
 		stopCh:   make(chan struct{}),
 	}
 	// The file as it stands is what the client is already running, so the first
@@ -178,7 +198,7 @@ func (cw *Watcher) reload() {
 	cw.mu.Lock()
 	same := sum == cw.lastHash
 	cw.mu.Unlock()
-	if same || isSelfWrite(sum) {
+	if same || (!cw.opts.DeliverSelfWrites && isSelfWrite(sum)) {
 		// Either the file says what is already in force, or tuios wrote it
 		// itself from a settings row. Both are already applied.
 		cw.mu.Lock()

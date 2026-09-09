@@ -508,7 +508,8 @@ func (m *OS) settingsCategories() []settingsCategory {
 
 	return []settingsCategory{
 		appearance, sidebar, dock, behavior,
-		notifications, startup, screenshot, screensaver, spotlight, advanced, daemon, tape,
+		notifications, startup, screenshot, screensaver, spotlight, advanced, daemon,
+		m.hostsCategory(), tape,
 	}
 }
 

@@ -2414,22 +2414,27 @@ Statuses:
                 serve. Upgrade tuios on one of the two machines.
   connecting    The first attempt has not finished yet.
 
-To add a host, put this in the config file and restart the daemon:
+Add a machine with 'tuios hosts add', remove one with 'tuios hosts remove', and
+dial one with 'tuios hosts test'. Each writes or reads the config file, and a
+running daemon follows the file, so no command here needs a restart.
 
-  [hosts.build]
-  addr = "gaurav@buildbox"
+  tuios hosts add build gaurav@buildbox
+  tuios hosts test build
+  tuios hosts remove build
 
-The addr is anything ssh understands, including an ssh_config alias. The daemon
-runs ssh with BatchMode on, so a link never asks for a password and never asks
-about a host key. Run ssh to the host once by hand to accept its key.`,
+The address is anything ssh understands, including an ssh_config alias. The
+daemon runs ssh with BatchMode on, so a link never asks for a password and never
+asks about a host key. Run ssh to the host once by hand to accept its key.`,
 		Example: `  tuios hosts
-  tuios hosts --json`,
+  tuios hosts --json
+  tuios hosts add build gaurav@buildbox`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runListHosts(hostsJSON)
 		},
 	}
 	hostsCmd.Flags().BoolVar(&hostsJSON, "json", false, "Output as JSON")
+	hostsCmd.AddCommand(newHostsSubcommands()...)
 
 	stdioProxyCmd := &cobra.Command{
 		Use:    "stdio-proxy",

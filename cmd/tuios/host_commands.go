@@ -67,8 +67,8 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 
 	if len(res.Hosts) == 0 {
 		fmt.Fprintln(w, "No hosts are configured.")
-		fmt.Fprintln(w, "To add a host, put a [hosts.NAME] table with an addr in the config file.")
-		fmt.Fprintln(w, "Then restart the daemon with 'tuios kill-server'.")
+		fmt.Fprintln(w, "Add a machine with 'tuios hosts add NAME ADDRESS'.")
+		fmt.Fprintln(w, "The daemon opens the link at once. No restart is needed.")
 		printConfigProblems(w, res.ConfigProblems)
 		return nil
 	}

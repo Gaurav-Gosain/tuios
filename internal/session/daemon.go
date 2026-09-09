@@ -66,10 +66,19 @@ type Daemon struct {
 	// never gets a channel into it (federation package, section 1 of the design
 	// document).
 	federation *federation.Manager
+	// federationMu guards federationProblems and the hosts watcher, both of
+	// which a config reload rewrites while a verb is reading them.
+	federationMu sync.Mutex
 	// federationProblems are the config entries that were dropped, kept so the
 	// list-hosts verb can report them instead of leaving the user to wonder
 	// where a host went.
 	federationProblems []string
+	// hostsWatcher follows the config file so an edit to the [hosts] table
+	// reaches the links without a restart. Nil when no config path is set,
+	// which is every test that builds a DaemonConfig by hand.
+	hostsWatcher *config.Watcher
+	// configPath is the file hostsWatcher follows.
+	configPath string
 
 	// agents is the cross-agent mailbox: the bounded per-session message rings
 	// and the in-flight ask graph. It is held here rather than on a Session
@@ -282,6 +291,10 @@ type DaemonConfig struct {
 	// AgentHookCommand is [notifications.agent].command, the shorthand spelling
 	// of an after-agent-state hook.
 	AgentHookCommand string
+	// ConfigPath is the user config file the daemon follows for changes to the
+	// [hosts] table. DaemonConfigFromUser fills it, so every real starter has
+	// it and a hand-built config in a test does not.
+	ConfigPath string
 }
 
 // NewDaemon creates a new daemon instance.
@@ -327,25 +340,24 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// raise session lifecycle events.
 	d.manager.SetSessionHooks(d.onSessionCreated, d.onSessionDeleted)
 
+	d.configPath = cfg.ConfigPath
 	d.setupFederation(cfg.Hosts)
 
 	return d
 }
 
 // setupFederation builds the host table and the link manager. Nothing is dialed
-// here; Start launches the supervisors, and a daemon with no hosts configured
-// never allocates a manager at all.
+// here; Start launches the supervisors.
+//
+// The manager is built even with no hosts configured, which is the default. It
+// costs a struct and no goroutine, and it is what lets a host added later reach
+// a running daemon: a nil manager would have to be built from the config
+// reload, and the verbs read the pointer without a lock.
 func (d *Daemon) setupFederation(hosts []federation.Host) {
-	if len(hosts) == 0 {
-		return
-	}
 	table, problems := federation.NewTable(hosts)
 	for _, p := range problems {
 		d.federationProblems = append(d.federationProblems, p.Error())
 		log.Printf("[FEDERATION] %v", p)
-	}
-	if table.Len() == 0 {
-		return
 	}
 	d.federation = federation.New(table, federation.Options{
 		// TUIOS_SSH names the ssh program to run. It exists for a machine where
@@ -546,6 +558,9 @@ func (d *Daemon) Start() error {
 	if d.federation != nil {
 		d.federation.Start(d.ctx)
 	}
+	// The config file is followed from here on, so a host added while the daemon
+	// runs reaches the links without a restart.
+	d.startHostsWatch()
 
 	go d.handleSignals()
 	go d.acceptLoop()
@@ -608,6 +623,10 @@ func (d *Daemon) shutdown() error {
 		// to the kernel, which matters on a machine where several daemons have
 		// come and gone.
 		_ = d.transcriptWatcher.Close()
+
+		// The config watch ends before the links do, so a save landing during
+		// shutdown cannot dial a host the daemon is about to drop.
+		d.stopHostsWatch()
 
 		// Every ssh child is killed here. A link left running would outlive the
 		// daemon that owns it.

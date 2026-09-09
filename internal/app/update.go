@@ -1174,6 +1174,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		return m, nil
 
+	case HostTestDoneMsg:
+		// Storing the results is the whole handler. The ssh children ran in the
+		// Cmd that produced this message.
+		m.applyHostTest(msg)
+		return m, nil
+
 	case FederationRefreshTickMsg:
 		after, refresh := m.federationRefreshPlan()
 		if !refresh {
