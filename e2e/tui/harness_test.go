@@ -209,6 +209,9 @@ type startOpts struct {
 	// "tuios" attaches to a daemon. Every other test here holds the standalone
 	// TUI still with TUIOS_NO_DAEMON=1; see startIn.
 	daemonDefault bool
+	// logPath, when set, receives the path of the raw PTY log, for a test
+	// that reads what tuios printed after the TUI gave the screen back.
+	logPath *string
 }
 
 // start spawns tuios in a hermetic environment and returns the terminal plus
@@ -307,6 +310,9 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 		t.Fatalf("start: create pty log: %v", err)
 	}
 	t.Cleanup(func() { _ = logFile.Close() })
+	if o.logPath != nil {
+		*o.logPath = logPath
+	}
 
 	opts := []tuitest.Option{
 		tuitest.WithSize(cols, rows),
