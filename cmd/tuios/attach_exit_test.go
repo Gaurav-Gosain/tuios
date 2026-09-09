@@ -105,7 +105,7 @@ func TestAttachExitStatusPerReason(t *testing.T) {
 		{"daemon lost", app.ExitDaemonLost, false, true, "connection to the TUIOS daemon was lost"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := reportSessionExit("work", tc.reason, tc.killed)
+			err := reportSessionExit("work", "", tc.reason, tc.killed)
 
 			if got := err != nil; got != tc.wantExit1 {
 				t.Fatalf("reportSessionExit returned error=%v, want error=%v (err: %v)", got, tc.wantExit1, err)
@@ -141,7 +141,7 @@ func TestReportSessionExitNormalMessages(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := captureStdout(t, func() {
-				if err := reportSessionExit(tc.session, app.ExitNormal, tc.killed); err != nil {
+				if err := reportSessionExit(tc.session, "", app.ExitNormal, tc.killed); err != nil {
 					t.Fatalf("reportSessionExit returned error: %v", err)
 				}
 			})

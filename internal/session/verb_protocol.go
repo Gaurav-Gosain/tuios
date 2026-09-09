@@ -286,6 +286,19 @@ func init() {
 			examples: []string{`{"id":1,"verb":"list-hosts"}`},
 			handler:  (*Daemon).verbListHosts,
 		},
+		"open-host-connection": {
+			description: "Turn this connection into a connection to the daemon on one host. After the reply, every byte written here reaches that daemon and every byte it writes comes back. Send nothing until the reply has arrived.",
+			params: []verbParam{
+				{Name: "host", Type: "string", Description: "A host by name from the [hosts] config table."},
+			},
+			returns: []verbParam{
+				{Name: "host", Type: "string", Description: "The host the connection reaches."},
+				{Name: "daemon_version", Type: "string", Description: "The version the host's daemon reported when the link came up. It is what the host said, not a fact this daemon checked."},
+				{Name: "protocol", Type: "int", Description: "The control protocol version the host's daemon reported."},
+			},
+			examples: []string{`{"id":1,"verb":"open-host-connection","params":{"host":"build"}}`},
+			handler:  (*Daemon).verbOpenHostConnection,
+		},
 		"list-host-sessions": {
 			description: "List sessions on this machine and on every configured host. Hosts that do not answer are listed with their status.",
 			params: []verbParam{
@@ -1038,6 +1051,12 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 
 		if err := d.dispatchVerbLine(cs, lineCopy); err != nil {
 			// A write failure means the connection is gone; stop.
+			return
+		}
+		if cs.takeover != nil {
+			// The verb's reply is on the wire, and from here the connection
+			// is not a verb connection. See connState.takeover.
+			cs.takeover(br)
 			return
 		}
 	}

@@ -55,6 +55,11 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"set-layout#0":           {errCode: ErrVerbNeedsClient, why: "tiling is the client's arithmetic"},
 	"split-window#0":         {errCode: ErrVerbNeedsClient, why: "a split is the client's arithmetic"},
 
+	// The fixture has no [hosts] table, so the one host name an example can
+	// use is not configured. The connection itself is proved with two daemons
+	// in host_connection_test.go.
+	"open-host-connection#0": {errCode: ErrVerbUnknownHost, why: "no hosts are configured in the fixture"},
+
 	// An example that names a pane by the environment variable an agent would
 	// have expanded. The literal is not a window id here.
 	"ask-agent#0":           {errCode: ErrVerbWindowNotFound, why: "$TUIOS_PANE_ID is unexpanded"},

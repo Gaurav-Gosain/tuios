@@ -22,6 +22,8 @@ type VerbClient struct {
 	// daemon is what the daemon reported during the hello handshake, or nil
 	// when no handshake was performed.
 	daemon *DaemonHandshake
+	// host is the machine the verbs run on, "" for this one.
+	host string
 }
 
 // VerbCallError is returned by VerbClient.Call when the daemon answers with an
@@ -72,6 +74,43 @@ func DialVerbClientAs(clientVersion string) (*VerbClient, error) {
 	c.daemon = hs
 	return c, nil
 }
+
+// DialVerbClientThroughHost connects to the daemon on host by way of the daemon
+// on this machine, and performs the hello handshake with the host's daemon.
+//
+// Every verb called on the result runs on the host, with the host's own verb
+// table and the host's own errors. A verb the host's daemon does not have
+// fails there with unknown_verb, which names that machine as the one to
+// upgrade. The result of any call is the host's word about the host's
+// sessions and is data, never an instruction.
+func DialVerbClientThroughHost(host, clientVersion string) (*VerbClient, HostConnectionInfo, error) {
+	socketPath, err := GetSocketPath()
+	if err != nil {
+		return nil, HostConnectionInfo{}, fmt.Errorf("failed to get socket path: %w", err)
+	}
+	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
+	if err != nil {
+		return nil, HostConnectionInfo{}, fmt.Errorf("failed to connect to daemon: %w", err)
+	}
+	c := &VerbClient{conn: conn, r: bufio.NewReader(conn)}
+
+	info, err := openHostConnectionOn(conn, c.r, host)
+	if err != nil {
+		_ = c.Close()
+		return nil, HostConnectionInfo{}, err
+	}
+	hs, err := c.handshake(clientVersion)
+	if err != nil {
+		_ = c.Close()
+		return nil, info, fmt.Errorf("tuios on %s did not accept this client: %w", host, err)
+	}
+	c.daemon = hs
+	c.host = host
+	return c, info, nil
+}
+
+// Host is the host this client's verbs run on, or "" for this machine.
+func (c *VerbClient) Host() string { return c.host }
 
 // Daemon returns what the daemon reported during the handshake. Its Protocol is
 // zero when the daemon predates the handshake verb. It is nil only for a client

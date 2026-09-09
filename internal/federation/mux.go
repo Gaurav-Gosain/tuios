@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"time"
 )
 
 // LinkPreamble is the first line the proxy writes on a fresh link, before any
@@ -20,12 +21,16 @@ const LinkPreamble = "TUIOS-LINK 1"
 // to keep reading.
 const preambleScanLimit = 8 << 10 // 8 KiB
 
-// streamBufferFrames is how many data frames a stream may hold before the mux
-// read loop blocks. The loop is shared, so a stalled consumer stalls the link;
-// with one control stream in stage 1 there is nothing to starve, and closing
-// the link is what unwedges it. A stream per attach (stage 3) needs a real
-// per-stream window instead.
+// streamBufferFrames is how many data frames a stream may hold before its
+// reader is considered behind. The read loop is shared by every stream on the
+// link, so a consumer that stops reading would otherwise stall the control
+// stream and every other attach with it. See deliver for what happens instead.
 const streamBufferFrames = 64
+
+// defaultStallLimit is how long a full stream may leave the read loop waiting
+// before the stream is dropped. A relay whose local client has not drained a
+// megabyte-scale backlog in this long is not slow, it is gone.
+const defaultStallLimit = 10 * time.Second
 
 var (
 	// ErrLinkClosed reports use of a mux whose pipe is gone.
@@ -36,6 +41,9 @@ var (
 	// the maximum. It bounds what one untrusted peer can make this side
 	// allocate.
 	ErrTooManyStreams = errors.New("federation: too many open streams")
+	// ErrStreamStalled reports a stream dropped because its reader fell too
+	// far behind. The link itself survives.
+	ErrStreamStalled = errors.New("federation: the stream's reader stopped reading")
 )
 
 // maxStreams caps concurrent streams on one link.
@@ -75,6 +83,10 @@ type mux struct {
 	// accept handles an open frame from the peer. Nil means opens are refused.
 	accept func(*Stream)
 
+	// stallLimit is how long deliver waits on a full stream before dropping
+	// it. Tests shorten it.
+	stallLimit time.Duration
+
 	mu      sync.Mutex
 	streams map[uint32]*Stream
 	nextID  uint32
@@ -101,13 +113,14 @@ func newMux(rwc io.ReadWriteCloser, accept func(*Stream), firstID uint32) *mux {
 // them.
 func newMuxRW(r io.Reader, w io.Writer, c io.Closer, accept func(*Stream), firstID uint32) *mux {
 	return &mux{
-		w:       w,
-		r:       r,
-		c:       c,
-		accept:  accept,
-		streams: make(map[uint32]*Stream),
-		nextID:  firstID,
-		done:    make(chan struct{}),
+		w:          w,
+		r:          r,
+		c:          c,
+		accept:     accept,
+		stallLimit: defaultStallLimit,
+		streams:    make(map[uint32]*Stream),
+		nextID:     firstID,
+		done:       make(chan struct{}),
 	}
 }
 
@@ -159,6 +172,16 @@ func (m *mux) writeFrame(t frameType, id uint32, payload []byte) error {
 	default:
 	}
 	return writeFrame(m.w, t, id, payload)
+}
+
+// dropStalled ends one stream whose reader fell behind, and tells the peer. The
+// stream's own Read reports ErrStreamStalled so the relay above it can say why.
+func (m *mux) dropStalled(s *Stream) {
+	m.mu.Lock()
+	delete(m.streams, s.id)
+	m.mu.Unlock()
+	s.peerClosed(ErrStreamStalled)
+	_ = m.writeFrame(frameClose, s.id, nil)
 }
 
 func (m *mux) dropStream(id uint32) {
@@ -288,13 +311,32 @@ func newStream(m *mux, id uint32) *Stream {
 	}
 }
 
-// deliver hands a data frame to the stream's reader. It blocks when the reader
-// is behind, which is the mux's only backpressure. See streamBufferFrames.
+// deliver hands a data frame to the stream's reader.
+//
+// It runs on the mux's read loop, which every stream on the link shares. A
+// reader that is behind makes it wait, which is the only backpressure there is
+// on the pipe, and that wait is bounded: a stream still full after stallLimit
+// is dropped, alone, and the loop goes on serving the others. Without the bound
+// one client that stopped draining its attach would freeze the control stream,
+// the listings would time out, and the whole link would be torn down for it.
 func (s *Stream) deliver(payload []byte) {
+	select {
+	case s.incoming <- payload:
+		return
+	case <-s.closed:
+		return
+	case <-s.m.done:
+		return
+	default:
+	}
+	t := time.NewTimer(s.m.stallLimit)
+	defer t.Stop()
 	select {
 	case s.incoming <- payload:
 	case <-s.closed:
 	case <-s.m.done:
+	case <-t.C:
+		s.m.dropStalled(s)
 	}
 }
 

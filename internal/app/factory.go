@@ -54,6 +54,9 @@ type OSOptions struct {
 	Width  int
 	Height int
 
+	// AttachedHost is the host DaemonClient reaches its daemon through, ""
+	// for this machine.
+	AttachedHost string
 	// IsDaemonSession indicates this is a daemon-attached session.
 	IsDaemonSession bool
 
@@ -187,6 +190,7 @@ func NewOS(opts OSOptions) *OS {
 		// Daemon connection
 		DaemonClient: opts.DaemonClient,
 		SessionName:  opts.SessionName,
+		AttachedHost: opts.AttachedHost,
 
 		// Pane geometry inputs start at this client's config and are settled
 		// across the session by state sync; see the field comment in os.go.

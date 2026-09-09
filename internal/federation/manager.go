@@ -3,6 +3,7 @@ package federation
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"sync"
 	"time"
 )
@@ -29,6 +30,9 @@ type Options struct {
 
 	// now is the clock, so tests can freeze it. Zero means time.Now.
 	now func() time.Time
+	// stallLimit is how long a full stream may hold the link's read loop
+	// before it is dropped. Zero means defaultStallLimit; tests shorten it.
+	stallLimit time.Duration
 }
 
 func (o Options) withDefaults() Options {
@@ -46,6 +50,9 @@ func (o Options) withDefaults() Options {
 	}
 	if o.now == nil {
 		o.now = time.Now
+	}
+	if o.stallLimit <= 0 {
+		o.stallLimit = defaultStallLimit
 	}
 	return o
 }
@@ -362,6 +369,32 @@ func (m *Manager) Call(ctx context.Context, host, verb string, params any) (json
 		return nil, ctx.Err()
 	}
 	return l.call(ctx, verb, params)
+}
+
+// OpenConnection opens a connection to the daemon on one host, over that host's
+// link. The far side answers with a fresh connection to its own daemon socket,
+// so the result is a byte pipe to that daemon and nothing more: the caller
+// speaks whichever daemon protocol it likes on it, and the caller is also the
+// one that bounds and distrusts what comes back.
+//
+// An unknown name is ErrUnknownHost, a host that is not up is UnreachableError
+// and a link with no room for another stream is RefusedError. All three are
+// final, and none of them waits on a machine that is not there: the only wait
+// is for a host whose first attempt has not settled yet, bounded by ctx.
+func (m *Manager) OpenConnection(ctx context.Context, host string) (io.ReadWriteCloser, error) {
+	if _, err := m.Table().Lookup(host); err != nil {
+		return nil, err
+	}
+	l := m.link(host)
+	if l == nil {
+		return nil, &UnreachableError{Host: host, Status: StatusConnecting, Reason: "The link is not started."}
+	}
+	select {
+	case <-l.settled:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return l.openConnection()
 }
 
 // CallAll runs one read verb on every configured host at once and returns every

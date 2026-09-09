@@ -1,51 +1,24 @@
 package app
 
 import (
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// TestRemoteOpenArgvRunsThisTuiosWithHold pins the pane's command: this
-// machine's own tuios, with 'attach --host' and --hold, so the pane reuses the
-// CLI path and stays open on a failure long enough to read it.
-func TestRemoteOpenArgvRunsThisTuiosWithHold(t *testing.T) {
-	exe, err := os.Executable()
-	if err != nil {
-		t.Skipf("no executable path in this environment: %v", err)
-	}
-	argv, err := remoteOpenArgv("attach", "build", "api")
-	if err != nil {
-		t.Fatalf("remoteOpenArgv: %v", err)
-	}
-	want := []string{exe, "attach", "--host", "build", "api", "--hold"}
-	if strings.Join(argv, " ") != strings.Join(want, " ") {
-		t.Errorf("ASSERTION: attach argv is %v, want %v", argv, want)
-	}
-
-	argv, err = remoteOpenArgv("new", "build", "")
-	if err != nil {
-		t.Fatalf("remoteOpenArgv new: %v", err)
-	}
-	want = []string{exe, "new", "--host", "build", "--hold"}
-	if strings.Join(argv, " ") != strings.Join(want, " ") {
-		t.Errorf("ASSERTION: new argv is %v, want %v", argv, want)
-	}
-}
-
 // TestOpenRemoteSessionOnADownHostSaysUnavailable is #170's toast: an action
-// aimed at a host that is not up says so, rather than opening a pane that will
-// only fail. The positive half is the up-host row being a target, proved in
-// sidebar_hosts_test.go.
+// aimed at a host that is not up says so, rather than dialing a machine that
+// cannot answer. The positive half is the up-host row being a target, proved
+// in sidebar_hosts_test.go, and the attach itself is proved end to end in
+// e2e/tui.
 func TestOpenRemoteSessionOnADownHostSaysUnavailable(t *testing.T) {
 	m := cachedDownHostOS(t) // "build" up, "stale" connecting
-	before := len(m.Windows)
+	before := m.SessionName
 
 	m.openRemoteSession("stale", "old")
-	if len(m.Windows) != before {
-		t.Errorf("ASSERTION: opening a session on a host that is not up added a pane")
+	if m.SessionName != before {
+		t.Errorf("ASSERTION: opening a session on a host that is not up changed the session")
 	}
 	if len(m.Notifications) == 0 || !strings.Contains(m.Notifications[len(m.Notifications)-1].Message, "stale is unavailable") {
 		t.Errorf("ASSERTION: opening a session on a down host did not say the host is unavailable: %+v", m.Notifications)
@@ -62,4 +35,49 @@ func TestOpenRemoteSessionOnADownHostSaysUnavailable(t *testing.T) {
 		t.Fatal("the fixture's up host is not up, so this proves nothing")
 	}
 	_ = federation.StatusUp
+}
+
+// TestRailShowsThisMachineAsAHostWhileAttachedElsewhere pins what the rail
+// draws when the client is on another machine: the main group is named for
+// that machine, the machine's own group is not drawn a second time, and this
+// machine's sessions appear as a host group named local so they can be
+// returned to.
+func TestRailShowsThisMachineAsAHostWhileAttachedElsewhere(t *testing.T) {
+	m := sidebarTestOS(t, 120, 40, "left")
+	m.applyFederationSnapshot(FederationHostsMsg{
+		Configured: 1,
+		Snapshot: FederationSnapshot{Hosts: []FederationHost{
+			{Name: federation.LocalHostName, Status: string(federation.StatusUp),
+				Sessions: []FederationSession{{Name: "here", WindowCount: 2}}},
+			{Name: "build", Status: string(federation.StatusUp),
+				Sessions: []FederationSession{{Name: "api", WindowCount: 3}}},
+		}},
+	})
+
+	// At home: the local entry is not a host group and build is.
+	names := func() string {
+		var out []string
+		for _, n := range m.hostGroupNodes() {
+			out = append(out, n.Host+"/"+n.Title)
+		}
+		return strings.Join(out, " ")
+	}
+	if got := names(); got != "build/build build/api" {
+		t.Fatalf("ASSERTION: at home the host groups are %q, want only build", got)
+	}
+	if m.sessionsHeaderLabel() != "sessions" {
+		t.Errorf("at home the header is %q", m.sessionsHeaderLabel())
+	}
+
+	// Away on build: local becomes a group, build is the main group.
+	m.AttachedHost = "build"
+	if got := names(); got != "local/local local/here" {
+		t.Errorf("ASSERTION: away on build the host groups are %q, want only local", got)
+	}
+	if m.sessionsHeaderLabel() != "@ build" {
+		t.Errorf("ASSERTION: away on build the header is %q, want @ build", m.sessionsHeaderLabel())
+	}
+	if !m.hostIsUp(federation.LocalHostName) {
+		t.Errorf("ASSERTION: this machine is not a target, so there is no way back")
+	}
 }

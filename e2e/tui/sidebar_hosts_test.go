@@ -118,8 +118,8 @@ func TestHostsCommandReportsALinkEndToEnd(t *testing.T) {
 	if !strings.Contains(out, "unreachable") {
 		t.Errorf("the unreachable host is not reported:\n%s", out)
 	}
-	// The whole promise of stage 1 in one line of output.
-	if !strings.Contains(out, "read only") {
-		t.Errorf("the listing does not say it is read only:\n%s", out)
+	// The listing says what a person does next with an up host.
+	if !strings.Contains(out, "tuios attach --host") {
+		t.Errorf("the listing does not say how to attach a session on a host:\n%s", out)
 	}
 }

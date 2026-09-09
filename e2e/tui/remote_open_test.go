@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -9,19 +10,15 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Opening and creating a session on another machine, driven the way a person
-// does it: the CLI flag from a real command line, and a real click on the rail.
+// Creating a session on another machine from the command line, and the ssh
+// fallback for opening one.
 //
 // The link is the same loopback the other federation tests use. The ssh
 // stand-in drops ssh's options and the address and runs the command locally, so
 // the host named "build" is this test's own daemon reached over the real
 // subprocess transport. Nothing reads the developer's ssh config, and no
-// network connection is made.
-//
-// What would pass a weaker test and fail this one: a --host flag that writes an
-// argv nothing runs, or a rail row that records a hit no handler answers. Both
-// are proved here by the session actually appearing and the pane actually
-// opening.
+// network connection is made. The rail's own path, against a second daemon,
+// is in host_attach_test.go.
 
 // TestNewOnAHostCreatesASessionAcrossTheLink is the CLI reachability proof for
 // 'tuios new --host'. The far side creates the session, and it comes back in
@@ -78,7 +75,7 @@ func waitForLS(t *testing.T, base string, want func(string) bool) error {
 	return fmt.Errorf("the last 'tuios ls' was:\n%s", out)
 }
 
-// waitForHostRow blocks until the rail shows text, then returns the screen.
+// railShows blocks until the rail shows text.
 func railShows(t *testing.T, term *tuitest.Terminal, want string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -88,111 +85,39 @@ func railShows(t *testing.T, term *tuitest.Terminal, want string) {
 	}
 }
 
-// TestRailOpensARemoteSession is the on-screen proof for #171: activating a
-// foreign session row opens it in a local pane. The rail shows the host group
-// and the remote session under it, and a click on that row opens a new pane
-// running the remote client.
-func TestRailOpensARemoteSession(t *testing.T) {
+// TestAttachOnAHostWithSSHRunsTheFarTuios keeps the fallback reachable: with
+// --ssh the session is opened by the tuios on the far side over an interactive
+// ssh, nested in this terminal, the way it was before the link carried an
+// attach. The far side here is this test's own daemon, so the nested client
+// is a second 'tuios attach' process on the session.
+func TestAttachOnAHostWithSSHRunsTheFarTuios(t *testing.T) {
 	base := t.TempDir()
 	ssh := writeFakeSSH(t, base)
 	env := []string{"TUIOS_SSH=" + ssh}
 	writeHostsConfig(t, base, tuiosBin)
 
-	// A detached session for the host to list. Over the loopback it is both a
-	// local session and a session under host "build".
-	if out, err := tuiosCLIEnv(t, base, env, "new", "remote-target", "--detach"); err != nil {
+	if out, err := tuiosCLIEnv(t, base, env, "new", "nested-target", "--detach"); err != nil {
 		t.Fatalf("create the session to open: %v\n%s", err, out)
 	}
 
-	term := startIn(t, base, startOpts{args: []string{"attach", "remote-target"}, env: env})
-	// Attaching to an existing session shows its shell pane, not the welcome
-	// screen, so wait for a pane border rather than waitBoot.
+	term := startIn(t, base, startOpts{args: []string{"attach", "--host", "build", "nested-target", "--ssh"}, env: env})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "╰──")
 	}, bootTimeout); err != nil {
-		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
-	}
-	toggleSidebarViaPalette(t, term)
-
-	// The host group and its session row: this is the frame the report captures.
-	railShows(t, term, "@ build")
-	railShows(t, term, "remote-target")
-	t.Logf("rail with a host group and a remote session row:\n%s", term.Snapshot())
-
-	// remoteRowAt finds the remote session row: the one under the "@ build"
-	// header, which is indented, not the local row of the same name higher up.
-	remoteRowAt := func() (col, row int) {
-		s := term.Screen()
-		_, rows := s.Size()
-		hostRow := -1
-		for r := 0; r < rows; r++ {
-			if strings.Contains(s.Line(r), "@ build") {
-				hostRow = r
-				break
-			}
-		}
-		if hostRow < 0 {
-			return -1, -1
-		}
-		for r := hostRow + 1; r < rows; r++ {
-			if c := strings.Index(s.Line(r), "remote-target"); c >= 0 && c < sidebarBand {
-				return c, r
-			}
-		}
-		return -1, -1
+		t.Fatalf("the far tuios never drew the session: %v\n%s", err, term.Snapshot())
 	}
 
-	// windowsIn is how many windows the daemon holds for the session, or -1 when
-	// it cannot be read. It is the load-insensitive truth: the screen is noisy
-	// while the remote client boots in the pane, but the daemon's window set is
-	// not.
-	windowsIn := func() int {
-		wl, err := daemonWindows(base, "remote-target")
-		if err != nil {
-			return -1
-		}
-		return len(wl.Windows)
-	}
-	reached := func(n int) bool {
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			if windowsIn() >= n {
-				return true
-			}
-			time.Sleep(200 * time.Millisecond)
-		}
-		return false
-	}
-
-	// The session starts with one window, the shell. Let the rail settle so its
-	// hit rectangles are registered, then click the remote session row read from
-	// the same settled frame.
-	if windowsIn() != 1 {
-		t.Fatalf("the session did not start with one window: %d", windowsIn())
-	}
-	time.Sleep(insertGuard)
-	col, row := remoteRowAt()
-	if row < 0 {
-		t.Fatalf("no remote session row under the host header:\n%s", term.Snapshot())
-	}
-	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
-
-	// Retry the click once, only if the first opened nothing. A second click on
-	// an opened row would open a second pane, so the retry is gated on the
-	// window count and never fires once the pane exists.
-	if !reached(2) {
-		if col, row = remoteRowAt(); row >= 0 {
-			mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
+	// The proof that ssh ran the far tuios: a plain 'tuios attach' process
+	// for the session, which the link path never starts.
+	out, _ := exec.Command("pgrep", "-af", tuiosBin).CombinedOutput()
+	nested := false
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.Contains(line, " attach nested-target") && !strings.Contains(line, "--host") {
+			nested = true
 		}
 	}
-
-	// The proof: the rail's click added a window to the outer session, running
-	// the remote client. If nothing opened, the row recorded a hit no handler
-	// answered. The daemon is asked directly, so a noisy screen cannot fail it.
-	rects := waitForSettledGeometryIn(t, base, "remote-target", 2)
-	if len(rects) != 2 {
-		t.Fatalf("ASSERTION: clicking a remote session row opened no pane: window count is %d", len(rects))
+	if !nested {
+		t.Fatalf("ASSERTION: --ssh did not run the far tuios; no nested client for nested-target:\n%s", out)
 	}
-	alive(t, term, "after opening a remote session from the rail")
-	t.Logf("after opening the remote session, the outer session holds %d windows", len(rects))
+	alive(t, term, "after opening a session over ssh")
 }

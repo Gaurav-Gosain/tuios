@@ -208,6 +208,14 @@ func generateUniqueSessionName(existingNames []string) string {
 }
 
 func runDaemonSession(sessionName string, createNew bool) error {
+	return runDaemonSessionOn("", sessionName, createNew)
+}
+
+// runDaemonSessionOn is runDaemonSession with the daemon chosen: this
+// machine's for an empty host, or the daemon on a host from the [hosts] table,
+// reached through this machine's daemon over its link. The client is the same
+// either way, and so is everything it draws.
+func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// Every path into the TUI funnels through here, so this is the one place
 	// that guarantees the terminal can host it before the screen is taken over.
 	if err := checkTerminal(); err != nil {
@@ -259,16 +267,32 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	// later; this only stops the interval in between from being a lie.
 	width, height := hostTerminalSize()
 
-	if err := client.ConnectWithCapabilities(version, width, height, clientCaps); err != nil {
-		return explainDialError(err)
+	if host == "" {
+		if err := client.ConnectWithCapabilities(version, width, height, clientCaps); err != nil {
+			return explainDialError(err)
+		}
+	} else {
+		if _, err := client.ConnectThroughHost(host, version, width, height, clientCaps); err != nil {
+			return explainHostConnectError(host, err)
+		}
 	}
 	log.Printf("[CLIENT] Connected to daemon")
+
+	if host != "" && sessionName == "" && createNew {
+		// The far side's daemon picks nothing on its own for an empty name,
+		// so the first free name there is chosen here, from what it listed
+		// at the handshake.
+		sessionName = generateUniqueSessionName(client.AvailableSessionNames())
+	}
 
 	log.Printf("[CLIENT] Attaching to session '%s' (createNew=%v)", sessionName, createNew)
 	state, err := client.AttachSession(sessionName, createNew, width, height)
 	if err != nil {
 		names := client.AvailableSessionNames()
 		_ = client.Close()
+		if host != "" {
+			return explainMissingHostSession(host, sessionName, names, err)
+		}
 		if !createNew && sessionName != "" {
 			return explainMissingSession(sessionName, names)
 		}
@@ -299,6 +323,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		IsDaemonSession: true,
 		DaemonClient:    client,
 		SessionName:     client.SessionName(),
+		AttachedHost:    host,
 		// One writer for the terminal: frames, kitty and sixel sequences all
 		// serialize on it. Left nil, the passthroughs open their own /dev/tty
 		// and nothing can order their writes against a frame.
@@ -333,11 +358,13 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	// it running (leader d). Both exit normally, so QuitRequested is what tells
 	// the two apart and picks the message the user sees.
 	killed := false
+	exitHost := host
 	if finalOS, ok := finalModel.(*app.OS); ok {
 		reason = finalOS.ExitReason
 		if name := finalOS.SessionName; name != "" {
 			exitSession = name
 		}
+		exitHost = finalOS.AttachedHost
 		killed = finalOS.QuitRequested
 		// Syncing state back is meaningful only for a detach, while the session
 		// still exists. A quit already killed it, a kill from elsewhere left no
@@ -357,7 +384,7 @@ func runDaemonSession(sessionName string, createNew bool) error {
 		return fmt.Errorf("program error: %w", err)
 	}
 
-	return reportSessionExit(exitSession, reason, killed)
+	return reportSessionExit(exitSession, exitHost, reason, killed)
 }
 
 // reportSessionExit prints why the client stopped and returns an error for the
@@ -368,8 +395,15 @@ func runDaemonSession(sessionName string, createNew bool) error {
 // session (leader q) from a detach that left it running (leader d). They read
 // differently on the way out so the user is not told a session was detached when
 // it was in fact destroyed.
-func reportSessionExit(sessionName string, reason app.ExitReason, killed bool) error {
+func reportSessionExit(sessionName, host string, reason app.ExitReason, killed bool) error {
 	switch reason {
+	case app.ExitHostLost:
+		return &diagnosticError{
+			What:  fmt.Sprintf("The link to %s closed.", host),
+			Cause: "ssh to the host dropped, or its daemon stopped. The session keeps running on " + host + ".",
+			Fix:   "run 'tuios hosts' to see the link, then 'tuios attach --host " + host + " " + sessionName + "' to attach again.",
+		}
+
 	case app.ExitSessionKilled:
 		return &diagnosticError{
 			What:  fmt.Sprintf("Session %q was terminated while you were attached.", sessionName),
@@ -385,10 +419,14 @@ func reportSessionExit(sessionName string, reason app.ExitReason, killed bool) e
 		}
 
 	default:
+		where := ""
+		if host != "" {
+			where = " on " + host
+		}
 		if killed {
-			fmt.Printf("Killed session '%s'.\n", sessionName)
+			fmt.Printf("Killed session '%s'%s.\n", sessionName, where)
 		} else {
-			fmt.Printf("Detached from session '%s'.\n", sessionName)
+			fmt.Printf("Detached from session '%s'%s.\n", sessionName, where)
 		}
 		return nil
 	}
