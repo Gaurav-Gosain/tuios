@@ -153,8 +153,10 @@ func TestHostThatAcceptsThenHangsDoesNotBlock(t *testing.T) {
 
 // TestHostThatAnswersThenStopsFailsTheCall covers the other half of hanging: the
 // link comes up and the daemon behind it stops answering. The call must give up
-// on its own deadline, and the link must be torn down rather than left holding
-// a request that can never be matched to a reply.
+// on its own deadline, and the link must be kept while its pipe is still
+// carrying traffic: one slow listing is not a dead machine, and tearing the
+// link down for it threw away every attached session on it. Only a run of
+// failed calls ends the link.
 func TestHostThatAnswersThenStopsFailsTheCall(t *testing.T) {
 	// A stub that answers hello and then never answers anything else. The hang
 	// is released at cleanup so the fixture's own goroutines can finish; a real
@@ -198,10 +200,84 @@ func TestHostThatAnswersThenStopsFailsTheCall(t *testing.T) {
 	}
 
 	// The control stream is unusable once a request on it went unanswered: the
-	// reply, if it ever comes, would be read as the answer to the next call. So
-	// the link is torn down and the host stops reading as up until a redial.
+	// reply, if it ever comes, would be read as the answer to the next call. It
+	// is replaced. The link is not: the pipe under it is fine, and an attached
+	// session riding on it must not be thrown away because a listing was slow.
+	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
+		t.Errorf("ASSERTION: the link is %q after one slow listing, want up. A slow listing is not a dead host", r.Status)
+	}
+
+	// A remote that keeps not answering does end the link, so a genuinely
+	// wedged daemon is redialed rather than reported up forever.
+	for range maxControlFailures {
+		_, _ = m.Call(ctx, "build", "list-sessions", nil)
+	}
 	if r := m.Reports(ctx)[0]; r.Status == StatusUp {
-		t.Error("the host still reads as up after a call on it timed out; the wedged link was not torn down")
+		t.Errorf("ASSERTION: the host still reads as up after %d calls in a row went unanswered; the wedged link was never torn down", maxControlFailures)
+	}
+}
+
+// TestALinkKeepsAnAttachWhileAListingTimesOut is the bug the maintainer hit.
+//
+// He was working in a session on a cloud host and the client kept being thrown
+// back to his own machine. The rail polls a host listing every five seconds
+// while it is open, that listing rides the same ssh pipe as the attached
+// session, and a listing that missed its deadline used to kill the ssh child.
+// Killing the ssh child killed the attach. So a link that was slow once, which
+// a busy pane across an ocean is, cost him the session he was typing into.
+func TestALinkKeepsAnAttachWhileAListingTimesOut(t *testing.T) {
+	hang := make(chan struct{})
+	stub := startStubDaemon(t, func(verb string, _ json.RawMessage) (any, *RemoteError) {
+		switch verb {
+		case "hello":
+			return Handshake{Protocol: 1, MinProtocol: 1, DaemonVersion: "1.0.0"}, nil
+		case "echo":
+			return map[string]any{"ok": true}, nil
+		}
+		<-hang
+		return nil, &RemoteError{Code: "internal", Message: "test over"}
+	})
+	t.Cleanup(func() { close(hang) })
+	opts := testOptions(proxyDialer(t, stub))
+	opts.CallTimeout = 300 * time.Millisecond
+	m := managerFor(t, opts, Host{Name: "build", Addr: "unused"})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
+		t.Fatalf("status is %q (%s), want up", r.Status, r.Reason)
+	}
+
+	// The attached session: a connection open on the link, with a live
+	// exchange on it, exactly as a pane has.
+	conn := openTo(t, m, "build")
+	br := bufio.NewReader(conn)
+	ask := func(id string) string {
+		t.Helper()
+		if _, err := io.WriteString(conn, `{"id":`+id+`,"verb":"echo"}`+"\n"); err != nil {
+			return "write failed: " + err.Error()
+		}
+		line, err := br.ReadString('\n')
+		if err != nil {
+			return "read failed: " + err.Error()
+		}
+		return line
+	}
+	if line := ask("1"); !strings.Contains(line, `"ok":true`) {
+		t.Fatalf("the attach did not answer before the listing: %q", line)
+	}
+
+	// The listing times out, which is the event that used to be fatal.
+	if _, err := m.Call(ctx, "build", "list-sessions", nil); err == nil {
+		t.Fatal("the listing against the hanging stub answered; the timeout cannot be forced")
+	}
+
+	// The session is still there and still works.
+	if line := ask("2"); !strings.Contains(line, `"ok":true`) {
+		t.Fatalf("ASSERTION: the attached connection stopped answering after a listing timed out: %q", line)
+	}
+	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
+		t.Errorf("ASSERTION: the link is %q after a listing timed out, want up", r.Status)
 	}
 }
 

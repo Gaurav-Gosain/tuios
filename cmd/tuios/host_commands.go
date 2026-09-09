@@ -35,6 +35,9 @@ type hostReport struct {
 	Sessions      int    `json:"sessions"`
 	LastOK        int64  `json:"last_ok"`
 	LastTry       int64  `json:"last_try"`
+	Drops         int    `json:"drops"`
+	DropReason    string `json:"drop_reason"`
+	Stalls        int    `json:"stalls"`
 }
 
 // runListHosts prints the configured hosts and the state of each link.
@@ -138,6 +141,20 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 			fmt.Fprintf(w, "  Run 'tuios hosts test %s' to see where the link looked.\n", h.Host)
 		}
 	}
+
+	// A link that keeps dropping and coming back reports "up" every time it is
+	// asked, so the count is the only place a person can see it happening.
+	for _, h := range res.Hosts {
+		if h.Drops == 0 && h.Stalls == 0 {
+			continue
+		}
+		if h.Drops > 0 {
+			fmt.Fprintf(w, "%s: the link dropped %s. %s\n", h.Host, timesWord(h.Drops), h.DropReason)
+		}
+		if h.Stalls > 0 {
+			fmt.Fprintf(w, "%s: a stream stopped being read %s. The link stayed up.\n", h.Host, timesWord(h.Stalls))
+		}
+	}
 	printConfigProblems(w, res.ConfigProblems)
 	return nil
 }
@@ -154,7 +171,7 @@ func hostStatusColor(status string) lipgloss.Color {
 		return lipgloss.Color("2")
 	case federation.StatusUnreachable:
 		return lipgloss.Color("1")
-	case federation.StatusIncompatible, federation.StatusNoBinary:
+	case federation.StatusIncompatible, federation.StatusNoBinary, federation.StatusReconnecting:
 		return lipgloss.Color("3")
 	default:
 		return lipgloss.Color("8")
@@ -388,4 +405,12 @@ func dialForLink(socketPath string) (net.Conn, error) {
 		return conn, nil
 	}
 	return net.DialTimeout("unix", socketPath, 5*time.Second)
+}
+
+// timesWord counts events in words, so a report reads as a sentence.
+func timesWord(n int) string {
+	if n == 1 {
+		return "once"
+	}
+	return strconv.Itoa(n) + " times"
 }

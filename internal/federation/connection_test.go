@@ -114,6 +114,7 @@ func TestAStalledConnectionDoesNotStallTheLink(t *testing.T) {
 	})
 	opts := testOptions(proxyDialer(t, stub))
 	opts.stallLimit = 200 * time.Millisecond
+	opts.connStallLimit = 200 * time.Millisecond
 	opts.CallTimeout = 5 * time.Second
 	m := managerFor(t, opts, Host{Name: "build", Addr: "unused"})
 

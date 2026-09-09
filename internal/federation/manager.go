@@ -27,13 +27,35 @@ type Options struct {
 	// InitialBackoff and MaxBackoff bound the redial cycle.
 	InitialBackoff time.Duration
 	MaxBackoff     time.Duration
+	// Log receives one line whenever a link drops, is kept through a failed
+	// listing, or drops a stream for a reader that stopped reading. It is how
+	// a person finds out which of those happened, which is the difference
+	// between three different fixes. Nil logs nothing.
+	Log func(format string, args ...any)
 
 	// now is the clock, so tests can freeze it. Zero means time.Now.
 	now func() time.Time
 	// stallLimit is how long a full stream may hold the link's read loop
 	// before it is dropped. Zero means defaultStallLimit; tests shorten it.
 	stallLimit time.Duration
+	// connStallLimit is the same for a relayed connection, which carries an
+	// attached session rather than a listing. Zero means
+	// connectionStallLimit; tests shorten it.
+	connStallLimit time.Duration
+	// linkQuietLimit is how long a link's pipe may carry no frame at all
+	// before a failed control call is read as a dead link rather than a slow
+	// one. Zero means defaultLinkQuietLimit; tests shorten it.
+	linkQuietLimit time.Duration
 }
+
+// defaultLinkQuietLimit is the silence that makes a link dead rather than slow.
+//
+// It is set above KeepaliveWindow on purpose. ssh's own keepalives end a
+// connection whose path has died within that window, so a pipe that is quiet
+// for longer than it, with ssh still running, is a remote that has stopped
+// talking rather than a network that has gone. Below it, this side would give
+// up on links ssh was about to recover on its own.
+const defaultLinkQuietLimit = KeepaliveWindow + 15*time.Second
 
 func (o Options) withDefaults() Options {
 	if o.Dial == nil {
@@ -53,6 +75,12 @@ func (o Options) withDefaults() Options {
 	}
 	if o.stallLimit <= 0 {
 		o.stallLimit = defaultStallLimit
+	}
+	if o.connStallLimit <= 0 {
+		o.connStallLimit = connectionStallLimit
+	}
+	if o.linkQuietLimit <= 0 {
+		o.linkQuietLimit = defaultLinkQuietLimit
 	}
 	return o
 }
@@ -84,6 +112,16 @@ type HostReport struct {
 	// LastOK and LastTry are Unix seconds, zero for never.
 	LastOK  int64 `json:"last_ok,omitempty"`
 	LastTry int64 `json:"last_try,omitempty"`
+	// Drops counts the times this link went down after it had been up, and
+	// DropReason says why the last one happened. A link that drops once an
+	// hour and a link that has never dropped both report "up", and these two
+	// fields are the only thing that tells them apart.
+	Drops      int    `json:"drops,omitempty"`
+	DropReason string `json:"drop_reason,omitempty"`
+	// Stalls counts streams this link dropped because nothing was reading
+	// them. It is the one number that separates a slow client from a dead
+	// machine, and both used to be reported as a lost link.
+	Stalls int `json:"stalls,omitempty"`
 }
 
 // Up reports whether this host can be asked anything right now.

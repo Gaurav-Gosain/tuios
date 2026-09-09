@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,7 +31,28 @@ const streamBufferFrames = 64
 // defaultStallLimit is how long a full stream may leave the read loop waiting
 // before the stream is dropped. A relay whose local client has not drained a
 // megabyte-scale backlog in this long is not slow, it is gone.
+//
+// It is the limit for the control stream, and the control stream alone is what
+// the number was chosen for: one call on it is bounded at DefaultCallTimeout,
+// so a control stream still full ten seconds later has nobody reading it.
 const defaultStallLimit = 10 * time.Second
+
+// connectionStallLimit is the same bound for a relayed connection, which is an
+// attached session rather than a listing.
+//
+// Ten seconds is the wrong number there and it cost the maintainer his session.
+// The reader at the end of a relayed connection is a person's terminal, and a
+// terminal legitimately stops reading for a while: a large paint, a client
+// swapped out under memory pressure, a laptop lid closed and opened. Ten
+// seconds of that is not a dead consumer, and dropping the stream for it threw
+// away a session the far daemon was still running perfectly.
+//
+// Thirty seconds is the trade in the other direction. The read loop is shared,
+// so a stream this side is waiting on freezes every other stream on the link
+// for as long as the wait lasts, and that is what stops the limit being raised
+// further. A reader gone for thirty seconds has lost nothing but time, and a
+// stream dropped after thirty seconds is one the client reconnects.
+const connectionStallLimit = 30 * time.Second
 
 var (
 	// ErrLinkClosed reports use of a mux whose pipe is gone.
@@ -84,8 +106,22 @@ type mux struct {
 	accept func(*Stream)
 
 	// stallLimit is how long deliver waits on a full stream before dropping
-	// it. Tests shorten it.
+	// it, for a stream that does not set its own. Tests shorten it.
 	stallLimit time.Duration
+
+	// onStall is told which stream was dropped for a reader that stopped
+	// reading. It is the only way anyone finds out that this happened, and
+	// telling a stalled attach apart from a dead sshd is the whole point of
+	// having it. Nil means nobody is listening.
+	onStall func(id uint32)
+
+	// lastRead is when the read loop last took a frame off the pipe, in Unix
+	// nanoseconds, and blocked counts the read loop's own waits inside
+	// deliver. Together they answer one question: is this pipe alive? A
+	// control call that timed out does not answer it, and used to be treated
+	// as if it did.
+	lastRead atomic.Int64
+	blocked  atomic.Int32
 
 	mu      sync.Mutex
 	streams map[uint32]*Stream
@@ -124,6 +160,32 @@ func newMuxRW(r io.Reader, w io.Writer, c io.Closer, accept func(*Stream), first
 	}
 }
 
+// alive reports whether the pipe under this mux is still carrying traffic.
+//
+// It exists because a control call that did not answer in time proves nothing
+// about the link. The link is the pipe, and the pipe is alive when a frame came
+// off it recently, or when the read loop is parked handing a frame to a stream
+// whose reader is behind. Treating a slow answer as a dead machine is what tore
+// a working link down and took the person's attached session with it.
+//
+// A mux that has read nothing at all is reported alive: no frame yet is the
+// state of a link that has just come up, not evidence of a dead one.
+func (m *mux) alive(quiet time.Duration) bool {
+	select {
+	case <-m.done:
+		return false
+	default:
+	}
+	if m.blocked.Load() > 0 {
+		return true
+	}
+	last := m.lastRead.Load()
+	if last == 0 {
+		return true
+	}
+	return time.Since(time.Unix(0, last)) < quiet
+}
+
 // Done is closed when the mux stops, whatever stopped it.
 func (m *mux) Done() <-chan struct{} { return m.done }
 
@@ -135,7 +197,15 @@ func (m *mux) Err() error {
 }
 
 // Open starts a new stream and tells the peer to open its end.
-func (m *mux) Open() (*Stream, error) {
+func (m *mux) Open() (*Stream, error) { return m.open(0) }
+
+// OpenWithStall is Open for a stream that needs its own limit for a reader
+// that falls behind. The limit is set before the stream can receive anything,
+// which is why it is a parameter rather than a field written afterwards: the
+// read loop may deliver a frame on it the instant the peer answers.
+func (m *mux) OpenWithStall(stall time.Duration) (*Stream, error) { return m.open(stall) }
+
+func (m *mux) open(stall time.Duration) (*Stream, error) {
 	m.mu.Lock()
 	if m.closed {
 		err := m.err
@@ -152,6 +222,7 @@ func (m *mux) Open() (*Stream, error) {
 	id := m.nextID
 	m.nextID += idStride
 	s := newStream(m, id)
+	s.stall = stall
 	m.streams[id] = s
 	m.mu.Unlock()
 
@@ -182,6 +253,9 @@ func (m *mux) dropStalled(s *Stream) {
 	m.mu.Unlock()
 	s.peerClosed(ErrStreamStalled)
 	_ = m.writeFrame(frameClose, s.id, nil)
+	if m.onStall != nil {
+		m.onStall(s.id)
+	}
 }
 
 func (m *mux) dropStream(id uint32) {
@@ -203,6 +277,7 @@ func (m *mux) run() error {
 			m.stop(err)
 			return err
 		}
+		m.lastRead.Store(time.Now().UnixNano())
 		switch f.Type {
 		case frameOpen:
 			m.handleOpen(f.Stream)
@@ -294,6 +369,11 @@ type Stream struct {
 	m  *mux
 	id uint32
 
+	// stall is this stream's own limit, zero meaning the mux's. It is set
+	// once, before the stream is registered, so the read loop can read it
+	// without a lock. A relayed connection sets it: see connectionStallLimit.
+	stall time.Duration
+
 	mu       sync.Mutex
 	buf      []byte
 	incoming chan []byte
@@ -329,7 +409,16 @@ func (s *Stream) deliver(payload []byte) {
 		return
 	default:
 	}
-	t := time.NewTimer(s.m.stallLimit)
+	limit := s.stall
+	if limit <= 0 {
+		limit = s.m.stallLimit
+	}
+	// The read loop is about to wait, and a link whose read loop is waiting is
+	// not a link that has gone quiet. Saying so is what stops a control call
+	// timing out behind this wait from being read as a dead machine.
+	s.m.blocked.Add(1)
+	defer s.m.blocked.Add(-1)
+	t := time.NewTimer(limit)
 	defer t.Stop()
 	select {
 	case s.incoming <- payload:

@@ -51,31 +51,88 @@ type Dialer func(ctx context.Context, h Host) (Transport, error)
 // ConnectTimeout makes the child give up on a dead machine on its own, so a
 // powered-off host is reported rather than leaving a process parked until the
 // context expires.
+//
+// The keepalive options are defaults rather than forced settings, which is why
+// they are appended after the host's own SSHOptions: ssh takes the first value
+// it obtains for a keyword, so a user who sets ServerAliveInterval themselves
+// still wins.
 func SSHDialer(sshBinary string) Dialer {
 	if sshBinary == "" {
 		sshBinary = "ssh"
 	}
 	return func(ctx context.Context, h Host) (Transport, error) {
-		secs := int(h.connectTimeout().Seconds())
-		if secs < 1 {
-			secs = 1
-		}
-		args := []string{
-			"-o", "BatchMode=yes",
-			"-o", "ConnectTimeout=" + strconv.Itoa(secs),
-			// No pseudo-terminal: the pipe carries frames, and a pty would
-			// translate them.
-			"-T",
-		}
-		args = append(args, h.SSHOptions...)
-		// One string: ssh joins its command words with spaces and the far
-		// side's login shell re-parses them, so what is sent is what that
-		// shell reads. See remote.go for what it says when no command is
-		// configured.
-		args = append(args, h.Addr, h.remoteCommand(true, "stdio-proxy"))
-		return CommandDialer(sshBinary, args...)(ctx, h)
+		return CommandDialer(sshBinary, linkArgs(h)...)(ctx, h)
 	}
 }
+
+// linkArgs is the argv SSHDialer runs, split out so a test can read it.
+func linkArgs(h Host) []string {
+	secs := int(h.connectTimeout().Seconds())
+	if secs < 1 {
+		secs = 1
+	}
+	args := []string{
+		"-o", "BatchMode=yes",
+		"-o", "ConnectTimeout=" + strconv.Itoa(secs),
+		// No pseudo-terminal: the pipe carries frames, and a pty would
+		// translate them.
+		"-T",
+	}
+	args = append(args, h.SSHOptions...)
+	args = append(args, keepaliveOptions()...)
+	// One string: ssh joins its command words with spaces and the far
+	// side's login shell re-parses them, so what is sent is what that
+	// shell reads. See remote.go for what it says when no command is
+	// configured.
+	return append(args, h.Addr, h.remoteCommand(true, "stdio-proxy"))
+}
+
+// The keepalive settings.
+//
+// A link to a cloud host sits idle whenever nobody types, and an idle TCP
+// connection through a NAT or a stateful firewall is dropped without either end
+// being told. ssh notices only when something tries to write, which for an
+// attached session is the next keystroke: the person types, and the link they
+// were using turns out to have been dead for twenty minutes. That is the
+// failure these three options exist to stop.
+//
+// ServerAliveInterval sends an encrypted probe when the connection has been
+// quiet that long. Fifteen seconds is chosen against the two numbers that
+// matter. Middlebox idle timeouts start around thirty seconds at the
+// aggressive end, so the probe has to be comfortably under that to hold the
+// mapping open. And the cost is four small packets a minute per host, which a
+// laptop radio does not notice; going to sixty seconds would save nothing worth
+// having and would sit above the timeouts that cause this.
+//
+// ServerAliveCountMax is how many unanswered probes end the connection, so the
+// pair decides how long a dead path stays undetected: 15 x 3 is forty-five
+// seconds. Detection is what starts the client's reconnect, so it is a floor on
+// how long a person stares at a frozen pane. Three is the smallest count that
+// still rides out a couple of lost packets on a mobile link, which is what
+// stops a brief drop-out from being reported as a dead host.
+//
+// TCPKeepAlive is the kernel's own probe. It is redundant with the two above
+// while the link is up and it is not redundant when ssh is blocked writing:
+// it is what makes the socket fail rather than block forever.
+const (
+	sshServerAliveInterval = 15
+	sshServerAliveCountMax = 3
+)
+
+// keepaliveOptions is the -o list that keeps an idle link alive and reports a
+// dead one.
+func keepaliveOptions() []string {
+	return []string{
+		"-o", "ServerAliveInterval=" + strconv.Itoa(sshServerAliveInterval),
+		"-o", "ServerAliveCountMax=" + strconv.Itoa(sshServerAliveCountMax),
+		"-o", "TCPKeepAlive=yes",
+	}
+}
+
+// KeepaliveWindow is how long a dead path can go unnoticed by ssh. The client's
+// reconnect budget is measured against it: a budget shorter than this would
+// give up before ssh had even reported the link gone.
+const KeepaliveWindow = sshServerAliveInterval * sshServerAliveCountMax * time.Second
 
 // CommandDialer runs any command and speaks the link over its stdio. SSHDialer
 // is built on it, and a test uses it to run the real `tuios stdio-proxy`

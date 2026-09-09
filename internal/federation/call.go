@@ -38,9 +38,20 @@ func (e *RemoteError) Error() string {
 }
 
 // caller runs verb calls over one stream. One call is in flight at a time.
+//
+// "One at a time" used to be a comment and is now a lock. The stream is a
+// single line of request and reply with no way to pair one with the other, so
+// two callers running at once read each other's answers: two clients polling
+// the rail five seconds apart is enough, and what it produces is one host's
+// session list reported under another host's name. Holding the lock across the
+// write and the read makes the pairing true instead of hoped for.
 type caller struct {
 	rw io.ReadWriteCloser
 	br *bufio.Reader
+
+	// one serialises whole calls. mu guards nextID alone, which is taken
+	// inside one.
+	one sync.Mutex
 
 	mu     sync.Mutex
 	nextID int
@@ -58,6 +69,13 @@ func newCaller(rw io.ReadWriteCloser) *caller {
 // stream, because a stream with an unanswered request on it can never be
 // reused. The link supervisor reads that as a dead link and redials.
 func (c *caller) call(ctx context.Context, verb string, params any) (json.RawMessage, error) {
+	// A caller waiting its turn must still give up when its context does,
+	// otherwise a call queued behind a wedged one waits past its own deadline.
+	if !lockOrDone(ctx, &c.one) {
+		return nil, ctx.Err()
+	}
+	defer c.one.Unlock()
+
 	c.mu.Lock()
 	c.nextID++
 	id := c.nextID
@@ -141,5 +159,28 @@ func readBoundedLine(br *bufio.Reader, limit int) ([]byte, error) {
 			return buf, nil
 		}
 		return nil, err
+	}
+}
+
+// lockOrDone takes mu unless ctx ends first. It reports whether the lock was
+// taken, so the caller knows whether it owes an Unlock.
+func lockOrDone(ctx context.Context, mu *sync.Mutex) bool {
+	got := make(chan struct{})
+	go func() {
+		mu.Lock()
+		close(got)
+	}()
+	select {
+	case <-got:
+		return true
+	case <-ctx.Done():
+		// The goroutine still holds the lock once it wins the race, so it is
+		// released rather than leaked. Waiting for it here would be waiting on
+		// exactly the call this one is giving up on.
+		go func() {
+			<-got
+			mu.Unlock()
+		}()
+		return false
 	}
 }

@@ -466,8 +466,18 @@ type OS struct {
 	// for the daemon on this machine. See SwitchToHostSession.
 	AttachedHost string
 	// hostReturn is the session on this machine to come back to if the link
-	// to AttachedHost drops, or "" when the client started on the host.
+	// to AttachedHost drops and cannot be got back, or "" when the client
+	// started on the host.
 	hostReturn string
+	// hostReconnect is the attempt to get a dropped link back, nil when there
+	// is nothing to get back. See host_reconnect.go.
+	hostReconnect *hostReconnect
+	// hostReconnectGen numbers those attempts, so a dial that finishes after
+	// the user has moved on is discarded rather than applied.
+	hostReconnectGen int
+	// hostReconnectReason is the sentence the exit notice shows when the
+	// client gave up on a link and had nowhere on this machine to return to.
+	hostReconnectReason string
 	// foreignTickGen is the generation of the listing poll timer now armed, and
 	// foreignSessionReplan asks Update to arm a new one. See
 	// foreignSessionReplanCmd.

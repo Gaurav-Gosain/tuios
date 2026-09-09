@@ -131,6 +131,8 @@ func hostStateSentence(status, reason, detail string) string {
 		head = "The host runs a tuios this one cannot talk to."
 	case federation.StatusConnecting:
 		head = "The link is starting."
+	case federation.StatusReconnecting:
+		head = "The link dropped and tuios is connecting again."
 	}
 	parts := []string{head}
 	if reason != "" && reason != head {
