@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
@@ -12,9 +14,14 @@ import (
 )
 
 // This file holds the CLI half of the session stash: put a file in, list what is
-// in. The point of the command is the path it prints, so the plain output puts
-// that path on a line of its own and nothing else on that line, which is what a
-// caller pipes into --attach.
+// in, and get a file out when it has to cross a link. The point of the command
+// is the path it prints, so the plain output puts that path on a line of its
+// own and nothing else on that line, which is what a caller pipes into --attach.
+//
+// With a session on another machine, `stash put` reads the file here and
+// sends its bytes, because the path means nothing there, and `stash get`
+// brings a stashed file's bytes back here. Both are bounded at 8 MB. On this
+// machine neither copies anything through the socket.
 
 // stashEntryRow is one entry of a stash listing or the result of a put.
 type stashEntryRow struct {
@@ -71,7 +78,11 @@ you can see when something you stashed earlier has gone.`,
 
   # Store a log and see what the session now holds
   tuios stash put /var/log/build.log
-  tuios stash list`,
+  tuios stash list
+
+  # Send a file here into a session on host build, and attach it there
+  path=$(tuios stash put -s build:api /tmp/flame.png)
+  tuios send-agent-message -s build:api -w review --attach "$path" 'the hot path is in decode'`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runStashPut(putSession, args[0], putJSON)
@@ -104,29 +115,139 @@ deleted to make room, so the first row without it is the next one to go.`,
 	listCmd.Flags().BoolVar(&listJSON, "json", false, "Output result as JSON")
 	_ = listCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
-	stashCmd.AddCommand(putCmd, listCmd)
+	var getSession string
+	var getJSON bool
+	getCmd := &cobra.Command{
+		Use:   "get <stored-path> [file]",
+		Short: "Copy a stashed file out of the session store, across a link",
+		Long: `Copy one stashed file to a path here. The stored path is what 'stash put' or
+'stash list' printed.
+
+It exists for a session on another machine: a path in that machine's stash
+cannot be opened here, so the bytes cross the link. A file over 8 MB is refused.
+On this machine, open the stored path directly instead.
+
+The copy is written to the file you name, or to the stored file's name in the
+current directory. The path written is printed on a line of its own.`,
+		Example: `  # Bring an attachment from a session on build here
+  tuios stash get -s build:api /run/user/1000/tuios/stash/<id>/<hash>.png flame.png`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			out := ""
+			if len(args) > 1 {
+				out = args[1]
+			}
+			return runStashGet(getSession, args[0], out, getJSON)
+		},
+	}
+	getCmd.Flags().StringVarP(&getSession, "session", "s", "", "Target session (default: most recently active)")
+	getCmd.Flags().BoolVar(&getJSON, "json", false, "Output result as JSON")
+	_ = getCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
+	stashCmd.AddCommand(putCmd, listCmd, getCmd)
 	return stashCmd
 }
 
+// stashTransferMaxBytes is the daemon's cap on bytes that cross the socket,
+// checked here first so a file too large is refused before it is read.
+const stashTransferMaxBytes = 8 << 20
+
 // runStashPut copies a file into the session store.
 func runStashPut(sessionName, path string, jsonOutput bool) error {
-	client, err := dialVerb()
+	t, err := dialSessionTarget(sessionName)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	// The path is sent as given. Making it absolute here would resolve it
-	// against this process's directory, and the daemon may be somewhere else;
-	// the daemon refuses a relative path and says so, which is the honest answer.
-	raw, err := client.Call("stash-put", map[string]any{"session": sessionName, "path": path})
+	// On this machine the path is sent as given. Making it absolute here
+	// would resolve it against this process's directory, and the daemon may
+	// be somewhere else; the daemon refuses a relative path and says so,
+	// which is the honest answer.
+	params := t.params(map[string]any{"path": path})
+	if t.host != "" {
+		// On another machine the path means nothing, so the bytes go
+		// instead, and the path is only what the file is called there.
+		content, err := readForTransfer(path)
+		if err != nil {
+			return err
+		}
+		abs, _ := filepath.Abs(path)
+		params["path"] = thisMachine() + ":" + abs
+		params["content"] = content
+	}
+	raw, err := t.client.Call("stash-put", params)
 	if err != nil {
-		return reportVerbError(explainVerbError("stash-put", err), jsonOutput)
+		return reportVerbError(t.explain("stash-put", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return printVerbResultOn(t, raw, jsonOutput)
 	}
 	return printStashPut(os.Stdout, raw)
+}
+
+// readForTransfer reads a file here for a put on another machine, refusing one
+// over the transfer cap before a byte of it is sent.
+func readForTransfer(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", &diagnosticError{
+			What:  fmt.Sprintf("Cannot read %s: %v.", path, err),
+			Cause: "for a session on another machine, this command reads the file here and sends its bytes.",
+			Fix:   "give the path of a file on this machine.",
+			Err:   err,
+		}
+	}
+	if info.IsDir() || !info.Mode().IsRegular() {
+		return "", fmt.Errorf("%s is not a regular file. The stash stores one file at a time", path)
+	}
+	if info.Size() > stashTransferMaxBytes {
+		return "", fmt.Errorf("%s is %d bytes. A file sent to another machine is capped at %d MB", path, info.Size(), stashTransferMaxBytes>>20)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("cannot read %s: %w", path, err)
+	}
+	return base64.StdEncoding.EncodeToString(data), nil
+}
+
+// runStashGet copies a stashed file out of a session store to a path here.
+func runStashGet(sessionName, stored, out string, jsonOutput bool) error {
+	t, err := dialSessionTarget(sessionName)
+	if err != nil {
+		return err
+	}
+	defer t.Close()
+
+	raw, err := t.client.Call("stash-get", t.params(map[string]any{"path": stored}))
+	if err != nil {
+		return reportVerbError(t.explain("stash-get", err), jsonOutput)
+	}
+	var res struct {
+		Name    string `json:"name"`
+		Bytes   int64  `json:"bytes"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	data, err := base64.StdEncoding.DecodeString(res.Content)
+	if err != nil {
+		return fmt.Errorf("the daemon%s sent content this build cannot read: %w", t.on(), err)
+	}
+	if out == "" {
+		out = res.Name
+	}
+	if err := os.WriteFile(out, data, 0o600); err != nil {
+		return fmt.Errorf("cannot write %s: %w", out, err)
+	}
+	if jsonOutput {
+		outputJSON(map[string]any{"success": true, "message": "file copied", "path": out, "bytes": len(data), "host": t.host, "stored": stored})
+		return nil
+	}
+	fmt.Println(out)
+	fmt.Printf("copied %s%s\n", stashBytes(int64(len(data))), t.on())
+	return nil
 }
 
 func printStashPut(w io.Writer, raw json.RawMessage) error {
@@ -157,18 +278,18 @@ func printStashPut(w io.Writer, raw json.RawMessage) error {
 
 // runStashList prints what the session store holds.
 func runStashList(sessionName string, jsonOutput bool) error {
-	client, err := dialVerb()
+	t, err := dialSessionTarget(sessionName)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	raw, err := client.Call("stash-list", map[string]any{"session": sessionName})
+	raw, err := t.client.Call("stash-list", t.params(map[string]any{"session": sessionName}))
 	if err != nil {
-		return reportVerbError(explainVerbError("stash-list", err), jsonOutput)
+		return reportVerbError(t.explain("stash-list", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return printVerbResultOn(t, raw, jsonOutput)
 	}
 	return printStashList(os.Stdout, raw)
 }

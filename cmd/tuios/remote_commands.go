@@ -146,20 +146,20 @@ func reportVerbError(err error, jsonOutput bool) error {
 
 // runSendKeys sends keystrokes to a running TUIOS session over the verb protocol.
 func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget string) error {
-	client, err := dialVerb()
+	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	if _, err := client.Call("send-keys", map[string]any{
+	if _, err := t.client.Call("send-keys", t.params(map[string]any{
 		"session": sessionName,
 		"window":  windowTarget,
 		"keys":    keys,
 		"literal": literal,
 		"raw":     raw,
-	}); err != nil {
-		return explainVerbError("send-keys", err)
+	})); err != nil {
+		return t.explain("send-keys", err)
 	}
 	return nil
 }
@@ -244,23 +244,23 @@ func runSplitWindow(sessionName, windowTarget, direction, name string, jsonOutpu
 // directional move does not name its pane in advance, so echoing the request
 // would confirm nothing.
 func runFocusWindow(sessionName, windowTarget, relative, direction string, jsonOutput bool) error {
-	client, err := dialVerb()
+	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	raw, err := client.Call("focus-window", map[string]any{
+	raw, err := t.client.Call("focus-window", t.params(map[string]any{
 		"session":   sessionName,
 		"window":    windowTarget,
 		"relative":  relative,
 		"direction": direction,
-	})
+	}))
 	if err != nil {
-		return reportVerbError(explainVerbError("focus-window", err), jsonOutput)
+		return reportVerbError(t.explain("focus-window", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return printVerbResultOn(t, raw, jsonOutput)
 	}
 	var res struct {
 		FocusedWindowID string    `json:"focused_window_id"`
@@ -273,7 +273,7 @@ func runFocusWindow(sessionName, windowTarget, relative, direction string, jsonO
 		fmt.Println("No window has the focus.")
 		return nil
 	}
-	fmt.Printf("%s  %s\n", shortWindowID(res.FocusedWindowID), windowLabel(res.Window))
+	fmt.Printf("%s  %s%s\n", shortWindowID(res.FocusedWindowID), windowLabel(res.Window), t.on())
 	return nil
 }
 
@@ -495,18 +495,18 @@ func runSetLayout(sessionName string, tiling *bool, equalize, rotate, jsonOutput
 // nothing, so a trailing newline in the argument is the Enter that submits the
 // line, and one call is enough to type and run a command.
 func runSendText(sessionName, windowTarget, text string) error {
-	client, err := dialVerb()
+	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	if _, err := client.Call("send-text", map[string]any{
+	if _, err := t.client.Call("send-text", t.params(map[string]any{
 		"session": sessionName,
 		"window":  windowTarget,
 		"text":    text,
-	}); err != nil {
-		return explainVerbError("send-text", err)
+	})); err != nil {
+		return t.explain("send-text", err)
 	}
 	return nil
 }
@@ -515,13 +515,13 @@ func runSendText(sessionName, windowTarget, text string) error {
 // keeps only the last N lines when positive, which is what bounds a capture of a
 // long scrollback to something a caller can actually read.
 func runCapturePane(sessionName, windowTarget string, scrollback, ansi, resolved bool, palette []string, lines int) error {
-	client, err := dialVerb()
+	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	raw, err := client.Call("capture-pane", map[string]any{
+	raw, err := t.client.Call("capture-pane", t.params(map[string]any{
 		"session":    sessionName,
 		"window":     windowTarget,
 		"scrollback": scrollback,
@@ -529,9 +529,9 @@ func runCapturePane(sessionName, windowTarget string, scrollback, ansi, resolved
 		"resolved":   resolved,
 		"palette":    palette,
 		"lines":      lines,
-	})
+	}))
 	if err != nil {
-		return explainVerbError("capture-pane", err)
+		return t.explain("capture-pane", err)
 	}
 
 	var res struct {
@@ -588,20 +588,20 @@ func runCommandRendered(sessionName, command string, args []string, jsonOutput b
 
 // queryWindows queries the window list over the verb protocol (no TUI required).
 func queryWindows(sessionName string, jsonOutput bool) error {
-	client, err := dialVerb()
+	t, err := dialSessionTarget(sessionName)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	raw, err := client.Call("list-windows", map[string]any{"session": sessionName})
+	raw, err := t.client.Call("list-windows", t.params(map[string]any{"session": sessionName}))
 	if err != nil {
-		return reportVerbError(explainVerbError("list-windows", err), jsonOutput)
+		return reportVerbError(t.explain("list-windows", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return printVerbResultOn(t, raw, jsonOutput)
 	}
-	return printWindowList(raw)
+	return printWindowList(raw, t.on())
 }
 
 // windowRow is the subset of a listed window both the table and the single
@@ -624,7 +624,7 @@ type windowRow struct {
 // printWindowList renders the window list as a table. Without this the command
 // printed only that it had succeeded, which told a reader nothing they asked
 // for and made --json the only way to see a window.
-func printWindowList(raw json.RawMessage) error {
+func printWindowList(raw json.RawMessage, on string) error {
 	var res struct {
 		Windows []windowRow `json:"windows"`
 		Total   int         `json:"total"`
@@ -674,7 +674,7 @@ func printWindowList(raw json.RawMessage) error {
 		})
 
 	fmt.Println(t.Render())
-	fmt.Printf("\n%d window(s). * marks the focused one.\n", res.Total)
+	fmt.Printf("\n%d window(s)%s. * marks the focused one.\n", res.Total, on)
 	return nil
 }
 
@@ -734,18 +734,18 @@ func printWindowDetail(data map[string]any) error {
 
 // querySession queries session info over the verb protocol (no TUI required).
 func querySession(sessionName string, jsonOutput bool) error {
-	client, err := dialVerb()
+	t, err := dialSessionTarget(sessionName)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	raw, err := client.Call("session-info", map[string]any{"session": sessionName})
+	raw, err := t.client.Call("session-info", t.params(map[string]any{"session": sessionName}))
 	if err != nil {
-		return reportVerbError(explainVerbError("session-info", err), jsonOutput)
+		return reportVerbError(t.explain("session-info", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return printVerbResultOn(t, raw, jsonOutput)
 	}
 	return printSessionInfo(raw)
 }
@@ -1060,15 +1060,16 @@ func runSetWorkspaceName(sessionName string, workspace int, name string) error {
 // printer, so the small setter commands do not each repeat the dial, the error
 // wrapping, and the decode.
 func callAndReport(verb string, params map[string]any, report func(map[string]any)) error {
-	client, err := dialVerb()
+	sessionName, _ := params["session"].(string)
+	t, err := dialSessionTarget(sessionName)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	raw, err := client.Call(verb, params)
+	raw, err := t.client.Call(verb, t.params(params))
 	if err != nil {
-		return explainVerbError(verb, err)
+		return t.explain(verb, err)
 	}
 	var res map[string]any
 	if err := json.Unmarshal(raw, &res); err != nil {
@@ -1085,11 +1086,11 @@ func callAndReport(verb string, params map[string]any, report func(map[string]an
 // only answers once the wait resolves: a client deadline shorter than the wait
 // would report a connection failure for a wait that was still perfectly healthy.
 func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, jsonOutput bool) error {
-	client, err := dialVerb()
+	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
 	params := map[string]any{
 		"session":   sessionName,
@@ -1109,12 +1110,12 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 	}
 
 	grace := time.Duration(timeout)*time.Millisecond + 10*time.Second
-	raw, err := client.CallWithTimeout("wait-for", params, grace)
+	raw, err := t.client.CallWithTimeout("wait-for", t.params(params), grace)
 	if err != nil {
-		return reportVerbError(explainVerbError("wait-for", err), jsonOutput)
+		return reportVerbError(t.explain("wait-for", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return printVerbResultOn(t, raw, jsonOutput)
 	}
 
 	var res struct {
@@ -1125,31 +1126,31 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 	if res.Window != "" {
-		fmt.Printf("%s matched on %s\n", res.Condition, res.Window)
+		fmt.Printf("%s matched on %s%s\n", res.Condition, res.Window, t.on())
 		return nil
 	}
-	fmt.Printf("%s matched\n", res.Condition)
+	fmt.Printf("%s matched%s\n", res.Condition, t.on())
 	return nil
 }
 
 // runGetAgentState reads a pane's reported agent state and prints it. With
 // jsonOutput it prints the full result; otherwise it prints the state name.
 func runGetAgentState(sessionName, windowTarget string, jsonOutput bool) error {
-	client, err := dialVerb()
+	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	raw, err := client.Call("get-agent-state", map[string]any{
+	raw, err := t.client.Call("get-agent-state", t.params(map[string]any{
 		"session": sessionName,
 		"window":  windowTarget,
-	})
+	}))
 	if err != nil {
-		return reportVerbError(explainVerbError("get-agent-state", err), jsonOutput)
+		return reportVerbError(t.explain("get-agent-state", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return printVerbResultOn(t, raw, jsonOutput)
 	}
 	var res struct {
 		State string `json:"state"`

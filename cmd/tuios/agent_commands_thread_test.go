@@ -26,7 +26,7 @@ func TestPrintedMessagesShowTheirThread(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := printAgentMessages(&buf, raw); err != nil {
+	if err := printAgentMessages(&buf, raw, ""); err != nil {
 		t.Fatalf("printAgentMessages: %v", err)
 	}
 	out := buf.String()
@@ -59,7 +59,7 @@ func TestAnEmptyThreadSaysWhy(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	var buf bytes.Buffer
-	if err := printAgentMessages(&buf, raw); err != nil {
+	if err := printAgentMessages(&buf, raw, ""); err != nil {
 		t.Fatalf("printAgentMessages: %v", err)
 	}
 	if !strings.Contains(buf.String(), "No messages in thread 7") {

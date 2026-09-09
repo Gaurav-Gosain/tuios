@@ -27,6 +27,52 @@ const (
 	untrustedClose = "--- end untrusted content ---"
 )
 
+// plainText strips control characters from text another program wrote, so a
+// body that carries an escape sequence cannot reach the terminal this prints
+// to. Newlines and tabs stay: they are layout, and the fence around the body
+// is what says the layout is the sender's.
+func plainText(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r == '\n' || r == '\t':
+			b.WriteRune(r)
+		case r < 0x20 || (r >= 0x7f && r < 0xa0):
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// plainLine is plainText for a value that must stay on one line.
+func plainLine(s string) string {
+	return strings.NewReplacer("\n", " ", "\t", " ").Replace(plainText(s))
+}
+
+// senderOf names who wrote a message, for the fence and the header: the
+// label, the window id, and, for a message that arrived from another
+// machine, that machine, so a reader knows it before the body. on names the
+// host the ring itself was read from, when it was not this machine.
+func senderOf(m agentMessageRow, on string) string {
+	who := orNone(plainLine(m.FromLabel))
+	if m.From != "" {
+		who = fmt.Sprintf("%s (%s)", who, shortWindowID(m.From))
+	}
+	if m.Origin == "link" {
+		host := plainLine(m.OriginHost)
+		if host == "" {
+			host = "another machine"
+		}
+		who += " on " + host + ", arrived over a link"
+	}
+	if on != "" {
+		who += ", in the ring on " + on
+	}
+	return who
+}
+
 // agentRow is one entry of the list-agents result.
 type agentRow struct {
 	WindowID   string `json:"window_id"`
@@ -46,23 +92,23 @@ type agentRow struct {
 // runListAgents prints the agent panes in a session: the board an orchestrating
 // agent reads before it addresses anyone.
 func runListAgents(sessionName string, all, jsonOutput bool) error {
-	client, err := dialVerb()
+	t, err := dialSessionTarget(sessionName)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	raw, err := client.Call("list-agents", map[string]any{"session": sessionName, "all": all})
+	raw, err := t.client.Call("list-agents", t.params(map[string]any{"all": all}))
 	if err != nil {
-		return reportVerbError(explainVerbError("list-agents", err), jsonOutput)
+		return reportVerbError(t.explain("list-agents", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return printVerbResultOn(t, raw, jsonOutput)
 	}
-	return printAgentList(os.Stdout, raw, all)
+	return printAgentList(os.Stdout, raw, all, t.on())
 }
 
-func printAgentList(w io.Writer, raw json.RawMessage, all bool) error {
+func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error {
 	var res struct {
 		Agents []agentRow `json:"agents"`
 		Total  int        `json:"total"`
@@ -92,12 +138,12 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool) error {
 		}
 		rows = append(rows, []string{
 			marker + shortWindowID(a.WindowID),
-			a.Name,
+			plainLine(a.Name),
 			a.State,
-			orNone(a.HarnessID),
+			orNone(plainLine(a.HarnessID)),
 			orNone(a.Source),
 			unread,
-			a.Message,
+			plainLine(a.Message),
 		})
 	}
 
@@ -128,24 +174,30 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool) error {
 	if all {
 		noun = "window(s), agent or not"
 	}
-	fmt.Fprintf(w, "\n%d %s. * marks the focused one. Address one with -w and its ID or NAME.\n", res.Total, noun)
+	fmt.Fprintf(w, "\n%d %s%s. * marks the focused one. Address one with -w and its ID or NAME.\n", res.Total, noun, on)
 	return nil
 }
 
 // runSendAgentMessage queues a message for another agent.
 func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo uint64, attachments []string, jsonOutput bool) error {
-	client, err := dialVerb()
+	t, err := dialTarget(sessionName, to)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	params := map[string]any{"session": sessionName, "text": text}
-	if to != "" {
-		params["to"] = to
+	params := t.params(map[string]any{"text": text})
+	if t.window != "" {
+		params["to"] = t.window
 	}
 	if from != "" {
 		params["from"] = from
+	}
+	if t.host != "" {
+		// The far daemon keeps this as the sender's claim about where it is,
+		// and shows it beside the message. It is the one thing a reader
+		// there has to tell this machine's agents from its own.
+		params["from_host"] = thisMachine()
 	}
 	if subject != "" {
 		params["subject"] = subject
@@ -157,12 +209,12 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 		params["attachments"] = attachments
 	}
 
-	raw, err := client.Call("send-agent-message", params)
+	raw, err := t.client.Call("send-agent-message", params)
 	if err != nil {
-		return reportVerbError(explainVerbError("send-agent-message", err), jsonOutput)
+		return reportVerbError(t.explain("send-agent-message", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return printVerbResultOn(t, raw, jsonOutput)
 	}
 	var res struct {
 		MessageID      uint64 `json:"message_id"`
@@ -182,9 +234,9 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 		thread = fmt.Sprintf(" in thread %d", res.ThreadID)
 	}
 	if res.To == "" {
-		fmt.Printf("notice %d posted to the session%s\n", res.MessageID, thread)
+		fmt.Printf("notice %d posted to the session%s%s\n", res.MessageID, t.on(), thread)
 	} else {
-		fmt.Printf("message %d queued for %s (%s)%s\n", res.MessageID, orNone(res.ToName), shortWindowID(res.To), thread)
+		fmt.Printf("message %d queued for %s (%s)%s%s\n", res.MessageID, orNone(plainLine(res.ToName)), shortWindowID(res.To), t.on(), thread)
 	}
 	if res.ReplyToMissing {
 		fmt.Println("the message you answered has been dropped from the ring. The reply stands, and it starts the thread from the id you named.")
@@ -210,6 +262,8 @@ type agentMessageRow struct {
 	ReadAt         int64           `json:"read_at"`
 	Undeliverable  bool            `json:"undeliverable"`
 	WasUnread      bool            `json:"was_unread"`
+	Origin         string          `json:"origin"`
+	OriginHost     string          `json:"origin_host"`
 }
 
 type attachmentRow struct {
@@ -222,20 +276,19 @@ type attachmentRow struct {
 
 // runReadAgentMessages reads the ring and prints it with every body fenced.
 func runReadAgentMessages(sessionName, to string, unread, notices, peek bool, thread uint64, limit int, jsonOutput bool) error {
-	client, err := dialVerb()
+	t, err := dialTarget(sessionName, to)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	params := map[string]any{
-		"session": sessionName,
+	params := t.params(map[string]any{
 		"unread":  unread,
 		"notices": notices,
 		"peek":    peek,
-	}
-	if to != "" {
-		params["to"] = to
+	})
+	if t.window != "" {
+		params["to"] = t.window
 	}
 	if thread > 0 {
 		params["thread"] = thread
@@ -244,17 +297,22 @@ func runReadAgentMessages(sessionName, to string, unread, notices, peek bool, th
 		params["limit"] = limit
 	}
 
-	raw, err := client.Call("read-agent-messages", params)
+	raw, err := t.client.Call("read-agent-messages", params)
 	if err != nil {
-		return reportVerbError(explainVerbError("read-agent-messages", err), jsonOutput)
+		return reportVerbError(t.explain("read-agent-messages", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return printVerbResultOn(t, raw, jsonOutput)
 	}
-	return printAgentMessages(os.Stdout, raw)
+	return printAgentMessages(os.Stdout, raw, t.host)
 }
 
-func printAgentMessages(w io.Writer, raw json.RawMessage) error {
+// printAgentMessages prints a ring. on is the host the ring was read from,
+// "" for this machine. Every body is fenced, every value another program
+// wrote is stripped of control characters, and a message that arrived from
+// another machine says so in its header and its fence, because that is the
+// first thing a reader needs to decide what to make of it.
+func printAgentMessages(w io.Writer, raw json.RawMessage, on string) error {
 	var res struct {
 		Messages []agentMessageRow `json:"messages"`
 		Unread   int               `json:"unread"`
@@ -278,10 +336,7 @@ func printAgentMessages(w io.Writer, raw json.RawMessage) error {
 		if i > 0 {
 			fmt.Fprintln(w)
 		}
-		who := orNone(m.FromLabel)
-		if m.From != "" {
-			who = fmt.Sprintf("%s (%s)", who, shortWindowID(m.From))
-		}
+		who := senderOf(m, on)
 		head := fmt.Sprintf("#%d  %s  from %s  %s", m.ID, m.Kind, who, agoOf(m.SentAt))
 		if m.ReplyTo != 0 {
 			head += fmt.Sprintf("  reply to #%d", m.ReplyTo)
@@ -302,24 +357,28 @@ func printAgentMessages(w io.Writer, raw json.RawMessage) error {
 			fmt.Fprintln(w, "the message this answers has been dropped from the ring")
 		}
 		if m.Subject != "" {
-			fmt.Fprintf(w, "subject: %s\n", m.Subject)
+			fmt.Fprintf(w, "subject: %s\n", plainLine(m.Subject))
 		}
 		for _, a := range m.Attachments {
-			line := fmt.Sprintf("attached: %s %s (%s, %d bytes)", a.Kind, a.Path, a.MediaType, a.Bytes)
+			line := fmt.Sprintf("attached: %s %s (%s, %d bytes)", a.Kind, plainLine(a.Path), plainLine(a.MediaType), a.Bytes)
 			if a.Missing {
 				line += "  MISSING: the sender's file is gone"
 			}
 			fmt.Fprintln(w, line)
 		}
 		fmt.Fprintf(w, untrustedOpen+"\n", who)
-		fmt.Fprintln(w, strings.TrimRight(m.Text, "\n"))
+		fmt.Fprintln(w, strings.TrimRight(plainText(m.Text), "\n"))
 		fmt.Fprintln(w, untrustedClose)
 	}
 
+	where := ""
+	if on != "" {
+		where = " on " + on
+	}
 	if res.Thread != 0 {
-		fmt.Fprintf(w, "\n%d message(s) in thread %d, %d unread.\n", res.Total, res.Thread, res.Unread)
+		fmt.Fprintf(w, "\n%d message(s) in thread %d%s, %d unread.\n", res.Total, res.Thread, where, res.Unread)
 	} else {
-		fmt.Fprintf(w, "\n%d message(s), %d unread.\n", res.Total, res.Unread)
+		fmt.Fprintf(w, "\n%d message(s)%s, %d unread.\n", res.Total, where, res.Unread)
 	}
 	if res.Evicted > 0 {
 		fmt.Fprintf(w, "%d older message(s) were dropped: the ring was full, and they were never read.\n", res.Evicted)
@@ -351,20 +410,22 @@ func agoOf(nanos int64) string {
 // resolves, so a shorter client deadline would report a connection failure for
 // an ask that was still perfectly healthy.
 func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, settle, timeout, lines int, force, jsonOutput bool) error {
-	client, err := dialVerb()
+	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.Close() }()
+	defer t.Close()
 
-	params := map[string]any{
-		"session": sessionName,
-		"window":  windowTarget,
-		"text":    text,
-		"force":   force,
-	}
+	params := t.params(map[string]any{
+		"window": windowTarget,
+		"text":   text,
+		"force":  force,
+	})
 	if from != "" {
 		params["from"] = from
+	}
+	if t.host != "" {
+		params["from_host"] = thisMachine()
 	}
 	for name, v := range map[string]int{
 		"ready_timeout": readyTimeout, "settle": settle, "timeout": timeout, "lines": lines,
@@ -375,12 +436,12 @@ func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, set
 	}
 
 	grace := time.Duration(readyTimeout+timeout)*time.Millisecond + 10*time.Second
-	raw, err := client.CallWithTimeout("ask-agent", params, grace)
+	raw, err := t.client.CallWithTimeout("ask-agent", params, grace)
 	if err != nil {
-		return reportVerbError(explainVerbError("ask-agent", err), jsonOutput)
+		return reportVerbError(t.explain("ask-agent", err), jsonOutput)
 	}
 	if jsonOutput {
-		return printVerbResult(raw, jsonOutput)
+		return printVerbResultOn(t, raw, jsonOutput)
 	}
 
 	var res struct {
@@ -395,9 +456,12 @@ func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, set
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	who := fmt.Sprintf("%s (%s)", orNone(res.Name), shortWindowID(res.Window))
+	who := fmt.Sprintf("%s (%s)", orNone(plainLine(res.Name)), shortWindowID(res.Window))
+	if t.host != "" {
+		who += " on " + t.host
+	}
 	fmt.Printf(untrustedOpen+"\n", who)
-	fmt.Println(strings.TrimRight(res.Reply, "\n"))
+	fmt.Println(strings.TrimRight(plainText(res.Reply), "\n"))
 	fmt.Println(untrustedClose)
 	fmt.Printf("\nsettled by %s; %s now reports %s\n", res.SettledBy, who, res.State)
 	if res.Truncated {
