@@ -21,13 +21,22 @@ jobs:
     # a hang is reported as the assertion that timed out rather than as a job
     # that was killed.
     #
-    # Both numbers here are budgets the suite has already outgrown once. It ran
-    # for about 1000 seconds on a developer machine against a 900 second test
-    # timeout, and a runner is slower, so three commits in a row were killed
-    # rather than failed. A kill prints no failing test, which is the worst
-    # shape a red build can take. Raise these together, and treat needing to
-    # raise them again as a signal that the suite needs to get faster.
-    timeout-minutes: 30
+    # The suite is split across runners because it grew past a single one. It
+    # ran about 1000 seconds in one process against a 900 second test timeout,
+    # and a runner is slower, so three commits in a row were killed rather than
+    # failed. A kill prints no failing test, which is the worst shape a red
+    # build can take.
+    #
+    # The tests hold no t.Parallel, and they should not: each one starts a real
+    # daemon and a real pseudo-terminal, so running them together inside one
+    # process would multiply the memory rather than the throughput. Splitting
+    # across machines gives each shard the whole runner.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    name: e2e-tui (shard ${{ matrix.shard }} of 4)
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v7
@@ -49,7 +58,7 @@ jobs:
       - name: Build the binary under test
         run: go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
 
-      - name: Run the end-to-end suite
+      - name: Run this shard of the end-to-end suite
         working-directory: e2e/tui
         env:
           TUIOS_E2E: "1"
@@ -57,11 +66,32 @@ jobs:
           # at an explicit binary keeps the build step's output out of the test
           # log and makes the artifact obvious.
           TUIOS_E2E_BIN: ${{ runner.temp }}/tuios
+          SHARD: ${{ matrix.shard }}
+          SHARDS: "4"
+        # The split is by a hash of the test name, not by the order the list
+        # comes back in, so adding or renaming a test moves only that test
+        # between shards instead of resegmenting every one of them.
+        #
+        # Listing needs TUIOS_E2E as well: without it the suite's TestMain
+        # returns before it can print a name, and the shard would silently be
+        # empty.
+        #
         # -count=1 defeats Go's test cache, which otherwise can replay a stale
         # result across a change of binary. -race is deliberately absent: the
         # program under test is a child process, so the detector would
         # instrument only the harness.
-        run: go test -count=1 -timeout 25m -v ./...
+        run: |
+          set -euo pipefail
+          names=$(go test -list '^Test' ./... | grep '^Test' | sort | awk -v n="$SHARD" -v t="$SHARDS" '
+            { h = 0
+              for (i = 1; i <= length($0); i++) h = (h * 31 + index("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", substr($0, i, 1))) % 1000003 }
+            (h % t) == (n - 1) { print }')
+          if [ -z "$names" ]; then
+            echo "shard $SHARD of $SHARDS matched no tests, which means the split is broken" >&2
+            exit 1
+          fi
+          echo "$names" | wc -l | xargs printf 'shard %s of %s runs %s tests\n' "$SHARD" "$SHARDS"
+          go test -count=1 -timeout 18m -v -run "^($(echo "$names" | paste -sd'|' -))$" ./...
 
       - name: Reap any surviving daemons
         # The harness tears down its own process groups, but a hard job failure
