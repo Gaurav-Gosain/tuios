@@ -20,7 +20,14 @@ jobs:
     # backstop; every individual wait inside the suite has its own deadline, so
     # a hang is reported as the assertion that timed out rather than as a job
     # that was killed.
-    timeout-minutes: 20
+    #
+    # Both numbers here are budgets the suite has already outgrown once. It ran
+    # for about 1000 seconds on a developer machine against a 900 second test
+    # timeout, and a runner is slower, so three commits in a row were killed
+    # rather than failed. A kill prints no failing test, which is the worst
+    # shape a red build can take. Raise these together, and treat needing to
+    # raise them again as a signal that the suite needs to get faster.
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v7
@@ -54,7 +61,7 @@ jobs:
         # result across a change of binary. -race is deliberately absent: the
         # program under test is a child process, so the detector would
         # instrument only the harness.
-        run: go test -count=1 -timeout 15m -v ./...
+        run: go test -count=1 -timeout 25m -v ./...
 
       - name: Reap any surviving daemons
         # The harness tears down its own process groups, but a hard job failure
