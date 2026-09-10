@@ -290,8 +290,8 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		})
 	}
 	bindings = append(bindings,
-		row("reorder_down", "Move the session down the rail"),
-		row("reorder_up", "Move the session up the rail"),
+		row("reorder_down", "Move the session or machine down the rail"),
+		row("reorder_up", "Move the session or machine up the rail"),
 		row("section", "Cycle the sessions, terminals and agents sections"),
 		row("agents_filter", "Agents: all sessions, or this one"),
 		row("agents_sort", "Agents: by priority, or by recency"),

@@ -1020,6 +1020,12 @@ type OS struct {
 	// state file.
 	SidebarHostOrder []string
 	SidebarHostIDs   []string
+	// sidebarMachineGroups is whether the last frame laid the sessions section
+	// out by machine, which is what steps its rows in under their machine's
+	// heading. Derived by the render from the stored snapshot, never stored:
+	// with no other machine there are no headings and no step, so the rail of
+	// a machine that stands alone is untouched. See sidebar_hosts.go.
+	sidebarMachineGroups bool
 	// SidebarHostSessionOrder is the drag-defined session order of each other
 	// machine, keyed by host name, kept apart from SidebarOrder so a drag while
 	// attached on build cannot write build's names over this machine's order.

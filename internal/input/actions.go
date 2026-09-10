@@ -213,6 +213,18 @@ func (d *ActionDispatcher) registerHandlers() {
 		d.Register(action, makeSidebarFileHandler(action))
 	}
 
+	// The rail's two reorder actions. They are dispatched by key from
+	// HandleSidebarKey, which reads the rail's own scope, and they are
+	// registered here because a machine header's context menu hands its rows to
+	// this dispatcher like every other menu. Both ways in call
+	// SidebarReorderCursor, so there is one body per direction.
+	//
+	// Registering them does not put them on a window-mode key: they live in
+	// [keybindings.sidebar], which the window-mode lookup never reads. Reached
+	// with no rail cursor they move nothing.
+	d.Register(sidebarActReorderUp, makeSidebarReorderHandler(-1))
+	d.Register(sidebarActReorderDown, makeSidebarReorderHandler(1))
+
 	// System actions
 	d.Register("toggle_logs", handleToggleLogs)
 	d.Register("toggle_cache_stats", handleToggleCacheStats)

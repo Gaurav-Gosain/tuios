@@ -171,6 +171,16 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.TakeSidebarCmd()
 }
 
+// makeSidebarReorderHandler is the reorder action as the dispatcher takes it:
+// one handler per direction, both calling the same rail method the key calls.
+// A machine header's context menu is the caller that needs it; see machineMenu.
+func makeSidebarReorderHandler(delta int) ActionHandler {
+	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		o.SidebarReorderCursor(delta)
+		return o, nil
+	}
+}
+
 // makeSidebarFileHandler wraps a file action for the ActionDispatcher, which is
 // how the files context menu reaches it. The key path calls
 // handleSidebarFileAction directly; both end in the same body.
