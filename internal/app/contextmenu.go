@@ -35,6 +35,9 @@ const (
 	// CtxTargetWorkspacePill is one workspace tab in the dock's strip. The "+"
 	// tab is not one: it stands for a workspace that does not exist yet.
 	CtxTargetWorkspacePill
+	// CtxTargetMachine is a machine's group header on the rail. What the menu
+	// is about rides in ContextMenu.SessionID, which holds the host name.
+	CtxTargetMachine
 	// CtxTargetFileRow is the rail's files section: one row of the listing, or
 	// the blank space the section drew around it. Both are the same target
 	// because the two rows that need no file at all (make one, paste one) are

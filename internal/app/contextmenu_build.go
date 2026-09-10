@@ -2,6 +2,7 @@ package app
 
 import (
 	"path/filepath"
+	"slices"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -32,6 +33,7 @@ const (
 	glyphFile     = ""
 	glyphCut      = ""
 	glyphUp       = ""
+	glyphDown     = ""
 )
 
 // OpenContextMenu opens the context menu for whatever is under the screen cell
@@ -418,6 +420,43 @@ func (m *OS) OpenSelectionMenu(x, y, windowIndex int) {
 	}
 	cm.Selected = cm.Next(1)
 	m.ContextMenu = cm
+}
+
+// ============================================================================
+// The rail's machine groups
+// ============================================================================
+
+// machineMenu is the menu for a machine's group header on the rail: where that
+// machine's group sits among the others.
+//
+// It exists for the two move rows. A machine's group is reordered by dragging
+// its header up or down, and a drag is a gesture nothing on screen announces,
+// so the only people who found it were the ones who guessed. A right-click is
+// where a person looks for what a row can do, and it used to open the rail's
+// own settings here, which is a menu about the rail rather than about the
+// machine that was pointed at.
+//
+// Both rows run the rail's own reorder actions rather than a body of their
+// own, so the menu and the keys bound to those actions cannot drift apart.
+// They act on the row under the rail's cursor, which is why the caller puts
+// the cursor on the header before building this.
+//
+// This machine is pinned to the top of the section and its rows are dimmed
+// rather than dropped: a dimmed row says the action exists and that this one
+// machine cannot use it, and a menu that changed shape from one machine to the
+// next would hide that.
+func (m *OS) machineMenu(host string) (string, []ContextMenuItem) {
+	at := slices.Index(m.SidebarHostIDs, host)
+	first := at <= 0
+	last := at < 0 || at >= len(m.SidebarHostIDs)-1
+	title := printableTitle(host)
+	if title == "" {
+		title = "Machine"
+	}
+	return title, []ContextMenuItem{
+		m.item(glyphUp, "Move up", "reorder_up", first),
+		m.item(glyphDown, "Move down", "reorder_down", last),
+	}
 }
 
 // ============================================================================

@@ -164,8 +164,13 @@ func (m *OS) sidebarRepoRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 	if hovered {
 		fg = pal.Fg
 	}
+	// A repository is an item that owns a subtree, not a heading: it wears a
+	// session's glyph, rolls its members' states up, and steps in under its
+	// machine with every other session row. Its own members hang off it on the
+	// tree marks. See sidebarWorktreeLabel.
+	indent := m.sidebarRowIndent()
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(state)).
-		Render(overlay.Truncate(printableTitle(node.Title), sidebarNameAvail(cw, rightW)))
+		Render(overlay.Truncate(printableTitle(node.Title), sidebarNameAvailIn(cw, rightW, indent)))
 	gutter := sidebarGutter(false, state, rowBg, pal, &m.Settings)
-	return sidebarComposeRow(gutter, glyph, name, right, cw, rowBg)
+	return sidebarComposeGroupRow(indent, gutter, glyph, name, right, cw, rowBg)
 }

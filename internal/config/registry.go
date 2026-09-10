@@ -349,6 +349,11 @@ var ActionDescriptions = map[string]string{
 	"file_paste":          "Files: paste into this folder",
 	"file_open":           "Files: open this folder, or copy this file's path",
 
+	// The rail's reorder actions. They are here for the machine header's menu,
+	// which resolves every row's label and key hint from this table.
+	"reorder_up":   "Rail: move this session or machine up",
+	"reorder_down": "Rail: move this session or machine down",
+
 	// Window Management
 	"new_window":    "New window",
 	"close_window":  "Close window",

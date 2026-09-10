@@ -21,6 +21,10 @@ type sidebarDragState struct {
 	PressY    int
 	Dragging  bool
 	Order     []string
+	// PinnedTold says this gesture has already answered a drag on the machine
+	// that cannot be dragged. Motion arrives on every cell the pointer crosses,
+	// and a toast per cell is not an answer.
+	PinnedTold bool
 }
 
 // sidebarEdgeState is the width-resize gesture on the rail's edge rule. A left
@@ -408,7 +412,14 @@ func (m *OS) SidebarDragMotion(x, y int) bool {
 			return true // horizontal jitter is still a click
 		}
 		if d.Host && d.SessionID == federation.LocalHostName {
-			// This machine is pinned first. Its header folds and is not dragged.
+			// This machine is pinned first. Its header folds and is not dragged,
+			// and it says so once per gesture rather than sitting still: a
+			// header that does not move under the pointer is how a person
+			// decides the rail cannot be reordered at all.
+			if !d.PinnedTold {
+				d.PinnedTold = true
+				m.sidebarSayMachinePinned()
+			}
 			return true
 		}
 		d.Dragging = true
@@ -649,12 +660,25 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 	}
 
 	switch hit.Kind {
-	case sidebarRowHostSession, sidebarRowHostNew, sidebarRowHost, sidebarRowRepo:
-		// A remote row names a machine and a group header names a repository,
-		// and neither is a local session. There is no per-row menu for either
-		// in this release, so the right-click opens the rail's own settings the
-		// way a click on blank rail would, rather than building a session menu
-		// for a name that is not a local session.
+	case sidebarRowHost:
+		// A machine's header. Its menu says where the machine sits among the
+		// others, and the rows that move it act on the rail's cursor, so the
+		// cursor goes to the header the pointer named first. Right-clicking a
+		// pane focuses that pane for the same reason.
+		if hit.SessionID == "" {
+			m.openRailSettingsMenu(x, y)
+			return
+		}
+		m.sidebarSetCursorToHit(hit)
+		cm.Target = CtxTargetMachine
+		cm.SessionID = hit.SessionID
+		cm.Title, cm.Items = m.machineMenu(hit.SessionID)
+	case sidebarRowHostSession, sidebarRowHostNew, sidebarRowRepo:
+		// A session on another machine, and a repository's group header.
+		// Neither is a local session and neither has a per-row menu in this
+		// release, so the right-click opens the rail's own settings the way a
+		// click on blank rail would, rather than building a session menu for a
+		// name that is not a local session.
 		m.openRailSettingsMenu(x, y)
 		return
 	case sidebarRowFileCd, sidebarRowFileUp, sidebarRowFileEntry:

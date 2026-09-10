@@ -822,7 +822,21 @@ func sidebarMailToken(unread int) (string, bool) {
 // from the rail's edge. Every piece arrives already styled; name must already
 // be truncated to sidebarNameAvail so the fit below cannot eat the figure.
 func sidebarComposeRow(gutter, glyph, name, right string, cw int, bg color.Color) string {
-	row := gutter + glyph + sidebarStyle(bg, nil).Render(" ") + name
+	return sidebarComposeGroupRow(0, gutter, glyph, name, right, cw, bg)
+}
+
+// sidebarComposeGroupRow is sidebarComposeRow for a row that belongs to a
+// group: the same spine, stepped in by indent cells between the gutter and the
+// glyph.
+//
+// The gutter does not move. It is the rail's margin strip, and "you are here"
+// and "this one wants a human" are read down the rail's own edge rather than
+// down whichever column the row's level happens to put them in. Everything
+// after it does move together, so a group's glyphs stay in one column and the
+// step is what says the rows are somebody's.
+func sidebarComposeGroupRow(indent int, gutter, glyph, name, right string, cw int, bg color.Color) string {
+	row := gutter + sidebarStyle(bg, nil).Render(strings.Repeat(" ", max(indent, 0))) +
+		glyph + sidebarStyle(bg, nil).Render(" ") + name
 	if rw := lipgloss.Width(right); rw > 0 {
 		gap := max(cw-lipgloss.Width(row)-rw-1, 0)
 		row += sidebarStyle(bg, nil).Render(strings.Repeat(" ", gap)) +
@@ -839,11 +853,16 @@ func sidebarComposeRow(gutter, glyph, name, right string, cw int, bg color.Color
 // to the last cell butts against its own window count, and "documentation-site"
 // beside a count of 2 reads as "documentation-site2". The name is what gives way
 // there, never the gap.
-func sidebarNameAvail(cw, rightW int) int {
+func sidebarNameAvail(cw, rightW int) int { return sidebarNameAvailIn(cw, rightW, 0) }
+
+// sidebarNameAvailIn is sidebarNameAvail for a row stepped in under a group
+// heading. The step comes off the name, the way every other figure on the row
+// does.
+func sidebarNameAvailIn(cw, rightW, indent int) int {
 	if rightW > 0 {
 		rightW += 2 // the inset cell, and the gap in front of the figure
 	}
-	return max(cw-sidebarNameCol-rightW, 1)
+	return max(cw-sidebarNameCol-max(indent, 0)-rightW, 1)
 }
 
 // renderSidebar composes the vertical session sidebar as a single layer, the way
@@ -1384,10 +1403,10 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		})
 		nav = append(nav, sidebarNavRow{Kind: kind, SessionID: sessionID, WindowID: windowID, WindowIndex: windowIndex})
 	}
-	overflowRow := func(n int) string {
-		// Stands in for the rows it hides, so it starts on the name spine.
+	overflowRow := func(n, indent int) string {
+		// Stands in for the rows it hides, so it starts where their names do.
 		more := overlay.Ellipsis() + " +" + strconv.Itoa(n)
-		return compose(sidebarFit(strings.Repeat(" ", sidebarNameCol)+
+		return compose(sidebarFit(strings.Repeat(" ", sidebarNameCol+indent)+
 			sidebarStyle(nil, pal.FgMute).Render(more), cw, nil))
 	}
 	// recordToken publishes a header control's rectangle and its nav row, the
@@ -1442,7 +1461,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			lines = append(lines, compose(m.sidebarSessionRow(s, variant, cw, pal, hovered, dragged)))
 		}
 		if h := hidden[sidebarSectionSessions]; h > 0 {
-			lines = append(lines, overflowRow(h))
+			lines = append(lines, overflowRow(h, m.sidebarRowIndent()))
 		}
 	}
 
@@ -1498,7 +1517,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			lines = append(lines, compose(m.sidebarTerminalRow(e, cw, pal, hovered, peeking)))
 		}
 		if h := hidden[sidebarSectionTerminals]; h > 0 {
-			lines = append(lines, overflowRow(h))
+			lines = append(lines, overflowRow(h, 0))
 		}
 	}
 
@@ -1520,7 +1539,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			lines = append(lines, compose(m.sidebarFileRow(row, cw, pal, hovered)))
 		}
 		if h := hidden[sidebarSectionFiles]; h > 0 {
-			lines = append(lines, overflowRow(h))
+			lines = append(lines, overflowRow(h, 0))
 		}
 	}
 
@@ -1558,7 +1577,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			}
 		}
 		if h := hidden[sidebarSectionAgents]; h > 0 {
-			lines = append(lines, overflowRow(h))
+			lines = append(lines, overflowRow(h, 0))
 		}
 	}
 
@@ -2039,7 +2058,8 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 		fg = pal.Fg
 	}
 	title := printableTitle(node.Title)
-	avail := sidebarNameAvail(cw, rightW)
+	indent := m.sidebarRowIndent()
+	avail := sidebarNameAvailIn(cw, rightW, indent)
 	// A worktree session is named by its branch under its repository's row,
 	// behind the mark that says whether the group goes on below it. The branch
 	// is the whole label there, so nothing rides after it.
@@ -2064,7 +2084,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	if tint != nil && stated && !node.IsCurrent && !sidebarAttention(node.AgentState) {
 		gutter = sidebarStyle(rowBg, tint).Render(accentMark())
 	}
-	return sidebarComposeRow(gutter, glyph, name, right, cw, rowBg)
+	return sidebarComposeGroupRow(indent, gutter, glyph, name, right, cw, rowBg)
 }
 
 // sidebarTerminalRow renders one pane of the session the terminals section is

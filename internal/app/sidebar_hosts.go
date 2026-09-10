@@ -338,6 +338,7 @@ func remoteSessionName(node sessiontree.Node) string {
 // client is attached to, which is the whole point: a row is where it was.
 func (m *OS) sidebarMachineRows(here, remote []sessiontree.Node) []sessiontree.Node {
 	m.SidebarHostIDs = m.SidebarHostIDs[:0]
+	m.sidebarMachineGroups = len(remote) > 0
 	if len(remote) == 0 {
 		return here
 	}
@@ -386,6 +387,23 @@ func (m *OS) sidebarMachineRows(here, remote []sessiontree.Node) []sessiontree.N
 		out = append(out, g.rows...)
 	}
 	return out
+}
+
+// sidebarGroupIndent is the step a machine's rows take under its heading. Two
+// cells: one is not a step the eye reads at a glance, and three costs a
+// twenty-eight column rail a word off every name for nothing the second cell
+// does not already say.
+const sidebarGroupIndent = 2
+
+// sidebarRowIndent is the step the sessions section's rows take. It is the
+// group step while the section is laid out by machine, and nothing at all
+// otherwise, so the rail of a machine that stands alone is the rail it always
+// was.
+func (m *OS) sidebarRowIndent() int {
+	if m.sidebarMachineGroups {
+		return sidebarGroupIndent
+	}
+	return 0
 }
 
 // attachedMachineHeader is the group header for the machine the client is
@@ -611,14 +629,17 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 		rightW = lipgloss.Width(add)
 	}
 
-	// The machine the client is on reads in the full ink, the others one step
-	// down, so "where am I" is answered at the machine level as well as on the
-	// session row. A machine that is not up is muted with its rows.
+	// A machine that answers reads in the full ink and a machine that does not
+	// is muted with its rows. Every machine that answers reads the same, which
+	// is what makes the rail's three inks a ramp: a heading in the full ink,
+	// its sessions one step down, the furniture one step below that. Ink used
+	// to say which machine the client was on, and it cost more than it bought:
+	// it put a machine and the sessions under it in the same ink, which is the
+	// thing that made the two impossible to tell apart. "Where am I" is
+	// answered where it always was, on the attached session's own row, and its
+	// row is now inside its machine's group.
 	here := node.Host == m.attachedMachine()
-	ink := pal.FgDim
-	if hovered || here {
-		ink = pal.Fg
-	}
+	ink := pal.Fg
 	if !up {
 		ink = pal.FgMute
 	}
@@ -627,7 +648,13 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 		mark = m.Settings.GetRailFoldShutGlyph()
 	}
 	glyph := sidebarStyle(rowBg, pal.FgMute).Render(mark)
-	name := sidebarStyle(rowBg, ink).Render(
+	// The heading's weight is what tells a machine from a session at a glance.
+	// The rail's other bold is an alarm on an item row, two levels in and
+	// wearing a severity mark in the gutter and a state glyph of its own; a
+	// heading that is bold at the section's own left edge is not read as one of
+	// those. Colour alone did not carry it: FgDim on a machine and FgDim on the
+	// session under it are the same ink, and that is the complaint.
+	name := sidebarStyle(rowBg, ink).Bold(true).Render(
 		overlay.Truncate(printableTitle(node.Title), sidebarNameAvail(cw, rightW)))
 	// A folded group hides the session row that wears the focus mark, so the
 	// header takes it: the fold must not make the attached session vanish from
@@ -668,9 +695,10 @@ func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal
 	case m.hostIsUp(node.Host):
 		ink = pal.FgDim
 	}
+	indent := m.sidebarRowIndent()
 	name := sidebarStyle(rowBg, ink).Render(
-		overlay.Truncate(printableTitle(node.Title), sidebarNameAvail(cw, rightW)))
+		overlay.Truncate(printableTitle(node.Title), sidebarNameAvailIn(cw, rightW, indent)))
 	gutter := sidebarStyle(rowBg, nil).Render(" ")
 	glyph := sidebarStyle(rowBg, pal.FgMute).Render(m.Settings.GetRailBullet())
-	return sidebarComposeRow(gutter, glyph, name, right, cw, rowBg)
+	return sidebarComposeGroupRow(indent, gutter, glyph, name, right, cw, rowBg)
 }

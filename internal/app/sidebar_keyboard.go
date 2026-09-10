@@ -307,13 +307,29 @@ func (m *OS) SidebarReorderCursor(delta int) {
 func (m *OS) sidebarReorderHost(host string, delta int) {
 	order := append([]string(nil), m.SidebarHostIDs...)
 	from := slices.Index(order, host)
+	if from < 0 {
+		// This machine. It is not in the order at all, so the swap below would
+		// have done nothing and said nothing, which is how a person decides a
+		// feature is missing.
+		m.sidebarSayMachinePinned()
+		return
+	}
 	to := from + delta
-	if from < 0 || to < 0 || to >= len(order) {
+	if to < 0 || to >= len(order) {
 		return
 	}
 	order[from], order[to] = order[to], order[from]
 	m.SidebarHostOrder = order
 	m.saveSidebarState()
+}
+
+// sidebarSayMachinePinned answers a move this machine cannot make. The rail
+// keeps this machine at the top of the sessions section whatever the others
+// are dragged into, and a refusal that draws nothing reads as a rail that
+// cannot be reordered at all.
+func (m *OS) sidebarSayMachinePinned() {
+	m.ShowNotification("This machine stays first. Move another machine instead.",
+		"info", m.Settings.NotificationDuration)
 }
 
 // SidebarCycleSection walks the cursor forward through the rail's three
@@ -394,12 +410,13 @@ func (m *OS) SidebarOpenCursorMenu(destructive bool) {
 }
 
 // sidebarRowHasMenu reports whether a row points at something a context menu
-// can be about: a session, a pane in either of the two sections that list
-// panes, or any row of the files section. The rail's own controls point at the
-// rail itself, which the right-click on blank rail already covers.
+// can be about: a session, a machine, a pane in either of the two sections
+// that list panes, or any row of the files section. The rail's own controls
+// point at the rail itself, which the right-click on blank rail already
+// covers.
 func sidebarRowHasMenu(row sidebarNavRow) bool {
 	switch row.Kind {
-	case sidebarRowSession:
+	case sidebarRowSession, sidebarRowHost:
 		return row.SessionID != ""
 	case sidebarRowWindow, sidebarRowAgent:
 		return row.WindowID != "" || row.WindowIndex >= 0

@@ -12,6 +12,12 @@ import (
 
 // saveFrame writes the screen to $TUIOS_E2E_FRAMES/<name>.txt when that
 // directory is set, so a run can hand a real frame to whoever asked for proof.
+//
+// It writes the styled encoding beside it, as <name>.styled.txt. A plain frame
+// answers "what is on the rail" and says nothing about weight or ink, which is
+// half of what a rail row means: a heading and the row under it can hold the
+// same characters at the same columns and still read as two different kinds of
+// thing. Proof of that half has to carry the attributes.
 func saveFrame(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	dir := os.Getenv("TUIOS_E2E_FRAMES")
@@ -20,6 +26,9 @@ func saveFrame(t *testing.T, term *tuitest.Terminal, name string) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, name+".txt"), []byte(term.Snapshot()), 0o644); err != nil {
 		t.Logf("could not save frame %s: %v", name, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name+".styled.txt"), []byte(term.SnapshotStyled()), 0o644); err != nil {
+		t.Logf("could not save styled frame %s: %v", name, err)
 	}
 }
 
