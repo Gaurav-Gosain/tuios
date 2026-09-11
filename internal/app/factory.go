@@ -69,6 +69,11 @@ type OSOptions struct {
 	// IsSSHMode indicates this is an SSH session.
 	IsSSHMode bool
 
+	// SSHIsLoopback marks an SSH session that arrived over loopback (the
+	// same machine), so its native clipboard is the operator's. See
+	// OS.SSHIsLoopback.
+	SSHIsLoopback bool
+
 	// SSHSession is the SSH session reference (nil in local mode).
 	SSHSession ssh.Session
 
@@ -177,6 +182,7 @@ func NewOS(opts OSOptions) *OS {
 		IsDaemonSession: opts.IsDaemonSession,
 		IsSSHMode:       opts.IsSSHMode,
 		SSHSession:      opts.SSHSession,
+		SSHIsLoopback:   opts.SSHIsLoopback,
 		TouchClient:     opts.TouchClient,
 		RemoteClient:    opts.RemoteClient,
 		Caps:            caps,
