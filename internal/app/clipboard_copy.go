@@ -38,7 +38,7 @@ func (m *OS) CopyToClipboard(text string) tea.Cmd {
 	}
 	m.CancelPendingCopy()
 	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
-	return tea.SetClipboard(text)
+	return m.clipboardWriteCmd(text)
 }
 
 // DeferCopyToClipboard holds text back until delay has passed with no further
@@ -79,9 +79,43 @@ func (m *OS) HandlePendingCopy(seq uint64) tea.Cmd {
 	text := m.pendingCopy
 	m.pendingCopy = ""
 	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
-	return tea.SetClipboard(text)
+	return m.clipboardWriteCmd(text)
 }
 
 // PendingCopyText reports the text a deferred write is holding, for tests and
 // for anything that needs to know a gesture has not settled yet.
 func (m *OS) PendingCopyText() string { return m.pendingCopy }
+
+// nativeClipboardAllowed reports whether this client may touch the machine's
+// own clipboard. A plain local TUI and a loopback SSH session are the same
+// person at this box; a remote SSH peer or a browser tab are not, and their
+// clipboard lives elsewhere (OSC 52 is how it is reached). See
+// clipboard_local.go.
+func (m *OS) nativeClipboardAllowed() bool {
+	// RemoteClient is the canonical "the human is not at this machine" flag in
+	// the ClientKind model. A loopback SSH session is the exception: it is the
+	// same person on the same box, so the native clipboard is still theirs.
+	if m.RemoteClient && !m.SSHIsLoopback {
+		return false
+	}
+	return ShouldUseNativeClipboard(m.SSHIsLoopback)
+}
+
+// clipboardWriteCmd writes text with the native tool when one applies, and
+// still returns the OSC 52 write. The double write is idempotent (same text):
+// OSC 52 is harmless where the native write already happened and is the only
+// path where the terminal carries it. VTE terminals (GNOME Terminal, Ptyxis)
+// never answer OSC 52, so the native write is what makes copy work there.
+func (m *OS) clipboardWriteCmd(text string) tea.Cmd {
+	set := tea.SetClipboard(text) // the Cmd that yields the OSC 52 write
+	return func() tea.Msg {
+		if m.nativeClipboardAllowed() {
+			if tool := DetectClipboardTool(); tool != nil {
+				// Best-effort: a failed native write still leaves the OSC 52
+				// message below as the safety net.
+				_ = tool.Write(text)
+			}
+		}
+		return set()
+	}
+}
