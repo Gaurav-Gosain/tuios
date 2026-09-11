@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"image/color"
 	"reflect"
+	"sync"
 	"unicode/utf8"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -69,6 +70,11 @@ type Scrollback struct {
 	// mutation bumps gen, which empties it on the next read. It is capped at
 	// cacheCap entries so a walk of the whole ring cannot pin a decoded copy
 	// of it.
+	// cacheMu guards the cache map below. Line() is reachable from capture
+	// paths that hold only terminalMu's read lock, so two captures can decode
+	// and cache at once; without its own lock the map is written by both and
+	// the runtime aborts the whole daemon on the concurrent map access.
+	cacheMu  sync.Mutex
 	cache    map[int]uv.Line
 	cacheGen uint64
 	gen      uint64
@@ -422,6 +428,8 @@ func (sb *Scrollback) Line(index int) uv.Line {
 	if index < 0 || index >= sb.Len() {
 		return nil
 	}
+	sb.cacheMu.Lock()
+	defer sb.cacheMu.Unlock()
 	if sb.cacheGen != sb.gen || len(sb.cache) >= cacheCap {
 		clear(sb.cache)
 		sb.cacheGen = sb.gen
