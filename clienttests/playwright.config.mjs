@@ -1,14 +1,20 @@
 // Browser tests for tuios-web, run against real servers on real viewports.
 //
 // The browser is the system chromium, so nothing is downloaded. Everything
-// here asserts what reached the wire or what the terminal buffer says, never a
-// frame rate and never a pixel: the headless GL is software rasterization.
+// here asserts what reached the wire or what the terminal buffer says, and
+// never a frame rate: the headless GL is software rasterization.
 //
-// Two servers, not one, because the two suites need opposite things from the
-// config file. The touch tests want tuios as it ships; the config tests want a
-// file full of values that are deliberately not the defaults. Sharing a server
-// would also mean sharing a daemon and the session inside it, so whichever
-// suite attached first would size the session for the other one's viewport.
+// The appearance suite is the one exception and reads pixels, because a colour
+// is the claim and a colour is the one thing software rasterization gets
+// exactly right. It pins the renderer to canvas, because a WebGL drawing
+// buffer cannot be read back without preserveDrawingBuffer.
+//
+// One server per suite, because each suite needs a different config file. The
+// touch tests want tuios as it ships, the config tests want a file full of
+// values that are deliberately not the defaults, and the appearance tests want
+// a theme. Sharing a server would also mean sharing a daemon and the session
+// inside it, so whichever suite attached first would size the session for the
+// other one's viewport.
 
 import { defineConfig } from '@playwright/test';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
@@ -27,6 +33,10 @@ export const CONFIG_BASE_URL = `http://127.0.0.1:${CONFIG_PORT}`;
 // Two ports up again, for the same WebTransport reason.
 export const MULTI_PORT = String(Number(PORT) + 4);
 export const MULTI_BASE_URL = `http://127.0.0.1:${MULTI_PORT}`;
+// The appearance suite gets a fourth server because it is the only one served
+// with a theme, and a theme changes what every other suite reads back.
+export const APPEARANCE_PORT = String(Number(PORT) + 6);
+export const APPEARANCE_BASE_URL = `http://127.0.0.1:${APPEARANCE_PORT}`;
 
 // A throwaway XDG tree per server per run. tuios-web reads the user's config
 // and writes session state, and a test must not touch either.
@@ -61,6 +71,7 @@ function isolatedTree(envKey) {
 const touch = isolatedTree('TUIOS_CT_HOME');
 const cfg = isolatedTree('TUIOS_CT_CONFIG_HOME');
 const multi = isolatedTree('TUIOS_CT_MULTI_HOME');
+const appearance = isolatedTree('TUIOS_CT_APPEARANCE_HOME');
 
 // The config the second server is served with. Written before it starts,
 // because tuios-web reads the file once, at startup, for the whole process.
@@ -91,8 +102,30 @@ leader_key = "ctrl+a"
 mkdirSync(join(cfg.env.XDG_CONFIG_HOME, 'tuios'), { recursive: true });
 writeFileSync(join(cfg.env.XDG_CONFIG_HOME, 'tuios', 'config.toml'), SEEDED_CONFIG);
 
-// Both, for the teardown: each server autostarts its own daemon.
-export const ISOLATED_HOMES = [touch.home, cfg.home, multi.home];
+// The config the fourth server is served with: a theme and nothing else.
+//
+// tokyo_night is the theme under test because of what it leaves out. It names
+// no cursor colour and no selection colour, which is the shape every theme
+// imported from kitty, ghostty, alacritty or wezterm has, and a colour that is
+// not there must reach the browser as "not there" rather than as black.
+//
+// Nothing here animates. A clock or a spinner repaints the screen, and these
+// tests write into the terminal buffer and read the pixel back on the next
+// frame, so a repaint in between would wipe what they wrote.
+export const THEME_ID = 'tokyo_night';
+export const SEEDED_THEME_CONFIG = `[appearance]
+theme = "${THEME_ID}"
+show_clock = false
+
+[startup]
+open_default_window = true
+`;
+
+mkdirSync(join(appearance.env.XDG_CONFIG_HOME, 'tuios'), { recursive: true });
+writeFileSync(join(appearance.env.XDG_CONFIG_HOME, 'tuios', 'config.toml'), SEEDED_THEME_CONFIG);
+
+// All four, for the teardown: each server autostarts its own daemon.
+export const ISOLATED_HOMES = [touch.home, cfg.home, multi.home, appearance.home];
 
 const chromium = {
   executablePath: CHROMIUM,
@@ -161,6 +194,22 @@ export default defineConfig({
       },
     },
     {
+      // The appearance tests read pixels, so they need the pinned GL setup and
+      // a device scale of 1. Same viewport as the desktop project: one test
+      // here opens the unthemed server as its control, and a second client at
+      // a different size would resize that server's session under it.
+      name: 'appearance',
+      testMatch: /appearance\.spec\.mjs/,
+      use: {
+        baseURL: APPEARANCE_BASE_URL,
+        hasTouch: false,
+        isMobile: false,
+        viewport: { width: 1400, height: 900 },
+        deviceScaleFactor: 1,
+        launchOptions: chromium,
+      },
+    },
+    {
       // No viewport here: the multi-client tests open their own contexts,
       // because the whole subject is two of them at sizes that differ.
       name: 'multiclient',
@@ -178,5 +227,6 @@ export default defineConfig({
     server(PORT, BASE_URL, touch.env),
     server(CONFIG_PORT, CONFIG_BASE_URL, cfg.env),
     server(MULTI_PORT, MULTI_BASE_URL, multi.env),
+    server(APPEARANCE_PORT, APPEARANCE_BASE_URL, appearance.env),
   ],
 });

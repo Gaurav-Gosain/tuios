@@ -345,6 +345,12 @@ func runWebServer() error {
 	sipConfig.TLSKey = tlsKey
 	sipConfig.AllowInsecureNoTLS = webInsecure
 
+	// How the page looks. Read after the config file and the flags have both
+	// landed on the globals above, because that is when theme.Current() is the
+	// theme the user asked for. A browser used to get sip's own palette
+	// whatever the user had picked.
+	sipConfig.Appearance = browserAppearance()
+
 	// The touch key bar is server-wide while the keys it carries are user
 	// settings, so it is built from the startup config read above rather than
 	// from a second load that could disagree with the globals.

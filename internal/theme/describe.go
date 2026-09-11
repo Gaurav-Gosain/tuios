@@ -125,12 +125,11 @@ func Colors(id string) (palette [16]color.Color, fg, bg, cursor color.Color, ok 
 
 // paletteOf is GetANSIPalette for a theme that is not the active one.
 func paletteOf(t *tint.Tint) [16]color.Color {
-	return [16]color.Color{
-		t.Black, t.Red, t.Green, t.Yellow,
-		t.Blue, t.Purple, t.Cyan, t.White,
-		t.BrightBlack, t.BrightRed, t.BrightGreen, t.BrightYellow,
-		t.BrightBlue, t.BrightPurple, t.BrightCyan, t.BrightWhite,
+	var pal [16]color.Color
+	for i, c := range ANSIOrder(t) {
+		pal[i] = c
 	}
+	return pal
 }
 
 // roundRatio trims a contrast ratio to two decimals. The third digit is noise

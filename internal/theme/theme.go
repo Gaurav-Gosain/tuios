@@ -102,7 +102,29 @@ func GetANSIPalette() [16]color.Color {
 		}
 		return pal
 	}
-	return [16]color.Color{
+	var pal [16]color.Color
+	for i, c := range ANSIOrder(t) {
+		pal[i] = c
+	}
+	return pal
+}
+
+// ANSIOrder returns a theme's sixteen ANSI colours in index order, 0 to 15:
+// the eight normal colours then the eight bright ones.
+//
+// A colour the theme never set comes back nil. GetANSIPalette cannot say that,
+// because a nil *tint.Color put in a color.Color is not a nil interface and
+// panics the moment anything reads its channels. A caller that has to tell
+// "unset" from "black" asks here.
+//
+// It is also the one place the order is written down. bubbletint calls index 5
+// Purple and xterm calls it magenta, so a second hand-written list is how a
+// palette ends up one slot out.
+func ANSIOrder(t *tint.Tint) [16]*tint.Color {
+	if t == nil {
+		return [16]*tint.Color{}
+	}
+	return [16]*tint.Color{
 		t.Black,        // 0
 		t.Red,          // 1
 		t.Green,        // 2
