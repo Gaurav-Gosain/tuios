@@ -55,7 +55,7 @@ func dialVerb(t *testing.T, socketPath string) *verbConn {
 // send writes a raw line (a newline is appended).
 func (c *verbConn) send(t *testing.T, line string) {
 	t.Helper()
-	_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+	_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second * testDeadlineScale))
 	if _, err := c.conn.Write([]byte(line + "\n")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -64,7 +64,7 @@ func (c *verbConn) send(t *testing.T, line string) {
 // readResp reads and decodes one response line.
 func (c *verbConn) readResp(t *testing.T) map[string]any {
 	t.Helper()
-	_ = c.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_ = c.conn.SetReadDeadline(time.Now().Add(5 * time.Second * testDeadlineScale))
 	line, err := c.r.ReadBytes('\n')
 	if err != nil {
 		t.Fatalf("read: %v (partial=%q)", err, string(line))
