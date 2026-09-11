@@ -1201,6 +1201,17 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	stateCopy := *s.state
 	stateCopy.Windows = make([]WindowState, len(s.state.Windows))
 	copy(stateCopy.Windows, s.state.Windows)
+	// Worktree is a pointer, so the struct copy above aliases the canonical
+	// record rather than copying it. That was harmless while the only write was
+	// SetWorktree replacing the whole pointer, but the fan prompt writes the
+	// status fields through the pointer under stateMu, and the snapshot is
+	// encoded for the wire after stateMu is released. Copying the record here
+	// is what makes the snapshot a snapshot. WorktreeInfo is all value fields,
+	// so one level is the whole of it.
+	if s.state.Worktree != nil {
+		wt := *s.state.Worktree
+		stateCopy.Worktree = &wt
+	}
 	if s.state.WorkspaceFocus != nil {
 		stateCopy.WorkspaceFocus = make(map[int]string)
 		maps.Copy(stateCopy.WorkspaceFocus, s.state.WorkspaceFocus)
@@ -1222,6 +1233,14 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	if s.state.WorkspaceHasCustom != nil {
 		stateCopy.WorkspaceHasCustom = maps.Clone(s.state.WorkspaceHasCustom)
 	}
+	// WorkspaceTrees, WindowToBSPID, PaneGeometry and ScrollStrip are left
+	// aliased on purpose: the daemon only ever replaces those whole, never
+	// writes into what they point at, so a snapshot that shares them is reading
+	// something nothing mutates. Deep-copying the BSP trees on every mutation
+	// would cost more than that buys. The invariant is the whole of the safety
+	// here, so a daemon-side write *through* one of those pointers has to clone
+	// the field here first - see the Worktree case above, which is exactly that
+	// invariant broken.
 	return &stateCopy
 }
 
