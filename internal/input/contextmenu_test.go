@@ -194,6 +194,28 @@ func TestRightClickGesture(t *testing.T) {
 		}
 	})
 
+	t.Run("terminal mode plain right-click opens the menu when the option is on", func(t *testing.T) {
+		o := ctxOS(t)
+		o.Mode = app.TerminalMode
+		o.Settings.RightClickOpensMenu = true
+		o, _ = handleMouseClick(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseRight}, o)
+		if !o.ContextMenuActive() {
+			t.Fatal("a plain right-click in terminal mode did not open the pane menu")
+		}
+		if o.ContextMenu.Target != app.CtxTargetPane {
+			t.Errorf("menu target = %v, want the pane menu", o.ContextMenu.Target)
+		}
+		for _, it := range o.ContextMenu.Items {
+			if it.Action == "paste_clipboard" {
+				if it.Dim {
+					t.Error("paste is dimmed on the pane menu opened from terminal mode")
+				}
+				return
+			}
+		}
+		t.Error("the pane menu opened from terminal mode has no paste row")
+	})
+
 	t.Run("mouse-mode pane keeps the modifier requirement", func(t *testing.T) {
 		o := ctxOS(t)
 		em := vt.NewEmulator(58, 28)
