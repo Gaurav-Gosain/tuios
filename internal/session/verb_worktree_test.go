@@ -481,3 +481,32 @@ func TestClientSyncCannotClearTheWorktreeRecord(t *testing.T) {
 		t.Fatalf("worktree record after a client sync = %+v, want it kept", got)
 	}
 }
+
+// TestTheStateSnapshotDoesNotShareItsWorktreeRecord: the snapshot a mutation
+// publishes is gob-encoded for the wire after the state lock is released, and
+// setPromptStatus writes the prompt fields through the record's pointer. A
+// shared pointer makes those two a data race, and lets a caller that holds a
+// snapshot write into the canonical state without the lock.
+//
+// NEGATIVE CONTROL: remove the Worktree copy from snapshotStateLocked and the
+// write through the snapshot reaches the session.
+func TestTheStateSnapshotDoesNotShareItsWorktreeRecord(t *testing.T) {
+	sess := newTestSession(t)
+	record := &WorktreeInfo{Info: worktree.Info{Repo: "api", Branch: "x", Path: "/wt/x"}}
+	if err := sess.SetWorktree(record); err != nil {
+		t.Fatal(err)
+	}
+
+	snap := sess.GetState()
+	if snap.Worktree == nil {
+		t.Fatal("the snapshot carries no worktree record")
+	}
+	if snap.Worktree == record {
+		t.Error("the snapshot shares the record it was given, so the caller can write into the state")
+	}
+	snap.Worktree.PromptStatus = PromptSent
+
+	if got := sess.Worktree(); got.PromptStatus != "" {
+		t.Errorf("the session holds prompt status %q after a write through a snapshot, want none", got.PromptStatus)
+	}
+}
