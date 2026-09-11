@@ -171,6 +171,7 @@ type AppearanceConfig struct {
 	CopyOnSelect             *bool                   `toml:"copy_on_select"`               // Copy a mouse selection to the clipboard on release (default: true)
 	FocusFollowsMouse        *bool                   `toml:"focus_follows_mouse"`          // Focus the pane under the cursor as the mouse moves (default: false)
 	AltDrag                  *bool                   `toml:"alt_drag"`                     // Alt + left-drag moves a pane (default: true)
+	RightClickOpensMenu      *bool                   `toml:"right_click_opens_menu"`       // A plain right-click on a pane in terminal mode opens the pane menu (default: false)
 	AutoEnterTerminalOnFocus AutoEnterTerminalPolicy `toml:"auto_enter_terminal_on_focus"` // When a keyboard focus command should start typing in that pane: off, targeted, all (default: off)
 	ClickToType              string                  `toml:"click_to_type"`                // What a click on a pane's content does in window-management mode: single, double, off (default: single)
 	WordCharacters           *string                 `toml:"word_characters"`              // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
@@ -1475,6 +1476,12 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// survives the default being on.
 	if cfg.Appearance.AltDrag != nil {
 		s.AltDrag = *cfg.Appearance.AltDrag
+	}
+
+	// RightClickOpensMenu defaults to false. A pointer so an explicit true in
+	// the config is what turns the plain right-click into the pane menu.
+	if cfg.Appearance.RightClickOpensMenu != nil {
+		s.RightClickOpensMenu = *cfg.Appearance.RightClickOpensMenu
 	}
 
 	// AutoEnterTerminalOnFocus only takes one of its three values, so a typo

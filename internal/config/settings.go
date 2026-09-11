@@ -298,6 +298,18 @@ type Settings struct {
 	// Set via appearance.click_to_type config.
 	ClickToType string
 
+	// RightClickOpensMenu makes a plain right-click on a pane's content open the
+	// pane menu while the keyboard is typing in it, instead of reserving the
+	// unmodified right button.
+	//
+	// Off by default: a pointer reaches the menu with ctrl or shift held and a
+	// plain right-click is consumed, so the button stays with the pane. A touch
+	// client has no modifier and opens the menu with a long press regardless.
+	// Turning this on is how someone makes the menu's Paste row one plain click
+	// away, without selecting anything first.
+	// Set via appearance.right_click_opens_menu config.
+	RightClickOpensMenu bool
+
 	// WordCharacters lists the punctuation that counts as part of a word when a
 	// double-click selects one, on top of letters and digits, which always do.
 	//
@@ -435,6 +447,7 @@ func DefaultSettings() Settings {
 		FocusFollowsMouse:           false,
 		AltDrag:                     true,
 		ClickToType:                 ClickToTypeSingle,
+		RightClickOpensMenu:         false,
 		AutoEnterTerminalOnFocus:    AutoEnterTerminalOff,
 		WordCharacters:              `@-./_~?&=%+#`,
 		NiriReverseScroll:           false,
