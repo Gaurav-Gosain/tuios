@@ -10,7 +10,7 @@ import "testing"
 func TestSaturatedSwitchNoResize(t *testing.T) {
 	r := newRig(t, 1)
 	ptyID := r.win(0).PTYID
-	r.feedPTY(ptyID, `printf 'SAT-READY\n'`, "SAT-READY")
+	r.feedPTY(ptyID, `printf 'SA''T-READY\n'`, "SAT-READY")
 	r.feedPTY(ptyID, `A=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; `+
 		`i=1; while [ $i -le 20000 ]; do echo "SAT-$i-$A$A$A$A-END"; i=$((i+1)); done; `+
 		`echo SAT-DONE`, "SAT-DONE")
