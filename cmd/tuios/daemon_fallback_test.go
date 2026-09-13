@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // TestADaemonThatWillNotStartLeavesTheUserAWayOut covers the cost of shipping
@@ -16,7 +18,7 @@ import (
 func TestADaemonThatWillNotStartLeavesTheUserAWayOut(t *testing.T) {
 	// Its own socket directory: ensureDaemon asks whether a daemon is reachable
 	// before it starts one, and the developer's own daemon would answer yes.
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	refuse := errors.New("socket directory is not writable")

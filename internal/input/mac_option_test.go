@@ -142,6 +142,11 @@ func TestComposedGlyphsAreNotChordsOffDarwin(t *testing.T) {
 	prev := darwinHost
 	darwinHost = false
 	t.Cleanup(func() { darwinHost = prev })
+	// The defaults and the key normalizer read the config package's own
+	// platform, not this one. On a macOS machine the registry would otherwise
+	// still be built from the macOS defaults, whose opt+ bindings expand to
+	// exactly the glyphs this test says mean nothing here.
+	t.Cleanup(config.ForceMacOSHost(false))
 
 	registry := config.NewKeybindRegistry(config.DefaultConfig())
 	for _, msg := range []tea.KeyPressMsg{

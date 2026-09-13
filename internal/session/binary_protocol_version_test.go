@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // fakeDaemon answers exactly one binary handshake with the welcome it is given,
@@ -20,7 +22,7 @@ func fakeDaemon(t *testing.T, welcome *WelcomePayload) (hello chan *HelloPayload
 // daemons whose numbering differs from this build's.
 func fakeDaemonReplying(t *testing.T, replyType MessageType, welcome *WelcomePayload) (hello chan *HelloPayload) {
 	t.Helper()
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 
 	socketPath, err := GetSocketPath()
 	if err != nil {
@@ -170,7 +172,7 @@ func TestClientRefusesTheRealV070Numbering(t *testing.T) {
 // daemon that outlives the client that started it, and for the client too old to
 // announce a version at all.
 func TestDaemonAnswersAHello(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 
 	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
 	if err := d.Start(); err != nil {

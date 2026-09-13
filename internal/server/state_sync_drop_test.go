@@ -7,6 +7,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // TestStateSyncFloodLeavesTheClientOnTheNewestSnapshot pushes more state updates
@@ -17,7 +18,7 @@ import (
 // with nothing to correct it until the session next changes. That is the "the
 // other client doesn't show the new pane" report.
 func TestStateSyncFloodLeavesTheClientOnTheNewestSnapshot(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Setenv("SHELL", "/bin/sh")
 
 	d := session.NewDaemon(&session.DaemonConfig{Version: "test", DisableAutoRestore: true})

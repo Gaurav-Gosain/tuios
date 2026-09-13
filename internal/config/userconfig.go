@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"runtime"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -1028,16 +1026,8 @@ func getDefaultLayoutKeybinds() map[string][]string {
 	return layout
 }
 
-// isMacOS detects if the current platform is macOS
-func isMacOS() bool {
-	// Check runtime.GOOS first (most reliable)
-	if runtime.GOOS == "darwin" {
-		return true
-	}
-	// Fallback to environment variables
-	return strings.Contains(strings.ToLower(os.Getenv("GOOS")), "darwin") ||
-		strings.Contains(strings.ToLower(os.Getenv("OSTYPE")), "darwin")
-}
+// isMacOS detects if the current platform is macOS. See macOSHost.
+func isMacOS() bool { return macOSHost }
 
 // clampPercent folds a configured percentage into its range, treating zero as
 // "not written" and answering with the default. A percentage option's floor is

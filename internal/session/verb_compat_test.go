@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // legacyDaemon is a faithful stand-in for a daemon built before the JSON verb
@@ -35,7 +37,7 @@ func startLegacyDaemon(t *testing.T, version string, sessions ...string) *legacy
 
 	// Point GetSocketPath at an isolated runtime dir so the fake daemon takes
 	// the place of the real one for this test only.
-	runtimeDir := t.TempDir()
+	runtimeDir := testutil.RuntimeDir(t)
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	socketPath, err := GetSocketPath()
 	if err != nil {
@@ -228,7 +230,7 @@ func TestHandshakeToleratesDaemonWithoutHelloVerb(t *testing.T) {
 // case still produces a connect error rather than a mismatch, so the two states
 // stay distinguishable to the CLI.
 func TestDialVerbClientReportsMissingDaemon(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 
 	_, err := DialVerbClientAs("1.4.0")
 	if err == nil {
@@ -247,7 +249,7 @@ func TestDialVerbClientReportsMissingDaemon(t *testing.T) {
 // hang or panic when the socket file exists but nothing is listening, which is
 // the stale-socket state the CLI also has to explain.
 func TestProbeLegacyDaemonIgnoresStaleSocket(t *testing.T) {
-	runtimeDir := t.TempDir()
+	runtimeDir := testutil.RuntimeDir(t)
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 
 	socketPath, err := GetSocketPath()

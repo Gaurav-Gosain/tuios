@@ -9,6 +9,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // webExitFixture is a running daemon, a browser-style client attached to a
@@ -21,7 +22,7 @@ type webExitFixture struct {
 
 func newWebExitFixture(t *testing.T, name string) *webExitFixture {
 	t.Helper()
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Setenv("SHELL", "/bin/sh")
 
 	d := session.NewDaemon(&session.DaemonConfig{Version: "test", DisableAutoRestore: true})

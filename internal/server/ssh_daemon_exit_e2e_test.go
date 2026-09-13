@@ -13,6 +13,7 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // sshExitRun is one real SSH client attached to one real daemon session, with
@@ -35,7 +36,7 @@ func startSSHExitRun(t *testing.T, name string) *sshExitRun {
 	if testing.Short() {
 		t.Skip("skipping SSH integration test in short mode")
 	}
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Setenv("SHELL", "/bin/sh")
 
 	d := session.NewDaemon(&session.DaemonConfig{Version: "test", DisableAutoRestore: true})

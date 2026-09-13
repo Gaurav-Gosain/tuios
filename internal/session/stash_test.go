@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // These tests hit the stash the way it will actually be used and the way it will
@@ -664,7 +666,7 @@ func TestStashedFileVanishesWithTheDaemon(t *testing.T) {
 // cannot: a daemon that was killed left files behind, and the next daemon has to
 // remove them before it serves anything.
 func TestStashSweepClearsAnUncleanPredecessor(t *testing.T) {
-	runtimeDir := t.TempDir()
+	runtimeDir := testutil.RuntimeDir(t)
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	t.Cleanup(useResurrectionDir(t.TempDir()))
 

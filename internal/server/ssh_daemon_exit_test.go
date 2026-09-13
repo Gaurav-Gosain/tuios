@@ -8,6 +8,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // daemonExitFixture is a running daemon, an SSH-style client attached to a
@@ -21,7 +22,7 @@ type daemonExitFixture struct {
 
 func newDaemonExitFixture(t *testing.T, name string) *daemonExitFixture {
 	t.Helper()
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Setenv("SHELL", "/bin/sh")
 
 	d := session.NewDaemon(&session.DaemonConfig{Version: "test", DisableAutoRestore: true})

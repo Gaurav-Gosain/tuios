@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"encoding/json"
 	"net"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"testing"
@@ -141,6 +143,8 @@ func TestEveryVerbExampleReachesItsHandler(t *testing.T) {
 				// them between workspaces and kill the session, so one shared
 				// fixture would make each example depend on the ones before it.
 				freshWorkSession(t, d)
+
+				skipIfExampleNeedsAMissingProgram(t, example)
 
 				want := exampleOutcomes[key]
 				resp, err := callOnce(t, socketPath, example, blockBudget)
@@ -300,4 +304,33 @@ func callOnce(t *testing.T, socketPath, line string, budget time.Duration) (map[
 		t.Fatalf("the daemon answered something that is not JSON: %q (%v)", raw, err)
 	}
 	return resp, nil
+}
+
+// skipIfExampleNeedsAMissingProgram skips an example that launches a program by
+// absolute path this machine does not have.
+//
+// The examples are documentation, so they name a path a reader recognises
+// (/usr/bin/htop). The fixture really runs them, which turns "htop is not
+// installed here" into a failure that reads like a broken handler. A missing
+// program is a fact about the machine, and the handler is reached by every
+// other example of the same verb. exampleOutcomes is the wrong home for this:
+// a row there says the call always fails, and on a box that has the program it
+// does not.
+func skipIfExampleNeedsAMissingProgram(t *testing.T, example string) {
+	t.Helper()
+	var call struct {
+		Params struct {
+			Command []string `json:"command"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal([]byte(example), &call); err != nil || len(call.Params.Command) == 0 {
+		return
+	}
+	prog := call.Params.Command[0]
+	if !filepath.IsAbs(prog) {
+		return
+	}
+	if _, err := os.Stat(prog); err != nil {
+		t.Skipf("the example runs %s, which this machine does not have", prog)
+	}
 }

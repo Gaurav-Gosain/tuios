@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // TestDiagnoseCountsSavedSessions pins that the diagnosis knows what is on disk.
@@ -12,7 +14,7 @@ import (
 // that matters most: it told a user whose sessions were all saved that none
 // existed.
 func TestDiagnoseCountsSavedSessions(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	stateDir := t.TempDir()
 	t.Cleanup(useResurrectionDir(stateDir))
 

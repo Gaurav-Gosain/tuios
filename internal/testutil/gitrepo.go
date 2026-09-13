@@ -31,6 +31,15 @@ func GitRepo(t *testing.T) string {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// Hand back the path with its symlinks resolved, because that is the form
+	// git reports and therefore the form a caller compares against. On macOS
+	// $TMPDIR sits under /var, which is a symlink to /private/var, so
+	// rev-parse answers /private/var/... for a repository the test knows as
+	// /var/..., and every assertion on a repo root or a worktree root fails on
+	// a difference that is not there.
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
 	Git(t, dir, "init", "-q", "-b", "main")
 	if err := os.WriteFile(filepath.Join(dir, "README"), []byte("hello\n"), 0o644); err != nil {
 		t.Fatal(err)

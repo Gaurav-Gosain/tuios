@@ -1,8 +1,6 @@
 package config
 
 import (
-	"os"
-	"runtime"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -46,17 +44,8 @@ func (kn *KeyNormalizer) IsMacOS() bool {
 	return kn.isMacOS
 }
 
-// detectMacOS checks if the current platform is macOS
-func detectMacOS() bool {
-	// Check GOOS first (most reliable)
-	if runtime.GOOS == "darwin" {
-		return true
-	}
-	// Fallback to environment variables
-	goos := strings.ToLower(os.Getenv("GOOS"))
-	ostype := strings.ToLower(os.Getenv("OSTYPE"))
-	return strings.Contains(goos, "darwin") || strings.Contains(ostype, "darwin")
-}
+// detectMacOS checks if the current platform is macOS. See macOSHost.
+func detectMacOS() bool { return macOSHost }
 
 // macOS Option key mappings (opt+number produces unicode characters)
 var macOptionNumberMap = map[string]string{
@@ -305,6 +294,19 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 		} else if glyph := macOptionLetterGlyph(keyLower); glyph != "" {
 			// Case is preserved: å (opt+a) and Å (opt+shift+a) are different keys.
 			result = append(result, glyph)
+			result = append(result, optionToAltReplacer.Replace(keyLower))
+		}
+
+		// Option reaches a terminal as the Alt modifier whatever key it is
+		// held with, so the alt+ spelling is always one of the ways an opt+
+		// binding actually arrives.
+		//
+		// This used to be added only inside the branches above, and each of
+		// those needs one of the glyph tables to match. A key that composes no
+		// glyph on macOS therefore kept the opt+ spelling alone, which no key
+		// event ever produces, and the binding was dead: opt+esc, the default
+		// for terminal_exit_mode, and any opt+<named key> a user writes.
+		if strings.HasPrefix(keyLower, "opt+") || strings.HasPrefix(keyLower, "option+") {
 			result = append(result, optionToAltReplacer.Replace(keyLower))
 		}
 

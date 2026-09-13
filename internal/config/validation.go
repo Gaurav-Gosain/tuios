@@ -155,14 +155,23 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 		}
 	}
 
-	// On macOS, warn about using alt+ instead of opt+ for better UX
+	// On macOS, warn about using alt+ instead of opt+ for better UX.
+	//
+	// Only about a binding the user wrote. The macOS defaults deliberately pair
+	// an Option chord with an alt+ spelling for terminals that cannot send one
+	// (terminal_next_window is opt+tab and alt+n), and next_session ships as
+	// alt+shift+n outright, so judging every alt+ binding made the shipped
+	// default config warn about itself: two warnings on every macOS machine
+	// whose config nobody had touched, advising the user to edit keys they had
+	// never chosen. An advisory is about a choice, and those are not choices.
 	if normalizer.IsMacOS() {
+		shipped := defaultKeybindingPairs()
 		checkMacOSAltUsage := func(sectionName string, section map[string][]string) {
 			for action, keys := range section {
 				for _, key := range keys {
 					keyLower := strings.ToLower(strings.TrimSpace(key))
 					// Warn if using alt+ (suggest opt+ instead for macOS consistency)
-					if strings.HasPrefix(keyLower, "alt+") {
+					if strings.HasPrefix(keyLower, "alt+") && !shipped[action+"\x00"+keyLower] {
 						result.Warnings = append(result.Warnings, ValidationError{
 							Field:   sectionName,
 							Key:     key,
@@ -536,4 +545,24 @@ func hasKeybinding(cfg *UserConfig, sectionName, action string) bool {
 	}
 
 	return false
+}
+
+// defaultKeybindingPairs is every action-and-key pair the shipped defaults
+// bind, keyed "<action>\x00<key>" with the key lowercased. It is what tells an
+// advisory that a binding is tuios's own rather than the user's.
+func defaultKeybindingPairs() map[string]bool {
+	kb := DefaultConfig().Keybindings
+	out := map[string]bool{}
+	for _, section := range []map[string][]string{
+		kb.WindowManagement, kb.Workspaces, kb.Layout, kb.ModeControl,
+		kb.System, kb.PrefixMode, kb.WindowPrefix, kb.MinimizePrefix,
+		kb.WorkspacePrefix, kb.TerminalMode,
+	} {
+		for action, keys := range section {
+			for _, key := range keys {
+				out[action+"\x00"+strings.ToLower(strings.TrimSpace(key))] = true
+			}
+		}
+	}
+	return out
 }

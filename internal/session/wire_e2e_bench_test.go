@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // countingConn counts the reads and writes made on a connection, which on an
@@ -54,7 +56,7 @@ type e2eRig struct {
 // The pane's handler forwards every batch it is handed to rig.output.
 func newE2ERig(tb testing.TB) *e2eRig {
 	tb.Helper()
-	tb.Setenv("XDG_RUNTIME_DIR", tb.TempDir())
+	tb.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(tb))
 	tb.Setenv("SHELL", "/bin/sh")
 	tb.Cleanup(useResurrectionDir(tb.TempDir()))
 

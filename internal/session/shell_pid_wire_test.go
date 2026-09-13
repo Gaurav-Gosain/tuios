@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -108,10 +109,16 @@ func TestTheShellPidReachesAClientOverTheSocket(t *testing.T) {
 		t.Fatalf("the client was sent shell pid %d, want %d", pid, want)
 	}
 
-	// The pid is only worth sending if it reads. This is the read the
-	// corroboration makes.
-	if _, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", want)); err != nil {
-		t.Fatalf("the pid the client got names no readable process: %v", err)
+	// The pid is only worth sending if it names a live process. On Linux that
+	// is the very read the corroboration makes, so assert it directly.
+	// Elsewhere there is no /proc, and signal 0 asks the same question of the
+	// kernel: does this pid name a process this user can address.
+	if runtime.GOOS == "linux" {
+		if _, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", want)); err != nil {
+			t.Fatalf("the pid the client got names no readable process: %v", err)
+		}
+	} else if err := syscall.Kill(want, 0); err != nil {
+		t.Fatalf("the pid the client got names no live process: %v", err)
 	}
 
 	// The client stores this in a field called ShellPgid, and one client-side

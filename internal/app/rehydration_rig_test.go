@@ -9,6 +9,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -61,7 +62,7 @@ func keepExits(r *rig) { r.keepExits = true }
 // involved.
 func ownSocket(t *testing.T) {
 	t.Helper()
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 }
 
 // newRig brings up a daemon, creates a session with panes windows, and attaches
