@@ -1,8 +1,6 @@
 package terminal
 
 import (
-	"fmt"
-	"os"
 	"sync"
 	"time"
 )
@@ -21,9 +19,9 @@ type cwdCache struct {
 }
 
 // CWD returns the shell's current working directory, or the empty string when
-// it cannot be determined. It is read from /proc, so it is available on Linux
-// (and some BSDs) and empty elsewhere; callers must treat the empty string as
-// "unknown" rather than as the root directory.
+// it cannot be determined. How it is read is the platform's business, and on a
+// platform with neither procfs nor libproc there is no answer at all; callers
+// must treat the empty string as "unknown" rather than as the root directory.
 //
 // The result is cached for cwdRefreshInterval because the render path asks for
 // it once per window per frame.
@@ -50,17 +48,19 @@ func (w *Window) CWD() string {
 // number rather than a window so a caller off the update goroutine can ask
 // without touching a live Window.
 //
-// The false answer is "nobody looked": there is no /proc on this system, the
-// process is gone, or the pgid was never recorded. Only a true answer is
-// evidence of anything, and a caller must not read the empty string as the root
-// directory.
+// The false answer is "nobody looked": this platform cannot read another
+// process's working directory, the process is gone, it belongs to another user,
+// or the pgid was never recorded. Only a true answer is evidence of anything,
+// and a caller must not read the empty string as the root directory. That
+// matters beyond the window title: cwdIsSpoofed rests on this, and a false
+// answer leaves the sidebar's file actions live on a directory a pane named
+// over OSC 7.
+//
+// The path comes back with its symlinks resolved on every platform that has an
+// answer, which is why sameDir compares by identity as well as by name.
 func ShellCWD(pgid int) (string, bool) {
 	if pgid <= 0 {
 		return "", false
 	}
-	cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", pgid))
-	if err != nil || cwd == "" {
-		return "", false
-	}
-	return cwd, true
+	return shellCWD(pgid)
 }
