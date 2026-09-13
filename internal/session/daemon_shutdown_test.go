@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // startShutdownTestDaemon starts a daemon like startTestDaemon but hands back
@@ -14,7 +16,7 @@ import (
 // a Stop cleanup, because these tests drive shutdown themselves.
 func startShutdownTestDaemon(t *testing.T) (*Daemon, string, string) {
 	t.Helper()
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 
 	stateDir := t.TempDir()
 	t.Cleanup(useResurrectionDir(stateDir))
@@ -113,7 +115,7 @@ func TestWaitForDaemonShutdownTimesOut(t *testing.T) {
 // run when no daemon is there: the signal is already in its final state, so the
 // wait must not burn the full timeout.
 func TestWaitForDaemonShutdownReturnsImmediatelyWhenAbsent(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 
 	start := time.Now()
 	if err := WaitForDaemonShutdown(5 * time.Second); err != nil {

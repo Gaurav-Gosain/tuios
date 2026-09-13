@@ -53,6 +53,13 @@ func TestAltShiftKeysSpellWhatTheTerminalSends(t *testing.T) {
 // three different spellings depending on what the host terminal speaks, and all
 // three have to find the same action.
 func TestAltShiftDigitsResolveInEverySpellingATerminalSends(t *testing.T) {
+	// alt+shift+<digit> is how the non-macOS defaults bind move_and_follow_N.
+	// The macOS defaults spell the same action opt+shift+N, so on a macOS
+	// machine the registry would hold no alt+ spelling of it and this would
+	// assert against a binding the config does not have. The subject here is
+	// the three wire spellings of one chord, which is the same question on
+	// both platforms.
+	t.Cleanup(config.ForceMacOSHost(false))
 	registry := config.NewKeybindRegistry(config.DefaultConfig())
 
 	for _, tc := range []struct {

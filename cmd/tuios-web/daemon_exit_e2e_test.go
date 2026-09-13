@@ -13,6 +13,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // The sip wire protocol, as the browser speaks it. The first byte of every
@@ -40,7 +41,7 @@ type webExitRun struct {
 // painted its first frame.
 func startWebExitRun(t *testing.T, name string) *webExitRun {
 	t.Helper()
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Setenv("SHELL", "/bin/sh")
 
 	d := session.NewDaemon(&session.DaemonConfig{Version: "test", DisableAutoRestore: true})

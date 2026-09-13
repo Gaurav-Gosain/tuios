@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // A connection through a host, proved with two real daemons in one process.
@@ -116,7 +117,7 @@ func (f *farSide) dialer(dialFar func() (net.Conn, error)) federation.Dialer {
 // names, so every client in the test dials it the way a real client would.
 func startHubAndFar(t *testing.T) (hub *Daemon, far *farSide) {
 	t.Helper()
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Cleanup(useResurrectionDir(t.TempDir()))
 
 	// A unix socket path is short by law, so the far socket does not go under
@@ -267,7 +268,7 @@ func TestVerbsThroughAHostRunOnTheFarDaemon(t *testing.T) {
 }
 
 func TestAConnectionToAHostThatIsDownIsRefusedByName(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Cleanup(useResurrectionDir(t.TempDir()))
 	hub := NewDaemon(&DaemonConfig{
 		Version:            "hub",
@@ -428,7 +429,7 @@ func TestTheHostCommandFenceRefusesEveryCommandItNames(t *testing.T) {
 // hello with a frame header claiming a gigabyte, and the client refuses the
 // message rather than reading it in.
 func TestAHostileFarDaemonCannotSizeThisClientsBuffer(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Cleanup(useResurrectionDir(t.TempDir()))
 
 	// The "far daemon" is a goroutine on the other end of the proxy's dial. It

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // Hooks used to be wired entirely into the client, so a session running
@@ -67,7 +68,7 @@ func (r *hookRecorder) settle() { time.Sleep(300 * time.Millisecond) }
 // event and reports the firings instead of running a shell.
 func startHookDaemon(t *testing.T, events ...hooks.Event) (*Daemon, string, *hookRecorder) {
 	t.Helper()
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Cleanup(useResurrectionDir(t.TempDir()))
 
 	table := make(map[string]any, len(events))
@@ -277,7 +278,7 @@ func TestASessionSideHookFiresOncePerEventNotOncePerClient(t *testing.T) {
 // is the only one gated by config rather than by the raw fact, and moving it to
 // the daemon must not quietly turn a muted state back on.
 func TestTheAgentStateHookObeysTheAlertPolicy(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Cleanup(useResurrectionDir(t.TempDir()))
 
 	off := false
@@ -354,7 +355,7 @@ func TestTheClientOnlyEventsAreNotFiredByTheDaemon(t *testing.T) {
 // TestADaemonWithNoHooksHoldsNoTable keeps the cost of the common case at one
 // nil check. Every event a pane writes passes through the sink.
 func TestADaemonWithNoHooksHoldsNoTable(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true})
 	if d.hooks != nil {
 		t.Error("a daemon with no hooks configured built a hook table anyway")
@@ -369,7 +370,7 @@ func TestADaemonWithNoHooksHoldsNoTable(t *testing.T) {
 // after-agent-state hook, and the daemon has to honour it or a user who wrote
 // only that spelling gets nothing when detached.
 func TestTheAgentCommandShorthandIsAHook(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	d := NewDaemon(&DaemonConfig{
 		Version:            "test",
 		DisableAutoRestore: true,
@@ -429,7 +430,7 @@ func TestApplyUserHooksCarriesBothSpellings(t *testing.T) {
 	}
 
 	// And a daemon built from it really holds both.
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true,
 		Hooks: cfg.Hooks, AgentAlerts: cfg.AgentAlerts, AgentHookCommand: cfg.AgentHookCommand})
 	if d.hooks == nil {

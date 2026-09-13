@@ -342,25 +342,37 @@ func keyEventFor(t *testing.T, spec string) tea.KeyPressMsg {
 			msg.Text = base
 		}
 	}
-	if msg.String() != spec && msg.Keystroke() != spec {
+	// No key event spells itself "opt+1": Option reaches a terminal as Alt, so
+	// the event an Option press produces spells itself "alt+1". Compare the
+	// binding against the spelling an event can actually have.
+	canon := spec
+	for _, name := range []string{"opt+", "option+"} {
+		canon = strings.ReplaceAll(canon, name, "alt+")
+	}
+	if msg.String() != canon && msg.Keystroke() != canon {
 		// Either the binding is spelled a way no key event spells itself, in
 		// which case the binding is dead and the config is what to fix, or this
 		// builder is missing a key name. Both are failures, and neither may be
 		// skipped: a row the table cannot press is a row it is not covering.
 		t.Fatalf("no key event spells %q (the nearest event spells itself %q): "+
 			"either the binding is dead, or namedBindingKeys is missing a key",
-			spec, msg.Keystroke())
+			canon, msg.Keystroke())
 	}
 	return msg
 }
 
 var bindingMods = map[string]tea.KeyMod{
-	"ctrl":  tea.ModCtrl,
-	"alt":   tea.ModAlt,
-	"shift": tea.ModShift,
-	"meta":  tea.ModMeta,
-	"hyper": tea.ModHyper,
-	"super": tea.ModSuper,
+	"ctrl": tea.ModCtrl,
+	"alt":  tea.ModAlt,
+	// The macOS defaults spell the Option key "opt+". It is the Alt modifier
+	// on the wire, which is why the normalizer expands opt+1 into alt+1, and
+	// config.validModifiers accepts both spellings on darwin.
+	"opt":    tea.ModAlt,
+	"option": tea.ModAlt,
+	"shift":  tea.ModShift,
+	"meta":   tea.ModMeta,
+	"hyper":  tea.ModHyper,
+	"super":  tea.ModSuper,
 }
 
 var namedBindingKeys = map[string]rune{

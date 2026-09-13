@@ -19,8 +19,40 @@ import (
 // The shell is a real process, because /proc is the only thing that can
 // corroborate one and a fake pgid corroborates nothing. It is started in
 // realDir with its own process group, so its pgid is its pid.
+// requireShellCWD skips when this platform cannot read another process's
+// working directory, which is the whole basis of the guard these tests assert.
+//
+// cwdIsSpoofed compares the directory a pane claims over OSC 7 against the one
+// its process group is really in, and terminal.ShellCWD answers that second
+// half by reading /proc/<pgid>/cwd. There is no /proc on darwin, so ShellCWD
+// reports "nobody looked", cwdIsSpoofed fails open, and the six file actions
+// stay live on whatever directory a pane names. Every test in this file then
+// passes or fails for a reason that has nothing to do with what it claims: the
+// ones asserting a refusal fail, and the ones asserting the actions survive
+// pass because the guard never ran.
+//
+// The gate is the capability rather than the GOOS, so these light up by
+// themselves on the day ShellCWD learns to answer somewhere else.
+func requireShellCWD(t *testing.T) {
+	t.Helper()
+	probe := exec.Command("sleep", "120")
+	probe.Dir = t.TempDir()
+	if err := probe.Start(); err != nil {
+		t.Fatalf("could not start the probe process: %v", err)
+	}
+	defer func() {
+		_ = probe.Process.Kill()
+		_, _ = probe.Process.Wait()
+	}()
+	if _, ok := terminal.ShellCWD(probe.Process.Pid); !ok {
+		t.Skip("this platform cannot read a process's working directory, so the " +
+			"OSC 7 spoof guard never fires: see terminal.ShellCWD")
+	}
+}
+
 func spoofPane(t *testing.T, realDir, sayDir string) *OS {
 	t.Helper()
+	requireShellCWD(t)
 	cmd := exec.Command("sleep", "120")
 	cmd.Dir = realDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

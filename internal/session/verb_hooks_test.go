@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // list-hooks is the answer to "why does my hook not fire?". A dock component
@@ -16,7 +17,7 @@ import (
 // the reported exit codes and errors are the ones a shell produced.
 func startRealHookDaemon(t *testing.T, table map[string]any) (*Daemon, string) {
 	t.Helper()
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Cleanup(useResurrectionDir(t.TempDir()))
 
 	d := NewDaemon(&DaemonConfig{Version: "test", DisableAutoRestore: true, Hooks: table})

@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // startTestDaemon starts a real daemon listening on an isolated unix socket in a
@@ -19,7 +21,7 @@ import (
 // and the socket path.
 func startTestDaemon(t *testing.T) (*Daemon, string) {
 	t.Helper()
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 
 	t.Cleanup(useResurrectionDir(t.TempDir()))
 

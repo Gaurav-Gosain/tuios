@@ -9,6 +9,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // TestRenameVerbAddressesTheIdentityAndSendsTheLabel is the contract that keeps
@@ -50,7 +51,7 @@ func TestRenameVerbAddressesTheIdentityAndSendsTheLabel(t *testing.T) {
 func TestSessionRenameDoesNotBlockUpdate(t *testing.T) {
 	// An empty runtime dir means the socket does not exist, so a call made
 	// inline would fail here rather than reach a daemon.
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 
 	m := &OS{Settings: config.Global, SessionName: "work", SessionDisplayName: "old"}
 	m.BeginRenameSession("work")
@@ -90,7 +91,7 @@ func TestSessionRenameDoesNotBlockUpdate(t *testing.T) {
 // TestWorkspaceRenameSeedsAndCommits checks the workspace half of the same
 // surface: seeded with the current name, and empty for one that has none.
 func TestWorkspaceRenameSeedsAndCommits(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 
 	m := &OS{Settings: config.Global, SessionName: "work", NumWorkspaces: 9, CurrentWorkspace: 1}
 	m.adoptSessionLabels(&session.SessionState{WorkspaceNames: map[int]string{2: "review"}})
