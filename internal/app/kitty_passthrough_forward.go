@@ -385,12 +385,31 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 	// possible; the whole bitmap only when it is not. A repainting guest sends
 	// the same image over and over, and the whole bitmap is the expensive way
 	// to say a corner of it moved.
+	//
+	// Only an image the guest named can be patched. Under i=0 the host id is
+	// fresh every transmit, so there is never a previous frame under it to
+	// compare against; see emitBitmap.
 	update := kp.emitBitmap(windowID, hostID, pending.Format, pending.Compression,
-		pending.Width, pending.Height, pending.Data)
+		pending.Width, pending.Height, pending.Data, pending.ImageID != 0)
 	if update == bitmapFull {
-		kp.pendingOutput = append(kp.pendingOutput, kp.buildInlineChunks(
-			hostID, pending.Format, pending.Compression,
-			pending.Width, pending.Height, pending.Data)...)
+		if kp.pendingGraphicsFull() {
+			// Drop the bitmap rather than queue it behind a host that is
+			// already this far behind. The render loop drains pendingOutput,
+			// and a guest animating faster than that loop runs hands over a
+			// whole new bitmap every frame: chafa on a gif queued 7GB of them.
+			//
+			// The bookkeeping below still runs, so the cursor advances by the
+			// rows and columns the image would have taken and the pane's
+			// layout is undisturbed. What the user sees is the frame before
+			// this one, held a moment longer, which is what dropping a frame
+			// means everywhere else in this file.
+			kittyPassthroughLog("forwardTransmit: dropping a %d byte bitmap, %d bytes already queued",
+				len(pending.Data), len(kp.pendingOutput))
+		} else {
+			kp.pendingOutput = append(kp.pendingOutput, kp.buildInlineChunks(
+				hostID, pending.Format, pending.Compression,
+				pending.Width, pending.Height, pending.Data)...)
+		}
 	}
 
 	kittyPassthroughLog("forwardTransmit: %d bitmap bytes, update=%d, hostID=%d, imgSize=(%d,%d) srcXYWH=(%d,%d,%d,%d) imgPixels=(%d,%d)",
@@ -1046,7 +1065,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	// small; the whole-bitmap writes that made async necessary are what it
 	// replaces.
 	if kp.canPatchBitmap(windowID, hostID) {
-		switch kp.emitBitmap(windowID, hostID, format, cmd.Compression, cmd.Width, cmd.Height, rawPixels) {
+		switch kp.emitBitmap(windowID, hostID, format, cmd.Compression, cmd.Width, cmd.Height, rawPixels, true) {
 		case bitmapUnchanged:
 			kittyPassthroughLog("forwardFileTransmitInline: identical frame, sending nothing (hostID=%d)", hostID)
 		case bitmapPatched:

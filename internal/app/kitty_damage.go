@@ -107,7 +107,24 @@ func (kp *KittyPassthrough) emitBitmap(
 	compression vt.KittyGraphicsCompression,
 	width, height int,
 	raw []byte,
+	patchable bool,
 ) bitmapUpdate {
+	// An image nothing can ever be compared against is not worth remembering.
+	//
+	// The cache is keyed by host id, and a guest that transmits under kitty's
+	// auto-assign sentinel (i=0) gets a fresh host id every time, by design, so
+	// that two images coexist in the scrollback instead of overwriting each
+	// other. The lookup below therefore misses on every one of those frames,
+	// and the copy kept for the next comparison is read by nothing, ever.
+	//
+	// It is not free: chafa animating a gif transmits a frame at a time under
+	// i=0, so this held a full bitmap per frame for the life of the process.
+	// Two minutes of one animation retained 2.8GB.
+	if !patchable {
+		kp.forgetBitmaps(windowID, hostID)
+		return bitmapFull
+	}
+
 	// Only a complete, uncompressed, raw bitmap can be compared or patched.
 	// Anything else, including a payload that does not fill the dimensions it
 	// declares, says nothing about what the host will end up displaying, and
@@ -285,8 +302,10 @@ func (kp *KittyPassthrough) absorbDirectFrame(cmd *vt.KittyCommand, rawData []by
 	}
 	delete(kp.directFrames, windowID)
 
+	// A direct frame stream names its own image id, so the next frame arrives
+	// under the same host id and can be compared against this one.
 	switch kp.emitBitmap(windowID, pending.imageID, pending.format,
-		pending.compression, pending.width, pending.height, pending.data) {
+		pending.compression, pending.width, pending.height, pending.data, true) {
 	case bitmapUnchanged:
 		kittyPassthroughLog("absorbDirectFrame: identical frame for i=%d, sending nothing", pending.imageID)
 	case bitmapPatched:
