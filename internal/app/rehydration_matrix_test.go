@@ -54,7 +54,7 @@ var rehydrationShapes = []paneShape{
 	{
 		name: "live-tail",
 		arrange: func(r *rig, ptyID string) {
-			r.feedPTY(ptyID, `printf 'TAIL-A\nTAIL-B\n'`, "TAIL-B")
+			r.feedPTY(ptyID, `printf 'TAIL-A\nTA''IL-B\n'`, "TAIL-B")
 		},
 	},
 	{
@@ -101,7 +101,7 @@ var rehydrationShapes = []paneShape{
 			// Enter the alternate screen and draw in it, the way vim or htop
 			// leaves a pane. Written by hand rather than by running an editor so
 			// the test does not depend on one being installed.
-			r.feedPTY(ptyID, `printf '\033[?1049h\033[H\033[2JALT-SCREEN-BODY\r\n'`, "ALT-SCREEN-BODY")
+			r.feedPTY(ptyID, `printf '\033[?1049h\033[H\033[2JAL''T-SCREEN-BODY\r\n'`, "ALT-SCREEN-BODY")
 			// A shape that quietly failed to arrange itself would make every
 			// alt-screen row of the matrix pass by testing nothing.
 			st, err := r.ctl.GetTerminalState(ptyID, -1, 0)
@@ -126,7 +126,7 @@ var rehydrationShapes = []paneShape{
 	{
 		name: "alt-screen-over-buffer",
 		arrange: func(r *rig, ptyID string) {
-			r.feedPTY(ptyID, `printf '\033[?1049h\033[H\033[2JALT-OVER-BODY\r\n'`, "ALT-OVER-BODY")
+			r.feedPTY(ptyID, `printf '\033[?1049h\033[H\033[2JAL''T-OVER-BODY\r\n'`, "ALT-OVER-BODY")
 		},
 		whileAway: func(r *rig, ptyID string) {
 			// More than the ring holds, produced inside the alternate screen,
@@ -151,7 +151,7 @@ var rehydrationShapes = []paneShape{
 	{
 		name: "wide-runes",
 		arrange: func(r *rig, ptyID string) {
-			r.feedPTY(ptyID, `printf '\346\227\245\346\234\254\350\252\236 WIDE-END\n'`, "WIDE-END")
+			r.feedPTY(ptyID, `printf '\346\227\245\346\234\254\350\252\236 WI''DE-END\n'`, "WIDE-END")
 		},
 	},
 	{
@@ -161,13 +161,17 @@ var rehydrationShapes = []paneShape{
 		// repaints the pane in shades the user never chose.
 		name: "heavy-sgr",
 		arrange: func(r *rig, ptyID string) {
-			r.feedPTY(ptyID, `printf '\033[1;31mBOLD-RED\033[m \033[4;32mUNDER-GREEN\033[m \033[7mREVERSED\033[m \033[3;9mSTRUCK\033[m SGR-END\n'`, "SGR-END")
+			// The sentinel goes on a row of its own. The four attribute runs
+			// come to 37 columns and the pane is 38, so a sentinel on the same
+			// row wrapped mid-word and never appeared whole: the wait was
+			// being satisfied by the shell's echo of the command instead.
+			r.feedPTY(ptyID, `printf '\033[1;31mBOLD-RED\033[m \033[4;32mUNDER-GREEN\033[m \033[7mREVERSED\033[m \033[3;9mSTRUCK\033[m\nSG''R-END\n'`, "SGR-END")
 		},
 	},
 	{
 		name: "256-and-truecolour",
 		arrange: func(r *rig, ptyID string) {
-			r.feedPTY(ptyID, `printf '\033[38;5;33mINDEXED\033[48;5;226m ON-YELLOW\033[m \033[38;2;200;100;50mTRUECOLOUR\033[m TC-END\n'`, "TC-END")
+			r.feedPTY(ptyID, `printf '\033[38;5;33mINDEXED\033[48;5;226m ON-YELLOW\033[m \033[38;2;200;100;50mTRUECOLOUR\033[m TC''-END\n'`, "TC-END")
 		},
 	},
 	{
@@ -177,10 +181,10 @@ var rehydrationShapes = []paneShape{
 		// whatever pen the client's emulator is holding.
 		name: "colour-still-in-force",
 		arrange: func(r *rig, ptyID string) {
-			r.feedPTY(ptyID, `printf '\033[35;1mPEN-LEFT-SET\n'`, "PEN-LEFT-SET")
+			r.feedPTY(ptyID, `printf '\033[35;1mPE''N-LEFT-SET\n'`, "PEN-LEFT-SET")
 		},
 		finish: func(r *rig, ptyID string) {
-			r.feedPTY(ptyID, `printf 'PAINTED-AFTER-RESTORE\n'`, "PAINTED-AFTER-RESTORE")
+			r.feedPTY(ptyID, `printf 'PA''INTED-AFTER-RESTORE\n'`, "PAINTED-AFTER-RESTORE")
 		},
 	},
 	{
@@ -194,7 +198,7 @@ var rehydrationShapes = []paneShape{
 	{
 		name: "origin-mode",
 		arrange: func(r *rig, ptyID string) {
-			r.feedPTY(ptyID, `printf '\033[2;8r\033[?6h\033[1;1HORIGIN-BODY-END\n'`, "ORIGIN-BODY-END")
+			r.feedPTY(ptyID, `printf '\033[2;8r\033[?6h\033[1;1HOR''IGIN-BODY-END\n'`, "ORIGIN-BODY-END")
 		},
 	},
 	{
@@ -229,7 +233,7 @@ var rehydrationShapes = []paneShape{
 		// still selected and a colour still in force.
 		name: "tui-mid-draw",
 		arrange: func(r *rig, ptyID string) {
-			r.feedPTY(ptyID, `printf '\033[?1049h\033[H\033[2J\033[1;34m\033(0lqqqk\r\nx  x\r\nmqqqj\r\nTUI-MID-DRAW\r\n'`, "TUI-MID-DRAW")
+			r.feedPTY(ptyID, `printf '\033[?1049h\033[H\033[2J\033[1;34m\033(0lqqqk\r\nx  x\r\nmqqqj\r\nTU''I-MID-DRAW\r\n'`, "TUI-MID-DRAW")
 			st, err := r.ctl.GetTerminalState(ptyID, -1, 0)
 			if err != nil || st == nil || !st.IsAltScreen {
 				r.t.Fatalf("the pane never entered the alternate screen (err %v, state %v)", err, st)
@@ -239,7 +243,7 @@ var rehydrationShapes = []paneShape{
 	{
 		name: "mid-output",
 		arrange: func(r *rig, ptyID string) {
-			r.feedPTY(ptyID, `printf 'MID-READY\n'`, "MID-READY")
+			r.feedPTY(ptyID, `printf 'MI''D-READY\n'`, "MID-READY")
 		},
 		whileAway: func(r *rig, ptyID string) {
 			// Started and not waited on, so it is still producing when the
@@ -254,7 +258,7 @@ var rehydrationShapes = []paneShape{
 	{
 		name: "over-buffer-while-away",
 		arrange: func(r *rig, ptyID string) {
-			r.feedPTY(ptyID, `printf 'OVER-READY\n'`, "OVER-READY")
+			r.feedPTY(ptyID, `printf 'OV''ER-READY\n'`, "OVER-READY")
 		},
 		whileAway: func(r *rig, ptyID string) {
 			// More than the 64KB ring holds, so the client cannot be resumed
@@ -275,7 +279,7 @@ var rehydrationShapes = []paneShape{
 		// laid out one width apart.
 		name: "resized-while-producing",
 		arrange: func(r *rig, ptyID string) {
-			r.feedPTY(ptyID, `printf 'RP-READY\n'`, "RP-READY")
+			r.feedPTY(ptyID, `printf 'RP''-READY\n'`, "RP-READY")
 			w := r.winByPTY(ptyID)
 			// Lines longer than the pane at every width it is taken through, so
 			// each one is a wrap decision, and started rather than waited for so
@@ -324,7 +328,7 @@ var rehydrationShapes = []paneShape{
 	{
 		name: "resized-while-away",
 		arrange: func(r *rig, ptyID string) {
-			r.feedPTY(ptyID, `printf 'RESIZE-READY\n'`, "RESIZE-READY")
+			r.feedPTY(ptyID, `printf 'RE''SIZE-READY\n'`, "RESIZE-READY")
 		},
 		whileAway: func(r *rig, ptyID string) {
 			w, h := r.ptySize(ptyID)

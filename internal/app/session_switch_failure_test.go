@@ -44,7 +44,7 @@ func TestFailedSessionSwitchLeavesTheUserWithTheirSession(t *testing.T) {
 	if w == nil {
 		t.Fatalf("pane %s is gone from the window set", ptyID)
 	}
-	r.feed(w, "echo rolledback", "rolledback")
+	r.feed(w, "echo ro''lledback", "rolledback")
 	rigWaitUntil(t, "the pane to stream again", func() bool {
 		return strings.Contains(clientText(r.winByPTY(ptyID)), "rolledback")
 	})

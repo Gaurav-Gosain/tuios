@@ -22,7 +22,7 @@ import (
 func TestResizeSeamStaysClosed(t *testing.T) {
 	r := newRig(t, 1)
 	ptyID := r.win(0).PTYID
-	r.feedPTY(ptyID, `printf 'SW-READY\n'`, "SW-READY")
+	r.feedPTY(ptyID, `printf 'SW''-READY\n'`, "SW-READY")
 	w := r.winByPTY(ptyID)
 
 	// Bursts with pauses: a burst keeps bytes in flight on both sides while a

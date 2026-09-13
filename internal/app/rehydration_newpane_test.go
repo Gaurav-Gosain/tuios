@@ -55,7 +55,7 @@ func TestRehydrationAdoptsAPaneCreatedElsewhere(t *testing.T) {
 		return ptyID != ""
 	})
 
-	r.feedPTY(ptyID, `printf 'ADOPTED-PANE\n'`, "ADOPTED-PANE")
+	r.feedPTY(ptyID, `printf 'AD''OPTED-PANE\n'`, "ADOPTED-PANE")
 	r.settle()
 	r.converge(ptyID)
 	compareSides(t, r, ptyID)
