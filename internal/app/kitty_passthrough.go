@@ -494,6 +494,25 @@ func (kp *KittyPassthrough) hostCaps() *HostCapabilities {
 	return GetHostCapabilities()
 }
 
+// scratchRetentionBytes is the largest reuse buffer worth keeping between
+// writes.
+//
+// Reusing the buffer is what stops a video stream allocating a frame-sized one
+// per frame, and every ordinary frame sits far below this. Past it the buffer
+// is dropped instead, because reuse across the whole life of the process means
+// one outsized write pins its own peak forever: a single burst of graphics left
+// 107MB of scratch resident with nothing on screen.
+const scratchRetentionBytes = 4 * 1024 * 1024
+
+// releaseScratch empties a reuse buffer, and gives its memory back when it grew
+// past what is worth carrying to the next write.
+func releaseScratch(buf []byte) []byte {
+	if cap(buf) > scratchRetentionBytes {
+		return nil
+	}
+	return buf[:0]
+}
+
 // writeHostSequence writes parts to hostOut as one unit that is mutually
 // exclusive with every other host write. Each *os.File.Write is only
 // per-syscall atomic, so without a shared lock a multi-part DEC 2026
@@ -535,6 +554,7 @@ func (kp *KittyPassthrough) writeHostSequence(parts ...[]byte) {
 	kp.writeInFlight.Store(true)
 	_, _ = kp.hostOut.Write(kp.hostScratch)
 	kp.writeInFlight.Store(false)
+	kp.hostScratch = releaseScratch(kp.hostScratch)
 	// The host earns a rest as long as the write it just took. See
 	// hostBacklogged.
 	kp.chargePacing(time.Since(started))
@@ -740,6 +760,27 @@ var (
 // direct passthrough transmission, mirroring the internal handler's limit.
 const maxPassthroughTransmitBytes = 64 * 1024 * 1024
 
+// maxPendingGraphicsBytes caps the graphics queued for the host but not yet
+// drained by the render loop.
+//
+// Nothing else bounded it. The drop path for a backlogged host only covers a
+// reused stream, which an auto-assigned image id never is, so a guest animating
+// faster than the loop runs queued a whole bitmap per frame for as long as it
+// kept going, and a client that went away stopped draining altogether. Two
+// minutes of chafa on a gif reached 7GB.
+//
+// The test runs before the append, never against it, so an empty queue still
+// takes an image of any size and this only ever refuses to pile a second one on
+// top. A few frames of headroom is all the render loop needs; a guest further
+// behind than that is one whose older frames are already superseded.
+const maxPendingGraphicsBytes = 8 * 1024 * 1024
+
+// pendingGraphicsFull reports whether the queue for the host has grown past
+// what the render loop is keeping up with. Callers hold kp.mu.
+func (kp *KittyPassthrough) pendingGraphicsFull() bool {
+	return len(kp.pendingOutput) > maxPendingGraphicsBytes
+}
+
 // flushToHost writes any pending output immediately to the host terminal,
 // wrapped in synchronized update sequences to prevent tearing/flickering.
 // Must be called while kp.mu is already held; the host write funnels through
@@ -747,7 +788,7 @@ const maxPassthroughTransmitBytes = 64 * 1024 * 1024
 func (kp *KittyPassthrough) flushToHost() {
 	if len(kp.pendingOutput) > 0 && kp.hostOut != nil {
 		kp.writeHostSequence(syncBegin, kp.pendingOutput, syncEnd)
-		kp.pendingOutput = kp.pendingOutput[:0]
+		kp.pendingOutput = releaseScratch(kp.pendingOutput)
 	}
 }
 

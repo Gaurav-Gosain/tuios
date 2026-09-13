@@ -50,7 +50,7 @@ func emitAndCapture(
 	raw []byte,
 ) (bitmapUpdate, []byte) {
 	before := len(kp.pendingOutput)
-	update := kp.emitBitmap(windowID, hostID, format, compression, width, height, raw)
+	update := kp.emitBitmap(windowID, hostID, format, compression, width, height, raw, true)
 	return update, append([]byte(nil), kp.pendingOutput[before:]...)
 }
 
@@ -885,5 +885,99 @@ func TestBitmapPacingDropsOnlyReusedFrames(t *testing.T) {
 	send(21)
 	if len(kp.pendingOutput) == afterSecond {
 		t.Fatal("no frame sent once the host caught up")
+	}
+}
+
+// The bitmap cache is keyed by host id, and an image transmitted under kitty's
+// auto-assign sentinel (i=0) is given a fresh host id every time so that two of
+// them coexist in the scrollback. Nothing can ever be compared against a frame
+// stored under an id that will not come round again, so storing it is pure
+// cost, paid for the life of the process.
+//
+// chafa animating a gif is the case that found it: a frame per transmit, all
+// under i=0, and two minutes of it retained 2.8GB of bitmaps nothing would ever
+// read.
+func TestAnUnpatchableImageRemembersNoBitmap(t *testing.T) {
+	withAnimatingHost(t)
+	kp := newDamagePassthrough(t)
+
+	const w, h = 40, 30
+	for i := range 20 {
+		raw := makeBitmap(w, h, 4, i)
+		// A fresh host id each time, which is what i=0 gets.
+		update := kp.emitBitmap("win", uint32(i+1), vt.KittyFormatRGBA,
+			vt.KittyCompressionNone, w, h, raw, false)
+		if update != bitmapFull {
+			t.Fatalf("frame %d answered %v, want the whole bitmap: an image with no "+
+				"previous frame under its id cannot be patched", i, update)
+		}
+	}
+
+	held := 0
+	for _, byHost := range kp.lastBitmap {
+		for _, entry := range byHost {
+			held += cap(entry.data)
+		}
+	}
+	if held != 0 {
+		t.Errorf("20 unpatchable frames left %d bytes of bitmap cached; every one of "+
+			"them is keyed by an id no later frame will use, so none can ever be read", held)
+	}
+}
+
+// The counterpart: an image the guest named keeps its cache, because the next
+// frame arrives under the same host id and is compared against this one.
+func TestANamedImageStillRemembersItsBitmap(t *testing.T) {
+	withAnimatingHost(t)
+	kp := newDamagePassthrough(t)
+
+	const w, h = 40, 30
+	raw := makeBitmap(w, h, 4, 1)
+	if update := kp.emitBitmap("win", 7, vt.KittyFormatRGBA,
+		vt.KittyCompressionNone, w, h, raw, true); update != bitmapFull {
+		t.Fatalf("the first frame answered %v, want the whole bitmap", update)
+	}
+	if kp.bitmapCacheFor("win", 7) == nil {
+		t.Fatal("a named image kept no bitmap, so its next frame cannot be a patch")
+	}
+	if update := kp.emitBitmap("win", 7, vt.KittyFormatRGBA,
+		vt.KittyCompressionNone, w, h, raw, true); update != bitmapUnchanged {
+		t.Errorf("an identical second frame answered %v, want it recognised as unchanged", update)
+	}
+}
+
+// A guest can hand over frames faster than the render loop drains them, and
+// before this the queue simply grew: chafa on a gif reached 7GB of bitmaps
+// waiting for a host that was minutes behind.
+func TestTheGraphicsQueueStopsGrowing(t *testing.T) {
+	withAnimatingHost(t)
+	kp := newDamagePassthrough(t)
+
+	kp.pendingOutput = make([]byte, maxPendingGraphicsBytes+1)
+	if !kp.pendingGraphicsFull() {
+		t.Fatal("a queue over the budget does not report itself full")
+	}
+
+	// An empty queue takes an image of any size: the test is made before the
+	// append, never against it, so a single large image is never refused.
+	kp.pendingOutput = nil
+	if kp.pendingGraphicsFull() {
+		t.Error("an empty queue reports itself full, which would refuse every image")
+	}
+}
+
+// A reuse buffer that is never given back pins its own peak for the life of the
+// process. One burst of graphics left 107MB of scratch resident with nothing on
+// screen.
+func TestAnOversizedScratchBufferIsGivenBack(t *testing.T) {
+	small := make([]byte, 0, scratchRetentionBytes/2)
+	small = append(small, 1, 2, 3)
+	if got := releaseScratch(small); cap(got) != cap(small) || len(got) != 0 {
+		t.Errorf("an ordinary buffer was not kept for reuse: cap %d, len %d", cap(got), len(got))
+	}
+
+	big := make([]byte, 0, scratchRetentionBytes*2)
+	if got := releaseScratch(big); got != nil {
+		t.Errorf("an outsized buffer kept %d bytes rather than giving them back", cap(got))
 	}
 }
