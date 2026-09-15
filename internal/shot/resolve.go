@@ -175,6 +175,9 @@ type FrameSpec struct {
 	// Without it a bold cell is double-struck, which thickens a glyph without
 	// making it the bold letterform the terminal drew.
 	BoldFontData []byte
+	// FontIndex and BoldFontIndex select a face inside a font collection. Zero
+	// is the first face, which is also the answer for a plain single font.
+	FontIndex, BoldFontIndex int
 	// EmbedFont says the font may be written into SVG and HTML output as an
 	// @font-face. It is separate from FontData because the two questions are
 	// different: PNG has to rasterize with a real file, and a file found for
@@ -214,6 +217,8 @@ func BuildFrame(spec FrameSpec, in FrameInputs) *Frame {
 		FontFamily:    spec.FontFamily,
 		FontData:      spec.FontData,
 		BoldFontData:  spec.BoldFontData,
+		FontIndex:     spec.FontIndex,
+		BoldFontIndex: spec.BoldFontIndex,
 		EmbedFont:     spec.EmbedFont,
 		Scale:         spec.Scale,
 		CellAspect:    in.CellAspect,

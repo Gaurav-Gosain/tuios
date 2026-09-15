@@ -211,6 +211,11 @@ type Frame struct {
 	FontData []byte
 	// BoldFontData is the bold cut of FontData. Nil double-strikes instead.
 	BoldFontData []byte
+	// FontIndex and BoldFontIndex select a face inside FontData when the file
+	// is a collection. macOS ships most of its own monospace faces as .ttc,
+	// and fontconfig answers with them on every platform, so the bytes a
+	// resolver hands over are regularly several faces rather than one.
+	FontIndex, BoldFontIndex int
 	// EmbedFont allows SVG and HTML to inline FontData as an @font-face. Only
 	// a font the user named themselves earns that: embedding turns a kilobyte
 	// of SVG into megabytes, and a font tuios found by asking the terminal was

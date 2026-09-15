@@ -160,6 +160,30 @@ type faceSet struct {
 	buf                                           sfnt.Buffer
 }
 
+// parseFontFace reads one face out of font bytes that may hold several.
+//
+// opentype.Parse refuses a collection outright ("invalid single font"), and
+// since fontconfig answers "Menlo" with a .ttc that refusal used to fail the
+// whole capture rather than cost it its icons. ParseCollection reads a plain
+// TTF or OTF as a collection of one, so it is the single path for both.
+func parseFontFace(data []byte, index int) (*sfnt.Font, error) {
+	coll, err := sfnt.ParseCollection(data)
+	if err != nil {
+		return nil, fmt.Errorf("parse font: %w", err)
+	}
+	if index < 0 || index >= coll.NumFonts() {
+		// An index the file does not have is a resolver and a file that
+		// disagree. The first face is a font from the family that was asked
+		// for, which beats no capture at all.
+		index = 0
+	}
+	font, err := coll.Font(index)
+	if err != nil {
+		return nil, fmt.Errorf("font %d of collection: %w", index, err)
+	}
+	return font, nil
+}
+
 func loadFaces(f *Frame, size float64) (*faceSet, error) {
 	fs := &faceSet{size: size}
 	opts := &opentype.FaceOptions{Size: size, DPI: 72, Hinting: font.HintingFull}
@@ -177,7 +201,7 @@ func loadFaces(f *Frame, size float64) (*faceSet, error) {
 		return nil, fmt.Errorf("embedded bold face: %w", err)
 	}
 	if f != nil && len(f.FontData) > 0 {
-		uf, err := opentype.Parse(f.FontData)
+		uf, err := parseFontFace(f.FontData, f.FontIndex)
 		if err != nil {
 			return nil, fmt.Errorf("screenshot.font_file did not parse: %w", err)
 		}
@@ -190,7 +214,7 @@ func loadFaces(f *Frame, size float64) (*faceSet, error) {
 		// that will not parse as bold leaves the double-strike in place, which
 		// is what happened before there was a bold cut at all.
 		if len(f.BoldFontData) > 0 {
-			if bf, berr := opentype.Parse(f.BoldFontData); berr == nil {
+			if bf, berr := parseFontFace(f.BoldFontData, f.BoldFontIndex); berr == nil {
 				if bface, berr := opentype.NewFace(bf, opts); berr == nil {
 					fs.userBoldFont, fs.userBold = bf, bface
 				}

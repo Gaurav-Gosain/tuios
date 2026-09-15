@@ -72,13 +72,13 @@ func TestTheHostFontWinsOverTheConfiguredFamily(t *testing.T) {
 		t.Skip("could not read a PostScript name back for the host face")
 	}
 	regular, _, warns := resolveFontFiles(s)
-	if len(regular) == 0 {
+	if len(regular.Data) == 0 {
 		t.Fatalf("no font resolved at all: %v", warns)
 	}
 	wantSize := fileSize(t, host.File)
-	if len(regular) != wantSize {
+	if len(regular.Data) != wantSize {
 		t.Errorf("resolved %d bytes, want the host font's %d from %s",
-			len(regular), wantSize, host.File)
+			len(regular.Data), wantSize, host.File)
 	}
 }
 
