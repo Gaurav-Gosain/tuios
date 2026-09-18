@@ -97,6 +97,39 @@ func parseShotGraphics(stream []byte) ([]shotTransmit, []shotPlacement) {
 	return transmits, placements
 }
 
+// The panel's text reaches the screen a frame before its picture does: the
+// cells are drawn, then the capture is encoded and uploaded. So a test that
+// waits for the panel and then reads the stream is reading it too early, and
+// every one of these used to close that gap by sleeping a fixed stretch.
+//
+// A fixed sleep is only ever as good as the slowest machine it runs on. These
+// passed for weeks and then began failing and passing across runs of the same
+// code, once the shard they sit in grew enough to slow the runner down. Waiting
+// for the upload itself has no such ceiling: it returns as soon as the picture
+// is there, and it fails with the counts rather than with a timeout.
+//
+// The settle is what the sleep was doing that a bare wait does not. The checks
+// read the last upload and the last placement, and a panel that relays out
+// places the same picture again, so stopping at the first sighting would read a
+// box the panel has already replaced.
+const shotSettle = 300 * time.Millisecond
+
+func waitForShotGraphics(t *testing.T, term *tuitest.Terminal, stream *hostStream,
+	uploads, placements int, what string,
+) ([]shotTransmit, []shotPlacement) {
+	t.Helper()
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		tx, pl := parseShotGraphics(stream.bytes())
+		return len(tx) >= uploads && len(pl) >= placements
+	}, uiTimeout); err != nil {
+		tx, pl := parseShotGraphics(stream.bytes())
+		t.Fatalf("%s: %d uploads and %d placements, want %d and %d\n%s",
+			what, len(tx), len(pl), uploads, placements, term.Snapshot())
+	}
+	time.Sleep(shotSettle)
+	return parseShotGraphics(stream.bytes())
+}
+
 func decodeShotPNG(b64 []byte) []byte {
 	raw, err := base64.StdEncoding.DecodeString(string(b64))
 	if err != nil {
@@ -294,13 +327,8 @@ func TestScreenshotRegionDragOnAGraphicsHostShowsThePicture(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the preview never appeared after a region drag: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(900 * time.Millisecond)
-
-	transmits, placements := parseShotGraphics(stream.bytes())
-	if len(transmits) == 0 || len(placements) == 0 {
-		t.Fatalf("the panel is up but carries no picture: %d uploads, %d placements\n%s",
-			len(transmits), len(placements), term.Snapshot())
-	}
+	transmits, placements := waitForShotGraphics(t, term, stream, 1, 1,
+		"the panel is up but carries no picture")
 	checkPictureShape(t, transmits[len(transmits)-1].png, placements[len(placements)-1])
 	alive(t, term, "after a region drag on a graphics host")
 }
@@ -421,17 +449,8 @@ func TestScreenshotRetakeSendsTheNewPicture(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the second preview never appeared: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(900 * time.Millisecond)
-
-	transmits, placements := parseShotGraphics(stream.bytes())
-	if len(placements) < 2 {
-		t.Fatalf("the preview picture was placed %d times, want at least 2 (one per capture)\n%s",
-			len(placements), term.Snapshot())
-	}
-	if len(transmits) < 2 {
-		t.Fatalf("two captures uploaded %d pictures; the second capture draws the first one's bytes\n%s",
-			len(transmits), term.Snapshot())
-	}
+	transmits, _ := waitForShotGraphics(t, term, stream, 2, 2,
+		"two captures did not leave two pictures on the stream")
 	if bytes.Equal(transmits[0].png, transmits[len(transmits)-1].png) {
 		t.Errorf("both uploads carried identical bytes, so the second capture is the first picture")
 	}
@@ -536,13 +555,8 @@ func TestScreenshotPreviewKeepsThePicturesShape(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the preview never appeared: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(900 * time.Millisecond)
-
-	transmits, placements := parseShotGraphics(stream.bytes())
-	if len(transmits) == 0 || len(placements) == 0 {
-		t.Fatalf("the pixel tier never ran: %d uploads, %d placements\n%s",
-			len(transmits), len(placements), term.Snapshot())
-	}
+	transmits, placements := waitForShotGraphics(t, term, stream, 1, 1,
+		"the pixel tier never ran")
 	// TUIOS_SHOT_DUMP writes the picture the client actually uploaded to a file,
 	// which is how the shape is checked by eye rather than only by arithmetic.
 	if dump := os.Getenv("TUIOS_SHOT_DUMP"); dump != "" {
@@ -599,14 +613,9 @@ func TestScreenshotOverAnOpenPreviewSendsTheNewPicture(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "run-command", "Screenshot"); err != nil {
 		t.Fatalf("second run-command Screenshot: %v\n%s", err, out)
 	}
-	time.Sleep(1200 * time.Millisecond)
-
-	transmits, placements := parseShotGraphics(stream.bytes())
+	transmits, placements := waitForShotGraphics(t, term, stream, 2, 1,
+		"a capture over an open preview did not upload a second picture; "+
+			"the panel is still drawing the first capture")
 	t.Logf("%d uploads, %d placements", len(transmits), len(placements))
-	if len(transmits) < 2 {
-		t.Fatalf("a capture over an open preview uploaded %d pictures in %d placements; "+
-			"the panel is still drawing the first capture\n%s",
-			len(transmits), len(placements), term.Snapshot())
-	}
 	alive(t, term, "after capturing over an open preview")
 }
