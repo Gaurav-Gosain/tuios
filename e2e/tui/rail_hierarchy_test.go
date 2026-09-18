@@ -46,6 +46,19 @@ func nameColOf(s tuitest.Screen, row int, name string) int {
 }
 
 // boldAt reports whether the cell at (col, row) is drawn bold.
+// ruledAfter reports whether a heading's rule runs out of the name on this row.
+// It looks for the rule glyph anywhere to the right of where the name ends,
+// which is where the heading draws it and where no item row draws anything.
+func ruledAfter(s tuitest.Screen, row, fromCol int) bool {
+	w, _ := s.Size()
+	for col := fromCol; col < w; col++ {
+		if s.Cell(col, row).Content == "\u2500" {
+			return true
+		}
+	}
+	return false
+}
+
 func boldAt(s tuitest.Screen, col, row int) bool {
 	return s.Cell(col, row).Bold
 }
@@ -116,13 +129,27 @@ func TestTheRailReadsMachinesAsHeadings(t *testing.T) {
 		t.Errorf("ASSERTION: the session under oci starts at column %d and its machine at %d; "+
 			"a session must step in under its machine\n%s", rowCol, headCol, term.Snapshot())
 	}
-	if !boldAt(s, headCol, head) {
-		t.Errorf("ASSERTION: the machine's name is not bold, so it does not read as a heading\n%s",
+	// A heading is told from the rows under it by a rule running out of its name
+	// to the right spine, and no longer by weight.
+	//
+	// It used to be bold, and in the brightest ink on the rail. That put the
+	// loudest treatment on the least actionable row, and it spent the one bold
+	// voice the rail keeps for a row that wants a human. A rule is a different
+	// kind of mark rather than a louder one, so a heading still reads as a
+	// heading with colour and weight both switched off.
+	if boldAt(s, headCol, head) {
+		t.Errorf("ASSERTION: the machine's name is bold, which is the voice the rail keeps for an alarm\n%s",
 			term.SnapshotStyled())
 	}
 	if boldAt(s, rowCol, row) {
-		t.Errorf("ASSERTION: the session's name is bold, which is the weight the heading over it uses\n%s",
-			term.SnapshotStyled())
+		t.Errorf("ASSERTION: the session's name is bold\n%s", term.SnapshotStyled())
+	}
+	if !ruledAfter(s, head, headCol+len("oci")) {
+		t.Errorf("ASSERTION: the machine's heading carries no rule, so nothing tells it from a session row\n%s",
+			term.Snapshot())
+	}
+	if ruledAfter(s, row, rowCol+len("session-0")) {
+		t.Errorf("ASSERTION: a session row carries a heading's rule\n%s", term.Snapshot())
 	}
 
 	// This machine reads the same way, and it is the one the client is on.

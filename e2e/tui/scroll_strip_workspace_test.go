@@ -101,6 +101,28 @@ func wheelStrip(t *testing.T, term *tuitest.Terminal, notches int) {
 	time.Sleep(time.Second)
 }
 
+// wheelStripToEnd walks the strip with the wheel until it stops moving.
+//
+// A notch was a fifth of the viewport when this suite was written, so a fixed
+// count of them was a fair proxy for "scroll to the far end". A notch is
+// appearance.niri_scroll_cells now, eight cells by default, because a trackpad
+// reports one wheel event per cell the fingers cross and a fifth of a viewport
+// per event made a flick unusable. The count that used to clear the strip no
+// longer does, so this asks the strip where the end is rather than assuming.
+func wheelStripToEnd(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	last := ""
+	for range 15 {
+		wheelStrip(t, term, 5)
+		band := stripBand(term)
+		if band == last {
+			return
+		}
+		last = band
+	}
+	t.Fatalf("the strip never stopped moving:\n%s", stripBand(term))
+}
+
 // roundTrip switches to workspace 2 and back to workspace 1.
 func roundTrip(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
@@ -114,8 +136,10 @@ func roundTrip(t *testing.T, term *tuitest.Terminal) {
 }
 
 // TestWorkspaceRoundTripKeepsTheScrolledStrip is the report. One wheel notch
-// moves the strip a fifth of the screen and leaves the focused column on
-// screen, so nothing about the round trip has any reason to move it.
+// moves the strip a little and leaves the focused column on screen, so nothing
+// about the round trip has any reason to move it. The notch used to be a fifth
+// of the screen and is appearance.niri_scroll_cells now; either way it is short
+// of the column, which is all this needs.
 func TestWorkspaceRoundTripKeepsTheScrolledStrip(t *testing.T) {
 	a := stripClient(t, t.TempDir())
 
@@ -143,8 +167,9 @@ func TestWorkspaceRoundTripKeepsTheScrolledStrip(t *testing.T) {
 func TestWorkspaceRoundTripRevealsAHiddenColumn(t *testing.T) {
 	a := stripClient(t, t.TempDir())
 
-	// Five notches is the whole strip: the focused column is off the left end.
-	wheelStrip(t, a, 5)
+	// To the far end, so the focused column is off the left edge. Walked rather
+	// than counted: how far one notch moves is a setting now.
+	wheelStripToEnd(t, a)
 	before := stripBand(a)
 	t.Logf("the strip parked off the focused column:\n%s", before)
 	if strings.Contains(before, "ALPHA") {
