@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
 // The federation control plane, stage 1: three read verbs and nothing else.
@@ -58,6 +59,42 @@ type remoteSessionRow struct {
 	Restored    bool   `json:"restored,omitempty"`
 	LastActive  int64  `json:"last_active,omitempty"`
 	Created     int64  `json:"created,omitempty"`
+	// AgentState is the most urgent agent state among the session's panes, by
+	// the rail's own ranking, empty when nothing in it is running an agent.
+	//
+	// It is rolled up here rather than sent pane by pane because a session row
+	// is one row: the rail asks "does anything in there want a person", and a
+	// listing that carried every pane's state would be answering a question
+	// nobody on this side asked. The unread bit is deliberately not carried.
+	// Whether a finished agent has been looked at is a fact about a viewer, not
+	// about the session, and this client has not looked at another machine's
+	// panes, so they roll up as unseen, which is what they are.
+	AgentState string `json:"agent_state,omitempty"`
+}
+
+// remoteSessionListRow is a row as a host sends it. It carries the window
+// summaries the rollup reads and this daemon does not pass on: the embedded
+// row is what crosses to the client.
+type remoteSessionListRow struct {
+	remoteSessionRow
+	Windows []WindowSummary `json:"windows"`
+}
+
+// rollUpAgentState is the most urgent state among a session's panes, by the
+// same ranking the rail draws with, so a row on another machine wears the
+// glyph a row on this one would.
+//
+// Every pane is ranked as unseen. The unread bit belongs to a viewer, and the
+// daemon answering has no idea what the person reading the listing has looked
+// at.
+func rollUpAgentState(windows []WindowSummary) string {
+	best, state := 0, ""
+	for _, w := range windows {
+		if r := sessiontree.AgentRank(w.AgentState, false); r > best {
+			best, state = r, w.AgentState
+		}
+	}
+	return state
 }
 
 // hostAgentsEntry is one host's slice of an aggregated agent listing.
@@ -148,14 +185,19 @@ func (d *Daemon) verbListHostSessions(_ *connState, params json.RawMessage) (any
 			continue
 		}
 		var decoded struct {
-			Sessions []remoteSessionRow `json:"sessions"`
+			Sessions []remoteSessionListRow `json:"sessions"`
 		}
 		if err := json.Unmarshal(a.Result, &decoded); err != nil {
 			e.Error, e.Code = "The host sent a session list this build cannot read.", ErrVerbInternal
 			entries = append(entries, e)
 			continue
 		}
-		e.Result = decoded.Sessions
+		rows := make([]remoteSessionRow, 0, len(decoded.Sessions))
+		for _, r := range decoded.Sessions {
+			r.remoteSessionRow.AgentState = rollUpAgentState(r.Windows)
+			rows = append(rows, r.remoteSessionRow)
+		}
+		e.Result = rows
 		entries = append(entries, e)
 	}
 	return map[string]any{"type": "host_session_list", "hosts": entries}, nil
@@ -294,6 +336,7 @@ func localSessionRows(infos []SessionInfo) []remoteSessionRow {
 			Restored:    s.Restored,
 			LastActive:  s.LastActive,
 			Created:     s.Created,
+			AgentState:  rollUpAgentState(s.Windows),
 		})
 	}
 	return out

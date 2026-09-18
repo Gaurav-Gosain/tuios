@@ -76,6 +76,12 @@ type FederationSession struct {
 	DisplayName string
 	WindowCount int
 	Attached    bool
+	// AgentState is the most urgent state among the session's panes, rolled up
+	// by the daemon that owns them. Empty when nothing in it runs an agent,
+	// and empty for a machine that did not answer, because a row from a
+	// machine that is not there is not evidence about what its agents are
+	// doing now.
+	AgentState string
 }
 
 // FederationHostsMsg carries a fresh snapshot back to the Update goroutine.
@@ -155,6 +161,7 @@ func refreshFederationCmd() tea.Cmd {
 					DisplayName string `json:"display_name"`
 					WindowCount int    `json:"window_count"`
 					Attached    bool   `json:"attached"`
+					AgentState  string `json:"agent_state"`
 				} `json:"sessions"`
 			} `json:"hosts"`
 		}
@@ -183,6 +190,7 @@ func refreshFederationCmd() tea.Cmd {
 					DisplayName: s.DisplayName,
 					WindowCount: s.WindowCount,
 					Attached:    s.Attached,
+					AgentState:  s.AgentState,
 				})
 			}
 			msg.Snapshot.Hosts = append(msg.Snapshot.Hosts, fh)
@@ -256,6 +264,11 @@ func (m *OS) hostGroupNodes() []sessiontree.Node {
 			HostNote:    h.Reason,
 			HostLastOK:  h.LastOK,
 			WindowCount: len(h.Sessions),
+			// The machine's own glyph is the most urgent thing under it, so a
+			// folded group still says whether anything in there wants a
+			// person. That is the whole reason a header can be folded without
+			// hiding an alarm.
+			AgentState: hostWorstAgentState(h.Sessions),
 		})
 		sessions := orderByKey(h.Sessions, func(s FederationSession) string { return s.Name },
 			m.sidebarSessionOrderFor(h.Name))
@@ -271,10 +284,62 @@ func (m *OS) hostGroupNodes() []sessiontree.Node {
 				Host:        h.Name,
 				WindowCount: s.WindowCount,
 				Attached:    s.Attached,
+				AgentState:  s.AgentState,
+				// DoneSeen is never set for another machine's row. The unread
+				// bit says whether the person reading has looked at that pane,
+				// and there is no way to look at one from here, so a finished
+				// agent over there stays unread until that machine's own state
+				// moves on.
 			})
 		}
 	}
 	return out
+}
+
+// hostAttention counts the machine's sessions that want a person, and names
+// the most urgent state among them.
+//
+// A machine that is not up counts nothing. Its rows are the last listing that
+// reached this client, and a figure drawn from them would be reporting what
+// some panes were doing at a moment that has passed, on a machine nobody can
+// reach to check.
+func (m *OS) hostAttention(host string) (blocked int, worst string) {
+	if !m.hostIsUp(host) {
+		return 0, ""
+	}
+	rank := 0
+	for _, h := range m.FederationHosts {
+		if h.Name != host {
+			continue
+		}
+		for _, s := range h.Sessions {
+			if !sidebarAttention(s.AgentState) {
+				continue
+			}
+			blocked++
+			if r := sessiontree.AgentRank(s.AgentState, false); r > rank {
+				worst, rank = s.AgentState, r
+			}
+		}
+	}
+	return blocked, worst
+}
+
+// hostWorstAgentState is the most urgent state among a machine's sessions, by
+// the ranking the rail draws with.
+//
+// A machine that did not answer has no sessions in the snapshot, so it returns
+// empty and its header wears no glyph. That is the point rather than a side
+// effect: a header that kept the last alarm it saw would be reporting a pane's
+// state from a machine nobody can currently reach.
+func hostWorstAgentState(sessions []FederationSession) string {
+	best, state := 0, ""
+	for _, s := range sessions {
+		if r := sessiontree.AgentRank(s.AgentState, false); r > best {
+			best, state = r, s.AgentState
+		}
+	}
+	return state
 }
 
 // hostNodeID namespaces a host's rows so their ids can never collide with a
@@ -646,6 +711,8 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 	rowBg := sidebarRowBg(st, pal)
 	up := node.HostStatus == string(federation.StatusUp)
 
+	blocked, worst := m.hostAttention(node.Host)
+
 	right, rightW := "", 0
 	switch {
 	case !up:
@@ -654,6 +721,21 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 		label := hostStatusLabel(node.HostStatus)
 		right = sidebarStyle(rowBg, pal.FgMute).Render(label)
 		rightW = lipgloss.Width(label)
+	case blocked > 0:
+		// How many of this machine's sessions want a person, in the strip
+		// badge's language. It outranks both the session count and the add
+		// control, which is the rail's standing rule that an alarm outranks a
+		// label: a count of sessions is a fact you can get by unfolding, and a
+		// pane waiting for you is not.
+		//
+		// It is in this slot rather than in the fold mark's cell because that
+		// cell says which way the group is folded, and that has to keep
+		// working. A folded group is exactly when this figure matters most, so
+		// taking the mark's place would have hidden it in the one state it was
+		// added for.
+		fig := strconv.Itoa(blocked) + agentStateIndicator(worst)
+		right = sidebarStyle(rowBg, sidebarSeverityColor(worst, pal)).Render(fig)
+		rightW = lipgloss.Width(fig)
 	case collapsed && node.WindowCount > 0:
 		count := strconv.Itoa(node.WindowCount)
 		right = sidebarStyle(rowBg, pal.FgMute).Render(count)
@@ -738,6 +820,18 @@ func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal
 	name := sidebarStyle(rowBg, ink).Render(
 		overlay.Truncate(printableTitle(node.Title), sidebarNameAvailIn(cw, rightW, indent)))
 	gutter := sidebarStyle(rowBg, nil).Render(" ")
+	// The same glyph a session on this machine wears, from the same function.
+	// The sessions section answers "who needs me", and a row that answered it
+	// only for the machine the client happens to be attached to was answering
+	// half the question: an agent waiting for a person waits just as long on
+	// the build box.
+	//
+	// A machine that is not answering keeps the resting bullet whatever its
+	// last listing said, because its rows are a cached listing rather than
+	// sessions you can reach.
 	glyph := sidebarStyle(rowBg, pal.FgMute).Render(m.Settings.GetRailBullet())
+	if m.hostIsUp(node.Host) && agentStateIndicator(node.AgentState) != "" {
+		glyph = sidebarGlyph(node.AgentState, node.DoneSeen, rowBg, pal, &m.Settings)
+	}
 	return sidebarComposeGroupRow(indent, gutter, glyph, name, right, cw, rowBg)
 }

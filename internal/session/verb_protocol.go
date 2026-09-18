@@ -430,7 +430,7 @@ func init() {
 				{Name: "host", Type: "string", Description: "One host by name, or \"local\" for this machine. Omit for every host."},
 			},
 			returns: []verbParam{
-				{Name: "hosts", Type: "[]string", Description: "One entry per host, local first, carrying that host's status and its sessions. An entry that failed carries an error and a code instead of sessions."},
+				{Name: "hosts", Type: "[]string", Description: "One entry per host, local first, carrying that host's status and its sessions. An entry that failed carries an error and a code instead of sessions. Each session carries agent_state, the most urgent agent state among its panes, so a listing can say which sessions want a person without a second call."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"list-host-sessions"}`,
