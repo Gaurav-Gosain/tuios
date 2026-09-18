@@ -616,8 +616,17 @@ func (m *OS) sidebarSwitchSession(sessionID string) {
 // focus is still wherever it was. A caller building anything about "the pane"
 // afterwards has to ask, or it is building it about the pane the user was on
 // before they pointed at this row.
-func (m *OS) sidebarFocusWindow(hit sidebarRowHit) (int, bool) {
+func (m *OS) sidebarFocusWindow(hit sidebarRowHit) (idx int, ok bool) {
 	m.clearSidebarReturn() // picking a pane is the whole point; esc must not undo it
+	// Whichever way this resolves, a pane picked off the rail is brought fully
+	// into view in the scrolling layout. Both the click and the keyboard reach
+	// here, and a pane you chose by name that stays half off the edge is the
+	// same complaint as a pane you clicked that does.
+	defer func() {
+		if ok {
+			m.RevealFocusedColumn()
+		}
+	}()
 	// Resolve by ID, never by the index the row was drawn with. A pane closing
 	// between that render and this click shifts every later index, so the index
 	// alone could focus a different pane than the row names, and the context menu

@@ -95,3 +95,31 @@ func TestAReleaseWithNoPressDoesNothing(t *testing.T) {
 		t.Error("a release with nothing armed armed something")
 	}
 }
+
+// TestPickingAPaneOffTheRailRevealsItNow.
+//
+// The click path waits for the release, because a press can turn out to be a
+// drag and revealing early moves the pane out from under the pointer. Picking a
+// pane off the rail has neither problem: you read its name and chose it, there
+// is no gesture to finish, and nothing is under the pointer that a scroll could
+// move. So it reveals immediately and does not arm anything.
+func TestPickingAPaneOffTheRailRevealsItNow(t *testing.T) {
+	m := armedOS(t)
+	// No focused window and no layout, so this only has to reach the end
+	// without panicking and without leaving a press armed behind it.
+	m.RevealFocusedColumn()
+	if m.clickReveal.armed {
+		t.Error("picking a pane off the rail armed a press that no release will consume")
+	}
+}
+
+// TestTheRailRevealHonoursTheSetting: the click and the rail are the same wish,
+// so one setting answers for both.
+func TestTheRailRevealHonoursTheSetting(t *testing.T) {
+	m := armedOS(t)
+	m.Settings.NiriClickReveals = false
+	m.RevealFocusedColumn() // must return before touching a layout
+	if m.clickReveal.armed {
+		t.Error("the rail reveal armed with the setting off")
+	}
+}

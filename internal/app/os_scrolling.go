@@ -346,6 +346,30 @@ func (m *OS) FocusWindowFromClick(i, x, y int) *OS {
 	return out
 }
 
+// RevealFocusedColumn brings the focused column fully on screen now, with no
+// press and release to wait for.
+//
+// Picking a pane off the rail is the plainest possible statement that you want
+// that pane: you read its name in a list and chose it. There is no gesture to
+// finish and nothing under the pointer that could be moved out from under it,
+// which is what the click path has to wait for, so this just does it.
+//
+// It answers to the same setting as the click, because they are the same wish.
+func (m *OS) RevealFocusedColumn() {
+	if !m.Settings.NiriClickReveals || !m.AutoTiling || !m.UseScrollingLayout {
+		return
+	}
+	fw := m.GetFocusedWindow()
+	if fw == nil {
+		return
+	}
+	sl := m.GetOrCreateScrollingLayout()
+	if sl.FocusColumnContaining(m.getWindowIntID(fw.ID)) {
+		sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
+		m.scrollingSetPositions()
+	}
+}
+
 // ArmClickReveal remembers where the pointer was when a press focused a pane.
 func (m *OS) ArmClickReveal(x, y int) {
 	if !m.Settings.NiriClickReveals || !m.AutoTiling || !m.UseScrollingLayout {
