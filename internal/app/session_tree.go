@@ -275,6 +275,34 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 		})
 	}
 	for _, s := range tree.Sessions {
+		// The tree carries the other machines' rows as well as this one's, and
+		// neither kind is a local session.
+		//
+		// A machine's own heading is not somewhere you can go at all. A session
+		// on another machine is, but it is reached by attaching through its
+		// host rather than by name, and its node id is a rail identity rather
+		// than a session name. Handing that id to SwitchToSession is what
+		// produced "switch to \x00host/local failed": the palette asked the
+		// daemon for a session literally called that.
+		if s.Kind == sessiontree.KindHost {
+			continue
+		}
+		if isRemoteNode(s) {
+			host, name := s.Host, remoteSessionName(s)
+			items = append(items, CommandPaletteItem{
+				Name:       sessionPaletteLabel("Session: ", name+" @ "+host, s.AgentState),
+				Shortcut:   "another machine",
+				Category:   "Sessions",
+				AgentState: s.AgentState,
+				Action: func(m *OS) (*OS, tea.Cmd) {
+					m.sidebarLeaveForJump()
+					m.openRemoteSession(host, name)
+					return m, nil
+				},
+			})
+			continue
+		}
+
 		sessionName := s.ID
 		isCurrent := s.IsCurrent
 		items = append(items, CommandPaletteItem{
