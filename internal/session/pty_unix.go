@@ -23,9 +23,17 @@ func (p *PTY) SetPixelSize(cols, rows, xpixel, ypixel int) error {
 		Ypixel: uint16(ypixel),
 	}
 
+	// A pane whose bytes come from somewhere other than a local pty has no file
+	// descriptor to set a window size on. Its size is carried by whatever is
+	// feeding it, so there is nothing to do here and nothing has gone wrong.
+	fd, ok := p.pty.(interface{ Fd() uintptr })
+	if !ok {
+		return nil
+	}
+
 	_, _, errno := syscall.Syscall(
 		syscall.SYS_IOCTL,
-		p.pty.Fd(),
+		fd.Fd(),
 		uintptr(unix.TIOCSWINSZ),
 		uintptr(unsafe.Pointer(&ws)),
 	)

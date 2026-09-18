@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image/color"
+	"io"
 
 	"log"
 	"maps"
@@ -21,7 +22,6 @@ import (
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	xpty "github.com/charmbracelet/x/xpty"
 	"github.com/google/uuid"
 
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
@@ -456,9 +456,29 @@ type ScrollStripState struct {
 }
 
 // PTY represents a daemon-managed pseudo-terminal.
+// paneIO is where a pane's bytes come from and go to.
+//
+// A pane on this machine gets the pty the daemon spawned, which is what this
+// has always been. The type is narrowed to the four operations a PTY actually
+// performs on it, out of the nine xpty.Pty carries, because the other five
+// cannot be answered honestly by anything that is not a local file: a stream to
+// another machine has no file descriptor, no name on this filesystem, and no
+// command of its own to start.
+//
+// Those four are the entire seam between "a pane is a process here" and "a pane
+// is a process somewhere else". Nothing else in PTY touches the handle: the
+// emulator, the scrollback, the sequenced ring buffer and every subscriber path
+// are already indifferent to where the bytes came from, which is why a pane on
+// another machine can reuse all of it rather than needing a second
+// implementation of it.
+type paneIO interface {
+	io.ReadWriteCloser
+	Resize(width, height int) error
+}
+
 type PTY struct {
 	ID     string
-	pty    xpty.Pty
+	pty    paneIO
 	cmd    *exec.Cmd
 	ctx    context.Context
 	cancel context.CancelFunc

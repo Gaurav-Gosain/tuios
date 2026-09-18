@@ -186,7 +186,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.DragStartX, o.DragStartY = X, Y
 			return o, nil
 		}
-		o.FocusWindowFromClick(clickedWindowIndex)
+		o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 		return o, nil
 	}
 
@@ -221,7 +221,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft {
 		win := o.Windows[clickedWindowIndex]
 		if rect, drawn := o.ScrollbarHit(win); drawn && rect.Contains(X, Y) {
-			o.FocusWindowFromClick(clickedWindowIndex)
+			o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 			o.ScrollbarGrabOffset = scrollbarGrab(win, rect, Y, &o.Settings)
 			o.ScrollbarDragging = true
 			o.ScrollbarDragWindowIndex = clickedWindowIndex
@@ -267,7 +267,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if msg.Button == tea.MouseLeft && msg.Mod == tea.ModShift {
 		if link, ok := o.LinkAt(X, Y); ok {
 			if clickedWindowIndex != -1 {
-				o.FocusWindowFromClick(clickedWindowIndex)
+				o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 			}
 			return o, o.OpenLink(link.URL)
 		}
@@ -283,7 +283,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// Check if click is within terminal content area
 			if inContent {
 				// Focus the window first so subsequent events work
-				o.FocusWindow(clickedWindowIndex)
+				o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 
 				// Create adjusted mouse event with terminal-relative coordinates
 				adjustedMouse := uv.MouseClickEvent{
@@ -371,7 +371,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if mouse.Button == tea.MouseLeft && (clickedWindow.InCopyMode() || o.Mode == app.TerminalMode) {
 		terminalX, terminalY, inContent := clickedWindow.ScreenToTerminal(X, Y)
 		if inContent {
-			o.FocusWindow(clickedWindowIndex)
+			o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 			if !clickedWindow.InCopyMode() {
 				// Selection reads through copy mode's machinery, so a
 				// selection in terminal mode has to turn it on. Implicitly:
@@ -406,7 +406,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if mouse.Button == tea.MouseRight {
 		o.BeginPointerGesture()
 	}
-	o.FocusWindow(clickedWindowIndex)
+	o.FocusWindowFromClick(clickedWindowIndex, X, Y)
 	if o.Mode == app.TerminalMode {
 		o.Mode = app.WindowManagementMode
 	}
@@ -529,7 +529,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // forwarding motion to a mouse-mode app underneath.
 func beginWindowDrag(o *app.OS, idx, x, y int) {
 	win := o.Windows[idx]
-	o.FocusWindow(idx)
+	o.FocusWindowFromClick(idx, x, y)
 	if o.Mode == app.TerminalMode {
 		o.Mode = app.WindowManagementMode
 	}

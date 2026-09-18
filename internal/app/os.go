@@ -547,6 +547,14 @@ type OS struct {
 	// goroutine, like ExitReason.
 	QuitRequested bool
 
+	// clickReveal is a press that focused a pane, held until the button comes
+	// up so the release can tell a click from the start of a drag. See
+	// ArmClickReveal.
+	clickReveal struct {
+		armed bool
+		x, y  int
+	}
+
 	// SidebarWidthPref is the expanded rail width this session asks for, or 0
 	// to take the configured default. It is synced with the session's other
 	// clients: the rail is chrome, and the panes' box is settled across every

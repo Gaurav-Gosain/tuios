@@ -321,40 +321,67 @@ func (m *OS) ScrollingOnFocusChange() {
 	m.scrollingSetPositions()
 }
 
-// FocusWindowFromClick focuses a pane the user clicked on, and in the scrolling
-// layout brings its whole column on screen.
+// FocusWindowFromClick focuses a pane the user pressed on, and arms the
+// scrolling layout to bring its whole column on screen when the button comes up.
 //
 // Focus moves for several reasons and they are not the same statement. A
 // workspace switch restoring its saved focus, or a focus the daemon moved, says
 // nothing about where the viewport should be, and revealing on those threw away
-// wherever the user had scrolled that workspace's strip. That is why every
-// focus change went to the least-scroll rule. A click is the other kind: a
-// column half off the edge that you deliberately clicked is one you picked to
-// work in, so the strip brings all of it to you rather than leaving you reading
-// half a pane.
+// wherever the user had scrolled that workspace's strip. That is why every focus
+// change went to the least-scroll rule. A click is the other kind: a column half
+// off the edge that you deliberately clicked is one you picked to work in.
+//
+// It waits for the release, and that is the whole trick. Revealing on the press
+// moves the pane out from under the pointer, so a press that turns out to be the
+// start of a drag, a title grab, a resize, a selection, measures every later
+// coordinate against where the pane used to be. A title drop landed a pane
+// twelve cells off that way. By the release the gesture is over and it is safe,
+// and a gesture that moved is not a click so it does not reveal at all.
 //
 // appearance.niri_click_reveals turns it off, for anyone who would rather the
 // strip stayed exactly where they left it.
-//
-// Only the clicks that do nothing but focus come here. A click that begins a
-// gesture (a title-bar grab, a resize press, an armed selection) or that is
-// forwarded to a guest running mouse tracking keeps the plain FocusWindow,
-// because scrolling the strip moves the pane out from under the pointer and
-// every later coordinate in that gesture is measured against where it used to
-// be. A title drop landed a pane twelve cells off for exactly that reason.
-func (m *OS) FocusWindowFromClick(i int) *OS {
+func (m *OS) FocusWindowFromClick(i, x, y int) *OS {
 	out := m.FocusWindow(i)
-	if !m.Settings.NiriClickReveals || !m.AutoTiling || !m.UseScrollingLayout {
-		return out
-	}
-	if fw := m.GetFocusedWindow(); fw != nil {
-		sl := m.GetOrCreateScrollingLayout()
-		if sl.FocusColumnContaining(m.getWindowIntID(fw.ID)) {
-			sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
-			m.scrollingSetPositions()
-		}
-	}
+	m.ArmClickReveal(x, y)
 	return out
+}
+
+// ArmClickReveal remembers where the pointer was when a press focused a pane.
+func (m *OS) ArmClickReveal(x, y int) {
+	if !m.Settings.NiriClickReveals || !m.AutoTiling || !m.UseScrollingLayout {
+		return
+	}
+	m.clickReveal.armed = true
+	m.clickReveal.x, m.clickReveal.y = x, y
+}
+
+// ReleaseClickReveal brings the focused column fully on screen if the press that
+// armed it turned out to be a click rather than a drag.
+//
+// The pointer not having moved is the test. A gesture that moved is a drag
+// whatever it was dragging, and a drag has already been laid out against the
+// strip where it started.
+func (m *OS) ReleaseClickReveal(x, y int) {
+	if !m.clickReveal.armed {
+		return
+	}
+	armedX, armedY := m.clickReveal.x, m.clickReveal.y
+	m.clickReveal.armed = false
+	if x != armedX || y != armedY {
+		return
+	}
+	if !m.Settings.NiriClickReveals || !m.AutoTiling || !m.UseScrollingLayout {
+		return
+	}
+	fw := m.GetFocusedWindow()
+	if fw == nil {
+		return
+	}
+	sl := m.GetOrCreateScrollingLayout()
+	if sl.FocusColumnContaining(m.getWindowIntID(fw.ID)) {
+		sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
+		m.scrollingSetPositions()
+	}
 }
 
 // ScrollingOnWindowAdded adds a new window to the scrolling layout.

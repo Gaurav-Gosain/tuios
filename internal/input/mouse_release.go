@@ -23,6 +23,11 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.EndStrayGesture()
 		o.EndPointerGesture()
 		o.ReleaseGestureAnnouncements()
+		// Last, because it moves the strip: everything above has to have
+		// finished laying the drop out against where the panes actually were.
+		// It does nothing unless a press focused a pane and the pointer never
+		// moved, which is what tells a click from the start of a drag.
+		o.ReleaseClickReveal(msg.X, msg.Y)
 	}()
 
 	// Armed by the cleanup below and returned from whichever branch gets there.
