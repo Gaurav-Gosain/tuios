@@ -480,6 +480,16 @@ func handleLogViewerKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// The two copy controls the viewer's hints have always advertised. They
+	// were drawn and never handled, so both fell through to the return below
+	// and the viewer kept two promises it could not keep.
+	if key == "A" {
+		return o, o.CopyLogs()
+	}
+	if key == "E" {
+		return o, o.CopyLogErrors()
+	}
+
 	// Ignore other keys when log viewer is active
 	return o, nil
 }
