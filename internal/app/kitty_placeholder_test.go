@@ -237,6 +237,9 @@ func TestTheWholePlaceholderFlow(t *testing.T) {
 
 	// The guest's emulator, wired the way a real pane's is.
 	term := vt.New(40, 10)
+	// Placeholder cells are kept only on a host that draws them, which is what
+	// setupKittyPassthrough decides per pane. See kitty_placeholder_caps.go.
+	term.SetKittyPlaceholderMode(vt.KittyPlaceholdersKeep)
 	term.SetKittyImageIDTranslator(func(g uint32) (uint32, bool) {
 		return kp.HostImageID(winID, g)
 	})
@@ -283,5 +286,27 @@ func TestTheWholePlaceholderFlow(t *testing.T) {
 					x, y, named, host)
 			}
 		}
+	}
+}
+
+// TestClearingTheScreenFreesPlaceholderImages stops a pager walked through a
+// directory of pictures from leaving every one of them resident in the host.
+// The clear takes the cells with it, so nothing names those images again.
+func TestClearingTheScreenFreesPlaceholderImages(t *testing.T) {
+	kp := newTestKittyPassthrough(t)
+	winID := "test-window-id-abcdef12"
+
+	place := &vt.KittyCommand{
+		Action: vt.KittyActionPlace, ImageID: 777, Columns: 4, Rows: 2, Virtual: true,
+	}
+	kp.ForwardCommand(place, nil, winID, 0, 0, 80, 24, 0, 0, 0, 0, 0, false, nil)
+	kp.mu.Lock()
+	kp.pendingOutput = nil
+	kp.mu.Unlock()
+
+	kp.ClearWindow(winID)
+
+	if out := pendingString(kp); !strings.Contains(out, "a=d,d=I,i=777") {
+		t.Errorf("clearing the screen did not free the image:\n%q", out)
 	}
 }

@@ -310,6 +310,22 @@ type Settings struct {
 	// Set via appearance.right_click_opens_menu config.
 	RightClickOpensMenu bool
 
+	// KittyPlaceholders decides whether images an application positions with
+	// kitty Unicode placeholders are drawn.
+	//
+	// "auto" draws them when the host terminal is one known to implement them,
+	// which is read off the name and version it reports rather than from TERM;
+	// there is no way to ask a terminal whether it has the feature. "on" and
+	// "off" say so outright, for a terminal the table does not know or gets
+	// wrong.
+	//
+	// Off means the placeholder cells are dropped, which is what tuios always
+	// did and which leaves the blank space the application made room for.
+	// Keeping them on a host that cannot draw them fills that space with
+	// missing-glyph boxes instead.
+	// Set via appearance.kitty_placeholders config.
+	KittyPlaceholders string
+
 	// NewWindowInheritCwd starts a new window in the working directory of the
 	// pane that was focused when it was asked for, rather than in the
 	// directory the daemon itself was started in.
@@ -403,6 +419,16 @@ type Settings struct {
 // DefaultSettings is tuios as it ships, before any config file, any flag and
 // any settings page. It is the seed for Global and the value every unconfigured
 // session starts from.
+// The three answers appearance.kitty_placeholders takes.
+const (
+	KittyPlaceholdersAuto = "auto"
+	KittyPlaceholdersOn   = "on"
+	KittyPlaceholdersOff  = "off"
+)
+
+// KittyPlaceholderModes is what appearance.kitty_placeholders accepts.
+var KittyPlaceholderModes = []string{KittyPlaceholdersAuto, KittyPlaceholdersOn, KittyPlaceholdersOff}
+
 func DefaultSettings() Settings {
 	return Settings{
 		NotificationDuration:        6 * time.Second,
@@ -461,6 +487,7 @@ func DefaultSettings() Settings {
 		AltDrag:                     true,
 		ClickToType:                 ClickToTypeSingle,
 		NewWindowInheritCwd:         true,
+		KittyPlaceholders:           KittyPlaceholdersAuto,
 		RightClickOpensMenu:         false,
 		AutoEnterTerminalOnFocus:    AutoEnterTerminalOff,
 		WordCharacters:              `@-./_~?&=%+#`,

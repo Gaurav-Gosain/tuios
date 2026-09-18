@@ -99,6 +99,16 @@ type KittyPassthrough struct {
 	// there misses it, exactly as it misses the remote-video images below.
 	// This is what gets those images deleted when the window goes away.
 	virtualImages map[string]map[uint32]bool
+	// occluderScratch is reused by every refresh pass. The windows drawn over
+	// a pane are the same for all of that pane's images, and a refresh runs on
+	// every frame a window is being dragged, so this is built once per window
+	// per pass rather than once per image and never reallocated.
+	occluderScratch []cellRect
+	// regionScratch and sliceScratch are reused the same way: the clear region
+	// of one image and the slices built from it, rebuilt every frame of a drag
+	// and never reallocated.
+	regionScratch []cellRect
+	sliceScratch  []placementSlice
 	nextHostID    uint32
 	pendingOutput []byte
 
@@ -226,6 +236,15 @@ type pendingDirectTransmit struct {
 	IsAltScreen    bool
 }
 
+// placementSlice is one rectangle of an image the host is told to draw, in
+// screen cells, with the crop into the image that goes with it.
+type placementSlice struct {
+	HostX, HostY      int
+	ClipTop, ClipLeft int
+	ClipBottom        int
+	Cols, Rows        int
+}
+
 type PassthroughPlacement struct {
 	GuestImageID uint32
 	HostImageID  uint32
@@ -275,6 +294,16 @@ type PassthroughPlacement struct {
 	ClipRight       int
 	MaxShowable     int // Max rows that can be shown in current viewport
 	MaxShowableCols int // Max cols that can be shown in current viewport
+
+	// Slices are the rectangles of this image that are actually clear, in
+	// screen cells. One placement can show one rectangle, so an image with a
+	// window over its corner is drawn as two, and the host is sent one a=p per
+	// slice. Empty means the whole image, which is what every path that sets
+	// HostX/HostY directly produces.
+	Slices []placementSlice
+	// placedSlices is how many slices the host was last given, so the extras
+	// can be deleted when the count falls.
+	placedSlices int
 }
 
 // remoteVideoState is the geometry needed to re-place a self-placed video image

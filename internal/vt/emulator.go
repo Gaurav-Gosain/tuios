@@ -164,6 +164,9 @@ type Emulator struct {
 	// kittyImageIDTranslator rewrites the image id a placeholder cell names.
 	// See kitty_placeholder.go.
 	kittyImageIDTranslator KittyImageIDTranslator
+	// kittyPlaceholderMode decides whether placeholder cells are stored or
+	// dropped. See kitty_placeholder.go.
+	kittyPlaceholderMode KittyPlaceholderMode
 
 	// Sixel graphics passthrough callback
 	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
@@ -1405,6 +1408,11 @@ func (e *Emulator) logf(format string, v ...any) {
 // wrote it.
 func (e *Emulator) SetKittyImageIDTranslator(fn KittyImageIDTranslator) {
 	e.kittyImageIDTranslator = fn
+}
+
+// SetKittyPlaceholderMode says whether placeholder cells are kept or dropped.
+func (e *Emulator) SetKittyPlaceholderMode(m KittyPlaceholderMode) {
+	e.kittyPlaceholderMode = m
 }
 
 func (e *Emulator) SetKittyPassthroughFunc(fn func(cmd *KittyCommand, rawData []byte)) {

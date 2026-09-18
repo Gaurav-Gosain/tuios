@@ -125,6 +125,11 @@ func (kp *KittyPassthrough) ClearWindow(windowID string) {
 	}
 	kp.placements[windowID] = nil
 	kp.deleteRemoteVideoImages(windowID)
+	// A screen clear takes the placeholder cells with it, so nothing names
+	// these images any more and their data would sit in the host until the
+	// window closed. A pager walked through a directory of pictures is exactly
+	// the case that accumulates them.
+	kp.deleteVirtualImages(windowID)
 }
 
 func (m *OS) setupKittyPassthrough(window *terminal.Window) {
@@ -157,6 +162,15 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 	window.Terminal.SetKittyImageIDTranslator(func(guestID uint32) (uint32, bool) {
 		return kp.HostImageID(win.ID, guestID)
 	})
+	// Placeholder cells are only worth keeping on a host that draws them. Kept
+	// anywhere else they are missing-glyph boxes where the picture should be,
+	// which is worse than the blank space the application left. See
+	// kitty_placeholder_caps.go for how that is decided.
+	mode := vt.KittyPlaceholdersDrop
+	if m.placeholdersEnabled() {
+		mode = vt.KittyPlaceholdersKeep
+	}
+	window.Terminal.SetKittyPlaceholderMode(mode)
 
 	window.Terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		// In daemon mode, the daemon's VT emulator responds to queries directly

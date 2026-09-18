@@ -279,9 +279,32 @@ func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 		// by. libghostty owns the write side here, so the rewrite happens on
 		// the way out, which is the one place both readers of this buffer go
 		// through.
-		if t.kittyImageIDTranslator != nil && IsKittyPlaceholder(out.Content) {
-			if fg := translateKittyPlaceholderFg(out.Content, out.Style.Fg, t.kittyImageIDTranslator); fg != nil {
-				out.Style.Fg = fg
+		if IsKittyPlaceholder(out.Content) && t.kittyPlaceholderMode == KittyPlaceholdersDrop {
+			// libghostty owns the write side, so a host that cannot draw these
+			// has them blanked on the way out instead.
+			out.Content = " "
+			out.Width = 1
+		}
+		if IsKittyPlaceholder(out.Content) {
+			// Spell out the row and column from the cell to the left, which
+			// this loop has already built, so clipping the left of the row
+			// later cannot orphan what survives. See kitty_placeholder.go.
+			leftContent, sameImage := "", false
+			if x > 0 {
+				if l := buf.CellAt(x-1, y); l != nil {
+					leftContent = l.Content
+					sameImage = sameFg(l.Style.Fg, out.Style.Fg)
+				}
+			}
+			if row, col, ok := kittyPlaceholderNext(out.Content, leftContent, sameImage); ok {
+				if full := kittyPlaceholderSelfDescribing(out.Content, row, col); full != "" {
+					out.Content = full
+				}
+			}
+			if t.kittyImageIDTranslator != nil {
+				if fg := translateKittyPlaceholderFg(out.Content, out.Style.Fg, t.kittyImageIDTranslator); fg != nil {
+					out.Style.Fg = fg
+				}
 			}
 		}
 		if dc.link {

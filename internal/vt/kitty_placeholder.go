@@ -32,6 +32,21 @@ import (
 // and the emulator is what owns the text.
 const kittyPlaceholderChar = kitty.Placeholder
 
+// KittyPlaceholderMode says what the emulator does with placeholder cells.
+type KittyPlaceholderMode int
+
+const (
+	// KittyPlaceholdersDrop discards placeholder cells, which is what a host
+	// that cannot draw them needs: kept, they render as missing-glyph boxes
+	// where the picture should be, which is worse than the blank space the
+	// application left room for. This is the default, so a caller that never
+	// asks is never surprised.
+	KittyPlaceholdersDrop KittyPlaceholderMode = iota
+	// KittyPlaceholdersKeep stores them so they reach the host and it draws
+	// the image.
+	KittyPlaceholdersKeep
+)
+
 // KittyImageIDTranslator turns a guest's image id into the id the host knows
 // that image by. It reports false when the image has no host id yet, in which
 // case the cell is left as the guest wrote it.
@@ -138,4 +153,111 @@ func translateKittyPlaceholderFg(content string, fg color.Color, tr KittyImageID
 		return nil
 	}
 	return kittyPlaceholderFg(hostID)
+}
+
+// Making a placeholder cell stand on its own.
+//
+// An application writes the row diacritic on the first cell of each row and
+// nothing on the rest, and the terminal works the others out by looking left:
+// a cell with no marks is the cell to its left, one column on. That is fine
+// until something takes the left of the row away, and a multiplexer takes the
+// left of rows away constantly. A pane dragged off the left edge of the screen
+// is clipped there, and a window drawn over the left half of an image replaces
+// those cells with its own. Either way the leftmost surviving cell has nothing
+// to inherit from, and kitty's specification says so outright: the rules "will
+// not work for horizontal scrolling and overlapping images", and a terminal
+// may guess but does not have to.
+//
+// So the marks are filled in here, where the row is still whole. Every cell is
+// given its own row and column, which is what the cell to its left would have
+// told it, and then no cell needs a neighbour and any of them can be clipped
+// away without taking the rest with it.
+
+// kittyPlaceholderRowCol reads the row and column a cell states for itself.
+func kittyPlaceholderRowCol(content string) (row, col int, hasRow, hasCol bool) {
+	idx := diacriticIndex()
+	n := 0
+	for i, r := range content {
+		if i == 0 {
+			continue
+		}
+		v, ok := idx[r]
+		if !ok {
+			continue
+		}
+		switch n {
+		case 0:
+			row, hasRow = v, true
+		case 1:
+			col, hasCol = v, true
+		}
+		n++
+		if n >= 2 {
+			break
+		}
+	}
+	return row, col, hasRow, hasCol
+}
+
+// kittyPlaceholderSelfDescribing returns the cell content with its row and
+// column spelled out, keeping any third mark (the image id's high byte) after
+// them. It returns "" when nothing needs changing.
+func kittyPlaceholderSelfDescribing(content string, row, col int) string {
+	if row < 0 || col < 0 || row >= 297 || col >= 297 {
+		return ""
+	}
+	if r, c, hasRow, hasCol := kittyPlaceholderRowCol(content); hasRow && hasCol && r == row && c == col {
+		return ""
+	}
+	out := string(kittyPlaceholderChar) + string(kitty.Diacritic(row)) + string(kitty.Diacritic(col))
+	if high, ok := kittyPlaceholderHighByte(content); ok {
+		out += string(kitty.Diacritic(high))
+	}
+	return out
+}
+
+// kittyPlaceholderNext works out the row and column of a cell from the cell to
+// its left, which is the inference the terminal would do if the row reached it
+// whole.
+//
+// left is the content of the cell immediately to the left and leftFg its
+// colour; they matter only when this cell states nothing itself. sameImage says
+// whether that cell belongs to the same image, which the colours decide.
+func kittyPlaceholderNext(content, left string, sameImage bool) (row, col int, ok bool) {
+	r, c, hasRow, hasCol := kittyPlaceholderRowCol(content)
+	switch {
+	case hasRow && hasCol:
+		return r, c, true
+	case !sameImage || !IsKittyPlaceholder(left):
+		if hasRow {
+			// A row with no column and nothing to its left starts at zero,
+			// which is what an application writes for the first cell.
+			return r, 0, true
+		}
+		return 0, 0, false
+	}
+	lr, lc, lHasRow, lHasCol := kittyPlaceholderRowCol(left)
+	if !lHasRow || !lHasCol {
+		return 0, 0, false
+	}
+	_ = lHasRow
+	if hasRow {
+		if r != lr {
+			// A new row starting beside another one begins at column zero.
+			return r, 0, true
+		}
+		return r, lc + 1, true
+	}
+	return lr, lc + 1, true
+}
+
+// sameFg reports whether two cell colours are the same, which is how two
+// placeholder cells are known to belong to the same image.
+func sameFg(a, b color.Color) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
 }

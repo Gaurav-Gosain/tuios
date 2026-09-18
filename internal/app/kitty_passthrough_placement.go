@@ -280,6 +280,15 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		viewportTop := info.ScrollbackLen - info.ScrollOffset
 		viewportWidth, viewportHeight := paneContentCells(info)
 
+		// The windows drawn over this one, which every image in it is clipped
+		// against. Built once here rather than once per image: a pane being
+		// dragged refreshes on every frame, and the answer cannot differ
+		// between two images in the same pane.
+		blockers := kp.occludersAboveInto(kp.occluderScratch[:0], info.WindowZ, allWindows, windowID)
+		kp.occluderScratch = blockers[:0]
+		// Reused for every image in this window, and across frames.
+		slices := kp.sliceScratch[:0]
+
 		// Collect IDs to delete (for altscreen cleanup)
 		var idsToDelete []uint32
 
@@ -393,46 +402,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				}
 			}
 
-			// Crop to whatever a window drawn over this one leaves clear,
-			// rather than hiding the picture because something touched it. The
-			// crops are applied exactly as the layout box's are above, because
-			// they are the same thing: a smaller rectangle of the same image.
-			// See kitty_occlusion.go for what one placement can and cannot
-			// show.
-			if anyPartVisible {
-				blockers := occludersAbove(info.WindowZ, allWindows, windowID)
-				clear, ok := largestClearRect(
-					cellRect{newHostX, newHostY, imageCellWidth, imageCellHeight}, blockers)
-				switch {
-				case !ok:
-					kittyPassthroughLog("RefreshPlacement: image fully covered by a higher window, hiding")
-					anyPartVisible = false
-				default:
-					if crop := clear.X - newHostX; crop > 0 {
-						newHostX += crop
-						clipLeft += crop
-						imageCellWidth -= crop
-					}
-					if crop := clear.Y - newHostY; crop > 0 {
-						newHostY += crop
-						clipTop += crop
-						imageCellHeight -= crop
-					}
-					if over := newHostX + imageCellWidth - clear.X - clear.W; over > 0 {
-						imageCellWidth -= over
-					}
-					if over := newHostY + imageCellHeight - clear.Y - clear.H; over > 0 {
-						clipBottom += over
-						imageCellHeight -= over
-					}
-					maxShowableCols = imageCellWidth
-					maxShowableRows = imageCellHeight
-					if imageCellWidth <= 0 || imageCellHeight <= 0 {
-						anyPartVisible = false
-					}
-				}
-			}
-
 			// Hide images when host position is out of bounds.
 			if anyPartVisible && (newHostX < 0 || newHostY < 0) {
 				anyPartVisible = false
@@ -478,6 +447,51 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				}
 			}
 
+			// Crop to whatever a window drawn over this one leaves clear,
+			// rather than hiding the picture because something touched it. The
+			// crops are applied exactly as the layout box's are above, because
+			// they are the same thing: a smaller rectangle of the same image.
+			// See kitty_occlusion.go for what one placement can and cannot
+			// show.
+			slices = slices[:0]
+			if anyPartVisible {
+				whole := cellRect{newHostX, newHostY, imageCellWidth, imageCellHeight}
+				region, exact := clearRegion(kp.regionScratch[:0], whole, blockers)
+				kp.regionScratch = region
+				if !exact {
+					// Too many pieces to draw one placement each. The largest
+					// single rectangle is the fallback, which is what this did
+					// before it could do better.
+					if one, ok := largestClearRect(whole, blockers); ok {
+						region = append(region[:0], one)
+					} else {
+						region = region[:0]
+					}
+				}
+				if len(region) == 0 {
+					kittyPassthroughLog("RefreshPlacement: image fully covered by a higher window, hiding")
+					anyPartVisible = false
+				} else {
+					for _, r := range region {
+						slices = append(slices, placementSlice{
+							HostX:      r.X,
+							HostY:      r.Y,
+							ClipTop:    clipTop + r.Y - newHostY,
+							ClipLeft:   clipLeft + r.X - newHostX,
+							ClipBottom: clipBottom + (newHostY + imageCellHeight) - (r.Y + r.H),
+							Cols:       r.W,
+							Rows:       r.H,
+						})
+					}
+					// The first slice also answers for the placement as a
+					// whole, so the fields every other path reads stay true.
+					newHostX, newHostY = slices[0].HostX, slices[0].HostY
+					clipTop, clipLeft = slices[0].ClipTop, slices[0].ClipLeft
+					clipBottom = slices[0].ClipBottom
+					maxShowableCols, maxShowableRows = slices[0].Cols, slices[0].Rows
+				}
+			}
+
 			kittyPassthroughLog("RefreshPlacement: winXY=(%d,%d) size=(%d,%d) off=(%d,%d) relY=%d, origRows=%d, origCols=%d, vpH=%d, vpW=%d, box=(%d,%d)-(%d,%d), clipTop=%d, clipBot=%d, clipLeft=%d, maxRows=%d, maxCols=%d, newHost=(%d,%d), visible=%v",
 				info.WindowX, info.WindowY, info.Width, info.Height, info.ContentOffsetX, info.ContentOffsetY,
 				relativeY, p.Rows, p.Cols, viewportHeight, viewportWidth, boxX0, boxY0, boxX1, boxY1,
@@ -501,8 +515,10 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				// redraw a placement whose image was swapped underneath it.
 				posChanged := p.Hidden || p.DataDirty || p.HostX != newHostX || p.HostY != newHostY ||
 					p.ClipTop != clipTop || p.ClipBottom != clipBottom || p.ClipLeft != clipLeft ||
-					p.MaxShowable != maxShowableRows || p.MaxShowableCols != maxShowableCols
+					p.MaxShowable != maxShowableRows || p.MaxShowableCols != maxShowableCols ||
+					!sameSlices(p.Slices, slices)
 				if posChanged {
+					p.Slices = append(p.Slices[:0], slices...)
 					p.HostX = newHostX
 					p.HostY = newHostY
 					p.ClipTop = clipTop
@@ -510,7 +526,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 					p.ClipLeft = clipLeft
 					p.MaxShowable = maxShowableRows
 					p.MaxShowableCols = maxShowableCols
-					kp.placeOne(p)
+					kp.placeSlices(p)
 				}
 				p.DataDirty = false
 				p.Hidden = false
@@ -615,6 +631,60 @@ func (kp *KittyPassthrough) deleteOnePlacement(p *PassthroughPlacement) {
 		caller = fmt.Sprintf("%s:%d", runtime.FuncForPC(pc).Name(), line)
 	}
 	kittyPassthroughLog("deleteOnePlacement: hostID=%d caller=%s", p.HostImageID, caller)
+	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+}
+
+// placeSlices draws an image as the set of rectangles that are clear of
+// whatever is on top of it, one a=p per rectangle.
+//
+// One placement shows one rectangle, so this is what lets an image with a
+// window over its corner keep the whole of the L instead of the larger of its
+// two strips. The placement ids run from the image's own upward, and the ones
+// left over from a frame with more slices are deleted, or a strip that is no
+// longer clear stays on the host's screen after the window moved off it.
+func (kp *KittyPassthrough) placeSlices(p *PassthroughPlacement) {
+	if len(p.Slices) == 0 {
+		// Every path that sets HostX and the clip fields directly, rather than
+		// going through the refresh, means the whole image.
+		kp.placeOne(p)
+		p.placedSlices = 1
+		return
+	}
+
+	base := p.PlacementID
+	if base == 0 {
+		base = 1
+	}
+	// Saved because placeOne reads the placement's own fields, and the slices
+	// are what is being drawn this pass rather than what the image is.
+	saved := placementSlice{
+		HostX: p.HostX, HostY: p.HostY,
+		ClipTop: p.ClipTop, ClipLeft: p.ClipLeft, ClipBottom: p.ClipBottom,
+		Cols: p.MaxShowableCols, Rows: p.MaxShowable,
+	}
+	for i, sl := range p.Slices {
+		p.HostX, p.HostY = sl.HostX, sl.HostY
+		p.ClipTop, p.ClipLeft, p.ClipBottom = sl.ClipTop, sl.ClipLeft, sl.ClipBottom
+		p.MaxShowableCols, p.MaxShowable = sl.Cols, sl.Rows
+		p.PlacementID = base + uint32(i)
+		kp.placeOne(p)
+	}
+	for i := len(p.Slices); i < p.placedSlices; i++ {
+		kp.deleteOneSlice(p, base+uint32(i))
+	}
+	p.placedSlices = len(p.Slices)
+
+	p.PlacementID = base
+	p.HostX, p.HostY = saved.HostX, saved.HostY
+	p.ClipTop, p.ClipLeft, p.ClipBottom = saved.ClipTop, saved.ClipLeft, saved.ClipBottom
+	p.MaxShowableCols, p.MaxShowable = saved.Cols, saved.Rows
+}
+
+// deleteOneSlice removes a single placement of an image, leaving the image and
+// its other placements alone. d=i without a p= would take them all.
+func (kp *KittyPassthrough) deleteOneSlice(p *PassthroughPlacement, placementID uint32) {
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,p=%d,q=2\x1b\\", p.HostImageID, placementID)
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 }
 

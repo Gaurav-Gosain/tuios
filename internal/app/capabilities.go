@@ -41,9 +41,14 @@ type HostCapabilities struct {
 	// always correct; claiming it wrongly would leave the pane frozen on its
 	// first frame.
 	KittyAnimation bool
-	SixelGraphics  bool
-	TrueColor      bool
-	TerminalName   string
+	// KittyPlaceholders is whether the host draws kitty Unicode placeholders.
+	// There is no way to ask, so it is read off the terminal's own name and
+	// version; see kitty_placeholder_caps.go for why, and for why guessing
+	// wrong here costs nothing.
+	KittyPlaceholders bool
+	SixelGraphics     bool
+	TrueColor         bool
+	TerminalName      string
 	// FontFamily and BoldFontFamily are the faces the host draws with, as it
 	// named them itself. kitty answers a documented XTGETTCAP key with them,
 	// and fontconfig turns the name into a file, so a PNG capture can be drawn
@@ -293,6 +298,9 @@ func probeTerminal(caps *HostCapabilities) {
 	}
 	writeAnimationProbe(&q)
 	writeFontQuery(&q)
+	// Who the terminal says it is, which is what decides whether Unicode
+	// placeholders are drawn or dropped.
+	q.WriteString(xtversionQuery)
 	q.WriteString("\x1b[c") // DA1 last, so its reply closes the whole batch
 	_, _ = tty.WriteString(q.String())
 
@@ -301,6 +309,7 @@ func probeTerminal(caps *HostCapabilities) {
 	parsePixelGeometry(caps, response)
 	parseGraphicsSupport(caps, response, probeFileErr == nil)
 	parseHostFont(caps, response)
+	caps.KittyPlaceholders = caps.KittyGraphics && hostDrawsPlaceholders(response)
 }
 
 // fontQueryKeys are the XTGETTCAP names kitty answers with its own font.
@@ -520,6 +529,13 @@ func applyEnvironmentOverrides(caps *HostCapabilities) {
 		caps.KittyGraphics = true
 	case "0":
 		caps.KittyGraphics = false
+	}
+
+	switch os.Getenv("TUIOS_KITTY_PLACEHOLDERS") {
+	case "1":
+		caps.KittyPlaceholders = true
+	case "0":
+		caps.KittyPlaceholders = false
 	}
 
 	switch os.Getenv("TUIOS_SIXEL_GRAPHICS") {

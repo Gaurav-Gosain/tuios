@@ -227,3 +227,146 @@ func TestAnUncoveredImageIsUnaffected(t *testing.T) {
 		t.Errorf("an image nothing covers was cropped:\n%q", out)
 	}
 }
+
+// TestSubtractRectIsExact pins the decomposition. This is what lets an image
+// keep the whole of an L rather than the larger of its two strips, which is the
+// visible defect: a window at the bottom right took the top right of the
+// picture with it.
+func TestSubtractRectIsExact(t *testing.T) {
+	img := cellRect{X: 0, Y: 0, W: 10, H: 10}
+
+	t.Run("a corner leaves two pieces covering everything else", func(t *testing.T) {
+		// Covers the bottom right quadrant.
+		got := subtractRect(img, cellRect{X: 5, Y: 5, W: 20, H: 20})
+		if covered := totalArea(got); covered != 75 {
+			t.Errorf("pieces cover %d cells, want 75 (100 less the 25 covered): %+v", covered, got)
+		}
+		assertDisjointAndClear(t, got, img, cellRect{X: 5, Y: 5, W: 20, H: 20})
+	})
+
+	t.Run("a window through the middle leaves a ring", func(t *testing.T) {
+		got := subtractRect(img, cellRect{X: 3, Y: 3, W: 4, H: 4})
+		if covered := totalArea(got); covered != 84 {
+			t.Errorf("pieces cover %d cells, want 84: %+v", covered, got)
+		}
+		assertDisjointAndClear(t, got, img, cellRect{X: 3, Y: 3, W: 4, H: 4})
+	})
+
+	t.Run("no overlap leaves the image whole", func(t *testing.T) {
+		got := subtractRect(img, cellRect{X: 50, Y: 50, W: 5, H: 5})
+		if len(got) != 1 || got[0] != img {
+			t.Errorf("got %+v, want the whole image", got)
+		}
+	})
+
+	t.Run("full cover leaves nothing", func(t *testing.T) {
+		if got := subtractRect(img, cellRect{X: -1, Y: -1, W: 30, H: 30}); len(got) != 0 {
+			t.Errorf("got %+v, want nothing", got)
+		}
+	})
+}
+
+func totalArea(rs []cellRect) int {
+	n := 0
+	for _, r := range rs {
+		n += r.area()
+	}
+	return n
+}
+
+// assertDisjointAndClear checks the pieces do not overlap each other, stay
+// inside the image, and none of them touches the blocker.
+func assertDisjointAndClear(t *testing.T, pieces []cellRect, img, blocker cellRect) {
+	t.Helper()
+	for i, a := range pieces {
+		if a.empty() {
+			t.Errorf("piece %d is empty", i)
+		}
+		if a.X < img.X || a.Y < img.Y || a.X+a.W > img.X+img.W || a.Y+a.H > img.Y+img.H {
+			t.Errorf("piece %d %+v escapes the image %+v", i, a, img)
+		}
+		if a.overlaps(blocker) {
+			t.Errorf("piece %d %+v overlaps the blocker %+v", i, a, blocker)
+		}
+		for j, b := range pieces {
+			if i != j && a.overlaps(b) {
+				t.Errorf("pieces %d %+v and %d %+v overlap, so the image is drawn twice there", i, a, j, b)
+			}
+		}
+	}
+}
+
+// TestClearRegionCapsTheDecomposition keeps a drag from turning into an
+// unbounded number of escape sequences per frame.
+func TestClearRegionCapsTheDecomposition(t *testing.T) {
+	img := cellRect{X: 0, Y: 0, W: 40, H: 40}
+	var blockers []cellRect
+	for i := range 6 {
+		blockers = append(blockers, cellRect{X: i*6 + 2, Y: 2, W: 2, H: 36})
+	}
+	if _, ok := clearRegion(nil, img, blockers); ok {
+		t.Error("a decomposition past the cap reported success instead of asking for the fallback")
+	}
+	// One blocker stays well inside the cap.
+	if got, ok := clearRegion(nil, img, blockers[:1]); !ok || len(got) == 0 {
+		t.Errorf("one blocker should decompose, got %+v ok=%v", got, ok)
+	}
+}
+
+// TestACornerCoverKeepsBothStrips is the screenshot case. A window over the
+// bottom right of an image used to take the whole top right with it, because
+// one placement shows one rectangle and the larger strip won. The image is now
+// drawn as both pieces of the L.
+//
+// Negative control: routing the refresh back through largestClearRect emitted a
+// single a=p and this failed.
+func TestACornerCoverKeepsBothStrips(t *testing.T) {
+	h := newOcclusionHarness(t)
+	h.refresh()
+
+	// The image sits at (1,1) and is 20x10. Cover its bottom right corner only.
+	h.infos["over"] = &WindowPositionInfo{
+		WindowX: 12, WindowY: 6, Width: 40, Height: 30,
+		Visible: true, WindowZ: 9, ScreenWidth: 200, ScreenHeight: 60,
+	}
+	out := h.refresh()
+
+	if n := strings.Count(out, "a=p,i="); n < 2 {
+		t.Errorf("the image was drawn as %d placement(s), want two for the L:\n%q", n, out)
+	}
+	if strings.Contains(out, "a=d,d=i,i=1,q=2") {
+		t.Errorf("the image was hidden rather than cropped:\n%q", out)
+	}
+	// The two pieces must use different placement ids or the second replaces
+	// the first.
+	if !strings.Contains(out, "p=1") || !strings.Contains(out, "p=2") {
+		t.Errorf("the two pieces did not get distinct placement ids:\n%q", out)
+	}
+}
+
+// TestSlicesShrinkBackToOne checks the leftovers are cleaned up. A frame that
+// needed two pieces and then needs one must delete the second, or a strip that
+// is no longer clear stays on screen after the window moves off it.
+//
+// Negative control: dropping the stale-slice delete loop from placeSlices left
+// the second placement on the host and this failed.
+func TestSlicesShrinkBackToOne(t *testing.T) {
+	h := newOcclusionHarness(t)
+	h.refresh()
+
+	h.infos["over"] = &WindowPositionInfo{
+		WindowX: 12, WindowY: 6, Width: 40, Height: 30,
+		Visible: true, WindowZ: 9, ScreenWidth: 200, ScreenHeight: 60,
+	}
+	if out := h.refresh(); strings.Count(out, "a=p,i=") < 2 {
+		t.Fatalf("setup did not produce two pieces:\n%q", out)
+	}
+
+	// Move the window so it covers a full-height band instead: one piece.
+	h.infos["over"].WindowY = 0
+	out := h.refresh()
+
+	if !strings.Contains(out, "a=d,d=i,i=1,p=2") {
+		t.Errorf("the second piece was not deleted when it stopped being needed:\n%q", out)
+	}
+}

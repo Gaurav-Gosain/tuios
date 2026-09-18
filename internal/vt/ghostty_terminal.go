@@ -121,8 +121,10 @@ type GhosttyTerminal struct {
 	// kittyImageIDTranslator rewrites the image id a placeholder cell names.
 	// See kitty_placeholder.go.
 	kittyImageIDTranslator KittyImageIDTranslator
-	sixelPassthroughFunc   func(cmd *SixelCommand, cursorX, cursorY, absLine int)
-	textSizingFunc         func(rawOSC []byte, cursorX, cursorY, scale, textLen int)
+	// kittyPlaceholderMode decides whether placeholder cells survive the read.
+	kittyPlaceholderMode KittyPlaceholderMode
+	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
+	textSizingFunc       func(rawOSC []byte, cursorX, cursorY, scale, textLen int)
 
 	restore *ghosttyRestore
 }

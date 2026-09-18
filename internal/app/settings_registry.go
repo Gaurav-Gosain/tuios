@@ -67,6 +67,7 @@ var settingLabels = map[string]string{
 	"appearance.links":                  "Links",
 	"appearance.right_click_opens_menu": "Right-click menu",
 	"appearance.new_window_inherit_cwd": "Inherit directory",
+	"appearance.kitty_placeholders":     "Placeholder images",
 	"appearance.dock_pill_caps":         "Pill caps",
 	"appearance.dock_workspace_tabs":    "Workspace tabs",
 	"appearance.dock_workspace_tooltip": "Workspace name on hover",

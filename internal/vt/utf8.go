@@ -91,6 +91,12 @@ func (o *openGrapheme) disarm() {
 
 // handlePrint handles printable characters.
 func (e *Emulator) handlePrint(r rune) {
+	// A placeholder cell on a host that cannot draw it is a missing-glyph box
+	// where a picture should be, so it is dropped and the application's own
+	// spacing is what shows.
+	if r == kittyPlaceholderChar && e.kittyPlaceholderMode == KittyPlaceholdersDrop {
+		return
+	}
 	if r >= ansi.SP && r < ansi.DEL {
 		if len(e.grapheme) > 0 {
 			// If we have a grapheme buffer, flush it before handling the ASCII character.
@@ -526,9 +532,28 @@ func (e *Emulator) handleGraphemeWithin(content string, width, left, right int) 
 	// rewrite happens here, on the way into the grid, so both of this
 	// backend's readers (its own Render and the per-cell path in the app) see
 	// the translated cell without either having to know about it.
-	if e.kittyImageIDTranslator != nil && IsKittyPlaceholder(content) {
-		if fg := translateKittyPlaceholderFg(content, cell.Style.Fg, e.kittyImageIDTranslator); fg != nil {
-			cell.Style.Fg = fg
+	if IsKittyPlaceholder(content) {
+		// Spell out this cell's row and column while the row is still whole,
+		// so clipping the left of it later cannot orphan the rest. See
+		// kitty_placeholder.go.
+		x, y := e.scr.CursorPosition()
+		var leftContent string
+		sameImage := false
+		if x > 0 {
+			if l := e.scr.CellAt(x-1, y); l != nil {
+				leftContent = l.Content
+				sameImage = sameFg(l.Style.Fg, cell.Style.Fg)
+			}
+		}
+		if row, col, ok := kittyPlaceholderNext(content, leftContent, sameImage); ok {
+			if full := kittyPlaceholderSelfDescribing(content, row, col); full != "" {
+				cell.Content = full
+			}
+		}
+		if e.kittyImageIDTranslator != nil {
+			if fg := translateKittyPlaceholderFg(cell.Content, cell.Style.Fg, e.kittyImageIDTranslator); fg != nil {
+				cell.Style.Fg = fg
+			}
 		}
 	}
 

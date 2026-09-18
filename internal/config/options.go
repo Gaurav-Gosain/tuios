@@ -147,6 +147,11 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 	{
+		Path: "appearance.kitty_placeholders", Type: OptionString, Section: "appearance",
+		Description: "Draw images an app positions with kitty Unicode placeholders: auto, on, off",
+		Accepted:    KittyPlaceholderModes, Default: KittyPlaceholdersAuto,
+	},
+	{
 		Path: "appearance.new_window_inherit_cwd", Type: OptionBool, Section: "appearance",
 		Description: "A new window starts in the focused pane's working directory",
 		Default:     "true",

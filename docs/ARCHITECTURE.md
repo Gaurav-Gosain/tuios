@@ -658,13 +658,91 @@ Two consequences follow from the id living in a color:
 Placeholders need a host terminal that implements them: kitty, Ghostty and
 WezTerm do, and xterm.js does not, so they do not appear in `tuios-web`.
 
-A placed image is cropped to what a window drawn over it leaves clear, rather
-than hidden because something touched it (`internal/app/kitty_occlusion.go`).
-One placement can show one rectangle, so a window over a corner leaves an L and
-the larger of its two strips is what gets drawn. A placeholder image has no such
-limit: its cells are text, the compositor has already decided which of them
-survive, and the host draws exactly those. The self-placed remote video stream
-used by browser panes still hides rather than crops.
+### Images under a window
+
+A kitty image is painted by the host terminal over the finished frame, not
+composited with the cells, so a pane drawn on top of one does not cover it the
+way it covers text. tuios used to hide any image a higher window touched at all,
+which meant one cell of overlap took the whole picture away.
+
+It is now cropped to what is actually clear
+(`internal/app/kitty_occlusion.go`). One placement shows one rectangle, so the
+visible region is subtracted exactly and drawn as up to `maxVisibleSlices`
+placements, one per rectangle: a window over a corner leaves an L and both of
+its strips are drawn. Past that cap the image falls back to the single largest
+clear rectangle, which only several overlapping windows can reach. Placement
+ids run from the image's own upward, and the ones left over from a frame with
+more slices are deleted, or a strip that is no longer clear would stay on
+screen after the window moved off it.
+
+A placeholder image needs none of this: its cells are text, the compositor has
+already decided which of them survive, and the host draws exactly those, so the
+visible region can be any shape at all. The self-placed remote video stream used
+by browser panes still hides rather than crops.
+
+### Deciding whether to use placeholders
+
+There is no way to ask a terminal whether it draws Unicode placeholders. The
+graphics protocol's query action answers for graphics as a whole, and kitty's
+capability kitten reports names, fonts, colours and the operating system and
+nothing about images. The obvious probe does not work either: the specification
+says a virtual placement must carry `c` and `r`, so a terminal that implements
+placeholders ought to refuse one without them, but Ghostty answers `OK` to
+exactly that while supporting the feature.
+
+So tuios asks the terminal who it is, with XTVERSION (`CSI > q`) in the
+capability probe's existing round trip, and looks the answer up in a table of
+known versions (`internal/app/kitty_placeholder_caps.go`). That is a heuristic,
+but a better one than reading `TERM`: XTVERSION is answered by the terminal on
+the other end of this tty now, while `TERM` and `TERM_PROGRAM` are inherited
+variables that go stale and that a multiplexer rewrites.
+
+What keeps it honest is the direction it fails in. Placeholder cells are kept
+only on a positive match; everywhere else they are dropped, exactly as they were
+before this existed, leaving the blank space the application made room for.
+Keeping them on a terminal that cannot draw them would fill that space with
+missing-glyph boxes instead. A table that is wrong or out of date therefore
+costs the feature and never the picture.
+
+`appearance.kitty_placeholders` overrides the table: `auto` asks the terminal,
+`on` and `off` say so outright. `TUIOS_KITTY_PLACEHOLDERS=1` or `0` overrides
+both, for a one-off.
+
+### Why placeholder cells carry both marks
+
+An application writes the row diacritic on the first cell of each row and leaves
+the rest to be worked out: a placeholder cell with no marks is the cell to its
+left, one column on. kitty's specification is explicit that this "will not work
+for horizontal scrolling and overlapping images", and a multiplexer produces
+both constantly. A pane dragged off the left edge of the screen is clipped
+there, and a window drawn over the left half of an image replaces those cells
+with its own; either way the leftmost surviving cell has nothing to inherit
+from, and the rest of its row goes with it.
+
+So tuios fills the marks in as the cells are built, while the row is still
+whole: every cell is given its own row and column, which is exactly what the
+cell to its left would have told it. No cell then needs a neighbour, and any of
+them can be clipped away without taking the others. The colours are what
+separate two images sitting side by side, so the inference never walks out of
+one image into the next.
+
+### What hides a placeholder image
+
+Nothing has to. The paths that hide a placed image, `HideAllPlacements` for a
+resize and `SetOverlayActive` for a full-screen overlay, exist because the host
+paints a placement over the finished frame and it would otherwise be drawn on
+top of the overlay. A placeholder image is drawn only where its cells are, and
+an overlay composited over the pane replaces those cells, so the host draws
+nothing there without being asked. A partial overlay leaves the uncovered part
+of the picture showing, which is what should happen and what a placement cannot
+express.
+
+Both of those functions walk `placements`, which a placeholder image is not in,
+so neither touches it. What does have to be explicit is freeing the image: it
+carries no placement, so the teardown that walks `placements` cannot see it.
+`OnWindowClose` and `ClearWindow` both free them, the latter because a screen
+clear takes the cells with it and a pager walked through a directory of pictures
+would otherwise leave every one of them resident in the host.
 
 ## Performance Characteristics
 

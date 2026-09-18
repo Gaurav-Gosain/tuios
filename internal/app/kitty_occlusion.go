@@ -64,6 +64,83 @@ func (r cellRect) clearOf(blocker cellRect) cellRect {
 	return best
 }
 
+// maxVisibleSlices caps how many placements one image may be broken into.
+//
+// Subtracting one rectangle from another leaves at most four, and each extra
+// blocker can split those again, so an unbounded decomposition is an unbounded
+// number of escape sequences on every frame of a drag. Past the cap the image
+// falls back to the single largest clear rectangle, which is worse looking and
+// cheap, and which nothing short of several overlapping windows can reach.
+const maxVisibleSlices = 6
+
+// subtractRect returns the parts of r that b does not cover: nothing when b
+// covers r, r itself when they do not meet, and otherwise up to four rectangles
+// (a band above, a band below, and the left and right pieces of what is
+// between them).
+func subtractRect(r, b cellRect) []cellRect {
+	if r.empty() {
+		return nil
+	}
+	if b.empty() || !r.overlaps(b) {
+		return []cellRect{r}
+	}
+	var out []cellRect
+	// The band above the blocker keeps r's full width.
+	if b.Y > r.Y {
+		out = append(out, cellRect{r.X, r.Y, r.W, b.Y - r.Y})
+	}
+	// The band below it, likewise.
+	if bBottom := b.Y + b.H; bBottom < r.Y+r.H {
+		out = append(out, cellRect{r.X, bBottom, r.W, r.Y + r.H - bBottom})
+	}
+	// What is left of the middle band, to the left and right of the blocker.
+	midTop := max(r.Y, b.Y)
+	midBottom := min(r.Y+r.H, b.Y+b.H)
+	if midBottom > midTop {
+		if b.X > r.X {
+			out = append(out, cellRect{r.X, midTop, b.X - r.X, midBottom - midTop})
+		}
+		if bRight := b.X + b.W; bRight < r.X+r.W {
+			out = append(out, cellRect{bRight, midTop, r.X + r.W - bRight, midBottom - midTop})
+		}
+	}
+	return out
+}
+
+// clearRegion returns the exact visible part of r as a set of rectangles, which
+// is what lets an image keep the whole of an L rather than the larger of its
+// two strips.
+//
+// dst is reused across frames. The answer is empty when the image is covered,
+// and nil with ok false when the decomposition ran past maxVisibleSlices, which
+// tells the caller to fall back to the single largest rectangle.
+func clearRegion(dst []cellRect, r cellRect, blockers []cellRect) ([]cellRect, bool) {
+	dst = append(dst[:0], r)
+	for _, b := range blockers {
+		if len(dst) == 0 {
+			return dst, true
+		}
+		n := 0
+		for _, piece := range dst {
+			for _, part := range subtractRect(piece, b) {
+				if n >= maxVisibleSlices {
+					return nil, false
+				}
+				// Compact in place: the pieces a blocker produces are always at
+				// or after the piece they came from.
+				if n < len(dst) {
+					dst[n] = part
+				} else {
+					dst = append(dst, part)
+				}
+				n++
+			}
+		}
+		dst = dst[:n]
+	}
+	return dst, true
+}
+
 // largestClearRect returns the biggest rectangle of r that none of the blockers
 // cover, and whether anything is left.
 //
@@ -90,12 +167,45 @@ func occludersAbove(
 	allWindows map[string]*WindowPositionInfo,
 	excludeWindowID string,
 ) []cellRect {
-	var out []cellRect
+	return occludersAboveInto(nil, windowZ, allWindows, excludeWindowID)
+}
+
+// occludersAboveInto appends into dst, which a caller reuses across frames so a
+// refresh during a drag allocates nothing.
+func occludersAboveInto(
+	dst []cellRect,
+	windowZ int,
+	allWindows map[string]*WindowPositionInfo,
+	excludeWindowID string,
+) []cellRect {
 	for id, info := range allWindows {
 		if id == excludeWindowID || !info.Visible || info.WindowZ <= windowZ {
 			continue
 		}
-		out = append(out, cellRect{info.WindowX, info.WindowY, info.Width, info.Height})
+		dst = append(dst, cellRect{info.WindowX, info.WindowY, info.Width, info.Height})
 	}
-	return out
+	return dst
+}
+
+func (kp *KittyPassthrough) occludersAboveInto(
+	dst []cellRect,
+	windowZ int,
+	allWindows map[string]*WindowPositionInfo,
+	excludeWindowID string,
+) []cellRect {
+	return occludersAboveInto(dst, windowZ, allWindows, excludeWindowID)
+}
+
+// sameSlices reports whether two slice lists describe the same drawing, so a
+// pass that changed nothing emits nothing.
+func sameSlices(a, b []placementSlice) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

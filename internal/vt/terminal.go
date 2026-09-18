@@ -99,6 +99,9 @@ type Terminal interface {
 	// SetKittyImageIDTranslator installs the guest-to-host image id mapping
 	// used for kitty Unicode placeholder cells. See kitty_placeholder.go.
 	SetKittyImageIDTranslator(fn KittyImageIDTranslator)
+	// SetKittyPlaceholderMode says whether placeholder cells are kept or
+	// dropped. See kitty_placeholder.go.
+	SetKittyPlaceholderMode(m KittyPlaceholderMode)
 	SetSixelPassthroughFunc(fn func(cmd *SixelCommand, cursorX, cursorY, absLine int))
 	SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, scale, textLen int))
 	SetCellSize(width, height int)
