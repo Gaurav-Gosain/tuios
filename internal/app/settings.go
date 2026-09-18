@@ -391,6 +391,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.click_to_type"),
 			opt("appearance.auto_enter_terminal_on_focus"),
 			opt("appearance.alt_drag"),
+			opt("appearance.right_click_opens_menu"),
 			opt("appearance.niri_reverse_scroll"),
 			custom("appearance.max_fps", m.maxFPSItem()),
 			opt("appearance.preferred_shell"),
