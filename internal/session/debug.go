@@ -315,6 +315,8 @@ func MessageTypeName(t MessageType) string {
 		MsgResize:           "Resize",
 		MsgPing:             "Ping",
 		MsgCreatePTY:        "CreatePTY",
+		MsgReadDir:          "ReadDir",
+		MsgDirListing:       "DirListing",
 		MsgClosePTY:         "ClosePTY",
 		MsgListPTYs:         "ListPTYs",
 		MsgFocusPTY:         "FocusPTY",

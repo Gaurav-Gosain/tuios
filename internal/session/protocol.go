@@ -94,6 +94,22 @@ const (
 	// polling for them, so the only way it can learn about the first host is
 	// to be told. It carries no listing; the client polls once on receipt.
 	MsgHostsChanged
+	// MsgReadDir asks the daemon to list a directory, and MsgDirListing is the
+	// answer. Appended, so every value above stays where an older peer expects
+	// it; see the note on ProtocolVersion.
+	//
+	// The rail's file section used to read the filesystem itself. That was the
+	// same machine as the pane for as long as a pane could only be on this
+	// machine, and federation ended that: a client attached to a session on
+	// another host was listing its own disk and reporting that the pane's
+	// directory did not exist. The daemon that owns the pane owns the
+	// filesystem the pane is on, so the listing is asked for rather than taken.
+	//
+	// It carries no new authority over a link. Attaching a session on a host
+	// already gives a shell on it, and reading the names in a directory is
+	// strictly less than that.
+	MsgReadDir
+	MsgDirListing
 )
 
 // HostsChangedPayload names the change behind a MsgHostsChanged push.
@@ -885,4 +901,41 @@ func ParseBinaryPTYMessage(payload []byte) (ptyID string, data []byte, err error
 	}
 	data = payload[36:]
 	return ptyID, data, nil
+}
+
+// ReadDirPayload asks for one directory's names.
+type ReadDirPayload struct {
+	// WindowID is the pane the listing is about, or empty for a directory the
+	// user named by hand. It is what lets the daemon answer whether the pane
+	// announced a directory its shell is not in; without a pane there is no
+	// such question.
+	WindowID string `json:"window_id,omitempty"`
+	Dir      string `json:"dir"`
+	// Max bounds the listing. Zero means the daemon's own bound.
+	Max int `json:"max,omitempty"`
+}
+
+// DirEntry is one name in a listing. Only the two facts a directory read
+// already returns: anything more would cost a stat per name, and the icon and
+// the ordering are the client's business.
+type DirEntry struct {
+	Name  string `json:"name"`
+	IsDir bool   `json:"is_dir"`
+}
+
+// DirListingPayload is the answer.
+type DirListingPayload struct {
+	Dir     string     `json:"dir"`
+	Entries []DirEntry `json:"entries,omitempty"`
+	// Capped reports that the directory holds more names than were sent.
+	Capped bool `json:"capped,omitempty"`
+	// Spoofed reports that the pane announced this directory and its shell is
+	// somewhere else. The daemon answers it because the daemon is the only side
+	// holding both facts: the announcement arrived in its window state and the
+	// shell is its own process. A client cannot compute it for a pane on
+	// another machine without reading a pid that means nothing where it is.
+	Spoofed bool `json:"spoofed,omitempty"`
+	// Err is the reason there is no listing, already in words a person can act
+	// on, or empty on success.
+	Err string `json:"err,omitempty"`
 }

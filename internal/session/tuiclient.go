@@ -594,6 +594,48 @@ func (c *TUIClient) CreatePTY(title, windowID string, width, height int) (string
 	}
 }
 
+// ReadDir asks the daemon to list a directory on the machine it is running on.
+//
+// The rail's file section used to read the filesystem itself, which was the same
+// machine as the pane only for as long as a pane could not be anywhere else.
+// Going through the daemon makes the answer come from the disk the pane is
+// actually on, and it is asked for the same way for a local session as for one
+// attached on another host, so there is one path and not two that can disagree.
+//
+// windowID names the pane the listing is about, so the daemon can also say
+// whether that pane announced a directory its shell is not in. Empty for a
+// directory the user walked to by hand, which is theirs whatever a pane says.
+func (c *TUIClient) ReadDir(windowID, dir string, max int) (*DirListingPayload, error) {
+	msg, err := NewMessageWithCodec(MsgReadDir, &ReadDirPayload{
+		WindowID: windowID, Dir: dir, Max: max,
+	}, c.codec)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.sendAndWaitResponse(msg, MsgDirListing, MsgError)
+	if err != nil {
+		return nil, err
+	}
+
+	switch resp.Type {
+	case MsgDirListing:
+		var payload DirListingPayload
+		if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+			return nil, err
+		}
+		return &payload, nil
+
+	case MsgError:
+		var errPayload ErrorPayload
+		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		return nil, fmt.Errorf("read dir failed: %s", errPayload.Message)
+
+	default:
+		return nil, fmt.Errorf("unexpected response: %d", resp.Type)
+	}
+}
+
 // ClosePTY closes a PTY.
 func (c *TUIClient) ClosePTY(ptyID string) error {
 	msg, err := NewMessageWithCodec(MsgClosePTY, &ClosePTYPayload{PTYID: ptyID}, c.codec)

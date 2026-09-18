@@ -340,7 +340,7 @@ func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 	pgid, wasSpoofed := 0, m.filesView.Spoofed
 	if !pinned && origin != "" {
 		wasSpoofed = false
-		if w := m.windowByID(origin); w != nil {
+		if w := m.windowByID(origin); w != nil && spoofCheckApplies(m.AttachedHost) {
 			pgid = w.ShellPgid
 		}
 	}
@@ -353,7 +353,49 @@ func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 	m.SidebarScrollF = 0
 	m.filesView.Gen++
 	gen := m.filesView.Gen
+
+	// The listing is asked of the daemon that holds the session, because that is
+	// the daemon that holds the disk the pane is on. Reading it here was right
+	// for as long as a pane could only be on this machine; a session attached on
+	// another host made this client list its own disk and report that the pane's
+	// directory did not exist.
+	//
+	// It goes through the daemon for a local session too. One path answers for
+	// both, so there is nothing for the two to disagree about, and the daemon is
+	// also the only side that can say whether the pane announced a directory its
+	// shell is not in.
+	client, host := m.DaemonClient, m.AttachedHost
 	return func() tea.Msg {
+		if client != nil {
+			listing, err := client.ReadDir(origin, dir, fileViewMaxEntries)
+			switch {
+			case err == nil && listing.Err != "":
+				return fileListMsg{Gen: gen, Dir: dir, Err: listing.Err, Spoofed: wasSpoofed || listing.Spoofed}
+			case err == nil:
+				entries := make([]fileEntry, 0, len(listing.Entries))
+				for _, e := range listing.Entries {
+					// Already in the daemon's order: directories first, then
+					// names. Sorting again here would be sorting a capped
+					// listing, which is an arbitrary subset of the directory.
+					entries = append(entries, fileEntry{
+						Name: e.Name, Dir: e.IsDir, Icon: fileIconFor(e.Name, e.IsDir),
+					})
+				}
+				return fileListMsg{
+					Gen: gen, Dir: dir, Entries: entries,
+					Capped: listing.Capped, Spoofed: wasSpoofed || listing.Spoofed,
+				}
+			case host != "":
+				// A daemon on another machine that cannot answer is the end of
+				// it. Falling through to read this machine's disk would list a
+				// directory with nothing to do with the pane, which is the bug
+				// this replaced rather than a fallback.
+				return fileListMsg{Gen: gen, Dir: dir, Err: "That machine could not list it."}
+			}
+			// A local daemon that could not answer falls through: a build older
+			// than this message answers with an error, and reading the disk here
+			// is the same disk it would have read.
+		}
 		spoofed := wasSpoofed || cwdIsSpoofed(pgid, dir)
 		items, capped, err := readDirFunc(dir, fileViewMaxEntries)
 		if err != nil {
@@ -382,6 +424,29 @@ func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 		return fileListMsg{Gen: gen, Dir: dir, Entries: entries, Capped: capped, Spoofed: spoofed}
 	}
 }
+
+// spoofCheckApplies reports whether this client can honestly run the spoof
+// check on a pane of the session it is attached to.
+//
+// A window's ShellPgid is filled from the daemon's WindowState.ShellPID for
+// every pane, including one attached from another machine. On such a pane that
+// number is a pid on that machine, and reading it here asks the local operating
+// system about whatever process happens to hold the same number. On Linux that
+// is usually nothing, which is harmless. On macOS, where the read goes through
+// the process table rather than /proc, it can be an unrelated live process, and
+// the answer is then a comparison between a remote shell's announced directory
+// and some local program's working directory.
+//
+// A check like this is allowed to answer "no evidence"; cwdIsSpoofed is built
+// around that and says so. It is not allowed to answer using a fact from the
+// wrong computer. So the check is for panes this client's own daemon owns, and
+// a session attached from another machine simply does not get it.
+//
+// The protection is not lost, it is misplaced: the daemon that owns the pane
+// holds both the announcement and the kernel's answer, so that is where this
+// belongs for a remote pane. Until it is asked for there, an attached session
+// on another machine is treated as unverified rather than as verified-clean.
+func spoofCheckApplies(attachedHost string) bool { return attachedHost == "" }
 
 // cwdIsSpoofed reports whether /proc says the pane's shell is somewhere other
 // than the folder the pane named over OSC 7.
@@ -780,10 +845,18 @@ func shellQuote(s string) string {
 // from the process it owns, is the only one such a pane can have, and it is the
 // better one everywhere.
 //
-// An empty value leaves whatever this client already learned. A sync that omits
-// the field must not wipe a directory a pane did announce.
+// It is a fallback and not an override. A client that has seen OSC 7 on this
+// pane already has the fresher answer: it parses the stream as it arrives, where
+// the daemon's copy reaches it on the next state sync, so adopting over the top
+// put a directory the pane had already left back on the window.
+//
+// That is not only stale, it is unsafe. cwdIsSpoofed earns its keep by comparing
+// the folder a pane announced against the one the kernel reports for its shell,
+// and a stale announcement disagrees with a current process for a pane that did
+// nothing wrong. Overwriting here turned every cd into a spoof warning and took
+// the file actions away with it.
 func adoptWindowCwd(w *terminal.Window, cwd string) {
-	if w != nil && cwd != "" {
+	if w != nil && cwd != "" && w.Cwd == "" {
 		w.Cwd = cwd
 	}
 }

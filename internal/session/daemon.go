@@ -1045,6 +1045,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleResize(cs, msg)
 	case MsgCreatePTY:
 		return d.handleCreatePTY(cs, msg)
+	case MsgReadDir:
+		return d.handleReadDir(cs, msg)
 	case MsgClosePTY:
 		return d.handleClosePTY(cs, msg)
 	case MsgUpdateState:
