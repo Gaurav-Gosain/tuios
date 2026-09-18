@@ -5,13 +5,13 @@ import (
 	"testing"
 )
 
-// TestScrollbackConcurrentLine reproduce el race que tumbaba al daemon:
-// dos (o más) capturadores llamando Line() a la vez — como hacen dos
-// `wait-for window-output` solapados. Line() decodifica y cachea en el mapa
-// sb.cache; sin lock, dos lectores lo escriben a la vez y el runtime de Go
-// aborta el proceso con "concurrent map writes".
+// TestScrollbackConcurrentLine reproduces the race that took the daemon down:
+// two or more capturers calling Line() at once, which is what two overlapping
+// `wait-for window-output` calls do. Line() decodes and caches into the
+// sb.cache map, and without a lock two readers write it at the same time and
+// the Go runtime aborts the process with "concurrent map writes".
 //
-// Con el fix (cacheMu) corre limpio bajo -race.
+// With cacheMu it runs clean under -race.
 func TestScrollbackConcurrentLine(t *testing.T) {
 	sb := NewScrollback(10000)
 	for i := 0; i < 3000; i++ {
