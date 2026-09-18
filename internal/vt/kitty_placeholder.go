@@ -38,7 +38,14 @@ const kittyPlaceholderChar = kitty.Placeholder
 type KittyImageIDTranslator func(guestID uint32) (hostID uint32, ok bool)
 
 // IsKittyPlaceholder reports whether a cell's content is a placeholder cell.
+//
+// This is asked of every cell the emulator prints and of every style run the
+// dim blends, so it leaves the hot path on a byte compare: U+10EEEE is F4 8E BB
+// AE in UTF-8, and no ordinary character starts with F4.
 func IsKittyPlaceholder(content string) bool {
+	if len(content) < 4 || content[0] != 0xF4 {
+		return false
+	}
 	for _, r := range content {
 		return r == kittyPlaceholderChar
 	}
