@@ -121,7 +121,15 @@ func (m *OS) FireAttached() {
 // FireDetached announces that this client is leaving. It waits for the hooks it
 // just fired, because the caller quits immediately afterwards and hooks run in
 // goroutines the process exit would otherwise discard unrun.
+//
+// It fires at most once per client. A deliberate detach reaches it from
+// DetachClient, and a dropped client reaches it from Cleanup; the first caller
+// wins and the second is a no-op, so a client that leaves one way fires the
+// hook once rather than twice.
 func (m *OS) FireDetached() {
+	if !m.detachFired.CompareAndSwap(false, true) {
+		return
+	}
 	if m.HookManager == nil {
 		return
 	}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -541,6 +542,12 @@ type OS struct {
 	// and a deliberate quit reports an error. Written only on the Bubble Tea
 	// goroutine, like ExitReason.
 	QuitRequested bool
+	// detachFired records that this client's after-detach hook has already run,
+	// so the deliberate detach path (DetachClient) and the teardown path
+	// (Cleanup) cannot both fire it. It is written from the Bubble Tea
+	// goroutine and from the teardown goroutine that runs Cleanup after the
+	// program stops, so it is atomic rather than a plain bool.
+	detachFired atomic.Bool
 
 	// SidebarWidthPref is the expanded rail width this session asks for, or 0
 	// to take the configured default. It is synced with the session's other
@@ -1409,6 +1416,17 @@ func (m *OS) Cleanup() {
 	// every disconnect would leave one running command per push component and
 	// the goroutines reading them.
 	m.StopDockComponents()
+	// A client that drops without a deliberate detach -- an SSH connection or a
+	// browser tab closing -- ends its relationship with the session here, and
+	// the after-detach hook is owed to whoever is watching that session. Fire
+	// it once, and only for a real detach: a session that was killed, or a
+	// daemon or host that went away, is not this client leaving and sets
+	// ExitReason before the program quits. DetachClient fires it on the
+	// leader-d path and deliberately skips this function; detachFired keeps the
+	// two from firing it twice.
+	if m.IsDaemonSession && m.ExitReason == ExitNormal {
+		m.FireDetached()
+	}
 	if m.DaemonClient != nil {
 		_ = m.DaemonClient.Close()
 		return

@@ -264,3 +264,81 @@ func TestEveryDeclaredEventIsCovered(t *testing.T) {
 		t.Errorf("covered set has %d events, AllEvents has %d", len(covered), len(hooks.AllEvents()))
 	}
 }
+
+// A client that drops without a deliberate detach -- an SSH connection or a
+// browser tab closing -- reaches Cleanup with no FireDetached call before it.
+// The after-detach hook is still owed to whoever is watching the session, so
+// Cleanup fires it.
+func TestCleanupFiresDetachOnADroppedClient(t *testing.T) {
+	m := hookTestOS(t)
+	m.IsDaemonSession = true
+	r := record(t, m)
+
+	m.Cleanup()
+
+	if ctx := r.only(t, m, hooks.AfterDetach); ctx.SessionID != "test-session" {
+		t.Errorf("SessionID = %q, want %q", ctx.SessionID, "test-session")
+	}
+}
+
+// A session killed from elsewhere, a lost daemon or a lost host is not this
+// client leaving, and the hook must stay silent for each. ExitReason is what
+// tells them apart, and it is set before the program quits.
+func TestCleanupStaysSilentWhenTheExitIsNotADetach(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		why  ExitReason
+	}{
+		{"session killed", ExitSessionKilled},
+		{"daemon lost", ExitDaemonLost},
+		{"host lost", ExitHostLost},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := hookTestOS(t)
+			m.IsDaemonSession = true
+			m.ExitReason = tc.why
+			r := record(t, m)
+
+			m.Cleanup()
+			m.HookManager.Wait()
+
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			if len(r.fired) != 0 {
+				t.Errorf("%s fired %v, want nothing", tc.name, r.events())
+			}
+		})
+	}
+}
+
+// A standalone session (no daemon) has nothing to detach from: closing it is
+// the whole system stopping, not a client leaving a session behind, so Cleanup
+// stays silent.
+func TestCleanupStaysSilentOutsideADaemonSession(t *testing.T) {
+	m := hookTestOS(t)
+	m.IsDaemonSession = false
+	r := record(t, m)
+
+	m.Cleanup()
+	m.HookManager.Wait()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.fired) != 0 {
+		t.Errorf("a non-daemon session fired %v, want nothing", r.events())
+	}
+}
+
+// The leader-d detach fires the hook itself and then quits; the caller runs
+// Cleanup after the program stops. One client leaving is one detach, so the
+// second caller must not fire it a second time.
+func TestDetachFiresOnceAcrossBothPaths(t *testing.T) {
+	m := hookTestOS(t)
+	m.IsDaemonSession = true
+	r := record(t, m)
+
+	m.DetachClient() // the deliberate detach: fires the hook, then quits
+	m.Cleanup()      // the caller's teardown, which would fire it a second time
+
+	r.only(t, m, hooks.AfterDetach)
+}
