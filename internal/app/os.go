@@ -458,6 +458,10 @@ type OS struct {
 	// code reads and what the tests set. See ClientKind.
 	Client    ClientKind
 	IsSSHMode bool // True when running over SSH
+	// SSHIsLoopback is true when an SSH session arrived over loopback (the
+	// same machine). The human is at this box, so the native clipboard is
+	// theirs and the local fallback is safe; a remote SSH peer is not.
+	SSHIsLoopback bool
 	// Daemon mode fields
 	IsDaemonSession bool               // True when running as part of a persistent daemon session
 	DaemonClient    *session.TUIClient // Client for daemon communication (nil in local mode)
