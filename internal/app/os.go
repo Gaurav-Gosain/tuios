@@ -952,6 +952,7 @@ type OS struct {
 	SidebarScrollT int
 	SidebarScrollA int
 	SidebarScrollF int
+	SidebarScrollG int
 	// sidebarAgentAnchor keeps the agents section's viewport on the row it was
 	// left on rather than on the index that row happened to have, since that
 	// section resorts itself on live agent state. See sidebar_anchor.go.
@@ -984,6 +985,11 @@ type OS struct {
 	// sections, which is every frame nobody has asked for a listing. See
 	// sidebar_files.go.
 	filesView fileViewState
+
+	// gitView is the rail's git section: the repository the focused pane is in
+	// and how far its branch has drifted. Derived state, never persisted and
+	// never synced, refreshed off the render path. See sidebar_git.go.
+	gitView gitView
 	// filePrompt is the file action dialog: the create prompt, the rename
 	// prompt, or the delete confirmation. Zero when none is up, which is every
 	// frame nobody has pressed a file action key on. See sidebar_file_ops.go.

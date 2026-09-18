@@ -473,7 +473,7 @@ const SidebarDefaultSections = "sessions:25,terminals,files:25,agents:34"
 // section the rail does not draw, and that is the only way to turn one off:
 // there is no second switch per section, because a switch cannot say where a
 // thing goes and two spacers would have no switch to share.
-var SidebarSectionNames = []string{"sessions", "terminals", "files", "agents"}
+var SidebarSectionNames = []string{"sessions", "terminals", "files", "agents", "git"}
 
 // SidebarSectionSpacer is the layout's empty block. It draws nothing and takes
 // lines, which is how a person puts a gap between two sections or pushes what

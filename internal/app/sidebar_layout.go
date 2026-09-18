@@ -64,6 +64,7 @@ var sidebarSectionByName = map[string]sidebarSection{
 	"terminals": sidebarSectionTerminals,
 	"agents":    sidebarSectionAgents,
 	"files":     sidebarSectionFiles,
+	"git":       sidebarSectionGit,
 }
 
 // sidebarSectionFloors is the least each section is shrunk to, in rows, before
@@ -75,6 +76,9 @@ var sidebarSectionFloors = [sidebarSectionCount]int{
 	sidebarSectionTerminals: 3,
 	sidebarSectionAgents:    2,
 	sidebarSectionFiles:     2,
+	// Two, because the section is a repository name and its branch, and one
+	// without the other says half of what it is for.
+	sidebarSectionGit: 2,
 }
 
 // The parsed layout, cached against the string it came from. The rail parses it
@@ -373,5 +377,6 @@ func (m *OS) sidebarScrollOffsets() [sidebarSectionCount]*int {
 		sidebarSectionTerminals: &m.SidebarScrollT,
 		sidebarSectionAgents:    &m.SidebarScrollA,
 		sidebarSectionFiles:     &m.SidebarScrollF,
+		sidebarSectionGit:       &m.SidebarScrollG,
 	}
 }

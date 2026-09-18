@@ -711,17 +711,18 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// on the next message would draw one frame with the viewport already slid.
 	m.applyScrollAnchors()
 	sync := m.FilesSyncCmd()
+	// The git section asks on the same beat and for the same reason: the focused
+	// pane's directory is what both are about, and every handler that can move
+	// it is covered by one comparison here rather than by a hook in each.
+	gitSync := m.GitSyncCmd()
 	// Same shape as the files sync: the rail opening is one of the fifty
 	// handlers, and the poll it re-plans is armed here rather than in each of
 	// the five places that can open it.
 	replan := m.foreignSessionReplanCmd()
-	if sync == nil && replan == nil {
+	if sync == nil && replan == nil && gitSync == nil {
 		return model, cmd
 	}
-	if cmd == nil && replan == nil {
-		return model, sync
-	}
-	return model, tea.Batch(cmd, sync, replan)
+	return model, tea.Batch(cmd, sync, replan, gitSync)
 }
 
 // handleMsg is Update's body: one switch over every message the client can see.
@@ -774,6 +775,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.MarkTerminalsWithNewContent()
 		m.renderSkipped = false
 		return m, ListenForPTYData(m.PTYDataChan)
+
+	case GitStateMsg:
+		// The reading the git section asked for. It is applied rather than
+		// acted on: the section draws whatever the last answer was, and a
+		// reading for a directory the focus has already left is dropped inside.
+		m.ApplyGitState(msg)
+		return m, nil
 
 	case PendingCopyMsg:
 		return m, m.HandlePendingCopy(msg.Seq)

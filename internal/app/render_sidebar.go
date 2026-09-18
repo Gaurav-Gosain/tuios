@@ -212,6 +212,10 @@ const (
 	// order the sections are stacked in is the layout's, read off
 	// appearance.sidebar.sections. See sidebar_layout.go.
 	sidebarSectionFiles
+	// sidebarSectionGit says which repository the focused pane is in, which
+	// branch it has, and how far that branch has drifted. Off unless the layout
+	// names it, like every other section.
+	sidebarSectionGit
 	sidebarSectionCount
 )
 
@@ -1248,6 +1252,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// empty section costs the rail nothing rather than costing it a label over a
 	// gap.
 	plans := sidebarLayoutPlans(&m.Settings)
+	gitRows := m.gitRows()
 	// A section with no rows is dropped, header and all, which is right for a
 	// section that has nothing to say and wrong for this one. A person who put
 	// files in their rail layout and sees no files heading reads the feature as
@@ -1262,6 +1267,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		sidebarSectionTerminals: nT,
 		sidebarSectionAgents:    nA,
 		sidebarSectionFiles:     filesRows,
+		sidebarSectionGit:       len(gitRows),
 	}
 	// The last section in the configured layout is the one pinned to the rail's
 	// bottom: the slack rides above it, and it wears a blank line of its own so
@@ -1284,7 +1290,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	agentRowH := 1
 	// Row heights per section, which is what turns a section's line budget into
 	// the rows it can show and a st.lit() line back into the row under it.
-	rowH := [sidebarSectionCount]int{1, 1, agentRowH, 1}
+	rowH := [sidebarSectionCount]int{1, 1, agentRowH, 1, 1}
 
 	// The chrome each drawn section costs before a row of it appears: its own
 	// header, plus the floating blank in front of the pinned block.
@@ -1690,6 +1696,18 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		}
 	}
 
+	drawGit := func() {
+		lines = append(lines, compose(sidebarHeaderRow("git", "", cw, pal)))
+		for i := range count[sidebarSectionGit] {
+			idx := start[sidebarSectionGit] + i
+			if idx >= len(gitRows) {
+				break
+			}
+			st := m.railRowState(idx == hoverRow[sidebarSectionGit], false)
+			lines = append(lines, compose(m.sidebarGitRow(gitRows[idx], cw, pal, st)))
+		}
+	}
+
 	drawAgents := func() {
 		// No add control here, and the asymmetry is the honest answer: an agent is
 		// a pane running an agent CLI, which is exactly what the terminals section
@@ -1734,6 +1752,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		sidebarSectionTerminals: drawTerminals,
 		sidebarSectionAgents:    drawAgents,
 		sidebarSectionFiles:     drawFiles,
+		sidebarSectionGit:       drawGit,
 	}
 	for i, p := range plans {
 		if p.Spacer {
