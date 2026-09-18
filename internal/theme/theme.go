@@ -206,7 +206,7 @@ func BorderFocusedWindow() color.Color {
 		return lipgloss.Color("#AFFFFF")
 	}
 	// Light cyan for window mode - use bright cyan
-	return borderInk(t.BrightCyan)
+	return borderInk(chromeOr(func(c *Chrome) color.Color { return c.AccentBright }, t.BrightCyan))
 }
 
 // BorderFocusedTerminal returns the color for focused window borders in terminal mode.
@@ -219,7 +219,7 @@ func BorderFocusedTerminal() color.Color {
 		return lipgloss.Color("#AAFFAA")
 	}
 	// Light green for terminal mode - use bright green
-	return borderInk(t.BrightGreen)
+	return borderInk(chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen))
 }
 
 // DockColorWindow returns the dock indicator color for window management mode.
@@ -228,7 +228,7 @@ func DockColorWindow() color.Color {
 	if t == nil {
 		return lipgloss.Color("#5c5cff")
 	}
-	return t.BrightBlue
+	return chromeOr(func(c *Chrome) color.Color { return c.Accent }, t.BrightBlue)
 }
 
 // DockColorTerminal returns the dock indicator color for terminal mode.
@@ -237,7 +237,7 @@ func DockColorTerminal() color.Color {
 	if t == nil {
 		return lipgloss.Color("#7aa2f7") // Soft blue
 	}
-	return t.BrightGreen
+	return chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen)
 }
 
 // DockColorCopy returns the dock indicator color for copy mode.
@@ -246,7 +246,7 @@ func DockColorCopy() color.Color {
 	if t == nil {
 		return lipgloss.Color("#e0af68") // Soft amber
 	}
-	return t.Yellow
+	return chromeOr(func(c *Chrome) color.Color { return c.Warning }, t.Yellow)
 }
 
 // NotificationError returns the color for error notifications.
@@ -260,7 +260,7 @@ func NotificationError() color.Color {
 	if t == nil {
 		return lipgloss.Color("#dc2626")
 	}
-	return t.Red
+	return chromeOr(func(c *Chrome) color.Color { return c.Error }, t.Red)
 }
 
 // NotificationWarning returns the color for warning notifications.
@@ -269,7 +269,7 @@ func NotificationWarning() color.Color {
 	if t == nil {
 		return lipgloss.Color("#d97706")
 	}
-	return t.Yellow
+	return chromeOr(func(c *Chrome) color.Color { return c.Warning }, t.Yellow)
 }
 
 // NotificationSuccess returns the color for success notifications.
@@ -278,7 +278,7 @@ func NotificationSuccess() color.Color {
 	if t == nil {
 		return lipgloss.Color("#16a34a")
 	}
-	return t.Green
+	return chromeOr(func(c *Chrome) color.Color { return c.Success }, t.Green)
 }
 
 // NotificationInfo returns the color for info notifications.
@@ -287,7 +287,7 @@ func NotificationInfo() color.Color {
 	if t == nil {
 		return lipgloss.Color("#2563eb")
 	}
-	return t.Blue
+	return chromeOr(func(c *Chrome) color.Color { return c.Info }, t.Blue)
 }
 
 // NotificationGround is the ground a message's inks are measured against: the

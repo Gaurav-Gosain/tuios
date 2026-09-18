@@ -134,6 +134,30 @@ func UI() overlay.Palette {
 		p.Success = t.BrightGreen
 		p.Info = t.BrightBlue
 		p.Warning = t.Yellow
+
+		// A theme that names its own chrome colours overrides the slots above,
+		// one role at a time. See Chrome: the point is a palette whose accent
+		// is not its bright blue.
+		if c := CurrentChrome(); c != nil {
+			if c.Accent != nil {
+				p.Accent, p.Selected, p.Info = c.Accent, c.Accent, c.Accent
+			}
+			if c.AccentBright != nil {
+				p.AccentBright = c.AccentBright
+			}
+			if c.Success != nil {
+				p.Success = c.Success
+			}
+			if c.Warning != nil {
+				p.Warning = c.Warning
+			}
+			if c.Error != nil {
+				p.Warn = c.Error
+			}
+			if c.Info != nil {
+				p.Info = c.Info
+			}
+		}
 	}
 
 	// Pick the pill foreground for contrast against whichever accent is active.

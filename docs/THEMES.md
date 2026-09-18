@@ -11,6 +11,7 @@ overlays, the dockbar) from them.
 - [Custom Themes](#custom-themes)
 - [Theme File Format](#theme-file-format)
 - [Defaults for Omitted Colors](#defaults-for-omitted-colors)
+- [Chrome Colors](#chrome-colors)
 - [Limitations](#limitations)
 
 ## Selecting a Theme
@@ -128,6 +129,48 @@ left unset, so a partial theme is valid:
 This means a theme that defines only the eight normal colors will render with
 bright text indistinguishable from normal text, which is usually not what you
 want. Define the bright variants explicitly.
+
+## Chrome Colors
+
+The sixteen ANSI slots are the emulator's color table: they are what a program
+running inside a pane paints with. They are also where TUIOS takes its own
+furniture colors from, which means a palette whose accent is amber could only
+get an amber logo by putting amber in `bright_blue`, recoloring every bold blue
+`ls` prints.
+
+An optional `chrome` object names those colors directly, leaving the sixteen to
+the panes:
+
+```json
+{
+  "id": "amber",
+  "bright_blue": "#5c5cff",
+
+  "chrome": {
+    "accent":        "#ffb454",
+    "accent_bright": "#ffd580",
+    "success":       "#aad94c",
+    "warning":       "#ffb454",
+    "error":         "#ff3333",
+    "info":          "#59c2ff"
+  }
+}
+```
+
+Every field is optional, and one you leave out derives exactly as it did before,
+so a theme written without a `chrome` object renders identically:
+
+| Field | What it colors | Derived from when absent |
+|---|---|---|
+| `accent` | logo, selected row, window-mode pill, info tier of the chrome | `bright_blue` |
+| `accent_bright` | secondary accent, focused border in window mode | `bright_cyan` |
+| `success` | terminal-mode pill, focused border in terminal mode, success notifications | `bright_green` |
+| `warning` | copy-mode pill, warning notifications | `yellow` |
+| `error` | error notifications, the chrome's alert ink | `red` |
+| `info` | info notifications | `blue` |
+
+A field that is not a hex color is dropped on its own and that role derives as
+usual, so a typo costs one color rather than the theme.
 
 ## Limitations
 
