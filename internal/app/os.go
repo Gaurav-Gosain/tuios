@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -538,6 +539,13 @@ type OS struct {
 	// to pick an exit status. Empty means the user quit or detached normally.
 	// It is written only on the Bubble Tea goroutine, in Update.
 	ExitReason ExitReason
+
+	// detachFired makes the after-detach hook fire once per client, however
+	// that client left. There are two arrivals now, a deliberate detach and a
+	// connection that ended, and over SSH one client can reach both: leader-d
+	// fires it and the middleware's Cleanup runs afterwards anyway. Atomic
+	// because Cleanup runs after the program has exited, off the UI goroutine.
+	detachFired atomic.Bool
 	// QuitRequested records that the user deliberately quit this client, which
 	// in a daemon session also kills the session. The daemon then announces the
 	// session ending and the connection dropping, and both announcements can
@@ -1420,6 +1428,24 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 // TUIClient.Close is idempotent, so calling Cleanup more than once is safe.
 // State should be synced to the daemon before Cleanup, on the UI goroutine.
 func (m *OS) Cleanup() {
+	// An SSH client whose connection closed and a browser tab that went away
+	// never pass through DetachClient, so the after-detach hook used to fire
+	// for a deliberate leader-d and for nothing else. Attach has held for every
+	// client since cd9637cf; this is the other half of the pair the hook
+	// documentation promises, that three clients attaching is three attaches.
+	//
+	// Only a normal exit is a detach. A session that was killed and a daemon
+	// that went away are not someone leaving, and ExitReason already separates
+	// them; it is ExitNormal by default, which is what a dropped connection
+	// leaves it as. FireDetached fires once per client, so the leader-d path
+	// reaching here a moment later adds nothing.
+	//
+	// It runs before the client is closed, so a hook that asks the daemon
+	// about the session it is being told about still has a session to ask.
+	if m.IsDaemonSession && m.ExitReason == ExitNormal {
+		m.FireDetached()
+	}
+
 	m.stopWindowExitDrain()
 	m.endConfigWatch()
 	// The dock's components are subprocesses this client started, and a push
