@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // Whether the host terminal can draw kitty Unicode placeholders.
@@ -129,5 +130,26 @@ func (m *OS) placeholdersEnabled() bool {
 		return false
 	default:
 		return m.hostCaps().KittyPlaceholders
+	}
+}
+
+// refreshKittyPlaceholderMode re-installs the placeholder mode on every pane,
+// so changing appearance.kitty_placeholders takes effect on the panes that are
+// already open rather than only on the next one.
+//
+// The ghostty backend filters on the way out of the grid, so a change shows on
+// the next frame. The pure emulator filters on the way in, so cells already
+// stored keep whatever they were: turning the setting off leaves the images
+// that are already on screen until the application redraws, which anything
+// that scrolls or resizes does.
+func (m *OS) refreshKittyPlaceholderMode() {
+	mode := vt.KittyPlaceholdersDrop
+	if m.placeholdersEnabled() {
+		mode = vt.KittyPlaceholdersKeep
+	}
+	for _, w := range m.Windows {
+		if w != nil && w.Terminal != nil {
+			w.Terminal.SetKittyPlaceholderMode(mode)
+		}
 	}
 }

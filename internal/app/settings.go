@@ -104,6 +104,7 @@ func clampInt(v, lo, hi int) int {
 // changes that affect window geometry (dock position, borders, title bars).
 func (m *OS) applyAppearanceLive(retile bool) {
 	m.adoptConfigPaneGeometry()
+	m.refreshKittyPlaceholderMode()
 	m.MarkAllDirty()
 	if retile && m.AutoTiling {
 		m.TileAllWindows()
@@ -393,7 +394,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.alt_drag"),
 			opt("appearance.right_click_opens_menu"),
 			opt("appearance.new_window_inherit_cwd"),
-			opt("appearance.kitty_placeholders"),
 			opt("appearance.niri_reverse_scroll"),
 			custom("appearance.max_fps", m.maxFPSItem()),
 			opt("appearance.preferred_shell"),
@@ -446,6 +446,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.copy_on_select"),
 			opt("appearance.word_characters"),
 			opt("appearance.zoom_max_width"),
+			opt("appearance.kitty_placeholders"),
 			custom("debug.show_key_events", m.showKeysItem()),
 		}),
 	}
