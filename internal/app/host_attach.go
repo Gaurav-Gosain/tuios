@@ -134,12 +134,6 @@ func (m *OS) rebuildForSessionOn(state *session.SessionState, savedWidth, savedH
 	m.rebuildForSession(state, savedWidth, savedHeight)
 }
 
-// AttachedHostLabel is the host qualifier shown beside the session name, or ""
-// on this machine.
-func (m *OS) AttachedHostLabel() string {
-	return m.AttachedHost
-}
-
 // clientCapabilities is this client's terminal, as the daemon wants it told.
 func (m *OS) clientCapabilities() *session.ClientCapabilities {
 	caps := m.hostCaps()

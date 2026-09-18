@@ -78,7 +78,16 @@ var (
 	// throttles actual work to NormalFPS; this is the upper bound so raising
 	// NormalFPS at runtime (including the "unlimited" setting, which pins it to
 	// this value) can take effect without a restart.
-	MaxFPSCap = 240
+	//
+	// It is the renderer's own ceiling and not a number of our choosing. Bubble
+	// Tea clamps to 120 in NewProgram, so a larger value here was accepted by
+	// the setting, offered by the settings row, handed to tea.WithFPS and then
+	// quietly ignored: the tick loop really did run faster while the screen did
+	// not, so the setting said one thing and the display did another. Matching
+	// the renderer is the honest of the two fixes, because the other one is to
+	// keep offering a number and explain in the row that part of it does
+	// nothing.
+	MaxFPSCap = 120
 
 	// MinConfiguredFPS is the floor a configured max_fps is clamped to. Below it
 	// the UI stops feeling like it is responding to the keyboard at all.
