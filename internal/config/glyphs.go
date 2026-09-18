@@ -117,6 +117,19 @@ func (s *Settings) GetRailFoldShutGlyph() string {
 	return s.glyphOr(func(g *theme.GlyphSet) string { return g.FoldShut }, "▸", ">")
 }
 
+// GetRailRuleGlyph is the rule that runs out of a group heading to the rail's
+// right spine. One cell, repeated.
+//
+// The heading used to be told from the rows under it by weight and by the
+// brightest ink on the rail, which put the loudest treatment on the least
+// actionable row and left the session names, the things you actually act on,
+// one step down. The rule carries the distinction instead, and it carries it
+// as structure rather than as emphasis, so it holds with colour switched off.
+// It shares the "rule" role with the window separator rather than taking a role
+// of its own: both are a hairline made of one repeated cell, and a set that
+// restyles one has said what it wants the other to be.
+func (s *Settings) GetRailRuleGlyph() string { return s.GetWindowSeparatorChar() }
+
 // GetRailCollapseGlyph is the arrow that folds the rail down to its strip.
 //
 // Two cells in ASCII, where "«" has no one-cell stand-in: a lone "<" in the

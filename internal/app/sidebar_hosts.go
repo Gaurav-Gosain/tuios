@@ -482,7 +482,7 @@ func (m *OS) setSidebarSessionOrder(host string, order []string) {
 // is not up is drawn and is not a target, because its listing is cached and
 // the machine cannot be reached right now.
 func (m *OS) drawHostRow(
-	node sessiontree.Node, cw, variant int, pal overlay.Palette, hovered, canCreate bool,
+	node sessiontree.Node, cw, variant int, pal overlay.Palette, st sidebarRowState, canCreate bool,
 	isCursor func(kind sidebarRowKind, sessionID, windowID string) bool,
 	recordHit func(kind sidebarRowKind, sessionID, windowID string, windowIndex, h int),
 	recordToken func(tk sidebarTokenSpan, sessionID string),
@@ -492,7 +492,7 @@ func (m *OS) drawHostRow(
 ) {
 	if node.Kind == sessiontree.KindHost {
 		collapsed := m.SidebarHostCollapsed(node.Host)
-		hovered = hovered || isCursor(sidebarRowHost, node.Host, "")
+		st.Cursor = st.Cursor || isCursor(sidebarRowHost, node.Host, "")
 		add := ""
 		if !collapsed && node.HostStatus == string(federation.StatusUp) {
 			// The attached machine's control is the section's: it creates on
@@ -505,23 +505,23 @@ func (m *OS) drawHostRow(
 			if kind != sidebarRowNewSession || canCreate {
 				if tok, span, ok := sidebarHeaderAdd(kind, cw, labelW, pal,
 					headerHoverX, isCursor(kind, id, ""), &m.Settings,
-					sidebarRowBg(hovered, pal)); ok {
+					sidebarRowBg(st, pal)); ok {
 					add = tok
 					recordToken(span, id)
 				}
 			}
 		}
 		recordHit(sidebarRowHost, node.Host, "", -1, 1)
-		*lines = append(*lines, compose(m.sidebarHostRow(node, cw, pal, add, hovered, collapsed)))
+		*lines = append(*lines, compose(m.sidebarHostRow(node, cw, pal, add, st, collapsed)))
 		return
 	}
 
 	// A session row. It is a target only when its host is up.
 	if m.hostIsUp(node.Host) {
-		hovered = hovered || isCursor(sidebarRowHostSession, node.Host, remoteSessionName(node))
+		st.Cursor = st.Cursor || isCursor(sidebarRowHostSession, node.Host, remoteSessionName(node))
 		recordHit(sidebarRowHostSession, node.Host, remoteSessionName(node), -1, 1)
 	}
-	*lines = append(*lines, compose(m.sidebarRemoteSessionRow(node, cw, variant, pal, hovered)))
+	*lines = append(*lines, compose(m.sidebarRemoteSessionRow(node, cw, variant, pal, st)))
 }
 
 // openRemoteSession attaches a session that lives on another machine, in this
@@ -606,8 +606,8 @@ func hostStatusLabel(status string) string {
 // that number is the only thing on the row saying the fold is not empty. A
 // host that is not answering keeps its row with one word saying why, because a
 // machine that vanished from the rail reads as a machine nobody configured.
-func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, add string, hovered, collapsed bool) string {
-	rowBg := sidebarRowBg(hovered, pal)
+func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, add string, st sidebarRowState, collapsed bool) string {
+	rowBg := sidebarRowBg(st, pal)
 	up := node.HostStatus == string(federation.StatusUp)
 
 	right, rightW := "", 0
@@ -627,17 +627,23 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 		rightW = lipgloss.Width(add)
 	}
 
-	// A machine that answers reads in the full ink and a machine that does not
-	// is muted with its rows. Every machine that answers reads the same, which
-	// is what makes the rail's three inks a ramp: a heading in the full ink,
-	// its sessions one step down, the furniture one step below that. Ink used
-	// to say which machine the client was on, and it cost more than it bought:
-	// it put a machine and the sessions under it in the same ink, which is the
-	// thing that made the two impossible to tell apart. "Where am I" is
-	// answered where it always was, on the attached session's own row, and its
-	// row is now inside its machine's group.
+	// A machine's name is secondary ink, and a machine that does not answer is
+	// muted with its rows.
+	//
+	// This used to be the full ink and bold, which made the heading the loudest
+	// thing on the rail. It is also the least actionable thing on the rail: you
+	// do not act on a machine, you act on a session under it. Emphasis should
+	// drain downward, so the session names are now the brightest ink and the
+	// heading sits one step under them.
+	//
+	// The objection to demoting it was real: FgDim on a machine and FgDim on
+	// the session under it are the same ink, and an ink step alone could not
+	// carry the distinction. It is not carried by ink now. The rule that runs
+	// out of the name to the right spine carries it, which is a different kind
+	// of mark rather than a louder one, so a heading still reads as a heading
+	// with colour switched off entirely.
 	here := node.Host == m.attachedMachine()
-	ink := pal.Fg
+	ink := pal.FgDim
 	if !up {
 		ink = pal.FgMute
 	}
@@ -646,19 +652,16 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 		mark = m.Settings.GetRailFoldShutGlyph()
 	}
 	glyph := sidebarStyle(rowBg, pal.FgMute).Render(mark)
-	// The heading's weight is what tells a machine from a session at a glance.
-	// The rail's other bold is an alarm on an item row, two levels in and
-	// wearing a severity mark in the gutter and a state glyph of its own; a
-	// heading that is bold at the section's own left edge is not read as one of
-	// those. Colour alone did not carry it: FgDim on a machine and FgDim on the
-	// session under it are the same ink, and that is the complaint.
-	name := sidebarStyle(rowBg, ink).Bold(true).Render(
+	// No bold. The rail spends its one bold voice on a row that wants a human,
+	// and a heading wearing the same weight as an alarm is what made that voice
+	// stop meaning anything.
+	name := sidebarStyle(rowBg, ink).Render(
 		overlay.Truncate(printableTitle(node.Title), sidebarNameAvail(cw, rightW)))
 	// A folded group hides the session row that wears the focus mark, so the
 	// header takes it: the fold must not make the attached session vanish from
 	// the rail without a trace.
 	gutter := sidebarGutter(here && collapsed, "", rowBg, pal, &m.Settings)
-	return sidebarComposeRow(gutter, glyph, name, right, cw, rowBg)
+	return sidebarComposeRuledRow(0, gutter, glyph, name, right, cw, rowBg, pal, &m.Settings)
 }
 
 // sidebarRemoteSessionRow draws one session that lives on a machine the client
@@ -675,9 +678,9 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 //
 // The count takes the same gate a local session row's count takes: a rail too
 // narrow for a name and a number keeps the name.
-func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal overlay.Palette, hovered bool) string {
+func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal overlay.Palette, st sidebarRowState) string {
 	var rowBg color.Color
-	if hovered {
+	if st.lit() {
 		rowBg = pal.Surface
 	}
 	right, rightW := "", 0
@@ -688,7 +691,7 @@ func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal
 	}
 	ink := pal.FgMute
 	switch {
-	case hovered:
+	case st.lit():
 		ink = pal.Fg
 	case m.hostIsUp(node.Host):
 		ink = pal.FgDim

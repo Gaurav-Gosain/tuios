@@ -45,7 +45,7 @@ func TestSidebarSessionRowTagsARestoredSession(t *testing.T) {
 	restored := sessiontree.BuildSession(sessiontree.SessionInput{
 		Name: "work", WindowCount: 2, Restored: true,
 	})
-	row := m.sidebarSessionRow(restored, sidebarVariantFull, 28, pal, false, false)
+	row := m.sidebarSessionRow(restored, sidebarVariantFull, 28, pal, sidebarRowState{}, false, true)
 	if !strings.Contains(row, session.RestoredTag) {
 		t.Errorf("the rail does not tag a restored session: %q", row)
 	}
@@ -53,7 +53,7 @@ func TestSidebarSessionRowTagsARestoredSession(t *testing.T) {
 	plain := sessiontree.BuildSession(sessiontree.SessionInput{
 		Name: "work", WindowCount: 2,
 	})
-	if got := m.sidebarSessionRow(plain, sidebarVariantFull, 28, pal, false, false); strings.Contains(got, session.RestoredTag) {
+	if got := m.sidebarSessionRow(plain, sidebarVariantFull, 28, pal, sidebarRowState{}, false, true); strings.Contains(got, session.RestoredTag) {
 		t.Errorf("the rail tagged a session that was never restored: %q", got)
 	}
 }

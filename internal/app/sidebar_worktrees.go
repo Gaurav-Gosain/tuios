@@ -134,9 +134,9 @@ func (m *OS) sidebarWorktreeLabel(node sessiontree.Node) (string, bool) {
 // parent would draw the same alarm twice. A shut group is the opposite case:
 // its rows are not on screen, so the parent carries the worst of them and the
 // count of what it is hiding.
-func (m *OS) sidebarRepoRow(node sessiontree.Node, cw int, pal overlay.Palette, hovered bool) string {
+func (m *OS) sidebarRepoRow(node sessiontree.Node, cw int, pal overlay.Palette, st sidebarRowState) string {
 	var rowBg color.Color
-	if hovered {
+	if st.lit() {
 		rowBg = pal.Surface
 	}
 	collapsed := m.SidebarRepoCollapsed(node.ID)
@@ -161,7 +161,7 @@ func (m *OS) sidebarRepoRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 	}
 
 	fg := pal.FgDim
-	if hovered {
+	if st.lit() {
 		fg = pal.Fg
 	}
 	// A repository is an item that owns a subtree, not a heading: it wears a

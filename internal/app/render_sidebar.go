@@ -134,9 +134,46 @@ func sidebarAddGlyph(s *config.Settings) string { return s.GetRailAddGlyph() }
 // they have to agree: the "+" on a machine's header is built before the row
 // around it is, and rendering it on the default ground left a block of
 // unhighlighted cells sitting in the middle of a highlighted row.
-func sidebarRowBg(hovered bool, pal overlay.Palette) color.Color {
-	if hovered {
+// sidebarRowState is why a row is lit, and the two reasons are not the same
+// thing. The keyboard cursor is where the next key lands. The mouse wash is
+// only where the pointer happens to be.
+//
+// They used to be one boolean, OR'd together at every row site, which had two
+// visible costs: sweeping the pointer down the rail painted a full-strength
+// "you are here" band on every row it crossed, and a long name started
+// scrolling because the pointer passed over it.
+type sidebarRowState struct {
+	Cursor  bool // the keyboard cursor is on this row
+	Hover   bool // the pointer is over this row
+	Focused bool // the rail owns the keyboard
+}
+
+// lit reports whether the row is drawing any band at all, which is what the
+// parts of a row that only care about being on a ground ask.
+func (st sidebarRowState) lit() bool { return st.Cursor || st.Hover }
+
+// railRowState reads the rail's focus once so a row site does not have to.
+func (m *OS) railRowState(hover, cursor bool) sidebarRowState {
+	return sidebarRowState{Cursor: cursor, Hover: hover, Focused: m.SidebarFocused}
+}
+
+// sidebarRowBg is the ground a row paints. Three steps, not one.
+//
+// The cursor on a focused rail takes Surface, the strongest of the three
+// grounds. The cursor on an unfocused rail drops to RowSel, so a rail that does
+// not own the keyboard stops claiming that it does while still saying where the
+// cursor will be when it gets it back. The mouse wash takes RowSel too, and is
+// told apart from an unfocused cursor by extent rather than by strength.
+//
+// The cursor always wins. A row that is both the cursor and st.lit() draws the
+// cursor treatment; the two are never composited, because a row carrying both
+// grounds reads as a third state that means nothing.
+func sidebarRowBg(st sidebarRowState, pal overlay.Palette) color.Color {
+	switch {
+	case st.Cursor && st.Focused:
 		return pal.Surface
+	case st.Cursor, st.Hover:
+		return pal.RowSel
 	}
 	return nil
 }
@@ -148,7 +185,13 @@ func sidebarHeaderAdd(kind sidebarRowKind, cw, labelW int, pal overlay.Palette, 
 		return "", sidebarTokenSpan{}, false
 	}
 	span := sidebarTokenSpan{Kind: kind, X0: x0, X1: x0 + gw}
-	ink := pal.FgMute
+	// At rest the control sits on the separator step, quieter than a count.
+	// It is an affordance, not information: it is drawn always so the spine does
+	// not move when the pointer arrives, and only its ink changes when it does.
+	// It used to rest at FgMute, which put it level with the figures on the same
+	// spine and made a row's loudest mark the one thing on it that was not about
+	// that row.
+	ink := sidebarRuleInk(rowBg, pal)
 	if cursor || (hoverX >= span.X0 && hoverX < span.X1) {
 		ink = pal.Fg
 	}
@@ -559,9 +602,31 @@ func sidebarEdgeRule(s *config.Settings) string {
 // agents section's controls), inset one cell from the rail's edge so it lands
 // on the same spine the rows' figures do.
 func sidebarHeaderRow(label, right string, cw int, pal overlay.Palette) string {
+	return sidebarHeaderRowRuled(label, right, cw, pal, nil)
+}
+
+// sidebarHeaderRowRuled is sidebarHeaderRow with the rule that marks a heading.
+// Passing nil settings keeps the old blank gap, which is what the callers that
+// put their own controls in that gap still want.
+func sidebarHeaderRowRuled(label, right string, cw int, pal overlay.Palette, s *config.Settings) string {
 	row := sidebarStyle(nil, nil).Render(" ") +
 		sidebarStyle(nil, pal.FgMute).Render(overlay.Truncate(label, max(cw-2, 1)))
-	if rw := lipgloss.Width(right); rw > 0 {
+	rw := lipgloss.Width(right)
+	if s != nil {
+		pad := 1
+		if rw > 0 {
+			pad = 2
+		}
+		if run := cw - lipgloss.Width(row) - rw - pad; run > 1 {
+			row += sidebarStyle(nil, nil).Render(" ") +
+				sidebarStyle(nil, sidebarRuleInk(nil, pal)).Render(strings.Repeat(s.GetRailRuleGlyph(), run-1))
+		}
+		if rw > 0 {
+			row += " " + right + " "
+		}
+		return sidebarFit(row, cw, nil)
+	}
+	if rw > 0 {
 		gap := max(cw-lipgloss.Width(row)-rw-1, 0)
 		row += strings.Repeat(" ", gap) + right + " "
 	}
@@ -857,6 +922,48 @@ func sidebarComposeGroupRow(indent int, gutter, glyph, name, right string, cw in
 	return sidebarFit(row, cw, bg)
 }
 
+// sidebarRuleInk is the ink a heading's rule takes. The rule is a separator, so
+// it sits on the separator step of the ramp. On a row that is painting a band
+// that step is the band's own colour, so it moves up one to stay visible.
+func sidebarRuleInk(bg color.Color, pal overlay.Palette) color.Color {
+	if bg != nil {
+		return pal.FgMute
+	}
+	return pal.Surface
+}
+
+// sidebarComposeRuledRow is sidebarComposeRow for a group heading: the gap
+// between the name and the trailing figure is filled with a rule instead of
+// with blanks.
+//
+// This is what carries "heading" now. It used to be carried by weight, which
+// put the loudest ink on the rail on its least actionable row, and by an ink
+// step that could not survive being one step from the sessions under it. A rule
+// is a different kind of mark rather than a louder one, so the heading reads as
+// a heading even in monochrome, and the session names below it get to be the
+// brightest thing on the rail, which is correct because they are what you act
+// on.
+func sidebarComposeRuledRow(indent int, gutter, glyph, name, right string, cw int, bg color.Color, pal overlay.Palette, s *config.Settings) string {
+	row := gutter + sidebarStyle(bg, nil).Render(strings.Repeat(" ", max(indent, 0))) +
+		glyph + sidebarStyle(bg, nil).Render(" ") + name
+	rw := lipgloss.Width(right)
+	pad := 1
+	if rw > 0 {
+		pad = 2 // one blank each side of the figure
+	}
+	run := cw - lipgloss.Width(row) - rw - pad
+	if run > 0 {
+		row += sidebarStyle(bg, nil).Render(" ") +
+			sidebarStyle(bg, sidebarRuleInk(bg, pal)).Render(strings.Repeat(s.GetRailRuleGlyph(), run-1))
+	} else if run == 0 {
+		row += sidebarStyle(bg, nil).Render(" ")
+	}
+	if rw > 0 {
+		row += sidebarStyle(bg, nil).Render(" ") + right + sidebarStyle(bg, nil).Render(" ")
+	}
+	return sidebarFit(row, cw, bg)
+}
+
 // sidebarNameAvail is how many cells a row's name may take: everything between
 // the spine and the right-aligned figure's inset.
 //
@@ -983,7 +1090,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	m.refreshSessionColorsFor(localSessionNodes(tree.Sessions))
 
 	// Re-armed each frame: a marquee row sets it, so a key left standing after
-	// the row stops drawing hovered means the scroll is over and the tick idles.
+	// the row stops drawing st.lit() means the scroll is over and the tick idles.
 	m.sidebarMarqueeSeen = false
 	defer func() {
 		if !m.sidebarMarqueeSeen {
@@ -1167,7 +1274,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// the same for every row in it rather than per entry.
 	agentRowH := 1
 	// Row heights per section, which is what turns a section's line budget into
-	// the rows it can show and a hovered line back into the row under it.
+	// the rows it can show and a st.lit() line back into the row under it.
 	rowH := [sidebarSectionCount]int{1, 1, agentRowH, 1}
 
 	// The chrome each drawn section costs before a row of it appears: its own
@@ -1451,26 +1558,39 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			}
 		}
 		lines = append(lines, compose(sidebarHeaderRow(label, add, cw, pal)))
+		// lazygit's excludeBlankColumns, on the rail's right spine. A one-window
+		// session is the common case, so a column that prints "1" against every
+		// row is a column of identical digits carrying nothing. It is dropped
+		// for the whole section rather than per row: a figure that appears on
+		// some rows and not others reads as ragged, where a column that is
+		// either there or gone reads as a decision.
+		showCounts := false
+		for _, s := range sessionRows {
+			if s.WindowCount > 1 {
+				showCounts = true
+				break
+			}
+		}
 		for i := range count[sidebarSectionSessions] {
 			idx := start[sidebarSectionSessions] + i
 			s := sessionRows[idx]
 			if s.Kind == sessiontree.KindRepo {
 				// A repository's group header. It is a nav row like any other,
 				// and activating it folds the group.
-				hovered := idx == hoverRow[sidebarSectionSessions] || isCursor(sidebarRowRepo, s.ID, "")
+				st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowRepo, s.ID, ""))
 				recordHit(sidebarRowRepo, s.ID, "", -1, 1)
-				lines = append(lines, compose(m.sidebarRepoRow(s, cw, pal, hovered)))
+				lines = append(lines, compose(m.sidebarRepoRow(s, cw, pal, st)))
 				continue
 			}
 			if isRemoteNode(s) {
-				m.drawHostRow(s, cw, variant, pal, idx == hoverRow[sidebarSectionSessions], canCreate,
+				m.drawHostRow(s, cw, variant, pal, m.railRowState(idx == hoverRow[sidebarSectionSessions], false), canCreate,
 					isCursor, recordHit, recordToken, headerHoverX[sidebarSectionSessions], compose, &lines)
 				continue
 			}
 			dragged := m.SidebarDrag.Dragging && s.ID == m.SidebarDrag.SessionID
-			hovered := idx == hoverRow[sidebarSectionSessions] || isCursor(sidebarRowSession, s.ID, "")
+			st := m.railRowState(idx == hoverRow[sidebarSectionSessions], isCursor(sidebarRowSession, s.ID, ""))
 			recordHit(sidebarRowSession, s.ID, "", -1, 1)
-			lines = append(lines, compose(m.sidebarSessionRow(s, variant, cw, pal, hovered, dragged)))
+			lines = append(lines, compose(m.sidebarSessionRow(s, variant, cw, pal, st, dragged, showCounts)))
 		}
 		if h := hidden[sidebarSectionSessions]; h > 0 {
 			lines = append(lines, overflowRow(h, m.sidebarRowIndent()))
@@ -1524,9 +1644,9 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		for i := range count[sidebarSectionTerminals] {
 			idx := start[sidebarSectionTerminals] + i
 			e := terminals[idx]
-			hovered := idx == hoverRow[sidebarSectionTerminals] || isCursor(sidebarRowWindow, e.SessionID, e.WindowID)
+			st := m.railRowState(idx == hoverRow[sidebarSectionTerminals], isCursor(sidebarRowWindow, e.SessionID, e.WindowID))
 			recordHit(sidebarRowWindow, e.SessionID, e.WindowID, e.WindowIndex, 1)
-			lines = append(lines, compose(m.sidebarTerminalRow(e, cw, pal, hovered, peeking)))
+			lines = append(lines, compose(m.sidebarTerminalRow(e, cw, pal, st, peeking)))
 		}
 		if h := hidden[sidebarSectionTerminals]; h > 0 {
 			lines = append(lines, overflowRow(h, 0))
@@ -1543,12 +1663,12 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		for i := range count[sidebarSectionFiles] {
 			idx := start[sidebarSectionFiles] + i
 			row := files[idx]
-			hovered := idx == hoverRow[sidebarSectionFiles]
+			st := m.railRowState(idx == hoverRow[sidebarSectionFiles], false)
 			if row.Kind != 0 {
-				hovered = hovered || isCursor(row.Kind, "", row.Key)
+				st.Cursor = st.Cursor || isCursor(row.Kind, "", row.Key)
 				recordHit(row.Kind, "", row.Key, row.Index, 1)
 			}
-			lines = append(lines, compose(m.sidebarFileRow(row, cw, pal, hovered)))
+			lines = append(lines, compose(m.sidebarFileRow(row, cw, pal, st)))
 		}
 		if h := hidden[sidebarSectionFiles]; h > 0 {
 			lines = append(lines, overflowRow(h, 0))
@@ -1574,18 +1694,19 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			// it apart from the header's token the cursor could not address it.
 			recordHit(sidebarRowAgentFilter, m.sidebarCurrentSessionID(), "", -1, 1)
 			lines = append(lines, compose(m.sidebarAgentsEmptyRow(agentsTotal, cw, pal,
-				hoverRow[sidebarSectionAgents] == 0 || isCursor(sidebarRowAgentFilter, m.sidebarCurrentSessionID(), ""))))
+				m.railRowState(hoverRow[sidebarSectionAgents] == 0,
+					isCursor(sidebarRowAgentFilter, m.sidebarCurrentSessionID(), "")))))
 			return
 		}
 		for i := range count[sidebarSectionAgents] {
 			idx := start[sidebarSectionAgents] + i
 			e := agents[idx]
-			hovered := idx == hoverRow[sidebarSectionAgents] || isCursor(sidebarRowAgent, e.SessionID, e.WindowID)
+			st := m.railRowState(idx == hoverRow[sidebarSectionAgents], isCursor(sidebarRowAgent, e.SessionID, e.WindowID))
 			tall := rowH[sidebarSectionAgents] > 1
 			recordHit(sidebarRowAgent, e.SessionID, e.WindowID, e.WindowIndex, rowH[sidebarSectionAgents])
-			lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, hovered, tall)))
+			lines = append(lines, compose(m.sidebarAgentRow(e, variant, cw, pal, st, tall)))
 			if tall {
-				lines = append(lines, compose(m.sidebarAgentNoteRow(e, variant, cw, pal, hovered)))
+				lines = append(lines, compose(m.sidebarAgentNoteRow(e, variant, cw, pal, st)))
 			}
 		}
 		if h := hidden[sidebarSectionAgents]; h > 0 {
@@ -2013,9 +2134,9 @@ func (m *OS) windowIndexByID(id string) int {
 //
 // A drag in progress keeps the band on the dragged row while it rides the
 // pointer.
-func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overlay.Palette, hovered, dragged bool) string {
+func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overlay.Palette, st sidebarRowState, dragged, showCounts bool) string {
 	var rowBg color.Color
-	if hovered || dragged {
+	if st.lit() || dragged {
 		rowBg = pal.Surface
 	}
 
@@ -2034,7 +2155,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	}
 
 	right, rightW := "", 0
-	if m.Settings.SidebarShowCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
+	if m.Settings.SidebarShowCounts && showCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
 		countStr := strconv.Itoa(node.WindowCount)
 		right = sidebarStyle(rowBg, pal.FgMute).Render(countStr)
 		rightW = lipgloss.Width(countStr)
@@ -2066,7 +2187,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 	// state wanting a human takes the rail's one bold voice, so it still leads
 	// on a monochrome capture where the gutter colour is gone.
 	fg := pal.FgDim
-	if node.IsCurrent || hovered || dragged {
+	if node.IsCurrent || st.lit() || dragged {
 		fg = pal.Fg
 	}
 	title := printableTitle(node.Title)
@@ -2090,7 +2211,7 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 		}
 	}
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(node.AgentState)).
-		Render(m.sidebarMarquee("s:"+node.ID, title, avail, hovered)) + branch
+		Render(m.sidebarMarquee("s:"+node.ID, title, avail, st.Cursor)) + branch
 
 	gutter := sidebarGutterTinted(node.IsCurrent, node.AgentState, tint, rowBg, pal, &m.Settings)
 	if tint != nil && stated && !node.IsCurrent && !sidebarAttention(node.AgentState) {
@@ -2109,9 +2230,9 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 // A peeked row is a photograph: uniformly dim, no focus mark, no unread
 // emphasis. Severity gutters and state glyph colours stay, because they are
 // what the user peeked to see.
-func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Palette, hovered, peeked bool) string {
+func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Palette, st sidebarRowState, peeked bool) string {
 	var rowBg color.Color
-	if hovered {
+	if st.lit() {
 		rowBg = pal.Surface
 	}
 
@@ -2165,12 +2286,12 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 		// Unseen work reads at full strength; seeing it is what dims it.
 		fg = pal.Fg
 	}
-	if hovered {
+	if st.lit() {
 		fg = pal.Fg
 	}
 
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(e.State)).
-		Render(m.sidebarMarquee("t:"+e.WindowID, title, sidebarNameAvail(cw, rightW), hovered))
+		Render(m.sidebarMarquee("t:"+e.WindowID, title, sidebarNameAvail(cw, rightW), st.lit()))
 	return sidebarComposeRow(gutter, sidebarGlyph(e.State, e.DoneSeen, rowBg, pal, &m.Settings), name, right, cw, rowBg)
 }
 
@@ -2193,10 +2314,10 @@ const sidebarWorkspaceTagMax = 8
 // every pane it has: the state it is in, the count it is hiding, and the way
 // back, all on the name spine so it reads as the section's one row rather than
 // as a message about it. Clicking anywhere on it flips the filter.
-func (m *OS) sidebarAgentsEmptyRow(total, cw int, pal overlay.Palette, hovered bool) string {
+func (m *OS) sidebarAgentsEmptyRow(total, cw int, pal overlay.Palette, st sidebarRowState) string {
 	var rowBg color.Color
 	fg := pal.FgMute
-	if hovered {
+	if st.lit() {
 		rowBg, fg = pal.Surface, pal.Fg
 	}
 	sep := " · "
@@ -2248,9 +2369,9 @@ func sidebarAgentName(e sidebarAgentEntry) string {
 // pane it is about. The note gives way before the harness name: which agent a
 // row is stays true at any width, where half a sentence is not a shorter
 // sentence.
-func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, hovered bool) string {
+func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState) string {
 	var rowBg color.Color
-	if hovered {
+	if st.lit() {
 		rowBg = pal.Surface
 	}
 	indent := sidebarNameCol + 1
@@ -2308,13 +2429,13 @@ func (m *OS) sidebarAgentNoteText(tokens []sidebarAgentToken, quiet lipgloss.Sty
 // tall says the row has a note line under it, which is where the harness name
 // goes: carrying it here as well would print one thing twice, and the line has
 // only ever had room for one name.
-func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, hovered, tall bool) string {
+func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState, tall bool) string {
 	var rowBg color.Color
 	fg := pal.FgDim
 	if e.State == "done" && !e.DoneSeen {
 		fg = pal.Fg
 	}
-	if hovered {
+	if st.lit() {
 		rowBg = pal.Surface
 		fg = pal.Fg
 	}
@@ -2398,7 +2519,7 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	}
 	nameRoom := max(avail-shownW-afterW, 1)
 	body := shown +
-		m.sidebarTokenStyle(nameStyle, plan.Name, pal).Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, nameRoom, hovered)) +
+		m.sidebarTokenStyle(nameStyle, plan.Name, pal).Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, nameRoom, st.Cursor)) +
 		after
 	return sidebarComposeRow(gutter,
 		sidebarGlyph(e.State, e.DoneSeen, rowBg, pal, &m.Settings), body, right, cw, rowBg)
