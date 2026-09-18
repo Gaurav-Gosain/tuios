@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -103,6 +104,9 @@ type fileViewState struct {
 	Entries []fileEntry
 	// Err is why the listing is empty, when that is the reason.
 	Err string
+	// ErrAt is when that failure came back, so a retry is paced rather than run
+	// on every message. See FilesSyncCmd.
+	ErrAt time.Time
 	// Gen stamps the outstanding request. The reply carries it back and is
 	// dropped when it does not match, and the rail's render cache folds it in
 	// so a listing that changed under an unchanged path still repaints.
@@ -114,6 +118,12 @@ type fileViewState struct {
 	// The listing stays; the file actions do not. See cwdIsSpoofed.
 	Spoofed bool
 }
+
+// fileRetryInterval paces retrying a directory that could not be read. Short
+// enough that a pane whose session has just been created fills in while the
+// person is still looking at it, long enough that a directory which stays
+// unreadable costs one ask a second rather than one per message.
+const fileRetryInterval = time.Second
 
 // fileViewMaxEntries bounds one listing.
 //
@@ -272,7 +282,7 @@ func (m *OS) FilesSyncCmd() tea.Cmd {
 		}
 		return nil
 	}
-	if want == m.filesView.Want {
+	if want == m.filesView.Want && !filesShouldRetry(m.filesView, want) {
 		return nil
 	}
 	window := m.GetFocusedWindow()
@@ -281,6 +291,31 @@ func (m *OS) FilesSyncCmd() tea.Cmd {
 		origin = window.ID
 	}
 	return m.requestFileList(want, origin, false)
+}
+
+// filesShouldRetry reports whether a directory already asked for is worth
+// asking for again.
+//
+// Want is set when a read is asked for, not when one succeeds. So a listing
+// that failed leaves Want pointing at the directory it could not read, and a
+// sync comparing on Want alone answers "already asked for that" forever: the
+// section stays empty until something else moves the focus, which is why
+// switching sessions away and back appeared to fix it.
+//
+// A failure is a reason to try again. Most of them are temporary, and the one
+// that prompted this is the most temporary of all: a session just created on
+// another machine has a pane whose daemon has not been asked for its directory
+// yet. Paced off when the failure came back, because the alternative is a
+// request to the daemon on every message for as long as the directory stays
+// unreadable, and this runs once per message.
+func filesShouldRetry(v fileViewState, want string) bool {
+	if v.Want != want {
+		return true // a different directory is always worth asking for
+	}
+	if v.Loading || v.Err == "" {
+		return false // in flight, or already on screen
+	}
+	return time.Since(v.ErrAt) >= fileRetryInterval
 }
 
 // fileViewFromLink reports whether the listing was opened from a directory link
@@ -536,6 +571,16 @@ func (m *OS) HandleFileList(msg fileListMsg) {
 	m.filesView.Entries = msg.Entries
 	m.filesView.Capped = msg.Capped
 	m.filesView.Spoofed = msg.Spoofed
+	// Stamped only on a failure, and only when it is a new one. FilesSyncCmd
+	// paces the retry off this, so leaving it unset would make every retry
+	// immediate and turn a directory that stays unreadable into a request per
+	// message. Restamping an unchanged error would push the next retry out
+	// forever, which is the opposite mistake.
+	if msg.Err != "" {
+		m.filesView.ErrAt = time.Now()
+	} else {
+		m.filesView.ErrAt = time.Time{}
+	}
 }
 
 // recordWindowCwd stores a pane's reported directory.

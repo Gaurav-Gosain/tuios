@@ -2,6 +2,7 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -84,5 +85,67 @@ func TestTheSpoofCheckIsNotRunAgainstAnotherMachinesPid(t *testing.T) {
 				t.Errorf("attached to %q the check applies=%v, want %v", c.host, got, c.want)
 			}
 		})
+	}
+}
+
+// TestAFailedListingIsTriedAgain.
+//
+// Want is set when a read is asked for, not when one succeeds, so a listing
+// that failed left Want pointing at the directory it could not read and the
+// sync answered "already asked for that" forever. The section then stayed
+// empty until something else moved the focus, which is why switching sessions
+// away and back appeared to fix it. Reported against a session just created on
+// another machine, where the first read lands before the daemon has been asked
+// for the pane's directory.
+//
+// Negative control: without the Err check in FilesSyncCmd the retry never
+// happens and this fails.
+func TestAFailedListingIsTriedAgain(t *testing.T) {
+	m := &OS{}
+	m.filesView.Want = "/home/ubuntu"
+	m.filesView.Err = "That folder is gone."
+	m.filesView.ErrAt = time.Now().Add(-2 * fileRetryInterval)
+
+	if !filesShouldRetry(m.filesView, "/home/ubuntu") {
+		t.Error("a listing that failed a while ago is not tried again")
+	}
+}
+
+// TestAFailedListingIsNotRetriedOnEveryMessage is the other half. FilesSyncCmd
+// runs once per message, so an unpaced retry is a request to the daemon per
+// keystroke for as long as the directory stays unreadable.
+func TestAFailedListingIsNotRetriedOnEveryMessage(t *testing.T) {
+	m := &OS{}
+	m.filesView.Want = "/home/ubuntu"
+	m.filesView.Err = "That folder is gone."
+	m.filesView.ErrAt = time.Now()
+
+	if filesShouldRetry(m.filesView, "/home/ubuntu") {
+		t.Error("a listing that just failed is retried immediately")
+	}
+}
+
+// TestASuccessfulListingIsNotAskedForAgain: the case the comparison was always
+// for. A directory already on screen costs nothing.
+func TestASuccessfulListingIsNotAskedForAgain(t *testing.T) {
+	m := &OS{}
+	m.filesView.Want = "/home/ubuntu"
+	m.filesView.Dir = "/home/ubuntu"
+
+	if filesShouldRetry(m.filesView, "/home/ubuntu") {
+		t.Error("a directory already listed is asked for again")
+	}
+}
+
+// TestAListingInFlightIsNotAskedForTwice.
+func TestAListingInFlightIsNotAskedForTwice(t *testing.T) {
+	m := &OS{}
+	m.filesView.Want = "/home/ubuntu"
+	m.filesView.Loading = true
+	m.filesView.Err = "an older failure"
+	m.filesView.ErrAt = time.Now().Add(-time.Hour)
+
+	if filesShouldRetry(m.filesView, "/home/ubuntu") {
+		t.Error("a read already in flight was asked for a second time")
 	}
 }
