@@ -116,6 +116,8 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec) (*hostedPane, error) {
 		return nil, err
 	}
 
+	releaseSlave(pty)
+
 	hp := &hostedPane{id: uuid.New().String(), pty: pty, cmd: cmd}
 
 	d.hostedPanesMu.Lock()
@@ -126,6 +128,33 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec) (*hostedPane, error) {
 	d.hostedPanesMu.Unlock()
 
 	return hp, nil
+}
+
+// releaseSlave closes this process's own copy of the pty's slave end, now that
+// the child has inherited its own.
+//
+// A pty master reports end of file only once every slave descriptor is shut,
+// and xpty leaves one open in the parent after starting the command. A pane
+// here notices its process exiting through the master going quiet, so with that
+// descriptor held the relay's read waits for a byte from a process that is
+// already gone. On Linux it waits forever, and the window on the other machine
+// stays up around nothing.
+//
+// A pane of this daemon's own does not need it and does not do it: its exit is
+// heard from cmd.Wait, which is a fact about a process rather than about a
+// descriptor. A hosted pane has no waiter on this machine that anyone is
+// listening to, because its owner is on the other side of a link and the
+// stream ending is the only notice that crosses.
+func releaseSlave(pty xpty.Pty) {
+	// Named rather than asserted against a concrete type, so a pty
+	// implementation without a separate slave end simply does not match.
+	slaved, ok := pty.(interface{ Slave() *os.File })
+	if !ok {
+		return
+	}
+	if f := slaved.Slave(); f != nil {
+		_ = f.Close()
+	}
 }
 
 // clampHostedDim keeps a size sent from another machine inside what a pty can
@@ -251,6 +280,21 @@ func (d *Daemon) relayHostedPane(cs *connState, br *bufio.Reader, hp *hostedPane
 	_ = conn.SetWriteDeadline(time.Time{})
 
 	defer d.forgetHostedPane(hp.id)
+
+	go func() {
+		// Reap the process. Nothing else on this machine waits for a hosted
+		// pane's command: the local path waits in monitorExit, which belongs
+		// to a PTY this daemon owns, and a hosted pane has no PTY here. An
+		// unwaited child is a zombie for as long as the daemon runs, and a
+		// daemon that hosts panes for another machine collects one per pane.
+		//
+		// It doubles as the backstop for the pty going quiet: whichever of the
+		// two notices first ends the pane, and close is idempotent.
+		if hp.cmd != nil {
+			_ = hp.cmd.Wait()
+		}
+		hp.close()
+	}()
 
 	done := make(chan struct{})
 	go func() {
