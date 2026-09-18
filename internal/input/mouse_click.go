@@ -186,7 +186,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.DragStartX, o.DragStartY = X, Y
 			return o, nil
 		}
-		o.FocusWindow(clickedWindowIndex)
+		o.FocusWindowFromClick(clickedWindowIndex)
 		return o, nil
 	}
 
@@ -221,7 +221,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft {
 		win := o.Windows[clickedWindowIndex]
 		if rect, drawn := o.ScrollbarHit(win); drawn && rect.Contains(X, Y) {
-			o.FocusWindow(clickedWindowIndex)
+			o.FocusWindowFromClick(clickedWindowIndex)
 			o.ScrollbarGrabOffset = scrollbarGrab(win, rect, Y, &o.Settings)
 			o.ScrollbarDragging = true
 			o.ScrollbarDragWindowIndex = clickedWindowIndex
@@ -267,7 +267,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if msg.Button == tea.MouseLeft && msg.Mod == tea.ModShift {
 		if link, ok := o.LinkAt(X, Y); ok {
 			if clickedWindowIndex != -1 {
-				o.FocusWindow(clickedWindowIndex)
+				o.FocusWindowFromClick(clickedWindowIndex)
 			}
 			return o, o.OpenLink(link.URL)
 		}

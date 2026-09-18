@@ -202,6 +202,8 @@ type AppearanceConfig struct {
 	DockPillCaps           *bool  `toml:"dock_pill_caps"`            // Powerline caps on the dock's pills (default: false, flat)
 	SessionColors          *bool  `toml:"session_colors"`            // Give each session its own colour on the rail and the switcher (default: true)
 	SessionBorder          *bool  `toml:"session_border"`            // Carry that colour on every pane border too (default: false)
+	NiriClickReveals       *bool  `toml:"niri_click_reveals"`        // Bring a clicked column fully on screen in the scrolling layout (default: true)
+	SidebarGitDirty        *bool  `toml:"git_dirty"`                 // Count changed and untracked paths in the rail's git section (default: true)
 	Glyphs                 string `toml:"glyphs"`                    // Chrome glyph set: default, box, heavy, ascii, or one from ~/.config/tuios/glyphs
 	Gap                    int    `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
 	// MasterRatio and ScrollColumnWidth are percentages rather than fractions
@@ -1364,6 +1366,12 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if cfg.Appearance.SessionBorder != nil {
 		s.SessionBorder = *cfg.Appearance.SessionBorder
+	}
+	if cfg.Appearance.SidebarGitDirty != nil {
+		s.SidebarGitDirty = *cfg.Appearance.SidebarGitDirty
+	}
+	if cfg.Appearance.NiriClickReveals != nil {
+		s.NiriClickReveals = *cfg.Appearance.NiriClickReveals
 	}
 	if cfg.Appearance.Scrollbar.Style != "" {
 		s.ScrollbarStyle = cfg.Appearance.Scrollbar.Style

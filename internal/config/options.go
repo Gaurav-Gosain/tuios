@@ -252,6 +252,16 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 	{
+		Path: "appearance.niri_click_reveals", Type: OptionBool, Section: "appearance",
+		Description: "In the scrolling layout, clicking a column that is partly off the edge brings all of it on screen",
+		Default:     "true",
+	},
+	{
+		Path: "appearance.git_dirty", Type: OptionBool, Section: "sidebar",
+		Description: "Count staged, changed and untracked paths in the rail's git section. The only part of it that costs a walk of the working tree.",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.glyphs", Type: OptionString, Section: "appearance",
 		Description: "Chrome glyph set: the characters the border, controls, rules and rail marks are drawn with",
 		Default:     theme.GlyphSetNone, GlyphSet: true,

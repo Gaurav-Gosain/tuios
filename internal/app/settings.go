@@ -337,6 +337,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.links"),
 			opt("appearance.session_colors"),
 			opt("appearance.session_border"),
+			opt("appearance.git_dirty"),
 		}),
 	}
 
@@ -397,6 +398,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.new_window_inherit_cwd"),
 			opt("appearance.niri_reverse_scroll"),
 			opt("appearance.niri_scroll_cells"),
+			opt("appearance.niri_click_reveals"),
 			custom("appearance.max_fps", m.maxFPSItem()),
 			opt("appearance.preferred_shell"),
 		}),

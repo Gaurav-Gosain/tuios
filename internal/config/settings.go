@@ -169,6 +169,27 @@ type Settings struct {
 	// attached on several machines, the session is the thing every pane in the
 	// view has in common, and its colour is the cheapest way to say which one
 	// you are looking at without reading the rail.
+	// SidebarGitDirty adds the count of staged, changed and untracked paths to
+	// the rail's git section.
+	//
+	// Separate from the section itself because it is the only part of it that
+	// costs a walk of the working tree. A branch and a divergence are recorded
+	// facts and come from a few file reads; dirtiness is recorded nowhere, so
+	// the only way to know is to compare the tree against the index. On a large
+	// repository that is the part worth being able to turn off.
+	// NiriClickReveals brings a clicked column fully on screen in the scrolling
+	// layout.
+	//
+	// A click is different from the other ways focus moves. A workspace switch
+	// or a focus the daemon moved is not a statement about the viewport, and
+	// revealing on those threw away wherever the user had scrolled the strip,
+	// which is the bug that put every focus change on the least-scroll rule.
+	// Clicking a column that is half off the edge is a statement: you picked
+	// that pane to work in, so the strip brings all of it to you.
+	NiriClickReveals bool
+
+	SidebarGitDirty bool
+
 	SessionBorder bool
 
 	SessionColors bool
@@ -480,6 +501,8 @@ func DefaultSettings() Settings {
 		Tooltips:                    true,
 		SessionColors:               true,
 		SessionBorder:               false,
+		SidebarGitDirty:             true,
+		NiriClickReveals:            true,
 		DockWorkspaceTabs:           true,
 		DockWorkspaceTabFormat:      "",
 		DockWorkspaceTooltip:        true,

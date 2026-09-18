@@ -769,3 +769,21 @@ func paneBusyReason(window *terminal.Window) (string, bool) {
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
+
+// adoptWindowCwd takes the directory the daemon reports for a pane.
+//
+// A client learns a directory two ways on its own, and neither works for a pane
+// attached from another machine. Its emulator sees one only when the shell
+// announces over OSC 7, and most shells are not configured to announce. Reading
+// the pane's process works only where the process is, and a pane on another
+// machine is not on this computer at all. So the daemon's answer, which it fills
+// from the process it owns, is the only one such a pane can have, and it is the
+// better one everywhere.
+//
+// An empty value leaves whatever this client already learned. A sync that omits
+// the field must not wipe a directory a pane did announce.
+func adoptWindowCwd(w *terminal.Window, cwd string) {
+	if w != nil && cwd != "" {
+		w.Cwd = cwd
+	}
+}

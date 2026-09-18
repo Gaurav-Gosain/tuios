@@ -321,6 +321,42 @@ func (m *OS) ScrollingOnFocusChange() {
 	m.scrollingSetPositions()
 }
 
+// FocusWindowFromClick focuses a pane the user clicked on, and in the scrolling
+// layout brings its whole column on screen.
+//
+// Focus moves for several reasons and they are not the same statement. A
+// workspace switch restoring its saved focus, or a focus the daemon moved, says
+// nothing about where the viewport should be, and revealing on those threw away
+// wherever the user had scrolled that workspace's strip. That is why every
+// focus change went to the least-scroll rule. A click is the other kind: a
+// column half off the edge that you deliberately clicked is one you picked to
+// work in, so the strip brings all of it to you rather than leaving you reading
+// half a pane.
+//
+// appearance.niri_click_reveals turns it off, for anyone who would rather the
+// strip stayed exactly where they left it.
+//
+// Only the clicks that do nothing but focus come here. A click that begins a
+// gesture (a title-bar grab, a resize press, an armed selection) or that is
+// forwarded to a guest running mouse tracking keeps the plain FocusWindow,
+// because scrolling the strip moves the pane out from under the pointer and
+// every later coordinate in that gesture is measured against where it used to
+// be. A title drop landed a pane twelve cells off for exactly that reason.
+func (m *OS) FocusWindowFromClick(i int) *OS {
+	out := m.FocusWindow(i)
+	if !m.Settings.NiriClickReveals || !m.AutoTiling || !m.UseScrollingLayout {
+		return out
+	}
+	if fw := m.GetFocusedWindow(); fw != nil {
+		sl := m.GetOrCreateScrollingLayout()
+		if sl.FocusColumnContaining(m.getWindowIntID(fw.ID)) {
+			sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
+			m.scrollingSetPositions()
+		}
+	}
+	return out
+}
+
 // ScrollingOnWindowAdded adds a new window to the scrolling layout.
 // Only adds the column  - FocusWindow handles viewport and positioning.
 func (m *OS) ScrollingOnWindowAdded(w *terminal.Window) {

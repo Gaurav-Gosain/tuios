@@ -354,3 +354,63 @@ var countCommits = func(root, head, upstream string) (ahead, behind int, err err
 	behind, _ = strconv.Atoi(fields[1])
 	return ahead, behind, nil
 }
+
+// Dirty is how many paths are staged, changed in the working tree, and not
+// tracked at all.
+type Dirty struct {
+	Staged, Modified, Untracked int
+}
+
+// Any reports whether there is anything to say.
+func (d Dirty) Any() bool { return d.Staged > 0 || d.Modified > 0 || d.Untracked > 0 }
+
+// ReadDirty counts the paths git would report as changed.
+//
+// This is deliberately a separate call from Read, and it is the expensive one.
+// Everything Read answers comes from a handful of file reads because a branch
+// and a divergence are recorded facts. Dirtiness is not recorded anywhere: the
+// only way to know is to compare the working tree against the index, which
+// means walking the tree. On a large repository that is the thing that makes a
+// sidebar stutter, so the caller decides whether to pay for it rather than
+// getting it folded into an answer it did not ask for.
+//
+// Not cached here either, for the same reason the hash check does not help: a
+// file changes without any commit moving, so there is no cheap fingerprint to
+// gate it on. The caller's refresh interval is the only bound.
+func ReadDirty(root string) (Dirty, bool) {
+	if root == "" {
+		return Dirty{}, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), countTimeout)
+	defer cancel()
+	// Porcelain v1 because its two status columns are fixed width and the
+	// format is frozen by git's own compatibility promise. Untracked files are
+	// counted but not walked into: a directory of a thousand new files is one
+	// line and one number, not a thousand.
+	cmd := exec.CommandContext(ctx, "git", "status", "--porcelain",
+		"--untracked-files=normal", "--no-renames")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GIT_PAGER=cat", "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0")
+	out, err := cmd.Output()
+	if err != nil {
+		return Dirty{}, false
+	}
+
+	var d Dirty
+	for line := range strings.SplitSeq(strings.TrimRight(string(out), "\n"), "\n") {
+		if len(line) < 2 {
+			continue
+		}
+		if line[0] == '?' && line[1] == '?' {
+			d.Untracked++
+			continue
+		}
+		if line[0] != ' ' {
+			d.Staged++
+		}
+		if line[1] != ' ' {
+			d.Modified++
+		}
+	}
+	return d, true
+}

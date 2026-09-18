@@ -287,6 +287,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 			m.PTYDataChan,
 			m.Settings.ScrollbackLines,
 		)
+		adoptWindowCwd(window, ws.Cwd)
 		if window == nil {
 			m.LogError("Failed to create daemon window for %s", shortID(ws.ID))
 			continue
@@ -1000,6 +1001,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 
 	// Update all properties
 	w.SetTitle(ws.Title)
+	adoptWindowCwd(w, ws.Cwd)
 	w.CustomName = ws.CustomName
 	if adoptGeometry {
 		w.X = ws.X
@@ -1170,6 +1172,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 		m.PTYDataChan,
 		m.Settings.ScrollbackLines,
 	)
+	adoptWindowCwd(window, ws.Cwd)
 	if window == nil {
 		return nil
 	}

@@ -35,6 +35,7 @@ type gitView struct {
 	// blanks between two directories that are both repositories.
 	Dir   string
 	State gitstate.State
+	Dirty gitstate.Dirty
 	Found bool
 
 	// asked is the directory a reading is in flight for, and when it was asked.
@@ -48,6 +49,7 @@ type gitView struct {
 type GitStateMsg struct {
 	Dir   string
 	State gitstate.State
+	Dirty gitstate.Dirty
 	Found bool
 }
 
@@ -91,9 +93,16 @@ func (m *OS) GitSyncCmd() tea.Cmd {
 		return nil
 	}
 	m.gitView.asked, m.gitView.at = want, time.Now()
+	dirty := m.Settings.SidebarGitDirty
 	return func() tea.Msg {
 		state, found := gitstate.Read(want)
-		return GitStateMsg{Dir: want, State: state, Found: found}
+		msg := GitStateMsg{Dir: want, State: state, Found: found}
+		if found && dirty {
+			// Taken here, on the same goroutine, so the expensive half never
+			// reaches the render path either.
+			msg.Dirty, _ = gitstate.ReadDirty(state.Root)
+		}
+		return msg
 	}
 }
 
@@ -104,6 +113,7 @@ func (m *OS) ApplyGitState(msg GitStateMsg) {
 		return
 	}
 	m.gitView.Dir, m.gitView.State, m.gitView.Found = msg.Dir, msg.State, msg.Found
+	m.gitView.Dirty = msg.Dirty
 }
 
 // gitRowKind is what a row of the section is.
@@ -136,6 +146,29 @@ func divergence(ahead, behind int) string {
 	return ""
 }
 
+// dirtyFigure is the staged, changed and untracked counts, or empty when the
+// tree is clean. The letters are the ones a shell prompt already uses for them,
+// so the rail is not teaching a second vocabulary for the same three numbers.
+func dirtyFigure(d gitstate.Dirty) string {
+	if !d.Any() {
+		return ""
+	}
+	out := ""
+	add := func(mark string, n int) {
+		if n == 0 {
+			return
+		}
+		if out != "" {
+			out += " "
+		}
+		out += mark + strconv.Itoa(n)
+	}
+	add("+", d.Staged)
+	add("!", d.Modified)
+	add("?", d.Untracked)
+	return out
+}
+
 // gitRows is what the section draws, top to bottom.
 func (m *OS) gitRows() []gitRowSpec {
 	if !m.gitView.Found {
@@ -144,7 +177,12 @@ func (m *OS) gitRows() []gitRowSpec {
 	st := m.gitView.State
 	rows := make([]gitRowSpec, 0, 2)
 	if st.Repo != "" {
-		rows = append(rows, gitRowSpec{Kind: gitRowRepo, Name: st.Repo})
+		// The repository row carries the dirt and the branch row carries the
+		// divergence, one figure each. Both on one row is more than twenty
+		// eight columns can hold beside a name, and splitting them puts each
+		// figure against the thing it is actually about: what is changed here,
+		// and how far this branch has drifted from where it came from.
+		rows = append(rows, gitRowSpec{Kind: gitRowRepo, Name: st.Repo, Right: dirtyFigure(m.gitView.Dirty)})
 	}
 	if st.Branch != "" {
 		row := gitRowSpec{Kind: gitRowBranch, Name: st.Branch}
@@ -167,8 +205,12 @@ func (m *OS) sidebarGitRow(row gitRowSpec, cw int, pal overlay.Palette, st sideb
 
 	right, rightW := "", 0
 	if row.Right != "" {
-		right = gitDivergenceToken(row.Right, rowBg, pal)
 		rightW = lipgloss.Width(row.Right)
+		if row.Kind == gitRowBranch {
+			right = gitDivergenceToken(row.Right, rowBg, pal)
+		} else {
+			right = sidebarStyle(rowBg, pal.Warn).Render(row.Right)
+		}
 	}
 
 	ink := pal.FgDim
