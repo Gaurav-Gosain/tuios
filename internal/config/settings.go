@@ -366,6 +366,12 @@ type Settings struct {
 	// Set via appearance.niri_reverse_scroll config
 	NiriReverseScroll bool
 
+	// NiriScrollCells is how many cells one wheel event walks the strip in the
+	// scrolling layout. See NiriScrollCellsDefault for why it is a flat count
+	// and not a share of the screen.
+	// Set via appearance.niri_scroll_cells config
+	NiriScrollCells int
+
 	// LeaderKey is the prefix key for commands (default: ctrl+b)
 	// Set via appearance.leader_key config
 	LeaderKey string
@@ -504,6 +510,7 @@ func DefaultSettings() Settings {
 		AutoEnterTerminalOnFocus:    AutoEnterTerminalOff,
 		WordCharacters:              `@-./_~?&=%+#`,
 		NiriReverseScroll:           false,
+		NiriScrollCells:             NiriScrollCellsDefault,
 		LeaderKey:                   DefaultLeaderKey,
 		PaneGap:                     0,
 		MasterRatioPercent:          MasterRatioDefault,

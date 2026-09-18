@@ -392,6 +392,11 @@ type OS struct {
 	viewportResizeAt time.Time
 	lastPointerAt    time.Time
 
+	// wheelAxis is the axis the scroll gesture in progress is on, so a
+	// trackpad's sideways drift can be told from a scroll the user meant. See
+	// wheel_axis.go.
+	wheelAxis wheelAxis
+
 	// zenHidden records the zen-mode border visibility of the last composed
 	// frame, so the idle tick can detect the mouse-mode timeout crossing and
 	// force a repaint (borders must reappear or melt away exactly once).

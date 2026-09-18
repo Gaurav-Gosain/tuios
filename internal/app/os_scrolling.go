@@ -3,6 +3,7 @@ package app
 import (
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -274,7 +275,11 @@ func (m *OS) ScrollingScrollViewport(delta int) {
 	viewW := m.ScrollingViewWidth()
 	// Cancel any in-flight slide animations so the wheel feels direct
 	m.CompleteAllAnimations()
-	sl.ViewportX += delta * (viewW / 5)
+	// A flat number of cells rather than a share of the view. See
+	// config.NiriScrollCellsDefault: a trackpad sends one wheel event per cell
+	// the fingers cross, so a step measured against the screen's width made one
+	// flick cross the whole strip and stop dead at the clamp.
+	sl.ViewportX += delta * max(m.Settings.NiriScrollCells, config.NiriScrollCellsMin)
 	sl.ClampViewport(viewW)
 	m.scrollingSetPositionsInstant()
 }

@@ -272,6 +272,11 @@ var optionSpecs = []Option{
 		Default:     strconv.Itoa(ScrollColumnWidthDefault), Min: ScrollColumnWidthMin, Max: ScrollColumnWidthMax,
 	},
 	{
+		Path: "appearance.niri_scroll_cells", Type: OptionInt, Section: "appearance",
+		Description: "Cells the scrolling layout's strip moves per mouse wheel event",
+		Default:     strconv.Itoa(NiriScrollCellsDefault), Min: NiriScrollCellsMin, Max: NiriScrollCellsMax,
+	},
+	{
 		Path: "appearance.panel_padding", Type: OptionInt, Section: "appearance",
 		Description: "Columns of padding each side of an overlay panel's content",
 		Default:     strconv.Itoa(overlay.DefaultPanelPadding), Min: 1, Max: overlay.MaxPanelPadding,

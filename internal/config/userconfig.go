@@ -194,6 +194,7 @@ type AppearanceConfig struct {
 	WindowTitleFormat      string `toml:"window_title_format"`       // Format string for window titles: {title}, {index}, {cwd}
 	ZoomMaxWidth           int    `toml:"zoom_max_width"`            // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
 	NiriReverseScroll      bool   `toml:"niri_reverse_scroll"`       // Reverse mouse scroll direction in niri scrolling mode (default: false)
+	NiriScrollCells        int    `toml:"niri_scroll_cells"`         // Cells the niri viewport moves per mouse wheel event (default: 8, min: 1, max: 200)
 	MaxFPS                 int    `toml:"max_fps"`                   // Maximum render FPS (default: 60, max: 120)
 	DockWorkspaceTabs      *bool  `toml:"dock_workspace_tabs"`       // Clickable workspace strip in the dock (default: true)
 	DockWorkspaceTabFormat string `toml:"dock_workspace_tab_format"` // Format string for workspace tabs: {index}, {name} (default: "{name}")
@@ -511,6 +512,7 @@ func DefaultConfig() *UserConfig {
 			ClockFormat:              DefaultClockFormat,
 			MasterRatio:              MasterRatioDefault,
 			ScrollColumnWidth:        ScrollColumnWidthDefault,
+			NiriScrollCells:          NiriScrollCellsDefault,
 			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
 			Sidebar: SidebarConfig{
 				Position:    "left",
@@ -1197,6 +1199,11 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	} else {
 		cfg.Appearance.ScrollColumnWidth = min(max(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin), ScrollColumnWidthMax)
 	}
+	if cfg.Appearance.NiriScrollCells == 0 {
+		cfg.Appearance.NiriScrollCells = NiriScrollCellsDefault
+	} else {
+		cfg.Appearance.NiriScrollCells = min(max(cfg.Appearance.NiriScrollCells, NiriScrollCellsMin), NiriScrollCellsMax)
+	}
 	if cfg.Appearance.DimUnfocused < 0 {
 		cfg.Appearance.DimUnfocused = 0
 	} else if cfg.Appearance.DimUnfocused > DimUnfocusedMax {
@@ -1399,6 +1406,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.ShowCPU = cfg.Appearance.ShowCPU
 	s.ShowRAM = cfg.Appearance.ShowRAM
 	s.NiriReverseScroll = cfg.Appearance.NiriReverseScroll
+	s.NiriScrollCells = clampPercent(cfg.Appearance.NiriScrollCells, NiriScrollCellsMin, NiriScrollCellsMax, NiriScrollCellsDefault)
 
 	if cfg.Appearance.ScrollbackLines > 0 {
 		s.ScrollbackLines = cfg.Appearance.ScrollbackLines

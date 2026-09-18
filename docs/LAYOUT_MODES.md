@@ -110,13 +110,28 @@ others follow to the same place. That works because the panes' box is settled
 across the session, so one offset shows every client the same columns whatever
 size their terminals are.
 
-`niri_reverse_scroll = true` in `[appearance]` inverts the wheel direction.
+`niri_reverse_scroll = true` in `[appearance]` inverts the wheel direction, on
+whichever axis the gesture arrives on.
 
 The wheel only moves the viewport while `Alt` or `Shift` is held, horizontal
 wheel included. A trackpad reports a little sideways drift on almost every
 vertical scroll and the terminal forwards that as a horizontal wheel button, so
 answering it on its own walked the strip sideways whenever someone scrolled back
 through a pane. Unmodified, the wheel belongs to the pane under the pointer.
+
+The drift does not go away once the modifier is held, so the strip follows the
+axis the gesture is mostly on and drops the events on the other one. A quarter
+second of stillness starts a new gesture. This is what a macOS mouse needs too,
+from the other side: the window server swaps the axes for a wheel with shift
+held, so a mouse gesture arrives entirely horizontal while a trackpad gesture
+arrives mostly vertical.
+
+`appearance.niri_scroll_cells` is how far one wheel event walks the strip, in
+cells (1-200, default 8). It is a flat count rather than a share of the screen
+because a terminal reports a trackpad as one wheel event per cell the fingers
+cross: a flick and its momentum tail are tens of events, and a fifth of the
+screen each sent the strip to its end before the fingers had left the glass.
+Raise it if you only ever scroll the strip with a wheel.
 
 ### Column commands
 

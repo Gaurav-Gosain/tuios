@@ -604,6 +604,22 @@ const (
 	ScrollColumnWidthDefault = 55
 )
 
+// How far one wheel event walks the scrolling layout's strip, in cells.
+//
+// It used to be a fifth of the visible width, which is fine for a wheel and
+// unusable on a trackpad: a terminal reports precision scrolling as one wheel
+// event per cell the fingers cross, so a single flick and its momentum tail are
+// tens of events, and a fifth of the screen each sent the strip to its clamp
+// before the fingers had left the glass. A flat number of cells is the same
+// distance whatever the screen is, small enough that a flick lands somewhere the
+// user aimed at, and large enough that a few notches of a wheel still get
+// somewhere. Someone who only ever scrolls the strip with a wheel can raise it.
+const (
+	NiriScrollCellsMin     = 1
+	NiriScrollCellsMax     = 200
+	NiriScrollCellsDefault = 8
+)
+
 // DimUnfocusedMax caps it. The cap is not a legibility floor - content is the
 // user's own text and they may quiet it as far as they like - it only stops a
 // pane from being erased outright, where there is nothing left to show the

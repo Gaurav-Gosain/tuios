@@ -232,9 +232,7 @@ func TestUnrelatedSyncLeavesTheStripAlone(t *testing.T) {
 	// strip, which leaves the focused column off screen on both clients.
 	focusOn(a, 0)
 	f.settle()
-	for range 5 {
-		b.ScrollingScrollViewport(1)
-	}
+	wheelToEnd(b)
 	b.SyncStateToDaemon()
 	f.settle()
 
@@ -474,13 +472,18 @@ func TestWorkspaceSwitchLandsBothClientsOnOneStrip(t *testing.T) {
 func TestWorkspaceRoundTripKeepsTheParkedStrip(t *testing.T) {
 	for _, row := range []struct {
 		name string
-		// notches is how far the wheel takes the strip off the focused column.
+		// notches is how far the wheel takes the strip off the focused column,
+		// or toEnd for as far as the strip goes. A notch count says nothing on
+		// its own: how many cells one covers is a setting, so the row that needs
+		// the column entirely off screen asks for the end rather than a number
+		// that happened to reach it.
 		notches int
+		toEnd   bool
 		// keep says the round trip must leave the offset exactly where it was.
 		keep bool
 	}{
-		{"the focused column is still on screen", 1, true},
-		{"the focused column is entirely off screen", 5, false},
+		{"the focused column is still on screen", 1, false, true},
+		{"the focused column is entirely off screen", 0, true, false},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			f := newScrollingFleet(t, 3, 100, 30)
@@ -491,6 +494,9 @@ func TestWorkspaceRoundTripKeepsTheParkedStrip(t *testing.T) {
 			// moves the strip without moving the focus.
 			focusOn(a, 0)
 			f.settle()
+			if row.toEnd {
+				wheelToEnd(a)
+			}
 			for range row.notches {
 				a.ScrollingScrollViewport(1)
 			}
@@ -551,5 +557,19 @@ func TestWorkspaceRoundTripKeepsTheParkedStrip(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// wheelToEnd walks the strip with the wheel until it stops moving, which is the
+// far end of it. Counting notches instead would tie the test to how many cells
+// one notch covers, which is appearance.niri_scroll_cells and not this test's
+// business.
+func wheelToEnd(m *OS) {
+	for range 500 {
+		before := m.GetOrCreateScrollingLayout().ViewportX
+		m.ScrollingScrollViewport(1)
+		if m.GetOrCreateScrollingLayout().ViewportX == before {
+			return
+		}
 	}
 }
