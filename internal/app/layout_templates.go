@@ -121,14 +121,14 @@ func SaveLayoutTemplate(name string, m *OS) error {
 			Minimized:  w.Minimized,
 		}
 
-		// Capture working directory from the terminal's CWD if available
+		// Where the pane is, so loading the template puts it back there.
+		//
+		// Through the platform's own reader rather than straight at /proc: this
+		// read was Linux-only, so every layout saved on macOS recorded no
+		// directory at all and every window it restored opened wherever the
+		// daemon happened to be.
 		if w.Terminal != nil {
-			// Try to get CWD from /proc if we have a shell PID
-			if w.ShellPgid > 0 {
-				if cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", w.ShellPgid)); err == nil {
-					lw.WorkingDir = cwd
-				}
-			}
+			lw.WorkingDir = paneDir(w)
 		}
 
 		tmpl.Windows = append(tmpl.Windows, lw)

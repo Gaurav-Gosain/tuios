@@ -212,7 +212,34 @@ func (m *OS) filesWantDir() string {
 	if m.filesView.Pinned && m.filesView.Origin == window.ID {
 		return m.filesView.Want
 	}
-	return window.Cwd
+	return paneDir(window)
+}
+
+// paneDir is the directory a pane is in.
+//
+// A shell announces it over OSC 7, and that is the answer when there is one: it
+// is what the shell believes, it arrives the moment the directory changes, and
+// it is right for a shell on the far side of an ssh session where no local
+// process could be read.
+//
+// A shell that never announces one is not a pane with no directory, though,
+// and treating it as one is why the files section spent half its time refusing
+// to open. Shell integration is not installed everywhere, and even where it is
+// the first announcement comes with the first prompt, so a pane that had not
+// been cd'd in yet had nothing to show. The process the pane is running has a
+// working directory whether or not anybody announced it, so that is the
+// fallback, and it is the same read the window title already uses.
+//
+// The empty string still means unknown: no pgid, a platform that cannot read
+// one, or a process that is gone.
+func paneDir(w *terminal.Window) string {
+	if w == nil {
+		return ""
+	}
+	if w.Cwd != "" {
+		return w.Cwd
+	}
+	return w.CWD()
 }
 
 // FilesSyncCmd is the one place the section decides it needs a new listing. It
@@ -477,14 +504,15 @@ func (m *OS) ToggleFileView() tea.Cmd {
 		m.ShowNotification("There is no pane to show files for.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	if window.Cwd == "" {
+	dir := paneDir(window)
+	if dir == "" {
 		m.ShowNotification(
-			"tuios does not know where that pane is. The shell has to report its directory.",
+			"tuios cannot read that pane's directory.",
 			"info", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.filesView.Show = 1
-	return m.requestFileList(window.Cwd, window.ID, false)
+	return m.requestFileList(dir, window.ID, false)
 }
 
 // OpenFileView shows dir in the files section and reports whether it could.
