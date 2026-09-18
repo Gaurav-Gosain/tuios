@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"image/color"
 	"strings"
 	"testing"
@@ -221,5 +222,66 @@ func TestAVirtualPlacementReservesNoRows(t *testing.T) {
 	}
 	if got := kp.ForwardCommand(real, nil, winID, 0, 0, 80, 24, 0, 0, 0, 0, 0, false, nil); got == nil {
 		t.Error("a real placement reserved nothing")
+	}
+}
+
+// TestTheWholePlaceholderFlow drives the exact shape glamour emits for an
+// image in a pager: transmit the image, declare the box it occupies, print the
+// placeholder grid. It checks the two halves agree, which is the thing that
+// was broken and the thing unit tests of either half alone cannot see.
+func TestTheWholePlaceholderFlow(t *testing.T) {
+	kp := newTestKittyPassthrough(t)
+	winID := "test-window-id-abcdef12"
+	const guestID uint32 = 0x0a0b0c
+	const cols, rows = 4, 2
+
+	// The guest's emulator, wired the way a real pane's is.
+	term := vt.New(40, 10)
+	term.SetKittyImageIDTranslator(func(g uint32) (uint32, bool) {
+		return kp.HostImageID(winID, g)
+	})
+	term.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, raw []byte) {
+		kp.ForwardCommand(cmd, raw, winID, 0, 0, 80, 24, 0, 0, 0, 0, 0, false, nil)
+	})
+
+	var seq strings.Builder
+	fmt.Fprintf(&seq, "\x1b_Ga=t,f=100,t=d,i=%d,q=2;aVZCT1J3MEtHZ28=\x1b\\", guestID)
+	fmt.Fprintf(&seq, "\x1b_Ga=p,U=1,i=%d,c=%d,r=%d,q=2\x1b\\", guestID, cols, rows)
+	for row := range rows {
+		fmt.Fprintf(&seq, "\x1b[38;2;%d;%d;%dm", (guestID>>16)&0xff, (guestID>>8)&0xff, guestID&0xff)
+		seq.WriteRune(kitty.Placeholder)
+		seq.WriteRune(kitty.Diacritic(row))
+		for range cols - 1 {
+			seq.WriteRune(kitty.Placeholder)
+		}
+		seq.WriteString("\x1b[39m\r\n")
+	}
+	if _, err := term.Write([]byte(seq.String())); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	host := pendingString(kp)
+	if !strings.Contains(host, "a=t") {
+		t.Errorf("the image never reached the host:\n%q", host)
+	}
+	if !strings.Contains(host, "U=1") {
+		t.Errorf("the host was never told the image is placed by its cells:\n%q", host)
+	}
+
+	// Every cell of the grid is present, and names the same image the host was
+	// told about.
+	for y := range rows {
+		for x := range cols {
+			cell := term.CellAt(x, y)
+			if cell == nil || !vt.IsKittyPlaceholder(cell.Content) {
+				t.Fatalf("cell (%d,%d) is not a placeholder: %+v", x, y, cell)
+			}
+			r, g, b, _ := cell.Style.Fg.RGBA()
+			named := uint32(r>>8)<<16 | uint32(g>>8)<<8 | uint32(b>>8)
+			if !strings.Contains(host, fmt.Sprintf("i=%d", named)) {
+				t.Errorf("cell (%d,%d) names image %d, which the host was never told about:\n%q",
+					x, y, named, host)
+			}
+		}
 	}
 }
