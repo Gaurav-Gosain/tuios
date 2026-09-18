@@ -956,9 +956,22 @@ func (m *OS) adoptWorkspaceHasCustom(state *session.SessionState) {
 // happens once the sync has been applied - see the StateSyncMsg case in
 // update.go.
 func (m *OS) adoptSidebarState(state *session.SessionState) {
-	if state.SidebarWidth > 0 {
-		m.SidebarWidthPref = state.SidebarWidth
-	}
+	// The width is deliberately not taken. It is this viewer's preference, not
+	// the session's: it says how much of this screen the rail may have, and it
+	// already has a home of its own in the sidebar state file, whose whole
+	// argument is that these are preferences of this user's sidebar rather than
+	// session data.
+	//
+	// Adopting it made the rail a property of whatever you were looking at. Hop
+	// to a session on another machine and the rail changed width, because you
+	// inherited the width whoever last used that session left it at. Nothing
+	// about your screen changed, so nothing about your rail should.
+	//
+	// Two clients with different rails is not a problem the session has to
+	// solve. Each announces its own chrome and the daemon settles the pane box
+	// against all of them, so the cost of disagreeing is a band of empty ground
+	// for the client with the narrower rail, which is a fair price for a rail
+	// that stays where you put it.
 	m.SidebarCollapsed = state.SidebarCollapsed
 }
 
