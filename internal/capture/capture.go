@@ -160,13 +160,13 @@ func Frame(s Settings, p *shot.Palette, plain bool) (*shot.Frame, []string) {
 	}
 	regular, bold, fontWarn := resolveFontFiles(s)
 	warnings = append(warnings, fontWarn...)
-	spec.FontData = regular
-	spec.BoldFontData = bold
+	spec.FontData, spec.FontIndex = regular.Data, regular.Index
+	spec.BoldFontData, spec.BoldFontIndex = bold.Data, bold.Index
 	// Only a font the user named by file is written into SVG and HTML output.
 	// A font found by asking the terminal was found so the raster has icons in
 	// it; copying three megabytes of it into every exported SVG is a different
 	// decision, and one nobody made.
-	spec.EmbedFont = s.FontFile != "" && len(regular) > 0
+	spec.EmbedFont = s.FontFile != "" && len(regular.Data) > 0
 	in := shot.FrameInputs{Palette: p, Accents: accentsOf(p)}
 	if s.HostCellW > 0 && s.HostCellH > 0 {
 		in.CellAspect = float64(s.HostCellW) / float64(s.HostCellH)
@@ -194,32 +194,50 @@ const FontFallbackNotice = "Icons need your terminal font. Set screenshot.font_f
 //
 // A file that will not read is a warning and a fallthrough, not a failure. The
 // capture is the point; the font is how it looks.
-func resolveFontFiles(s Settings) (regular, bold []byte, warnings []string) {
+func resolveFontFiles(s Settings) (regular, bold fontBytes, warnings []string) {
 	if s.FontFile != "" {
 		data, err := os.ReadFile(s.FontFile) // #nosec G304 - the path is the operator's own config
 		if err == nil {
-			return data, nil, nil
+			return fontBytes{Data: data}, fontBytes{}, nil
 		}
 		warnings = append(warnings, "The font file could not be read. Another font was used.")
 	}
 	if face, ok := FontByPostScriptName(s.HostFontFamily); ok {
-		if data, err := os.ReadFile(face.File); err == nil { // #nosec G304 - fontconfig's own answer
+		if data, err := os.ReadFile(face.File); err == nil { // #nosec G304 - a font file the resolver found
 			boldFace, boldOK := FontByPostScriptName(s.HostBoldFamily)
-			if boldOK && boldFace.File != face.File {
-				bold, _ = os.ReadFile(boldFace.File) // #nosec G304 - fontconfig's own answer
+			// Two faces of one collection share a path, so the file being the
+			// same no longer means the font is. The index is what tells the
+			// bold cut apart from the regular one it lives beside.
+			if boldOK && (boldFace.File != face.File || boldFace.Index != face.Index) {
+				bold = readFontBytes(boldFace)
 			}
-			return data, bold, warnings
+			return fontBytes{Data: data, Index: face.Index}, bold, warnings
 		}
 	}
 	if face, ok := FontByFamily(s.FontFamily); ok {
-		if data, err := os.ReadFile(face.File); err == nil { // #nosec G304 - fontconfig's own answer
-			if boldFace, boldOK := BoldFontByFamily(s.FontFamily, face.File); boldOK {
-				bold, _ = os.ReadFile(boldFace.File) // #nosec G304 - fontconfig's own answer
+		if data, err := os.ReadFile(face.File); err == nil { // #nosec G304 - a font file the resolver found
+			if boldFace, boldOK := BoldFontByFamily(s.FontFamily, face); boldOK {
+				bold = readFontBytes(boldFace)
 			}
-			return data, bold, warnings
+			return fontBytes{Data: data, Index: face.Index}, bold, warnings
 		}
 	}
-	return nil, nil, warnings
+	return fontBytes{}, fontBytes{}, warnings
+}
+
+// fontBytes is a font file's contents and the face to take from it.
+type fontBytes struct {
+	Data  []byte
+	Index int
+}
+
+// readFontBytes loads a resolved face, or nothing when the file will not read.
+func readFontBytes(face FontFace) fontBytes {
+	data, err := os.ReadFile(face.File) // #nosec G304 - a font file the resolver found
+	if err != nil {
+		return fontBytes{}
+	}
+	return fontBytes{Data: data, Index: face.Index}
 }
 
 // accentsOf picks the wash seeds: the theme's blue and magenta, the two
