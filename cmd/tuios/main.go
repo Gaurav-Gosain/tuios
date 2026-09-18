@@ -1172,6 +1172,7 @@ as typed. End the text with a newline to run it as a command.`,
 	var newWindowWorkspace int
 	var newWindowCwd string
 	var newWindowNoFocus bool
+	var newWindowHost string
 	var newWindowJSON bool
 	newWindowCmd := &cobra.Command{
 		Use:   "new-window [name] [command...]",
@@ -1187,7 +1188,13 @@ of a shell. Nothing re-parses them, so nothing needs quoting. The window closes
 when the program exits.
 
 --workspace picks the workspace, --cwd sets the starting directory, and
---no-focus leaves the focus where it is.`,
+--no-focus leaves the focus where it is.
+
+--host runs the window's process on another machine from the [hosts] table. The
+window still belongs to this session and is drawn and sized here; only the
+process is over there. There is no special mode to turn on: a session holding
+one is an ordinary session with a window that happens to be elsewhere, so it
+lists, scripts and restores like any other.`,
 		Example: `  # Open an unnamed window
   tuios new-window
 
@@ -1203,7 +1210,10 @@ when the program exits.
   tuios new-window tests --workspace 2 --cwd /src/api --no-focus
 
   # Capture the new window's id for scripting
-  tuios new-window --json | jq -r .window_id`,
+  tuios new-window --json | jq -r .window_id
+
+  # Open a window whose shell runs on another machine
+  tuios new-window deploy --host build`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := ""
@@ -1213,15 +1223,17 @@ when the program exits.
 				command = args[1:]
 			}
 			return runNewWindow(newWindowSession, name, newWindowWorkspace, newWindowCwd,
-				!newWindowNoFocus, command, newWindowJSON)
+				!newWindowNoFocus, command, newWindowHost, newWindowJSON)
 		},
 	}
 	newWindowCmd.Flags().StringVarP(&newWindowSession, "session", "s", "", "Target session (default: most recently active)")
 	newWindowCmd.Flags().IntVar(&newWindowWorkspace, "workspace", 0, "Workspace to open the window on (default: the current one)")
 	newWindowCmd.Flags().StringVar(&newWindowCwd, "cwd", "", "Directory to start the shell in (default: the daemon's)")
 	newWindowCmd.Flags().BoolVar(&newWindowNoFocus, "no-focus", false, "Leave the focus where it is")
+	newWindowCmd.Flags().StringVar(&newWindowHost, "host", "", "Run the window's process on this machine from the [hosts] table (default: this machine)")
 	newWindowCmd.Flags().BoolVar(&newWindowJSON, "json", false, "Output result as JSON")
 	_ = newWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	_ = newWindowCmd.RegisterFlagCompletionFunc("host", completeHostNames)
 
 	var popupSession string
 	var popupWidth string

@@ -92,6 +92,18 @@ type WindowState struct {
 	PreZoomY int `json:"pre_zoom_y,omitempty"`
 	PreZoomW int `json:"pre_zoom_w,omitempty"`
 	PreZoomH int `json:"pre_zoom_h,omitempty"`
+	// Host names the machine this window's process runs on, and it is empty for
+	// every window whose process is on the daemon that owns the session, which
+	// is every window unless someone asked otherwise.
+	//
+	// A session holding one of these is what a global session is. There is no
+	// second kind of session and no flag that says so: the field is on the
+	// window because the machine is a property of the process, not of the
+	// session it is grouped under, and that is what lets `tuios ls`, the verbs,
+	// the mailbox and hooks keep working on such a session with no special
+	// case. The zero value is a window on this machine, which is what every
+	// older client and every older state file reads as.
+	Host string `json:"host,omitempty"`
 	// Cwd is the working directory of the window's shell process, captured on the
 	// daemon side when saving resurrection state. On cold-start restore a fresh
 	// shell is respawned here. Empty for live state syncs (clients do not set it).
@@ -477,7 +489,11 @@ type paneIO interface {
 }
 
 type PTY struct {
-	ID     string
+	ID string
+	// host is the machine the process is on, empty for this one. It is what
+	// tells the two halves of exit detection apart: a pane here has an
+	// exec.Cmd to wait on, and a pane elsewhere has only its stream ending.
+	host   string
 	pty    paneIO
 	cmd    *exec.Cmd
 	ctx    context.Context
@@ -776,6 +792,10 @@ type Session struct {
 	graphicsMu    sync.RWMutex
 	kittyGraphics bool
 	sixelGraphics bool
+	// fed is the link manager a window on another machine is opened over. It is
+	// nil unless the daemon installed one, and every reader checks. See
+	// remote_pane.go.
+	fed paneFederation
 }
 
 // SetGraphicsCapabilities records the graphics protocols tuios can forward to
@@ -986,7 +1006,7 @@ func (s *Session) forgetBroadcastFingerprint() {
 // non-nil, is invoked with the PTY ID when the process exits; it is set before
 // the monitor goroutine starts so it is always visible to monitorExit.
 func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, "", nil, false, onExit)
+	return s.createPTY(windowID, width, height, "", nil, "", false, onExit)
 }
 
 // RestorePTY creates a fresh PTY for a resurrected window. It behaves like
@@ -995,14 +1015,14 @@ func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyI
 // and a one-line banner is written to the terminal so the user can see the
 // process is a freshly respawned shell, not the original long-lived one.
 func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, cwd, nil, true, onExit)
+	return s.createPTY(windowID, width, height, cwd, nil, "", true, onExit)
 }
 
 // command, when non-empty, is an argv exec'd as the PTY's process in place of
 // the shell. It is deliberately not persisted: a restored window respawns as a
 // shell, because silently rerunning a program the user ran once is not what
 // restoration promises.
-func (s *Session) createPTY(windowID string, width, height int, cwd string, command []string, restored bool, onExit func(ptyID string)) (*PTY, error) {
+func (s *Session) createPTY(windowID string, width, height int, cwd string, command []string, host string, restored bool, onExit func(ptyID string)) (*PTY, error) {
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
 
@@ -1018,32 +1038,50 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	//
 	// The command is rebuilt per attempt, because an exec.Cmd that failed to
 	// start cannot be started again.
-	ptyInstance, cmd, err := ptyspawn.Spawn(width, height, func() *exec.Cmd {
-		var cmd *exec.Cmd
-		if len(command) > 0 {
-			cmd = exec.Command(command[0], command[1:]...)
-		} else {
-			cmd = exec.Command(shell)
+	// A window on another machine takes the same path from here down. Only the
+	// two lines that produce the handle differ: the process is started over a
+	// link instead of here, so there is no exec.Cmd to wait on and no local pid
+	// to read. Everything below is the code a local pane runs, which is the
+	// point of the paneIO seam.
+	var (
+		ptyInstance paneIO
+		cmd         *exec.Cmd
+		err         error
+	)
+	if host != "" {
+		ptyInstance, err = s.openRemotePaneFor(host, width, height, cwd, command)
+		if err != nil {
+			cancel()
+			return nil, err
 		}
-		cmd.Env = s.buildEnv(windowID, restored)
-		// Start the shell in cwd when one was named and still exists; otherwise
-		// fall back to the shell's default (inherited) directory.
-		//
-		// The restored flag used to gate this too, which meant a caller that
-		// asked a fresh window for a directory was answered with a shell
-		// somewhere else and no indication of it. Restoration and placement are
-		// separate questions: the flag still decides the banner, because that
-		// is what it is about.
-		if cwd != "" {
-			if info, statErr := os.Stat(cwd); statErr == nil && info.IsDir() {
-				cmd.Dir = cwd
+	} else {
+		ptyInstance, cmd, err = ptyspawn.Spawn(width, height, func() *exec.Cmd {
+			var cmd *exec.Cmd
+			if len(command) > 0 {
+				cmd = exec.Command(command[0], command[1:]...)
+			} else {
+				cmd = exec.Command(shell)
 			}
+			cmd.Env = s.buildEnv(windowID, restored)
+			// Start the shell in cwd when one was named and still exists; otherwise
+			// fall back to the shell's default (inherited) directory.
+			//
+			// The restored flag used to gate this too, which meant a caller that
+			// asked a fresh window for a directory was answered with a shell
+			// somewhere else and no indication of it. Restoration and placement are
+			// separate questions: the flag still decides the banner, because that
+			// is what it is about.
+			if cwd != "" {
+				if info, statErr := os.Stat(cwd); statErr == nil && info.IsDir() {
+					cmd.Dir = cwd
+				}
+			}
+			return cmd
+		}, debugLog)
+		if err != nil {
+			cancel()
+			return nil, err
 		}
-		return cmd
-	}, debugLog)
-	if err != nil {
-		cancel()
-		return nil, err
 	}
 
 	// Create VT emulator for persistent terminal state
@@ -1061,6 +1099,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 
 	pty := &PTY{
 		ID:           id,
+		host:         host,
 		pty:          ptyInstance,
 		cmd:          cmd,
 		ctx:          ctx,
@@ -1121,10 +1160,21 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	// The shell's first directory is known before it prints a prompt, so the
 	// pane has a place from the start even under a shell that never reports
 	// OSC 7, which bash and zsh mostly do not.
-	if seed := cmd.Dir; seed != "" {
-		pty.place.setCwd(seed)
-	} else if wd, err := os.Getwd(); err == nil {
-		pty.place.setCwd(wd)
+	//
+	// A pane on another machine is seeded with nothing, and that is the honest
+	// answer rather than a gap. Both seeds here are paths on this machine: the
+	// command's directory is one this daemon chose, and the daemon's own
+	// working directory is plainly local. Neither describes where a shell on
+	// another machine started, and the far side is free to ignore the
+	// directory that was asked for when it does not exist there. So the pane
+	// has no place until its own shell announces one over OSC 7, which is the
+	// only report that actually comes from the machine the process is on.
+	if cmd != nil {
+		if seed := cmd.Dir; seed != "" {
+			pty.place.setCwd(seed)
+		} else if wd, err := os.Getwd(); err == nil {
+			pty.place.setCwd(wd)
+		}
 	}
 
 	s.ptys[id] = pty
@@ -2954,6 +3004,15 @@ func (p *PTY) readOutput() {
 
 		n, err := p.pty.Read(buf)
 		if err != nil {
+			// A pane on another machine ends here. Its stream stopping is the
+			// only notice that crosses: the far side closes the connection
+			// when the process exits, when the owner hangs up and when the
+			// link drops, and none of those leaves anything here to wait on.
+			// Without this the window stayed open around a pane that had
+			// nothing behind it, because monitorExit had returned at once.
+			if p.host != "" {
+				p.noteExit(0)
+			}
 			return
 		}
 
@@ -3144,16 +3203,36 @@ func (p *PTY) broadcast(chunk ptyChunk, seq int64) {
 
 func (p *PTY) monitorExit() {
 	if p.cmd == nil {
+		// A pane on another machine. There is no process here to wait on, so
+		// its exit is heard where its bytes stop instead: see readOutput.
 		return
 	}
 
 	_ = p.cmd.Wait()
 
-	p.exitedMu.Lock()
-	p.exited = true
+	code := 0
 	if p.cmd.ProcessState != nil {
-		p.exitCode = p.cmd.ProcessState.ExitCode()
+		code = p.cmd.ProcessState.ExitCode()
 	}
+	p.noteExit(code)
+}
+
+// noteExit marks the process gone and tells everything that was waiting on it.
+// It is idempotent: a pane on another machine can reach it from the read loop
+// and from a close at the same time.
+//
+// The two callers differ only in what they know. A local pane arrives with the
+// exit status the kernel gave it; a pane on another machine arrives with the
+// fact that its stream ended, which is all that crosses. That is why the code
+// is a parameter rather than read from the command here.
+func (p *PTY) noteExit(code int) {
+	p.exitedMu.Lock()
+	if p.exited {
+		p.exitedMu.Unlock()
+		return
+	}
+	p.exited = true
+	p.exitCode = code
 	p.exitedMu.Unlock()
 
 	debugLog("[DEBUG] PTY %s: process exited with code %d", p.ID[:8], p.exitCode)

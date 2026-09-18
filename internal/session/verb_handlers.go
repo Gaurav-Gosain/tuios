@@ -176,6 +176,7 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 		Cwd       string   `json:"cwd"`
 		Focus     *bool    `json:"focus"`
 		Command   []string `json:"command"`
+		Host      string   `json:"host"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -187,9 +188,21 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 	if p.Workspace < 0 {
 		return nil, invalidParam("workspace", "workspace is a workspace number, e.g. 2. Omit it for the current one")
 	}
-	// A directory that cannot be entered is refused rather than quietly ignored.
-	if verr := checkWindowCwd(p.Cwd); verr != nil {
+	// A window on another machine. The name is checked against the [hosts]
+	// table here rather than at the spawn, so a typo is a parameter error that
+	// names the machines available instead of a link failure twenty seconds
+	// later. "local" is accepted and means this machine, which is the default.
+	if verr := checkWindowHost(d, &p.Host); verr != nil {
 		return nil, verr
+	}
+	// A directory that cannot be entered is refused rather than quietly ignored.
+	// A window on another machine is the exception: the path is that machine's
+	// to judge, and checking it against this filesystem would refuse a
+	// directory that exists there and accept one that does not.
+	if p.Host == "" {
+		if verr := checkWindowCwd(p.Cwd); verr != nil {
+			return nil, verr
+		}
 	}
 	// An empty argv head would only fail later inside exec with a message that
 	// names nothing; refuse it as the parameter mistake it is.
@@ -214,6 +227,7 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 		Focus:     focus,
 		Command:   p.Command,
 		Name:      p.Name,
+		Host:      p.Host,
 	}, onExit)
 	if err != nil {
 		return nil, newWindowErr(err, sess, p.Workspace)
@@ -236,6 +250,9 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 		"pty_id":    win.PTYID,
 		"focused":   focus,
 		"unplaced":  win.Unplaced,
+		// Omitted for a window on this machine, so the ordinary result keeps
+		// the shape it has always had.
+		"host": win.Host,
 	}, nil
 }
 

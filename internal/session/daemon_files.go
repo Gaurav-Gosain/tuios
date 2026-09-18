@@ -39,6 +39,22 @@ func (d *Daemon) handleReadDir(cs *connState, msg *Message) error {
 			Dir: payload.Dir, Err: "There is no folder to show.",
 		})
 	}
+	// A pane whose process is on another machine names a directory on that
+	// machine. Listing it here would read this filesystem and answer about a
+	// path that means nothing to the pane: either "that folder is gone", or,
+	// worse, a listing of an unrelated directory that happens to share the
+	// name. Both are wrong in the same way the client's own listing was before
+	// the daemon took this over, and the fix is the same one: the machine that
+	// owns the process owns the filesystem the answer is about.
+	//
+	// This daemon is not that machine, so it says so rather than guessing.
+	if host := d.windowHost(cs.sessionID, payload.WindowID); host != "" {
+		return d.sendMessage(cs, MsgDirListing, &DirListingPayload{
+			Dir: dir,
+			Err: "This pane runs on " + host + ", so its files are there.",
+		})
+	}
+
 	out := listDir(dir, payload.Max)
 	// Asked whether or not the directory could be read, because the two answers
 	// are independent and this is the one that changes what a person should do
@@ -46,6 +62,24 @@ func (d *Daemon) handleReadDir(cs *connState, msg *Message) error {
 	// folder it named cannot be listed.
 	out.Spoofed = d.paneIsSpoofed(cs.sessionID, payload.WindowID, dir)
 	return d.sendMessage(cs, MsgDirListing, out)
+}
+
+// windowHost is the machine a window's process runs on, empty for this one.
+func (d *Daemon) windowHost(sessionID, windowID string) string {
+	if sessionID == "" || windowID == "" {
+		return ""
+	}
+	sess := d.manager.GetSessionByID(sessionID)
+	if sess == nil {
+		return ""
+	}
+	state := sess.GetState()
+	for i := range state.Windows {
+		if state.Windows[i].ID == windowID {
+			return state.Windows[i].Host
+		}
+	}
+	return ""
 }
 
 // listDir reads one directory into the answer the client draws. Separate from

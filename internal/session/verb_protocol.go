@@ -391,6 +391,39 @@ func init() {
 			examples: []string{`{"id":1,"verb":"open-host-connection","params":{"host":"build"}}`},
 			handler:  (*Daemon).verbOpenHostConnection,
 		},
+		"open-pane": {
+			description: "Spawn a process on this machine and turn this connection into its pty. After the reply, every byte written here reaches the process and every byte it writes comes back. Send nothing until the reply has arrived. This is the far half of a global session: the pane belongs to the session on the daemon that asked, which draws it and sizes it; this machine supplies the process and nothing else.",
+			params: []verbParam{
+				{Name: "width", Type: "int", Description: "The pane's width in cells, decided by the layout that owns the window. Out of range falls back to 80."},
+				{Name: "height", Type: "int", Description: "The pane's height in cells. Out of range falls back to 80."},
+				{Name: "cwd", Type: "string", Description: "A directory on this machine to start in. Ignored when it does not exist here, since the asking machine's path need not mean anything on this one."},
+				{Name: "command", Type: "[]string", Description: "An argv to run in place of the shell. Omit for a login shell."},
+				{Name: "term", Type: "string", Description: "TERM for the process. It comes from the asking session because that session's emulator is what the process is talking to."},
+				{Name: "color_term", Type: "string", Description: "COLORTERM for the process, for the same reason."},
+				{Name: "shell", Type: "string", Description: "The shell to run. Omit to use this machine's."},
+				{Name: "session", Type: "string", Description: "The asking session's name, exported as TUIOS_SESSION."},
+			},
+			returns: []verbParam{
+				{Name: "pane", Type: "string", Description: "The id that addresses this pane in resize-pane. It lives as long as the connection does."},
+			},
+			examples: []string{`{"id":1,"verb":"open-pane","params":{"width":120,"height":40}}`},
+			handler:  (*Daemon).verbOpenPane,
+		},
+		"resize-pane": {
+			description: "Resize a pane this machine is running for another machine. It arrives on its own connection because the pane's connection carries raw bytes and has no room to say anything out of band.",
+			params: []verbParam{
+				{Name: "pane", Type: "string", Description: "The pane id open-pane returned."},
+				{Name: "width", Type: "int", Description: "The new width in cells."},
+				{Name: "height", Type: "int", Description: "The new height in cells."},
+			},
+			returns: []verbParam{
+				{Name: "pane", Type: "string", Description: "The pane that was resized."},
+				{Name: "width", Type: "int", Description: "The width it was set to."},
+				{Name: "height", Type: "int", Description: "The height it was set to."},
+			},
+			examples: []string{`{"id":1,"verb":"resize-pane","params":{"pane":"f2c1","width":120,"height":40}}`},
+			handler:  (*Daemon).verbResizePane,
+		},
 		"list-host-sessions": {
 			description: "List sessions on this machine and on every configured host. Hosts that do not answer are listed with their status.",
 			params: []verbParam{
@@ -441,9 +474,11 @@ func init() {
 				{Name: "cwd", Type: "string", Description: "Directory to start the shell in. Omit to inherit the daemon's."},
 				{Name: "focus", Type: "bool", Description: "Focus the new window. Pass false to leave the focus where it is.", Default: "true"},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the window's process instead of a shell. No shell parses it, so nothing needs quoting. The window closes when the program exits."},
+				{Name: "host", Type: "string", Description: "Run the window's process on another machine, named as it is in the [hosts] config table. The window belongs to this session and is drawn and sized here; only the process is there. Omit, or pass \"local\", for this machine."},
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the new window. Use it to address the window in later calls."},
+				{Name: "host", Type: "string", Description: "The machine the window's process runs on. Omitted for a window on this machine."},
 				{Name: "name", Type: "string", Description: "The window's name, generated when none was given."},
 				{Name: "workspace", Type: "int", Description: "Workspace the window was created on."},
 				{Name: "pty_id", Type: "string", Description: "Id of the window's PTY."},

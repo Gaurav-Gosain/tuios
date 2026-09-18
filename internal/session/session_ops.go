@@ -166,6 +166,10 @@ type NewWindowOptions struct {
 	// spawns the PTY; sending bytes for a shell to re-parse instead would make
 	// the command's meaning depend on which shell answered.
 	Command []string
+	// Host asks for the window's process on another machine, named as it is in
+	// the [hosts] config table. Empty is this machine, which is every window
+	// unless someone asked otherwise. See hosted_pane.go.
+	Host string
 	// Name is the window's custom name, the one the dock and the rail show.
 	//
 	// It is set here rather than by a rename afterwards for the same reason the
@@ -225,11 +229,15 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	// with the setting off, or with nothing to inherit, this stays empty and
 	// the shell starts where the daemon did.
 	cwd := opts.Cwd
-	if cwd == "" {
+	// Inheriting is the focused pane's directory, and that is a path on this
+	// machine. Handing it to another machine would start the shell somewhere
+	// unrelated on the rare occasion the path happens to exist there, so a
+	// window with a host inherits nothing and starts where its own shell would.
+	if cwd == "" && opts.Host == "" {
 		cwd = s.inheritedCwd()
 	}
 
-	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, cwd, opts.Command, false, onExit)
+	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, cwd, opts.Command, opts.Host, false, onExit)
 	if err != nil {
 		return WindowState{}, err
 	}
@@ -277,6 +285,10 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			Height:     height,
 			Workspace:  workspace,
 			PTYID:      pty.ID,
+			// The machine the process is on. Empty for a window of this
+			// daemon's own, which is what makes the field free for every
+			// session that is not global.
+			Host: opts.Host,
 			// Stamped here as well as on the detector's poll, because the pid is
 			// already in hand and a pane that waits a poll for it is a pane the
 			// rail cannot check for two seconds. The poll stays the authority: it

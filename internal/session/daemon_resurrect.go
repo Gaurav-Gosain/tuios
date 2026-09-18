@@ -124,6 +124,25 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 		ptyWidth := max(w.Width-2, 1)
 		ptyHeight := max(w.Height-2, 1)
 
+		// A window whose process was on another machine comes back on this one,
+		// and it has to stop claiming otherwise.
+		//
+		// A restore respawns a shell here from saved state. It does not dial a
+		// host, and it should not: resurrection runs when the daemon starts,
+		// which is exactly when links are not up yet, and a restore that waited
+		// on a machine that may never answer would hold the whole session.
+		//
+		// So the record is corrected to match what was actually started. Left
+		// alone it would be worse than a gap: the frame marks a pane with the
+		// machine its shell runs on, and a mark that names the wrong machine is
+		// read and believed. The directory goes with it, because it was a path
+		// over there and means nothing here.
+		if w.Host != "" {
+			debugLog("[DEBUG] restored window %s ran on %s; it comes back on this machine", shortID(w.ID), w.Host)
+			w.Host = ""
+			w.Cwd = ""
+		}
+
 		pty, err := sess.RestorePTY(w.ID, ptyWidth, ptyHeight, w.Cwd, onExit)
 		if err != nil {
 			LogError("Dropping restored window %s, its shell could not be respawned: %v", shortID(w.ID), err)

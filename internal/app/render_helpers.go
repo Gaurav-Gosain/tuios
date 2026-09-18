@@ -215,8 +215,28 @@ func getWindowTitle(window *terminal.Window, position int, maxWidth int, s *conf
 	// running an agent is always marked.
 	indicator := agentStateIndicator(window.AgentState)
 
+	// A pane whose shell is on another machine says so. This is not decoration
+	// and it is not optional: two panes side by side look identical, and the
+	// same typed line is a different act depending on which machine answers
+	// it.
+	//
+	// It goes on the front because truncation below takes from the end, so a
+	// name too long for the bar gives up its own tail and never the marker.
+	host := window.Host
 	if windowName == "" {
+		if host != "" {
+			return joinTitleParts(indicator, host)
+		}
 		return indicator
+	}
+
+	// The machine joins the name before the truncation rather than after it, so
+	// what is measured against the bar is what will be drawn on it. Prefixing
+	// afterwards would push the finished badge past the width that was just
+	// fitted, and layoutBorderRow drops a badge that no longer fits whole:
+	// the pane most worth marking would have ended up with no title at all.
+	if host != "" {
+		windowName = host + ":" + windowName
 	}
 
 	// Reserve room for the indicator and its trailing space before truncating.
@@ -240,10 +260,19 @@ func getWindowTitle(window *terminal.Window, position int, maxWidth int, s *conf
 			return indicator
 		}
 	}
-	if indicator != "" {
-		return indicator + " " + windowName
+	return joinTitleParts(indicator, windowName)
+}
+
+// joinTitleParts puts the agent indicator in front of the rest when there is
+// one, which is the order the badge has always drawn them in.
+func joinTitleParts(indicator, rest string) string {
+	if indicator == "" {
+		return rest
 	}
-	return windowName
+	if rest == "" {
+		return indicator
+	}
+	return indicator + " " + rest
 }
 
 // addToBorder draws the title bar and the bottom bar around an already

@@ -86,6 +86,14 @@ type Daemon struct {
 	// configPath is the file hostsWatcher follows.
 	configPath string
 
+	// hostedPanes are the panes this daemon runs on another machine's behalf,
+	// keyed by the id open-pane returned. They are held here rather than on a
+	// Session because a hosted pane belongs to no session on this machine: the
+	// session it is a window of is on the daemon that asked for it. See
+	// hosted_pane.go.
+	hostedPanes   map[string]*hostedPane
+	hostedPanesMu sync.Mutex
+
 	// agents is the cross-agent mailbox: the bounded per-session message rings
 	// and the in-flight ask graph. It is held here rather than on a Session
 	// because it must never reach disk: SessionState is what resurrection
@@ -432,6 +440,13 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	if d.transcriptWatcher != nil {
 		s.SetTranscriptWatcher(d.transcriptWatcher)
 	}
+	// The links a window on another machine is opened over. The nil check is
+	// not defensive noise: d.federation is a typed pointer, and handing a nil
+	// one to an interface parameter makes an interface that is not nil and
+	// panics on first use, so the session would think it had links.
+	if d.federation != nil {
+		s.SetFederation(d.federation)
+	}
 	s.SetStateSink(func(state *SessionState) {
 		d.broadcastStateSync(sessionID, state, "update", "")
 	})
@@ -739,6 +754,12 @@ func (d *Daemon) shutdown() error {
 		// The config watch ends before the links do, so a save landing during
 		// shutdown cannot dial a host the daemon is about to drop.
 		d.stopHostsWatch()
+
+		// Panes running here on another machine's behalf end with the daemon
+		// that was relaying them. Their owner is on the far side of a link
+		// that is about to go, so a survivor would be a shell on a pty nobody
+		// can reach.
+		d.closeHostedPanes()
 
 		// Every ssh child is killed here. A link left running would outlive the
 		// daemon that owns it.

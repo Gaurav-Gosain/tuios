@@ -167,8 +167,9 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 // runNewWindow opens a window in a session and reports its id, which is the
 // handle every later call needs. workspace 0 means the current one, an empty
 // cwd means the daemon's own directory, and a non-empty command is an argv the
-// window execs as its process instead of a shell.
-func runNewWindow(sessionName, name string, workspace int, cwd string, focus bool, command []string, jsonOutput bool) error {
+// window execs as its process instead of a shell. A non-empty host puts the
+// window's process on another machine; the window is still this session's.
+func runNewWindow(sessionName, name string, workspace int, cwd string, focus bool, command []string, host string, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -185,6 +186,9 @@ func runNewWindow(sessionName, name string, workspace int, cwd string, focus boo
 	if len(command) > 0 {
 		params["command"] = command
 	}
+	if host != "" {
+		params["host"] = host
+	}
 	raw, err := client.Call("new-window", params)
 	if err != nil {
 		return reportVerbError(explainVerbError("new-window", err), jsonOutput)
@@ -195,9 +199,16 @@ func runNewWindow(sessionName, name string, workspace int, cwd string, focus boo
 	var res struct {
 		WindowID string `json:"window_id"`
 		Name     string `json:"name"`
+		Host     string `json:"host"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	// The machine is printed only when it is not this one, so the ordinary
+	// line keeps the shape every script that already reads it expects.
+	if res.Host != "" {
+		fmt.Printf("%s  %s  on %s\n", shortWindowID(res.WindowID), res.Name, res.Host)
+		return nil
 	}
 	fmt.Printf("%s  %s\n", shortWindowID(res.WindowID), res.Name)
 	return nil
@@ -2225,4 +2236,38 @@ func runPopup(o popupOptions) error {
 	}
 	fmt.Printf("%s  %s\n", shortWindowID(res.WindowID), res.Name)
 	return nil
+}
+
+// completeHostNames offers the machines in the [hosts] table, each with the
+// state of its link, so a completion does not silently suggest a machine that
+// is down. A daemon that is not running, or one with no hosts, offers nothing
+// rather than an error: a completion is not the place to report a problem.
+func completeHostNames(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	if !session.IsDaemonRunning() {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	client, err := dialVerb()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	defer func() { _ = client.Close() }()
+
+	raw, err := client.Call("list-hosts", map[string]any{})
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	var res struct {
+		Hosts []struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+		} `json:"hosts"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	names := make([]string, 0, len(res.Hosts))
+	for _, h := range res.Hosts {
+		names = append(names, fmt.Sprintf("%s\t%s", h.Name, h.Status))
+	}
+	return names, cobra.ShellCompDirectiveNoFileComp
 }

@@ -17,6 +17,7 @@ what does and does not come back after each kind of interruption.
 - [What Survives](#what-survives)
 - [Resurrection](#resurrection)
 - [The resurrect Command](#the-resurrect-command)
+- [Windows on Another Machine](#windows-on-another-machine)
 - [Where State Lives](#where-state-lives)
 - [Limitations](#limitations)
 - [Related Documentation](#related-documentation)
@@ -249,6 +250,63 @@ an alias for the same command.
 If the restore fails, the command says which of the reasons applies: there is no
 saved state under that name, the state is corrupt, or the state was written by a
 newer TUIOS. In the last two cases it also prints where the file was archived.
+
+## Windows on Another Machine
+
+A window's process does not have to run on the machine the session is on.
+
+```bash
+tuios new-window deploy --host build
+```
+
+The window belongs to the session it was created in. It is drawn here, sized by
+the layout here, and closed here; only the process is on `build`. The machine
+comes from the `[hosts]` table, the same one `tuios hosts` lists, and a name
+that is not in it is refused before anything is started.
+
+There is no "global session" mode to turn on, and that is the point. A session
+holding such a window is an ordinary session with an ordinary window, so `tuios
+ls`, the verbs, the mailbox, hooks and resurrection all keep working on it with
+no special case. What makes the window different is one field recording where
+its process is.
+
+Panes on two machines can sit side by side in one layout, because each pane is
+a window of this session and the layout does not care where any of their
+processes are.
+
+### What it looks like
+
+A pane whose shell is elsewhere says so on its title bar, as `build:name`. This
+is not optional: two panes side by side are otherwise identical, and the same
+typed line is a different act depending on which machine answers it.
+
+### What crosses, and what does not
+
+The machine supplying the process supplies a process and a pty, and nothing
+else. It runs no terminal emulator for the pane and keeps no scrollback for it,
+and it does not know which session the pane belongs to. All of that is here, on
+the daemon that owns the window, exactly as it is for a pane of its own.
+
+That division has a consequence worth knowing: the pane is **not** a window of
+any session on the other machine. It will not appear in `tuios ls` there, and
+it is not enrolled in that machine's size negotiation, so a layout here can
+never shrink a session someone is working in there.
+
+### What it needs
+
+Both machines need a tuios new enough to speak `open-pane`. An older one
+refuses by name and says to update it.
+
+### Limits
+
+- **The window ends when the link does.** The process is reached over the link,
+  so losing the link ends the pane, the same way closing it does. It does not
+  come back on redial.
+- **A resurrected session brings the window back on this machine.** Resurrection
+  respawns a shell from saved state, and it does not redial a host to do it.
+- **The rail's file section does not list a remote pane's directory.** The files
+  are on the other machine. It says so rather than listing this machine's disk
+  under the other machine's path.
 
 ## Where State Lives
 

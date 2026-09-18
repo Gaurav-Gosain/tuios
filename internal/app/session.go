@@ -288,6 +288,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 			m.Settings.ScrollbackLines,
 		)
 		adoptWindowCwd(window, ws.Cwd)
+		adoptWindowHost(window, ws.Host)
 		if window == nil {
 			m.LogError("Failed to create daemon window for %s", shortID(ws.ID))
 			continue
@@ -1015,6 +1016,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	// Update all properties
 	w.SetTitle(ws.Title)
 	adoptWindowCwd(w, ws.Cwd)
+	adoptWindowHost(w, ws.Host)
 	w.CustomName = ws.CustomName
 	if adoptGeometry {
 		w.X = ws.X
@@ -1186,6 +1188,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 		m.Settings.ScrollbackLines,
 	)
 	adoptWindowCwd(window, ws.Cwd)
+	adoptWindowHost(window, ws.Host)
 	if window == nil {
 		return nil
 	}
@@ -1972,4 +1975,19 @@ func (m *OS) ResizeDaemonPTY(window *terminal.Window, width, height int) error {
 	termHeight := max(height-2, 1)
 
 	return m.DaemonClient.ResizePTY(window.PTYID, termWidth, termHeight)
+}
+
+// adoptWindowHost records which machine a window's process runs on.
+//
+// Unlike the directory beside it, this is taken from the daemon without
+// argument. A directory has two possible sources that can disagree, the
+// shell's own announcement and the daemon's reading of the process, and the
+// fresher one has to win. Where the process runs has one source: the daemon
+// that started it. Nothing on the client can learn it any other way and
+// nothing on the client may overrule it.
+func adoptWindowHost(w *terminal.Window, host string) {
+	if w == nil {
+		return
+	}
+	w.Host = host
 }

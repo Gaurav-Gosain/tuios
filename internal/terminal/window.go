@@ -417,6 +417,17 @@ type Window struct {
 	// anything reading it has to have an answer for not knowing.
 	Cwd string
 
+	// Host is the machine the pane's process runs on, empty for this one.
+	//
+	// It is carried on the client, rather than left in the session state the
+	// daemon holds, because it is a thing the person has to be able to see. A
+	// pane whose shell is on another machine looks exactly like one whose
+	// shell is here, and the difference decides what a command in it does: the
+	// same line is a different act on a build box than on a laptop. So the
+	// frame says which machine, and it says it whether or not the shell is
+	// cooperating about its prompt.
+	Host string
+
 	KittyPassthroughFunc func(cmd *vt.KittyCommand, rawData []byte)
 	SixelPassthroughFunc func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int)
 
