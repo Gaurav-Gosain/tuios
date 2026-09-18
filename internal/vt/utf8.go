@@ -7,13 +7,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// kittyPlaceholderChar is the base character used by kitty's unicode
-// placeholder image protocol (U=1). Apps like yazi emit this character
-// with combining diacritical marks to encode image-id/row/column.
-// tuios handles kitty graphics via a separate overlay layer, so these
-// placeholder characters should be invisible in the text buffer.
-const kittyPlaceholderChar = 0x10EEEE
-
 // maxClusterBytes caps how much text one cell can hold. Terminals bound this
 // - xterm keeps a fixed number of combining characters per cell - because a
 // guest can pour combining marks onto one base forever, and every path that
@@ -98,12 +91,6 @@ func (o *openGrapheme) disarm() {
 
 // handlePrint handles printable characters.
 func (e *Emulator) handlePrint(r rune) {
-	// Suppress kitty unicode placeholder characters. They would show as
-	// garbled text because tuios renders images via its own passthrough
-	// layer, not by interpreting placeholder cells.
-	if r == kittyPlaceholderChar {
-		return
-	}
 	if r >= ansi.SP && r < ansi.DEL {
 		if len(e.grapheme) > 0 {
 			// If we have a grapheme buffer, flush it before handling the ASCII character.
@@ -533,6 +520,16 @@ func (e *Emulator) handleGraphemeWithin(content string, width, left, right int) 
 		Width:   width,
 		Style:   e.scr.cursorPen(),
 		Link:    e.scr.cursorLink(),
+	}
+	// A kitty placeholder cell names its image in its foreground colour, and
+	// the name the guest used is not the one the host knows the image by. The
+	// rewrite happens here, on the way into the grid, so both of this
+	// backend's readers (its own Render and the per-cell path in the app) see
+	// the translated cell without either having to know about it.
+	if e.kittyImageIDTranslator != nil && IsKittyPlaceholder(content) {
+		if fg := translateKittyPlaceholderFg(content, cell.Style.Fg, e.kittyImageIDTranslator); fg != nil {
+			cell.Style.Fg = fg
+		}
 	}
 
 	x, y := e.scr.CursorPosition()

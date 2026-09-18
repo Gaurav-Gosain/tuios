@@ -274,6 +274,16 @@ func (t *GhosttyTerminal) syncRowLocked(buf *grid, y int) {
 		}
 
 		out.Style = t.styleFor(dc.styleID, x)
+		// A kitty placeholder cell names its image in its foreground colour,
+		// and the name the guest used is not the one the host knows the image
+		// by. libghostty owns the write side here, so the rewrite happens on
+		// the way out, which is the one place both readers of this buffer go
+		// through.
+		if t.kittyImageIDTranslator != nil && IsKittyPlaceholder(out.Content) {
+			if fg := translateKittyPlaceholderFg(out.Content, out.Style.Fg, t.kittyImageIDTranslator); fg != nil {
+				out.Style.Fg = fg
+			}
+		}
 		if dc.link {
 			if uri := t.hyperlinkAt(x, y); uri != "" {
 				out.Link = uv.Link{URL: uri}

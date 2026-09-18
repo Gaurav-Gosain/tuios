@@ -7,6 +7,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
 // Dimming an unfocused pane's content is the one appearance question the frame
@@ -70,6 +71,13 @@ func paneDim(isFocused bool, s *config.Settings) int {
 // at, which is a stranger result than not dimming.
 func dimCell(dst, src *uv.Cell, fg, bg color.Color, t float64) *uv.Cell {
 	if src == nil {
+		return src
+	}
+	// A kitty placeholder cell is not text and its colour is not a colour: the
+	// foreground is the image's id, and blending it renames the image to one
+	// the host has never heard of, which draws nothing. The cell is a pixel of
+	// a picture, so there is nothing here to dim in the first place.
+	if vt.IsKittyPlaceholder(src.Content) {
 		return src
 	}
 	// isNilColor rather than == nil: a cell's style colour can be an interface

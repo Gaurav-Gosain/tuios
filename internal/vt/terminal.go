@@ -96,6 +96,9 @@ type Terminal interface {
 	GetCallbacks() Callbacks
 	SetScreenClearFunc(f func())
 	SetKittyPassthroughFunc(fn func(cmd *KittyCommand, rawData []byte))
+	// SetKittyImageIDTranslator installs the guest-to-host image id mapping
+	// used for kitty Unicode placeholder cells. See kitty_placeholder.go.
+	SetKittyImageIDTranslator(fn KittyImageIDTranslator)
 	SetSixelPassthroughFunc(fn func(cmd *SixelCommand, cursorX, cursorY, absLine int))
 	SetTextSizingFunc(fn func(rawOSC []byte, cursorX, cursorY, scale, textLen int))
 	SetCellSize(width, height int)

@@ -579,7 +579,7 @@ This ensures:
 | **Input Handler**     | `internal/input/keyboard.go`    | Event dispatcher           | Modal routing, prefix commands, keyboard/mouse processing       |
 | **Action Registry**   | `internal/input/actions.go`     | Command execution          | 40+ action handlers for window management and navigation        |
 | **VT Emulator**       | `internal/vt/emulator.go`       | ANSI parser                | Screen buffer management, scrollback, escape sequence handling, kitty keyboard protocol (CSI u, fish 4.x compatible), OSC 4/52, mode 2026/2027  |
-| **Kitty Passthrough** | `internal/app/kitty_passthrough.go` | Graphics forwarding    | Flicker-free image passthrough with ID reuse and mode 2026 sync. Video playback via mpv --vo=kitty (shm and base64) and youterm. |
+| **Kitty Passthrough** | `internal/app/kitty_passthrough.go` | Graphics forwarding    | Flicker-free image passthrough with ID reuse and mode 2026 sync. Video playback via mpv --vo=kitty (shm and base64) and youterm. Unicode placeholders forwarded as declarations, see below. |
 | **Sixel Passthrough** | `internal/app/sixel_passthrough.go` | Sixel forwarding       | Raw sixel passthrough with window boundary awareness            |
 | **Rendering Engine**  | `internal/app/render.go`        | View generation            | Layer composition, viewport culling, ANSI generation            |
 | **Layout System**     | `internal/layout/tiling.go`     | Window positioning         | Grid calculations, tiling algorithms, snap positions            |
@@ -620,6 +620,43 @@ This ensures:
 5. Layers stacked by Z-index
 6. Overlays added (help, logs, dock, status bar)
 7. ANSI output returned to Bubble Tea
+
+### Kitty Unicode Placeholders
+
+Most applications place a kitty image themselves: they transmit it and say
+"draw it here", and tuios intercepts that, works out where "here" is on the
+host screen given the pane's position and scroll offset, and re-emits the
+placement at the recomputed coordinates. That is the passthrough described
+above, and it is what `internal/app/kitty_passthrough_placement.go` spends its
+time on.
+
+Unicode placeholders work the other way round, and a multiplexer has almost
+nothing to do. The application transmits the image, declares that it occupies a
+box of `c` columns by `r` rows, and then prints cells of U+10EEEE carrying the
+image id in their foreground color and the image row and column in combining
+marks. The terminal draws the part of the image belonging to each of those
+cells. Because the position lives in the text grid, the image scrolls, clips
+and reflows exactly as the text does, which is why kitty's documentation points
+multiplexers at this protocol and why a pager can use it.
+
+tuios forwards the declaration (`internal/app/kitty_passthrough_forward.go`,
+`forwardVirtualPlace`) and lets the cells travel the ordinary text path. It
+tracks no placement, computes no coordinates and does no clipping for these
+images: scrolling the pane scrolls the cells, and the host redraws whatever is
+still on screen. The one thing it must do is rewrite the image id the cells
+name, because the host knows the image by whichever id it actually arrived
+under and a cell naming an unknown id draws nothing. That rewrite happens in
+the emulator as the cells are built (`internal/vt/kitty_placeholder.go`).
+
+Two consequences follow from the id living in a color:
+
+- A placeholder cell is exempt from dimming (`dimCell`). Blending its
+  foreground would rename the image rather than fade it.
+- A host that quantizes 24-bit color would rename the image too, so these
+  images need a truecolor host.
+
+Placeholders need a host terminal that implements them: kitty, Ghostty and
+WezTerm do, and xterm.js does not, so they do not appear in `tuios-web`.
 
 ## Performance Characteristics
 

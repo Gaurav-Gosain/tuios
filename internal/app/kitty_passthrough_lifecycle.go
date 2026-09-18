@@ -65,6 +65,28 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 	kp.forgetImagePixels(windowID, 0)
 	kp.forgetFrameHashes(windowID)
 	kp.deleteRemoteVideoImages(windowID)
+	kp.deleteVirtualImages(windowID)
+}
+
+// deleteVirtualImages deletes the host images this window declared for kitty
+// Unicode placeholders. They carry no placement of their own, so the placement
+// teardown above cannot see them, and without this every document a pane
+// scrolled through would stay resident in the host terminal after the pane was
+// gone.
+func (kp *KittyPassthrough) deleteVirtualImages(windowID string) {
+	ids := kp.virtualImages[windowID]
+	if len(ids) == 0 {
+		delete(kp.virtualImages, windowID)
+		return
+	}
+	var buf bytes.Buffer
+	for hostID := range ids {
+		// d=I frees the image data as well as the placements: the window is
+		// gone and no cell will name this image again.
+		fmt.Fprintf(&buf, "\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", hostID)
+	}
+	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+	delete(kp.virtualImages, windowID)
 }
 
 // deleteRemoteVideoImages deletes the host images backing this window's
@@ -126,6 +148,15 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 	window.Terminal.KittyAltState().SetClearCallback(clearCallback)
 	kittyPassthroughLog("setupKittyPassthrough: registered clear callback on BOTH main/alt for winID=%s",
 		win.ID[:min(8, len(win.ID))])
+
+	// Kitty Unicode placeholder cells name their image in their foreground
+	// colour, using the id the guest chose. The host knows that image by an id
+	// tuios allocated, so the emulator rewrites the colour as the cells are
+	// built. Installed here because this is where the window and the
+	// passthrough are introduced to each other.
+	window.Terminal.SetKittyImageIDTranslator(func(guestID uint32) (uint32, bool) {
+		return kp.HostImageID(win.ID, guestID)
+	})
 
 	window.Terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		// In daemon mode, the daemon's VT emulator responds to queries directly

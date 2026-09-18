@@ -118,8 +118,11 @@ type GhosttyTerminal struct {
 	kittyMain, kittyAlt  *KittyState
 	semanticMarkers      *SemanticMarkerList
 	kittyPassthroughFunc func(cmd *KittyCommand, rawData []byte)
-	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
-	textSizingFunc       func(rawOSC []byte, cursorX, cursorY, scale, textLen int)
+	// kittyImageIDTranslator rewrites the image id a placeholder cell names.
+	// See kitty_placeholder.go.
+	kittyImageIDTranslator KittyImageIDTranslator
+	sixelPassthroughFunc   func(cmd *SixelCommand, cursorX, cursorY, absLine int)
+	textSizingFunc         func(rawOSC []byte, cursorX, cursorY, scale, textLen int)
 
 	restore *ghosttyRestore
 }

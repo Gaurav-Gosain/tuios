@@ -97,24 +97,6 @@ func (kp *KittyPassthrough) ForwardCommand(
 		return nil
 	}
 
-	// Clear virtual placements on any new image activity for this window
-	// Virtual placements are inherently transient - they should be re-sent by the app if still needed
-	if placements := kp.placements[windowID]; placements != nil {
-		var virtualIDs []uint32
-		for hostID, p := range placements {
-			if p.Virtual {
-				virtualIDs = append(virtualIDs, hostID)
-				if !p.Hidden {
-					kp.deleteOnePlacement(p)
-				}
-			}
-		}
-		for _, id := range virtualIDs {
-			delete(placements, id)
-			kittyPassthroughLog("ForwardCommand: cleared stale virtual placement hostID=%d", id)
-		}
-	}
-
 	// Remember what size the guest says this image is, on whichever path the
 	// bytes take. Only the first chunk of a chunked transmission carries s= and
 	// v=, and a continuation must not overwrite them with zero, so this records
@@ -169,7 +151,17 @@ func (kp *KittyPassthrough) ForwardCommand(
 	case vt.KittyActionPlace:
 		kittyPassthroughLog("ForwardCommand: handling PLACE")
 		kp.forwardPlace(cmd, windowID, windowX, windowY, contentCols, contentRows, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
-		// Return ORIGINAL image dimensions for whitespace reservation
+		// Return ORIGINAL image dimensions for whitespace reservation.
+		//
+		// Not for a virtual placement. The reservation exists because an image
+		// placed at the cursor covers rows the guest does not know about, so
+		// tuios opens them; an application using Unicode placeholders prints
+		// the cells the image occupies itself, and reserving rows on its
+		// behalf would push its own output down by the height of every image
+		// on the page.
+		if cmd.Virtual {
+			break
+		}
 		imgRows, imgCols := kp.calculateImageCells(cmd)
 		if imgRows > 0 || imgCols > 0 {
 			return &PlacementResult{Rows: imgRows, Cols: imgCols, CursorMove: cmd.CursorMove}
@@ -1267,6 +1259,60 @@ func buildVideoReplace(hostID uint32, st *remoteVideoState) []byte {
 	return out.Bytes()
 }
 
+// forwardVirtualPlace forwards a kitty Unicode-placeholder declaration: the
+// image, under the id the host knows it by, occupies a box of c by r cells.
+//
+// Nothing is drawn by this. The host draws the image where the guest's
+// U+10EEEE cells land, and those cells reach it through the ordinary text path
+// with their foreground rewritten to name the same id (see
+// internal/vt/kitty_placeholder.go). Because the position is carried by text,
+// tuios does not track, reposition or clip this image at all: scrolling the
+// pane scrolls the cells, and the host redraws whatever is still on screen.
+//
+// The id is recorded so the image can be freed when the window goes, which the
+// placement teardown cannot do for an image that has no placement.
+func (kp *KittyPassthrough) forwardVirtualPlace(cmd *vt.KittyCommand, windowID string) {
+	// Whichever id the image actually reached the host under, not a fresh one.
+	// A transmit-only command (a=t, which is what an application using
+	// placeholders sends) is passed through with the guest's own id untouched,
+	// so no host id was ever allocated and the guest's id is the right answer.
+	// Allocating one here would declare a placement against an image the host
+	// has never been sent. A host id exists only when some other path already
+	// re-registered the image, and then it is what the cells are rewritten to
+	// as well.
+	hostID, ok := kp.imageIDMap[windowID][cmd.ImageID]
+	if !ok {
+		hostID = cmd.ImageID
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString("\x1b_Ga=p,U=1")
+	fmt.Fprintf(&buf, ",i=%d", hostID)
+	if cmd.PlacementID > 0 {
+		fmt.Fprintf(&buf, ",p=%d", cmd.PlacementID)
+	}
+	if cmd.Columns > 0 {
+		fmt.Fprintf(&buf, ",c=%d", cmd.Columns)
+	}
+	if cmd.Rows > 0 {
+		fmt.Fprintf(&buf, ",r=%d", cmd.Rows)
+	}
+	if cmd.ZIndex != 0 {
+		fmt.Fprintf(&buf, ",z=%d", cmd.ZIndex)
+	}
+	buf.WriteString(",q=2")
+	buf.WriteString("\x1b\\")
+	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
+
+	if kp.virtualImages[windowID] == nil {
+		kp.virtualImages[windowID] = make(map[uint32]bool)
+	}
+	kp.virtualImages[windowID][hostID] = true
+
+	kittyPassthroughLog("forwardVirtualPlace: hostID=%d cols=%d rows=%d winID=%s",
+		hostID, cmd.Columns, cmd.Rows, windowID[:min(8, len(windowID))])
+}
+
 func (kp *KittyPassthrough) forwardPlace(
 	cmd *vt.KittyCommand,
 	windowID string,
@@ -1277,6 +1323,22 @@ func (kp *KittyPassthrough) forwardPlace(
 	scrollbackLen int,
 	isAltScreen bool,
 ) {
+	// A virtual placement does not go anywhere. It says the image occupies a
+	// box of c by r cells, and the cells of U+10EEEE the guest prints next are
+	// what say where that box is drawn. Those cells are text, so they scroll,
+	// clip and reflow with the rest of the pane for free, which is the whole
+	// reason the protocol exists and why kitty points multiplexers at it.
+	//
+	// So this forwards the declaration and stops. Positioning it at the cursor
+	// the way a real placement is positioned, which is what tuios did before by
+	// dropping the U=1, put the image wherever the guest's cursor happened to
+	// be when it declared the image, and left the placeholder cells pointing at
+	// nothing.
+	if cmd.Virtual {
+		kp.forwardVirtualPlace(cmd, windowID)
+		return
+	}
+
 	hostX := windowX + contentOffsetX + cursorX
 	hostY := windowY + contentOffsetY + cursorY
 
@@ -1336,7 +1398,8 @@ func (kp *KittyPassthrough) forwardPlace(
 	if cmd.ZIndex != 0 {
 		fmt.Fprintf(&buf, ",z=%d", cmd.ZIndex)
 	}
-	// Note: Don't send U=1 to host - TUIOS renders guest content itself
+	// No U=1 here: a virtual placement never reaches this far, and a real
+	// placement is one tuios positions itself.
 	buf.WriteString(",q=2")
 	buf.WriteString("\x1b\\")
 	buf.WriteString("\x1b8") // Restore cursor position
@@ -1402,6 +1465,9 @@ func (kp *KittyPassthrough) deleteAllWindowPlacements(windowID string, clearImag
 	if clearImageMap {
 		kp.imageIDMap[windowID] = nil
 		kp.forgetImagePixels(windowID, 0)
+		// The placeholder images go with the id map: once the guest ids are
+		// forgotten nothing can name these again.
+		kp.deleteVirtualImages(windowID)
 	}
 }
 

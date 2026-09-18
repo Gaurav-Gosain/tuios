@@ -423,6 +423,15 @@ func (t *GhosttyTerminal) SetKittyPassthroughFunc(fn func(cmd *KittyCommand, raw
 	t.kittyPassthroughFunc = fn
 }
 
+// SetKittyImageIDTranslator installs the guest-to-host image id mapping used
+// for kitty Unicode placeholder cells. Nil leaves every cell as the guest
+// wrote it.
+func (t *GhosttyTerminal) SetKittyImageIDTranslator(fn KittyImageIDTranslator) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.kittyImageIDTranslator = fn
+}
+
 func (t *GhosttyTerminal) SetSixelPassthroughFunc(fn func(cmd *SixelCommand, cursorX, cursorY, absLine int)) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

@@ -161,6 +161,9 @@ type Emulator struct {
 
 	// Kitty graphics passthrough callback
 	kittyPassthroughFunc func(cmd *KittyCommand, rawData []byte)
+	// kittyImageIDTranslator rewrites the image id a placeholder cell names.
+	// See kitty_placeholder.go.
+	kittyImageIDTranslator KittyImageIDTranslator
 
 	// Sixel graphics passthrough callback
 	sixelPassthroughFunc func(cmd *SixelCommand, cursorX, cursorY, absLine int)
@@ -1395,6 +1398,13 @@ func (e *Emulator) logf(format string, v ...any) {
 	if e.logger != nil {
 		e.logger.Printf(format, v...)
 	}
+}
+
+// SetKittyImageIDTranslator installs the guest-to-host image id mapping used
+// for kitty Unicode placeholder cells. Nil leaves every cell as the guest
+// wrote it.
+func (e *Emulator) SetKittyImageIDTranslator(fn KittyImageIDTranslator) {
+	e.kittyImageIDTranslator = fn
 }
 
 func (e *Emulator) SetKittyPassthroughFunc(fn func(cmd *KittyCommand, rawData []byte)) {

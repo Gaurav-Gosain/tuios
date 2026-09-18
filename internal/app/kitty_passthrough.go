@@ -91,8 +91,14 @@ type KittyPassthrough struct {
 	pacedUntilNanos atomic.Int64
 	writeInFlight   atomic.Bool
 
-	placements    map[string]map[uint32]*PassthroughPlacement
-	imageIDMap    map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
+	placements map[string]map[uint32]*PassthroughPlacement
+	imageIDMap map[string]map[uint32]uint32 // maps (windowID, guestImageID) -> hostImageID
+	// virtualImages holds the host ids this window has virtual placements for,
+	// as (windowID -> set of hostImageID). A virtual placement is not a
+	// placement tuios positions, so it is not in `placements` and the teardown
+	// there misses it, exactly as it misses the remote-video images below.
+	// This is what gets those images deleted when the window goes away.
+	virtualImages map[string]map[uint32]bool
 	nextHostID    uint32
 	pendingOutput []byte
 
@@ -472,6 +478,7 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 		hostOut:           hostOut,
 		placements:        make(map[string]map[uint32]*PassthroughPlacement),
 		imageIDMap:        make(map[string]map[uint32]uint32),
+		virtualImages:     make(map[string]map[uint32]bool),
 		remoteVideo:       make(map[string]map[uint32]*remoteVideoState),
 		frameHashMisses:   make(map[string]map[uint32]int),
 		imagePixels:       make(map[string]map[uint32][2]int),
@@ -790,6 +797,16 @@ func (kp *KittyPassthrough) flushToHost() {
 		kp.writeHostSequence(syncBegin, kp.pendingOutput, syncEnd)
 		kp.pendingOutput = releaseScratch(kp.pendingOutput)
 	}
+}
+
+// HostImageID reports the id the host knows a window's guest image by. It is
+// what the emulator asks when it rewrites a kitty placeholder cell, so a cell
+// naming the guest's id reaches the host naming the host's.
+func (kp *KittyPassthrough) HostImageID(windowID string, guestID uint32) (uint32, bool) {
+	kp.mu.Lock()
+	defer kp.mu.Unlock()
+	hostID, ok := kp.imageIDMap[windowID][guestID]
+	return hostID, ok
 }
 
 func (kp *KittyPassthrough) allocateHostID() uint32 {
