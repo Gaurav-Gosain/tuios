@@ -725,12 +725,14 @@ func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal
 		right = sidebarStyle(rowBg, pal.FgMute).Render(count)
 		rightW = lipgloss.Width(count)
 	}
+	// The same ramp a local session row takes: the name is the brightest ink,
+	// and it does not move when the row is lit because the band says that. A
+	// machine that is not answering is the one exception, and it is muted with
+	// its heading, because its rows are a cached listing rather than sessions
+	// you can reach.
 	ink := pal.FgMute
-	switch {
-	case st.lit():
+	if m.hostIsUp(node.Host) {
 		ink = pal.Fg
-	case m.hostIsUp(node.Host):
-		ink = pal.FgDim
 	}
 	indent := m.sidebarRowIndent()
 	name := sidebarStyle(rowBg, ink).Render(

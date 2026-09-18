@@ -2217,13 +2217,23 @@ func (m *OS) sidebarSessionRow(node sessiontree.Node, variant, cw int, pal overl
 		rightW += lipgloss.Width(tag)
 	}
 
-	// The attached session's name reads at full strength; the rest are dim. A
-	// state wanting a human takes the rail's one bold voice, so it still leads
-	// on a monochrome capture where the gutter colour is gone.
-	fg := pal.FgDim
-	if node.IsCurrent || st.lit() || dragged {
-		fg = pal.Fg
-	}
+	// A session name takes the brightest ink the rail has, and keeps it. It is
+	// the thing on the rail you act on, so emphasis drains down from it: the
+	// machine heading over it is a step quieter, and the counts and marks
+	// quieter still.
+	//
+	// It used to be dim unless this was the attached session, which put a
+	// non-attached session on the same ink as the heading above it once that
+	// heading stopped being bright. Two levels sharing an ink is the complaint
+	// the rail's hierarchy exists to answer.
+	//
+	// "Which one am I on" did not need the ink and does not lose anything: it
+	// is the tinted mark in the gutter, which is the rail's entire accent
+	// budget and is already spent on exactly that. The ink also no longer moves
+	// when a row is lit, because the band under it says that now, and a row
+	// that changes ground and ink at once reads as an error rather than as a
+	// selection.
+	fg := pal.Fg
 	title := printableTitle(node.Title)
 	indent := m.sidebarRowIndent()
 	avail := sidebarNameAvailIn(cw, rightW, indent)

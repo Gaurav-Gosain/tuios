@@ -891,7 +891,11 @@ func TestRailInksARemoteRowByItsLink(t *testing.T) {
 	})
 
 	lines, _ := m.sidebarPanelLines()
-	live := sidebarStyle(nil, theme.UI().FgDim).Render("live-one")
+	// A session name takes the brightest ink now, wherever it lives, because it
+	// is the thing on the rail you act on. The contrast this test is about is
+	// unchanged: a machine that answers has reachable sessions, and one that
+	// does not has a cached listing, which is muted with its heading.
+	live := sidebarStyle(nil, theme.UI().Fg).Render("live-one")
 	stale := sidebarStyle(nil, theme.UI().FgMute).Render("stale-one")
 	var sawLive, sawStale bool
 	for _, l := range lines {
@@ -899,7 +903,7 @@ func TestRailInksARemoteRowByItsLink(t *testing.T) {
 		if strings.Contains(plain, "live-one") {
 			sawLive = true
 			if !strings.Contains(l, live) {
-				t.Errorf("ASSERTION: the row of a session on a machine that answers is not drawn in the resting ink:\n%q", l)
+				t.Errorf("ASSERTION: the row of a session on a machine that answers is not drawn in a session name's ink:\n%q", l)
 			}
 		}
 		if strings.Contains(plain, "stale-one") {

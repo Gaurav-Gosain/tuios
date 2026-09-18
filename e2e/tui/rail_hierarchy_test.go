@@ -154,8 +154,15 @@ func TestTheRailReadsMachinesAsHeadings(t *testing.T) {
 
 	// This machine reads the same way, and it is the one the client is on.
 	local := railRowOf(s, hostOpen+" local")
-	if local < 0 || !boldAt(s, nameColOf(s, local, "local"), local) {
-		t.Errorf("ASSERTION: this machine's own heading is not bold\n%s", term.SnapshotStyled())
+	if local < 0 {
+		t.Fatalf("ASSERTION: this machine has no heading on the rail\n%s", term.Snapshot())
+	}
+	if boldAt(s, nameColOf(s, local, "local"), local) {
+		t.Errorf("ASSERTION: this machine's own heading is bold, which is the voice the rail keeps for an alarm\n%s",
+			term.SnapshotStyled())
+	}
+	if !ruledAfter(s, local, nameColOf(s, local, "local")+len("local")) {
+		t.Errorf("ASSERTION: this machine's own heading carries no rule\n%s", term.Snapshot())
 	}
 
 	// A machine that cannot be reached keeps its row and says why.
@@ -164,10 +171,12 @@ func TestTheRailReadsMachinesAsHeadings(t *testing.T) {
 		t.Fatalf("ASSERTION: the unreachable machine left the rail\n%s", term.Snapshot())
 	}
 
-	// The rail's ink is a ramp: every machine that answers reads at one
-	// strength, its sessions one step down, and a machine that does not answer
-	// below them both. Ink used to say which machine the client was on, which
-	// put a machine and the session under it in the same ink.
+	// The rail's ink is a ramp, and it runs the other way now: a session name is
+	// the brightest thing on the rail because it is what you act on, the
+	// machine heading over it is a step quieter, and a machine that does not
+	// answer is quieter still. Every machine that answers still reads at one
+	// strength, and a session must never share its machine's ink, which is the
+	// thing two levels of hierarchy cannot do.
 	hereInk := s.Cell(nameColOf(s, local, "local"), local).Fg
 	thereInk := s.Cell(headCol, head).Fg
 	downInk := s.Cell(nameColOf(s, down, "work"), down).Fg
