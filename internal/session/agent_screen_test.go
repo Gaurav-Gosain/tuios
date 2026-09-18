@@ -88,11 +88,25 @@ func TestStallTimerLooksAtTheScreenBeforeCallingAPaneIdle(t *testing.T) {
 // paintPane writes to the pane's emulator and records that the pane wrote, which
 // is one event in the daemon and two calls here because the test bypasses the
 // read loop that would otherwise do both.
+//
+// The screen is cleared first, in the same write, because the pane has a real
+// shell in it. That shell prints its prompt a few tens of milliseconds after
+// the window is created, and a test that paints before the prompt arrives sees
+// a clean screen while one that paints after sees its text appended to the
+// prompt's line: "sh-3.2$ Do you want to make this edit to main.go?" instead of
+// the question on its own. Which side of that the test lands on is a race it
+// usually won and sometimes lost, and losing it is a nightly failure on a rule
+// that matches the line rather than a defect in the rule. Clearing costs
+// nothing and settles it, and it goes in the same feedVT call so the shell,
+// which writes under the same lock, cannot land between the clear and the text.
 func paintPane(t *testing.T, p *PTY, data string) {
 	t.Helper()
-	feedVT(t, p, data)
+	feedVT(t, p, clearScreen+data)
 	p.lastOutput.Store(time.Now().UnixNano())
 }
+
+// clearScreen erases the display and homes the cursor.
+const clearScreen = "\x1b[2J\x1b[H"
 
 // backdateAgentClaim moves a window's claim timestamp into the past, standing in
 // for the seconds a harness spends working between reporting that it started and
@@ -258,7 +272,7 @@ func TestTheOverrideIsHandedBackWhenThePromptLeaves(t *testing.T) {
 	// The user answered: the pane repaints over the question, which is the only
 	// way a prompt can ever leave a screen, and that repaint is what runs the
 	// look that ends the override.
-	paintPane(t, sess.GetPTY(ptyID), "\x1b[2J\x1b[H"+"Running tests...\r\n")
+	paintPane(t, sess.GetPTY(ptyID), "Running tests...\r\n")
 	if sess.scanScreenForAgent(ptyID, reg) {
 		t.Fatal("a screen with no prompt on it still matched a rule")
 	}

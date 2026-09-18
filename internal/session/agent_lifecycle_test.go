@@ -38,7 +38,7 @@ func TestUnhookedAgentLifecycleAnswersBlockedOrThinking(t *testing.T) {
 
 	// 2. It paints a permission prompt and goes silent. The screen tier reads
 	// the prompt: the pane needs a person.
-	paintPane(t, sess.GetPTY(ptyID), "\x1b[2J\x1b[H"+claudePermissionPrompt)
+	paintPane(t, sess.GetPTY(ptyID), claudePermissionPrompt)
 	if !look(ptyID) {
 		t.Fatal("prompt: the screen tier did not match the permission prompt")
 	}
@@ -51,7 +51,7 @@ func TestUnhookedAgentLifecycleAnswersBlockedOrThinking(t *testing.T) {
 	// pane must stop saying it needs a person, at once, on the look the repaint
 	// runs: a person told "blocked" about a pane that is thinking is the exact
 	// mistake this feature exists to prevent.
-	paintPane(t, sess.GetPTY(ptyID), "\x1b[2J\x1b[H"+"Running tests...\r\n")
+	paintPane(t, sess.GetPTY(ptyID), "Running tests...\r\n")
 	if look(ptyID) {
 		t.Fatal("answered: a screen with no prompt on it still matched a rule")
 	}
@@ -63,7 +63,7 @@ func TestUnhookedAgentLifecycleAnswersBlockedOrThinking(t *testing.T) {
 	// 4. It finishes its turn and sits at its own prompt, silent. No rule knows
 	// that screen. The silence timer must not call it idle, because idle says
 	// nothing needs you and nothing here knows that: it says unknown.
-	paintPane(t, sess.GetPTY(ptyID), "\x1b[2J\x1b[H"+"> \r\n")
+	paintPane(t, sess.GetPTY(ptyID), "> \r\n")
 	backdateAgentClaim(t, sess, winID, stall+time.Second)
 	if n := sess.applyStallHeuristic(time.Now(), stall, func(string) int64 { return 0 }, look); n != 1 {
 		t.Fatalf("silence: demoted %d panes, want 1", n)
