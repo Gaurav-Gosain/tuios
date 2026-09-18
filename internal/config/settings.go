@@ -310,6 +310,19 @@ type Settings struct {
 	// Set via appearance.right_click_opens_menu config.
 	RightClickOpensMenu bool
 
+	// NewWindowInheritCwd starts a new window in the working directory of the
+	// pane that was focused when it was asked for, rather than in the
+	// directory the daemon itself was started in.
+	//
+	// On by default. A window opened from a pane deep in a project is almost
+	// always wanted in that project, and the old behaviour dropped the shell
+	// back in $HOME to be cd'd again by hand. The directory is read from the
+	// focused pane's live shell, so it follows the pane rather than where the
+	// pane started, and anything that cannot be read falls back to the old
+	// behaviour rather than failing to open a window.
+	// Set via appearance.new_window_inherit_cwd config.
+	NewWindowInheritCwd bool
+
 	// WordCharacters lists the punctuation that counts as part of a word when a
 	// double-click selects one, on top of letters and digits, which always do.
 	//
@@ -447,6 +460,7 @@ func DefaultSettings() Settings {
 		FocusFollowsMouse:           false,
 		AltDrag:                     true,
 		ClickToType:                 ClickToTypeSingle,
+		NewWindowInheritCwd:         true,
 		RightClickOpensMenu:         false,
 		AutoEnterTerminalOnFocus:    AutoEnterTerminalOff,
 		WordCharacters:              `@-./_~?&=%+#`,

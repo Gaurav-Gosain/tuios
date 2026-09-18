@@ -285,21 +285,6 @@ func ListResurrectableInfos() ([]ResurrectableInfo, error) {
 	return infos, nil
 }
 
-// processCwd returns the working directory of the process with the given PID.
-// It reads /proc/<pid>/cwd, which exists on Linux (and some BSDs). On platforms
-// without procfs the readlink fails and (,"", false) is returned, in which case
-// resurrection falls back to spawning the shell in its default directory.
-func processCwd(pid int) (string, bool) {
-	if pid <= 0 {
-		return "", false
-	}
-	cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", pid))
-	if err != nil || cwd == "" {
-		return "", false
-	}
-	return cwd, true
-}
-
 // ListResurrectableSessions returns names of sessions that can be restored.
 func ListResurrectableSessions() ([]string, error) {
 	dir := getResurrectionDir()

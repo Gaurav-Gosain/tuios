@@ -293,6 +293,10 @@ type DaemonConfig struct {
 	// takes it when it is made and keeps it, so a change applies to panes made
 	// after the daemon next reads its config.
 	ScrollbackLines int
+	// NewWindowInheritCwd starts a new window in the focused pane's working
+	// directory, from appearance.new_window_inherit_cwd. The daemon is the side
+	// that spawns the shell, so it is the side that has to know.
+	NewWindowInheritCwd bool
 	// AgentStallTimeout overrides how long a pane may report working with no
 	// output before the stall heuristic demotes it to idle. Zero falls back to
 	// the TUIOS_AGENT_STALL_SECONDS environment override, then to the default; a
@@ -356,6 +360,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
 	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
+	d.manager.SetNewWindowInheritCwd(cfg.NewWindowInheritCwd)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 	d.loadHooks(cfg)
 

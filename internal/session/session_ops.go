@@ -220,7 +220,16 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		}
 	}
 
-	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, opts.Cwd, opts.Command, false, onExit)
+	// A caller that named a directory gets it. One that did not inherits the
+	// focused pane's, which is what appearance.new_window_inherit_cwd asks for;
+	// with the setting off, or with nothing to inherit, this stays empty and
+	// the shell starts where the daemon did.
+	cwd := opts.Cwd
+	if cwd == "" {
+		cwd = s.inheritedCwd()
+	}
+
+	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, cwd, opts.Command, false, onExit)
 	if err != nil {
 		return WindowState{}, err
 	}
@@ -232,11 +241,11 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 	first := len(s.GetState().Windows) == 0
 	var detected *WorktreeInfo
 	if first {
-		cwd := opts.Cwd
-		if cwd == "" {
-			cwd, _ = pty.ProcessCwd()
+		detectIn := cwd
+		if detectIn == "" {
+			detectIn, _ = pty.ProcessCwd()
 		}
-		if info, ok := worktree.Detect(cwd); ok {
+		if info, ok := worktree.Detect(detectIn); ok {
 			detected = &WorktreeInfo{Info: info}
 		}
 	}

@@ -147,6 +147,11 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 	{
+		Path: "appearance.new_window_inherit_cwd", Type: OptionBool, Section: "appearance",
+		Description: "A new window starts in the focused pane's working directory",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.click_to_type", Type: OptionString, Section: "appearance",
 		Description: "What a click on a pane's content does in window-management mode",
 		Accepted:    ClickToTypeModes, Default: ClickToTypeSingle,

@@ -48,6 +48,9 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// has to reach it: the client's emulator honoured the setting and the
 	// daemon's kept ten thousand lines whatever it said.
 	cfg.ScrollbackLines = uc.Appearance.ScrollbackLines
+	// The daemon spawns every pane, so where a new one starts is its decision
+	// to make. Absent from the file means the default, which is to inherit.
+	cfg.NewWindowInheritCwd = uc.Appearance.NewWindowInheritCwd == nil || *uc.Appearance.NewWindowInheritCwd
 	// The daemon runs the hooks for the facts it owns, so a session with
 	// nobody attached still runs them. The client keeps the hooks that need a
 	// terminal.

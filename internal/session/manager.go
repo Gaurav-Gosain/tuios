@@ -19,6 +19,9 @@ type Manager struct {
 	// scrollbackLines is stamped into every session made here, so each pane
 	// keeps the history depth the daemon was configured with.
 	scrollbackLines int
+	// inheritCwd is appearance.new_window_inherit_cwd, stamped into every
+	// session this manager makes.
+	inheritCwd bool
 	// hostName is the name this machine gives itself, stamped into every
 	// session for TUIOS_HOST. Empty means the operating system's hostname.
 	hostName string
@@ -45,6 +48,9 @@ func NewManager() *Manager {
 	return &Manager{
 		sessions: make(map[string]*Session),
 		byID:     make(map[string]*Session),
+		// The default matches config.DefaultSettings: a daemon nobody
+		// configured still opens windows where the user is looking.
+		inheritCwd: true,
 	}
 }
 
@@ -52,12 +58,28 @@ func NewManager() *Manager {
 // - manager_unix.go for Unix/Linux/macOS
 // - manager_windows.go for Windows
 
+// newWindowInheritCwd reports whether a new window takes the focused pane's
+// directory.
+func (m *Manager) newWindowInheritCwd() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.inheritCwd
+}
+
 // SetScrollbackLines sets the history depth every session made from now on
 // gives its panes. Zero means the emulator's default.
 func (m *Manager) SetScrollbackLines(n int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.scrollbackLines = n
+}
+
+// SetNewWindowInheritCwd sets whether a window made from now on starts in the
+// focused pane's directory.
+func (m *Manager) SetNewWindowInheritCwd(v bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.inheritCwd = v
 }
 
 // SetHostName sets the name this machine gives itself, for TUIOS_HOST.
@@ -127,6 +149,7 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	if cfg.HostName == "" {
 		cfg.HostName = m.HostName()
 	}
+	cfg.InheritCwd = m.newWindowInheritCwd()
 
 	// Create the session
 	session, err := NewSession(name, cfg, width, height)

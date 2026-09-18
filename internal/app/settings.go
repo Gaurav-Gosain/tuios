@@ -392,6 +392,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.auto_enter_terminal_on_focus"),
 			opt("appearance.alt_drag"),
 			opt("appearance.right_click_opens_menu"),
+			opt("appearance.new_window_inherit_cwd"),
 			opt("appearance.niri_reverse_scroll"),
 			custom("appearance.max_fps", m.maxFPSItem()),
 			opt("appearance.preferred_shell"),

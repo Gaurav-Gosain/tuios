@@ -170,6 +170,7 @@ type AppearanceConfig struct {
 	FocusFollowsMouse        *bool                   `toml:"focus_follows_mouse"`          // Focus the pane under the cursor as the mouse moves (default: false)
 	AltDrag                  *bool                   `toml:"alt_drag"`                     // Alt + left-drag moves a pane (default: true)
 	RightClickOpensMenu      *bool                   `toml:"right_click_opens_menu"`       // A plain right-click on a pane in terminal mode opens the pane menu (default: false)
+	NewWindowInheritCwd      *bool                   `toml:"new_window_inherit_cwd"`       // A new window starts in the focused pane's working directory (default: true)
 	AutoEnterTerminalOnFocus AutoEnterTerminalPolicy `toml:"auto_enter_terminal_on_focus"` // When a keyboard focus command should start typing in that pane: off, targeted, all (default: off)
 	ClickToType              string                  `toml:"click_to_type"`                // What a click on a pane's content does in window-management mode: single, double, off (default: single)
 	WordCharacters           *string                 `toml:"word_characters"`              // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
@@ -1472,6 +1473,12 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// the config is what turns the plain right-click into the pane menu.
 	if cfg.Appearance.RightClickOpensMenu != nil {
 		s.RightClickOpensMenu = *cfg.Appearance.RightClickOpensMenu
+	}
+
+	// NewWindowInheritCwd defaults to true. A pointer so an explicit false in
+	// the config is what puts new windows back in the daemon's directory.
+	if cfg.Appearance.NewWindowInheritCwd != nil {
+		s.NewWindowInheritCwd = *cfg.Appearance.NewWindowInheritCwd
 	}
 
 	// AutoEnterTerminalOnFocus only takes one of its three values, so a typo

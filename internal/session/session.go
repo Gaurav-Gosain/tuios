@@ -785,6 +785,37 @@ type SessionConfig struct {
 	// every pane as TUIOS_HOST. The manager stamps it from the daemon's own
 	// hostname. Empty leaves the variable unset.
 	HostName string
+	// InheritCwd starts a new window in the focused pane's working directory
+	// rather than the daemon's. The manager stamps it from the daemon's config.
+	InheritCwd bool
+}
+
+// inheritedCwd is the directory a new window should start in when the caller
+// named none, or "" when there is nothing to inherit.
+//
+// The focused pane's live shell is asked rather than the Cwd on the window
+// record: that field is filled when resurrection state is saved, so it says
+// where the pane was the last time the daemon wrote state, not where the user
+// has since cd'd to. Reading the process is what makes a window opened from a
+// project land in the project. The record is the fallback for a pane whose
+// process cannot be read, which is every pane on a platform with no procfs
+// equivalent, and "" is the fallback after that, meaning the daemon's own
+// directory exactly as before.
+func (s *Session) inheritedCwd() string {
+	if s.config == nil || !s.config.InheritCwd {
+		return ""
+	}
+	state := s.GetState()
+	win, ok := findWindowState(state, state.FocusedWindowID)
+	if !ok {
+		return ""
+	}
+	if pty := s.GetPTY(win.PTYID); pty != nil {
+		if cwd, ok := pty.ProcessCwd(); ok && cwd != "" {
+			return cwd
+		}
+	}
+	return win.Cwd
 }
 
 // scrollbackLines is the history depth a new pane in this session keeps.
