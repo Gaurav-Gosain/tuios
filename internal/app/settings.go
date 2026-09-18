@@ -336,6 +336,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.zen_mode"),
 			opt("appearance.links"),
 			opt("appearance.session_colors"),
+			opt("appearance.session_border"),
 		}),
 	}
 

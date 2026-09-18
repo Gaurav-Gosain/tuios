@@ -247,6 +247,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.session_border", Type: OptionBool, Section: "appearance",
+		Description: "Carry the session's colour on every pane border, not only on the rail",
+		Default:     "false",
+	},
+	{
 		Path: "appearance.glyphs", Type: OptionString, Section: "appearance",
 		Description: "Chrome glyph set: the characters the border, controls, rules and rail marks are drawn with",
 		Default:     theme.GlyphSetNone, GlyphSet: true,

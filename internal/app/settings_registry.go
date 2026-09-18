@@ -64,6 +64,7 @@ var settingLabels = map[string]string{
 	"appearance.animations_enabled":     "Animations",
 	"appearance.confirm_quit":           "Confirm quit",
 	"appearance.session_colors":         "Session colors",
+	"appearance.session_border":         "Session border",
 	"appearance.links":                  "Links",
 	"appearance.right_click_opens_menu": "Right-click menu",
 	"appearance.new_window_inherit_cwd": "Inherit directory",

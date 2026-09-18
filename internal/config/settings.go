@@ -160,6 +160,17 @@ type Settings struct {
 	// surfaces that show more than one session at once: the rail's sessions and
 	// agents sections, and the session switcher. Off leaves each of those exactly
 	// as it was before the colours existed.
+	// SessionBorder carries the session's colour on every pane border, not only
+	// on the rail. It is off by default because it changes the look of every
+	// window, and it is separate from SessionColors so the rail's marks and the
+	// borders can be turned on independently.
+	//
+	// It is for telling one machine from another at a glance. Once panes can be
+	// attached on several machines, the session is the thing every pane in the
+	// view has in common, and its colour is the cheapest way to say which one
+	// you are looking at without reading the rail.
+	SessionBorder bool
+
 	SessionColors bool
 
 	// DockWorkspaceTabs draws the dock's clickable workspace strip. Off leaves the
@@ -462,6 +473,7 @@ func DefaultSettings() Settings {
 		SidebarAgentRow:             DefaultSidebarAgentRow(),
 		Tooltips:                    true,
 		SessionColors:               true,
+		SessionBorder:               false,
 		DockWorkspaceTabs:           true,
 		DockWorkspaceTabFormat:      "",
 		DockWorkspaceTooltip:        true,

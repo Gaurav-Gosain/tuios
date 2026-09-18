@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -251,6 +252,36 @@ func (m *OS) sessionTint(name string, bg color.Color) color.Color {
 		return nil
 	}
 	return theme.Readable(a.RGB(), bg)
+}
+
+// sessionBorderQuiet is how far an unfocused pane's border is pulled back
+// toward the ground. Far enough that the focused pane still wins the frame,
+// near enough that the hue is still readable as the same one.
+const sessionBorderQuiet = 0.55
+
+// sessionBorderTint is the colour every pane's border carries when
+// appearance.session_border asks for it, and whether it carries one at all.
+//
+// The session is the one thing every pane on screen has in common, so its
+// colour is what says which session, and therefore which machine, you are
+// looking at. That is a question the rail already answers, but the rail is off
+// to one side and the borders are around the thing you are reading.
+//
+// It is measured against the terminal's own background for the same reason
+// sessionTint is: a hue from the theme's sixteen is legible on some grounds and
+// a smudge on others, and which is which is not a thing to decide by eye.
+// It answers both strengths at once so the caller does not have to know how far
+// back an unfocused border is pulled.
+func (m *OS) sessionBorderTint() (focused, unfocused color.Color, ok bool) {
+	if !m.Settings.SessionBorder {
+		return nil, nil, false
+	}
+	bg := theme.TerminalBg()
+	tint := m.sessionTint(m.SessionName, bg)
+	if tint == nil {
+		return nil, nil, false
+	}
+	return tint, overlay.MixColors(tint, bg, sessionBorderQuiet), true
 }
 
 // railGround is what a rail row is actually drawn on: the band under the

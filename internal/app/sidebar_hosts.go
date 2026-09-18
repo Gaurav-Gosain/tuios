@@ -357,6 +357,42 @@ func (m *OS) sidebarMachineRows(here, remote []sessiontree.Node) []sessiontree.N
 		groups = append(groups, g)
 	}
 
+	// Put the groups back into the table's order before anything else looks at
+	// them.
+	//
+	// The attached machine's group is built from `here` rather than from the
+	// listing, because the listing leaves it out: its sessions are the ones
+	// already in hand. That made it the first group built, and therefore the
+	// first group in the order below, so attaching a session on another machine
+	// moved that machine up the rail and pushed the rest down. Which machine you
+	// are attached to is not an ordering, and the rail should not reshuffle
+	// underneath a switch.
+	//
+	// The table's order is the same for every client and does not depend on
+	// where this one happens to be attached, so it is the stable base. A drag
+	// order still wins, below.
+	byHost := make(map[string]machineGroup, len(groups))
+	for _, g := range groups {
+		byHost[g.header.Host] = g
+	}
+	ordered := make([]machineGroup, 0, len(groups))
+	seen := make(map[string]bool, len(groups))
+	for _, h := range m.FederationHosts {
+		if g, ok := byHost[h.Name]; ok && !seen[h.Name] {
+			ordered = append(ordered, g)
+			seen[h.Name] = true
+		}
+	}
+	// A group the table does not name keeps its place after them. This machine
+	// is the usual one, and it is pinned first anyway.
+	for _, g := range groups {
+		if !seen[g.header.Host] {
+			ordered = append(ordered, g)
+			seen[g.header.Host] = true
+		}
+	}
+	groups = ordered
+
 	// This machine is pinned first and is not dragged. The others take the
 	// user's order, or the draft order of a drag in progress.
 	var local []machineGroup

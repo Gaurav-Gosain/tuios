@@ -127,16 +127,23 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 		isFocused := m.FocusedWindow == i && m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows)
 		isMultifocused := len(m.MultifocusSet) > 0 && m.MultifocusSet[window.ID]
 		var borderColorObj color.Color
-		if isFocused {
-			if m.Mode == TerminalMode {
-				borderColorObj = theme.BorderFocusedTerminal()
-			} else {
-				borderColorObj = theme.BorderFocusedWindow()
-			}
-		} else if isMultifocused {
+		tint, quietTint, tinted := m.sessionBorderTint()
+		switch {
+		case isFocused && m.Mode == TerminalMode:
+			// The mode colour outranks the session's. This border says the keys
+			// are going into the guest, which is the more urgent fact and the
+			// one a person checks before typing.
+			borderColorObj = theme.BorderFocusedTerminal()
+		case isFocused && tinted:
+			borderColorObj = tint
+		case isFocused:
+			borderColorObj = theme.BorderFocusedWindow()
+		case isMultifocused:
 			// Multifocused windows get a distinct border color (yellow/orange)
 			borderColorObj = lipgloss.Color("3")
-		} else {
+		case tinted:
+			borderColorObj = quietTint
+		default:
 			borderColorObj = theme.BorderUnfocused()
 		}
 
