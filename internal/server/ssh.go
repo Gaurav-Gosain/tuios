@@ -432,6 +432,7 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer,
 		Width:           width,
 		Height:          height,
 		SSHSession:      sshSession,
+		SSHIsLoopback:   isLoopbackAddr(sshSession.RemoteAddr()),
 		// Route kitty/sixel APC sequences to the SSH session so they reach the
 		// client's terminal, via the serialized writer shared with the
 		// bubbletea renderer so graphics and text writes never interleave on
@@ -512,6 +513,7 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 		Width:           width,
 		Height:          height,
 		SSHSession:      sshSession,
+		SSHIsLoopback:   isLoopbackAddr(sshSession.RemoteAddr()),
 		IsDaemonSession: true,
 		DaemonClient:    client,
 		SessionName:     sessionName,
@@ -533,3 +535,21 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 
 // Window is an alias for terminal.Window for use in this package
 type Window = terminal.Window
+
+// isLoopbackAddr reports whether an SSH connection arrived from the same
+// machine (127.0.0.1, ::1, or a unix socket with no port). The native clipboard
+// fallback is only safe for such sessions: the operator's clipboard IS the
+// server's. A remote SSH peer's clipboard lives elsewhere, so it keeps the
+// OSC 52 path.
+func isLoopbackAddr(addr net.Addr) bool {
+	if addr == nil {
+		return false
+	}
+	host, _, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		// No host:port to split means a unix socket, which is always local.
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}

@@ -49,6 +49,26 @@ func (m *OS) RequestHostPaste() tea.Cmd {
 	m.pasteSeq++
 	m.pastePending = true
 	seq := m.pasteSeq
+
+	// A terminal that never answers the OSC 52 read is asked natively instead,
+	// when the human is at this machine (a local VTE terminal, or a loopback
+	// SSH session). The reply is a tea.ClipboardMsg, so it lands in the same
+	// handler the OSC 52 answer does. See clipboard_local.go.
+	if m.nativeClipboardAllowed() {
+		if tool := DetectClipboardTool(); tool != nil {
+			return tea.Batch(
+				func() tea.Msg {
+					text, err := tool.Read()
+					if err != nil {
+						return PasteTimeoutMsg{Seq: seq}
+					}
+					return tea.ClipboardMsg{Content: text, Selection: 'c'}
+				},
+				tea.Tick(hostPasteTimeout, func(time.Time) tea.Msg { return PasteTimeoutMsg{Seq: seq} }),
+			)
+		}
+	}
+
 	return tea.Batch(
 		tea.ReadClipboard,
 		tea.Tick(hostPasteTimeout, func(time.Time) tea.Msg { return PasteTimeoutMsg{Seq: seq} }),
