@@ -76,7 +76,7 @@ func TestAMachineHeadingIsNotBold(t *testing.T) {
 	head := hostHeadingNode(t, m)
 
 	var lines []string
-	m.drawHostRow(head, 40, sidebarVariantFull, theme.UI(), sidebarRowState{}, true,
+	m.drawHostRow(head, 40, sidebarVariantFull, theme.UI(), sidebarRowState{}, true, true,
 		func(sidebarRowKind, string, string) bool { return false },
 		func(sidebarRowKind, string, string, int, int) {},
 		func(sidebarTokenSpan, string) {},
@@ -99,7 +99,7 @@ func TestAMachineHeadingCarriesARule(t *testing.T) {
 	head := hostHeadingNode(t, m)
 
 	var lines []string
-	m.drawHostRow(head, 40, sidebarVariantFull, theme.UI(), sidebarRowState{}, true,
+	m.drawHostRow(head, 40, sidebarVariantFull, theme.UI(), sidebarRowState{}, true, true,
 		func(sidebarRowKind, string, string) bool { return false },
 		func(sidebarRowKind, string, string, int, int) {},
 		func(sidebarTokenSpan, string) {},

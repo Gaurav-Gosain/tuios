@@ -1248,11 +1248,20 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// empty section costs the rail nothing rather than costing it a label over a
 	// gap.
 	plans := sidebarLayoutPlans(&m.Settings)
+	// A section with no rows is dropped, header and all, which is right for a
+	// section that has nothing to say and wrong for this one. A person who put
+	// files in their rail layout and sees no files heading reads the feature as
+	// broken rather than as empty, and the reason it is empty is the one thing
+	// worth telling them. So it keeps one row and spends it saying why.
+	filesRows := len(files)
+	if filesRows == 0 && m.filesSectionEnabled() {
+		filesRows = 1
+	}
 	rowsIn := [sidebarSectionCount]int{
 		sidebarSectionSessions:  nS,
 		sidebarSectionTerminals: nT,
 		sidebarSectionAgents:    nA,
-		sidebarSectionFiles:     len(files),
+		sidebarSectionFiles:     filesRows,
 	}
 	// The last section in the configured layout is the one pinned to the rail's
 	// bottom: the slack rides above it, and it wears a blank line of its own so
@@ -1583,7 +1592,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 				continue
 			}
 			if isRemoteNode(s) {
-				m.drawHostRow(s, cw, variant, pal, m.railRowState(idx == hoverRow[sidebarSectionSessions], false), canCreate,
+				m.drawHostRow(s, cw, variant, pal, m.railRowState(idx == hoverRow[sidebarSectionSessions], false), canCreate, showCounts,
 					isCursor, recordHit, recordToken, headerHoverX[sidebarSectionSessions], compose, &lines)
 				continue
 			}
@@ -1660,6 +1669,12 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 			recordToken(cdSpan, "")
 		}
 		lines = append(lines, compose(m.sidebarFilesHeaderRow(cdTok, hasCd, cw, pal)))
+		if len(files) == 0 {
+			if count[sidebarSectionFiles] > 0 {
+				lines = append(lines, compose(sidebarFilesEmptyRow(cw, pal)))
+			}
+			return
+		}
 		for i := range count[sidebarSectionFiles] {
 			idx := start[sidebarSectionFiles] + i
 			row := files[idx]

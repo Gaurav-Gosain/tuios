@@ -211,6 +211,18 @@ func (m *OS) sidebarFilesHeaderRow(cdTok string, hasCd bool, cw int, pal overlay
 // That is `ls -F`'s distinction, and it is what the row still says on a terminal
 // with no colour and no icon at all. The icon in the glyph column is the layer
 // on top of it, not instead of it.
+// sidebarFilesEmptyRow says why the section is listing nothing.
+//
+// The section has a directory or it does not, and when it does not the listing
+// is empty for exactly one reason: nothing has told tuios where the focused
+// pane is. That is worth a row. The alternative, which is what it used to do,
+// was to disappear, and a feature that disappears when it cannot answer is
+// indistinguishable from one that is broken.
+func sidebarFilesEmptyRow(cw int, pal overlay.Palette) string {
+	return sidebarFit(sidebarStyle(nil, pal.FgMute).
+		Render(" "+overlay.Truncate("no directory yet", max(cw-2, 1))), cw, nil)
+}
+
 func (m *OS) sidebarFileRow(row fileRowSpec, cw int, pal overlay.Palette, st sidebarRowState) string {
 	var bg color.Color
 	if st.lit() {

@@ -939,7 +939,7 @@ func TestNarrowRailDropsTheRemoteCount(t *testing.T) {
 
 	draw := func(variant int) string {
 		var lines []string
-		m.drawHostRow(row, 40, variant, theme.UI(), sidebarRowState{}, true,
+		m.drawHostRow(row, 40, variant, theme.UI(), sidebarRowState{}, true, true,
 			func(sidebarRowKind, string, string) bool { return false },
 			func(sidebarRowKind, string, string, int, int) {},
 			func(sidebarTokenSpan, string) {},

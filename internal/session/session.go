@@ -651,6 +651,14 @@ type Session struct {
 	ptys   map[string]*PTY
 	ptysMu sync.RWMutex
 
+	// The last directory read out of each PTY's process, and when. See
+	// liveCwds: GetState is on the render path and reading a process
+	// directory is a syscall per window, so the read is throttled per
+	// session rather than taken on every call.
+	cwdCache   map[string]string
+	cwdReadAt  time.Time
+	cwdCacheMu sync.Mutex
+
 	// Session state (serializable)
 	state            *SessionState
 	stopResurrection func() // Stops periodic resurrection saving
@@ -1207,7 +1215,72 @@ func (s *Session) GetState() *SessionState {
 			state.Windows[i].Title = t
 		}
 	}
+
+	// And fill the directory the same way, for the same reason. A shell that
+	// announces one wins, because it is the shell's own answer and it stays
+	// right when the pane is running something that changed directory without
+	// the process doing so. The read below is what a pane whose shell never
+	// announced gets, and it is the only thing a client on another machine can
+	// be given. This writes into the copy, so the stored state keeps holding
+	// only what was actually announced.
+	cwds := s.liveCwds()
+	for i := range state.Windows {
+		if state.Windows[i].Cwd != "" {
+			continue
+		}
+		if cwd := cwds[state.Windows[i].PTYID]; cwd != "" {
+			state.Windows[i].Cwd = cwd
+		}
+	}
 	return state
+}
+
+// cwdReadInterval bounds how often a session reads its shells' directories out
+// of the operating system. A second is well under the time it takes a person to
+// notice a cd, and well over the rate the render path asks.
+const cwdReadInterval = time.Second
+
+// liveCwds is each window's working directory, read from the process the daemon
+// owns, keyed by PTY id.
+//
+// The stored Cwd is only ever set by a shell announcing one over OSC 7, and
+// most shells are not configured to announce. That was survivable while the
+// only consumer was the file section running on the same machine as the pane,
+// because it could read the process itself when nothing was announced. It
+// stopped being survivable once a client could attach a session on another
+// machine: that client has no process to read, so a pane on another machine had
+// no directory at all, and a file section with nothing to be about does not
+// draw a row, which means the whole section disappears.
+//
+// The side that owns the process is the side that can answer. It answers here,
+// and the answer crosses the wire with the rest of the window state, so a
+// client gets a directory the same way whether the pane is on this machine or
+// another one.
+func (s *Session) liveCwds() map[string]string {
+	s.cwdCacheMu.Lock()
+	if s.cwdCache != nil && time.Since(s.cwdReadAt) < cwdReadInterval {
+		cached := s.cwdCache
+		s.cwdCacheMu.Unlock()
+		return cached
+	}
+	s.cwdCacheMu.Unlock()
+
+	// Read outside the cache lock so the two are never held together. Two
+	// callers racing here both do the work and both store the same answer,
+	// which is cheaper than serialising the render path behind a syscall.
+	s.ptysMu.RLock()
+	cwds := make(map[string]string, len(s.ptys))
+	for id, pty := range s.ptys {
+		if cwd, ok := pty.ProcessCwd(); ok && cwd != "" {
+			cwds[id] = cwd
+		}
+	}
+	s.ptysMu.RUnlock()
+
+	s.cwdCacheMu.Lock()
+	s.cwdCache, s.cwdReadAt = cwds, time.Now()
+	s.cwdCacheMu.Unlock()
+	return cwds
 }
 
 // liveTitles maps PTY ID to the title that PTY's application last set, for every

@@ -482,7 +482,7 @@ func (m *OS) setSidebarSessionOrder(host string, order []string) {
 // is not up is drawn and is not a target, because its listing is cached and
 // the machine cannot be reached right now.
 func (m *OS) drawHostRow(
-	node sessiontree.Node, cw, variant int, pal overlay.Palette, st sidebarRowState, canCreate bool,
+	node sessiontree.Node, cw, variant int, pal overlay.Palette, st sidebarRowState, canCreate, showCounts bool,
 	isCursor func(kind sidebarRowKind, sessionID, windowID string) bool,
 	recordHit func(kind sidebarRowKind, sessionID, windowID string, windowIndex, h int),
 	recordToken func(tk sidebarTokenSpan, sessionID string),
@@ -521,7 +521,7 @@ func (m *OS) drawHostRow(
 		st.Cursor = st.Cursor || isCursor(sidebarRowHostSession, node.Host, remoteSessionName(node))
 		recordHit(sidebarRowHostSession, node.Host, remoteSessionName(node), -1, 1)
 	}
-	*lines = append(*lines, compose(m.sidebarRemoteSessionRow(node, cw, variant, pal, st)))
+	*lines = append(*lines, compose(m.sidebarRemoteSessionRow(node, cw, variant, pal, st, showCounts)))
 }
 
 // openRemoteSession attaches a session that lives on another machine, in this
@@ -678,13 +678,13 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 //
 // The count takes the same gate a local session row's count takes: a rail too
 // narrow for a name and a number keeps the name.
-func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal overlay.Palette, st sidebarRowState) string {
+func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal overlay.Palette, st sidebarRowState, showCounts bool) string {
 	var rowBg color.Color
 	if st.lit() {
 		rowBg = pal.Surface
 	}
 	right, rightW := "", 0
-	if m.Settings.SidebarShowCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
+	if m.Settings.SidebarShowCounts && showCounts && node.WindowCount > 0 && variant == sidebarVariantFull {
 		count := strconv.Itoa(node.WindowCount)
 		right = sidebarStyle(rowBg, pal.FgMute).Render(count)
 		rightW = lipgloss.Width(count)
