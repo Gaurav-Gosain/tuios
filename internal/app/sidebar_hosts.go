@@ -504,7 +504,8 @@ func (m *OS) drawHostRow(
 			labelW := sidebarHeaderLabelW(m.Settings.GetRailFoldOpenGlyph() + " " + node.Title)
 			if kind != sidebarRowNewSession || canCreate {
 				if tok, span, ok := sidebarHeaderAdd(kind, cw, labelW, pal,
-					headerHoverX, isCursor(kind, id, ""), &m.Settings); ok {
+					headerHoverX, isCursor(kind, id, ""), &m.Settings,
+					sidebarRowBg(hovered, pal)); ok {
 					add = tok
 					recordToken(span, id)
 				}
@@ -606,10 +607,7 @@ func hostStatusLabel(status string) string {
 // host that is not answering keeps its row with one word saying why, because a
 // machine that vanished from the rail reads as a machine nobody configured.
 func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, add string, hovered, collapsed bool) string {
-	var rowBg color.Color
-	if hovered {
-		rowBg = pal.Surface
-	}
+	rowBg := sidebarRowBg(hovered, pal)
 	up := node.HostStatus == string(federation.StatusUp)
 
 	right, rightW := "", 0

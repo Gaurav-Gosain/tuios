@@ -129,7 +129,19 @@ func sidebarAddGlyph(s *config.Settings) string { return s.GetRailAddGlyph() }
 // directly under the agents block and read as "new agent", which is not a thing
 // the rail can do; the same glyph on the sessions header cannot be read as
 // anything but "another one of these".
-func sidebarHeaderAdd(kind sidebarRowKind, cw, labelW int, pal overlay.Palette, hoverX int, cursor bool, s *config.Settings) (string, sidebarTokenSpan, bool) {
+// sidebarRowBg is the ground a rail row is drawn on. It lives here rather than
+// at each use because a row's parts are rendered in more than one place and
+// they have to agree: the "+" on a machine's header is built before the row
+// around it is, and rendering it on the default ground left a block of
+// unhighlighted cells sitting in the middle of a highlighted row.
+func sidebarRowBg(hovered bool, pal overlay.Palette) color.Color {
+	if hovered {
+		return pal.Surface
+	}
+	return nil
+}
+
+func sidebarHeaderAdd(kind sidebarRowKind, cw, labelW int, pal overlay.Palette, hoverX int, cursor bool, s *config.Settings, rowBg color.Color) (string, sidebarTokenSpan, bool) {
 	gw := lipgloss.Width(sidebarAddGlyph(s))
 	x0 := cw - 1 - gw
 	if x0 < labelW+1 {
@@ -140,7 +152,7 @@ func sidebarHeaderAdd(kind sidebarRowKind, cw, labelW int, pal overlay.Palette, 
 	if cursor || (hoverX >= span.X0 && hoverX < span.X1) {
 		ink = pal.Fg
 	}
-	return sidebarStyle(nil, ink).Render(sidebarAddGlyph(s)), span, true
+	return sidebarStyle(rowBg, ink).Render(sidebarAddGlyph(s)), span, true
 }
 
 // sidebarSection identifies one of the rail's three stacked lists. Each owns
@@ -1433,7 +1445,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		// machine would be one more than the rail can explain.
 		if canCreate && len(m.SidebarHostIDs) == 0 {
 			if tok, span, ok := sidebarHeaderAdd(sidebarRowNewSession, cw, sidebarHeaderLabelW(label),
-				pal, headerHoverX[sidebarSectionSessions], isCursor(sidebarRowNewSession, "", ""), &m.Settings); ok {
+				pal, headerHoverX[sidebarSectionSessions], isCursor(sidebarRowNewSession, "", ""), &m.Settings, nil); ok {
 				add = tok
 				recordToken(span, "")
 			}
@@ -1472,7 +1484,7 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		// same cells in practice; the arithmetic holds either way.
 		termAdd, termSpan, hasTermAdd := sidebarHeaderAdd(sidebarRowNewWindow, cw,
 			sidebarHeaderLabelW("terminals"), pal, headerHoverX[sidebarSectionTerminals],
-			isCursor(sidebarRowNewWindow, shown, ""), &m.Settings)
+			isCursor(sidebarRowNewWindow, shown, ""), &m.Settings, nil)
 		right := termAdd
 		if peeking {
 			// Whose panes these are, since they are not the attached session's,
