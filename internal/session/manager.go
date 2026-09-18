@@ -58,14 +58,6 @@ func NewManager() *Manager {
 // - manager_unix.go for Unix/Linux/macOS
 // - manager_windows.go for Windows
 
-// newWindowInheritCwd reports whether a new window takes the focused pane's
-// directory.
-func (m *Manager) newWindowInheritCwd() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.inheritCwd
-}
-
 // SetScrollbackLines sets the history depth every session made from now on
 // gives its panes. Zero means the emulator's default.
 func (m *Manager) SetScrollbackLines(n int) {
@@ -149,7 +141,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	if cfg.HostName == "" {
 		cfg.HostName = m.HostName()
 	}
-	cfg.InheritCwd = m.newWindowInheritCwd()
+	// Read directly, not through a helper: m.mu is already held here, and the
+	// fields above are read the same way for the same reason.
+	cfg.InheritCwd = m.inheritCwd
 
 	// Create the session
 	session, err := NewSession(name, cfg, width, height)

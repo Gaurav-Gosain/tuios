@@ -134,3 +134,40 @@ func TestAnExplicitDirectoryWinsOverTheFocusedPane(t *testing.T) {
 		t.Errorf("new window started in %q, want the asked-for %q", got, asked)
 	}
 }
+
+// TestCreatingASessionThroughTheManagerDoesNotDeadlock is the regression test
+// for the way the inherit flag first reached a session.
+//
+// CreateSession holds the manager's lock while it stamps the config, and reads
+// the fields around this one directly for exactly that reason. Reaching for the
+// flag through a locking accessor took the same lock a second time and every
+// daemon session creation stopped there, which the feature's own tests missed
+// because they build a Session directly and never go through the manager.
+func TestCreatingASessionThroughTheManagerDoesNotDeadlock(t *testing.T) {
+	t.Cleanup(useResurrectionDir(t.TempDir()))
+	m := NewManager()
+	m.SetNewWindowInheritCwd(true)
+
+	done := make(chan *Session, 1)
+	go func() {
+		sess, err := m.CreateSession("deadlock-check", &SessionConfig{}, 80, 24)
+		if err != nil {
+			done <- nil
+			return
+		}
+		done <- sess
+	}()
+
+	select {
+	case sess := <-done:
+		if sess == nil {
+			t.Fatal("CreateSession failed")
+		}
+		t.Cleanup(sess.Stop)
+		if !sess.config.InheritCwd {
+			t.Error("the session did not take the manager's inherit setting")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("CreateSession deadlocked")
+	}
+}
