@@ -393,13 +393,44 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				}
 			}
 
-			// Check if image is occluded by a higher-z window
-			if anyPartVisible && kp.isOccludedByHigherWindow(
-				newHostX, newHostY, imageCellWidth, imageCellHeight,
-				info.WindowZ, allWindows, windowID,
-			) {
-				kittyPassthroughLog("RefreshPlacement: image occluded by higher-z window, hiding")
-				anyPartVisible = false
+			// Crop to whatever a window drawn over this one leaves clear,
+			// rather than hiding the picture because something touched it. The
+			// crops are applied exactly as the layout box's are above, because
+			// they are the same thing: a smaller rectangle of the same image.
+			// See kitty_occlusion.go for what one placement can and cannot
+			// show.
+			if anyPartVisible {
+				blockers := occludersAbove(info.WindowZ, allWindows, windowID)
+				clear, ok := largestClearRect(
+					cellRect{newHostX, newHostY, imageCellWidth, imageCellHeight}, blockers)
+				switch {
+				case !ok:
+					kittyPassthroughLog("RefreshPlacement: image fully covered by a higher window, hiding")
+					anyPartVisible = false
+				default:
+					if crop := clear.X - newHostX; crop > 0 {
+						newHostX += crop
+						clipLeft += crop
+						imageCellWidth -= crop
+					}
+					if crop := clear.Y - newHostY; crop > 0 {
+						newHostY += crop
+						clipTop += crop
+						imageCellHeight -= crop
+					}
+					if over := newHostX + imageCellWidth - clear.X - clear.W; over > 0 {
+						imageCellWidth -= over
+					}
+					if over := newHostY + imageCellHeight - clear.Y - clear.H; over > 0 {
+						clipBottom += over
+						imageCellHeight -= over
+					}
+					maxShowableCols = imageCellWidth
+					maxShowableRows = imageCellHeight
+					if imageCellWidth <= 0 || imageCellHeight <= 0 {
+						anyPartVisible = false
+					}
+				}
 			}
 
 			// Hide images when host position is out of bounds.

@@ -658,6 +658,14 @@ Two consequences follow from the id living in a color:
 Placeholders need a host terminal that implements them: kitty, Ghostty and
 WezTerm do, and xterm.js does not, so they do not appear in `tuios-web`.
 
+A placed image is cropped to what a window drawn over it leaves clear, rather
+than hidden because something touched it (`internal/app/kitty_occlusion.go`).
+One placement can show one rectangle, so a window over a corner leaves an L and
+the larger of its two strips is what gets drawn. A placeholder image has no such
+limit: its cells are text, the compositor has already decided which of them
+survive, and the host draws exactly those. The self-placed remote video stream
+used by browser panes still hides rather than crops.
+
 ## Performance Characteristics
 
 **Memory Management:**
