@@ -11,3 +11,23 @@ exe_glob  = ["**/vendor/*/bin/codex", "**/codex"]
 
 [screen]
 enabled = false
+
+# Codex writes "Action Required" into the window title when it is waiting on a
+# person, which is the one thing a rail most needs to know and the one channel
+# this harness offers: its screen rules are off, because its TUI has no stable
+# prompt to key on.
+#
+# Enabled here and nowhere else on purpose. A title proves that something set a
+# title, so a rule is only worth shipping when the phrase is unambiguous and
+# the agent writes it deliberately. A spinner glyph is neither: it proves
+# animation, and every TUI animates.
+[title]
+enabled   = true
+fold_case = true
+
+[[title.rule]]
+state    = "needs_input"
+priority = 10
+kind     = "approval"
+message  = "Codex says an action is required"
+any      = ["action required"]

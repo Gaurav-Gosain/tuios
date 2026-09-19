@@ -33,7 +33,7 @@ func (r *Registry) Classify(id string, tail []string) (state string, rule int, o
 	bestPri := 0
 	for i := range m.Screen.Rule {
 		rl := &m.Screen.Rule[i]
-		if !checkRule(rl, hay, folded, nil) {
+		if !checkRule(rl, hay, folded, nil, strings.Contains) {
 			continue
 		}
 		if bestIdx == -1 || rl.Priority > bestPri {
@@ -57,7 +57,7 @@ func (r *Registry) Classify(id string, tail []string) (state string, rule int, o
 // writing a rule needs and what classification does not. Passing nil skips every
 // allocation, so the diagnostic costs the hot path nothing and neither of them
 // carries a second copy of the predicates.
-func checkRule(rl *ScreenRule, hay, folded string, rep *RuleReport) bool {
+func checkRule(rl *ScreenRule, hay, folded string, rep *RuleReport, contains func(hay, needle string) bool) bool {
 	// A rule naming no positive predicate would match every screen the harness
 	// ever paints, which is a rule that says the pane is always in its state.
 	if len(rl.All) == 0 && len(rl.Any) == 0 && len(rl.Regex) == 0 {
@@ -68,7 +68,7 @@ func checkRule(rl *ScreenRule, hay, folded string, rep *RuleReport) bool {
 	}
 	ok := true
 	for _, s := range rl.All {
-		if strings.Contains(folded, s) {
+		if contains(folded, s) {
 			continue
 		}
 		ok = false
@@ -88,7 +88,7 @@ func checkRule(rl *ScreenRule, hay, folded string, rep *RuleReport) bool {
 		rep.MissingRegex = append(rep.MissingRegex, rl.Regex[i])
 	}
 	for _, s := range rl.Not {
-		if !strings.Contains(folded, s) {
+		if !contains(folded, s) {
 			continue
 		}
 		ok = false
@@ -111,7 +111,7 @@ func checkRule(rl *ScreenRule, hay, folded string, rep *RuleReport) bool {
 		return ok
 	}
 	for _, s := range rl.Any {
-		if strings.Contains(folded, s) {
+		if contains(folded, s) {
 			return ok
 		}
 	}
@@ -167,7 +167,7 @@ func (r *Registry) Explain(id string, tail []string) (state string, rule int, re
 	for i := range m.Screen.Rule {
 		rl := &m.Screen.Rule[i]
 		rep := RuleReport{Index: i, State: rl.State, Priority: rl.Priority}
-		rep.Matched = checkRule(rl, hay, folded, &rep)
+		rep.Matched = checkRule(rl, hay, folded, &rep, strings.Contains)
 		reports = append(reports, rep)
 		if !rep.Matched || !m.Screen.Enabled || len(tail) == 0 {
 			continue

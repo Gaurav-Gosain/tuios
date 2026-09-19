@@ -1029,10 +1029,15 @@ func (d *Daemon) verbExplainAgentScreen(_ *connState, params json.RawMessage) (a
 	// rule for a harness tuios does not know yet means looking at a pane nothing
 	// has claimed, so refusing to dump it there would withhold the diagnostic
 	// from the case it is most needed in.
+	// The pane title is read here, in the same look as the tail, so the
+	// explanation and the classification below run against one reading rather
+	// than two of a value that moves.
 	var tail []string
+	var paneTitle string
 	if w.PTYID != "" {
 		if pty := sess.GetPTY(w.PTYID); pty != nil {
 			tail = pty.tailText(lines)
+			paneTitle = pty.Title()
 		}
 	}
 
@@ -1047,6 +1052,7 @@ func (d *Daemon) verbExplainAgentScreen(_ *connState, params json.RawMessage) (a
 		"rules":      []harness.RuleReport{},
 		"matched":    false,
 		"rule":       -1,
+		"title":      paneTitle,
 	}
 	if m == nil {
 		// No harness means no rules to run, which is a fact worth returning
@@ -1060,6 +1066,19 @@ func (d *Daemon) verbExplainAgentScreen(_ *connState, params json.RawMessage) (a
 	out["rule"] = rule
 	out["matched"] = rule >= 0
 	out["rule_state"] = matchedState
+
+	// The title tier, reported beside the screen tier rather than in a verb of
+	// its own. Someone asking why a pane reads the way it does is asking about
+	// the pane, not about one channel, and a title rule that fired is exactly
+	// the thing they would otherwise have no way to see: the string it matched
+	// is gone from the screen by the time anyone looks.
+	out["title"] = paneTitle
+	out["title_enabled"] = m.Title.Enabled
+	titleState, titleRule, titleReports := reg.ExplainTitle(hid, paneTitle)
+	out["title_rules"] = titleReports
+	out["title_rule"] = titleRule
+	out["title_matched"] = titleRule >= 0
+	out["title_rule_state"] = titleState
 	return out, nil
 }
 

@@ -16,6 +16,7 @@ alongside the rest of the pane-driving surface.
 - [Sources and precedence](#sources-and-precedence)
 - [Recognising a harness](#recognising-a-harness)
 - [Screen rules](#screen-rules)
+- [Title rules](#title-rules)
 - [The stall heuristic](#the-stall-heuristic)
 - [Indicator](#indicator)
 - [Claude Code integration](#claude-code-integration)
@@ -362,6 +363,54 @@ the harness, which one fired, and for each rule that refused, which of its
 strings was the reason. `--harness` runs a harness's rules against a pane nothing
 has claimed, which is the case when the rule being written is the one that would
 attribute it.
+
+## Title rules
+
+The window title is the other thing an agent publishes about itself, with OSC 0
+or OSC 2, and tuios kept the string for the window's name without ever reading
+it. Codex writes `Action Required` there when it is waiting on a person. Claude
+Code puts a spinner there while it works.
+
+A manifest may carry a `[title]` block, the same rule shape as `[screen]`:
+
+```toml
+[title]
+enabled   = true
+fold_case = true
+
+[[title.rule]]
+state    = "needs_input"
+priority = 10
+kind     = "approval"
+message  = "Codex says an action is required"
+any      = ["action required"]
+```
+
+Two things bound what a title rule may do, and both are about what a title can
+honestly prove.
+
+**It never creates a claim.** A title proves that something set a title, not
+that the something is an agent, and any program can set any string. A pane that
+no other tier has recognised has nothing here to move. Title rules only change
+the state of a pane already attributed to a harness.
+
+**A substring has to match a whole token.** The screen tier matches anywhere,
+because a rendered frame is prose. A title is mostly paths, branches and program
+names, so matching anywhere finds an agent's name inside words that are not it:
+a rule for `opencode` would match a pane sitting in `~/src/opencode-blinker`,
+and the false positive would arrive wearing the right label. Letters, digits,
+`_`, `-` and `.` continue a token; everything else ends one. A predicate that
+carries its own boundary, like `action required:`, is matched plainly at that
+end.
+
+Title rules report as `source: osc`, because that is what they are: an escape
+sequence the program emitted about itself, alongside the progress sequence
+already read there.
+
+Only one ships enabled, Codex's, because its phrase is unambiguous and written
+deliberately. A spinner glyph is neither: it proves animation, and every TUI
+animates. `tuios explain-agent-screen` prints the pane's title and what the
+title rules made of it beside the screen half, which is the way to write one.
 
 ## The stall heuristic
 

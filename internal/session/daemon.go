@@ -490,7 +490,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 					if !pty.hasScreenLook() {
 						pty.setScreenLook(func() {
 							s.readTranscriptOnOutput(ptyID)
-							s.scanScreenForAgent(ptyID, reg)
+							s.scanPaneForAgent(ptyID, reg)
 						})
 					}
 					if pty.screenScanDue(time.Now().UnixNano()) {
@@ -1291,7 +1291,7 @@ func (d *Daemon) stallMonitor() {
 					// The last look before the pane is called idle. A stalled pane
 					// emits nothing, so the scan the output path would have run is
 					// the one that never happens.
-					return sess.scanScreenForAgent(ptyID, reg)
+					return sess.scanPaneForAgent(ptyID, reg)
 				})
 			}
 		}

@@ -33,7 +33,38 @@ type Manifest struct {
 	Priority   int        `toml:"priority"`
 	Detect     Detect     `toml:"detect"`
 	Screen     Screen     `toml:"screen"`
+	Title      Title      `toml:"title"`
 	Transcript Transcript `toml:"transcript"`
+}
+
+// Title is the rules matched against the pane's window title, the string the
+// program sets with OSC 0 or OSC 2.
+//
+// It is a channel the agents already use and tuios parsed and threw away.
+// Claude Code puts a braille spinner in the title while it works and a mark
+// when it is idle; Codex writes "Action Required" there when it is blocked. A
+// title is one short string the program chose to publish about itself, which
+// makes it cheaper to read than the screen and less likely to rot than a rule
+// written against a rendered frame.
+//
+// Two things bound what it is allowed to do, and both are about what a title
+// can honestly prove.
+//
+// It never creates an identity claim. A spinner proves that something is
+// animating, not that the something is an agent, and any program can set any
+// title; a pane with no claim has nothing for a title rule to move. So these
+// rules only ever move the state of a pane some other tier already recognised.
+//
+// And a substring here has to match whole tokens. The screen tier matches
+// anywhere because a rendered frame is prose, but a title is mostly paths and
+// names: a rule for "opencode" matching a pane sitting in ~/src/opencode-blinker
+// would be a false positive with the agent's own name on it. See containsToken.
+type Title struct {
+	Enabled bool `toml:"enabled"`
+	// FoldCase lowercases the title and every substring predicate before
+	// matching, exactly as Screen.FoldCase does for the screen.
+	FoldCase bool         `toml:"fold_case"`
+	Rule     []ScreenRule `toml:"rule"`
 }
 
 // Detect is how a process is recognised as this harness. Any one predicate
@@ -228,6 +259,23 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 		}
 		if r.Kind = strings.ToLower(strings.TrimSpace(r.Kind)); r.Kind != "" && !promptKinds[r.Kind] {
 			return nil, fmt.Errorf("%s: manifest %q screen rule %d: unknown kind %q (approval or question)",
+				name, m.ID, i, r.Kind)
+		}
+	}
+	// Title rules are the same shape as screen rules and are checked the same
+	// way, so a mistake in one is reported in the same words as a mistake in
+	// the other.
+	for i := range m.Title.Rule {
+		r := &m.Title.Rule[i]
+		if _, ok := screenStates[r.State]; !ok {
+			return nil, fmt.Errorf("%s: manifest %q title rule %d: unknown state %q",
+				name, m.ID, i, r.State)
+		}
+		if err := r.compile(m.Title.FoldCase); err != nil {
+			return nil, fmt.Errorf("%s: manifest %q title rule %d: %w", name, m.ID, i, err)
+		}
+		if r.Kind = strings.ToLower(strings.TrimSpace(r.Kind)); r.Kind != "" && !promptKinds[r.Kind] {
+			return nil, fmt.Errorf("%s: manifest %q title rule %d: unknown kind %q (approval or question)",
 				name, m.ID, i, r.Kind)
 		}
 	}

@@ -917,7 +917,7 @@ func init() {
 			handler: (*Daemon).verbExplainAgentDetect,
 		},
 		"explain-agent-screen": {
-			description: "Show a pane's screen tail exactly as the harness screen rules read it, what every rule made of it, and which one fired. Use it to write or debug a rule: for each rule that did not match, it names the strings that were the reason.",
+			description: "Show a pane's screen tail exactly as the harness screen rules read it, what every rule made of it, and which one fired. Use it to write or debug a rule: for each rule that did not match, it names the strings that were the reason. The pane's window title and what the title rules made of it are reported alongside, since a title is gone from the screen by the time anyone asks why a pane reads the way it does.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,

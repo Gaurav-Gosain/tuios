@@ -68,22 +68,22 @@ func TestClassifyIsSilentForAHarnessWithRulesOff(t *testing.T) {
 // paints, which is a rule that says the pane is always blocked.
 func TestRuleWithNoPredicatesMatchesNothing(t *testing.T) {
 	rl := &ScreenRule{State: "needs_input"}
-	if checkRule(rl, "anything at all", "anything at all", nil) {
+	if checkRule(rl, "anything at all", "anything at all", nil, strings.Contains) {
 		t.Fatal("a rule with no predicates matched; it would claim every pane")
 	}
 	// Not alone is a veto with nothing to veto for, not a positive claim.
 	rl = &ScreenRule{State: "needs_input", Not: []string{"quiet"}}
-	if checkRule(rl, "anything at all", "anything at all", nil) {
+	if checkRule(rl, "anything at all", "anything at all", nil, strings.Contains) {
 		t.Fatal("a rule with only a veto matched; it would claim every pane not naming its veto")
 	}
 }
 
 func TestNotPredicateVetoesAMatch(t *testing.T) {
 	rl := &ScreenRule{State: "needs_input", Any: []string{"Do you want"}, Not: []string{"(auto-approved)"}}
-	if !checkRule(rl, "Do you want to proceed?", "Do you want to proceed?", nil) {
+	if !checkRule(rl, "Do you want to proceed?", "Do you want to proceed?", nil, strings.Contains) {
 		t.Fatal("the any predicate did not match on its own")
 	}
-	if checkRule(rl, "Do you want to proceed? (auto-approved)", "Do you want to proceed? (auto-approved)", nil) {
+	if checkRule(rl, "Do you want to proceed? (auto-approved)", "Do you want to proceed? (auto-approved)", nil, strings.Contains) {
 		t.Fatal("the not predicate failed to veto")
 	}
 }
@@ -101,21 +101,21 @@ func mustRule(t *testing.T, rl ScreenRule, foldCase bool) *ScreenRule {
 func TestRegexPredicateAnchorsLines(t *testing.T) {
 	rl := mustRule(t, ScreenRule{State: "working", Regex: []string{`^\s*⠋ Thinking`}}, false)
 	hay := "some earlier output\n  ⠋ Thinking hard\n"
-	if !checkRule(rl, hay, hay, nil) {
+	if !checkRule(rl, hay, hay, nil, strings.Contains) {
 		t.Fatal("a line-anchored pattern did not match its line; ^ must mean line start in a joined tail")
 	}
 	hay = "prefix ⠋ Thinking inline"
-	if checkRule(rl, hay, hay, nil) {
+	if checkRule(rl, hay, hay, nil, strings.Contains) {
 		t.Fatal("^ matched mid-line; the anchor would be meaningless on a joined tail")
 	}
 }
 
 func TestRegexAloneIsAPositivePredicate(t *testing.T) {
 	rl := mustRule(t, ScreenRule{State: "working", Regex: []string{`\[stop\]`}}, false)
-	if !checkRule(rl, "⠧ Waiting 2.8s [stop]", "⠧ waiting 2.8s [stop]", nil) {
+	if !checkRule(rl, "⠧ Waiting 2.8s [stop]", "⠧ waiting 2.8s [stop]", nil, strings.Contains) {
 		t.Fatal("a regex-only rule did not match")
 	}
-	if checkRule(rl, "all done", "all done", nil) {
+	if checkRule(rl, "all done", "all done", nil, strings.Contains) {
 		t.Fatal("a regex-only rule matched a screen its pattern is absent from")
 	}
 }
@@ -126,11 +126,11 @@ func TestNotRegexVetoesAMatch(t *testing.T) {
 		Regex:    []string{`^❯ `},
 		NotRegex: []string{`^( [\x{2800}-\x{28FF}]){1,2} `},
 	}, false)
-	if !checkRule(rl, "❯ ready", "❯ ready", nil) {
+	if !checkRule(rl, "❯ ready", "❯ ready", nil, strings.Contains) {
 		t.Fatal("the positive regex did not match on its own")
 	}
 	hay := "❯ ready\n ⠧ [BUILD]"
-	if checkRule(rl, hay, hay, nil) {
+	if checkRule(rl, hay, hay, nil, strings.Contains) {
 		t.Fatal("not_regex failed to veto")
 	}
 }
