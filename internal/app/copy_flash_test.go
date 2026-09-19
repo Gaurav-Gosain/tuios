@@ -26,33 +26,27 @@ func flashOS(t *testing.T) *OS {
 	return m
 }
 
-// TestTheSweepCrossesTheWholePaneAndThenStops.
+// TestTheSweepStartsAndEndsOffTheBlock.
 //
-// The band starts off one edge and ends off the other, so the first and last
-// columns are lit on the way past rather than the light appearing to start and
-// stop inside the text.
+// The light has to arrive from outside the copied text and leave on the other
+// side, so the first and last cells are lit on the way past rather than the
+// sweep appearing to begin and end inside the block.
 //
-// Negative control: making the span the pane's width rather than the width
-// plus two reaches leaves the first column unlit at the start.
-func TestTheSweepCrossesTheWholePaneAndThenStops(t *testing.T) {
+// Stated about the block rather than about columns, because with a diagonal
+// the column a row is lit at depends on which row it is.
+func TestTheSweepStartsAndEndsOffTheBlock(t *testing.T) {
 	m := flashOS(t)
-	const width = 80
+	box := copyFlashBox{left: 4, right: 40, top: 20, bottom: 25}
+	ground := lipgloss.Color("#101010")
 
-	// At the very start the light is off the left edge, and the first column
-	// is the first thing it reaches.
-	begin := m.copyFlashBandFor(0, copyFlashBox{left: 0, right: width - 1, rows: 1})
-	if begin.centre >= 0 {
-		t.Errorf("the sweep starts at column %.1f, want off the left edge", begin.centre)
+	if blockLit(m.copyFlashBandFor(0, box), box, ground) {
+		t.Error("the block is lit before the sweep starts")
 	}
-	end := m.copyFlashBandFor(1, copyFlashBox{left: 0, right: width - 1, rows: 1})
-	if end.centre <= float64(width) {
-		t.Errorf("the sweep ends at column %.1f, want past the right edge", end.centre)
+	if blockLit(m.copyFlashBandFor(1, box), box, ground) {
+		t.Error("the block is lit after the sweep has finished")
 	}
-
-	// And in the middle it is lighting the middle.
-	mid := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: width - 1, rows: 1})
-	if mid.intensity(width/2, 0) <= 0 {
-		t.Error("the middle of the sweep does not light the middle of the pane")
+	if !blockLit(m.copyFlashBandFor(0.5, box), box, ground) {
+		t.Error("nothing in the block is lit halfway through the sweep")
 	}
 }
 
@@ -60,7 +54,7 @@ func TestTheSweepCrossesTheWholePaneAndThenStops(t *testing.T) {
 // across the text; the falloff is what makes it read as light passing over it.
 func TestTheLightFallsOffRatherThanEnding(t *testing.T) {
 	m := flashOS(t)
-	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 80 - 1, rows: 1})
+	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 80 - 1, top: 20, bottom: 20})
 	centre := int(band.centre)
 
 	at := band.intensity(centre, 0)
@@ -191,7 +185,8 @@ func selectedWindow() *terminal.Window {
 // this fails.
 func TestTheLightLeans(t *testing.T) {
 	m := flashOS(t)
-	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 80 - 1, rows: 6})
+	box := copyFlashBox{left: 0, right: 80 - 1, top: 20, bottom: 25}
+	band := m.copyFlashBandFor(0.5, box)
 
 	// The column each row is brightest at, which has to move along as the
 	// rows go down.
@@ -205,15 +200,15 @@ func TestTheLightLeans(t *testing.T) {
 		return at
 	}
 
-	top, bottom := brightest(0), brightest(3)
+	top, bottom := brightest(box.top), brightest(box.top+3)
 	if top < 0 || bottom < 0 {
 		t.Fatal("ASSERTION: a row is not lit at all, so there is no lean to measure")
 	}
 	if bottom <= top {
-		t.Errorf("row 0 is brightest at column %d and row 3 at %d, so the light does not lean", top, bottom)
+		t.Errorf("the top row is brightest at column %d and three rows down at %d, so the light does not lean", top, bottom)
 	}
 	if want := top + 3*copyFlashSlope; bottom != want {
-		t.Errorf("row 3 is brightest at column %d, want %d for a slope of %d", bottom, want, copyFlashSlope)
+		t.Errorf("three rows down is brightest at column %d, want %d for a slope of %d", bottom, want, copyFlashSlope)
 	}
 }
 
@@ -253,7 +248,7 @@ func TestTheLightArrivesAndLeaves(t *testing.T) {
 func TestOnlyLitCellsArePainted(t *testing.T) {
 	m := flashOS(t)
 	ground := lipgloss.Color("#101010")
-	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 80, rows: 1})
+	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 80, top: 20, bottom: 20})
 
 	// A cell the light is nowhere near.
 	if _, lit := band.styleFor(80, 0, false, ground); lit {
@@ -279,13 +274,13 @@ func TestTheSweepIsSizedToWhatWasCopied(t *testing.T) {
 	m := flashOS(t)
 	// A short block near the left of a wide pane, which is the case that
 	// showed the fault.
-	box := copyFlashBox{left: 4, right: 23, rows: 1}
+	box := copyFlashBox{left: 4, right: 23, top: 20, bottom: 20}
 
 	// At the halfway point the light has to be inside the block.
 	mid := m.copyFlashBandFor(0.5, box)
 	lit := false
 	for x := box.left; x <= box.right; x++ {
-		if mid.intensity(x, 0) > 0.2 {
+		if mid.intensity(x, box.top) > 0.2 {
 			lit = true
 		}
 	}
@@ -299,7 +294,7 @@ func TestTheSweepIsSizedToWhatWasCopied(t *testing.T) {
 	for i := range steps {
 		band := m.copyFlashBandFor(float64(i)/steps, box)
 		for x := box.left; x <= box.right; x++ {
-			if band.intensity(x, 0) > 0.2 {
+			if band.intensity(x, box.top) > 0.2 {
 				runs++
 				break
 			}
@@ -328,8 +323,8 @@ func TestTheSweepMeasuresTheBlock(t *testing.T) {
 	if box.left != 5 || box.right != 20 {
 		t.Errorf("the block spans columns %d to %d, want 5 to 20", box.left, box.right)
 	}
-	if box.rows != 1 {
-		t.Errorf("the block is %d rows, want 1", box.rows)
+	if box.rows() != 1 {
+		t.Errorf("the block is %d rows, want 1", box.rows())
 	}
 }
 
@@ -356,7 +351,7 @@ func TestAnEmptyRegionIsNotSwept(t *testing.T) {
 // Negative control: taking the axis range from the block's columns for every
 // shape leaves the vertical one lit in almost no frames.
 func TestEveryShapeCrossesTheWholeBlock(t *testing.T) {
-	box := copyFlashBox{left: 10, right: 40, rows: 6}
+	box := copyFlashBox{left: 10, right: 40, top: 20, bottom: 25}
 
 	for _, shape := range config.CopyFlashStyles {
 		t.Run(shape, func(t *testing.T) {
@@ -366,7 +361,7 @@ func TestEveryShapeCrossesTheWholeBlock(t *testing.T) {
 
 			// Every cell of the block is lit at some point in the run.
 			const steps = 40
-			for row := range box.rows {
+			for row := box.top; row <= box.bottom; row++ {
 				for x := box.left; x <= box.right; x++ {
 					everLit := false
 					for i := range steps {
@@ -403,7 +398,7 @@ func TestEveryShapeCrossesTheWholeBlock(t *testing.T) {
 // TestTheTwoDiagonalsLeanOppositeWays, which is the whole difference between
 // them and the thing a person picking one is choosing.
 func TestTheTwoDiagonalsLeanOppositeWays(t *testing.T) {
-	box := copyFlashBox{left: 0, right: 60, rows: 6}
+	box := copyFlashBox{left: 0, right: 60, top: 20, bottom: 25}
 
 	brightest := func(shape string, row int) int {
 		m := flashOS(t)
@@ -418,8 +413,8 @@ func TestTheTwoDiagonalsLeanOppositeWays(t *testing.T) {
 		return at
 	}
 
-	fwdTop, fwdBottom := brightest(config.CopyFlashDiagonal, 0), brightest(config.CopyFlashDiagonal, 5)
-	revTop, revBottom := brightest(config.CopyFlashDiagonalReverse, 0), brightest(config.CopyFlashDiagonalReverse, 5)
+	fwdTop, fwdBottom := brightest(config.CopyFlashDiagonal, 20), brightest(config.CopyFlashDiagonal, 25)
+	revTop, revBottom := brightest(config.CopyFlashDiagonalReverse, 20), brightest(config.CopyFlashDiagonalReverse, 25)
 
 	if fwdTop < 0 || fwdBottom < 0 || revTop < 0 || revBottom < 0 {
 		t.Fatal("ASSERTION: a row is not lit at the halfway point, so there is no lean to compare")
@@ -437,9 +432,9 @@ func TestTheTwoDiagonalsLeanOppositeWays(t *testing.T) {
 func TestAHorizontalSweepDoesNotLean(t *testing.T) {
 	m := flashOS(t)
 	m.Settings.CopyFlashStyle = config.CopyFlashHorizontal
-	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 60, rows: 4})
+	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 60, top: 20, bottom: 23})
 
-	if band.intensity(30, 0) != band.intensity(30, 3) {
+	if band.intensity(30, 20) != band.intensity(30, 23) {
 		t.Error("a horizontal sweep lights different columns on different rows")
 	}
 }
@@ -448,22 +443,22 @@ func TestAHorizontalSweepDoesNotLean(t *testing.T) {
 func TestAVerticalSweepRunsDownTheRows(t *testing.T) {
 	m := flashOS(t)
 	m.Settings.CopyFlashStyle = config.CopyFlashVertical
-	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 60, rows: 6})
+	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 60, top: 20, bottom: 25})
 
-	if band.intensity(0, 2) != band.intensity(60, 2) {
+	if band.intensity(0, 22) != band.intensity(60, 22) {
 		t.Error("a vertical sweep lights a row unevenly")
 	}
 	// The row the light is on against a row it is not. Comparing the two ends
 	// would compare two dark rows, which says nothing.
 	near := band.intensity(0, int(band.centre))
-	if near <= band.intensity(0, 0) {
+	if near <= band.intensity(0, 20) {
 		t.Error("a vertical sweep does not travel down the rows")
 	}
 }
 
 // blockLit reports whether any cell of the block is lit on this frame.
 func blockLit(band copyFlashBand, box copyFlashBox, ground color.Color) bool {
-	for row := range box.rows {
+	for row := box.top; row <= box.bottom; row++ {
 		for x := box.left; x <= box.right; x++ {
 			if _, lit := band.styleFor(x, row, false, ground); lit {
 				return true
@@ -471,4 +466,61 @@ func blockLit(band copyFlashBand, box copyFlashBox, ground color.Color) bool {
 		}
 	}
 	return false
+}
+
+// TestEveryShapeLightsABlockThatIsNotAtTheTopOfThePane.
+//
+// This is the fault that made three of the four shapes do nothing. The band's
+// travel was worked out over rows zero to n, while the cells were drawn at the
+// pane's real row numbers. For a block twenty rows down, the diagonal was off
+// by twenty times its slope and the light passed to one side of the text, and
+// the vertical sweep travelled over rows zero to n and never reached row
+// twenty at all. Only the horizontal shape worked, because it is the one with
+// no row term, which is exactly what was reported.
+//
+// One row, because a single-line selection is the case that showed it and the
+// case with the least margin for error.
+//
+// Negative control: measuring the axis range from zero rather than from the
+// block's own rows fails every shape here but horizontal.
+func TestEveryShapeLightsABlockThatIsNotAtTheTopOfThePane(t *testing.T) {
+	ground := lipgloss.Color("#101010")
+
+	for _, shape := range config.CopyFlashStyles {
+		t.Run(shape, func(t *testing.T) {
+			m := flashOS(t)
+			m.Settings.CopyFlashStyle = shape
+
+			// A short selection on one row, a long way down a tall pane.
+			box := copyFlashBox{left: 12, right: 30, top: 34, bottom: 34}
+
+			lit := 0
+			const steps = 40
+			for i := range steps {
+				if blockLit(m.copyFlashBandFor(float64(i)/steps, box), box, ground) {
+					lit++
+				}
+			}
+			if lit == 0 {
+				t.Fatal("the block is never lit, so this shape does nothing")
+			}
+			if lit < steps/3 {
+				t.Errorf("the block is lit in %d of %d frames, so the sweep is mostly off the text", lit, steps)
+			}
+
+			// And every cell of it is reached.
+			for x := box.left; x <= box.right; x++ {
+				ever := false
+				for i := range steps {
+					if _, on := m.copyFlashBandFor(float64(i)/steps, box).styleFor(x, box.top, false, ground); on {
+						ever = true
+						break
+					}
+				}
+				if !ever {
+					t.Errorf("column %d is never lit", x)
+				}
+			}
+		})
+	}
 }

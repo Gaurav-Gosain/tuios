@@ -288,6 +288,9 @@ func (m *OS) copyFlashBandFor(progress float64, box copyFlashBox) copyFlashBand 
 	// sweep runs down, because a block is far shorter than it is wide.
 	floor := 4.0
 	if band.vertical {
+		// In rows rather than columns, because a block is far shorter than it
+		// is wide. Below one row the light would be thinner than the thing it
+		// is crossing and a one-row block would never light at all.
 		floor = 1.5
 	}
 	if band.reach < floor {
@@ -302,12 +305,11 @@ func (m *OS) copyFlashBandFor(progress float64, box copyFlashBox) copyFlashBand 
 // along the axis this sweep runs.
 func (b copyFlashBand) axisRange(box copyFlashBox) (lo, hi float64) {
 	if b.vertical {
-		return 0, float64(max(box.rows-1, 0))
+		return float64(box.top), float64(box.bottom)
 	}
-	last := max(box.rows-1, 0)
 	corners := []float64{
-		b.position(box.left, 0), b.position(box.right, 0),
-		b.position(box.left, last), b.position(box.right, last),
+		b.position(box.left, box.top), b.position(box.right, box.top),
+		b.position(box.left, box.bottom), b.position(box.right, box.bottom),
 	}
 	lo, hi = corners[0], corners[0]
 	for _, c := range corners[1:] {
@@ -316,19 +318,30 @@ func (b copyFlashBand) axisRange(box copyFlashBox) (lo, hi float64) {
 	return lo, hi
 }
 
-// copyFlashBox is the block the sweep crosses: its leftmost and rightmost lit
-// columns, and how many rows it covers.
+// copyFlashBox is the block the sweep crosses, in the pane's own coordinates:
+// the leftmost and rightmost lit columns, and the first and last lit rows.
+//
+// The rows are the pane's row numbers, not a count, and that is the whole
+// point of them. They used to be a count, so the band's travel was worked out
+// over rows zero to n while the cells were drawn at their real row numbers.
+// For a block twenty rows down the diagonal was off by twenty times its slope
+// and the light passed to one side of the text; the vertical sweep travelled
+// over rows zero to n and never reached row twenty at all. Only the
+// horizontal one worked, because it is the one shape with no row term.
 type copyFlashBox struct {
-	left  int
-	right int
-	rows  int
+	left   int
+	right  int
+	top    int
+	bottom int
 }
+
+// rows is how many rows the block covers.
+func (b copyFlashBox) rows() int { return b.bottom - b.top + 1 }
 
 // copyFlashBoxOf measures the marked region, so the sweep can be sized to what
 // was copied rather than to the pane it sits in.
 func copyFlashBoxOf(grid *pool.HighlightGrid, maxY, maxX int) (copyFlashBox, bool) {
-	box := copyFlashBox{left: maxX, right: -1}
-	top, bottom := -1, -1
+	box := copyFlashBox{left: maxX, right: -1, top: -1, bottom: -1}
 	for y := range maxY {
 		for x := range maxX {
 			if !grid.Get(y, x) {
@@ -340,16 +353,15 @@ func copyFlashBoxOf(grid *pool.HighlightGrid, maxY, maxX int) (copyFlashBox, boo
 			if x > box.right {
 				box.right = x
 			}
-			if top < 0 {
-				top = y
+			if box.top < 0 {
+				box.top = y
 			}
-			bottom = y
+			box.bottom = y
 		}
 	}
 	if box.right < 0 {
 		return copyFlashBox{}, false
 	}
-	box.rows = bottom - top + 1
 	return box, true
 }
 
