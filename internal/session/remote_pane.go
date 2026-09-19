@@ -64,6 +64,11 @@ type remotePane struct {
 
 	mu     sync.Mutex
 	closed bool
+	// cwd is where the far machine last said the process was, with the time it
+	// said so and whether an ask is already out. See Cwd.
+	cwd         string
+	cwdAt       time.Time
+	cwdInflight bool
 }
 
 // openRemotePane starts a process on host and returns the pane it speaks to.
@@ -234,4 +239,53 @@ func (s *Session) openRemotePaneFor(host string, width, height int, cwd string, 
 	ctx, cancel := context.WithTimeout(context.Background(), remotePaneOpenBudget)
 	defer cancel()
 	return openRemotePane(ctx, fed, host, spec)
+}
+
+// remotePaneCwdTTL is how long a directory the far machine gave stays good
+// before a fresher one is asked for. A shell changes directory when somebody
+// types cd, so a second is both far faster than anyone types and slow enough
+// that a rail redrawing at sixty frames a second asks once.
+const remotePaneCwdTTL = time.Second
+
+// Cwd is where the far machine last said the pane's process was.
+//
+// It never waits. The caller is GetState, which runs on the render path, and a
+// call over a link takes about as long as a frame does even when the link is
+// healthy. So this answers from the last reply and starts a new ask when that
+// one is stale, which means the first call after a cd is a frame behind and
+// every one after it is current. A rail one frame behind on a directory is not
+// a fault anybody can see; a rail that stops drawing while it asks is.
+func (p *remotePane) Cwd() (string, bool) {
+	p.mu.Lock()
+	cwd, asked, closed, inflight := p.cwd, p.cwdAt, p.closed, p.cwdInflight
+	stale := time.Since(asked) > remotePaneCwdTTL
+	if !closed && stale && !inflight {
+		p.cwdInflight = true
+		go p.refreshCwd()
+	}
+	p.mu.Unlock()
+	return cwd, cwd != ""
+}
+
+// refreshCwd asks the far machine where the pane is and stores the answer.
+func (p *remotePane) refreshCwd() {
+	ctx, cancel := context.WithTimeout(context.Background(), remotePaneResizeBudget)
+	defer cancel()
+	raw, err := p.fed.Call(ctx, p.host, "pane-cwd", map[string]any{"pane": p.id})
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cwdInflight = false
+	// The clock moves whether or not the answer was useful, so a machine that
+	// is refusing is asked once a second rather than once a frame.
+	p.cwdAt = time.Now()
+	if err != nil {
+		return
+	}
+	var res struct {
+		Cwd string `json:"cwd"`
+	}
+	if json.Unmarshal(raw, &res) == nil && res.Cwd != "" {
+		p.cwd = res.Cwd
+	}
 }

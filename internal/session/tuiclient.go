@@ -605,9 +605,9 @@ func (c *TUIClient) CreatePTY(title, windowID string, width, height int) (string
 // windowID names the pane the listing is about, so the daemon can also say
 // whether that pane announced a directory its shell is not in. Empty for a
 // directory the user walked to by hand, which is theirs whatever a pane says.
-func (c *TUIClient) ReadDir(windowID, dir string, max int) (*DirListingPayload, error) {
+func (c *TUIClient) ReadDir(windowID, dir string, max int, pinned bool) (*DirListingPayload, error) {
 	msg, err := NewMessageWithCodec(MsgReadDir, &ReadDirPayload{
-		WindowID: windowID, Dir: dir, Max: max,
+		WindowID: windowID, Dir: dir, Max: max, Pinned: pinned,
 	}, c.codec)
 	if err != nil {
 		return nil, err

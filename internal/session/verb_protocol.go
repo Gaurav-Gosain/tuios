@@ -424,6 +424,33 @@ func init() {
 			examples: []string{`{"id":1,"verb":"resize-pane","params":{"pane":"f2c1","width":120,"height":40}}`},
 			handler:  (*Daemon).verbResizePane,
 		},
+		"pane-cwd": {
+			description: "Where a pane this machine runs for another machine has its process. The machine with the process is the only one that can say: the daemon that owns the window reads a pid that means nothing there, and a shell may never announce its directory.",
+			params: []verbParam{
+				{Name: "pane", Type: "string", Description: "The pane id open-pane returned."},
+			},
+			returns: []verbParam{
+				{Name: "pane", Type: "string", Description: "The pane asked about."},
+				{Name: "cwd", Type: "string", Description: "The directory the process is in, empty when it cannot be read."},
+			},
+			examples: []string{`{"id":1,"verb":"pane-cwd","params":{"pane":"f2c1"}}`},
+			handler:  (*Daemon).verbPaneCwd,
+		},
+		"read-dir": {
+			description: "List a directory on this machine, as the rail's file section reads it. The machine with the process is the machine with the files, so a pane running here is listed here.",
+			params: []verbParam{
+				{Name: "dir", Type: "string", Description: "The directory to list."},
+				{Name: "max", Type: "int", Description: "At most this many names. Omit for the built-in cap."},
+			},
+			returns: []verbParam{
+				{Name: "dir", Type: "string", Description: "The directory listed."},
+				{Name: "entries", Type: "[]string", Description: "One entry per name, carrying the name and whether it is a directory. Directories first, then names, case insensitively."},
+				{Name: "capped", Type: "bool", Description: "The directory holds more names than were sent."},
+				{Name: "err", Type: "string", Description: "Why there is no listing, in words a person can act on."},
+			},
+			examples: []string{`{"id":1,"verb":"read-dir","params":{"dir":"/home/ubuntu"}}`},
+			handler:  (*Daemon).verbReadDir,
+		},
 		"list-host-sessions": {
 			description: "List sessions on this machine and on every configured host. Hosts that do not answer are listed with their status.",
 			params: []verbParam{

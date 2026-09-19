@@ -402,7 +402,7 @@ func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 	client, host := m.DaemonClient, m.AttachedHost
 	return func() tea.Msg {
 		if client != nil {
-			listing, err := client.ReadDir(origin, dir, fileViewMaxEntries)
+			listing, err := client.ReadDir(origin, dir, fileViewMaxEntries, pinned)
 			switch {
 			case err == nil && listing.Err != "":
 				return fileListMsg{Gen: gen, Dir: dir, Err: listing.Err, Spoofed: wasSpoofed || listing.Spoofed}

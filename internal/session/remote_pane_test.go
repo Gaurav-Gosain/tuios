@@ -8,6 +8,8 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -715,3 +717,164 @@ func (s *specStream) Read(p []byte) (int, error) {
 }
 
 func (s *specStream) Close() error { return nil }
+
+// TestAnInteractiveShellEndingOnCtrlDClosesThePane.
+//
+// Reported: ctrl+D on a pane running on another machine printed "exit" and
+// left the window open, and the window only went when another key was pressed.
+//
+// The exit of a pane elsewhere is heard where its bytes stop, so this is the
+// shape that matters: a shell that is read from, told to end by its input
+// rather than by its argv, and whose last act is to print something. The
+// existing exit test runs `sh -c "exit 0"`, which never reads and never
+// prints, and so cannot see this.
+func TestAnInteractiveShellEndingOnCtrlDClosesThePane(t *testing.T) {
+	d, socketPath := startTestDaemon(t)
+	sess, err := d.manager.CreateSession("ctrl-d", &SessionConfig{}, 80, 24)
+	if err != nil {
+		t.Fatalf("create the session: %v", err)
+	}
+	sess.SetFederation(&socketFederation{socketPath: socketPath})
+
+	exited := make(chan string, 1)
+	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
+		Host:    "build",
+		Command: []string{"/bin/sh", "-i"},
+	}, func(ptyID string) { exited <- ptyID })
+	if err != nil {
+		t.Fatalf("create a window on another machine: %v", err)
+	}
+	pty := sess.GetPTY(win.PTYID)
+	if pty == nil {
+		t.Fatal("the window has no pane")
+	}
+
+	// Wait for the shell to be reading, so the end of file lands on a shell
+	// that is listening rather than on one still starting up.
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(pty.CaptureContent(false, false), "$") {
+		if time.Now().After(deadline) {
+			t.Fatalf("the far shell never prompted:\n%s", pty.CaptureContent(false, false))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if _, err := pty.Write([]byte{0x04}); err != nil {
+		t.Fatalf("send end of file: %v", err)
+	}
+
+	select {
+	case got := <-exited:
+		if got != win.PTYID {
+			t.Errorf("a different pane was reported as exited: %q", got)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf("the far shell ended and the window was never told:\n%s",
+			pty.CaptureContent(false, false))
+	}
+}
+
+// TestAPaneOnAnotherMachineReportsWhereItIs.
+//
+// The rail's file section needs a directory before it can ask for a listing,
+// and a pane on another machine has none of the usual sources: there is no
+// process here to read, and a shell that never emits OSC 7, which bash and zsh
+// mostly do not, announces nothing. So the machine running it is asked, and it
+// is the only one that can answer.
+//
+// Without this the section said "no directory yet" for every remote pane, for
+// its whole life.
+func TestAPaneOnAnotherMachineReportsWhereItIs(t *testing.T) {
+	d, socketPath := startTestDaemon(t)
+	fed := &socketFederation{socketPath: socketPath}
+
+	home := t.TempDir()
+	p := openTestPane(t, fed, hostedPaneSpec{
+		Width: 80, Height: 24, Cwd: home,
+		Command: []string{"/bin/sh"},
+	})
+	_ = d
+
+	// Compared after resolving links: the kernel reports the real path, and on
+	// macOS the temp root reaches it through a symlink.
+	want, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(paneBudget)
+	for {
+		if cwd, ok := p.Cwd(); ok {
+			got, err := filepath.EvalSymlinks(cwd)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != want {
+				t.Fatalf("the far machine says the pane is in %q, want %q", got, want)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the far machine never said where the pane's process is")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestAskingWhereAPaneIsDoesNotBlockTheCaller.
+//
+// Cwd is read from GetState, which is on the render path. A call over a link
+// takes about as long as a frame does when the link is healthy and much longer
+// when it is not, so this answers from the last reply and asks for a fresher
+// one in the background. A rail one frame behind on a directory is not a fault
+// anybody can see; a rail that stops drawing while it asks is.
+//
+// Negative control: making Cwd wait for the reply fails here on the budget.
+func TestAskingWhereAPaneIsDoesNotBlockTheCaller(t *testing.T) {
+	_, socketPath := startTestDaemon(t)
+	fed := &socketFederation{socketPath: socketPath}
+	p := openTestPane(t, fed, hostedPaneSpec{Width: 80, Height: 24, Command: []string{"/bin/sh"}})
+
+	start := time.Now()
+	for range 50 {
+		p.Cwd()
+	}
+	// Fifty calls, every one of them answered from what was already known.
+	// Even one round trip over the fake link would be slower than this.
+	if took := time.Since(start); took > 100*time.Millisecond {
+		t.Errorf("fifty reads of the pane's directory took %v, so they were waiting on the far machine", took)
+	}
+}
+
+// TestTheFarMachineListsItsOwnDirectory is the other half: the machine with
+// the process is the machine with the files.
+func TestTheFarMachineListsItsOwnDirectory(t *testing.T) {
+	d, socketPath := startTestDaemon(t)
+	_ = d
+	fed := &socketFederation{socketPath: socketPath}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "only-over-there.txt"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	raw, err := fed.Call(ctx, "build", "read-dir", map[string]any{"dir": dir})
+	if err != nil {
+		t.Fatalf("ask the far machine to list a directory: %v", err)
+	}
+	var out DirListingPayload
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("read the listing: %v", err)
+	}
+	found := false
+	for _, e := range out.Entries {
+		if e.Name == "only-over-there.txt" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the listing does not hold the file that is there: %+v", out)
+	}
+}

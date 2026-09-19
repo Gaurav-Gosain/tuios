@@ -2960,6 +2960,14 @@ func (p *PTY) Close() error {
 // The second return is false when it cannot be determined (process gone, or an
 // unsupported platform). Used to capture cwd for session resurrection.
 func (p *PTY) ProcessCwd() (string, bool) {
+	// A pane on another machine has no process here to read. The machine
+	// running it is the only one that can say where it is, so the answer is
+	// the one that machine last gave, and asking for a fresher one is started
+	// here rather than waited for: this is called from GetState, which is on
+	// the render path.
+	if rp, ok := p.pty.(*remotePane); ok {
+		return rp.Cwd()
+	}
 	if p.cmd == nil || p.cmd.Process == nil {
 		return "", false
 	}

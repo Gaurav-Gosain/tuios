@@ -330,3 +330,11 @@ func (d *Daemon) relayHostedPane(cs *connState, br *bufio.Reader, hp *hostedPane
 	_ = conn.Close()
 	<-done
 }
+
+// processCwd is the directory the hosted pane's process is in.
+func (hp *hostedPane) processCwd() (string, bool) {
+	if hp.cmd == nil || hp.cmd.Process == nil {
+		return "", false
+	}
+	return processCwd(hp.cmd.Process.Pid)
+}

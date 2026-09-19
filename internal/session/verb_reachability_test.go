@@ -75,6 +75,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// end against two daemons in remote_pane_test.go; what this run proves is
 	// that the verb is reachable and says which pane it could not find.
 	"resize-pane#0": {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
+	"pane-cwd#0":    {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
 
 	// An example that names a pane by the environment variable an agent would
 	// have expanded. The literal is not a window id here.

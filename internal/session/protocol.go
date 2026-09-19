@@ -913,6 +913,19 @@ type ReadDirPayload struct {
 	Dir      string `json:"dir"`
 	// Max bounds the listing. Zero means the daemon's own bound.
 	Max int `json:"max,omitempty"`
+	// Pinned marks a directory the user walked into by hand, so the pane's
+	// own directory is no longer what is being listed.
+	//
+	// The window still travels with it, because the window says which machine
+	// the files are on and that is true wherever the user has browsed to. What
+	// it must not do is answer the spoof question: comparing a folder somebody
+	// chose against the folder the pane's shell is in reports every step away
+	// from the pane as the pane lying about where it is, which is what "read
+	// only: wrong folder" on a hand-picked directory was.
+	//
+	// False is a pane-steered listing, which is what an older client sends and
+	// what the check has always applied to.
+	Pinned bool `json:"pinned,omitempty"`
 }
 
 // DirEntry is one name in a listing. Only the two facts a directory read

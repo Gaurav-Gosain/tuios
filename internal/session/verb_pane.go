@@ -3,6 +3,7 @@ package session
 import (
 	"bufio"
 	"encoding/json"
+	"path/filepath"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
@@ -100,4 +101,53 @@ func checkWindowHost(d *Daemon, host *string) *verbError {
 		return nil
 	}
 	return d.checkHostParam(*host)
+}
+
+// verbPaneCwd answers where a hosted pane's process is.
+//
+// The machine running the process is the only one that can say. The daemon
+// that owns the window reads a pid that means nothing here, and the shell may
+// never announce over OSC 7: bash and zsh mostly do not, which is the case the
+// rail's file section already had to be taught for panes of its own.
+func (d *Daemon) verbPaneCwd(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Pane string `json:"pane"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if p.Pane == "" {
+		return nil, invalidParam("pane", "pane-cwd needs the pane id that open-pane returned.")
+	}
+	hp := d.lookupHostedPane(p.Pane)
+	if hp == nil {
+		return nil, newVerbError(ErrVerbUnknownPane, "this machine is not running a pane called "+echoName(p.Pane)+".")
+	}
+	cwd, _ := hp.processCwd()
+	return map[string]any{"pane": p.Pane, "cwd": cwd}, nil
+}
+
+// verbReadDir lists a directory on this machine.
+//
+// It is the far half of the rail's file section for a pane whose process runs
+// here. The section asks the daemon that owns the pane rather than reading a
+// filesystem itself, for the reason it was taught once already: the machine
+// with the process is the machine with the files, and any other answer is a
+// listing of the wrong disk under the right path.
+//
+// It carries no authority the link did not already have. A configured host can
+// be asked for a shell, and reading the names in a directory is strictly less
+// than that.
+func (d *Daemon) verbReadDir(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Dir string `json:"dir"`
+		Max int    `json:"max"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if p.Dir == "" {
+		return nil, invalidParam("dir", "read-dir needs a directory to list.")
+	}
+	return listDir(filepath.Clean(p.Dir), p.Max), nil
 }
