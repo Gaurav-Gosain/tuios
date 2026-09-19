@@ -444,6 +444,10 @@ type SelectionConfig struct {
 	// FlashMs is how long one sweep takes, and FlashColor is the light.
 	FlashMs    int    `toml:"flash_ms,omitempty"`
 	FlashColor string `toml:"flash_color,omitempty"`
+	// FlashStyle is the shape the sweep takes: diagonal, diagonal-reverse,
+	// horizontal or vertical. Which one reads best depends on what is usually
+	// copied, so it is a choice rather than a constant.
+	FlashStyle string `toml:"flash_style,omitempty"`
 }
 
 // SidebarConfig holds the [appearance.sidebar] table: everything about the
@@ -580,7 +584,7 @@ func DefaultConfig() *UserConfig {
 				MatchBg: DefaultMatchBg, MatchFg: DefaultMatchFg,
 				CursorBg: DefaultCopyCursorBg, CursorFg: DefaultCopyCursorFg,
 				Flash: &defaultCopyFlash, FlashMs: CopyFlashMsDefault,
-				FlashColor: DefaultCopyFlashColor,
+				FlashColor: DefaultCopyFlashColor, FlashStyle: DefaultCopyFlashStyle,
 			},
 			Sidebar: SidebarConfig{
 				Position:    "left",
@@ -610,7 +614,7 @@ func DefaultConfig() *UserConfig {
 		Keybindings: KeybindingsConfig{
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
-				"new_window":        {"n"},
+				"new_window": {"n"},
 				// Capital N, one shift away from the n that makes a window.
 				// Making a session was reachable from a one-cell "+" on a rail
 				// heading and from nowhere else a keyboard could find, which
@@ -1529,6 +1533,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if cfg.Appearance.Selection.FlashColor != "" {
 		s.CopyFlashColor = cfg.Appearance.Selection.FlashColor
+	}
+	if cfg.Appearance.Selection.FlashStyle != "" {
+		s.CopyFlashStyle = cfg.Appearance.Selection.FlashStyle
 	}
 
 	// The hide/show toggles are plain bools with no "unset" state, so they are

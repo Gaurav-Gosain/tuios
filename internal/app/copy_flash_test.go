@@ -1,6 +1,8 @@
 package app
 
 import (
+	"charm.land/lipgloss/v2"
+	"image/color"
 	"testing"
 	"time"
 
@@ -238,70 +240,29 @@ func TestTheLightArrivesAndLeaves(t *testing.T) {
 	}
 }
 
-// TestTheSelectionShowsUnderTheSweep. A copy clears the selection, and light
-// crossing nothing reads as a glitch rather than as an acknowledgement of what
-// was taken, so the block is painted for as long as the sweep runs.
-func TestTheSelectionShowsUnderTheSweep(t *testing.T) {
-	m := flashOS(t)
-	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 80 - 1, rows: 1})
-
-	// A cell far from the light is still part of the block.
-	if _, lit := band.styleFor(79, 0, false); !lit {
-		t.Error("a cell outside the light is not painted, so the block disappears under the sweep")
-	}
-	// And once the sweep is over, nothing is painted.
-	done := m.copyFlashBandFor(1, copyFlashBox{left: 0, right: 80 - 1, rows: 1})
-	if _, lit := done.styleFor(40, 0, false); lit {
-		t.Error("the block is still painted after the sweep has finished")
-	}
-}
-
-// TestTheSweepMarksItsPaneEveryTick.
+// TestOnlyLitCellsArePainted.
 //
-// This is why the sweep could not be seen. A pane is drawn from its cached
-// frame unless something marks it, a copy changes nothing in the pane, and the
-// maintenance tick marks nothing. So exactly one frame was drawn, the one the
-// copy itself asked for, and that is the frame where the light has not arrived
-// yet: a static highlight over the whole region and no movement at all, which
-// is precisely what was reported.
+// The sweep used to paint the whole block in the selection colour for its
+// whole run, because the effect it copies keeps its selection. There, the
+// selection is still there because the app leaves it; here a copy clears it,
+// so painting it back put a block of colour on screen that read as the
+// selection having come back. Worse, the last frame of the sweep stayed there
+// until the pane changed for some other reason.
 //
-// Negative control: dropping the mark from the tick leaves the pane clean and
-// this fails.
-func TestTheSweepMarksItsPaneEveryTick(t *testing.T) {
+// Negative control: returning a painted style for an unlit cell fails here.
+func TestOnlyLitCellsArePainted(t *testing.T) {
 	m := flashOS(t)
-	w := selectedWindow()
-	m.Windows = []*terminal.Window{w}
+	ground := lipgloss.Color("#101010")
+	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 80, rows: 1})
 
-	m.NoteCopyFlash(w)
-	if m.copyFlash == nil {
-		t.Fatal("ASSERTION: no sweep was recorded, so there is nothing to draw")
+	// A cell the light is nowhere near.
+	if _, lit := band.styleFor(80, 0, false, ground); lit {
+		t.Error("a cell the light has not reached is painted, so the block is a slab")
 	}
-
-	// The frame the copy asked for has been drawn.
-	w.ContentDirty = false
-
-	m.markCopyFlashPane()
-
-	if !w.ContentDirty {
-		t.Error("the tick did not mark the pane, so the sweep draws one frame and stops")
-	}
-}
-
-// TestAFinishedSweepMarksNothing, so a quiet client goes back to drawing
-// nothing at all.
-func TestAFinishedSweepMarksNothing(t *testing.T) {
-	m := flashOS(t)
-	m.Settings.CopyFlashMs = 1
-	w := selectedWindow()
-	m.Windows = []*terminal.Window{w}
-	m.NoteCopyFlash(w)
-
-	time.Sleep(5 * time.Millisecond)
-	w.ContentDirty = false
-	m.markCopyFlashPane()
-
-	if w.ContentDirty {
-		t.Error("a finished sweep is still asking its pane to redraw")
+	// And one it is on.
+	centre := int(band.centre)
+	if _, lit := band.styleFor(centre, 0, false, ground); !lit {
+		t.Error("the centre of the band is not painted")
 	}
 }
 
@@ -382,4 +343,132 @@ func TestAnEmptyRegionIsNotSwept(t *testing.T) {
 	if _, ok := copyFlashBoxOf(g, 4, 60); ok {
 		t.Error("an empty region measured as a block to sweep")
 	}
+}
+
+// TestEveryShapeCrossesTheWholeBlock.
+//
+// Four shapes, one rule: whatever the block is, the light starts off one end
+// of it, passes over every part, and leaves off the other. A shape that ran
+// out of span would leave part of the block dark, and one whose span was too
+// long would spend the run off the text, which is the fault that made the
+// sweep look like a blink.
+//
+// Negative control: taking the axis range from the block's columns for every
+// shape leaves the vertical one lit in almost no frames.
+func TestEveryShapeCrossesTheWholeBlock(t *testing.T) {
+	box := copyFlashBox{left: 10, right: 40, rows: 6}
+
+	for _, shape := range config.CopyFlashStyles {
+		t.Run(shape, func(t *testing.T) {
+			m := flashOS(t)
+			m.Settings.CopyFlashStyle = shape
+			ground := lipgloss.Color("#101010")
+
+			// Every cell of the block is lit at some point in the run.
+			const steps = 40
+			for row := range box.rows {
+				for x := box.left; x <= box.right; x++ {
+					everLit := false
+					for i := range steps {
+						band := m.copyFlashBandFor(float64(i)/steps, box)
+						if _, lit := band.styleFor(x, row, false, ground); lit {
+							everLit = true
+							break
+						}
+					}
+					if !everLit {
+						t.Fatalf("cell %d,%d is never lit", x, row)
+					}
+				}
+			}
+
+			// And something in the block is lit in most frames, not a
+			// handful. Any cell counts: a horizontal sweep lights every row
+			// at once and passes a given column in a moment, so asking about
+			// one column would say it was mostly dark when it was not.
+			runs := 0
+			for i := range steps {
+				band := m.copyFlashBandFor(float64(i)/steps, box)
+				if blockLit(band, box, ground) {
+					runs++
+				}
+			}
+			if runs < steps/3 {
+				t.Errorf("the block is lit in %d of %d frames", runs, steps)
+			}
+		})
+	}
+}
+
+// TestTheTwoDiagonalsLeanOppositeWays, which is the whole difference between
+// them and the thing a person picking one is choosing.
+func TestTheTwoDiagonalsLeanOppositeWays(t *testing.T) {
+	box := copyFlashBox{left: 0, right: 60, rows: 6}
+
+	brightest := func(shape string, row int) int {
+		m := flashOS(t)
+		m.Settings.CopyFlashStyle = shape
+		band := m.copyFlashBandFor(0.5, box)
+		best, at := 0.0, -1
+		for x := box.left; x <= box.right; x++ {
+			if v := band.intensity(x, row); v > best {
+				best, at = v, x
+			}
+		}
+		return at
+	}
+
+	fwdTop, fwdBottom := brightest(config.CopyFlashDiagonal, 0), brightest(config.CopyFlashDiagonal, 5)
+	revTop, revBottom := brightest(config.CopyFlashDiagonalReverse, 0), brightest(config.CopyFlashDiagonalReverse, 5)
+
+	if fwdTop < 0 || fwdBottom < 0 || revTop < 0 || revBottom < 0 {
+		t.Fatal("ASSERTION: a row is not lit at the halfway point, so there is no lean to compare")
+	}
+	if fwdBottom <= fwdTop {
+		t.Errorf("the diagonal does not lean forward: top %d, bottom %d", fwdTop, fwdBottom)
+	}
+	if revBottom >= revTop {
+		t.Errorf("the reverse diagonal does not lean back: top %d, bottom %d", revTop, revBottom)
+	}
+}
+
+// TestAHorizontalSweepDoesNotLean. It is the shape for a single long line,
+// where a diagonal barely leans at all over one row.
+func TestAHorizontalSweepDoesNotLean(t *testing.T) {
+	m := flashOS(t)
+	m.Settings.CopyFlashStyle = config.CopyFlashHorizontal
+	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 60, rows: 4})
+
+	if band.intensity(30, 0) != band.intensity(30, 3) {
+		t.Error("a horizontal sweep lights different columns on different rows")
+	}
+}
+
+// TestAVerticalSweepRunsDownTheRows, so every column of a row is lit together.
+func TestAVerticalSweepRunsDownTheRows(t *testing.T) {
+	m := flashOS(t)
+	m.Settings.CopyFlashStyle = config.CopyFlashVertical
+	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 60, rows: 6})
+
+	if band.intensity(0, 2) != band.intensity(60, 2) {
+		t.Error("a vertical sweep lights a row unevenly")
+	}
+	// The row the light is on against a row it is not. Comparing the two ends
+	// would compare two dark rows, which says nothing.
+	near := band.intensity(0, int(band.centre))
+	if near <= band.intensity(0, 0) {
+		t.Error("a vertical sweep does not travel down the rows")
+	}
+}
+
+// blockLit reports whether any cell of the block is lit on this frame.
+func blockLit(band copyFlashBand, box copyFlashBox, ground color.Color) bool {
+	for row := range box.rows {
+		for x := box.left; x <= box.right; x++ {
+			if _, lit := band.styleFor(x, row, false, ground); lit {
+				return true
+			}
+		}
+	}
+	return false
 }

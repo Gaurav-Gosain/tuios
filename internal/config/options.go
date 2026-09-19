@@ -486,6 +486,11 @@ var optionSpecs = []Option{
 		Min:         CopyFlashMsMin, Max: CopyFlashMsMax,
 	},
 	{
+		Path: "appearance.selection.flash_style", Type: OptionString, Section: "selection",
+		Description: "The shape the copy sweep takes",
+		Accepted:    CopyFlashStyles, Default: DefaultCopyFlashStyle,
+	},
+	{
 		Path: "appearance.selection.flash_color", Type: OptionString, Section: "selection",
 		Description: "The light the copy sweep is made of",
 		Default:     DefaultCopyFlashColor, Color: true,

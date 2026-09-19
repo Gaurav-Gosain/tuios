@@ -456,9 +456,16 @@ of light across the cells that were taken, once, and then it is gone.
 ```toml
 [appearance.selection]
 flash = true
-flash_ms = 420
+flash_ms = 800
 flash_color = "#FFF3C4"
+# diagonal, diagonal-reverse, horizontal, vertical
+flash_style = "diagonal"
 ```
+
+The shape is a choice because which one reads best depends on what you copy.
+A diagonal falls across a paragraph. A horizontal one crosses a single long
+line properly, where a diagonal barely leans at all over one row. A vertical
+one moves down a tall narrow block, which the other three cross in an instant.
 
 The same table holds the colours a pane marks text with: the selection, search
 matches, the match under the cursor, and the copy mode cursor. They follow the

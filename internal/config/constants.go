@@ -1559,4 +1559,22 @@ const (
 	// A pale warm white, which reads as light over output of any colour
 	// without introducing a hue the rest of the screen does not use.
 	DefaultCopyFlashColor = "#FFF3C4"
+	// The shape the sweep takes. A diagonal falls across a paragraph, which is
+	// what most copies are.
+	DefaultCopyFlashStyle = "diagonal"
 )
+
+// CopyFlashStyles is every value appearance.selection.flash_style takes. It
+// lives here rather than beside the shapes themselves so the option registry
+// can name the set without importing the app.
+const (
+	CopyFlashDiagonal        = "diagonal"
+	CopyFlashDiagonalReverse = "diagonal-reverse"
+	CopyFlashHorizontal      = "horizontal"
+	CopyFlashVertical        = "vertical"
+)
+
+var CopyFlashStyles = []string{
+	CopyFlashDiagonal, CopyFlashDiagonalReverse,
+	CopyFlashHorizontal, CopyFlashVertical,
+}

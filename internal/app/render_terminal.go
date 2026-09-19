@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -737,7 +738,14 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				// ground, so the sweep passes over the words rather than
 				// behind them.
 				hasGlyph := char != "" && char != " "
-				if st, lit := flashBand.styleFor(x, y, hasGlyph); lit {
+				// The cell's own background is what the light is mixed into,
+				// so the sweep brightens whatever was there rather than
+				// replacing it with a colour of its own.
+				cellBg := theme.UI().Canvas
+				if cell != nil && cell.Style.Bg != nil {
+					cellBg = cell.Style.Bg
+				}
+				if st, lit := flashBand.styleFor(x, y, hasGlyph, cellBg); lit {
 					flushBatch()
 					builder.WriteString(renderStyledText(st, char))
 					notePrev(cell)

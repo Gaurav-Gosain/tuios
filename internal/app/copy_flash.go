@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -74,10 +75,21 @@ func (m *OS) NoteCopyFlash(window *terminal.Window) {
 // One frame reached the screen: the one the copy itself asked for, which is
 // the frame where the light has not arrived yet.
 func (m *OS) markCopyFlashPane() {
-	if m.copyFlash == nil || !m.CopyFlashActive() {
+	if m.copyFlash == nil {
 		return
 	}
-	if w := m.windowByID(m.copyFlash.WindowID); w != nil {
+	id := m.copyFlash.WindowID
+	// Asked whether it is still running or has just this moment stopped, and
+	// the pane is marked either way.
+	//
+	// The last frame of a sweep has light in it. Nothing was asking for a
+	// frame after that, so that frame stayed on the screen until the pane
+	// changed for some other reason: the block the sweep had been crossing sat
+	// there lit, and clicking about produced another copy and another one
+	// stuck behind it. The tick that finds the sweep finished is the one that
+	// asks for the frame without it.
+	m.CopyFlashActive()
+	if w := m.windowByID(id); w != nil {
 		w.ContentDirty = true
 	}
 }
@@ -121,71 +133,95 @@ func (m *OS) CopyFlashActive() bool {
 	return true
 }
 
-// copyFlashBand is the light on one frame: where its centre is, how far its
-// glow reaches, how bright it is overall, and what it is made of.
+// copyFlashBand is the light on one frame: where its centre is along whichever
+// axis the sweep runs, how far its glow reaches, and what it is made of.
 type copyFlashBand struct {
 	centre float64
 	reach  float64
 	// amp is the whole sweep's brightness on this frame, from 0 to 1. It is
 	// what makes the light arrive and leave, rather than switch on at full
 	// strength at one edge and off at the other.
-	amp  float64
+	amp float64
+	// slope is how far the light leans, in columns per row, and vertical makes
+	// it travel down the rows instead of across the columns. Together they are
+	// the four shapes; see copyFlashShape.
+	slope    float64
+	vertical bool
+
 	tint color.Color
 	ink  color.Color
-	// ground is the pane's own background, and sel is the selection the sweep
-	// passes over. The selection is painted for as long as the sweep runs,
-	// because a copy clears it and light crossing nothing reads as a glitch
-	// rather than as an acknowledgement of what was taken.
-	ground color.Color
-	sel    color.Color
 }
 
-// copyFlashSlope is how far the light leans, in columns per row.
+// The shapes a sweep can take.
 //
-// A vertical band crossing a paragraph looks like a wipe. A diagonal one looks
-// like light falling across it, which is the thing worth having, and a
-// character grid can hold a diagonal exactly as long as its slope is a whole
-// number of columns per row.
+// They are a setting because which one reads best depends on what is usually
+// being copied. A diagonal falls across a paragraph. A horizontal one crosses
+// a single long line properly, where a diagonal barely leans at all over one
+// row. A vertical one moves down a tall narrow block, where the other three
+// cross it in an instant.
+//
+// The names live in config, with the option that names the set.
+
+// copyFlashSlope is how far a diagonal leans, in columns per row.
+//
+// A character grid holds a diagonal exactly when its slope is a whole number
+// of columns per row, which is the one thing a grid does better than a
+// gradient: there is nothing to interpolate and nothing to alias.
 const copyFlashSlope = 2
+
+// position is where a cell sits along the axis the sweep runs.
+//
+// The row is subtracted rather than added, so a positive slope means each row
+// down is lit further to the right: the light peaks where position equals the
+// centre, which is at x = centre + row*slope. Added, the sign came out
+// backwards and the diagonal leaned the wrong way, which is the opposite of
+// the effect this is copying.
+func (b copyFlashBand) position(x, row int) float64 {
+	if b.vertical {
+		return float64(row)
+	}
+	return float64(x) - float64(row)*b.slope
+}
 
 // intensity is how lit one cell is, from 0 to 1.
 //
 // The falloff is what makes it read as light passing over the text rather than
-// a block sliding across it, and the row offset is what makes it a diagonal:
-// each row's band sits that much further along than the one above it.
+// a block sliding across it.
 func (b copyFlashBand) intensity(x, row int) float64 {
 	if b.reach <= 0 || b.amp <= 0 {
 		return 0
 	}
-	d := float64(x) - (b.centre + float64(row*copyFlashSlope))
+	d := b.position(x, row) - b.centre
 	if d < 0 {
 		d = -d
 	}
 	if d >= b.reach {
 		return 0
 	}
-	// Smooth at both ends: 1 at the centre, 0 at the reach, with no corner.
 	t := 1 - d/b.reach
 	return t * t * b.amp
 }
 
-// styleFor is how one cell of the sweep is drawn, and whether it is part of
-// the sweep at all.
+// styleFor is how one cell of the sweep is drawn, and whether the light has
+// reached it at all.
 //
-// Both halves move. The background is the selection carried toward the light,
-// and a cell holding a character has its text carried toward the light too,
-// because a sweep that touched only the background would pass behind the words
-// rather than over them.
-func (b copyFlashBand) styleFor(x, row int, hasGlyph bool) (lipgloss.Style, bool) {
-	if b.amp <= 0 {
-		return lipgloss.Style{}, false
-	}
+// Only lit cells are painted. An earlier version also painted the whole block
+// in the selection colour for the length of the sweep, on the grounds that the
+// effect this copies keeps its selection: there, the selection is still there
+// because the app leaves it. Here a copy clears it, so painting it back put a
+// block of colour on the screen that nobody had asked for and that read as the
+// selection having come back rather than as an acknowledgement.
+//
+// Both halves of a lit cell move. The background is the pane's own ground
+// carried toward the light, and a cell holding a character has its text
+// carried toward the light as well, because a sweep that touched only the
+// background would pass behind the words rather than over them.
+func (b copyFlashBand) styleFor(x, row int, hasGlyph bool, bg color.Color) (lipgloss.Style, bool) {
 	i := b.intensity(x, row)
 	if i <= 0.02 {
-		// Inside the block but outside the light, so the selection shows.
-		return lipgloss.NewStyle().Background(b.sel), true
+		return lipgloss.Style{}, false
 	}
-	st := lipgloss.NewStyle().Background(overlay.MixColors(b.sel, b.tint, i))
+	st := lipgloss.NewStyle().Background(overlay.MixColors(bg, b.tint, i))
 	if hasGlyph {
 		st = st.Foreground(overlay.MixColors(b.ink, b.tint, i))
 	}
@@ -221,33 +257,63 @@ func copyFlashEnvelope(progress float64) float64 {
 // whole line should take the same time so the sweep could not be read as a
 // progress bar. That was wrong in the way that matters: the light is only
 // visible while it is over the block, so a short selection on a wide pane was
-// lit for a twentieth of the time the sweep was running and the whole thing
-// went past in a blink. Crossing the block means the light is on the text for
-// the whole duration, whatever was copied.
-//
-// box is the block's bounds in columns and its height in rows.
+// lit for a twentieth of the run and what reached the screen was a blink. The
+// band is sized to the block instead, so the run takes the same time whatever
+// was copied and the light is on the text for all of it.
 func (m *OS) copyFlashBandFor(progress float64, box copyFlashBox) copyFlashBand {
 	pal := theme.UI()
-	width := max(box.right-box.left+1, 1)
-	reach := float64(width) * m.copyFlashReach()
-	// A floor, or the light on a narrow block is one cell wide and reads as a
-	// cursor rather than as a sweep.
-	if reach < 4 {
-		reach = 4
+	band := copyFlashBand{
+		amp:  copyFlashEnvelope(progress),
+		tint: lipgloss.Color(m.Settings.CopyFlashColor),
+		ink:  pal.Fg,
 	}
-	// From fully off one edge to fully off the other, and far enough past the
-	// end for the lowest row's band, which leans furthest along, to leave too.
-	lean := float64(box.rows * copyFlashSlope)
-	span := float64(width) + lean + 2*reach
-	return copyFlashBand{
-		centre: float64(box.left) - reach + progress*span,
-		reach:  reach,
-		amp:    copyFlashEnvelope(progress),
-		tint:   lipgloss.Color(m.Settings.CopyFlashColor),
-		ink:    pal.Fg,
-		ground: pal.Canvas,
-		sel:    lipgloss.Color(m.Settings.SelectionBg),
+	switch m.Settings.CopyFlashStyle {
+	case config.CopyFlashHorizontal:
+	case config.CopyFlashDiagonalReverse:
+		band.slope = -copyFlashSlope
+	case config.CopyFlashVertical:
+		band.vertical = true
+	default:
+		band.slope = copyFlashSlope
 	}
+
+	// How far along its axis the block runs, from the extremes of the cells in
+	// it. Taking it from the corners rather than assuming a rectangle is what
+	// lets the same arithmetic serve all four shapes.
+	lo, hi := band.axisRange(box)
+	span := hi - lo
+	band.reach = span * m.copyFlashReach()
+	// A floor, or the light over a short block is one cell wide and reads as a
+	// cursor rather than as a sweep. In rows rather than columns when the
+	// sweep runs down, because a block is far shorter than it is wide.
+	floor := 4.0
+	if band.vertical {
+		floor = 1.5
+	}
+	if band.reach < floor {
+		band.reach = floor
+	}
+	// From fully off one end to fully off the other.
+	band.centre = lo - band.reach + progress*(span+2*band.reach)
+	return band
+}
+
+// axisRange is the lowest and highest position any cell of the block takes
+// along the axis this sweep runs.
+func (b copyFlashBand) axisRange(box copyFlashBox) (lo, hi float64) {
+	if b.vertical {
+		return 0, float64(max(box.rows-1, 0))
+	}
+	last := max(box.rows-1, 0)
+	corners := []float64{
+		b.position(box.left, 0), b.position(box.right, 0),
+		b.position(box.left, last), b.position(box.right, last),
+	}
+	lo, hi = corners[0], corners[0]
+	for _, c := range corners[1:] {
+		lo, hi = min(lo, c), max(hi, c)
+	}
+	return lo, hi
 }
 
 // copyFlashBox is the block the sweep crosses: its leftmost and rightmost lit
