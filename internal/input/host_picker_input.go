@@ -13,8 +13,7 @@ func handleHostPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	switch msg.String() {
 	case "esc", "ctrl+c":
-		o.ShowHostPicker = false
-		o.HostPickerQuery = ""
+		o.CloseHostPicker()
 		return o, nil
 
 	case "enter":

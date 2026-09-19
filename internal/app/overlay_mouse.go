@@ -526,7 +526,7 @@ func (m *OS) closeOverlay(kind string) {
 	case "layout":
 		m.ShowLayoutPicker = false
 	case "hostpicker":
-		m.ShowHostPicker = false
+		m.CloseHostPicker()
 	case "accent":
 		m.CloseAccentPicker()
 	case "aggregate":

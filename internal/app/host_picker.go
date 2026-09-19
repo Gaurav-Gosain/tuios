@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -129,6 +130,9 @@ func (m *OS) ChooseHostForNewWindow(item HostPickerItem) tea.Cmd {
 	m.ShowHostPicker = false
 	m.HostPickerQuery = ""
 	if !item.Up {
+		// The window is not being made, so a split waiting for it is not
+		// happening either.
+		m.CancelPendingSplit()
 		m.ShowNotification(item.Label+" is unavailable", "warning",
 			m.Settings.NotificationWarningDuration)
 		return nil
@@ -237,6 +241,26 @@ func IsGlobalSession(name string) bool { return name == GlobalSessionName }
 // inGlobalSession reports whether this client is attached to a global session.
 func (m *OS) inGlobalSession() bool {
 	return m.SessionGlobal || IsGlobalSession(m.SessionName)
+}
+
+// CloseHostPicker puts the picker away without making a window.
+//
+// It also drops any split that was waiting on the answer. A split records the
+// direction and the pane to split before it asks for the window, because the
+// window is made by the daemon and arrives later; if the question is cancelled
+// that record has to go, or the next window made for any reason lands split
+// against a pane the user has since forgotten about.
+func (m *OS) CloseHostPicker() {
+	m.ShowHostPicker = false
+	m.HostPickerQuery = ""
+	m.CancelPendingSplit()
+}
+
+// CancelPendingSplit forgets a split that was recorded for a window that is
+// not going to arrive.
+func (m *OS) CancelPendingSplit() {
+	m.pendingSplitDir = layout.PreselectionNone
+	m.pendingSplitTarget = ""
 }
 
 // NewWindowHere is what every "make me a pane" gesture calls: the key, the

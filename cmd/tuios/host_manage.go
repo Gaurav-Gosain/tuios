@@ -34,6 +34,7 @@ type hostAddFlags struct {
 	command    string
 	timeout    int
 	sshOptions []string
+	tailnet    bool
 }
 
 // newHostsSubcommands builds add, remove and test.
@@ -86,6 +87,7 @@ To open a session on the host in this client, run
 	addCmd.Flags().StringVar(&add.command, "command", "", "The tuios binary to run on the host. The link then looks for none")
 	addCmd.Flags().IntVar(&add.timeout, "connect-timeout", 0, "Seconds one dial may take before the host is called unreachable (default 10)")
 	addCmd.Flags().StringArrayVar(&add.sshOptions, "ssh-option", nil, "One extra argument for ssh. Repeat the flag for each one")
+	addCmd.Flags().BoolVar(&add.tailnet, "tailnet", false, "Take the address from the machine of that name on your tailnet")
 
 	removeCmd := &cobra.Command{
 		Use:     "remove <name>",
@@ -127,7 +129,7 @@ asks about a host key. Run ssh to the machine once by hand to accept its key.`,
 		},
 	}
 
-	return []*cobra.Command{addCmd, removeCmd, testCmd}
+	return []*cobra.Command{addCmd, removeCmd, testCmd, newHostsTailnetCommand()}
 }
 
 // runHostAdd writes one [hosts.NAME] table.
@@ -140,6 +142,19 @@ func runHostAdd(name, addr string, flags hostAddFlags) error {
 		return err
 	}
 	addr = strings.TrimSpace(addr)
+	if flags.tailnet {
+		// The name the user typed is a decision, so the filters that decide
+		// what to suggest do not apply: a machine they named by hand is added
+		// even if it is one the suggestion list would have left out.
+		found, ok := tailnetAddrFor(name)
+		if !ok {
+			return fmt.Errorf("no machine called %q on your tailnet.\nRun 'tuios hosts tailnet' to see what is there", name)
+		}
+		if addr != "" && addr != found {
+			return fmt.Errorf("host %q was given the address %s and --tailnet, which says %s.\nPass one or the other", name, addr, found)
+		}
+		addr = found
+	}
 	if addr == "" {
 		return fmt.Errorf("host %q needs an address.\n%s", name, addrHelp())
 	}
@@ -321,12 +336,15 @@ func printHostTest(r federation.HostReport) error {
 func addrHelp() string {
 	var b strings.Builder
 	b.WriteString("An address is anything ssh understands, for example user@machine.")
-	aliases := federation.ReadSSHAliases(federation.UserSSHConfigPath())
-	if len(aliases) == 0 {
-		return b.String()
+	if aliases := federation.ReadSSHAliases(federation.UserSSHConfigPath()); len(aliases) > 0 {
+		b.WriteString("\nYour ssh config names these machines:\n  ")
+		b.WriteString(strings.Join(aliases, "\n  "))
 	}
-	b.WriteString("\nYour ssh config names these machines:\n  ")
-	b.WriteString(strings.Join(aliases, "\n  "))
+	if addrs := tailnetAddrs(); len(addrs) > 0 {
+		b.WriteString("\nYour tailnet has these machines:\n  ")
+		b.WriteString(strings.Join(addrs, "\n  "))
+		b.WriteString("\nAdd one by name with 'tuios hosts add NAME --tailnet'.")
+	}
 	return b.String()
 }
 
@@ -336,11 +354,11 @@ func completeHostAddArgs(_ *cobra.Command, args []string, _ string) ([]string, c
 	if len(args) != 1 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	aliases := federation.ReadSSHAliases(federation.UserSSHConfigPath())
-	if len(aliases) == 0 {
+	candidates := append(federation.ReadSSHAliases(federation.UserSSHConfigPath()), tailnetAddrs()...)
+	if len(candidates) == 0 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	return aliases, cobra.ShellCompDirectiveNoFileComp
+	return candidates, cobra.ShellCompDirectiveNoFileComp
 }
 
 // completeConfiguredHosts completes a host name with the names in the config

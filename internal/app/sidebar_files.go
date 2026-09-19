@@ -95,6 +95,13 @@ type fileViewState struct {
 	// from a link. Only an origin pane can be told to change directory, because
 	// only it is the one the user meant.
 	Origin string
+	// Host is the machine the listing was read from, empty for this one.
+	//
+	// It is part of what identifies a listing, alongside the directory. Two
+	// panes on two machines are very often in the same directory, because
+	// /home/ubuntu is /home/ubuntu everywhere, and comparing the path alone
+	// made moving between them leave the first machine's files on screen.
+	Host string
 	// Pinned says the user steered the listing somewhere of their own, so it
 	// stops following the origin pane's cwd. Cleared when the focus moves to
 	// another pane, because the listing is then about a different pane.
@@ -282,13 +289,16 @@ func (m *OS) FilesSyncCmd() tea.Cmd {
 		}
 		return nil
 	}
-	if want == m.filesView.Want && !filesShouldRetry(m.filesView, want) {
-		return nil
-	}
 	window := m.GetFocusedWindow()
-	origin := ""
+	origin, host := "", ""
 	if window != nil {
-		origin = window.ID
+		origin, host = window.ID, window.Host
+	}
+	// The directory and the machine together. The same path on two machines is
+	// two different directories, and the section following the focus between
+	// them has to ask again rather than keep the answer it has.
+	if want == m.filesView.Want && host == m.filesView.Host && !filesShouldRetry(m.filesView, want) {
+		return nil
 	}
 	return m.requestFileList(want, origin, false)
 }
@@ -382,6 +392,10 @@ func (m *OS) requestFileList(dir, origin string, pinned bool) tea.Cmd {
 
 	m.filesView.Want = dir
 	m.filesView.Origin = origin
+	m.filesView.Host = ""
+	if w := m.windowByID(origin); w != nil {
+		m.filesView.Host = w.Host
+	}
 	m.filesView.Pinned = pinned
 	m.filesView.Loading = true
 	m.filesView.Err = ""

@@ -18,6 +18,8 @@ what does and does not come back after each kind of interruption.
 - [Resurrection](#resurrection)
 - [The resurrect Command](#the-resurrect-command)
 - [Windows on Another Machine](#windows-on-another-machine)
+- [Global Sessions](#global-sessions)
+- [Machines on a Tailnet](#machines-on-a-tailnet)
 - [Where State Lives](#where-state-lives)
 - [Limitations](#limitations)
 - [Related Documentation](#related-documentation)
@@ -264,11 +266,10 @@ the layout here, and closed here; only the process is on `build`. The machine
 comes from the `[hosts]` table, the same one `tuios hosts` lists, and a name
 that is not in it is refused before anything is started.
 
-There is no "global session" mode to turn on, and that is the point. A session
-holding such a window is an ordinary session with an ordinary window, so `tuios
-ls`, the verbs, the mailbox, hooks and resurrection all keep working on it with
-no special case. What makes the window different is one field recording where
-its process is.
+A session holding such a window is still an ordinary session, so `tuios ls`, the
+verbs, the mailbox, hooks and resurrection keep working on it with no special
+case. What makes the window different is one field recording where its process
+is.
 
 Panes on two machines can sit side by side in one layout, because each pane is
 a window of this session and the layout does not care where any of their
@@ -304,9 +305,124 @@ refuses by name and says to update it.
   come back on redial.
 - **A resurrected session brings the window back on this machine.** Resurrection
   respawns a shell from saved state, and it does not redial a host to do it.
-- **The rail's file section does not list a remote pane's directory.** The files
-  are on the other machine. It says so rather than listing this machine's disk
-  under the other machine's path.
+- **A resurrected window runs a local shell.** The layout comes back and the
+  pane in it is on this machine, whatever it said before.
+
+## Global Sessions
+
+A session whose panes are all on one machine is that machine's session. A
+session holding panes from several is not, and the rail says so: once a second
+machine is reachable, it draws a group called `global` above the machines.
+
+```
+global                +
+  deploy
+local                 +
+  work
+build                 +
+  api
+```
+
+Sessions in the global group work like any other. What is different is that
+every way of making a window in one asks which machine it should run on, by
+every route: the key, the rail's `+`, the command palette. That question has one
+sensible answer in an ordinary session and is worth asking in this one, which is
+why the picker appears here and nowhere else.
+
+Make one from the `+` on the group header, or from the shell:
+
+```bash
+tuios new deploy --global
+```
+
+A global session is created with no windows, since the first pane is the one you
+pick a machine for.
+
+The group holds as many sessions as you make. It is drawn above the machines
+because a global session is not any machine's: it is held by a daemon, the way
+any session is, but where it is held says nothing about where its panes run.
+
+Turn the group off with `global_session = false` in the config. Sessions that
+already exist stay listed.
+
+## Machines on a Tailnet
+
+If this machine is on a [Tailscale](https://tailscale.com) tailnet, tuios can
+list the machines on it and offer them as addresses:
+
+```bash
+tuios hosts tailnet
+```
+
+```
+   arch-btw          arch-btw.example.ts.net          offline
+ + ente              ente.example.ts.net
+ = forgejo           forgejo.example.ts.net           already the host forgejo
+   my-phone          my-phone.example.ts.net          cannot run tuios (iOS)
+```
+
+Add one:
+
+```bash
+tuios hosts add ente --tailnet
+```
+
+**Nothing is added on its own.** This is the same rule the ssh_config aliases
+follow: a host exists because you named it. What is discovered is what to type,
+not what to connect to.
+
+**Nothing new is dialled either.** A host added this way is reached over ssh like
+every other host. A MagicDNS name resolves like any other name, so the tailnet is
+how the name resolves and how the traffic is carried, and tuios does not open a
+tailnet connection itself. That also means ssh over a tailnet already worked
+before this existed: you could always write the MagicDNS name as an address by
+hand. This saves you the typing and tells you what is there.
+
+tuios asks the `tailscaled` already running on this machine, through the local
+API, which is the same thing `tailscale status` asks. It needs no root, no
+auth key, and no operator setting. A machine with no tailscale on it gets an
+empty list and behaves exactly as it did before.
+
+Every machine is listed, offered or not, and one that is not offered says why.
+By default a machine is left out when it is offline, when it is this machine,
+when it was shared in from another tailnet, or when it runs an operating system
+that cannot host a tuios daemon.
+
+Change any of that in the `[tailscale]` table:
+
+```toml
+[tailscale]
+# Offer tailnet machines as addresses at all.
+enabled = true
+# Which form of address: "dns" is the MagicDNS name and works anywhere on the
+# tailnet, "name" is the short name and needs a search domain, "ip" is the
+# 100.x address and needs no DNS.
+addr = "dns"
+# An ssh login put in front of every address.
+user = "ubuntu"
+# The operating systems to offer. An empty list offers every machine.
+os = ["linux", "macOS", "windows"]
+# Offer machines that are offline, this machine, and machines shared in.
+offline = false
+self = false
+shared = false
+# Glob patterns matched against the short name and the MagicDNS name.
+# exclude wins over include.
+include = ["*"]
+exclude = ["*-pad-*"]
+# How many to offer.
+max = 50
+# Where the tailscaled local API socket is, if it is not in the usual place.
+socket = ""
+
+# Per-machine logins, which win over the user above. This has to come last,
+# because everything after a sub-table heading belongs to it.
+[tailscale.users]
+build = "root"
+```
+
+For a script or an agent, `tuios hosts tailnet --json` gives every machine with
+`offered` and, when it is false, `skipped` saying which rule left it out.
 
 ## Where State Lives
 

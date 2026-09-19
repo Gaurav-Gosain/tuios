@@ -517,6 +517,13 @@ type OS struct {
 	// session's arrives with the cached listing; this one comes down with the
 	// session state, the same way SessionRestored does.
 	SessionGlobal bool
+	// The machines on this user's tailnet, offered as addresses on the Hosts
+	// settings page. Filled once by a goroutine, because the call behind it is
+	// a round trip and the row that shows them is drawn in the render path.
+	// See tailnetAddrCandidates.
+	tailnetMu         sync.Mutex
+	tailnetAskedAt    time.Time
+	tailnetCandidates []string
 	// SessionWorktree is the attached session's daemon-owned worktree record,
 	// nil when its directory is not a linked git worktree. Every other
 	// session's arrives with the cached listing; this one comes down with the

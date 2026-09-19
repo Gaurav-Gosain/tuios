@@ -97,6 +97,26 @@ func HostsInFile(path string) (map[string]HostConfig, error) {
 	return cfg.Hosts, nil
 }
 
+// TailscaleInFile is the [tailscale] table in the file at path, read without
+// creating anything.
+//
+// It exists alongside HostsInFile rather than going through LoadUserConfig for
+// the reason that one does: LoadUserConfig writes a default config file when
+// there is none, and a reader asking what the table says must not create a
+// file as a side effect of asking. A caller on a background goroutine makes
+// that a race as well as a surprise.
+func TailscaleInFile(path string) (TailscaleConfig, error) {
+	data, err := readConfigForEdit(path)
+	if err != nil {
+		return TailscaleConfig{}, err
+	}
+	cfg, err := ParseUserConfig(data)
+	if err != nil {
+		return TailscaleConfig{}, err
+	}
+	return cfg.Tailscale, nil
+}
+
 // readConfigForEdit reads the config file. A file that is not there yet is an
 // empty one: adding the first host to a machine that has never saved a setting
 // must work.

@@ -21,6 +21,7 @@ var optionWalkSkips = map[string]string{
 	"dock.right":                   "an ordered list of component names, not a scalar path",
 	"dock.custom":                  "a free-form map of component name to its command and refresh",
 	"hosts":                        "a map of host name to its address, which no single settable path can spell",
+	"tailscale":                    "file-plane config for what the hosts table suggests, read from the file by the two callers that use it, like [hosts] above",
 	"appearance.sidebar.agent_row": "a table of tokens, each with a look and an ordered rule list, which no single settable path can spell",
 }
 

@@ -154,6 +154,9 @@ func (m *OS) hostAddItem() settingItem {
 	if candidates := m.hostAddrCandidates(); len(candidates) > 0 {
 		desc += " Your ssh config names: " + strings.Join(candidates, ", ") + "."
 	}
+	if candidates := m.tailnetAddrCandidates(); len(candidates) > 0 {
+		desc += " Your tailnet has: " + strings.Join(candidates, ", ") + "."
+	}
 	return settingItem{
 		Label:       hostAddRowLabel,
 		Desc:        desc,
@@ -186,6 +189,74 @@ func (m *OS) hostAddrCandidates() []string {
 	}
 	return aliases
 }
+
+// tailnetAddrCandidates are the machines on this user's tailnet, offered as
+// addresses the same way the ssh_config aliases are. Nothing is added from the
+// list; see internal/federation's tailnet.go.
+//
+// The answer comes from a cache that a goroutine fills, because this runs in
+// the render path and the call behind it is a round trip to the tailscaled on
+// this machine. A page drawn before the first answer lands shows the ssh
+// aliases alone and gains the tailnet names on a later frame, which is the
+// same bargain every other live fact on this page makes.
+func (m *OS) tailnetAddrCandidates() []string {
+	if m.ConfigReadOnly {
+		// A served session must not read the serving machine's tailnet on
+		// behalf of whoever connected to it, for the same reason it must not
+		// read its ssh config.
+		return nil
+	}
+	m.tailnetMu.Lock()
+	defer m.tailnetMu.Unlock()
+	if time.Since(m.tailnetAskedAt) > tailnetCandidateTTL {
+		m.tailnetAskedAt = time.Now()
+		go m.refreshTailnetCandidates()
+	}
+	if len(m.tailnetCandidates) > maxHostAddrCandidates {
+		return m.tailnetCandidates[:maxHostAddrCandidates]
+	}
+	return m.tailnetCandidates
+}
+
+// refreshTailnetCandidates fills the cache.
+//
+// The answer is kept for a minute rather than for the life of the client. A
+// machine coming up on the tailnet, or an edit to the [tailscale] table, has to
+// reach the row without a restart, and asking once per frame would be a socket
+// call behind a description line nobody is waiting on.
+func (m *OS) refreshTailnetCandidates() {
+	// The [tailscale] table is file-plane config like [hosts], so it is read
+	// from the file rather than from the option registry. This runs on its own
+	// goroutine, which is the only reason reading a file here is fine.
+	opt := federation.DefaultTailnetOptions()
+	path, err := config.GetConfigPath()
+	if err != nil {
+		return
+	}
+	ts, err := config.TailscaleInFile(path)
+	if err != nil {
+		return
+	}
+	if !ts.TailscaleEnabled() {
+		return
+	}
+	opt = ts.TailnetOptions()
+	ctx, cancel := context.WithTimeout(context.Background(), tailnetCandidateTimeout)
+	defer cancel()
+	addrs := federation.TailnetAddrs(ctx, opt)
+
+	m.tailnetMu.Lock()
+	m.tailnetCandidates = addrs
+	m.tailnetMu.Unlock()
+}
+
+// tailnetCandidateTimeout bounds the one local call. It goes to a unix socket
+// on this machine, so anything slower than this means nothing is answering.
+const tailnetCandidateTimeout = 3 * time.Second
+
+// tailnetCandidateTTL is how long an answer is kept before it is asked for
+// again.
+const tailnetCandidateTTL = time.Minute
 
 // hostTestItem is the row that dials every configured host.
 func (m *OS) hostTestItem() settingItem {

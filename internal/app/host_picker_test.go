@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // The machine picker is the way to put a window on another machine from inside
@@ -342,3 +344,94 @@ func TestAFailureIsReported(t *testing.T) {
 type errFake struct{}
 
 func (errFake) Error() string { return "the link went away" }
+
+// TestEveryWayOfMakingAWindowInAGlobalSessionAsksWhichMachine.
+//
+// The picker was wired into the key, the rail's "+" and the palette, and the
+// splits were not: they called AddWindow directly, so ctrl+b | and ctrl+b -
+// made a local pane in the one session whose point is that the machine is
+// chosen. A question asked by three routes out of five is not a rule anybody
+// can rely on.
+//
+// Negative control: putting AddWindow back in the daemon branch of either
+// split leaves ShowHostPicker false and this fails.
+func TestEveryWayOfMakingAWindowInAGlobalSessionAsksWhichMachine(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		split func(*OS)
+	}{
+		{"split down", (*OS).SplitFocusedHorizontal},
+		{"split right", (*OS).SplitFocusedVertical},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := pickerOS(t)
+			m.SessionGlobal = true
+			m.AutoTiling = true
+			m.Windows = []*terminal.Window{{ID: "w1", Width: 40, Height: 20, Workspace: 1}}
+			m.CurrentWorkspace = 1
+			m.FocusedWindow = 0
+
+			tc.split(m)
+
+			if !m.ShowHostPicker {
+				t.Error("the split did not ask which machine the pane runs on")
+			}
+			if m.pendingSplitTarget != "w1" {
+				t.Errorf("the split recorded %q as the pane to split against, want w1", m.pendingSplitTarget)
+			}
+		})
+	}
+}
+
+// TestASplitOutsideAGlobalSessionAsksNothing. The question has one sensible
+// answer in an ordinary session, and a picker that appeared there would put a
+// dialog in front of a key people press all day.
+//
+// The split is not run here, because outside a global session it goes on to
+// make the window and this fixture holds a client with no connection. What is
+// checked is the gate the split now goes through, which is the thing that
+// decides whether the question is asked at all.
+func TestASplitOutsideAGlobalSessionAsksNothing(t *testing.T) {
+	m := pickerOS(t)
+	m.SessionGlobal = false
+	m.SessionName = "work"
+
+	if m.newWindowShouldPickHost() {
+		t.Error("an ordinary session would be asked which machine a new pane runs on")
+	}
+}
+
+// TestCancellingThePickerForgetsTheSplit.
+//
+// A split records the direction and the pane before it asks for the window,
+// because the window is made by the daemon and arrives later. If the question
+// is cancelled that record has to go: otherwise the next window made for any
+// reason lands split against a pane the user has since forgotten about.
+//
+// Negative control: closing the picker with a bare ShowHostPicker = false
+// leaves the target set and this fails.
+func TestCancellingThePickerForgetsTheSplit(t *testing.T) {
+	m := pickerOS(t)
+	m.SessionGlobal = true
+	m.AutoTiling = true
+	m.Windows = []*terminal.Window{{ID: "w1", Width: 40, Height: 20, Workspace: 1}}
+	m.CurrentWorkspace = 1
+	m.FocusedWindow = 0
+
+	m.SplitFocusedHorizontal()
+	if m.pendingSplitTarget == "" {
+		t.Fatal("ASSERTION: the split recorded nothing, so there is nothing to forget")
+	}
+
+	m.CloseHostPicker()
+
+	if m.ShowHostPicker {
+		t.Error("the picker is still open")
+	}
+	if m.pendingSplitTarget != "" {
+		t.Errorf("a cancelled split still points at %q", m.pendingSplitTarget)
+	}
+	if m.pendingSplitDir != layout.PreselectionNone {
+		t.Error("a cancelled split still forces a direction")
+	}
+}

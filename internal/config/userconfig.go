@@ -42,6 +42,10 @@ type UserConfig struct {
 	// listings. Outside the option registry for the same reason as the tables
 	// above. See hosts.go.
 	Hosts map[string]HostConfig `toml:"hosts,omitempty"`
+	// Tailscale is the [tailscale] table: which machines on your tailnet are
+	// offered as addresses when adding a host. It changes suggestions only;
+	// nothing is added on its own. See tailscale.go.
+	Tailscale TailscaleConfig `toml:"tailscale,omitempty"`
 }
 
 // NotificationsConfig holds how long a dock message stays up.

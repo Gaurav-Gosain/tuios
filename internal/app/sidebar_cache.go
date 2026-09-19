@@ -190,6 +190,7 @@ func (m *OS) sidebarSignature() uint64 {
 	mixI(int(m.filesView.Show))
 	mixS(m.filesView.Dir)
 	mixS(m.filesView.Origin)
+	mixS(m.filesView.Host)
 	mixS(m.filesView.Err)
 	mixB(m.filesView.Loading)
 	mixI(m.SidebarScrollF)

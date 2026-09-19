@@ -504,7 +504,12 @@ func (m *OS) SplitFocusedHorizontal() {
 	if m.IsDaemonSession && m.DaemonClient != nil {
 		m.pendingSplitDir = layout.PreselectionDown
 		m.pendingSplitTarget = focusedWin.ID
-		m.AddWindow("")
+		// Through NewWindowHere rather than straight to AddWindow, so a split
+		// in a global session asks which machine the pane runs on the same way
+		// every other way of making one does. The recorded direction outlives
+		// the question: the window still arrives through a state sync, and
+		// adoptSyncedWindows still applies it.
+		m.NewWindowHere()
 		return
 	}
 
@@ -537,7 +542,8 @@ func (m *OS) SplitFocusedVertical() {
 	if m.IsDaemonSession && m.DaemonClient != nil {
 		m.pendingSplitDir = layout.PreselectionRight
 		m.pendingSplitTarget = focusedWin.ID
-		m.AddWindow("")
+		// See SplitFocusedHorizontal.
+		m.NewWindowHere()
 		return
 	}
 
