@@ -69,6 +69,10 @@ type remotePane struct {
 	cwd         string
 	cwdAt       time.Time
 	cwdInflight bool
+	// onCwdChange is called when the far machine reports a directory that is
+	// not the one held, so the session can tell its clients. It is set by the
+	// session that owns the pane and is nil in a test that builds one by hand.
+	onCwdChange func()
 }
 
 // openRemotePane starts a process on host and returns the pane it speaks to.
@@ -238,7 +242,12 @@ func (s *Session) openRemotePaneFor(host string, width, height int, cwd string, 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), remotePaneOpenBudget)
 	defer cancel()
-	return openRemotePane(ctx, fed, host, spec)
+	p, err := openRemotePane(ctx, fed, host, spec)
+	if err != nil {
+		return nil, err
+	}
+	p.onCwdChange = s.PublishLiveFacts
+	return p, nil
 }
 
 // remotePaneCwdTTL is how long a directory the far machine gave stays good
@@ -285,7 +294,45 @@ func (p *remotePane) refreshCwd() {
 	var res struct {
 		Cwd string `json:"cwd"`
 	}
-	if json.Unmarshal(raw, &res) == nil && res.Cwd != "" {
-		p.cwd = res.Cwd
+	changed := false
+	if json.Unmarshal(raw, &res) == nil && res.Cwd != "" && res.Cwd != p.cwd {
+		p.cwd, changed = res.Cwd, true
 	}
+	notify := p.onCwdChange
+	if !changed || notify == nil {
+		return
+	}
+	// Outside the lock, and on this goroutine rather than a new one: the push
+	// writes to client sockets, and holding a pane's lock across that would
+	// put a slow client in front of the next read of where the pane is.
+	go notify()
+}
+
+// PublishLiveFacts pushes the session's state to its clients because something
+// the emulators or the processes know has changed, rather than because the
+// session itself was altered.
+//
+// A remote pane's directory is the case it exists for. Nothing about the
+// session changes when a shell on another machine runs cd: the window set, the
+// layout and the names are all as they were, so no mutation happens and no
+// push follows. But the directory is on the snapshot clients are given, and
+// without a push they would be told the first answer and never a later one.
+//
+// A pane on this machine has no such problem, which is why this was not needed
+// before: its shell announces over OSC 7, and that announcement reaches every
+// client through its own emulator rather than through the session's state.
+//
+// It goes through mutateState with an empty change so it takes the version
+// with it. The push is skipped for a version already sent, so a bump is what
+// makes it a push at all, and a version is the honest record anyway: what
+// clients hold afterwards is not what they held before.
+func (s *Session) PublishLiveFacts() {
+	// The cached read goes first. liveCwds holds its answer for a second so
+	// the render path does not ask the operating system per frame, and the
+	// push that created the pane had already cached the answer from before the
+	// far machine replied: an empty one. Publishing without clearing it sent
+	// that same empty answer again, which is the whole reason this was still
+	// broken after the push itself was fixed.
+	s.forgetCwdCache()
+	_ = s.mutateState(func(*SessionState) error { return nil })
 }

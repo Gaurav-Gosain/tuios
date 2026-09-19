@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -69,6 +70,30 @@ func TestTheRailNamesTheMachineAPaneRunsOn(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Errorf("the pane's frame does not name the machine: %v\n%s", err, term.Snapshot())
 	}
+	// And it survives a client pushing its own state back.
+	//
+	// This is the half that was broken and that the first version of this test
+	// walked straight past. The machine is daemon-owned and a client sync does
+	// not carry it, so until it was added to the carry-over the first push
+	// wiped it: the rail named the machine for a moment and then stopped, and
+	// which panes still showed one depended on when each last synced. Making
+	// another window is the cheapest way to make this client push.
+	if out, err := tuiosCLIEnv(t, base, env, "new-window", "local-one", "-s", "home"); err != nil {
+		t.Fatalf("make a second window: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return contains(s.Text(), "local-one")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the second window never appeared: %v\n%s", err, term.Snapshot())
+	}
+	// Given a moment for the push to land and come back.
+	time.Sleep(time.Second)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return railRowWith(s.Text(), "faraway", "build")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the rail forgot the machine after a client sync: %v\n%s", err, term.Snapshot())
+	}
+
 	alive(t, term, "after a window on another machine")
 }
 

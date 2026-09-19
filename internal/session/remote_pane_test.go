@@ -878,3 +878,69 @@ func TestTheFarMachineListsItsOwnDirectory(t *testing.T) {
 		t.Errorf("the listing does not hold the file that is there: %+v", out)
 	}
 }
+
+// TestAPushCarriesARemotePanesDirectory.
+//
+// The clients are given a snapshot, and for a pane on another machine that
+// snapshot is the only place its directory can come from: there is no process
+// here to read and its shell announces nothing. So the push has to carry what
+// a verb would read, and for a while it did not. GetState filled the directory
+// in and publishState did not, so `tuios list-windows` reported it and the
+// client drawing the same pane was never told.
+//
+// Negative control: removing fillLiveFacts from publishState fails here with
+// an empty directory on every push.
+func TestAPushCarriesARemotePanesDirectory(t *testing.T) {
+	d, socketPath := startTestDaemon(t)
+	sess, err := d.manager.CreateSession("pushes", &SessionConfig{}, 80, 24)
+	if err != nil {
+		t.Fatalf("create the session: %v", err)
+	}
+	sess.SetFederation(&socketFederation{socketPath: socketPath})
+
+	var mu sync.Mutex
+	seen := ""
+	sess.SetStateSink(func(state *SessionState) {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, w := range state.Windows {
+			if w.Host != "" && w.Cwd != "" {
+				seen = w.Cwd
+			}
+		}
+	})
+
+	home := t.TempDir()
+	if _, err := sess.AddDaemonWindowWith(NewWindowOptions{
+		Host:    "build",
+		Cwd:     home,
+		Command: []string{"/bin/sh"},
+	}, func(string) {}); err != nil {
+		t.Fatalf("create a window on another machine: %v", err)
+	}
+
+	want, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(paneBudget)
+	for {
+		mu.Lock()
+		got := seen
+		mu.Unlock()
+		if got != "" {
+			resolved, err := filepath.EvalSymlinks(got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resolved != want {
+				t.Fatalf("a push carried directory %q, want %q", resolved, want)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no push ever carried the remote pane's directory, so no client could learn it")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}

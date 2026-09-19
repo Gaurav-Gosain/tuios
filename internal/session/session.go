@@ -960,6 +960,13 @@ func (s *Session) publishState(snap *SessionState) {
 		return
 	}
 
+	// The same live facts a verb would read. Without this the clients were the
+	// one audience told less than everybody else: the snapshot they were
+	// pushed carried only what had been stored, so a pane whose shell never
+	// announces its directory appeared to have none, and the rail's file
+	// section had nothing to ask about.
+	s.fillLiveFacts(snap)
+
 	s.pushMu.Lock()
 	defer s.pushMu.Unlock()
 	if snap.Version <= s.pushedVersion {
@@ -1274,6 +1281,27 @@ func (s *Session) GetState() *SessionState {
 	state := s.snapshotStateLocked()
 	s.stateMu.RUnlock()
 
+	s.fillLiveFacts(state)
+	return state
+}
+
+// fillLiveFacts writes what the emulators and the processes know into a
+// snapshot, over the top of what was stored.
+//
+// It is applied to every snapshot that leaves the session, both the ones a
+// verb reads and the ones pushed to clients, and that is the point. It used to
+// run in GetState alone, so `tuios list-windows` reported a pane's directory
+// and the client drawing that same pane was never told it. Local panes hid it:
+// a shell that announces over OSC 7 reaches the client through its own
+// emulator, so only a pane whose shell says nothing went without, and the
+// panes that say nothing are exactly the ones on another machine.
+//
+// It writes into the copy. The stored state keeps holding only what was
+// actually announced, which is what resurrection saves.
+func (s *Session) fillLiveFacts(state *SessionState) {
+	if state == nil {
+		return
+	}
 	// Retitle from the live emulators. The stored title is only as fresh as the
 	// last sync from a client, which knows the title of the windows it is
 	// subscribed to and nothing about the rest, so a reattach or a resurrection
@@ -1302,7 +1330,14 @@ func (s *Session) GetState() *SessionState {
 			state.Windows[i].Cwd = cwd
 		}
 	}
-	return state
+}
+
+// forgetCwdCache drops the cached directory read, so the next snapshot asks
+// again rather than repeating an answer that is known to be stale.
+func (s *Session) forgetCwdCache() {
+	s.cwdCacheMu.Lock()
+	s.cwdCache, s.cwdReadAt = nil, time.Time{}
+	s.cwdCacheMu.Unlock()
 }
 
 // cwdReadInterval bounds how often a session reads its shells' directories out

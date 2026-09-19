@@ -139,6 +139,17 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		height string
 	}
 	popups := make(map[string]popup, len(canonical.Windows))
+	// The machine a window's process runs on is stamped once, when the daemon
+	// creates the window, and nothing moves a process between machines
+	// afterwards. So canonical is always the truth and it is carried by id the
+	// way the popup mark is.
+	//
+	// Without this the first client sync wiped it, and everything downstream
+	// read the pane as local: the rail stopped naming the machine, and the
+	// file section asked this machine for a directory that is on another one.
+	// The field is daemon-owned like every other one in this block, and it was
+	// added without being put here.
+	hosts := make(map[string]string, len(canonical.Windows))
 	for i := range canonical.Windows {
 		w := &canonical.Windows[i]
 		if cwd := w.Cwd; cwd != "" {
@@ -146,6 +157,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		}
 		if w.Popup {
 			popups[w.ID] = popup{w.PopupWidth, w.PopupHeight}
+		}
+		if w.Host != "" {
+			hosts[w.ID] = w.Host
 		}
 		if cmd := w.ForegroundCmd; cmd != "" {
 			fgCmds[w.ID] = cmd
@@ -167,6 +181,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		}
 		if w.ShellPID == 0 {
 			w.ShellPID = shellPIDs[w.ID]
+		}
+		if w.Host == "" {
+			w.Host = hosts[w.ID]
 		}
 		if p, ok := popups[w.ID]; ok {
 			w.Popup = true
