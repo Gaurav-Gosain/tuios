@@ -34,18 +34,16 @@ func sectionAction(msg tea.KeyPressMsg, o *app.OS, lookup sectionLookup) string 
 // The palette and the launcher used to be literals in both mode handlers. As
 // literals they were invisible to `tuios keybinds doctor`, unrebindable, and
 // silently ahead of anything a user had put on the same key.
+//
+// They then became two cases of a switch here, which fixed that and left a
+// smaller version of the same fault: the section is documented as general, and
+// anything a user put in it other than those two did nothing and said nothing.
+// It goes through the dispatcher now, so the section holds whatever the
+// dispatcher knows, and the two actions are registered like every other.
 func handleGlobalBinds(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, bool) {
 	// Each case records the action it ran, the way Dispatch does for every
 	// action that goes through the dispatcher. These two do not, so without the
 	// line here the one probe that says whether a key reached its action is
 	// blind to the whole global section. See NoteAction.
-	switch action := sectionAction(msg, o, (*config.KeybindRegistry).GetGlobalAction); action {
-	case "command_palette":
-		o.NoteAction(action)
-		return o, o.OpenCommandPalette(), true
-	case "launcher":
-		o.NoteAction(action)
-		return o, o.OpenLauncher(), true
-	}
-	return o, nil, false
+	return dispatchAction(sectionAction(msg, o, (*config.KeybindRegistry).GetGlobalAction), msg, o)
 }

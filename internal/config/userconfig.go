@@ -193,12 +193,16 @@ type AppearanceConfig struct {
 	Theme                    string                  `toml:"theme"`                        // Color theme name (e.g., dracula, nord, my-custom-theme)
 	SharedBorders            *bool                   `toml:"shared_borders"`               // Share borders between adjacent tiled windows (default: false)
 	// Customization
-	BorderFocusedColor     string `toml:"border_focused_color"`      // Hex color for focused pane border (e.g., "#89b4fa")
-	BorderUnfocusedColor   string `toml:"border_unfocused_color"`    // Hex color for unfocused pane border (e.g., "#585b70")
-	WindowTitleFormat      string `toml:"window_title_format"`       // Format string for window titles: {title}, {index}, {cwd}
-	ZoomMaxWidth           int    `toml:"zoom_max_width"`            // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
-	NiriReverseScroll      bool   `toml:"niri_reverse_scroll"`       // Reverse mouse scroll direction in niri scrolling mode (default: false)
-	NiriScrollCells        int    `toml:"niri_scroll_cells"`         // Cells the niri viewport moves per mouse wheel event (default: 8, min: 1, max: 200)
+	BorderFocusedColor   string `toml:"border_focused_color"`   // Hex color for focused pane border (e.g., "#89b4fa")
+	BorderUnfocusedColor string `toml:"border_unfocused_color"` // Hex color for unfocused pane border (e.g., "#585b70")
+	WindowTitleFormat    string `toml:"window_title_format"`    // Format string for window titles: {title}, {index}, {cwd}
+	ZoomMaxWidth         int    `toml:"zoom_max_width"`         // Max width in cells for zoom mode (0 = fullscreen, e.g. 120 centers at 120 cols)
+	NiriReverseScroll    bool   `toml:"niri_reverse_scroll"`    // Reverse mouse scroll direction in niri scrolling mode (default: false)
+	NiriScrollCells      int    `toml:"niri_scroll_cells"`      // Cells the niri viewport moves per mouse wheel event (default: 8, min: 1, max: 200)
+	// PrefixRepeatTime is how long the prefix stays armed after a repeatable
+	// prefix command, in milliseconds, so ctrl+b then left left left walks
+	// three columns. Zero turns it off. This is tmux's repeat-time.
+	PrefixRepeatTime       *int   `toml:"prefix_repeat_time"`
 	MaxFPS                 int    `toml:"max_fps"`                   // Maximum render FPS (default: 60, max: 120)
 	DockWorkspaceTabs      *bool  `toml:"dock_workspace_tabs"`       // Clickable workspace strip in the dock (default: true)
 	DockWorkspaceTabFormat string `toml:"dock_workspace_tab_format"` // Format string for workspace tabs: {index}, {name} (default: "{name}")
@@ -531,6 +535,10 @@ type KeybindingsConfig struct {
 	SidebarFiles map[string][]string `toml:"sidebar_files"`
 }
 
+// defaultPrefixRepeatTime is addressable so DefaultConfig can point at it.
+// Zero is a real value for this key, so it is a pointer; see the field.
+var defaultPrefixRepeatTime = PrefixRepeatTimeDefault
+
 // DefaultConfig returns the default configuration
 func DefaultConfig() *UserConfig {
 	cfg := &UserConfig{
@@ -554,6 +562,7 @@ func DefaultConfig() *UserConfig {
 			MasterRatio:              MasterRatioDefault,
 			ScrollColumnWidth:        ScrollColumnWidthDefault,
 			NiriScrollCells:          NiriScrollCellsDefault,
+			PrefixRepeatTime:         &defaultPrefixRepeatTime,
 			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
 			Selection: SelectionConfig{
 				Bg: DefaultSelectionBg, Fg: DefaultSelectionFg,
@@ -677,6 +686,37 @@ func DefaultConfig() *UserConfig {
 				"prefix_keybinds":      {"k"},
 				"prefix_next_window":   {"n", "tab"},
 				"prefix_prev_window":   {"p", "shift+tab"},
+				// Walking panes from the prefix, on the arrows, which is what
+				// tmux binds and what every tmux user reaches for first.
+				//
+				// They matter most on macOS. The direct chords for this are
+				// alt+left and alt+right, and those are the two a macOS
+				// terminal is most likely to rewrite into the readline word
+				// motions before tuios ever sees them, so the prefix is the
+				// path that works with no terminal settings at all.
+				//
+				// The arrows rather than hjkl: j is the jump-to-message key
+				// and k opens the keybindings, both already bound here, and
+				// taking either would be trading one familiar thing for
+				// another. The arrows were free.
+				//
+				// One prefix press covers a run of them; see the repeat window
+				// in internal/input/prefix_repeat.go.
+				"terminal_focus_left":  {"left"},
+				"terminal_focus_right": {"right"},
+				"terminal_focus_up":    {"up"},
+				"terminal_focus_down":  {"down"},
+				// Stepping through sessions, which tmux puts on the same pair
+				// of brackets. The direct chords are alt+shift+n and
+				// alt+shift+p, and the first of those is dead on macOS: the
+				// Option+Shift glyph for n is the dead tilde, so it is left
+				// out of the glyph table on purpose and nothing matches it.
+				"next_session": {")"},
+				"prev_session": {"("},
+				// The launcher's direct chord is alt+space, which macOS turns
+				// into a non-breaking space that matches nothing. This is the
+				// way in that does not depend on the terminal.
+				"launcher":             {"a"},
 				"prefix_select_0":      {"0"},
 				"prefix_select_1":      {"1"},
 				"prefix_select_2":      {"2"},
@@ -1431,6 +1471,12 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.ScrollbarThumb = cfg.Appearance.Scrollbar.Thumb
 	s.ScrollbarTrack = cfg.Appearance.Scrollbar.Track
 	s.ScrollbarTint = cfg.Appearance.Scrollbar.Tint
+
+	// A pointer because zero is a real value here: it turns the repeat window
+	// off, and a plain int could not tell that from an absent key.
+	if cfg.Appearance.PrefixRepeatTime != nil {
+		s.PrefixRepeatTime = *cfg.Appearance.PrefixRepeatTime
+	}
 
 	// The selection colours. A background that is empty falls back to the
 	// default, because a pane with no colour behind a selection shows no

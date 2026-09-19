@@ -1532,3 +1532,18 @@ const (
 	DefaultCopyCursorBg = "#39C5CF"
 	DefaultCopyCursorFg = "#08222B"
 )
+
+// The prefix repeat window, in milliseconds.
+//
+// After a prefix command that is worth pressing twice, the prefix stays armed
+// for this long, so ctrl+b then left left left walks three columns instead of
+// one. It is tmux's repeat-time and the same default: long enough to press
+// again without hurrying, short enough that a key struck afterwards for any
+// other reason goes where it was meant to.
+//
+// Zero turns it off, and every prefix command then takes its own prefix.
+const (
+	PrefixRepeatTimeDefault = 500
+	PrefixRepeatTimeMin     = 0
+	PrefixRepeatTimeMax     = 5000
+)

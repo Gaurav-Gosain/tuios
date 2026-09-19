@@ -415,6 +415,11 @@ type Settings struct {
 	// Set via appearance.niri_scroll_cells config
 	NiriScrollCells int
 
+	// PrefixRepeatTime is how long the prefix stays armed after a repeatable
+	// prefix command, in milliseconds. Zero turns it off. See
+	// PrefixRepeatTimeDefault.
+	PrefixRepeatTime int
+
 	// LeaderKey is the prefix key for commands (default: ctrl+b)
 	// Set via appearance.leader_key config
 	LeaderKey string
@@ -566,6 +571,7 @@ func DefaultSettings() Settings {
 		WordCharacters:              `@-./_~?&=%+#`,
 		NiriReverseScroll:           false,
 		NiriScrollCells:             NiriScrollCellsDefault,
+		PrefixRepeatTime:            PrefixRepeatTimeDefault,
 		LeaderKey:                   DefaultLeaderKey,
 		PaneGap:                     0,
 		MasterRatioPercent:          MasterRatioDefault,

@@ -526,6 +526,11 @@ type OS struct {
 	// marks() in render_terminal.go.
 	markStyleCache *markStyles
 
+	// prefixRepeatUntil is when the prefix stops being armed after a
+	// repeatable prefix command. Zero when nothing is armed. See
+	// ArmPrefixRepeat.
+	prefixRepeatUntil time.Time
+
 	tailnetMu         sync.Mutex
 	tailnetAskedAt    time.Time
 	tailnetCandidates []string

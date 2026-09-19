@@ -181,6 +181,11 @@ func (d *ActionDispatcher) registerHandlers() {
 
 	// Session navigation. Bound to chords, and allowed from terminal mode by
 	// isTerminalSafeAction, so walking sessions does not first cost an Esc.
+	// The palette and the launcher. They are reachable from the global
+	// section, from a prefix and from window mode, so they are ordinary
+	// dispatcher actions rather than cases of a switch; see global_binds.go.
+	d.Register("command_palette", handleOpenCommandPalette)
+	d.Register("launcher", handleOpenLauncher)
 	d.Register("next_session", handleNextSession)
 	d.Register("prev_session", handlePrevSession)
 
@@ -1031,4 +1036,14 @@ func handleScrollExpel(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // handleStartScreensaver covers the screen on request rather than on a timer.
 func handleStartScreensaver(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.StartScreensaverNow()
+}
+
+// handleOpenCommandPalette opens the command palette.
+func handleOpenCommandPalette(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.OpenCommandPalette()
+}
+
+// handleOpenLauncher opens the app launcher.
+func handleOpenLauncher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.OpenLauncher()
 }

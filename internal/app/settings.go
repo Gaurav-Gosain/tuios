@@ -425,6 +425,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.niri_reverse_scroll"),
 			opt("appearance.niri_scroll_cells"),
 			opt("appearance.niri_click_reveals"),
+			opt("appearance.prefix_repeat_time"),
 			custom("appearance.max_fps", m.maxFPSItem()),
 			opt("appearance.preferred_shell"),
 		}),

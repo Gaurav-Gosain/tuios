@@ -76,6 +76,12 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"k", "Keybind manager"},
 			{"n", "Next window"},
 			{"p", "Previous window"},
+			// The arrows walk panes, and the prefix stays armed for a moment
+			// so a run of them costs one prefix press. See the repeat window
+			// in internal/input/prefix_repeat.go.
+			{"←/→/↑/↓", "Focus pane in a direction"},
+			{"a", "Launcher"},
+			{"(/)", "Previous/next session"},
 			{"0-9", "Jump to window"},
 			{"z", "Toggle zoom"},
 			{"space", "Toggle tiling"},

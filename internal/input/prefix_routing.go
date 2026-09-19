@@ -50,6 +50,7 @@ func HandlePrefixCommand(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.KeybindRegistry != nil {
 		action := lookupAction(msg, o.KeybindRegistry.GetPrefixAction)
 		if m, cmd, ok := dispatchAction(action, msg, o); ok {
+			armIfRepeatable(m, action)
 			return m, cmd
 		}
 	}

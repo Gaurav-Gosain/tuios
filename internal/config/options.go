@@ -292,6 +292,12 @@ var optionSpecs = []Option{
 		Default:     strconv.Itoa(NiriScrollCellsDefault), Min: NiriScrollCellsMin, Max: NiriScrollCellsMax,
 	},
 	{
+		Path: "appearance.prefix_repeat_time", Type: OptionInt, Section: "appearance",
+		Description: "Milliseconds the prefix stays armed after a repeatable command. 0 turns it off.",
+		Default:     strconv.Itoa(PrefixRepeatTimeDefault),
+		Min:         PrefixRepeatTimeMin, Max: PrefixRepeatTimeMax,
+	},
+	{
 		Path: "appearance.panel_padding", Type: OptionInt, Section: "appearance",
 		Description: "Columns of padding each side of an overlay panel's content",
 		Default:     strconv.Itoa(overlay.DefaultPanelPadding), Min: 1, Max: overlay.MaxPanelPadding,

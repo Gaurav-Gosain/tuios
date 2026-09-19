@@ -334,6 +334,18 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// A repeatable prefix command pressed again inside its window, in either
+	// mode. It runs here, before the modes, because the window belongs to the
+	// command rather than to the mode the client happens to be in.
+	//
+	// It is after every overlay above: a key while the palette or the help
+	// panel is open belongs to the panel, whatever was pressed before it.
+	if !o.PrefixActive {
+		if m, cmd, ok := tryPrefixRepeat(msg, o); ok {
+			return m, cmd
+		}
+	}
+
 	// Terminal mode handling
 	if o.Mode == app.TerminalMode {
 		return HandleTerminalModeKey(msg, o)
