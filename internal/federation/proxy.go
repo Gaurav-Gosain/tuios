@@ -64,6 +64,26 @@ func serveStream(s *Stream, dial func() (net.Conn, error)) {
 		}
 	}()
 	_, _ = io.Copy(s, conn)
+
+	// The daemon on this machine has stopped talking, so the stream is closed
+	// here rather than left to the deferred close below.
+	//
+	// The deferred one cannot do it: it runs after the wait, and the wait is
+	// for a goroutine blocked reading this same stream for bytes from the far
+	// side. So a daemon that closed its connection was never reported. The
+	// caller sat on a stream that would not end until it happened to write
+	// something, which made the write fail, which ended the other copy, which
+	// finally released the close.
+	//
+	// The shape that showed it: a pane running here for another machine, ended
+	// with ctrl+D. The shell printed "exit" and went, this side heard nothing,
+	// and the window stayed open until the next key was pressed. Attaching a
+	// session over a link has the same shape and the same fault.
+	//
+	// Closing after the copy loses nothing. The copy ran until the connection
+	// gave end of file, so everything the daemon sent is already on the
+	// stream. Close is idempotent, so the defer is still correct.
+	_ = s.Close()
 	<-done
 }
 
