@@ -404,6 +404,12 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	if w.CustomName != "" {
 		info["custom_name"] = w.CustomName
 	}
+	// Where the window's process is, when it is known. A shell that never
+	// announces and a machine that cannot be reached both leave it empty, so
+	// it is omitted rather than reported as the root.
+	if w.Cwd != "" {
+		info["cwd"] = w.Cwd
+	}
 	// The machine the window's process runs on, omitted when it is this one.
 	// A listing that cannot say where a window runs is incomplete once a
 	// session can hold windows from more than one machine, and the listing is

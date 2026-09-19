@@ -339,7 +339,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.links"),
 			opt("appearance.session_colors"),
 			opt("appearance.session_border"),
-			opt("appearance.new_window_picks_host"),
+			opt("appearance.global_session"),
 			opt("appearance.git_dirty"),
 		}),
 	}

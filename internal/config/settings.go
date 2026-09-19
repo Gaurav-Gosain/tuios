@@ -192,15 +192,14 @@ type Settings struct {
 
 	SessionBorder bool
 
-	// NewWindowPicksHost makes a new window ask which machine its process runs
-	// on, when there is more than one to pick from.
+	// GlobalSession offers a session that holds panes from more than one
+	// machine, listed in the rail once a second machine is reachable.
 	//
-	// It costs nothing on the machine that has no hosts configured, which is
-	// almost every one: with a single answer there is no question, so the
-	// window is made here and the picker never appears. It is a setting rather
-	// than a rule because someone with hosts configured who always wants the
-	// local pane should not pay a keystroke for a choice they never make.
-	NewWindowPicksHost bool
+	// It is a session of its own rather than a thing any session can become.
+	// An ordinary session is the machine it is on, and a new pane in it is a
+	// pane there, with nothing to ask about. The global session is the one
+	// place the question is worth putting, so it is the one place it is asked.
+	GlobalSession bool
 
 	SessionColors bool
 
@@ -511,7 +510,7 @@ func DefaultSettings() Settings {
 		Tooltips:                    true,
 		SessionColors:               true,
 		SessionBorder:               false,
-		NewWindowPicksHost:          true,
+		GlobalSession:               true,
 		SidebarGitDirty:             true,
 		NiriClickReveals:            true,
 		DockWorkspaceTabs:           true,

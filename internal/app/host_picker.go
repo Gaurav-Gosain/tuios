@@ -195,20 +195,26 @@ func (m *OS) hostPickerActivate(idx int) tea.Cmd {
 	return m.ChooseHostForNewWindow(filtered[idx])
 }
 
+// GlobalSessionName is the session that holds panes from more than one
+// machine.
+//
+// It is a session of its own rather than something any session can become, and
+// that is the whole design. An ordinary session is the machine it is on: a new
+// pane in it is a pane there, and asking which machine every time would be
+// asking a question with one sensible answer. The global session is the one
+// place the question is worth putting, so it is the one place it is asked, and
+// somebody working locally never meets the picker at all.
+const GlobalSessionName = "global"
+
+// IsGlobalSession reports whether a session name is the global one.
+func IsGlobalSession(name string) bool { return name == GlobalSessionName }
+
 // NewWindowHere is what every "make me a pane" gesture calls: the key, the
 // prefix key, the rail's "+", and the palette.
 //
-// It asks which machine when there is more than one to pick from, and makes
-// the pane without a word when there is not. That gate is what keeps the
-// picker from being an obstacle: a machine with no hosts configured, which is
-// almost every one, has a single answer and so no question, and the key is as
-// instant as it ever was.
-//
-// The picker opening on the ordinary new-window gesture is the point. It was
-// reachable only through the command palette before, which meant finding a
-// window on another machine required knowing the feature existed and then
-// typing its name. A choice you have to go looking for is not a choice most
-// people will find.
+// In the global session it asks which machine, every time and by every route,
+// because mixing machines is what that session is for. Anywhere else it makes
+// the pane here without a word.
 func (m *OS) NewWindowHere() {
 	if !m.newWindowShouldPickHost() {
 		m.AddWindow("")
@@ -220,10 +226,24 @@ func (m *OS) NewWindowHere() {
 // newWindowShouldPickHost reports whether a new window has a machine to
 // choose between.
 func (m *OS) newWindowShouldPickHost() bool {
-	if !m.Settings.NewWindowPicksHost {
+	if !m.IsDaemonSession || m.DaemonClient == nil {
 		return false
 	}
-	if !m.IsDaemonSession || m.DaemonClient == nil {
+	if !IsGlobalSession(m.SessionName) {
+		return false
+	}
+	// A global session with nothing to reach but this machine has no choice in
+	// it, and a picker with one row is a question with one answer.
+	return m.reachableMachines() > 1
+}
+
+// GlobalSessionOffered reports whether the rail should list the global session.
+//
+// Only once a second machine is reachable. Before that it would be a session
+// that holds panes from several machines on a machine that knows of none, and
+// switching into it would buy nothing but a session to switch back out of.
+func (m *OS) GlobalSessionOffered() bool {
+	if !m.Settings.GlobalSession || !m.IsDaemonSession || m.DaemonClient == nil {
 		return false
 	}
 	return m.reachableMachines() > 1

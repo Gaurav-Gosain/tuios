@@ -252,8 +252,8 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 	{
-		Path: "appearance.new_window_picks_host", Type: OptionBool, Section: "appearance",
-		Description: "Ask which machine a new window's process runs on, when more than one is reachable",
+		Path: "appearance.global_session", Type: OptionBool, Section: "appearance",
+		Description: "Offer a session in the rail that holds panes from several machines, once a second one is reachable",
 		Default:     "true",
 	},
 	{

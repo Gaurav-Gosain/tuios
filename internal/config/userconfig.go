@@ -202,7 +202,7 @@ type AppearanceConfig struct {
 	DockPillCaps           *bool  `toml:"dock_pill_caps"`            // Powerline caps on the dock's pills (default: false, flat)
 	SessionColors          *bool  `toml:"session_colors"`            // Give each session its own colour on the rail and the switcher (default: true)
 	SessionBorder          *bool  `toml:"session_border"`            // Carry that colour on every pane border too (default: false)
-	NewWindowPicksHost     *bool  `toml:"new_window_picks_host"`     // Ask which machine a new window runs on when more than one is reachable (default: true)
+	GlobalSession          *bool  `toml:"global_session"`            // Offer a session that holds panes from several machines (default: true)
 	NiriClickReveals       *bool  `toml:"niri_click_reveals"`        // Bring a clicked column fully on screen in the scrolling layout (default: true)
 	SidebarGitDirty        *bool  `toml:"git_dirty"`                 // Count changed and untracked paths in the rail's git section (default: true)
 	Glyphs                 string `toml:"glyphs"`                    // Chrome glyph set: default, box, heavy, ascii, or one from ~/.config/tuios/glyphs
@@ -1365,8 +1365,8 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if cfg.Appearance.SessionColors != nil {
 		s.SessionColors = *cfg.Appearance.SessionColors
 	}
-	if cfg.Appearance.NewWindowPicksHost != nil {
-		s.NewWindowPicksHost = *cfg.Appearance.NewWindowPicksHost
+	if cfg.Appearance.GlobalSession != nil {
+		s.GlobalSession = *cfg.Appearance.GlobalSession
 	}
 	if cfg.Appearance.SessionBorder != nil {
 		s.SessionBorder = *cfg.Appearance.SessionBorder

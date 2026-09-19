@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
 // The machine picker is the way to put a window on another machine from inside
@@ -16,6 +18,10 @@ func pickerOS(t *testing.T) *OS {
 	m := sidebarTestOS(t, 120, 40, "left")
 	m.SessionName = "work"
 	m.IsDaemonSession = true
+	// A client object, not a connection: the gates being tested ask whether
+	// this is a daemon session at all, and every path that would use it is
+	// guarded again where it is used.
+	m.DaemonClient = session.NewTUIClient()
 	m.applyFederationSnapshot(FederationHostsMsg{
 		Configured: 2,
 		Snapshot: FederationSnapshot{Hosts: []FederationHost{
@@ -80,7 +86,9 @@ func TestAMachineThatIsDownIsOfferedAndRefused(t *testing.T) {
 // TestChoosingThisMachineDoesNotGoOverALink. The local answer is the one that
 // must stay instant: it is the common case and there is nothing to dial.
 func TestChoosingThisMachineDoesNotGoOverALink(t *testing.T) {
-	m := pickerOS(t)
+	// Without a daemon client, so the pane is made the standalone way and the
+	// question under test, whether anything was sent, is the only one asked.
+	m := sidebarTestOS(t, 120, 40, "left")
 	if cmd := m.ChooseHostForNewWindow(HostPickerItem{Name: "", Label: "this machine", Up: true}); cmd != nil {
 		t.Error("choosing this machine returned a command, so it went out over the network")
 	}
@@ -118,19 +126,94 @@ func TestTheQueryNarrowsTheList(t *testing.T) {
 	}
 }
 
-// TestThePickerDoesNotOpenWithNoOtherMachines. A dialog asking a question with
-// one answer is not a choice, and the answer is the one a plain new window
-// already gives.
-func TestThePickerDoesNotOpenWithNoOtherMachines(t *testing.T) {
+// TestOnlyTheGlobalSessionAsksWhichMachine.
+//
+// A local session is the machine it is on: a new pane in it is a pane there,
+// and asking every time would be a question with one sensible answer. The
+// global session is the one place mixing machines is the point, so it is the
+// one place the question is put.
+//
+// Negative control: gating on the machine count alone, which is what this did
+// first, makes the local session ask too and fails here.
+func TestOnlyTheGlobalSessionAsksWhichMachine(t *testing.T) {
+	m := pickerOS(t)
+
+	m.SessionName = "work"
+	if m.newWindowShouldPickHost() {
+		t.Error("an ordinary session asked which machine a new pane goes on")
+	}
+
+	m.SessionName = GlobalSessionName
+	if !m.newWindowShouldPickHost() {
+		t.Error("the global session did not ask which machine a new pane goes on")
+	}
+}
+
+// TestTheGlobalSessionDoesNotAskWithNowhereToGo. A picker offering one row is
+// a question with one answer, even in the session built for choosing.
+func TestTheGlobalSessionDoesNotAskWithNowhereToGo(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 	m.IsDaemonSession = true
+	m.SessionName = GlobalSessionName
 	m.applyFederationSnapshot(FederationHostsMsg{Snapshot: FederationSnapshot{Hosts: []FederationHost{
 		{Name: federation.LocalHostName, Status: string(federation.StatusUp)},
 	}}})
 
-	m.OpenHostPicker()
-	if m.ShowHostPicker {
-		t.Error("the picker opened with only this machine to offer")
+	if m.newWindowShouldPickHost() {
+		t.Error("the global session asked which machine with only this one reachable")
+	}
+}
+
+// TestTheRailOffersTheGlobalSessionOnceASecondMachineIsThere, and not before:
+// on a machine that can reach nowhere else it would be a session for holding
+// panes from several machines on a machine that knows of none.
+func TestTheRailOffersTheGlobalSessionOnceASecondMachineIsThere(t *testing.T) {
+	m := pickerOS(t)
+	if !m.GlobalSessionOffered() {
+		t.Error("the rail does not offer the global session with another machine up")
+	}
+
+	alone := sidebarTestOS(t, 120, 40, "left")
+	alone.IsDaemonSession = true
+	alone.applyFederationSnapshot(FederationHostsMsg{Snapshot: FederationSnapshot{Hosts: []FederationHost{
+		{Name: federation.LocalHostName, Status: string(federation.StatusUp)},
+	}}})
+	if alone.GlobalSessionOffered() {
+		t.Error("the rail offers the global session on a machine that can reach nowhere else")
+	}
+}
+
+// TestTheGlobalSessionIsOfferedBeforeItExists. It is the session nobody has
+// created yet that most needs a row, and switching to one that is not there
+// creates it, so the row needs no second path behind it.
+func TestTheGlobalSessionIsOfferedBeforeItExists(t *testing.T) {
+	m := pickerOS(t)
+
+	got := m.withGlobalSession(nil)
+	if len(got) != 1 || got[0].Name != GlobalSessionName {
+		t.Fatalf("the rail does not offer a global session row: %+v", got)
+	}
+
+	// And it is not offered twice once the daemon lists it.
+	existing := []sessiontree.SessionInput{{Name: GlobalSessionName, WindowCount: 2}}
+	again := m.withGlobalSession(existing)
+	if len(again) != 1 {
+		t.Errorf("the global session is listed %d times", len(again))
+	}
+	if again[0].WindowCount != 2 {
+		t.Error("the real session was replaced by the empty offer")
+	}
+}
+
+// TestTurningTheGlobalSessionOffRemovesTheRow.
+func TestTurningTheGlobalSessionOffRemovesTheRow(t *testing.T) {
+	m := pickerOS(t)
+	m.Settings.GlobalSession = false
+	if m.GlobalSessionOffered() {
+		t.Error("the row is offered with the setting off")
+	}
+	if got := m.withGlobalSession(nil); len(got) != 0 {
+		t.Errorf("a row was added with the setting off: %+v", got)
 	}
 }
 

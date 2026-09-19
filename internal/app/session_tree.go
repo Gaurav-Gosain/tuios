@@ -177,6 +177,7 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 		// last, which is where the creation order will put it anyway.
 		sessions = append(sessions, current)
 	}
+	sessions = m.withGlobalSession(sessions)
 	// The drag order of the machine these sessions are on. Keyed by machine,
 	// because session names repeat across machines: build's session-0 must not
 	// take this machine's slot for the same name.
@@ -372,4 +373,28 @@ func (m *OS) sidebarLeaveForJump() {
 	}
 	m.clearSidebarReturn()
 	m.ExitSidebarFocus()
+}
+
+// withGlobalSession offers the global session in the rail once a second
+// machine is reachable.
+//
+// It is offered before it exists, as an empty row, and that is deliberate: a
+// session nobody has created yet is exactly the one that needs an affordance,
+// and switching to a session that is not there creates it, so the row works
+// without a second path to write. Once it exists the daemon lists it like any
+// other session and this adds nothing.
+//
+// It is not offered on a machine that can reach nowhere else. There it would
+// be a session for holding panes from several machines on a machine that knows
+// of none.
+func (m *OS) withGlobalSession(sessions []sessiontree.SessionInput) []sessiontree.SessionInput {
+	if !m.GlobalSessionOffered() {
+		return sessions
+	}
+	for _, s := range sessions {
+		if s.Name == GlobalSessionName {
+			return sessions
+		}
+	}
+	return append(sessions, sessiontree.SessionInput{Name: GlobalSessionName})
 }
