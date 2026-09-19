@@ -192,6 +192,16 @@ type Settings struct {
 
 	SessionBorder bool
 
+	// NewWindowPicksHost makes a new window ask which machine its process runs
+	// on, when there is more than one to pick from.
+	//
+	// It costs nothing on the machine that has no hosts configured, which is
+	// almost every one: with a single answer there is no question, so the
+	// window is made here and the picker never appears. It is a setting rather
+	// than a rule because someone with hosts configured who always wants the
+	// local pane should not pay a keystroke for a choice they never make.
+	NewWindowPicksHost bool
+
 	SessionColors bool
 
 	// DockWorkspaceTabs draws the dock's clickable workspace strip. Off leaves the
@@ -501,6 +511,7 @@ func DefaultSettings() Settings {
 		Tooltips:                    true,
 		SessionColors:               true,
 		SessionBorder:               false,
+		NewWindowPicksHost:          true,
 		SidebarGitDirty:             true,
 		NiriClickReveals:            true,
 		DockWorkspaceTabs:           true,

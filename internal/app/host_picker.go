@@ -194,3 +194,54 @@ func (m *OS) hostPickerActivate(idx int) tea.Cmd {
 	}
 	return m.ChooseHostForNewWindow(filtered[idx])
 }
+
+// NewWindowHere is what every "make me a pane" gesture calls: the key, the
+// prefix key, the rail's "+", and the palette.
+//
+// It asks which machine when there is more than one to pick from, and makes
+// the pane without a word when there is not. That gate is what keeps the
+// picker from being an obstacle: a machine with no hosts configured, which is
+// almost every one, has a single answer and so no question, and the key is as
+// instant as it ever was.
+//
+// The picker opening on the ordinary new-window gesture is the point. It was
+// reachable only through the command palette before, which meant finding a
+// window on another machine required knowing the feature existed and then
+// typing its name. A choice you have to go looking for is not a choice most
+// people will find.
+func (m *OS) NewWindowHere() {
+	if !m.newWindowShouldPickHost() {
+		m.AddWindow("")
+		return
+	}
+	m.OpenHostPicker()
+}
+
+// newWindowShouldPickHost reports whether a new window has a machine to
+// choose between.
+func (m *OS) newWindowShouldPickHost() bool {
+	if !m.Settings.NewWindowPicksHost {
+		return false
+	}
+	if !m.IsDaemonSession || m.DaemonClient == nil {
+		return false
+	}
+	return m.reachableMachines() > 1
+}
+
+// reachableMachines counts this machine and every configured one whose link is
+// up. A machine that is not answering is not a choice: it is listed in the
+// picker so nobody wonders where it went, but it cannot be picked, so it must
+// not be the reason a picker appears at all.
+func (m *OS) reachableMachines() int {
+	n := 1
+	for _, h := range m.FederationHosts {
+		if h.Name == federation.LocalHostName {
+			continue
+		}
+		if h.Status == string(federation.StatusUp) {
+			n++
+		}
+	}
+	return n
+}

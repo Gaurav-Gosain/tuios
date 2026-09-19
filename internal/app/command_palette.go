@@ -148,7 +148,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			Shortcut: "prefix+c",
 			Category: "Window",
 			Action: func(m *OS) (*OS, tea.Cmd) {
-				m.AddWindow("")
+				m.NewWindowHere()
 				return m, nil
 			},
 		},

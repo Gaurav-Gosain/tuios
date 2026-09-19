@@ -252,6 +252,11 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 	{
+		Path: "appearance.new_window_picks_host", Type: OptionBool, Section: "appearance",
+		Description: "Ask which machine a new window's process runs on, when more than one is reachable",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.niri_click_reveals", Type: OptionBool, Section: "appearance",
 		Description: "In the scrolling layout, clicking a column that is partly off the edge brings all of it on screen",
 		Default:     "true",

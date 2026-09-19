@@ -285,7 +285,7 @@ func GetDispatcher() *ActionDispatcher {
 // ============================================================================
 
 func handleNewWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.AddWindow("")
+	o.NewWindowHere()
 	return o, nil
 }
 

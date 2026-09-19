@@ -586,7 +586,7 @@ func (m *OS) SidebarNewWindow(sessionID string) {
 		return
 	}
 	m.clearSidebarReturn() // the new pane is where the user asked to end up
-	m.AddWindow("")
+	m.NewWindowHere()
 }
 
 // sessionCreateChan is the buffered channel carrying creation results back to
