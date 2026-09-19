@@ -237,3 +237,51 @@ func TestAFailureIsReported(t *testing.T) {
 type errFake struct{}
 
 func (errFake) Error() string { return "the link went away" }
+
+// TestTheGlobalRowDoesNotMoveTheMachineHeadings.
+//
+// The rail's machine headings are ordered from the host table so that
+// switching sessions does not move them. A row that appeared under this
+// machine only while the client happened to be attached to it would undo
+// that: every switch away would take a row out of the group above the
+// headings and step all of them up.
+//
+// So the offer does not depend on where the client is attached. It is under
+// this machine either way, whether this machine is the attached group or a
+// host group seen from somewhere else.
+//
+// Negative control: gating GlobalSessionOffered on AttachedHost == "" makes
+// the two counts differ here, which is what moved the headings in the
+// end-to-end rail test.
+func TestTheGlobalRowDoesNotMoveTheMachineHeadings(t *testing.T) {
+	m := pickerOS(t)
+	local := FederationHost{Name: federation.LocalHostName, Status: string(federation.StatusUp)}
+
+	// The two states use different paths, because hostGroupNodes leaves out
+	// whichever machine is attached: attached here, this machine's sessions
+	// come from live state through withGlobalSession; attached away, they come
+	// from the host listing through hostSessionsWithGlobal. The row has to be
+	// in whichever one is carrying this machine.
+	m.AttachedHost = ""
+	here := len(m.withGlobalSession(nil))
+
+	m.AttachedHost = "build"
+	away := len(m.hostSessionsWithGlobal(local))
+
+	if here != away {
+		t.Errorf("this machine's group gains %d rows when attached here and %d when away", here, away)
+	}
+	if here == 0 {
+		t.Fatal("ASSERTION: no row is offered either way, so this proves nothing")
+	}
+}
+
+// TestTheGlobalRowIsOnlyUnderThisMachine. It is this daemon's session, and a
+// row under another machine's heading would propose creating one over there.
+func TestTheGlobalRowIsOnlyUnderThisMachine(t *testing.T) {
+	m := pickerOS(t)
+	other := FederationHost{Name: "build", Status: string(federation.StatusUp)}
+	if got := m.hostSessionsWithGlobal(other); len(got) != 0 {
+		t.Errorf("another machine's group was offered a global session: %+v", got)
+	}
+}

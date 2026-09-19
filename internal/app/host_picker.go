@@ -242,6 +242,12 @@ func (m *OS) newWindowShouldPickHost() bool {
 // Only once a second machine is reachable. Before that it would be a session
 // that holds panes from several machines on a machine that knows of none, and
 // switching into it would buy nothing but a session to switch back out of.
+//
+// It does not depend on where this client is attached. The row belongs to this
+// machine's group and appears there whether that group is the attached one or
+// a host group seen from elsewhere, because a row that came and went on every
+// switch would move the machine headings under it, and those are ordered
+// precisely so they do not move.
 func (m *OS) GlobalSessionOffered() bool {
 	if !m.Settings.GlobalSession || !m.IsDaemonSession || m.DaemonClient == nil {
 		return false

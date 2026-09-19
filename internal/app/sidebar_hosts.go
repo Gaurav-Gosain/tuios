@@ -270,7 +270,7 @@ func (m *OS) hostGroupNodes() []sessiontree.Node {
 			// hiding an alarm.
 			AgentState: hostWorstAgentState(h.Sessions),
 		})
-		sessions := orderByKey(h.Sessions, func(s FederationSession) string { return s.Name },
+		sessions := orderByKey(m.hostSessionsWithGlobal(h), func(s FederationSession) string { return s.Name },
 			m.sidebarSessionOrderFor(h.Name))
 		for _, s := range sessions {
 			title := s.Name
@@ -340,6 +340,34 @@ func hostWorstAgentState(sessions []FederationSession) string {
 		}
 	}
 	return state
+}
+
+// hostSessionsWithGlobal offers the global session under this machine's group,
+// for the case where the client is attached somewhere else and this machine is
+// drawn as a host.
+//
+// The row has to be in both states or it would appear and vanish as the client
+// switches, and every machine heading below it would step up and down with it.
+// Those headings are ordered from the host table precisely so that switching
+// does not move them.
+//
+// Only under this machine. The global session is this daemon's, and a row
+// under another machine's heading would propose creating one over there, which
+// is a different session on a machine with its own idea of what it can reach.
+func (m *OS) hostSessionsWithGlobal(h FederationHost) []FederationSession {
+	if h.Name != federation.LocalHostName || !m.GlobalSessionOffered() {
+		return h.Sessions
+	}
+	for _, s := range h.Sessions {
+		if s.Name == GlobalSessionName {
+			return h.Sessions
+		}
+	}
+	// Copied rather than appended in place: the snapshot is shared with every
+	// other reader of the host listing this frame.
+	out := make([]FederationSession, 0, len(h.Sessions)+1)
+	out = append(out, h.Sessions...)
+	return append(out, FederationSession{Name: GlobalSessionName})
 }
 
 // hostNodeID namespaces a host's rows so their ids can never collide with a

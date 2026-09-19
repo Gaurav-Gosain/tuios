@@ -388,7 +388,10 @@ func (m *OS) sidebarLeaveForJump() {
 // be a session for holding panes from several machines on a machine that knows
 // of none.
 func (m *OS) withGlobalSession(sessions []sessiontree.SessionInput) []sessiontree.SessionInput {
-	if !m.GlobalSessionOffered() {
+	// Only into this machine's own group. While the client is attached
+	// elsewhere this list is that host's sessions, and the row is added to the
+	// local group instead; see sidebarHostSessions.
+	if !m.GlobalSessionOffered() || m.AttachedHost != "" {
 		return sessions
 	}
 	for _, s := range sessions {
