@@ -447,6 +447,30 @@ build = "root"
 For a script or an agent, `tuios hosts tailnet --json` gives every machine with
 `offered` and, when it is false, `skipped` saying which rule left it out.
 
+## Copying
+
+Copying is the one gesture in a terminal with no result to look at: the text
+does not change, and the selection usually disappears. So a copy sweeps a band
+of light across the cells that were taken, once, and then it is gone.
+
+```toml
+[appearance.selection]
+flash = true
+flash_ms = 420
+flash_color = "#FFF3C4"
+```
+
+The same table holds the colours a pane marks text with: the selection, search
+matches, the match under the cursor, and the copy mode cursor. They follow the
+theme nowhere else in tuios, because they are the one part of a pane's colours
+tuios chooses rather than the program running in it, so they are settings. A
+text colour left empty keeps the colour the program wrote, and tints only the
+background behind it.
+
+The scrollback browser draws from the same two places: the theme for its
+chrome, and these settings for its search and selection, so a match there and
+a match in a pane are the same colour.
+
 ## Where State Lives
 
 | What | Path |

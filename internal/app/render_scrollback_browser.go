@@ -8,7 +8,9 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/scrollback"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -25,15 +27,29 @@ func (m *OS) renderScrollbackBrowser() string {
 		return ""
 	}
 
-	// Colors
-	accent := lipgloss.Color("#4fc3f7")
-	dimFg := lipgloss.Color("#505068")
-	selBg := lipgloss.Color("#1e3a5f")
-	selFg := lipgloss.Color("#ffffff")
-	normalFg := lipgloss.Color("#b0b0c0")
-	multiClr := lipgloss.Color("#66bb6a")
-	okClr := lipgloss.Color("#66bb6a")
-	failClr := lipgloss.Color("#ef5350")
+	// The browser's colours come from the theme and from the selection
+	// settings, like every other overlay.
+	//
+	// They were thirty-three hex literals. The one full-screen surface in
+	// tuios that ignored the user's theme was this one, so a person on a light
+	// theme, or on any theme at all, got a dark blue panel with its own idea
+	// of every colour, and the search highlight here was a different yellow
+	// from the search highlight in a pane two keystrokes away.
+	pal := theme.UI()
+	accent := pal.AccentBright
+	dimFg := pal.FgMute
+	selBg := pal.RowSel
+	selFg := pal.Fg
+	normalFg := pal.FgDim
+	multiClr := pal.Success
+	okClr := pal.Success
+	failClr := pal.Warn
+	// The marks a pane paints over its own output, so the browser's search
+	// and selection read as the same thing the pane's do. See
+	// config.SelectionConfig.
+	searchBgColor := lipgloss.Color(m.Settings.SearchBg)
+	matchFg := lipgloss.Color(m.Settings.MatchFg)
+	matchBgColor := lipgloss.Color(m.Settings.MatchBg)
 
 	// Inner content area (border=2, padding=2 top/bot, 4 left/right)
 	innerW := w - 6 // border(2) + padding-left(2) + padding-right(2)
@@ -63,7 +79,7 @@ func (m *OS) renderScrollbackBrowser() string {
 		if scrollback.BrowserMode(i) == browser.Mode {
 			tabs = append(tabs, lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("#000000")).
+				Foreground(matchFg).
 				Background(accent).
 				Padding(0, 1).
 				Render(name))
@@ -91,19 +107,19 @@ func (m *OS) renderScrollbackBrowser() string {
 		case scrollback.VimVisualChar:
 			modeBadge = " " + lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("#000000")).
-				Background(lipgloss.Color("#ffeb3b")).
+				Foreground(matchFg).
+				Background(matchBgColor).
 				Render(" VISUAL ") + " "
 		case scrollback.VimVisualLine:
 			modeBadge = " " + lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("#000000")).
-				Background(lipgloss.Color("#ffeb3b")).
+				Foreground(matchFg).
+				Background(matchBgColor).
 				Render(" VISUAL LINE ") + " "
 		default:
 			modeBadge = " " + lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("#000000")).
+				Foreground(matchFg).
 				Background(accent).
 				Render(" OUTPUT ") + " "
 		}
@@ -112,17 +128,17 @@ func (m *OS) renderScrollbackBrowser() string {
 	headerStr := title + methodStr + modeBadge + "  " + strings.Join(tabs, "")
 	vim := browser.Vim
 	if browser.OutputMode && vim != nil && vim.Mode == scrollback.VimSearch {
-		headerStr += "  " + styled(lipgloss.Color("#ffeb3b"), true, "/"+vim.SearchQuery+"█")
+		headerStr += "  " + styled(searchBgColor, true, "/"+vim.SearchQuery+"█")
 	} else if browser.OutputMode && vim != nil && vim.SearchQuery != "" {
 		matchInfo := ""
 		if n := len(vim.SearchMatches); n > 0 {
 			matchInfo = fmt.Sprintf(" [%d/%d]", vim.SearchCurrent+1, n)
 		}
-		headerStr += "  " + styled(lipgloss.Color("#ffeb3b"), false, "/"+vim.SearchQuery+matchInfo)
+		headerStr += "  " + styled(searchBgColor, false, "/"+vim.SearchQuery+matchInfo)
 	} else if browser.SearchActive {
-		headerStr += "  " + styled(lipgloss.Color("#ffeb3b"), true, "/"+browser.SearchQuery+"█")
+		headerStr += "  " + styled(searchBgColor, true, "/"+browser.SearchQuery+"█")
 	} else if browser.SearchQuery != "" {
-		headerStr += "  " + styled(lipgloss.Color("#ffeb3b"), false, "["+browser.SearchQuery+"]")
+		headerStr += "  " + styled(searchBgColor, false, "["+browser.SearchQuery+"]")
 	}
 
 	lines := make([]string, 0, innerH)
@@ -136,7 +152,12 @@ func (m *OS) renderScrollbackBrowser() string {
 
 	// === PANES ===
 	leftLines := buildLeftPane(browser, leftW, paneH, selBg, selFg, normalFg, dimFg, multiClr)
-	rightLines := buildRightPane(browser, rightW, paneH, dimFg, accent, okClr, failClr)
+	rightLines := buildRightPane(browser, rightW, paneH, dimFg, accent, okClr, failClr, browserMarks{
+		cursorBg: pal.Selected,
+		visualBg: lipgloss.Color(m.Settings.SelectionBg),
+		searchBg: searchBgColor,
+		normalFg: pal.FgDim,
+	})
 
 	sep := styled(dimFg, false, "│")
 	for i := range paneH {
@@ -206,14 +227,14 @@ func (m *OS) renderScrollbackBrowser() string {
 		Padding(1, 2).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(accent).
-		Background(lipgloss.Color("#1a1a2a")).
+		Background(pal.Surface).
 		Render(content)
 
 	result := lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
 
 	// Help overlay (rendered on top)
 	if browser.ShowHelp {
-		result = overlayBrowserHelp(w, h, browser.OutputMode, accent, dimFg)
+		result = overlayBrowserHelp(w, h, browser.OutputMode, accent, dimFg, pal)
 	}
 
 	return result
@@ -286,9 +307,19 @@ func buildLeftPane(
 	return out
 }
 
+// browserMarks are the colours the preview pane paints over the output it
+// shows: the cursor, a visual selection, and a search match. They are the
+// pane's own marks, so the browser and the pane it came from agree.
+type browserMarks struct {
+	cursorBg color.Color
+	visualBg color.Color
+	searchBg color.Color
+	normalFg color.Color
+}
+
 func buildRightPane(
 	browser *scrollback.Browser, width, height int,
-	dimFg, accent, okClr, failClr color.Color,
+	dimFg, accent, okClr, failClr color.Color, marks browserMarks,
 ) []string {
 	out := make([]string, height)
 	empty := strings.Repeat(" ", width)
@@ -387,10 +418,10 @@ func buildRightPane(
 		scroll = max(scroll, 0)
 	}
 
-	cursorBg := lipgloss.Color("#2e5090")
-	visualBg := lipgloss.Color("#1e3a5f")
-	searchBg := lipgloss.Color("#3a3520")
-	normalTextFg := lipgloss.Color("#b0b0c0")
+	cursorBg := marks.cursorBg
+	visualBg := marks.visualBg
+	searchBg := marks.searchBg
+	normalTextFg := marks.normalFg
 
 	for i := range availH {
 		pIdx := scroll + i
@@ -497,7 +528,7 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 		if lineIdx == vim.CursorY {
 			// Show cursor block on empty line
 			return lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#ffffff")).
+				Foreground(normalFg).
 				Bold(true).
 				Background(cursorBg).
 				Render(" ") + strings.Repeat(" ", max(width-1, 0))
@@ -549,20 +580,20 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 		case 3: // cursor
 			result.WriteString("\x1b[0m")
 			result.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#ffffff")).
+				Foreground(normalFg).
 				Bold(true).
 				Background(cursorBg).
 				Render(span))
 		case 2: // visual
 			result.WriteString("\x1b[0m")
 			result.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#d0d0e0")).
+				Foreground(normalFg).
 				Background(visualBg).
 				Render(span))
 		case 1: // search
 			result.WriteString("\x1b[0m")
 			result.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#d0c080")).
+				Foreground(searchBg).
 				Background(searchBg).
 				Render(span))
 		default:
@@ -591,7 +622,7 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 
 	if cursorPastEnd {
 		result.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#ffffff")).
+			Foreground(normalFg).
 			Bold(true).
 			Background(cursorBg).
 			Render(" "))
@@ -666,7 +697,7 @@ func isCSIFinal(b byte) bool {
 }
 
 // overlayBrowserHelp renders a help modal on top of the browser content.
-func overlayBrowserHelp(w, h int, outputMode bool, accent, dimFg color.Color) string {
+func overlayBrowserHelp(w, h int, outputMode bool, accent, dimFg color.Color, pal overlay.Palette) string {
 	var helpLines []string
 	titleText := "Keys"
 
@@ -745,7 +776,7 @@ func overlayBrowserHelp(w, h int, outputMode bool, accent, dimFg color.Color) st
 		if l == "" {
 			modalLines = append(modalLines, strings.Repeat(" ", modalW-4))
 		} else {
-			modalLines = append(modalLines, fitLine(styled(lipgloss.Color("#b0b0c0"), false, l), modalW-4))
+			modalLines = append(modalLines, fitLine(styled(pal.FgDim, false, l), modalW-4))
 		}
 	}
 
@@ -760,7 +791,7 @@ func overlayBrowserHelp(w, h int, outputMode bool, accent, dimFg color.Color) st
 		Padding(1, 2).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(accent).
-		Background(lipgloss.Color("#1a1a2a")).
+		Background(pal.Surface).
 		Render(modalContent)
 
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, modal)
@@ -774,9 +805,10 @@ type browserHint struct {
 }
 
 func browserFooterHints(hints []browserHint, maxWidth int, s *config.Settings) string {
-	pillBg := lipgloss.Color("#3a3a5e")
-	pillFg := lipgloss.Color("#ffffff")
-	descFg := lipgloss.Color("#808098")
+	pal := theme.UI()
+	pillBg := pal.Card
+	pillFg := pal.Fg
+	descFg := pal.FgMute
 
 	pillLeft := s.GetWindowPillLeft()
 	pillRight := s.GetWindowPillRight()

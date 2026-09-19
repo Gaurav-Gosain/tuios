@@ -37,6 +37,9 @@ func (m *OS) CopyToClipboard(text string) tea.Cmd {
 		return nil
 	}
 	m.CancelPendingCopy()
+	// The sweep is written down before the selection goes, because the
+	// selection is where the region comes from and a copy usually clears it.
+	m.NoteCopyFlash(m.GetFocusedWindow())
 	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
 	return m.clipboardWriteCmd(text)
 }
@@ -54,6 +57,10 @@ func (m *OS) DeferCopyToClipboard(text string, delay time.Duration) tea.Cmd {
 	}
 	m.selectionSeq++
 	m.pendingCopy = text
+	// The same, for the deferred path: by the time the timer fires the pane
+	// may have scrolled or the selection may be gone, so the region is taken
+	// now alongside the text.
+	m.NoteCopyFlash(m.GetFocusedWindow())
 	seq := m.selectionSeq
 	return tea.Tick(max(delay, time.Millisecond), func(time.Time) tea.Msg {
 		return PendingCopyMsg{Seq: seq}

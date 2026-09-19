@@ -165,6 +165,15 @@ var colorSettings = []colorSetting{
 			return selectionInk(s.CopyCursorFg, ground)
 		},
 	},
+	{
+		Path:  "appearance.selection.flash_color",
+		Label: "Copy sweep",
+		Desc:  "The light that crosses text you just copied",
+		apply: selectionColorApply(func(s *config.Settings, v string) { s.CopyFlashColor = v }),
+		effective: func(_ color.Color, s *config.Settings) color.Color {
+			return lipgloss.Color(s.CopyFlashColor)
+		},
+	},
 }
 
 // selectionColorApply writes one selection colour and repaints.

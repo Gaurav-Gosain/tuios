@@ -1547,3 +1547,16 @@ const (
 	PrefixRepeatTimeMin     = 0
 	PrefixRepeatTimeMax     = 5000
 )
+
+// The copy sweep: a band of light that crosses what was copied, once.
+//
+// Copying is the one gesture in a terminal with no result to look at, so the
+// feedback has to be put where the text was. See internal/app/copy_flash.go.
+const (
+	CopyFlashMsDefault = 420
+	CopyFlashMsMin     = 80
+	CopyFlashMsMax     = 3000
+	// A pale warm white, which reads as light over output of any colour
+	// without introducing a hue the rest of the screen does not use.
+	DefaultCopyFlashColor = "#FFF3C4"
+)

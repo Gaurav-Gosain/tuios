@@ -258,6 +258,12 @@ type Settings struct {
 	CopyCursorBg  string
 	CopyCursorFg  string
 
+	// CopyFlash sweeps a band of light over text that was just copied.
+	// CopyFlashMs is how long one sweep takes and CopyFlashColor is the light.
+	CopyFlash      bool
+	CopyFlashMs    int
+	CopyFlashColor string
+
 	// HideScrollbar controls whether the window scrollbar is hidden.
 	// Automatically treated as true when BorderStyle == "hidden" since there is
 	// no border to draw the thumb on in that mode.
@@ -551,6 +557,9 @@ func DefaultSettings() Settings {
 		MatchFg:                     DefaultMatchFg,
 		CopyCursorBg:                DefaultCopyCursorBg,
 		CopyCursorFg:                DefaultCopyCursorFg,
+		CopyFlash:                   true,
+		CopyFlashMs:                 CopyFlashMsDefault,
+		CopyFlashColor:              DefaultCopyFlashColor,
 		HideScrollbar:               false,
 		WindowTitlePosition:         "bottom",
 		WindowTitleFormat:           "",

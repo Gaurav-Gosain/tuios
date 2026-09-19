@@ -483,6 +483,26 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 	}
 
+	// The band of light crossing text that was just copied, if there is one.
+	//
+	// Its region is built exactly the way the visual selection's is, from the
+	// same absolute coordinates, because it is the same region: the sweep
+	// covers the cells that were taken. It outlives the selection, which a
+	// copy usually clears, which is why the coordinates were written down at
+	// the copy rather than read from the pane now.
+	var (
+		flashGrid *pool.HighlightGrid
+		flashBand copyFlashBand
+	)
+	if progress, ok := m.copyFlashProgress(window.ID); ok && m.copyFlash != nil {
+		flashGrid = pool.GetHighlightGrid()
+		flashGrid.Init(maxY, maxX)
+		defer pool.PutHighlightGrid(flashGrid)
+		fillPaneRegion(flashGrid, m.copyFlash.Start, m.copyFlash.End,
+			scrollbackLen, window.ScrollbackOffset, maxY, maxX)
+		flashBand = m.copyFlashBandFor(progress, maxX)
+	}
+
 	// The dim and the ground it carries toward, resolved once for the pane
 	// rather than per cell. dimT is zero for a focused pane, for an unset
 	// option, and for an untheme where there is no known ground to carry to,
@@ -690,6 +710,24 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			char := " "
 			if cell != nil && cell.Content != "" {
 				char = string(cell.Content)
+			}
+
+			// The copy sweep, ahead of the ordinary cell path and behind
+			// every mark: a selection or a search match still shows as what
+			// it is while the light crosses it.
+			if flashGrid != nil && flashGrid.Get(y, x) {
+				if st, lit := flashBand.styleFor(x); lit {
+					flushBatch()
+					builder.WriteString(renderStyledText(st, char))
+					notePrev(cell)
+					prevIsCursor = false
+					cellWidth := 1
+					if cell != nil && cell.Width > 1 {
+						cellWidth = cell.Width
+					}
+					x += cellWidth
+					continue
+				}
 			}
 
 			if inVisualMode && visualSelection != nil && visualSelection.Get(y, x) && x <= lineEndX {

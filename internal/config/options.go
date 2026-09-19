@@ -474,6 +474,23 @@ var optionSpecs = []Option{
 		Default:     DefaultCopyCursorFg, Color: true,
 	},
 
+	{
+		Path: "appearance.selection.flash", Type: OptionBool, Section: "selection",
+		Description: "Sweep a band of light over text that was just copied",
+		Default:     "true",
+	},
+	{
+		Path: "appearance.selection.flash_ms", Type: OptionInt, Section: "selection",
+		Description: "Milliseconds one copy sweep takes",
+		Default:     strconv.Itoa(CopyFlashMsDefault),
+		Min:         CopyFlashMsMin, Max: CopyFlashMsMax,
+	},
+	{
+		Path: "appearance.selection.flash_color", Type: OptionString, Section: "selection",
+		Description: "The light the copy sweep is made of",
+		Default:     DefaultCopyFlashColor, Color: true,
+	},
+
 	// [appearance.sidebar]
 	{
 		Path: "appearance.sidebar.enabled", Type: OptionBool, Section: "sidebar",

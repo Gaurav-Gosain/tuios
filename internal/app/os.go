@@ -526,6 +526,11 @@ type OS struct {
 	// marks() in render_terminal.go.
 	markStyleCache *markStyles
 
+	// copyFlash is the band of light crossing text that was just copied, or
+	// nil. It is dropped the moment it has run its course, so an idle client
+	// holds nothing. See copy_flash.go.
+	copyFlash *copyFlash
+
 	// prefixRepeatUntil is when the prefix stops being armed after a
 	// repeatable prefix command. Zero when nothing is armed. See
 	// ArmPrefixRepeat.

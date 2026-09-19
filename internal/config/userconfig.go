@@ -437,6 +437,13 @@ type SelectionConfig struct {
 	// CursorBg is the block copy mode draws where its cursor is.
 	CursorBg string `toml:"cursor_bg"`
 	CursorFg string `toml:"cursor_fg"`
+	// Flash sweeps a band of light over text that was just copied. Copying is
+	// the one gesture in a terminal with no result to look at: the text does
+	// not change and the selection usually disappears.
+	Flash *bool `toml:"flash"`
+	// FlashMs is how long one sweep takes, and FlashColor is the light.
+	FlashMs    int    `toml:"flash_ms,omitempty"`
+	FlashColor string `toml:"flash_color,omitempty"`
 }
 
 // SidebarConfig holds the [appearance.sidebar] table: everything about the
@@ -539,6 +546,9 @@ type KeybindingsConfig struct {
 // Zero is a real value for this key, so it is a pointer; see the field.
 var defaultPrefixRepeatTime = PrefixRepeatTimeDefault
 
+// defaultCopyFlash is addressable so DefaultConfig can point at it.
+var defaultCopyFlash = true
+
 // DefaultConfig returns the default configuration
 func DefaultConfig() *UserConfig {
 	cfg := &UserConfig{
@@ -569,6 +579,8 @@ func DefaultConfig() *UserConfig {
 				SearchBg: DefaultSearchBg, SearchFg: DefaultSearchFg,
 				MatchBg: DefaultMatchBg, MatchFg: DefaultMatchFg,
 				CursorBg: DefaultCopyCursorBg, CursorFg: DefaultCopyCursorFg,
+				Flash: &defaultCopyFlash, FlashMs: CopyFlashMsDefault,
+				FlashColor: DefaultCopyFlashColor,
 			},
 			Sidebar: SidebarConfig{
 				Position:    "left",
@@ -1502,6 +1514,15 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.CopyCursorBg = cfg.Appearance.Selection.CursorBg
 	}
 	s.CopyCursorFg = cfg.Appearance.Selection.CursorFg
+	if cfg.Appearance.Selection.Flash != nil {
+		s.CopyFlash = *cfg.Appearance.Selection.Flash
+	}
+	if cfg.Appearance.Selection.FlashMs > 0 {
+		s.CopyFlashMs = cfg.Appearance.Selection.FlashMs
+	}
+	if cfg.Appearance.Selection.FlashColor != "" {
+		s.CopyFlashColor = cfg.Appearance.Selection.FlashColor
+	}
 
 	// The hide/show toggles are plain bools with no "unset" state, so they are
 	// assigned unconditionally: turning one off in the settings page has to

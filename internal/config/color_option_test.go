@@ -44,6 +44,8 @@ func TestColorOptionsAreMarked(t *testing.T) {
 		"appearance.selection.match_fg":  true,
 		"appearance.selection.cursor_bg": true,
 		"appearance.selection.cursor_fg": true,
+		// The light the copy sweep is made of.
+		"appearance.selection.flash_color": true,
 	}
 	got := map[string]bool{}
 	for _, p := range colorOptionPaths(t) {

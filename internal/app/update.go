@@ -486,6 +486,12 @@ func (m *OS) tickNeedsWork() bool {
 		len(m.pendingAgentAlerts) > 0 || m.spotlightMotionPending {
 		return true
 	}
+	// The band of light crossing text that was just copied. It is drawn from
+	// the clock rather than stepped, so it needs frames while it runs and
+	// nothing at all once it has finished; the check drops it when it has.
+	if m.CopyFlashActive() {
+		return true
+	}
 	// A gesture's announcement hold that nothing is holding any more. The sweep
 	// below is what ends it, and a hold the idle diet slept through is exactly
 	// the stranded hold this has to catch: one bool, then one comparison.
