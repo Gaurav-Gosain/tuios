@@ -106,7 +106,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		const (
 			artCols      = 38
 			subtitleCols = 28
-			hintCols     = 44 // three key chips and their labels, spaced
+			hintCols     = 62 // four key chips and their labels, spaced
 			boxCols      = 6  // both borders, both paddings
 			boxRows      = 4  // border and padding, top and bottom
 		)
@@ -143,9 +143,14 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		// there is not, so no width loses a hint entirely. They are key chips and
 		// lowercase labels, the same shape every overlay footer uses: the quoted
 		// Title-case prose was the only surface speaking that way.
-		hints := make([]string, 0, 3)
+		hints := make([]string, 0, 4)
 		for _, h := range []overlay.Hint{
 			{Key: "n", Label: "new window"},
+			// The splash is what somebody with no session is looking at, so
+			// the way to make one belongs on it. It was on neither the splash
+			// nor any key: a person who had just arrived could make a pane and
+			// had no way to find out that sessions existed.
+			{Key: "N", Label: "new session"},
 			{Key: "?", Label: "help"},
 			{Key: ",", Label: "settings"},
 		} {

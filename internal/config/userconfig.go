@@ -611,6 +611,13 @@ func DefaultConfig() *UserConfig {
 			LeaderKey: "ctrl+b",
 			WindowManagement: map[string][]string{
 				"new_window":        {"n"},
+				// Capital N, one shift away from the n that makes a window.
+				// Making a session was reachable from a one-cell "+" on a rail
+				// heading and from nowhere else a keyboard could find, which
+				// made the first thing anybody does the least reachable thing
+				// in the interface. It asks which machine when there is more
+				// than one, and offers a global session alongside them.
+				"new_session":       {"N"},
 				"close_window":      {"w", "x"},
 				"rename_window":     {"r"},
 				"minimize_window":   {"m"},

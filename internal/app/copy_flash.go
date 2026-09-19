@@ -65,6 +65,23 @@ func (m *OS) NoteCopyFlash(window *terminal.Window) {
 	window.ContentDirty = true
 }
 
+// markCopyFlashPane asks the pane a sweep is crossing to draw another frame.
+//
+// It is called from the maintenance tick, and it is what makes the sweep move
+// at all. A pane is drawn from its cached frame unless something marks it, a
+// copy changes nothing in the pane, and nothing else was marking it, so the
+// light was computed every tick and painted into a frame that was thrown away.
+// One frame reached the screen: the one the copy itself asked for, which is
+// the frame where the light has not arrived yet.
+func (m *OS) markCopyFlashPane() {
+	if m.copyFlash == nil || !m.CopyFlashActive() {
+		return
+	}
+	if w := m.windowByID(m.copyFlash.WindowID); w != nil {
+		w.ContentDirty = true
+	}
+}
+
 // copyFlashDuration is how long one sweep takes.
 func (m *OS) copyFlashDuration() time.Duration {
 	return time.Duration(m.Settings.CopyFlashMs) * time.Millisecond

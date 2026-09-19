@@ -186,6 +186,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	// dispatcher actions rather than cases of a switch; see global_binds.go.
 	d.Register("command_palette", handleOpenCommandPalette)
 	d.Register("launcher", handleOpenLauncher)
+	d.Register("new_session", handleNewSession)
 	d.Register("next_session", handleNextSession)
 	d.Register("prev_session", handlePrevSession)
 
@@ -1046,4 +1047,11 @@ func handleOpenCommandPalette(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // handleOpenLauncher opens the app launcher.
 func handleOpenLauncher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.OpenLauncher()
+}
+
+// handleNewSession makes a session, asking which machine when there is more
+// than one and offering a global session alongside them.
+func handleNewSession(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.OpenNewSessionPicker()
+	return o, nil
 }

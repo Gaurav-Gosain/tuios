@@ -894,6 +894,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		m.tickStats.Work++
 
+		// The pane a copy sweep is crossing. Nothing in it has changed, so
+		// nothing else marks it, and a pane that is not marked is drawn from
+		// its cached frame: the light was computed every tick and painted into
+		// a frame that was thrown away. Without this the sweep shows exactly
+		// one frame, the one the copy itself asked for, which is the frame
+		// where the light has not arrived yet.
+		m.markCopyFlashPane()
+
 		// Agent alerts whose settle window has closed. Done before the window
 		// sweep below so an alert about a pane that exited this tick is dropped
 		// by its own re-validation rather than by a nil window.

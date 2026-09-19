@@ -254,3 +254,52 @@ func TestTheSelectionShowsUnderTheSweep(t *testing.T) {
 		t.Error("the block is still painted after the sweep has finished")
 	}
 }
+
+// TestTheSweepMarksItsPaneEveryTick.
+//
+// This is why the sweep could not be seen. A pane is drawn from its cached
+// frame unless something marks it, a copy changes nothing in the pane, and the
+// maintenance tick marks nothing. So exactly one frame was drawn, the one the
+// copy itself asked for, and that is the frame where the light has not arrived
+// yet: a static highlight over the whole region and no movement at all, which
+// is precisely what was reported.
+//
+// Negative control: dropping the mark from the tick leaves the pane clean and
+// this fails.
+func TestTheSweepMarksItsPaneEveryTick(t *testing.T) {
+	m := flashOS(t)
+	w := selectedWindow()
+	m.Windows = []*terminal.Window{w}
+
+	m.NoteCopyFlash(w)
+	if m.copyFlash == nil {
+		t.Fatal("ASSERTION: no sweep was recorded, so there is nothing to draw")
+	}
+
+	// The frame the copy asked for has been drawn.
+	w.ContentDirty = false
+
+	m.markCopyFlashPane()
+
+	if !w.ContentDirty {
+		t.Error("the tick did not mark the pane, so the sweep draws one frame and stops")
+	}
+}
+
+// TestAFinishedSweepMarksNothing, so a quiet client goes back to drawing
+// nothing at all.
+func TestAFinishedSweepMarksNothing(t *testing.T) {
+	m := flashOS(t)
+	m.Settings.CopyFlashMs = 1
+	w := selectedWindow()
+	m.Windows = []*terminal.Window{w}
+	m.NoteCopyFlash(w)
+
+	time.Sleep(5 * time.Millisecond)
+	w.ContentDirty = false
+	m.markCopyFlashPane()
+
+	if w.ContentDirty {
+		t.Error("a finished sweep is still asking its pane to redraw")
+	}
+}

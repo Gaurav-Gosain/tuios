@@ -722,7 +722,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			// The copy sweep, ahead of the ordinary cell path and behind
 			// every mark: a selection or a search match still shows as what
 			// it is while the light crosses it.
-			if flashGrid != nil && flashGrid.Get(y, x) {
+			// Only as far as the text goes on this row, which is the same
+			// clamp the pane's own selection uses below. Without it the
+			// highlight ran to the edge of the pane on every row, so a
+			// selection of one short line was painted as a full-width block.
+			if flashGrid != nil && flashGrid.Get(y, x) && x <= lineEndX {
 				// A cell holding a character has its text lit as well as its
 				// ground, so the sweep passes over the words rather than
 				// behind them.

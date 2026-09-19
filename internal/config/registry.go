@@ -562,6 +562,7 @@ var ActionDescriptions = map[string]string{
 	// Global (window mode and terminal mode alike)
 	"command_palette": "Open the command palette",
 	"launcher":        "Open the app launcher",
+	"new_session":     "Make a session, asking which machine",
 
 	// Script playback
 	"script_pause": "Pause or resume the playing tape",
