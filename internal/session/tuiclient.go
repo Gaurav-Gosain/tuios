@@ -1425,6 +1425,21 @@ func (c *TUIClient) SessionRestored(name string) bool {
 	return false
 }
 
+// SessionGlobal reports whether the named session is a global one, from the
+// cached listing. False for a session this client has not been told about, and
+// false from a daemon too old to send the field, which reads as the ordinary
+// session it would have been before global sessions existed.
+func (c *TUIClient) SessionGlobal(name string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, s := range c.availableSessions {
+		if s.Name == name {
+			return s.Global
+		}
+	}
+	return false
+}
+
 // SessionCurrentWorkspace is the workspace the named session is showing, from
 // the cached listing, or 0 when it is unknown: an older daemon does not send
 // the field, and a surface reading zero simply says nothing about where that
@@ -1493,11 +1508,23 @@ func (c *TUIClient) TryRefreshSessionList() {
 // daemon answers with the refreshed listing, which is applied to the cache so
 // the new session is in the rail before the next poll rather than after it.
 func (c *TUIClient) CreateDetachedSession(name string, width, height int) error {
+	return c.createSession(name, width, height, false)
+}
+
+// CreateGlobalSession creates a session meant to hold panes from more than one
+// machine. It is created with no windows: the first one is the pane the user
+// picks a machine for. See NewPayload.Global.
+func (c *TUIClient) CreateGlobalSession(name string, width, height int) error {
+	return c.createSession(name, width, height, true)
+}
+
+func (c *TUIClient) createSession(name string, width, height int, global bool) error {
 	msg, err := NewMessageWithCodec(MsgNew, &NewPayload{
 		SessionName: name,
 		Width:       width,
 		Height:      height,
 		Detach:      true,
+		Global:      global,
 	}, c.codec)
 	if err != nil {
 		return err

@@ -183,37 +183,142 @@ func TestTheRailOffersTheGlobalSessionOnceASecondMachineIsThere(t *testing.T) {
 	}
 }
 
-// TestTheGlobalSessionIsOfferedBeforeItExists. It is the session nobody has
-// created yet that most needs a row, and switching to one that is not there
-// creates it, so the row needs no second path behind it.
-func TestTheGlobalSessionIsOfferedBeforeItExists(t *testing.T) {
+// railGlobalGroup is the rail's global group: the header's index among the
+// rows, and the rows listed under it.
+func railGlobalGroup(t *testing.T, m *OS, here []sessiontree.Node) (int, []sessiontree.Node) {
+	t.Helper()
+	rows := m.sidebarMachineRows(here, m.hostGroupNodes())
+	for i, n := range rows {
+		if n.Kind != sessiontree.KindHost || !n.Global {
+			continue
+		}
+		var under []sessiontree.Node
+		for _, r := range rows[i+1:] {
+			if r.Kind == sessiontree.KindHost {
+				break
+			}
+			under = append(under, r)
+		}
+		return i, under
+	}
+	return -1, nil
+}
+
+// TestTheGlobalGroupIsOfferedBeforeThereIsAnythingInIt. It is the group with
+// nothing in it that most needs a header: its "+" is how the first global
+// session gets made.
+func TestTheGlobalGroupIsOfferedBeforeThereIsAnythingInIt(t *testing.T) {
 	m := pickerOS(t)
+	here := []sessiontree.Node{{Kind: sessiontree.KindSession, ID: "work", Title: "work"}}
 
-	got := m.withGlobalSession(nil)
-	if len(got) != 1 || got[0].Name != GlobalSessionName {
-		t.Fatalf("the rail does not offer a global session row: %+v", got)
+	at, under := railGlobalGroup(t, m, here)
+	if at != 0 {
+		t.Fatalf("the global group is at row %d, want the top of the rail", at)
 	}
-
-	// And it is not offered twice once the daemon lists it.
-	existing := []sessiontree.SessionInput{{Name: GlobalSessionName, WindowCount: 2}}
-	again := m.withGlobalSession(existing)
-	if len(again) != 1 {
-		t.Errorf("the global session is listed %d times", len(again))
-	}
-	if again[0].WindowCount != 2 {
-		t.Error("the real session was replaced by the empty offer")
+	if len(under) != 0 {
+		t.Errorf("the empty global group lists %d rows", len(under))
 	}
 }
 
-// TestTurningTheGlobalSessionOffRemovesTheRow.
-func TestTurningTheGlobalSessionOffRemovesTheRow(t *testing.T) {
+// TestTheGlobalGroupIsAboveThisMachine.
+//
+// It is not a machine and it is not under one. A global session holds panes
+// from several machines, so filing it under the one whose daemon happens to
+// hold it says it belongs to that machine, which is the one thing it does not.
+func TestTheGlobalGroupIsAboveThisMachine(t *testing.T) {
+	m := pickerOS(t)
+	here := []sessiontree.Node{{Kind: sessiontree.KindSession, ID: "work", Title: "work"}}
+
+	rows := m.sidebarMachineRows(here, m.hostGroupNodes())
+	var headers []string
+	for _, n := range rows {
+		if n.Kind == sessiontree.KindHost {
+			headers = append(headers, n.Host)
+		}
+	}
+	if len(headers) < 2 {
+		t.Fatalf("ASSERTION: the rail drew %d machine headers, so there is no order to check", len(headers))
+	}
+	if headers[0] != GlobalSessionName {
+		t.Errorf("the rail reads %v, want the global group first", headers)
+	}
+	if headers[1] != federation.LocalHostName {
+		t.Errorf("the rail reads %v, want this machine under the global group", headers)
+	}
+}
+
+// TestAGlobalSessionIsListedInTheGlobalGroupAndNotUnderItsMachine.
+//
+// Negative control: without the strip in sidebarMachineRows the session stays
+// under this machine and the global group is empty.
+func TestAGlobalSessionIsListedInTheGlobalGroupAndNotUnderItsMachine(t *testing.T) {
+	m := pickerOS(t)
+	here := []sessiontree.Node{
+		{Kind: sessiontree.KindSession, ID: "work", Title: "work"},
+		{Kind: sessiontree.KindSession, ID: "everywhere", Title: "everywhere", Global: true},
+	}
+
+	rows := m.sidebarMachineRows(here, m.hostGroupNodes())
+	seen := 0
+	for _, n := range rows {
+		if n.Kind == sessiontree.KindSession && n.ID == "everywhere" {
+			seen++
+		}
+	}
+	if seen != 1 {
+		t.Errorf("the global session is drawn %d times, want once", seen)
+	}
+
+	_, under := railGlobalGroup(t, m, here)
+	if len(under) != 1 || under[0].ID != "everywhere" {
+		t.Errorf("the global group holds %+v, want the global session", under)
+	}
+}
+
+// TestTheGlobalGroupHoldsMoreThanOneSession. There is nothing special about
+// the first one: a person can keep as many as they have things to do.
+func TestTheGlobalGroupHoldsMoreThanOneSession(t *testing.T) {
+	m := pickerOS(t)
+	here := []sessiontree.Node{
+		{Kind: sessiontree.KindSession, ID: "work", Title: "work"},
+		{Kind: sessiontree.KindSession, ID: "deploy", Title: "deploy", Global: true},
+		{Kind: sessiontree.KindSession, ID: "debug", Title: "debug", Global: true},
+	}
+
+	_, under := railGlobalGroup(t, m, here)
+	if len(under) != 2 {
+		t.Errorf("the global group holds %d sessions, want both: %+v", len(under), under)
+	}
+}
+
+// TestASessionNamedGlobalIsStillGlobal. The mark is set when the session is
+// created, so the sessions created before the mark existed have only their
+// name to say what they are.
+func TestASessionNamedGlobalIsStillGlobal(t *testing.T) {
+	m := pickerOS(t)
+	here := []sessiontree.Node{
+		{Kind: sessiontree.KindSession, ID: "work", Title: "work"},
+		{Kind: sessiontree.KindSession, ID: GlobalSessionName, Title: GlobalSessionName},
+	}
+
+	_, under := railGlobalGroup(t, m, here)
+	if len(under) != 1 || under[0].ID != GlobalSessionName {
+		t.Errorf("the group holds %+v, want the session named global", under)
+	}
+}
+
+// TestTurningTheGlobalSessionOffRemovesTheGroup, when there is no global
+// session to show. A session that exists is still listed: hiding a session
+// somebody is using is worse than showing a group they turned off.
+func TestTurningTheGlobalSessionOffRemovesTheGroup(t *testing.T) {
 	m := pickerOS(t)
 	m.Settings.GlobalSession = false
 	if m.GlobalSessionOffered() {
-		t.Error("the row is offered with the setting off")
+		t.Error("the group is offered with the setting off")
 	}
-	if got := m.withGlobalSession(nil); len(got) != 0 {
-		t.Errorf("a row was added with the setting off: %+v", got)
+	here := []sessiontree.Node{{Kind: sessiontree.KindSession, ID: "work", Title: "work"}}
+	if at, _ := railGlobalGroup(t, m, here); at != -1 {
+		t.Error("the group was drawn with the setting off and nothing in it")
 	}
 }
 
@@ -237,51 +342,3 @@ func TestAFailureIsReported(t *testing.T) {
 type errFake struct{}
 
 func (errFake) Error() string { return "the link went away" }
-
-// TestTheGlobalRowDoesNotMoveTheMachineHeadings.
-//
-// The rail's machine headings are ordered from the host table so that
-// switching sessions does not move them. A row that appeared under this
-// machine only while the client happened to be attached to it would undo
-// that: every switch away would take a row out of the group above the
-// headings and step all of them up.
-//
-// So the offer does not depend on where the client is attached. It is under
-// this machine either way, whether this machine is the attached group or a
-// host group seen from somewhere else.
-//
-// Negative control: gating GlobalSessionOffered on AttachedHost == "" makes
-// the two counts differ here, which is what moved the headings in the
-// end-to-end rail test.
-func TestTheGlobalRowDoesNotMoveTheMachineHeadings(t *testing.T) {
-	m := pickerOS(t)
-	local := FederationHost{Name: federation.LocalHostName, Status: string(federation.StatusUp)}
-
-	// The two states use different paths, because hostGroupNodes leaves out
-	// whichever machine is attached: attached here, this machine's sessions
-	// come from live state through withGlobalSession; attached away, they come
-	// from the host listing through hostSessionsWithGlobal. The row has to be
-	// in whichever one is carrying this machine.
-	m.AttachedHost = ""
-	here := len(m.withGlobalSession(nil))
-
-	m.AttachedHost = "build"
-	away := len(m.hostSessionsWithGlobal(local))
-
-	if here != away {
-		t.Errorf("this machine's group gains %d rows when attached here and %d when away", here, away)
-	}
-	if here == 0 {
-		t.Fatal("ASSERTION: no row is offered either way, so this proves nothing")
-	}
-}
-
-// TestTheGlobalRowIsOnlyUnderThisMachine. It is this daemon's session, and a
-// row under another machine's heading would propose creating one over there.
-func TestTheGlobalRowIsOnlyUnderThisMachine(t *testing.T) {
-	m := pickerOS(t)
-	other := FederationHost{Name: "build", Status: string(federation.StatusUp)}
-	if got := m.hostSessionsWithGlobal(other); len(got) != 0 {
-		t.Errorf("another machine's group was offered a global session: %+v", got)
-	}
-}

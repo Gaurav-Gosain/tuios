@@ -512,6 +512,11 @@ type OS struct {
 	// Distinct from RestoredFromState below, which is this client's own
 	// bookkeeping about having applied a state snapshot.
 	SessionRestored bool
+	// SessionGlobal is the attached session's daemon-owned global mark, which
+	// says it is meant to hold panes from more than one machine. Every other
+	// session's arrives with the cached listing; this one comes down with the
+	// session state, the same way SessionRestored does.
+	SessionGlobal bool
 	// SessionWorktree is the attached session's daemon-owned worktree record,
 	// nil when its directory is not a linked git worktree. Every other
 	// session's arrives with the cached listing; this one comes down with the

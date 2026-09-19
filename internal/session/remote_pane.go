@@ -336,3 +336,16 @@ func (s *Session) PublishLiveFacts() {
 	s.forgetCwdCache()
 	_ = s.mutateState(func(*SessionState) error { return nil })
 }
+
+// refreshRemoteCwdOnOutput asks a pane on another machine where it is, if it
+// has been long enough since the last answer.
+//
+// Reading the cached value is what starts the ask, so this is a map read and a
+// clock comparison for a pane of this daemon's own, and at most one call a
+// second for one elsewhere. The answer landing is what publishes it; see
+// remotePane.Cwd and Session.PublishLiveFacts.
+func (p *PTY) refreshRemoteCwdOnOutput() {
+	if rp, ok := p.pty.(*remotePane); ok {
+		rp.Cwd()
+	}
+}

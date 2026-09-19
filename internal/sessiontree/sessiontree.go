@@ -90,6 +90,12 @@ type Node struct {
 	HostNote string
 	// HostLastOK is when a host last answered, as Unix seconds, zero for never.
 	HostLastOK int64
+	// Global marks the global session's row. The row sits at machine level in
+	// the rail, above the machines, because the session it stands for is not a
+	// session of any one machine: it holds panes from several. It is drawn
+	// like a machine header and it behaves like a session row, so selecting it
+	// attaches the global session.
+	Global bool
 	// Worktree is the git worktree this session sits in, nil for a session
 	// that is not one. It is what puts the row under a repository parent and
 	// labels it with its branch.
@@ -158,6 +164,9 @@ type SessionInput struct {
 	// Restored says this session came back from saved state and has not been
 	// attached to since.
 	Restored bool
+	// Global marks a session meant to hold panes from more than one machine.
+	// The rail files it in its own group rather than under a machine.
+	Global bool
 	// CurrentWorkspace is the workspace this session is showing, or 0 when the
 	// caller does not know.
 	CurrentWorkspace int
@@ -233,6 +242,7 @@ func BuildSession(s SessionInput) Node {
 		WindowCount: s.WindowCount,
 		Workspace:   s.CurrentWorkspace,
 		Restored:    s.Restored,
+		Global:      s.Global,
 		Worktree:    s.Worktree,
 	}
 	if len(s.Windows) == 0 {

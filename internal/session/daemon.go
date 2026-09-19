@@ -464,6 +464,19 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				if state, ok := pty.takeAgentProgress(); ok {
 					s.applyAgentProgress(ev.Window, state)
 				}
+				// Where a pane on another machine is.
+				//
+				// It tells nobody when its shell changes directory: there is no
+				// process here to read, and a shell that does not announce over
+				// OSC 7 says nothing to anyone. The only hint that reaches this
+				// machine is that the pane printed something, which is what a
+				// prompt after a cd is.
+				//
+				// So the ask is made here. It is self-throttled to once a
+				// second and only made for a pane whose bytes are arriving, so
+				// a session sitting idle pays nothing, and a pane of this
+				// daemon's own does not reach the network at all.
+				pty.refreshRemoteCwdOnOutput()
 				if d.agentDetectInterval > 0 && pty.probeAgentExitDue(time.Now().UnixNano()) {
 					s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.identifyDetail)
 				}

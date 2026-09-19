@@ -260,6 +260,17 @@ type SessionState struct {
 	// Daemon-owned: clients never send it, and false is what every older client
 	// and every pre-existing state file reads back as.
 	Restored bool `json:"restored,omitempty"`
+	// Global marks a session that is meant to hold panes from more than one
+	// machine. Nothing in the daemon behaves differently for one: the panes on
+	// other machines work the same way in any session, and a global session
+	// with only local panes is an ordinary session. What the mark does is tell
+	// the clients where to file it, which is its own group in the rail rather
+	// than under the machine whose daemon happens to be holding it.
+	//
+	// Daemon-owned: it is set when the session is created and never changes,
+	// so a client sync that omits it must not clear it. False is what every
+	// older client and every state file written before this reads back as.
+	Global bool `json:"global,omitempty"`
 	// Worktree is the daemon's record of the git worktree this session's
 	// directory is, or nil for a session that is not in one. Daemon-owned and
 	// omitted when nil, which is what every older client and state file reads.
@@ -836,6 +847,8 @@ type SessionConfig struct {
 	// InheritCwd starts a new window in the focused pane's working directory
 	// rather than the daemon's. The manager stamps it from the daemon's config.
 	InheritCwd bool
+	// Global creates the session as a global one. See SessionState.Global.
+	Global bool
 }
 
 // inheritedCwd is the directory a new window should start in when the caller
@@ -900,6 +913,7 @@ func NewSession(name string, cfg *SessionConfig, width, height int) (*Session, e
 			// cannot say what it saw. A versioned client always echoes back at
 			// least 1, even before the daemon has mutated anything.
 			Version: 1,
+			Global:  cfg != nil && cfg.Global,
 		},
 		width:      width,
 		height:     height,
@@ -1806,6 +1820,7 @@ func (s *Session) Info() SessionInfo {
 		Accent:           accent,
 		CurrentWorkspace: currentWorkspace,
 		Restored:         restored,
+		Global:           s.isGlobal(),
 		Dir:              dir,
 		Branch:           branch,
 		Worktree:         s.worktreeListing(),
@@ -3317,4 +3332,12 @@ func (p *PTY) forwardTerminalResponses() {
 			}
 		}
 	}
+}
+
+// isGlobal reports whether this session is a global one. See
+// SessionState.Global.
+func (s *Session) isGlobal() bool {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	return s.state.Global
 }

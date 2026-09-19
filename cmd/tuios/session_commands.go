@@ -163,6 +163,17 @@ func runNewSession(sessionName string) error {
 // without launching the TUI. The session holds an initial window, is usable by
 // control verbs immediately, and can be attached later with 'tuios attach'.
 func runNewSessionDetached(sessionName string) error {
+	return newSessionDetached(sessionName, false)
+}
+
+// runNewGlobalSessionDetached creates a global session: one meant to hold
+// panes from more than one machine. It is created with no windows, since every
+// window in it names the machine it runs on.
+func runNewGlobalSessionDetached(sessionName string) error {
+	return newSessionDetached(sessionName, true)
+}
+
+func newSessionDetached(sessionName string, global bool) error {
 	if err := ensureDaemon(); err != nil {
 		return err
 	}
@@ -185,7 +196,11 @@ func runNewSessionDetached(sessionName string) error {
 		sessionName = generateUniqueSessionName(existing)
 	}
 
-	if err := client.CreateDetachedSession(sessionName, 80, 24); err != nil {
+	create := client.CreateDetachedSession
+	if global {
+		create = client.CreateGlobalSession
+	}
+	if err := create(sessionName, 80, 24); err != nil {
 		return err
 	}
 

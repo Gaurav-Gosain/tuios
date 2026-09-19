@@ -235,6 +235,14 @@ type NewPayload struct {
 	// simply create an empty session. Zero value keeps the pre-existing
 	// "create an empty session" behavior.
 	Detach bool `json:"detach,omitempty"`
+	// Global creates the session as a global one: a session meant to hold
+	// panes from more than one machine. See SessionState.Global.
+	//
+	// It also suppresses the initial window a detached create would spawn. A
+	// global session's first pane is the one the user picks a machine for, and
+	// a window spawned here would be a local pane nobody asked for, in the one
+	// session whose whole point is that the machine is chosen.
+	Global bool `json:"global,omitempty"`
 }
 
 // WindowSummary is a lightweight per-window entry in a session listing: enough
@@ -308,6 +316,11 @@ type SessionInfo struct {
 	// attach to find out. Omitted when false, which is what an older daemon
 	// sends and what every client reads as "an ordinary live session".
 	Restored bool `json:"restored,omitempty"`
+	// Global marks a session meant to hold panes from more than one machine,
+	// which the rail files in its own group rather than under a machine. See
+	// SessionState.Global. Omitted when false, which is what an older daemon
+	// sends and what every client reads as an ordinary session.
+	Global bool `json:"global,omitempty"`
 	// Worktree is set for a session whose directory is a git worktree: which
 	// repository, which branch, and whether the directory still exists. It is
 	// what the rail groups by. Omitted for every other session, which is also

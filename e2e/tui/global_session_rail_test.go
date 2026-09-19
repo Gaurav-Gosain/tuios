@@ -131,3 +131,65 @@ func containsAll(s string, parts ...string) bool {
 	}
 	return true
 }
+
+// railRowIndex is the first rail line holding every part, or -1. The line is
+// cut at the rail's edge first, so a match on the pane area next to it does
+// not count as a rail row.
+func railRowIndex(screen string, parts ...string) int {
+	for i, line := range strings.Split(screen, "\n") {
+		rail := line
+		if j := strings.Index(line, "│"); j >= 0 {
+			rail = line[:j]
+		}
+		all := true
+		for _, p := range parts {
+			if !strings.Contains(rail, p) {
+				all = false
+				break
+			}
+		}
+		if all {
+			return i
+		}
+	}
+	return -1
+}
+
+// The rail groups sessions by machine once there is more than one machine, and
+// the global sessions are not one of those groups: they hold panes from
+// several machines, so they get a group of their own above the machines.
+//
+// This is an end to end test because the ordering is what was wrong, twice,
+// and ordering is the one thing a unit test on the row builder can agree with
+// while the screen still reads differently: the rail draws sections, the
+// machine groups sit inside one of them, and a row in the right list can still
+// come out in the wrong place on screen.
+func TestTheRailPutsTheGlobalGroupAboveTheMachines(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	ssh := writeFakeSSHTo(t, base, remote)
+	writeOneHostConfig(t, base, tuiosBin)
+	env := []string{"TUIOS_SSH=" + ssh}
+
+	// The group appears once a second machine is reachable, so the far daemon
+	// has to be up before the rail is read.
+	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
+		t.Fatalf("create the far session: %v\n%s", err, out)
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
+	waitBoot(t, term)
+	waitForHostListing(t, base, func(s string) bool {
+		return containsAll(s, "build", "up")
+	}, "the daemon never reported build up")
+
+	toggleSidebarViaPalette(t, term)
+
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		global := railRowIndex(s.Text(), "global")
+		local := railRowIndex(s.Text(), "local")
+		return global >= 0 && local >= 0 && global < local
+	}, uiTimeout); err != nil {
+		t.Fatalf("the rail does not put the global group above this machine: %v\n%s", err, term.Snapshot())
+	}
+}

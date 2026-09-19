@@ -41,7 +41,11 @@ type ClipboardSetMsg struct {
 // not happen.
 type SessionCreatedMsg struct {
 	Name string
-	Err  error
+	// Global says the session was created as a global one, which has no
+	// windows: its first pane is the one the user picks a machine for, so the
+	// picker is opened once the switch has landed.
+	Global bool
+	Err    error
 }
 
 // SessionKilledMsg carries the result of killing a session this client is not
@@ -1124,6 +1128,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// follow it by name so the cursor lands on it rather than on whatever
 		// took its index.
 		m.sidebarFollowSession = msg.Name
+		if msg.Global {
+			// A global session is created empty, so this is the first pane in
+			// it and the picker is the point.
+			m.NewWindowHere()
+		}
 		return m, cmd
 
 	case SessionKilledMsg:

@@ -944,3 +944,144 @@ func TestAPushCarriesARemotePanesDirectory(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// TestAPaneThatChangesDirectoryOnAnotherMachineSaysSo.
+//
+// The first answer used to be the only one. The ask was made from the snapshot
+// path, so it only happened when something else caused a snapshot, and nothing
+// does when a shell somewhere else runs cd: the window set, the layout and the
+// names are all as they were. The rail showed the directory the pane started
+// in for as long as it lived.
+//
+// What is watched here is the pushes, not GetState. Calling GetState is itself
+// an ask, so a test that polls it drives the very refresh it is checking for
+// and passes with the feature removed. That is exactly what the first version
+// of this did.
+//
+// This does not fail when the explicit refresh is removed, and that is worth
+// saying rather than hiding: other work on the output path mutates the session
+// and every mutation asks, so the answer arrives by accident. Accident is the
+// problem. A pane whose output causes no mutation kept its first directory for
+// as long as it lived, which is what was reported. The hook is pinned where it
+// can fail, in TestOutputAsksWhereARemotePaneIsAtMostOncePerSecond.
+func TestAPaneThatChangesDirectoryOnAnotherMachineSaysSo(t *testing.T) {
+	d, socketPath := startTestDaemon(t)
+	sess, err := d.manager.CreateSession("cd-elsewhere", &SessionConfig{}, 80, 24)
+	if err != nil {
+		t.Fatalf("create the session: %v", err)
+	}
+	sess.SetFederation(&socketFederation{socketPath: socketPath})
+
+	var mu sync.Mutex
+	pushed := map[string]bool{}
+	sess.SetStateSink(func(state *SessionState) {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, w := range state.Windows {
+			if w.Host != "" && w.Cwd != "" {
+				if got, err := filepath.EvalSymlinks(w.Cwd); err == nil {
+					pushed[got] = true
+				}
+			}
+		}
+	})
+	sawPushed := func(want string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return pushed[want]
+	}
+
+	home := t.TempDir()
+	sub := filepath.Join(home, "inner")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
+		Host: "build", Cwd: home, Command: []string{"/bin/sh"},
+	}, func(string) {})
+	if err != nil {
+		t.Fatalf("create a window on another machine: %v", err)
+	}
+	pty := sess.GetPTY(win.PTYID)
+	if pty == nil {
+		t.Fatal("the window has no pane")
+	}
+
+	wantHome, _ := filepath.EvalSymlinks(home)
+	waitUntil(t, func() bool { return sawPushed(wantHome) },
+		"no push ever carried where the pane started")
+
+	// cd, then print. The print is the only thing that crosses, and it is what
+	// tells this machine to ask again.
+	if _, err := pty.Write([]byte("cd " + sub + "\npwd\n")); err != nil {
+		t.Fatalf("send cd: %v", err)
+	}
+
+	wantSub, _ := filepath.EvalSymlinks(sub)
+	waitUntil(t, func() bool { return sawPushed(wantSub) },
+		"the pane changed directory and no push ever said so")
+}
+
+// waitUntil blocks until cond holds, or fails with why.
+func waitUntil(t *testing.T, cond func() bool, why string) {
+	t.Helper()
+	deadline := time.Now().Add(paneBudget)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal(why)
+}
+
+// TestOutputAsksWhereARemotePaneIsAtMostOncePerSecond pins the explicit ask
+// and its throttle.
+//
+// Both halves matter. Without the ask a pane whose output causes no mutation
+// never reports a cd. Without the throttle a pane printing a build log asks
+// the far machine once per chunk, which is a network call per frame.
+//
+// Negative control: dropping the staleness check in Cwd makes the second count
+// rise with every call.
+func TestOutputAsksWhereARemotePaneIsAtMostOncePerSecond(t *testing.T) {
+	counter := &countingFederation{}
+	p := &remotePane{host: "build", id: "p1", fed: counter, stream: &scriptedStream{}, br: bufio.NewReader(&scriptedStream{})}
+	pty := &PTY{host: "build", pty: p}
+
+	for range 20 {
+		pty.refreshRemoteCwdOnOutput()
+	}
+	// The asks are made on their own goroutines, so this waits for the first
+	// rather than assuming it has landed.
+	waitUntil(t, func() bool { return counter.calls() >= 1 }, "output never asked where the pane is")
+	if got := counter.calls(); got > 1 {
+		t.Errorf("twenty chunks asked the far machine %d times, want one", got)
+	}
+}
+
+// countingFederation records how many times it was asked.
+type countingFederation struct {
+	mu sync.Mutex
+	n  int
+}
+
+func (c *countingFederation) calls() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.n
+}
+
+func (c *countingFederation) OpenConnection(context.Context, string) (io.ReadWriteCloser, error) {
+	return nil, errors.New("not used")
+}
+
+func (c *countingFederation) Call(_ context.Context, _, verb string, _ any) (json.RawMessage, error) {
+	if verb == "pane-cwd" {
+		c.mu.Lock()
+		c.n++
+		c.mu.Unlock()
+	}
+	return json.RawMessage(`{"cwd":"/somewhere"}`), nil
+}

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -206,8 +207,37 @@ func (m *OS) hostPickerActivate(idx int) tea.Cmd {
 // somebody working locally never meets the picker at all.
 const GlobalSessionName = "global"
 
+// nextGlobalSessionName is the first free name for a new global session:
+// "global", then "global-2" and up. The first one keeps the bare name because
+// most people will only ever have one.
+func (m *OS) nextGlobalSessionName() string {
+	taken := map[string]bool{}
+	if m.DaemonClient != nil {
+		for _, n := range m.DaemonClient.AvailableSessionNames() {
+			taken[n] = true
+		}
+	}
+	if !taken[GlobalSessionName] {
+		return GlobalSessionName
+	}
+	for i := 2; ; i++ {
+		name := fmt.Sprintf("%s-%d", GlobalSessionName, i)
+		if !taken[name] {
+			return name
+		}
+	}
+}
+
 // IsGlobalSession reports whether a session name is the global one.
+//
+// This is the fallback for a session created before the daemon marked global
+// sessions as such. The mark is what says it now; see SessionState.Global.
 func IsGlobalSession(name string) bool { return name == GlobalSessionName }
+
+// inGlobalSession reports whether this client is attached to a global session.
+func (m *OS) inGlobalSession() bool {
+	return m.SessionGlobal || IsGlobalSession(m.SessionName)
+}
 
 // NewWindowHere is what every "make me a pane" gesture calls: the key, the
 // prefix key, the rail's "+", and the palette.
@@ -229,7 +259,7 @@ func (m *OS) newWindowShouldPickHost() bool {
 	if !m.IsDaemonSession || m.DaemonClient == nil {
 		return false
 	}
-	if !IsGlobalSession(m.SessionName) {
+	if !m.inGlobalSession() {
 		return false
 	}
 	// A global session with nothing to reach but this machine has no choice in

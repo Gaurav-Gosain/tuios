@@ -76,6 +76,9 @@ type FederationSession struct {
 	DisplayName string
 	WindowCount int
 	Attached    bool
+	// Global marks a session meant to hold panes from more than one machine.
+	// The rail files it in the global group rather than under this machine.
+	Global bool
 	// AgentState is the most urgent state among the session's panes, rolled up
 	// by the daemon that owns them. Empty when nothing in it runs an agent,
 	// and empty for a machine that did not answer, because a row from a
@@ -161,6 +164,7 @@ func refreshFederationCmd() tea.Cmd {
 					DisplayName string `json:"display_name"`
 					WindowCount int    `json:"window_count"`
 					Attached    bool   `json:"attached"`
+					Global      bool   `json:"global"`
 					AgentState  string `json:"agent_state"`
 				} `json:"sessions"`
 			} `json:"hosts"`
@@ -190,6 +194,7 @@ func refreshFederationCmd() tea.Cmd {
 					DisplayName: s.DisplayName,
 					WindowCount: s.WindowCount,
 					Attached:    s.Attached,
+					Global:      s.Global,
 					AgentState:  s.AgentState,
 				})
 			}
@@ -270,7 +275,7 @@ func (m *OS) hostGroupNodes() []sessiontree.Node {
 			// hiding an alarm.
 			AgentState: hostWorstAgentState(h.Sessions),
 		})
-		sessions := orderByKey(m.hostSessionsWithGlobal(h), func(s FederationSession) string { return s.Name },
+		sessions := orderByKey(h.Sessions, func(s FederationSession) string { return s.Name },
 			m.sidebarSessionOrderFor(h.Name))
 		for _, s := range sessions {
 			title := s.Name
@@ -342,34 +347,6 @@ func hostWorstAgentState(sessions []FederationSession) string {
 	return state
 }
 
-// hostSessionsWithGlobal offers the global session under this machine's group,
-// for the case where the client is attached somewhere else and this machine is
-// drawn as a host.
-//
-// The row has to be in both states or it would appear and vanish as the client
-// switches, and every machine heading below it would step up and down with it.
-// Those headings are ordered from the host table precisely so that switching
-// does not move them.
-//
-// Only under this machine. The global session is this daemon's, and a row
-// under another machine's heading would propose creating one over there, which
-// is a different session on a machine with its own idea of what it can reach.
-func (m *OS) hostSessionsWithGlobal(h FederationHost) []FederationSession {
-	if h.Name != federation.LocalHostName || !m.GlobalSessionOffered() {
-		return h.Sessions
-	}
-	for _, s := range h.Sessions {
-		if s.Name == GlobalSessionName {
-			return h.Sessions
-		}
-	}
-	// Copied rather than appended in place: the snapshot is shared with every
-	// other reader of the host listing this frame.
-	out := make([]FederationSession, 0, len(h.Sessions)+1)
-	out = append(out, h.Sessions...)
-	return append(out, FederationSession{Name: GlobalSessionName})
-}
-
 // hostNodeID namespaces a host's rows so their ids can never collide with a
 // local session name. Nothing resolves these ids: they exist so the render
 // cache and the row loop have a stable key per row.
@@ -416,6 +393,82 @@ func remoteSessionName(node sessiontree.Node) string {
 
 // The machine groups of the sessions section.
 
+// The global group: the sessions that hold panes from more than one machine.
+//
+// They are listed above the machines rather than under one. A global session
+// is held by some daemon, because a session has to live somewhere, but where
+// it is held is storage rather than meaning: its panes run wherever the user
+// put them. Filing it under the machine holding it would say it belongs to
+// that machine, which is the one thing it does not.
+
+// stripGlobalRows takes the global sessions out of a machine's rows and
+// returns them for the group above the machines.
+func stripGlobalRows(rows []sessiontree.Node) (kept, global []sessiontree.Node) {
+	kept = rows[:0:0]
+	for _, n := range rows {
+		if isGlobalSessionRow(n) {
+			global = append(global, n)
+			continue
+		}
+		kept = append(kept, n)
+	}
+	return kept, global
+}
+
+// stripGlobalRowsCounted is stripGlobalRows for another machine's group, whose
+// header carries its own count of the sessions under it. Taking rows out
+// without taking them off the count leaves the header claiming sessions the
+// group no longer shows.
+func stripGlobalRowsCounted(rows []sessiontree.Node, count int, global *[]sessiontree.Node) ([]sessiontree.Node, int) {
+	kept, found := stripGlobalRows(rows)
+	if len(found) == 0 {
+		return rows, count
+	}
+	*global = append(*global, found...)
+	return kept, max(count-len(found), 0)
+}
+
+// isGlobalSessionRow reports whether a row is a global session's.
+//
+// The name is accepted as well as the mark. The mark is set when the session
+// is created, so a global session created before the mark existed has only its
+// name to say what it is, and the first one was called "global" exactly
+// because that was the only way to say it at the time.
+func isGlobalSessionRow(n sessiontree.Node) bool {
+	if n.Kind != sessiontree.KindSession {
+		return false
+	}
+	return n.Global || remoteSessionName(n) == GlobalSessionName
+}
+
+// globalGroupHeader is the row above the global sessions. It is shaped like a
+// machine's header, which is what puts it at that level in the rail, and it
+// folds like one.
+func (m *OS) globalGroupHeader(rows []sessiontree.Node) sessiontree.Node {
+	return sessiontree.Node{
+		Kind:        sessiontree.KindHost,
+		Global:      true,
+		ID:          hostNodeID(GlobalSessionName),
+		Title:       GlobalSessionName,
+		Host:        GlobalSessionName,
+		HostStatus:  string(federation.StatusUp),
+		WindowCount: len(rows),
+		AgentState:  worstNodeAgentState(rows),
+	}
+}
+
+// worstNodeAgentState is the most urgent agent state among some rows, so a
+// folded group still says whether anything in it wants a person.
+func worstNodeAgentState(rows []sessiontree.Node) string {
+	best, state := 0, ""
+	for _, n := range rows {
+		if r := sessiontree.AgentRank(n.AgentState, n.DoneSeen); r > best {
+			best, state = r, n.AgentState
+		}
+	}
+	return state
+}
+
 // sidebarMachineRows lays the sessions section out by machine.
 //
 // here is the attached machine's rows, already grouped by repository and with
@@ -436,6 +489,13 @@ func (m *OS) sidebarMachineRows(here, remote []sessiontree.Node) []sessiontree.N
 		return here
 	}
 
+	// The global session is taken out of whichever machine's group holds it
+	// and given a row of its own above them all. It is listed under a machine
+	// because some daemon has to hold it, but that is where it is stored
+	// rather than what it is: its panes run on several machines, so filing it
+	// under one of them says the wrong thing.
+	here, global := stripGlobalRows(here)
+
 	type machineGroup struct {
 		header sessiontree.Node
 		rows   []sessiontree.Node
@@ -447,6 +507,7 @@ func (m *OS) sidebarMachineRows(here, remote []sessiontree.Node) []sessiontree.N
 		for i++; i < len(remote) && remote[i].Kind != sessiontree.KindHost; i++ {
 			g.rows = append(g.rows, remote[i])
 		}
+		g.rows, g.header.WindowCount = stripGlobalRowsCounted(g.rows, g.header.WindowCount, &global)
 		groups = append(groups, g)
 	}
 
@@ -504,7 +565,18 @@ func (m *OS) sidebarMachineRows(here, remote []sessiontree.Node) []sessiontree.N
 	others = orderByKey(others, func(g machineGroup) string { return g.header.Host }, order)
 	groups = append(local, others...)
 
-	out := make([]sessiontree.Node, 0, len(here)+len(remote)+1)
+	out := make([]sessiontree.Node, 0, len(here)+len(remote)+2)
+	// The global group goes above the machines. It is drawn when there is a
+	// global session to show and also when there is not, because a group that
+	// appears only once you have made one is a group you cannot use to make
+	// one.
+	if len(global) > 0 || m.GlobalSessionOffered() {
+		header := m.globalGroupHeader(global)
+		out = append(out, header)
+		if !m.SidebarHostCollapsed(GlobalSessionName) {
+			out = append(out, global...)
+		}
+	}
 	for _, g := range groups {
 		if g.header.Host != federation.LocalHostName {
 			m.SidebarHostIDs = append(m.SidebarHostIDs, g.header.Host)
@@ -619,6 +691,26 @@ func (m *OS) drawHostRow(
 	compose func(content string) string,
 	lines *[]string,
 ) {
+	if node.Global {
+		// The global group's header. It folds like a machine's, and its "+"
+		// makes another global session rather than a session on a machine.
+		collapsed := m.SidebarHostCollapsed(GlobalSessionName)
+		st.Cursor = st.Cursor || isCursor(sidebarRowHost, GlobalSessionName, "")
+		add := ""
+		if !collapsed {
+			labelW := sidebarHeaderLabelW(m.Settings.GetRailFoldOpenGlyph() + " " + node.Title)
+			if tok, span, ok := sidebarHeaderAdd(sidebarRowGlobalNew, cw, labelW, pal,
+				headerHoverX, isCursor(sidebarRowGlobalNew, GlobalSessionName, ""), &m.Settings,
+				sidebarRowBg(st, pal)); ok {
+				add = tok
+				recordToken(span, GlobalSessionName)
+			}
+		}
+		recordHit(sidebarRowHost, GlobalSessionName, "", -1, 1)
+		*lines = append(*lines, compose(m.sidebarHostRow(node, cw, pal, add, st, collapsed)))
+		return
+	}
+
 	if node.Kind == sessiontree.KindHost {
 		collapsed := m.SidebarHostCollapsed(node.Host)
 		st.Cursor = st.Cursor || isCursor(sidebarRowHost, node.Host, "")

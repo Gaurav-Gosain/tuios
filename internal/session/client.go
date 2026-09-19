@@ -152,11 +152,23 @@ func (c *Client) KillSession(name string) error {
 // initial window) and no attached client. name may be empty to let the daemon
 // generate one. It returns an error if the name is already taken.
 func (c *Client) CreateDetachedSession(name string, width, height int) error {
+	return c.createSession(name, width, height, false)
+}
+
+// CreateGlobalSession creates a session meant to hold panes from more than one
+// machine. It is created with no windows, because its first pane is the one
+// the user picks a machine for. See NewPayload.Global.
+func (c *Client) CreateGlobalSession(name string, width, height int) error {
+	return c.createSession(name, width, height, true)
+}
+
+func (c *Client) createSession(name string, width, height int, global bool) error {
 	msg, err := NewMessageWithCodec(MsgNew, &NewPayload{
 		SessionName: name,
 		Width:       width,
 		Height:      height,
 		Detach:      true,
+		Global:      global,
 	}, c.codec)
 	if err != nil {
 		return err

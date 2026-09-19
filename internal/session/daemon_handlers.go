@@ -285,7 +285,7 @@ func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 		return fmt.Errorf("invalid new payload: %w", err)
 	}
 
-	cfg := &SessionConfig{}
+	cfg := &SessionConfig{Global: payload.Global}
 	if cs.hello != nil {
 		cfg.Term = cs.hello.Term
 		cfg.ColorTerm = cs.hello.ColorTerm
@@ -309,7 +309,7 @@ func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 	// daemon-side. This makes the session immediately usable by control verbs
 	// and gives a later 'tuios attach' a window to restore. Non-detach creation
 	// keeps its historical behavior of an empty session the TUI populates.
-	if payload.Detach {
+	if payload.Detach && !payload.Global {
 		sessionID := sess.ID
 		onExit := func(ptyID string) { d.notifyPTYClosed(sessionID, ptyID) }
 		if _, err := sess.AddDaemonWindow("", onExit); err != nil {

@@ -162,7 +162,7 @@ func (m *OS) sidebarStepSection(delta int) {
 // control that belongs to none.
 func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 	switch kind {
-	case sidebarRowSession, sidebarRowHostSession, sidebarRowHostNew, sidebarRowHost, sidebarRowRepo:
+	case sidebarRowSession, sidebarRowHostSession, sidebarRowHostNew, sidebarRowGlobalNew, sidebarRowHost, sidebarRowRepo:
 		return sidebarSectionSessions
 	case sidebarRowWindow:
 		return sidebarSectionTerminals
@@ -236,6 +236,11 @@ func (m *OS) SidebarActivateCursor() bool {
 		return true
 	case sidebarRowHostNew:
 		m.createRemoteSession(row.SessionID)
+		return true
+	case sidebarRowGlobalNew:
+		// A new global session is where the user asked to end up, so the rail
+		// hands the keyboard back the way the other create controls do.
+		m.SidebarNewGlobalSession()
 		return true
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
@@ -567,6 +572,26 @@ func (m *OS) SidebarNewSession() {
 	w, h := m.GetContentWidth(), m.GetUsableHeight()
 	go func() {
 		ch <- SessionCreatedMsg{Name: name, Err: client.CreateDetachedSession(name, w, h)}
+	}()
+}
+
+// SidebarNewGlobalSession makes another global session and switches to it,
+// which is what the global group's "+" means.
+//
+// The session is created with no windows. Its first pane is the one the user
+// picks a machine for, and the picker is opened for them once the switch has
+// landed; see SessionCreatedMsg.
+func (m *OS) SidebarNewGlobalSession() {
+	if !m.SidebarCanCreateSession() {
+		m.ShowNotification("Sessions need the daemon", "info", m.Settings.NotificationDuration)
+		return
+	}
+	m.clearSidebarReturn()
+	name := m.nextGlobalSessionName()
+	client, ch := m.DaemonClient, m.sessionCreateChan()
+	w, h := m.GetContentWidth(), m.GetUsableHeight()
+	go func() {
+		ch <- SessionCreatedMsg{Name: name, Global: true, Err: client.CreateGlobalSession(name, w, h)}
 	}()
 }
 

@@ -111,6 +111,11 @@ const (
 	// again, and dragging it reorders the machines. It carries the host name in
 	// SessionID. See sidebar_hosts.go.
 	sidebarRowHost
+	// sidebarRowGlobalNew is the "+" on the global group's header. Activating
+	// it creates another global session and switches to it. It is its own kind
+	// rather than the machine header's "+" because the global group is not a
+	// machine: there is no daemon called "global" to create a session on.
+	sidebarRowGlobalNew
 )
 
 // sidebarAddGlyph is the mark both add controls wear. One cell, so it costs a

@@ -526,6 +526,7 @@ the remote client. See 'tuios hosts --help'.`,
 	var newDetach bool
 	var newHost string
 	var newHold bool
+	var newGlobal bool
 	var newSSH bool
 	newCmd := &cobra.Command{
 		Use:   "new [session-name]",
@@ -569,6 +570,12 @@ returns. See 'tuios hosts --help'.`,
 			if newHost != "" {
 				return runNewOnHost(newHost, name, newDetach, newHold, newSSH)
 			}
+			if newGlobal {
+				// A global session is created with no windows whether or not
+				// --detach was asked for: its first window names a machine,
+				// and there is nothing here to ask.
+				return runNewGlobalSessionDetached(name)
+			}
 			if newDetach {
 				return runNewSessionDetached(name)
 			}
@@ -578,6 +585,7 @@ returns. See 'tuios hosts --help'.`,
 	newCmd.Flags().BoolVarP(&newDetach, "detach", "d", false, "Create the session headless without attaching a client")
 	newCmd.Flags().StringVar(&newHost, "host", "", "Create the session on this host from the [hosts] table")
 	newCmd.Flags().BoolVar(&newSSH, "ssh", false, "With --host, run ssh to the host and its own tuios instead of attaching here")
+	newCmd.Flags().BoolVar(&newGlobal, "global", false, "Create a global session, which holds panes from more than one machine")
 	newCmd.Flags().BoolVar(&newHold, "hold", false, "After a failure, wait for enter before the command exits")
 	registerHostNameCompletion(newCmd, "host")
 
