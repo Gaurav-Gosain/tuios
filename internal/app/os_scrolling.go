@@ -349,14 +349,24 @@ func (m *OS) FocusWindowFromClick(i, x, y int) *OS {
 // RevealFocusedColumn brings the focused column fully on screen now, with no
 // press and release to wait for.
 //
-// Picking a pane off the rail is the plainest possible statement that you want
-// that pane: you read its name in a list and chose it. There is no gesture to
-// finish and nothing under the pointer that could be moved out from under it,
-// which is what the click path has to wait for, so this just does it.
+// It is the rule for asking to be taken to a pane: picking one off the rail,
+// or a keyboard command that walks to the next one. Both are the plainest
+// possible statement that you want that pane, there is no gesture to finish,
+// and nothing under the pointer that could be moved out from under it, which
+// is the only thing the click path has to wait for.
 //
-// It answers to the same setting as the click, because they are the same wish.
+// The other rule is EnsureFocusedVisible, in ScrollingOnFocusChange: a focus
+// that moved for a reason the user did not ask for, such as a workspace
+// switch restoring its own focus, must not throw away where they had scrolled
+// to. See the comment there.
+//
+// It is not gated on appearance.niri_click_reveals. That setting is about the
+// pointer, and it is checked by the two callers that are about the pointer. A
+// keyboard command that says "take me to the next pane" and then leaves half
+// of it off the edge has not done what was asked, whatever the pointer is set
+// to do.
 func (m *OS) RevealFocusedColumn() {
-	if !m.Settings.NiriClickReveals || !m.AutoTiling || !m.UseScrollingLayout {
+	if !m.AutoTiling || !m.UseScrollingLayout {
 		return
 	}
 	fw := m.GetFocusedWindow()

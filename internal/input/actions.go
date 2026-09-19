@@ -361,13 +361,13 @@ func handleRestoreAll(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleNextWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	prev := o.FocusedWindow
 	o.CycleToNextVisibleWindow()
-	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterCycle)
+	return afterFocusCommand(o, prev, focusEnterCycle)
 }
 
 func handlePrevWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	prev := o.FocusedWindow
 	o.CycleToPreviousVisibleWindow()
-	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterCycle)
+	return afterFocusCommand(o, prev, focusEnterCycle)
 }
 
 // makeSelectWindowHandler creates a handler for selecting a window by index.
@@ -376,7 +376,7 @@ func makeSelectWindowHandler(idx int) ActionHandler {
 	return func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		prev := o.FocusedWindow
 		selectWindowByIndex(idx+1, o)
-		return maybeEnterTerminalOnFocusChange(o, prev, focusEnterTargeted)
+		return afterFocusCommand(o, prev, focusEnterTargeted)
 	}
 }
 
@@ -416,7 +416,7 @@ func snapOrFocus(o *app.OS, direction string) (*app.OS, tea.Cmd) {
 	}
 	prev := o.FocusedWindow
 	_ = o.SnapByDirection(direction)
-	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterTargeted)
+	return afterFocusCommand(o, prev, focusEnterTargeted)
 }
 
 func handleSnapLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -706,6 +706,25 @@ const (
 	focusEnterTargeted
 )
 
+// afterFocusCommand is the tail of every keyboard command that moves focus:
+// next, previous, the four directions, and select-by-number, in window mode
+// and behind the prefix alike.
+//
+// It brings the newly focused column fully on screen in the scrolling layout.
+// Focus alone went through the least-scroll rule, which is for a focus that
+// moved for a reason the user did not ask for; a key that says "take me to the
+// next pane" is the other kind, and it was landing on panes still half off the
+// edge. See RevealFocusedColumn.
+//
+// Nothing happens when focus did not actually move, and nothing happens in any
+// layout but the scrolling one.
+func afterFocusCommand(o *app.OS, previousFocused int, kind focusEnterKind) (*app.OS, tea.Cmd) {
+	if o.FocusedWindow != previousFocused {
+		o.RevealFocusedColumn()
+	}
+	return maybeEnterTerminalOnFocusChange(o, previousFocused, kind)
+}
+
 // maybeEnterTerminalOnFocusChange enters terminal mode after a window-focus
 // command that actually moved focus, from window-management mode. Hover-focus
 // and click-to-type keep their own policies; this is only the keyboard (and
@@ -963,7 +982,7 @@ func handleScrollFocusLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.UseScrollingLayout {
 		o.ScrollingFocusLeft()
 	}
-	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterTargeted)
+	return afterFocusCommand(o, prev, focusEnterTargeted)
 }
 
 func handleScrollFocusRight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
@@ -971,7 +990,7 @@ func handleScrollFocusRight(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling && o.UseScrollingLayout {
 		o.ScrollingFocusRight()
 	}
-	return maybeEnterTerminalOnFocusChange(o, prev, focusEnterTargeted)
+	return afterFocusCommand(o, prev, focusEnterTargeted)
 }
 
 func handleScrollMoveLeft(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

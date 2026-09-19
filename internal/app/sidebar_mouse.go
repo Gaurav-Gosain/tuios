@@ -626,7 +626,10 @@ func (m *OS) sidebarFocusWindow(hit sidebarRowHit) (idx int, ok bool) {
 	// same complaint as a pane you clicked that does.
 	defer func() {
 		if ok {
-			m.RevealFocusedColumn()
+			// The rail is the pointer, so it answers to the pointer's setting.
+			if m.Settings.NiriClickReveals {
+				m.RevealFocusedColumn()
+			}
 		}
 	}()
 	// Resolve by ID, never by the index the row was drawn with. A pane closing
