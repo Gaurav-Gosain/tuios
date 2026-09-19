@@ -322,17 +322,7 @@ func runWebServer() error {
 	// layers the flags on top of what this leaves behind.
 	config.ApplyAppearanceConfig(userConfig, &config.Global)
 
-	config.ApplyOverrides(config.Overrides{
-		ASCIIOnly:            asciiOnly,
-		BorderStyle:          borderStyle,
-		DockbarPosition:      dockbarPosition,
-		HideWindowButtons:    hideWindowButtons,
-		WindowButtonStyle:    windowButtonStyle,
-		WindowButtonPosition: windowButtonPosition,
-		ScrollbackLines:      scrollbackLines,
-		NoAnimations:         noAnimations,
-		ThemeName:            themeName,
-	}, &config.Global)
+	config.ApplyOverrides(webAppearanceOverrides(), &config.Global)
 
 	// Create sip server
 	sipConfig := sip.DefaultConfig()
@@ -652,10 +642,12 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch
 	//
 	// The kind says the rest: read-only config, no desktop, graphics forced
 	// on because stdin is not a TTY here.
+	seed := config.AppearanceFrom(userConfig, webAppearanceOverrides())
 	tuiosInstance := app.NewOS(app.OSOptions{
 		Client:          app.ClientBrowser,
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
+		Settings:        &seed,
 		ShowKeys:        showKeys,
 		Width:           width,
 		Height:          height,
@@ -756,10 +748,12 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth,
 	// Create TUIOS instance connected to daemon. Graphics passthrough is
 	// force-enabled and routed through the sip PTY slave so kitty/sixel
 	// sequences reach the browser's xterm.js image addon (sip v0.1.12+).
+	seed := config.AppearanceFrom(userConfig, webAppearanceOverrides())
 	tuiosInstance := app.NewOS(app.OSOptions{
 		Client:          app.ClientBrowser,
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
+		Settings:        &seed,
 		ShowKeys:        showKeys,
 		Width:           width,
 		Height:          height,
@@ -788,4 +782,22 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth,
 	tuiosInstance.RestoreAttachedSession(state)
 
 	return tuiosInstance, nil
+}
+
+// webAppearanceOverrides is the interface flags this server layers over the
+// config file. It is built per call so a session that connects after an edit
+// gets the file as it is now with these flags on top of it, rather than the
+// file the server loaded when it started. See config.AppearanceFrom.
+func webAppearanceOverrides() config.Overrides {
+	return config.Overrides{
+		ASCIIOnly:            asciiOnly,
+		BorderStyle:          borderStyle,
+		DockbarPosition:      dockbarPosition,
+		HideWindowButtons:    hideWindowButtons,
+		WindowButtonStyle:    windowButtonStyle,
+		WindowButtonPosition: windowButtonPosition,
+		ScrollbackLines:      scrollbackLines,
+		NoAnimations:         noAnimations,
+		ThemeName:            themeName,
+	}
 }

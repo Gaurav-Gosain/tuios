@@ -117,6 +117,17 @@ type OSOptions struct {
 	// Nil means "this process's own terminal", which is what a local attach
 	// wants and what a server falls back to when it detected nothing.
 	Caps *HostCapabilities
+
+	// Settings is the appearance seed this session starts from. Nil uses
+	// config.Global, which is what every entrypoint that applies the file and
+	// the flags to the globals before building a session wants: the local
+	// client, and the tests.
+	//
+	// A server that holds several sessions across config edits builds a fresh
+	// seed per connection instead (see config.AppearanceFrom), so a session that
+	// connects after an edit follows the file rather than the copy the server
+	// loaded when it started.
+	Settings *config.Settings
 }
 
 // NewOS creates a new OS instance with the given options.
@@ -138,6 +149,14 @@ func NewOS(opts OSOptions) *OS {
 		caps = GetHostCapabilities()
 	}
 
+	// The appearance seed for this session. Nil means the process globals; a
+	// server hands in a seed built per connection so a session that connects
+	// after a config edit follows the file. See OSOptions.Settings.
+	seed := config.Global
+	if opts.Settings != nil {
+		seed = *opts.Settings
+	}
+
 	os := &OS{
 		// Core state
 		FocusedWindow:   -1,
@@ -152,7 +171,7 @@ func NewOS(opts OSOptions) *OS {
 		// Routed verbs, for the hosts that cannot Send into the program. The
 		// local attach client leaves this unused. See dock_remote.go.
 		RemoteCommandChan: make(chan RemoteCommandMsg, remoteCommandQueue),
-		MasterRatio:       config.Global.MasterRatioFraction(),
+		MasterRatio:       seed.MasterRatioFraction(),
 		CurrentWorkspace:  1,
 		NumWorkspaces:     numWorkspaces,
 
@@ -191,7 +210,7 @@ func NewOS(opts OSOptions) *OS {
 		// own. The entrypoints have already applied the config file and the
 		// flags to config.Global, single-threaded, before any connection was
 		// served; nothing writes it after that.
-		Settings: config.Global,
+		Settings: seed,
 
 		// Daemon connection
 		DaemonClient: opts.DaemonClient,
@@ -200,12 +219,12 @@ func NewOS(opts OSOptions) *OS {
 
 		// Pane geometry inputs start at this client's config and are settled
 		// across the session by state sync; see the field comment in os.go.
-		SharedBorders:           config.Global.SharedBorders,
-		PaneGap:                 config.Global.PaneGap,
-		ScrollColumnWidth:       config.Global.ScrollColumnWidth,
-		lastConfigSharedBorders: config.Global.SharedBorders,
-		lastConfigPaneGap:       config.Global.PaneGap,
-		lastConfigScrollWidth:   config.Global.ScrollColumnWidth,
+		SharedBorders:           seed.SharedBorders,
+		PaneGap:                 seed.PaneGap,
+		ScrollColumnWidth:       seed.ScrollColumnWidth,
+		lastConfigSharedBorders: seed.SharedBorders,
+		lastConfigPaneGap:       seed.PaneGap,
+		lastConfigScrollWidth:   seed.ScrollColumnWidth,
 	}
 
 	// Sidebar order and expand/collapse state survive restarts; a load failure
