@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -233,7 +232,7 @@ func tuiosOut(base string, args ...string) (string, error) {
 	cmd := exec.Command(tuiosBin, args...)
 	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
 	for _, key := range xdgKeys {
-		cmd.Env = append(cmd.Env, key+"="+filepath.Join(base, key))
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
 	}
 	var errBuf strings.Builder
 	cmd.Stderr = &errBuf

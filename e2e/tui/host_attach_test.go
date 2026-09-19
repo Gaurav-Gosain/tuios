@@ -37,7 +37,11 @@ func writeFakeSSHTo(t *testing.T, dir, remoteBase string) string {
 	b.WriteString("while [ $# -gt 0 ]; do\n  case \"$1\" in\n    -o) shift 2 ;;\n    -T) shift ;;\n    -t) shift ;;\n    *) break ;;\n  esac\ndone\n")
 	b.WriteString("shift\n") // the address
 	for _, key := range xdgKeys {
-		b.WriteString("export " + key + "=" + filepath.Join(remoteBase, key) + "\n")
+		// Through xdgDir, so the far daemon's socket is short enough to bind
+		// on this machine too. The stand-in is what puts the second daemon's
+		// environment in place, so a path decided anywhere else never reaches
+		// it. See xdgDir.
+		b.WriteString("export " + key + "=" + xdgDir(remoteBase, key) + "\n")
 	}
 	b.WriteString("exec /bin/sh -c \"$*\"\n")
 	if err := os.WriteFile(path, []byte(b.String()), 0o700); err != nil {
@@ -52,9 +56,7 @@ func remoteMachine(t *testing.T) string {
 	t.Helper()
 	base := t.TempDir()
 	for _, key := range xdgKeys {
-		if err := os.MkdirAll(filepath.Join(base, key), 0o700); err != nil {
-			t.Fatalf("mkdir %s: %v", key, err)
-		}
+		xdgDir(base, key)
 	}
 	killDaemon(t, base)
 	return base

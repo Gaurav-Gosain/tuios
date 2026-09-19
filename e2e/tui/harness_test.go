@@ -99,6 +99,8 @@ import (
 	"testing"
 	"time"
 
+	"crypto/sha256"
+	"encoding/hex"
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
@@ -150,6 +152,10 @@ func runE2E(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, "e2e: skipping, set TUIOS_E2E=1 to run (spawns real multiplexer daemons)")
 		return 0
 	}
+	// The runtime directories that had to be moved out of the isolation roots
+	// live under one root, removed once here rather than per test: a test's own
+	// cleanup runs while another test may still be deriving the same path.
+	defer func() { _ = os.RemoveAll(shortRuntimeRoot) }()
 
 	if bin := os.Getenv("TUIOS_E2E_BIN"); bin != "" {
 		abs, err := filepath.Abs(bin)
@@ -246,11 +252,7 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 
 	env := make([]string, 0, len(xdgKeys)+len(o.env)+2)
 	for _, key := range xdgKeys {
-		dir := filepath.Join(base, key)
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			t.Fatalf("start: mkdir %s: %v", key, err)
-		}
-		env = append(env, key+"="+dir)
+		env = append(env, key+"="+xdgDir(base, key))
 	}
 	// fish generates its man-page completions the first time it starts
 	// interactively against an empty cache: it forks a python that reads every
@@ -648,7 +650,7 @@ func tuiosCLI(t *testing.T, base string, args ...string) (string, error) {
 	cmd.Dir = workDirIn(t, base)
 	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
 	for _, key := range xdgKeys {
-		cmd.Env = append(cmd.Env, key+"="+filepath.Join(base, key))
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
 	}
 	out, err := cmd.CombinedOutput()
 	return string(out), err
@@ -1016,5 +1018,75 @@ func disableTiling(t *testing.T, term *tuitest.Terminal) {
 		return !strings.Contains(s.Text(), "Tiling o")
 	}, 10*time.Second); err != nil {
 		t.Fatalf("the tiling-off message never cleared: %v\n%s", err, term.Snapshot())
+	}
+}
+
+// unixSocketPathMax is the length a socket path is kept under. The kernel's
+// own cap is 104 bytes on darwin and 108 on linux, both counting the
+// terminator; this sits under the smaller one with room for the daemon to
+// append its own name.
+const unixSocketPathMax = 96
+
+// shortRuntimeRoot is where a runtime directory goes when the isolation root
+// is too long to hold one. Per user, so two people on one machine do not share
+// it, and fixed rather than random so a leftover from a killed run is reused
+// rather than accumulated.
+var shortRuntimeRoot = filepath.Join("/tmp", fmt.Sprintf("tuios-e2e-%d", os.Getuid()))
+
+// redirected remembers the isolation roots whose runtime directory has already
+// been moved, so the move and its cleanup happen once per root rather than
+// once per lookup.
+var redirected sync.Map
+
+// xdgDir is the directory one XDG variable points at for an isolation root,
+// and the only reason it is a function is the socket.
+//
+// The daemon binds <XDG_RUNTIME_DIR>/tuios/tuios.sock, and a unix socket path
+// is capped by the kernel at about a hundred bytes. t.TempDir names its
+// directory after the test, and on macOS the temp root is already
+// /var/folders/<16 chars>/<16 chars>/T/, so a test with a long name spends the
+// whole budget before tuios adds a byte: the bind fails, the daemon exits 1,
+// and the test reports that tuios never reached its welcome screen. Every test
+// in the suite fails that way, which reads like a broken harness rather than a
+// path length.
+//
+// So the suite only really ran on linux. That is the worst shape it could have
+// taken, because the one open bug that reproduces on macOS and not on linux is
+// about keyboard focus resizing a pane, and the harness built to investigate
+// it could not be run on the machine it happens on.
+//
+// A runtime directory that would not fit is put under a short root instead,
+// and base/XDG_RUNTIME_DIR is left as a symlink to it, because a few tests
+// read the pid file by joining the base themselves. The variable carries the
+// short path and not the symlink: a bind is measured against the path it is
+// handed, not the path that path resolves to.
+func xdgDir(base, key string) string {
+	dir := filepath.Join(base, key)
+	if key != "XDG_RUNTIME_DIR" || len(filepath.Join(dir, "tuios", "tuios.sock")) <= unixSocketPathMax {
+		mustMkdir(dir)
+		return dir
+	}
+
+	// Named from the root it stands in for, so every caller that asks about one
+	// isolation root gets one answer without passing anything between them.
+	sum := sha256.Sum256([]byte(base))
+	short := filepath.Join(shortRuntimeRoot, hex.EncodeToString(sum[:6]))
+	mustMkdir(short)
+	if _, already := redirected.LoadOrStore(short, true); !already {
+		// Best effort, and only so a test that opens a file by joining the base
+		// itself still finds it. A test that compares the path as a string is
+		// not covered by a symlink and asks xdgDir for the answer instead.
+		_ = os.Symlink(short, dir)
+	}
+	return short
+}
+
+// mustMkdir makes a directory the suite cannot run without. A test helper that
+// cannot create its own isolation directory has nothing to fall back to and
+// nothing useful to report later, so it says so here rather than letting the
+// daemon fail twenty lines on with a message about a socket.
+func mustMkdir(dir string) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		panic("e2e: mkdir " + dir + ": " + err.Error())
 	}
 }

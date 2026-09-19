@@ -32,7 +32,7 @@ func tuiosCLIEnv(t *testing.T, base string, env []string, args ...string) (strin
 	cmd := exec.Command(tuiosBin, args...)
 	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
 	for _, key := range xdgKeys {
-		cmd.Env = append(cmd.Env, key+"="+filepath.Join(base, key))
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
 	}
 	cmd.Env = append(cmd.Env, env...)
 	out, err := cmd.CombinedOutput()

@@ -442,9 +442,7 @@ func perfBase(t *testing.T) string {
 	t.Helper()
 	base := t.TempDir()
 	for _, key := range xdgKeys {
-		if err := os.MkdirAll(filepath.Join(base, key), 0o700); err != nil {
-			t.Fatalf("mkdir %s: %v", key, err)
-		}
+		xdgDir(base, key)
 	}
 	killDaemon(t, base)
 	return base
@@ -570,7 +568,7 @@ func startDaemonWithPprof(t *testing.T, base string) string {
 	t.Helper()
 	env := os.Environ()
 	for _, key := range xdgKeys {
-		env = append(env, key+"="+filepath.Join(base, key))
+		env = append(env, key+"="+xdgDir(base, key))
 	}
 	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
 	daemon := exec.Command(tuiosBin, "daemon", "--pprof", addr)

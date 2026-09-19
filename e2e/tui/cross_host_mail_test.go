@@ -284,7 +284,12 @@ func TestAFileCrossesTheLinkThroughTheStash(t *testing.T) {
 		t.Fatalf("ASSERTION: stash put -s build:far failed, so the file's bytes did not cross the link: %v\n%s", err, out)
 	}
 	stored := strings.SplitN(out, "\n", 2)[0]
-	if !strings.HasPrefix(stored, filepath.Join(remote, "XDG_RUNTIME_DIR")) {
+	// Against the directory the far daemon was actually given, not against the
+	// base joined by hand: the two are the same path on linux and are not on
+	// macOS, where a runtime directory that would overrun the socket cap is
+	// placed under a short root. A symlink covers a test that opens a file
+	// through the base; it cannot cover one that compares the string.
+	if !strings.HasPrefix(stored, xdgDir(remote, "XDG_RUNTIME_DIR")) {
 		t.Fatalf("ASSERTION: the stored path is not in build's runtime directory:\n%s", out)
 	}
 	if got, err := os.ReadFile(stored); err != nil || string(got) != string(want) {

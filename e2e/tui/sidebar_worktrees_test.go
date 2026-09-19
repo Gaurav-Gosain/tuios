@@ -26,7 +26,7 @@ func tuiosCLIIn(t *testing.T, base, dir string, args ...string) (string, error) 
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
 	for _, key := range xdgKeys {
-		cmd.Env = append(cmd.Env, key+"="+filepath.Join(base, key))
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
 	}
 	out, err := cmd.CombinedOutput()
 	return string(out), err

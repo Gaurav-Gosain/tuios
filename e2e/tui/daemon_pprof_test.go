@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"syscall"
 	"testing"
 	"time"
@@ -18,11 +17,7 @@ func TestDaemonServesPprof(t *testing.T) {
 	base := t.TempDir()
 	env := os.Environ()
 	for _, key := range xdgKeys {
-		dir := filepath.Join(base, key)
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			t.Fatal(err)
-		}
-		env = append(env, key+"="+dir)
+		env = append(env, key+"="+xdgDir(base, key))
 	}
 	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
 
