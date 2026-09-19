@@ -507,7 +507,13 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		defer pool.PutHighlightGrid(flashGrid)
 		fillPaneRegion(flashGrid, m.copyFlash.Start, m.copyFlash.End,
 			scrollbackLen, window.ScrollbackOffset, maxY, maxX)
-		flashBand = m.copyFlashBandFor(progress, maxX, maxY)
+		if box, ok := copyFlashBoxOf(flashGrid, maxY, maxX); ok {
+			flashBand = m.copyFlashBandFor(progress, box)
+		} else {
+			// The copied region has scrolled out of view, so there is nothing
+			// to light.
+			flashGrid = nil
+		}
 	}
 
 	// The dim and the ground it carries toward, resolved once for the pane

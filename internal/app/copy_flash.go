@@ -215,22 +215,32 @@ func copyFlashEnvelope(progress float64) float64 {
 
 // copyFlashBandFor builds the band for this frame.
 //
-// The sweep crosses the full width of the pane rather than the width of the
-// region, because a selection of three characters and a selection of a whole
-// line should take the same time to cross: light moving at a speed that
-// depends on how much was copied reads as a progress bar, which it is not.
-func (m *OS) copyFlashBandFor(progress float64, width, rows int) copyFlashBand {
+// It crosses the copied block, not the pane.
+//
+// It used to cross the pane, on the reasoning that three characters and a
+// whole line should take the same time so the sweep could not be read as a
+// progress bar. That was wrong in the way that matters: the light is only
+// visible while it is over the block, so a short selection on a wide pane was
+// lit for a twentieth of the time the sweep was running and the whole thing
+// went past in a blink. Crossing the block means the light is on the text for
+// the whole duration, whatever was copied.
+//
+// box is the block's bounds in columns and its height in rows.
+func (m *OS) copyFlashBandFor(progress float64, box copyFlashBox) copyFlashBand {
 	pal := theme.UI()
+	width := max(box.right-box.left+1, 1)
 	reach := float64(width) * m.copyFlashReach()
-	if reach < 3 {
-		reach = 3
+	// A floor, or the light on a narrow block is one cell wide and reads as a
+	// cursor rather than as a sweep.
+	if reach < 4 {
+		reach = 4
 	}
 	// From fully off one edge to fully off the other, and far enough past the
 	// end for the lowest row's band, which leans furthest along, to leave too.
-	lean := float64(rows * copyFlashSlope)
+	lean := float64(box.rows * copyFlashSlope)
 	span := float64(width) + lean + 2*reach
 	return copyFlashBand{
-		centre: -reach + progress*span,
+		centre: float64(box.left) - reach + progress*span,
 		reach:  reach,
 		amp:    copyFlashEnvelope(progress),
 		tint:   lipgloss.Color(m.Settings.CopyFlashColor),
@@ -238,6 +248,43 @@ func (m *OS) copyFlashBandFor(progress float64, width, rows int) copyFlashBand {
 		ground: pal.Canvas,
 		sel:    lipgloss.Color(m.Settings.SelectionBg),
 	}
+}
+
+// copyFlashBox is the block the sweep crosses: its leftmost and rightmost lit
+// columns, and how many rows it covers.
+type copyFlashBox struct {
+	left  int
+	right int
+	rows  int
+}
+
+// copyFlashBoxOf measures the marked region, so the sweep can be sized to what
+// was copied rather than to the pane it sits in.
+func copyFlashBoxOf(grid *pool.HighlightGrid, maxY, maxX int) (copyFlashBox, bool) {
+	box := copyFlashBox{left: maxX, right: -1}
+	top, bottom := -1, -1
+	for y := range maxY {
+		for x := range maxX {
+			if !grid.Get(y, x) {
+				continue
+			}
+			if x < box.left {
+				box.left = x
+			}
+			if x > box.right {
+				box.right = x
+			}
+			if top < 0 {
+				top = y
+			}
+			bottom = y
+		}
+	}
+	if box.right < 0 {
+		return copyFlashBox{}, false
+	}
+	box.rows = bottom - top + 1
+	return box, true
 }
 
 // fillPaneRegion marks the cells of a pane region on a grid, mapping the

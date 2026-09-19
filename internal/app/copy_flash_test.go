@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -37,17 +38,17 @@ func TestTheSweepCrossesTheWholePaneAndThenStops(t *testing.T) {
 
 	// At the very start the light is off the left edge, and the first column
 	// is the first thing it reaches.
-	begin := m.copyFlashBandFor(0, width, 1)
+	begin := m.copyFlashBandFor(0, copyFlashBox{left: 0, right: width - 1, rows: 1})
 	if begin.centre >= 0 {
 		t.Errorf("the sweep starts at column %.1f, want off the left edge", begin.centre)
 	}
-	end := m.copyFlashBandFor(1, width, 1)
+	end := m.copyFlashBandFor(1, copyFlashBox{left: 0, right: width - 1, rows: 1})
 	if end.centre <= float64(width) {
 		t.Errorf("the sweep ends at column %.1f, want past the right edge", end.centre)
 	}
 
 	// And in the middle it is lighting the middle.
-	mid := m.copyFlashBandFor(0.5, width, 1)
+	mid := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: width - 1, rows: 1})
 	if mid.intensity(width/2, 0) <= 0 {
 		t.Error("the middle of the sweep does not light the middle of the pane")
 	}
@@ -57,7 +58,7 @@ func TestTheSweepCrossesTheWholePaneAndThenStops(t *testing.T) {
 // across the text; the falloff is what makes it read as light passing over it.
 func TestTheLightFallsOffRatherThanEnding(t *testing.T) {
 	m := flashOS(t)
-	band := m.copyFlashBandFor(0.5, 80, 1)
+	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 80 - 1, rows: 1})
 	centre := int(band.centre)
 
 	at := band.intensity(centre, 0)
@@ -188,7 +189,7 @@ func selectedWindow() *terminal.Window {
 // this fails.
 func TestTheLightLeans(t *testing.T) {
 	m := flashOS(t)
-	band := m.copyFlashBandFor(0.5, 80, 6)
+	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 80 - 1, rows: 6})
 
 	// The column each row is brightest at, which has to move along as the
 	// rows go down.
@@ -242,14 +243,14 @@ func TestTheLightArrivesAndLeaves(t *testing.T) {
 // was taken, so the block is painted for as long as the sweep runs.
 func TestTheSelectionShowsUnderTheSweep(t *testing.T) {
 	m := flashOS(t)
-	band := m.copyFlashBandFor(0.5, 80, 1)
+	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 80 - 1, rows: 1})
 
 	// A cell far from the light is still part of the block.
 	if _, lit := band.styleFor(79, 0, false); !lit {
 		t.Error("a cell outside the light is not painted, so the block disappears under the sweep")
 	}
 	// And once the sweep is over, nothing is painted.
-	done := m.copyFlashBandFor(1, 80, 1)
+	done := m.copyFlashBandFor(1, copyFlashBox{left: 0, right: 80 - 1, rows: 1})
 	if _, lit := done.styleFor(40, 0, false); lit {
 		t.Error("the block is still painted after the sweep has finished")
 	}
@@ -301,5 +302,84 @@ func TestAFinishedSweepMarksNothing(t *testing.T) {
 
 	if w.ContentDirty {
 		t.Error("a finished sweep is still asking its pane to redraw")
+	}
+}
+
+// TestTheSweepIsSizedToWhatWasCopied.
+//
+// The sweep used to cross the pane, so the light was only over the copied text
+// for the fraction of the run the block occupied. A twenty column selection on
+// a two hundred column pane was lit for about a twentieth of the duration, and
+// what reached the screen was a blink.
+//
+// Negative control: sizing the band to the pane instead of the block puts the
+// light outside the block at the halfway point and this fails.
+func TestTheSweepIsSizedToWhatWasCopied(t *testing.T) {
+	m := flashOS(t)
+	// A short block near the left of a wide pane, which is the case that
+	// showed the fault.
+	box := copyFlashBox{left: 4, right: 23, rows: 1}
+
+	// At the halfway point the light has to be inside the block.
+	mid := m.copyFlashBandFor(0.5, box)
+	lit := false
+	for x := box.left; x <= box.right; x++ {
+		if mid.intensity(x, 0) > 0.2 {
+			lit = true
+		}
+	}
+	if !lit {
+		t.Error("halfway through the sweep, nothing in the copied block is lit")
+	}
+
+	// And it has to be lit for most of the run, not a sliver of it.
+	runs := 0
+	const steps = 20
+	for i := range steps {
+		band := m.copyFlashBandFor(float64(i)/steps, box)
+		for x := box.left; x <= box.right; x++ {
+			if band.intensity(x, 0) > 0.2 {
+				runs++
+				break
+			}
+		}
+	}
+	if runs < steps/2 {
+		t.Errorf("the block is lit in %d of %d frames, so the sweep is mostly off the text", runs, steps)
+	}
+}
+
+// TestTheSweepMeasuresTheBlock. The bounds come from the marked cells, so a
+// block that is narrower than the pane is swept at its own width.
+func TestTheSweepMeasuresTheBlock(t *testing.T) {
+	g := pool.GetHighlightGrid()
+	defer pool.PutHighlightGrid(g)
+	g.Init(4, 60)
+	// One row, so the block's bounds are that row's bounds. A selection over
+	// several rows reaches column zero on every row after the first, which is
+	// what a selection is, so its left edge is zero and says nothing.
+	fillPaneRegion(g, terminal.Position{X: 5, Y: 0}, terminal.Position{X: 20, Y: 0}, 0, 0, 4, 60)
+
+	box, ok := copyFlashBoxOf(g, 4, 60)
+	if !ok {
+		t.Fatal("the marked region measured as nothing")
+	}
+	if box.left != 5 || box.right != 20 {
+		t.Errorf("the block spans columns %d to %d, want 5 to 20", box.left, box.right)
+	}
+	if box.rows != 1 {
+		t.Errorf("the block is %d rows, want 1", box.rows)
+	}
+}
+
+// TestAnEmptyRegionIsNotSwept, which is what a copied block scrolled out of
+// view leaves behind.
+func TestAnEmptyRegionIsNotSwept(t *testing.T) {
+	g := pool.GetHighlightGrid()
+	defer pool.PutHighlightGrid(g)
+	g.Init(4, 60)
+
+	if _, ok := copyFlashBoxOf(g, 4, 60); ok {
+		t.Error("an empty region measured as a block to sweep")
 	}
 }
