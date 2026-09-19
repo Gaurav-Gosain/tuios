@@ -59,6 +59,10 @@ func (m *OS) NoteCopyFlash(window *terminal.Window) {
 		start, end = end, start
 	}
 	m.copyFlash = &copyFlash{WindowID: window.ID, Start: start, End: end, At: time.Now()}
+	// Nothing in the pane changed, so nothing else is going to ask for a
+	// frame. The first one is asked for here and the work tick keeps them
+	// coming while the sweep runs; see tickNeedsWork.
+	window.ContentDirty = true
 }
 
 // copyFlashDuration is how long one sweep takes.

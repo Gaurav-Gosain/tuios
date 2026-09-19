@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // The band of light that crosses text after a copy.
@@ -120,5 +121,60 @@ func TestTurningItOffRecordsNothing(t *testing.T) {
 	}
 	if m.CopyFlashActive() {
 		t.Error("a sweep is running with the setting off")
+	}
+}
+
+// TestACopyAsksForAFrame.
+//
+// The sweep was invisible and this is why: a pane's render is cached against
+// its content, a copy changes nothing in the pane, so the cached frame was
+// returned unchanged for as long as the pane stayed quiet. The light was being
+// computed every frame and drawn into a frame nobody looked at.
+//
+// Negative control: dropping the ContentDirty line from NoteCopyFlash leaves
+// the pane clean and this fails.
+func TestACopyAsksForAFrame(t *testing.T) {
+	m := flashOS(t)
+	w := selectedWindow()
+	w.ContentDirty = false
+
+	m.NoteCopyFlash(w)
+
+	if !w.ContentDirty {
+		t.Error("a copy did not ask the pane for a frame, so the sweep is drawn into a cached one")
+	}
+	if m.copyFlash == nil {
+		t.Fatal("the copy recorded no sweep")
+	}
+	if m.copyFlash.WindowID != w.ID {
+		t.Errorf("the sweep is recorded against %q, want %q", m.copyFlash.WindowID, w.ID)
+	}
+}
+
+// TestACopyWithNoSelectionRecordsNothing. The region comes from the selection,
+// so there is nothing to sweep over without one.
+func TestACopyWithNoSelectionRecordsNothing(t *testing.T) {
+	m := flashOS(t)
+	w := selectedWindow()
+	w.CopyMode.State = terminal.CopyModeNormal
+
+	m.NoteCopyFlash(w)
+
+	if m.copyFlash != nil {
+		t.Error("a copy with no selection recorded a sweep")
+	}
+}
+
+// selectedWindow is a pane holding a visual selection, which is what a copy
+// takes its region from.
+func selectedWindow() *terminal.Window {
+	return &terminal.Window{
+		ID: "w1", Width: 80, Height: 24,
+		CopyMode: &terminal.CopyMode{
+			Active:      true,
+			State:       terminal.CopyModeVisualChar,
+			VisualStart: terminal.Position{X: 0, Y: 0},
+			VisualEnd:   terminal.Position{X: 10, Y: 0},
+		},
 	}
 }

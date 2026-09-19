@@ -156,6 +156,7 @@ func (m *OS) renderScrollbackBrowser() string {
 		cursorBg: pal.Selected,
 		visualBg: lipgloss.Color(m.Settings.SelectionBg),
 		searchBg: searchBgColor,
+		searchFg: lipgloss.Color(m.Settings.SearchFg),
 		normalFg: pal.FgDim,
 	})
 
@@ -223,11 +224,23 @@ func (m *OS) renderScrollbackBrowser() string {
 	}
 	content := strings.Join(lines[:innerH], "\n")
 
+	// No fill on the panel, and that is deliberate rather than an omission.
+	//
+	// It had one, and the fill only ever covered the parts of the panel
+	// nothing had been drawn on. Every line of content ends in an ANSI reset,
+	// because the output it shows carries the program's own colours and those
+	// have to be turned off again, and a reset clears the background for the
+	// rest of that line. So the fill survived in the empty column beside the
+	// list and died everywhere a line had been written, leaving a hard
+	// vertical seam down the middle of the panel and a different shade above
+	// and below the text.
+	//
+	// The border and the header and footer bands are what make it read as a
+	// panel. They are drawn, so they keep their colour.
 	box := lipgloss.NewStyle().
 		Padding(1, 2).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(accent).
-		Background(pal.Surface).
 		Render(content)
 
 	result := lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
@@ -351,6 +364,7 @@ type browserMarks struct {
 	cursorBg color.Color
 	visualBg color.Color
 	searchBg color.Color
+	searchFg color.Color
 	normalFg color.Color
 }
 
@@ -469,7 +483,7 @@ func buildRightPane(
 
 		if browser.OutputMode && vim != nil {
 			out[i+1] = renderVimLine(vim, pIdx, width,
-				cursorBg, visualBg, searchBg, normalTextFg)
+				cursorBg, visualBg, searchBg, marks.searchFg, normalTextFg)
 		} else {
 			truncated := ansi.Truncate(previewLines[pIdx], width, "")
 			out[i+1] = padANSI(truncated, width)
@@ -500,8 +514,11 @@ func buildRightPane(
 
 // renderVimLine renders a single line with character-level cursor, visual, and search highlighting.
 func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
-	cursorBg, visualBg, searchBg, normalFg color.Color,
+	cursorBg, visualBg, searchBg, searchFg, normalFg color.Color,
 ) string {
+	// Whether this whole line is selected, which decides whether the padding
+	// past the last character carries the selection too.
+	lineSelected := false
 	// Get plain text from VimState lines
 	text := ""
 	if lineIdx < len(vim.Lines) {
@@ -552,6 +569,12 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 			for x := range runes {
 				hl[x] = 2
 			}
+			// And on to the end of the pane. A line selection selects the
+			// line, so the highlight has to be the shape of a line: stopping
+			// at the last character gave every selected row a different
+			// right-hand edge, and a block of text with a ragged edge does
+			// not read as a selection at all.
+			lineSelected = true
 		}
 	}
 
@@ -629,8 +652,12 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 				Render(span))
 		case 1: // search
 			result.WriteString("\x1b[0m")
+			// The text in the match's own text colour. It was drawn in the
+			// background colour, foreground and background the same, so every
+			// search match in this pane was a solid block with the thing you
+			// searched for invisible inside it.
 			result.WriteString(lipgloss.NewStyle().
-				Foreground(searchBg).
+				Foreground(searchFg).
 				Background(searchBg).
 				Render(span))
 		default:
@@ -668,7 +695,11 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 	rendered := result.String()
 	w := ansi.StringWidth(rendered)
 	if w < width {
-		rendered += strings.Repeat(" ", width-w)
+		pad := strings.Repeat(" ", width-w)
+		if lineSelected {
+			pad = lipgloss.NewStyle().Background(visualBg).Render(pad)
+		}
+		rendered += pad
 	}
 	return rendered
 }
@@ -824,11 +855,12 @@ func overlayBrowserHelp(w, h int, outputMode bool, accent, dimFg color.Color, pa
 	modalLines = append(modalLines, fitLine(dismissHint, modalW-4))
 
 	modalContent := strings.Join(modalLines, "\n")
+	// No fill, for the reason the panel has none: a line that ends in a reset
+	// takes the fill with it for the rest of that line.
 	modal := lipgloss.NewStyle().
 		Padding(1, 2).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(accent).
-		Background(pal.Surface).
 		Render(modalContent)
 
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, modal)

@@ -196,7 +196,14 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 	cacheUsable := window.CachedContent != "" && window.CachedContentDim() == dim
 
-	if (window.IsBeingManipulated || !window.ContentDirty) && cacheUsable {
+	// A copy sweep is the one thing that changes what a pane looks like
+	// without changing anything in the pane. The cache is keyed on the
+	// content, so the frame it holds is still perfectly valid and still
+	// perfectly wrong: it was drawn before the light arrived. While the sweep
+	// runs this pane draws every frame, and the frames it draws are not kept.
+	flashing := m.copyFlash != nil && m.copyFlash.WindowID == window.ID && m.CopyFlashActive()
+
+	if !flashing && (window.IsBeingManipulated || !window.ContentDirty) && cacheUsable {
 		window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "cache-clean", window.CachedContent)
@@ -867,7 +874,12 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		cols, rows = maxX, maxY
 	}
 	window.RenderedCols, window.RenderedRows = cols, rows
-	cacheRender(window, content, cols, rows, dim)
+	// A frame with the sweep in it is not kept. The light is where it is for
+	// one frame only, and a cache holding it would show that one position
+	// until the pane's own content changed.
+	if !flashing {
+		cacheRender(window, content, cols, rows, dim)
+	}
 	if renderTraceEnabled {
 		traceRender(window, isFocused, inTerminalMode, entryDirty, "slow", content)
 	}
