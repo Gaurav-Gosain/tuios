@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
@@ -42,6 +43,26 @@ type Chrome struct {
 	Error color.Color
 	// Info is an info notification. Derived from blue.
 	Info color.Color
+
+	// Surface is the ground every dialog is filled with: the command palette,
+	// the pickers, the context menu, the which-key window. It is the one
+	// neutral a theme names, and the other three steps of the ramp and the
+	// three ink tiers are derived from it at the spacings the constant ramp
+	// has, so a panel still reads as raised and a card as inset, and the
+	// hierarchy of the text on them is kept. Nil keeps the constant ramp.
+	Surface color.Color
+	// Canvas, Panel and Card are the other steps of the neutral ramp, for a
+	// theme that wants an exact ramp rather than a generated one. Each one
+	// left unnamed derives from Surface, and all three are constants when
+	// Surface is too.
+	Canvas color.Color
+	Panel  color.Color
+	Card   color.Color
+
+	// The ink tiers, measured against Surface when one is named. Never named
+	// in the file: a text colour a theme could set is a text colour that can
+	// be set unreadable, and the tiers are their ratios rather than their hex.
+	fg, fgDim, fgMute color.Color
 }
 
 // chromeFile is the shape read from a theme JSON's optional "chrome" object.
@@ -55,6 +76,10 @@ type chromeFile struct {
 		Warning      string `json:"warning"`
 		Error        string `json:"error"`
 		Info         string `json:"info"`
+		Surface      string `json:"surface"`
+		Canvas       string `json:"canvas"`
+		Panel        string `json:"panel"`
+		Card         string `json:"card"`
 	} `json:"chrome"`
 }
 
@@ -109,14 +134,63 @@ func parseChrome(data []byte) *Chrome {
 		Warning:      parseChromeColor(f.Chrome.Warning),
 		Error:        parseChromeColor(f.Chrome.Error),
 		Info:         parseChromeColor(f.Chrome.Info),
+		Surface:      parseChromeColor(f.Chrome.Surface),
+		Canvas:       parseChromeColor(f.Chrome.Canvas),
+		Panel:        parseChromeColor(f.Chrome.Panel),
+		Card:         parseChromeColor(f.Chrome.Card),
 	}
-	if c.Accent == nil && c.AccentBright == nil && c.Success == nil &&
-		c.Warning == nil && c.Error == nil && c.Info == nil {
+	named := false
+	for _, got := range []color.Color{c.Accent, c.AccentBright, c.Success, c.Warning,
+		c.Error, c.Info, c.Surface, c.Canvas, c.Panel, c.Card} {
+		named = named || got != nil
+	}
+	if !named {
 		// An empty or entirely unparseable object is the same as none, and
 		// saying so keeps CurrentChrome's nil meaning "derive everything".
 		return nil
 	}
+	c.deriveRamp()
 	return c
+}
+
+// deriveRamp fills the neutral steps and ink tiers a theme left to its named
+// Surface. It runs once, when the file is read, because UI() is asked for on
+// every overlay of every frame and each derivation bisects over contrast
+// ratios; the palette a frame copies out has the answers already.
+func (c *Chrome) deriveRamp() {
+	if c.Surface == nil {
+		return
+	}
+	if c.Canvas == nil {
+		c.Canvas = overlay.Darker(c.Surface, chromeRamp.canvas)
+	}
+	if c.Panel == nil {
+		c.Panel = overlay.Darker(c.Surface, chromeRamp.panel)
+	}
+	if c.Card == nil {
+		c.Card = overlay.Lighter(c.Surface, chromeRamp.card)
+	}
+	// Each tier is measured on Surface at its target, then held to its floor
+	// on the other steps it is written on. On a dark ramp the floors never
+	// bind: the grounds below Surface only add contrast to a light ink, and
+	// the card is where quiet ink already fails and is lifted at the one call
+	// site that writes on it. On a light ramp the sides swap. The dark inks
+	// measure worst on the canvas, and a quiet tier held to 3.07:1 on the
+	// surface measures about 2.1:1 there, which is below the floor the constant
+	// palette clears. Lifting only where a floor binds keeps the hierarchy on
+	// every ground a theme can ask for, at the cost of compressing its quiet end
+	// on a light one.
+	text := []color.Color{c.Canvas, c.Panel, c.Surface, c.Card}
+	c.fg = overlay.Tone(c.Surface, chromeRamp.fg)
+	c.fgDim = overlay.Tone(c.Surface, chromeRamp.fgDim)
+	c.fgMute = overlay.Tone(c.Surface, chromeRamp.fgMute)
+	for _, g := range text {
+		c.fg = overlay.ReadableAt(c.fg, g, ContrastFloor)
+		c.fgDim = overlay.ReadableAt(c.fgDim, g, ContrastFloor)
+	}
+	for _, g := range text[:3] {
+		c.fgMute = overlay.ReadableAt(c.fgMute, g, MarkFloor)
+	}
 }
 
 // parseChromeColor accepts the hex spellings a theme file already uses for its
