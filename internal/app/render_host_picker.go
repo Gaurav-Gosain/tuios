@@ -19,7 +19,7 @@ func (m *OS) renderHostPicker() (string, overlay.Geometry, []overlayRowHit) {
 
 	return m.renderListOverlay(listOverlay{
 		Glyph:      "",
-		Title:      "New window on",
+		Title:      hostPickerTitle(m.HostPickerPurpose),
 		Width:      hostPickerWidth,
 		MaxVisible: 10,
 		Search:     true,
@@ -50,4 +50,13 @@ func (m *OS) renderHostPicker() (string, overlay.Geometry, []overlayRowHit) {
 				nameFg, pal.FgMute, selected && item.Up, rowBg, pal)
 		},
 	})
+}
+
+// hostPickerTitle says which question is being asked, since the list is the
+// same for both.
+func hostPickerTitle(p HostPickerPurpose) string {
+	if p == HostPickerNewSession {
+		return "New session on"
+	}
+	return "New window on"
 }

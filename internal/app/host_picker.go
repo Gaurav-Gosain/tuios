@@ -100,6 +100,7 @@ func (m *OS) OpenHostPicker() {
 			m.Settings.NotificationWarningDuration)
 		return
 	}
+	m.HostPickerPurpose = HostPickerNewWindow
 	m.HostPickerItems = m.buildHostPickerItems()
 	if len(m.HostPickerItems) <= 1 {
 		// Only this machine. Offering a list of one is a dialog that asks a
@@ -112,6 +113,77 @@ func (m *OS) OpenHostPicker() {
 	m.HostPickerSelected = 0
 	m.HostPickerScroll = 0
 	m.ShowHostPicker = true
+}
+
+// HostPickerPurpose is what the machine picker is being asked for. The list is
+// the same either way, because the question is the same: which machine.
+type HostPickerPurpose int
+
+const (
+	// HostPickerNewWindow makes a pane in this session, on the chosen machine.
+	HostPickerNewWindow HostPickerPurpose = iota
+	// HostPickerNewSession makes a session on the chosen machine and attaches
+	// to it.
+	HostPickerNewSession
+)
+
+// OpenNewSessionPicker asks which machine a new session should be made on.
+//
+// With one machine there is nothing to ask, so the session is simply made
+// here. A picker with a single row is a dialog that asks a question with one
+// answer, which is the same rule OpenHostPicker follows.
+func (m *OS) OpenNewSessionPicker() {
+	if !m.CanCreateSession() {
+		m.ShowNotification("Sessions need the daemon", "info", m.Settings.NotificationDuration)
+		return
+	}
+	if !m.newSessionShouldPickHost() {
+		m.SidebarNewSession()
+		return
+	}
+	m.HostPickerPurpose = HostPickerNewSession
+	m.HostPickerItems = m.buildHostPickerItems()
+	m.HostPickerQuery = ""
+	m.HostPickerSelected = 0
+	m.HostPickerScroll = 0
+	m.ShowHostPicker = true
+}
+
+// newSessionShouldPickHost reports whether making a session is a question.
+//
+// It is the same rule as newWindowShouldPickHost minus the global session
+// part: a session belongs to a machine, so the machine is worth asking about
+// wherever you are, as soon as there is more than one to choose from.
+func (m *OS) newSessionShouldPickHost() bool {
+	if !m.CanCreateSession() {
+		return false
+	}
+	return m.reachableMachines() > 1
+}
+
+// ChooseHostForNewSession makes a session on the chosen machine and attaches
+// to it.
+func (m *OS) ChooseHostForNewSession(item HostPickerItem) tea.Cmd {
+	m.CloseHostPicker()
+	if !item.Up {
+		m.ShowNotification(item.Label+" is unavailable", "warning",
+			m.Settings.NotificationWarningDuration)
+		return nil
+	}
+	if item.Name == "" || item.Name == federation.LocalHostName {
+		m.SidebarNewSession()
+		return nil
+	}
+	m.createRemoteSession(item.Name)
+	return nil
+}
+
+// ChooseHost runs whatever the picker was opened for.
+func (m *OS) ChooseHost(item HostPickerItem) tea.Cmd {
+	if m.HostPickerPurpose == HostPickerNewSession {
+		return m.ChooseHostForNewSession(item)
+	}
+	return m.ChooseHostForNewWindow(item)
 }
 
 // NewWindowOnHostMsg is the answer to asking for a window on another machine.

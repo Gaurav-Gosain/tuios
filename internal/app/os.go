@@ -892,7 +892,11 @@ type OS struct {
 	// A session can hold windows from several machines, and the only way to
 	// make one was the command line. This is the way from inside, and it is a
 	// picker rather than a prompt because the answer is one of a known list.
-	ShowHostPicker     bool
+	ShowHostPicker bool
+	// HostPickerPurpose is what the machine picker was opened for: a window or
+	// a session. The list and the keys are the same; only the title and what
+	// enter does differ. See host_picker.go.
+	HostPickerPurpose  HostPickerPurpose
 	HostPickerQuery    string
 	HostPickerSelected int
 	HostPickerScroll   int

@@ -34,6 +34,16 @@ const (
 	DockSessionLeave
 	// DockSessionClose ends the session and every process in it.
 	DockSessionClose
+	// DockSessionNew makes a session, asking which machine when there is more
+	// than one to choose from.
+	//
+	// It is here because creating a session was the one thing with no control
+	// anywhere on screen: it lived on a one-cell "+" on a rail heading, which
+	// is only there when the rail is open, only reachable with a pointer or
+	// after walking the rail with the keyboard, and carries no label. Making a
+	// session is the first thing anybody does and the last thing that was
+	// visible.
+	DockSessionNew
 )
 
 // dockSessionHit is where a session control was drawn on the last frame.
@@ -69,22 +79,42 @@ func dockSessionControlsFit(renderWidth int) bool {
 const (
 	dockSessionLeaveLabel = "Leave running"
 	dockSessionCloseLabel = "Close session"
+	dockSessionNewLabel   = "New session"
 )
 
 // dockSessionIcon is a control's glyph, following the configured glyph set.
+//
+// The new-session control wears the same "+" the rail's own add controls do,
+// rather than a glyph of its own. Two marks for one verb is two things to
+// learn, and the rail's is the one people meet first.
 func dockSessionIcon(a DockSessionAction, s *config.Settings) string {
-	if a == DockSessionLeave {
+	switch a {
+	case DockSessionNew:
+		return s.GetRailAddGlyph()
+	case DockSessionLeave:
 		return s.GetDockIconLeaveRunning()
+	default:
+		return s.GetDockIconCloseSession()
 	}
-	return s.GetDockIconCloseSession()
 }
 
 // dockSessionLabel is a control's word, which is what its tooltip says.
 func dockSessionLabel(a DockSessionAction) string {
-	if a == DockSessionLeave {
+	switch a {
+	case DockSessionNew:
+		return dockSessionNewLabel
+	case DockSessionLeave:
 		return dockSessionLeaveLabel
+	default:
+		return dockSessionCloseLabel
 	}
-	return dockSessionCloseLabel
+}
+
+// CanCreateSession reports whether there is a daemon to create a session on.
+// Under plain `tuios` there is none, so the control is left out of the frame
+// entirely rather than drawn dead, for the reason CanLeaveRunning gives.
+func (m *OS) CanCreateSession() bool {
+	return m.IsDaemonSession && m.DaemonClient != nil
 }
 
 // CanLeaveRunning reports whether there is a session to leave running, which is

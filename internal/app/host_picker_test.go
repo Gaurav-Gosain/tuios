@@ -435,3 +435,65 @@ func TestCancellingThePickerForgetsTheSplit(t *testing.T) {
 		t.Error("a cancelled split still forces a direction")
 	}
 }
+
+// TestMakingASessionAsksWhichMachineWhenThereIsAChoice.
+//
+// Creating a session had one control anywhere on screen: a one-cell "+" on a
+// rail heading, only present while the rail is open, carrying no label, and
+// only ever making a session on this machine. With more than one machine
+// configured, "new session" is a question, and it is now asked by the dock's
+// control, the palette entry and the rail's "+" alike.
+//
+// Negative control: routing the rail's "+" straight to SidebarNewSession
+// leaves ShowHostPicker false and this fails.
+func TestMakingASessionAsksWhichMachineWhenThereIsAChoice(t *testing.T) {
+	m := pickerOS(t)
+
+	m.SidebarNewSessionHere()
+
+	if !m.ShowHostPicker {
+		t.Fatal("making a session did not ask which machine with two reachable")
+	}
+	if m.HostPickerPurpose != HostPickerNewSession {
+		t.Error("the picker opened for the wrong purpose")
+	}
+}
+
+// TestMakingASessionOnOneMachineAsksNothing. A picker with a single row is a
+// dialog that asks a question with one answer.
+//
+// The gate is checked rather than the whole call, because on one machine the
+// call goes on to create the session and this fixture holds a client with no
+// connection behind it.
+func TestMakingASessionOnOneMachineAsksNothing(t *testing.T) {
+	m := sidebarTestOS(t, 120, 40, "left")
+	m.IsDaemonSession = true
+	m.DaemonClient = session.NewTUIClient()
+	m.applyFederationSnapshot(FederationHostsMsg{Snapshot: FederationSnapshot{Hosts: []FederationHost{
+		{Name: federation.LocalHostName, Status: string(federation.StatusUp)},
+	}}})
+
+	if m.newSessionShouldPickHost() {
+		t.Error("a machine that can reach nowhere else would be asked which machine")
+	}
+
+	// And with a second one up, it is a question.
+	m.applyFederationSnapshot(FederationHostsMsg{Snapshot: FederationSnapshot{Hosts: []FederationHost{
+		{Name: federation.LocalHostName, Status: string(federation.StatusUp)},
+		{Name: "build", Status: string(federation.StatusUp)},
+	}}})
+	if !m.newSessionShouldPickHost() {
+		t.Error("two reachable machines and making a session still asked nothing")
+	}
+}
+
+// TestThePickerTitleSaysWhichQuestion. The list is the same for both, so the
+// title is the only thing that says whether enter makes a pane or a session.
+func TestThePickerTitleSaysWhichQuestion(t *testing.T) {
+	if got := hostPickerTitle(HostPickerNewSession); got != "New session on" {
+		t.Errorf("the session title reads %q", got)
+	}
+	if got := hostPickerTitle(HostPickerNewWindow); got != "New window on" {
+		t.Errorf("the window title reads %q", got)
+	}
+}

@@ -149,7 +149,7 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case sidebarActAccent:
 		o.SidebarAccentCursor()
 	case sidebarActNewSession:
-		o.SidebarNewSession()
+		o.SidebarNewSessionHere()
 	case sidebarActNewWindow:
 		// The keyboard reach for the terminals header's "+". It makes the pane in
 		// the attached session, which is the only one that section ever lists

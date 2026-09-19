@@ -224,7 +224,7 @@ func (m *OS) SidebarActivateCursor() bool {
 	case sidebarRowAgentMail:
 		m.queueSidebarCmd(m.OpenAgentMail())
 	case sidebarRowNewSession:
-		m.SidebarNewSession()
+		m.SidebarNewSessionHere()
 	case sidebarRowNewWindow:
 		// The new pane is the request, so the rail hands the keyboard back to it.
 		m.SidebarNewWindow(row.SessionID)
@@ -555,6 +555,16 @@ func (m *OS) SidebarSetCollapsed(collapsed bool) {
 // SidebarNewSession creates a detached session and switches to it: create and
 // go, no prompt. The name matches what `tuios new` would have picked, so the
 // two ways in never invent different conventions.
+// SidebarNewSessionHere is the rail's "+" on the sessions header. It asks
+// which machine when there is more than one, the same way the dock's control
+// and the palette entry do, so the three agree about what the verb means.
+func (m *OS) SidebarNewSessionHere() {
+	m.OpenNewSessionPicker()
+}
+
+// SidebarNewSession makes a session on this machine, with no question asked.
+// It is what the picker calls once a machine has been chosen, and what the
+// rail did before the picker existed.
 func (m *OS) SidebarNewSession() {
 	if !m.SidebarCanCreateSession() {
 		m.ShowNotification("Sessions need the daemon", "info", m.Settings.NotificationDuration)

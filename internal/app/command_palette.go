@@ -589,6 +589,17 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 		},
 		// Session & Config
 		{
+			// The palette's own way in to making a session, which had none.
+			// It was a one-cell "+" on a rail heading, and the rail is not
+			// always open.
+			Name:     "New session",
+			Category: "Session",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenNewSessionPicker()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Settings",
 			Shortcut: "prefix+,",
 			Category: "Session",

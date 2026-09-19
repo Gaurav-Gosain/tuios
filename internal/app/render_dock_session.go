@@ -37,7 +37,13 @@ func (m *OS) buildDockSessionStrip() (string, []dockSessionCell) {
 	}
 
 	pal := theme.UI()
-	cells := make([]dockSessionCell, 0, 2)
+	cells := make([]dockSessionCell, 0, 3)
+	// Creating comes first, at the far end from closing. The two most
+	// different things the strip does are the two furthest apart, and the one
+	// that cannot be undone keeps its place at the edge.
+	if m.CanCreateSession() {
+		cells = append(cells, m.dockSessionCell(DockSessionNew, pal))
+	}
 	if m.CanLeaveRunning() {
 		cells = append(cells, m.dockSessionCell(DockSessionLeave, pal))
 	}

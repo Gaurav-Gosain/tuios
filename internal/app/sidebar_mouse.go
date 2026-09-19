@@ -224,7 +224,7 @@ func (m *OS) SidebarClick(x, y int, right bool) bool {
 	case sidebarRowAgentMail:
 		m.queueSidebarCmd(m.OpenAgentMail())
 	case sidebarRowNewSession:
-		m.SidebarNewSession()
+		m.SidebarNewSessionHere()
 	case sidebarRowNewWindow:
 		m.SidebarNewWindow(hit.SessionID)
 	case sidebarRowHostSession:
@@ -372,7 +372,7 @@ func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 	case sidebarRowAgentMail:
 		m.queueSidebarCmd(m.OpenAgentMail())
 	case sidebarRowNewSession:
-		m.SidebarNewSession()
+		m.SidebarNewSessionHere()
 	case sidebarRowNewWindow:
 		m.SidebarNewWindow(hit.SessionID)
 	case sidebarRowHostSession:

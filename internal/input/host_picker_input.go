@@ -23,7 +23,7 @@ func handleHostPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		if o.HostPickerSelected < 0 || o.HostPickerSelected >= len(filtered) {
 			return o, nil
 		}
-		return o, o.ChooseHostForNewWindow(filtered[o.HostPickerSelected])
+		return o, o.ChooseHost(filtered[o.HostPickerSelected])
 
 	case "up", "ctrl+p":
 		if o.HostPickerSelected > 0 {
