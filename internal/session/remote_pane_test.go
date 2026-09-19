@@ -2,6 +2,7 @@ package session
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -623,3 +624,94 @@ func TestARestoredWindowStopsClaimingAnotherMachine(t *testing.T) {
 		t.Errorf("the restored shell was started in the other machine's directory: %q", got)
 	}
 }
+
+// TestTheAskingMachinesShellDoesNotTravel.
+//
+// TERM and COLORTERM describe the emulator the program talks to, and that is
+// here, so this session's answer is right wherever the process runs. The shell
+// is a file that has to exist on the machine running it.
+//
+// Found by deploying: a laptop running zsh asked a Linux host for a pane and
+// the host tried to exec /bin/zsh, which it does not have. Both ends were the
+// same machine in every test until then, so the path existed and the fault was
+// invisible.
+//
+// Negative control: putting s.config.Shell back into the spec fails here.
+func TestTheAskingMachinesShellDoesNotTravel(t *testing.T) {
+	d, socketPath := startTestDaemon(t)
+	sess, err := d.manager.CreateSession("shell-travel", &SessionConfig{
+		Term:      "xterm-256color",
+		ColorTerm: "truecolor",
+		Shell:     "/bin/zsh-that-is-only-here",
+	}, 80, 24)
+	if err != nil {
+		t.Fatalf("create the session: %v", err)
+	}
+	sess.SetFederation(&socketFederation{socketPath: socketPath})
+
+	spec := captureOpenPaneSpec(t, sess)
+	if spec.Shell != "" {
+		t.Errorf("the asking machine's shell was sent to the far machine: %q", spec.Shell)
+	}
+	if spec.Term != "xterm-256color" || spec.ColorTerm != "truecolor" {
+		t.Errorf("the terminal type did not travel: term=%q colorterm=%q", spec.Term, spec.ColorTerm)
+	}
+}
+
+// captureOpenPaneSpec opens a pane against a federation that records the spec
+// instead of a daemon, so the request can be read as it would cross.
+func captureOpenPaneSpec(t *testing.T, sess *Session) hostedPaneSpec {
+	t.Helper()
+	rec := &specRecorder{}
+	sess.SetFederation(rec)
+	_, _ = sess.openRemotePaneFor("build", 80, 24, "", nil)
+	if !rec.seen {
+		t.Fatal("ASSERTION: no open-pane request was made, so this proves nothing")
+	}
+	return rec.spec
+}
+
+// specRecorder is a paneFederation that reads the open-pane request and then
+// refuses it, which is all this needs: the question is what was asked for.
+type specRecorder struct {
+	spec hostedPaneSpec
+	seen bool
+}
+
+func (r *specRecorder) OpenConnection(context.Context, string) (io.ReadWriteCloser, error) {
+	return &specStream{rec: r}, nil
+}
+
+func (r *specRecorder) Call(context.Context, string, string, any) (json.RawMessage, error) {
+	return nil, nil
+}
+
+// specStream reads the request line, records its params, and answers with an
+// error so the open ends there.
+type specStream struct {
+	rec   *specRecorder
+	reply string
+	read  int
+}
+
+func (s *specStream) Write(p []byte) (int, error) {
+	var req struct {
+		Params hostedPaneSpec `json:"params"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(p), &req); err == nil {
+		s.rec.spec, s.rec.seen = req.Params, true
+	}
+	s.reply = `{"id":1,"error":{"code":"internal","message":"recorded"}}` + "\n"
+	return len(p), nil
+}
+
+func (s *specStream) Read(p []byte) (int, error) {
+	if s.read >= len(s.reply) {
+		return 0, io.EOF
+	}
+	n := copy(p, s.reply[s.read:])
+	s.read += n
+	return n, nil
+}
+
+func (s *specStream) Close() error { return nil }

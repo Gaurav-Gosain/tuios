@@ -200,9 +200,10 @@ func (s *Session) SetFederation(fed paneFederation) {
 
 // openRemotePaneFor starts this session's window on another machine.
 //
-// The terminal type, the colour support and the shell travel with the request
-// because the pane is drawn by this session's emulator: the program at the far
-// end has to be told what it is really talking to, which is here, not there.
+// The terminal type and the colour support travel with the request, because
+// the pane is drawn by this session's emulator and the program at the far end
+// has to be told what it is really talking to. The shell does not travel: see
+// below.
 func (s *Session) openRemotePaneFor(host string, width, height int, cwd string, command []string) (paneIO, error) {
 	fed := s.fed
 	if fed == nil {
@@ -216,7 +217,19 @@ func (s *Session) openRemotePaneFor(host string, width, height int, cwd string, 
 		Session: s.Name,
 	}
 	if s.config != nil {
-		spec.Term, spec.ColorTerm, spec.Shell = s.config.Term, s.config.ColorTerm, s.config.Shell
+		// The terminal type travels and the shell does not.
+		//
+		// TERM and COLORTERM describe the emulator the program is talking to,
+		// and that emulator is here, so this session's answer is the right one
+		// wherever the process runs. The shell is a file that has to exist on
+		// the machine running it. Sending this session's shell made the far
+		// side try to exec a path from this machine: a laptop running zsh
+		// asked a Linux host for /bin/zsh and got "no such file or directory".
+		//
+		// So the far machine picks its own shell, which is what open-pane does
+		// with an empty one. A caller that wants a particular shell over there
+		// can still name it, but it has to be a path that exists over there.
+		spec.Term, spec.ColorTerm = s.config.Term, s.config.ColorTerm
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), remotePaneOpenBudget)
 	defer cancel()

@@ -404,6 +404,13 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	if w.CustomName != "" {
 		info["custom_name"] = w.CustomName
 	}
+	// The machine the window's process runs on, omitted when it is this one.
+	// A listing that cannot say where a window runs is incomplete once a
+	// session can hold windows from more than one machine, and the listing is
+	// what scripts and agents read.
+	if w.Host != "" {
+		info["host"] = w.Host
+	}
 	// Always report the agent state (as "none" when unset) so a consumer building
 	// an attention view can read every pane's state in one list-windows call.
 	info["agent_state"] = w.AgentState.Name()
