@@ -62,7 +62,7 @@ func (m *OS) renderScrollbackBrowser() string {
 	headerLines := 2 // title + separator
 	footerLines := 2 // separator + hints
 	paneH := max(innerH-headerLines-footerLines, 1)
-	leftW := max(innerW*30/100, 10)
+	leftW := browserListWidth(browserItems(browser), innerW)
 	rightW := innerW - leftW - 3 // " │ "
 	if rightW < 8 {
 		rightW = 8
@@ -240,10 +240,8 @@ func (m *OS) renderScrollbackBrowser() string {
 	return result
 }
 
-func buildLeftPane(
-	browser *scrollback.Browser, width, height int,
-	selBg, selFg, normalFg, dimFg, multiClr color.Color,
-) []string {
+// browserItems is the list the left pane shows, for whichever mode is on.
+func browserItems(browser *scrollback.Browser) []string {
 	var items []string
 	switch browser.Mode {
 	case scrollback.ModeCommands:
@@ -260,6 +258,45 @@ func buildLeftPane(
 			items = append(items, browser.PathBlocks[idx].Raw)
 		}
 	}
+	return items
+}
+
+// The bounds on the list column.
+//
+// A floor so a list of one-word commands still reads as a column and the
+// header above it is not cut to nothing, and a ceiling as a share of the
+// panel so a single long command cannot take the output pane's room. The
+// output is what the browser is for; the list is how you choose which.
+const (
+	browserListMinWidth = 18
+	browserListMaxShare = 40
+)
+
+// browserListWidth is how wide the list column should be for what is in it.
+//
+// It used to be thirty percent of the panel, whatever the panel held. On a
+// wide terminal that meant seventy columns of grey for a list of "ll" and
+// "ls", with the selected row's highlight bar drawn across every one of them,
+// and the output squeezed into what was left.
+func browserListWidth(items []string, innerW int) int {
+	widest := 0
+	for _, it := range items {
+		if w := lipgloss.Width(strings.ReplaceAll(it, "\n", " ")); w > widest {
+			widest = w
+		}
+	}
+	// Two for the "> " marker, one so the longest entry is not flush against
+	// the rule beside it.
+	want := widest + 3
+	ceiling := max(innerW*browserListMaxShare/100, browserListMinWidth)
+	return min(max(want, browserListMinWidth), ceiling)
+}
+
+func buildLeftPane(
+	browser *scrollback.Browser, width, height int,
+	selBg, selFg, normalFg, dimFg, multiClr color.Color,
+) []string {
+	items := browserItems(browser)
 
 	out := make([]string, height)
 	if len(items) == 0 {
