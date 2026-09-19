@@ -1507,3 +1507,28 @@ const (
 	// MaxNameLengthBeforeEllipsis is max length before needing ellipsis
 	MaxNameLengthBeforeEllipsis = MaxNameTruncateLength - EllipsisLength
 )
+
+// The colours a pane paints over its own output to mark text. See
+// SelectionConfig for why they are settings rather than literals.
+//
+// The selection is a neutral grey rather than the violet it used to be. A
+// selection is not a status and should not introduce a hue the rest of the
+// screen does not use: grey reads as "this is marked" against output of any
+// colour, which is what every editor and browser settled on. The text keeps
+// the colour the program wrote it in, so a selection over syntax-highlighted
+// output stays readable as the same code.
+const (
+	DefaultSelectionBg = "#45475A"
+	DefaultSelectionFg = ""
+	// Search is amber and the match under the cursor is a brighter one. They
+	// are two steps of one colour rather than two colours, because they answer
+	// two parts of the same question.
+	DefaultSearchBg = "#8A6D2F"
+	DefaultSearchFg = "#F5E7C8"
+	DefaultMatchBg  = "#E5A93D"
+	DefaultMatchFg  = "#1C1B19"
+	// The copy mode cursor. Cyan, which is the one hue not used by the
+	// selection or the search, so the three never read as each other.
+	DefaultCopyCursorBg = "#39C5CF"
+	DefaultCopyCursorFg = "#08222B"
+)

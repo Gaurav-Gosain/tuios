@@ -235,6 +235,9 @@ type AppearanceConfig struct {
 	// of [appearance]; a table written mid-section would swallow the keys that
 	// follow it.
 	Scrollbar ScrollbarConfig `toml:"scrollbar"`
+	// Selection is the [appearance.selection] table: the colours a pane uses to
+	// mark text. See SelectionConfig.
+	Selection SelectionConfig `toml:"selection"`
 	Sidebar   SidebarConfig   `toml:"sidebar"`
 }
 
@@ -401,6 +404,37 @@ type ScrollbarConfig struct {
 	Tint  string `toml:"tint"`  // border, muted, #RRGGBB (default: border)
 }
 
+// SelectionConfig holds the [appearance.selection] table: the colours a pane
+// paints over its own output to mark text.
+//
+// All four were fixed hex literals in the render loop. They are the one part
+// of a pane's colours tuios chooses rather than the program running in it, so
+// they are the one part a person cannot fix by changing their theme, and the
+// selection colour in particular sat over every pane in a violet nothing else
+// on screen used.
+//
+// A background is a colour literal. A foreground may also be empty, which
+// leaves the text the colour the program wrote it in and tints only the
+// background behind it, the way a browser or an editor marks a selection.
+type SelectionConfig struct {
+	// Bg and Fg are the selection in copy mode's visual state.
+	Bg string `toml:"bg"`
+	Fg string `toml:"fg"`
+	// Bold draws selected text bold as well. Off by default: the background
+	// already says what is selected, and reweighting the text moves it.
+	Bold *bool `toml:"bold"`
+	// SearchBg is every match of a search, and MatchBg is the one the cursor
+	// is on. Two colours because "where are the matches" and "which one am I
+	// on" are two questions, and one colour answers only the first.
+	SearchBg string `toml:"search_bg"`
+	SearchFg string `toml:"search_fg"`
+	MatchBg  string `toml:"match_bg"`
+	MatchFg  string `toml:"match_fg"`
+	// CursorBg is the block copy mode draws where its cursor is.
+	CursorBg string `toml:"cursor_bg"`
+	CursorFg string `toml:"cursor_fg"`
+}
+
 // SidebarConfig holds the [appearance.sidebar] table: everything about the
 // vertical session rail. Each toggle is a pointer so nil can mean "unset, use
 // the default" and an explicit false survives a reload.
@@ -521,6 +555,12 @@ func DefaultConfig() *UserConfig {
 			ScrollColumnWidth:        ScrollColumnWidthDefault,
 			NiriScrollCells:          NiriScrollCellsDefault,
 			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
+			Selection: SelectionConfig{
+				Bg: DefaultSelectionBg, Fg: DefaultSelectionFg,
+				SearchBg: DefaultSearchBg, SearchFg: DefaultSearchFg,
+				MatchBg: DefaultMatchBg, MatchFg: DefaultMatchFg,
+				CursorBg: DefaultCopyCursorBg, CursorFg: DefaultCopyCursorFg,
+			},
 			Sidebar: SidebarConfig{
 				Position:    "left",
 				Width:       SidebarDefaultWidth,
@@ -1391,6 +1431,31 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.ScrollbarThumb = cfg.Appearance.Scrollbar.Thumb
 	s.ScrollbarTrack = cfg.Appearance.Scrollbar.Track
 	s.ScrollbarTint = cfg.Appearance.Scrollbar.Tint
+
+	// The selection colours. A background that is empty falls back to the
+	// default, because a pane with no colour behind a selection shows no
+	// selection at all. A foreground that is empty is a decision: it means
+	// keep the colour the program wrote the text in, so it is assigned as
+	// written.
+	if cfg.Appearance.Selection.Bg != "" {
+		s.SelectionBg = cfg.Appearance.Selection.Bg
+	}
+	s.SelectionFg = cfg.Appearance.Selection.Fg
+	if cfg.Appearance.Selection.Bold != nil {
+		s.SelectionBold = *cfg.Appearance.Selection.Bold
+	}
+	if cfg.Appearance.Selection.SearchBg != "" {
+		s.SearchBg = cfg.Appearance.Selection.SearchBg
+	}
+	s.SearchFg = cfg.Appearance.Selection.SearchFg
+	if cfg.Appearance.Selection.MatchBg != "" {
+		s.MatchBg = cfg.Appearance.Selection.MatchBg
+	}
+	s.MatchFg = cfg.Appearance.Selection.MatchFg
+	if cfg.Appearance.Selection.CursorBg != "" {
+		s.CopyCursorBg = cfg.Appearance.Selection.CursorBg
+	}
+	s.CopyCursorFg = cfg.Appearance.Selection.CursorFg
 
 	// The hide/show toggles are plain bools with no "unset" state, so they are
 	// assigned unconditionally: turning one off in the settings page has to

@@ -81,6 +81,113 @@ var colorSettings = []colorSetting{
 		effective:  scrollbarTintColor,
 		namedColor: scrollbarTintKeywordColor,
 	},
+
+	// [appearance.selection]: the marks a pane paints over its own output.
+	//
+	// A foreground here may be left empty, which keeps the text the colour the
+	// program wrote it in and tints only the background behind it. That is why
+	// each of the three foregrounds says "(keep)" rather than naming a colour
+	// it would fall back to: there is no fallback, and the unset state is a
+	// real choice rather than an absent one.
+	{
+		Path:  "appearance.selection.bg",
+		Label: "Selection",
+		Desc:  "Background behind text selected in copy mode",
+		apply: selectionColorApply(func(s *config.Settings, v string) { s.SelectionBg = v }),
+		effective: func(_ color.Color, s *config.Settings) color.Color {
+			return lipgloss.Color(s.SelectionBg)
+		},
+	},
+	{
+		Path:  "appearance.selection.fg",
+		Label: "Selected text",
+		Desc:  "Colour of selected text. Empty keeps the colour it already has.",
+		Unset: "(keep)",
+		apply: selectionColorApply(func(s *config.Settings, v string) { s.SelectionFg = v }),
+		effective: func(ground color.Color, s *config.Settings) color.Color {
+			return selectionInk(s.SelectionFg, ground)
+		},
+	},
+	{
+		Path:  "appearance.selection.search_bg",
+		Label: "Search match",
+		Desc:  "Background behind every match of a search",
+		apply: selectionColorApply(func(s *config.Settings, v string) { s.SearchBg = v }),
+		effective: func(_ color.Color, s *config.Settings) color.Color {
+			return lipgloss.Color(s.SearchBg)
+		},
+	},
+	{
+		Path:  "appearance.selection.search_fg",
+		Label: "Search match text",
+		Desc:  "Colour of matched text. Empty keeps the colour it has.",
+		Unset: "(keep)",
+		apply: selectionColorApply(func(s *config.Settings, v string) { s.SearchFg = v }),
+		effective: func(ground color.Color, s *config.Settings) color.Color {
+			return selectionInk(s.SearchFg, ground)
+		},
+	},
+	{
+		Path:  "appearance.selection.match_bg",
+		Label: "Current match",
+		Desc:  "Background behind the one match the cursor is on",
+		apply: selectionColorApply(func(s *config.Settings, v string) { s.MatchBg = v }),
+		effective: func(_ color.Color, s *config.Settings) color.Color {
+			return lipgloss.Color(s.MatchBg)
+		},
+	},
+	{
+		Path:  "appearance.selection.match_fg",
+		Label: "Current match text",
+		Desc:  "Colour of the match under the cursor. Empty keeps it.",
+		Unset: "(keep)",
+		apply: selectionColorApply(func(s *config.Settings, v string) { s.MatchFg = v }),
+		effective: func(ground color.Color, s *config.Settings) color.Color {
+			return selectionInk(s.MatchFg, ground)
+		},
+	},
+	{
+		Path:  "appearance.selection.cursor_bg",
+		Label: "Copy mode cursor",
+		Desc:  "Background of the block copy mode draws where its cursor is",
+		apply: selectionColorApply(func(s *config.Settings, v string) { s.CopyCursorBg = v }),
+		effective: func(_ color.Color, s *config.Settings) color.Color {
+			return lipgloss.Color(s.CopyCursorBg)
+		},
+	},
+	{
+		Path:  "appearance.selection.cursor_fg",
+		Label: "Copy mode cursor text",
+		Desc:  "Colour under the copy mode cursor. Empty keeps it.",
+		Unset: "(keep)",
+		apply: selectionColorApply(func(s *config.Settings, v string) { s.CopyCursorFg = v }),
+		effective: func(ground color.Color, s *config.Settings) color.Color {
+			return selectionInk(s.CopyCursorFg, ground)
+		},
+	},
+}
+
+// selectionColorApply writes one selection colour and repaints.
+//
+// Every pane has to be redrawn rather than only the focused one: a search
+// highlights matches in whichever pane was searched, and a person changing the
+// colour is looking at the result.
+func selectionColorApply(set func(*config.Settings, string)) func(*OS, string) {
+	return func(m *OS, v string) {
+		set(&m.Settings, v)
+		m.MarkAllDirty()
+	}
+}
+
+// selectionInk is the swatch for a mark's foreground. An empty one keeps
+// whatever colour the text already had, which has no single answer, so the
+// ground the swatch sits on stands in for it: that is what the cell will look
+// like where nothing has been overridden.
+func selectionInk(v string, ground color.Color) color.Color {
+	if v == "" {
+		return ground
+	}
+	return lipgloss.Color(v)
 }
 
 // scrollbarTintColor is the colour the scrollbar's thumb is being drawn in,

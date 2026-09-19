@@ -99,3 +99,38 @@ func chordRune(msg tea.KeyPressMsg) rune {
 	}
 	return runes[0]
 }
+
+// macRewrittenAltArrowKeys are the readline word motions a macOS terminal
+// sends in place of Option+Left and Option+Right, mapped to the chord the user
+// actually pressed.
+//
+// ESC b and ESC f are word-back and word-forward, and sending them for
+// Option+arrow is the macOS convention rather than a fault. It costs tuios the
+// two chords all the same, because what arrives says nothing about an arrow
+// key having been pressed.
+var macRewrittenAltArrowKeys = map[string]string{
+	"alt+b": "alt+left",
+	"alt+f": "alt+right",
+}
+
+// macRewrittenAltArrow reports whether a key press is one of those, and which
+// arrow chord it stands for.
+//
+// Only on darwin, and only for the plain chord: alt+b typed on a Linux box is
+// a user's own binding, and ctrl+alt+b is not something any terminal sends for
+// an arrow key.
+//
+// This does not rebind anything. The pair is genuinely ambiguous, since a
+// shell wants ESC b and ESC f for word movement, so tuios keeps its hands off
+// them and says what happened instead.
+func macRewrittenAltArrow(msg tea.KeyPressMsg) (got, arrow string, ok bool) {
+	if !runtimeIsDarwin() {
+		return "", "", false
+	}
+	if mods := msg.Mod &^ lockMods; mods != tea.ModAlt {
+		return "", "", false
+	}
+	got = msg.Keystroke()
+	arrow, ok = macRewrittenAltArrowKeys[got]
+	return got, arrow, ok
+}

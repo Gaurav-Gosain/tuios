@@ -369,6 +369,29 @@ func (m *OS) settingsCategories() []settingsCategory {
 		}),
 	}
 
+	// The marks a pane paints over its own output, in the order a person meets
+	// them: the selection first, then the search, then the copy mode cursor.
+	// Each background is followed by the text colour that sits on it, so the
+	// pair reads as one thing.
+	//
+	// A tab of their own for the reason the sidebar rows have one: Appearance
+	// was already at the height of the panel, and nine more rows would have
+	// put the rest of it under a scroll.
+	selection := settingsCategory{
+		Name: "Selection",
+		Items: m.resolveRows([]settingsRow{
+			opt("appearance.selection.bg"),
+			opt("appearance.selection.fg"),
+			opt("appearance.selection.bold"),
+			opt("appearance.selection.search_bg"),
+			opt("appearance.selection.search_fg"),
+			opt("appearance.selection.match_bg"),
+			opt("appearance.selection.match_fg"),
+			opt("appearance.selection.cursor_bg"),
+			opt("appearance.selection.cursor_fg"),
+		}),
+	}
+
 	dock := settingsCategory{
 		Name: "Dock",
 		Items: m.resolveRows([]settingsRow{
@@ -519,7 +542,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 	}
 
 	return []settingsCategory{
-		appearance, sidebar, dock, behavior,
+		appearance, sidebar, selection, dock, behavior,
 		notifications, startup, screenshot, screensaver, spotlight, advanced, daemon,
 		m.hostsCategory(), tape,
 	}

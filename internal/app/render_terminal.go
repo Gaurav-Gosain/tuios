@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"image/color"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -11,36 +12,74 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// Highlight styles used by the terminal render loop are invariant, so they are
-// built once instead of per matching cell per frame.
+// The marks a pane paints over its own output: the selection, the search
+// matches, the match under the cursor, and the copy mode cursor block.
+//
+// These were four fixed hex literals. They are the one part of a pane's
+// colours tuios chooses rather than the program running in it, so they were
+// also the one part a person could not fix by changing their theme, and the
+// selection in particular was a violet nothing else on screen used. They are
+// settings now; see config.SelectionConfig.
+//
+// They are still built once rather than per matching cell per frame. The cache
+// holds the values they were built from, so an edit in the settings page shows
+// on the next frame and nothing else costs a rebuild.
+type markStyles struct {
+	from      string
+	selection lipgloss.Style
+	search    lipgloss.Style
+	match     lipgloss.Style
+	cursor    lipgloss.Style
+}
+
+// markStyle builds one mark. An empty foreground leaves the text the colour
+// the program wrote it in and tints only the background behind it, which is
+// how an editor or a browser marks a selection.
+func markStyle(bg, fg string, bold bool) lipgloss.Style {
+	st := lipgloss.NewStyle()
+	if bg != "" {
+		st = st.Background(lipgloss.Color(bg))
+	}
+	if fg != "" {
+		st = st.Foreground(lipgloss.Color(fg))
+	}
+	return st.Bold(bold)
+}
+
+// marks are this client's mark styles, rebuilt when the settings behind them
+// change.
+func (m *OS) marks() *markStyles {
+	s := &m.Settings
+	from := strings.Join([]string{
+		s.SelectionBg, s.SelectionFg, strconv.FormatBool(s.SelectionBold),
+		s.SearchBg, s.SearchFg, s.MatchBg, s.MatchFg,
+		s.CopyCursorBg, s.CopyCursorFg,
+	}, "\x00")
+	if m.markStyleCache != nil && m.markStyleCache.from == from {
+		return m.markStyleCache
+	}
+	m.markStyleCache = &markStyles{
+		from:      from,
+		selection: markStyle(s.SelectionBg, s.SelectionFg, s.SelectionBold),
+		search:    markStyle(s.SearchBg, s.SearchFg, false),
+		// The match under the cursor is bold as well as brighter. It is the
+		// one of many that the next keypress acts on, and two marks that
+		// differ only in shade are hard to tell apart at a glance.
+		match:  markStyle(s.MatchBg, s.MatchFg, true),
+		cursor: markStyle(s.CopyCursorBg, s.CopyCursorFg, true),
+	}
+	return m.markStyleCache
+}
+
 var (
-	copyModeCursorStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("#00D7FF")).
-				Foreground(lipgloss.Color("#000000")).
-				Bold(true)
-
-	visualSelectionStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("#5F5FAF")).
-				Foreground(lipgloss.Color("#FFFFFF")).
-				Bold(true)
-
-	currentMatchStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("#FF00FF")).
-				Foreground(lipgloss.Color("#000000")).
-				Bold(true)
-
-	searchMatchStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("#FF8700")).
-				Foreground(lipgloss.Color("#000000"))
-
 	// The link under the pointer. An underline and a colour rather than a
 	// filled background, because the run is text the program wrote and the
 	// highlight is saying what it is, not selecting it: a block of colour would
 	// read as the drag-selection the same gesture used to start, which is the
 	// one thing this must not be confused with.
 	linkHoverStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#7DCFFF")).
-			Underline(true)
+		Foreground(lipgloss.Color("#7DCFFF")).
+		Underline(true)
 )
 
 // isBlankRender reports whether a rendered frame carries no visible text, so
@@ -330,6 +369,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	scrollbackLen := window.ScrollbackLen()
 	inScrollbackMode := window.ScrollbackOffset > 0
 
+	marks := m.marks()
+
 	inCopyMode := window.InCopyMode()
 	// The block cursor is copy mode showing itself. A pane that is merely
 	// scrolled back under the wheel draws none: a cursor parked mid-pane over
@@ -618,7 +659,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 				flushBatch()
 
-				builder.WriteString(renderStyledText(copyModeCursorStyle, char))
+				builder.WriteString(renderStyledText(marks.cursor, char))
 
 				prevValid = false
 				prevIsCursor = false
@@ -654,7 +695,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			if inVisualMode && visualSelection != nil && visualSelection.Get(y, x) && x <= lineEndX {
 				flushBatch()
 
-				builder.WriteString(renderStyledText(visualSelectionStyle, char))
+				builder.WriteString(renderStyledText(marks.selection, char))
 				notePrev(cell)
 				prevIsCursor = false
 				cellWidth := 1
@@ -669,7 +710,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				if currentMatchHighlight != nil && currentMatchHighlight.Get(y, x) {
 					flushBatch()
 
-					builder.WriteString(renderStyledText(currentMatchStyle, char))
+					builder.WriteString(renderStyledText(marks.match, char))
 					notePrev(cell)
 					prevIsCursor = false
 					cellWidth := 1
@@ -683,7 +724,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				if searchHighlights != nil && searchHighlights.Get(y, x) {
 					flushBatch()
 
-					builder.WriteString(renderStyledText(searchMatchStyle, char))
+					builder.WriteString(renderStyledText(marks.search, char))
 					notePrev(cell)
 					prevIsCursor = false
 					cellWidth := 1

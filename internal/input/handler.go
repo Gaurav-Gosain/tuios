@@ -200,6 +200,12 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if chord, ok := macOptionChord(msg); ok && chord != msg.Keystroke() {
 		o.NoteComposedOptionChord(chord)
 	}
+	// The other way a macOS terminal loses an Option chord, and the one that
+	// used to pass in silence: Option+Left and Option+Right arriving as the
+	// readline word motions.
+	if got, arrow, ok := macRewrittenAltArrow(msg); ok {
+		o.NoteRewrittenAltArrow(got, arrow)
+	}
 
 	// esc takes a message off the dock, in every mode, without consuming the key.
 	//

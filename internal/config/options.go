@@ -418,6 +418,56 @@ var optionSpecs = []Option{
 		Accepted:    ScrollbarTints, Default: ScrollbarTintQuiet, Color: true,
 	},
 
+	// [appearance.selection]. Every background is a colour literal; a
+	// foreground may also be empty, which keeps the text the colour the
+	// program wrote it in. No closed set covers a colour, so none carries
+	// Accepted and validation reports a bad one.
+	{
+		Path: "appearance.selection.bg", Type: OptionString, Section: "selection",
+		Description: "Background behind selected text",
+		Default:     DefaultSelectionBg, Color: true,
+	},
+	{
+		Path: "appearance.selection.fg", Type: OptionString, Section: "selection",
+		Description: "Selected text colour. Empty keeps the colour it already has.",
+		Default:     DefaultSelectionFg, Color: true,
+	},
+	{
+		Path: "appearance.selection.bold", Type: OptionBool, Section: "selection",
+		Description: "Draw selected text bold as well as tinted",
+		Default:     "false",
+	},
+	{
+		Path: "appearance.selection.search_bg", Type: OptionString, Section: "selection",
+		Description: "Background behind every search match",
+		Default:     DefaultSearchBg, Color: true,
+	},
+	{
+		Path: "appearance.selection.search_fg", Type: OptionString, Section: "selection",
+		Description: "Text colour of a search match. Empty keeps the colour it has.",
+		Default:     DefaultSearchFg, Color: true,
+	},
+	{
+		Path: "appearance.selection.match_bg", Type: OptionString, Section: "selection",
+		Description: "Background behind the match the cursor is on",
+		Default:     DefaultMatchBg, Color: true,
+	},
+	{
+		Path: "appearance.selection.match_fg", Type: OptionString, Section: "selection",
+		Description: "Text colour of the match the cursor is on. Empty keeps it.",
+		Default:     DefaultMatchFg, Color: true,
+	},
+	{
+		Path: "appearance.selection.cursor_bg", Type: OptionString, Section: "selection",
+		Description: "Background of the copy mode cursor block",
+		Default:     DefaultCopyCursorBg, Color: true,
+	},
+	{
+		Path: "appearance.selection.cursor_fg", Type: OptionString, Section: "selection",
+		Description: "Text colour under the copy mode cursor. Empty keeps it.",
+		Default:     DefaultCopyCursorFg, Color: true,
+	},
+
 	// [appearance.sidebar]
 	{
 		Path: "appearance.sidebar.enabled", Type: OptionBool, Section: "sidebar",

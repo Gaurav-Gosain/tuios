@@ -245,6 +245,19 @@ type Settings struct {
 
 	ScrollbarTint string
 
+	// The colours a pane paints over its own output to mark text. See
+	// SelectionConfig. An empty foreground leaves the text the colour the
+	// program wrote it in and tints only the background.
+	SelectionBg   string
+	SelectionFg   string
+	SelectionBold bool
+	SearchBg      string
+	SearchFg      string
+	MatchBg       string
+	MatchFg       string
+	CopyCursorBg  string
+	CopyCursorFg  string
+
 	// HideScrollbar controls whether the window scrollbar is hidden.
 	// Automatically treated as true when BorderStyle == "hidden" since there is
 	// no border to draw the thumb on in that mode.
@@ -524,6 +537,15 @@ func DefaultSettings() Settings {
 		ScrollbarThumb:              "",
 		ScrollbarTrack:              "",
 		ScrollbarTint:               ScrollbarTintQuiet,
+		SelectionBg:                 DefaultSelectionBg,
+		SelectionFg:                 DefaultSelectionFg,
+		SelectionBold:               false,
+		SearchBg:                    DefaultSearchBg,
+		SearchFg:                    DefaultSearchFg,
+		MatchBg:                     DefaultMatchBg,
+		MatchFg:                     DefaultMatchFg,
+		CopyCursorBg:                DefaultCopyCursorBg,
+		CopyCursorFg:                DefaultCopyCursorFg,
 		HideScrollbar:               false,
 		WindowTitlePosition:         "bottom",
 		WindowTitleFormat:           "",

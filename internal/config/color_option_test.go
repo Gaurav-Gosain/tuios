@@ -25,7 +25,7 @@ func colorOptionPaths(t *testing.T) []string {
 	return paths
 }
 
-// TestColorOptionsAreMarked pins the three colour options, because the settings
+// TestColorOptionsAreMarked pins the colour options, because the settings
 // panel offers a picker for exactly the ones the registry marks and a colour
 // that lost its mark would quietly go back to being a text field.
 func TestColorOptionsAreMarked(t *testing.T) {
@@ -33,6 +33,17 @@ func TestColorOptionsAreMarked(t *testing.T) {
 		"appearance.border_focused_color":   true,
 		"appearance.border_unfocused_color": true,
 		"appearance.scrollbar.tint":         true,
+		// The marks a pane paints over its own output. Each background has a
+		// text colour beside it, and each text colour may be left empty to
+		// keep whatever the program wrote.
+		"appearance.selection.bg":        true,
+		"appearance.selection.fg":        true,
+		"appearance.selection.search_bg": true,
+		"appearance.selection.search_fg": true,
+		"appearance.selection.match_bg":  true,
+		"appearance.selection.match_fg":  true,
+		"appearance.selection.cursor_bg": true,
+		"appearance.selection.cursor_fg": true,
 	}
 	got := map[string]bool{}
 	for _, p := range colorOptionPaths(t) {

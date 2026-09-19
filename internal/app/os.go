@@ -521,6 +521,11 @@ type OS struct {
 	// settings page. Filled once by a goroutine, because the call behind it is
 	// a round trip and the row that shows them is drawn in the render path.
 	// See tailnetAddrCandidates.
+	// markStyleCache holds the selection, search and copy mode cursor styles
+	// so they are built once rather than per matching cell per frame. See
+	// marks() in render_terminal.go.
+	markStyleCache *markStyles
+
 	tailnetMu         sync.Mutex
 	tailnetAskedAt    time.Time
 	tailnetCandidates []string
