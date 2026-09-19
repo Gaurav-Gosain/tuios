@@ -52,7 +52,7 @@ func handleContextMenuKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ContextMenuMove(-1)
 	case "down", "j", "tab":
 		o.ContextMenuMove(1)
-	case "enter", " ":
+	case "enter", "space":
 		action := o.ContextMenuSelectedAction()
 		o.CloseContextMenu()
 		return runContextMenuAction(action, o)

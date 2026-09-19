@@ -187,21 +187,35 @@ type SessionInput struct {
 //
 // Order: errored > needs_input > done-unseen > working > done-seen > idle > none.
 func AgentRank(state string, doneSeen bool) int {
+	// The numbers are spaced so a state can be added between two others
+	// without renumbering every caller's expectations. Only the order is
+	// meaningful; nothing compares a rank to a literal.
 	switch state {
 	case "errored":
-		return 6
+		return 12
 	case "needs_input":
-		return 5
+		return 10
 	case "done":
 		if doneSeen {
-			return 2
+			return 4
 		}
-		return 4
+		return 8
 	case "working":
-		return 3
+		return 6
 	case "idle":
+		return 2
+	case "unknown":
+		// An agent whose state the daemon cannot read. It ranks above nothing
+		// and below idle: there is something in that pane, which is more than
+		// "none" says, and it is not a claim that the agent is waiting, which
+		// is what idle says.
+		//
+		// It ranked zero, the same as none, so a session whose only agent was
+		// in this state rolled up to nothing and the rail showed the quiet
+		// dot. That is the state the stall timer writes for any agent with no
+		// screen rules, so it was not a rare case.
 		return 1
-	default: // "none" and any unknown value
+	default: // "none" and any value this build does not know
 		return 0
 	}
 }

@@ -2,6 +2,8 @@
 package input
 
 import (
+	"unicode/utf8"
+
 	"fmt"
 	"time"
 
@@ -374,7 +376,8 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		fx.ShowNotification("", "info", 0)
 	case tea.KeyBackspace:
 		if len(cm.SearchQuery) > 0 {
-			cm.SearchQuery = cm.SearchQuery[:len(cm.SearchQuery)-1]
+			_, size := utf8.DecodeLastRuneInString(cm.SearchQuery)
+			cm.SearchQuery = cm.SearchQuery[:len(cm.SearchQuery)-size]
 			executeSearch(cm, window)
 		}
 		fx.ShowNotification(searchPrefix+cm.SearchQuery, "info", 0)

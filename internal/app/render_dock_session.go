@@ -87,9 +87,17 @@ func (m *OS) dockSessionCell(a DockSessionAction, pal overlay.Palette) dockSessi
 	st := lipgloss.NewStyle()
 	hovered := m.dockSessionHover == a
 	switch {
-	case a == DockSessionLeave && hovered:
+	// Creating and leaving are the two that can be taken back, and they are
+	// drawn the same way: normal dock text, bold, brightening under the
+	// pointer. Only closing is recessed and goes warning-coloured on hover.
+	//
+	// The new control fell through to the closing arm when it was added, so
+	// the one button on the bar that makes something wore the colours of the
+	// one that destroys something. The weight split is the whole design of
+	// this strip; see the file header.
+	case a != DockSessionClose && hovered:
 		st = st.Foreground(theme.Readable(pal.AccentBright, pal.Canvas)).Bold(true)
-	case a == DockSessionLeave:
+	case a != DockSessionClose:
 		st = st.Foreground(pal.Fg).Bold(true)
 	case hovered:
 		st = st.Foreground(theme.Readable(pal.Warn, pal.Canvas)).Bold(true)

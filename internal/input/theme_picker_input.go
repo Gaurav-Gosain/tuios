@@ -1,6 +1,8 @@
 package input
 
 import (
+	"unicode/utf8"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
@@ -19,7 +21,10 @@ func handleThemePickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ThemePickerMove(1)
 	case "backspace":
 		if len(o.ThemePickerQuery) > 0 {
-			o.ThemePickerQuery = o.ThemePickerQuery[:len(o.ThemePickerQuery)-1]
+			// A rune at a time. Taking a byte off splits a multi-byte character
+			// and leaves invalid UTF-8 in the query.
+			_, size := utf8.DecodeLastRuneInString(o.ThemePickerQuery)
+			o.ThemePickerQuery = o.ThemePickerQuery[:len(o.ThemePickerQuery)-size]
 			o.ThemePickerRefilter()
 		}
 	case "ctrl+u":

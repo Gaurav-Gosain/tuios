@@ -1,6 +1,8 @@
 package input
 
 import (
+	"unicode/utf8"
+
 	"fmt"
 	"time"
 
@@ -38,7 +40,8 @@ func HandleScrollbackBrowserKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 			return o, nil
 		case "backspace":
 			if len(browser.SearchQuery) > 0 {
-				browser.SetSearch(browser.SearchQuery[:len(browser.SearchQuery)-1])
+				_, size := utf8.DecodeLastRuneInString(browser.SearchQuery)
+				browser.SetSearch(browser.SearchQuery[:len(browser.SearchQuery)-size])
 			}
 			return o, nil
 		default:
@@ -247,7 +250,8 @@ func handleBrowserOutputModeKey(keyStr string, browser *scrollback.Browser, o *a
 			vim.SearchExecute()
 		case "backspace":
 			if len(vim.SearchQuery) > 0 {
-				vim.SearchQuery = vim.SearchQuery[:len(vim.SearchQuery)-1]
+				_, size := utf8.DecodeLastRuneInString(vim.SearchQuery)
+				vim.SearchQuery = vim.SearchQuery[:len(vim.SearchQuery)-size]
 			}
 		default:
 			if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126 {

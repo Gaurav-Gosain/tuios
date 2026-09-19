@@ -1,6 +1,8 @@
 package input
 
 import (
+	"unicode/utf8"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
@@ -34,7 +36,10 @@ func handleLauncherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	case "backspace":
 		if len(o.LauncherQuery) > 0 {
-			o.LauncherQuery = o.LauncherQuery[:len(o.LauncherQuery)-1]
+			// A rune at a time. Taking a byte off splits a multi-byte character
+			// and leaves invalid UTF-8 in the query.
+			_, size := utf8.DecodeLastRuneInString(o.LauncherQuery)
+			o.LauncherQuery = o.LauncherQuery[:len(o.LauncherQuery)-size]
 			o.LauncherRefilter()
 		}
 		return o, o.LauncherIconWork()

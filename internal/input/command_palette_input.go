@@ -1,6 +1,8 @@
 package input
 
 import (
+	"unicode/utf8"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
@@ -27,7 +29,10 @@ func handleCommandPaletteInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 
 	case "backspace":
 		if len(o.CommandPaletteQuery) > 0 {
-			o.CommandPaletteQuery = o.CommandPaletteQuery[:len(o.CommandPaletteQuery)-1]
+			// A rune at a time. Taking a byte off splits a multi-byte character
+			// and leaves invalid UTF-8 in the query.
+			_, size := utf8.DecodeLastRuneInString(o.CommandPaletteQuery)
+			o.CommandPaletteQuery = o.CommandPaletteQuery[:len(o.CommandPaletteQuery)-size]
 			o.CommandPaletteSelected = 0
 			o.CommandPaletteScroll = 0
 		}

@@ -49,7 +49,7 @@ func (m *OS) renderLayoutPicker() (string, overlay.Geometry, []overlayRowHit) {
 		EmptyMsg:   "No saved layouts",
 		Hints: []overlay.Hint{
 			{Key: "⏎", Label: "apply"},
-			{Key: "d", Label: "delete"},
+			{Key: "ctrl+d", Label: "delete"},
 			{Key: "esc", Label: "close"},
 		},
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {

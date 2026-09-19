@@ -1,6 +1,8 @@
 package input
 
 import (
+	"unicode/utf8"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
@@ -38,7 +40,8 @@ func handleWorkspaceSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.
 
 	case "backspace":
 		if len(o.WorkspaceSwitcherQuery) > 0 {
-			o.WorkspaceSwitcherQuery = o.WorkspaceSwitcherQuery[:len(o.WorkspaceSwitcherQuery)-1]
+			_, size := utf8.DecodeLastRuneInString(o.WorkspaceSwitcherQuery)
+			o.WorkspaceSwitcherQuery = o.WorkspaceSwitcherQuery[:len(o.WorkspaceSwitcherQuery)-size]
 			o.WorkspaceSwitcherSelected = 0
 			o.WorkspaceSwitcherScroll = 0
 		}
@@ -51,8 +54,15 @@ func handleWorkspaceSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.
 		return o, nil
 
 	default:
-		if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126 {
-			o.WorkspaceSwitcherQuery += keyStr
+		// A space and any typed rune, the way the session switcher takes
+		// them. The gate here was printable ASCII only, so a name with a
+		// space in it could not be searched for past its first word.
+		text := msg.Text
+		if keyStr == "space" {
+			text = " "
+		}
+		if text != "" {
+			o.WorkspaceSwitcherQuery += text
 			o.WorkspaceSwitcherSelected = 0
 			o.WorkspaceSwitcherScroll = 0
 		}

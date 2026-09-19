@@ -1,6 +1,8 @@
 package input
 
 import (
+	"unicode/utf8"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
@@ -39,7 +41,10 @@ func handleHostPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	case "backspace":
 		if len(o.HostPickerQuery) > 0 {
-			o.HostPickerQuery = o.HostPickerQuery[:len(o.HostPickerQuery)-1]
+			// A rune at a time. Taking a byte off splits a multi-byte
+			// character and leaves invalid UTF-8 in the query.
+			_, size := utf8.DecodeLastRuneInString(o.HostPickerQuery)
+			o.HostPickerQuery = o.HostPickerQuery[:len(o.HostPickerQuery)-size]
 			// The list grows again as letters come off, and a cursor left
 			// where a shorter list ended would be pointing past it.
 			o.HostPickerSelected = 0
@@ -52,8 +57,15 @@ func handleHostPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
-	if s := msg.String(); len(s) == 1 && s[0] >= 32 && s[0] <= 126 {
-		o.HostPickerQuery += s
+	// A space and any typed rune, the way the session switcher takes them. The
+	// gate here was printable ASCII only, so a machine with a space in its
+	// name could not be searched for past its first word.
+	text := msg.Text
+	if msg.String() == "space" {
+		text = " "
+	}
+	if text != "" {
+		o.HostPickerQuery += text
 		// Typing narrows the list, so the cursor goes back to the top rather
 		// than staying on a row that may no longer be there.
 		o.HostPickerSelected = 0

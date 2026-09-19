@@ -16,7 +16,7 @@ func handleSessionCloseInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 		o.SessionCloseMove(-1)
 	case "down", "j":
 		o.SessionCloseMove(1)
-	case "enter", " ":
+	case "enter", "space":
 		return o, o.SessionCloseActivate(o.SessionCloseSelected)
 	}
 	return o, nil

@@ -1,6 +1,11 @@
 package input
 
 import (
+	"unicode/utf8"
+
+	"strings"
+	"unicode"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
@@ -12,7 +17,7 @@ func handleLayoutPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 	if o.LayoutPickerMode == "save" {
 		return handleLayoutSaveInput(keyStr, o)
 	}
-	return handleLayoutLoadInput(keyStr, o)
+	return handleLayoutLoadInput(msg, keyStr, o)
 }
 
 // handleLayoutSaveInput handles input for the layout save name prompt.
@@ -40,7 +45,8 @@ func handleLayoutSaveInput(keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
 
 	case "backspace":
 		if len(o.LayoutSaveBuffer) > 0 {
-			o.LayoutSaveBuffer = o.LayoutSaveBuffer[:len(o.LayoutSaveBuffer)-1]
+			_, size := utf8.DecodeLastRuneInString(o.LayoutSaveBuffer)
+			o.LayoutSaveBuffer = o.LayoutSaveBuffer[:len(o.LayoutSaveBuffer)-size]
 		}
 		return o, nil
 
@@ -57,7 +63,7 @@ func handleLayoutSaveInput(keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
 }
 
 // handleLayoutLoadInput handles input for the layout load/browse mode.
-func handleLayoutLoadInput(keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
+func handleLayoutLoadInput(msg tea.KeyPressMsg, keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
 	filtered := app.FilterLayoutTemplates(o.LayoutPickerItems, o.LayoutPickerQuery)
 
 	switch keyStr {
@@ -101,7 +107,8 @@ func handleLayoutLoadInput(keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
 
 	case "backspace":
 		if len(o.LayoutPickerQuery) > 0 {
-			o.LayoutPickerQuery = o.LayoutPickerQuery[:len(o.LayoutPickerQuery)-1]
+			_, size := utf8.DecodeLastRuneInString(o.LayoutPickerQuery)
+			o.LayoutPickerQuery = o.LayoutPickerQuery[:len(o.LayoutPickerQuery)-size]
 			o.LayoutPickerSelected = 0
 			o.LayoutPickerScroll = 0
 		}
@@ -113,9 +120,15 @@ func handleLayoutLoadInput(keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
 		o.LayoutPickerScroll = 0
 		return o, nil
 
-	default:
-		// Delete action only when query is empty
-		if o.LayoutPickerQuery == "" && keyStr == "d" {
+	case "ctrl+d":
+		// Deleting a layout is behind a modifier, which is where the session
+		// switcher and the keybind manager put theirs.
+		//
+		// It used to be a bare "d", gated on the query being empty, which is
+		// exactly the state the picker opens in. Typing "docs" to filter
+		// deleted the selected layout and then filtered on "ocs". It was the
+		// one place in the app where a filter keystroke destroyed saved state.
+		{
 			if len(filtered) > 0 && o.LayoutPickerSelected < len(filtered) {
 				selected := filtered[o.LayoutPickerSelected]
 				if err := app.DeleteLayoutTemplate(selected.Name); err != nil {
@@ -130,12 +143,22 @@ func handleLayoutLoadInput(keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
 					}
 				}
 			}
+		}
+		return o, nil
+
+	default:
+		// A space and anything a person can type, including characters that
+		// are more than one byte. The filter used to take printable ASCII
+		// only, so a layout with a space in its name could not be searched
+		// for past the first word.
+		if keyStr == "space" {
+			o.LayoutPickerQuery += " "
+			o.LayoutPickerSelected = 0
+			o.LayoutPickerScroll = 0
 			return o, nil
 		}
-
-		// Accept printable characters for search
-		if len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126 {
-			o.LayoutPickerQuery += keyStr
+		if msg.Text != "" && !strings.ContainsFunc(msg.Text, unicode.IsControl) {
+			o.LayoutPickerQuery += msg.Text
 			o.LayoutPickerSelected = 0
 			o.LayoutPickerScroll = 0
 		}

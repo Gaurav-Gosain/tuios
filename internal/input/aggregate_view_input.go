@@ -1,6 +1,8 @@
 package input
 
 import (
+	"unicode/utf8"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
@@ -40,7 +42,10 @@ func handleAggregateViewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 
 	case "backspace":
 		if len(o.AggregateViewQuery) > 0 {
-			o.AggregateViewQuery = o.AggregateViewQuery[:len(o.AggregateViewQuery)-1]
+			// A rune at a time. Taking a byte off splits a multi-byte character
+			// and leaves invalid UTF-8 in the query.
+			_, size := utf8.DecodeLastRuneInString(o.AggregateViewQuery)
+			o.AggregateViewQuery = o.AggregateViewQuery[:len(o.AggregateViewQuery)-size]
 			o.AggregateViewSelected = 0
 			o.AggregateViewScroll = 0
 		}

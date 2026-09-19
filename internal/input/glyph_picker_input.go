@@ -1,6 +1,8 @@
 package input
 
 import (
+	"unicode/utf8"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
@@ -19,7 +21,10 @@ func handleGlyphPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.GlyphPickerMove(1)
 	case "backspace":
 		if len(o.GlyphPickerQuery) > 0 {
-			o.GlyphPickerQuery = o.GlyphPickerQuery[:len(o.GlyphPickerQuery)-1]
+			// A rune at a time. Taking a byte off splits a multi-byte character
+			// and leaves invalid UTF-8 in the query.
+			_, size := utf8.DecodeLastRuneInString(o.GlyphPickerQuery)
+			o.GlyphPickerQuery = o.GlyphPickerQuery[:len(o.GlyphPickerQuery)-size]
 			o.GlyphPickerRefilter()
 		}
 	case "ctrl+u":

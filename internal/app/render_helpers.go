@@ -39,6 +39,8 @@ func agentStateIndicator(state string) string {
 			return "#"
 		case session.AgentStateErrored:
 			return "x"
+		case session.AgentStateUnknown:
+			return "?"
 		default:
 			return ""
 		}
@@ -54,6 +56,18 @@ func agentStateIndicator(state string) string {
 		return "■"
 	case session.AgentStateErrored:
 		return "×"
+	case session.AgentStateUnknown:
+		// An agent is there and the daemon cannot say what it is doing. It
+		// drew nothing at all before, which read as no agent, and that is the
+		// common case rather than an edge: the stall timer writes this state
+		// for any agent with no screen rules to read, which is every agent
+		// matched by name alone.
+		//
+		// A hollow square rather than a question mark: the row already names
+		// the agent, so the question is about the state and not about whether
+		// anything is there. It reads as the same family as idle's hollow
+		// circle, which is the nearest thing to what it means.
+		return "□"
 	default:
 		return ""
 	}

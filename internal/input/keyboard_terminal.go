@@ -1,6 +1,8 @@
 package input
 
 import (
+	"unicode/utf8"
+
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -94,7 +96,8 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// Handle backspace
 			if key == "backspace" {
 				if len(o.HelpSearchQuery) > 0 {
-					o.HelpSearchQuery = o.HelpSearchQuery[:len(o.HelpSearchQuery)-1]
+					_, size := utf8.DecodeLastRuneInString(o.HelpSearchQuery)
+					o.HelpSearchQuery = o.HelpSearchQuery[:len(o.HelpSearchQuery)-size]
 					o.HelpScrollOffset = 0 // Reset scroll when query changes
 				}
 				return o, nil
