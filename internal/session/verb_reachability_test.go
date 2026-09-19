@@ -39,6 +39,10 @@ type exampleOutcome struct {
 	blocks bool
 	// why says what about the fixture, not the verb, produces this.
 	why string
+	// slow marks an example that does real work before it can answer, and so
+	// is not covered by a budget written for a verb that reads state and
+	// returns. See slowBudget.
+	slow bool
 }
 
 // exampleOutcomes records every example the fixture cannot make succeed. The
@@ -61,6 +65,10 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// use is not configured. The connection itself is proved with two daemons
 	// in host_connection_test.go.
 	"open-host-connection#0": {errCode: ErrVerbUnknownHost, why: "no hosts are configured in the fixture"},
+
+	// Rendering and encoding a picture is real work, unlike every other verb
+	// here, and a budget written for a state read is not a budget for it.
+	"screenshot#0": {slow: true, why: "a screenshot renders and encodes a picture"},
 
 	// resize-pane addresses a pane open-pane returned, and the example carries
 	// a literal id rather than one from this run. The pair is proved end to
@@ -111,6 +119,19 @@ var exampleOutcomes = map[string]exampleOutcome{
 // of magnitude and still keeps the blocking pair cheap.
 const blockBudget = 750 * time.Millisecond
 
+// slowBudget is what an example marked slow gets instead.
+//
+// The budget above is two orders of magnitude over what a verb that reads
+// state and answers needs, which is every verb but one. Taking a screenshot
+// renders and encodes a picture, so it is the one example whose honest cost is
+// in the same order as the budget, and on a loaded runner it went over: twice
+// in a week the build went red on a timeout that said nothing about the verb.
+//
+// Raising blockBudget for everyone would have been the wrong fix. It is also
+// how long the blocking pair is waited on before they count as blocking, so
+// every raise is paid by the two tests that are meant to time out.
+const slowBudget = 10 * time.Second
+
 // TestEveryVerbExampleReachesItsHandler runs every example in the registry
 // against a real daemon.
 //
@@ -153,7 +174,11 @@ func TestEveryVerbExampleReachesItsHandler(t *testing.T) {
 				skipIfExampleNeedsAMissingProgram(t, example)
 
 				want := exampleOutcomes[key]
-				resp, err := callOnce(t, socketPath, example, blockBudget)
+				budget := blockBudget
+				if want.slow {
+					budget = slowBudget
+				}
+				resp, err := callOnce(t, socketPath, example, budget)
 				if want.blocks {
 					if err == nil {
 						t.Fatalf("%s answered %v, but this example has nothing to wait for: "+
@@ -162,7 +187,7 @@ func TestEveryVerbExampleReachesItsHandler(t *testing.T) {
 					return
 				}
 				if err != nil {
-					t.Fatalf("%s did not answer within %v: %v", key, blockBudget, err)
+					t.Fatalf("%s did not answer within %v: %v", key, budget, err)
 				}
 
 				if e, ok := resp["error"].(map[string]any); ok && e != nil {
