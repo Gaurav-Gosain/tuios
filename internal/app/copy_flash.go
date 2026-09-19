@@ -104,27 +104,43 @@ func (m *OS) CopyFlashActive() bool {
 	return true
 }
 
-// copyFlashBand is the shape of the light: where its centre is across the
-// region, and how far its glow reaches.
+// copyFlashBand is the light on one frame: where its centre is, how far its
+// glow reaches, how bright it is overall, and what it is made of.
 type copyFlashBand struct {
 	centre float64
 	reach  float64
-	tint   color.Color
+	// amp is the whole sweep's brightness on this frame, from 0 to 1. It is
+	// what makes the light arrive and leave, rather than switch on at full
+	// strength at one edge and off at the other.
+	amp  float64
+	tint color.Color
+	ink  color.Color
+	// ground is the pane's own background, and sel is the selection the sweep
+	// passes over. The selection is painted for as long as the sweep runs,
+	// because a copy clears it and light crossing nothing reads as a glitch
+	// rather than as an acknowledgement of what was taken.
 	ground color.Color
+	sel    color.Color
 }
 
-// copyFlashIntensity is how lit one column is, from 0 to 1.
+// copyFlashSlope is how far the light leans, in columns per row.
 //
-// A soft falloff rather than a hard edge, which is what makes it read as light
-// passing over the text rather than as a block sliding across it. The band
-// starts off the left edge and ends off the right, so the first and last
-// columns are lit on the way past instead of the sweep appearing to begin and
-// end inside the text.
-func (b copyFlashBand) intensity(x int) float64 {
-	if b.reach <= 0 {
+// A vertical band crossing a paragraph looks like a wipe. A diagonal one looks
+// like light falling across it, which is the thing worth having, and a
+// character grid can hold a diagonal exactly as long as its slope is a whole
+// number of columns per row.
+const copyFlashSlope = 2
+
+// intensity is how lit one cell is, from 0 to 1.
+//
+// The falloff is what makes it read as light passing over the text rather than
+// a block sliding across it, and the row offset is what makes it a diagonal:
+// each row's band sits that much further along than the one above it.
+func (b copyFlashBand) intensity(x, row int) float64 {
+	if b.reach <= 0 || b.amp <= 0 {
 		return 0
 	}
-	d := float64(x) - b.centre
+	d := float64(x) - (b.centre + float64(row*copyFlashSlope))
 	if d < 0 {
 		d = -d
 	}
@@ -133,7 +149,51 @@ func (b copyFlashBand) intensity(x int) float64 {
 	}
 	// Smooth at both ends: 1 at the centre, 0 at the reach, with no corner.
 	t := 1 - d/b.reach
-	return t * t
+	return t * t * b.amp
+}
+
+// styleFor is how one cell of the sweep is drawn, and whether it is part of
+// the sweep at all.
+//
+// Both halves move. The background is the selection carried toward the light,
+// and a cell holding a character has its text carried toward the light too,
+// because a sweep that touched only the background would pass behind the words
+// rather than over them.
+func (b copyFlashBand) styleFor(x, row int, hasGlyph bool) (lipgloss.Style, bool) {
+	if b.amp <= 0 {
+		return lipgloss.Style{}, false
+	}
+	i := b.intensity(x, row)
+	if i <= 0.02 {
+		// Inside the block but outside the light, so the selection shows.
+		return lipgloss.NewStyle().Background(b.sel), true
+	}
+	st := lipgloss.NewStyle().Background(overlay.MixColors(b.sel, b.tint, i))
+	if hasGlyph {
+		st = st.Foreground(overlay.MixColors(b.ink, b.tint, i))
+	}
+	return st, true
+}
+
+// copyFlashEnvelope is the sweep's brightness over its life: it ramps in,
+// holds, and fades. Without it the light appears at full strength at one edge
+// and vanishes at the other, which reads as a wipe rather than as something
+// passing over.
+func copyFlashEnvelope(progress float64) float64 {
+	const (
+		rampIn  = 0.15
+		rampOut = 0.25
+	)
+	switch {
+	case progress <= 0 || progress >= 1:
+		return 0
+	case progress < rampIn:
+		return progress / rampIn
+	case progress > 1-rampOut:
+		return (1 - progress) / rampOut
+	default:
+		return 1
+	}
 }
 
 // copyFlashBandFor builds the band for this frame.
@@ -142,31 +202,25 @@ func (b copyFlashBand) intensity(x int) float64 {
 // region, because a selection of three characters and a selection of a whole
 // line should take the same time to cross: light moving at a speed that
 // depends on how much was copied reads as a progress bar, which it is not.
-func (m *OS) copyFlashBandFor(progress float64, width int) copyFlashBand {
+func (m *OS) copyFlashBandFor(progress float64, width, rows int) copyFlashBand {
 	pal := theme.UI()
 	reach := float64(width) * m.copyFlashReach()
 	if reach < 3 {
 		reach = 3
 	}
-	// From fully off one edge to fully off the other.
-	span := float64(width) + 2*reach
+	// From fully off one edge to fully off the other, and far enough past the
+	// end for the lowest row's band, which leans furthest along, to leave too.
+	lean := float64(rows * copyFlashSlope)
+	span := float64(width) + lean + 2*reach
 	return copyFlashBand{
 		centre: -reach + progress*span,
 		reach:  reach,
+		amp:    copyFlashEnvelope(progress),
 		tint:   lipgloss.Color(m.Settings.CopyFlashColor),
+		ink:    pal.Fg,
 		ground: pal.Canvas,
+		sel:    lipgloss.Color(m.Settings.SelectionBg),
 	}
-}
-
-// styleFor is the style one column of the sweep is drawn in, and whether the
-// light has reached it at all. A column the light has not reached is left to
-// the ordinary cell path, so the sweep costs nothing outside its own band.
-func (b copyFlashBand) styleFor(x int) (lipgloss.Style, bool) {
-	i := b.intensity(x)
-	if i <= 0.02 {
-		return lipgloss.Style{}, false
-	}
-	return lipgloss.NewStyle().Background(overlay.MixColors(b.ground, b.tint, i)), true
 }
 
 // fillPaneRegion marks the cells of a pane region on a grid, mapping the

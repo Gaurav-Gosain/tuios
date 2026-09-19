@@ -507,7 +507,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		defer pool.PutHighlightGrid(flashGrid)
 		fillPaneRegion(flashGrid, m.copyFlash.Start, m.copyFlash.End,
 			scrollbackLen, window.ScrollbackOffset, maxY, maxX)
-		flashBand = m.copyFlashBandFor(progress, maxX)
+		flashBand = m.copyFlashBandFor(progress, maxX, maxY)
 	}
 
 	// The dim and the ground it carries toward, resolved once for the pane
@@ -723,7 +723,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			// every mark: a selection or a search match still shows as what
 			// it is while the light crosses it.
 			if flashGrid != nil && flashGrid.Get(y, x) {
-				if st, lit := flashBand.styleFor(x); lit {
+				// A cell holding a character has its text lit as well as its
+				// ground, so the sweep passes over the words rather than
+				// behind them.
+				hasGlyph := char != "" && char != " "
+				if st, lit := flashBand.styleFor(x, y, hasGlyph); lit {
 					flushBatch()
 					builder.WriteString(renderStyledText(st, char))
 					notePrev(cell)

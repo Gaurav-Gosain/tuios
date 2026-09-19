@@ -37,18 +37,18 @@ func TestTheSweepCrossesTheWholePaneAndThenStops(t *testing.T) {
 
 	// At the very start the light is off the left edge, and the first column
 	// is the first thing it reaches.
-	begin := m.copyFlashBandFor(0, width)
+	begin := m.copyFlashBandFor(0, width, 1)
 	if begin.centre >= 0 {
 		t.Errorf("the sweep starts at column %.1f, want off the left edge", begin.centre)
 	}
-	end := m.copyFlashBandFor(1, width)
+	end := m.copyFlashBandFor(1, width, 1)
 	if end.centre <= float64(width) {
 		t.Errorf("the sweep ends at column %.1f, want past the right edge", end.centre)
 	}
 
 	// And in the middle it is lighting the middle.
-	mid := m.copyFlashBandFor(0.5, width)
-	if mid.intensity(width/2) <= 0 {
+	mid := m.copyFlashBandFor(0.5, width, 1)
+	if mid.intensity(width/2, 0) <= 0 {
 		t.Error("the middle of the sweep does not light the middle of the pane")
 	}
 }
@@ -57,12 +57,12 @@ func TestTheSweepCrossesTheWholePaneAndThenStops(t *testing.T) {
 // across the text; the falloff is what makes it read as light passing over it.
 func TestTheLightFallsOffRatherThanEnding(t *testing.T) {
 	m := flashOS(t)
-	band := m.copyFlashBandFor(0.5, 80)
+	band := m.copyFlashBandFor(0.5, 80, 1)
 	centre := int(band.centre)
 
-	at := band.intensity(centre)
-	near := band.intensity(centre + int(band.reach/3))
-	far := band.intensity(centre + int(band.reach) + 1)
+	at := band.intensity(centre, 0)
+	near := band.intensity(centre+int(band.reach/3), 0)
+	far := band.intensity(centre+int(band.reach)+1, 0)
 
 	if !(at > near && near > far) {
 		t.Errorf("the light does not fall off: centre %.2f, near %.2f, far %.2f", at, near, far)
@@ -176,5 +176,81 @@ func selectedWindow() *terminal.Window {
 			VisualStart: terminal.Position{X: 0, Y: 0},
 			VisualEnd:   terminal.Position{X: 10, Y: 0},
 		},
+	}
+}
+
+// TestTheLightLeans. A vertical band crossing a paragraph looks like a wipe.
+// A diagonal one looks like light falling across it, which is the thing worth
+// having, and a character grid holds a diagonal exactly when its slope is a
+// whole number of columns per row.
+//
+// Negative control: a slope of zero makes every row light the same column and
+// this fails.
+func TestTheLightLeans(t *testing.T) {
+	m := flashOS(t)
+	band := m.copyFlashBandFor(0.5, 80, 6)
+
+	// The column each row is brightest at, which has to move along as the
+	// rows go down.
+	brightest := func(row int) int {
+		best, at := 0.0, -1
+		for x := range 80 {
+			if v := band.intensity(x, row); v > best {
+				best, at = v, x
+			}
+		}
+		return at
+	}
+
+	top, bottom := brightest(0), brightest(3)
+	if top < 0 || bottom < 0 {
+		t.Fatal("ASSERTION: a row is not lit at all, so there is no lean to measure")
+	}
+	if bottom <= top {
+		t.Errorf("row 0 is brightest at column %d and row 3 at %d, so the light does not lean", top, bottom)
+	}
+	if want := top + 3*copyFlashSlope; bottom != want {
+		t.Errorf("row 3 is brightest at column %d, want %d for a slope of %d", bottom, want, copyFlashSlope)
+	}
+}
+
+// TestTheLightArrivesAndLeaves. Without an envelope the sweep switches on at
+// full strength at one edge and off at the other, which reads as a wipe.
+//
+// Negative control: returning 1 from copyFlashEnvelope fails both ends here.
+func TestTheLightArrivesAndLeaves(t *testing.T) {
+	begin := copyFlashEnvelope(0.02)
+	middle := copyFlashEnvelope(0.5)
+	end := copyFlashEnvelope(0.98)
+
+	if begin >= middle {
+		t.Errorf("the sweep starts at %.2f against %.2f in the middle, so it does not arrive", begin, middle)
+	}
+	if end >= middle {
+		t.Errorf("the sweep ends at %.2f against %.2f in the middle, so it does not leave", end, middle)
+	}
+	if middle < 0.99 {
+		t.Errorf("the middle of the sweep is only %.2f bright", middle)
+	}
+	if copyFlashEnvelope(0) != 0 || copyFlashEnvelope(1) != 0 {
+		t.Error("the sweep is lit before it starts or after it ends")
+	}
+}
+
+// TestTheSelectionShowsUnderTheSweep. A copy clears the selection, and light
+// crossing nothing reads as a glitch rather than as an acknowledgement of what
+// was taken, so the block is painted for as long as the sweep runs.
+func TestTheSelectionShowsUnderTheSweep(t *testing.T) {
+	m := flashOS(t)
+	band := m.copyFlashBandFor(0.5, 80, 1)
+
+	// A cell far from the light is still part of the block.
+	if _, lit := band.styleFor(79, 0, false); !lit {
+		t.Error("a cell outside the light is not painted, so the block disappears under the sweep")
+	}
+	// And once the sweep is over, nothing is painted.
+	done := m.copyFlashBandFor(1, 80, 1)
+	if _, lit := done.styleFor(40, 0, false); lit {
+		t.Error("the block is still painted after the sweep has finished")
 	}
 }
