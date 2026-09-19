@@ -26,6 +26,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"strings"
 )
 
 // SSHServerConfig holds configuration for the SSH server.
@@ -467,20 +468,13 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
 	}
 
-	// If no session name specified, show picker or get default
+	// Which session a connection with no name asked for gets.
 	if sessionName == "" {
-		availableSessions := client.AvailableSessionNames()
-		if len(availableSessions) == 0 {
-			// No sessions exist, create a new one
-			sessionName = "ssh-session"
-		} else if len(availableSessions) == 1 {
-			// Only one session, use it
-			sessionName = availableSessions[0]
-		} else {
-			// Multiple sessions - use the first one for now
-			// TODO: Could run session picker here, but that requires a different flow
-			sessionName = availableSessions[0]
-			log.Printf("Multiple sessions available, attaching to: %s", sessionName)
+		available := client.AvailableSessionNames()
+		sessionName = chooseSSHSession(available)
+		if len(available) > 1 && sessionName == DefaultSSHSessionName {
+			log.Printf("Several sessions exist (%s) and the connection named none, so it gets %q",
+				strings.Join(available, ", "), sessionName)
 		}
 	}
 
@@ -556,4 +550,42 @@ func isLoopbackAddr(addr net.Addr) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+// DefaultSSHSessionName is the session a connection that named none gets when
+// this machine's sessions cannot answer for it.
+//
+// It is the same answer tuios-web gives with "web", and for the same reason:
+// what a server hands an unnamed connection has to be a decision rather than
+// whatever the listing happened to return first.
+const DefaultSSHSessionName = "ssh-session"
+
+// chooseSSHSession picks the session for a connection that named none.
+//
+// The old rule took the first name the daemon listed when there were several,
+// which is an ordering and not a choice. Two operators connecting to one
+// server could land in different sessions from one another, or in a colleague's
+// session, with nothing on screen saying which or why. The listing's order is
+// not part of any contract, so the same connection could answer differently
+// after a session was created or removed.
+//
+// The three cases are now three answers rather than two answers and a lottery:
+//
+//   - No sessions. There is nothing to choose between, so the connection gets
+//     the default name and the daemon creates it. This is unchanged.
+//   - One session. There is no ambiguity, so it gets that one. Also unchanged,
+//     and the case that keeps a single-session server behaving the way someone
+//     would expect.
+//   - Several. The connection did not say, and neither did the person, so
+//     picking one of theirs is a guess wearing a fact's clothes. It gets the
+//     default name instead: deterministic, the same for every connection, and
+//     nobody else's. Switching away from it is one keystroke.
+//
+// A username that maps to a session never reaches here; that mapping is
+// determineSessionName and it is a real answer from the person connecting.
+func chooseSSHSession(available []string) string {
+	if len(available) == 1 {
+		return available[0]
+	}
+	return DefaultSSHSessionName
 }
