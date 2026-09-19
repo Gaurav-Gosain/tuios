@@ -151,3 +151,78 @@ func ContrastText(bg color.Color) color.Color {
 	}
 	return charmtone.Pepper
 }
+
+// delinearize is the inverse of linearize: it puts the sRGB transfer curve
+// back on one channel so a colour built in linear light can be spelled.
+func delinearize(c float64) float64 {
+	if c <= 0.0031308 {
+		return c * 12.92
+	}
+	return 1.055*math.Pow(c, 1/2.4) - 0.055
+}
+
+// atLuminance returns c with its channels scaled in linear light until its
+// relative luminance is target. Luminance is linear in linear light, so scaling
+// every channel by the same factor moves the luminance by that factor and
+// leaves the chromaticity where it was: a warm brown stays a warm brown at
+// every step of a ramp built from it. A channel that runs past its end is
+// clamped, which is the one place the hue can drift, and it happens only when
+// the target lies past what the colour can say.
+func atLuminance(c color.Color, target float64) color.Color {
+	r, g, b, _ := c.RGBA()
+	lr, lg, lb := linearize(float64(r)/65535), linearize(float64(g)/65535), linearize(float64(b)/65535)
+	if l := 0.2126*lr + 0.7152*lg + 0.0722*lb; l > 0 {
+		k := target / l
+		lr, lg, lb = lr*k, lg*k, lb*k
+	} else {
+		// Black has no chromaticity to keep, so the step from it is a grey.
+		lr, lg, lb = target, target, target
+	}
+	channel := func(v float64) uint8 {
+		return uint8(math.Round(delinearize(math.Min(math.Max(v, 0), 1)) * 255))
+	}
+	return color.RGBA{R: channel(lr), G: channel(lg), B: channel(lb), A: 0xFF}
+}
+
+// Lighter returns the colour one contrast step above bg: the same chromaticity
+// at the luminance that measures ratio:1 against it. A neutral ramp is built
+// from one ground with this and Darker, which is what keeps a panel reading as
+// raised and a card as inset when the ground moves. Past white the step clamps.
+func Lighter(bg color.Color, ratio float64) color.Color {
+	return atLuminance(bg, math.Min((relativeLuminance(bg)+0.05)*ratio-0.05, 1))
+}
+
+// Darker is Lighter's counterpart: the colour that bg measures ratio:1 against
+// from above. Past black the step clamps.
+func Darker(bg color.Color, ratio float64) color.Color {
+	return atLuminance(bg, math.Max((relativeLuminance(bg)+0.05)/ratio-0.05, 0))
+}
+
+// Tone returns an ink that measures ratio:1 on bg, or as close above it as the
+// ground allows: the ground's own text end carried toward the ground until it
+// measures the ratio. This is how an ink hierarchy is held when the ground it
+// was picked against changes: the tiers are their ratios, not their hex values,
+// and a light ground gets its tiers in dark ink because ContrastText chooses
+// the text end by measurement.
+//
+// A ground that cannot reach the ratio in either direction, a mid grey say,
+// gets the text end itself, which is the most it can do.
+func Tone(bg color.Color, ratio float64) color.Color {
+	ink := ContrastText(bg)
+	if ContrastRatio(ink, bg) <= ratio {
+		return ink
+	}
+	// Bisected for the same reason Structure is, and toward the other side of
+	// the target: an ink is held to a floor, so the answer is the least blend
+	// that still clears it rather than the most that stays under it.
+	lo, hi := 0.0, 1.0
+	for range 16 {
+		mid := (lo + hi) / 2
+		if ContrastRatio(MixColors(bg, ink, mid), bg) >= ratio {
+			hi = mid
+		} else {
+			lo = mid
+		}
+	}
+	return MixColors(bg, ink, hi)
+}

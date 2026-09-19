@@ -90,6 +90,30 @@ func mixColors(a, b color.Color, t float64) color.Color { return overlay.MixColo
 // dependency and could be published on its own.
 type UIPalette = overlay.Palette
 
+// chromeRamp is the constant ramp stated as the ratios between its steps,
+// which is what a theme that names its own Surface is held to. The four
+// neutrals are not independent: they are one ramp at fixed spacing, and that
+// spacing is what makes a panel read as raised and a card as inset. The three
+// inks are the same kind of thing, a hierarchy stated as ratios on the surface
+// they are written on. Measured from the constants rather than typed, so the
+// two ways of building a palette cannot drift apart.
+//
+// Contrast ratios rather than luminance ratios, because contrast is what every
+// ink in the chrome is measured by, and because the flare term in it is what
+// keeps the steps of a ramp built on a near-black ground apart: in bare
+// luminance a third of almost nothing is nothing.
+var chromeRamp = struct {
+	canvas, panel, card float64 // steps below, below and above Surface
+	fg, fgDim, fgMute   float64 // ink tiers on Surface
+}{
+	canvas: overlay.ContrastRatio(charmtone.Char, charmtone.Pepper),
+	panel:  overlay.ContrastRatio(charmtone.Char, charmtone.BBQ),
+	card:   overlay.ContrastRatio(charmtone.Iron, charmtone.Char),
+	fg:     overlay.ContrastRatio(charmtone.Butter, charmtone.Char),
+	fgDim:  overlay.ContrastRatio(charmtone.Smoke, charmtone.Char),
+	fgMute: overlay.ContrastRatio(charmtone.Squid, charmtone.Char),
+}
+
 // UI returns the active chrome palette. Neutrals and semantic status colors come
 // from the charmtone palette so overlays read consistently regardless of the
 // terminal theme; the accent follows the active terminal theme when one is
@@ -98,6 +122,10 @@ type UIPalette = overlay.Palette
 // Chrome is intentionally kept on a constant neutral ramp (like a real window
 // manager keeps its chrome constant) so overlays stay legible over any terminal
 // content, while a themed session still tints its tabs, selection and badges.
+// A theme that names a chrome Surface moves the ramp, and the ink tiers move
+// with it: every ink was chosen against the ground it is written on, so
+// opening the ground up without re-deriving the inks would trade off-accent
+// chrome for unreadable chrome. See Chrome.
 func UI() overlay.Palette {
 	p := overlay.Palette{
 		Canvas:   uiCanvas,
@@ -156,6 +184,19 @@ func UI() overlay.Palette {
 			}
 			if c.Info != nil {
 				p.Info = c.Info
+			}
+			if c.Canvas != nil {
+				p.Canvas = c.Canvas
+			}
+			if c.Panel != nil {
+				p.Panel, p.RowSel = c.Panel, c.Panel
+			}
+			if c.Surface != nil {
+				p.Surface = c.Surface
+				p.Fg, p.FgDim, p.FgMute = c.fg, c.fgDim, c.fgMute
+			}
+			if c.Card != nil {
+				p.Card = c.Card
 			}
 		}
 	}

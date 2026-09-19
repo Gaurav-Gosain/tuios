@@ -168,9 +168,49 @@ so a theme written without a `chrome` object renders identically:
 | `warning` | copy-mode pill, warning notifications | `yellow` |
 | `error` | error notifications, the chrome's alert ink | `red` |
 | `info` | info notifications | `blue` |
+| `surface` | the fill of every dialog: command palette, pickers, context menu, which-key | a constant, see below |
+| `canvas` | the darkest step of the chrome's neutral ramp | derived from `surface` |
+| `panel` | the outer band and the selected-row bar | derived from `surface` |
+| `card` | inset chips and input fields | derived from `surface` |
 
 A field that is not a hex color is dropped on its own and that role derives as
 usual, so a typo costs one color rather than the theme.
+
+### The surface
+
+The dialogs are not painted from the sixteen at all. They sit on a constant
+neutral ramp, the way a window manager keeps its chrome constant, so an overlay
+stays legible over any terminal content. That ramp is four greys at fixed
+spacing (canvas, panel, surface, card), and the spacing is what makes a panel
+read as raised and a chip as inset.
+
+`surface` moves the whole ramp. Name it and the other three steps are derived
+at the same spacing, and the three text tiers (primary, secondary, quiet) are
+re-derived against it at the contrast ratios the constant palette has. The
+inks are picked by measurement rather than fixed, so a light surface gets its
+text in dark ink:
+
+```json
+{
+  "id": "walnut",
+  "chrome": {
+    "accent":  "#ffb454",
+    "surface": "#2b2118"
+  }
+}
+```
+
+`canvas`, `panel` and `card` are for a theme that wants an exact ramp rather
+than a generated one. Each one you leave out is derived from `surface`, and all
+three are the constants when `surface` is too. The text tiers are never named:
+they are their contrast ratios, and a text color a file could set is a text
+color that can be set unreadable.
+
+A very dark or very light `surface` has less room on one side of it. The step
+past black or white clamps, so a near-black surface gets a black canvas, and a
+near-white one a white card. The focused border and the mode pills are accent
+colors and do not follow `surface`; a light surface under an accent picked for
+a dark one is the case to raise if a pill disappears.
 
 ## Limitations
 
@@ -187,8 +227,9 @@ usual, so a typo costs one color rather than the theme.
   and are not part of the theme file. Both rows in the settings page open a
   colour picker, seeded on the colour the border is currently drawn in; clearing
   one there unsets the override and hands the border back to the theme.
-- **Some overlays are not themed.** The which-key popup, in particular, draws
-  with fixed colors regardless of the active theme.
+- **The chrome's neutrals do not follow the sixteen.** Dialogs and the
+  which-key popup draw on a constant grey ramp regardless of the active theme,
+  by design; `chrome.surface` is the knob that moves it.
 
 ## Related Documentation
 
