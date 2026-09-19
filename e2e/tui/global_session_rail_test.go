@@ -1,0 +1,108 @@
+package tuie2e
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/Gaurav-Gosain/tuitest"
+)
+
+// A session can hold a window whose process runs on another machine. The rail
+// lists that window, so it has to say which machine it is on: a command typed
+// into a pane does a different thing depending on which machine answers it,
+// and the rail is where someone looks before typing.
+//
+// This is the whole path in one test, which is why it is here rather than only
+// in the unit tests. The daemon puts the host on the window state, pushes it,
+// the client adopts it onto its own window, the session tree carries it, and
+// the row draws it. A break anywhere along that chain is a row that silently
+// says nothing, and nothing below the top of it would fail.
+func TestTheRailNamesTheMachineAPaneRunsOn(t *testing.T) {
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	ssh := writeFakeSSHTo(t, base, remote)
+	writeOneHostConfig(t, base, tuiosBin)
+	env := []string{"TUIOS_SSH=" + ssh}
+
+	// Creating a session on the far machine is what starts its daemon. Without
+	// it the link comes up against a machine with no tuios running on it, and
+	// a pane cannot be opened there.
+	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
+		t.Fatalf("create the far session: %v\n%s", err, out)
+	}
+
+	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
+	waitBoot(t, term)
+
+	// Wait for the link, since a window cannot be put on a machine the daemon
+	// has not reached yet.
+	waitForHostListing(t, base, func(s string) bool {
+		return containsAll(s, "build", "up")
+	}, "the daemon never reported build up")
+
+	if out, err := tuiosCLIEnv(t, base, env, "new-window", "faraway", "-s", "home", "--host", "build"); err != nil {
+		t.Fatalf("create a window on build: %v\n%s\n%s", err, out, term.Snapshot())
+	}
+
+	toggleSidebarViaPalette(t, term)
+	railShows(t, term, "faraway")
+
+	// On the pane's own rail row, and separately on the pane's frame.
+	//
+	// Two earlier versions of this passed with the feature taken out. The
+	// first asked whether "build" appeared anywhere, and the rail draws a
+	// heading for every configured machine, so it was already on screen. The
+	// second asked for a line holding both names, and the pane's own title bar
+	// holds "build:faraway", which is a different feature on a different part
+	// of the screen. An assertion about the rail has to look only at the rail.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return railRowWith(s.Text(), "faraway", "build")
+	}, uiTimeout); err != nil {
+		t.Fatalf("no rail row names both the pane and the machine it runs on: %v\n%s", err, term.Snapshot())
+	}
+
+	// The frame says it too, which is what someone looks at before typing.
+	// Waited on rather than read once: the rail row and the pane frame are
+	// painted from different places and need not land in the same frame.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "build:faraway")
+	}, uiTimeout); err != nil {
+		t.Errorf("the pane's frame does not name the machine: %v\n%s", err, term.Snapshot())
+	}
+	alive(t, term, "after a window on another machine")
+}
+
+// railRowWith reports whether one rail row holds every one of parts.
+//
+// The rail is a column, and a screen line runs past it into the panes. So the
+// line is cut at the rail's right edge and only that side is read: without the
+// cut, anything a pane happens to be drawing counts as the rail saying it.
+func railRowWith(screen string, parts ...string) bool {
+	for _, line := range strings.Split(screen, "\n") {
+		rail := line
+		if i := strings.Index(line, "│"); i >= 0 {
+			rail = line[:i]
+		}
+		all := true
+		for _, p := range parts {
+			if !strings.Contains(rail, p) {
+				all = false
+				break
+			}
+		}
+		if all {
+			return true
+		}
+	}
+	return false
+}
+
+// containsAll is a small helper so the host wait reads as one condition.
+func containsAll(s string, parts ...string) bool {
+	for _, p := range parts {
+		if !contains(s, p) {
+			return false
+		}
+	}
+	return true
+}

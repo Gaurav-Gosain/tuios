@@ -357,6 +357,14 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 // newWindowErr classifies a creation failure. An out-of-range workspace is a bad
 // parameter the caller can correct; anything else came from spawning the shell.
 func newWindowErr(err error, sess *Session, ws int) *verbError {
+	// A window that could not be opened on another machine has nothing to do
+	// with window targets. mapResolveErr below is for the failures of naming a
+	// window, and its fallback hint says the target matched nothing and lists
+	// the windows that exist, which on a link failure is advice about the
+	// wrong problem printed under a message about the right one.
+	if msg := err.Error(); strings.Contains(msg, "tuios on ") || strings.Contains(msg, "host ") {
+		return newVerbError(ErrVerbInternal, msg)
+	}
 	if strings.Contains(err.Error(), "out of range") {
 		return hintedVerbError(ErrVerbInvalidParams, err.Error(), &VerbHint{
 			Param:  "workspace",
