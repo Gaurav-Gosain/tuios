@@ -1,0 +1,73 @@
+name: Container image builds
+
+# The image is published from a version tag, and until now that was the only
+# time anything built it. So the Dockerfile could stop describing a working
+# image and nothing would say so until a release. It shipped for a long time
+# building only the multiplexer, with no way to run the web terminal from it,
+# because no build ever ran that would have been asked to.
+#
+# This is the publish job without the publishing: the half that catches a
+# broken Dockerfile, on the commits where one could break.
+#
+# The path filter is the Dockerfile and what the build reads from the module
+# rather than every Go file. A break in here is almost always the Dockerfile
+# itself, a moved command, or a dependency that stopped building statically,
+# and running a container build on every internal edit would buy the rest at a
+# price the rest is not worth.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - go.mod
+      - go.sum
+      - cmd/**
+      - .github/workflows/docker-build.yml
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - go.mod
+      - go.sum
+      - cmd/**
+      - .github/workflows/docker-build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build the image without publishing it
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      # One platform. The publish job builds what a release needs; what is
+      # checked here is that the Dockerfile still describes a working image,
+      # and that answer does not differ per architecture.
+      #
+      # The action is pinned to the same commit the publish job pins, so the
+      # thing being exercised here is the thing that will publish.
+      - name: Build
+        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        with:
+          context: .
+          push: false
+          load: true
+          tags: tuios:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The build succeeding is not the assertion. The bug this file exists for
+      # was a binary that was never built rather than a build that failed, so
+      # both commands have to be in the image and able to say what they are.
+      - name: Both commands are in the image
+        run: |
+          docker run --rm --entrypoint /tuios tuios:ci --version
+          docker run --rm --entrypoint /tuios-web tuios:ci --version
