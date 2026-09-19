@@ -281,6 +281,29 @@ A pane whose shell is elsewhere says so on its title bar, as `build:name`. This
 is not optional: two panes side by side are otherwise identical, and the same
 typed line is a different act depending on which machine answers it.
 
+### Agents in a pane on another machine
+
+Agent detection works. The daemon that owns the window cannot do it alone: the
+pane's process is on the other machine, so the pid it would read means nothing
+here and every tier of detection starts from that process. It asks the other
+machine what the pane is running, through the `pane-agent` verb, and decides
+what the answer means itself. The rules, the manifests and your configuration
+stay with the window.
+
+What does not work is an agent in such a pane reporting its own state, or
+reading its mail. It has no `TUIOS_SOCKET` that reaches the daemon holding the
+window, and no window or pane id that means anything on the machine it is
+running on, because the link is dialled one way and the far side cannot open a
+connection back. `TUIOS_PANE_HOSTED=1` is set so a shell profile can tell.
+
+`TUIOS_SESSION` is deliberately not set in such a pane. It would name a session
+on the other machine, and every tool that reads it addresses a session on the
+machine it is running on. `TUIOS_SESSION_REMOTE` carries the name for anything
+that wants to know where the pane came from.
+
+Sending mail between machines is a different thing and it does work: see
+`tuios send-agent-message --to build:api:1`.
+
 ### What crosses, and what does not
 
 The machine supplying the process supplies a process and a pty, and nothing

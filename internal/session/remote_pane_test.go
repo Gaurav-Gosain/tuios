@@ -1085,3 +1085,110 @@ func (c *countingFederation) Call(_ context.Context, _, verb string, _ any) (jso
 	}
 	return json.RawMessage(`{"cwd":"/somewhere"}`), nil
 }
+
+// agentFederation answers pane-agent with a fixed process, so the near side's
+// detection path can be driven without a second machine.
+type agentFederation struct {
+	mu      sync.Mutex
+	calls   int
+	comm    string
+	argv    []string
+	running bool
+}
+
+func (a *agentFederation) OpenConnection(context.Context, string) (io.ReadWriteCloser, error) {
+	return nil, errors.New("not used")
+}
+
+func (a *agentFederation) Call(_ context.Context, _, verb string, _ any) (json.RawMessage, error) {
+	if verb != "pane-agent" {
+		return json.RawMessage(`{}`), nil
+	}
+	a.mu.Lock()
+	a.calls++
+	comm, argv, running := a.comm, a.argv, a.running
+	a.mu.Unlock()
+
+	body, _ := json.Marshal(map[string]any{
+		"pane": "p1", "running": running, "comm": comm, "argv": argv,
+		"pid": 4242, "shell_pid": 4200,
+	})
+	return body, nil
+}
+
+func (a *agentFederation) count() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.calls
+}
+
+// TestWhatAPaneOnAnotherMachineIsRunningReachesTheDetector.
+//
+// This is the whole point of pane-agent. The daemon that owns the window holds
+// the emulator and can read the pane's output all it likes, but the pid it
+// would read to find out what is running means nothing on its own machine:
+// there is no process there. Every tier of detection starts from the
+// foreground process, so without an answer from the far machine a pane on
+// another machine can never be identified as running an agent at all.
+//
+// Negative control: returning early from remoteForeground, so the resolver
+// falls through to the local read, gives a shell pid of zero and this fails.
+func TestWhatAPaneOnAnotherMachineIsRunningReachesTheDetector(t *testing.T) {
+	fed := &agentFederation{comm: "claude", argv: []string{"claude", "--resume"}, running: true}
+	rp := &remotePane{host: "build", id: "p1", fed: fed, stream: &scriptedStream{}, br: bufio.NewReader(&scriptedStream{})}
+	pty := &PTY{host: "build", pty: rp}
+
+	// The first look never waits: it reports what is cached, which is nothing
+	// yet, and starts the ask. That is deliberate, because this runs on the
+	// detector's tick and a round trip must not hold it up.
+	if _, _, remote := pty.remoteForeground(); !remote {
+		t.Fatal("a pane on another machine was not recognised as one")
+	}
+	waitUntil(t, func() bool { return fed.count() >= 1 }, "the far machine was never asked what the pane is running")
+
+	// And once the answer has landed, it is what the detector sees.
+	waitUntil(t, func() bool {
+		info, running, _ := pty.remoteForeground()
+		return running && info.comm == "claude"
+	}, "the answer from the far machine never reached the resolver")
+
+	info, running, _ := pty.remoteForeground()
+	if !running {
+		t.Fatal("the pane reports nothing running")
+	}
+	if info.comm != "claude" {
+		t.Errorf("the process is %q, want claude", info.comm)
+	}
+	if len(info.argv) != 2 || info.argv[0] != "claude" {
+		t.Errorf("the command line is %v", info.argv)
+	}
+	if info.shellPID != 4200 {
+		t.Errorf("the shell pid is %d, want the one the far machine gave", info.shellPID)
+	}
+}
+
+// TestALocalPaneIsNotAskedAnotherMachine. The resolver has to tell the two
+// apart, or every ordinary pane would take a round trip it does not need.
+func TestALocalPaneIsNotAskedAnotherMachine(t *testing.T) {
+	pty := &PTY{}
+	if _, _, remote := pty.remoteForeground(); remote {
+		t.Error("a pane on this machine was treated as one on another")
+	}
+}
+
+// TestThePaneIsNotAskedOncePerTick. The detector ticks every two seconds and
+// the answer costs a round trip to another machine, so the cache has to hold
+// between ticks.
+func TestThePaneIsNotAskedOncePerTick(t *testing.T) {
+	fed := &agentFederation{comm: "codex", running: true}
+	rp := &remotePane{host: "build", id: "p1", fed: fed, stream: &scriptedStream{}, br: bufio.NewReader(&scriptedStream{})}
+	pty := &PTY{host: "build", pty: rp}
+
+	for range 20 {
+		pty.remoteForeground()
+	}
+	waitUntil(t, func() bool { return fed.count() >= 1 }, "the far machine was never asked")
+	if got := fed.count(); got > 1 {
+		t.Errorf("twenty looks asked the far machine %d times, want one", got)
+	}
+}

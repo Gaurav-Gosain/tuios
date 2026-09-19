@@ -197,14 +197,21 @@ func closestMatch(target string, candidates []string) string {
 	// on the connection's own goroutine, for a suggestion that was always empty.
 	targetLen := utf8.RuneCountInString(target)
 
+	// A name that is a verb is not a typo. The caller failed for some other
+	// reason, and both "did you mean the thing you typed" and "did you mean
+	// this other verb" are noise on top of the real error.
+	//
+	// This used to skip the exact match and keep looking, which held only for
+	// as long as no other verb was within the tolerance of any real one.
+	// Adding pane-agent put a neighbour next to ask-agent and the hint started
+	// proposing it to callers who had spelled ask-agent correctly.
+	if slices.Contains(candidates, target) {
+		return ""
+	}
+
 	best := ""
 	bestDist := limit + 1
 	for _, c := range candidates {
-		if c == target {
-			// An exact match is never a suggestion; the caller failed for some
-			// other reason and "did you mean the thing you typed" is noise.
-			continue
-		}
 		if diff := targetLen - utf8.RuneCountInString(c); diff > limit || diff < -limit {
 			continue
 		}

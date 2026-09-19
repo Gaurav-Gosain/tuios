@@ -497,3 +497,63 @@ func TestThePickerTitleSaysWhichQuestion(t *testing.T) {
 		t.Errorf("the window title reads %q", got)
 	}
 }
+
+// TestTheSessionPickerOffersAGlobalSession.
+//
+// "New session on" asks which machine, and a global session is an answer to
+// that question: it is the session whose panes are not on any one of them. It
+// belongs in the same list rather than behind a second control somewhere else.
+//
+// Negative control: dropping the global row from buildHostPickerItems leaves
+// only the machines and this fails.
+func TestTheSessionPickerOffersAGlobalSession(t *testing.T) {
+	m := pickerOS(t)
+	m.HostPickerPurpose = HostPickerNewSession
+
+	items := m.buildHostPickerItems()
+	var global *HostPickerItem
+	for i := range items {
+		if items[i].Global {
+			global = &items[i]
+		}
+	}
+	if global == nil {
+		t.Fatal("the session picker does not offer a global session")
+	}
+	if global.Label != GlobalSessionName {
+		t.Errorf("the global row reads %q", global.Label)
+	}
+	// First, because a session holding panes from several machines is not a
+	// session on any of the machines listed under it.
+	if items[1].Global != true {
+		t.Error("the global row is not the first thing after this machine")
+	}
+}
+
+// TestTheWindowPickerDoesNotOfferAGlobalSession. A window is made in the
+// session you are already in, and "global" is not a machine to run a process
+// on, so the row would be an answer to a question nobody asked.
+func TestTheWindowPickerDoesNotOfferAGlobalSession(t *testing.T) {
+	m := pickerOS(t)
+	m.HostPickerPurpose = HostPickerNewWindow
+
+	for _, it := range m.buildHostPickerItems() {
+		if it.Global {
+			t.Error("the window picker offered a global session as a machine")
+		}
+	}
+}
+
+// TestTheGlobalRowIsNotOfferedWhenTheGroupIsNot. The row and the rail's group
+// answer to one setting, so turning global sessions off takes both.
+func TestTheGlobalRowIsNotOfferedWhenTheGroupIsNot(t *testing.T) {
+	m := pickerOS(t)
+	m.HostPickerPurpose = HostPickerNewSession
+	m.Settings.GlobalSession = false
+
+	for _, it := range m.buildHostPickerItems() {
+		if it.Global {
+			t.Error("the global row was offered with global sessions turned off")
+		}
+	}
+}

@@ -175,6 +175,14 @@ func clampHostedDim(v int) int {
 // from: TERM and COLORTERM are the asking session's, because that session's
 // emulator is what the program is really talking to, while TUIOS_HOST stays
 // this machine's, because that is where the process actually is.
+//
+// It is not the same set Session.buildEnv exports, and the difference matters.
+// TUIOS_SOCKET, TUIOS_WINDOW_ID, TUIOS_PANE_ID and TUIOS_ENV are all absent,
+// because each of them addresses something on the machine the session is on
+// and there is no way to reach that from here: the link is dialled one way and
+// the far side cannot open a connection back. An agent in a pane like this
+// therefore cannot report its own state, and is detected instead by the daemon
+// that owns the window asking this one what is running; see pane-agent.
 func hostedPaneEnv(d *Daemon, spec hostedPaneSpec) []string {
 	env := os.Environ()
 
@@ -189,15 +197,28 @@ func hostedPaneEnv(d *Daemon, spec hostedPaneSpec) []string {
 	env = append(env, "TERM="+term, "COLORTERM="+colorTerm)
 	env = append(env, "TERM_PROGRAM="+guestenv.TermProgram(false, false))
 	env = append(env, "TERM_PROGRAM_VERSION=0.1.0")
+	// The session the pane belongs to is deliberately not exported.
+	//
+	// It is a session on the other machine, and every tool that reads
+	// TUIOS_SESSION uses it to address a session on the machine it is running
+	// on. Exporting it here meant a shim on this side resolving that name
+	// against this daemon's sessions, where it names a different session or
+	// none at all. TUIOS_SESSION_REMOTE carries it for anything that wants to
+	// know where the pane came from, under a name nothing addresses with.
 	if spec.Session != "" {
-		env = append(env, "TUIOS_SESSION="+spec.Session)
+		env = append(env, "TUIOS_SESSION_REMOTE="+spec.Session)
 	}
 	if host := d.hostedPaneHostName(); host != "" {
 		env = append(env, "TUIOS_HOST="+host)
 	}
 	// TUIOS_PANE_HOSTED tells a program in the pane that its terminal is on
-	// another machine. Shell integration uses it to hold back the things that
-	// only mean something locally, and a person who is lost can read it.
+	// another machine, and that the usual per-pane variables are therefore
+	// absent: there is no TUIOS_SOCKET here that reaches the daemon holding
+	// the window, and no window or pane id that means anything on this side.
+	//
+	// Nothing in tuios reads it. It is for a person who is lost and for a
+	// shell profile that wants to hold back the parts of its setup that only
+	// mean something on the machine the session is on.
 	env = append(env, "TUIOS_PANE_HOSTED=1")
 	return env
 }
@@ -329,6 +350,26 @@ func (d *Daemon) relayHostedPane(cs *connState, br *bufio.Reader, hp *hostedPane
 	hp.close()
 	_ = conn.Close()
 	<-done
+}
+
+// foreground is the process running in the hosted pane's terminal right now.
+//
+// It is the far half of agent detection. The daemon that owns the window holds
+// the emulator and the scrollback and can read a pane's output all it likes,
+// but the pid it would read to find out what is running means nothing on its
+// own machine: there is no process there. Only this side can look, which is
+// the same reason pane-cwd exists.
+func (hp *hostedPane) foreground() (foregroundInfo, bool) {
+	if hp.cmd == nil || hp.cmd.Process == nil {
+		return foregroundInfo{}, false
+	}
+	shellPID := hp.cmd.Process.Pid
+	info, running := foregroundProcess(shellPID)
+	// Stamped outside the running check, for the reason foregroundResolver
+	// gives: the shell pid is a fact about the pane rather than about what the
+	// pane is running.
+	info.shellPID = shellPID
+	return info, running
 }
 
 // processCwd is the directory the hosted pane's process is in.

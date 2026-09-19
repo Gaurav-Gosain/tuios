@@ -73,6 +73,13 @@ type remotePane struct {
 	// not the one held, so the session can tell its clients. It is set by the
 	// session that owns the pane and is nil in a test that builds one by hand.
 	onCwdChange func()
+	// fg is what the far machine last said is running in the pane, on the same
+	// terms as cwd: a cached answer, a time it was given, and whether an ask
+	// is already out. See Foreground.
+	fg         foregroundInfo
+	fgRunning  bool
+	fgAt       time.Time
+	fgInflight bool
 }
 
 // openRemotePane starts a process on host and returns the pane it speaks to.
@@ -250,6 +257,78 @@ func (s *Session) openRemotePaneFor(host string, width, height int, cwd string, 
 	return p, nil
 }
 
+// Foreground is what the far machine last said is running in this pane, and
+// whether it could read anything at all.
+//
+// It is the answer the agent detector needs and the one thing the daemon that
+// owns the window cannot work out for itself: the pane's process is on another
+// machine, so the pid here is zero and every tier that starts from a process
+// gives up. Asking the far machine is the only way to know, which is exactly
+// the argument pane-cwd makes about directories.
+//
+// It never waits. The cached answer is returned at once and a stale one starts
+// a refresh on its own goroutine, because this is called from the detector's
+// tick and a round trip to another machine must not hold that up. The first
+// call therefore reports nothing running, which is what a pane whose process
+// has not been looked at yet honestly is.
+func (p *remotePane) Foreground() (foregroundInfo, bool) {
+	p.mu.Lock()
+	info, running := p.fg, p.fgRunning
+	asked, closed, inflight := p.fgAt, p.closed, p.fgInflight
+	stale := time.Since(asked) > remotePaneAgentTTL
+	if !closed && stale && !inflight {
+		p.fgInflight = true
+		go p.refreshForeground()
+	}
+	p.mu.Unlock()
+	return info, running
+}
+
+// remotePaneAgentTTL is how long an answer about what a pane is running stays
+// good before it is asked for again.
+//
+// Longer than the directory's. A directory changes the moment somebody types
+// cd and the rail is showing it, so a second is already slow. What a pane is
+// running changes when a command starts or ends, the detector's own tick is
+// two seconds, and the answer costs a round trip to another machine.
+const remotePaneAgentTTL = 2 * time.Second
+
+// refreshForeground asks the far machine what the pane is running.
+func (p *remotePane) refreshForeground() {
+	ctx, cancel := context.WithTimeout(context.Background(), remotePaneResizeBudget)
+	defer cancel()
+	raw, err := p.fed.Call(ctx, p.host, "pane-agent", map[string]any{"pane": p.id})
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.fgInflight = false
+	// The clock moves whether or not the answer was useful, so a machine that
+	// is refusing is asked on the same schedule rather than once per tick.
+	p.fgAt = time.Now()
+	if err != nil {
+		return
+	}
+	var res struct {
+		Running  bool     `json:"running"`
+		Comm     string   `json:"comm"`
+		Argv     []string `json:"argv"`
+		Exe      string   `json:"exe"`
+		PID      int      `json:"pid"`
+		ShellPID int      `json:"shell_pid"`
+	}
+	if json.Unmarshal(raw, &res) != nil {
+		return
+	}
+	p.fg = foregroundInfo{
+		comm:     res.Comm,
+		argv:     res.Argv,
+		exe:      res.Exe,
+		pid:      res.PID,
+		shellPID: res.ShellPID,
+	}
+	p.fgRunning = res.Running
+}
+
 // remotePaneCwdTTL is how long a directory the far machine gave stays good
 // before a fresher one is asked for. A shell changes directory when somebody
 // types cd, so a second is both far faster than anyone types and slow enough
@@ -335,6 +414,19 @@ func (s *Session) PublishLiveFacts() {
 	// broken after the push itself was fixed.
 	s.forgetCwdCache()
 	_ = s.mutateState(func(*SessionState) error { return nil })
+}
+
+// remoteForeground is what the far machine says this pane is running, for a
+// pane whose process is on another machine. The last result says whether this
+// is such a pane at all, which is what tells "nothing is running there" apart
+// from "this question does not apply here".
+func (p *PTY) remoteForeground() (foregroundInfo, bool, bool) {
+	rp, ok := p.pty.(*remotePane)
+	if !ok {
+		return foregroundInfo{}, false, false
+	}
+	info, running := rp.Foreground()
+	return info, running, true
 }
 
 // refreshRemoteCwdOnOutput asks a pane on another machine where it is, if it

@@ -127,6 +127,51 @@ func (d *Daemon) verbPaneCwd(_ *connState, params json.RawMessage) (any, *verbEr
 	return map[string]any{"pane": p.Pane, "cwd": cwd}, nil
 }
 
+// verbPaneAgent reports what a pane this machine runs for another machine is
+// running, so the daemon that owns the window can detect an agent in it.
+//
+// Without this, a pane whose process is here is invisible to detection on both
+// sides. The owning daemon reads a shell pid of zero, because there is no
+// process on its machine, so every tier that starts from the foreground
+// process gives up: no harness is identified, and the transcript, title and
+// screen tiers all gate on having one. This side never looks either, because a
+// hosted pane is not a window of any session here and the detector walks
+// sessions.
+//
+// So the two halves are split the way pane-cwd splits them. This side reads
+// the process, which only it can do. The other side decides what the process
+// means, which only it should do: the rules, the manifests and the user's
+// configuration all live with the window.
+//
+// It carries no authority the link did not already have. A configured host can
+// be asked for a shell, and naming the process already running in one is
+// strictly less than that.
+func (d *Daemon) verbPaneAgent(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Pane string `json:"pane"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if p.Pane == "" {
+		return nil, invalidParam("pane", "pane-agent needs the pane id that open-pane returned.")
+	}
+	hp := d.lookupHostedPane(p.Pane)
+	if hp == nil {
+		return nil, newVerbError(ErrVerbUnknownPane, "this machine is not running a pane called "+echoName(p.Pane)+".")
+	}
+	info, running := hp.foreground()
+	return map[string]any{
+		"pane":      p.Pane,
+		"running":   running,
+		"comm":      info.comm,
+		"argv":      info.argv,
+		"exe":       info.exe,
+		"pid":       info.pid,
+		"shell_pid": info.shellPID,
+	}, nil
+}
+
 // verbReadDir lists a directory on this machine.
 //
 // It is the far half of the rail's file section for a pane whose process runs

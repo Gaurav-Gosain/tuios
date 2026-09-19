@@ -477,6 +477,10 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				// a session sitting idle pays nothing, and a pane of this
 				// daemon's own does not reach the network at all.
 				pty.refreshRemoteCwdOnOutput()
+				// And what it is running, on the same terms and its own
+				// slower clock. A pane that has just written is a pane where
+				// something may have started or finished.
+				pty.remoteForeground()
 				if d.agentDetectInterval > 0 && pty.probeAgentExitDue(time.Now().UnixNano()) {
 					s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.identifyDetail)
 				}
@@ -1258,6 +1262,18 @@ func (d *Daemon) foregroundResolver(sess *Session) func(ptyID string) (foregroun
 		pty := sess.GetPTY(ptyID)
 		if pty == nil || pty.IsExited() {
 			return foregroundInfo{}, false
+		}
+		// A pane whose process is on another machine is asked about there.
+		// Reading a pid here would read nothing, because there is no process
+		// on this machine, and every tier that starts from the foreground
+		// process would give up.
+		//
+		// The answer arrives in the same struct the local read produces, so
+		// nothing downstream knows or cares which machine looked: the rules,
+		// the manifests and the user's configuration stay here, with the
+		// window. See remotePane.Foreground.
+		if info, running, remote := pty.remoteForeground(); remote {
+			return info, running
 		}
 		shellPID := pty.ShellPID()
 		info, running := foregroundProcess(shellPID)

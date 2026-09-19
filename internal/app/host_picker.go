@@ -36,6 +36,10 @@ type HostPickerItem struct {
 	// down is still listed, because hiding it would leave someone wondering
 	// whether they had imagined configuring it, but it cannot be chosen.
 	Up bool
+	// Global marks the row that makes a global session rather than a session
+	// on a machine. It is not a machine, and Name is empty for it, which is
+	// why it needs a mark of its own rather than a reserved name.
+	Global bool
 }
 
 // HostPickerItems is this machine followed by every configured one, in the
@@ -47,6 +51,22 @@ func (m *OS) buildHostPickerItems() []HostPickerItem {
 		Detail: "local",
 		Up:     true,
 	}}
+	// A global session is the answer to the same question, and the only place
+	// the question is asked, so it is a row here rather than a second control
+	// somewhere else. It is offered first because a session that will hold
+	// panes from several machines is not a session on any of the rows below
+	// it, and putting it among them would say it was.
+	//
+	// Only for a session. A window is made in the session you are already in,
+	// and "global" is not a machine to run a process on.
+	if m.HostPickerPurpose == HostPickerNewSession && m.GlobalSessionOffered() {
+		items = append(items, HostPickerItem{
+			Global: true,
+			Label:  GlobalSessionName,
+			Detail: "panes from any machine",
+			Up:     true,
+		})
+	}
 	for _, h := range m.FederationHosts {
 		if h.Name == federation.LocalHostName {
 			continue
@@ -143,6 +163,7 @@ func (m *OS) OpenNewSessionPicker() {
 	}
 	m.HostPickerPurpose = HostPickerNewSession
 	m.HostPickerItems = m.buildHostPickerItems()
+
 	m.HostPickerQuery = ""
 	m.HostPickerSelected = 0
 	m.HostPickerScroll = 0
@@ -168,6 +189,10 @@ func (m *OS) ChooseHostForNewSession(item HostPickerItem) tea.Cmd {
 	if !item.Up {
 		m.ShowNotification(item.Label+" is unavailable", "warning",
 			m.Settings.NotificationWarningDuration)
+		return nil
+	}
+	if item.Global {
+		m.SidebarNewGlobalSession()
 		return nil
 	}
 	if item.Name == "" || item.Name == federation.LocalHostName {

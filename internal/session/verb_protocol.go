@@ -436,6 +436,23 @@ func init() {
 			examples: []string{`{"id":1,"verb":"pane-cwd","params":{"pane":"f2c1"}}`},
 			handler:  (*Daemon).verbPaneCwd,
 		},
+		"pane-agent": {
+			description: "What a pane this machine runs for another machine has running in it. The machine with the process is the only one that can look: the daemon that owns the window reads a pid that means nothing there, so without this a pane on another machine is invisible to agent detection. This side reads the process; the side that owns the window decides what it means.",
+			params: []verbParam{
+				{Name: "pane", Type: "string", Description: "The pane id open-pane returned."},
+			},
+			returns: []verbParam{
+				{Name: "pane", Type: "string", Description: "The pane asked about."},
+				{Name: "running", Type: "bool", Description: "Whether a foreground process could be read at all."},
+				{Name: "comm", Type: "string", Description: "The process name, as the kernel reports it."},
+				{Name: "argv", Type: "array", Description: "The full command line."},
+				{Name: "exe", Type: "string", Description: "The resolved binary, empty when it cannot be read."},
+				{Name: "pid", Type: "int", Description: "The foreground process, zero when none was resolved."},
+				{Name: "shell_pid", Type: "int", Description: "The pane's own shell, which is a fact about the pane rather than about what it runs."},
+			},
+			examples: []string{`{"id":1,"verb":"pane-agent","params":{"pane":"f2c1"}}`},
+			handler:  (*Daemon).verbPaneAgent,
+		},
 		"read-dir": {
 			description: "List a directory on this machine, as the rail's file section reads it. The machine with the process is the machine with the files, so a pane running here is listed here.",
 			params: []verbParam{
