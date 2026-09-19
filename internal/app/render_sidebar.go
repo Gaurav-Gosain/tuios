@@ -420,6 +420,10 @@ type sidebarTerminalEntry struct {
 	// workspace this client cannot know. Resolved where the session's context is
 	// still in hand, so the row itself does not have to go looking for it.
 	Tag string
+	// Host is the machine the pane's process runs on, empty for this one. A
+	// session can hold panes from several machines, and which one a pane is on
+	// decides what a command typed into it does, so the row says it.
+	Host string
 	// WindowIndex is the index into m.Windows, or -1 for a pane of a session
 	// this client is not attached to.
 	WindowIndex int
@@ -1883,6 +1887,7 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 			State:       win.AgentState,
 			DoneSeen:    win.DoneSeen,
 			Focused:     win.IsCurrent,
+			Host:        win.Host,
 			WindowIndex: -1,
 		}
 		if node.IsCurrent {
@@ -2314,8 +2319,21 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 	// workspace it is on, so the row answers "where did it go" without a switch
 	// to find out. A pane on this workspace says nothing, because "here" is not
 	// information.
+	// The machine outranks the workspace in this slot. Both are orientation,
+	// but a workspace is where a pane is filed and a machine decides what a
+	// command typed into it does, so when only one of them fits it is this one.
+	// They are shown together when there is room for both.
 	right, rightW := "", 0
-	if e.Tag != "" {
+	switch {
+	case e.Host != "" && e.Tag != "" && sidebarNameAvail(cw, lipgloss.Width(e.Host+" "+e.Tag)) >= sidebarHostTagFloor:
+		label := e.Host + " " + e.Tag
+		right = sidebarStyle(rowBg, pal.AccentBright).Render(e.Host) +
+			sidebarStyle(rowBg, pal.FgMute).Render(" "+e.Tag)
+		rightW = lipgloss.Width(label)
+	case e.Host != "":
+		right = sidebarStyle(rowBg, pal.AccentBright).Render(e.Host)
+		rightW = lipgloss.Width(e.Host)
+	case e.Tag != "":
 		right = sidebarStyle(rowBg, pal.FgMute).Render(e.Tag)
 		rightW = lipgloss.Width(e.Tag)
 	}
@@ -2338,6 +2356,12 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 		Render(m.sidebarMarquee("t:"+e.WindowID, title, sidebarNameAvail(cw, rightW), st.lit()))
 	return sidebarComposeRow(gutter, sidebarGlyph(e.State, e.DoneSeen, rowBg, pal, &m.Settings), name, right, cw, rowBg)
 }
+
+// sidebarHostTagFloor is how much of a pane's own name has to survive before
+// the row spends its width saying both the machine and the workspace. Below it
+// the machine goes on alone, because a row that names two places and none of
+// its own pane has stopped being a list of panes.
+const sidebarHostTagFloor = 8
 
 // workspaceTag is the quiet right-hand mark saying which workspace a pane sits
 // on. A named workspace says its name, because that is the thing the user gave

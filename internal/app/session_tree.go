@@ -77,6 +77,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 			Message:    w.AgentMessage,
 			Focused:    i == m.FocusedWindow,
 			Workspace:  w.Workspace,
+			Host:       w.Host,
 		})
 	}
 	name := m.SessionName

@@ -865,6 +865,21 @@ type OS struct {
 	AggregateViewQuery    string
 	AggregateViewSelected int
 	AggregateViewScroll   int
+	// Machine picker overlay: which machine a new window's process runs on.
+	//
+	// A session can hold windows from several machines, and the only way to
+	// make one was the command line. This is the way from inside, and it is a
+	// picker rather than a prompt because the answer is one of a known list.
+	ShowHostPicker     bool
+	HostPickerQuery    string
+	HostPickerSelected int
+	HostPickerScroll   int
+	// HostPickerItems is the list as it stood when the picker opened. It is
+	// held rather than rebuilt per keystroke so the rows cannot move under the
+	// cursor while somebody is typing: a link coming up mid-search would
+	// otherwise change what Enter means.
+	HostPickerItems []HostPickerItem
+
 	// Layout picker overlay
 	ShowLayoutPicker bool
 	LayoutCycleIndex int             // Current index in saved layouts for cycling

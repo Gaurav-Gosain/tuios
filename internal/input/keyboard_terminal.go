@@ -144,6 +144,12 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleLayoutPickerInput(msg, o)
 	}
 
+	// The machine picker, for the same reason: a letter typed into it is a
+	// search and must not reach the shell.
+	if o.ShowHostPicker {
+		return handleHostPickerInput(msg, o)
+	}
+
 	// Handle session switcher (takes priority in terminal mode)
 	if o.ShowSessionSwitcher {
 		return handleSessionSwitcherInput(msg, o)

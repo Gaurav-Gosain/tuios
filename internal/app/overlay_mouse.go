@@ -205,6 +205,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.AggregateViewSelected = idx
 	case "layout":
 		m.LayoutPickerSelected = idx
+	case "hostpicker":
+		m.HostPickerSelected = idx
 	case "quit":
 		m.QuitMenuSelected = idx
 	case "sessionclose":
@@ -274,6 +276,9 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	case "layout":
 		n := len(FilterLayoutTemplates(m.LayoutPickerItems, m.LayoutPickerQuery))
 		moveListSelection(&m.LayoutPickerSelected, &m.LayoutPickerScroll, n, 10, wheelDelta(up))
+	case "hostpicker":
+		n := len(FilterHostPickerItems(m.HostPickerItems, m.HostPickerQuery))
+		moveListSelection(&m.HostPickerSelected, &m.HostPickerScroll, n, 10, wheelDelta(up))
 	case "accent":
 		// The wheel drives whatever is under it: the strip turns the hue, the
 		// grid steps through lightness.
@@ -411,6 +416,9 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case "layout":
 		m.LayoutPickerSelected = row.Idx
 		m.layoutPickerActivate(row.Idx)
+	case "hostpicker":
+		m.HostPickerSelected = row.Idx
+		return m.hostPickerActivate(row.Idx)
 	case "quit":
 		m.QuitMenuSelected = row.Idx
 		return m.QuitMenuActivate(row.Idx)
@@ -517,6 +525,8 @@ func (m *OS) closeOverlay(kind string) {
 		m.CloseScreenshotPreview(false)
 	case "layout":
 		m.ShowLayoutPicker = false
+	case "hostpicker":
+		m.ShowHostPicker = false
 	case "accent":
 		m.CloseAccentPicker()
 	case "aggregate":

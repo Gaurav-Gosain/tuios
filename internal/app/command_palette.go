@@ -153,6 +153,15 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			},
 		},
 		{
+			Name:     "New window on another machine",
+			Shortcut: "",
+			Category: "Window",
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenHostPicker()
+				return m, nil
+			},
+		},
+		{
 			Name:     "Close window",
 			Shortcut: "prefix+x",
 			Category: "Window",

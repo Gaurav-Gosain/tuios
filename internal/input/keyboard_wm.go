@@ -82,6 +82,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return handleLayoutPickerInput(msg, o)
 	}
 
+	// Handle the machine picker overlay
+	if o.ShowHostPicker {
+		return handleHostPickerInput(msg, o)
+	}
+
 	// Handle command palette overlay
 	if o.ShowCommandPalette {
 		return handleCommandPaletteInput(msg, o)

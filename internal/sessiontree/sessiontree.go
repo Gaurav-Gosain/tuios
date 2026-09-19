@@ -130,6 +130,10 @@ type WindowInput struct {
 	// not know. A surface showing panes of a session it is not attached to
 	// reads it off the wire, where an older daemon simply sends nothing.
 	Workspace int
+	// Host is the machine the pane's process runs on, empty for this one.
+	// A session can hold panes from more than one machine, so a list of its
+	// panes has to be able to say which is which.
+	Host string
 }
 
 // SessionInput is the caller's per-session data. Windows may be nil for a
@@ -249,6 +253,7 @@ func BuildSession(s SessionInput) Node {
 			Message:    w.Message,
 			IsCurrent:  w.Focused,
 			Workspace:  w.Workspace,
+			Host:       w.Host,
 		})
 		if r := AgentRank(w.AgentState, w.DoneSeen); r > bestRank {
 			node.AgentState, node.DoneSeen, bestRank = w.AgentState, w.DoneSeen, r

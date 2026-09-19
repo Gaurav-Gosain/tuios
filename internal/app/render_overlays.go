@@ -222,6 +222,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "layout", content, geo, rows)
 	}
 
+	if m.ShowHostPicker {
+		content, geo, rows := m.renderHostPicker()
+		layers = m.placeOverlayPanel(layers, "hostpicker", content, geo, rows)
+	}
+
 	if m.ShowSettings {
 		content, geo, rows := m.renderSettings()
 		layers = m.placeOverlayPanel(layers, "settings", content, geo, rows)

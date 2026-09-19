@@ -1245,6 +1245,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		return m, nil
 
+	case NewWindowOnHostMsg:
+		// The window itself arrives on the daemon's state push, the way any
+		// window another client made arrives. This carries only the failure,
+		// which is the half a push cannot say.
+		m.ApplyNewWindowOnHost(msg)
+		return m, nil
+
 	case HostsChangedMsg:
 		// The daemon's host table changed under this client. The poll is armed
 		// again whatever it was doing, because the daemon with no hosts, which
