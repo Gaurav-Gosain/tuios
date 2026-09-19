@@ -127,3 +127,20 @@ func ApplyOverrides(overrides Overrides, s *Settings) {
 		s.ZoomMaxWidth = overrides.ZoomMaxWidth
 	}
 }
+
+// AppearanceFrom builds the appearance settings a newly served session starts
+// from: the built-in defaults, the config file as it is now, then the caller's
+// flag overrides.
+//
+// It is the same order the process globals get once at server startup, run per
+// connection instead of once, so a session that connects after an edit follows
+// the file rather than the copy the server loaded when it started. A nil cfg is
+// an empty one, so the overrides still apply.
+func AppearanceFrom(cfg *UserConfig, ov Overrides) Settings {
+	s := DefaultSettings()
+	if cfg != nil {
+		ApplyAppearanceConfig(cfg, &s)
+	}
+	ApplyOverrides(ov, &s)
+	return s
+}

@@ -424,10 +424,12 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer,
 
 	// The kind says the rest: read-only config, no desktop, file-medium
 	// graphics re-encoded for a terminal that cannot read server paths.
+	seed := config.AppearanceFrom(userConfig, cfg.Overrides)
 	tuiosInstance := app.NewOS(app.OSOptions{
 		Client:          app.ClientSSH,
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
+		Settings:        &seed,
 		ShowKeys:        cfg.ShowKeys,
 		Width:           width,
 		Height:          height,
@@ -505,10 +507,12 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 
 	// Create TUIOS instance connected to daemon. The kind says the rest, as
 	// in the ephemeral path above.
+	seed := config.AppearanceFrom(userConfig, cfg.Overrides)
 	tuiosInstance := app.NewOS(app.OSOptions{
 		Client:          app.ClientSSH,
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
+		Settings:        &seed,
 		ShowKeys:        cfg.ShowKeys,
 		Width:           width,
 		Height:          height,
