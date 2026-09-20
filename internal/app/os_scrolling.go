@@ -380,6 +380,30 @@ func (m *OS) RevealFocusedColumn() {
 	}
 }
 
+// RevealHoveredColumn brings the focused column fully on screen after
+// focus-follows-mouse moved the focus onto it.
+//
+// Hovering a column with that setting on is the same statement clicking one is:
+// it is how you pick the pane to work in, and there is no other gesture to
+// make. Focus went through the least-scroll rule, which by design leaves a
+// column that is already partly visible where it is, so the pane you had just
+// focused was the one you could not see.
+//
+// Unlike the click path there is nothing to wait for. A press might turn out to
+// be a drag, which is why that one reveals on the release; a motion event is
+// already over by the time it arrives. Scrolling does move the column out from
+// under the pointer, and the pointer may then be over a different pane, but
+// nothing acts on that until the user moves the mouse again, and when they do
+// they are pointing at what they are pointing at.
+//
+// appearance.niri_hover_reveals turns it off.
+func (m *OS) RevealHoveredColumn() {
+	if !m.Settings.NiriHoverReveals || !m.Settings.FocusFollowsMouse {
+		return
+	}
+	m.RevealFocusedColumn()
+}
+
 // ArmClickReveal remembers where the pointer was when a press focused a pane.
 func (m *OS) ArmClickReveal(x, y int) {
 	if !m.Settings.NiriClickReveals || !m.AutoTiling || !m.UseScrollingLayout {

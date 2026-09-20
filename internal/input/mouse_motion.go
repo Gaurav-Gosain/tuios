@@ -180,6 +180,11 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		!o.SidebarBandContains(mouse.X, mouse.Y) && !o.InDockBand(mouse.Y) {
 		if idx := findClickedWindow(mouse.X, mouse.Y, o); idx >= 0 && idx != o.FocusedWindow {
 			o.FocusWindow(idx)
+			// In the scrolling layout, bring the whole column on screen. Focus
+			// went through the least-scroll rule, which leaves a column that is
+			// already partly visible where it is, so hovering a column at the
+			// edge focused a pane the user could not see.
+			o.RevealHoveredColumn()
 		}
 	}
 

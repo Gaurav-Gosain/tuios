@@ -20,7 +20,13 @@ type openAnimHarness struct {
 }
 
 func newOpenAnimHarness(width, height int) *openAnimHarness {
-	return &openAnimHarness{
+	return newOpenAnimHarnessWithLayout(width, height, true)
+}
+
+// newOpenAnimHarnessWithLayout is the same harness under either tiled layout, so
+// the open animation can be checked in both. bsp false is master-stack.
+func newOpenAnimHarnessWithLayout(width, height int, bsp bool) *openAnimHarness {
+	h := &openAnimHarness{
 		m: &OS{
 			Settings:         config.Global,
 			NumWorkspaces:    9,
@@ -29,7 +35,7 @@ func newOpenAnimHarness(width, height int) *openAnimHarness {
 			Width:            width,
 			Height:           height,
 			AutoTiling:       true,
-			UseBSPLayout:     true,
+			UseBSPLayout:     bsp,
 		},
 		state: &session.SessionState{
 			Name:             "open-anim",
@@ -39,6 +45,7 @@ func newOpenAnimHarness(width, height int) *openAnimHarness {
 			Version:          1,
 		},
 	}
+	return h
 }
 
 // createWindow runs one daemon-side creation and the client sync it produces,
@@ -292,5 +299,85 @@ func TestOpenStartRectFloor(t *testing.T) {
 				t.Errorf("start box (%d,%d %dx%d) is not inside the tile %+v", x, y, w, h, tc.rect)
 			}
 		})
+	}
+}
+
+// TestOpenAnimationPlaysUnderMasterStack pins that a new pane grows into its
+// slot under the master-stack layout too.
+//
+// Only the BSP branch armed one. The other tiled branch placed every pane
+// outright, so opening a pane under master-stack was a jump cut while the same
+// pane under BSP bloomed into place.
+func TestOpenAnimationPlaysUnderMasterStack(t *testing.T) {
+	prev := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = true
+	defer func() { config.Global.AnimationsEnabled = prev }()
+
+	h := newOpenAnimHarnessWithLayout(120, 40, false)
+
+	for i := 1; i <= 3; i++ {
+		anims := h.createWindow(t)
+		anim := h.newestWindowAnim(t, anims)
+
+		if anim.StartX < anim.EndX || anim.StartY < anim.EndY ||
+			anim.StartX+anim.StartWidth > anim.EndX+anim.EndWidth ||
+			anim.StartY+anim.StartHeight > anim.EndY+anim.EndHeight {
+			t.Errorf("pane %d opens from (%d,%d %dx%d), which is not inside its slot (%d,%d %dx%d)",
+				i, anim.StartX, anim.StartY, anim.StartWidth, anim.StartHeight,
+				anim.EndX, anim.EndY, anim.EndWidth, anim.EndHeight)
+		}
+		if anim.StartWidth >= anim.EndWidth && anim.StartHeight >= anim.EndHeight {
+			t.Errorf("pane %d does not grow: start %dx%d, slot %dx%d",
+				i, anim.StartWidth, anim.StartHeight, anim.EndWidth, anim.EndHeight)
+		}
+	}
+}
+
+// TestMasterStackOnlyAnimatesTheOpeningPane pins the other half: a retile is not
+// a move. Only the pane that just opened animates, so a resize or a layout
+// change does not put every pane on screen in motion.
+func TestMasterStackOnlyAnimatesTheOpeningPane(t *testing.T) {
+	prev := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = true
+	defer func() { config.Global.AnimationsEnabled = prev }()
+
+	h := newOpenAnimHarnessWithLayout(120, 40, false)
+	for i := 1; i <= 3; i++ {
+		anims := h.createWindow(t)
+		if len(anims) != 1 {
+			t.Errorf("creating pane %d armed %d animations, want 1 (the pane that opened)", i, len(anims))
+		}
+	}
+
+	// A retile with nothing opening arms nothing at all.
+	h.m.Animations = nil
+	h.m.TileAllWindows()
+	if len(h.m.Animations) != 0 {
+		t.Errorf("a plain retile armed %d animations", len(h.m.Animations))
+	}
+}
+
+// TestMasterStackOpenRespectsDisabledAnimations checks the option: with
+// animations off the pane is placed on its slot in one step, and the open start
+// rectangle does not survive into the path with no animation to carry it.
+func TestMasterStackOpenRespectsDisabledAnimations(t *testing.T) {
+	prev := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	defer func() { config.Global.AnimationsEnabled = prev }()
+
+	h := newOpenAnimHarnessWithLayout(120, 40, false)
+	for i := 1; i <= 3; i++ {
+		if anims := h.createWindow(t); len(anims) != 0 {
+			t.Fatalf("pane %d armed %d animations with animations disabled", i, len(anims))
+		}
+	}
+	for _, w := range h.m.Windows {
+		if w.Opening {
+			t.Errorf("window %s still marked opening after placement", w.ID)
+		}
+		if w.Width <= ui.MinAnimatedWidth || w.Height <= ui.MinAnimatedHeight {
+			t.Errorf("window %s left at an animation start box (%dx%d) rather than its slot",
+				w.ID, w.Width, w.Height)
+		}
 	}
 }

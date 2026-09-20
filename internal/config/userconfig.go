@@ -212,6 +212,7 @@ type AppearanceConfig struct {
 	SessionBorder          *bool  `toml:"session_border"`            // Carry that colour on every pane border too (default: false)
 	GlobalSession          *bool  `toml:"global_session"`            // Offer a session that holds panes from several machines (default: true)
 	NiriClickReveals       *bool  `toml:"niri_click_reveals"`        // Bring a clicked column fully on screen in the scrolling layout (default: true)
+	NiriHoverReveals       *bool  `toml:"niri_hover_reveals"`        // With focus-follows-mouse on, bring the hovered column fully on screen (default: true)
 	SidebarGitDirty        *bool  `toml:"git_dirty"`                 // Count changed and untracked paths in the rail's git section (default: true)
 	Glyphs                 string `toml:"glyphs"`                    // Chrome glyph set: default, box, heavy, ascii, or one from ~/.config/tuios/glyphs
 	Gap                    int    `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
@@ -1483,6 +1484,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if cfg.Appearance.NiriClickReveals != nil {
 		s.NiriClickReveals = *cfg.Appearance.NiriClickReveals
+	}
+	if cfg.Appearance.NiriHoverReveals != nil {
+		s.NiriHoverReveals = *cfg.Appearance.NiriHoverReveals
 	}
 	if cfg.Appearance.Scrollbar.Style != "" {
 		s.ScrollbarStyle = cfg.Appearance.Scrollbar.Style

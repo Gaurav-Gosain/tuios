@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
 // Tiling constants
@@ -101,12 +102,12 @@ func (m *OS) tileAllWindows() {
 
 	m.LogInfo("TileAllWindows called with %d visible windows, BSP=%v, Scrolling=%v", len(visibleWindows), m.UseBSPLayout, m.UseScrollingLayout)
 
-	// Only the BSP path plays an open animation, and it clears Opening itself as
-	// it places each pane. Clear it here for the two layouts that do not, so a
-	// pane created under a scrolling or master-stack layout cannot carry the flag
-	// until whenever the user next switches to BSP and then bloom there, long
-	// after it opened.
-	if m.UseScrollingLayout || !m.UseBSPLayout {
+	// The scrolling layout plays no open animation, so clear the flag here for
+	// it: a pane created under it must not carry the flag until whenever the
+	// user next switches to a layout that does animate and then bloom there,
+	// long after it opened. The other two branches read and clear it as they
+	// place each pane.
+	if m.UseScrollingLayout {
 		for _, w := range visibleWindows {
 			w.Opening = false
 		}
@@ -147,6 +148,30 @@ func (m *OS) tileAllWindows() {
 
 	// Use master-stack layout if BSP is disabled
 	if !m.UseBSPLayout {
+		// Read and clear before the placement loop, for every visible pane and
+		// not only the ones the loop reaches. A pane skipped below (zoomed,
+		// dragged, or past the end of the rectangle list) still opened, and a
+		// flag left set on it makes some later retile play the animation long
+		// after the fact.
+		opening := make(map[string]bool, len(visibleWindows))
+		for _, w := range visibleWindows {
+			if w.Opening {
+				opening[w.ID] = true
+			}
+			w.Opening = false
+		}
+		// A new pane grows into its slot here the way it does under BSP. This
+		// branch placed every pane outright, so opening one under master-stack
+		// was a jump cut while the same pane under BSP bloomed. Only an opening
+		// pane animates: a retile is not a move, and animating every one of
+		// them would put the whole layout in motion whenever anything resized.
+		openDur := m.Settings.GetAnimationDuration()
+		if deferring {
+			// Mid-drag the layout is reapplied on every composed frame, so an
+			// animation started here would be cancelled by the next one.
+			openDur = 0
+		}
+
 		layouts := m.contentTileLayouts(len(visibleWindows))
 		for i, l := range layouts {
 			if i < len(visibleWindows) {
@@ -167,6 +192,28 @@ func (m *OS) tileAllWindows() {
 				// scrolling layout mid-slide left the pane drawing at one size
 				// and its guest writing at another.
 				m.CancelSnapAnimation(visibleWindows[i])
+
+				if opening[visibleWindows[i].ID] && openDur > 0 {
+					rect := layout.Rect{X: l.X, Y: l.Y, W: l.Width, H: l.Height}
+					if x, y, w, h := openStartRect(rect); w != rect.W || h != rect.H {
+						// Assigned, not resized: the emulator keeps the size the
+						// pane was created at for the length of the animation,
+						// the way every other frame of a snap leaves it, and the
+						// completion resizes it once at the destination.
+						visibleWindows[i].X, visibleWindows[i].Y = x, y
+						visibleWindows[i].Width, visibleWindows[i].Height = w, h
+					}
+					// Before the animation, for the same reason the BSP path
+					// settles it before the placement: the allowance decides how
+					// much of the rectangle the guest gets.
+					visibleWindows[i].Tiled = m.panesBorderless()
+					if anim := ui.NewSnapAnimation(visibleWindows[i], rect.X, rect.Y, rect.W, rect.H, openDur); anim != nil {
+						m.Animations = append(m.Animations, anim)
+						visibleWindows[i].InvalidateCache()
+						continue
+					}
+				}
+
 				visibleWindows[i].X = l.X
 				visibleWindows[i].Y = l.Y
 				// Set Tiled before Resize so the border deduction (and therefore

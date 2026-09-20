@@ -116,3 +116,61 @@ func TestAFocusNobodyAskedForLeavesTheStripAlone(t *testing.T) {
 			before, sl.ViewportX)
 	}
 }
+
+// TestHoveringAPaneBringsAllOfItOnScreen is the same rule for focus follows
+// mouse: pointing at a column with that setting on is how you pick the pane to
+// work in, and there is no other gesture to make.
+//
+// Focus went through the least-scroll rule, which leaves a column that is
+// already partly visible where it is, so hovering one at the edge focused a
+// pane the user could not see.
+func TestHoveringAPaneBringsAllOfItOnScreen(t *testing.T) {
+	m := scrollingOS(t, 4)
+	m.Settings.FocusFollowsMouse = true
+	m.Settings.NiriHoverReveals = true
+
+	last := len(m.Windows) - 1
+	m.FocusWindow(last)
+	if !parkStraddling(m, last) {
+		t.Fatal("ASSERTION: could not park the strip with the column half on screen, so this proves nothing")
+	}
+
+	m.RevealHoveredColumn()
+
+	if !columnFullyVisible(m, last) {
+		t.Error("the hovered column is still not all on screen")
+	}
+}
+
+// TestHoverRevealHonoursItsSettings checks both switches: the reveal is off
+// when the user turned it off, and it does nothing at all when nothing focuses
+// on hover in the first place.
+func TestHoverRevealHonoursItsSettings(t *testing.T) {
+	for _, c := range []struct {
+		name              string
+		hoverReveals, ffm bool
+	}{
+		{"hover reveal off", false, true},
+		{"focus does not follow the mouse", true, false},
+		{"both off", false, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			m := scrollingOS(t, 4)
+			m.Settings.NiriHoverReveals = c.hoverReveals
+			m.Settings.FocusFollowsMouse = c.ffm
+
+			last := len(m.Windows) - 1
+			m.FocusWindow(last)
+			if !parkStraddling(m, last) {
+				t.Fatal("ASSERTION: could not park the strip with the column half on screen")
+			}
+			before := m.GetOrCreateScrollingLayout().ViewportX
+
+			m.RevealHoveredColumn()
+
+			if got := m.GetOrCreateScrollingLayout().ViewportX; got != before {
+				t.Errorf("the strip moved from %d to %d with the reveal switched off", before, got)
+			}
+		})
+	}
+}

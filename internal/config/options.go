@@ -276,6 +276,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.niri_hover_reveals", Type: OptionBool, Section: "appearance",
+		Description: "In the scrolling layout with focus-follows-mouse on, hovering a column that is partly off the edge brings all of it on screen",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.git_dirty", Type: OptionBool, Section: "sidebar",
 		Description: "Count staged, changed and untracked paths in the rail's git section. The only part of it that costs a walk of the working tree.",
 		Default:     "true",

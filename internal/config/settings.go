@@ -188,6 +188,18 @@ type Settings struct {
 	// that pane to work in, so the strip brings all of it to you.
 	NiriClickReveals bool
 
+	// NiriHoverReveals brings the column under the pointer fully on screen in
+	// the scrolling layout, while focus-follows-mouse is on.
+	//
+	// Hovering a column with that setting on is the same statement clicking one
+	// is: it is how you pick the pane to work in, and there is no other gesture
+	// to make. Without it the focus moved to a column that stayed half off the
+	// edge, so the pane you had just focused was the one you could not see.
+	//
+	// It does nothing unless appearance.focus_follows_mouse is on, since
+	// nothing focuses on hover otherwise.
+	NiriHoverReveals bool
+
 	SidebarGitDirty bool
 
 	SessionBorder bool
@@ -539,6 +551,7 @@ func DefaultSettings() Settings {
 		GlobalSession:               true,
 		SidebarGitDirty:             true,
 		NiriClickReveals:            true,
+		NiriHoverReveals:            true,
 		DockWorkspaceTabs:           true,
 		DockWorkspaceTabFormat:      "",
 		DockWorkspaceTooltip:        true,

@@ -63,6 +63,7 @@ var settingLabels = map[string]string{
 	"appearance.niri_reverse_scroll":    "Reverse scroll",
 	"appearance.niri_scroll_cells":      "Strip scroll step",
 	"appearance.niri_click_reveals":     "Click reveals column",
+	"appearance.niri_hover_reveals":     "Hover reveals column",
 	"appearance.animations_enabled":     "Animations",
 	"appearance.confirm_quit":           "Confirm quit",
 	"appearance.session_colors":         "Session colors",
