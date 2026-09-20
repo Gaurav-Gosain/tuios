@@ -752,7 +752,11 @@ func (m *OS) fileViewUpFrom(dir string) tea.Cmd {
 	if parent == dir {
 		return nil
 	}
-	return m.requestFileList(parent, m.filesView.Origin, true)
+	cmd := m.requestFileList(parent, m.filesView.Origin, true)
+	// Land on the folder just left, the way a file manager does, so walking in
+	// and back out returns the cursor to where it started.
+	m.followFileRow(filepath.Base(dir))
+	return cmd
 }
 
 // FileViewEnter acts on one row of the listing.
@@ -789,6 +793,9 @@ func (m *OS) fileViewOpen(dir, name string, isDir bool) tea.Cmd {
 		var cmd tea.Cmd
 		if m.Settings.SidebarFolderClick != config.SidebarFolderClickCd {
 			cmd = m.requestFileList(full, m.filesView.Origin, true)
+			// The first row of the new listing, since nothing in it is the row
+			// the cursor was on.
+			m.followFileRow("")
 		}
 		if m.Settings.SidebarFolderClick != config.SidebarFolderClickNavigate {
 			m.sendCdToOrigin(full)
@@ -797,6 +804,17 @@ func (m *OS) fileViewOpen(dir, name string, isDir bool) tea.Cmd {
 	}
 	m.ShowNotification("Copied the path.", "success", m.Settings.NotificationDuration)
 	return tea.SetClipboard(full)
+}
+
+// followFileRow asks the next nav build, once the listing being requested has
+// arrived, to put the cursor on the named entry of the files section, or on the
+// section's first row when the name is empty or not in the listing.
+//
+// Called after requestFileList, which has already bumped the generation.
+func (m *OS) followFileRow(name string) {
+	m.sidebarFollowFile = true
+	m.sidebarFollowFileName = name
+	m.sidebarFollowFileGen = m.filesView.Gen
 }
 
 // FileViewCd sends a cd to the pane the section was opened from, for the

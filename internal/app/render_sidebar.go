@@ -1846,6 +1846,15 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 func (m *OS) sidebarPublishNav(nav []sidebarNavRow, target sidebarNavRow, haveTarget bool) {
 	m.SidebarNav = nav
 	m.sidebarFollowSession = ""
+	// A pending walk into or out of a folder outranks the tracked row, because
+	// the tracked row is a name from the listing that was just replaced.
+	if m.sidebarFollowFile && !m.filesView.Loading && m.filesView.Gen == m.sidebarFollowFileGen {
+		m.sidebarFollowFile = false
+		if i, ok := sidebarFileRowIndex(nav, m.sidebarFollowFileName); ok {
+			m.SidebarCursor = i
+			return
+		}
+	}
 	if haveTarget {
 		m.SidebarCursor = 0
 		for i, r := range nav {
@@ -1858,6 +1867,31 @@ func (m *OS) sidebarPublishNav(nav []sidebarNavRow, target sidebarNavRow, haveTa
 	if m.SidebarCursor >= len(nav) {
 		m.SidebarCursor = max(len(nav)-1, 0)
 	}
+}
+
+// sidebarFileRowIndex is the index of the named entry in the files section, or
+// of the section's first row when the name is empty or absent.
+//
+// Absent is the ordinary case on the way out of a folder that was deleted or
+// renamed while the listing was open, and on the way into one from the files
+// menu, so it is a fallback rather than a failure.
+func sidebarFileRowIndex(nav []sidebarNavRow, name string) (int, bool) {
+	first := -1
+	for i, r := range nav {
+		if r.Kind != sidebarRowFileUp && r.Kind != sidebarRowFileEntry {
+			continue
+		}
+		if first < 0 {
+			first = i
+		}
+		if name != "" && r.Kind == sidebarRowFileEntry && r.WindowID == name {
+			return i, true
+		}
+	}
+	if first < 0 {
+		return 0, false
+	}
+	return first, true
 }
 
 // sidebarShownSession is the session whose panes the terminals section is

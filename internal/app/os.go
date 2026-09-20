@@ -1195,6 +1195,23 @@ type OS struct {
 	// switch keeps the cursor on the session it moved once the tree relaid out,
 	// without the handler guessing the post-relayout index.
 	sidebarFollowSession string
+	// sidebarFollowFile asks the next nav build to put the cursor on a row of
+	// the files section once the listing it was set for has arrived.
+	//
+	// Walking into a folder replaces the listing, so the row the cursor was on
+	// (a file row is identified by its name) is gone from the new one, and the
+	// rebuild fell back to index 0, which is the first session row at the very
+	// top of the rail. Every step into a folder threw the keyboard out of the
+	// section it was working in.
+	//
+	// sidebarFollowFileName is the entry to land on, empty to land on the
+	// section's first row. Walking up names the folder just left, so stepping
+	// out puts the cursor back on where it came from. sidebarFollowFileGen is
+	// the listing generation it was set for, so the cursor moves when the new
+	// listing arrives and not on a frame drawn while it is still loading.
+	sidebarFollowFile     bool
+	sidebarFollowFileName string
+	sidebarFollowFileGen  uint64
 	// sidebarCache holds the last styled rail keyed by a cheap signature of every
 	// input that changes the rows, so a frame drawn for an unrelated reason (a
 	// pane printing output) does not rebuild and restyle the whole rail.

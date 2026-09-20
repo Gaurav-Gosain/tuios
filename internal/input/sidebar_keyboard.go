@@ -52,6 +52,18 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	action := lookupAction(msg, o.KeybindRegistry.GetSidebarAction)
 	if action == "" {
+		// A global bind, on a key the rail does not bind itself.
+		//
+		// The global section is the one that acts in window mode and terminal
+		// mode alike, and the rail is a third scope that was swallowing all of
+		// it: ctrl+p did nothing from the rail, even though "/" opens the same
+		// palette, because the rail returns before the mode handlers that run
+		// these. The rail's own bindings are looked up first, so j and k still
+		// move the cursor whatever a user has put in the global section.
+		if m, cmd, ok := handleGlobalBinds(msg, o); ok {
+			return m, cmd
+		}
+
 		// esc leaves the rail when nothing else claims it. The scope swallows
 		// unbound keys, so a config that resolves no rail action (one written
 		// before this section existed, or a rebound exit) would otherwise trap

@@ -48,3 +48,46 @@ func TestRailSlashOpensThePaletteAndKeepsItsKeys(t *testing.T) {
 		t.Error("esc out of the palette also left the rail")
 	}
 }
+
+// TestRailCtrlPOpensThePalette checks that the global bind for the palette works
+// from the rail, the same as it does over a pane.
+//
+// The rail swallows every key it does not bind and returns before the mode
+// handlers that run the global section, so ctrl+p did nothing there.
+func TestRailCtrlPOpensThePalette(t *testing.T) {
+	prev := config.Global.SidebarEnabled
+	config.Global.SidebarEnabled = true
+	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
+
+	o := twoPaneOS(t)
+	o.SidebarFocused = true
+
+	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl}, o)
+	if !o.ShowCommandPalette {
+		t.Fatal("ctrl+p in the rail did not open the palette")
+	}
+	if !o.SidebarFocused {
+		t.Error("opening the palette dropped rail focus, so closing it would not come back to the row")
+	}
+}
+
+// TestRailKeysStillBeatGlobalOnes checks that the rail's own bindings are looked
+// up first, so letting the global section through did not hand it the cursor
+// keys.
+func TestRailKeysStillBeatGlobalOnes(t *testing.T) {
+	prev := config.Global.SidebarEnabled
+	config.Global.SidebarEnabled = true
+	t.Cleanup(func() { config.Global.SidebarEnabled = prev })
+
+	o := twoPaneOS(t)
+	o.SidebarFocused = true
+	o.ShowCommandPalette = false
+
+	o, _ = HandleKeyPress(tea.KeyPressMsg{Code: 'j', Text: "j"}, o)
+	if o.ShowCommandPalette {
+		t.Error("a rail cursor key reached the global section")
+	}
+	if !o.SidebarFocused {
+		t.Error("a rail cursor key left the rail")
+	}
+}
