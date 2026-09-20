@@ -147,7 +147,9 @@ func (m *OS) toggleZoom() {
 		fw.Zoomed = false
 		if camera {
 			// The camera comes back to the layout's own size, which the tiler
-			// does for every pane at once. Nothing here to put back by hand.
+			// does for every pane at once. Nothing here to put back by hand,
+			// and the same slide on the way out as on the way in.
+			m.zoomRelayout = true
 			m.tileAllWindows()
 			m.FlushPTYBuffersAfterResize()
 			m.MarkAllDirty()
@@ -340,6 +342,11 @@ func (m *OS) zoomPane(w *terminal.Window) bool {
 		// The layout places this pane along with every other. Putting it in a
 		// box here first would be a rectangle the very next retile throws away.
 		//
+		// The retile it is waiting for slides rather than places: the whole
+		// layout is going somewhere new, and a cut between two arrangements
+		// says nothing about which pane was zoomed.
+		m.zoomRelayout = true
+		//
 		// On the strip the widened column also has to be brought on screen:
 		// growing a column that is half off the edge leaves the pane you asked
 		// for further off it than before.
@@ -419,6 +426,21 @@ func (m *OS) ZoomFollowsFocus(i int) {
 // holding so the slide has somewhere to start. Arming the animation before the
 // retile would be arming it against a destination the tiler had not chosen yet.
 func (m *OS) handOverZoom(from, to *terminal.Window) {
+	// Under a camera there is no box to hand over. The zoom is which pane the
+	// layout is aimed at, so moving it is moving the mark and letting the tiler
+	// aim again, and every pane slides because the tiler animates what it
+	// places.
+	//
+	// The retile at the end is the whole of it. Marking the new pane without
+	// one left the layout drawn at the arrangement it already had, so the
+	// focus moved and the zoom appeared to come off: the mark had moved and
+	// nothing had been redrawn against it.
+	if m.zoomUsesLayout(to) {
+		m.zoomPane(to)
+		m.tileAllWindows()
+		return
+	}
+
 	boxX, boxY, boxW, boxH := from.X, from.Y, from.Width, from.Height
 
 	// Back into the layout. Under a tiling layout the tiler owns where it

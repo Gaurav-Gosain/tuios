@@ -1,6 +1,8 @@
 package app
 
 import (
+	"time"
+
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -176,6 +178,17 @@ func (m *OS) tileAllWindows() {
 			openDur = 0
 		}
 
+		// Read and cleared here, before the loop that consumes it, so a request
+		// left over from a zoom cannot slide a later retile that has nothing to
+		// do with one.
+		zoomSlide := time.Duration(0)
+		if m.zoomRelayout {
+			m.zoomRelayout = false
+			if m.Settings.ZoomAnimation {
+				zoomSlide = m.Settings.GetFastAnimationDuration()
+			}
+		}
+
 		layouts := m.contentTileLayouts(len(visibleWindows))
 		// A zoom of part of the screen is a camera over this layout rather than
 		// one pane's own rectangle. See zoom_canvas.go.
@@ -219,6 +232,20 @@ func (m *OS) tileAllWindows() {
 					// much of the rectangle the guest gets.
 					visibleWindows[i].Tiled = m.panesBorderless()
 					if anim := ui.NewSnapAnimation(visibleWindows[i], rect.X, rect.Y, rect.W, rect.H, openDur); anim != nil {
+						m.Animations = append(m.Animations, anim)
+						visibleWindows[i].InvalidateCache()
+						continue
+					}
+				}
+
+				// The zoom has just moved, so the whole layout is going
+				// somewhere new and every pane slides there. The BSP tiler
+				// animates every placement already; this one does not, and
+				// without this a camera zoom cut between two arrangements with
+				// nothing to say which pane had been zoomed.
+				if zoomSlide > 0 && !deferring {
+					visibleWindows[i].Tiled = m.panesBorderless()
+					if anim := ui.NewSnapAnimation(visibleWindows[i], l.X, l.Y, l.Width, l.Height, zoomSlide); anim != nil {
 						m.Animations = append(m.Animations, anim)
 						visibleWindows[i].InvalidateCache()
 						continue

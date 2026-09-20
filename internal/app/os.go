@@ -1212,6 +1212,20 @@ type OS struct {
 	sidebarFollowFile     bool
 	sidebarFollowFileName string
 	sidebarFollowFileGen  uint64
+	// zoomRelayout asks the next retile to slide its panes rather than place
+	// them, because the zoom has just moved and the whole layout is going
+	// somewhere new.
+	//
+	// One shot, consumed by the retile it was set for. A camera zoom moves
+	// every pane on screen at once, and a retile that placed them outright
+	// would cut between two arrangements with nothing to say which pane had
+	// been zoomed. Ordinary retiles stay a placement: a resize is not a move,
+	// and putting the whole layout in motion whenever anything changed would
+	// be worse than saying nothing.
+	//
+	// The BSP tiler animates every placement already, so this is for the
+	// master-stack one, which does not.
+	zoomRelayout bool
 	// sidebarCache holds the last styled rail keyed by a cheap signature of every
 	// input that changes the rows, so a frame drawn for an unrelated reason (a
 	// pane printing output) does not rebuild and restyle the whole rail.

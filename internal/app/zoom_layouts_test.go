@@ -138,3 +138,81 @@ func TestUnzoomingPutsThePaneBackInEveryTiler(t *testing.T) {
 		})
 	}
 }
+
+// TestTheZoomStaysOnTheFocusedPaneUnderACamera is the report: zoomed in, the
+// next-pane key focused the pane after it and the zoom appeared to come off.
+//
+// Under a camera the zoom is which pane the layout is aimed at rather than a
+// box somebody holds, so moving it means moving the mark and letting the tiler
+// aim again. The handover moved the mark and never retiled, so the layout went
+// on being drawn at the arrangement it already had: the focus had moved, the
+// mark had moved, and nothing had been redrawn against either.
+func TestTheZoomStaysOnTheFocusedPaneUnderACamera(t *testing.T) {
+	for _, mode := range []string{
+		config.LayoutModeBSP,
+		config.LayoutModeMasterStack,
+		config.LayoutModeScrolling,
+	} {
+		t.Run(mode, func(t *testing.T) {
+			m, wins := tiledZoomOS(t, mode)
+			m.FocusedWindow = 0
+
+			m.ToggleZoom()
+			m.CompleteAllAnimations()
+			// Where the pane about to receive the zoom sits while somebody
+			// else has it: pushed off the edges by the camera aimed at pane 0.
+			// Taking the zoom has to bring it back and lift it.
+			before := [4]int{wins[1].X, wins[1].Y, wins[1].Width, wins[1].Height}
+
+			m.FocusWindow(1)
+			m.CompleteAllAnimations()
+
+			if wins[0].Zoomed {
+				t.Error("the pane that lost the focus kept the zoom")
+			}
+			if !wins[1].Zoomed {
+				t.Fatal("the pane the focus reached did not take the zoom")
+			}
+			// And the layout was actually redrawn against the new mark.
+			// Without the retile the pane sat at the tile it had all along,
+			// with nothing but a flag to say it was zoomed, which is exactly
+			// what the zoom coming off looks like.
+			got := [4]int{wins[1].X, wins[1].Y, wins[1].Width, wins[1].Height}
+			if got == before {
+				t.Errorf("the pane that took the zoom never moved from %v: the layout was never re-aimed", before)
+			}
+			// And it came back onto the screen, which is what the camera being
+			// re-aimed means: while somebody else held the zoom this pane was
+			// pushed past the edges.
+			if got[0] >= m.GetLeftMargin()+m.GetContentWidth() || got[1] >= m.GetTopMargin()+m.GetUsableHeight() {
+				t.Errorf("the pane that took the zoom is at %v, off the screen", got)
+			}
+		})
+	}
+}
+
+// TestTheHandoverSlidesUnderEveryTiler pins the second half of the report: it
+// has to be smooth. Every layout arms something to move, rather than cutting
+// from one arrangement to the next.
+func TestTheHandoverSlidesUnderEveryTiler(t *testing.T) {
+	for _, mode := range []string{
+		config.LayoutModeBSP,
+		config.LayoutModeMasterStack,
+	} {
+		t.Run(mode, func(t *testing.T) {
+			m, _ := tiledZoomOS(t, mode)
+			m.Settings.ZoomAnimation = true
+			m.FocusedWindow = 0
+
+			m.ToggleZoom()
+			m.CompleteAllAnimations()
+
+			m.Animations = nil
+			m.FocusWindow(1)
+
+			if len(m.Animations) == 0 {
+				t.Error("the handover moved nothing: the layout cut from one arrangement to the next")
+			}
+		})
+	}
+}
