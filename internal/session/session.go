@@ -504,9 +504,12 @@ type PTY struct {
 	// host is the machine the process is on, empty for this one. It is what
 	// tells the two halves of exit detection apart: a pane here has an
 	// exec.Cmd to wait on, and a pane elsewhere has only its stream ending.
-	host   string
-	pty    paneIO
-	cmd    *exec.Cmd
+	host string
+	pty  paneIO
+	cmd  *exec.Cmd
+	// rawLog appends every byte the process writes, when TUIOS_PTY_LOG asks
+	// for it, and is nil otherwise. See pty_log.go.
+	rawLog *ptyLogger
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -1133,6 +1136,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		vtWriteChan:  make(chan vtChunk, 256),
 		onExit:       onExit,
 		debug:        debugEnabled(),
+		rawLog:       newPTYLogger(id),
 	}
 
 	// Per-PTY control-plane event emitter, pre-tagged with this window and PTY
@@ -3050,6 +3054,7 @@ func (p *PTY) readOutput() {
 		p.vtClosed = true
 		close(p.vtWriteChan)
 		p.streamMu.Unlock()
+		p.rawLog.Close()
 	}()
 
 	buf := make([]byte, 16*1024) // 16KB: matches typical PTY pipe buffer
@@ -3077,6 +3082,11 @@ func (p *PTY) readOutput() {
 		if n > 0 {
 			data := make([]byte, n)
 			copy(data, buf[:n])
+
+			// The raw stream, when TUIOS_PTY_LOG asks for it. Taken here,
+			// before anything reads or reorders it, so what lands in the file
+			// is what the program wrote.
+			p.rawLog.Write(data)
 
 			// Held across all three steps so a resize taken under the same
 			// lock cannot land between two of them: the daemon's emulator and

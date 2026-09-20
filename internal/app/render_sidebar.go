@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -514,6 +515,13 @@ func printableRunes(s string) string {
 // only strip again the moment the name was drawn.
 func printableRune(r rune, ascii bool) bool {
 	switch {
+	case r == utf8.RuneError:
+		// A byte that was not valid UTF-8. Ranging over a string turns each
+		// one into this, and it draws as a tofu box, so a single bad byte
+		// from a guest put a black diamond in the rail and the window frame.
+		// The emulator drops them when a title is set; this is the guard for
+		// every other route a name takes here.
+		return false
 	case r < 0x20 || (r >= 0x7f && r < 0xa0):
 		// C0/C1 controls.
 		return false

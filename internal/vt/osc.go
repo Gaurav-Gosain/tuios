@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -20,6 +21,33 @@ func (e *Emulator) handleOsc(cmd int, data []byte) {
 	}
 }
 
+// sanitiseTitle drops anything from a title that is not valid UTF-8.
+//
+// A title is chrome: it is drawn in a rail row, a window frame and a session
+// listing, and it is serialised into JSON. An invalid byte survives all of
+// that as a replacement character, which draws as a tofu box and marshals as
+// U+FFFD, so one bad byte from a guest turns into a black diamond in three
+// places at once.
+//
+// Dropped rather than replaced. There is nothing useful to put in its place,
+// and a title that is one character shorter is better than a title with a box
+// in it.
+func sanitiseTitle(b []byte) string {
+	if utf8.Valid(b) {
+		return string(b)
+	}
+	var out strings.Builder
+	out.Grow(len(b))
+	for len(b) > 0 {
+		r, size := utf8.DecodeRune(b)
+		if r != utf8.RuneError || size > 1 {
+			out.WriteRune(r)
+		}
+		b = b[size:]
+	}
+	return out.String()
+}
+
 func (e *Emulator) handleTitle(cmd int, data []byte) {
 	// Split on the first ';' only; titles may legitimately contain semicolons.
 	parts := bytes.SplitN(data, []byte{';'}, 2)
@@ -29,7 +57,7 @@ func (e *Emulator) handleTitle(cmd int, data []byte) {
 	}
 	switch cmd {
 	case 0: // Set window title and icon name
-		name := string(parts[1])
+		name := sanitiseTitle(parts[1])
 		e.iconName, e.title = name, name
 		if e.cb.Title != nil {
 			e.cb.Title(name)
@@ -38,13 +66,13 @@ func (e *Emulator) handleTitle(cmd int, data []byte) {
 			e.cb.IconName(name)
 		}
 	case 1: // Set icon name
-		name := string(parts[1])
+		name := sanitiseTitle(parts[1])
 		e.iconName = name
 		if e.cb.IconName != nil {
 			e.cb.IconName(name)
 		}
 	case 2: // Set window title
-		name := string(parts[1])
+		name := sanitiseTitle(parts[1])
 		e.title = name
 		if e.cb.Title != nil {
 			e.cb.Title(name)
