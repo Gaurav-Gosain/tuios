@@ -12,17 +12,18 @@ import (
 // for a reason a reader can check, so the walk below cannot quietly grow a
 // hole.
 var optionWalkSkips = map[string]string{
-	"keybindings":                  "maps of action to keys, not scalar paths",
-	"hooks":                        "a free-form map of event to command",
-	"daemon.agent_binaries":        "a list, which a value arriving as one string cannot spell",
-	"notifications.agent.sounds":   "file paths, which no accepted set or range can check",
-	"dock.left":                    "an ordered list of component names, not a scalar path",
-	"dock.center":                  "an ordered list of component names, not a scalar path",
-	"dock.right":                   "an ordered list of component names, not a scalar path",
-	"dock.custom":                  "a free-form map of component name to its command and refresh",
-	"hosts":                        "a map of host name to its address, which no single settable path can spell",
-	"tailscale":                    "file-plane config for what the hosts table suggests, read from the file by the two callers that use it, like [hosts] above",
-	"appearance.sidebar.agent_row": "a table of tokens, each with a look and an ordered rule list, which no single settable path can spell",
+	"keybindings":                      "maps of action to keys, not scalar paths",
+	"hooks":                            "a free-form map of event to command",
+	"daemon.agent_binaries":            "a list, which a value arriving as one string cannot spell",
+	"notifications.agent.sounds":       "file paths, which no accepted set or range can check",
+	"dock.left":                        "an ordered list of component names, not a scalar path",
+	"dock.center":                      "an ordered list of component names, not a scalar path",
+	"dock.right":                       "an ordered list of component names, not a scalar path",
+	"dock.custom":                      "a free-form map of component name to its command and refresh",
+	"hosts":                            "a map of host name to its address, which no single settable path can spell",
+	"tailscale":                        "file-plane config for what the hosts table suggests, read from the file by the two callers that use it, like [hosts] above",
+	"appearance.selection.flash_style": "retired. It named the shape of a sweeping band, and the sweep is gone; the key is kept so a config carrying one still loads, and nothing reads it",
+	"appearance.sidebar.agent_row":     "a table of tokens, each with a look and an ordered rule list, which no single settable path can spell",
 }
 
 // TestOptionRegistryCoversEveryScalarField is the guard that keeps the

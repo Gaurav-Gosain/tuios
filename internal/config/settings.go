@@ -263,8 +263,6 @@ type Settings struct {
 	CopyFlash      bool
 	CopyFlashMs    int
 	CopyFlashColor string
-	// CopyFlashStyle is the shape the sweep takes. See app.CopyFlashShapes.
-	CopyFlashStyle string
 
 	// HideScrollbar controls whether the window scrollbar is hidden.
 	// Automatically treated as true when BorderStyle == "hidden" since there is
@@ -562,7 +560,6 @@ func DefaultSettings() Settings {
 		CopyFlash:                   true,
 		CopyFlashMs:                 CopyFlashMsDefault,
 		CopyFlashColor:              DefaultCopyFlashColor,
-		CopyFlashStyle:              DefaultCopyFlashStyle,
 		HideScrollbar:               false,
 		WindowTitlePosition:         "bottom",
 		WindowTitleFormat:           "",
