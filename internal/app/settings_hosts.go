@@ -206,11 +206,26 @@ func (m *OS) tailnetAddrCandidates() []string {
 		// read its ssh config.
 		return nil
 	}
+	// The [tailscale] table is read here, on the caller's goroutine, and only
+	// the tailnet call is handed off.
+	//
+	// It used to be read inside the goroutine, which meant that goroutine
+	// resolving an XDG path: reading the environment, and creating the config
+	// directory if it was not there. Both of those raced with anything else
+	// changing the environment, which in a test binary is every test that
+	// points XDG at a directory of its own. Reading a small file on the
+	// goroutine that is already building a settings row costs nothing
+	// measurable, and the round trip that actually takes time is still off it.
+	opt, enabled := tailnetOptionsFromFile()
+	if !enabled {
+		return nil
+	}
+
 	m.tailnetMu.Lock()
 	defer m.tailnetMu.Unlock()
 	if time.Since(m.tailnetAskedAt) > tailnetCandidateTTL {
 		m.tailnetAskedAt = time.Now()
-		go m.refreshTailnetCandidates()
+		go m.refreshTailnetCandidates(opt)
 	}
 	if len(m.tailnetCandidates) > maxHostAddrCandidates {
 		return m.tailnetCandidates[:maxHostAddrCandidates]
@@ -224,23 +239,7 @@ func (m *OS) tailnetAddrCandidates() []string {
 // machine coming up on the tailnet, or an edit to the [tailscale] table, has to
 // reach the row without a restart, and asking once per frame would be a socket
 // call behind a description line nobody is waiting on.
-func (m *OS) refreshTailnetCandidates() {
-	// The [tailscale] table is file-plane config like [hosts], so it is read
-	// from the file rather than from the option registry. This runs on its own
-	// goroutine, which is the only reason reading a file here is fine.
-	opt := federation.DefaultTailnetOptions()
-	path, err := config.GetConfigPath()
-	if err != nil {
-		return
-	}
-	ts, err := config.TailscaleInFile(path)
-	if err != nil {
-		return
-	}
-	if !ts.TailscaleEnabled() {
-		return
-	}
-	opt = ts.TailnetOptions()
+func (m *OS) refreshTailnetCandidates(opt federation.TailnetOptions) {
 	ctx, cancel := context.WithTimeout(context.Background(), tailnetCandidateTimeout)
 	defer cancel()
 	addrs := federation.TailnetAddrs(ctx, opt)
@@ -248,6 +247,24 @@ func (m *OS) refreshTailnetCandidates() {
 	m.tailnetMu.Lock()
 	m.tailnetCandidates = addrs
 	m.tailnetMu.Unlock()
+}
+
+// tailnetOptionsFromFile is the [tailscale] table, and whether it asks for
+// tailnet machines to be offered at all.
+//
+// A config that cannot be found or will not parse gives the defaults rather
+// than nothing: the suggestion list is a convenience, and losing it as well
+// as everything else a broken config costs would be piling on.
+func tailnetOptionsFromFile() (federation.TailnetOptions, bool) {
+	path, err := config.GetConfigPath()
+	if err != nil {
+		return federation.DefaultTailnetOptions(), false
+	}
+	ts, err := config.TailscaleInFile(path)
+	if err != nil {
+		return federation.DefaultTailnetOptions(), false
+	}
+	return ts.TailnetOptions(), ts.TailscaleEnabled()
 }
 
 // tailnetCandidateTimeout bounds the one local call. It goes to a unix socket
