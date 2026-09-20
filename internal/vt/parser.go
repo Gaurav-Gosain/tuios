@@ -183,7 +183,42 @@ func (p *seqParser) advanceUtf8(b byte) parser.Action {
 	return parser.PrintAction
 }
 
+// inStringState reports whether the parser is collecting the payload of a
+// string sequence: OSC, DCS, SOS, PM or APC.
+func (p *seqParser) inStringState() bool {
+	switch p.state {
+	case parser.OscStringState, parser.DcsStringState,
+		parser.SosStringState, parser.PmStringState, parser.ApcStringState:
+		return true
+	default:
+		return false
+	}
+}
+
 func (p *seqParser) advance(b byte) parser.Action {
+	// A byte with the top bit set is payload while a string sequence is being
+	// collected, never a control.
+	//
+	// The transition table honours the 8-bit C1 controls, where 0x9C is a
+	// String Terminator. Those bytes also occur inside UTF-8: U+2733 is
+	// e2 9c b3, so its middle byte ended an OSC that had only just started.
+	// What that produced was an empty title and the rest of the payload
+	// printed at the cursor, which in a terminal UI is wherever that program
+	// last put it. A window title of "✳ Say hello in three words" therefore
+	// wrote "Say hello in three words" into the input box.
+	//
+	// That is the whole of the Dingbats block and a good deal besides:
+	// anything whose encoding contains 9c, including ✳ and ✅, and the same
+	// argument applies to 90, 9d and 9f. A UTF-8 terminal must not recognise
+	// the 8-bit forms at all, which is what xterm does and what the scanner
+	// for the other backend already says it does; see ghostty_scan.go. The
+	// ESC-prefixed forms and BEL still terminate, and those are what programs
+	// actually send.
+	if b >= 0x80 && p.inStringState() {
+		p.performAction(parser.PutAction, p.state, b)
+		return parser.PutAction
+	}
+
 	state, action := parser.Table.Transition(p.state, b)
 
 	// We need to clear the parser state if the state changes from EscapeState.

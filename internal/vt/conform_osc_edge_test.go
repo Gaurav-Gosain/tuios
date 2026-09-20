@@ -27,11 +27,26 @@ func TestConform_OSCTerminators(t *testing.T) {
 		{"BEL ends an OSC", "\x1b]0;hello\x07", "hello"},
 		{"seven-bit ST ends an OSC", "\x1b]0;hello\x1b\\", "hello"},
 
-		// The eight-bit ST is one byte. A guest that has asked for eight-bit
-		// controls sends it, and a parser that only knows ESC-backslash
-		// swallows the rest of the stream looking for a terminator that
-		// already went past.
-		{"eight-bit ST ends an OSC", "\x1b]0;hello\x9c", "hello"},
+		// The eight-bit ST does not end an OSC here, and that is a decision
+		// rather than an omission.
+		//
+		// It is one byte, 0x9C, and it is also the middle byte of U+2733 and
+		// of everything else whose encoding carries it. This terminal is
+		// always UTF-8, so the two uses cannot both be honoured: a title of
+		// "✳ Say hello in three words" ended its own OSC after one byte and
+		// printed the rest at the cursor, which in a terminal UI is wherever
+		// the program last put it. That was reported as text appearing inside
+		// an input box.
+		//
+		// xterm makes the same choice, honouring eight-bit controls only when
+		// it is not in UTF-8 mode, and the scanner for the other backend in
+		// this repository already says so in its own header.
+		//
+		// What is given up is real: a guest that sends a bare 0x9C to end a
+		// string will have that string run on until a BEL, an ESC-backslash,
+		// or the length cap. No program that expects to run in a UTF-8
+		// terminal sends one, because it is ambiguous for them too.
+		{"eight-bit ST does not end an OSC in a UTF-8 terminal", "\x1b]0;hello\x9c", ""},
 
 		// An OSC with no payload separator is still a command. Setting an
 		// empty title is a thing programs do on exit.
