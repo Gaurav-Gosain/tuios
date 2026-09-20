@@ -486,6 +486,36 @@ type Settings struct {
 	// the floor.
 	ScrollColumnMax int
 
+	// ZoomSize is how much of the content region a zoomed pane takes, as a
+	// percent. 100, the default, is the whole of it.
+	//
+	// Below 100 the layout around the pane stays on screen at the edges, which
+	// is the scrolling layout's peek in both directions at once: a zoom that
+	// still shows you what you are not looking at. The box is pulled toward the
+	// pane's own corner rather than centred, so the neighbours that show are the
+	// ones it actually has.
+	//
+	// Read it through GetZoomSize, never directly.
+	ZoomSize int
+
+	// WindowButtonZoom draws the third title bar control on a tiled pane, where
+	// it toggles the zoom.
+	//
+	// A tiled bar used to carry two: there was nothing a maximize could mean
+	// when the tiler owns the rectangle. There is now, because zoom means it,
+	// and a tiled pane is exactly where a zoom is worth reaching for. The green
+	// disc is the control everybody already knows.
+	WindowButtonZoom bool
+
+	// ZoomAnimation slides a pane between its tile and the zoom box instead of
+	// swapping the two in one frame.
+	//
+	// Zoom used to be a cut: the pane was at its tile in one frame and filling
+	// the region in the next, with nothing to say which pane had grown. That is
+	// worst exactly when it matters, which is a zoom that moves from one pane to
+	// another, where two panes change at once and neither says so.
+	ZoomAnimation bool
+
 	// DimUnfocused is how far an unfocused pane's content is carried toward the
 	// pane's own ground, as a percentage. Zero, the default, draws every pane's
 	// content the same.
@@ -617,6 +647,9 @@ func DefaultSettings() Settings {
 		MasterRatioPercent:          MasterRatioDefault,
 		ScrollColumnWidth:           ScrollColumnWidthDefault,
 		ScrollColumnMax:             ScrollColumnWidthMax,
+		ZoomSize:                    ZoomSizeDefault,
+		ZoomAnimation:               true,
+		WindowButtonZoom:            true,
 		DimUnfocused:                0,
 		ClockFormat:                 "",
 		ZoomMaxWidth:                0,

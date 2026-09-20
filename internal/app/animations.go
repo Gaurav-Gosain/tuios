@@ -60,18 +60,10 @@ func (m *OS) CompleteWindowAnimations(windowIndex int) {
 	for i := len(m.Animations) - 1; i >= 0; i-- {
 		anim := m.Animations[i]
 		if anim.Window == window {
-			// Snap window to final position immediately
-			anim.Window.X = anim.EndX
-			anim.Window.Y = anim.EndY
-			anim.Window.Width = anim.EndWidth
-			anim.Window.Height = anim.EndHeight
-			// Invalidate the cached layer captured at the mid-animation position,
-			// matching animation.Update. Without this the window renders at its
-			// stale position until an unrelated event dirties it.
-			anim.Window.MarkPositionDirty()
-
-			// Mark as complete and remove
-			anim.Complete = true
+			// Landed through the animation's own last step, so the pane gets
+			// the state its type leaves behind and its guest gets the one
+			// resize, exactly as running the slide out would have given it.
+			anim.Finish()
 			m.Animations = slices.Delete(m.Animations, i, i+1)
 		}
 	}
@@ -92,20 +84,9 @@ func (m *OS) CancelAnimationsForWindow(w *terminal.Window) {
 func (m *OS) CompleteAllAnimations() {
 	// Complete all animations by snapping windows to their final positions
 	for i := len(m.Animations) - 1; i >= 0; i-- {
-		anim := m.Animations[i]
-
-		// Snap window to final position immediately
-		anim.Window.X = anim.EndX
-		anim.Window.Y = anim.EndY
-		anim.Window.Width = anim.EndWidth
-		anim.Window.Height = anim.EndHeight
-		// Invalidate the cached layer captured at the mid-animation position,
-		// matching animation.Update. Without this the window renders at its
-		// stale position until an unrelated event dirties it.
-		anim.Window.MarkPositionDirty()
-
-		// Mark as complete
-		anim.Complete = true
+		// See CompleteWindowAnimations: landing goes through the animation's
+		// own last step so the guest is resized.
+		m.Animations[i].Finish()
 	}
 
 	// Clear all animations

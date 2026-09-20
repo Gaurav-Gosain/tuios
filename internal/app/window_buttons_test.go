@@ -19,6 +19,16 @@ import (
 // a column, so a press on the corner glyph closed the window.
 
 // withButtonStyle runs fn under one control style and restores the global.
+// withTiledZoom runs fn with appearance.window_button_zoom set, which decides
+// whether a tiled pane's bar carries two controls or three.
+func withTiledZoom(t *testing.T, on bool, fn func()) {
+	t.Helper()
+	prev := config.Global.WindowButtonZoom
+	config.Global.WindowButtonZoom = on
+	defer func() { config.Global.WindowButtonZoom = prev }()
+	fn()
+}
+
 func withButtonStyle(t *testing.T, style string, fn func()) {
 	t.Helper()
 	prev := config.Global.WindowButtonStyle
@@ -51,58 +61,64 @@ func TestWindowButtonRectsCoverTheGlyphsTheyWereDrawnFor(t *testing.T) {
 	for _, style := range config.WindowButtonStyles {
 		for _, position := range config.WindowButtonPositions {
 			for _, tiling := range []bool{false, true} {
-				for _, width := range []int{20, 40, 78, 200} {
-					for _, originX := range []int{0, 7, 133} {
-						withButtonPosition(t, position, func() {
-							withButtonStyle(t, style, func() {
-								win := &terminal.Window{ID: "w", X: originX, Y: 4, Width: width, Height: 10, Workspace: 1}
-								m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
-								cols, rects := drawTopBorder(t, m, win, tiling)
+				for _, tiledZoom := range []bool{false, true} {
+					for _, width := range []int{20, 40, 78, 200} {
+						for _, originX := range []int{0, 7, 133} {
+							withButtonPosition(t, position, func() {
+								withButtonStyle(t, style, func() {
+									withTiledZoom(t, tiledZoom, func() {
+										win := &terminal.Window{ID: "w", X: originX, Y: 4, Width: width, Height: 10, Workspace: 1}
+										m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
+										cols, rects := drawTopBorder(t, m, win, tiling)
 
-								wantControls := 3
-								if tiling {
-									wantControls = 2
-								}
-								if len(rects) != wantControls {
-									t.Fatalf("%s/%s tiling=%v width=%d: recorded %d controls, want %d",
-										style, position, tiling, width, len(rects), wantControls)
-								}
-
-								seen := map[WindowButtonAction]bool{}
-								for _, r := range rects {
-									if seen[r.Action] {
-										t.Fatalf("%s/%s: action %v recorded twice", style, position, r.Action)
-									}
-									seen[r.Action] = true
-									if r.Y != win.Y {
-										t.Errorf("%s/%s: %v recorded on row %d, want the title row %d",
-											style, position, r.Action, r.Y, win.Y)
-									}
-									// Every recorded column has to exist in the
-									// row that was drawn, and both corner cells
-									// are border glyphs no control may claim.
-									first, last := win.X+1, win.X+len(cols)-1
-									if r.X < first || r.X+r.W > last {
-										t.Errorf("%s/%s tiling=%v width=%d: %v spans [%d,%d), outside the drawn row [%d,%d)",
-											style, position, tiling, width, r.Action, r.X, r.X+r.W, first, last)
-										return
-									}
-									// And it has to contain the glyph it stands
-									// for: a span of nothing but padding is a
-									// control the user cannot see but can press.
-									ink := false
-									for x := r.X; x < r.X+r.W; x++ {
-										if cols[x-win.X] != ' ' {
-											ink = true
+										// Three, unless a tiled bar has been told to
+										// leave the zoom off.
+										wantControls := 3
+										if tiling && !tiledZoom {
+											wantControls = 2
 										}
-									}
-									if !ink {
-										t.Errorf("%s/%s tiling=%v width=%d: %v spans [%d,%d), which is blank",
-											style, position, tiling, width, r.Action, r.X, r.X+r.W)
-									}
-								}
+										if len(rects) != wantControls {
+											t.Fatalf("%s/%s tiling=%v width=%d: recorded %d controls, want %d",
+												style, position, tiling, width, len(rects), wantControls)
+										}
+
+										seen := map[WindowButtonAction]bool{}
+										for _, r := range rects {
+											if seen[r.Action] {
+												t.Fatalf("%s/%s: action %v recorded twice", style, position, r.Action)
+											}
+											seen[r.Action] = true
+											if r.Y != win.Y {
+												t.Errorf("%s/%s: %v recorded on row %d, want the title row %d",
+													style, position, r.Action, r.Y, win.Y)
+											}
+											// Every recorded column has to exist in the
+											// row that was drawn, and both corner cells
+											// are border glyphs no control may claim.
+											first, last := win.X+1, win.X+len(cols)-1
+											if r.X < first || r.X+r.W > last {
+												t.Errorf("%s/%s tiling=%v width=%d: %v spans [%d,%d), outside the drawn row [%d,%d)",
+													style, position, tiling, width, r.Action, r.X, r.X+r.W, first, last)
+												return
+											}
+											// And it has to contain the glyph it stands
+											// for: a span of nothing but padding is a
+											// control the user cannot see but can press.
+											ink := false
+											for x := r.X; x < r.X+r.W; x++ {
+												if cols[x-win.X] != ' ' {
+													ink = true
+												}
+											}
+											if !ink {
+												t.Errorf("%s/%s tiling=%v width=%d: %v spans [%d,%d), which is blank",
+													style, position, tiling, width, r.Action, r.X, r.X+r.W)
+											}
+										}
+									})
+								})
 							})
-						})
+						}
 					}
 				}
 			}
@@ -202,19 +218,33 @@ func TestPillRectsMatchTheDocumentedOffsets(t *testing.T) {
 // split out so the style and the position each get their own scope around it.
 func runPillOffsetCases(t *testing.T) {
 	t.Helper()
+	// tiledZoom says whether a tiled bar carries the zoom control. It decides
+	// which set of offsets the minimize sits at: the two-control bar has its
+	// own pair, and the three-control bar uses the same ones a floating window
+	// has always used, because it is the same three controls.
 	for _, tc := range []struct {
-		tiling              bool
+		tiling, tiledZoom   bool
 		action              WindowButtonAction
 		wantLeft, wantRight int
 	}{
-		{false, WindowButtonClose, config.CloseButtonLeft, config.CloseButtonRight},
-		{true, WindowButtonClose, config.CloseButtonLeft, config.CloseButtonRight},
-		{false, WindowButtonZoom, config.MaximizeButtonLeft, config.MaximizeButtonRight},
-		{true, WindowButtonMinimize, config.MinimizeButtonLeftTiling, config.MinimizeButtonRightTiling},
+		{false, false, WindowButtonClose, config.CloseButtonLeft, config.CloseButtonRight},
+		{true, false, WindowButtonClose, config.CloseButtonLeft, config.CloseButtonRight},
+		{true, true, WindowButtonClose, config.CloseButtonLeft, config.CloseButtonRight},
+		{false, false, WindowButtonZoom, config.MaximizeButtonLeft, config.MaximizeButtonRight},
+		{true, true, WindowButtonZoom, config.MaximizeButtonLeft, config.MaximizeButtonRight},
+		{false, false, WindowButtonMinimize, config.MinimizeButtonLeftNonTiling, config.MinimizeButtonRightNonTiling},
+		{true, true, WindowButtonMinimize, config.MinimizeButtonLeftNonTiling, config.MinimizeButtonRightNonTiling},
+		{true, false, WindowButtonMinimize, config.MinimizeButtonLeftTiling, config.MinimizeButtonRightTiling},
 	} {
 		win := &terminal.Window{ID: "w", X: 11, Y: 2, Width: 50, Height: 10, Workspace: 1}
-		m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
-		cols, rects := drawTopBorder(t, m, win, tc.tiling)
+		var cols []rune
+		var rects []WindowButtonRect
+		withTiledZoom(t, tc.tiledZoom, func() {
+			// The model is built inside, because it takes its own copy of the
+			// settings and the setting above has to be in it.
+			m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
+			cols, rects = drawTopBorder(t, m, win, tc.tiling)
+		})
 		end := win.X + len(cols) // one past the corner, which offset -1 names
 
 		var got WindowButtonRect
@@ -225,14 +255,14 @@ func runPillOffsetCases(t *testing.T) {
 		}
 		left, right := got.X-end, got.X+got.W-1-end
 		if left > tc.wantLeft || right < tc.wantRight {
-			t.Errorf("tiling=%v %v was recorded on offsets %d..%d, which does not contain the documented %d..%d",
-				tc.tiling, tc.action, left, right, tc.wantLeft, tc.wantRight)
+			t.Errorf("tiling=%v tiledZoom=%v %v was recorded on offsets %d..%d, which does not contain the documented %d..%d",
+				tc.tiling, tc.tiledZoom, tc.action, left, right, tc.wantLeft, tc.wantRight)
 		}
 		// And it may not spill past the documented span into the next
 		// control or the corner, which is the drift these replaced.
 		if left < tc.wantLeft-1 || right > tc.wantRight {
-			t.Errorf("tiling=%v %v was recorded on offsets %d..%d, wider than the %d..%d it was drawn on",
-				tc.tiling, tc.action, left, right, tc.wantLeft, tc.wantRight)
+			t.Errorf("tiling=%v tiledZoom=%v %v was recorded on offsets %d..%d, wider than the %d..%d it was drawn on",
+				tc.tiling, tc.tiledZoom, tc.action, left, right, tc.wantLeft, tc.wantRight)
 		}
 	}
 }

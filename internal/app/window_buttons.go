@@ -14,14 +14,31 @@ import (
 // click handler never has to know which control sits where.
 type WindowButtonAction int
 
-// The controls a title bar can carry. A tiled window has no zoom, so its bar
-// carries two.
+// The controls a title bar can carry.
 const (
 	WindowButtonNone WindowButtonAction = iota
 	WindowButtonClose
 	WindowButtonMinimize
 	WindowButtonZoom
 )
+
+// windowButtonsHaveZoom reports whether a window's bar carries the third
+// control.
+//
+// A tiled window used to have none: there was nothing for a maximize to mean
+// when the tiler owns the rectangle. There is now, because zoom means it, and a
+// tiled pane is exactly where a zoom is worth reaching for. The green disc is
+// the control everybody already knows, so it is the one that should do it.
+//
+// appearance.window_button_zoom turns it off for anyone who would rather a
+// tiled bar carried two.
+func windowButtonsHaveZoom(isTiling bool, s *config.Settings) bool {
+	if !isTiling {
+		// A floating window's maximize has always been there.
+		return true
+	}
+	return s.WindowButtonZoom
+}
 
 // WindowButtonRect is where one control was drawn on the last frame: the row,
 // the span of columns it took, and what pressing it does.
@@ -189,7 +206,7 @@ func windowPillPieces(col color.Color, isTiling bool, s *config.Settings) []wind
 		{WindowButtonNone, pillCap(s.GetWindowPillLeft())},
 		{WindowButtonMinimize, glyph(s.GetWindowButtonMinimize())},
 	}
-	if !isTiling {
+	if windowButtonsHaveZoom(isTiling, s) {
 		pieces = append(pieces, windowButtonPiece{WindowButtonZoom, glyph(s.GetWindowButtonMaximize())})
 	}
 	return append(pieces,
@@ -217,7 +234,7 @@ func (m *OS) windowDotPieces(col color.Color, window *terminal.Window, isTiling 
 	hovered := m.windowButtonHover == window.ID
 
 	actions := []WindowButtonAction{WindowButtonClose, WindowButtonMinimize, WindowButtonZoom}
-	if isTiling {
+	if !windowButtonsHaveZoom(isTiling, &m.Settings) {
 		actions = actions[:2]
 	}
 

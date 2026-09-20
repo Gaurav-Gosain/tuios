@@ -213,6 +213,8 @@ type AppearanceConfig struct {
 	GlobalSession          *bool  `toml:"global_session"`            // Offer a session that holds panes from several machines (default: true)
 	NiriClickReveals       *bool  `toml:"niri_click_reveals"`        // Bring a clicked column fully on screen in the scrolling layout (default: true)
 	NiriHoverReveals       *bool  `toml:"niri_hover_reveals"`        // With focus-follows-mouse on, bring the hovered column fully on screen (default: true)
+	ZoomAnimation          *bool  `toml:"zoom_animation"`            // Slide a pane between its tile and the zoom box (default: true)
+	WindowButtonZoom       *bool  `toml:"window_button_zoom"`        // Carry the zoom control on a tiled pane's title bar (default: true)
 	SidebarGitDirty        *bool  `toml:"git_dirty"`                 // Count changed and untracked paths in the rail's git section (default: true)
 	Glyphs                 string `toml:"glyphs"`                    // Chrome glyph set: default, box, heavy, ascii, or one from ~/.config/tuios/glyphs
 	Gap                    int    `toml:"gap"`                       // Cells of empty space kept between neighbouring tiled panes (default: 0)
@@ -223,6 +225,7 @@ type AppearanceConfig struct {
 	MasterRatio       int    `toml:"master_ratio"`        // Master pane width in the master-stack layout, percent of the screen (default: 50)
 	ScrollColumnWidth int    `toml:"scroll_column_width"` // New column width in the scrolling layout, percent of the screen (default: 55)
 	ScrollColumnMax   int    `toml:"scroll_column_max"`   // Highest that width may be set to, percent of the screen (default: 90, up to 100)
+	ZoomSize          int    `toml:"zoom_size"`           // How much of the screen a zoomed pane takes, percent (default: 100)
 	PanelPadding      int    `toml:"panel_padding"`       // Columns of surface padding inside every overlay panel (default: 2)
 	ClockFormat       string `toml:"clock_format"`        // Go time layout the clock overlay is drawn with (default: 15:04:05)
 	DimUnfocused      int    `toml:"dim_unfocused"`       // Percent an unfocused pane's content is carried toward its own ground (default: 0)
@@ -578,6 +581,7 @@ func DefaultConfig() *UserConfig {
 			MasterRatio:              MasterRatioDefault,
 			ScrollColumnWidth:        ScrollColumnWidthDefault,
 			ScrollColumnMax:          ScrollColumnWidthMax,
+			ZoomSize:                 ZoomSizeDefault,
 			NiriScrollCells:          NiriScrollCellsDefault,
 			PrefixRepeatTime:         &defaultPrefixRepeatTime,
 			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
@@ -1497,6 +1501,12 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if cfg.Appearance.NiriHoverReveals != nil {
 		s.NiriHoverReveals = *cfg.Appearance.NiriHoverReveals
 	}
+	if cfg.Appearance.ZoomAnimation != nil {
+		s.ZoomAnimation = *cfg.Appearance.ZoomAnimation
+	}
+	if cfg.Appearance.WindowButtonZoom != nil {
+		s.WindowButtonZoom = *cfg.Appearance.WindowButtonZoom
+	}
 	if cfg.Appearance.Scrollbar.Style != "" {
 		s.ScrollbarStyle = cfg.Appearance.Scrollbar.Style
 	}
@@ -1566,6 +1576,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.ClockFormat = cfg.Appearance.ClockFormat
 	s.PaneGap = min(max(cfg.Appearance.Gap, 0), PaneGapMax)
 	s.MasterRatioPercent = clampPercent(cfg.Appearance.MasterRatio, MasterRatioMin, MasterRatioMax, MasterRatioDefault)
+	s.ZoomSize = clampPercent(cfg.Appearance.ZoomSize, ZoomSizeMin, ZoomSizeMax, ZoomSizeDefault)
 	s.ScrollColumnMax = clampPercent(cfg.Appearance.ScrollColumnMax, ScrollColumnWidthMin, ScrollColumnWidthCeiling, ScrollColumnWidthMax)
 	s.ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, s.ScrollColumnMax, ScrollColumnWidthDefault)
 	s.DimUnfocused = min(max(cfg.Appearance.DimUnfocused, 0), DimUnfocusedMax)

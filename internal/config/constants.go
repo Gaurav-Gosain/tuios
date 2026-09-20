@@ -443,6 +443,30 @@ const (
 // Runtime Configuration
 // =============================================================================
 
+// The zoom box's size as a percent of the content region, and its range.
+//
+// 100 is the whole region, which is what zoom has always been. Below it the
+// pane keeps the middle and the layout around it stays on screen at the edges,
+// the way the scrolling layout leaves the next column peeking in, except in
+// both directions at once: you can see what you are not looking at.
+const (
+	ZoomSizeMin     = 50
+	ZoomSizeMax     = 100
+	ZoomSizeDefault = 100
+)
+
+// GetZoomSize is the zoom box's size as a percent of the content region.
+//
+// A value outside the range, including the zero a Settings built by hand
+// carries, reads as the full region. Nothing that computes the box may read the
+// field directly, or a hand-built model would zoom to half a screen.
+func (s *Settings) GetZoomSize() int {
+	if s.ZoomSize < ZoomSizeMin || s.ZoomSize > ZoomSizeMax {
+		return ZoomSizeDefault
+	}
+	return s.ZoomSize
+}
+
 // GetScrollColumnMax is the highest a scrolling column's width may be set to,
 // as a percent of the screen.
 //

@@ -308,6 +308,23 @@ var optionSpecs = []Option{
 		Percent: true,
 	},
 	{
+		Path: "appearance.zoom_size", Type: OptionInt, Section: "appearance",
+		Description: "How much of the screen a zoomed pane takes, as a percent. Below 100 the layout around it stays visible at the edges.",
+		Default:     strconv.Itoa(ZoomSizeDefault),
+		Min:         ZoomSizeMin, Max: ZoomSizeMax,
+		Percent: true,
+	},
+	{
+		Path: "appearance.window_button_zoom", Type: OptionBool, Section: "appearance",
+		Description: "Carry the third title bar control on a tiled pane, where it toggles the zoom",
+		Default:     "true",
+	},
+	{
+		Path: "appearance.zoom_animation", Type: OptionBool, Section: "appearance",
+		Description: "Slide a pane between its tile and the zoom box instead of swapping the two in one frame",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.scroll_column_max", Type: OptionInt, Section: "appearance",
 		Description: "Highest a column's width may be set to in the scrolling layout, as a percent. 100 lets a column fill the screen, at the cost of the next one peeking in at the edge.",
 		Default:     strconv.Itoa(ScrollColumnWidthMax),

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
+	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
 // MinimizeWindow minimizes the window at the specified index.
@@ -143,6 +144,16 @@ func (m *OS) toggleZoom() {
 	if fw.Zoomed {
 		// Restore from zoom
 		fw.Zoomed = false
+		// The slide back to the tile, when it is on. The pane is left where it
+		// is and the snap walks it home, landing it and resizing the guest once
+		// at the destination, exactly as the way in does.
+		if m.animateToRect(fw, fw.PreZoomX, fw.PreZoomY, fw.PreZoomWidth, fw.PreZoomHeight) {
+			if m.AutoTiling {
+				m.TileAllWindows()
+			}
+			m.MarkAllDirty()
+			return
+		}
 		fw.X = fw.PreZoomX
 		fw.Y = fw.PreZoomY
 		fw.Width = fw.PreZoomWidth
@@ -175,7 +186,7 @@ func (m *OS) toggleZoom() {
 		fw.PreZoomHeight = fw.Height
 		fw.Zoomed = true
 
-		m.applyZoomRect(fw, false)
+		m.applyZoomRectAnimated(fw, false, true)
 		if retireRetile {
 			// A pane the retirement above handed back to the layout. Retiling
 			// while a pane is zoomed is safe now and was not before: the tiler
@@ -229,15 +240,71 @@ func (m *OS) zoomedWindow() *terminal.Window {
 // this box that the session does not settle, and settling it is a job of its
 // own.
 func (m *OS) zoomRect() (x, y, w, h int) {
+	return m.zoomRectFor(nil)
+}
+
+// zoomRectFor is zoomRect for a named pane, which is what lets a box smaller
+// than the region sit on the side of the screen that pane came from.
+//
+// win may be nil, which centres the box. Every caller that has the pane should
+// pass it: the anchoring is the whole point of a box that does not fill the
+// region, and a centred one shows empty margins on the sides where the pane had
+// no neighbours.
+func (m *OS) zoomRectFor(win *terminal.Window) (x, y, w, h int) {
 	topMargin := m.GetTopMargin()
 	leftMargin := m.GetLeftMargin()
 	contentWidth := m.GetContentWidth()
-	zoomWidth := contentWidth
+	contentHeight := m.GetUsableHeight()
+
+	zoomWidth, zoomHeight := contentWidth, contentHeight
+	// appearance.zoom_size keeps the layout around the pane on screen: the
+	// scrolling layout's peek, in both directions at once.
+	if pct := m.Settings.GetZoomSize(); pct < 100 {
+		zoomWidth = max(contentWidth*pct/100, 1)
+		zoomHeight = max(contentHeight*pct/100, 1)
+	}
 	// If ZoomMaxWidth is set, cap width and center horizontally
-	if m.Settings.ZoomMaxWidth > 0 && m.Settings.ZoomMaxWidth < contentWidth {
+	if m.Settings.ZoomMaxWidth > 0 && m.Settings.ZoomMaxWidth < zoomWidth {
 		zoomWidth = m.Settings.ZoomMaxWidth
 	}
-	return leftMargin + (contentWidth-zoomWidth)/2, topMargin, zoomWidth, m.GetUsableHeight()
+
+	x = leftMargin + (contentWidth-zoomWidth)/2
+	y = topMargin + (contentHeight-zoomHeight)/2
+	if win != nil {
+		// The rectangle the pane came from, not the one it is in. Once it is
+		// zoomed its own rectangle is the box, so anchoring on that would move
+		// the box a little further into the corner every time it was
+		// recomputed, and this runs on every sync and every resize.
+		ax, ay, aw, ah := win.X, win.Y, win.Width, win.Height
+		if win.Zoomed && win.PreZoomWidth > 0 && win.PreZoomHeight > 0 {
+			ax, ay, aw, ah = win.PreZoomX, win.PreZoomY, win.PreZoomWidth, win.PreZoomHeight
+		}
+		x = zoomAnchor(ax, aw, leftMargin, contentWidth, zoomWidth)
+		y = zoomAnchor(ay, ah, topMargin, contentHeight, zoomHeight)
+	}
+	return x, y, zoomWidth, zoomHeight
+}
+
+// zoomAnchor places a zoom box of size box along one axis so it stays over the
+// pane it came from, clamped inside the content region.
+//
+// The box keeps the pane's own centre where it can. Zoom the top right pane of
+// a four-way split and the box goes to the top right, so what peeks in is the
+// pane to its left and the pane below it, which are the two it actually has.
+// Centring the box instead would leave a margin above and to the right showing
+// nothing at all, and the same margin on the other sides covering exactly the
+// neighbours worth seeing.
+//
+// At full size origin+span == region, so every term cancels and the clamp
+// returns the region's own origin. Nothing changes for a zoom that fills the
+// screen.
+func zoomAnchor(paneStart, paneSpan, regionStart, regionSpan, box int) int {
+	if box >= regionSpan {
+		return regionStart
+	}
+	// Centre the box on the pane, then pull it back inside the region.
+	want := paneStart + paneSpan/2 - box/2
+	return min(max(want, regionStart), regionStart+regionSpan-box)
 }
 
 // applyZoomRect puts a zoomed pane in this client's zoom box and tells its
@@ -251,15 +318,32 @@ func (m *OS) zoomRect() (x, y, w, h int) {
 // given the box visually and the real announcement is left for the release, the
 // same bargain every tiled pane gets.
 func (m *OS) applyZoomRect(w *terminal.Window, deferring bool) {
+	m.applyZoomRectAnimated(w, deferring, false)
+}
+
+// applyZoomRectAnimated is applyZoomRect with a say in whether the move is
+// animated.
+//
+// Only a real transition animates. This also runs on every sync and every
+// resize to keep the box correct, and sliding the pane on those would put the
+// whole region in motion whenever anything at all changed.
+func (m *OS) applyZoomRectAnimated(w *terminal.Window, deferring, animate bool) {
 	// A snap still in flight owns this pane's rectangle and stamps its own back
 	// on the next tick, so it is retired before the box is set - the same thing
 	// toggleZoom does before it zooms, and the same thing ApplyBSPLayout does
 	// before it places a pane. Retired even when the box already matches: the
 	// snap is heading somewhere else regardless.
 	m.CancelSnapAnimation(w)
-	x, y, width, height := m.zoomRect()
+	x, y, width, height := m.zoomRectFor(w)
 	if w.X == x && w.Y == y && w.Width == width && w.Height == height {
 		return
+	}
+	if animate && !deferring {
+		if anim := m.zoomAnimation(w, x, y, width, height); anim != nil {
+			m.Animations = append(m.Animations, anim)
+			w.InvalidateCache()
+			return
+		}
 	}
 	w.X, w.Y = x, y
 	w.InvalidateCache()
@@ -270,6 +354,64 @@ func (m *OS) applyZoomRect(w *terminal.Window, deferring bool) {
 		return
 	}
 	w.Resize(width, height)
+}
+
+// zoomCoversRegion reports whether the zoomed pane's rectangle fills the content
+// region, so nothing behind it could show through.
+//
+// It is false for a zoom sized under 100 percent, which leaves the layout
+// showing at the edges on purpose, and false while a zoom is sliding, because
+// the pane has not reached the box yet. The render draws the rest of the layout
+// in both cases. A nil pane is not a zoom and covers nothing.
+func (m *OS) zoomCoversRegion(w *terminal.Window) bool {
+	if w == nil {
+		return false
+	}
+	for _, a := range m.Animations {
+		if a != nil && a.Window == w && !a.Complete {
+			return false
+		}
+	}
+	return w.X <= m.GetLeftMargin() && w.Y <= m.GetTopMargin() &&
+		w.Width >= m.GetContentWidth() && w.Height >= m.GetUsableHeight()
+}
+
+// zoomAnimation is the slide between a pane's tile and a zoom box, or nil when
+// the pane should simply be put there.
+//
+// Zoom used to be a cut: the pane was at its tile in one frame and filling the
+// region in the next, with nothing to say which pane had grown. That reads
+// worst exactly where it matters most, which is a zoom moving from one pane to
+// another: two panes change at once and neither says which way.
+//
+// It is the same snap every other pane movement uses, so it lands the same way,
+// resizes the guest once at the destination, and is retired by the same paths
+// that retire any other.
+func (m *OS) zoomAnimation(w *terminal.Window, x, y, width, height int) *ui.Animation {
+	if !m.Settings.ZoomAnimation {
+		return nil
+	}
+	dur := m.Settings.GetFastAnimationDuration()
+	if dur <= 0 {
+		return nil
+	}
+	return ui.NewSnapAnimation(w, x, y, width, height, dur)
+}
+
+// animateToRect slides a pane to a rectangle it is being put back at, which is
+// the unzoom half. It reports whether it armed an animation; when it did not,
+// the caller places the pane itself.
+func (m *OS) animateToRect(w *terminal.Window, x, y, width, height int) bool {
+	if w.X == x && w.Y == y && w.Width == width && w.Height == height {
+		return false
+	}
+	anim := m.zoomAnimation(w, x, y, width, height)
+	if anim == nil {
+		return false
+	}
+	m.Animations = append(m.Animations, anim)
+	w.InvalidateCache()
+	return true
 }
 
 // applyZoomState puts this client's own geometry behind the zoom flags a sync

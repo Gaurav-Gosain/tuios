@@ -69,6 +69,9 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	// window drew the whole tiled layout underneath a pane somebody else had
 	// zoomed. See zoomedWindow.
 	zoomedWindow := m.zoomedWindow()
+	// Whether that pane hides everything behind it, which decides whether the
+	// rest of the layout is drawn at all. See the skip in the loop below.
+	zoomCovers := m.zoomCoversRegion(zoomedWindow)
 
 	// Precompute the set of windows with an active (incomplete) animation once
 	// per frame instead of rescanning m.Animations for every window, which was
@@ -96,13 +99,20 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			continue
 		}
 
-		// When any window is zoomed, only render the zoomed window - and the
+		// When a zoomed window covers the region, only render it - and the
 		// popups over it. A popup covers a rectangle in the middle of the
 		// region and closes when its command exits, so it has to be drawn over
 		// whatever is underneath or it runs where nobody can see or type into
 		// it. That is the whole of what the skip is for: a zoomed pane owns the
 		// region and no tiled pane may show through it.
-		if zoomedWindow != nil && window != zoomedWindow && !window.IsPopup {
+		//
+		// It only owns the region when it fills it. A zoom sized under 100
+		// percent deliberately leaves the layout showing at the edges, and a
+		// zoom part way through its slide has not covered it yet, so in both
+		// cases the panes underneath are drawn and the zoomed one is lifted
+		// over them. Skipping them there left the pane growing over a blank
+		// screen, which is the one thing the smaller box exists to avoid.
+		if zoomedWindow != nil && window != zoomedWindow && !window.IsPopup && zoomCovers {
 			continue
 		}
 
@@ -300,6 +310,14 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 // or an overlay. A window in motion that draws its own border goes to
 // ZIndexAnimating, above the tiled panes it is sliding across.
 func windowLayerZ(window *terminal.Window, animating bool) int {
+	// A zoomed pane is drawn over the layout whenever the layout is drawn at
+	// all, which is a box smaller than the region or a zoom part way through
+	// its slide. Its own Z counts from ZIndexBase like any tiled pane's, so
+	// without this the panes it is supposed to be covering draw on top of it
+	// whenever their Z happened to be higher.
+	if window.Zoomed {
+		return config.ZIndexAnimating
+	}
 	if window.IsFloating {
 		// A floating window stays in its band while it moves. Lifting it to
 		// ZIndexAnimating used to drop a dragged float under the other floats,
