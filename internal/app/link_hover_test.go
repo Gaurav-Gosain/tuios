@@ -223,3 +223,79 @@ func TestUnfocusedPaneLeavesTheFastPathToUnderline(t *testing.T) {
 		t.Errorf("an unfocused pane served the fast path and drew no underline:\n%q", out)
 	}
 }
+
+// TestLinkHoverFollowsASoftWrap checks that a URL the guest broke across rows
+// resolves whole, from either half.
+//
+// The pane's grid is 58 cells wide, so the prefix below puts the URL's tail on
+// the next row with nothing between the halves. Hovering the first half used to
+// offer the truncated address, and hovering the second half found no link at
+// all, which is what `cat README.md` looks like on any URL longer than the pane.
+func TestLinkHoverFollowsASoftWrap(t *testing.T) {
+	const url = "https://img.shields.io/github/commit-activity/w/Gaurav-Gosain/tuios"
+	// Fill the row up to the URL so the break lands inside it.
+	const lead = "src="
+	_, win := linkTestOS(t, lead+url)
+
+	grid := win.Terminal.Width()
+	if len(lead)+len(url) <= grid {
+		t.Fatalf("the URL fits on one row (%d cells in a %d cell grid), so this test checks nothing",
+			len(lead)+len(url), grid)
+	}
+
+	// A cell in the first half, and one in the second.
+	for _, probe := range []struct {
+		name string
+		x, y int
+	}{
+		{"first half", len(lead) + 4, 0},
+		{"second half", 2, 1},
+	} {
+		link, ok := resolvePaneLink(win, probe.x, probe.y, &config.Global)
+		if !ok {
+			t.Errorf("%s: no link resolved", probe.name)
+			continue
+		}
+		if link.URL != url {
+			t.Errorf("%s: resolved %q, want %q", probe.name, link.URL, url)
+		}
+		if link.Y0 != 0 || link.X0 != len(lead) {
+			t.Errorf("%s: run starts at (%d, %d), want (%d, 0)", probe.name, link.X0, link.Y0, len(lead))
+		}
+		if link.Y1 != 1 {
+			t.Errorf("%s: run ends on row %d, want row 1", probe.name, link.Y1)
+		}
+		if wantX1 := len(lead) + len(url) - grid - 1; link.X1 != wantX1 {
+			t.Errorf("%s: run ends at column %d, want %d", probe.name, link.X1, wantX1)
+		}
+	}
+}
+
+// TestLinkHoverDoesNotJoinTwoLines checks that two URLs on two lines stay two
+// links, so following a wrap does not glue neighbouring output together.
+//
+// This is the case the one-row scan was protecting against, and the wrap rule
+// has to keep protecting against it: the first line does not reach the pane's
+// last column, so nothing carries onto the second.
+func TestLinkHoverDoesNotJoinTwoLines(t *testing.T) {
+	const first = "https://example.com/one"
+	const second = "https://example.com/two"
+	_, win := linkTestOS(t, first+"\r\n"+second+"\r\n")
+
+	for _, probe := range []struct {
+		y    int
+		want string
+	}{{0, first}, {1, second}} {
+		link, ok := resolvePaneLink(win, 4, probe.y, &config.Global)
+		if !ok {
+			t.Errorf("row %d: no link resolved", probe.y)
+			continue
+		}
+		if link.URL != probe.want {
+			t.Errorf("row %d: resolved %q, want %q", probe.y, link.URL, probe.want)
+		}
+		if link.Y0 != probe.y || link.Y1 != probe.y {
+			t.Errorf("row %d: the run spans rows %d to %d, want one row", probe.y, link.Y0, link.Y1)
+		}
+	}
+}

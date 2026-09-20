@@ -160,46 +160,107 @@ func markedLinkAt(window *terminal.Window, x, y, maxX int) (PaneLink, bool) {
 	}, true
 }
 
-// bareLinkAt finds a plain-text URL covering (x, y).
+// linkWrapRows bounds how far a bare URL is followed across a wrap, in rows
+// each way. A URL long enough to fill sixteen rows of a pane is not one anybody
+// is about to click, and the bound is what keeps a screen of solid text from
+// being joined end to end on every mouse move.
+const linkWrapRows = 16
+
+// linkCellRef is a viewport cell, used to map a byte in the joined text of a
+// wrapped line back to the cell that drew it.
+type linkCellRef struct{ X, Y int }
+
+// bareLinkAt finds a plain-text URL covering (x, y), following it across a soft
+// wrap.
 //
-// One row only. A URL that the guest wrapped across two rows is left alone: the
-// two halves are separate strings as far as the grid is concerned, and joining
-// them means guessing whether the break was a wrap or a line ending, which is a
-// guess that turns two neighbouring log lines into one wrong address.
+// A guest that prints a URL wider than the pane gets it broken across rows with
+// no character between the halves, and until now each half was scanned on its
+// own: hovering the first half offered to open a truncated address, and the
+// second half was not a link at all.
+//
+// The rows are joined when the row above is full, meaning its last column holds
+// something other than a space. That is what a soft wrap leaves behind and what
+// a line ending does not: a program that ends a line ends it where the text
+// ends, which is almost never the last column exactly. The emulator does not
+// record a wrap flag, so this is the signal available, and it is wrong only for
+// a line that happens to fill the pane to its last cell and ends a URL exactly
+// there, which is the same case a wrap produces.
 func bareLinkAt(window *terminal.Window, x, y, maxX int) (PaneLink, bool) {
-	text, byteAt := paneRowText(window, y, maxX)
-	if x >= len(byteAt) || byteAt[x] < 0 {
+	h := window.ContentHeight()
+
+	// Walk up to the first row of the wrapped line, then collect it and every
+	// row the wrap carried it onto.
+	top := y
+	for top > 0 && top > y-linkWrapRows && paneRowIsFull(window, top-1, maxX) {
+		top--
+	}
+
+	var b strings.Builder
+	var refs []linkCellRef
+	var byteAt []int
+	cursor := -1
+	for row := top; row < h && row <= y+linkWrapRows; row++ {
+		text, rowBytes := paneRowText(window, row, maxX)
+		base := b.Len()
+		b.WriteString(text)
+		for col, off := range rowBytes {
+			if off < 0 {
+				continue
+			}
+			if row == y && col == x {
+				cursor = base + off
+			}
+			refs = append(refs, linkCellRef{X: col, Y: row})
+			byteAt = append(byteAt, base+off)
+		}
+		// The line ends here unless this row is full, which is the wrap.
+		if !paneRowIsFull(window, row, maxX) {
+			break
+		}
+	}
+	if cursor < 0 {
 		return PaneLink{}, false
 	}
-	s, e, ok := ScanBareURL(text, byteAt[x])
+
+	s, e, ok := ScanBareURL(b.String(), cursor)
 	if !ok {
 		return PaneLink{}, false
 	}
 
-	// Map the byte range back to the columns that drew it.
-	x0, x1 := -1, -1
-	for col := range len(byteAt) {
-		b := byteAt[col]
-		if b < 0 {
-			continue
-		}
-		if b >= s && b < e {
-			if x0 < 0 {
-				x0 = col
+	// Map the byte range back to the cells that drew it.
+	first, last := -1, -1
+	for i, off := range byteAt {
+		if off >= s && off < e {
+			if first < 0 {
+				first = i
 			}
-			x1 = col
+			last = i
 		}
 	}
-	if x0 < 0 {
+	if first < 0 {
 		return PaneLink{}, false
 	}
 
 	return PaneLink{
 		WindowID: window.ID,
-		URL:      text[s:e],
-		Y0:       y, X0: x0, Y1: y, X1: x1,
+		URL:      b.String()[s:e],
+		Y0:       refs[first].Y, X0: refs[first].X,
+		Y1: refs[last].Y, X1: refs[last].X,
 		Row: y, Col: x,
 	}, true
+}
+
+// paneRowIsFull reports whether the row's last column holds something other
+// than a space, which is what a soft wrap leaves and a line ending does not.
+//
+// The caller must hold the window's I/O read lock.
+func paneRowIsFull(window *terminal.Window, y, maxX int) bool {
+	if y < 0 || maxX <= 0 {
+		return false
+	}
+	text, _ := paneRowText(window, y, maxX)
+	trimmed := strings.TrimRight(text, " ")
+	return trimmed != "" && len(trimmed) == len(text)
 }
 
 // paneCellAt reads one viewport cell, from the scrollback ring when the pane is
