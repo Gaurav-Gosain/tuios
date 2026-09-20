@@ -629,7 +629,6 @@ func TestAnExplicitReportSurvivesAnIdleShell(t *testing.T) {
 	}
 }
 
-
 // TestAPaneThatNeverRanAnAgentKeepsItsState.
 //
 // An unhooked harness is exercised by setting a low-ranked claim on a pane and
