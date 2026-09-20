@@ -24,105 +24,124 @@ import (
 // screen, so a small pane in a busy layout is lifted further than a big one:
 // the setting says how much of the screen the pane you asked for should take,
 // and that is the same promise whatever it started as.
+//
+// The tiler is run again in the larger box rather than its finished rectangles
+// being stretched. Stretching them scaled the gaps between panes along with the
+// panes, and a gap is not content: it is the one column a shared border is
+// drawn in. At any zoom past about 1.5x that column became two, which drew fat
+// dividers under BSP and, under master-stack, none at all, because the divider
+// finder looks for neighbours exactly one gap apart. Laying out in the larger
+// box keeps every gap the width the user asked for, so the dividers come out
+// right without anything downstream knowing a camera is involved.
 
-// zoomCanvas is the transform from tiled coordinates to screen coordinates
-// while a pane is zoomed to part of the screen. The zero value is the identity,
-// which is what every layout that is not in this state uses.
+// zoomCanvas is the transform from the box a zoomed layout is computed in to
+// the screen. The zero value is the identity, which is what every layout that
+// is not in this state uses.
 type zoomCanvas struct {
 	// on is false for a layout drawn at its own size, which is a zoom of the
 	// whole screen, no zoom at all, or a zoom the layout cannot do this to.
 	on bool
-	// scaleX and scaleY are how much bigger the canvas is than the screen on
-	// each axis.
+	// bounds is the box the layout is computed in: the content region grown
+	// until the zoomed pane's share of it is zoom_size percent of the screen.
 	//
 	// One factor per axis rather than one for both. A pane that already spans
-	// the region on an axis cannot be lifted on it: scaling the left half of a
-	// split vertically would push its own top and bottom off the screen, which
-	// loses the pane you asked to see. Each axis is floored at 1, so an axis
-	// with nothing to gain is left alone and the lift happens on the axis that
-	// has room for it.
+	// the region on an axis cannot be lifted on it: growing the box vertically
+	// for the left half of a split would push that pane's own top and bottom
+	// off the screen, which loses the pane you asked to see. Each axis is
+	// floored at the region's own size, so an axis with nothing to gain is left
+	// alone and the lift happens on the axis that has room for it.
 	//
-	// The canvas is stretched differently in the two directions when that
-	// happens. A pane is a grid of cells rather than a picture, so there is no
-	// aspect to preserve: what the setting promises is that the pane you zoomed
-	// takes that share of each axis, and that is what this gives it.
-	scaleX, scaleY float64
-	// pan is the canvas cell the screen's top left corner is over.
+	// The box is stretched differently in the two directions when that happens.
+	// A pane is a grid of cells rather than a picture, so there is no aspect to
+	// preserve: what the setting promises is that the pane you zoomed takes
+	// that share of each axis, and that is what this gives it.
+	bounds layout.Rect
+	// panX and panY are how far the screen has been moved over that box.
 	panX, panY int
-	// origin is the screen cell the content region starts at, added back after
-	// the pan so the result is in absolute screen coordinates.
-	originX, originY int
 }
 
-// apply maps one pane's tiled rectangle onto the screen.
+// apply maps one rectangle from the enlarged box onto the screen.
 //
-// A rectangle entirely off the screen is returned as it falls out, off the
-// screen: the render clips panes to the content region, so a pane the camera
-// has left behind costs a layer nobody sees rather than a special case here.
+// A pure translation, because the layout was computed at the box's own size.
+// A rectangle that lands entirely off the screen is returned as it falls out:
+// the render clips panes to the content region, so a pane the camera has left
+// behind costs a layer nobody sees rather than a special case here.
 func (c zoomCanvas) apply(r layout.Rect) layout.Rect {
 	if !c.on {
 		return r
 	}
-	// Scaled about the region's origin, so a pane at the origin stays there and
-	// the whole canvas grows down and to the right from it.
-	x := c.scaleX_(r.X-c.originX) - c.panX + c.originX
-	y := c.scaleY_(r.Y-c.originY) - c.panY + c.originY
-	// The far edge is scaled rather than the width, so two panes that shared an
-	// edge still share it: scaling each width on its own leaves a seam wherever
-	// the rounding went different ways.
-	w := c.scaleX_(r.X-c.originX+r.W) - c.scaleX_(r.X-c.originX)
-	h := c.scaleY_(r.Y-c.originY+r.H) - c.scaleY_(r.Y-c.originY)
-	return layout.Rect{X: x, Y: y, W: max(w, 1), H: max(h, 1)}
+	r.X -= c.panX
+	r.Y -= c.panY
+	return r
 }
 
-// scaleX_ and scaleY_ scale one coordinate measured from the region's origin.
-func (c zoomCanvas) scaleX_(v int) int { return int(float64(v)*c.scaleX + 0.5) }
-func (c zoomCanvas) scaleY_(v int) int { return int(float64(v)*c.scaleY + 0.5) }
+// applySplit maps a divider from the enlarged box onto the screen, so the lines
+// the tiler reserved between panes land between the same panes.
+func (c zoomCanvas) applySplit(s layout.SplitLine) layout.SplitLine {
+	if !c.on {
+		return s
+	}
+	if s.Vertical {
+		s.Pos -= c.panX
+		s.From -= c.panY
+		s.To -= c.panY
+		return s
+	}
+	s.Pos -= c.panY
+	s.From -= c.panX
+	s.To -= c.panX
+	return s
+}
 
-// zoomCanvasFor builds the transform for a workspace whose zoomed pane occupies
-// tile in tiled coordinates, or the identity when there is nothing to do.
+// zoomCanvasBounds is the box a zoomed workspace's layout should be computed
+// in, given the rectangle the tiler gave the zoomed pane at the screen's own
+// size. ok is false when there is nothing to do.
 //
-// tile is the rectangle the tiler gave that pane before any of this, which is
-// the only rectangle that says where the pane belongs. The pane's own is the
-// scaled one by the time this runs again.
-func (m *OS) zoomCanvasFor(zoomed *terminal.Window, tile layout.Rect) zoomCanvas {
+// tile is the rectangle the tiler chose before any of this, which is the only
+// one that says how big a share of the layout the pane holds.
+func (m *OS) zoomCanvasBounds(zoomed *terminal.Window, tile layout.Rect) (layout.Rect, bool) {
 	pct := m.Settings.GetZoomSize()
-	if zoomed == nil || pct >= 100 || tile.W <= 0 || tile.H <= 0 {
-		return zoomCanvas{}
+	region := layout.Rect{
+		X: m.GetLeftMargin(), Y: m.GetTopMargin(),
+		W: m.GetContentWidth(), H: m.GetUsableHeight(),
 	}
-	regionW, regionH := m.GetContentWidth(), m.GetUsableHeight()
-	if regionW <= 0 || regionH <= 0 {
-		return zoomCanvas{}
+	if zoomed == nil || pct >= 100 || tile.W <= 0 || tile.H <= 0 || region.W <= 0 || region.H <= 0 {
+		return region, false
 	}
-	// A pane that is the whole layout has nothing around it to show, so lifting
-	// the camera would frame it against empty canvas.
-	if tile.W >= regionW && tile.H >= regionH {
-		return zoomCanvas{}
-	}
-
-	// How much bigger the canvas has to be for this pane to reach its share of
-	// each axis. Floored at 1: an axis the pane already spans has nothing to
-	// gain, and scaling it there would push the pane's own ends off the screen.
-	wantW := float64(regionW) * float64(pct) / 100
-	wantH := float64(regionH) * float64(pct) / 100
-	scaleX := max(wantW/float64(tile.W), 1)
-	scaleY := max(wantH/float64(tile.H), 1)
-	if scaleX <= 1 && scaleY <= 1 {
-		// The pane already fills that much of both axes. Nothing to lift.
-		return zoomCanvas{}
+	// A pane that is the whole layout has nothing around it to show, so
+	// growing the box would frame it against empty canvas.
+	if tile.W >= region.W && tile.H >= region.H {
+		return region, false
 	}
 
-	originX, originY := m.GetLeftMargin(), m.GetTopMargin()
-	c := zoomCanvas{on: true, scaleX: scaleX, scaleY: scaleY, originX: originX, originY: originY}
+	// How big the box has to be for this pane to reach its share of each axis.
+	// Never smaller than the screen: an axis the pane already spans has nothing
+	// to gain, and shrinking it there would push the pane's own ends off.
+	wantW := float64(region.W) * float64(pct) / 100
+	wantH := float64(region.H) * float64(pct) / 100
+	boundsW := max(int(float64(region.W)*wantW/float64(tile.W)+0.5), region.W)
+	boundsH := max(int(float64(region.H)*wantH/float64(tile.H)+0.5), region.H)
+	if boundsW <= region.W && boundsH <= region.H {
+		// Already at least that much of both axes. Nothing to lift.
+		return region, false
+	}
+	return layout.Rect{X: region.X, Y: region.Y, W: boundsW, H: boundsH}, true
+}
 
-	// Centre the screen on the pane, then hold it inside the canvas. The clamp
-	// is what puts a corner pane in its corner: there is no canvas past the
-	// edge to show, so the camera stops and the whole of the peek falls on the
-	// sides the pane actually has neighbours on.
-	tx, ty := tile.X-originX, tile.Y-originY
-	paneW := c.scaleX_(tx+tile.W) - c.scaleX_(tx)
-	paneH := c.scaleY_(ty+tile.H) - c.scaleY_(ty)
-	c.panX = clampInt(c.scaleX_(tx)+paneW/2-regionW/2, 0, max(c.scaleX_(regionW)-regionW, 0))
-	c.panY = clampInt(c.scaleY_(ty)+paneH/2-regionH/2, 0, max(c.scaleY_(regionH)-regionH, 0))
+// zoomCanvasAt finishes the camera once the layout has been recomputed in the
+// enlarged box and the zoomed pane's rectangle there is known.
+//
+// The screen is centred on that pane and then held inside the box. The clamp is
+// what puts a corner pane in its corner: there is no box past the edge to show,
+// so the camera stops and the whole of the peek falls on the sides the pane
+// actually has neighbours on.
+func (m *OS) zoomCanvasAt(bounds, zoomedRect layout.Rect) zoomCanvas {
+	region := layout.Rect{
+		X: m.GetLeftMargin(), Y: m.GetTopMargin(),
+		W: m.GetContentWidth(), H: m.GetUsableHeight(),
+	}
+	c := zoomCanvas{on: true, bounds: bounds}
+	c.panX = clampInt(zoomedRect.X+zoomedRect.W/2-region.W/2-region.X, 0, max(bounds.W-region.W, 0))
+	c.panY = clampInt(zoomedRect.Y+zoomedRect.H/2-region.H/2-region.Y, 0, max(bounds.H-region.H, 0))
 	return c
 }

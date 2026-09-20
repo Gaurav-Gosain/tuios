@@ -1226,6 +1226,16 @@ type OS struct {
 	// The BSP tiler animates every placement already, so this is for the
 	// master-stack one, which does not.
 	zoomRelayout bool
+	// zoomCanvasNow is the camera the last retile laid the panes out through,
+	// or the identity when it laid them out at their own size.
+	//
+	// Recorded by the tilers for the render to read. The divider grid needs it:
+	// the BSP tiler's dividers come from the tree, in the coordinates the tree
+	// was laid out in, so without the same transform the panes went through
+	// they are drawn at the layout's own size across a screen showing it at
+	// another. Reading it rather than recomputing it keeps the layout work in
+	// the tiler, where the rest of it is.
+	zoomCanvasNow zoomCanvas
 	// sidebarCache holds the last styled rail keyed by a cheap signature of every
 	// input that changes the rows, so a frame drawn for an unrelated reason (a
 	// pane printing output) does not rebuild and restyle the whole rail.

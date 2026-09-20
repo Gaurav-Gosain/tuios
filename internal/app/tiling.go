@@ -1,8 +1,6 @@
 package app
 
 import (
-	"time"
-
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -36,10 +34,23 @@ type tileLayout struct {
 // same box GetBSPBounds hands the BSP tree, so panes never tile under a
 // reserved sidebar band on either side.
 func (m *OS) contentTileLayouts(n int) []layout.TileLayout {
-	layouts := layout.CalculateTilingLayout(n, m.GetContentWidth(), m.GetUsableHeight(), m.GetTopMargin(), m.MasterRatio, m.separatorGap())
-	if lm := m.GetLeftMargin(); lm != 0 {
+	return m.tileLayoutsIn(n, layout.Rect{
+		X: m.GetLeftMargin(), Y: m.GetTopMargin(),
+		W: m.GetContentWidth(), H: m.GetUsableHeight(),
+	})
+}
+
+// tileLayoutsIn runs the master-stack tiler inside an arbitrary box.
+//
+// The box is the content region for every ordinary layout, and a larger one
+// while a pane is zoomed to part of the screen: the layout is computed at the
+// camera's size rather than computed at the screen's and stretched, so the gaps
+// between panes stay the width the user asked for. See zoom_canvas.go.
+func (m *OS) tileLayoutsIn(n int, bounds layout.Rect) []layout.TileLayout {
+	layouts := layout.CalculateTilingLayout(n, bounds.W, bounds.H, bounds.Y, m.MasterRatio, m.separatorGap())
+	if bounds.X != 0 {
 		for i := range layouts {
-			layouts[i].X += lm
+			layouts[i].X += bounds.X
 		}
 	}
 	return layouts
@@ -166,33 +177,40 @@ func (m *OS) tileAllWindows() {
 			}
 			w.Opening = false
 		}
-		// A new pane grows into its slot here the way it does under BSP. This
-		// branch placed every pane outright, so opening one under master-stack
-		// was a jump cut while the same pane under BSP bloomed. Only an opening
-		// pane animates: a retile is not a move, and animating every one of
-		// them would put the whole layout in motion whenever anything resized.
-		openDur := m.Settings.GetAnimationDuration()
+		// Panes slide to where the layout puts them, the way they do under BSP.
+		//
+		// This branch placed every pane outright, so every rearrangement here
+		// was a jump cut while the same one under BSP eased: closing a pane
+		// snapped the survivors into the space it left, opening one appeared
+		// at full size, and a zoom cut between two arrangements. The two tilers
+		// answer the same question and there was no reason for them to answer
+		// it differently.
+		dur := m.Settings.GetAnimationDuration()
 		if deferring {
 			// Mid-drag the layout is reapplied on every composed frame, so an
-			// animation started here would be cancelled by the next one.
-			openDur = 0
+			// animation started here would be discarded and restarted by the
+			// next one before it could finish, and the panes would trail the
+			// pointer on a curve that kept resetting. A resize is direct
+			// manipulation: the edge is where the pointer is. See the same
+			// reasoning at length in ApplyBSPLayout.
+			dur = 0
 		}
-
-		// Read and cleared here, before the loop that consumes it, so a request
-		// left over from a zoom cannot slide a later retile that has nothing to
-		// do with one.
-		zoomSlide := time.Duration(0)
-		if m.zoomRelayout {
-			m.zoomRelayout = false
-			if m.Settings.ZoomAnimation {
-				zoomSlide = m.Settings.GetFastAnimationDuration()
-			}
+		if m.takeZoomRelayout() && !m.Settings.ZoomAnimation {
+			// The retile a zoom asked for, from somebody who does not want the
+			// zoom to slide.
+			dur = 0
 		}
 
 		layouts := m.contentTileLayouts(len(visibleWindows))
 		// A zoom of part of the screen is a camera over this layout rather than
-		// one pane's own rectangle. See zoom_canvas.go.
-		canvas := m.masterZoomCanvas(visibleWindows, layouts)
+		// one pane's own rectangle. The layout is computed again in a larger
+		// box and the screen is panned over it; see zoom_canvas.go for why it
+		// is laid out again rather than stretched.
+		canvas, zoomBounds, ok := m.masterZoomCanvas(visibleWindows, layouts)
+		if ok {
+			layouts = m.tileLayoutsIn(len(visibleWindows), zoomBounds)
+		}
+		m.zoomCanvasNow = canvas
 		for i, l := range layouts {
 			if i < len(visibleWindows) {
 				// A zoomed pane keeps its slot and loses its rectangle to the
@@ -217,35 +235,27 @@ func (m *OS) tileAllWindows() {
 				// and its guest writing at another.
 				m.CancelSnapAnimation(visibleWindows[i])
 
-				if opening[visibleWindows[i].ID] && openDur > 0 {
+				if dur > 0 {
 					rect := layout.Rect{X: l.X, Y: l.Y, W: l.Width, H: l.Height}
-					if x, y, w, h := openStartRect(rect); w != rect.W || h != rect.H {
-						// Assigned, not resized: the emulator keeps the size the
-						// pane was created at for the length of the animation,
-						// the way every other frame of a snap leaves it, and the
-						// completion resizes it once at the destination.
-						visibleWindows[i].X, visibleWindows[i].Y = x, y
-						visibleWindows[i].Width, visibleWindows[i].Height = w, h
+					// A pane being placed for the first time starts from a box
+					// inside its own destination rather than from wherever it
+					// was parked, so it grows into place. See openStartRect.
+					if opening[visibleWindows[i].ID] {
+						if x, y, w, h := openStartRect(rect); w != rect.W || h != rect.H {
+							// Assigned, not resized: the emulator keeps the size
+							// the pane was created at for the length of the
+							// animation, the way every other frame of a snap
+							// leaves it, and the completion resizes it once at
+							// the destination.
+							visibleWindows[i].X, visibleWindows[i].Y = x, y
+							visibleWindows[i].Width, visibleWindows[i].Height = w, h
+						}
 					}
 					// Before the animation, for the same reason the BSP path
 					// settles it before the placement: the allowance decides how
 					// much of the rectangle the guest gets.
 					visibleWindows[i].Tiled = m.panesBorderless()
-					if anim := ui.NewSnapAnimation(visibleWindows[i], rect.X, rect.Y, rect.W, rect.H, openDur); anim != nil {
-						m.Animations = append(m.Animations, anim)
-						visibleWindows[i].InvalidateCache()
-						continue
-					}
-				}
-
-				// The zoom has just moved, so the whole layout is going
-				// somewhere new and every pane slides there. The BSP tiler
-				// animates every placement already; this one does not, and
-				// without this a camera zoom cut between two arrangements with
-				// nothing to say which pane had been zoomed.
-				if zoomSlide > 0 && !deferring {
-					visibleWindows[i].Tiled = m.panesBorderless()
-					if anim := ui.NewSnapAnimation(visibleWindows[i], l.X, l.Y, l.Width, l.Height, zoomSlide); anim != nil {
+					if anim := ui.NewSnapAnimation(visibleWindows[i], rect.X, rect.Y, rect.W, rect.H, dur); anim != nil {
 						m.Animations = append(m.Animations, anim)
 						visibleWindows[i].InvalidateCache()
 						continue
@@ -516,20 +526,37 @@ func (m *OS) TileNewWindow() {
 	m.TileAllWindows()
 }
 
-// masterZoomCanvas works the camera out from a master-stack layout, from the
-// zoomed pane's rectangle as the tiler chose it.
-func (m *OS) masterZoomCanvas(wins []*terminal.Window, layouts []layout.TileLayout) zoomCanvas {
+// masterZoomCanvas works the camera out for a master-stack layout.
+//
+// Two passes, for the reason bspZoomCanvas takes two: the rectangle the tiler
+// gave the zoomed pane at the screen's own size says how big the box has to be,
+// and the rectangle it gets in that box says where to point the screen.
+func (m *OS) masterZoomCanvas(wins []*terminal.Window, layouts []layout.TileLayout) (zoomCanvas, layout.Rect, bool) {
 	zw := m.zoomedWindow()
 	if zw == nil {
-		return zoomCanvas{}
+		return zoomCanvas{}, layout.Rect{}, false
 	}
+	slot := -1
 	for i, w := range wins {
 		if w == zw && i < len(layouts) {
-			l := layouts[i]
-			return m.zoomCanvasFor(zw, layout.Rect{X: l.X, Y: l.Y, W: l.Width, H: l.Height})
+			slot = i
+			break
 		}
 	}
-	return zoomCanvas{}
+	if slot < 0 {
+		return zoomCanvas{}, layout.Rect{}, false
+	}
+	l := layouts[slot]
+	zoomBounds, ok := m.zoomCanvasBounds(zw, layout.Rect{X: l.X, Y: l.Y, W: l.Width, H: l.Height})
+	if !ok {
+		return zoomCanvas{}, layout.Rect{}, false
+	}
+	grown := m.tileLayoutsIn(len(wins), zoomBounds)
+	if slot >= len(grown) {
+		return zoomCanvas{}, layout.Rect{}, false
+	}
+	g := grown[slot]
+	return m.zoomCanvasAt(zoomBounds, layout.Rect{X: g.X, Y: g.Y, W: g.Width, H: g.Height}), zoomBounds, true
 }
 
 // RetileAfterClose handles window close in tiling mode

@@ -825,6 +825,27 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		m.SyncStateToDaemon()
 	}
 
+	// A pane this client has just placed, and that the sync has focused, has to
+	// be the pane the zoom is on.
+	//
+	// A zoomed workspace shows one pane. Focus arrives here by assignment
+	// rather than through FocusWindow, so the handover that key presses get
+	// never ran: a pane created while zoomed was focused underneath somebody
+	// else's zoom, which is a pane you are typing into and cannot see.
+	//
+	// Only for a pane this client placed. A peer moving its focus says nothing
+	// about where this client's zoom should be, and dragging the zoom around on
+	// every sync is the bug ZoomFollowsFocus is careful not to be. See the note
+	// there about focus applied by sync.
+	if placed {
+		for _, w := range placedWindows {
+			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) && m.Windows[m.FocusedWindow] == w {
+				m.ZoomFollowsFocus(m.FocusedWindow)
+				break
+			}
+		}
+	}
+
 	// The strip as the session has it, taken before the retile below rather than
 	// after it: that retile lays the strip out from the offset and the focused
 	// column, so giving it the session's answers first is one pass over the

@@ -360,6 +360,22 @@ func (m *OS) zoomPane(w *terminal.Window) bool {
 	return retireRetile
 }
 
+// takeZoomRelayout reports whether this retile is the one a zoom asked for, and
+// clears the request so a later retile that has nothing to do with a zoom does
+// not inherit it.
+//
+// A zoom is a retile now, so it animates because retiles animate. All this
+// decides is whether appearance.zoom_animation gets to say otherwise: somebody
+// who has turned the zoom's slide off has not asked for every other retile to
+// stop easing too.
+func (m *OS) takeZoomRelayout() bool {
+	if !m.zoomRelayout {
+		return false
+	}
+	m.zoomRelayout = false
+	return true
+}
+
 // zoomUsesLayout reports whether zooming w is the layout's job rather than a
 // box of w's own.
 //

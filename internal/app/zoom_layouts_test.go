@@ -42,6 +42,10 @@ func tiledZoomOS(t *testing.T, mode string) (*OS, []*terminal.Window) {
 		}
 	}
 	m.TileAllWindows()
+	// The tilers slide panes into place, so the rectangles are not the tiled
+	// ones until the slide lands. A test that reads a rectangle straight after
+	// laying out reads where the panes were before it.
+	m.CompleteAllAnimations()
 	return m, wins
 }
 
@@ -214,5 +218,183 @@ func TestTheHandoverSlidesUnderEveryTiler(t *testing.T) {
 				t.Error("the handover moved nothing: the layout cut from one arrangement to the next")
 			}
 		})
+	}
+}
+
+// TestOpeningAPaneWhileZoomedGivesItTheZoom is the report: creating a window
+// while zoomed bugged the layout out.
+//
+// This drives the daemon path, which is the one a session actually takes: the
+// daemon creates the pane and marks it Unplaced, the client places it, and the
+// focus arrives by assignment rather than through FocusWindow. So the handover
+// that key presses get never ran, and the new pane was focused underneath
+// somebody else's zoom, which is a pane you are typing into and cannot see.
+func TestOpeningAPaneWhileZoomedGivesItTheZoom(t *testing.T) {
+	for _, size := range []int{100, 85} {
+		name := "full"
+		if size < 100 {
+			name = "camera"
+		}
+		t.Run(name, func(t *testing.T) {
+			prev := config.Global.AnimationsEnabled
+			config.Global.AnimationsEnabled = false
+			defer func() { config.Global.AnimationsEnabled = prev }()
+
+			h := newOpenAnimHarness(120, 40)
+			h.m.Settings.ZoomSize = size
+			h.m.Settings.ZoomAnimation = false
+			h.createWindow(t)
+			h.createWindow(t)
+
+			first := h.m.Windows[0]
+			h.m.FocusedWindow = 0
+			h.m.ToggleZoom()
+			h.m.CompleteAllAnimations()
+			if !first.Zoomed {
+				t.Fatal("setup: the pane did not zoom")
+			}
+			// Zoom is session state, and pressing the key pushes it. Without
+			// this the daemon's copy still predates the zoom and the next sync
+			// takes it straight back off, which is the harness lying rather
+			// than the code failing.
+			h.state = h.m.BuildSessionState()
+			h.state.Version = h.next + 1
+
+			h.createWindow(t)
+			h.m.CompleteAllAnimations()
+
+			fresh := h.m.Windows[len(h.m.Windows)-1]
+			if h.m.GetFocusedWindow() != fresh {
+				t.Fatal("the new pane is not focused")
+			}
+			if !fresh.Zoomed {
+				t.Error("the new pane is focused underneath somebody else's zoom")
+			}
+			if first.Zoomed {
+				t.Error("the pane that had the zoom kept it")
+			}
+			zoomedCount := 0
+			for _, w := range h.m.Windows {
+				if w.Zoomed {
+					zoomedCount++
+				}
+			}
+			if zoomedCount != 1 {
+				t.Errorf("%d panes hold the zoom, want one", zoomedCount)
+			}
+
+			// And it has a rectangle the layout chose, not the nominal box the
+			// daemon handed over.
+			if fresh.Width <= 0 || fresh.Height <= 0 {
+				t.Fatalf("the new pane is %dx%d", fresh.Width, fresh.Height)
+			}
+			if fresh.Width > h.m.GetContentWidth() || fresh.Height > h.m.GetUsableHeight() {
+				t.Errorf("the new pane is %dx%d, larger than the %dx%d region",
+					fresh.Width, fresh.Height, h.m.GetContentWidth(), h.m.GetUsableHeight())
+			}
+		})
+	}
+}
+
+// TestACameraZoomKeepsTheSharedBorders pins that the dividers survive a zoom of
+// part of the screen, and follow the camera rather than staying at the size the
+// layout was computed at.
+func TestACameraZoomKeepsTheSharedBorders(t *testing.T) {
+	for _, mode := range []string{config.LayoutModeBSP, config.LayoutModeMasterStack} {
+		t.Run(mode, func(t *testing.T) {
+			m, _ := tiledZoomOS(t, mode)
+			// Shared borders on, and the layout run again so the panes get the
+			// borderless rectangles that reserve a column for each divider.
+			m.SharedBorders = true
+			m.TileAllWindows()
+			m.CompleteAllAnimations()
+			if !m.panesBorderless() {
+				t.Fatal("shared borders did not take, so this checks nothing")
+			}
+
+			plain := m.separatorSplits()
+			if len(plain) == 0 {
+				t.Fatal("no dividers without a zoom, so this checks nothing")
+			}
+
+			m.FocusedWindow = 0
+			m.ToggleZoom()
+			m.CompleteAllAnimations()
+
+			zoomed := m.separatorSplits()
+			if len(zoomed) == 0 {
+				t.Fatal("a camera zoom drew no dividers at all")
+			}
+			// They moved with the layout: a camera that scaled the panes and
+			// left the dividers where they were is the thing this is about.
+			same := len(zoomed) == len(plain)
+			if same {
+				for i := range zoomed {
+					if zoomed[i] != plain[i] {
+						same = false
+						break
+					}
+				}
+			}
+			if same {
+				t.Error("the dividers did not move with the camera")
+			}
+		})
+	}
+}
+
+// TestAddWindowPlacesThePaneBeforeFocusingIt covers the local creation path,
+// which is the one a session without a daemon takes.
+//
+// Focusing hands a pane the workspace's zoom, and the handover retiles. A
+// retile that meets a pane the tree has never been told about inserts it
+// wherever its repair path can rather than where the creation is about to put
+// it, and records its pre-zoom rectangle as the raw creation box it has not
+// left yet. So the pane has to be placed first.
+func TestAddWindowPlacesThePaneBeforeFocusingIt(t *testing.T) {
+	m := newStartupOS(t, false, true)
+	defer closeWindows(m)
+	m.AutoTiling, m.UseBSPLayout = true, true
+	m.Settings.ZoomSize = 85
+	m.Settings.ZoomAnimation = false
+
+	m.AddWindow("")
+	m.AddWindow("")
+	if len(m.Windows) != 2 {
+		t.Fatalf("setup: %d windows, want 2", len(m.Windows))
+	}
+	m.CompleteAllAnimations()
+
+	m.FocusedWindow = 0
+	m.ToggleZoom()
+	m.CompleteAllAnimations()
+	if !m.Windows[0].Zoomed {
+		t.Fatal("setup: the pane did not zoom")
+	}
+
+	m.AddWindow("")
+	m.CompleteAllAnimations()
+
+	fresh := m.Windows[len(m.Windows)-1]
+	if m.GetFocusedWindow() != fresh {
+		t.Fatal("the new pane is not focused")
+	}
+	if !fresh.Zoomed {
+		t.Error("the new pane is focused underneath somebody else's zoom")
+	}
+	// It is in the tiling structure, at a rectangle the layout chose. A pane
+	// the handover retiled around before the creation placed it came out at the
+	// creation box, which is half the screen centred on it.
+	if fresh.Width > m.GetContentWidth() || fresh.Height > m.GetUsableHeight() {
+		t.Errorf("the new pane is %dx%d, larger than the %dx%d region",
+			fresh.Width, fresh.Height, m.GetContentWidth(), m.GetUsableHeight())
+	}
+	if !m.GetOrCreateBSPTree().HasWindow(m.getWindowIntID(fresh.ID)) {
+		t.Error("the new pane is not in the tiling tree")
+	}
+	// And the tree holds each pane once: the repair path inserting it and the
+	// creation inserting it again is how it ended up in two places.
+	if got, want := m.GetOrCreateBSPTree().WindowCount(), len(m.Windows); got != want {
+		t.Errorf("the tree holds %d panes, want %d", got, want)
 	}
 }

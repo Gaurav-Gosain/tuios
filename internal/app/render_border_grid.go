@@ -45,7 +45,20 @@ func (m *OS) separatorSplits() []layout.SplitLine {
 	if tree == nil || tree.IsEmpty() {
 		return nil
 	}
-	return tree.CollectSplits(m.GetBSPBounds(), m.separatorGap())
+	// Collected from the box the panes were laid out in, and moved onto the
+	// screen the same way they were. Collecting from the screen's own box while
+	// a camera is up drew the dividers for a layout nobody is looking at. The
+	// master-stack branch above needs none of this: its dividers come from the
+	// pane rectangles, which are already where the camera put them.
+	bounds, c := m.GetBSPBounds(), m.zoomCanvasNow
+	if c.on {
+		bounds = c.bounds
+	}
+	splits := tree.CollectSplits(bounds, m.separatorGap())
+	for i := range splits {
+		splits[i] = c.applySplit(splits[i])
+	}
+	return splits
 }
 
 // paneLayer is a tiled pane as the divider grid sees it: the rectangle it holds
@@ -58,11 +71,26 @@ type paneLayer struct {
 // tiledPaneLayers returns the panes currently tiled on screen, ordered bottom to
 // top the way the compositor stacks them.
 func (m *OS) tiledPaneLayers() []paneLayer {
+	// A pane is moving when its rectangle is not the one it is settling on, not
+	// merely when an animation object still exists for it.
+	//
+	// The two come apart on the last frames of a transition, where the eased
+	// position has already rounded onto the destination and the animation has
+	// a tick or two left to run. Counting those as moving changed what the
+	// dividers were allowed to draw over, so the frame before an animation
+	// completed drew a different grid from the settled frame and the junctions
+	// popped as it landed. Comparing the rectangle is what makes the last frame
+	// of a transition and the first frame after it the same frame.
 	inFlight := make(map[*terminal.Window]struct{}, len(m.Animations))
 	for _, a := range m.Animations {
-		if !a.Complete && a.Window != nil {
-			inFlight[a.Window] = struct{}{}
+		if a.Complete || a.Window == nil {
+			continue
 		}
+		w := a.Window
+		if w.X == a.EndX && w.Y == a.EndY && w.Width == a.EndWidth && w.Height == a.EndHeight {
+			continue
+		}
+		inFlight[w] = struct{}{}
 	}
 	wins := make([]*terminal.Window, 0, len(m.Windows))
 	for _, w := range m.Windows {
@@ -115,6 +143,24 @@ const settledDepth = math.MaxInt
 func (m *OS) transitioning() bool {
 	for _, a := range m.Animations {
 		if a.Complete || a.Window == nil {
+			continue
+		}
+		// A pane whose rectangle is already the one it is settling on is not in
+		// motion, whatever its animation still has left to run.
+		//
+		// The eased position rounds onto the destination a tick or two before
+		// the clock does. Counting those ticks as a transition kept the whole
+		// grid on the moving renderer, which draws the panes' own edges, while
+		// the panes were already standing where the settled renderer would draw
+		// the tiler's divisions instead. The two disagree at junctions, by
+		// design, so the last frame of every transition drew a different grid
+		// from the first frame after it and the junctions popped as it landed.
+		//
+		// It showed up when the master-stack tiler started animating: its two
+		// renderers disagree at a junction that the BSP ones happen to agree
+		// on, so nothing had caught it before.
+		if a.Window.X == a.EndX && a.Window.Y == a.EndY &&
+			a.Window.Width == a.EndWidth && a.Window.Height == a.EndHeight {
 			continue
 		}
 		if a.Window.Tiled && a.Window.Workspace == m.CurrentWorkspace && !a.Window.Minimized {
@@ -282,11 +328,17 @@ func (c *cell) isHoriz() bool { return c != nil && c.horiz }
 // renderSeparatorOverlay renders thin separator lines between tiled panes.
 // Each separator line is its own lipgloss Layer to avoid occluding content.
 func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
-	// Don't render shared borders when a window is zoomed. Any zoomed pane on
-	// the workspace, not this client's focused one: zoom is shared, so the pane
-	// covering the box can be one this client did not zoom and is not focused
-	// on, and the dividers would then be drawn across it. See zoomedWindow.
-	if m.zoomedWindow() != nil {
+	// Don't render shared borders when a zoomed pane covers the region. Any
+	// zoomed pane on the workspace, not this client's focused one: zoom is
+	// shared, so the pane covering the box can be one this client did not zoom
+	// and is not focused on, and the dividers would then be drawn across it.
+	// See zoomedWindow.
+	//
+	// A zoom of part of the screen covers nothing: the layout is all still
+	// there, drawn through a camera, and it wants the dividers every other
+	// arrangement of it gets. Suppressing them on any zoom at all took the
+	// shared borders away the moment appearance.zoom_size was set.
+	if m.zoomCoversRegion(m.zoomedWindow()) {
 		return nil
 	}
 

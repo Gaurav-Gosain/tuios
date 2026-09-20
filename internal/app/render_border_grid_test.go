@@ -208,12 +208,33 @@ func TestSharedBorderFocusHandlesEdgeCases(t *testing.T) {
 		}
 	})
 
-	t.Run("zoomed window suppresses the frame", func(t *testing.T) {
+	t.Run("a zoom that covers the region suppresses the frame", func(t *testing.T) {
 		m := sharedBorderOS(t, 3)
 		m.Settings = config.Global
-		m.Windows[m.FocusedWindow].Zoomed = true
+		zw := m.Windows[m.FocusedWindow]
+		zw.Zoomed = true
+		// The rectangle a full zoom gives it. The flag alone is not the zoom:
+		// what suppresses the dividers is one pane covering the region, because
+		// a divider drawn then lands across that pane.
+		zw.X, zw.Y = m.GetLeftMargin(), m.GetTopMargin()
+		zw.Width, zw.Height = m.GetContentWidth(), m.GetUsableHeight()
 		if layers := m.renderSeparatorOverlay(); len(layers) != 0 {
-			t.Errorf("a zoomed window should draw no separators, got %d layers", len(layers))
+			t.Errorf("a zoom covering the region should draw no separators, got %d layers", len(layers))
+		}
+	})
+
+	t.Run("a zoom of part of the region keeps the frame", func(t *testing.T) {
+		m := sharedBorderOS(t, 3)
+		m.Settings = config.Global
+		// appearance.zoom_size draws the whole layout through a camera, so
+		// every pane is still on screen and the dividers between them are still
+		// the dividers. Suppressing them on any zoom at all took the shared
+		// borders away the moment the setting was used.
+		zw := m.Windows[m.FocusedWindow]
+		zw.Zoomed = true
+		zw.Width = m.GetContentWidth() * 3 / 4
+		if layers := m.renderSeparatorOverlay(); len(layers) == 0 {
+			t.Error("a zoom of part of the region drew no separators, so the shared borders vanished")
 		}
 	})
 

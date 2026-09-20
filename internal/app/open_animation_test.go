@@ -333,10 +333,16 @@ func TestOpenAnimationPlaysUnderMasterStack(t *testing.T) {
 	}
 }
 
-// TestMasterStackOnlyAnimatesTheOpeningPane pins the other half: a retile is not
-// a move. Only the pane that just opened animates, so a resize or a layout
-// change does not put every pane on screen in motion.
-func TestMasterStackOnlyAnimatesTheOpeningPane(t *testing.T) {
+// TestMasterStackAnimatesThePanesThatMove pins the other half: a retile moves
+// the panes the layout moved and nothing else.
+//
+// The opening pane is not the only one that animates, and never was under BSP.
+// Opening a pane takes room from the panes already there, and those panes go
+// somewhere new: sliding one and cutting the rest is a worse frame than either
+// sliding all of them or cutting all of them. What must not animate is a retile
+// that moved nothing, or the layout would be in motion whenever anything at all
+// happened.
+func TestMasterStackAnimatesThePanesThatMove(t *testing.T) {
 	prev := config.Global.AnimationsEnabled
 	config.Global.AnimationsEnabled = true
 	defer func() { config.Global.AnimationsEnabled = prev }()
@@ -344,16 +350,30 @@ func TestMasterStackOnlyAnimatesTheOpeningPane(t *testing.T) {
 	h := newOpenAnimHarnessWithLayout(120, 40, false)
 	for i := 1; i <= 3; i++ {
 		anims := h.createWindow(t)
-		if len(anims) != 1 {
-			t.Errorf("creating pane %d armed %d animations, want 1 (the pane that opened)", i, len(anims))
+		if len(anims) == 0 {
+			t.Errorf("creating pane %d armed nothing, so it appeared in one frame", i)
+			continue
+		}
+		// The pane that opened is among them, and so is anything that had to
+		// give it room.
+		newest := h.m.Windows[len(h.m.Windows)-1]
+		var sawNewest bool
+		for _, a := range anims {
+			if a.Window == newest {
+				sawNewest = true
+			}
+		}
+		if !sawNewest {
+			t.Errorf("creating pane %d did not animate the pane that opened", i)
 		}
 	}
 
-	// A retile with nothing opening arms nothing at all.
+	// A retile that moves nothing arms nothing at all.
+	h.m.CompleteAllAnimations()
 	h.m.Animations = nil
 	h.m.TileAllWindows()
 	if len(h.m.Animations) != 0 {
-		t.Errorf("a plain retile armed %d animations", len(h.m.Animations))
+		t.Errorf("a retile that moved nothing armed %d animations", len(h.m.Animations))
 	}
 }
 

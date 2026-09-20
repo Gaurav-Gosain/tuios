@@ -519,9 +519,19 @@ func (m *OS) AddWindow(name string, command ...string) *OS {
 		m.ScrollingOnWindowAdded(window)
 	}
 
-	// Focus the new window, which will bring it to the front
-	m.FocusWindow(len(m.Windows) - 1)
-
+	// Placed before it is focused.
+	//
+	// Focusing hands a pane the workspace's zoom (see ZoomFollowsFocus), and
+	// the handover retiles. Retiling around a pane the tree has not been told
+	// about leaves that retile inserting it wherever its repair path can rather
+	// than where the block below is about to put it, and records its pre-zoom
+	// rectangle as the raw creation box it has not left yet.
+	//
+	// The repair path covers for both, so no test tells the two orders apart
+	// and this fixed nothing that was reported. It is here because a pane that
+	// is in the layout before anything asks the layout about it needs no
+	// covering for, which is one less thing depending on a repair.
+	//
 	// Auto-tile if in tiling mode
 	if m.AutoTiling {
 		// Set only here, immediately before the layout that consumes it, so an
@@ -539,6 +549,12 @@ func (m *OS) AddWindow(name string, command ...string) *OS {
 			}
 		}
 	}
+
+	// Focus the new window, which will bring it to the front, and hand it the
+	// zoom if the workspace has one: a zoomed workspace shows one pane, and a
+	// new pane focused underneath somebody else's zoom is one you are typing
+	// into and cannot see.
+	m.FocusWindow(len(m.Windows) - 1)
 
 	return m
 }

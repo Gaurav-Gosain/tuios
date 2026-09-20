@@ -165,9 +165,20 @@ func (m *OS) ApplyBSPLayout() {
 	borderless := m.panesBorderless()
 
 	// A zoom of part of the screen is a camera over this layout rather than one
-	// pane's own rectangle, so it is worked out from the layout the tiler has
-	// just produced and applied to every pane below. See zoom_canvas.go.
-	canvas := m.bspZoomCanvas(layouts)
+	// pane's own rectangle. The layout is computed again in a larger box and
+	// the screen is panned over it; see zoom_canvas.go for why it is laid out
+	// again rather than stretched.
+	canvas, zoomBounds, ok := m.bspZoomCanvas(tree, bounds, layouts)
+	if ok {
+		bounds = zoomBounds
+		layouts = tree.ApplyLayout(bounds, m.separatorGap())
+	}
+	m.zoomCanvasNow = canvas
+
+	// Whether this retile is the one a zoom asked for, which is the only thing
+	// appearance.zoom_animation gets a say over. Read once for the whole
+	// layout, since it is one answer for all of it.
+	zoomRetile := m.takeZoomRelayout()
 
 	for windowIntID, rect := range layouts {
 		win := m.getWindowByIntID(windowIntID)
@@ -285,6 +296,11 @@ func (m *OS) ApplyBSPLayout() {
 		// one step, so the geometry is left exactly as the un-animated path had
 		// it.
 		dur := m.Settings.GetAnimationDuration()
+		if zoomRetile && !m.Settings.ZoomAnimation {
+			// The retile a zoom asked for, from somebody who does not want the
+			// zoom to slide.
+			dur = 0
+		}
 		if opening && dur > 0 {
 			if x, y, w, h := openStartRect(rect); w != rect.W || h != rect.H {
 				win.X, win.Y = x, y
@@ -321,18 +337,34 @@ func (m *OS) ApplyBSPLayout() {
 // that: the drag sets geometry per motion event, the animation stamps its own
 // back over all of it on the next tick, and the layout jumps to wherever the
 // old transition had got to.
-// bspZoomCanvas works the camera out from a BSP layout: it needs the zoomed
-// pane's rectangle as the tiler chose it, before anything is applied to it.
-func (m *OS) bspZoomCanvas(layouts map[int]layout.Rect) zoomCanvas {
+// bspZoomCanvas works the camera out for a BSP layout.
+//
+// It needs two passes: the rectangle the tiler gave the zoomed pane at the
+// screen's own size says how big the box has to be, and the rectangle it gets
+// in that box says where to point the screen. So the layout is run again here
+// to answer the second question, and the caller runs it once more to place the
+// panes. Both passes are the tree walking its own nodes, which is cheap, and
+// they only happen while something is zoomed to part of the screen.
+func (m *OS) bspZoomCanvas(tree *layout.BSPTree, bounds layout.Rect, layouts map[int]layout.Rect) (zoomCanvas, layout.Rect, bool) {
 	zw := m.zoomedWindow()
 	if zw == nil {
-		return zoomCanvas{}
+		return zoomCanvas{}, bounds, false
 	}
-	rect, ok := layouts[m.getWindowIntID(zw.ID)]
+	id := m.getWindowIntID(zw.ID)
+	tile, ok := layouts[id]
 	if !ok {
-		return zoomCanvas{}
+		return zoomCanvas{}, bounds, false
 	}
-	return m.zoomCanvasFor(zw, rect)
+	zoomBounds, ok := m.zoomCanvasBounds(zw, tile)
+	if !ok {
+		return zoomCanvas{}, bounds, false
+	}
+	grown := tree.ApplyLayout(zoomBounds, m.separatorGap())
+	zoomedRect, ok := grown[id]
+	if !ok {
+		return zoomCanvas{}, bounds, false
+	}
+	return m.zoomCanvasAt(zoomBounds, zoomedRect), zoomBounds, true
 }
 
 func (m *OS) CancelSnapAnimation(win *terminal.Window) {
