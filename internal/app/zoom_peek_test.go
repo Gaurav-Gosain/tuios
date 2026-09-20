@@ -169,3 +169,65 @@ func TestAPeekZoomDoesNotHideTheLayout(t *testing.T) {
 		t.Error("a peek zoom reports that it covers the region, so the layout it leaves room for is not drawn")
 	}
 }
+
+// TestAFullHeightPaneKeepsItsHeight is the layout from the report: one pane down
+// the left, two stacked on the right.
+//
+// The left pane spans the region top to bottom, so it has no neighbour above or
+// below it. Shrinking it vertically anyway opened a band at each end onto the
+// only thing past its ends, which is a few rows of the right column's title
+// bars: the least useful rows in the frame, and they read as litter scattered
+// around the zoom rather than as a peek at anything.
+func TestAFullHeightPaneKeepsItsHeight(t *testing.T) {
+	m, wins := zoomPeekOS(t)
+	m.Settings.ZoomSize = 90
+
+	// Left half full height, and two stacked on the right.
+	left := wins[0]
+	left.X, left.Y, left.Width, left.Height = 0, 0, 60, m.GetUsableHeight()
+	wins[1].X, wins[1].Y, wins[1].Width, wins[1].Height = 60, 0, 60, 19
+	wins[2].X, wins[2].Y, wins[2].Width, wins[2].Height = 60, 19, 60, 19
+	m.Windows = wins[:3]
+
+	x, y, w, h := m.zoomRectFor(left)
+
+	if h != m.GetUsableHeight() {
+		t.Errorf("the box is %d rows in a %d row region: it gave up height it had no neighbour for",
+			h, m.GetUsableHeight())
+	}
+	if y != m.GetTopMargin() {
+		t.Errorf("the box starts at y=%d, want the region's top %d", y, m.GetTopMargin())
+	}
+	if w >= m.GetContentWidth() {
+		t.Errorf("the box is %d columns in a %d column region: it gave up no width, so nothing peeks",
+			w, m.GetContentWidth())
+	}
+	// And the width it gave up is on the right, which is the side the two
+	// neighbours are on.
+	if x != m.GetLeftMargin() {
+		t.Errorf("the box starts at x=%d, want the region's left %d: the band is on the wrong side",
+			x, m.GetLeftMargin())
+	}
+}
+
+// TestALonePaneZoomsWhole pins that a pane with no neighbours at all takes the
+// region. A box floating in the middle of nothing is not a peek at anything.
+func TestALonePaneZoomsWhole(t *testing.T) {
+	m, wins := zoomPeekOS(t)
+	m.Settings.ZoomSize = 80
+	only := wins[0]
+	only.X, only.Y = 0, 0
+	only.Width, only.Height = m.GetContentWidth(), m.GetUsableHeight()
+	m.Windows = wins[:1]
+
+	x, y, w, h := m.zoomRectFor(only)
+
+	if w != m.GetContentWidth() || h != m.GetUsableHeight() {
+		t.Errorf("the only pane zoomed to %dx%d, want the whole region %dx%d",
+			w, h, m.GetContentWidth(), m.GetUsableHeight())
+	}
+	if x != m.GetLeftMargin() || y != m.GetTopMargin() {
+		t.Errorf("the only pane zoomed to (%d,%d), want the region's corner (%d,%d)",
+			x, y, m.GetLeftMargin(), m.GetTopMargin())
+	}
+}

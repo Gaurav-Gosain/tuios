@@ -507,6 +507,15 @@ type Settings struct {
 	// disc is the control everybody already knows.
 	WindowButtonZoom bool
 
+	// ZoomFollowsFocus hands the zoom to the pane the focus lands on.
+	//
+	// A zoomed workspace shows one pane, and focus used to move underneath it
+	// regardless: the next-pane key focused the pane after it, the zoomed pane
+	// kept the box, and keys went to a pane nobody could see. The zoom is the
+	// statement that you want one pane and the whole region for it; a focus
+	// move is the statement of which pane.
+	ZoomFollowsFocus bool
+
 	// ZoomAnimation slides a pane between its tile and the zoom box instead of
 	// swapping the two in one frame.
 	//
@@ -649,6 +658,7 @@ func DefaultSettings() Settings {
 		ScrollColumnMax:             ScrollColumnWidthMax,
 		ZoomSize:                    ZoomSizeDefault,
 		ZoomAnimation:               true,
+		ZoomFollowsFocus:            true,
 		WindowButtonZoom:            true,
 		DimUnfocused:                0,
 		ClockFormat:                 "",

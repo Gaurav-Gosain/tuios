@@ -320,6 +320,11 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 	{
+		Path: "appearance.zoom_follows_focus", Type: OptionBool, Section: "appearance",
+		Description: "Hand the zoom to the pane the focus lands on, so moving focus while zoomed shows the pane you moved to",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.zoom_animation", Type: OptionBool, Section: "appearance",
 		Description: "Slide a pane between its tile and the zoom box instead of swapping the two in one frame",
 		Default:     "true",

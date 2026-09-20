@@ -92,6 +92,7 @@ var settingLabels = map[string]string{
 	"appearance.dock_workspace_tab_format":    "Workspace tab format",
 	"appearance.zoom_size":                    "Zoom size",
 	"appearance.zoom_animation":               "Zoom animates",
+	"appearance.zoom_follows_focus":           "Zoom follows focus",
 	"appearance.window_button_zoom":           "Tiled zoom button",
 	"appearance.zoom_max_width":               "Zoom width",
 	"appearance.alt_drag":                     "Alt-drag to move",

@@ -177,16 +177,7 @@ func (m *OS) toggleZoom() {
 		// when it did. Shared, that ambiguity is a divergence rather than a
 		// latent mess - each client picks a pane to blow up and they need not
 		// pick the same one - so the previous zoom is retired here.
-		retireRetile := m.retireOtherZooms(fw)
-
-		// Save current position and zoom to fullscreen
-		fw.PreZoomX = fw.X
-		fw.PreZoomY = fw.Y
-		fw.PreZoomWidth = fw.Width
-		fw.PreZoomHeight = fw.Height
-		fw.Zoomed = true
-
-		m.applyZoomRectAnimated(fw, false, true)
+		retireRetile := m.zoomPane(fw)
 		if retireRetile {
 			// A pane the retirement above handed back to the layout. Retiling
 			// while a pane is zoomed is safe now and was not before: the tiler
@@ -259,9 +250,35 @@ func (m *OS) zoomRectFor(win *terminal.Window) (x, y, w, h int) {
 	zoomWidth, zoomHeight := contentWidth, contentHeight
 	// appearance.zoom_size keeps the layout around the pane on screen: the
 	// scrolling layout's peek, in both directions at once.
+	//
+	// An axis is only given up where there is something to see for it. A pane
+	// whose tile already spans the region on one axis has no neighbour on that
+	// axis, so shrinking it there opens a band onto whatever lies past the
+	// pane's own ends, which for a full-height pane beside a stack of two is a
+	// few rows of somebody else's title bar at each end. Those are the least
+	// useful rows in the frame and they read as litter around the zoom.
+	//
+	// So the left half of a split gives up width alone and keeps the full
+	// height, which puts the whole of the peek into one band on the right
+	// showing both of its neighbours end to end. A pane in the corner of a two
+	// by two gives up both, because it has a neighbour on both. The only pane
+	// on the workspace gives up neither, because a box floating in the middle
+	// of nothing is not a peek at anything.
 	if pct := m.Settings.GetZoomSize(); pct < 100 {
-		zoomWidth = max(contentWidth*pct/100, 1)
-		zoomHeight = max(contentHeight*pct/100, 1)
+		shrinkX, shrinkY := true, true
+		if win != nil {
+			aw, ah := win.Width, win.Height
+			if win.Zoomed && win.PreZoomWidth > 0 && win.PreZoomHeight > 0 {
+				aw, ah = win.PreZoomWidth, win.PreZoomHeight
+			}
+			shrinkX, shrinkY = aw < contentWidth, ah < contentHeight
+		}
+		if shrinkX {
+			zoomWidth = max(contentWidth*pct/100, 1)
+		}
+		if shrinkY {
+			zoomHeight = max(contentHeight*pct/100, 1)
+		}
 	}
 	// If ZoomMaxWidth is set, cap width and center horizontally
 	if m.Settings.ZoomMaxWidth > 0 && m.Settings.ZoomMaxWidth < zoomWidth {
@@ -354,6 +371,110 @@ func (m *OS) applyZoomRectAnimated(w *terminal.Window, deferring, animate bool) 
 		return
 	}
 	w.Resize(width, height)
+}
+
+// zoomPane gives w the workspace's zoom, taking it from whichever pane held it,
+// and reports whether a pane was handed back to the layout and so needs a
+// retile.
+//
+// It is the zoom half of toggleZoom, and the second half of a handover. One
+// body, so the two ways of taking the zoom cannot come to mean different
+// things.
+func (m *OS) zoomPane(w *terminal.Window) bool {
+	// One pane is zoomed per workspace. It was not, while the flag was
+	// client-local and only the focused pane was drawn: zooming a second
+	// pane left the first one flagged and still holding the whole box,
+	// invisible until the focus came back to it and the layout was wrong
+	// when it did. Shared, that ambiguity is a divergence rather than a
+	// latent mess - each client picks a pane to blow up and they need not
+	// pick the same one - so the previous zoom is retired here.
+	retireRetile := m.retireOtherZooms(w)
+
+	// Save current position and zoom to fullscreen
+	w.PreZoomX = w.X
+	w.PreZoomY = w.Y
+	w.PreZoomWidth = w.Width
+	w.PreZoomHeight = w.Height
+	w.Zoomed = true
+
+	m.applyZoomRectAnimated(w, false, true)
+	return retireRetile
+}
+
+// ZoomFollowsFocus moves the workspace's zoom onto the pane the focus has just
+// landed on, when some other pane on the workspace holds it.
+//
+// A zoomed workspace shows one pane, and focus used to move underneath it
+// regardless: the next-pane key focused the pane after it, the zoomed pane kept
+// the box, and the cursor was drawn where the focused pane would have been had
+// it been visible. Keys went to a pane nobody could see.
+//
+// The zoom is the statement that you want one pane and the whole region for it,
+// and a focus move is the statement of which pane. They compose by handing the
+// box over: the pane that had it slides back to its tile while the pane the
+// focus reached slides into the box, both at once, so the frame says what
+// happened rather than cutting between two arrangements.
+//
+// appearance.zoom_follows_focus turns it off, for anyone who would rather the
+// zoom stayed on the pane they put it on.
+func (m *OS) ZoomFollowsFocus(i int) {
+	if !m.Settings.ZoomFollowsFocus || i < 0 || i >= len(m.Windows) {
+		return
+	}
+	w := m.Windows[i]
+	// A popup is drawn over the zoom and focused in front of it, so focusing
+	// one is not a request to see it filling the region.
+	if w == nil || w.IsPopup || w.Minimized || w.Minimizing || w.Workspace != m.CurrentWorkspace {
+		return
+	}
+	zw := m.zoomedWindow()
+	if zw == nil || zw == w {
+		return
+	}
+	m.settleSizes(func() {
+		// The same two retirements toggleZoom makes, for the same reasons: a
+		// deferred resize replayed over the box would shrink the pane back to
+		// its tile, and a snap in flight owns the rectangle the pre-zoom record
+		// is about to be read from.
+		m.requireRealLayout()
+		m.CancelSnapAnimation(w)
+		m.handOverZoom(zw, w)
+		m.FlushPTYBuffersAfterResize()
+		m.MarkAllDirty()
+	})
+}
+
+// handOverZoom moves the box from one pane to another, sliding both.
+//
+// The outgoing pane is put back in the layout first, which is what settles the
+// rectangle it is going home to, and only then is it returned to the box it was
+// holding so the slide has somewhere to start. Arming the animation before the
+// retile would be arming it against a destination the tiler had not chosen yet.
+func (m *OS) handOverZoom(from, to *terminal.Window) {
+	boxX, boxY, boxW, boxH := from.X, from.Y, from.Width, from.Height
+
+	// Back into the layout. Under a tiling layout the tiler owns where it
+	// goes, and it can only place a pane that is no longer zoomed.
+	from.Zoomed = false
+	if m.AutoTiling && !from.IsFloating {
+		m.tileAllWindows()
+	} else if from.PreZoomWidth > 0 && from.PreZoomHeight > 0 {
+		from.X, from.Y = from.PreZoomX, from.PreZoomY
+		from.Width, from.Height = from.PreZoomWidth, from.PreZoomHeight
+		from.Resize(from.PreZoomWidth, from.PreZoomHeight)
+	}
+
+	// Where it ended up is where the slide is going.
+	homeX, homeY, homeW, homeH := from.X, from.Y, from.Width, from.Height
+	from.X, from.Y, from.Width, from.Height = boxX, boxY, boxW, boxH
+	if !m.animateToRect(from, homeX, homeY, homeW, homeH) {
+		from.X, from.Y, from.Width, from.Height = homeX, homeY, homeW, homeH
+		from.InvalidateCache()
+	}
+
+	// And the pane the focus reached takes the box, sliding into it from the
+	// tile the retile above just gave it.
+	m.zoomPane(to)
 }
 
 // zoomCoversRegion reports whether the zoomed pane's rectangle fills the content

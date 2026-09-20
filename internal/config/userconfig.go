@@ -214,6 +214,7 @@ type AppearanceConfig struct {
 	NiriClickReveals       *bool  `toml:"niri_click_reveals"`        // Bring a clicked column fully on screen in the scrolling layout (default: true)
 	NiriHoverReveals       *bool  `toml:"niri_hover_reveals"`        // With focus-follows-mouse on, bring the hovered column fully on screen (default: true)
 	ZoomAnimation          *bool  `toml:"zoom_animation"`            // Slide a pane between its tile and the zoom box (default: true)
+	ZoomFollowsFocus       *bool  `toml:"zoom_follows_focus"`        // Hand the zoom to the pane the focus lands on (default: true)
 	WindowButtonZoom       *bool  `toml:"window_button_zoom"`        // Carry the zoom control on a tiled pane's title bar (default: true)
 	SidebarGitDirty        *bool  `toml:"git_dirty"`                 // Count changed and untracked paths in the rail's git section (default: true)
 	Glyphs                 string `toml:"glyphs"`                    // Chrome glyph set: default, box, heavy, ascii, or one from ~/.config/tuios/glyphs
@@ -1503,6 +1504,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if cfg.Appearance.ZoomAnimation != nil {
 		s.ZoomAnimation = *cfg.Appearance.ZoomAnimation
+	}
+	if cfg.Appearance.ZoomFollowsFocus != nil {
+		s.ZoomFollowsFocus = *cfg.Appearance.ZoomFollowsFocus
 	}
 	if cfg.Appearance.WindowButtonZoom != nil {
 		s.WindowButtonZoom = *cfg.Appearance.WindowButtonZoom

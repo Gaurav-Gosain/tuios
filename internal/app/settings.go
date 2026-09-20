@@ -487,6 +487,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.word_characters"),
 			opt("appearance.zoom_size"),
 			opt("appearance.zoom_animation"),
+			opt("appearance.zoom_follows_focus"),
 			opt("appearance.window_button_zoom"),
 			opt("appearance.zoom_max_width"),
 			opt("appearance.kitty_placeholders"),

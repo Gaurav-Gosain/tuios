@@ -279,6 +279,16 @@ func (m *OS) FocusWindow(i int) *OS {
 	// Invalidate cache for new focused window (border color change + fresh content)
 	m.Windows[i].InvalidateCache() // Full invalidation to show latest content
 
+	// A zoomed workspace shows one pane, so the pane the focus landed on has to
+	// be that one or the keys go somewhere invisible. See ZoomFollowsFocus.
+	//
+	// Here rather than in the next-pane command because every local focus move
+	// comes through here and none of them should land beside a zoom. A peer's
+	// focus arrives by assignment rather than through this, so a client whose
+	// focus sits elsewhere while somebody else's pane is zoomed keeps drawing
+	// that zoom, which is what the render intends.
+	m.ZoomFollowsFocus(i)
+
 	m.FireHook(hooks.AfterFocusChange, m.Windows[i].ID, m.Windows[i].Title())
 
 	// Sync scrolling layout focus and scroll into view when focus changes
