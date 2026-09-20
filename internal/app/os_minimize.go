@@ -143,7 +143,16 @@ func (m *OS) toggleZoom() {
 
 	if fw.Zoomed {
 		// Restore from zoom
+		camera := m.zoomUsesLayout(fw)
 		fw.Zoomed = false
+		if camera {
+			// The camera comes back to the layout's own size, which the tiler
+			// does for every pane at once. Nothing here to put back by hand.
+			m.tileAllWindows()
+			m.FlushPTYBuffersAfterResize()
+			m.MarkAllDirty()
+			return
+		}
 		// The slide back to the tile, when it is on. The pane is left where it
 		// is and the snap walks it home, landing it and resizing the guest once
 		// at the destination, exactly as the way in does.
@@ -234,94 +243,24 @@ func (m *OS) zoomRect() (x, y, w, h int) {
 	return m.zoomRectFor(nil)
 }
 
-// zoomRectFor is zoomRect for a named pane, which is what lets a box smaller
-// than the region sit on the side of the screen that pane came from.
+// zoomRectFor is zoomRect for a named pane.
 //
-// win may be nil, which centres the box. Every caller that has the pane should
-// pass it: the anchoring is the whole point of a box that does not fill the
-// region, and a centred one shows empty margins on the sides where the pane had
-// no neighbours.
+// win is unused and kept so the two callers read the same. A zoom of part of
+// the screen is a camera over the layout rather than a box for one pane, so the
+// only zoom that comes through here is the zoom of the whole screen, which is
+// the same rectangle whichever pane asked for it. See zoom_canvas.go and
+// zoomUsesLayout.
 func (m *OS) zoomRectFor(win *terminal.Window) (x, y, w, h int) {
+	_ = win
 	topMargin := m.GetTopMargin()
 	leftMargin := m.GetLeftMargin()
 	contentWidth := m.GetContentWidth()
-	contentHeight := m.GetUsableHeight()
-
-	zoomWidth, zoomHeight := contentWidth, contentHeight
-	// appearance.zoom_size keeps the layout around the pane on screen: the
-	// scrolling layout's peek, in both directions at once.
-	//
-	// An axis is only given up where there is something to see for it. A pane
-	// whose tile already spans the region on one axis has no neighbour on that
-	// axis, so shrinking it there opens a band onto whatever lies past the
-	// pane's own ends, which for a full-height pane beside a stack of two is a
-	// few rows of somebody else's title bar at each end. Those are the least
-	// useful rows in the frame and they read as litter around the zoom.
-	//
-	// So the left half of a split gives up width alone and keeps the full
-	// height, which puts the whole of the peek into one band on the right
-	// showing both of its neighbours end to end. A pane in the corner of a two
-	// by two gives up both, because it has a neighbour on both. The only pane
-	// on the workspace gives up neither, because a box floating in the middle
-	// of nothing is not a peek at anything.
-	if pct := m.Settings.GetZoomSize(); pct < 100 {
-		shrinkX, shrinkY := true, true
-		if win != nil {
-			aw, ah := win.Width, win.Height
-			if win.Zoomed && win.PreZoomWidth > 0 && win.PreZoomHeight > 0 {
-				aw, ah = win.PreZoomWidth, win.PreZoomHeight
-			}
-			shrinkX, shrinkY = aw < contentWidth, ah < contentHeight
-		}
-		if shrinkX {
-			zoomWidth = max(contentWidth*pct/100, 1)
-		}
-		if shrinkY {
-			zoomHeight = max(contentHeight*pct/100, 1)
-		}
-	}
+	zoomWidth := contentWidth
 	// If ZoomMaxWidth is set, cap width and center horizontally
-	if m.Settings.ZoomMaxWidth > 0 && m.Settings.ZoomMaxWidth < zoomWidth {
+	if m.Settings.ZoomMaxWidth > 0 && m.Settings.ZoomMaxWidth < contentWidth {
 		zoomWidth = m.Settings.ZoomMaxWidth
 	}
-
-	x = leftMargin + (contentWidth-zoomWidth)/2
-	y = topMargin + (contentHeight-zoomHeight)/2
-	if win != nil {
-		// The rectangle the pane came from, not the one it is in. Once it is
-		// zoomed its own rectangle is the box, so anchoring on that would move
-		// the box a little further into the corner every time it was
-		// recomputed, and this runs on every sync and every resize.
-		ax, ay, aw, ah := win.X, win.Y, win.Width, win.Height
-		if win.Zoomed && win.PreZoomWidth > 0 && win.PreZoomHeight > 0 {
-			ax, ay, aw, ah = win.PreZoomX, win.PreZoomY, win.PreZoomWidth, win.PreZoomHeight
-		}
-		x = zoomAnchor(ax, aw, leftMargin, contentWidth, zoomWidth)
-		y = zoomAnchor(ay, ah, topMargin, contentHeight, zoomHeight)
-	}
-	return x, y, zoomWidth, zoomHeight
-}
-
-// zoomAnchor places a zoom box of size box along one axis so it stays over the
-// pane it came from, clamped inside the content region.
-//
-// The box keeps the pane's own centre where it can. Zoom the top right pane of
-// a four-way split and the box goes to the top right, so what peeks in is the
-// pane to its left and the pane below it, which are the two it actually has.
-// Centring the box instead would leave a margin above and to the right showing
-// nothing at all, and the same margin on the other sides covering exactly the
-// neighbours worth seeing.
-//
-// At full size origin+span == region, so every term cancels and the clamp
-// returns the region's own origin. Nothing changes for a zoom that fills the
-// screen.
-func zoomAnchor(paneStart, paneSpan, regionStart, regionSpan, box int) int {
-	if box >= regionSpan {
-		return regionStart
-	}
-	// Centre the box on the pane, then pull it back inside the region.
-	want := paneStart + paneSpan/2 - box/2
-	return min(max(want, regionStart), regionStart+regionSpan-box)
+	return leftMargin + (contentWidth-zoomWidth)/2, topMargin, zoomWidth, m.GetUsableHeight()
 }
 
 // applyZoomRect puts a zoomed pane in this client's zoom box and tells its
@@ -397,8 +336,37 @@ func (m *OS) zoomPane(w *terminal.Window) bool {
 	w.PreZoomHeight = w.Height
 	w.Zoomed = true
 
+	if m.zoomUsesLayout(w) {
+		// The layout places this pane along with every other. Putting it in a
+		// box here first would be a rectangle the very next retile throws away.
+		//
+		// On the strip the widened column also has to be brought on screen:
+		// growing a column that is half off the edge leaves the pane you asked
+		// for further off it than before.
+		if m.UseScrollingLayout {
+			m.scrollingSetPositions()
+			m.RevealFocusedColumn()
+		}
+		return true
+	}
 	m.applyZoomRectAnimated(w, false, true)
 	return retireRetile
+}
+
+// zoomUsesLayout reports whether zooming w is the layout's job rather than a
+// box of w's own.
+//
+// A zoom of part of the screen is, in all three tilers. BSP and master-stack
+// get a camera over the whole arrangement; the scrolling strip is already a
+// camera, so there it is the zoomed column's own width. Either way the tiler
+// places the pane and nothing hands it a rectangle beside that.
+//
+// A zoom of the whole screen is not: there is nothing to show around the pane,
+// so it takes the region the way it always has. Nor is a floating pane, which
+// is not in a layout to be zoomed inside of.
+func (m *OS) zoomUsesLayout(w *terminal.Window) bool {
+	return m.Settings.GetZoomSize() < 100 &&
+		m.AutoTiling && w != nil && !w.IsFloating
 }
 
 // ZoomFollowsFocus moves the workspace's zoom onto the pane the focus has just

@@ -57,6 +57,18 @@ type ScrollingLayout struct {
 	// never a divider: there is no separator overlay in scrolling mode for a
 	// wider gap to thicken.
 	Gap int
+	// MaxProportion is the widest a column may be, as a share of the screen.
+	// Zero reads as nine tenths, which is where the next column stops peeking
+	// in at the edge. It is appearance.scroll_column_max, set by the caller on
+	// every access for the same reason Gap is.
+	MaxProportion float64
+	// ZoomedCol is the column holding the workspace's zoomed pane, or -1 for
+	// none, and ZoomProportion is the share of the screen it is given while it
+	// holds it. Together they are what a zoom means on the strip: one column
+	// widened past the cap the others are held to, with the rest of the strip
+	// still running off the edges. Set by the caller alongside Gap.
+	ZoomedCol      int
+	ZoomProportion float64
 }
 
 // NewScrollingLayout creates a new scrolling layout with sensible defaults.
@@ -64,6 +76,7 @@ func NewScrollingLayout() *ScrollingLayout {
 	return &ScrollingLayout{
 		DefaultWidth: 0.55,
 		PresetWidths: []float64{0.333, 0.5, 0.55, 0.667, 0.9},
+		ZoomedCol:    -1,
 	}
 }
 
@@ -235,12 +248,28 @@ func (s *ScrollingLayout) ResolveColumnWidth(colIndex, screenWidth int) int {
 	if colIndex < 0 || colIndex >= len(s.Columns) {
 		return 0
 	}
-	return s.resolveWidth(s.Columns[colIndex], screenWidth)
+	return s.resolveWidthAt(colIndex, s.Columns[colIndex], screenWidth)
 }
 
-// resolveWidth returns the width in cells for a column, capped at 90% of screen.
+// maxColumnWidth is the widest a column may be resolved to, in cells.
+//
+// The cap used to be nine tenths of the screen, written here as a literal. That
+// is where the next column stops peeking in at the edge, which is the only
+// thing that says the strip has one, and it is the right default. It is not
+// somebody else's decision to make for a person who wants one column and the
+// whole screen: appearance.scroll_column_max is theirs, and MaxProportion is
+// how it reaches this far.
+func (s *ScrollingLayout) maxColumnWidth(screenWidth int) int {
+	p := s.MaxProportion
+	if p <= 0 || p > 1 {
+		p = 0.9
+	}
+	return max(int(float64(screenWidth)*p), 10)
+}
+
+// resolveWidth returns the width in cells for a column.
 func (s *ScrollingLayout) resolveWidth(col ScrollColumn, screenWidth int) int {
-	maxWidth := screenWidth * 9 / 10
+	maxWidth := s.maxColumnWidth(screenWidth)
 	if col.FixedWidth > 0 {
 		return min(col.FixedWidth, maxWidth)
 	}
@@ -251,11 +280,26 @@ func (s *ScrollingLayout) resolveWidth(col ScrollColumn, screenWidth int) int {
 	return min(max(int(float64(screenWidth)*proportion), 10), maxWidth)
 }
 
+// resolveWidthAt is resolveWidth for a column by index, which is what lets the
+// zoomed column be wider than the cap the others are held to.
+//
+// A zoom on the strip is a wider column rather than a camera over the layout,
+// because the strip is already a camera: it is wider than the screen and shows
+// what it cannot fit at the edges. Giving the zoomed column its share of the
+// screen and revealing it is the same gesture the other layouts get, said in
+// the terms this one already has.
+func (s *ScrollingLayout) resolveWidthAt(i int, col ScrollColumn, screenWidth int) int {
+	if i == s.ZoomedCol && s.ZoomProportion > 0 {
+		return min(max(int(float64(screenWidth)*s.ZoomProportion), 10), screenWidth)
+	}
+	return s.resolveWidth(col, screenWidth)
+}
+
 // TotalStripWidth returns the total width of all columns in cells.
 func (s *ScrollingLayout) TotalStripWidth(screenWidth int) int {
 	total := 0
 	for i, col := range s.Columns {
-		total += s.resolveWidth(col, screenWidth)
+		total += s.resolveWidthAt(i, col, screenWidth)
 		if i < len(s.Columns)-1 {
 			total += s.Gap
 		}
@@ -267,7 +311,7 @@ func (s *ScrollingLayout) TotalStripWidth(screenWidth int) int {
 func (s *ScrollingLayout) columnX(index, screenWidth int) int {
 	x := 0
 	for i := 0; i < index && i < len(s.Columns); i++ {
-		x += s.resolveWidth(s.Columns[i], screenWidth) + s.Gap
+		x += s.resolveWidthAt(i, s.Columns[i], screenWidth) + s.Gap
 	}
 	return x
 }
@@ -301,7 +345,7 @@ const scrollPeek = 4
 // opt-in there.
 func (s *ScrollingLayout) reveal(screenWidth, margin int) {
 	colX := s.columnX(s.FocusedCol, screenWidth)
-	colW := s.resolveWidth(s.Columns[s.FocusedCol], screenWidth)
+	colW := s.resolveWidthAt(s.FocusedCol, s.Columns[s.FocusedCol], screenWidth)
 
 	// A column too wide to show with margin on both sides gets what is left,
 	// shared; without this the two clauses below fight and the viewport lands
@@ -330,7 +374,7 @@ func (s *ScrollingLayout) EnsureFocusedVisible(screenWidth int) {
 		return
 	}
 	colX := s.columnX(s.FocusedCol, screenWidth)
-	colW := s.resolveWidth(s.Columns[s.FocusedCol], screenWidth)
+	colW := s.resolveWidthAt(s.FocusedCol, s.Columns[s.FocusedCol], screenWidth)
 	if colX < s.ViewportX+screenWidth && colX+colW > s.ViewportX {
 		return // some of it is on screen
 	}
@@ -351,6 +395,22 @@ func (s *ScrollingLayout) ScrollToFocusedColumn(screenWidth int) {
 // FocusColumnContaining sets focus to the column containing the given window ID.
 // Returns true if the window was found. If not found, FocusedCol is unchanged
 // and the caller should avoid scrolling the viewport.
+// ColumnContaining is the index of the column holding a window, or -1.
+//
+// It reports without moving the focus, which is what a caller asking where a
+// pane is needs: FocusColumnContaining answers the same question by changing
+// the answer to a different one.
+func (s *ScrollingLayout) ColumnContaining(windowID int) int {
+	for i, col := range s.Columns {
+		for _, id := range col.WindowIDs {
+			if id == windowID {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
 func (s *ScrollingLayout) FocusColumnContaining(windowID int) bool {
 	for ci := range s.Columns {
 		if at := slices.Index(s.Columns[ci].WindowIDs, windowID); at >= 0 {
@@ -375,8 +435,8 @@ func (s *ScrollingLayout) ComputePositions(screenWidth, usableHeight, topMargin 
 	}
 
 	x := 0
-	for _, col := range s.Columns {
-		colWidth := s.resolveWidth(col, screenWidth)
+	for ci, col := range s.Columns {
+		colWidth := s.resolveWidthAt(ci, col, screenWidth)
 		screenX := x - s.ViewportX
 
 		windowCount := len(col.WindowIDs)

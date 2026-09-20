@@ -119,7 +119,11 @@ func (m *OS) tileAllWindows() {
 	// retile is exactly when that has happened: every resize path ends here.
 	// Left out, a client that resized while a peer held the zoom kept drawing
 	// the pane at the old box, so the shell had two sizes.
-	if zw := m.zoomedWindow(); zw != nil {
+	//
+	// Not under a camera. There the zoomed pane has no box of its own: it is
+	// placed by the layout below along with every other pane, and putting it in
+	// one here would be a rectangle the very next line throws away.
+	if zw := m.zoomedWindow(); zw != nil && !m.zoomUsesLayout(zw) {
 		m.applyZoomRect(zw, deferring)
 	}
 
@@ -173,12 +177,19 @@ func (m *OS) tileAllWindows() {
 		}
 
 		layouts := m.contentTileLayouts(len(visibleWindows))
+		// A zoom of part of the screen is a camera over this layout rather than
+		// one pane's own rectangle. See zoom_canvas.go.
+		canvas := m.masterZoomCanvas(visibleWindows, layouts)
 		for i, l := range layouts {
 			if i < len(visibleWindows) {
 				// A zoomed pane keeps its slot and loses its rectangle to the
-				// zoom box. See the same skip in ApplyBSPLayout.
-				if visibleWindows[i].Zoomed {
+				// zoom box. See the same skip in ApplyBSPLayout. Under a camera
+				// it is placed like every other pane.
+				if visibleWindows[i].Zoomed && !canvas.on {
 					continue
+				}
+				if r := canvas.apply(layout.Rect{X: l.X, Y: l.Y, W: l.Width, H: l.Height}); canvas.on {
+					l.X, l.Y, l.Width, l.Height = r.X, r.Y, r.W, r.H
 				}
 				// A pane the pointer is dragging keeps its rectangle; the slot
 				// is recorded for the drop. See LiveWindowDrag.
@@ -476,6 +487,22 @@ func (m *OS) TileNewWindow() {
 
 	// Retile all windows including the new one
 	m.TileAllWindows()
+}
+
+// masterZoomCanvas works the camera out from a master-stack layout, from the
+// zoomed pane's rectangle as the tiler chose it.
+func (m *OS) masterZoomCanvas(wins []*terminal.Window, layouts []layout.TileLayout) zoomCanvas {
+	zw := m.zoomedWindow()
+	if zw == nil {
+		return zoomCanvas{}
+	}
+	for i, w := range wins {
+		if w == zw && i < len(layouts) {
+			l := layouts[i]
+			return m.zoomCanvasFor(zw, layout.Rect{X: l.X, Y: l.Y, W: l.Width, H: l.Height})
+		}
+	}
+	return zoomCanvas{}
 }
 
 // RetileAfterClose handles window close in tiling mode

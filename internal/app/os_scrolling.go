@@ -63,6 +63,20 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 	// one place that has to be right.
 	sl.Gap = m.PaneGap
 	sl.DefaultWidth = m.ScrollColumnWidthFraction()
+	sl.MaxProportion = float64(m.Settings.GetScrollColumnMax()) / 100
+	// A zoom on the strip is one column widened past the cap the others are
+	// held to. The strip is already a camera, wider than the screen and showing
+	// what it cannot fit at the edges, so a second camera over it would be two
+	// viewports on one arrangement: the pane gets its share of the screen and
+	// the rest of the strip goes on running off the edges, which is the peek
+	// the other layouts build a canvas for.
+	sl.ZoomedCol, sl.ZoomProportion = -1, 0
+	if zw := m.zoomedWindow(); zw != nil && m.Settings.GetZoomSize() < 100 {
+		if i := sl.ColumnContaining(m.getWindowIntID(zw.ID)); i >= 0 {
+			sl.ZoomedCol = i
+			sl.ZoomProportion = float64(m.Settings.GetZoomSize()) / 100
+		}
+	}
 	// Revealed after the geometry above, because the reveal measures columns
 	// with it, and only on the pass that built the strip.
 	if created {
@@ -123,7 +137,11 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		}
 		// A zoomed pane keeps its column and loses its rectangle to the zoom
 		// box. See the same skip in ApplyBSPLayout.
-		if win.Zoomed {
+		//
+		// Not for a zoom of part of the screen: there the zoom is the column's
+		// own width, so the pane is placed by the strip along with every other
+		// and there is no box for it to be holding.
+		if win.Zoomed && !m.zoomUsesLayout(win) {
 			continue
 		}
 		// A pane the pointer is dragging keeps its rectangle; the slot is

@@ -164,11 +164,17 @@ func (m *OS) ApplyBSPLayout() {
 	// where no gap was reserved, its neighbour's line lands on its own content.
 	borderless := m.panesBorderless()
 
+	// A zoom of part of the screen is a camera over this layout rather than one
+	// pane's own rectangle, so it is worked out from the layout the tiler has
+	// just produced and applied to every pane below. See zoom_canvas.go.
+	canvas := m.bspZoomCanvas(layouts)
+
 	for windowIntID, rect := range layouts {
 		win := m.getWindowByIntID(windowIntID)
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
 		}
+		rect = canvas.apply(rect)
 		// A zoomed pane keeps its slot in the tree and loses its rectangle to the
 		// zoom box, so the tiler leaves the rectangle alone. This is new with
 		// shared zoom: while the flag was local, nothing retiled a workspace that
@@ -176,7 +182,10 @@ func (m *OS) ApplyBSPLayout() {
 		// can bring a pane, close one or move the box while somebody else holds
 		// the zoom, and each of those retiles - and a retile that placed the
 		// zoomed pane would drop the zoom on every client at once.
-		if win.Zoomed {
+		//
+		// Under a camera it is placed like every other pane: it is not holding
+		// a box of its own, it is simply the pane the camera is on.
+		if win.Zoomed && !canvas.on {
 			continue
 		}
 		// A pane the pointer is dragging keeps its rectangle; the slot is
@@ -312,6 +321,20 @@ func (m *OS) ApplyBSPLayout() {
 // that: the drag sets geometry per motion event, the animation stamps its own
 // back over all of it on the next tick, and the layout jumps to wherever the
 // old transition had got to.
+// bspZoomCanvas works the camera out from a BSP layout: it needs the zoomed
+// pane's rectangle as the tiler chose it, before anything is applied to it.
+func (m *OS) bspZoomCanvas(layouts map[int]layout.Rect) zoomCanvas {
+	zw := m.zoomedWindow()
+	if zw == nil {
+		return zoomCanvas{}
+	}
+	rect, ok := layouts[m.getWindowIntID(zw.ID)]
+	if !ok {
+		return zoomCanvas{}
+	}
+	return m.zoomCanvasFor(zw, rect)
+}
+
 func (m *OS) CancelSnapAnimation(win *terminal.Window) {
 	for i := len(m.Animations) - 1; i >= 0; i-- {
 		if m.Animations[i].Window == win && m.Animations[i].Type == ui.AnimationSnap {
