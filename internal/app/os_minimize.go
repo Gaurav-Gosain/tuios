@@ -159,32 +159,76 @@ func (m *OS) toggleZoom() {
 		}
 		m.MarkAllDirty()
 	} else {
-		// One pane is zoomed per workspace. It was not, while the flag was
-		// client-local and only the focused pane was drawn: zooming a second
-		// pane left the first one flagged and still holding the whole box,
-		// invisible until the focus came back to it and the layout was wrong
-		// when it did. Shared, that ambiguity is a divergence rather than a
-		// latent mess - each client picks a pane to blow up and they need not
-		// pick the same one - so the previous zoom is retired here.
-		retireRetile := m.retireOtherZooms(fw)
-
-		// Save current position and zoom to fullscreen
-		fw.PreZoomX = fw.X
-		fw.PreZoomY = fw.Y
-		fw.PreZoomWidth = fw.Width
-		fw.PreZoomHeight = fw.Height
-		fw.Zoomed = true
-
-		m.applyZoomRect(fw, false)
-		if retireRetile {
-			// A pane the retirement above handed back to the layout. Retiling
-			// while a pane is zoomed is safe now and was not before: the tiler
-			// skips the zoomed pane's rectangle and hands it the zoom box.
-			m.tileAllWindows()
-		}
-		m.FlushPTYBuffersAfterResize()
-		m.MarkAllDirty()
+		m.zoomWindow(fw)
 	}
+}
+
+// zoomWindow gives w the workspace's zoom, taking it from whichever pane held
+// it. It is the zoom half of toggleZoom, and the whole of what a focus move
+// does when it lands beside a zoomed pane; see zoomFollowsFocus.
+func (m *OS) zoomWindow(w *terminal.Window) {
+	// One pane is zoomed per workspace. It was not, while the flag was
+	// client-local and only the focused pane was drawn: zooming a second
+	// pane left the first one flagged and still holding the whole box,
+	// invisible until the focus came back to it and the layout was wrong
+	// when it did. Shared, that ambiguity is a divergence rather than a
+	// latent mess - each client picks a pane to blow up and they need not
+	// pick the same one - so the previous zoom is retired here.
+	retireRetile := m.retireOtherZooms(w)
+
+	// Save current position and zoom to fullscreen
+	w.PreZoomX = w.X
+	w.PreZoomY = w.Y
+	w.PreZoomWidth = w.Width
+	w.PreZoomHeight = w.Height
+	w.Zoomed = true
+
+	m.applyZoomRect(w, false)
+	if retireRetile {
+		// A pane the retirement above handed back to the layout. Retiling
+		// while a pane is zoomed is safe now and was not before: the tiler
+		// skips the zoomed pane's rectangle and hands it the zoom box.
+		m.tileAllWindows()
+	}
+	m.FlushPTYBuffersAfterResize()
+	m.MarkAllDirty()
+}
+
+// zoomFollowsFocus moves the workspace's zoom onto the window at i, which
+// FocusWindow has just focused, when some other pane on the workspace holds it.
+//
+// Zoom hides every pane but the zoomed one, and focus used to move underneath
+// it regardless: alt+n from a zoomed pane focused the next pane in the cycle,
+// the zoomed pane kept the box, and the cursor was drawn where the focused
+// pane would have been had it been visible. Keys went to a pane nobody could
+// see. The zoom is the user's statement that they want one pane and the whole
+// region for it, and a focus move is the statement of which pane; the two
+// compose by handing the box to the pane the focus landed on, the same way
+// pressing z on it would have.
+//
+// Only a focus move this client made comes through here. A sync applies a
+// peer's focus by writing the field, so a peer whose focus sits elsewhere while
+// this client's pane is zoomed keeps drawing the zoom, as the render intends.
+// A popup is drawn over the zoom and focused in front of it, so focusing one
+// leaves the zoom where it is.
+func (m *OS) zoomFollowsFocus(i int) {
+	w := m.Windows[i]
+	if w.IsPopup || w.Minimized || w.Minimizing || w.Workspace != m.CurrentWorkspace {
+		return
+	}
+	zw := m.zoomedWindow()
+	if zw == nil || zw == w {
+		return
+	}
+	m.settleSizes(func() {
+		// The same two retirements toggleZoom makes, for the same reasons: a
+		// deferred resize replayed over the box would shrink the pane back to
+		// its tile, and a snap in flight owns the rectangle the pre-zoom record
+		// is about to be read from.
+		m.requireRealLayout()
+		m.CancelSnapAnimation(w)
+		m.zoomWindow(w)
+	})
 }
 
 // zoomedWindow is the pane the session has zoomed on the workspace this client
