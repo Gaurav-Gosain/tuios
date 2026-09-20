@@ -706,7 +706,19 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	buf.WriteString("\x1b7") // Save cursor position
 	fmt.Fprintf(&buf, "\x1b[%d;%dH", p.HostY+1, p.HostX+1)
 	buf.WriteString("\x1b_G")
-	fmt.Fprintf(&buf, "a=p,i=%d,p=%d", p.HostImageID, p.PlacementID)
+	// C=1: do not move the cursor.
+	//
+	// The protocol's default is C=0, which moves the cursor to after the
+	// image's bottom right cell. tuios places images anywhere in a pane,
+	// including its last rows, so that move runs past the bottom of the screen
+	// and the host terminal scrolls to make room. The save and restore around
+	// this put the cursor back; they cannot put back a scroll. Every frame
+	// after it is then drawn one row out, which is the whole screen sliding up
+	// and the chrome smearing.
+	//
+	// tuios positions every image itself, with the absolute move above, so
+	// there is nothing the host's own cursor policy is needed for.
+	fmt.Fprintf(&buf, "a=p,i=%d,p=%d,C=1", p.HostImageID, p.PlacementID)
 
 	// MaxShowable is already calculated as: p.Rows - clipTop - clipBottom
 	// So it already accounts for clipping and is the number of rows to display

@@ -1245,7 +1245,9 @@ func buildVideoReplace(hostID uint32, st *remoteVideoState) []byte {
 	var out bytes.Buffer
 	out.WriteString("\x1b7")
 	fmt.Fprintf(&out, "\x1b[%d;%dH", st.hostY+1, st.hostX+1)
-	fmt.Fprintf(&out, "\x1b_Ga=p,i=%d,p=1,q=2", hostID)
+	// C=1 for the reason placeOne carries: the default cursor policy scrolls
+	// the host screen when an image sits at the bottom of a pane.
+	fmt.Fprintf(&out, "\x1b_Ga=p,i=%d,p=1,C=1,q=2", hostID)
 	if cols > 0 {
 		fmt.Fprintf(&out, ",c=%d", cols)
 	}
@@ -1365,7 +1367,9 @@ func (kp *KittyPassthrough) forwardPlace(
 	buf.WriteString("\x1b7") // Save cursor position
 	fmt.Fprintf(&buf, "\x1b[%d;%dH", hostY+1, hostX+1)
 	buf.WriteString("\x1b_G")
-	fmt.Fprintf(&buf, "a=p,i=%d", hostID)
+	// C=1 for the reason placeOne carries: the default cursor policy scrolls
+	// the host screen when an image sits at the bottom of a pane.
+	fmt.Fprintf(&buf, "a=p,i=%d,C=1", hostID)
 
 	if cmd.PlacementID > 0 {
 		fmt.Fprintf(&buf, ",p=%d", cmd.PlacementID)
