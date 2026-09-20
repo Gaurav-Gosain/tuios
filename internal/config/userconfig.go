@@ -222,6 +222,7 @@ type AppearanceConfig struct {
 	// keeps the master ratio as the fraction the tilers want.
 	MasterRatio       int    `toml:"master_ratio"`        // Master pane width in the master-stack layout, percent of the screen (default: 50)
 	ScrollColumnWidth int    `toml:"scroll_column_width"` // New column width in the scrolling layout, percent of the screen (default: 55)
+	ScrollColumnMax   int    `toml:"scroll_column_max"`   // Highest that width may be set to, percent of the screen (default: 90, up to 100)
 	PanelPadding      int    `toml:"panel_padding"`       // Columns of surface padding inside every overlay panel (default: 2)
 	ClockFormat       string `toml:"clock_format"`        // Go time layout the clock overlay is drawn with (default: 15:04:05)
 	DimUnfocused      int    `toml:"dim_unfocused"`       // Percent an unfocused pane's content is carried toward its own ground (default: 0)
@@ -576,6 +577,7 @@ func DefaultConfig() *UserConfig {
 			ClockFormat:              DefaultClockFormat,
 			MasterRatio:              MasterRatioDefault,
 			ScrollColumnWidth:        ScrollColumnWidthDefault,
+			ScrollColumnMax:          ScrollColumnWidthMax,
 			NiriScrollCells:          NiriScrollCellsDefault,
 			PrefixRepeatTime:         &defaultPrefixRepeatTime,
 			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
@@ -1305,10 +1307,17 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	} else {
 		cfg.Appearance.MasterRatio = min(max(cfg.Appearance.MasterRatio, MasterRatioMin), MasterRatioMax)
 	}
+	// The cap is settled before the width, because it is what the width is
+	// clamped against.
+	if cfg.Appearance.ScrollColumnMax == 0 {
+		cfg.Appearance.ScrollColumnMax = ScrollColumnWidthMax
+	} else {
+		cfg.Appearance.ScrollColumnMax = min(max(cfg.Appearance.ScrollColumnMax, ScrollColumnWidthMin), ScrollColumnWidthCeiling)
+	}
 	if cfg.Appearance.ScrollColumnWidth == 0 {
 		cfg.Appearance.ScrollColumnWidth = ScrollColumnWidthDefault
 	} else {
-		cfg.Appearance.ScrollColumnWidth = min(max(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin), ScrollColumnWidthMax)
+		cfg.Appearance.ScrollColumnWidth = min(max(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin), cfg.Appearance.ScrollColumnMax)
 	}
 	if cfg.Appearance.NiriScrollCells == 0 {
 		cfg.Appearance.NiriScrollCells = NiriScrollCellsDefault
@@ -1557,7 +1566,8 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	s.ClockFormat = cfg.Appearance.ClockFormat
 	s.PaneGap = min(max(cfg.Appearance.Gap, 0), PaneGapMax)
 	s.MasterRatioPercent = clampPercent(cfg.Appearance.MasterRatio, MasterRatioMin, MasterRatioMax, MasterRatioDefault)
-	s.ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, ScrollColumnWidthMax, ScrollColumnWidthDefault)
+	s.ScrollColumnMax = clampPercent(cfg.Appearance.ScrollColumnMax, ScrollColumnWidthMin, ScrollColumnWidthCeiling, ScrollColumnWidthMax)
+	s.ScrollColumnWidth = clampPercent(cfg.Appearance.ScrollColumnWidth, ScrollColumnWidthMin, s.ScrollColumnMax, ScrollColumnWidthDefault)
 	s.DimUnfocused = min(max(cfg.Appearance.DimUnfocused, 0), DimUnfocusedMax)
 	overlay.SetPanelPadding(cfg.Appearance.PanelPadding)
 	// The glyph set is selected here rather than beside the theme, because it

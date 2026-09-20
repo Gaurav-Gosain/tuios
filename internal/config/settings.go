@@ -471,6 +471,21 @@ type Settings struct {
 	// as a two-pane split and never as something you scroll.
 	ScrollColumnWidth int
 
+	// ScrollColumnMax is the highest ScrollColumnWidth may be set to, as a
+	// percent of the screen.
+	//
+	// The default, 90, is where the next column stops peeking in at the edge,
+	// which is the only thing that says the strip has one. Raising it to 100
+	// gives a column the whole screen: it is the ask from somebody who wanted a
+	// pane at full width without zooming, because zooming costs them the fast
+	// window switching the strip is for. The peek is what that trades away,
+	// which is why it is a setting and not the new default.
+	//
+	// Read it through GetScrollColumnMax, never directly: a Settings built by
+	// hand carries a zero here, and a clamp against zero pins every column to
+	// the floor.
+	ScrollColumnMax int
+
 	// DimUnfocused is how far an unfocused pane's content is carried toward the
 	// pane's own ground, as a percentage. Zero, the default, draws every pane's
 	// content the same.
@@ -601,6 +616,7 @@ func DefaultSettings() Settings {
 		PaneGap:                     0,
 		MasterRatioPercent:          MasterRatioDefault,
 		ScrollColumnWidth:           ScrollColumnWidthDefault,
+		ScrollColumnMax:             ScrollColumnWidthMax,
 		DimUnfocused:                0,
 		ClockFormat:                 "",
 		ZoomMaxWidth:                0,

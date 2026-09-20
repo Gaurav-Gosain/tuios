@@ -443,6 +443,20 @@ const (
 // Runtime Configuration
 // =============================================================================
 
+// GetScrollColumnMax is the highest a scrolling column's width may be set to,
+// as a percent of the screen.
+//
+// A value outside the allowed range, including the zero a Settings built by
+// hand carries, reads as the default ceiling. Nothing that clamps a width may
+// read the constant directly, or the setting would be ignored on whichever
+// path forgot.
+func (s *Settings) GetScrollColumnMax() int {
+	if s.ScrollColumnMax < ScrollColumnWidthMin || s.ScrollColumnMax > ScrollColumnWidthCeiling {
+		return ScrollColumnWidthMax
+	}
+	return s.ScrollColumnMax
+}
+
 // GetAnimationDuration returns the animation duration for standard operations.
 // Returns 0 if animations are disabled or suppressed, causing instant transitions.
 func (s *Settings) GetAnimationDuration() time.Duration {
@@ -605,11 +619,18 @@ func (s *Settings) MasterRatioFraction() float64 {
 }
 
 // The column width's range and its default. The floor is the narrowest column
-// a shell is usable in; the ceiling is where the strip's next column stops
-// peeking in at the edge, which is the only thing that says there is one.
+// a shell is usable in.
+//
+// ScrollColumnWidthMax is the default ceiling, and it is where the strip's next
+// column stops peeking in at the edge, which is the only thing that says there
+// is one. appearance.scroll_column_max raises it, up to
+// ScrollColumnWidthCeiling: a full-width column gives the pane the whole screen
+// without zooming, so the strip keeps its columns and its fast switching, and
+// the peek is what you spend for it.
 const (
 	ScrollColumnWidthMin     = 20
 	ScrollColumnWidthMax     = 90
+	ScrollColumnWidthCeiling = 100
 	ScrollColumnWidthDefault = 55
 )
 

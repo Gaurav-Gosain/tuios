@@ -63,7 +63,7 @@ func (m *OS) SetMasterRatioSetting(percent int) {
 // SetScrollColumnWidthSetting is SetSharedBordersSetting for a scrolling
 // column's width, as a percent of the screen.
 func (m *OS) SetScrollColumnWidthSetting(percent int) {
-	percent = clampInt(percent, config.ScrollColumnWidthMin, config.ScrollColumnWidthMax)
+	percent = clampInt(percent, config.ScrollColumnWidthMin, m.scrollColumnMax())
 	m.ScrollColumnWidth = percent
 	m.Settings.ScrollColumnWidth = percent
 	m.lastConfigScrollWidth = percent
@@ -79,8 +79,16 @@ func (m *OS) ScrollColumnWidthFraction() float64 {
 	if w == 0 {
 		w = m.Settings.ScrollColumnWidth
 	}
-	return float64(clampInt(w, config.ScrollColumnWidthMin, config.ScrollColumnWidthMax)) / 100
+	return float64(clampInt(w, config.ScrollColumnWidthMin, m.scrollColumnMax())) / 100
 }
+
+// scrollColumnMax is the highest a column's width may be set to on this client.
+//
+// appearance.scroll_column_max, which defaults to the 90 that leaves the next
+// column peeking in at the edge. Somebody who wants a pane at full width
+// without zooming, because zooming costs them the strip's fast switching, sets
+// it to 100 and spends the peek.
+func (m *OS) scrollColumnMax() int { return m.Settings.GetScrollColumnMax() }
 
 // MasterRatioPercent is the session's master ratio as the settings row shows
 // it. Rounded rather than truncated, so a ratio the resize keys nudged to 0.55
@@ -161,9 +169,9 @@ func (m *OS) masterRatioItem() settingItem {
 // scrollColumnWidthItem is the settings row for a scrolling column's width.
 func (m *OS) scrollColumnWidthItem() settingItem {
 	return percentItem("appearance.scroll_column_width",
-		config.ScrollColumnWidthMin, config.ScrollColumnWidthMax,
+		config.ScrollColumnWidthMin, m.scrollColumnMax(),
 		func(m *OS) int {
-			return clampInt(m.ScrollColumnWidth, config.ScrollColumnWidthMin, config.ScrollColumnWidthMax)
+			return clampInt(m.ScrollColumnWidth, config.ScrollColumnWidthMin, m.scrollColumnMax())
 		},
 		(*OS).SetScrollColumnWidthSetting)
 }

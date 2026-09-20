@@ -62,6 +62,7 @@ var settingLabels = map[string]string{
 	"appearance.gap":                    "Pane gap",
 	"appearance.niri_reverse_scroll":    "Reverse scroll",
 	"appearance.niri_scroll_cells":      "Strip scroll step",
+	"appearance.scroll_column_max":      "Column width cap",
 	"appearance.niri_click_reveals":     "Click reveals column",
 	"appearance.niri_hover_reveals":     "Hover reveals column",
 	"appearance.animations_enabled":     "Animations",

@@ -333,6 +333,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			// is not using.
 			custom("appearance.master_ratio", m.masterRatioItem()),
 			custom("appearance.scroll_column_width", m.scrollColumnWidthItem()),
+			opt("appearance.scroll_column_max"),
 			opt("appearance.dim_unfocused"),
 			opt("appearance.panel_padding"),
 			opt("appearance.zen_mode"),
@@ -340,7 +341,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.session_colors"),
 			opt("appearance.session_border"),
 			opt("appearance.global_session"),
-			opt("appearance.git_dirty"),
 		}),
 	}
 
@@ -366,6 +366,10 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.sidebar.file_delete"),
 			opt("appearance.sidebar.marquee"),
 			opt("appearance.sidebar.tooltips"),
+			// Filed here rather than under Appearance, which is where it used to
+			// sit: the registry already calls it a sidebar option, it counts paths
+			// for the rail's git section, and Appearance had no room for it.
+			opt("appearance.git_dirty"),
 		}),
 	}
 

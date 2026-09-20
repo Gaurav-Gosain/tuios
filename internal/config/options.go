@@ -304,7 +304,14 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.scroll_column_width", Type: OptionInt, Section: "appearance",
 		Description: "Width of a column in the scrolling layout, as a percent of the screen",
-		Default:     strconv.Itoa(ScrollColumnWidthDefault), Min: ScrollColumnWidthMin, Max: ScrollColumnWidthMax,
+		Default:     strconv.Itoa(ScrollColumnWidthDefault), Min: ScrollColumnWidthMin, Max: ScrollColumnWidthCeiling,
+		Percent: true,
+	},
+	{
+		Path: "appearance.scroll_column_max", Type: OptionInt, Section: "appearance",
+		Description: "Highest a column's width may be set to in the scrolling layout, as a percent. 100 lets a column fill the screen, at the cost of the next one peeking in at the edge.",
+		Default:     strconv.Itoa(ScrollColumnWidthMax),
+		Min:         ScrollColumnWidthMin, Max: ScrollColumnWidthCeiling,
 		Percent: true,
 	},
 	{
