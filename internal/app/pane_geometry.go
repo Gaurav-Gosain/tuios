@@ -142,9 +142,9 @@ func (m *OS) paneGapItem() settingItem {
 		adjust: func(m *OS, dir int) {
 			m.SetPaneGapSetting(m.PaneGap + dir)
 		},
-		meter: func(m *OS) float64 {
-			return float64(clampInt(m.PaneGap, 0, config.PaneGapMax)) / float64(config.PaneGapMax)
-		},
+		// No gauge. The gap is a count of cells over a range of eight, so the
+		// number is already the whole story and a bar beside it only says the
+		// same thing less exactly.
 	}
 }
 

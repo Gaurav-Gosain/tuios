@@ -316,14 +316,22 @@ func (m *OS) registryItem(path string) settingItem {
 			step = s
 		}
 		item.Control = controlInt
-		item.value = func(m *OS) string { return strconv.Itoa(m.optionInt(path)) }
+		item.value = func(m *OS) string {
+			text := strconv.Itoa(m.optionInt(path))
+			if o.Percent {
+				text += "%"
+			}
+			return text
+		}
 		item.adjust = func(m *OS, dir int) {
 			m.setOption(path, strconv.Itoa(clampInt(m.optionInt(path)+dir*step, lo, hi)))
 		}
-		// A gauge only where the registry enforces a ceiling. On an option
-		// without one the bar would be drawn against a number this file picked,
-		// which is a scale the setting does not actually have.
-		if o.Max > 0 {
+		// A gauge only on a proportion, where both ends of the range are places
+		// the value would really sit. It used to be drawn on any option with a
+		// ceiling, which put one beside every count and timeout in the panel,
+		// where it sat empty whatever the value was, because those ceilings are
+		// guards against a silly number and not the top of a scale.
+		if o.Percent {
 			item.meter = func(m *OS) float64 {
 				if hi <= lo {
 					return 0

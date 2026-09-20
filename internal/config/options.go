@@ -49,6 +49,20 @@ type Option struct {
 	// without it a misspelled set is recorded, reported as applied, and draws
 	// the glyphs it already had.
 	GlyphSet bool `json:"glyph_set,omitempty"`
+	// Percent marks an int option whose value is a share of something, with
+	// Min and Max as the real ends of its travel rather than as a guard against
+	// a silly number. Like Color and Theme it says what the value means rather
+	// than what it is, and it is what earns the option a gauge on the settings
+	// panel and a % after its number.
+	//
+	// The line it draws is between a proportion and a count. Both are ints with
+	// a Max, so the panel used to gauge both, and on a count the result said
+	// nothing: notifications.duration allows up to an hour, so the usual four
+	// seconds drew an empty bar, and appearance.scrollback_lines allows a
+	// million, so ten thousand drew an empty bar too. A proportion is the case
+	// where the far end is a place you would actually put the value, which is
+	// the only case where seeing how far along it sits tells you anything.
+	Percent bool `json:"percent,omitempty"`
 }
 
 // The three types an option can carry. A config value crosses the protocol as a
@@ -280,11 +294,13 @@ var optionSpecs = []Option{
 		Path: "appearance.master_ratio", Type: OptionInt, Section: "appearance",
 		Description: "Width of the master pane in the master-stack layout, as a percent of the screen",
 		Default:     strconv.Itoa(MasterRatioDefault), Min: MasterRatioMin, Max: MasterRatioMax,
+		Percent: true,
 	},
 	{
 		Path: "appearance.scroll_column_width", Type: OptionInt, Section: "appearance",
 		Description: "Width of a column in the scrolling layout, as a percent of the screen",
 		Default:     strconv.Itoa(ScrollColumnWidthDefault), Min: ScrollColumnWidthMin, Max: ScrollColumnWidthMax,
+		Percent: true,
 	},
 	{
 		Path: "appearance.niri_scroll_cells", Type: OptionInt, Section: "appearance",
@@ -306,6 +322,7 @@ var optionSpecs = []Option{
 		Path: "appearance.dim_unfocused", Type: OptionInt, Section: "appearance",
 		Description: "How much tuios fades a pane you are not in, as a percent. 0 is off.",
 		Default:     "0", Min: 0, Max: DimUnfocusedMax,
+		Percent: true,
 	},
 	{
 		Path: "appearance.clock_format", Type: OptionString, Section: "dock",
@@ -893,6 +910,7 @@ var optionSpecs = []Option{
 		Path: "spotlight.dim", Type: OptionInt, Section: "spotlight",
 		Description: "Percent of its light an unlit cell loses",
 		Default:     "75", Min: SpotlightMinDim, Max: SpotlightMaxDim,
+		Percent: true,
 	},
 	{
 		Path: "spotlight.edge", Type: OptionString, Section: "spotlight",

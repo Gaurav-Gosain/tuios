@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -231,7 +230,7 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 		// exactly these rows: the change they make is on the screen behind the
 		// panel, and the number alone does not say how far there is left to go.
 		if item.meter != nil {
-			control = settingsMeter(item.meter(m), selected, bg, pal, &m.Settings) + control
+			control = settingsMeter(item.meter(m), selected, bg, pal) + control
 		}
 	}
 
@@ -334,7 +333,7 @@ const settingsMeterCells = 6
 // A gauge rather than a percentage: the question it answers is "how much further
 // can this go", which a second number does not answer any faster than the first
 // one did.
-func settingsMeter(fraction float64, selected bool, bg color.Color, pal overlay.Palette, s *config.Settings) string {
+func settingsMeter(fraction float64, selected bool, bg color.Color, pal overlay.Palette) string {
 	fraction = min(max(fraction, 0), 1)
 	filled := int(fraction*float64(settingsMeterCells) + 0.5)
 	// A value off the floor always shows at least one cell, so nudging a
@@ -344,7 +343,7 @@ func settingsMeter(fraction float64, selected bool, bg color.Color, pal overlay.
 		filled = 1
 	}
 
-	on, off := s.GetScrollbarThumbChar(), s.GetScrollbarTrackChar()
+	on, off := settingsMeterGlyphs()
 	inkOn, inkOff := pal.Accent, pal.FgMute
 	if !selected {
 		inkOn = pal.FgDim
@@ -352,4 +351,27 @@ func settingsMeter(fraction float64, selected bool, bg color.Color, pal overlay.
 	return overlay.Style(bg).Foreground(inkOn).Render(strings.Repeat(on, filled)) +
 		overlay.Style(bg).Foreground(inkOff).Render(strings.Repeat(off, settingsMeterCells-filled)) +
 		overlay.Style(bg).Render(" ")
+}
+
+// settingsMeterGlyphs are the filled and unfilled cells of a settings gauge.
+//
+// Its own pair, not the pane scrollbar's.
+//
+// It used to read appearance.scrollbar.thumb and .track, so changing how a
+// pane draws its scrollbar changed every numeric row on the settings page,
+// which is a connection nobody could guess at and nobody asked for. Worse, the
+// track style's track glyph is deliberately the empty string, because that bar
+// paints its groove with a background rather than a character. Repeating an
+// empty string gives no cells, so the gauge stopped being a fixed width and
+// became as wide as its own value: every row's stepper then sat at a different
+// column, which is what the page looked like with that style set.
+//
+// Horizontal characters, because the gauge is horizontal. The scrollbar's are
+// vertical bars, which is right for a scrollbar and was being laid on its side
+// here.
+func settingsMeterGlyphs() (on, off string) {
+	if overlay.UseASCII() {
+		return "=", "-"
+	}
+	return "\u2501", "\u2500"
 }
