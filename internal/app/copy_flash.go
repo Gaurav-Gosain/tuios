@@ -261,11 +261,20 @@ func (b copyFlashBand) styleFor(x, row int, hasGlyph bool, bg color.Color) (lipg
 	if i <= 0.02 {
 		return lipgloss.Style{}, false
 	}
-	st := lipgloss.NewStyle().Background(overlay.MixColors(bg, b.tint, i))
-	if hasGlyph {
-		st = st.Foreground(overlay.MixColors(b.ink, b.tint, i))
-	}
-	return st, true
+	// Only the background. The text is left exactly as the program wrote it.
+	//
+	// It used to be carried toward the same colour as the ground, so at the
+	// centre of the band the two were equal and the characters were gone:
+	// eleven to one down to one to one on a dark theme, with everything above
+	// about half intensity below the contrast floor the rest of the interface
+	// holds its marks to. Text disappearing and coming back is a far louder
+	// event than a tint, and it is what the sweep actually looked like.
+	//
+	// It also mixed from the interface's own foreground rather than the
+	// cell's, so a coloured line lost its colour for the duration and snapped
+	// back at the end. Light passing over text does not repaint the text.
+	_ = hasGlyph
+	return lipgloss.NewStyle().Background(overlay.MixColors(bg, b.tint, i)), true
 }
 
 // copyFlashEnvelope is the sweep's brightness over its life: it ramps in,
@@ -304,7 +313,7 @@ func (m *OS) copyFlashBandFor(progress float64, box copyFlashBox) copyFlashBand 
 	pal := theme.UI()
 	band := copyFlashBand{
 		amp:  copyFlashEnvelope(progress),
-		tint: lipgloss.Color(m.Settings.CopyFlashColor),
+		tint: m.copyFlashTint(),
 		ink:  pal.Fg,
 	}
 	switch m.Settings.CopyFlashStyle {
@@ -454,3 +463,29 @@ func fillPaneRegion(grid *pool.HighlightGrid, start, end terminal.Position,
 // narrow band has few cells to spread its shades over and arrives as an edge;
 // a wider one has more, and reads as light rather than as a bar.
 func (m *OS) copyFlashReach() float64 { return 0.30 }
+
+// copyFlashTint is the colour the light is made of.
+//
+// Derived from the pane's own background unless a colour is configured. What a
+// person sees is the change relative to the ground they are looking at, not a
+// particular colour, and one literal cannot serve both ends of the theme
+// range: the pale gold this shipped with measures fourteen to one against a
+// dark ground and one point oh three against a light one, so it was a strobe
+// on one theme and invisible on the other.
+//
+// The ground is lifted by a ratio instead, in whichever direction has room,
+// which ContrastText answers by measuring rather than by guessing at the
+// theme. The lift is capped against the selection colour, which is the most
+// familiar "this region is marked" signal in the product: an acknowledgement
+// should land just under it, the same order and read as weaker.
+func (m *OS) copyFlashTint() color.Color {
+	if c := m.Settings.CopyFlashColor; c != "" {
+		return lipgloss.Color(c)
+	}
+	return overlay.Tone(theme.TerminalBg(), copyFlashLift)
+}
+
+// copyFlashLift is how far the ground is carried, as a contrast ratio. The
+// selection measures about 1.8 to 1 against a dark ground, so this sits under
+// it.
+const copyFlashLift = 1.6

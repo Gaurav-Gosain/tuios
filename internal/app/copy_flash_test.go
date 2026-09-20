@@ -2,7 +2,9 @@ package app
 
 import (
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"image/color"
+	"strings"
 	"testing"
 	"time"
 
@@ -644,5 +646,71 @@ func TestCancellingWhenNothingIsRunningIsSafe(t *testing.T) {
 	m.CancelCopyFlash()
 	if m.CopyFlashActive() {
 		t.Error("a sweep appeared from nowhere")
+	}
+}
+
+// TestTheSweepNeverRepaintsTheText.
+//
+// The worst fault the sweep had, and the reason it read as an effect behaving
+// strangely: it carried the cell's foreground toward the same colour as its
+// background, so at the centre of the band the two were equal and the
+// characters were gone. Eleven to one down to one to one on a dark theme.
+//
+// Light passing over text does not repaint the text.
+//
+// Negative control: setting a foreground in styleFor fails this at the centre
+// of the band.
+func TestTheSweepNeverRepaintsTheText(t *testing.T) {
+	m := flashOS(t)
+	ground := lipgloss.Color("#1E1E2E")
+	box := copyFlashBox{left: 0, right: 60, top: 10, bottom: 10}
+	band := m.copyFlashBandFor(0.5, box)
+
+	centre := int(band.peakColumn(box.top))
+	st, lit := band.styleFor(centre, box.top, true, ground)
+	if !lit {
+		t.Fatal("ASSERTION: the centre of the band is not lit, so there is nothing to check")
+	}
+	if got := st.Render("x"); strings.Contains(got, "38;2;") {
+		t.Errorf("the brightest cell repaints its text: %q", got)
+	}
+}
+
+// TestTheTintIsDerivedFromTheGround.
+//
+// One literal cannot serve both ends of the theme range: the pale gold this
+// shipped with measures fourteen to one against a dark ground and one point oh
+// three against a light one, so it was a strobe on one theme and invisible on
+// the other.
+//
+// Negative control: going back to a fixed colour fails the light theme's floor
+// and the dark theme's ceiling at once.
+func TestTheTintIsDerivedFromTheGround(t *testing.T) {
+	for _, tc := range []struct{ name, bg string }{
+		{"a dark theme", "#1E1E2E"},
+		{"a light theme", "#FDF6E3"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bg := lipgloss.Color(tc.bg)
+			tint := overlay.Tone(bg, copyFlashLift)
+
+			got := overlay.ContrastRatio(tint, bg)
+			if got < 1.3 {
+				t.Errorf("the tint measures %.2f against the ground, too little to see", got)
+			}
+			if got > copyFlashLift+0.05 {
+				t.Errorf("the tint measures %.2f against the ground, louder than the selection", got)
+			}
+		})
+	}
+}
+
+// TestAConfiguredColourStillWins, because that is what the setting is for.
+func TestAConfiguredColourStillWins(t *testing.T) {
+	m := flashOS(t)
+	m.Settings.CopyFlashColor = "#FF00FF"
+
+	if got := m.copyFlashTint(); got != lipgloss.Color("#FF00FF") {
+		t.Errorf("the tint is %v, want the configured colour", got)
 	}
 }

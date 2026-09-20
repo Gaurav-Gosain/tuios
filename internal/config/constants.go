@@ -1556,9 +1556,13 @@ const (
 	CopyFlashMsDefault = 420
 	CopyFlashMsMin     = 80
 	CopyFlashMsMax     = 3000
-	// A pale warm white, which reads as light over output of any colour
-	// without introducing a hue the rest of the screen does not use.
-	DefaultCopyFlashColor = "#FFF3C4"
+	// Empty, meaning the colour is derived from the pane's own background.
+	//
+	// It was a pale warm white, and one literal cannot serve both ends of the
+	// theme range: that colour measures fourteen to one against a dark ground
+	// and one point oh three against a light one. A value set here is still
+	// honoured, which is what the setting is for.
+	DefaultCopyFlashColor = ""
 	// The shape the sweep takes. A diagonal falls across a paragraph, which is
 	// what most copies are.
 	DefaultCopyFlashStyle = "diagonal"
