@@ -93,6 +93,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -236,6 +237,20 @@ func start(t *testing.T, o startOpts) (*tuitest.Terminal, string) {
 var xdgKeys = []string{
 	"XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_STATE_HOME",
 	"XDG_CACHE_HOME", "XDG_DATA_HOME",
+	// The search lists, and they are not optional on macOS.
+	//
+	// A config file is looked up with xdg.SearchConfigFile, which walks the
+	// home and then the dirs. On Linux the dirs are /etc/xdg and a redirected
+	// home is the whole story, which is why this was not missed. On macOS the
+	// dirs include ~/.config whatever the home is set to, so every test read
+	// the developer's own config: their theme, their rail, their hosts. The
+	// rail in a failing frame listed machines that belong to the person
+	// running the suite.
+	//
+	// That made local runs untrustworthy in the worst way, by passing and
+	// failing for reasons that had nothing to do with the change under test,
+	// and it left CI as the only honest signal.
+	"XDG_CONFIG_DIRS", "XDG_DATA_DIRS",
 }
 
 // startIn spawns tuios against an explicit isolation root, so two clients can
@@ -1088,5 +1103,49 @@ func xdgDir(base, key string) string {
 func mustMkdir(dir string) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		panic("e2e: mkdir " + dir + ": " + err.Error())
+	}
+}
+
+// TestTheSuiteReadsNoConfigButItsOwn.
+//
+// The isolation is what makes every other test in this package mean anything,
+// and on macOS it was not isolating. A config file is looked up with
+// xdg.SearchConfigFile, which walks the config home and then the config dirs.
+// Redirecting the home is the whole story on Linux, where the dirs are
+// /etc/xdg. On macOS the dirs include ~/.config whatever the home is set to,
+// so every test read the developer's own config and their theme, rail and
+// hosts came with it.
+//
+// That is the worst shape a test-harness fault can take: it passed in CI,
+// failed locally for reasons unrelated to the change under test, and taught
+// whoever was running it to stop believing local runs.
+//
+// Negative control: dropping XDG_CONFIG_DIRS from xdgKeys fails this on macOS
+// and passes on Linux, which is exactly how it went unnoticed.
+func TestTheSuiteReadsNoConfigButItsOwn(t *testing.T) {
+	base := t.TempDir()
+
+	// Every directory the child is told about has to be inside the root this
+	// test owns, whether it is a single path or a list of them.
+	for _, key := range xdgKeys {
+		dir := xdgDir(base, key)
+		if dir == "" {
+			t.Errorf("%s is redirected to nothing", key)
+			continue
+		}
+		// The runtime dir may be moved to a short path on macOS, where the
+		// unix socket name has a length cap; it is still not the user's.
+		if strings.HasPrefix(dir, base) || strings.HasPrefix(dir, shortRuntimeRoot) {
+			continue
+		}
+		t.Errorf("%s points at %s, which is outside the test's own root", key, dir)
+	}
+
+	// And the two search lists are redirected at all, which is the half that
+	// was missing.
+	for _, key := range []string{"XDG_CONFIG_DIRS", "XDG_DATA_DIRS"} {
+		if !slices.Contains(xdgKeys, key) {
+			t.Errorf("%s is not redirected, so a config outside the test can be read", key)
+		}
 	}
 }
