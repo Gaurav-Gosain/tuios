@@ -106,9 +106,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		const (
 			artCols      = 38
 			subtitleCols = 28
-			hintCols     = 62 // four key chips and their labels, spaced
-			boxCols      = 6  // both borders, both paddings
-			boxRows      = 4  // border and padding, top and bottom
+			boxCols      = 6 // both borders, both paddings
+			boxRows      = 4 // border and padding, top and bottom
 		)
 		// The splash belongs to the content region: the sidebar's reserved
 		// columns and the dock's rows are drawn by someone else, and centering
@@ -139,10 +138,15 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				Render("Terminal UI Operating System"))
 		}
 
-		// The hints read as one line when there is room for one, and stack when
-		// there is not, so no width loses a hint entirely. They are key chips and
-		// lowercase labels, the same shape every overlay footer uses: the quoted
+		// The hints are packed into as many rows as the width needs, so no
+		// width loses a hint entirely. They are key chips and lowercase
+		// labels, the same shape every overlay footer uses: the quoted
 		// Title-case prose was the only surface speaking that way.
+		//
+		// Packed rather than all-or-nothing. It used to be one line if they
+		// all fitted and one line each if they did not, so adding a fourth
+		// chip took the splash from three rows of hints to four on a narrow
+		// terminal, and the box then squeezed out the subtitle to fit.
 		hints := make([]string, 0, 4)
 		for _, h := range []overlay.Hint{
 			{Key: "n", Label: "new window"},
@@ -157,13 +161,9 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			hints = append(hints, overlay.KeyBadge(h.Key, ui)+
 				lipgloss.NewStyle().Foreground(ui.FgDim).Render(" "+h.Label))
 		}
-		sep := "\n"
-		if avail >= hintCols {
-			sep = "   "
-		}
 		parts = append(parts, "", lipgloss.NewStyle().
 			Align(lipgloss.Center).
-			Render(strings.Join(hints, sep)))
+			Render(packHints(hints, avail)))
 
 		content := lipgloss.JoinVertical(lipgloss.Center, squeezeLines(parts, availRows)...)
 
@@ -773,4 +773,27 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	layers = m.placeContextMenu(layers)
 
 	return layers
+}
+
+// packHints lays key hints out in as few rows as the width allows.
+//
+// The splash is squeezed to fit its box, and what a squeeze drops is the
+// middle: the subtitle goes before the hints do. So the hints have to be as
+// short as they can be rather than as tall as the narrowest chip demands.
+func packHints(hints []string, avail int) string {
+	if len(hints) == 0 {
+		return ""
+	}
+	const gap = "   "
+	var rows []string
+	cur := hints[0]
+	for _, h := range hints[1:] {
+		if w := lipgloss.Width(cur) + lipgloss.Width(gap) + lipgloss.Width(h); w <= avail {
+			cur += gap + h
+			continue
+		}
+		rows = append(rows, cur)
+		cur = h
+	}
+	return strings.Join(append(rows, cur), "\n")
 }

@@ -551,6 +551,14 @@ func TestAnAgentThatReportedAndThenQuitLosesItsRow(t *testing.T) {
 		t.Fatalf("ASSERTION: the pane is %q, not working, so there is nothing to clear", got)
 	}
 
+	// The detector sees it running. This is the step that makes the exit worth
+	// acting on: a state on a pane that has never had an agent process in it
+	// is not stale, it is somebody's note or a screen rule's reading.
+	agentRunning := fakeResolver(map[string]fakeProc{
+		ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}, pid: 200, shellPID: 100}, true},
+	})
+	sess.applyAgentDetection(agentRunning, agent.identifyDetail)
+
 	// It quits. The pane is back at its shell with nothing running in it.
 	shell := fakeResolver(map[string]fakeProc{
 		ptyID: {foregroundInfo{comm: "fish", argv: []string{"fish"}, pid: 100, shellPID: 100}, true},
@@ -580,6 +588,13 @@ func TestAPaneRunningSomethingElseKeepsItsState(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("ApplyAgentReport: %v", err)
 	}
+
+	// The detector sees the agent first, so the pane is one the sweep would
+	// otherwise be willing to clear.
+	agentRunning := fakeResolver(map[string]fakeProc{
+		ptyID: {foregroundInfo{comm: "claude", argv: []string{"claude"}, pid: 200, shellPID: 100}, true},
+	})
+	sess.applyAgentDetection(agentRunning, agent.identifyDetail)
 
 	// Something else holds the foreground: a different pid from the shell.
 	editor := fakeResolver(map[string]fakeProc{
@@ -611,5 +626,37 @@ func TestAnExplicitReportSurvivesAnIdleShell(t *testing.T) {
 
 	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {
 		t.Errorf("an explicit report was cleared by the shell sweep: %q", got)
+	}
+}
+
+
+// TestAPaneThatNeverRanAnAgentKeepsItsState.
+//
+// An unhooked harness is exercised by setting a low-ranked claim on a pane and
+// letting a screen rule read what it paints, with no agent binary anywhere.
+// The sweep that clears a stale agent must not clear that: the state is not
+// stale, it is the only thing anybody ever said about the pane.
+//
+// Negative control: dropping the sawProcess condition clears it here, which is
+// the end-to-end test this broke.
+func TestAPaneThatNeverRanAnAgentKeepsItsState(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, id)
+	agent := newAgentMatcher(nil)
+
+	if _, _, err := sess.ApplyAgentReport(id, AgentReport{
+		State: AgentStateWorking, Source: AgentSourceStall, Harness: "claude-code",
+	}); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+
+	// The pane has only ever run a shell.
+	shell := fakeResolver(map[string]fakeProc{
+		ptyID: {foregroundInfo{comm: "fish", argv: []string{"fish"}, pid: 100, shellPID: 100}, true},
+	})
+	sess.applyAgentDetection(shell, agent.identifyDetail)
+
+	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
+		t.Errorf("a pane that never ran an agent lost its state: %q", got)
 	}
 }

@@ -127,6 +127,16 @@ type agentClaim struct {
 	// higher-ranked source taking the state over: an explicit report during the
 	// agent's run wins, and the pane still clears when the agent exits.
 	auto bool
+	// sawProcess records that the detector has seen a real agent process in
+	// this pane at some point, whoever owns the claim.
+	//
+	// It is what tells a state that has gone stale from one that was never
+	// about a process at all. Most agents report for themselves, so the
+	// detector does not own their claim and cannot clear it when they exit;
+	// this says the exit is worth acting on. A claim set by hand, or by a
+	// screen rule on a pane that never ran an agent binary, has never had a
+	// process and is left alone.
+	sawProcess bool
 	// blocker marks a claim taken through the visible-blocker exception, and
 	// prior is the claim it displaced. They are kept together because the
 	// exception is a loan: the moment a later look finds the prompt gone, prior

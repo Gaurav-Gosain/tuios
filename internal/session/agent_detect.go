@@ -549,6 +549,13 @@ func (s *Session) applyAgentDetection(
 			detected := running && isAgent
 			claim := s.agentClaims[w.ID]
 			owned := claim.auto
+			// Noted whoever owns the claim, and before the switch, because
+			// most of its branches do nothing for a claim the detector does
+			// not own. It is what lets the exit be acted on later.
+			if detected && !claim.sawProcess {
+				claim.sawProcess = true
+				s.setAgentClaim(w.ID, claim)
+			}
 			switch {
 			case detected && !owned:
 				// Take ownership only if no state is set, so a manual report wins.
@@ -605,7 +612,13 @@ func (s *Session) applyAgentDetection(
 				// sitting at a prompt is exactly where somebody might want to
 				// leave a note. Everything else here was inferred, and an
 				// inference about an agent that is not there is wrong.
-				if running && info.atShell() && s.agentClaims[w.ID].source != AgentSourceReport {
+				//
+				// And only where a real agent process was seen. Without that
+				// this swept away any state on any pane sitting at a shell,
+				// including a screen rule's reading of a pane that has never
+				// run an agent binary, which is how an unhooked harness is
+				// exercised.
+				if running && info.atShell() && claim.sawProcess && claim.source != AgentSourceReport {
 					delete(s.agentClaims, w.ID)
 					w.AgentState = AgentStateNone
 					w.AgentMessage = ""
