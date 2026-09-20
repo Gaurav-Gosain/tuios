@@ -408,19 +408,19 @@ func (m *OS) zoomUsesLayout(w *terminal.Window) bool {
 //
 // appearance.zoom_follows_focus turns it off, for anyone who would rather the
 // zoom stayed on the pane they put it on.
-func (m *OS) ZoomFollowsFocus(i int) {
+func (m *OS) ZoomFollowsFocus(i int) bool {
 	if !m.Settings.ZoomFollowsFocus || i < 0 || i >= len(m.Windows) {
-		return
+		return false
 	}
 	w := m.Windows[i]
 	// A popup is drawn over the zoom and focused in front of it, so focusing
 	// one is not a request to see it filling the region.
 	if w == nil || w.IsPopup || w.Minimized || w.Minimizing || w.Workspace != m.CurrentWorkspace {
-		return
+		return false
 	}
 	zw := m.zoomedWindow()
 	if zw == nil || zw == w {
-		return
+		return false
 	}
 	m.settleSizes(func() {
 		// The same two retirements toggleZoom makes, for the same reasons: a
@@ -433,6 +433,7 @@ func (m *OS) ZoomFollowsFocus(i int) {
 		m.FlushPTYBuffersAfterResize()
 		m.MarkAllDirty()
 	})
+	return true
 }
 
 // handOverZoom moves the box from one pane to another, sliding both.
@@ -561,6 +562,19 @@ func (m *OS) applyZoomState(unzoomed []*terminal.Window) bool {
 		retile = m.unzoomPane(w) || retile
 	}
 	if zw := m.zoomedWindow(); zw != nil {
+		if m.zoomUsesLayout(zw) {
+			// The layout owns this pane's rectangle, so there is no box to hand
+			// it and the retile is what puts it where the camera is pointing.
+			//
+			// Handing it one here is what made a pane created while zoomed come
+			// out filling the screen. The creating sync placed it correctly, and
+			// then the daemon's next broadcast arrived, created nothing, and so
+			// retiled nothing: this line stamped the whole region onto the pane
+			// and nothing came along afterwards to disagree. It arrived with no
+			// animation either, because a box handed over directly is not a
+			// journey.
+			return true
+		}
 		// Unconditional, not only when the flag changed: the box also moves when
 		// the session resizes or its reserve is renegotiated, and while a pane is
 		// zoomed nothing else looks at that pane's rectangle.

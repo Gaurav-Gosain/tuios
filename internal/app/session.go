@@ -413,7 +413,16 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// below suppresses the first retile, which is the only other thing that
 	// would have looked.
 	if zw := m.zoomedWindow(); zw != nil {
-		m.applyZoomRect(zw, false)
+		if m.zoomUsesLayout(zw) {
+			// The layout owns the rectangle, and the retile below is suppressed
+			// on a restore, so this is the one that has to run: without it the
+			// pane keeps whatever rectangle the restore left it with and the
+			// camera is never pointed at anything.
+			m.zoomRelayout = true
+			m.TileAllWindows()
+		} else {
+			m.applyZoomRect(zw, false)
+		}
 	}
 
 	// A popup came in the same way and is answered the same way: the mark and
@@ -837,6 +846,14 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// about where this client's zoom should be, and dragging the zoom around on
 	// every sync is the bug ZoomFollowsFocus is careful not to be. See the note
 	// there about focus applied by sync.
+	// After the retile rather than before it, because the retile is where a
+	// forced split (ctrl+b | and ctrl+b -) inserts the pane on the side it was
+	// asked for. Retiling ahead of it would insert the pane through the tree's
+	// repair path instead and lose the direction.
+	//
+	// It needs no push of its own: a push inside a sync is held and sent once
+	// at the end (see applyingPeerSync), and that one carries whatever this
+	// leaves behind.
 	if placed {
 		for _, w := range placedWindows {
 			if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) && m.Windows[m.FocusedWindow] == w {

@@ -398,3 +398,118 @@ func TestAddWindowPlacesThePaneBeforeFocusingIt(t *testing.T) {
 		t.Errorf("the tree holds %d panes, want %d", got, want)
 	}
 }
+
+// TestAnEchoDoesNotStampTheRegionOnACameraZoom is the report: a pane created
+// while zoomed came out filling the screen with no edges showing and no
+// animation.
+//
+// The creating sync placed it correctly. Then the daemon's next broadcast
+// arrived, which creates nothing and so retiles nothing, and the zoom-adopting
+// step handed the pane the whole region unconditionally. Nothing came along
+// afterwards to disagree, so that rectangle stood. It arrived with no animation
+// either, because a box handed over directly is not a journey.
+func TestAnEchoDoesNotStampTheRegionOnACameraZoom(t *testing.T) {
+	prev := config.Global.AnimationsEnabled
+	config.Global.AnimationsEnabled = false
+	defer func() { config.Global.AnimationsEnabled = prev }()
+
+	h := newOpenAnimHarness(120, 40)
+	h.m.Settings.ZoomSize = 95
+	h.m.Settings.ZoomAnimation = false
+	h.createWindow(t)
+	h.createWindow(t)
+
+	h.m.FocusedWindow = 0
+	h.m.ToggleZoom()
+	h.m.CompleteAllAnimations()
+	h.state = h.m.BuildSessionState()
+	h.state.Version = h.next + 1
+
+	h.createWindow(t)
+	h.m.CompleteAllAnimations()
+	fresh := h.m.Windows[len(h.m.Windows)-1]
+	if !fresh.Zoomed {
+		t.Fatal("setup: the new pane did not take the zoom")
+	}
+	placed := [4]int{fresh.X, fresh.Y, fresh.Width, fresh.Height}
+	if placed[2] >= h.m.GetContentWidth() && placed[3] >= h.m.GetUsableHeight() {
+		t.Fatalf("setup: the pane was already filling the region at %v", placed)
+	}
+
+	// The daemon's next broadcast. It creates nothing, closes nothing and
+	// places nothing, so nothing in the sync retiles: whatever it does to the
+	// zoomed pane's rectangle is what the user is left looking at.
+	echo := h.m.BuildSessionState()
+	echo.Version = h.state.Version + 5
+	if err := h.m.ApplyStateSync(echo); err != nil {
+		t.Fatalf("echo: %v", err)
+	}
+	h.m.CompleteAllAnimations()
+
+	if got := [4]int{fresh.X, fresh.Y, fresh.Width, fresh.Height}; got != placed {
+		t.Errorf("the echo moved the zoomed pane from %v to %v", placed, got)
+	}
+	if fresh.Width >= h.m.GetContentWidth() && fresh.Height >= h.m.GetUsableHeight() {
+		t.Errorf("the echo gave the pane the whole %dx%d region, so nothing is left to peek",
+			h.m.GetContentWidth(), h.m.GetUsableHeight())
+	}
+}
+
+// TestTheHandoverOnACreationReachesTheDaemon is the second half of the report:
+// creating a pane while zoomed still bugged out after the handover was added.
+//
+// Which pane is zoomed is session state. The retile that absorbs a creation
+// pushes, and the handover runs after it, so the handover lived on this client
+// alone: the daemon went on believing the old pane was zoomed and put it back
+// on its next broadcast. The zoom came off a moment after the pane appeared,
+// which is the same symptom as never having moved it.
+func TestTheHandoverOnACreationReachesTheDaemon(t *testing.T) {
+	for _, size := range []int{100, 85} {
+		name := "full"
+		if size < 100 {
+			name = "camera"
+		}
+		t.Run(name, func(t *testing.T) {
+			prev := config.Global.AnimationsEnabled
+			config.Global.AnimationsEnabled = false
+			defer func() { config.Global.AnimationsEnabled = prev }()
+
+			h := newOpenAnimHarness(120, 40)
+			h.m.Settings.ZoomSize = size
+			h.m.Settings.ZoomAnimation = false
+			h.createWindow(t)
+			h.createWindow(t)
+
+			first := h.m.Windows[0]
+			h.m.FocusedWindow = 0
+			h.m.ToggleZoom()
+			h.m.CompleteAllAnimations()
+			h.state = h.m.BuildSessionState()
+			h.state.Version = h.next + 1
+
+			h.createWindow(t)
+			h.m.CompleteAllAnimations()
+			fresh := h.m.Windows[len(h.m.Windows)-1]
+			if !fresh.Zoomed {
+				t.Fatal("setup: the new pane did not take the zoom")
+			}
+
+			// The daemon's next broadcast, built from what this client told it.
+			// If the handover never reached the daemon this carries the old
+			// pane as the zoomed one and takes the zoom straight back off.
+			echo := h.m.BuildSessionState()
+			echo.Version = h.state.Version + 5
+			if err := h.m.ApplyStateSync(echo); err != nil {
+				t.Fatalf("echo: %v", err)
+			}
+			h.m.CompleteAllAnimations()
+
+			if !fresh.Zoomed {
+				t.Error("the daemon's next broadcast took the zoom off the new pane")
+			}
+			if first.Zoomed {
+				t.Error("the daemon's next broadcast put the zoom back on the old pane")
+			}
+		})
+	}
+}
