@@ -4,7 +4,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
 // Workspace management methods
@@ -341,59 +340,19 @@ func (m *OS) GetWorkspaceWindowCount(workspace int) int {
 	return count
 }
 
-// TileVisibleWorkspaceWindows tiles all visible windows in the current workspace with animations.
+// TileVisibleWorkspaceWindows lays out the panes of the workspace on screen.
+//
+// It is TileAllWindows, which is the only tiler there is. It used to defer to
+// it for BSP and scrolling and keep a copy of the master-stack path for itself,
+// on the grounds that the other two carry geometry a generic tiler would
+// overwrite. The copy then fell behind everything the real one learned: the
+// zoom camera, the skip for a pane the pointer is dragging, the open animation,
+// and the deferred resize a live drag needs.
+//
+// The camera is what made that visible. Switching workspaces and coming back
+// ran this copy, which laid the panes out at the screen's own size while the
+// zoom flag survived, so the dock still said the workspace was zoomed and the
+// view was not.
 func (m *OS) TileVisibleWorkspaceWindows() {
-	// BSP and scrolling layouts carry their own geometry (split ratios, column
-	// offsets) that the master-stack tiler below would silently overwrite,
-	// desyncing the separator overlay and eventually tripping the stale-ID check
-	// in TileAllWindows (which then discards the whole tree). Defer to
-	// TileAllWindows, which branches correctly per layout mode and filters
-	// floating windows.
-	if m.UseBSPLayout || m.UseScrollingLayout {
-		m.TileAllWindows()
-		return
-	}
-
-	// Master-stack path: animate visible, non-floating windows into place.
-	visibleWindows := make([]int, 0)
-	for i, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing && !w.IsFloating {
-			visibleWindows = append(visibleWindows, i)
-		}
-	}
-
-	if len(visibleWindows) == 0 {
-		return
-	}
-
-	// Use existing tiling logic but only for visible workspace windows
-	layouts := m.calculateTilingLayout(len(visibleWindows))
-
-	// Create animations for smooth transitions (matching TileAllWindows behavior)
-	for i, windowIndex := range visibleWindows {
-		if i < len(layouts) {
-			window := m.Windows[windowIndex]
-
-			// Create animation for smooth transition
-			anim := ui.NewSnapAnimation(
-				window,
-				layouts[i].x,
-				layouts[i].y,
-				layouts[i].width,
-				layouts[i].height,
-				m.Settings.GetAnimationDuration(),
-			)
-
-			if anim != nil {
-				m.Animations = append(m.Animations, anim)
-			} else {
-				// Fallback if animation creation fails
-				window.X = layouts[i].x
-				window.Y = layouts[i].y
-				window.Width = layouts[i].width
-				window.Height = layouts[i].height
-				window.PositionDirty = true
-			}
-		}
-	}
+	m.TileAllWindows()
 }

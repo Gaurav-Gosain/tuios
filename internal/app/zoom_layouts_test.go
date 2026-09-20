@@ -513,3 +513,39 @@ func TestTheHandoverOnACreationReachesTheDaemon(t *testing.T) {
 		})
 	}
 }
+
+// TestAZoomSurvivesAWorkspaceRoundTrip is the report: switching away and back
+// left the dock saying the workspace was zoomed while the view was not.
+//
+// The workspace switch went through a private copy of the master-stack tiler,
+// which knew nothing about the camera and laid the panes out at the screen's
+// own size. The flag survived because nothing had unzoomed anything; only the
+// view disagreed with it.
+func TestAZoomSurvivesAWorkspaceRoundTrip(t *testing.T) {
+	for _, mode := range []string{config.LayoutModeBSP, config.LayoutModeMasterStack} {
+		t.Run(mode, func(t *testing.T) {
+			m, wins := tiledZoomOS(t, mode)
+			m.NumWorkspaces = 9
+			m.WorkspaceHasCustom = map[int]bool{}
+			m.WorkspaceMasterRatio = map[int]float64{}
+			m.WorkspaceLayouts = map[int][]WindowLayout{}
+			zoomAndSettle(m, 0)
+			zoomed := [4]int{wins[0].X, wins[0].Y, wins[0].Width, wins[0].Height}
+			if zoomed[2] >= m.GetContentWidth() && zoomed[3] >= m.GetUsableHeight() {
+				t.Fatalf("setup: the pane fills the region at %v, so a camera is not in play", zoomed)
+			}
+
+			m.SwitchToWorkspace(2)
+			m.SwitchToWorkspace(1)
+			m.CompleteAllAnimations()
+
+			if !wins[0].Zoomed {
+				t.Fatal("the round trip dropped the zoom flag")
+			}
+			if got := [4]int{wins[0].X, wins[0].Y, wins[0].Width, wins[0].Height}; got != zoomed {
+				t.Errorf("the pane came back at %v, want the zoomed box %v: the view disagrees with the flag",
+					got, zoomed)
+			}
+		})
+	}
+}

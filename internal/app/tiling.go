@@ -24,11 +24,6 @@ const (
 	DirDown
 )
 
-// tileLayout is a private type for compatibility with existing code
-type tileLayout struct {
-	x, y, width, height int
-}
-
 // contentTileLayouts runs the master-stack tiler inside the content region:
 // computed against the content width and shifted right by the left margin, the
 // same box GetBSPBounds hands the BSP tree, so panes never tile under a
@@ -54,21 +49,6 @@ func (m *OS) tileLayoutsIn(n int, bounds layout.Rect) []layout.TileLayout {
 		}
 	}
 	return layouts
-}
-
-// calculateTilingLayout is a wrapper around contentTileLayouts for internal use
-func (m *OS) calculateTilingLayout(n int) []tileLayout {
-	layouts := m.contentTileLayouts(n)
-	result := make([]tileLayout, len(layouts))
-	for i, l := range layouts {
-		result[i] = tileLayout{
-			x:      l.X,
-			y:      l.Y,
-			width:  l.Width,
-			height: l.Height,
-		}
-	}
-	return result
 }
 
 // TileAllWindows arranges all visible windows in a tiling layout

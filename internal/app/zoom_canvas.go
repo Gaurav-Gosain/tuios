@@ -34,6 +34,15 @@ import (
 // box keeps every gap the width the user asked for, so the dividers come out
 // right without anything downstream knowing a camera is involved.
 
+// zoomPeekMinCells is the least a neighbour may show on a side the zoomed pane
+// has one on.
+//
+// Two cells: its border and one cell of what is behind it. One cell is the
+// border alone, which says a pane is there without showing any of it, and on a
+// bordered layout it reads as a stray line rather than as a pane carrying on
+// past the edge of the screen.
+const zoomPeekMinCells = 2
+
 // zoomCanvas is the transform from the box a zoomed layout is computed in to
 // the screen. The zero value is the identity, which is what every layout that
 // is not in this state uses.
@@ -117,8 +126,25 @@ func (m *OS) zoomCanvasBounds(zoomed *terminal.Window, tile layout.Rect) (layout
 	// How big the box has to be for this pane to reach its share of each axis.
 	// Never smaller than the screen: an axis the pane already spans has nothing
 	// to gain, and shrinking it there would push the pane's own ends off.
-	wantW := float64(region.W) * float64(pct) / 100
-	wantH := float64(region.H) * float64(pct) / 100
+	//
+	// The share is capped so that what is left over is a peek and not a hairline.
+	// A percentage buys very different numbers of cells on the two axes, because
+	// a screen is far wider in columns than it is tall in rows: at 95 percent of
+	// a 160 by 42 region the leftover is eight columns and two rows, so the
+	// panes beside it showed four columns each and the panes above and below
+	// showed one row each. One row is the neighbour's border and nothing else,
+	// which reads as a line the layout forgot to remove rather than as a pane
+	// carrying on past the edge.
+	//
+	// So each side keeps at least zoomPeekMinCells. It costs the zoomed pane a
+	// few cells on the short axis and it is what makes the setting mean the same
+	// thing in both directions.
+	wantW := min(float64(region.W)*float64(pct)/100, float64(region.W-2*zoomPeekMinCells))
+	wantH := min(float64(region.H)*float64(pct)/100, float64(region.H-2*zoomPeekMinCells))
+	if wantW < 1 || wantH < 1 {
+		// A region too small to have both a pane and a peek in it.
+		return region, false
+	}
 	boundsW := max(int(float64(region.W)*wantW/float64(tile.W)+0.5), region.W)
 	boundsH := max(int(float64(region.H)*wantH/float64(tile.H)+0.5), region.H)
 	if boundsW <= region.W && boundsH <= region.H {
