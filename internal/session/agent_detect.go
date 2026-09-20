@@ -583,8 +583,37 @@ func (s *Session) applyAgentDetection(
 				w.AgentHarness = ""
 				w.AgentStateAt = now
 				changed++
+
+			case !detected && !owned && w.AgentState != AgentStateNone:
+				// A claim the detector never took, on a pane that is back at
+				// its shell with nothing running in it.
+				//
+				// Most agents report their own state, so the detector never
+				// owns the claim and its clearing branch above never runs. The
+				// reporter is the agent, and an agent that has exited cannot
+				// retract anything, so the last thing it said stood for as
+				// long as the pane lived: quit an agent and it kept its row in
+				// the agent list, with the harness it used to be running.
+				//
+				// Only for a pane that is genuinely idle at its shell. A pane
+				// running something else is left alone, because an agent that
+				// opened an editor is still an agent, which is the same
+				// argument the miss count above makes.
+				//
+				// An explicit report is not cleared. set-agent-state is a
+				// person or a script saying something about a pane, and a pane
+				// sitting at a prompt is exactly where somebody might want to
+				// leave a note. Everything else here was inferred, and an
+				// inference about an agent that is not there is wrong.
+				if running && info.atShell() && s.agentClaims[w.ID].source != AgentSourceReport {
+					delete(s.agentClaims, w.ID)
+					w.AgentState = AgentStateNone
+					w.AgentMessage = ""
+					w.AgentHarness = ""
+					w.AgentStateAt = now
+					changed++
+				}
 			}
-			// !detected && !owned: not ours, do not touch.
 		}
 		// Drop claims on windows that no longer exist so the map cannot grow
 		// without bound. This touches only in-memory bookkeeping, never state, so

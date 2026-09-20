@@ -520,3 +520,96 @@ func TestResolveAgentBinaries(t *testing.T) {
 		t.Error("matcher did not recognise config-added name cfg1")
 	}
 }
+
+// TestAnAgentThatReportedAndThenQuitLosesItsRow.
+//
+// Reported as: launched an agent, quit it, and the agent list still showed the
+// pane, with the harness it used to be running.
+//
+// Most agents report their own state rather than waiting to be detected, so
+// the detector never takes the claim and its clearing branch never runs. The
+// reporter is the agent, and an agent that has exited cannot retract anything,
+// so the last thing it said stood for as long as the pane lived. The stall
+// timer demoted it to unknown, which is a state, so the pane stayed in the
+// list.
+//
+// Negative control: without the shell case in applyAgentDetection the pane
+// keeps its state and its harness here.
+func TestAnAgentThatReportedAndThenQuitLosesItsRow(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, id)
+	agent := newAgentMatcher(nil)
+
+	// The agent reports for itself while it runs, which is the path the
+	// detector never owns.
+	if _, _, err := sess.ApplyAgentReport(id, AgentReport{
+		State: AgentStateWorking, Source: AgentSourceOSC, Harness: "claude-code",
+	}); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
+		t.Fatalf("ASSERTION: the pane is %q, not working, so there is nothing to clear", got)
+	}
+
+	// It quits. The pane is back at its shell with nothing running in it.
+	shell := fakeResolver(map[string]fakeProc{
+		ptyID: {foregroundInfo{comm: "fish", argv: []string{"fish"}, pid: 100, shellPID: 100}, true},
+	})
+	sess.applyAgentDetection(shell, agent.identifyDetail)
+
+	if got := agentStateOf(t, sess, id); got != AgentStateNone {
+		t.Errorf("the pane is still %q after the agent quit", got)
+	}
+	for _, w := range sess.GetState().Windows {
+		if w.ID == id && w.AgentHarness != "" {
+			t.Errorf("the pane still claims harness %q", w.AgentHarness)
+		}
+	}
+}
+
+// TestAPaneRunningSomethingElseKeepsItsState. An agent that opened an editor
+// is still an agent, which is the same argument the miss count makes for a
+// claim the detector does own.
+func TestAPaneRunningSomethingElseKeepsItsState(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, id)
+	agent := newAgentMatcher(nil)
+
+	if _, _, err := sess.ApplyAgentReport(id, AgentReport{
+		State: AgentStateWorking, Source: AgentSourceOSC, Harness: "claude-code",
+	}); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+
+	// Something else holds the foreground: a different pid from the shell.
+	editor := fakeResolver(map[string]fakeProc{
+		ptyID: {foregroundInfo{comm: "nvim", argv: []string{"nvim"}, pid: 200, shellPID: 100}, true},
+	})
+	sess.applyAgentDetection(editor, agent.identifyDetail)
+
+	if got := agentStateOf(t, sess, id); got != AgentStateWorking {
+		t.Errorf("a pane running an editor lost its state: %q", got)
+	}
+}
+
+// TestAnExplicitReportSurvivesAnIdleShell. set-agent-state is a person or a
+// script saying something about a pane, and a pane sitting at a prompt is
+// exactly where somebody might want to leave a note.
+func TestAnExplicitReportSurvivesAnIdleShell(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	ptyID := ptyIDOfWindow(t, sess, id)
+	agent := newAgentMatcher(nil)
+
+	if err := sess.SetDaemonWindowAgentState(id, AgentStateNeedsInput, "waiting"); err != nil {
+		t.Fatalf("SetDaemonWindowAgentState: %v", err)
+	}
+
+	shell := fakeResolver(map[string]fakeProc{
+		ptyID: {foregroundInfo{comm: "fish", argv: []string{"fish"}, pid: 100, shellPID: 100}, true},
+	})
+	sess.applyAgentDetection(shell, agent.identifyDetail)
+
+	if got := agentStateOf(t, sess, id); got != AgentStateNeedsInput {
+		t.Errorf("an explicit report was cleared by the shell sweep: %q", got)
+	}
+}
