@@ -606,3 +606,43 @@ func TestTheLightIsBrightestInTheMiddleOfItself(t *testing.T) {
 		}
 	}
 }
+
+// TestAnythingTheUserDoesEndsTheSweep.
+//
+// The sweep is a short acknowledgement of a copy. Once a key has been pressed
+// or a click has landed, the user is no longer looking at what was copied, and
+// a sweep left running carried on painting a region whose text had moved
+// underneath it. That is what leaving copy mode mid-sweep looked like.
+//
+// Negative control: without CancelCopyFlash the sweep is still running here
+// and this fails.
+func TestAnythingTheUserDoesEndsTheSweep(t *testing.T) {
+	m := flashOS(t)
+	w := selectedWindow()
+	m.Windows = []*terminal.Window{w}
+	m.NoteCopyFlash(w)
+
+	if !m.CopyFlashActive() {
+		t.Fatal("ASSERTION: no sweep is running, so there is nothing to cancel")
+	}
+	w.ContentDirty = false
+
+	m.CancelCopyFlash()
+
+	if m.CopyFlashActive() {
+		t.Error("the sweep survived the thing that should have ended it")
+	}
+	if !w.ContentDirty {
+		t.Error("the pane was not asked for the frame without the sweep in it")
+	}
+}
+
+// TestCancellingWhenNothingIsRunningIsSafe, because it is called on every key
+// press and every click.
+func TestCancellingWhenNothingIsRunningIsSafe(t *testing.T) {
+	m := flashOS(t)
+	m.CancelCopyFlash()
+	if m.CopyFlashActive() {
+		t.Error("a sweep appeared from nowhere")
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"log"
+	"sync"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -16,7 +17,21 @@ var enabled bool
 // Border color overrides from user config. When non-nil they take precedence
 // over the theme-derived border colors. A single focused override applies to
 // both window-mode and terminal-mode focused borders.
+//
+// They are process-global and are written whenever a session applies its
+// appearance config, which is once per client. Under the ssh server that is
+// once per connection, on that connection's own goroutine, so two people
+// connecting at the same moment wrote these at the same moment. The race
+// detector caught it in CI; what a user would have seen is one session
+// briefly wearing another's border colour.
+//
+// The lock makes the writes and reads safe. It does not make them right: the
+// values are still shared, so two ssh sessions with different border colours
+// still overwrite each other rather than each keeping their own. Making them
+// per-session is a larger change than a data race deserves, and the lock is
+// the part that has to be true either way.
 var (
+	borderMu                sync.RWMutex
 	borderFocusedOverride   color.Color
 	borderUnfocusedOverride color.Color
 )
@@ -24,6 +39,8 @@ var (
 // SetBorderOverrides sets custom border colors from hex strings (e.g. "#89b4fa").
 // An empty string clears the corresponding override and restores the theme color.
 func SetBorderOverrides(focusedHex, unfocusedHex string) {
+	borderMu.Lock()
+	defer borderMu.Unlock()
 	if focusedHex != "" {
 		borderFocusedOverride = lipgloss.Color(focusedHex)
 	} else {
@@ -34,6 +51,14 @@ func SetBorderOverrides(focusedHex, unfocusedHex string) {
 	} else {
 		borderUnfocusedOverride = nil
 	}
+}
+
+// borderOverrides reads the pair under the lock, so a caller cannot see one
+// half of a change.
+func borderOverrides() (focused, unfocused color.Color) {
+	borderMu.RLock()
+	defer borderMu.RUnlock()
+	return borderFocusedOverride, borderUnfocusedOverride
 }
 
 // Initialize sets up the theme registry with the specified theme name.
@@ -184,8 +209,8 @@ func borderInk(c color.Color) color.Color {
 func BorderUnfocused() color.Color {
 	// A configured colour is returned as chosen: measurement was overridden on
 	// purpose, the same way the scrollbar treats a configured tint.
-	if borderUnfocusedOverride != nil {
-		return borderUnfocusedOverride
+	if _, unfocused := borderOverrides(); unfocused != nil {
+		return unfocused
 	}
 	t := Current()
 	if t == nil {
@@ -198,8 +223,8 @@ func BorderUnfocused() color.Color {
 
 // BorderFocusedWindow returns the color for focused window borders in window management mode.
 func BorderFocusedWindow() color.Color {
-	if borderFocusedOverride != nil {
-		return borderFocusedOverride
+	if focused, _ := borderOverrides(); focused != nil {
+		return focused
 	}
 	t := Current()
 	if t == nil {
@@ -211,8 +236,8 @@ func BorderFocusedWindow() color.Color {
 
 // BorderFocusedTerminal returns the color for focused window borders in terminal mode.
 func BorderFocusedTerminal() color.Color {
-	if borderFocusedOverride != nil {
-		return borderFocusedOverride
+	if focused, _ := borderOverrides(); focused != nil {
+		return focused
 	}
 	t := Current()
 	if t == nil {

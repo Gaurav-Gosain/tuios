@@ -14,6 +14,11 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	X := mouse.X
 	Y := mouse.Y
 
+	// A click supersedes a copy sweep still running, for the reason a key
+	// press does: it is an acknowledgement of a copy, and clicking elsewhere
+	// says the user has moved on. See CancelCopyFlash.
+	o.CancelCopyFlash()
+
 	// An open context menu is modal to the mouse: it either runs the row that
 	// was clicked or, for a click anywhere else, closes without running
 	// anything. Either way the click stops here, so it cannot also focus a pane

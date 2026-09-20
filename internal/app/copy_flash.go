@@ -94,6 +94,25 @@ func (m *OS) markCopyFlashPane() {
 	}
 }
 
+// CancelCopyFlash drops a sweep that is still running, and asks its pane for
+// the frame without it.
+//
+// Anything the user does supersedes it. The sweep is a 550ms acknowledgement
+// of a copy, and once they have pressed a key or clicked somewhere they are
+// no longer looking at what was copied: leaving the light running meant it
+// carried on painting a region whose text had moved underneath it, which is
+// what leaving copy mode mid-sweep looked like.
+func (m *OS) CancelCopyFlash() {
+	if m.copyFlash == nil {
+		return
+	}
+	id := m.copyFlash.WindowID
+	m.copyFlash = nil
+	if w := m.windowByID(id); w != nil {
+		w.ContentDirty = true
+	}
+}
+
 // copyFlashDuration is how long one sweep takes.
 func (m *OS) copyFlashDuration() time.Duration {
 	return time.Duration(m.Settings.CopyFlashMs) * time.Millisecond

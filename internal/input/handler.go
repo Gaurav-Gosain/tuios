@@ -334,6 +334,12 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 
+	// Any key supersedes a copy sweep still running. It is an acknowledgement
+	// of a copy, and once a key has been pressed the user is no longer
+	// looking at what was copied: the light would otherwise carry on painting
+	// a region whose text has moved underneath it.
+	o.CancelCopyFlash()
+
 	// A repeatable prefix command pressed again inside its window, in either
 	// mode. It runs here, before the modes, because the window belongs to the
 	// command rather than to the mode the client happens to be in.
