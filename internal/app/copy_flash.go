@@ -183,6 +183,19 @@ func (b copyFlashBand) position(x, row int) float64 {
 	return float64(x) - float64(row)*b.slope
 }
 
+// peakColumn is the column the light is brightest at on one row.
+//
+// The centre is a position along the sweep's own axis, not a column: for a
+// diagonal the two differ by the row's share of the lean, and for a vertical
+// sweep there is no column to speak of. Anything that wants to know where the
+// light is on a given row has to go through this rather than reading centre.
+func (b copyFlashBand) peakColumn(row int) float64 {
+	if b.vertical {
+		return 0
+	}
+	return b.centre + float64(row)*b.slope
+}
+
 // intensity is how lit one cell is, from 0 to 1.
 //
 // The falloff is what makes it read as light passing over the text rather than
@@ -198,8 +211,16 @@ func (b copyFlashBand) intensity(x, row int) float64 {
 	if d >= b.reach {
 		return 0
 	}
+	// Smoothstep rather than a square.
+	//
+	// A square is steep at the centre and shallow at the edge, so most of the
+	// band sits at nearly the same brightness and then drops away: in a grid,
+	// where every step is a whole cell, that reads as a hard block with a
+	// fringe. Smoothstep is flat at both ends and steepest in between, which
+	// spreads the change over more cells and gives the eye more intermediate
+	// shades to read as a gradient.
 	t := 1 - d/b.reach
-	return t * t * b.amp
+	return t * t * (3 - 2*t) * b.amp
 }
 
 // styleFor is how one cell of the sweep is drawn, and whether the light has
@@ -410,4 +431,7 @@ func fillPaneRegion(grid *pool.HighlightGrid, start, end terminal.Position,
 // copyFlashReach is the share of the pane's width the glow spans, as a
 // fraction. A wider band on a wider pane, so the sweep looks the same on a
 // narrow pane and a full-screen one.
-func (m *OS) copyFlashReach() float64 { return 0.18 }
+// A wider band than it was. Every step of the gradient is a whole cell, so a
+// narrow band has few cells to spread its shades over and arrives as an edge;
+// a wider one has more, and reads as light rather than as a bar.
+func (m *OS) copyFlashReach() float64 { return 0.30 }

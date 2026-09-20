@@ -255,7 +255,7 @@ func TestOnlyLitCellsArePainted(t *testing.T) {
 		t.Error("a cell the light has not reached is painted, so the block is a slab")
 	}
 	// And one it is on.
-	centre := int(band.centre)
+	centre := int(band.peakColumn(0))
 	if _, lit := band.styleFor(centre, 0, false, ground); !lit {
 		t.Error("the centre of the band is not painted")
 	}
@@ -522,5 +522,87 @@ func TestEveryShapeLightsABlockThatIsNotAtTheTopOfThePane(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestTheLightSpreadsItsShadesRatherThanStackingThemAtTheEdge.
+//
+// Every step of the gradient is a whole cell, so what makes the band read as
+// light rather than as a bar with a fringe is how many cells carry a middling
+// brightness. A square falloff is steep at the centre and shallow at the edge,
+// so it stacks its cells at the two ends. Smoothstep is flat at both ends and
+// steepest between them, which moves cells into the middle of the range.
+//
+// The two curves are compared against each other rather than against a
+// number. The gain is real but modest, about forty percent of lit cells
+// mid-range against thirty-four, and a floor picked to sit between those two
+// figures would be a number chosen to pass rather than a property worth
+// holding.
+//
+// Negative control: returning the square from intensity makes the two counts
+// equal and this fails.
+func TestTheLightSpreadsItsShadesRatherThanStackingThemAtTheEdge(t *testing.T) {
+	m := flashOS(t)
+	box := copyFlashBox{left: 0, right: 60, top: 10, bottom: 10}
+	band := m.copyFlashBandFor(0.5, box)
+
+	midRange := func(f func(float64) float64) (mid, lit int) {
+		for x := box.left; x <= box.right; x++ {
+			d := band.position(x, box.top) - band.centre
+			if d < 0 {
+				d = -d
+			}
+			if d >= band.reach {
+				continue
+			}
+			v := f(1-d/band.reach) * band.amp
+			if v <= 0 {
+				continue
+			}
+			lit++
+			if v > 0.25 && v < 0.75 {
+				mid++
+			}
+		}
+		return mid, lit
+	}
+
+	square := func(t float64) float64 { return t * t }
+	_, lit := midRange(square)
+	if lit == 0 {
+		t.Fatal("ASSERTION: nothing is lit, so there is no gradient to measure")
+	}
+
+	// What the band actually draws, against what a square would have drawn
+	// over the same cells.
+	actual := 0
+	for x := box.left; x <= box.right; x++ {
+		if v := band.intensity(x, box.top); v > 0.25 && v < 0.75 {
+			actual++
+		}
+	}
+	squareMid, _ := midRange(square)
+
+	if actual <= squareMid {
+		t.Errorf("the falloff puts %d lit cells mid-range against %d for a square, so it is no smoother",
+			actual, squareMid)
+	}
+}
+
+// TestTheLightIsBrightestInTheMiddleOfItself, whatever the falloff is. The
+// shape of the curve is a judgement; this is the part that is not.
+func TestTheLightIsBrightestInTheMiddleOfItself(t *testing.T) {
+	m := flashOS(t)
+	box := copyFlashBox{left: 0, right: 60, top: 10, bottom: 10}
+	band := m.copyFlashBandFor(0.5, box)
+
+	// The column, not the centre: for a diagonal the two differ by the row's
+	// share of the lean.
+	centre := int(band.peakColumn(box.top))
+	at := band.intensity(centre, box.top)
+	for _, d := range []int{2, 4, 6} {
+		if out := band.intensity(centre+d, box.top); out >= at {
+			t.Errorf("%d cells from the centre is %.2f against %.2f at it", d, out, at)
+		}
 	}
 }

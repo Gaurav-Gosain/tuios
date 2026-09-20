@@ -456,7 +456,7 @@ of light across the cells that were taken, once, and then it is gone.
 ```toml
 [appearance.selection]
 flash = true
-flash_ms = 800
+flash_ms = 550
 flash_color = "#FFF3C4"
 # diagonal, diagonal-reverse, horizontal, vertical
 flash_style = "diagonal"

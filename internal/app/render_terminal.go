@@ -741,7 +741,14 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				// The cell's own background is what the light is mixed into,
 				// so the sweep brightens whatever was there rather than
 				// replacing it with a colour of its own.
-				cellBg := theme.UI().Canvas
+				//
+				// A cell with no background of its own takes the pane's, not
+				// the overlay palette's canvas. The canvas is the colour the
+				// panels are built on and is darker than most panes, so using
+				// it painted a black band under the sweep and made the light
+				// on it read as gold on black rather than as the pane getting
+				// brighter.
+				cellBg := theme.TerminalBg()
 				if cell != nil && cell.Style.Bg != nil {
 					cellBg = cell.Style.Bg
 				}
