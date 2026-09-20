@@ -508,7 +508,13 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		defer pool.PutHighlightGrid(flashGrid)
 		fillPaneRegion(flashGrid, m.copyFlash.Start, m.copyFlash.End,
 			scrollbackLen, window.ScrollbackOffset, maxY, maxX)
-		flashBand = m.copyFlashBandFor(progress)
+		if box, ok := copyFlashBoxOf(flashGrid, maxY, maxX); ok {
+			flashBand = m.copyFlashBandFor(progress, box)
+		} else {
+			// The copied region has scrolled out of view, so there is nothing
+			// to light.
+			flashGrid = nil
+		}
 	}
 
 	// The dim and the ground it carries toward, resolved once for the pane
@@ -731,9 +737,10 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				// A cell holding a character has its text lit as well as its
 				// ground, so the sweep passes over the words rather than
 				// behind them.
-				// The cell's own background is what the fade is mixed into,
-				// so a cell brightens from whatever it had rather than being
-				// replaced with a colour of its own.
+				hasGlyph := char != "" && char != " "
+				// The cell's own background is what the light is mixed into,
+				// so the sweep brightens whatever was there rather than
+				// replacing it with a colour of its own.
 				//
 				// A cell with no background of its own takes the pane's, not
 				// the overlay palette's canvas. The canvas is the colour the
@@ -745,7 +752,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				if cell != nil && cell.Style.Bg != nil {
 					cellBg = cell.Style.Bg
 				}
-				if st, lit := flashBand.styleFor(cellBg); lit {
+				if st, lit := flashBand.styleFor(x, y, hasGlyph, cellBg); lit {
 					flushBatch()
 					builder.WriteString(renderStyledText(st, char))
 					notePrev(cell)

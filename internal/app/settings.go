@@ -391,6 +391,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.selection.cursor_fg"),
 			opt("appearance.selection.flash"),
 			opt("appearance.selection.flash_ms"),
+			opt("appearance.selection.flash_style"),
 			opt("appearance.selection.flash_color"),
 		}),
 	}

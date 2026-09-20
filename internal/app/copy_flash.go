@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -59,7 +60,6 @@ func (m *OS) NoteCopyFlash(window *terminal.Window) {
 		start, end = end, start
 	}
 	m.copyFlash = &copyFlash{WindowID: window.ID, Start: start, End: end, At: time.Now()}
-	m.copyFlashStep = -1
 	// Nothing in the pane changed, so nothing else is going to ask for a
 	// frame. The first one is asked for here and the work tick keeps them
 	// coming while the sweep runs; see tickNeedsWork.
@@ -79,18 +79,6 @@ func (m *OS) markCopyFlashPane() {
 		return
 	}
 	id := m.copyFlash.WindowID
-	// Only when the step changes, plus the one that finds it finished.
-	//
-	// The fade has six of them, so one copy costs six repaints whatever the
-	// frame rate is. Marking on every tick redrew the pane sixty times a
-	// second to show six colours, and because the sweep it replaced gave every
-	// cell a different background, none of those repaints could coalesce a run
-	// of cells into one escape sequence either.
-	step := copyFlashStepAt(m.copyFlashProgressAt(time.Now()))
-	if step == m.copyFlashStep && step >= 0 {
-		return
-	}
-	m.copyFlashStep = step
 	// Asked whether it is still running or has just this moment stopped, and
 	// the pane is marked either way.
 	//
@@ -135,19 +123,6 @@ func (m *OS) copyFlashDuration() time.Duration {
 //
 // The flash is dropped as soon as it has run its course, so an idle client
 // holds nothing and asks for no frames on its account.
-// copyFlashProgressAt is how far through the fade the given moment is, with no
-// side effects, for a caller that only wants to know which step is showing.
-func (m *OS) copyFlashProgressAt(now time.Time) float64 {
-	if m.copyFlash == nil {
-		return 1
-	}
-	total := m.copyFlashDuration()
-	if total <= 0 {
-		return 1
-	}
-	return float64(now.Sub(m.copyFlash.At)) / float64(total)
-}
-
 func (m *OS) copyFlashProgress(windowID string) (float64, bool) {
 	if m.copyFlash == nil {
 		return 0, false
@@ -177,141 +152,257 @@ func (m *OS) CopyFlashActive() bool {
 	return true
 }
 
-// copyFlashSteps is how many distinct frames a fade has.
-//
-// Not one per display frame. Fourteen frames over the duration would be
-// fourteen colours differing by under two percent luminance each, which is
-// below what a terminal and a display resolve between them: fourteen repaints
-// for the appearance of six. Six steps at forty milliseconds each is long
-// enough for a step to read as a state rather than a transition, and short
-// enough that six of them read as continuous.
-const copyFlashSteps = 6
-
-// copyFlashLevels is how strongly each step is mixed toward the peak. It
-// starts at full and decays: the acknowledgement appears at the instant of the
-// keypress, because a ramp-in reads as lag rather than as arrival.
-var copyFlashLevels = [copyFlashSteps]float64{1.00, 0.70, 0.45, 0.28, 0.15, 0.06}
-
-// copyFlashBand is the fade on one frame.
-//
-// It has no position. The first version of this swept a band of light across
-// the copied block, modelled frame by frame on a graphical app's shimmer, and
-// every part of that translation was wrong for a character grid.
-//
-// A grid cannot move anything by less than a whole cell, so the band crept on
-// a short copy and teleported on a wide one, with no duration that suited
-// both. A gradient across cells is a handful of whole-cell steps, which is
-// banding rather than light. A diagonal over a block that is five rows tall
-// and two hundred columns wide leans two degrees, so the shape the setting
-// promised was a vertical wipe in the common case. And motion is the loudest
-// thing a terminal can do: it is the one stimulus that pulls the eye, which is
-// the opposite of what an acknowledgement wants, since the person already
-// knows what they did and is usually looking elsewhere.
-//
-// What is left is the part that carried the meaning: the region. The shape of
-// what was taken, ragged right margin and all, is the whole message.
+// copyFlashBand is the light on one frame: where its centre is along whichever
+// axis the sweep runs, how far its glow reaches, and what it is made of.
 type copyFlashBand struct {
-	// level is how far toward peak this frame sits, from 1 down to 0.
-	level float64
-	// peak is the colour the ground is carried toward, derived from the pane's
-	// own background rather than fixed. See copyFlashPeak.
-	peak color.Color
+	centre float64
+	reach  float64
+	// amp is the whole sweep's brightness on this frame, from 0 to 1. It is
+	// what makes the light arrive and leave, rather than switch on at full
+	// strength at one edge and off at the other.
+	amp float64
+	// slope is how far the light leans, in columns per row, and vertical makes
+	// it travel down the rows instead of across the columns. Together they are
+	// the four shapes; see copyFlashShape.
+	slope    float64
+	vertical bool
+
+	tint color.Color
+	ink  color.Color
 }
 
-// styleFor is how one cell of the region is drawn on this frame.
+// The shapes a sweep can take.
 //
-// The foreground is never set, and that is the fix for the worst fault the
-// sweep had. It mixed the text toward the same colour as the ground, so at the
-// centre of the band the two were equal and the characters were simply gone:
-// eleven to one down to one to one. What reads as an effect behaving strangely
-// is text disappearing and coming back, which is a far louder event than a
-// tint. It also threw away the colours the program had written, because it
-// mixed from the interface's own foreground rather than the cell's.
+// They are a setting because which one reads best depends on what is usually
+// being copied. A diagonal falls across a paragraph. A horizontal one crosses
+// a single long line properly, where a diagonal barely leans at all over one
+// row. A vertical one moves down a tall narrow block, where the other three
+// cross it in an instant.
 //
-// So only the background moves, and it moves from whatever the cell already
-// had, which is what makes a line with its own background brighten rather than
-// be replaced.
-func (b copyFlashBand) styleFor(bg color.Color) (lipgloss.Style, bool) {
-	if b.level <= 0 {
+// The names live in config, with the option that names the set.
+
+// copyFlashSlope is how far a diagonal leans, in columns per row.
+//
+// A character grid holds a diagonal exactly when its slope is a whole number
+// of columns per row, which is the one thing a grid does better than a
+// gradient: there is nothing to interpolate and nothing to alias.
+const copyFlashSlope = 2
+
+// position is where a cell sits along the axis the sweep runs.
+//
+// The row is subtracted rather than added, so a positive slope means each row
+// down is lit further to the right: the light peaks where position equals the
+// centre, which is at x = centre + row*slope. Added, the sign came out
+// backwards and the diagonal leaned the wrong way, which is the opposite of
+// the effect this is copying.
+func (b copyFlashBand) position(x, row int) float64 {
+	if b.vertical {
+		return float64(row)
+	}
+	return float64(x) - float64(row)*b.slope
+}
+
+// peakColumn is the column the light is brightest at on one row.
+//
+// The centre is a position along the sweep's own axis, not a column: for a
+// diagonal the two differ by the row's share of the lean, and for a vertical
+// sweep there is no column to speak of. Anything that wants to know where the
+// light is on a given row has to go through this rather than reading centre.
+func (b copyFlashBand) peakColumn(row int) float64 {
+	if b.vertical {
+		return 0
+	}
+	return b.centre + float64(row)*b.slope
+}
+
+// intensity is how lit one cell is, from 0 to 1.
+//
+// The falloff is what makes it read as light passing over the text rather than
+// a block sliding across it.
+func (b copyFlashBand) intensity(x, row int) float64 {
+	if b.reach <= 0 || b.amp <= 0 {
+		return 0
+	}
+	d := b.position(x, row) - b.centre
+	if d < 0 {
+		d = -d
+	}
+	if d >= b.reach {
+		return 0
+	}
+	// Smoothstep rather than a square.
+	//
+	// A square is steep at the centre and shallow at the edge, so most of the
+	// band sits at nearly the same brightness and then drops away: in a grid,
+	// where every step is a whole cell, that reads as a hard block with a
+	// fringe. Smoothstep is flat at both ends and steepest in between, which
+	// spreads the change over more cells and gives the eye more intermediate
+	// shades to read as a gradient.
+	t := 1 - d/b.reach
+	return t * t * (3 - 2*t) * b.amp
+}
+
+// styleFor is how one cell of the sweep is drawn, and whether the light has
+// reached it at all.
+//
+// Only lit cells are painted. An earlier version also painted the whole block
+// in the selection colour for the length of the sweep, on the grounds that the
+// effect this copies keeps its selection: there, the selection is still there
+// because the app leaves it. Here a copy clears it, so painting it back put a
+// block of colour on the screen that nobody had asked for and that read as the
+// selection having come back rather than as an acknowledgement.
+//
+// Both halves of a lit cell move. The background is the pane's own ground
+// carried toward the light, and a cell holding a character has its text
+// carried toward the light as well, because a sweep that touched only the
+// background would pass behind the words rather than over them.
+func (b copyFlashBand) styleFor(x, row int, hasGlyph bool, bg color.Color) (lipgloss.Style, bool) {
+	i := b.intensity(x, row)
+	if i <= 0.02 {
 		return lipgloss.Style{}, false
 	}
-	return lipgloss.NewStyle().Background(overlay.MixColors(bg, b.peak, b.level)), true
+	st := lipgloss.NewStyle().Background(overlay.MixColors(bg, b.tint, i))
+	if hasGlyph {
+		st = st.Foreground(overlay.MixColors(b.ink, b.tint, i))
+	}
+	return st, true
 }
 
-// copyFlashCeiling is the most the ground may be lifted, as a contrast ratio.
-//
-// Calibrated against the selection colour, which is the most familiar "this
-// region is marked" signal in the product and measures about 1.8 to 1 against
-// a dark ground. An acknowledgement should land just under that: the same
-// order, read as weaker.
-const copyFlashCeiling = 1.6
+// copyFlashEnvelope is the sweep's brightness over its life: it ramps in,
+// holds, and fades. Without it the light appears at full strength at one edge
+// and vanishes at the other, which reads as a wipe rather than as something
+// passing over.
+func copyFlashEnvelope(progress float64) float64 {
+	const (
+		rampIn  = 0.15
+		rampOut = 0.25
+	)
+	switch {
+	case progress <= 0 || progress >= 1:
+		return 0
+	case progress < rampIn:
+		return progress / rampIn
+	case progress > 1-rampOut:
+		return (1 - progress) / rampOut
+	default:
+		return 1
+	}
+}
 
-// copyFlashFloor keeps the fade perceptible on a theme with so little contrast
-// that the ceiling cannot be spent.
-const copyFlashFloor = 1.15
-
-// copyFlashPeak is the colour the ground is carried toward.
+// copyFlashBandFor builds the band for this frame.
 //
-// Derived rather than fixed. The setting used to be a hex literal, and the
-// same literal measured fourteen to one against a dark ground and one point
-// oh three to one against a light one: a strobe on one theme and invisible on
-// the other. What matters is the change relative to the ground, not the
-// colour, so the ground is lifted by a ratio and the direction is whichever
-// one has headroom, which is what ContrastText answers by measuring.
+// It crosses the copied block, not the pane.
 //
-// The lift is capped so it never takes the pane's text below the floor the
-// rest of the interface holds its marks to. A high-contrast theme spends the
-// whole ceiling; a low-contrast one spends what it has.
-func copyFlashPeak(bg, fg color.Color) color.Color {
-	ratio := overlay.ContrastRatio(fg, bg) / overlay.MarkFloor
-	ratio = min(max(ratio, copyFlashFloor), copyFlashCeiling)
+// It used to cross the pane, on the reasoning that three characters and a
+// whole line should take the same time so the sweep could not be read as a
+// progress bar. That was wrong in the way that matters: the light is only
+// visible while it is over the block, so a short selection on a wide pane was
+// lit for a twentieth of the run and what reached the screen was a blink. The
+// band is sized to the block instead, so the run takes the same time whatever
+// was copied and the light is on the text for all of it.
+func (m *OS) copyFlashBandFor(progress float64, box copyFlashBox) copyFlashBand {
+	pal := theme.UI()
+	band := copyFlashBand{
+		amp:  copyFlashEnvelope(progress),
+		tint: lipgloss.Color(m.Settings.CopyFlashColor),
+		ink:  pal.Fg,
+	}
+	switch m.Settings.CopyFlashStyle {
+	case config.CopyFlashHorizontal:
+	case config.CopyFlashDiagonalReverse:
+		band.slope = -copyFlashSlope
+	case config.CopyFlashVertical:
+		band.vertical = true
+	default:
+		band.slope = copyFlashSlope
+	}
 
-	// Then measured and backed off until it actually clears the floor.
-	//
-	// The arithmetic above says where the lift may stop, and a colour is eight
-	// bits a channel, so what Tone can return is a colour near that and not
-	// the colour itself. On a low-contrast theme, where the whole budget is
-	// spent, rounding landed at 2.99 against a floor of 3.00. Measuring the
-	// answer costs a few multiplications once per fade and means the floor is
-	// a fact rather than an intention.
-	peak := overlay.Tone(bg, ratio)
-	for range 8 {
-		if overlay.ContrastRatio(fg, peak) >= overlay.MarkFloor || ratio <= copyFlashFloor {
-			break
+	// How far along its axis the block runs, from the extremes of the cells in
+	// it. Taking it from the corners rather than assuming a rectangle is what
+	// lets the same arithmetic serve all four shapes.
+	lo, hi := band.axisRange(box)
+	span := hi - lo
+	band.reach = span * m.copyFlashReach()
+	// A floor, or the light over a short block is one cell wide and reads as a
+	// cursor rather than as a sweep. In rows rather than columns when the
+	// sweep runs down, because a block is far shorter than it is wide.
+	floor := 4.0
+	if band.vertical {
+		// In rows rather than columns, because a block is far shorter than it
+		// is wide. Below one row the light would be thinner than the thing it
+		// is crossing and a one-row block would never light at all.
+		floor = 1.5
+	}
+	if band.reach < floor {
+		band.reach = floor
+	}
+	// From fully off one end to fully off the other.
+	band.centre = lo - band.reach + progress*(span+2*band.reach)
+	return band
+}
+
+// axisRange is the lowest and highest position any cell of the block takes
+// along the axis this sweep runs.
+func (b copyFlashBand) axisRange(box copyFlashBox) (lo, hi float64) {
+	if b.vertical {
+		return float64(box.top), float64(box.bottom)
+	}
+	corners := []float64{
+		b.position(box.left, box.top), b.position(box.right, box.top),
+		b.position(box.left, box.bottom), b.position(box.right, box.bottom),
+	}
+	lo, hi = corners[0], corners[0]
+	for _, c := range corners[1:] {
+		lo, hi = min(lo, c), max(hi, c)
+	}
+	return lo, hi
+}
+
+// copyFlashBox is the block the sweep crosses, in the pane's own coordinates:
+// the leftmost and rightmost lit columns, and the first and last lit rows.
+//
+// The rows are the pane's row numbers, not a count, and that is the whole
+// point of them. They used to be a count, so the band's travel was worked out
+// over rows zero to n while the cells were drawn at their real row numbers.
+// For a block twenty rows down the diagonal was off by twenty times its slope
+// and the light passed to one side of the text; the vertical sweep travelled
+// over rows zero to n and never reached row twenty at all. Only the
+// horizontal one worked, because it is the one shape with no row term.
+type copyFlashBox struct {
+	left   int
+	right  int
+	top    int
+	bottom int
+}
+
+// rows is how many rows the block covers.
+func (b copyFlashBox) rows() int { return b.bottom - b.top + 1 }
+
+// copyFlashBoxOf measures the marked region, so the sweep can be sized to what
+// was copied rather than to the pane it sits in.
+func copyFlashBoxOf(grid *pool.HighlightGrid, maxY, maxX int) (copyFlashBox, bool) {
+	box := copyFlashBox{left: maxX, right: -1, top: -1, bottom: -1}
+	for y := range maxY {
+		for x := range maxX {
+			if !grid.Get(y, x) {
+				continue
+			}
+			if x < box.left {
+				box.left = x
+			}
+			if x > box.right {
+				box.right = x
+			}
+			if box.top < 0 {
+				box.top = y
+			}
+			box.bottom = y
 		}
-		ratio = max(ratio-0.02, copyFlashFloor)
-		peak = overlay.Tone(bg, ratio)
 	}
-	return peak
-}
-
-// copyFlashBandFor is the fade on the frame at this point through the run.
-func (m *OS) copyFlashBandFor(progress float64) copyFlashBand {
-	step := copyFlashStepAt(progress)
-	if step < 0 {
-		return copyFlashBand{}
+	if box.right < 0 {
+		return copyFlashBox{}, false
 	}
-	bg, fg := theme.TerminalBg(), theme.TerminalFg()
-	peak := copyFlashPeak(bg, fg)
-	// A colour the user named wins, for anyone who wants a particular one.
-	if c := m.Settings.CopyFlashColor; c != "" {
-		peak = lipgloss.Color(c)
-	}
-	return copyFlashBand{level: copyFlashLevels[step], peak: peak}
-}
-
-// copyFlashStepAt is which of the fade's steps this point falls in, or -1 once
-// the fade is over.
-//
-// The step rather than the raw progress is what the pane is redrawn on, so one
-// copy costs six repaints whatever the frame rate is, instead of one per tick
-// for the whole duration.
-func copyFlashStepAt(progress float64) int {
-	if progress < 0 || progress >= 1 {
-		return -1
-	}
-	step := int(progress * copyFlashSteps)
-	return min(step, copyFlashSteps-1)
+	return box, true
 }
 
 // fillPaneRegion marks the cells of a pane region on a grid, mapping the
@@ -355,3 +446,11 @@ func fillPaneRegion(grid *pool.HighlightGrid, start, end terminal.Position,
 		}
 	}
 }
+
+// copyFlashReach is the share of the pane's width the glow spans, as a
+// fraction. A wider band on a wider pane, so the sweep looks the same on a
+// narrow pane and a full-screen one.
+// A wider band than it was. Every step of the gradient is a whole cell, so a
+// narrow band has few cells to spread its shades over and arrives as an edge;
+// a wider one has more, and reads as light rather than as a bar.
+func (m *OS) copyFlashReach() float64 { return 0.30 }

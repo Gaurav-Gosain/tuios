@@ -530,9 +530,6 @@ type OS struct {
 	// nil. It is dropped the moment it has run its course, so an idle client
 	// holds nothing. See copy_flash.go.
 	copyFlash *copyFlash
-	// copyFlashStep is the fade step the pane was last asked to draw, so the
-	// tick marks it once per step rather than once per tick.
-	copyFlashStep int
 
 	// prefixRepeatUntil is when the prefix stops being armed after a
 	// repeatable prefix command. Zero when nothing is armed. See

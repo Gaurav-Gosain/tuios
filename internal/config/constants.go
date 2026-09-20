@@ -1555,21 +1555,26 @@ const (
 const (
 	CopyFlashMsDefault = 420
 	CopyFlashMsMin     = 80
-	// A cap rather than a preference. Any key or click ends the fade, and a
-	// fast typist's gap between keys is around 150ms, so a longer setting is
-	// mostly not seen and what is seen is a hard cut.
-	CopyFlashMsMax = 800
-	// Empty, meaning the colour is derived from the pane's own background.
-	//
-	// It was a hex literal, and the same literal measured fourteen to one
-	// against a dark ground and one point oh three to one against a light
-	// one: a strobe on one theme and invisible on the other. What matters is
-	// the change relative to the ground rather than the colour. A value set
-	// here is still honoured, for anyone who wants a particular one, which is
-	// the same convention the foreground settings beside it use.
-	DefaultCopyFlashColor = ""
+	CopyFlashMsMax     = 3000
+	// A pale warm white, which reads as light over output of any colour
+	// without introducing a hue the rest of the screen does not use.
+	DefaultCopyFlashColor = "#FFF3C4"
+	// The shape the sweep takes. A diagonal falls across a paragraph, which is
+	// what most copies are.
+	DefaultCopyFlashStyle = "diagonal"
 )
 
 // CopyFlashStyles is every value appearance.selection.flash_style takes. It
 // lives here rather than beside the shapes themselves so the option registry
 // can name the set without importing the app.
+const (
+	CopyFlashDiagonal        = "diagonal"
+	CopyFlashDiagonalReverse = "diagonal-reverse"
+	CopyFlashHorizontal      = "horizontal"
+	CopyFlashVertical        = "vertical"
+)
+
+var CopyFlashStyles = []string{
+	CopyFlashDiagonal, CopyFlashDiagonalReverse,
+	CopyFlashHorizontal, CopyFlashVertical,
+}

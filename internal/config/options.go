@@ -476,18 +476,23 @@ var optionSpecs = []Option{
 
 	{
 		Path: "appearance.selection.flash", Type: OptionBool, Section: "selection",
-		Description: "Fade a tint over text that was just copied",
+		Description: "Sweep a band of light over text that was just copied",
 		Default:     "true",
 	},
 	{
 		Path: "appearance.selection.flash_ms", Type: OptionInt, Section: "selection",
-		Description: "Milliseconds a copy takes to fade",
+		Description: "Milliseconds one copy sweep takes",
 		Default:     strconv.Itoa(CopyFlashMsDefault),
 		Min:         CopyFlashMsMin, Max: CopyFlashMsMax,
 	},
 	{
+		Path: "appearance.selection.flash_style", Type: OptionString, Section: "selection",
+		Description: "The shape the copy sweep takes",
+		Accepted:    CopyFlashStyles, Default: DefaultCopyFlashStyle,
+	},
+	{
 		Path: "appearance.selection.flash_color", Type: OptionString, Section: "selection",
-		Description: "The colour a copy fades through. Empty derives it from the pane.",
+		Description: "The light the copy sweep is made of",
 		Default:     DefaultCopyFlashColor, Color: true,
 	},
 

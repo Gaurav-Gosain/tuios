@@ -450,33 +450,22 @@ For a script or an agent, `tuios hosts tailnet --json` gives every machine with
 ## Copying
 
 Copying is the one gesture in a terminal with no result to look at: the text
-does not change, and the selection usually disappears. So a copy fades a tint
-over the cells that were taken, for a quarter of a second, and the shape of
-what was taken is the message.
+does not change, and the selection usually disappears. So a copy sweeps a band
+of light across the cells that were taken, once, and then it is gone.
 
 ```toml
 [appearance.selection]
 flash = true
-flash_ms = 240
-# Empty derives the colour from the pane's own background.
-flash_color = ""
+flash_ms = 550
+flash_color = "#FFF3C4"
+# diagonal, diagonal-reverse, horizontal, vertical
+flash_style = "diagonal"
 ```
 
-The colour is derived rather than fixed. What a person sees is the change
-relative to the ground they are looking at, not a particular colour, and one
-colour cannot serve both: a pale gold that is a strobe on a dark theme is
-invisible on a light one. The ground is lifted by a ratio instead, in whichever
-direction has room, and the lift is capped so the pane's own text never drops
-below the contrast floor the rest of the interface holds its marks to. Setting
-a colour here overrides all of that.
-
-The text itself is never touched. An earlier version swept a band of light
-across the block and carried the text toward the same colour as the ground, so
-at the centre of the band the two were equal and the characters were gone. It
-also moved, and motion is the loudest thing a terminal can do: a grid cannot
-shift anything by less than a whole cell, so the band crept on a short copy and
-jumped on a wide one, and the gradient across it was a handful of whole-cell
-steps rather than light. What is left is the part that carried the meaning.
+The shape is a choice because which one reads best depends on what you copy.
+A diagonal falls across a paragraph. A horizontal one crosses a single long
+line properly, where a diagonal barely leans at all over one row. A vertical
+one moves down a tall narrow block, which the other three cross in an instant.
 
 The same table holds the colours a pane marks text with: the selection, search
 matches, the match under the cursor, and the copy mode cursor. They follow the

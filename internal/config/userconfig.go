@@ -444,8 +444,9 @@ type SelectionConfig struct {
 	// FlashMs is how long one sweep takes, and FlashColor is the light.
 	FlashMs    int    `toml:"flash_ms,omitempty"`
 	FlashColor string `toml:"flash_color,omitempty"`
-	// FlashStyle was the shape a sweeping band took. The sweep is gone, and
-	// the key is kept so a config carrying one still loads: nothing reads it.
+	// FlashStyle is the shape the sweep takes: diagonal, diagonal-reverse,
+	// horizontal or vertical. Which one reads best depends on what is usually
+	// copied, so it is a choice rather than a constant.
 	FlashStyle string `toml:"flash_style,omitempty"`
 }
 
@@ -583,7 +584,7 @@ func DefaultConfig() *UserConfig {
 				MatchBg: DefaultMatchBg, MatchFg: DefaultMatchFg,
 				CursorBg: DefaultCopyCursorBg, CursorFg: DefaultCopyCursorFg,
 				Flash: &defaultCopyFlash, FlashMs: CopyFlashMsDefault,
-				FlashColor: DefaultCopyFlashColor,
+				FlashColor: DefaultCopyFlashColor, FlashStyle: DefaultCopyFlashStyle,
 			},
 			Sidebar: SidebarConfig{
 				Position:    "left",
@@ -1532,6 +1533,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	}
 	if cfg.Appearance.Selection.FlashColor != "" {
 		s.CopyFlashColor = cfg.Appearance.Selection.FlashColor
+	}
+	if cfg.Appearance.Selection.FlashStyle != "" {
+		s.CopyFlashStyle = cfg.Appearance.Selection.FlashStyle
 	}
 
 	// The hide/show toggles are plain bools with no "unset" state, so they are
