@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -224,6 +225,12 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 	case controlColor:
 		control = m.settingsColorControl(item, selected, bg, pal, width)
 	default:
+		if selected && m.SettingsEditingNumber() {
+			// The row is open for editing, so it shows the slider and the field
+			// instead of the stepper it shows at rest.
+			control = m.settingsNumberEditor(item, bg, pal, width)
+			break
+		}
 		control = overlay.Cycler(overlay.Truncate(item.value(m), max(width/2, 6)), selected, bg, pal)
 		// A gauge in front of a bounded number, so the row reads as a magnitude
 		// rather than as an integer with no scale. It is worth the cells on
@@ -245,6 +252,84 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 
 	gap := max(width-lipgloss.Width(left)-lipgloss.Width(control), 1)
 	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + control, control, stepless
+}
+
+// settingsNumberEditorCells is how wide the slider in the number editor is. It
+// is wider than the gauge a numeric row shows at rest, because this one is
+// being aimed with rather than only read.
+const settingsNumberEditorCells = 14
+
+// settingsNumberEditor renders an open number editor: the slider the arrow keys
+// move, the field the digits go into, and the two ends it is bounded by.
+//
+// The ends are drawn because they are what the editor validates against, and a
+// field that refuses a number without ever having said what it would accept is
+// a field that looks broken. They are the same two numbers the stepper has
+// always clamped to; nothing had shown them before.
+func (m *OS) settingsNumberEditor(item settingItem, bg color.Color, pal overlay.Palette, width int) string {
+	lo, hi, ok := m.SettingsEditNumberRange()
+	if !ok {
+		return overlay.Cycler(m.SettingsEditBuffer, true, bg, pal)
+	}
+	// The value the slider shows. An empty field is mid-edit rather than
+	// wrong, so the slider keeps showing where the setting still is.
+	value, typed := m.SettingsEditNumberValue()
+	if !typed {
+		value = clampInt(settingsNumberOf(item.value(m)), lo, hi)
+	}
+
+	cursor := "▏"
+	if overlay.UseASCII() {
+		cursor = "_"
+	}
+	field := m.SettingsEditBuffer + cursor
+
+	bracket := overlay.Style(bg).Foreground(pal.AccentBright)
+	ends := overlay.Style(bg).Foreground(pal.FgMute)
+	body := bracket.Render("[ ") +
+		overlay.Style(bg).Foreground(pal.Fg).Render(field) +
+		bracket.Render(" ]")
+
+	// The slider is dropped before the field is, on a panel too narrow for
+	// both: the number is the thing being set and the slider is how it is
+	// aimed, so the one that has to survive is the number.
+	slider := settingsNumberSlider(value, lo, hi, bg, pal)
+	full := ends.Render(strconv.Itoa(lo)+" ") + slider + ends.Render(" "+strconv.Itoa(hi)+" ") + body
+	if lipgloss.Width(full) <= max(width-6, 8) {
+		return full
+	}
+	if compact := slider + " " + body; lipgloss.Width(compact) <= max(width-6, 8) {
+		return compact
+	}
+	return body
+}
+
+// settingsNumberSlider draws where a value sits between two ends, with a handle
+// the arrow keys move.
+func settingsNumberSlider(value, lo, hi int, bg color.Color, pal overlay.Palette) string {
+	track, thumb := settingsMeterGlyphs()
+	handle := "\u25cf"
+	if overlay.UseASCII() {
+		handle = "#"
+	}
+	at := 0
+	if hi > lo {
+		at = int(float64(value-lo)/float64(hi-lo)*float64(settingsNumberEditorCells-1) + 0.5)
+	}
+	at = clampInt(at, 0, settingsNumberEditorCells-1)
+
+	var b strings.Builder
+	for i := range settingsNumberEditorCells {
+		switch {
+		case i == at:
+			b.WriteString(overlay.Style(bg).Foreground(pal.AccentBright).Render(handle))
+		case i < at:
+			b.WriteString(overlay.Style(bg).Foreground(pal.Accent).Render(track))
+		default:
+			b.WriteString(overlay.Style(bg).Foreground(pal.FgMute).Render(thumb))
+		}
+	}
+	return b.String()
 }
 
 // settingsColorControl renders a colour setting as its swatch and its value in

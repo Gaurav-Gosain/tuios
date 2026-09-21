@@ -150,6 +150,9 @@ func (m *OS) paneGapItem() settingItem {
 		adjust: func(m *OS, dir int) {
 			m.SetPaneGapSetting(m.PaneGap + dir)
 		},
+		setNum: func(m *OS, v int) { m.SetPaneGapSetting(v) },
+		numMin: 0,
+		numMax: config.PaneGapMax,
 		// No gauge. The gap is a count of cells over a range of eight, so the
 		// number is already the whole story and a bar beside it only says the
 		// same thing less exactly.
@@ -187,6 +190,9 @@ func percentItem(path string, lo, hi int, get func(*OS) int, set func(*OS, int))
 		Control: controlInt,
 		value:   func(m *OS) string { return strconv.Itoa(get(m)) + "%" },
 		adjust:  func(m *OS, dir int) { set(m, get(m)+dir) },
+		setNum:  func(m *OS, v int) { set(m, v) },
+		numMin:  lo,
+		numMax:  hi,
 		meter: func(m *OS) float64 {
 			return float64(clampInt(get(m), lo, hi)-lo) / float64(hi-lo)
 		},

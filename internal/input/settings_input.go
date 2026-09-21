@@ -36,6 +36,7 @@ func handleSettingsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // edited inline. Enter commits, Esc cancels, and printable input is appended to
 // the buffer.
 func handleSettingsEditInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	number := o.SettingsEditingNumber()
 	switch msg.String() {
 	case "esc":
 		o.SettingsEditCancel()
@@ -45,12 +46,41 @@ func handleSettingsEditInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 		o.SettingsEditBackspace()
 	case "ctrl+u":
 		o.SettingsEditClear()
+	case "left", "right", "up", "down":
+		// The slider half of the number editor. A text field has nothing for
+		// these to do, so they are left alone there.
+		if !number {
+			return o, nil
+		}
+		dir := 1
+		if msg.String() == "left" || msg.String() == "down" {
+			dir = -1
+		}
+		o.SettingsEditNumberSlide(dir)
 	default:
-		if msg.String() == "space" {
+		switch {
+		case number:
+			// Digits and a leading minus only. A number editor that accepts
+			// letters is one that refuses the value on Enter for a reason the
+			// user cannot see while typing it.
+			if t := msg.Text; t != "" && isNumberEntry(t) {
+				o.SettingsEditAppend(t)
+			}
+		case msg.String() == "space":
 			o.SettingsEditAppend(" ")
-		} else if msg.Text != "" {
+		case msg.Text != "":
 			o.SettingsEditAppend(msg.Text)
 		}
 	}
 	return o, nil
+}
+
+// isNumberEntry reports whether typed text belongs in a number field.
+func isNumberEntry(s string) bool {
+	for _, r := range s {
+		if (r < '0' || r > '9') && r != '-' {
+			return false
+		}
+	}
+	return true
 }

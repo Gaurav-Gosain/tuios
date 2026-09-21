@@ -332,6 +332,10 @@ func (m *OS) registryItem(path string) settingItem {
 		item.adjust = func(m *OS, dir int) {
 			m.setOption(path, strconv.Itoa(clampInt(m.optionInt(path)+dir*step, lo, hi)))
 		}
+		item.setNum = func(m *OS, v int) {
+			m.setOption(path, strconv.Itoa(clampInt(v, lo, hi)))
+		}
+		item.numMin, item.numMax = lo, hi
 		// A gauge only on a proportion, where both ends of the range are places
 		// the value would really sit. It used to be drawn on any option with a
 		// ceiling, which put one beside every count and timeout in the panel,

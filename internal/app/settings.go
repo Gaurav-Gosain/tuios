@@ -64,6 +64,18 @@ type settingItem struct {
 	// only what the number is: "gap 3" answers nothing without knowing that the
 	// most it goes to is 8.
 	meter func(m *OS) float64
+	// setNum writes a number straight to a bounded numeric setting, and numMin
+	// and numMax are the ends it may be written between. Set for every numeric
+	// row alongside adjust.
+	//
+	// adjust alone is a stepper, and a stepper is the wrong instrument for a
+	// number with a wide range: Enter on a row simply incremented it, so
+	// reaching 2000 from 300 meant holding a key. With these the row opens into
+	// an editor that takes a typed number or slides to one, and the same two
+	// ends the stepper clamps against are what the editor validates and the
+	// slider spans.
+	setNum         func(m *OS, v int)
+	numMin, numMax int
 }
 
 // settingsCategory groups related settings under a tab.
@@ -866,11 +878,109 @@ func (m *OS) SettingsActivate() tea.Cmd {
 	if fn := item.activate; fn != nil {
 		return fn(m)
 	}
-	if item.Control == controlString {
+	if item.Control == controlString || m.settingsRowTakesANumber(item) {
 		m.SettingsBeginEdit()
 		return nil
 	}
 	return m.SettingsAdjust(1)
+}
+
+// settingsRowTakesANumber reports whether a row opens into the number editor.
+//
+// Enter used to step a numeric row by one, which is the same thing the arrow
+// keys already do and no way at all to reach a number at the other end of a
+// wide range. A row that knows its ends and can be written to directly opens
+// instead, where the number can be typed or slid to.
+func (m *OS) settingsRowTakesANumber(item settingItem) bool {
+	return item.Control == controlInt && item.setNum != nil && item.numMax > item.numMin
+}
+
+// SettingsEditingNumber reports whether the open editor is the number one, so
+// the renderer knows to draw a slider and the input handler knows that the
+// arrow keys move a value rather than nothing.
+func (m *OS) SettingsEditingNumber() bool {
+	if !m.SettingsEditing {
+		return false
+	}
+	item, ok := m.settingsSelectedItem()
+	return ok && m.settingsRowTakesANumber(item)
+}
+
+// settingsSelectedItem is the row the cursor is on.
+func (m *OS) settingsSelectedItem() (settingItem, bool) {
+	items := m.settingsCurrentItems()
+	if m.SettingsSelected < 0 || m.SettingsSelected >= len(items) {
+		return settingItem{}, false
+	}
+	return items[m.SettingsSelected], true
+}
+
+// SettingsEditNumberRange is the ends the open number editor validates and
+// slides between, and whether there is one open at all.
+func (m *OS) SettingsEditNumberRange() (lo, hi int, ok bool) {
+	item, found := m.settingsSelectedItem()
+	if !found || !m.SettingsEditingNumber() {
+		return 0, 0, false
+	}
+	return item.numMin, item.numMax, true
+}
+
+// SettingsEditNumberValue is the number in the editor's buffer, clamped to the
+// row's range, and whether the buffer holds a number at all.
+//
+// An empty buffer is not a number and not an error either: it is what is left
+// after clearing the field to type a new one, and the slider keeps showing the
+// value the setting still has while that happens.
+func (m *OS) SettingsEditNumberValue() (int, bool) {
+	lo, hi, ok := m.SettingsEditNumberRange()
+	if !ok {
+		return 0, false
+	}
+	v, err := strconv.Atoi(strings.TrimSpace(m.SettingsEditBuffer))
+	if err != nil {
+		return 0, false
+	}
+	return clampInt(v, lo, hi), true
+}
+
+// SettingsEditNumberSlide moves the number in the editor by one step and
+// rewrites the buffer, which is the slider half of the editor.
+//
+// It works on the buffer rather than on the setting, so a slide and a typed
+// digit are edits to the same thing and Esc abandons both together.
+func (m *OS) SettingsEditNumberSlide(dir int) {
+	item, found := m.settingsSelectedItem()
+	if !found || !m.SettingsEditingNumber() {
+		return
+	}
+	cur, ok := m.SettingsEditNumberValue()
+	if !ok {
+		// Nothing typed yet, or not a number: slide from where the setting is.
+		cur = settingsNumberOf(item.value(m))
+	}
+	step := 1
+	// A range wide enough that stepping by one would take a thousand presses
+	// slides by a hundredth of itself, so a slide crosses it in about as many
+	// presses whatever it spans. The arrows outside the editor still step by
+	// one, for the times a number has to be exact.
+	if span := item.numMax - item.numMin; span > 200 {
+		step = span / 100
+	}
+	m.SettingsEditBuffer = strconv.Itoa(clampInt(cur+dir*step, item.numMin, item.numMax))
+}
+
+// settingsNumberOf reads the leading integer out of a row's rendered value,
+// which may carry a trailing unit such as the percent sign.
+func settingsNumberOf(text string) int {
+	end := 0
+	for end < len(text) && (text[end] == '-' || (text[end] >= '0' && text[end] <= '9')) {
+		end++
+	}
+	v, err := strconv.Atoi(text[:end])
+	if err != nil {
+		return 0
+	}
+	return v
 }
 
 // SettingsEditActive reports whether a text setting is currently being edited.
@@ -884,11 +994,17 @@ func (m *OS) SettingsBeginEdit() {
 		return
 	}
 	item := items[m.SettingsSelected]
-	if item.Control != controlString {
+	if item.Control != controlString && !m.settingsRowTakesANumber(item) {
 		return
 	}
 	m.SettingsEditing = true
 	m.SettingsEditBuffer = item.value(m)
+	if item.Control == controlInt {
+		// The number alone, without the unit the row shows it with: the editor
+		// takes a number and a stray percent sign in the buffer is a value that
+		// will not parse when it is committed.
+		m.SettingsEditBuffer = strconv.Itoa(settingsNumberOf(m.SettingsEditBuffer))
+	}
 }
 
 // SettingsEditAppend adds typed text to the edit buffer.
@@ -929,8 +1045,17 @@ func (m *OS) SettingsEditCommit() tea.Cmd {
 	value := strings.TrimSpace(m.SettingsEditBuffer)
 	items := m.settingsCurrentItems()
 	if len(items) > 0 {
-		if set := items[m.SettingsSelected].setStr; set != nil {
-			set(m, value)
+		item := items[m.SettingsSelected]
+		switch {
+		case m.settingsRowTakesANumber(item):
+			// A buffer that is not a number leaves the setting alone. The
+			// alternative is writing a zero for a typo, which for a scrollback
+			// of ten thousand lines is a keystroke that throws the lot away.
+			if v, err := strconv.Atoi(value); err == nil {
+				item.setNum(m, clampInt(v, item.numMin, item.numMax))
+			}
+		case item.setStr != nil:
+			item.setStr(m, value)
 		}
 	}
 	m.SettingsEditing = false

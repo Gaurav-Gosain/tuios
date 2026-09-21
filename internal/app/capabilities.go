@@ -63,6 +63,26 @@ type HostCapabilities struct {
 	CellHeight     int
 	Cols           int
 	Rows           int
+	// ANSI is the host terminal's own sixteen palette colours, packed as
+	// 0xRRGGBB. Fg and Bg are its default
+	// foreground and background, on the same terms.
+	//
+	// A palette index cannot say what colour it is: only the terminal drawing
+	// it can. Everything tuios renders unthemed comes out as indices, the host
+	// resolves them, and anything that has to turn a finished frame back into
+	// cells of its own has no way to follow unless it asks. It used to guess
+	// with the xterm defaults, where index 4 is a navy so dark it is hard to
+	// read, so the screen saver over an unthemed session redrew every directory
+	// name in a blue the terminal had never shown.
+	ANSI [16]uint32
+	// ANSIMask has a bit set for each slot the terminal actually answered for.
+	// A terminal may answer for some and not others, and a slot it said nothing
+	// about has to keep the fallback rather than the zero value, which is
+	// black.
+	ANSIMask uint16
+	Fg, Bg   uint32
+	HasFg    bool
+	HasBg    bool
 }
 
 // cachedCapabilities and clientCapabilities are process-globals read from
@@ -173,6 +193,17 @@ func writeCapabilitiesDebug(caps *HostCapabilities) {
 	_, _ = fmt.Fprintf(f, "Terminal: %s\nKitty: %v\nSixel: %v\nTrueColor: %v\nCell: %dx%d\nPixel: %dx%d\n",
 		caps.TerminalName, caps.KittyGraphics, caps.SixelGraphics, caps.TrueColor,
 		caps.CellWidth, caps.CellHeight, caps.PixelWidth, caps.PixelHeight)
+	if caps.ANSIMask != 0 || caps.HasFg || caps.HasBg {
+		_, _ = fmt.Fprintf(f, "Palette: mask=%04x fg=%06x(%t) bg=%06x(%t)\n",
+			caps.ANSIMask, caps.Fg, caps.HasFg, caps.Bg, caps.HasBg)
+		for i, c := range caps.ANSI {
+			if caps.ANSIMask&(1<<uint(i)) != 0 {
+				_, _ = fmt.Fprintf(f, "  ansi[%2d] = #%06x\n", i, c)
+			}
+		}
+	} else {
+		_, _ = fmt.Fprintf(f, "Palette: the terminal answered no colour queries\n")
+	}
 	_ = f.Close()
 }
 
@@ -298,6 +329,7 @@ func probeTerminal(caps *HostCapabilities) {
 	}
 	writeAnimationProbe(&q)
 	writeFontQuery(&q)
+	writePaletteQuery(&q)
 	// Who the terminal says it is, which is what decides whether Unicode
 	// placeholders are drawn or dropped.
 	q.WriteString(xtversionQuery)
@@ -309,7 +341,76 @@ func probeTerminal(caps *HostCapabilities) {
 	parsePixelGeometry(caps, response)
 	parseGraphicsSupport(caps, response, probeFileErr == nil)
 	parseHostFont(caps, response)
+	parseHostPalette(caps, response)
 	caps.KittyPlaceholders = caps.KittyGraphics && hostDrawsPlaceholders(response)
+}
+
+// writePaletteQuery appends the colour questions to the probe batch: the
+// sixteen palette slots, and the default foreground and background.
+//
+// They ride the existing round trip the font queries do, for the same reasons.
+// A terminal that does not answer leaves the fields unset and the caller falls
+// back to guessing, which is what it did before; a terminal that does answer
+// costs one more reply to parse. DA1 still closes the batch either way.
+func writePaletteQuery(q *strings.Builder) {
+	for i := range 16 {
+		fmt.Fprintf(q, "\x1b]4;%d;?\x1b\\", i)
+	}
+	q.WriteString("\x1b]10;?\x1b\\")
+	q.WriteString("\x1b]11;?\x1b\\")
+}
+
+// oscColorReply matches an OSC colour answer for a palette slot (OSC 4) or for
+// the default foreground or background (OSC 10 and 11).
+//
+// The channels are one to four hex digits each, because the reply is an X11
+// colour name and terminals differ on how many they use: xterm and ghostty
+// answer four, some answer two. String terminator or BEL, because both are in
+// use and a reply that came back is worth reading whichever it ended with.
+var oscColorReply = regexp.MustCompile(
+	`\x1b\](4;(\d+)|10|11);rgb:([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})(?:\x1b\\|\x07)`)
+
+// parseHostPalette reads the terminal's own colours out of a probe response.
+func parseHostPalette(caps *HostCapabilities, response string) {
+	for _, m := range oscColorReply.FindAllStringSubmatch(response, -1) {
+		packed := packOSCColor(m[3], m[4], m[5])
+		switch {
+		case strings.HasPrefix(m[1], "4;"):
+			idx, err := strconv.Atoi(m[2])
+			if err != nil || idx < 0 || idx > 15 {
+				continue
+			}
+			caps.ANSI[idx] = packed
+			caps.ANSIMask |= 1 << uint(idx)
+		case m[1] == "10":
+			caps.Fg, caps.HasFg = packed, true
+		case m[1] == "11":
+			caps.Bg, caps.HasBg = packed, true
+		}
+	}
+}
+
+// packOSCColor turns one X11 rgb: channel triple into 0xRRGGBB.
+//
+// Each channel is scaled from however many hex digits it came with to eight
+// bits, which is what "rgb:f/0/0" and "rgb:ffff/0000/0000" both meaning pure
+// red requires. Reading the top two digits instead would turn the first into
+// 0x0f0000, a red so dark it reads as black.
+func packOSCColor(r, g, b string) uint32 {
+	return uint32(scaleOSCChannel(r))<<16 | uint32(scaleOSCChannel(g))<<8 | uint32(scaleOSCChannel(b))
+}
+
+// scaleOSCChannel converts one hex channel of any width to eight bits.
+func scaleOSCChannel(s string) uint8 {
+	v, err := strconv.ParseUint(s, 16, 32)
+	if err != nil || len(s) == 0 {
+		return 0
+	}
+	maxV := uint64(1)<<(4*len(s)) - 1
+	if maxV == 0 {
+		return 0
+	}
+	return uint8((v*255 + maxV/2) / maxV)
 }
 
 // fontQueryKeys are the XTGETTCAP names kitty answers with its own font.

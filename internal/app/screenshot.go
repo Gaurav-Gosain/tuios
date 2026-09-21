@@ -363,8 +363,48 @@ func cropGrid(g *shot.Grid, x0, y0, x1, y1 int) *shot.Grid {
 // the client has selected a tint of its own, so the process theme is the right
 // answer here.
 func (m *OS) shotPalette() *shot.Palette {
-	p, _ := capture.Palette(theme.CurrentThemeID())
-	return p
+	p, warn := capture.Palette(theme.CurrentThemeID())
+	if warn == "" {
+		return p
+	}
+	// No theme resolved, so every colour in the frame is a palette index and
+	// the guess above is the xterm defaults. The host terminal is the one
+	// resolving those indices on screen, and it will say what it resolves them
+	// to, so ask it rather than guess. See HostCapabilities.ANSI.
+	return hostPalette(m.hostCaps(), p)
+}
+
+// hostPalette overlays whatever the host terminal said about its own colours
+// onto a fallback palette, and returns the fallback untouched when it said
+// nothing.
+func hostPalette(caps *HostCapabilities, fallback *shot.Palette) *shot.Palette {
+	if caps == nil || fallback == nil {
+		return fallback
+	}
+	if caps.ANSIMask == 0 && !caps.HasFg && !caps.HasBg {
+		return fallback
+	}
+	out := *fallback
+	// Only the slots the terminal answered for. One it said nothing about keeps
+	// the fallback: taking the zero value there would paint it black, which is
+	// worse than the guess this is replacing.
+	for i, packed := range caps.ANSI {
+		if caps.ANSIMask&(1<<uint(i)) != 0 {
+			out.ANSI[i] = unpackShotColor(packed)
+		}
+	}
+	if caps.HasFg {
+		out.FG = unpackShotColor(caps.Fg)
+	}
+	if caps.HasBg {
+		out.BG = unpackShotColor(caps.Bg)
+	}
+	return &out
+}
+
+// unpackShotColor turns a 0xRRGGBB word into a renderer colour.
+func unpackShotColor(packed uint32) shot.Color {
+	return shot.RGB(uint8(packed>>16), uint8(packed>>8), uint8(packed))
 }
 
 // screenshotSettings resolves the [screenshot] section this client holds, and
