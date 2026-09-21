@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"os/signal"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -877,6 +878,16 @@ func printOptionList(w io.Writer, options []optionRow, sections []string, total 
 		fmt.Fprintln(w, "No options match that filter.")
 		return
 	}
+
+	// A section is a display group, not a path prefix, so regroup a clone
+	// rather than reprint a heading each time path order crosses back into one.
+	options = slices.Clone(options)
+	slices.SortFunc(options, func(a, b optionRow) int {
+		if c := strings.Compare(a.Section, b.Section); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Path, b.Path)
+	})
 
 	// One width across every group, so the paths line up down the whole page
 	// rather than shifting at each section heading.
