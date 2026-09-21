@@ -22,10 +22,12 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/shirou/gopsutil/v4 v4.26.7
 	github.com/spf13/cobra v1.10.2
-	go.mitchellh.com/libghostty v0.0.0-20260904160725-d815d1633c05
+	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf
+	go4.org/mem v0.0.0-20240501181205-ae6ca9944745
 	golang.org/x/image v0.45.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
+	tailscale.com v1.102.4
 )
 
 require (
@@ -45,10 +47,8 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/tailscale/go-winio v0.0.0-20231025203758-c4f33415bf55 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	go4.org/mem v0.0.0-20240501181205-ae6ca9944745 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
-	tailscale.com v1.102.4 // indirect
 )
 
 require (

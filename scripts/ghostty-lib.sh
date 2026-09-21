@@ -23,7 +23,7 @@ set -eu
 # compiles against these headers and calls into this archive, so the two pins
 # must move together. A binding built for older headers still compiles against
 # newer ones, and the mismatch is silent.
-GHOSTTY_COMMIT=492300cad104195411d12217dd22f1cd05f31376
+GHOSTTY_COMMIT=27e8b3fa85d9cf8c7cd5ae2ced348bcb0a4fba9c
 
 # The archive outlives the machine that built it: CI restores it from a cache
 # shared by heterogeneous runners, and release binaries link it and then run on
