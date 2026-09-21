@@ -581,6 +581,24 @@ func (m *OS) safeComposeFrame() (frame string, ok bool) {
 // composeFrame renders the full frame, using the fullscreen fast path when it is
 // eligible and falling back to the compositor otherwise.
 func (m *OS) composeFrame() string {
+	// The screen saver is the frame, not a layer over one.
+	//
+	// It is built at the render size and drawn at the origin, so it covers
+	// every cell the compositor would produce. Composing them anyway meant
+	// every pane, every border, the rail and the dock were laid out and styled
+	// on every frame of the animation and then painted over: the whole cost of
+	// a frame, spent on cells nobody sees. The saver ticks at the session's
+	// frame rate, which is 240 on a screen that will take it, so that was four
+	// frames' worth of work in the time it had to draw one and the animation
+	// ran visibly slow.
+	//
+	// The panes are still there and still running; what is skipped is drawing
+	// them. The saver's own capture was taken when it started, so it has the
+	// screen it is animating and needs nothing further from the compositor.
+	if m.screensaver.active && m.screensaver.frame != "" {
+		m.OverlayHits = m.OverlayHits[:0]
+		return m.screensaver.frame
+	}
 	if window, ok := m.fullscreenFastWindow(); ok && !fastPathDisabled {
 		return m.buildFullscreenFrame(window)
 	}
