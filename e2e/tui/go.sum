@@ -40,8 +40,8 @@ github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsT
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/xo/terminfo v1.0.0 h1:2ZpYzqWzyyytjk3TP6aJVDhkMAkc99/1xKQdA3TDTBY=
 github.com/xo/terminfo v1.0.0/go.mod h1:RbqR21r5mrJuqunuUZ/Dhy/avygyECGrLceyNeo4LiM=
-go.mitchellh.com/libghostty v0.0.0-20260904160725-d815d1633c05 h1:7Sz2mlBykMH7crUEpg93npShrautkiY30QpR1+y7urI=
-go.mitchellh.com/libghostty v0.0.0-20260904160725-d815d1633c05/go.mod h1:sx8yDvnDrQC/PzsrFfYx7ROmH8my91nz7lOxQb6sbo0=
+go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf h1:PgfZ7mRcXk8n3+B+46oo9WxDi6xK1z6feOQEKNRWCBs=
+go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf/go.mod h1:sx8yDvnDrQC/PzsrFfYx7ROmH8my91nz7lOxQb6sbo0=
 golang.org/x/exp v0.0.0-20260611194520-c48552f49976 h1:X8Hz2ImujgbmetVuW+w2YkyZChE3cBpZi2P158rTG9M=
 golang.org/x/exp v0.0.0-20260611194520-c48552f49976/go.mod h1:vnf4pv9iKZXY58sQE1L86zmNWJ4159e1RkcWiLCkeEY=
 golang.org/x/sync v0.22.0 h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=

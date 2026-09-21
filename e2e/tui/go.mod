@@ -6,7 +6,7 @@ require github.com/Gaurav-Gosain/tuitest v0.0.0-20260726152020-d8180855c594
 
 require (
 	github.com/adrg/xdg v0.5.3 // indirect
-	go.mitchellh.com/libghostty v0.0.0-20260904160725-d815d1633c05 // indirect
+	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf // indirect
 )
 
 require (

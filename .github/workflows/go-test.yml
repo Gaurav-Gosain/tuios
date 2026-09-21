@@ -51,6 +51,22 @@ jobs:
             exit 1
           fi
 
+      - name: Modules are tidy
+        # Both modules, because e2e/tui replaces the root one and so carries the
+        # root's dependencies as indirect requirements of its own. A dependency
+        # bump in the root leaves those stale, and nothing here noticed: the
+        # end-to-end job failed instead, in all four shards at once, with "go:
+        # updates to go.mod needed" from a module the change had not touched by
+        # name. That has happened twice. This says which module and says it in
+        # the job the change belongs to.
+        run: |
+          for dir in . e2e/tui; do
+            if ! (cd "$dir" && go mod tidy -diff); then
+              echo "$dir/go.mod is not tidy; run: (cd $dir && go mod tidy)" >&2
+              exit 1
+            fi
+          done
+
       - name: Vet
         run: go vet ./...
 
