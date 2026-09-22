@@ -204,28 +204,17 @@ func runWebServer() error {
 	// stdout; pin it to what the browser terminal renders, the same way.
 	app.SetAccentColorProfile(colorprofile.TrueColor)
 
-	// Install the browser terminal as the process host capabilities, the same
-	// way the SSH server installs its client's. Without this,
-	// GetHostCapabilities probes this process's non-TTY stdin and reports no
-	// graphics and a 9x20 default cell, disagreeing with the capabilities the
-	// daemon is told below (webCaps in createDaemonTUIOSInstance): the same
-	// terminal, described two ways. KittyAnimation stays false because the
-	// browser overlay has no a=f frame-edit path; KittyFileTransfer stays
-	// false because the browser cannot read server-local paths.
+	// Install the browser terminal as the process host capabilities. Without
+	// this, GetHostCapabilities probes this process's non-TTY stdin and reports
+	// no graphics and a 9x20 default cell, disagreeing with the capabilities
+	// every connection is given: the same terminal, described two ways.
 	//
 	// The cell size here is a process-wide default, and stays a placeholder: it
 	// is installed once at startup, before any browser has connected, and one
 	// process serves several browsers at once at whatever font size each reader
-	// chose. What each connection actually reports to the daemon is measured
-	// from that browser's own canvas - see cellSize and webCaps.
-	app.SetClientCapabilities(&app.HostCapabilities{
-		KittyGraphics: true,
-		SixelGraphics: true,
-		TrueColor:     true,
-		TerminalName:  "tuios-web",
-		CellWidth:     webFallbackCellWidth,
-		CellHeight:    webFallbackCellHeight,
-	})
+	// chose. Each connection carries its own, measured from that browser's
+	// canvas. See cellSize and webHostCaps.
+	app.SetClientCapabilities(webHostCaps(webFallbackCellWidth, webFallbackCellHeight))
 
 	// Set terminal environment variables
 	_ = os.Setenv("TERM", "xterm-256color")
@@ -340,6 +329,12 @@ func runWebServer() error {
 	// theme the user asked for. A browser used to get sip's own palette
 	// whatever the user had picked.
 	sipConfig.Appearance = browserAppearance()
+
+	// The colours the browser will resolve palette indices to follow from that
+	// appearance, so they are settled here too, before any browser connects.
+	// The seed installed above is replaced so it carries them as well.
+	webPalette = newBrowserPalette(sipConfig.Appearance.Theme)
+	app.SetClientCapabilities(webHostCaps(webFallbackCellWidth, webFallbackCellHeight))
 
 	// The touch key bar is server-wide while the keys it carries are user
 	// settings, so it is built from the startup config read above rather than
@@ -585,22 +580,46 @@ func createTUIOSHandler(sess sip.Session) tea.Model {
 	graphicsOut := sess.PtySlave()
 	touch := sessionIsTouch(sess.Context())
 
+	// This browser's own terminal, measured from its canvas, for either kind
+	// of session. The ephemeral path used to get none and fell back to the
+	// process-wide placeholder, so its image cell math used a 10x20 cell
+	// whatever font size the reader had.
+	hostCaps := webHostCaps(cellSize(pty))
+
 	// Determine session name
 	sessionName := webServerConfig.defaultSession
 
 	// If ephemeral mode or daemon not available, use old behavior
 	if webServerConfig.ephemeral {
-		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut, touch)
+		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut, touch, hostCaps)
 	}
 
 	// Try to connect to daemon
-	cellW, cellH := cellSize(pty)
-	model, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height, cellW, cellH, graphicsOut, touch)
+	model, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height, graphicsOut, touch, hostCaps)
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
-		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut, touch)
+		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut, touch, hostCaps)
 	}
 	return model
+}
+
+// webHostCaps is the browser terminal one connection draws to. sip's bundled
+// xterm.js loads the image addon with kitty and sixel support, so both
+// protocols render. KittyAnimation stays false because the browser overlay has
+// no a=f frame-edit path, and KittyFileTransfer stays false because the browser
+// cannot read server-local paths. The palette is the one the browser draws
+// with; see browserPalette.
+func webHostCaps(cellWidth, cellHeight int) *app.HostCapabilities {
+	caps := &app.HostCapabilities{
+		KittyGraphics: true,
+		SixelGraphics: true,
+		TrueColor:     true,
+		TerminalName:  "tuios-web",
+		CellWidth:     cellWidth,
+		CellHeight:    cellHeight,
+	}
+	webPalette.applyTo(caps)
+	return caps
 }
 
 // webFallbackCellWidth and webFallbackCellHeight are what a cell is taken to
@@ -613,7 +632,7 @@ const (
 )
 
 // createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
-func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch bool) tea.Model {
+func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch bool, hostCaps *app.HostCapabilities) tea.Model {
 	// Load user configuration
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
@@ -644,6 +663,7 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch
 		Height:          height,
 		GraphicsOutput:  graphicsOut,
 		TouchClient:     touch,
+		Caps:            hostCaps,
 	})
 
 	return tuiosInstance
@@ -673,8 +693,8 @@ func cellSize(pty sip.Pty) (cellWidth, cellHeight int) {
 }
 
 // createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon.
-// cellWidth and cellHeight are this browser's own, from cellSize.
-func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth, cellHeight int, graphicsOut *os.File, touch bool) (tea.Model, error) {
+// hostCaps is this browser's own, from webHostCaps.
+func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOut *os.File, touch bool, hostCaps *app.HostCapabilities) (tea.Model, error) {
 	// Connect to daemon
 	client := session.NewTUIClient()
 	v := webServerConfig.version
@@ -693,13 +713,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth,
 	// pixel size of its window: a tool that asks the terminal how big a cell is
 	// before drawing - kitty icat is the usual one - was told a number that had
 	// nothing to do with the reader's font, and drew at the wrong scale.
-	webCaps := &session.ClientCapabilities{
-		KittyGraphics: true,
-		SixelGraphics: true,
-		TerminalName:  "tuios-web",
-		CellWidth:     cellWidth,
-		CellHeight:    cellHeight,
-	}
+	webCaps := app.ClientCapabilitiesOf(hostCaps)
 	if err := client.ConnectWithCapabilities(v, width, height, webCaps); err != nil {
 		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
 	}
@@ -757,14 +771,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, cellWidth,
 		// installed at startup before any browser had connected. One process
 		// serves several readers at several font sizes, and the image cell math
 		// has to answer for the one it is drawing to.
-		Caps: &app.HostCapabilities{
-			KittyGraphics: true,
-			SixelGraphics: true,
-			TrueColor:     true,
-			TerminalName:  "tuios-web",
-			CellWidth:     cellWidth,
-			CellHeight:    cellHeight,
-		},
+		Caps: hostCaps,
 	})
 
 	// Everything the daemon sends an attached client, then the windows it
