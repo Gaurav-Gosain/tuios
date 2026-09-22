@@ -2,10 +2,20 @@ package session
 
 import (
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
+
+// clearAgentNote drops what a window's state said about itself: the message
+// and the kind of block. Every path that moves a window's state without a
+// report of its own calls it, so a kind never outlives the needs_input it
+// described.
+func clearAgentNote(w *WindowState) {
+	w.AgentMessage = ""
+	w.AgentKind = ""
+}
 
 // AgentState is the semantic state of an agent (a coding-agent CLI or any other
 // long-running process) running in a window's pane. It is daemon-owned per-window
@@ -115,10 +125,20 @@ type AgentReport struct {
 	Source  AgentSource
 	Harness string // optional harness id, reported back by get-agent-state
 	// Kind is what sort of block a needs_input report is: harness.PromptKindApproval
-	// or harness.PromptKindQuestion. The screen and title tiers take it from the
-	// rule that matched. A report that names none is guessed from its message;
+	// or harness.PromptKindQuestion. The screen, title and notify tiers take it
+	// from the rule that matched, and a hook reporter sends it as the kind param
+	// of set-agent-state. A report that names none is guessed from its message;
 	// see agentKindOf. It means nothing for any other state.
 	Kind string
+	// SessionID is the harness's own id for the conversation the report is
+	// about. It is set by hook reporters, and setting it turns on the nested
+	// and foreign session guard in sessionGuard. A report without one is
+	// treated exactly as reports were before the field existed.
+	SessionID string
+	// IfState, when not empty, applies the report only if the window's state
+	// is one of these right now. It is how a hook says "clear the block once
+	// the tool ran" without also turning a finished pane back to working.
+	IfState []AgentState
 	// paneWroteAt is the unix-nano time the pane last produced output, as the
 	// source read it at the moment it looked. Only the daemon's own looks set
 	// it (the title, the screen and a notification). blockerOverridesClaim reads
@@ -159,6 +179,65 @@ func (s *Session) SetDaemonWindowAgentState(target string, state AgentState, mes
 // The output-stall heuristic is deliberately not routed through here; see
 // applyStallHeuristic for why.
 func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bool, error) {
+	effective, applied, _, err := s.applyAgentReport(target, r)
+	return effective, applied, err
+}
+
+// Refusal reasons applyAgentReport gives for a report it did not apply. They
+// are wire values: set-agent-state returns them as "reason".
+const (
+	// agentRefusedOutranked is a report from a source ranked below the claim.
+	agentRefusedOutranked = "outranked"
+	// agentRefusedIfState is a report whose if_state did not hold.
+	agentRefusedIfState = "if_state"
+	// agentRefusedForeignSession is a hook report from a conversation other
+	// than the one the pane's own harness is in the middle of.
+	agentRefusedForeignSession = "foreign_session"
+	// agentRefusedForeignHarness is a hook report from a harness other than
+	// the one that reported the pane mid-turn.
+	agentRefusedForeignHarness = "foreign_harness"
+)
+
+// errAgentReportRefused carries a refusal reason out of mutateState.
+type errAgentReportRefused string
+
+func (e errAgentReportRefused) Error() string { return "agent report refused: " + string(e) }
+
+// sessionGuard decides whether a hook report about one conversation may write
+// to a window, returning a refusal reason or "".
+//
+// A hook fires for every harness process that loaded it, not only the one that
+// owns the pane. A `claude -p` a tool call started inside the pane runs the
+// same user hooks, and so does a second harness nested in the first. Their
+// events carry their own session id, and without this a nested run finishing
+// would mark the pane done while the outer turn is still running.
+//
+// The rule refuses only while the pane's own harness is mid-turn by its own
+// report: a report-source claim in working or needs_input. That is the only
+// time a nested run can exist, since a nested run is started by a tool call.
+// At rest, a different session is a new conversation in the same pane (a
+// restart, /clear, /resume), and it takes the pane over. A report without a
+// session id never reaches here, so no caller from before this existed changes
+// behaviour.
+func sessionGuard(w *WindowState, claim agentClaim, held bool, r AgentReport) string {
+	if r.SessionID == "" || !held || claim.source != AgentSourceReport {
+		return ""
+	}
+	if w.AgentState != AgentStateWorking && w.AgentState != AgentStateNeedsInput {
+		return ""
+	}
+	if w.AgentSessionID != "" && w.AgentSessionID != r.SessionID {
+		return agentRefusedForeignSession
+	}
+	if r.Harness != "" && claim.identity == identityReport && claim.harness != "" && claim.harness != r.Harness {
+		return agentRefusedForeignHarness
+	}
+	return ""
+}
+
+// applyAgentReport is ApplyAgentReport with the reason a refused report was
+// refused, empty when it was applied.
+func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bool, string, error) {
 	if r.Source == "" {
 		r.Source = AgentSourceReport
 	}
@@ -176,6 +255,14 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 			return errAgentLookUnchanged
 		}
 		prev := w.AgentState
+		if len(r.IfState) > 0 && !slices.Contains(r.IfState, prev) {
+			effective = prev
+			return errAgentReportRefused(agentRefusedIfState)
+		}
+		if reason := sessionGuard(w, claim, held, r); reason != "" {
+			effective = prev
+			return errAgentReportRefused(reason)
+		}
 		override := false
 		// held, not the zero claim's rank: a window nobody has claimed is open to
 		// any source, including the weakest.
@@ -213,6 +300,9 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 		w.AgentKind = agentKindOf(r)
 		w.AgentHarness = next.harness
 		w.AgentStateAt = time.Now().UnixNano()
+		if r.SessionID != "" {
+			w.AgentSessionID = r.SessionID
+		}
 		// auto is carried over: it says the detector will clear this pane when the
 		// agent exits, which a report taking the state over does not change.
 		s.setAgentClaim(w.ID, next)
@@ -220,13 +310,23 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 		applied = true
 		return nil
 	})
-	if errors.Is(err, errAgentClaimHeld) || errors.Is(err, errAgentLookUnchanged) {
-		return effective, false, nil
+	if errors.Is(err, errAgentClaimHeld) {
+		return effective, false, agentRefusedOutranked, nil
+	}
+	// A look that read back its own claim changed nothing, and it has no
+	// reason: it comes from the daemon's own looks, never from a caller of
+	// set-agent-state, which is the only reader of the reason.
+	if errors.Is(err, errAgentLookUnchanged) {
+		return effective, false, "", nil
+	}
+	var refused errAgentReportRefused
+	if errors.As(err, &refused) {
+		return effective, false, string(refused), nil
 	}
 	if err != nil {
-		return effective, false, err
+		return effective, false, "", err
 	}
-	return effective, applied, nil
+	return effective, applied, "", nil
 }
 
 // harnessAfterReport decides what a window is attributed to once r is applied.
@@ -393,8 +493,7 @@ func (s *Session) releaseAgentBlockerOverride(windowID string) bool {
 			return errNoBlockerRelease
 		}
 		w.AgentState = claim.prior.state
-		w.AgentMessage = ""
-		w.AgentKind = ""
+		clearAgentNote(w)
 		w.AgentHarness = claim.prior.harness
 		w.AgentStateAt = time.Now().UnixNano()
 		s.setAgentClaim(w.ID, agentClaim{

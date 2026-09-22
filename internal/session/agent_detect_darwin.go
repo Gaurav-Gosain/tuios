@@ -69,8 +69,8 @@ func readProcessInfo(pid int) foregroundInfo {
 //
 // The buffer is: int32 argc, the NUL-terminated executable path, NUL padding to
 // an alignment boundary, then argc NUL-terminated arguments, then the
-// environment. Only the first two sections are read. The environment is not
-// something process detection has any business looking at.
+// environment. Only the first two sections are read here. Of the environment,
+// detection reads one variable and only through readAgentHintEnv.
 func readProcArgs(pid int) (string, []string) {
 	buf, err := unix.SysctlRaw("kern.procargs2", pid)
 	if err != nil || len(buf) < 4 {
@@ -104,6 +104,19 @@ func readProcArgs(pid int) (string, []string) {
 		rest = rest[end+1:]
 	}
 	return exe, argv
+}
+
+// readAgentHintEnv reads TUIOS_AGENT from the environment section of
+// kern.procargs2. The argument reader above stops before that section on
+// purpose; this is the one variable detection reads, and only when a wrapper
+// it cannot see past might be naming its agent. A refused sysctl is an absent
+// hint.
+func readAgentHintEnv(pid int) (string, bool) {
+	buf, err := unix.SysctlRaw("kern.procargs2", pid)
+	if err != nil {
+		return "", false
+	}
+	return procargsEnvVar(buf, AgentHintEnv)
 }
 
 // foregroundGroup walks the descendants of leader that share its process group,

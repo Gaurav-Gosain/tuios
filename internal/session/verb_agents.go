@@ -139,6 +139,9 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 			// focused since. See agent_turns.go.
 			"completion_seq":  w.CompletionSeq,
 			"finished_unread": sess.finishedUnread(&w),
+			// The harness's own conversation id, empty until a hook reports
+			// one. It is what a resume names.
+			"agent_session_id": w.AgentSessionID,
 		})
 	}
 

@@ -955,10 +955,20 @@ func init() {
 				{Name: "message", Type: "string", Description: "Optional short note reported with the state, e.g. what the agent is waiting for."},
 				{Name: "source", Type: "string", Description: "Where the state came from. A source ranked below the one that last set the window is refused. The result then reports applied false and the state that stands.", Accepted: AgentSourceNames, Default: "report"},
 				{Name: "harness", Type: "string", Description: "Optional id of the harness the state is about, reported back by get-agent-state."},
+				{Name: "kind", Type: "string", Description: "What a needs_input state waits for: approval for a tool call waiting to be allowed, question for anything else. Only valid with needs_input. Omitted, it is guessed from message. Reported back by get-agent-state and list-agents as blocked_by.", Accepted: agentKindNames},
+				{Name: "agent_session_id", Type: "string", Description: "The harness's own id for the conversation, as a hook reports it. It is stored on the window for a later resume. It also turns on the nested-session guard: while the pane's harness is working or needs_input by its own report, a report for a different conversation or from a different harness is refused with reason foreign_session or foreign_harness."},
+				{Name: "transcript_path", Type: "string", Description: "The transcript file the harness is writing, as a hook reports it. For a harness whose manifest has a transcript reader, the window is joined to this exact file instead of a searched one. Kept in daemon memory only."},
+				{Name: "if_state", Type: "string", Description: "Comma-separated states. The report applies only when the window is in one of them now, and is otherwise refused with reason if_state.", Accepted: AgentStateNames},
+			},
+			returns: []verbParam{
+				{Name: "state", Type: "string", Description: "The state the window shows after the call, which is the reported one only when applied is true."},
+				{Name: "applied", Type: "bool", Description: "Whether this report set the state."},
+				{Name: "reason", Type: "string", Description: "Why the report was not applied. Absent when it was.", Accepted: []string{agentRefusedOutranked, agentRefusedIfState, agentRefusedForeignSession, agentRefusedForeignHarness}},
 			},
 			examples: []string{
 				`{"id":1,"verb":"set-agent-state","params":{"session":"work","state":"needs_input","message":"awaiting approval"}}`,
 				`{"id":1,"verb":"set-agent-state","params":{"session":"work","state":"working","source":"osc","harness":"claude-code"}}`,
+				`{"id":1,"verb":"set-agent-state","params":{"session":"work","state":"needs_input","kind":"approval","harness":"claude-code","agent_session_id":"5f1c","message":"approve Bash: go test ./..."}}`,
 			},
 			handler: (*Daemon).verbSetAgentState,
 		},
@@ -967,6 +977,21 @@ func init() {
 			params:      []verbParam{sessionParam, windowParam},
 			examples:    []string{`{"id":1,"verb":"get-agent-state","params":{"session":"work","window":"build"}}`},
 			handler:     (*Daemon).verbGetAgentState,
+		},
+		"resolve-pane": {
+			description: "Name the pane a process runs in, from its terminal session id and its ancestor pids. It is how a hook reporter finds its pane when the harness or a sandbox wrapper scrubbed TUIOS_PANE_ID from the environment. Only panes on this daemon's own machine are matched.",
+			params: []verbParam{
+				{Name: "sid", Type: "int", Description: "The process's session id. Every process whose controlling terminal is a pane shares the id of that pane's shell, so this is tried first."},
+				{Name: "pids", Type: "[]int", Description: "The process's ancestors, nearest first. The first one that is a pane's shell names the pane."},
+			},
+			returns: []verbParam{
+				{Name: "session", Type: "string", Description: "The session the pane is in."},
+				{Name: "window_id", Type: "string", Description: "The pane's window id."},
+				{Name: "by", Type: "string", Description: "What matched: tty for the session id, pid for an ancestor.", Accepted: []string{"tty", "pid"}},
+				{Name: "pid", Type: "int", Description: "The shell pid that matched."},
+			},
+			examples: []string{`{"id":1,"verb":"resolve-pane","params":{"sid":4242,"pids":[4250,4243,4242]}}`},
+			handler:  (*Daemon).verbResolvePane,
 		},
 		"explain-agent-detect": {
 			description: "Say in plain words whether a pane runs an agent and on what evidence. Lists every agent name seen on the command line that did not count, what the detector read (comm, argv, executable, and the processes behind a wrapper), which harness manifest matched and on which predicate, and for each manifest that did not match, what it compared against.",
@@ -1020,7 +1045,7 @@ func init() {
 				{Name: "all", Type: "bool", Description: "Include every window, not only the panes something has identified as an agent.", Default: "false"},
 			},
 			returns: []verbParam{
-				{Name: "agents", Type: "[]object", Description: "One entry per pane: window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, completion_seq, finished_unread. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since."},
+				{Name: "agents", Type: "[]object", Description: "One entry per pane: window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, completion_seq, finished_unread, agent_session_id. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it."},
 				{Name: "total", Type: "int", Description: "How many panes are listed."},
 			},
 			examples: []string{

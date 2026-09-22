@@ -141,11 +141,21 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	type agent struct {
 		state   AgentState
 		message string
-		kind    string
 		harness string
 		at      int64
 	}
 	agents := make(map[string]agent, len(canonical.Windows))
+	// The kind of a block and the harness's session id are daemon-owned too, but
+	// they are carried apart from the block above and taken from canonical
+	// unconditionally. A client that predates them sends a window with its
+	// agent state and without them, and the block above keeps a client's agent
+	// fields whenever any of them is set, so riding along there would lose them
+	// on every sync from an older client.
+	type agentIdentity struct {
+		kind      string
+		sessionID string
+	}
+	agentIDs := make(map[string]agentIdentity, len(canonical.Windows))
 	// The popup mark and the size the popup was asked for are stamped once, when
 	// the daemon creates the window, and nothing ever changes them. So canonical
 	// is always the truth and they are carried over by id the way Cwd is.
@@ -192,7 +202,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			shellPIDs[w.ID] = pid
 		}
 		if w.AgentState != AgentStateNone || w.AgentMessage != "" || w.AgentHarness != "" || w.AgentStateAt != 0 {
-			agents[w.ID] = agent{w.AgentState, w.AgentMessage, w.AgentKind, w.AgentHarness, w.AgentStateAt}
+			agents[w.ID] = agent{w.AgentState, w.AgentMessage, w.AgentHarness, w.AgentStateAt}
+		}
+		if w.AgentKind != "" || w.AgentSessionID != "" {
+			agentIDs[w.ID] = agentIdentity{w.AgentKind, w.AgentSessionID}
 		}
 	}
 	for i := range incoming.Windows {
@@ -218,10 +231,12 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			w.PopupWidth = p.width
 			w.PopupHeight = p.height
 		}
+		ids := agentIDs[w.ID]
+		w.AgentKind = ids.kind
+		w.AgentSessionID = ids.sessionID
 		if a, ok := agents[w.ID]; ok && w.AgentState == AgentStateNone && w.AgentMessage == "" && w.AgentHarness == "" && w.AgentStateAt == 0 {
 			w.AgentState = a.state
 			w.AgentMessage = a.message
-			w.AgentKind = a.kind
 			w.AgentHarness = a.harness
 			w.AgentStateAt = a.at
 		}

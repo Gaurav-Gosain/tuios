@@ -153,6 +153,17 @@ func readProcessInfo(pid int) foregroundInfo {
 	}
 }
 
+// readAgentHintEnv reads TUIOS_AGENT from /proc/<pid>/environ. The file is
+// readable only for a process of the same user, and a refusal is an absent
+// hint, never an error.
+func readAgentHintEnv(pid int) (string, bool) {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/environ")
+	if err != nil {
+		return "", false
+	}
+	return environVar(data, AgentHintEnv)
+}
+
 // readComm returns the trimmed contents of /proc/<pid>/comm, or "" on error.
 func readComm(pid int) string {
 	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/comm")

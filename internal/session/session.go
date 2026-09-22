@@ -153,6 +153,14 @@ type WindowState struct {
 	// turn nobody has looked at. Daemon-owned like AgentState. Zero, which is
 	// what an older daemon sends, means no turn has been counted.
 	CompletionSeq uint64 `json:"completion_seq,omitempty"`
+	// AgentSessionID is the harness's own id for the conversation running in
+	// the pane, as a hook reported it (Claude Code's session_id, for one). It
+	// is what a later resume names, and it is how a hook event from a nested
+	// or foreign session is told apart from the pane's own. It is kept when the
+	// agent exits, so the last conversation a pane ran can still be resumed,
+	// and it is replaced when another session reports into the pane. It is
+	// daemon-owned and never set by a client.
+	AgentSessionID string `json:"agent_session_id,omitempty"`
 	// Popup marks a transient floating pane that runs one command and closes
 	// when the command exits. It is session state, not a client's own, for the
 	// two reasons IsFloating and Zoomed are: a peer that does not know the pane

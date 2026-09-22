@@ -105,6 +105,11 @@ const (
 	// identityList is the built-in or user name list matching the process's own
 	// name. It names no harness, so no screen rules run for it.
 	identityList identityTier = "list"
+	// identityHint is a wrapper naming its agent through TUIOS_AGENT in its
+	// environment. It is the person who started the wrapper saying what runs
+	// in it, which is why it names a harness and runs its rules, and why it is
+	// tried only after the process itself was not recognised.
+	identityHint identityTier = "hint"
 )
 
 // confidence is the plain word a tier is reported as.
@@ -112,7 +117,7 @@ func (t identityTier) confidence() string {
 	switch t {
 	case identityReport:
 		return "certain"
-	case identityManifest, identityList:
+	case identityManifest, identityList, identityHint:
 		return "strong"
 	default:
 		return "none"
@@ -161,6 +166,40 @@ func (m agentMatcher) identifyDetail(info foregroundInfo) (detection, bool) {
 	if d, ok := m.matchProc(info); ok {
 		return d, true
 	}
+	d, ok := m.walkGroup(info)
+	if ok {
+		return d, true
+	}
+	if hinted, ok := m.matchHint(info); ok {
+		hinted.visited = d.visited
+		return hinted, true
+	}
+	return d, false
+}
+
+// matchHint attributes a pane to the harness its foreground process's
+// TUIOS_AGENT names. It is the last resort, tried only when neither the
+// leader nor anything behind it was recognised, so a real agent binary always
+// wins over what a wrapper says about it. The hint must name a manifest, by id
+// or by the program name the manifest detects, and a value naming nothing is
+// ignored rather than trusted into a claim.
+func (m agentMatcher) matchHint(info foregroundInfo) (detection, bool) {
+	if info.hint == nil || m.registry == nil {
+		return detection{}, false
+	}
+	name := info.hint()
+	if name == "" {
+		return detection{}, false
+	}
+	man, _, ok := m.registry.Resolve(name)
+	if !ok {
+		return detection{}, false
+	}
+	return detection{harness: man.ID, rule: AgentHintEnv + "=" + name, tier: identityHint, proc: info}, true
+}
+
+// walkGroup reads the processes behind a wrapper leader for an agent.
+func (m agentMatcher) walkGroup(info foregroundInfo) (detection, bool) {
 	if info.group == nil || !info.proc().Wraps() {
 		return detection{}, false
 	}
@@ -394,6 +433,10 @@ type foregroundInfo struct {
 	// prompt, or the platform cannot list a process's children. It is read
 	// lazily, so a pane whose leader is itself the agent never pays for it.
 	group func(yield func(foregroundInfo) bool)
+	// hint reads the harness the leader's TUIOS_AGENT names, "" for none. It
+	// is nil for a pane at its shell prompt, and read lazily like group, so a
+	// pane whose process is recognised never reads its environment.
+	hint func() string
 	// shellPID is the pane's shell, not its foreground process. It rides here
 	// because the resolver is handed the shell pid to begin with, so nothing has
 	// to be read to know it, and because this is the one value the detector's
@@ -468,6 +511,7 @@ func foregroundProcess(shellPid int) (foregroundInfo, bool) {
 	// walk is handed over unread: the matcher only runs it for one that is.
 	if tpgid != shellPid {
 		info.group = foregroundGroup(tpgid, agentGroupWalkLimit, agentGroupWalkDepth)
+		info.hint = func() string { return agentHint(readAgentHintEnv, tpgid) }
 	}
 	return info, true
 }
@@ -561,7 +605,7 @@ func (s *Session) applyAgentDetection(
 				// Take ownership only if no state is set, so a manual report wins.
 				if w.AgentState == AgentStateNone {
 					w.AgentState = AgentStateWorking
-					w.AgentMessage = ""
+					clearAgentNote(w)
 					w.AgentHarness = det.harness
 					w.AgentStateAt = now
 					s.setAgentClaim(w.ID, agentClaim{
@@ -586,7 +630,7 @@ func (s *Session) applyAgentDetection(
 				// Agent gone from the foreground: relinquish and clear.
 				delete(s.agentClaims, w.ID)
 				w.AgentState = AgentStateNone
-				w.AgentMessage = ""
+				clearAgentNote(w)
 				w.AgentHarness = ""
 				w.AgentStateAt = now
 				changed++
@@ -621,7 +665,7 @@ func (s *Session) applyAgentDetection(
 				if running && info.atShell() && claim.sawProcess && claim.source != AgentSourceReport {
 					delete(s.agentClaims, w.ID)
 					w.AgentState = AgentStateNone
-					w.AgentMessage = ""
+					clearAgentNote(w)
 					w.AgentHarness = ""
 					w.AgentStateAt = now
 					changed++
@@ -708,7 +752,7 @@ func (s *Session) reconcileAgentOnOutput(
 					return errNoAgentDetectChange
 				}
 				w.AgentState = AgentStateWorking
-				w.AgentMessage = ""
+				clearAgentNote(w)
 				// Re-stated rather than cleared: the process just identified is the
 				// same one the detector attributed, and a pane with no harness on it
 				// has no screen rules to run, so clearing here blinded the very pane
@@ -730,7 +774,7 @@ func (s *Session) reconcileAgentOnOutput(
 			}
 			delete(s.agentClaims, w.ID)
 			w.AgentState = AgentStateNone
-			w.AgentMessage = ""
+			clearAgentNote(w)
 			w.AgentHarness = ""
 			w.AgentStateAt = time.Now().UnixNano()
 			changed = true

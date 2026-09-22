@@ -682,6 +682,13 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 		Message string `json:"message"`
 		Source  string `json:"source"`
 		Harness string `json:"harness"`
+		// The fields below are what a hook reporter adds. Every one is
+		// optional, and a caller that sends none of them is handled exactly as
+		// before they existed.
+		Kind           string `json:"kind"`
+		AgentSessionID string `json:"agent_session_id"`
+		TranscriptPath string `json:"transcript_path"`
+		IfState        string `json:"if_state"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -709,6 +716,35 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 			Detail:     "source says where the state came from and decides which of two competing reports wins. Omit it to report for yourself.",
 		})
 	}
+	if p.Kind != "" {
+		if p.Kind != harness.PromptKindApproval && p.Kind != harness.PromptKindQuestion {
+			return nil, hintedVerbError(ErrVerbInvalidParams, "unknown kind "+echoName(p.Kind), &VerbHint{
+				Param:     "kind",
+				Available: agentKindNames,
+				Detail:    "kind says what a needs_input state waits for.",
+			})
+		}
+		if state != AgentStateNeedsInput {
+			return nil, invalidParam("kind", "kind describes a needs_input state, and this report is "+state.Name())
+		}
+	}
+	var ifState []AgentState
+	for name := range strings.SplitSeq(p.IfState, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		st, ok := ParseAgentState(name)
+		if !ok {
+			return nil, hintedVerbError(ErrVerbInvalidParams, "unknown agent state "+echoName(name)+" in if_state", &VerbHint{
+				Param:      "if_state",
+				DidYouMean: closestMatch(name, AgentStateNames),
+				Available:  AgentStateNames,
+				Detail:     "if_state lists the states the window must be in for the report to apply.",
+			})
+		}
+		ifState = append(ifState, st)
+	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
 		return nil, verr
@@ -723,25 +759,63 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 		target = id
 	}
 
-	effective, applied, err := sess.ApplyAgentReport(target, AgentReport{
-		State:   state,
-		Message: p.Message,
-		Source:  source,
-		Harness: p.Harness,
+	effective, applied, reason, err := sess.applyAgentReport(target, AgentReport{
+		State:     state,
+		Message:   p.Message,
+		Source:    source,
+		Harness:   p.Harness,
+		Kind:      p.Kind,
+		SessionID: p.AgentSessionID,
+		IfState:   ifState,
 	})
 	if err != nil {
 		return nil, mapResolveErr(err, sess)
 	}
+	if applied && p.TranscriptPath != "" {
+		d.joinReportedTranscript(sess, target, p.Harness, p.TranscriptPath)
+	}
 	// state is the effective state, so a report a higher-ranked source outranked
 	// reports what the pane actually shows rather than what was asked for.
-	// applied says which of the two happened.
-	return map[string]any{
+	// applied says which of the two happened, and reason says why not.
+	out := map[string]any{
 		"type":    "agent_state_set",
 		"state":   effective.Name(),
 		"message": p.Message,
 		"source":  source.Name(),
 		"applied": applied,
-	}, nil
+	}
+	if reason != "" {
+		out["reason"] = reason
+	}
+	return out, nil
+}
+
+// agentKindNames are the values set-agent-state accepts for kind. They are
+// the manifest rule kinds, so a hook and a screen rule describe a block in the
+// same words.
+var agentKindNames = []string{harness.PromptKindApproval, harness.PromptKindQuestion}
+
+// joinReportedTranscript binds a window to the transcript file its harness
+// named in a hook. This is the exact join the transcript source was built for:
+// the searched join refuses whenever two files could be the pane's, and the
+// harness naming its own file settles that. Only a harness whose manifest has
+// a transcript reader is joined, since nothing else could read the file, and
+// a failure leaves the pane on whatever join it had.
+func (d *Daemon) joinReportedTranscript(sess *Session, target, harnessID, path string) {
+	state := sess.GetState()
+	idx, err := findWindowStateIndex(state.Windows, target)
+	if err != nil {
+		return
+	}
+	w := state.Windows[idx]
+	if harnessID == "" {
+		harnessID = w.AgentHarness
+	}
+	reg := d.agentMatcher.registry
+	if harnessID == "" || reg == nil || reg.TranscriptFor(harnessID) == nil {
+		return
+	}
+	_ = sess.JoinAgentTranscript(w.ID, harnessID, path, true)
 }
 
 func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *verbError) {
@@ -791,9 +865,12 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 		"activity":  w.AgentState.Activity(),
 		// ready and blocked_by are the same answers list-agents gives: whether
 		// ask-agent would type at the pane now, and, for a pane on needs_input,
-		// whether it waits on an approval or a question.
+		// whether it waits on an approval or a question. blocked_by is also
+		// where the kind a hook reported with set-agent-state reads back.
 		"ready":      agentRestStates[w.AgentState.Name()],
 		"blocked_by": agentBlockedBy(w),
+		// The harness's own conversation id, empty until a hook reports one.
+		"agent_session_id": w.AgentSessionID,
 	}, nil
 }
 
@@ -917,6 +994,14 @@ func (d *Daemon) verbExplainAgentDetect(_ *connState, params json.RawMessage) (a
 		if name == "" {
 			name = "an agent named " + processLabel(det.proc)
 			out["note"] = "The name list matched, not a manifest. No harness is named, so no screen rules run."
+		}
+		if det.tier == identityHint {
+			// The process itself was not recognised: its environment named
+			// the harness. Said as that, so nobody reads it as a name match.
+			out["verdict"] = "This pane runs " + name + ", as named by " + AgentHintEnv + "."
+			evidence = append(evidence, fmt.Sprintf("Named by %s on pid %d (%s). The process itself is not a known agent.",
+				det.rule, det.proc.pid, processLabel(det.proc)))
+			break
 		}
 		what := "The process " + processLabel(det.proc) + " matched " + describeRule(det)
 		if len(det.via) > 0 {
