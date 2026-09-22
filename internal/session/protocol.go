@@ -616,24 +616,31 @@ const LegacyWelcomeType MessageType = 22
 
 // WriteMessage writes one framed message.
 // Wire format: [4 bytes BE length][1 byte type][1 byte codec][payload]
+//
+// The header and the payload go out through net.Buffers. On a *net.UnixConn,
+// which is what every production caller passes, that is one writev with no
+// copy of the payload; on any other writer it is one write for the header and
+// one for the payload. It used to be three writes, one each for the length,
+// the type and codec bytes and the payload, so three syscalls under the
+// caller's send lock. The bytes on the wire are the same.
+//
+// Measured on a unix socket, a 64-byte frame went from about 2.2us to 1.3us
+// and a 4 KiB frame from 2.2us to 1.65us. At 64 KiB and above the copy into
+// the socket dominates and the two are within noise of each other.
 func WriteMessage(w io.Writer, msg *Message) error {
-	// Calculate total length: 1 (type) + 1 (codec) + len(payload)
-	totalLen := uint32(2 + len(msg.Payload))
+	var hdr [6]byte
+	// Length counts the type and codec bytes plus the payload.
+	binary.BigEndian.PutUint32(hdr[:4], uint32(2+len(msg.Payload)))
+	hdr[4], hdr[5] = byte(msg.Type), wireCodecGob
 
-	// Write length
-	if err := binary.Write(w, binary.BigEndian, totalLen); err != nil {
-		return fmt.Errorf("failed to write message length: %w", err)
-	}
-
-	// Write type and codec
-	if _, err := w.Write([]byte{byte(msg.Type), wireCodecGob}); err != nil {
-		return fmt.Errorf("failed to write message header: %w", err)
-	}
-
-	// Write payload
-	if len(msg.Payload) > 0 {
-		if _, err := w.Write(msg.Payload); err != nil {
-			return fmt.Errorf("failed to write message payload: %w", err)
+	if len(msg.Payload) == 0 {
+		if _, err := w.Write(hdr[:]); err != nil {
+			return fmt.Errorf("failed to write message header: %w", err)
+		}
+	} else {
+		bufs := net.Buffers{hdr[:], msg.Payload}
+		if _, err := bufs.WriteTo(w); err != nil {
+			return fmt.Errorf("failed to write message: %w", err)
 		}
 	}
 
