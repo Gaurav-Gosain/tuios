@@ -1,0 +1,198 @@
+[
+  {
+    "name": "SessionStart startup",
+    "payload": {"session_id": "sess-1", "transcript_path": "/home/u/.claude/projects/-src/sess-1.jsonl", "cwd": "/src", "hook_event_name": "SessionStart", "source": "startup", "model": "claude-opus"},
+    "want": {"state": "idle", "agent_session_id": "sess-1", "transcript_path": "/home/u/.claude/projects/-src/sess-1.jsonl"}
+  },
+  {
+    "name": "SessionStart resume",
+    "payload": {"session_id": "sess-1", "transcript_path": "/t.jsonl", "hook_event_name": "SessionStart", "source": "resume"},
+    "want": {"state": "idle", "agent_session_id": "sess-1", "transcript_path": "/t.jsonl"}
+  },
+  {
+    "name": "SessionStart compact",
+    "payload": {"session_id": "sess-1", "transcript_path": "/t.jsonl", "hook_event_name": "SessionStart", "source": "compact"},
+    "skip": "compaction"
+  },
+  {
+    "name": "UserPromptSubmit",
+    "payload": {"session_id": "sess-1", "transcript_path": "/t.jsonl", "hook_event_name": "UserPromptSubmit", "prompt": "fix the bug"},
+    "want": {"state": "working", "agent_session_id": "sess-1", "transcript_path": "/t.jsonl"}
+  },
+  {
+    "name": "PreToolUse",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "go test ./..."}, "tool_use_id": "t1"},
+    "want": {"state": "working", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "PermissionRequest Bash",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PermissionRequest", "tool_name": "Bash", "tool_input": {"command": "GITHUB_TOKEN=ghp_abcdefghijklmnop git push origin main", "description": "Push"}, "tool_use_id": "t2"},
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve Bash: GITHUB_TOKEN=*** git push origin main", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "PermissionRequest Edit",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PermissionRequest", "tool_name": "Edit", "tool_input": {"file_path": "/src/main.go", "old_string": "a", "new_string": "b"}},
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve Edit: /src/main.go", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "PermissionRequest unknown tool",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PermissionRequest", "tool_name": "mcp__db__query", "tool_input": {"sql_text": "select 1"}},
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve mcp__db__query", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "PostToolUse",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_response": {"stdout": "ok"}},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "PostToolUseFailure",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PostToolUseFailure", "tool_name": "Bash"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "PermissionDenied",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PermissionDenied", "tool_name": "Bash"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "ElicitationResult",
+    "payload": {"session_id": "sess-1", "hook_event_name": "ElicitationResult"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "Notification permission_prompt",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "permission_prompt", "message": "Claude needs your permission to use Bash"},
+    "want": {"state": "needs_input", "kind": "approval", "message": "Claude needs your permission to use Bash", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "Notification elicitation_dialog",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "elicitation_dialog", "message": "The db server asks for a region"},
+    "want": {"state": "needs_input", "kind": "question", "message": "The db server asks for a region", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "Notification elicitation_url_dialog",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "elicitation_url_dialog", "message": "Open the link"},
+    "want": {"state": "needs_input", "kind": "question", "message": "Open the link", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "Notification agent_needs_input",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "agent_needs_input", "message": "Which branch?"},
+    "want": {"state": "needs_input", "kind": "question", "message": "Which branch?", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "Notification idle_prompt",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "idle_prompt", "message": "Claude is waiting for your input"},
+    "want": {"state": "idle", "if_state": "working,unknown", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "Notification auth_success",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "auth_success", "message": "Signed in"},
+    "skip": "not a state change"
+  },
+  {
+    "name": "Notification elicitation_complete",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "elicitation_complete"},
+    "skip": "not a state change"
+  },
+  {
+    "name": "Notification agent_completed",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "agent_completed"},
+    "skip": "not a state change"
+  },
+  {
+    "name": "Notification quota_auto_resume_fired",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "notification_type": "quota_auto_resume_fired"},
+    "skip": "not a state change"
+  },
+  {
+    "name": "Notification untyped permission (older Claude Code)",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "message": "Claude needs your permission to use Bash"},
+    "want": {"state": "needs_input", "kind": "approval", "message": "Claude needs your permission to use Bash", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "Notification untyped idle (older Claude Code)",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "message": "Claude is waiting for your input"},
+    "want": {"state": "idle", "if_state": "working,unknown", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "Notification untyped other",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Notification", "message": "Something else"},
+    "skip": "no type"
+  },
+  {
+    "name": "Stop",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Stop", "stop_hook_active": false},
+    "want": {"state": "done", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "StopFailure",
+    "payload": {"session_id": "sess-1", "hook_event_name": "StopFailure", "error_type": "rate_limit"},
+    "want": {"state": "errored", "message": "stopped on rate_limit", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "SessionEnd",
+    "payload": {"session_id": "sess-1", "hook_event_name": "SessionEnd", "reason": "prompt_input_exit"},
+    "want": {"state": "none", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "SubagentStop",
+    "payload": {"session_id": "sess-1", "hook_event_name": "SubagentStop", "agent_id": "a1"},
+    "skip": "subagent"
+  },
+  {
+    "name": "subagent PreToolUse",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PreToolUse", "agent_id": "a1", "agent_type": "Explore", "tool_name": "Read"},
+    "skip": "subagent"
+  },
+  {
+    "name": "Cursor running Claude hooks, by env",
+    "env": {"CURSOR_VERSION": "1.7"},
+    "payload": {"session_id": "sess-1", "hook_event_name": "Stop"},
+    "skip": "Cursor"
+  },
+  {
+    "name": "Cursor running Claude hooks, by payload",
+    "payload": {"session_id": "sess-1", "hook_event_name": "Stop", "cursor_version": "1.7"},
+    "skip": "Cursor"
+  },
+  {
+    "name": "a pane TUIOS_AGENT names as Codex",
+    "env": {"TUIOS_AGENT": "codex"},
+    "payload": {"session_id": "sess-1", "hook_event_name": "Stop"},
+    "skip": "foreign harness"
+  },
+  {
+    "name": "a pane TUIOS_AGENT names as Claude",
+    "env": {"TUIOS_AGENT": "claude"},
+    "payload": {"session_id": "sess-1", "hook_event_name": "Stop"},
+    "want": {"state": "done", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "unmapped event",
+    "payload": {"session_id": "sess-1", "hook_event_name": "PreCompact"},
+    "skip": "not mapped"
+  },
+  {
+    "name": "event from the command line",
+    "event": "Stop",
+    "payload": {"session_id": "sess-1"},
+    "want": {"state": "done", "agent_session_id": "sess-1"}
+  },
+  {
+    "name": "broken payload never becomes done",
+    "event": "Stop",
+    "raw": "{not json",
+    "skip": "not a JSON object"
+  },
+  {
+    "name": "empty payload, even with the event named",
+    "event": "Stop",
+    "raw": "",
+    "skip": "empty payload"
+  },
+  {
+    "name": "a payload that names no event",
+    "payload": {"session_id": "sess-1"},
+    "skip": "names no event"
+  }
+]

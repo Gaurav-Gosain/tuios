@@ -1,0 +1,79 @@
+[
+  {
+    "name": "SessionStart",
+    "payload": {"session_id": "th-1", "transcript_path": "/home/u/.codex/sessions/rollout.jsonl", "cwd": "/src", "hook_event_name": "SessionStart", "model": "gpt-5", "permission_mode": "default", "source": "startup"},
+    "want": {"state": "idle", "agent_session_id": "th-1", "transcript_path": "/home/u/.codex/sessions/rollout.jsonl"}
+  },
+  {
+    "name": "UserPromptSubmit",
+    "payload": {"session_id": "th-1", "hook_event_name": "UserPromptSubmit", "turn_id": "t1", "prompt": "go"},
+    "want": {"state": "working", "agent_session_id": "th-1"}
+  },
+  {
+    "name": "PreToolUse",
+    "payload": {"session_id": "th-1", "hook_event_name": "PreToolUse", "turn_id": "t1", "tool_name": "shell", "tool_input": {"command": "ls"}},
+    "want": {"state": "working", "agent_session_id": "th-1"}
+  },
+  {
+    "name": "PermissionRequest",
+    "payload": {"session_id": "th-1", "hook_event_name": "PermissionRequest", "turn_id": "t1", "tool_name": "shell", "tool_input": {"command": "rm -rf build"}},
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve shell: rm -rf build", "agent_session_id": "th-1"}
+  },
+  {
+    "name": "PostToolUse",
+    "payload": {"session_id": "th-1", "hook_event_name": "PostToolUse", "turn_id": "t1", "tool_name": "shell"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "th-1"}
+  },
+  {
+    "name": "Stop",
+    "payload": {"session_id": "th-1", "hook_event_name": "Stop", "turn_id": "t1"},
+    "want": {"state": "done", "agent_session_id": "th-1"}
+  },
+  {
+    "name": "Interrupt",
+    "payload": {"session_id": "th-1", "hook_event_name": "Interrupt"},
+    "want": {"state": "idle", "agent_session_id": "th-1"}
+  },
+  {
+    "name": "SessionEnd",
+    "payload": {"session_id": "th-1", "hook_event_name": "SessionEnd"},
+    "want": {"state": "none", "agent_session_id": "th-1"}
+  },
+  {
+    "name": "SubagentStop",
+    "payload": {"session_id": "th-1", "hook_event_name": "SubagentStop"},
+    "skip": "subagent"
+  },
+  {
+    "name": "SubagentStart",
+    "payload": {"session_id": "th-1", "hook_event_name": "SubagentStart"},
+    "skip": "subagent"
+  },
+  {
+    "name": "PreCompact",
+    "payload": {"session_id": "th-1", "hook_event_name": "PreCompact"},
+    "skip": "not mapped"
+  },
+  {
+    "name": "nested Codex",
+    "env": {"CODEX_THREAD_ID": "outer"},
+    "payload": {"session_id": "inner", "hook_event_name": "Stop"},
+    "skip": "nested"
+  },
+  {
+    "name": "own thread id in the environment",
+    "env": {"CODEX_THREAD_ID": "th-1"},
+    "payload": {"session_id": "th-1", "hook_event_name": "Stop"},
+    "want": {"state": "done", "agent_session_id": "th-1"}
+  },
+  {
+    "name": "legacy notify payload",
+    "payload": {"type": "agent-turn-complete", "thread-id": "th-1", "turn-id": "t1", "cwd": "/src", "input-messages": ["go"], "last-assistant-message": "done"},
+    "want": {"state": "done", "agent_session_id": "th-1"}
+  },
+  {
+    "name": "broken payload",
+    "raw": "[1,2",
+    "skip": "not a JSON object"
+  }
+]

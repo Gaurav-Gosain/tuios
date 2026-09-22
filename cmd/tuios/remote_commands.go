@@ -1002,21 +1002,34 @@ func runGetConfig(sessionName, path string, jsonOutput bool) error {
 // A report the daemon declines because a higher-ranked source already owns the
 // window comes back as applied:false, not as an error. Saying so matters: the
 // caller otherwise believes it set a state that never took.
-func runSetAgentState(sessionName, windowTarget, state, message, source, harness string) error {
+func runSetAgentState(sessionName, windowTarget, state, message, source, harness string, extra setAgentStateExtras) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = client.Close() }()
 
-	raw, err := client.Call("set-agent-state", map[string]any{
+	params := map[string]any{
 		"session": sessionName,
 		"window":  windowTarget,
 		"state":   state,
 		"message": message,
 		"source":  source,
 		"harness": harness,
-	})
+	}
+	// Sent only when set, so a call that uses none of them works against a
+	// daemon that predates them.
+	for k, v := range map[string]string{
+		"kind":             extra.kind,
+		"agent_session_id": extra.sessionID,
+		"transcript_path":  extra.transcriptPath,
+		"if_state":         extra.ifState,
+	} {
+		if v != "" {
+			params[k] = v
+		}
+	}
+	raw, err := client.Call("set-agent-state", params)
 	if err != nil {
 		return explainVerbError("set-agent-state", err)
 	}
@@ -1025,14 +1038,38 @@ func runSetAgentState(sessionName, windowTarget, state, message, source, harness
 		Applied bool   `json:"applied"`
 		State   string `json:"state"`
 		Source  string `json:"source"`
+		Reason  string `json:"reason"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 	if !res.Applied {
-		fmt.Fprintf(os.Stderr, "Not applied: a higher-ranked source owns this pane. It still reports %s.\n", res.State)
+		fmt.Fprintf(os.Stderr, "Not applied: %s It still reports %s.\n", agentRefusalText(res.Reason), res.State)
 	}
 	return nil
+}
+
+// setAgentStateExtras are the set-agent-state fields a hook reporter adds.
+type setAgentStateExtras struct {
+	kind           string
+	sessionID      string
+	transcriptPath string
+	ifState        string
+}
+
+// agentRefusalText says in words why a report was not applied.
+func agentRefusalText(reason string) string {
+	switch reason {
+	case "if_state":
+		return "the pane was not in any of the --if-state states."
+	case "foreign_session":
+		return "the pane's agent is mid-turn in another conversation, so this looks like a nested run."
+	case "foreign_harness":
+		return "another harness reported this pane mid-turn, so this looks like a nested run."
+	default:
+		// outranked, or a daemon that predates reasons.
+		return "a higher-ranked source owns this pane."
+	}
 }
 
 // runSetSessionName sets a session's display label. The session keeps its own

@@ -1,0 +1,62 @@
+[
+  {
+    "name": "SessionStart",
+    "payload": {"session_id": "g-1", "transcript_path": "/home/u/.gemini/tmp/chat.json", "cwd": "/src", "hook_event_name": "SessionStart", "timestamp": "2026-09-22T10:00:00Z", "source": "startup"},
+    "want": {"state": "idle", "agent_session_id": "g-1", "transcript_path": "/home/u/.gemini/tmp/chat.json"}
+  },
+  {
+    "name": "BeforeAgent",
+    "payload": {"session_id": "g-1", "hook_event_name": "BeforeAgent", "prompt": "go"},
+    "want": {"state": "working", "agent_session_id": "g-1"}
+  },
+  {
+    "name": "BeforeTool",
+    "payload": {"session_id": "g-1", "hook_event_name": "BeforeTool", "tool_name": "run_shell_command"},
+    "want": {"state": "working", "agent_session_id": "g-1"}
+  },
+  {
+    "name": "AfterTool",
+    "payload": {"session_id": "g-1", "hook_event_name": "AfterTool", "tool_name": "run_shell_command"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "g-1"}
+  },
+  {
+    "name": "Notification ToolPermission",
+    "payload": {"session_id": "g-1", "hook_event_name": "Notification", "notification_type": "ToolPermission", "message": "Allow run_shell_command: npm test?", "details": {"tool": "run_shell_command"}},
+    "want": {"state": "needs_input", "kind": "approval", "message": "Allow run_shell_command: npm test?", "agent_session_id": "g-1"}
+  },
+  {
+    "name": "Notification other type",
+    "payload": {"session_id": "g-1", "hook_event_name": "Notification", "notification_type": "Something"},
+    "skip": "not a state change"
+  },
+  {
+    "name": "AfterAgent",
+    "payload": {"session_id": "g-1", "hook_event_name": "AfterAgent", "prompt_response": "done"},
+    "want": {"state": "done", "agent_session_id": "g-1"}
+  },
+  {
+    "name": "SessionEnd",
+    "payload": {"session_id": "g-1", "hook_event_name": "SessionEnd", "reason": "exit"},
+    "want": {"state": "none", "agent_session_id": "g-1"}
+  },
+  {
+    "name": "BeforeModel",
+    "payload": {"session_id": "g-1", "hook_event_name": "BeforeModel"},
+    "skip": "not mapped"
+  },
+  {
+    "name": "AfterModel",
+    "payload": {"session_id": "g-1", "hook_event_name": "AfterModel"},
+    "skip": "not mapped"
+  },
+  {
+    "name": "BeforeToolSelection",
+    "payload": {"session_id": "g-1", "hook_event_name": "BeforeToolSelection"},
+    "skip": "not mapped"
+  },
+  {
+    "name": "PreCompress",
+    "payload": {"session_id": "g-1", "hook_event_name": "PreCompress"},
+    "skip": "not mapped"
+  }
+]

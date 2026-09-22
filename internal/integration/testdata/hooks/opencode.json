@@ -1,0 +1,82 @@
+[
+  {
+    "name": "session.created",
+    "payload": {"hook_event_name": "session.created", "session_id": "ses_1"},
+    "want": {"state": "idle", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "chat.message",
+    "payload": {"hook_event_name": "chat.message", "session_id": "ses_1"},
+    "want": {"state": "working", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "tool.execute.before",
+    "payload": {"hook_event_name": "tool.execute.before", "session_id": "ses_1"},
+    "want": {"state": "working", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "session.status busy",
+    "payload": {"hook_event_name": "session.status", "session_id": "ses_1", "status": "busy"},
+    "want": {"state": "working", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "session.status retry",
+    "payload": {"hook_event_name": "session.status", "session_id": "ses_1", "status": "retry"},
+    "want": {"state": "working", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "session.status idle",
+    "payload": {"hook_event_name": "session.status", "session_id": "ses_1", "status": "idle"},
+    "skip": "left to session.idle"
+  },
+  {
+    "name": "permission.asked",
+    "payload": {"hook_event_name": "permission.asked", "session_id": "ses_1", "title": "bash: git push"},
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve bash: git push", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "permission.updated (older opencode)",
+    "payload": {"hook_event_name": "permission.updated", "session_id": "ses_1", "title": ""},
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve a tool call", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "question.asked",
+    "payload": {"hook_event_name": "question.asked", "session_id": "ses_1", "title": "Which file?"},
+    "want": {"state": "needs_input", "kind": "question", "message": "Which file?", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "permission.replied",
+    "payload": {"hook_event_name": "permission.replied", "session_id": "ses_1"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "question.replied",
+    "payload": {"hook_event_name": "question.replied", "session_id": "ses_1"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "question.rejected",
+    "payload": {"hook_event_name": "question.rejected", "session_id": "ses_1"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "session.idle",
+    "payload": {"hook_event_name": "session.idle", "session_id": "ses_1"},
+    "want": {"state": "done", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "session.error",
+    "payload": {"hook_event_name": "session.error", "session_id": "ses_1", "error": "ProviderAuthError"},
+    "want": {"state": "errored", "message": "ProviderAuthError", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "session.deleted",
+    "payload": {"hook_event_name": "session.deleted", "session_id": "ses_1"},
+    "want": {"state": "none", "agent_session_id": "ses_1"}
+  },
+  {
+    "name": "unknown event",
+    "payload": {"hook_event_name": "file.edited", "session_id": "ses_1"},
+    "skip": "not mapped"
+  }
+]

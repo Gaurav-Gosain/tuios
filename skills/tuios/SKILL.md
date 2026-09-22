@@ -701,12 +701,45 @@ tuios set-agent-state working -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --harness 
 ### Wire it to your harness once
 
 If your harness has a hooks system, map its lifecycle events to these calls once
-instead of remembering to call them by hand. `integrations/claude-code/` in the
-tuios repo is a working shim: session start and prompt submit report `working`,
-a notification reports `needs_input` with the notification's message, stop
-reports `done`, and every path exits 0 untouched when `TUIOS_ENV` is unset, so
-it is safe to leave wired up outside tuios. The same mapping fits any harness
-that can run a command on its lifecycle events.
+instead of remembering to call them by hand. For Claude Code, Codex, Gemini CLI
+and opencode, tuios does the wiring:
+
+```sh
+tuios integration install claude-code    # or codex, gemini-cli, opencode, --all
+tuios integration status                 # installed and current, per harness
+tuios doctor agents                      # also lists agent panes missing theirs
+```
+
+Each installed hook runs `tuios agent-hook <harness>`, which reads the hook
+payload on stdin and reports for the pane it runs in. A prompt or a tool call
+reports `working`, a permission request reports `needs_input` with `kind`
+`approval`, the tool finishing after an approval moves the pane back to
+`working`, the end of the turn reports `done`, and the harness's session id is
+stored on the pane (`agent_session_id` in `get-agent-state` and `list-agents`).
+A payload it cannot read, a subagent's event and an unmapped event report
+nothing. It always exits 0 and gives up after 500ms, so a dead daemon never
+slows the harness. `integrations/claude-code/` in the tuios repo holds the older
+shell shim, which now just runs the same reporter. Outside tuios, with
+`TUIOS_ENV` unset and no pane to find, it reports nothing.
+
+To report the same things by hand from another harness's hooks:
+
+```sh
+tuios set-agent-state needs_input -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --kind approval --agent-session-id "$SID" -m "approve Bash: make"
+tuios set-agent-state working -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --if-state needs_input
+```
+
+`--if-state` applies the report only when the pane is in one of the states
+named, so a "tool finished" event clears a block without turning a finished
+pane back to `working`. A report that carries `--agent-session-id` is refused
+while the pane's own agent is mid-turn in a different session, which is what
+keeps a `claude -p` run inside the pane from marking it done.
+
+An agent in a container or a VM is invisible to process detection. Set
+`TUIOS_AGENT` to its harness id on the wrapper you run, for example
+`TUIOS_AGENT=claude-code docker run -it box claude`, and the pane is attributed
+to that harness. A hook for a different harness than the one `TUIOS_AGENT` names
+is ignored.
 
 A harness that emits OSC 9;4 progress reports needs no wiring at all: tuios
 reads them from the pane. Setting a bar maps to `working`, clearing it to
@@ -776,7 +809,11 @@ Not applied: a higher-ranked source owns this pane. It still reports working.
 ```
 
 A script that must know whether its report took should match that line, since
-the exit code will not say.
+the exit code will not say. The other refusals print their own reason on the
+same `Not applied:` line: an `--if-state` that did not hold, or a report from
+another conversation or another harness while the pane's agent is mid-turn.
+Over the socket the result carries `applied: false` and a `reason` of
+`outranked`, `if_state`, `foreign_session` or `foreign_harness`.
 
 ### Reading state back, and knowing something finished
 

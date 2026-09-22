@@ -1022,18 +1022,26 @@ Run 'tuios list-options' to see every path.`,
 	var setAgentStateMessage string
 	var setAgentStateSource string
 	var setAgentStateHarness string
+	var setAgentStateExtra setAgentStateExtras
 	setAgentStateCmd := &cobra.Command{
 		Use:   "set-agent-state <state>",
 		Short: "Report a pane's agent state to the running TUIOS session",
 		Long: `Report the semantic state of an agent running in a pane so the daemon can
 surface which panes need attention. State is one of: none, working, needs_input,
-idle, done, errored. A pane reports its own state by running this against the
-daemon socket; the reference Claude Code shim does exactly that.`,
+idle, done, errored, unknown. A pane reports its own state by running this
+against the daemon socket; tuios agent-hook, which the installed harness
+integrations run, does exactly that.`,
 		Example: `  # Mark the focused pane as working
   tuios set-agent-state working
 
   # Mark a specific pane as needing input, with a note
   tuios set-agent-state needs_input -w build -m "awaiting approval"
+
+  # Say what the block is, and which conversation it belongs to
+  tuios set-agent-state needs_input --kind approval --agent-session-id 5f1c -m "approve Bash: make"
+
+  # Move a blocked pane back to working, and leave any other state alone
+  tuios set-agent-state working --if-state needs_input
 
   # Clear a pane's agent state
   tuios set-agent-state none`,
@@ -1041,9 +1049,13 @@ daemon socket; the reference Claude Code shim does exactly that.`,
 		ValidArgs: session.AgentStateNames,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runSetAgentState(setAgentStateSession, setAgentStateWindow, args[0],
-				setAgentStateMessage, setAgentStateSource, setAgentStateHarness)
+				setAgentStateMessage, setAgentStateSource, setAgentStateHarness, setAgentStateExtra)
 		},
 	}
+	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.kind, "kind", "", "What a needs_input state waits for: approval or question")
+	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.sessionID, "agent-session-id", "", "The harness's own conversation id, stored on the pane for a later resume")
+	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.transcriptPath, "transcript-path", "", "The transcript file the harness writes, joined exactly instead of searched for")
+	setAgentStateCmd.Flags().StringVar(&setAgentStateExtra.ifState, "if-state", "", "Apply only when the pane is in one of these comma-separated states")
 	setAgentStateCmd.Flags().StringVarP(&setAgentStateSession, "session", "s", "", "Target session (default: most recently active)")
 	setAgentStateCmd.Flags().StringVarP(&setAgentStateWindow, "window", "w", "", "Target window by name or ID (default: focused)")
 	setAgentStateCmd.Flags().StringVarP(&setAgentStateMessage, "message", "m", "", "Optional short note reported with the state")
@@ -2555,6 +2567,7 @@ It does not start a daemon. If no daemon runs here, the caller is told so.`,
 	rootCmd.AddCommand(hostsCmd, stdioProxyCmd)
 	rootCmd.AddCommand(newStashCommand())
 	rootCmd.AddCommand(newWorktreeCommand(), newFanCommand())
+	rootCmd.AddCommand(newAgentHookCommand(), newIntegrationCommand(), newDoctorCommand())
 
 	return rootCmd
 }
