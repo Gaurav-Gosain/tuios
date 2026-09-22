@@ -19,6 +19,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/sip"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/netutil"
@@ -48,17 +49,9 @@ var (
 	webInsecure       bool
 	webTouch          string
 	// TUIOS forwarded flags
-	debugMode            bool
-	asciiOnly            bool
-	themeName            string
-	borderStyle          string
-	dockbarPosition      string
-	hideWindowButtons    bool
-	windowButtonStyle    string
-	windowButtonPosition string
-	scrollbackLines      int
-	showKeys             bool
-	noAnimations         bool
+	debugMode bool
+	// interfaceFlags is the same interface flag set `tuios` registers.
+	interfaceFlags cliflags.Interface
 	// Daemon mode flags
 	defaultSession string
 	ephemeralMode  bool
@@ -71,7 +64,8 @@ var webServerConfig struct {
 	version        string
 }
 
-func main() {
+// newRootCmd builds the tuios-web command with every flag it takes.
+func newRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "tuios-web",
 		Short: "Web-based terminal server for TUIOS",
@@ -155,22 +149,18 @@ Client features:
 
 	// TUIOS forwarded flags
 	rootCmd.Flags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
-	rootCmd.Flags().BoolVar(&asciiOnly, "ascii-only", false, "Use ASCII characters instead of Nerd Font icons")
-	rootCmd.Flags().StringVar(&themeName, "theme", "", "Color theme to use (e.g., dracula, nord, tokyonight)")
-	rootCmd.Flags().StringVar(&borderStyle, "border-style", "", "Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block")
-	rootCmd.Flags().StringVar(&dockbarPosition, "dockbar-position", "", "Dockbar position: bottom, top, hidden")
-	rootCmd.Flags().BoolVar(&hideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
-	rootCmd.Flags().StringVar(&windowButtonStyle, "window-button-style", "", "Window control style: pill, dots (default: from config or dots)")
-	rootCmd.Flags().StringVar(&windowButtonPosition, "window-button-position", "", "Which end of the title bar the window controls sit on: right, left (default: from config or left)")
-	rootCmd.Flags().IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)")
-	rootCmd.Flags().BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
-	rootCmd.Flags().BoolVar(&noAnimations, "no-animations", false, "Disable UI animations for instant transitions")
+	interfaceFlags.Register(rootCmd.Flags())
 
+	rootCmd.AddCommand(newCertCmd())
+	return rootCmd
+}
+
+func main() {
 	// See cmd/tuios/main.go: a crash report names the build it came from, and
 	// internal/app cannot read these vars itself.
 	app.SetBuildStamp(version, commit)
 
-	rootCmd.AddCommand(newCertCmd())
+	rootCmd := newRootCmd()
 
 	// Execute with fang
 	if err := fang.Execute(
@@ -660,7 +650,7 @@ func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
 		Settings:        &seed,
-		ShowKeys:        showKeys,
+		ShowKeys:        interfaceFlags.ShowKeys,
 		Width:           width,
 		Height:          height,
 		GraphicsOutput:  graphicsOut,
@@ -761,7 +751,7 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
 		Settings:        &seed,
-		ShowKeys:        showKeys,
+		ShowKeys:        interfaceFlags.ShowKeys,
 		Width:           width,
 		Height:          height,
 		IsDaemonSession: true,
@@ -789,15 +779,5 @@ func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOu
 // gets the file as it is now with these flags on top of it, rather than the
 // file the server loaded when it started. See config.AppearanceFrom.
 func webAppearanceOverrides() config.Overrides {
-	return config.Overrides{
-		ASCIIOnly:            asciiOnly,
-		BorderStyle:          borderStyle,
-		DockbarPosition:      dockbarPosition,
-		HideWindowButtons:    hideWindowButtons,
-		WindowButtonStyle:    windowButtonStyle,
-		WindowButtonPosition: windowButtonPosition,
-		ScrollbackLines:      scrollbackLines,
-		NoAnimations:         noAnimations,
-		ThemeName:            themeName,
-	}
+	return interfaceFlags.Overrides()
 }

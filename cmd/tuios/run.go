@@ -72,26 +72,7 @@ func loadAndApplyConfig() *config.UserConfig {
 // SSH server hands it to StartSSHServer, which applies it after the appearance
 // baseline; applying it here first would only be undone by that baseline.
 func flagOverrides() config.Overrides {
-	return config.Overrides{
-		ASCIIOnly:            asciiOnly,
-		BorderStyle:          borderStyle,
-		DockbarPosition:      dockbarPosition,
-		HideWindowButtons:    hideWindowButtons,
-		WindowButtonStyle:    windowButtonStyle,
-		WindowButtonPosition: windowButtonPosition,
-		HideScrollbar:        hideScrollbar,
-		WindowTitlePosition:  windowTitlePosition,
-		HideClock:            hideClock,
-		ShowClock:            showClock,
-		ShowCPU:              showCPU,
-		ShowRAM:              showRAM,
-		SharedBorders:        sharedBorders,
-		ZoomMaxWidth:         zoomMaxWidth,
-		ScrollbackLines:      scrollbackLines,
-		NoAnimations:         noAnimations,
-		ConfirmQuit:          confirmQuit,
-		ThemeName:            themeName,
-	}
+	return interfaceFlags.Overrides()
 }
 
 func runLocal() error {
@@ -178,7 +159,7 @@ func runLocal() error {
 		Client:          app.ClientLocal,
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
-		ShowKeys:        showKeys,
+		ShowKeys:        interfaceFlags.ShowKeys,
 		IsDaemonSession: isDaemonSession,
 		// One writer for the terminal: frames, kitty and sixel sequences all
 		// serialize on it. Left nil, the passthroughs open their own /dev/tty
@@ -273,7 +254,7 @@ func runSSHServer(f sshServerFlags) error {
 		NoAuth:             f.noAuth,
 		Version:            version,
 		Ephemeral:          f.ephemeral,
-		ShowKeys:           showKeys,
+		ShowKeys:           interfaceFlags.ShowKeys,
 		// The full flag set, not a subset: `tuios ssh` registers the same
 		// interface flags as every other run command, and the server applies
 		// them over the appearance baseline it loads. Applying them here

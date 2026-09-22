@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -30,32 +31,16 @@ var (
 
 // Global flags
 var (
-	debugMode            bool
-	cpuProfile           string
-	pprofAddr            string
-	asciiOnly            bool
-	themeName            string
-	listThemes           bool
-	previewTheme         string
-	borderStyle          string
-	dockbarPosition      string
-	hideWindowButtons    bool
-	windowButtonStyle    string
-	windowButtonPosition string
-	hideScrollbar        bool
-	scrollbackLines      int
-	showKeys             bool
-	noAnimations         bool
-	confirmQuit          bool
-	windowTitlePosition  string
-	hideClock            bool
-	showClock            bool
-	showCPU              bool
-	showRAM              bool
-	sharedBorders        bool
-	zoomMaxWidth         int
-	printSkill           bool
-	standaloneMode       bool
+	debugMode      bool
+	cpuProfile     string
+	pprofAddr      string
+	listThemes     bool
+	previewTheme   string
+	printSkill     bool
+	standaloneMode bool
+	// interfaceFlags is the appearance and interface flags, shared by every
+	// command that renders the TUI. See registerInterfaceFlags.
+	interfaceFlags cliflags.Interface
 )
 
 func main() {
@@ -2559,30 +2544,12 @@ It does not start a daemon. If no daemon runs here, the caller is told so.`,
 
 // registerInterfaceFlags registers the appearance and interface flags on each
 // command that renders the TUI: the bare root, attach, new, ssh, and tape
-// playback. Every registration binds the same globals, so the run paths keep
-// reading one set of values while commands that only talk to the daemon stop
-// inheriting flags that mean nothing to them.
+// playback. Every registration binds the same interfaceFlags, so the run paths
+// keep reading one set of values while commands that only talk to the daemon
+// stop inheriting flags that mean nothing to them. tuios-web registers the same
+// set through the same cliflags package.
 func registerInterfaceFlags(cmds ...*cobra.Command) {
 	for _, cmd := range cmds {
-		f := cmd.Flags()
-		f.BoolVar(&asciiOnly, "ascii-only", false, "Use ASCII characters instead of Nerd Font icons")
-		f.StringVar(&themeName, "theme", "", "Color theme to use (e.g., dracula, nord, tokyonight). Leave empty to use standard terminal colors without theming")
-		f.StringVar(&borderStyle, "border-style", "", "Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (default: from config or rounded)")
-		f.StringVar(&dockbarPosition, "dockbar-position", "", "Dockbar position: bottom, top, hidden (default: from config or bottom)")
-		f.BoolVar(&hideWindowButtons, "hide-window-buttons", false, "Hide window control buttons (minimize, maximize, close)")
-		f.StringVar(&windowButtonStyle, "window-button-style", "", "Window control style: pill, dots (default: from config or dots)")
-		f.StringVar(&windowButtonPosition, "window-button-position", "", "Which end of the title bar the window controls sit on: right, left (default: from config or left)")
-		f.BoolVar(&hideScrollbar, "hide-scrollbar", false, "Hide the window scrollbar thumb on the border")
-		f.IntVar(&scrollbackLines, "scrollback-lines", 0, "Number of lines to keep in scrollback buffer (default: from config or 10000, min: 100, max: 1000000)")
-		f.BoolVar(&showKeys, "show-keys", false, "Enable showkeys overlay to display pressed keys")
-		f.BoolVar(&noAnimations, "no-animations", false, "Disable UI animations for instant transitions")
-		f.BoolVar(&confirmQuit, "confirm-quit", false, "Always show quit confirmation dialog")
-		f.StringVar(&windowTitlePosition, "window-title-position", "", "Window title position: bottom, top, hidden (default: from config or bottom)")
-		f.BoolVar(&hideClock, "hide-clock", false, "Hide the clock overlay (deprecated, clock is hidden by default)")
-		f.BoolVar(&showClock, "show-clock", false, "Show the clock overlay")
-		f.BoolVar(&showCPU, "show-cpu", false, "Show CPU graph in the dock")
-		f.BoolVar(&showRAM, "show-ram", false, "Show RAM usage in the dock")
-		f.BoolVar(&sharedBorders, "shared-borders", false, "Share borders between adjacent tiled windows")
-		f.IntVar(&zoomMaxWidth, "zoom-max-width", 0, "Max width in cells for zoom mode (0 = fullscreen, e.g. 120)")
+		interfaceFlags.Register(cmd.Flags())
 	}
 }

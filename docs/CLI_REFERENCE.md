@@ -1772,7 +1772,18 @@ tuios-web [flags]
 - `--window-button-position <position>` - Which end they sit on: `right`, `left`
 - `--scrollback-lines <int>` - Scrollback buffer size
 - `--no-animations` - Disable UI animations
+- `--hide-scrollbar` - Hide the window scrollbar thumb on the border
+- `--window-title-position <pos>` - Window title position: `bottom`, `top`, `hidden`
+- `--hide-clock` - Hide the clock overlay (deprecated, the clock is hidden by default)
+- `--show-clock` - Show the clock overlay
+- `--show-cpu` - Show the CPU graph in the dock
+- `--show-ram` - Show RAM usage in the dock
+- `--shared-borders` - Share borders between adjacent tiled windows
+- `--zoom-max-width <int>` - Max width in cells for zoom mode (0 = fullscreen)
+- `--confirm-quit` - Always show the quit confirmation dialog
 - `--debug` - Enable debug logging
+
+The interface flags are the same set `tuios` and `tuios ssh` take.
 
 **Subcommands:**
 - `tuios-web cert` - Show the status of the self-signed TLS certificate `--auto-tls` uses

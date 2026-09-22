@@ -48,8 +48,8 @@ func runTapeInteractive(tapeFile string) error {
 	// off below for deterministic playback.
 	config.ApplyAppearanceConfig(userConfig, &config.Global)
 
-	if err := theme.Initialize(themeName); err != nil {
-		log.Printf("Warning: Failed to load theme '%s': %v", themeName, err)
+	if err := theme.Initialize(interfaceFlags.ThemeName); err != nil {
+		log.Printf("Warning: Failed to load theme '%s': %v", interfaceFlags.ThemeName, err)
 	}
 
 	app.SetInputHandler(input.HandleInput)
@@ -71,7 +71,7 @@ func runTapeInteractive(tapeFile string) error {
 		Client:          app.ClientLocal,
 		KeybindRegistry: keybindRegistry,
 		UserConfig:      userConfig,
-		ShowKeys:        showKeys,
+		ShowKeys:        interfaceFlags.ShowKeys,
 	})
 	initialOS.ScriptMode = true
 	initialOS.ScriptPlayer = player

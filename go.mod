@@ -22,6 +22,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/shirou/gopsutil/v4 v4.26.7
 	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.10
 	go.mitchellh.com/libghostty v0.0.0-20260920220152-31b65cdc24cf
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745
 	golang.org/x/image v0.45.0
@@ -86,7 +87,6 @@ require (
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.57.1 // indirect
 	github.com/quic-go/webtransport-go v0.9.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect

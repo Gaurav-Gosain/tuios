@@ -23,13 +23,13 @@ func TestLoadAndApplyConfigHonorsConfirmQuit(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	xdg.Reload()
 
-	prevFlag, prevApplied := confirmQuit, config.Global.AlwaysConfirmQuit
+	prevFlag, prevApplied := interfaceFlags.ConfirmQuit, config.Global.AlwaysConfirmQuit
 	t.Cleanup(func() {
-		confirmQuit = prevFlag
+		interfaceFlags.ConfirmQuit = prevFlag
 		config.Global.AlwaysConfirmQuit = prevApplied
 	})
 
-	confirmQuit = true
+	interfaceFlags.ConfirmQuit = true
 	config.Global.AlwaysConfirmQuit = false
 
 	loadAndApplyConfig()
