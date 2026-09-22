@@ -699,9 +699,20 @@ func handleScrollbackBrowserMouseRelease(o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
+// truncateForNotif shortens s to at most maxLen runes for a notification,
+// ending it with "..." when it was cut. It counts and cuts by rune, so a
+// command holding multi-byte text is never split inside a character.
 func truncateForNotif(s string, maxLen int) string {
-	if len(s) > maxLen {
-		return s[:maxLen-3] + "..."
+	if maxLen <= 0 {
+		return ""
 	}
-	return s
+	if utf8.RuneCountInString(s) <= maxLen {
+		return s
+	}
+	runes := []rune(s)
+	// Too small to fit an ellipsis: hard-truncate on a rune boundary.
+	if maxLen <= 3 {
+		return string(runes[:maxLen])
+	}
+	return string(runes[:maxLen-3]) + "..."
 }
