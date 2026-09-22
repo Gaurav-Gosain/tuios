@@ -50,6 +50,9 @@ func agentNavIDs(m *OS) []string {
 // looked at it sinks below that again.
 func TestAgentsSectionPriorityOrder(t *testing.T) {
 	m, tree := attentionOS(t, 120, 40)
+	// Priority is no longer the default; the needs-you order is. See
+	// TestAgentsSectionNeedsYouOrder.
+	m.SidebarAgentSort = sidebarAgentsPriority
 	m.sidebarPanelLinesForTree(tree)
 
 	want := []string{"w-err", "w-input", "w-work", "w-done", "w-idle"}
@@ -72,6 +75,61 @@ func TestAgentsSectionPriorityOrder(t *testing.T) {
 	m.noteAgentState(m.Windows[2], "working")
 	if m.agentSeen("w-done") {
 		t.Fatal("leaving done kept the seen bit, so the next finish would be silent")
+	}
+}
+
+// TestAgentsSectionNeedsYouOrder is the default order: grouped by what a row
+// needs from the person, and in spawn order inside a group. The fixture spawns
+// the errored pane before the blocked one, so a group sort that ranked inside
+// the group would show the same order by accident; the second half swaps the
+// states and checks the rows did not swap with them.
+func TestAgentsSectionNeedsYouOrder(t *testing.T) {
+	m, tree := attentionOS(t, 120, 40)
+	m.sidebarPanelLinesForTree(tree)
+
+	want := []string{"w-err", "w-input", "w-done", "w-work", "w-idle"}
+	if got := agentNavIDs(m); !equalStrings(got, want) {
+		t.Fatalf("agent order = %v, want %v (needs you > finished unread > working > idle)", got, want)
+	}
+
+	// The errored pane now asks a question and the blocked one errors. Both
+	// stay in the needs-you group, so neither row moves: the order inside a
+	// group is when the pane was opened, not how loud it is.
+	m.Windows[3].AgentState, m.Windows[4].AgentState = "needs_input", "errored"
+	m.sidebarPanelLinesForTree(m.BuildSessionTree())
+	if got := agentNavIDs(m); !equalStrings(got, want) {
+		t.Fatalf("a state change inside the group moved rows: %v, want %v", got, want)
+	}
+
+	// Looking at the finished pane moves it to the idle group, after the
+	// idle pane that was spawned before it.
+	m.FocusWindow(2)
+	m.sidebarPanelLinesForTree(m.BuildSessionTree())
+	wantSeen := []string{"w-err", "w-input", "w-work", "w-idle", "w-done"}
+	if got := agentNavIDs(m); !equalStrings(got, wantSeen) {
+		t.Fatalf("after the look, agent order = %v, want %v", got, wantSeen)
+	}
+}
+
+// TestAgentGroupTable pins which group every state lands in.
+func TestAgentGroupTable(t *testing.T) {
+	for _, c := range []struct {
+		state string
+		seen  bool
+		want  int
+	}{
+		{"needs_input", false, sidebarGroupNeedsYou},
+		{"errored", false, sidebarGroupNeedsYou},
+		{"done", false, sidebarGroupFinished},
+		{"working", false, sidebarGroupWorking},
+		{"done", true, sidebarGroupIdle},
+		{"idle", false, sidebarGroupIdle},
+		{"unknown", false, sidebarGroupIdle},
+		{"a-state-from-a-newer-daemon", false, sidebarGroupIdle},
+	} {
+		if got := sidebarAgentGroup(c.state, c.seen); got != c.want {
+			t.Errorf("group(%q, seen=%v) = %d, want %d", c.state, c.seen, got, c.want)
+		}
 	}
 }
 

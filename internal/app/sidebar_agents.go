@@ -6,14 +6,15 @@ import "sort"
 // question from the one the rest of the rail answers. Its two controls live in
 // its own header and nowhere else: a filter, because a rail watching six
 // sessions is not always a rail you want six sessions' worth of alarm from, and
-// a sort, because "loudest" and "newest" are both reasonable readings of a list
-// of running agents and neither is right for everyone.
+// a sort, because "what needs me", "loudest" and "newest" are all reasonable
+// readings of a list of running agents and none is right for everyone.
 
 // Agents-section filter and sort values. They are the strings written to
 // sidebar.json, so they are the wire format as much as they are the state.
 const (
 	sidebarAgentsAll      = "all"
 	sidebarAgentsSession  = "session"
+	sidebarAgentsNeedsYou = "needs_you"
 	sidebarAgentsPriority = "priority"
 	sidebarAgentsRecent   = "recent"
 )
@@ -28,11 +29,15 @@ func (m *OS) sidebarAgentsFilter() string {
 	return sidebarAgentsAll
 }
 
+// sidebarAgentsSort is needs-you unless the user picked another. An explicit
+// "priority" in a state file is a choice the user made with the header
+// control, so it stands; only an empty or unknown value takes the default.
 func (m *OS) sidebarAgentsSort() string {
-	if m.SidebarAgentSort == sidebarAgentsRecent {
-		return sidebarAgentsRecent
+	switch m.SidebarAgentSort {
+	case sidebarAgentsPriority, sidebarAgentsRecent:
+		return m.SidebarAgentSort
 	}
-	return sidebarAgentsPriority
+	return sidebarAgentsNeedsYou
 }
 
 // SidebarCycleAgentsFilter flips the agents section between every session and
@@ -46,15 +51,48 @@ func (m *OS) SidebarCycleAgentsFilter() {
 	m.saveSidebarState()
 }
 
-// SidebarCycleAgentsSort flips the agents section between priority and recency,
-// and persists the choice.
+// SidebarCycleAgentsSort steps the agents section through its orders, needs
+// you, then priority, then recency, and persists the choice.
 func (m *OS) SidebarCycleAgentsSort() {
-	if m.sidebarAgentsSort() == sidebarAgentsPriority {
-		m.SidebarAgentSort = sidebarAgentsRecent
-	} else {
+	switch m.sidebarAgentsSort() {
+	case sidebarAgentsNeedsYou:
 		m.SidebarAgentSort = sidebarAgentsPriority
+	case sidebarAgentsPriority:
+		m.SidebarAgentSort = sidebarAgentsRecent
+	default:
+		m.SidebarAgentSort = sidebarAgentsNeedsYou
 	}
 	m.saveSidebarState()
+}
+
+// The groups of the needs-you order, in the order they are drawn. Each is what
+// a row wants from the person looking at the rail.
+const (
+	// sidebarGroupNeedsYou is a pane blocked on a person: an approval, a
+	// question, or an error.
+	sidebarGroupNeedsYou = iota
+	// sidebarGroupFinished is a pane that finished and has not been looked at.
+	sidebarGroupFinished
+	// sidebarGroupWorking is a pane in flight. It needs nothing yet.
+	sidebarGroupWorking
+	// sidebarGroupIdle is everything at rest: idle, a finished pane already
+	// looked at, a pane whose state nothing can read, and any state this build
+	// does not know.
+	sidebarGroupIdle
+)
+
+// sidebarAgentGroup is the needs-you group a pane belongs to.
+func sidebarAgentGroup(state string, doneSeen bool) int {
+	switch {
+	case sidebarAttention(state):
+		return sidebarGroupNeedsYou
+	case state == "done" && !doneSeen:
+		return sidebarGroupFinished
+	case state == "working":
+		return sidebarGroupWorking
+	default:
+		return sidebarGroupIdle
+	}
 }
 
 // sidebarAgentPriority ranks a pane by how much it should be the next thing the
@@ -104,16 +142,30 @@ func (m *OS) sidebarFilterAgents(agents []sidebarAgentEntry) ([]sidebarAgentEntr
 	return kept, total
 }
 
-// sidebarSortAgents orders the section. Both orders are stable, so panes at the
+// sidebarSortAgents orders the section. Every order is stable, so panes at the
 // same rank or the same instant keep the order the tree gave them and no row
 // moves under the pointer for a reason the user cannot see.
+//
+// The needs-you order is groups only. Inside a group the rows keep the tree's
+// order, which is spawn order: sessions as the daemon created them (or as the
+// user dragged them), panes in the order they were opened. So a row moves only
+// when its group changes, which is when what it wants from you changed, and
+// never because a neighbour did something. Priority sorts errored above
+// needs_input and recency sorts by the last state change, and both of those
+// reorder a group every time one of its members moves.
 func (m *OS) sidebarSortAgents(agents []sidebarAgentEntry) {
-	if m.sidebarAgentsSort() == sidebarAgentsRecent {
+	switch m.sidebarAgentsSort() {
+	case sidebarAgentsRecent:
 		sort.SliceStable(agents, func(a, b int) bool { return agents[a].StateAt > agents[b].StateAt })
-		return
+	case sidebarAgentsPriority:
+		sort.SliceStable(agents, func(a, b int) bool {
+			return sidebarAgentPriority(agents[a].State, agents[a].DoneSeen) >
+				sidebarAgentPriority(agents[b].State, agents[b].DoneSeen)
+		})
+	default:
+		sort.SliceStable(agents, func(a, b int) bool {
+			return sidebarAgentGroup(agents[a].State, agents[a].DoneSeen) <
+				sidebarAgentGroup(agents[b].State, agents[b].DoneSeen)
+		})
 	}
-	sort.SliceStable(agents, func(a, b int) bool {
-		return sidebarAgentPriority(agents[a].State, agents[a].DoneSeen) >
-			sidebarAgentPriority(agents[b].State, agents[b].DoneSeen)
-	})
 }

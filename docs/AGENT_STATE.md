@@ -21,6 +21,7 @@ alongside the rest of the pane-driving surface.
 - [The stall heuristic](#the-stall-heuristic)
 - [Finished turns](#finished-turns)
 - [Indicator](#indicator)
+- [The rail's agents section](#the-rails-agents-section)
 - [Harness integrations](#harness-integrations)
 - [Environment](#environment)
 - [Alerts](#alerts)
@@ -636,12 +637,94 @@ tuios draws a one-cell glyph in each window's title:
 | `idle`        | `○`       |
 | `done`        | `■`       |
 | `errored`     | `×`       |
-| `unknown`     | (nothing) |
+| `unknown`     | `□`       |
 | `none`        | (nothing) |
 
 The glyphs are distinct shapes rather than the same shape in different colors, so
 the state reads at a glance and survives a monochrome capture. The indicator
-shows even for a window with no name.
+shows even for a window with no name. With `--ascii-only` the glyphs are `*`,
+`!`, `o`, `#`, `x` and `?`.
+
+This table used to say `unknown` draws nothing. It has drawn `□` since the state
+was given a glyph, because a pane with an agent in it that drew nothing read as
+a pane with no agent.
+
+## The rail's agents section
+
+The agents section of the session rail lists every pane running an agent, in
+every session, and is ordered by what each one needs from you. The header's
+sort control (`o` with the rail focused, or a click on it) steps through three
+orders: `you`, `pri` and `rec`.
+
+`you`, the default, draws four groups, top to bottom:
+
+1. **Needs you**: `needs_input` (an approval or a question) and `errored`.
+2. **Finished**: `done` that you have not looked at yet.
+3. **Working**: `working`.
+4. **At rest**: `idle`, `unknown`, `done` you have already looked at, and any
+   state this build does not know.
+
+Inside a group the rows keep spawn order: sessions in the order the daemon made
+them (or the order you dragged them into), panes in the order they were opened.
+A row moves only when its group changes, which is when what it wants from you
+changed. It never moves because a neighbour did something.
+
+`pri` is the older order, which was the default before `you` existed: errored,
+then needs_input, working, done unread, done read, idle. `rec` is newest state
+change first. A rail whose saved state names `pri` keeps it; only a rail that
+never picked an order moves to `you`.
+
+The collapsed strip lists its agents in the same order as the section.
+
+### What a row says without colour
+
+Colour is never the only signal. Every state has its own glyph (the table
+above), and a finished pane you have looked at draws `○`, idle's glyph, in the
+rail, where it used to draw `■` in a muted colour: read and unread finished
+panes differed only in ink. The title bar still draws `■`, because it has no
+unread bit to show.
+
+The row's second line carries a word for what the row needs, the `need` token:
+`approval` or `question` when a screen rule read the prompt (the kind is taken
+off the front of the message so it is said once), `needs input`, `errored` or
+`finished` when the pane reported no message of its own. A row that needs you
+also shows how long it has waited: at the right edge of the first line when the
+rail is wide enough for the elapsed column, and after the need word otherwise
+(`approval 12m`, or `waiting 12m` when the message stands in for the word).
+
+Every in-flight state draws the one working glyph, `●`, whichever source
+reported it (a hook, an OSC 9;4 progress report, a screen rule or the process
+detector). What the agent is doing goes on the second line, from its message.
+
+### Agent metadata
+
+A pane can report short facts about its agent with `set-agent-meta`: the
+model, how full its context is, the cost of the turn, a one-line summary.
+
+```sh
+tuios set-agent-meta -w "$TUIOS_PANE_ID" --source statusline --ttl 60s model=opus context=42%
+```
+
+The `meta` row token draws every key on the second line, values only, in the
+order the pane first reported them, so write values that read on their own
+(`42% ctx` rather than `42`). `$name` places one key, and `meta` then leaves
+that key out:
+
+```toml
+[appearance.sidebar.agent_row]
+tokens = ["session", "need", "harness", "name", "elapsed", "$context", "meta", "message"]
+
+[appearance.sidebar.agent_row."$context"]
+fg = "warning"
+```
+
+Metadata is display only. It never changes a state, a wait, an alert or a
+message. It is capped at 16 keys per call and 32 per pane, values are cut to 80
+characters with control characters removed, keys set with a TTL are dropped by
+the daemon when it runs out, and everything clears when the agent leaves the
+pane. `get-agent-state` and `list-agents` report it as a `meta` object. No
+harness feeds it yet; a hook or a statusline command is where a feed goes. See
+[the protocol reference](protocol.md#set-agent-meta).
 
 ## Harness integrations
 

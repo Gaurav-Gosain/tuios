@@ -18,7 +18,7 @@ import (
 // ordered text and numeric rules:
 //
 //	[appearance.sidebar.agent_row]
-//	tokens = ["session", "harness", "name", "elapsed", "message"]
+//	tokens = ["session", "need", "harness", "name", "elapsed", "meta", "message"]
 //
 //	[appearance.sidebar.agent_row.name]
 //	fg = "text"
@@ -47,12 +47,51 @@ import (
 
 // SidebarAgentRowTokens is every token an agent row can carry, in the order a
 // person is most likely to want them listed.
-var SidebarAgentRowTokens = []string{"harness", "name", "state", "elapsed", "message", "session", "host"}
+// Beside these, "$key" names one key of the pane's agent metadata (see
+// SidebarMetaTokenKey).
+var SidebarAgentRowTokens = []string{"harness", "name", "state", "elapsed", "need", "meta", "message", "session", "host"}
 
-// SidebarAgentRowDefaultTokens is the row as it ships: what the rail drew before
-// the table existed, in the order it drew it. state and host are left out so a
-// rail with no config sees no change; both have a value on every row.
-var SidebarAgentRowDefaultTokens = []string{"session", "harness", "name", "elapsed", "message"}
+// SidebarAgentRowDefaultTokens is the row as it ships. state and host are left
+// out because both have a value on every row and the glyph already says the
+// state. need and meta draw on the second line only: need says what a row
+// wants from you ("approval", "question", "errored", "finished"), and meta is
+// whatever the pane reported through set-agent-meta, which is nothing unless a
+// hook or statusline feed writes it.
+var SidebarAgentRowDefaultTokens = []string{"session", "need", "harness", "name", "elapsed", "meta", "message"}
+
+// SidebarMetaTokenKey returns the metadata key a "$key" token names, and false
+// for any other token. The key rules match the daemon's set-agent-meta: 1 to 24
+// lower-case letters, digits, '_' and '-', starting with a letter.
+func SidebarMetaTokenKey(name string) (string, bool) {
+	key, ok := strings.CutPrefix(name, "$")
+	if !ok || key == "" || len(key) > 24 {
+		return "", false
+	}
+	for i := 0; i < len(key); i++ {
+		c := key[i]
+		switch {
+		case c >= 'a' && c <= 'z':
+		case i > 0 && (c >= '0' && c <= '9' || c == '_' || c == '-'):
+		default:
+			return "", false
+		}
+	}
+	return key, true
+}
+
+// sidebarKnownToken reports whether name is a token a row can draw.
+func sidebarKnownToken(name string) bool {
+	if slices.Contains(SidebarAgentRowTokens, name) {
+		return true
+	}
+	_, ok := SidebarMetaTokenKey(name)
+	return ok
+}
+
+// sidebarTokenNames is the list a problem about an unknown token offers.
+func sidebarTokenNames() string {
+	return strings.Join(SidebarAgentRowTokens, ", ") + ", or $key for one metadata key"
+}
 
 // SidebarTokenColors are the palette names a token's fg may take, beside a
 // #rrggbb literal. They are the rail's own tiers and the four status inks.
@@ -223,9 +262,9 @@ func ParseSidebarAgentRow(table map[string]any) SidebarAgentRowSpec {
 			for _, name := range list {
 				name = strings.ToLower(strings.TrimSpace(name))
 				switch {
-				case !slices.Contains(SidebarAgentRowTokens, name):
+				case !sidebarKnownToken(name):
 					problem("there is no agent row token called %s. The names are %s",
-						strconv.Quote(name), strings.Join(SidebarAgentRowTokens, ", "))
+						strconv.Quote(name), sidebarTokenNames())
 				case slices.Contains(tokens, name):
 					problem("%s is listed twice in tokens, so the second one is ignored", name)
 				default:
@@ -238,9 +277,9 @@ func ParseSidebarAgentRow(table map[string]any) SidebarAgentRowSpec {
 			}
 			spec.Tokens = tokens
 		default:
-			if !slices.Contains(SidebarAgentRowTokens, key) {
+			if !sidebarKnownToken(key) {
 				problem("there is no agent row token called %s. The names are %s",
-					strconv.Quote(key), strings.Join(SidebarAgentRowTokens, ", "))
+					strconv.Quote(key), sidebarTokenNames())
 				continue
 			}
 			sub, ok := raw.(map[string]any)

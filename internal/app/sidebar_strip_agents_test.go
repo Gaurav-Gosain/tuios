@@ -31,9 +31,12 @@ func agentStripOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 			{ID: "cccccccc3333", Title: "build", AgentState: "done", DoneSeen: true},
 			{ID: "ffffffff6666", Title: "shell", AgentState: "idle"},
 		}},
+		// The errored pane was opened first. The strip lists in the section's
+		// order, which by default keeps spawn order inside the needs-you
+		// group, and several tests below read the errored pane as the first.
 		{Name: "api", Windows: []sessiontree.WindowInput{
-			{ID: "dddddddd4444", Title: "server", AgentState: "needs_input"},
 			{ID: "eeeeeeee5555", Title: "tests", AgentState: "errored"},
+			{ID: "dddddddd4444", Title: "server", AgentState: "needs_input"},
 		}},
 		{Name: "docs"},
 	})

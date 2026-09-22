@@ -214,3 +214,39 @@ fg = "warning"
 		t.Fatalf("the table changed through a save:\n before %s\n after  %s\n%s", before.Fingerprint, after.Fingerprint, out)
 	}
 }
+
+// TestAgentRowReadsMetaTokens: "meta" and "need" are tokens, "$key" names one
+// metadata key with the daemon's key rules, and a "$key" can carry a style of
+// its own like any other token.
+func TestAgentRowReadsMetaTokens(t *testing.T) {
+	spec := parseAgentRowTOML(t, `
+[appearance.sidebar.agent_row]
+tokens = ["need", "name", "$context", "meta"]
+
+[appearance.sidebar.agent_row."$context"]
+fg = "warning"
+`)
+	if len(spec.Problems) != 0 {
+		t.Fatalf("problems: %v", spec.Problems)
+	}
+	if !slices.Equal(spec.Tokens, []string{"need", "name", "$context", "meta"}) {
+		t.Fatalf("tokens = %v", spec.Tokens)
+	}
+	if spec.Style("$context").Base.Fg != "warning" {
+		t.Errorf("the $context style was not read: %+v", spec.Style("$context"))
+	}
+
+	bad := parseAgentRowTOML(t, `
+[appearance.sidebar.agent_row]
+tokens = ["name", "$", "$1st", "$Model"]
+`)
+	// $Model lower-cases to a valid key, as every token name is lower-cased.
+	if len(bad.Problems) != 2 || !slices.Equal(bad.Tokens, []string{"name", "$model"}) {
+		t.Errorf("tokens = %v, problems = %v", bad.Tokens, bad.Problems)
+	}
+	for _, p := range bad.Problems {
+		if !strings.Contains(p, "$key") {
+			t.Errorf("the problem does not say $key exists: %q", p)
+		}
+	}
+}

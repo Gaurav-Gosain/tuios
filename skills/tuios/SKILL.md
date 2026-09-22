@@ -698,6 +698,17 @@ so anything reading the state knows what reported it:
 tuios set-agent-state working -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --harness claude-code -m "building"
 ```
 
+Facts about yourself that are not a state (your model, how full your context
+is, a one-line summary of the task) go in metadata. The rail draws the values
+under your row. It is display only and never changes your state. `key=` removes
+a key, `--ttl` makes a feed that stops writing leave nothing stale, and all of
+it clears when you leave the pane:
+
+```sh
+tuios set-agent-meta -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --source statusline --ttl 60s model=opus context=42%
+tuios set-agent-meta -w "$TUIOS_PANE_ID" summary=
+```
+
 ### Wire it to your harness once
 
 If your harness has a hooks system, map its lifecycle events to these calls once
@@ -1453,8 +1464,10 @@ scalar option, so it is set in config.toml rather than with `set-config`:
 ```toml
 [appearance.sidebar.agent_row]
 # Left to right. Leave a token out to hide it. The names are
-# harness, name, state, elapsed, message, session, host.
-tokens = ["session", "harness", "name", "elapsed", "message"]
+# harness, name, state, elapsed, need, meta, message, session, host, and
+# $key for one key of the pane's set-agent-meta metadata. need, meta, $key
+# and message draw on the row's second line.
+tokens = ["session", "need", "harness", "name", "elapsed", "meta", "message"]
 
 # A token's own look. Each key is optional: an absent one keeps the rail's
 # own choice. fg is a palette name (text, dim, muted, accent, warning,

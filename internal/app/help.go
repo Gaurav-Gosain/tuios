@@ -294,7 +294,7 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		row("reorder_up", "Move the session or machine up the rail"),
 		row("section", "Cycle the sessions, terminals and agents sections"),
 		row("agents_filter", "Agents: all sessions, or this one"),
-		row("agents_sort", "Agents: by priority, or by recency"),
+		row("agents_sort", "Agents: needs you, priority, or recency"),
 		row("mail", "Open the mailbox, for the pane under the cursor"),
 		row("palette", "Find a pane in any session, or filter by @state"),
 		row("narrow", "Collapse the rail. On the divider: split down"),

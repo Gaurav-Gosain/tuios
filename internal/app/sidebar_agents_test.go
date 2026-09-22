@@ -147,11 +147,11 @@ func TestAgentsHeaderTokensAreTheirOwnHitZones(t *testing.T) {
 
 	// Each click reaches exactly its own control.
 	m.SidebarClick(filter.X0, filter.Y0, false)
-	if m.sidebarAgentsFilter() != sidebarAgentsSession || m.sidebarAgentsSort() != sidebarAgentsPriority {
+	if m.sidebarAgentsFilter() != sidebarAgentsSession || m.sidebarAgentsSort() != sidebarAgentsNeedsYou {
 		t.Errorf("clicking the filter gave filter=%q sort=%q", m.sidebarAgentsFilter(), m.sidebarAgentsSort())
 	}
 	m.SidebarClick(sortHit.X0, sortHit.Y0, false)
-	if m.sidebarAgentsSort() != sidebarAgentsRecent || m.sidebarAgentsFilter() != sidebarAgentsSession {
+	if m.sidebarAgentsSort() != sidebarAgentsPriority || m.sidebarAgentsFilter() != sidebarAgentsSession {
 		t.Errorf("clicking the sort gave filter=%q sort=%q", m.sidebarAgentsFilter(), m.sidebarAgentsSort())
 	}
 }
@@ -165,8 +165,15 @@ func TestAgentsHeaderTokensRenderTheirState(t *testing.T) {
 	if header < 0 {
 		t.Fatalf("no agents header:\n%s", strings.Join(lines, "\n"))
 	}
-	if !strings.Contains(lines[header], "all") || !strings.Contains(lines[header], "pri") {
+	if !strings.Contains(lines[header], "all") || !strings.Contains(lines[header], "you") {
 		t.Errorf("default header does not carry its tokens: %q", lines[header])
+	}
+
+	m.SidebarAgentSort = sidebarAgentsPriority
+	lines = railPlain(t, m, tree)
+	header = lineOf(lines, " agents")
+	if !strings.Contains(lines[header], "pri") {
+		t.Errorf("the priority order does not name itself: %q", lines[header])
 	}
 
 	m.SidebarAgentFilter, m.SidebarAgentSort = sidebarAgentsSession, sidebarAgentsRecent
@@ -205,19 +212,39 @@ func TestAgentsControlsPersist(t *testing.T) {
 
 	restored := &OS{Settings: config.Global}
 	restored.loadSidebarState()
-	if restored.sidebarAgentsFilter() != sidebarAgentsSession || restored.sidebarAgentsSort() != sidebarAgentsRecent {
-		t.Errorf("after a restart filter=%q sort=%q, want session/recent",
+	if restored.sidebarAgentsFilter() != sidebarAgentsSession || restored.sidebarAgentsSort() != sidebarAgentsPriority {
+		t.Errorf("after a restart filter=%q sort=%q, want session/priority",
 			restored.sidebarAgentsFilter(), restored.sidebarAgentsSort())
 	}
 
-	// Back to the defaults, which are written as empty and read back as defaults.
+	m.SidebarCycleAgentsSort()
+	restored = &OS{Settings: config.Global}
+	restored.loadSidebarState()
+	if restored.sidebarAgentsSort() != sidebarAgentsRecent {
+		t.Errorf("after a second step sort=%q, want recent", restored.sidebarAgentsSort())
+	}
+
+	// Back to the defaults.
 	m.SidebarCycleAgentsFilter()
 	m.SidebarCycleAgentsSort()
 	restored = &OS{Settings: config.Global}
 	restored.loadSidebarState()
-	if restored.sidebarAgentsFilter() != sidebarAgentsAll || restored.sidebarAgentsSort() != sidebarAgentsPriority {
-		t.Errorf("after flipping back filter=%q sort=%q, want all/priority",
+	if restored.sidebarAgentsFilter() != sidebarAgentsAll || restored.sidebarAgentsSort() != sidebarAgentsNeedsYou {
+		t.Errorf("after flipping back filter=%q sort=%q, want all/needs_you",
 			restored.sidebarAgentsFilter(), restored.sidebarAgentsSort())
+	}
+}
+
+// TestAgentsSortKeepsAnExplicitPriority: needs-you replaced priority as the
+// default. A state file that says priority was written by a user who picked it
+// with the header control, and must keep it; only an empty one takes the new
+// default.
+func TestAgentsSortKeepsAnExplicitPriority(t *testing.T) {
+	if got := (&OS{SidebarAgentSort: "priority"}).sidebarAgentsSort(); got != sidebarAgentsPriority {
+		t.Errorf("a saved priority read back as %q", got)
+	}
+	if got := (&OS{}).sidebarAgentsSort(); got != sidebarAgentsNeedsYou {
+		t.Errorf("an empty sort read back as %q, want needs_you", got)
 	}
 }
 
@@ -226,7 +253,7 @@ func TestAgentsControlsPersist(t *testing.T) {
 // as the default rather than emptying the section.
 func TestAgentsControlsDefaultOnAGarbageStateFile(t *testing.T) {
 	m := &OS{Settings: config.Global, SidebarAgentFilter: "nonsense", SidebarAgentSort: "nonsense"}
-	if m.sidebarAgentsFilter() != sidebarAgentsAll || m.sidebarAgentsSort() != sidebarAgentsPriority {
+	if m.sidebarAgentsFilter() != sidebarAgentsAll || m.sidebarAgentsSort() != sidebarAgentsNeedsYou {
 		t.Errorf("unknown values read back as filter=%q sort=%q", m.sidebarAgentsFilter(), m.sidebarAgentsSort())
 	}
 }

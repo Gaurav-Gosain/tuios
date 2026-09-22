@@ -19,6 +19,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -393,6 +394,10 @@ type Window struct {
 	// AgentHarness is the harness id the reporting source named, empty when the
 	// state came from something that named none. Alert sinks pass it on.
 	AgentHarness string
+	// AgentMeta is what the pane reported about its agent through
+	// set-agent-meta, as the daemon synced it. The rail draws it. Replaced
+	// whole on every sync and never edited in place.
+	AgentMeta []sessiontree.MetaToken
 	// AgentStateAt is when the pane entered AgentState (Unix nanoseconds), as
 	// the daemon stamped it. The rail shows the elapsed time so a pane waiting
 	// on input reads differently from one that just started working.

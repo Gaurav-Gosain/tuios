@@ -2,7 +2,6 @@ package app
 
 import (
 	"image/color"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -142,8 +141,8 @@ func sidebarStripBadgeFor(sessions []sessiontree.Node) sidebarStripBadgeInfo {
 // question, which nothing else on the strip answers: what wants a human
 // somewhere the strip is not showing.
 //
-// The order is sidebarAgentPriority, the expanded section's own priority sort,
-// so the folded rail cannot rank a pane differently from the open one. The
+// The order is the expanded section's own sort, whichever the user picked, so
+// the folded rail cannot rank a pane differently from the open one. The
 // section's all/here filter is deliberately not applied: its control is not on
 // the strip.
 func (m *OS) sidebarStripAgents(sessions []sessiontree.Node, listed string) []sidebarAgentEntry {
@@ -157,10 +156,7 @@ func (m *OS) sidebarStripAgents(sessions []sessiontree.Node, listed string) []si
 			kept = append(kept, e)
 		}
 	}
-	sort.SliceStable(kept, func(a, b int) bool {
-		return sidebarAgentPriority(kept[a].State, kept[a].DoneSeen) >
-			sidebarAgentPriority(kept[b].State, kept[b].DoneSeen)
-	})
+	m.sidebarSortAgents(kept)
 	return kept
 }
 

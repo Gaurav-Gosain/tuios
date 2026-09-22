@@ -980,3 +980,28 @@ before an escape sequence. The CPU gain of the three removed above was 6%, so
 the fourth is worth at most a third of that, and a string cache is one more
 piece of per-emulator state to reason about. Left for when a profile of a real
 workload asks for it.
+
+## 2026-09 agents rail grouping and metadata
+
+The agents section gained a needs-you order, a need token, a meta token and a
+metadata fold in the rail signature. The rail is on the hot path, so it was
+measured before and after with two new benchmarks: `BenchmarkSidebarAgentsRebuild`,
+a full rebuild of a rail watching twelve agents in every state, and
+`BenchmarkSidebarAgentsCached`, the cached frame over the same fleet, whose
+signature folds every agent pane.
+
+Measured with the two test binaries run alternately, eight runs each, one second
+per run, so machine load hit both sides alike. Medians:
+
+| Benchmark | Before | After | Allocations |
+| --- | --- | --- | --- |
+| `BenchmarkSidebarAgentsRebuild` | 345 µs, 55288 B | 342 µs, 55992 B | 1572, unchanged |
+| `BenchmarkSidebarAgentsCached` | 2670 ns | 2667 ns | 0, unchanged |
+| `BenchmarkSidebarPanelCached` | 1207 ns | 1208 ns | 0, unchanged |
+| `BenchmarkSidebarPanelLinesCached` | 1215 ns | 1206 ns | 0, unchanged |
+
+No change beyond noise in time. A rebuild allocates 704 bytes more, from the two
+extra tokens in the shipped row. The signature folds a pane's metadata only when
+it has some, so a rail with no metadata pays nothing per frame for it, and a
+state sync that leaves a pane's metadata unchanged reuses the pane's list rather
+than allocating a new one.

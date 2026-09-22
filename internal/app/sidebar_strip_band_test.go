@@ -206,10 +206,13 @@ func TestStripHoverBandSurvivesASeverityMark(t *testing.T) {
 
 	var loud, quiet sidebarRowHit
 	for _, h := range m.SidebarHits {
-		switch h.SessionID {
-		case "api": // carries needs_input and errored panes
+		switch {
+		case h.SessionID == "api" && h.WindowID == "dddddddd4444":
+			// The needs_input pane's own row. Picked by id: the api session
+			// carries an errored pane too, and which of the two is drawn last
+			// is the section's sort, not what this test is about.
 			loud = h
-		case "docs":
+		case h.SessionID == "docs":
 			quiet = h
 		}
 	}

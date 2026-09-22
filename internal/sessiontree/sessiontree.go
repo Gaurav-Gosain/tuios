@@ -59,6 +59,9 @@ type Node struct {
 	// files"), empty when it reported none. Never rolled up, for the same
 	// reason Harness is not.
 	Message string
+	// Meta is the pane's agent metadata (model, context, a summary), in the
+	// order the pane holds it. Display only, never rolled up.
+	Meta []MetaToken
 	// Workspace is the workspace a window node sits on, or 0 when unknown. On a
 	// session node it is the workspace that session is showing, which is what
 	// decides which of its panes count as "here".
@@ -111,6 +114,14 @@ type Node struct {
 	Children []Node
 }
 
+// MetaToken is one key and value a pane reported about its agent. It is the
+// display half of the daemon's session.AgentMetaToken: what a surface draws,
+// without who wrote it or when it expires, which the daemon handles.
+type MetaToken struct {
+	Key   string
+	Value string
+}
+
 // Tree is the full set of sessions, each with its windows when known.
 type Tree struct {
 	Sessions []Node
@@ -130,6 +141,9 @@ type WindowInput struct {
 	Harness string
 	// Message is the note the pane reported with its state, empty for none.
 	Message string
+	// Meta is what the pane reported about its agent through set-agent-meta,
+	// in the order the pane holds it. Nil for none.
+	Meta []MetaToken
 	// Focused marks the currently focused window in its session.
 	Focused bool
 	// Workspace is the workspace the pane sits on, or 0 when the caller does
@@ -275,6 +289,7 @@ func BuildSession(s SessionInput) Node {
 			StateAt:    w.StateAt,
 			Harness:    w.Harness,
 			Message:    w.Message,
+			Meta:       w.Meta,
 			IsCurrent:  w.Focused,
 			Workspace:  w.Workspace,
 			Host:       w.Host,

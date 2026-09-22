@@ -8,7 +8,9 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
 // An agent row is drawn from tokens: the facts the row has about its pane, each
@@ -64,8 +66,14 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 		}
 	case "message":
 		tk.Text = printableTitle(e.Message)
+	case "need":
+		tk.Text = m.sidebarAgentNeedText(e, variant, now)
 	case "host":
 		tk.Text = printableTitle(e.Host)
+	default:
+		if key, ok := config.SidebarMetaTokenKey(name); ok {
+			tk.Text = printableTitle(sidebarAgentMetaValue(e.Meta, key))
+		}
 	}
 	if !tk.HasNumber && tk.Text != "" {
 		if f, err := strconv.ParseFloat(tk.Text, 64); err == nil {
@@ -95,7 +103,28 @@ func (m *OS) sidebarAgentTokensFor(e sidebarAgentEntry, variant int, tall bool, 
 	var plan sidebarAgentTokenPlan
 	spec := &m.Settings.SidebarAgentRow
 	beforeName := true
+	needAt, messageAt := -1, -1
 	for _, name := range spec.Tokens {
+		if name == "meta" {
+			// Every key the pane reported that no $key token places itself,
+			// in the pane's own order.
+			if tall {
+				for _, t := range e.Meta {
+					if spec.Has("$" + t.Key) {
+						continue
+					}
+					tk := sidebarAgentToken{Name: "$" + t.Key, Text: printableTitle(t.Value)}
+					if tk.Text == "" {
+						continue
+					}
+					if f, err := strconv.ParseFloat(tk.Text, 64); err == nil {
+						tk.Number, tk.HasNumber = f, true
+					}
+					plan.Note = append(plan.Note, tk)
+				}
+			}
+			continue
+		}
 		tk := m.sidebarAgentTokenValue(name, e, variant, now)
 		switch {
 		case name == "name":
@@ -105,8 +134,14 @@ func (m *OS) sidebarAgentTokensFor(e sidebarAgentEntry, variant int, tall bool, 
 		case name == "elapsed":
 			plan.Right = tk
 			continue
-		case name == "message" || (name == "harness" && tall):
+		case sidebarNoteToken(name) || (name == "harness" && tall):
 			if tall && tk.Text != "" {
+				switch name {
+				case "need":
+					needAt = len(plan.Note)
+				case "message":
+					messageAt = len(plan.Note)
+				}
 				plan.Note = append(plan.Note, tk)
 			}
 			continue
@@ -121,7 +156,104 @@ func (m *OS) sidebarAgentTokensFor(e sidebarAgentEntry, variant int, tall bool, 
 			plan.After = append(plan.After, tk)
 		}
 	}
+	// A screen rule's message is "approval: <the prompt>", and the need token
+	// already said approval, so the message keeps only the prompt.
+	if needAt >= 0 && messageAt >= 0 {
+		if _, kind := sidebarAgentNeed(e.State, e.DoneSeen, e.Message); kind {
+			rest := sidebarAgentMessageRest(plan.Note[messageAt].Text)
+			if rest == "" {
+				plan.Note = append(plan.Note[:messageAt], plan.Note[messageAt+1:]...)
+			} else {
+				plan.Note[messageAt].Text = rest
+			}
+		}
+	}
 	return plan
+}
+
+// sidebarAgentNeedText is the need token as drawn: the word, and the wait when
+// the identity line is not showing it, which is the narrow rail and a row with
+// no elapsed token. How long a pane has been waiting on you is the one figure
+// a row that needs you must not lose.
+func (m *OS) sidebarAgentNeedText(e sidebarAgentEntry, variant int, now time.Time) string {
+	word, _ := sidebarAgentNeed(e.State, e.DoneSeen, e.Message)
+	if sidebarAgentGroup(e.State, e.DoneSeen) != sidebarGroupNeedsYou {
+		return word
+	}
+	if variant == sidebarVariantFull && m.Settings.SidebarAgentRow.Has("elapsed") {
+		return word
+	}
+	wait := agentElapsed(e.State, e.StateAt, now)
+	switch {
+	case wait == "":
+		return word
+	case word == "":
+		return "waiting " + wait
+	default:
+		return word + " " + wait
+	}
+}
+
+// sidebarNoteToken reports the tokens that only ever draw on a row's second
+// line: the note the pane reported, what the row needs from you, and the
+// pane's metadata. None of them has room on the identity line, which is the
+// name's.
+func sidebarNoteToken(name string) bool {
+	if name == "message" || name == "need" {
+		return true
+	}
+	_, ok := config.SidebarMetaTokenKey(name)
+	return ok
+}
+
+// sidebarAgentNeed is what a row wants from the person, in a word, and whether
+// the word came from the kind a screen rule put in front of the message. It is
+// the text half of the state: the glyph and its colour say the same thing, and
+// the word is what still says it on a rail drawn without colour or glyphs.
+// Working and resting rows need nothing and get no word.
+//
+// The word gives way to a message that says it better. "approval" or
+// "question" is lifted off the front of the message, so it costs nothing. A
+// row that needs you and reported its own message ("awaiting approval") keeps
+// the message and gets no word: on a 28-column rail the two would not both
+// fit, and the message is the one that says what to do.
+func sidebarAgentNeed(state string, doneSeen bool, message string) (string, bool) {
+	switch state {
+	case "needs_input":
+		if kind, _, ok := strings.Cut(message, ": "); ok && (kind == harness.PromptKindApproval || kind == harness.PromptKindQuestion) {
+			return kind, true
+		}
+		if message == "" {
+			return "needs input", false
+		}
+	case "errored":
+		if message == "" {
+			return "errored", false
+		}
+	case "done":
+		if !doneSeen && message == "" {
+			return "finished", false
+		}
+	}
+	return "", false
+}
+
+// sidebarAgentMessageRest is a message with the prompt kind in front of it
+// taken off: "approval: run tests?" is "run tests?".
+func sidebarAgentMessageRest(message string) string {
+	_, rest, _ := strings.Cut(message, ": ")
+	return strings.TrimSpace(rest)
+}
+
+// sidebarAgentMetaValue is the value of one metadata key, empty when the pane
+// did not report it.
+func sidebarAgentMetaValue(meta []sessiontree.MetaToken, key string) string {
+	for _, t := range meta {
+		if t.Key == key {
+			return t.Value
+		}
+	}
+	return ""
 }
 
 // sidebarAgentsHaveNotes reports whether any of these agents has something to

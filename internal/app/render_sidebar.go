@@ -402,6 +402,9 @@ type sidebarAgentEntry struct {
 	// Message is the note the pane reported with its state ("editing files"),
 	// empty when it reported none.
 	Message string
+	// Meta is what the pane reported about its agent through set-agent-meta,
+	// in the order the pane holds it. The meta and $key row tokens draw it.
+	Meta []sessiontree.MetaToken
 	// SessionLabel is what to print for SessionID: the session's display name
 	// when it has one. Identity keys the row, the label only fronts it.
 	SessionLabel string
@@ -563,11 +566,25 @@ func sidebarGlyph(state string, doneSeen bool, bg color.Color, pal overlay.Palet
 	if !s.SidebarShowGlyphs {
 		return sidebarStyle(bg, nil).Render(" ")
 	}
-	g := agentStateIndicator(state)
+	g := agentStateIndicator(sidebarGlyphState(state, doneSeen))
 	if g == "" {
 		return sidebarStyle(bg, nil).Render(" ")
 	}
 	return sidebarStyle(bg, sidebarStateColor(state, doneSeen, pal)).Render(g)
+}
+
+// sidebarGlyphState is the state whose glyph a rail row draws. It is the
+// state itself, with one exception: a finished pane the user has looked at
+// draws idle's hollow circle. Unread and read used to differ only in colour,
+// which a monochrome terminal, a capture, or a colour-blind reader cannot
+// see, and a finished pane that has been reviewed is at rest in every sense
+// the rail cares about. The title bar keeps the done glyph, because it has no
+// unread bit to show.
+func sidebarGlyphState(state string, doneSeen bool) string {
+	if state == "done" && doneSeen {
+		return "idle"
+	}
+	return state
 }
 
 // sidebarQuietDot is the placeholder a session row puts in its glyph column
@@ -797,12 +814,17 @@ func sidebarAttentionCounts(state string, doneSeen bool) (blocked, done bool) {
 // the mail token or the two controls: all three were here before it, and a
 // rail that fit them must keep fitting them.
 func (m *OS) sidebarAgentsControls(cw, headerW int, pal overlay.Palette, hoverX int, count sidebarAgentCountInfo) (string, []sidebarTokenSpan) {
-	filter, sort := "all", "pri"
+	// "you" for the needs-you order: three cells like the other two, so the
+	// header fits exactly what it fit before the order existed.
+	filter, sort := "all", "you"
 	filterOn, sortOn := false, false
 	if m.sidebarAgentsFilter() == sidebarAgentsSession {
 		filter, filterOn = "here", true
 	}
-	if m.sidebarAgentsSort() == sidebarAgentsRecent {
+	switch m.sidebarAgentsSort() {
+	case sidebarAgentsPriority:
+		sort, sortOn = "pri", true
+	case sidebarAgentsRecent:
 		sort, sortOn = "rec", true
 	}
 	sep := " · "
@@ -1989,6 +2011,7 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 				StateAt:      win.StateAt,
 				Harness:      win.Harness,
 				Message:      win.Message,
+				Meta:         win.Meta,
 				WindowIndex:  idx,
 				Foreign:      !s.IsCurrent,
 				Host:         s.Host,

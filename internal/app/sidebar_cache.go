@@ -360,6 +360,17 @@ func (m *OS) sidebarSignature() uint64 {
 		// even when its state and title hold still.
 		mixS(w.AgentHarness)
 		mixS(w.AgentMessage)
+		// The metadata a pane reported is drawn on its row's second line. The
+		// count goes first so two lists that concatenate the same do not fold
+		// the same. A pane with none folds nothing, so the common case costs
+		// this per-frame fold nothing.
+		if n := len(w.AgentMeta); n > 0 {
+			mixI(n)
+			for _, t := range w.AgentMeta {
+				mixS(t.Key)
+				mixS(t.Value)
+			}
+		}
 		// The agents section prints the age of the state, so the row changes on a
 		// minute boundary with no other input moving. Folding the whole timestamp
 		// would rebuild the rail on every frame; the minute bucket rebuilds it at

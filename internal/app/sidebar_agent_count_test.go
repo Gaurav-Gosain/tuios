@@ -116,7 +116,7 @@ func TestAgentsHeaderCountGivesWayInSteps(t *testing.T) {
 	if !strings.Contains(header, sidebarMailGlyph()) {
 		t.Fatalf("the mail token yielded to the count: %q", header)
 	}
-	if !strings.Contains(header, "all") || !strings.Contains(header, "pri") {
+	if !strings.Contains(header, "all") || !strings.Contains(header, "you") {
 		t.Fatalf("the header lost its controls: %q", header)
 	}
 
