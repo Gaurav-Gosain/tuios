@@ -632,6 +632,7 @@ func (s *Session) applyAgentDetection(
 				w.AgentState = AgentStateNone
 				clearAgentNote(w)
 				w.AgentHarness = ""
+				w.AgentMeta = nil
 				w.AgentStateAt = now
 				changed++
 
@@ -667,6 +668,7 @@ func (s *Session) applyAgentDetection(
 					w.AgentState = AgentStateNone
 					clearAgentNote(w)
 					w.AgentHarness = ""
+					w.AgentMeta = nil
 					w.AgentStateAt = now
 					changed++
 				}
@@ -781,6 +783,7 @@ func (s *Session) reconcileAgentOnOutput(
 			w.AgentState = AgentStateNone
 			clearAgentNote(w)
 			w.AgentHarness = ""
+			w.AgentMeta = nil
 			w.AgentStateAt = time.Now().UnixNano()
 			changed = true
 			return nil

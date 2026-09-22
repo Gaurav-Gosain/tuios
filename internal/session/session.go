@@ -161,6 +161,12 @@ type WindowState struct {
 	// and it is replaced when another session reports into the pane. It is
 	// daemon-owned and never set by a client.
 	AgentSessionID string `json:"agent_session_id,omitempty"`
+	// AgentMeta is what the pane reported about its agent through
+	// set-agent-meta (model, context, cost, a summary), in the order the keys
+	// first arrived. Daemon-owned like AgentState, display only, and cleared
+	// when the agent leaves the pane. Additive: an older peer drops it and a
+	// state without it reads as "the pane said nothing". See agent_meta.go.
+	AgentMeta []AgentMetaToken `json:"agent_meta,omitempty"`
 	// Popup marks a transient floating pane that runs one command and closes
 	// when the command exits. It is session state, not a client's own, for the
 	// two reasons IsFloating and Zoomed are: a peer that does not know the pane
@@ -905,6 +911,13 @@ type Session struct {
 	// stateMu and neither is serialised.
 	agentTurns     map[string]agentTurn
 	completionSeen map[string]uint64
+
+	// agentMetaTimer is the one-shot that drops expired agent metadata, due at
+	// agentMetaAt (Unix nanoseconds). Nil when no token has a TTL. Guarded by
+	// agentMetaMu. See agent_meta.go.
+	agentMetaTimer *time.Timer
+	agentMetaAt    int64
+	agentMetaMu    sync.Mutex
 
 	// Graphics capabilities of the attached client's host terminal. The daemon
 	// records them on attach so shells spawned afterwards can advertise a
@@ -1836,6 +1849,7 @@ func (s *Session) Stop() {
 	// that has already saved and stopped.
 	s.stopAgentHoldTimer()
 	s.idle.stop()
+	s.stopAgentMetaTimer()
 
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
@@ -1989,6 +2003,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			AgentHarness:  w.AgentHarness,
 			AgentMessage:  w.AgentMessage,
 			CompletionSeq: w.CompletionSeq,
+			AgentMeta:     w.AgentMeta,
 			ForegroundCmd: fg,
 			Workspace:     w.Workspace,
 		})

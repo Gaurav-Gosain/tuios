@@ -131,7 +131,7 @@ type verbHandler func(d *Daemon, cs *connState, params json.RawMessage) (any, *v
 // output, so an agent can discover the full call shape without reading the docs.
 type verbParam struct {
 	Name        string   `json:"name"`
-	Type        string   `json:"type"` // string | int | bool | []string
+	Type        string   `json:"type"` // string | int | bool | []string | []int | object
 	Required    bool     `json:"required,omitempty"`
 	Description string   `json:"description"`
 	Accepted    []string `json:"accepted,omitempty"` // closed value set, when there is one
@@ -994,6 +994,28 @@ func init() {
 			examples: []string{`{"id":1,"verb":"resolve-pane","params":{"sid":4242,"pids":[4250,4243,4242]}}`},
 			handler:  (*Daemon).verbResolvePane,
 		},
+		"set-agent-meta": {
+			description: "Record display metadata about the agent in a window's pane (model, context used, cost, a short summary). The rail draws it under the agent's row. It is display only: it never changes the agent state, a wait, an alert or a message. Keys keep the position they first arrived in. The metadata clears when the agent leaves the pane.",
+			params: []verbParam{
+				sessionParam,
+				windowParam,
+				{Name: "tokens", Type: "object", Description: "Key to value. A string sets the key, null removes it. At most 16 keys per call and 32 per pane. A key is 1 to 24 lower-case letters, digits, '_' or '-', starting with a letter. A value has control characters replaced and is cut to 80 characters. Required unless clear is true."},
+				{Name: "source", Type: "string", Description: "Who is writing, recorded on each key so clear can remove only this writer's keys."},
+				{Name: "ttl_ms", Type: "int", Description: "Milliseconds the keys set by this call live before the daemon drops them. 0 keeps them until they are removed or the agent leaves. At most one day.", Default: "0"},
+				{Name: "clear", Type: "bool", Description: "Remove every key this source wrote, or every key when source is empty, before applying tokens.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "The window the metadata was recorded on."},
+				{Name: "meta", Type: "object", Description: "The keys the pane holds after the call, key to value."},
+				{Name: "truncated", Type: "[]string", Description: "The keys whose values were cut to the length limit."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"set-agent-meta","params":{"session":"work","source":"statusline","tokens":{"model":"opus","context":"42%"},"ttl_ms":60000}}`,
+				`{"id":1,"verb":"set-agent-meta","params":{"session":"work","tokens":{"summary":null}}}`,
+				`{"id":1,"verb":"set-agent-meta","params":{"session":"work","source":"statusline","clear":true}}`,
+			},
+			handler: (*Daemon).verbSetAgentMeta,
+		},
 		"explain-agent-detect": {
 			description: "Say in plain words whether a pane runs an agent and on what evidence. Lists every agent name seen on the command line that did not count, what the detector read (comm, argv, executable, and the processes behind a wrapper), which harness manifest matched and on which predicate, and for each manifest that did not match, what it compared against.",
 			params:      []verbParam{sessionParam, windowParam},
@@ -1046,7 +1068,7 @@ func init() {
 				{Name: "all", Type: "bool", Description: "Include every window, not only the panes something has identified as an agent.", Default: "false"},
 			},
 			returns: []verbParam{
-				{Name: "agents", Type: "[]object", Description: "One entry per pane: window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, completion_seq, finished_unread, agent_session_id. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it."},
+				{Name: "agents", Type: "[]object", Description: "One entry per pane: window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, completion_seq, finished_unread, agent_session_id, meta. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it. meta is the set-agent-meta keys, key to value."},
 				{Name: "total", Type: "int", Description: "How many panes are listed."},
 			},
 			examples: []string{

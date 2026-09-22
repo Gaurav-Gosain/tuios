@@ -296,7 +296,7 @@ func TestSessionInfoWindows(t *testing.T) {
 		{ID: "w3", Title: "shell"},
 	}
 	for i, w := range want {
-		if info.Windows[i] != w {
+		if !windowSummariesAgree(info.Windows[i], w) {
 			t.Errorf("Windows[%d] = %+v, want %+v", i, info.Windows[i], w)
 		}
 	}

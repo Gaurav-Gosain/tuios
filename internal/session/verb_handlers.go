@@ -873,6 +873,8 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 		"blocked_by": agentBlockedBy(w),
 		// The harness's own conversation id, empty until a hook reports one.
 		"agent_session_id": w.AgentSessionID,
+		// meta is what set-agent-meta recorded, key to value.
+		"meta": agentMetaMap(w.AgentMeta, time.Now().UnixNano()),
 	}, nil
 }
 

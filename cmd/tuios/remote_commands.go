@@ -1079,6 +1079,86 @@ func agentRefusalText(reason string) string {
 	}
 }
 
+// agentMetaTokensJSON turns key=value arguments into the tokens object of a
+// set-agent-meta call, in argument order, which the rail keeps. "key=" removes
+// the key.
+func agentMetaTokensJSON(args []string) (json.RawMessage, error) {
+	var b strings.Builder
+	b.WriteByte('{')
+	for i, arg := range args {
+		key, value, ok := strings.Cut(arg, "=")
+		if !ok || key == "" {
+			return nil, fmt.Errorf("%q is not key=value. Write key= to remove a key", arg)
+		}
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		k, _ := json.Marshal(key)
+		b.Write(k)
+		b.WriteByte(':')
+		if value == "" {
+			b.WriteString("null")
+			continue
+		}
+		v, _ := json.Marshal(value)
+		b.Write(v)
+	}
+	b.WriteByte('}')
+	return json.RawMessage(b.String()), nil
+}
+
+// runSetAgentMeta records display metadata about a pane's agent. It prints
+// nothing on success, like set-agent-state, except the keys whose values were
+// cut to the length limit, on stderr.
+func runSetAgentMeta(sessionName, windowTarget string, args []string, source string, ttl time.Duration, clearFirst, jsonOutput bool) error {
+	tokens, err := agentMetaTokensJSON(args)
+	if err != nil {
+		return err
+	}
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	params := map[string]any{
+		"session": sessionName,
+		"window":  windowTarget,
+		"source":  source,
+		"ttl_ms":  ttl.Milliseconds(),
+		"clear":   clearFirst,
+	}
+	if len(args) > 0 {
+		params["tokens"] = tokens
+	}
+	raw, err := client.Call("set-agent-meta", params)
+	if err != nil {
+		return explainVerbError("set-agent-meta", err)
+	}
+	if jsonOutput {
+		var pretty any
+		if err := json.Unmarshal(raw, &pretty); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+		out, err := json.MarshalIndent(pretty, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to render response: %w", err)
+		}
+		fmt.Println(string(out))
+		return nil
+	}
+	var res struct {
+		Truncated []string `json:"truncated"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if len(res.Truncated) > 0 {
+		fmt.Fprintf(os.Stderr, "Cut to %d characters: %s\n", session.AgentMetaMaxValue, strings.Join(res.Truncated, ", "))
+	}
+	return nil
+}
+
 // runSetSessionName sets a session's display label. The session keeps its own
 // name for addressing, so renaming the label never breaks a script.
 func runSetSessionName(sessionName, name string) error {

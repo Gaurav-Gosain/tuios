@@ -156,6 +156,10 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		sessionID string
 	}
 	agentIDs := make(map[string]agentIdentity, len(canonical.Windows))
+	// Agent metadata is daemon-owned for the same reason, and carried on its
+	// own because it is set by its own verb: a pane can have metadata and no
+	// state at all.
+	metas := make(map[string][]AgentMetaToken)
 	// The popup mark and the size the popup was asked for are stamped once, when
 	// the daemon creates the window, and nothing ever changes them. So canonical
 	// is always the truth and they are carried over by id the way Cwd is.
@@ -207,6 +211,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if w.AgentKind != "" || w.AgentSessionID != "" {
 			agentIDs[w.ID] = agentIdentity{w.AgentKind, w.AgentSessionID}
 		}
+		if len(w.AgentMeta) > 0 {
+			metas[w.ID] = w.AgentMeta
+		}
 	}
 	for i := range incoming.Windows {
 		w := &incoming.Windows[i]
@@ -240,6 +247,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			w.AgentHarness = a.harness
 			w.AgentStateAt = a.at
 		}
+		// Taken from canonical whatever the client sent: no client sets it, so
+		// a value in a client push is an echo of an older state at best.
+		w.AgentMeta = metas[w.ID]
 	}
 }
 

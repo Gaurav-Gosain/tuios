@@ -100,6 +100,7 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 
 	state := sess.GetState()
 	unread := d.agents.unreadCounts(sess.Name)
+	now := time.Now().UnixNano()
 
 	agents := make([]map[string]any, 0, len(state.Windows))
 	for i := range state.Windows {
@@ -142,6 +143,7 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 			// The harness's own conversation id, empty until a hook reports
 			// one. It is what a resume names.
 			"agent_session_id": w.AgentSessionID,
+			"meta":             agentMetaMap(w.AgentMeta, now),
 		})
 	}
 

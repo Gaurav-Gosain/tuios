@@ -328,6 +328,11 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 				delete(s.agentHarnessPIDs, w.ID)
 			}
 		}
+		// A pane cleared to none has no agent to describe, and metadata left
+		// behind would be drawn for whatever agent starts in it next.
+		if r.State == AgentStateNone {
+			w.AgentMeta = nil
+		}
 		// auto is carried over: it says the detector will clear this pane when the
 		// agent exits, which a report taking the state over does not change.
 		s.setAgentClaim(w.ID, next)

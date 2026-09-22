@@ -1663,7 +1663,7 @@ func listingsAgree(a, b []SessionInfo) bool {
 		if a[i].Dir != b[i].Dir || a[i].Branch != b[i].Branch {
 			return false
 		}
-		if !slices.Equal(a[i].Windows, b[i].Windows) {
+		if !slices.EqualFunc(a[i].Windows, b[i].Windows, windowSummariesAgree) {
 			return false
 		}
 	}
@@ -1780,4 +1780,17 @@ func (c *TUIClient) sendAndWaitResponse(msg *Message, expectedTypes ...MessageTy
 	case <-c.done:
 		return nil, fmt.Errorf("client closed")
 	}
+}
+
+// windowSummariesAgree compares two window summaries field by field. The
+// struct stopped being comparable with == when AgentMeta, a slice, joined it.
+// TestWindowSummariesAgreeCoversEveryField fails when a field is added here
+// without being compared.
+func windowSummariesAgree(a, b WindowSummary) bool {
+	return a.ID == b.ID && a.Title == b.Title &&
+		a.AgentState == b.AgentState && a.AgentStateAt == b.AgentStateAt &&
+		a.AgentHarness == b.AgentHarness && a.AgentMessage == b.AgentMessage &&
+		a.CompletionSeq == b.CompletionSeq &&
+		slices.Equal(a.AgentMeta, b.AgentMeta) &&
+		a.ForegroundCmd == b.ForegroundCmd && a.Workspace == b.Workspace
 }

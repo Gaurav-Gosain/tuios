@@ -267,7 +267,8 @@ Response (abridged):
 ```
 
 Pass a `verb` param to describe only that verb. Each parameter carries its
-`name`, `type` (`string`, `int`, `bool`, or `[]string`), `description`, and
+`name`, `type` (`string`, `int`, `bool`, `[]string`, `[]int`, or `object` for
+a JSON object such as `set-agent-meta`'s `tokens`), `description`, and
 optionally `required`, `accepted`, and `default`. The `accepted` lists are the
 same lists the handlers enforce, so they cannot drift from the implementation.
 
@@ -1009,6 +1010,52 @@ shell. Only panes on the daemon's own machine are matched.
 ```
 
 No match is `window_not_found`.
+
+### set-agent-meta
+
+Record display metadata about the agent in a pane: its model, how full its
+context is, what the turn cost, a one-line summary. The rail draws it on the
+second line of the agent's row. It is display only. Nothing reads it to decide
+an agent state, a `wait-for`, an alert or a message.
+
+Params: `session` (optional), `window` (optional, default the focused pane),
+`tokens` (an object of key to string, or to `null` to remove the key; required
+unless `clear` is true), `source` (optional, recorded on each key), `ttl_ms`
+(optional, 0 to 86400000, default 0 for no expiry), `clear` (optional bool).
+
+Limits: 16 keys per call and 32 per pane. A key is 1 to 24 lower-case letters,
+digits, `_` or `-`, starting with a letter. A value has control characters
+replaced with spaces and is cut to 80 characters. A bad key, too many keys, or
+a TTL out of range is `invalid_params`; a cut value is not an error, and its
+key is listed in `truncated`.
+
+Order: a key keeps the position it first arrived in, and a new key goes at the
+end in the order the `tokens` object lists it, so a feed that rewrites every
+key on each tick does not reorder the row.
+
+Lifetime: `clear` removes every key the same `source` wrote, or every key when
+`source` is empty, before `tokens` is applied. Keys set with `ttl_ms` are dropped
+by the daemon when it runs out, and the change reaches clients through the
+ordinary state sync. All metadata clears when the agent leaves the pane, which is
+the pane's agent state going to `none`.
+
+Request:
+
+```json
+{"verb": "set-agent-meta", "params": {"session": "work", "window": "build", "source": "statusline", "tokens": {"model": "opus", "context": "42%"}, "ttl_ms": 60000}}
+```
+
+Response:
+
+```json
+{"result": {"type": "agent_meta_set", "window_id": "3f2a9c1e", "meta": {"model": "opus", "context": "42%"}, "truncated": []}}
+```
+
+`get-agent-state` and each `list-agents` entry carry the same `meta` object.
+
+Wire compatibility: the metadata rides the window state as an additive field
+(`agent_meta`). An older client drops it and draws nothing, and an older daemon
+answers the verb with `unknown_verb`.
 
 ## Event stream
 

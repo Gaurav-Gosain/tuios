@@ -157,7 +157,7 @@ func TestListVerbsDescribesEveryVerb(t *testing.T) {
 			if pname == "" || ptype == "" || pdesc == "" {
 				t.Errorf("verb %q has an incompletely documented param: %v", name, p)
 			}
-			if !slices.Contains([]string{"string", "int", "bool", "[]string", "[]int"}, ptype) {
+			if !slices.Contains([]string{"string", "int", "bool", "[]string", "[]int", "object"}, ptype) {
 				t.Errorf("verb %q param %q has unknown type %q", name, pname, ptype)
 			}
 		}

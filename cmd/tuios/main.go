@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
@@ -1065,6 +1066,50 @@ integrations run, does exactly that.`,
 	_ = setAgentStateCmd.RegisterFlagCompletionFunc("source", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return session.AgentSourceNames, cobra.ShellCompDirectiveNoFileComp
 	})
+
+	var setAgentMetaSession string
+	var setAgentMetaWindow string
+	var setAgentMetaSource string
+	var setAgentMetaTTL time.Duration
+	var setAgentMetaClear bool
+	var setAgentMetaJSON bool
+	setAgentMetaCmd := &cobra.Command{
+		Use:   "set-agent-meta [key=value ...]",
+		Short: "Record display metadata about a pane's agent",
+		Long: `Record short facts about the agent in a pane, such as its model, how full its
+context is, or a one-line summary of the task. The rail draws them under the
+agent's row. They are display only and never change the agent's state.
+
+Each argument is key=value. key= removes the key. Keys are lower-case letters,
+digits, '_' and '-'. Values are cut to 80 characters. --ttl drops the keys this
+call sets after that long, so a feed that stops writing leaves nothing stale.
+The metadata clears when the agent leaves the pane.`,
+		Example: `  # From a statusline or hook: the model and context use, for a minute
+  tuios set-agent-meta -w "$TUIOS_PANE_ID" --source statusline --ttl 60s model=opus context=42%
+
+  # Remove one key
+  tuios set-agent-meta summary=
+
+  # Remove every key this source wrote
+  tuios set-agent-meta --source statusline --clear`,
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) == 0 && !setAgentMetaClear {
+				return fmt.Errorf("give at least one key=value, or --clear")
+			}
+			return nil
+		},
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runSetAgentMeta(setAgentMetaSession, setAgentMetaWindow, args,
+				setAgentMetaSource, setAgentMetaTTL, setAgentMetaClear, setAgentMetaJSON)
+		},
+	}
+	setAgentMetaCmd.Flags().StringVarP(&setAgentMetaSession, "session", "s", "", "Target session (default: most recently active)")
+	setAgentMetaCmd.Flags().StringVarP(&setAgentMetaWindow, "window", "w", "", "Target window by name or ID (default: focused)")
+	setAgentMetaCmd.Flags().StringVar(&setAgentMetaSource, "source", "", "Who is writing, so --clear removes only this writer's keys")
+	setAgentMetaCmd.Flags().DurationVar(&setAgentMetaTTL, "ttl", 0, "Drop the keys set by this call after this long (default: keep until removed)")
+	setAgentMetaCmd.Flags().BoolVar(&setAgentMetaClear, "clear", false, "Remove every key this source wrote (every key with no --source) first")
+	setAgentMetaCmd.Flags().BoolVar(&setAgentMetaJSON, "json", false, "Print the result as JSON")
+	_ = setAgentMetaCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
 	var getAgentStateSession string
 	var getAgentStateWindow string
@@ -2556,7 +2601,7 @@ It does not start a daemon. If no daemon runs here, the caller is told so.`,
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)
-	rootCmd.AddCommand(setAgentStateCmd, getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
+	rootCmd.AddCommand(setAgentStateCmd, setAgentMetaCmd, getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
 	rootCmd.AddCommand(listAgentsCmd, sendAgentMessageCmd, readAgentMessagesCmd, askAgentCmd)
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand())
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)

@@ -277,6 +277,10 @@ type WindowSummary struct {
 	// session it is not attached to. Additive and omitted when zero, which is
 	// what an older peer sends and what reads as no turn counted.
 	CompletionSeq uint64 `json:"completion_seq,omitempty"`
+	// AgentMeta is what the pane reported about its agent through
+	// set-agent-meta, so a rail watching another session can draw it too.
+	// Additive and omitted when empty, which is what an older peer sends.
+	AgentMeta []AgentMetaToken `json:"agent_meta,omitempty"`
 	// ForegroundCmd is what the pane is running, for a row that would otherwise
 	// repeat the title its siblings carry. Empty for a shell and for a pane the
 	// user has named, whose name is already the answer. Additive and omitted

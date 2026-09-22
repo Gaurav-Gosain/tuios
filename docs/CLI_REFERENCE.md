@@ -1033,6 +1033,55 @@ tuios set-agent-state working --source osc --harness claude-code
 tuios set-agent-state none
 ```
 
+### `tuios set-agent-meta`
+
+Record short facts about the agent in a pane, such as its model, how full its
+context is, or a one-line summary of the task. The rail draws them on the
+second line of the agent's row. They are display only: they never change the
+agent state, a wait, an alert or a message.
+
+**Usage:**
+```bash
+tuios set-agent-meta [key=value ...] [flags]
+```
+
+Each argument is `key=value`, and `key=` removes the key. A key is 1 to 24
+lower-case letters, digits, `_` or `-`, starting with a letter. A value has its
+control characters replaced and is cut to 80 characters; the keys that were cut
+are named on stderr. One call sets at most 16 keys, and a pane holds at most 32.
+Keys keep the position they first arrived in, so an update does not reorder the
+row. The metadata clears when the agent leaves the pane.
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <id-or-name>`: Target window (default: focused)
+- `--source <name>`: Who is writing, so `--clear` removes only this writer's keys
+- `--ttl <duration>`: Drop the keys this call sets after this long, at most `24h` (default: keep until removed)
+- `--clear`: Remove every key this source wrote (every key with no `--source`) first
+- `--json`: Print the result
+
+**Examples:**
+```bash
+# From a statusline or hook: the model and context use, for a minute
+tuios set-agent-meta -w "$TUIOS_PANE_ID" --source statusline --ttl 60s model=opus context=42%
+
+# Remove one key
+tuios set-agent-meta summary=
+
+# Remove every key this source wrote
+tuios set-agent-meta --source statusline --clear
+```
+
+With `--json`:
+```json
+{
+  "type": "agent_meta_set",
+  "window_id": "3f2a9c1e",
+  "meta": {"context": "42%", "model": "opus"},
+  "truncated": []
+}
+```
+
 ### `tuios set-session-name`
 
 Set the label a session shows in the sidebar and the dock.
@@ -1728,6 +1777,7 @@ them.
 |---------|--------------|
 | `tuios list-agents` | List the agent panes in a session and what each is doing |
 | `tuios get-agent-state` | Read a pane's reported agent state |
+| `tuios set-agent-meta [key=value ...]` | Record display metadata about a pane's agent (model, context, a summary) for the rail |
 | `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session |
 | `tuios read-agent-messages` | Read the messages agents have left in this session |
 | `tuios ask-agent <text>` | Ask another agent a question and wait for its answer |
