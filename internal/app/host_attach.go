@@ -141,14 +141,13 @@ func (m *OS) clientCapabilities() *session.ClientCapabilities {
 		return nil
 	}
 	return &session.ClientCapabilities{
-		PixelWidth:     caps.PixelWidth,
-		PixelHeight:    caps.PixelHeight,
-		CellWidth:      caps.CellWidth,
-		CellHeight:     caps.CellHeight,
-		KittyGraphics:  caps.KittyGraphics,
-		KittyAnimation: caps.KittyAnimation,
-		SixelGraphics:  caps.SixelGraphics,
-		TerminalName:   caps.TerminalName,
+		PixelWidth:    caps.PixelWidth,
+		PixelHeight:   caps.PixelHeight,
+		CellWidth:     caps.CellWidth,
+		CellHeight:    caps.CellHeight,
+		KittyGraphics: caps.KittyGraphics,
+		SixelGraphics: caps.SixelGraphics,
+		TerminalName:  caps.TerminalName,
 	}
 }
 

@@ -167,19 +167,20 @@ func NewTUIClient() *TUIClient {
 	}
 }
 
-// ClientCapabilities holds terminal graphics capabilities detected from the client's terminal.
+// ClientCapabilities holds terminal graphics capabilities detected from the
+// client's terminal, as the hello tells them to the daemon.
+//
+// Whether the terminal honours kitty a=f frame edits is not here. The client
+// decides damage patches itself from app.HostCapabilities.KittyAnimation, so
+// the daemon has no use for it.
 type ClientCapabilities struct {
 	PixelWidth    int
 	PixelHeight   int
 	CellWidth     int
 	CellHeight    int
 	KittyGraphics bool
-	// KittyAnimation reports that the client's terminal honours a=f frame
-	// edits, which lets the daemon send damage rectangles instead of whole
-	// bitmaps to that client.
-	KittyAnimation bool
-	SixelGraphics  bool
-	TerminalName   string
+	SixelGraphics bool
+	TerminalName  string
 }
 
 // Connect connects to the daemon and performs handshake.

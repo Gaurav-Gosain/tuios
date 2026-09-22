@@ -187,13 +187,16 @@ func terminalName(term string, env map[string]string) string {
 // app-level HostCapabilities that GetHostCapabilities serves. KittyFileTransfer
 // is always false: a file-medium transmission names a path on the server, which
 // the remote client cannot read, so the passthrough must re-encode as direct.
+// KittyAnimation is always false too: nothing passive says whether the client
+// honours a=f frame edits, and claiming it wrongly freezes a pane on its first
+// frame, while leaving it off only costs full retransmissions.
 func clientToHostCapabilities(c *session.ClientCapabilities) *app.HostCapabilities {
 	if c == nil {
 		return nil
 	}
 	return &app.HostCapabilities{
 		KittyGraphics:     c.KittyGraphics,
-		KittyAnimation:    c.KittyAnimation,
+		KittyAnimation:    false,
 		KittyFileTransfer: false,
 		SixelGraphics:     c.SixelGraphics,
 		TrueColor:         true,
