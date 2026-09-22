@@ -107,7 +107,7 @@ tuios --standalone
 ```
 
 **Flags:**
-- `--theme <name>` - Set color theme (default: "tokyonight")
+- `--theme <name>` - Set color theme (default: none, the terminal's own colors)
 - `--list-themes` - List all available themes and exit
 - `--preview-theme <name>` - Preview a theme's 16 ANSI colors and exit
 - `--skill` - Print the embedded agent skill and exit
@@ -133,7 +133,7 @@ tuios --standalone
 
 **Examples:**
 ```bash
-tuios                          # Start TUIOS normally (tokyonight theme)
+tuios                          # Start TUIOS normally (no theme, terminal colors)
 tuios --theme dracula          # Start with Dracula theme
 tuios --ascii-only             # Start without Nerd Font icons
 tuios --show-keys              # Start with showkeys overlay enabled
@@ -164,7 +164,7 @@ tuios --list-themes
 ```
 
 **Popular themes include:**
-- `tokyonight` (default) - A clean, dark theme with vibrant colors
+- `tokyonight` - A clean, dark theme with vibrant colors
 - `dracula` - Dark theme with purple accent
 - `nord` - An arctic, north-bluish color palette
 - `gruvbox_dark` - Retro groove color scheme
@@ -2185,7 +2185,7 @@ tuios help config edit  # Show help for config edit subcommand
 
 These flags are available on the root command:
 
-- `--theme <name>` - Set color theme (default: "tokyonight")
+- `--theme <name>` - Set color theme (default: none, the terminal's own colors)
 - `--list-themes` - List all available themes and exit
 - `--preview-theme <name>` - Preview a theme's colors and exit
 - `--skill` - Print the embedded agent skill and exit

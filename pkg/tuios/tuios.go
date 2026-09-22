@@ -28,12 +28,21 @@
 //
 // # Using with sip (Web Terminal)
 //
-// TUIOS can be served through the browser using the sip library:
+// TUIOS can be served through the browser using the sip library. Build the
+// program yourself, with sip's options first and ProgramOptions after them:
+// both carry a tea.WithFilter and the last one set wins, so sip's Serve, which
+// appends its own options after yours, would drop the mouse motion filter.
 //
 //	server := sip.NewServer(sip.DefaultConfig())
-//	server.Serve(ctx, func(sess sip.Session) (tea.Model, []tea.ProgramOption) {
-//		return tuios.NewForSession(sess.Pty()), nil
+//	server.ServeWithProgram(ctx, func(sess sip.Session) *tea.Program {
+//		pty := sess.Pty()
+//		model := tuios.New(tuios.WithSize(pty.Width, pty.Height))
+//		return tea.NewProgram(model, append(sip.MakeOptions(sess), tuios.ProgramOptions()...)...)
 //	})
+//
+// A model built this way is a local client as far as tuios knows: there is no
+// option yet that marks it as a browser. See docs/LIBRARY.md for the SSH
+// recipe and what WithSSHMode does and does not set.
 package tuios
 
 import (
@@ -247,10 +256,10 @@ func New(opts ...Option) *Model {
 	return newModel(options)
 }
 
-// NewForSession creates a new TUIOS model configured for a PTY session.
-// This is useful when embedding TUIOS in web terminals or SSH servers.
+// PTY is anything that can report a terminal size, for NewForPTY.
 //
-// The pty parameter should have Width and Height fields.
+// It takes methods, not fields, so a struct with Width and Height fields, such
+// as sip.Pty, does not satisfy it. For those, pass the size with WithSize.
 type PTY interface {
 	Width() int
 	Height() int

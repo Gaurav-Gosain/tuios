@@ -219,7 +219,7 @@ import (
 func main() {
     server := sip.NewServer(sip.DefaultConfig())
 
-    err := server.Serve(context.Background(), func(sess sip.Session) (tea.Model, []tea.ProgramOption) {
+    err := server.ServeWithProgram(context.Background(), func(sess sip.Session) *tea.Program {
         pty := sess.Pty()
 
         // Create TUIOS for the web session
@@ -228,7 +228,8 @@ func main() {
             tuios.WithTheme("dracula"),
         )
 
-        return model, tuios.ProgramOptions()
+        // sip's options first, then tuios's.
+        return tea.NewProgram(model, append(sip.MakeOptions(sess), tuios.ProgramOptions()...)...)
     })
 
     if err != nil {
@@ -236,6 +237,12 @@ func main() {
     }
 }
 ```
+
+Build the program yourself with `ServeWithProgram` rather than returning the
+options from `Serve`. Both `sip.MakeOptions` and `tuios.ProgramOptions` carry a
+`tea.WithFilter`, and the last one set wins. `Serve` appends sip's options after
+yours, which drops the tuios mouse motion filter. `tuios-web` builds its
+program the same way.
 
 ## SSH Server Integration
 
@@ -245,10 +252,9 @@ For SSH server integration, use the Wish library:
 package main
 
 import (
-    "context"
-
     "github.com/Gaurav-Gosain/tuios/pkg/tuios"
     tea "charm.land/bubbletea/v2"
+    "charm.land/ssh"
     "charm.land/wish/v2"
     "charm.land/wish/v2/bubbletea"
 )
@@ -257,7 +263,7 @@ func main() {
     s, _ := wish.NewServer(
         wish.WithAddress(":2222"),
         wish.WithMiddleware(
-            bubbletea.Middleware(func(sess ssh.Session) (tea.Model, []tea.ProgramOption) {
+            bubbletea.MiddlewareWithProgramHandler(func(sess ssh.Session) *tea.Program {
                 pty, _, _ := sess.Pty()
 
                 model := tuios.New(
@@ -265,7 +271,8 @@ func main() {
                     tuios.WithSSHMode(true),
                 )
 
-                return model, tuios.ProgramOptions()
+                // wish's options first, then tuios's.
+                return tea.NewProgram(model, append(bubbletea.MakeOptions(sess), tuios.ProgramOptions()...)...)
             }),
         ),
     )
@@ -273,6 +280,17 @@ func main() {
     s.ListenAndServe()
 }
 ```
+
+`bubbletea.Middleware` has the same ordering problem as sip's `Serve`: it
+appends `MakeOptions` after the options you return, so its `tea.WithFilter`
+replaces the tuios one. `MiddlewareWithProgramHandler` lets you put them in the
+right order. The `tuios ssh` server in `internal/server` does the same.
+
+`WithSSHMode` makes the model an SSH client: the settings page does not write
+the operator's config file and desktop actions do not run on the server. It
+does not give the model the SSH session, a graphics output or the client's
+terminal capabilities, so images are not forwarded to the client. A model
+served without it, including one behind sip, is treated as a local client.
 
 ## Configuration Access
 
