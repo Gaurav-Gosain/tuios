@@ -613,7 +613,9 @@ tuios new-window [name] [command...] [flags]
 ```
 
 Words after the name are the argv the window runs instead of a shell, with no
-shell in between: `tuios new-window htop /usr/bin/htop`.
+shell in between: `tuios new-window htop /usr/bin/htop`. Put `--` before a
+command that has flags of its own, or tuios reads them as its own flags:
+`tuios new-window log -- git log --oneline -20`.
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)

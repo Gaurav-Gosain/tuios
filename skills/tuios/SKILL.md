@@ -408,6 +408,13 @@ closes when the program exits:
 tuios new-window -s work htop /usr/bin/htop
 ```
 
+Put `--` before a command that has flags of its own. Without it tuios reads
+`--oneline` as its own flag and refuses it:
+
+```sh
+tuios new-window -s work log -- git log --oneline -20
+```
+
 The window is created by the daemon whether or not anyone is attached, so this
 works on a detached session. Naming it means you never have to hold on to the
 uuid. To keep the id instead:

@@ -1178,7 +1178,8 @@ on to the id.
 
 Arguments after the name are an argv the window runs as its own process instead
 of a shell. Nothing re-parses them, so nothing needs quoting. The window closes
-when the program exits.
+when the program exits. Put -- before a command that has flags of its own, or
+tuios reads them as its own flags: tuios new-window log -- git log --oneline.
 
 --workspace picks the workspace, --cwd sets the starting directory, and
 --no-focus leaves the focus where it is.
@@ -1198,6 +1199,9 @@ lists, scripts and restores like any other.`,
 
   # Open a window whose process is the program itself, no shell in between
   tuios new-window htop /usr/bin/htop
+
+  # A command with flags of its own goes after --
+  tuios new-window log -- git log --oneline -20
 
   # Open a pane on workspace 2, in a directory, without taking the focus
   tuios new-window tests --workspace 2 --cwd /src/api --no-focus
