@@ -948,3 +948,33 @@ step of generated terminal input. It costs one int per row.
 | `BackendScroll` | 71.3 ms | 47.1 ms | -33.9% (p=0.002) |
 | `Emulator_ANSIColorWrite` | 993 ns | 693 ns | -30.2% (p=0.002) |
 | every other vt benchmark | | | `~` |
+
+**A truecolor repaint stops allocating per colour** (`csi_sgr.go`, `utf8.go`).
+It made four objects per cell. Two were `ansi.ReadStyleColor` boxing a
+`color.RGBA` into a `color.Color`, once for the foreground and once for the
+background. SGR `38;2;r;g;b` and `38:2:r:g:b` (and 48, 58) now take the boxed
+value from a 256-slot direct-mapped cache on the emulator, made on the first
+truecolor SGR: in the unthemed path when the SGR is that colour alone, and in
+the themed path wherever the colour appears. A third was `string(e.grapheme)`
+in `extendOpenGrapheme`: SGR leaves a non-ASCII cluster open, so every next
+character was tested against it through a fresh string. The test now runs on a
+reused byte buffer and only a rune that really extends the cluster pays for a
+string. `TestRGBParamsMatchReadStyleColor` and `TestHandleSgrMatchesReadStyle`
+hold the colour path to ansi's and uv's readers on random parameter lists.
+
+| `BackendDoomFire158x40` | before | after | |
+|---|---|---|---|
+| allocs/op | 757,200 | 189,600 | -75.0% |
+| B/op | 5.83 MiB | 1.51 MiB | -74.2% |
+| CPU per op | 83.8 ms | 78.8 ms | -6.0% (p=0.032) |
+| every other vt benchmark | | | `~`, allocations unchanged |
+
+### Measured and deliberately not changed
+
+The fourth allocation of a truecolor cell is `string(e.grapheme)` in
+`flushGraphemeAtWriteEnd`, which keeps the open cluster's text across the SGR.
+A single-rune string cache would remove it, one allocation per non-ASCII cell
+before an escape sequence. The CPU gain of the three removed above was 6%, so
+the fourth is worth at most a third of that, and a string cache is one more
+piece of per-emulator state to reason about. Left for when a profile of a real
+workload asks for it.

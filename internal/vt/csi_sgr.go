@@ -7,9 +7,56 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// rgbSlot is one entry of Emulator.rgbCache. key is the colour's 24 bits
+// with bit 24 set, so the zero slot matches nothing.
+type rgbSlot struct {
+	key uint32
+	c   color.Color
+}
+
+// rgbColor returns the colour an SGR 38/48/58 with type 2 sets for r, g, b:
+// the color.RGBA ansi.ReadStyleColor builds. Putting that value in a
+// color.Color allocates, and a truecolor repaint sets a colour or two for
+// every cell, so the boxed value is kept in a small direct-mapped cache and
+// handed out again. The value is the same either way; only the allocation is
+// shared.
+func (e *Emulator) rgbColor(r, g, b uint8) color.Color {
+	if e.rgbCache == nil {
+		e.rgbCache = new([256]rgbSlot)
+	}
+	key := 1<<24 | uint32(r)<<16 | uint32(g)<<8 | uint32(b)
+	slot := &e.rgbCache[(uint32(r)*7+uint32(g)*13+uint32(b)*31)&0xff]
+	if slot.key != key {
+		slot.key = key
+		slot.c = color.RGBA{R: r, G: g, B: b, A: 0xff}
+	}
+	return slot.c
+}
+
+// rgbParams reports whether params starts with a direct RGB colour in one of
+// the two shapes programs send, 38;2;r;g;b and 38:2:r:g:b (or 48, 58), and
+// returns its components. These are exactly the shapes ansi.ReadStyleColor
+// reads as five parameters with the colour in params[2:5]; any other shape,
+// the colour-space forms included, is left to it.
+func rgbParams(params ansi.Params) (r, g, b uint8, ok bool) {
+	if len(params) < 5 || params[1].Param(0) != 2 || params[4].HasMore() {
+		return 0, 0, 0, false
+	}
+	colon := params[0].HasMore()
+	for _, p := range params[1:4] {
+		if p.HasMore() != colon {
+			return 0, 0, 0, false
+		}
+	}
+	return uint8(params[2].Param(0)), uint8(params[3].Param(0)), uint8(params[4].Param(0)), true //nolint:gosec
+}
+
 // parseThemedColor parses an indexed or RGB color from SGR params, using theme colors for indices 0-15.
 // Returns the color and the number of extra params consumed (to add to loop index).
 func (e *Emulator) parseThemedColor(params ansi.Params, i int) (color.Color, int) {
+	if r, g, b, ok := rgbParams(params[i:]); ok {
+		return e.rgbColor(r, g, b), 4
+	}
 	// Check if this is indexed color format (X;5;n) and if n is 0-15
 	if i+2 < len(params) {
 		next, _, _ := params.Param(i+1, -1)
@@ -34,6 +81,24 @@ func (e *Emulator) parseThemedColor(params ansi.Params, i int) (color.Color, int
 func (e *Emulator) handleSgr(params ansi.Params) {
 	// If theming is disabled or no theme colors are set, use standard ultraviolet handling
 	if !e.hasThemeColors() {
+		// An SGR that is one truecolor colour and nothing else is what a
+		// truecolor repaint sends for every cell. uv.ReadStyle would box a
+		// new colour for it each time.
+		if len(params) == 5 {
+			if r, g, b, ok := rgbParams(params); ok {
+				switch params[0].Param(0) {
+				case 38:
+					e.scr.cur.Pen.Fg = e.rgbColor(r, g, b)
+					return
+				case 48:
+					e.scr.cur.Pen.Bg = e.rgbColor(r, g, b)
+					return
+				case 58:
+					e.scr.cur.Pen.UnderlineColor = e.rgbColor(r, g, b)
+					return
+				}
+			}
+		}
 		uv.ReadStyle(params, &e.scr.cur.Pen)
 		return
 	}

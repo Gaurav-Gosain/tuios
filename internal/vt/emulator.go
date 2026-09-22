@@ -102,6 +102,13 @@ type Emulator struct {
 	lastClusterWidth int
 	// A slice of runes to compose a grapheme.
 	grapheme []rune
+	// graphemeScratch is where extendOpenGrapheme encodes the buffer to test
+	// whether a new rune extends the open cluster, so the test allocates
+	// nothing when it does not.
+	graphemeScratch []byte
+	// rgbCache holds recently used truecolor SGR colours, made on the first
+	// one. See rgbColor.
+	rgbCache *[256]rgbSlot
 	// The cell handleGrapheme last drew into, and the line edges it was drawn
 	// under. A pending wrap makes the target differ from the cursor position
 	// observed beforehand, and the margins are read before the wrap is

@@ -226,16 +226,32 @@ func (e *Emulator) flushGraphemeAtWriteEnd() {
 // in rather than at the cursor.
 func (e *Emulator) extendOpenGrapheme() {
 	method := ansi.GraphemeWidth
-	s := string(e.grapheme)
-	cluster, width := ansi.FirstGraphemeCluster(s, method)
-	if len(cluster) != len(s) {
+	// Most arrivals do not extend the cluster: after a styled non-ASCII
+	// character the cluster stays open across the SGR, so every next
+	// character is tested against it. The test runs on a reused byte
+	// buffer, and only a rune that does extend it pays for a string.
+	scratch := e.graphemeScratch[:0]
+	for _, r := range e.grapheme {
+		scratch = utf8.AppendRune(scratch, r)
+	}
+	e.graphemeScratch = scratch
+	first, width := ansi.FirstGraphemeCluster(scratch, method)
+	if len(first) != len(scratch) {
 		// The new rune began a fresh cluster instead of extending the open one.
 		// Close the open cluster and leave the remainder buffered for the
 		// normal path.
 		e.openGrapheme.disarm()
-		e.grapheme = append(e.grapheme[:0], []rune(s[len(cluster):])...)
+		rest := scratch[len(first):]
+		e.grapheme = e.grapheme[:0]
+		for len(rest) > 0 {
+			r, n := utf8.DecodeRune(rest)
+			e.grapheme = append(e.grapheme, r)
+			rest = rest[n:]
+		}
 		return
 	}
+	s := string(scratch)
+	cluster := s
 
 	if len(s) > maxClusterBytes {
 		// A continuation past the cap is dropped, the way every growth path
