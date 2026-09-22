@@ -30,7 +30,7 @@ print_error() {
 }
 
 print_warning() {
-    echo -e "${YELLOW}⚠${NC} $1"
+    echo -e "${YELLOW}!${NC} $1"
 }
 
 # Detect OS
