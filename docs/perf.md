@@ -1371,3 +1371,48 @@ scrollback building the cells it hands back.
 compares bytes, and `TestOlderPeerReadsTheWire` now also applies an answer that
 carried cells and checks the pane comes back. The quiet-pane echo tests above
 are the check that no change here holds a keystroke.
+
+## 2026-09 second profiling pass: vt
+
+A second profile of `internal/vt`, this time over replays of real PTY captures
+rather than synthetic floods, plus the scrollback's memory and the SGR diff in
+the pure Go renderer. Each change below is its own commit.
+
+### Measurement conditions
+
+The captures were recorded at 160x45 with `TERM=xterm-256color` and
+`COLORTERM=truecolor` and are not in the repository: `btop` (btop -u 100 for
+8 s, 1.9 MB), `nvim` (nvim --clean paging through a Go file, 0.5 MB),
+`nvimcfg` (the same with a full user config, 5.3 MB), `uni` (6000 lines of
+mixed scripts, emoji clusters, box drawing and braille, 1 MB) and `claude`
+(`testdata/claude_title_ghost.raw` repeated 100 times). A throwaway benchmark
+replays each one in 4 KB writes into `NewWithScrollback(160, 45, 10000)`.
+
+The method is the one above: process CPU time (user plus sys) per op at a fixed
+`-test.benchtime Nx` with `-test.cpu 1` under `nice`, old and new test
+binaries alternating for eight rounds, compared with `benchstat`. Each change
+is measured against the commit before it. On this machine slot noise is about
++/-8% per sample, so a figure is quoted only where it clears that with
+p < 0.05. Allocation counts are exact. Before each commit the cells, styles,
+links and scrollback of every capture were hashed under random write splits and
+random resizes, and the hashes matched the commit before.
+
+### What moved
+
+**Mode changes stop formatting a debug line** (`csi_mode.go`,
+`kitty_keyboard.go`). `setMode` and the kitty keyboard handlers called
+`e.logf` on every call. Go boxes the variadic arguments before `logf` sees
+that no logger is set, and no production code sets one. nvim toggles `?25`
+around every redraw and Claude Code sends `?2026` and `?25` on every frame, so
+on the `claude` replay this was 56% of all bytes the emulator allocated. The
+"unhandled sequence" lines, which the conformance corpus reads, stay.
+`TestPerFrameModeSetsAllocateNothing` pins a mode set and a kitty keyboard
+push, pop and set at zero allocations.
+
+| | before | after | |
+|---|---|---|---|
+| `claude` CPU per op | 15.91 ms | 15.04 ms | -5.4% (p=0.002) |
+| `claude` allocs/op | 34.62k | 19.72k | -43% |
+| `claude` B/op | 1068 KiB | 379 KiB | -64% |
+| `nvim` allocs/op | 600 | 125 | -79%, CPU `~` |
+| `nvimcfg` allocs/op | 15.93k | 15.10k | -5%, CPU `~` |

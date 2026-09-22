@@ -110,7 +110,6 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		}
 		e.kittyKbd.Push(flags)
 		e.updateKittyKeyboardCache()
-		e.logf("kitty keyboard: push flags=%d, stack depth=%d", flags, len(e.kittyKbd.stack))
 		return true
 	})
 
@@ -122,7 +121,6 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		}
 		e.kittyKbd.Pop(count)
 		e.updateKittyKeyboardCache()
-		e.logf("kitty keyboard: pop count=%d, stack depth=%d, flags=%d", count, len(e.kittyKbd.stack), e.kittyKbd.CurrentFlags())
 		return true
 	})
 
@@ -132,7 +130,6 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		// Respond with CSI ? flags u
 		response := fmt.Sprintf("\x1b[?%du", flags)
 		_, _ = io.WriteString(e.pipe, response)
-		e.logf("kitty keyboard: query, responding with flags=%d", flags)
 		return true
 	})
 
@@ -148,7 +145,6 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		}
 		e.kittyKbd.Set(flags, mode)
 		e.updateKittyKeyboardCache()
-		e.logf("kitty keyboard: set flags=%d mode=%d, result=%d", flags, mode, e.kittyKbd.CurrentFlags())
 		return true
 	})
 }
