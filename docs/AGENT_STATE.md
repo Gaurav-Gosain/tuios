@@ -50,8 +50,8 @@ have to know which states mean it.
 supplies it from its `kind` (named in the manifest, or guessed from the rule's
 words), and a report supplies it with the `kind` param of `set-agent-state`, as
 `tuios agent-hook` does. A report that carries no kind has it guessed from the
-reported message the same way: a message that mentions approval, permission, allowing,
-proceeding, confirming or trust reads as `approval`, anything else as
+reported message the same way: a message that mentions approval, permission,
+allowing, proceeding, confirming or trust reads as `approval`, anything else as
 `question`. An empty message gives an empty `blocked_by`, which means the
 source did not say.
 
@@ -72,8 +72,8 @@ glyph for it.
 `unknown` is a display state and not a ready one. `fan` waits for `idle` or
 `done`, `ask-agent` also takes `errored` and `none`, and neither types into an
 `unknown` pane, because a quiet pane with nothing on its screen may be in the
-middle of a long tool call. A harness whose manifest reads its prompt box reaches `idle` instead (see
-[Screen rules](#screen-rules)); for any other, pass `force` to `ask-agent`, or
+middle of a long tool call. A harness whose manifest reads its prompt box
+reaches `idle` instead (see [Screen rules](#screen-rules)); for any other, pass `force` to `ask-agent`, or
 send a fan prompt with `send-text` once the pane is at its prompt.
 
 State is daemon-owned per-window state. It rides the same versioned state sync

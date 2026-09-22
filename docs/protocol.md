@@ -185,9 +185,10 @@ agent in the middle of a long tool call looks the same.
   `allow_blocked` together are what `force` alone used to be.
 - `list-agents` and `get-agent-state` gain `blocked_by`: `approval` or
   `question` for a pane on `needs_input`, empty when the source did not say and
-  for every other state. A screen or title rule supplies it from its `kind`, and
-  a report without one, such as a hook's, is guessed from its message the way a
-  rule without a kind is. `get-agent-state` also gains `ready`, with the same
+  for every other state. A screen, title or notify rule supplies it from its
+  `kind`, a report supplies it with the `kind` param of `set-agent-state`, and
+  a report without one is guessed from its message the way a rule without a
+  kind is. `get-agent-state` also gains `ready`, with the same
   meaning as in `list-agents`.
 
 **A prompt is pasted and submitted with a carriage return.** `ask-agent` and

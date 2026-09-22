@@ -683,15 +683,13 @@ tuios set-agent-state none                  # clear it
 
 The states are `none`, `working`, `needs_input`, `idle`, `done`, `errored` and
 `unknown`. `unknown` is what the daemon writes to a pane it has lost track of:
-an agent is there and nothing says what it is doing. It is not ready:
-`ask-agent` and `fan` do not type into an `unknown` pane, and `list-agents`
-reports `ready: false` for it. `list-agents` also reports `completion_seq`, the
-turns a pane has finished, and `finished_unread`, true while a pane is at rest
-after a turn nobody has focused it since. Read `needs_you` from
-`get-agent-state` or `list-agents` when the question is "does a person have to
-act", and `message` for what the agent waits for. With
-no `-w` the report lands on the focused window, which is wrong when you are not
-the focused pane. From inside a pane, always name yourself, and name your harness
+an agent is there and nothing says what it is doing, so `ask-agent` and `fan`
+do not type into it. `list-agents` also reports `completion_seq`, the turns a
+pane has finished, and `finished_unread`, true while a pane is at rest after a
+turn nobody has focused it since. Read `needs_you` from `get-agent-state` or
+`list-agents` when the question is "does a person have to act", and `message`
+for what the agent waits for. With no `-w` the report lands on the focused
+window, which is wrong when you are not the focused pane. From inside a pane, always name yourself, and name your harness
 so anything reading the state knows what reported it:
 
 ```sh
@@ -724,8 +722,8 @@ tuios doctor agents                      # also lists agent panes missing theirs
 Each installed hook runs `tuios agent-hook <harness>`, which reads the hook
 payload on stdin and reports for the pane it runs in. A prompt or a tool call
 reports `working`, a permission request reports `needs_input` with `kind`
-`approval` (read back as `blocked_by`), the tool finishing after an approval moves the pane back to
-`working`, the end of the turn reports `done`, and the harness's session id is
+`approval` (read back as `blocked_by`), the tool finishing after an approval
+moves the pane back to `working`, the end of the turn reports `done`, and the harness's session id is
 stored on the pane (`agent_session_id` in `get-agent-state` and `list-agents`).
 A payload it cannot read, a subagent's event and an unmapped event report
 nothing. It always exits 0 and gives up after 500ms, so a dead daemon never
