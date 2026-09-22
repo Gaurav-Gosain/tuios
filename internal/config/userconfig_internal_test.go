@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 // TestMaxFPSClamp pins how a configured max_fps reaches the tick loop.
 // ApplyAppearanceConfig is the only path that applies it now; ApplyOverrides
@@ -36,6 +40,23 @@ func TestMaxFPSClamp(t *testing.T) {
 	ApplyAppearanceConfig(&UserConfig{}, &Global)
 	if Global.NormalFPS != 45 {
 		t.Errorf("an unset max_fps moved the rate to %d, want it left at 45", Global.NormalFPS)
+	}
+}
+
+// TestMaxFPSDescriptionMatchesClamp. list-options described max_fps as "10 to
+// 240" while the code clamps to 120, so a user asking for 240 got 120 with no
+// word of it.
+func TestMaxFPSDescriptionMatchesClamp(t *testing.T) {
+	opt, ok := LookupOption("appearance.max_fps")
+	if !ok {
+		t.Fatal("appearance.max_fps is not in the option registry")
+	}
+	want := fmt.Sprintf("The range is %d to %d.", clampMaxFPS(1), clampMaxFPS(1<<20))
+	if !strings.Contains(opt.Description, want) {
+		t.Errorf("max_fps description %q does not say %q", opt.Description, want)
+	}
+	if opt.Max != clampMaxFPS(1<<20) {
+		t.Errorf("max_fps accepts up to %d, the clamp allows %d", opt.Max, clampMaxFPS(1<<20))
 	}
 }
 

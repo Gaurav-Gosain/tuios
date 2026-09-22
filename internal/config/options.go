@@ -252,8 +252,9 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.max_fps", Type: OptionInt, Section: "appearance",
-		Description: "Highest frame rate tuios draws at. 0 uses 60. The range is 10 to 240.",
-		Default:     "0", Min: 0, Max: MaxFPSCap,
+		Description: fmt.Sprintf("Highest frame rate tuios draws at. 0 uses 60. The range is %d to %d.",
+			MinConfiguredFPS, MaxFPSCap),
+		Default: "0", Min: 0, Max: MaxFPSCap,
 	},
 	{
 		Path: "appearance.session_colors", Type: OptionBool, Section: "appearance",
