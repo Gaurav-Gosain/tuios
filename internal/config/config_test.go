@@ -96,16 +96,6 @@ func TestKeybindRegistry_GetAction(t *testing.T) {
 	}
 }
 
-func TestKeybindRegistry_GetKeysForDisplay(t *testing.T) {
-	cfg := config.DefaultConfig()
-	registry := config.NewKeybindRegistry(cfg)
-
-	display := registry.GetKeysForDisplay("new_window")
-	if display == "" {
-		t.Error("Expected display string for new_window")
-	}
-}
-
 func TestKeybindRegistry_UnknownAction(t *testing.T) {
 	cfg := config.DefaultConfig()
 	registry := config.NewKeybindRegistry(cfg)

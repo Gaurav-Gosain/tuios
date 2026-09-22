@@ -2021,19 +2021,6 @@ func (m *OS) SendInputToDaemon(window *terminal.Window, data []byte) error {
 	return m.DaemonClient.WritePTY(window.PTYID, data)
 }
 
-// ResizeDaemonPTY resizes a daemon-managed PTY.
-func (m *OS) ResizeDaemonPTY(window *terminal.Window, width, height int) error {
-	if m.DaemonClient == nil || !window.DaemonMode {
-		return nil
-	}
-
-	// Account for borders
-	termWidth := max(width-2, 1)
-	termHeight := max(height-2, 1)
-
-	return m.DaemonClient.ResizePTY(window.PTYID, termWidth, termHeight)
-}
-
 // adoptWindowHost records which machine a window's process runs on.
 //
 // Unlike the directory beside it, this is taken from the daemon without

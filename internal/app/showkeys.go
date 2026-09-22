@@ -134,44 +134,6 @@ func formatKeyDisplay(keyStr string, modifiers []string) string {
 	return displayKey
 }
 
-// GetShowkeysDisplayText generates the formatted text for the showkeys overlay.
-// It returns a formatted string of recent key presses ready for display.
-func (m *OS) GetShowkeysDisplayText() string {
-	if len(m.RecentKeys) == 0 {
-		return ""
-	}
-
-	var sb strings.Builder
-
-	for i, keyEvent := range m.RecentKeys {
-		if i > 0 {
-			sb.WriteString("  ")
-		}
-
-		// Build the key display with modifiers
-		if len(keyEvent.Modifiers) > 0 {
-			sb.WriteString(strings.Join(keyEvent.Modifiers, "+"))
-			sb.WriteString(" + ")
-		}
-
-		// Add key with count if > 1
-		if keyEvent.Count > 1 {
-			sb.WriteString(keyEvent.Key)
-			sb.WriteString(" ")
-			sb.WriteRune('×')
-			sb.WriteString(" ")
-			// Use a simple count representation
-			for range keyEvent.Count {
-				sb.WriteRune('·')
-			}
-		} else {
-			sb.WriteString(keyEvent.Key)
-		}
-	}
-
-	return sb.String()
-}
-
 // CleanupExpiredKeys removes keys from the history that have expired based on timeout.
 // Keys older than the timeout duration are removed.
 func (m *OS) CleanupExpiredKeys(timeout time.Duration) {

@@ -106,8 +106,8 @@ func TestMotionFilterPassesTheBandExitEvent(t *testing.T) {
 // box on that strength, which composed one frame per cell for a sweep across
 // any pane at all; it now asks the pane whether a link is under the cell.
 //
-// Negative control, confirmed red: with PointerOverLink replaced by
-// PointerOverPaneContent the "plain text" assertion fails, and with the clause
+// Negative control, confirmed red: with PointerOverLink replaced by a test of
+// the pane's content box the "plain text" assertion fails, and with the clause
 // removed the first assertion fails and so does the underline in a real
 // session. With the cell-change guard removed the last assertion fails.
 func TestMotionFilterPassesPaneContentForLinks(t *testing.T) {

@@ -34,33 +34,11 @@ func (m *OS) linkHoverFor(window *terminal.Window) (PaneLink, bool) {
 	return m.linkHover, true
 }
 
-// PointerOverPaneContent reports whether absolute screen (x, y) is inside some
-// pane's content box, which is the only place a link can be.
-//
-// It exists for the motion filter, which is a whitelist and drops every event it
-// does not recognise. Link hover is the first hover in tuios that comes from
-// what a program printed rather than from where the chrome is, so it cannot be
-// answered by a rectangle the renderer recorded: the whole pane is the target.
-// This is therefore as narrow as the clause can honestly be, and it is why
-// appearance.links = off exists, since that turns the clause off entirely and
-// restores the filter to exactly what it dropped before.
-func (m *OS) PointerOverPaneContent(x, y int) bool {
-	if !linksEnabled(&m.Settings) {
-		return false
-	}
-	idx := m.WindowAt(x, y)
-	if idx < 0 {
-		return false
-	}
-	_, _, inContent := m.Windows[idx].ScreenToTerminal(x, y)
-	return inContent
-}
-
 // PointerOverLink reports whether a link sits under absolute screen (x, y),
 // without recording anything.
 //
 // It is what the motion filter asks. The filter used to pass every motion
-// over pane content on the strength of PointerOverPaneContent, because a link
+// over a pane's content box, because a link
 // can be anywhere a program printed, and a frame was then composed per cell
 // the pointer crossed over any pane at all: a sweep across an idle shell cost
 // one full compose per cell. Asking the pane whether there is a link under

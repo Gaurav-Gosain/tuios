@@ -306,19 +306,6 @@ func PressesByAction(r *KeybindRegistry) map[string][]string {
 	return out
 }
 
-// GetKeysForDisplay returns a formatted string of keys for display in help
-func (r *KeybindRegistry) GetKeysForDisplay(action string) string {
-	keys := r.GetKeys(action)
-	if len(keys) == 0 {
-		return ""
-	}
-	// Show first 2 keys if multiple bindings exist
-	if len(keys) > 2 {
-		return strings.Join(keys[:2], ", ") + ", ..."
-	}
-	return strings.Join(keys, ", ")
-}
-
 // HasAction checks if an action exists in the registry
 func (r *KeybindRegistry) HasAction(action string) bool {
 	return len(r.GetKeys(action)) > 0

@@ -6,13 +6,6 @@ type Keybinding struct {
 	Description string
 }
 
-// KeybindingSection represents a section of related keybindings
-type KeybindingSection struct {
-	Title     string
-	Condition string // Empty for always shown, "tiling" for tiling mode, "!tiling" for non-tiling
-	Bindings  []Keybinding
-}
-
 // GetPrefixKeybindings returns keybindings for the prefix overlay.
 // isDaemonSession indicates whether we're running in daemon mode (affects detach/quit descriptions).
 func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybinding {

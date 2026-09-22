@@ -46,17 +46,6 @@ func linkFilePath(rawURL string) (string, bool) {
 	return localCwdPath(rawURL)
 }
 
-// CopyLink puts a link's address on the clipboard. It is the one action that
-// works identically everywhere, because OSC 52 reaches whichever terminal the
-// client is drawing into, and that is by definition the viewer's.
-func (m *OS) CopyLink(rawURL string) tea.Cmd {
-	if rawURL == "" {
-		return nil
-	}
-	m.ShowNotification("Copied the link.", "success", m.Settings.NotificationDuration)
-	return tea.SetClipboard(rawURL)
-}
-
 // OpenLink performs the default action for a link.
 //
 // It never fails silently. Every branch that cannot do the obvious thing says

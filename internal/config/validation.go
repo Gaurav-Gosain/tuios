@@ -37,11 +37,6 @@ func (vr *ValidationResult) HasErrors() bool {
 	return len(vr.Errors) > 0
 }
 
-// HasWarnings returns true if there are any warnings
-func (vr *ValidationResult) HasWarnings() bool {
-	return len(vr.Warnings) > 0
-}
-
 // ValidateConfig validates the user configuration
 func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	result := &ValidationResult{
