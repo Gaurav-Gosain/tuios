@@ -124,6 +124,38 @@ func TestConform_SingleShifts(t *testing.T) {
 			name: "the eight-bit SS3 means the same thing",
 			in:   "\x1b+0\x8fqq",
 			want: "─q",
+		}, {
+			// The shift is spent on the first character whatever its length.
+			// A multi-byte cluster (U+00E1 here) used to leave it pending, so
+			// the next ASCII character came out of G2.
+			name: "SS2 is spent on a multi-byte cluster",
+			in:   "\x1b*0\x1bN\xc3\xa1b",
+			want: "\xc3\xa1b",
+		}, {
+			name: "the eight-bit SS2 is spent on a multi-byte cluster",
+			in:   "\x1b*0\x8e\xc3\xa1b",
+			want: "\xc3\xa1b",
+		}, {
+			name: "SS2 is spent on a wide character",
+			in:   "\x1b*0\x1bN\xe4\xb8\x96a",
+			want: "\xe4\xb8\x96a",
+		}, {
+			// A combining mark (U+0301) after a shifted character must not
+			// rebuild the cell from the raw byte and undo the mapping. The
+			// mark attaches to the mapped glyph (U+2592 for `a`), as it does
+			// under a locking shift.
+			name: "a mark after an SS2 character keeps the mapping",
+			in:   "\x1b*0\x1bNa\xcc\x81",
+			want: "\xe2\x96\x92\xcc\x81",
+		}, {
+			name:  "a mark after an SS2 character in a later write keeps the mapping",
+			in:    "\x1b*0\x1bNa\xcc\x81",
+			split: []string{"\x1b*0\x1bNa", "\xcc\x81"},
+			want:  "\xe2\x96\x92\xcc\x81",
+		}, {
+			name: "a mark after a locking-shift character keeps the mapping",
+			in:   "\x1b(0a\xcc\x81",
+			want: "\xe2\x96\x92\xcc\x81",
 		},
 	})
 }

@@ -102,6 +102,9 @@ func (e *Emulator) handlePrint(r rune) {
 			// If we have a grapheme buffer, flush it before handling the ASCII character.
 			e.flushGrapheme()
 		}
+		// handleGrapheme spends a pending single shift, so whether this
+		// character was mapped through one has to be read first.
+		shifted := e.gsingle > 1 && e.gsingle < 4 && e.charsets[e.gsingle] != nil
 		e.handleGrapheme(asciiStr[r], 1)
 
 		// Leave the character open as a cluster. An ASCII letter is a legal
@@ -116,7 +119,7 @@ func (e *Emulator) handlePrint(r rune) {
 		// mapped text is what a combining mark would have to attach to.
 		// Rebuilding the cell from the byte the guest sent would undo the
 		// mapping, so with a set designated the cluster is closed instead.
-		if e.charsets[e.gl] == nil && e.gsingle == 0 {
+		if e.charsets[e.gl] == nil && !shifted {
 			e.openGrapheme.arm(e.lastCellX, e.lastCellY, 1, e.lastCellLeft, e.lastCellRight, byte(r), "")
 		} else {
 			e.openGrapheme.disarm()
@@ -568,13 +571,17 @@ func (e *Emulator) handleGraphemeWithin(content string, width, left, right int) 
 		x = left
 	}
 
-	// Handle character set mappings
+	// Handle character set mappings. A single shift applies to exactly one
+	// character, so it is spent here whatever the character is: a multi-byte
+	// cluster the sets cannot map still uses it up, or the next ASCII byte
+	// would be drawn from G2 or G3.
+	single := e.gsingle
+	e.gsingle = 0
 	if len(content) == 1 { //nolint:nestif
 		var charset CharSet
 		c := content[0]
-		if e.gsingle > 1 && e.gsingle < 4 {
-			charset = e.charsets[e.gsingle]
-			e.gsingle = 0
+		if single > 1 && single < 4 {
+			charset = e.charsets[single]
 		} else if c < 128 {
 			charset = e.charsets[e.gl]
 		} else {
