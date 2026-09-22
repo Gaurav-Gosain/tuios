@@ -742,6 +742,17 @@ func dockItemsWidth(items []DockItem) int {
 // dockRightWidth is the width the right-hand block wants, and whether it gives
 // way to the minimized entries when the bar is too narrow for both. A message
 // does not: it holds the block for the few seconds it is up.
+//
+// A live message owns the right-hand block, ahead of the copy-mode help line
+// and the system meters both. It is measured here rather than only at render
+// time so the dock items are laid out against the room the message actually
+// takes, and so mouse hit-testing (which shares this layout) agrees with what
+// is drawn.
+//
+// This is also the fix for a message pushed while copy mode was active being
+// silently dropped. The help line used to hold the block unconditionally, so
+// the message was not crowded out, it was never rendered at all: a copy of
+// something that failed, which is when a message matters most, went nowhere.
 func (m *OS) dockRightWidth() (width int, yields bool) {
 	if block, ok := m.dockNotificationBlock(m.GetRenderWidth(), 0); ok {
 		return block.Width, false
@@ -750,21 +761,9 @@ func (m *OS) dockRightWidth() (width int, yields bool) {
 }
 
 // calculateDockRightWidth calculates the width of the right side of the dock
+// when no message holds it: the copy-mode help line or the system meters.
 func (m *OS) calculateDockRightWidth() int {
 	m.ensureDockPlan()
-	// A live message owns the right-hand block, ahead of the copy-mode help
-	// line and the system meters both. It is measured here rather than only at
-	// render time so the dock items are laid out against the room the message
-	// actually takes, and so mouse hit-testing (which shares this layout) agrees
-	// with what is drawn.
-	//
-	// This is also the fix for a message pushed while copy mode was active being
-	// silently dropped. The help line used to hold the block unconditionally, so
-	// the message was not crowded out, it was never rendered at all: a copy of
-	// something that failed, which is when a message matters most, went nowhere.
-	if block, ok := m.dockNotificationBlock(m.GetRenderWidth(), 0); ok {
-		return block.Width
-	}
 
 	focusedWindow := m.GetFocusedWindow()
 
@@ -884,17 +883,8 @@ func (m *OS) getDockItems() []DockItem {
 
 // calculateItemPositions determines which items fit and their X positions
 func (layout *DockLayout) calculateItemPositions(screenWidth int, allItems []DockItem) {
-	// Calculate total width of all items (including spaces between)
-	totalItemsWidth := 0
-	for i, item := range allItems {
-		totalItemsWidth += item.Width
-		if i > 0 {
-			totalItemsWidth++ // Space between items
-		}
-	}
-
 	// Calculate available space for dock items
-	availableSpace := screenWidth - layout.LeftWidth - layout.RightWidth - totalItemsWidth
+	availableSpace := screenWidth - layout.LeftWidth - layout.RightWidth - dockItemsWidth(allItems)
 	if availableSpace < 0 {
 		// Items don't fit - need to truncate
 		layout.truncateItems(screenWidth, allItems)
