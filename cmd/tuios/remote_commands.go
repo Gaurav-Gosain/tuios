@@ -1557,7 +1557,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 	switch resp.Type {
 	case session.MsgCommandResult:
 		var result session.CommandResultPayload
-		if err := resp.ParsePayloadWithCodec(&result, client.GetCodec()); err != nil {
+		if err := resp.ParsePayload(&result); err != nil {
 			if jsonOutput {
 				outputJSON(map[string]any{
 					"success": false,
@@ -1591,7 +1591,7 @@ func sendAndWaitForResultWithFormat(client *session.Client, msg *session.Message
 
 	case session.MsgError:
 		var errPayload session.ErrorPayload
-		if err := resp.ParsePayloadWithCodec(&errPayload, client.GetCodec()); err != nil {
+		if err := resp.ParsePayload(&errPayload); err != nil {
 			if jsonOutput {
 				outputJSON(map[string]any{
 					"success": false,
@@ -1951,7 +1951,7 @@ func displayLogs(client *session.Client, count int, clear bool) (int64, error) {
 
 	if resp.Type == session.MsgError {
 		var errPayload session.ErrorPayload
-		if err := resp.ParsePayloadWithCodec(&errPayload, client.GetCodec()); err != nil {
+		if err := resp.ParsePayload(&errPayload); err != nil {
 			return 0, fmt.Errorf("failed to get logs")
 		}
 		return 0, fmt.Errorf("failed to get logs: %s", errPayload.Message)
@@ -1962,7 +1962,7 @@ func displayLogs(client *session.Client, count int, clear bool) (int64, error) {
 	}
 
 	var logsData session.LogsDataPayload
-	if err := resp.ParsePayloadWithCodec(&logsData, client.GetCodec()); err != nil {
+	if err := resp.ParsePayload(&logsData); err != nil {
 		return 0, fmt.Errorf("failed to parse logs: %w", err)
 	}
 
@@ -2032,7 +2032,7 @@ func followLogs(client *session.Client, initialCount int) error {
 			}
 
 			var logsData session.LogsDataPayload
-			if err := resp.ParsePayloadWithCodec(&logsData, client.GetCodec()); err != nil {
+			if err := resp.ParsePayload(&logsData); err != nil {
 				continue
 			}
 

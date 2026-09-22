@@ -16,7 +16,6 @@ func newFakeTUI(t *testing.T, d *Daemon, sessionID string) (*connState, net.Conn
 		conn:             serverSide,
 		clientID:         "fake-tui",
 		done:             make(chan struct{}),
-		codec:            DefaultCodec(),
 		ptySubscriptions: make(map[string]struct{}),
 		sessionID:        sessionID,
 		isTUIClient:      true,
@@ -37,12 +36,12 @@ func newFakeTUI(t *testing.T, d *Daemon, sessionID string) (*connState, net.Conn
 // TUI and replies with the given result, mimicking what the real TUI does.
 func answerRemoteCommand(t *testing.T, d *Daemon, tui *connState, clientSide net.Conn, result *CommandResultPayload) {
 	go func() {
-		msg, _, err := ReadMessageWithCodec(clientSide)
+		msg, err := ReadMessage(clientSide)
 		if err != nil {
 			return
 		}
 		var rc RemoteCommandPayload
-		if err := msg.ParsePayloadWithCodec(&rc, DefaultCodec()); err != nil {
+		if err := msg.ParsePayload(&rc); err != nil {
 			return
 		}
 		result.RequestID = rc.RequestID
@@ -89,7 +88,7 @@ func TestRouteToTUISyncTimeout(t *testing.T) {
 
 	tui, clientSide := newFakeTUI(t, d, "sess-2")
 	// Drain the command but never reply.
-	go func() { _, _, _ = ReadMessageWithCodec(clientSide) }()
+	go func() { _, _ = ReadMessage(clientSide) }()
 
 	_, err := d.routeToTUISync(tui, "req-timeout",
 		&RemoteCommandPayload{CommandType: "send_keys", Keys: "x"},
@@ -150,7 +149,7 @@ func TestRenameWindowWithAttachedTUIUpdatesDaemonState(t *testing.T) {
 	// The client-side pipe must be drained or a daemon push would block.
 	go func() {
 		for {
-			if _, _, err := ReadMessageWithCodec(clientSide); err != nil {
+			if _, err := ReadMessage(clientSide); err != nil {
 				return
 			}
 		}
@@ -158,7 +157,7 @@ func TestRenameWindowWithAttachedTUIUpdatesDaemonState(t *testing.T) {
 
 	requester := &connState{
 		conn: newDiscardConn(t), clientID: "ctl",
-		done: make(chan struct{}), codec: DefaultCodec(),
+		done: make(chan struct{}),
 	}
 	msg, err := NewMessage(MsgExecuteCommand, &ExecuteCommandPayload{
 		RequestID:   "req-rename",
@@ -227,7 +226,7 @@ func TestCloseWindowWithAttachedTUIRunsOnTheDaemon(t *testing.T) {
 	pushed := make(chan *SessionState, 8)
 	go func() {
 		for {
-			msg, _, err := ReadMessageWithCodec(clientSide)
+			msg, err := ReadMessage(clientSide)
 			if err != nil {
 				return
 			}
@@ -235,7 +234,7 @@ func TestCloseWindowWithAttachedTUIRunsOnTheDaemon(t *testing.T) {
 				continue
 			}
 			var p StateSyncPayload
-			if err := msg.ParsePayloadWithCodec(&p, DefaultCodec()); err == nil {
+			if err := msg.ParsePayload(&p); err == nil {
 				pushed <- p.State
 			}
 		}

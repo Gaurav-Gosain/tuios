@@ -203,9 +203,6 @@ type connState struct {
 	bcastNext uint64     // the next ticket handed out
 	bcastDone uint64     // broadcasts written so far
 
-	// Codec negotiated for this connection (gob by default)
-	codec Codec
-
 	// mu guards the mutable per-connection fields below (sessionID, width,
 	// height, isTUIClient, ptySubscriptions). These are written on this
 	// connection's own goroutine and read from other goroutines (PTY exit
@@ -933,7 +930,6 @@ func (d *Daemon) handleConnectionFrom(conn net.Conn, viaLink bool) {
 		conn:             conn,
 		clientID:         clientID,
 		done:             make(chan struct{}),
-		codec:            DefaultCodec(), // Default to gob, may be changed in handleHello
 		ptySubscriptions: make(map[string]struct{}),
 		ptyResume:        make(map[string]int64),
 		viaLink:          viaLink,
@@ -1035,7 +1031,7 @@ func (d *Daemon) handleConnectionFrom(conn net.Conn, viaLink bool) {
 		// arrives or the connection is closed, and both drop and shutdown
 		// close it. The body gets a deadline so a large payload cannot be cut
 		// mid-frame and desync framing.
-		msg, codecType, err := ReadMessageBuffered(conn, br, 0, 30*time.Second)
+		msg, err := ReadMessageBuffered(conn, br, 0, 30*time.Second)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return
@@ -1050,9 +1046,6 @@ func (d *Daemon) handleConnectionFrom(conn net.Conn, viaLink bool) {
 			LogError("Read error from %s: %v", clientID, err)
 			return
 		}
-
-		// Update codec if message came with a different one (shouldn't happen after handshake)
-		_ = codecType // Codec is negotiated at Hello, messages should use that codec
 
 		if err := d.handleMessage(cs, msg); err != nil {
 			LogError("Error handling message from %s: %v", clientID, err)

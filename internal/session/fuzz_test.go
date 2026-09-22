@@ -193,8 +193,8 @@ func FuzzReadMessageFraming(f *testing.F) {
 		return append(b, body...)
 	}
 
-	f.Add(frame(2, byte(MsgPTYOutput), byte(CodecGob)))
-	f.Add(frame(6, byte(MsgInput), byte(CodecJSON), 'a', 'b', 'c', 'd'))
+	f.Add(frame(2, byte(MsgPTYOutput), wireCodecGob))
+	f.Add(frame(6, byte(MsgInput), 1, 'a', 'b', 'c', 'd')) // codec byte 1: the reserved JSON value
 	// Truncated at every boundary.
 	f.Add([]byte{})
 	f.Add([]byte{0})
@@ -206,17 +206,17 @@ func FuzzReadMessageFraming(f *testing.F) {
 	f.Add(frame(1, byte(MsgInput)))
 	// Exactly at, just under and just over the 16 MiB cap, with no body: the
 	// reader must reject the oversized ones without allocating for them.
-	f.Add(frame(16*1024*1024, byte(MsgInput), byte(CodecGob)))
-	f.Add(frame(16*1024*1024-1, byte(MsgInput), byte(CodecGob)))
-	f.Add(frame(16*1024*1024+1, byte(MsgInput), byte(CodecGob)))
-	f.Add(frame(0xFFFFFFFF, byte(MsgInput), byte(CodecGob)))
+	f.Add(frame(16*1024*1024, byte(MsgInput), wireCodecGob))
+	f.Add(frame(16*1024*1024-1, byte(MsgInput), wireCodecGob))
+	f.Add(frame(16*1024*1024+1, byte(MsgInput), wireCodecGob))
+	f.Add(frame(0xFFFFFFFF, byte(MsgInput), wireCodecGob))
 	// A well-formed PTY frame and a truncated one.
-	f.Add(frame(2+36+4, byte(MsgPTYOutput), byte(CodecGob),
+	f.Add(frame(2+36+4, byte(MsgPTYOutput), wireCodecGob,
 		'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
 		'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
 		'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
 		'u', 'v', 'w', 'x', 'y', 'z', 'd', 'a', 't', 'a'))
-	f.Add(frame(2+36, byte(MsgPTYOutput), byte(CodecGob)))
+	f.Add(frame(2+36, byte(MsgPTYOutput), wireCodecGob))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {
@@ -227,12 +227,12 @@ func FuzzReadMessageFraming(f *testing.F) {
 		// A single reader can hold several frames; a desync on one frame must
 		// not turn into an unbounded read loop on the rest.
 		for range 64 {
-			msg, codec, err := ReadMessageWithCodec(r)
+			msg, err := ReadMessage(r)
 			if err != nil {
 				break
 			}
 			if msg == nil {
-				t.Fatalf("ReadMessageWithCodec returned a nil message and no error")
+				t.Fatalf("ReadMessage returned a nil message and no error")
 			}
 			// The reader accepted the frame, so it was within the cap and the
 			// body was fully present.
@@ -245,8 +245,6 @@ func FuzzReadMessageFraming(f *testing.F) {
 				t.Fatalf("payload of %d bytes from %d bytes of input",
 					len(msg.Payload), len(data))
 			}
-			_ = codec
-
 			// PTY frames are parsed further, with the ID taken from a fixed
 			// 36-byte prefix.
 			if msg.Type == MsgPTYOutput || msg.Type == MsgInput {

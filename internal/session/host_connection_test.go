@@ -467,7 +467,7 @@ func TestAHostileFarDaemonCannotSizeThisClientsBuffer(t *testing.T) {
 			// A binary client. Take its hello, then answer with a length no
 			// honest message has, and keep the connection open the way a slow
 			// attacker would.
-			if _, _, err := ReadMessageBuffered(server, br, 5*time.Second, 5*time.Second); err != nil {
+			if _, err := ReadMessageBuffered(server, br, 5*time.Second, 5*time.Second); err != nil {
 				return
 			}
 			hdr := []byte{0x40, 0x00, 0x00, 0x00, byte(MsgWelcome), 0}

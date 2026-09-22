@@ -121,9 +121,8 @@ type HostsChangedPayload struct {
 
 // Message is the base protocol message structure.
 // Wire format (v2): [4 bytes length][1 byte type][1 byte codec][payload]
-// The codec byte indicates how the payload is encoded:
-//   - 0 = gob (default, binary)
-//   - 1 = json (for external clients)
+// The codec byte is always 0 (gob). The value 1 once meant JSON and stays
+// reserved; readers ignore the byte.
 type Message struct {
 	Type    MessageType
 	Payload []byte
@@ -137,7 +136,7 @@ type HelloPayload struct {
 	Shell          string `json:"shell"`                     // Preferred shell
 	Width          int    `json:"width"`                     // Terminal width
 	Height         int    `json:"height"`                    // Terminal height
-	PreferredCodec string `json:"preferred_codec,omitempty"` // "gob" (default) or "json"
+	PreferredCodec string `json:"preferred_codec,omitempty"` // Always "gob"; kept for older daemons
 	// Graphics capabilities from client's terminal
 	PixelWidth    int    `json:"pixel_width,omitempty"`    // Terminal width in pixels
 	PixelHeight   int    `json:"pixel_height,omitempty"`   // Terminal height in pixels
@@ -157,7 +156,7 @@ type HelloPayload struct {
 type WelcomePayload struct {
 	Version      string   `json:"version"`       // Server version
 	SessionNames []string `json:"session_names"` // Available sessions
-	Codec        string   `json:"codec"`         // Negotiated codec: "gob" or "json"
+	Codec        string   `json:"codec"`         // Always "gob"; kept for older clients
 	// Protocol is the wire protocol version the daemon speaks. Zero means a
 	// daemon that predates the field; see HelloPayload.Protocol.
 	Protocol int `json:"protocol,omitempty"`
@@ -648,9 +647,9 @@ const LegacyProtocolVersion = 2
 // it would move. Only the compatibility probe reads it.
 const LegacyWelcomeType MessageType = 22
 
-// WriteMessageWithCodec writes a message with the specified codec.
+// WriteMessage writes one framed message.
 // Wire format: [4 bytes BE length][1 byte type][1 byte codec][payload]
-func WriteMessageWithCodec(w io.Writer, msg *Message, codec Codec) error {
+func WriteMessage(w io.Writer, msg *Message) error {
 	// Calculate total length: 1 (type) + 1 (codec) + len(payload)
 	totalLen := uint32(2 + len(msg.Payload))
 
@@ -660,7 +659,7 @@ func WriteMessageWithCodec(w io.Writer, msg *Message, codec Codec) error {
 	}
 
 	// Write type and codec
-	if _, err := w.Write([]byte{byte(msg.Type), byte(codec.Type())}); err != nil {
+	if _, err := w.Write([]byte{byte(msg.Type), wireCodecGob}); err != nil {
 		return fmt.Errorf("failed to write message header: %w", err)
 	}
 
@@ -672,20 +671,20 @@ func WriteMessageWithCodec(w io.Writer, msg *Message, codec Codec) error {
 	}
 
 	// Debug logging
-	LogMessage("SEND", msg, codec)
+	LogMessage("SEND", msg)
 
 	return nil
 }
 
-// ReadMessageWithCodec reads a message and returns it along with the codec type used.
+// ReadMessage reads one framed message. The codec byte is read and ignored.
 // Wire format: [4 bytes BE length][1 byte type][1 byte codec][payload]
-func ReadMessageWithCodec(r io.Reader) (*Message, CodecType, error) {
+func ReadMessage(r io.Reader) (*Message, error) {
 	var totalLen uint32
 	if err := binary.Read(r, binary.BigEndian, &totalLen); err != nil {
 		if err == io.EOF {
-			return nil, CodecGob, err
+			return nil, err
 		}
-		return nil, CodecGob, fmt.Errorf("failed to read message length: %w", err)
+		return nil, fmt.Errorf("failed to read message length: %w", err)
 	}
 	return readMessageBody(r, totalLen)
 }
@@ -702,15 +701,15 @@ func ReadMessageWithCodec(r io.Reader) (*Message, CodecType, error) {
 // in a bufio.Reader to peek the first byte for JSON-versus-binary detection,
 // and the client wraps its connection so a frame is one read rather than
 // three; neither may read conn directly once the reader holds bytes.
-func ReadMessageBuffered(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeout time.Duration) (*Message, CodecType, error) {
+func ReadMessageBuffered(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeout time.Duration) (*Message, error) {
 	setBoundaryDeadline(conn, boundaryTimeout)
 
 	var totalLen uint32
 	if err := binary.Read(r, binary.BigEndian, &totalLen); err != nil {
 		if err == io.EOF {
-			return nil, CodecGob, err
+			return nil, err
 		}
-		return nil, CodecGob, fmt.Errorf("failed to read message length: %w", err)
+		return nil, fmt.Errorf("failed to read message length: %w", err)
 	}
 
 	if bodyTimeout > 0 {
@@ -741,24 +740,23 @@ func setBoundaryDeadline(conn net.Conn, timeout time.Duration) {
 
 // readMessageBody reads the header and payload after the length prefix has
 // already been consumed from r.
-func readMessageBody(r io.Reader, totalLen uint32) (*Message, CodecType, error) {
+func readMessageBody(r io.Reader, totalLen uint32) (*Message, error) {
 	// Sanity check length (max 16MB)
 	if totalLen > 16*1024*1024 {
-		return nil, CodecGob, fmt.Errorf("message too large: %d bytes (raw: 0x%08x)", totalLen, totalLen)
+		return nil, fmt.Errorf("message too large: %d bytes (raw: 0x%08x)", totalLen, totalLen)
 	}
 
 	if totalLen < 2 {
-		return nil, CodecGob, fmt.Errorf("message too small: %d bytes", totalLen)
+		return nil, fmt.Errorf("message too small: %d bytes", totalLen)
 	}
 
-	// Read type and codec
+	// Read type and codec. The codec byte is always gob and is ignored.
 	header := make([]byte, 2)
 	if _, err := io.ReadFull(r, header); err != nil {
-		return nil, CodecGob, fmt.Errorf("failed to read message header (after len=%d): %w", totalLen, err)
+		return nil, fmt.Errorf("failed to read message header (after len=%d): %w", totalLen, err)
 	}
 
 	msgType := MessageType(header[0])
-	codecType := CodecType(header[1])
 
 	// Read payload
 	payloadLen := totalLen - 2
@@ -766,7 +764,7 @@ func readMessageBody(r io.Reader, totalLen uint32) (*Message, CodecType, error) 
 	if payloadLen > 0 {
 		payload = make([]byte, payloadLen)
 		if _, err := io.ReadFull(r, payload); err != nil {
-			return nil, codecType, fmt.Errorf("failed to read message payload (len=%d, type=%d): %w", payloadLen, msgType, err)
+			return nil, fmt.Errorf("failed to read message payload (len=%d, type=%d): %w", payloadLen, msgType, err)
 		}
 	}
 
@@ -776,31 +774,19 @@ func readMessageBody(r io.Reader, totalLen uint32) (*Message, CodecType, error) 
 	}
 
 	// Debug logging
-	LogMessage("RECV", msg, DefaultCodec())
+	LogMessage("RECV", msg)
 
-	return msg, codecType, nil
+	return msg, nil
 }
 
-// WriteMessage writes a message using the default codec (gob).
-// This is a convenience wrapper for internal use.
-func WriteMessage(w io.Writer, msg *Message) error {
-	return WriteMessageWithCodec(w, msg, DefaultCodec())
-}
-
-// ReadMessage reads a message, ignoring the codec type.
-// This is a convenience wrapper for internal use.
-func ReadMessage(r io.Reader) (*Message, error) {
-	msg, _, err := ReadMessageWithCodec(r)
-	return msg, err
-}
-
-// NewMessageWithCodec creates a message with the specified codec.
-func NewMessageWithCodec(msgType MessageType, payload any, codec Codec) (*Message, error) {
+// NewMessage creates a message with a gob-encoded payload. A nil payload
+// gives an empty one.
+func NewMessage(msgType MessageType, payload any) (*Message, error) {
 	var data []byte
 	var err error
 
 	if payload != nil {
-		data, err = codec.Encode(payload)
+		data, err = encodePayload(payload)
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode payload: %w", err)
 		}
@@ -812,11 +798,6 @@ func NewMessageWithCodec(msgType MessageType, payload any, codec Codec) (*Messag
 	}, nil
 }
 
-// NewMessage creates a message with gob-encoded payload (default).
-func NewMessage(msgType MessageType, payload any) (*Message, error) {
-	return NewMessageWithCodec(msgType, payload, DefaultCodec())
-}
-
 // NewRawMessage creates a message with raw bytes payload (for binary data like PTY I/O).
 func NewRawMessage(msgType MessageType, data []byte) *Message {
 	return &Message{
@@ -825,17 +806,10 @@ func NewRawMessage(msgType MessageType, data []byte) *Message {
 	}
 }
 
-// ParsePayloadWithCodec decodes the message payload using the specified codec.
-func (m *Message) ParsePayloadWithCodec(v any, codec Codec) error {
-	if len(m.Payload) == 0 {
-		return nil
-	}
-	return codec.Decode(m.Payload, v)
-}
-
-// ParsePayload decodes the message payload using gob (default).
+// ParsePayload decodes the message's gob payload into v. An empty payload
+// leaves v untouched.
 func (m *Message) ParsePayload(v any) error {
-	return m.ParsePayloadWithCodec(v, DefaultCodec())
+	return decodePayload(m.Payload, v)
 }
 
 // Binary message helpers for high-frequency PTY I/O
@@ -872,7 +846,7 @@ func writePTYFrame(w io.Writer, msg MessageType, ptyID string, data []byte) erro
 	}
 	buf = buf[:ptyFrameHeaderLen]
 	binary.BigEndian.PutUint32(buf, uint32(2+36+len(data)))
-	buf[4], buf[5] = byte(msg), byte(CodecGob)
+	buf[4], buf[5] = byte(msg), wireCodecGob
 	clear(buf[6:ptyFrameHeaderLen])
 	copy(buf[6:ptyFrameHeaderLen], ptyID)
 	buf = append(buf, data...)

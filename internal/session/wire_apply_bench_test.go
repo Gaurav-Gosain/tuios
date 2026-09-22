@@ -56,7 +56,6 @@ func wirePTYRGB(tb testing.TB, cols, rows, scrollback, run int) *PTY {
 // and a route that rebuilds a window both do. "decode" is the gob alone, and
 // "apply" is decode plus ApplyTerminalState.
 func BenchmarkWireTerminalStateApply(b *testing.B) {
-	codec := GetCodec(CodecGob)
 	for _, tc := range []struct {
 		name   string
 		build  func(testing.TB, int, int, int) *PTY
@@ -82,14 +81,14 @@ func BenchmarkWireTerminalStateApply(b *testing.B) {
 			}
 			return st
 		}
-		data, err := codec.Encode(&TerminalStatePayload{PTYID: pty.ID, State: snapshot()})
+		data, err := encodePayload(&TerminalStatePayload{PTYID: pty.ID, State: snapshot()})
 		if err != nil {
 			b.Fatal(err)
 		}
 		b.Run(tc.name+"/encode", func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
-				if _, err := codec.Encode(&TerminalStatePayload{PTYID: pty.ID, State: snapshot()}); err != nil {
+				if _, err := encodePayload(&TerminalStatePayload{PTYID: pty.ID, State: snapshot()}); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -99,7 +98,7 @@ func BenchmarkWireTerminalStateApply(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				var payload TerminalStatePayload
-				if err := codec.Decode(data, &payload); err != nil {
+				if err := decodePayload(data, &payload); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -108,7 +107,7 @@ func BenchmarkWireTerminalStateApply(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
 				var payload TerminalStatePayload
-				if err := codec.Decode(data, &payload); err != nil {
+				if err := decodePayload(data, &payload); err != nil {
 					b.Fatal(err)
 				}
 				em := vt.NewEmulator(benchWireCols, benchWireRows)

@@ -122,7 +122,7 @@ func (d *Daemon) ApplyHosts(hosts []federation.Host) {
 // still: it runs from ApplyHosts and only on a change.
 func (d *Daemon) broadcastHostsChanged(change federation.TableChange) {
 	payload := &HostsChangedPayload{Added: change.Added, Removed: change.Removed, Redialed: change.Redialed}
-	msg, err := NewMessageWithCodec(MsgHostsChanged, payload, DefaultCodec())
+	msg, err := NewMessage(MsgHostsChanged, payload)
 	if err != nil {
 		debugLog("[DEBUG] broadcastHostsChanged: encode: %v", err)
 		return

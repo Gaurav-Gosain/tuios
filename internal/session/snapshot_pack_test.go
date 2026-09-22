@@ -21,13 +21,12 @@ func throughWire(tb testing.TB, state *TerminalState, packed bool) *TerminalStat
 			tb.Fatal("Pack left cells behind")
 		}
 	}
-	codec := GetCodec(CodecGob)
-	data, err := codec.Encode(&TerminalStatePayload{PTYID: "x", State: state})
+	data, err := encodePayload(&TerminalStatePayload{PTYID: "x", State: state})
 	if err != nil {
 		tb.Fatalf("encode: %v", err)
 	}
 	var payload TerminalStatePayload
-	if err := codec.Decode(data, &payload); err != nil {
+	if err := decodePayload(data, &payload); err != nil {
 		tb.Fatalf("decode: %v", err)
 	}
 	return payload.State
@@ -85,14 +84,13 @@ func TestPackedRowsRoundTrip(t *testing.T) {
 // of a full screen are a fraction of the gob cells.
 func TestPackedRowsAreSmaller(t *testing.T) {
 	pty := wirePTY(t, benchWireCols, benchWireRows, 0)
-	codec := GetCodec(CodecGob)
-	cells, err := codec.Encode(&TerminalStatePayload{PTYID: "x", State: pty.GetTerminalState(0, 0)})
+	cells, err := encodePayload(&TerminalStatePayload{PTYID: "x", State: pty.GetTerminalState(0, 0)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	st := pty.GetTerminalState(0, 0)
 	st.Pack()
-	packed, err := codec.Encode(&TerminalStatePayload{PTYID: "x", State: st})
+	packed, err := encodePayload(&TerminalStatePayload{PTYID: "x", State: st})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +160,7 @@ func TestSnapshotIsPackedOnlyOnRequest(t *testing.T) {
 		name   string
 		packed bool
 	}{{"asked", true}, {"not asked", false}} {
-		msg, err := NewMessageWithCodec(MsgGetTerminalState, &GetTerminalStatePayload{PTYID: rig.ptyID, IncludeScrollback: true, Packed: tc.packed}, rig.c.codec)
+		msg, err := NewMessage(MsgGetTerminalState, &GetTerminalStatePayload{PTYID: rig.ptyID, IncludeScrollback: true, Packed: tc.packed})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -171,7 +169,7 @@ func TestSnapshotIsPackedOnlyOnRequest(t *testing.T) {
 			t.Fatalf("%s: %v", tc.name, err)
 		}
 		var payload TerminalStatePayload
-		if err := resp.ParsePayloadWithCodec(&payload, rig.c.codec); err != nil {
+		if err := resp.ParsePayload(&payload); err != nil {
 			t.Fatal(err)
 		}
 		if got := payload.State.isPacked(); got != tc.packed {
@@ -237,17 +235,15 @@ type oldTerminalStateReply struct {
 // that answer: the cells arrive where they always did and unpacking is a
 // no-op, so the pane comes back.
 func TestOlderPeerReadsTheWire(t *testing.T) {
-	codec := GetCodec(CodecGob)
-
 	// Newer client, older daemon: the request still reads.
-	asked, err := codec.Encode(&GetTerminalStatePayload{
+	asked, err := encodePayload(&GetTerminalStatePayload{
 		PTYID: "p", IncludeScrollback: true, MaxScrollbackLines: 7, HaveScrollback: 3, Packed: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var old oldGetTerminalStateRequest
-	if err := codec.Decode(asked, &old); err != nil {
+	if err := decodePayload(asked, &old); err != nil {
 		t.Fatalf("a daemon without the Packed field could not read the request: %v", err)
 	}
 	if old != (oldGetTerminalStateRequest{PTYID: "p", IncludeScrollback: true, MaxScrollbackLines: 7, HaveScrollback: 3}) {
@@ -256,14 +252,14 @@ func TestOlderPeerReadsTheWire(t *testing.T) {
 
 	// Older daemon, newer client: the answer still reads, as cells.
 	rows := packedGrid()
-	sent, err := codec.Encode(&oldTerminalStateReply{
+	sent, err := encodePayload(&oldTerminalStateReply{
 		PTYID: "p", State: &oldTerminalState{Width: 4, Height: len(rows), Screen: rows},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var got TerminalStatePayload
-	if err := codec.Decode(sent, &got); err != nil {
+	if err := decodePayload(sent, &got); err != nil {
 		t.Fatalf("a client with the Packed fields could not read the older answer: %v", err)
 	}
 	if got.State.isPacked() {

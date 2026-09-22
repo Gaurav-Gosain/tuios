@@ -18,7 +18,6 @@ func newFailingConnState(t *testing.T) *connState {
 		conn:             client,
 		clientID:         "test-client",
 		done:             make(chan struct{}),
-		codec:            DefaultCodec(),
 		ptySubscriptions: make(map[string]struct{}),
 	}
 }

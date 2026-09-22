@@ -7,45 +7,18 @@ import (
 	"fmt"
 )
 
-// CodecType identifies the encoding format used for message payloads.
-type CodecType uint8
+// wireCodecGob is the value of the codec byte in every frame header. gob is
+// the only payload encoding. The byte stays on the wire so frames keep their
+// layout: senders write 0 and readers ignore it. The value 1 once meant JSON
+// and stays reserved.
+const wireCodecGob byte = 0
 
-const (
-	// CodecGob is the default binary encoding - fast and efficient for Go-to-Go communication.
-	CodecGob CodecType = iota
-	// CodecJSON is reserved: the JSON payload codec was removed (no client
-	// could negotiate it), but the wire codec byte keeps its value.
-	CodecJSON
-)
+// wireCodecName is what the welcome reports in WelcomePayload.Codec. Older
+// peers inside the same protocol version still read that field.
+const wireCodecName = "gob"
 
-// String returns the string representation of the codec type.
-func (c CodecType) String() string {
-	switch c {
-	case CodecGob:
-		return "gob"
-	case CodecJSON:
-		return "json"
-	default:
-		return fmt.Sprintf("unknown(%d)", c)
-	}
-}
-
-// Codec defines the interface for message payload encoding/decoding.
-type Codec interface {
-	// Encode serializes a value to bytes.
-	Encode(v any) ([]byte, error)
-	// Decode deserializes bytes into a value.
-	Decode(data []byte, v any) error
-	// Type returns the codec type identifier.
-	Type() CodecType
-}
-
-// GobCodec implements binary encoding using encoding/gob.
-// This is the default codec for internal communication.
-type GobCodec struct{}
-
-// Encode serializes a value using gob encoding.
-func (c *GobCodec) Encode(v any) ([]byte, error) {
+// encodePayload serializes a message payload with gob.
+func encodePayload(v any) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(v); err != nil {
@@ -54,8 +27,9 @@ func (c *GobCodec) Encode(v any) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Decode deserializes gob-encoded bytes into a value.
-func (c *GobCodec) Decode(data []byte, v any) error {
+// decodePayload deserializes a gob payload into v. An empty payload leaves v
+// untouched.
+func decodePayload(data []byte, v any) error {
 	if len(data) == 0 {
 		return nil
 	}
@@ -64,23 +38,6 @@ func (c *GobCodec) Decode(data []byte, v any) error {
 		return fmt.Errorf("gob decode: %w", err)
 	}
 	return nil
-}
-
-// Type returns CodecGob.
-func (c *GobCodec) Type() CodecType { return CodecGob }
-
-// Singleton codec instance for reuse.
-var gobCodec = &GobCodec{}
-
-// GetCodec returns the codec for a wire codec byte. gob is the only payload
-// codec; the byte survives on the wire for stability.
-func GetCodec(CodecType) Codec {
-	return gobCodec
-}
-
-// DefaultCodec returns the default codec (gob).
-func DefaultCodec() Codec {
-	return gobCodec
 }
 
 // Register all payload types with gob.

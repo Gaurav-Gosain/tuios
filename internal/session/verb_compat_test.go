@@ -69,7 +69,7 @@ func (d *legacyDaemon) handle(conn net.Conn) {
 	defer func() { _ = conn.Close() }()
 	for {
 		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-		msg, _, err := ReadMessageWithCodec(conn)
+		msg, err := ReadMessage(conn)
 		if err != nil {
 			// The old read loop returned here, closing the connection. A JSON
 			// request line lands in exactly this branch: '{' is 0x7b, so the

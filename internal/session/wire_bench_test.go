@@ -58,18 +58,17 @@ func wirePTY(tb testing.TB, cols, rows, scrollback int) *PTY {
 // is what the client would cost if it were sent only what it uses, so the gap
 // between depth 0 and depth 1000 is dead weight, not a payload.
 func BenchmarkWireTerminalState(b *testing.B) {
-	codec := GetCodec(CodecGob)
 	for _, depth := range []int{0, 100, 1000} {
 		b.Run(fmt.Sprintf("scrollback-%d", depth), func(b *testing.B) {
 			pty := wirePTY(b, benchWireCols, benchWireRows, depth)
-			data, err := codec.Encode(&TerminalStatePayload{PTYID: pty.ID, State: pty.GetTerminalState(depth, 0)})
+			data, err := encodePayload(&TerminalStatePayload{PTYID: pty.ID, State: pty.GetTerminalState(depth, 0)})
 			if err != nil {
 				b.Fatal(err)
 			}
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
-				if _, err := codec.Encode(&TerminalStatePayload{
+				if _, err := encodePayload(&TerminalStatePayload{
 					PTYID: pty.ID, State: pty.GetTerminalState(depth, 0),
 				}); err != nil {
 					b.Fatal(err)
@@ -91,7 +90,6 @@ func BenchmarkWireTerminalState(b *testing.B) {
 // missing none, which is the common case for a pane the user switches back to
 // without it having printed anything meanwhile.
 func BenchmarkWireTerminalStateCaughtUp(b *testing.B) {
-	codec := GetCodec(CodecGob)
 	const depth = 1000
 	for _, behind := range []int{0, 50, 1000} {
 		name := fmt.Sprintf("behind-%d", behind)
@@ -101,7 +99,7 @@ func BenchmarkWireTerminalStateCaughtUp(b *testing.B) {
 		b.Run(name, func(b *testing.B) {
 			pty := wirePTY(b, benchWireCols, benchWireRows, depth)
 			have := depth - behind
-			data, err := codec.Encode(&TerminalStatePayload{
+			data, err := encodePayload(&TerminalStatePayload{
 				PTYID: pty.ID, State: pty.GetTerminalState(depth, have),
 			})
 			if err != nil {
@@ -110,7 +108,7 @@ func BenchmarkWireTerminalStateCaughtUp(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
-				if _, err := codec.Encode(&TerminalStatePayload{
+				if _, err := encodePayload(&TerminalStatePayload{
 					PTYID: pty.ID, State: pty.GetTerminalState(depth, have),
 				}); err != nil {
 					b.Fatal(err)
@@ -131,8 +129,6 @@ func BenchmarkWireTerminalStateCaughtUp(b *testing.B) {
 // whole whatever changed. Reported separately so the fixed cost and the one
 // that grows with the session are not averaged into a single misleading number.
 func BenchmarkWireKeystroke(b *testing.B) {
-	codec := GetCodec(CodecGob)
-
 	b.Run("raw-input", func(b *testing.B) {
 		// Header, the 36-byte PTY UUID the binary framing carries, and the key.
 		const header = 4 + 1 + 1
@@ -143,14 +139,14 @@ func BenchmarkWireKeystroke(b *testing.B) {
 	for _, n := range []int{1, 8, 32} {
 		b.Run(fmt.Sprintf("state-push/windows-%d", n), func(b *testing.B) {
 			st := benchState(n)
-			data, err := codec.Encode(st)
+			data, err := encodePayload(st)
 			if err != nil {
 				b.Fatal(err)
 			}
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
-				if _, err := codec.Encode(st); err != nil {
+				if _, err := encodePayload(st); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -164,7 +160,6 @@ func BenchmarkWireKeystroke(b *testing.B) {
 // the whole session's layout. It is sent once per attach and is the floor of
 // what reattaching costs before any pane content is fetched.
 func BenchmarkWireAttach(b *testing.B) {
-	codec := GetCodec(CodecGob)
 	for _, n := range []int{1, 8, 32} {
 		b.Run(fmt.Sprintf("windows-%d", n), func(b *testing.B) {
 			st := benchState(n)
@@ -173,14 +168,14 @@ func BenchmarkWireAttach(b *testing.B) {
 				Width: benchWireCols, Height: benchWireRows,
 				WindowCount: n, State: st,
 			}
-			data, err := codec.Encode(payload)
+			data, err := encodePayload(payload)
 			if err != nil {
 				b.Fatal(err)
 			}
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
-				if _, err := codec.Encode(payload); err != nil {
+				if _, err := encodePayload(payload); err != nil {
 					b.Fatal(err)
 				}
 			}

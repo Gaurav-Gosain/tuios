@@ -96,34 +96,31 @@ func BenchmarkStateCodec(b *testing.B) {
 	for _, n := range []int{4, 16, 64} {
 		st := benchState(n)
 
-		for _, ct := range []CodecType{CodecGob} {
-			codec := GetCodec(ct)
-			b.Run(fmt.Sprintf("%s/windows-%d/encode", ct, n), func(b *testing.B) {
-				b.ReportAllocs()
-				b.ResetTimer()
-				for b.Loop() {
-					if _, err := codec.Encode(st); err != nil {
-						b.Fatal(err)
-					}
+		b.Run(fmt.Sprintf("gob/windows-%d/encode", n), func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				if _, err := encodePayload(st); err != nil {
+					b.Fatal(err)
 				}
-			})
-
-			data, err := codec.Encode(st)
-			if err != nil {
-				b.Fatal(err)
 			}
-			b.Run(fmt.Sprintf("%s/windows-%d/decode", ct, n), func(b *testing.B) {
-				b.ReportAllocs()
-				b.ResetTimer()
-				for b.Loop() {
-					var out SessionState
-					if err := codec.Decode(data, &out); err != nil {
-						b.Fatal(err)
-					}
-				}
-				b.StopTimer()
-				b.ReportMetric(float64(len(data)), "wire-bytes")
-			})
+		})
+
+		data, err := encodePayload(st)
+		if err != nil {
+			b.Fatal(err)
 		}
+		b.Run(fmt.Sprintf("gob/windows-%d/decode", n), func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				var out SessionState
+				if err := decodePayload(data, &out); err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.StopTimer()
+			b.ReportMetric(float64(len(data)), "wire-bytes")
+		})
 	}
 }

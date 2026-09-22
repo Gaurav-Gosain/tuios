@@ -150,7 +150,7 @@ func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
 }
 
 func (d *Daemon) sendMessage(cs *connState, msgType MessageType, payload any) error {
-	msg, err := NewMessageWithCodec(msgType, payload, cs.codec)
+	msg, err := NewMessage(msgType, payload)
 	if err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func (d *Daemon) sendMessage(cs *connState, msgType MessageType, payload any) er
 func (d *Daemon) sendEncoded(cs *connState, msg *Message) error {
 	cs.sendMu.Lock()
 	_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	err := WriteMessageWithCodec(cs.conn, msg, cs.codec)
+	err := WriteMessage(cs.conn, msg)
 	cs.sendMu.Unlock()
 	if err != nil {
 		// A mid-frame write failure permanently desyncs framing for this
@@ -196,7 +196,7 @@ func (d *Daemon) sendError(cs *connState, code int, message string) error {
 // been caught in the act; it is closed here because it costs one lock to close
 // and nothing about it is bounded by how narrow it happens to be today.
 func (d *Daemon) sendAttachReply(cs *connState, payload *AttachedPayload) error {
-	msg, err := NewMessageWithCodec(MsgAttached, payload, cs.codec)
+	msg, err := NewMessage(MsgAttached, payload)
 	if err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func (d *Daemon) sendAttachReply(cs *connState, payload *AttachedPayload) error 
 	cs.attached = true
 	cs.mu.Unlock()
 	_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	err = WriteMessageWithCodec(cs.conn, msg, cs.codec)
+	err = WriteMessage(cs.conn, msg)
 	cs.sendMu.Unlock()
 
 	if err != nil {
@@ -223,7 +223,7 @@ func (d *Daemon) broadcastToSession(sessionID string, msgType MessageType, paylo
 	// Encoded once. Every client speaks the one codec there is, and a state
 	// push is the whole session, so encoding it on each client's goroutine
 	// was the same gob of the same state as many times as there were peers.
-	msg, err := NewMessageWithCodec(msgType, payload, DefaultCodec())
+	msg, err := NewMessage(msgType, payload)
 	if err != nil {
 		debugLog("[DEBUG] broadcastToSession: encode: %v", err)
 		return

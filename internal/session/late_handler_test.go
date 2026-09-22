@@ -16,7 +16,7 @@ import (
 // deliver runs one fabricated broadcast through the client's own dispatch.
 func deliver(t *testing.T, c *TUIClient, msgType MessageType, payload any) {
 	t.Helper()
-	msg, err := NewMessageWithCodec(msgType, payload, c.codec)
+	msg, err := NewMessage(msgType, payload)
 	if err != nil {
 		t.Fatalf("build message: %v", err)
 	}

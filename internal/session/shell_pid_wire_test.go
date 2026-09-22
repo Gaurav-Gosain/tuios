@@ -338,8 +338,7 @@ type oldWindowState struct {
 // is "nobody knows", which leaves a pane's file actions exactly as they were.
 // Anything else would call a pane a liar on the strength of a missing field.
 func TestAPeerThatNeverHeardOfTheFieldDecodesAsUnknown(t *testing.T) {
-	codec := DefaultCodec()
-	data, err := codec.Encode(&oldWindowState{
+	data, err := encodePayload(&oldWindowState{
 		ID: "w1", Title: "shell", PTYID: "pty-1", Width: 80, Height: 24,
 		Workspace: 1, ForegroundCmd: "nvim",
 	})
@@ -348,7 +347,7 @@ func TestAPeerThatNeverHeardOfTheFieldDecodesAsUnknown(t *testing.T) {
 	}
 
 	var got WindowState
-	if err := codec.Decode(data, &got); err != nil {
+	if err := decodePayload(data, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if got.ID != "w1" || got.ForegroundCmd != "nvim" {

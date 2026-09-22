@@ -91,7 +91,6 @@ func TestStreamEventsEmitsGapMarker(t *testing.T) {
 		conn:             client,
 		clientID:         "gap-client",
 		done:             make(chan struct{}),
-		codec:            DefaultCodec(),
 		ptySubscriptions: make(map[string]struct{}),
 	}
 

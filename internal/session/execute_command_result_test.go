@@ -52,7 +52,7 @@ func TestARoutedCommandsResultReachesTheRequester(t *testing.T) {
 		// at once is on the wire within milliseconds; five seconds is the
 		// budget for the machine, not for the daemon.
 		_ = cli.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-		resp, _, err := ReadMessageWithCodec(cli.conn)
+		resp, err := ReadMessage(cli.conn)
 		_ = cli.Close()
 		if err != nil {
 			t.Fatalf("round %d: the client answered the command and the requester never heard: %v", round, err)
@@ -61,7 +61,7 @@ func TestARoutedCommandsResultReachesTheRequester(t *testing.T) {
 			t.Fatalf("round %d: reply type %d, want a command result", round, resp.Type)
 		}
 		var result CommandResultPayload
-		if err := resp.ParsePayloadWithCodec(&result, cli.GetCodec()); err != nil {
+		if err := resp.ParsePayload(&result); err != nil {
 			t.Fatalf("round %d: parse result: %v", round, err)
 		}
 		if result.RequestID != requestID || !result.Success {

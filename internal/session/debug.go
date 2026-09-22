@@ -259,7 +259,7 @@ func LogBasic(format string, args ...any) {
 }
 
 // LogMessage logs a protocol message with appropriate detail.
-func LogMessage(direction string, msg *Message, codec Codec) {
+func LogMessage(direction string, msg *Message) {
 	level := GetDebugLevel()
 	if level < DebugMessages {
 		return
@@ -274,7 +274,6 @@ func LogMessage(direction string, msg *Message, codec Codec) {
 	}
 
 	typeName := MessageTypeName(msg.Type)
-	codecName := codec.Type().String()
 
 	if level >= DebugTrace {
 		// Full payload dump (truncated for sanity)
@@ -282,23 +281,23 @@ func LogMessage(direction string, msg *Message, codec Codec) {
 		if len(payloadPreview) > 256 {
 			payloadPreview = payloadPreview[:256]
 		}
-		ProtocolLog(DebugTrace, "[%s] %s (%s) %d bytes: %x",
-			direction, typeName, codecName, len(msg.Payload), payloadPreview)
+		ProtocolLog(DebugTrace, "[%s] %s %d bytes: %x",
+			direction, typeName, len(msg.Payload), payloadPreview)
 	} else {
-		ProtocolLog(DebugMessages, "[%s] %s (%s) %d bytes",
-			direction, typeName, codecName, len(msg.Payload))
+		ProtocolLog(DebugMessages, "[%s] %s %d bytes",
+			direction, typeName, len(msg.Payload))
 	}
 }
 
 // LogMessageDecoded logs a decoded message payload for debugging.
-func LogMessageDecoded(direction string, msg *Message, codec Codec) {
+func LogMessageDecoded(direction string, msg *Message) {
 	level := GetDebugLevel()
 	if level < DebugTrace {
 		return
 	}
 
 	typeName := MessageTypeName(msg.Type)
-	decoded := DebugPayload(msg, codec)
+	decoded := DebugPayload(msg)
 	ProtocolLog(DebugTrace, "[%s] %s: %s", direction, typeName, decoded)
 }
 
@@ -360,13 +359,13 @@ func MessageTypeName(t MessageType) string {
 // user picked: a shell rewrites it on every prompt, so it routinely carries the
 // working directory and the command line. That is pane content, and the level
 // boundary says content starts at verbose.
-func DebugPayload(msg *Message, codec Codec) string {
-	return debugPayloadAt(GetDebugLevel(), msg, codec)
+func DebugPayload(msg *Message) string {
+	return debugPayloadAt(GetDebugLevel(), msg)
 }
 
 // debugPayloadAt is DebugPayload with the level passed in, so the redaction can
 // be tested without moving a global.
-func debugPayloadAt(level DebugLevel, msg *Message, codec Codec) string {
+func debugPayloadAt(level DebugLevel, msg *Message) string {
 	if len(msg.Payload) == 0 {
 		return "<empty>"
 	}
@@ -374,71 +373,71 @@ func debugPayloadAt(level DebugLevel, msg *Message, codec Codec) string {
 	switch msg.Type {
 	case MsgHello:
 		var p HelloPayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("Hello{Version:%q, Term:%q, %dx%d, Codec:%q}",
 				p.Version, p.Term, p.Width, p.Height, p.PreferredCodec)
 		}
 	case MsgWelcome:
 		var p WelcomePayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("Welcome{Version:%q, Sessions:%v, Codec:%q}",
 				p.Version, p.SessionNames, p.Codec)
 		}
 	case MsgAttach:
 		var p AttachPayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("Attach{Session:%q, Create:%v, %dx%d}",
 				p.SessionName, p.CreateNew, p.Width, p.Height)
 		}
 	case MsgAttached:
 		var p AttachedPayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("Attached{Session:%q, ID:%s, %dx%d, Windows:%d}",
 				p.SessionName, truncateID(p.SessionID), p.Width, p.Height, p.WindowCount)
 		}
 	case MsgNew:
 		var p NewPayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("New{Session:%q, %dx%d}", p.SessionName, p.Width, p.Height)
 		}
 	case MsgKill:
 		var p KillPayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("Kill{Session:%q}", p.SessionName)
 		}
 	case MsgResize:
 		var p ResizePayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("Resize{%dx%d}", p.Width, p.Height)
 		}
 	case MsgError:
 		var p ErrorPayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("Error{Code:%d, Msg:%q}", p.Code, p.Message)
 		}
 	case MsgCreatePTY:
 		var p CreatePTYPayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("CreatePTY{Title:%s, %dx%d}", redactTitle(level, p.Title), p.Width, p.Height)
 		}
 	case MsgPTYCreated:
 		var p PTYCreatedPayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("PTYCreated{ID:%s, Title:%s}", truncateID(p.ID), redactTitle(level, p.Title))
 		}
 	case MsgClosePTY:
 		var p ClosePTYPayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("ClosePTY{ID:%s}", truncateID(p.PTYID))
 		}
 	case MsgSubscribePTY:
 		var p SubscribePTYPayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("SubscribePTY{ID:%s}", truncateID(p.PTYID))
 		}
 	case MsgUnsubscribePTY:
 		var p UnsubscribePTYPayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("UnsubscribePTY{ID:%s}", truncateID(p.PTYID))
 		}
 	case MsgInput, MsgPTYOutput:
@@ -446,12 +445,12 @@ func debugPayloadAt(level DebugLevel, msg *Message, codec Codec) string {
 		return fmt.Sprintf("<%d bytes>", len(msg.Payload))
 	case MsgSessionList:
 		var p SessionListPayload
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("SessionList{Count:%d}", len(p.Sessions))
 		}
 	case MsgStateData:
 		var p SessionState
-		if err := codec.Decode(msg.Payload, &p); err == nil {
+		if err := decodePayload(msg.Payload, &p); err == nil {
 			return fmt.Sprintf("StateData{Name:%q, Windows:%d}", p.Name, len(p.Windows))
 		}
 	}

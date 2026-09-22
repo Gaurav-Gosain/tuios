@@ -9,18 +9,17 @@ import (
 // rewritten by the shell on every prompt and carries the working directory, so
 // it is content and content starts at verbose.
 func TestDebugPayloadRedactsTitleBelowVerbose(t *testing.T) {
-	codec := DefaultCodec()
-	msg, err := NewMessageWithCodec(MsgCreatePTY, &CreatePTYPayload{
+	msg, err := NewMessage(MsgCreatePTY, &CreatePTYPayload{
 		Title:  "zsh ~/work/acme-secret-merger",
 		Width:  80,
 		Height: 24,
-	}, codec)
+	})
 	if err != nil {
 		t.Fatalf("build message: %v", err)
 	}
 
 	for _, level := range []DebugLevel{DebugOff, DebugErrors, DebugBasic, DebugMessages} {
-		got := debugPayloadAt(level, msg, codec)
+		got := debugPayloadAt(level, msg)
 		if strings.Contains(got, "acme-secret-merger") {
 			t.Fatalf("level %s printed the window title: %s", level, got)
 		}
@@ -29,7 +28,7 @@ func TestDebugPayloadRedactsTitleBelowVerbose(t *testing.T) {
 		}
 	}
 
-	if got := debugPayloadAt(DebugVerbose, msg, codec); !strings.Contains(got, "acme-secret-merger") {
+	if got := debugPayloadAt(DebugVerbose, msg); !strings.Contains(got, "acme-secret-merger") {
 		t.Fatalf("verbose must still capture content, got %s", got)
 	}
 }
@@ -37,19 +36,18 @@ func TestDebugPayloadRedactsTitleBelowVerbose(t *testing.T) {
 // TestPTYCreatedRedactsTitleBelowVerbose covers the second title site, which the
 // daemon sends back on every pane it opens.
 func TestPTYCreatedRedactsTitleBelowVerbose(t *testing.T) {
-	codec := DefaultCodec()
-	msg, err := NewMessageWithCodec(MsgPTYCreated, &PTYCreatedPayload{
+	msg, err := NewMessage(MsgPTYCreated, &PTYCreatedPayload{
 		ID:    "3f2a91c4-0000-0000-0000-000000000000",
 		Title: "nvim /home/ada/notes.md",
-	}, codec)
+	})
 	if err != nil {
 		t.Fatalf("build message: %v", err)
 	}
 
-	if got := debugPayloadAt(DebugMessages, msg, codec); strings.Contains(got, "/home/ada") {
+	if got := debugPayloadAt(DebugMessages, msg); strings.Contains(got, "/home/ada") {
 		t.Fatalf("messages level printed a path from a title: %s", got)
 	}
-	if got := debugPayloadAt(DebugTrace, msg, codec); !strings.Contains(got, "/home/ada") {
+	if got := debugPayloadAt(DebugTrace, msg); !strings.Contains(got, "/home/ada") {
 		t.Fatalf("trace must still capture content, got %s", got)
 	}
 }

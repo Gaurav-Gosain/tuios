@@ -28,9 +28,6 @@ type Client struct {
 	closeOnce sync.Once
 	sendMu    sync.Mutex
 	recvMu    sync.Mutex
-
-	// Codec negotiated with daemon (gob by default)
-	codec Codec
 }
 
 // ClientConfig holds configuration for creating a client.
@@ -44,7 +41,6 @@ func NewClient(cfg *ClientConfig) *Client {
 	return &Client{
 		version: cfg.Version,
 		done:    make(chan struct{}),
-		codec:   DefaultCodec(), // gob by default
 	}
 }
 
@@ -88,7 +84,7 @@ func (c *Client) Close() error {
 
 // ListSessions returns a list of all sessions.
 func (c *Client) ListSessions() ([]SessionInfo, error) {
-	msg, err := NewMessageWithCodec(MsgList, nil, c.codec)
+	msg, err := NewMessage(MsgList, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +103,7 @@ func (c *Client) ListSessions() ([]SessionInfo, error) {
 	}
 
 	var payload SessionListPayload
-	if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+	if err := resp.ParsePayload(&payload); err != nil {
 		return nil, err
 	}
 
@@ -116,9 +112,9 @@ func (c *Client) ListSessions() ([]SessionInfo, error) {
 
 // KillSession terminates a session.
 func (c *Client) KillSession(name string) error {
-	msg, err := NewMessageWithCodec(MsgKill, &KillPayload{
+	msg, err := NewMessage(MsgKill, &KillPayload{
 		SessionName: name,
-	}, c.codec)
+	})
 	if err != nil {
 		return err
 	}
@@ -138,7 +134,7 @@ func (c *Client) KillSession(name string) error {
 
 	case MsgError:
 		var errPayload ErrorPayload
-		if err := resp.ParsePayloadWithCodec(&errPayload, c.codec); err != nil {
+		if err := resp.ParsePayload(&errPayload); err != nil {
 			return fmt.Errorf("kill failed")
 		}
 		return fmt.Errorf("kill failed: %s", errPayload.Message)
@@ -163,13 +159,13 @@ func (c *Client) CreateGlobalSession(name string, width, height int) error {
 }
 
 func (c *Client) createSession(name string, width, height int, global bool) error {
-	msg, err := NewMessageWithCodec(MsgNew, &NewPayload{
+	msg, err := NewMessage(MsgNew, &NewPayload{
 		SessionName: name,
 		Width:       width,
 		Height:      height,
 		Detach:      true,
 		Global:      global,
-	}, c.codec)
+	})
 	if err != nil {
 		return err
 	}
@@ -189,7 +185,7 @@ func (c *Client) createSession(name string, width, height int, global bool) erro
 
 	case MsgError:
 		var errPayload ErrorPayload
-		if err := resp.ParsePayloadWithCodec(&errPayload, c.codec); err != nil {
+		if err := resp.ParsePayload(&errPayload); err != nil {
 			return fmt.Errorf("create failed")
 		}
 		return fmt.Errorf("create failed: %s", errPayload.Message)
@@ -202,9 +198,9 @@ func (c *Client) createSession(name string, width, height int, global bool) erro
 // ResurrectSession asks the daemon to restore a saved session on demand. It is
 // a no-op (success) if the session is already live.
 func (c *Client) ResurrectSession(name string) error {
-	msg, err := NewMessageWithCodec(MsgResurrect, &ResurrectPayload{
+	msg, err := NewMessage(MsgResurrect, &ResurrectPayload{
 		SessionName: name,
-	}, c.codec)
+	})
 	if err != nil {
 		return err
 	}
@@ -224,7 +220,7 @@ func (c *Client) ResurrectSession(name string) error {
 
 	case MsgError:
 		var errPayload ErrorPayload
-		if err := resp.ParsePayloadWithCodec(&errPayload, c.codec); err != nil {
+		if err := resp.ParsePayload(&errPayload); err != nil {
 			return fmt.Errorf("resurrect failed")
 		}
 		return fmt.Errorf("resurrect failed: %s", errPayload.Message)
@@ -241,7 +237,7 @@ func (c *Client) sendHello() error {
 	// Detect shell
 	shell := detectShell()
 
-	msg, err := NewMessageWithCodec(MsgHello, &HelloPayload{
+	msg, err := NewMessage(MsgHello, &HelloPayload{
 		Version:        c.version,
 		Term:           termType,
 		ColorTerm:      colorTerm,
@@ -250,7 +246,7 @@ func (c *Client) sendHello() error {
 		Height:         c.height,
 		PreferredCodec: "gob", // Request gob (default)
 		Protocol:       ProtocolVersion,
-	}, c.codec)
+	})
 	if err != nil {
 		return err
 	}
@@ -267,7 +263,7 @@ func (c *Client) sendHello() error {
 
 	if resp.Type == MsgError {
 		var errPayload ErrorPayload
-		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		_ = resp.ParsePayload(&errPayload)
 		return fmt.Errorf("the daemon refused this client: %s", errPayload.Message)
 	}
 	if resp.Type != MsgWelcome {
@@ -276,18 +272,14 @@ func (c *Client) sendHello() error {
 		return numberingMismatch(c.version, resp.Type)
 	}
 
-	// Parse welcome to get negotiated codec
 	var welcome WelcomePayload
-	if err := resp.ParsePayloadWithCodec(&welcome, c.codec); err != nil {
+	if err := resp.ParsePayload(&welcome); err != nil {
 		return fmt.Errorf("failed to parse welcome: %w", err)
 	}
 
 	if protocolMismatch(welcome.Protocol) {
 		return daemonProtocolMismatch(c.version, &welcome)
 	}
-
-	// gob is the only payload codec.
-	c.codec = DefaultCodec()
 
 	return nil
 }
@@ -297,7 +289,7 @@ func (c *Client) send(msg *Message) error {
 	defer c.sendMu.Unlock()
 
 	_ = c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	return WriteMessageWithCodec(c.conn, msg, c.codec)
+	return WriteMessage(c.conn, msg)
 }
 
 func (c *Client) recv() (*Message, error) {
@@ -305,8 +297,7 @@ func (c *Client) recv() (*Message, error) {
 	defer c.recvMu.Unlock()
 
 	_ = c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
-	msg, _, err := ReadMessageWithCodec(c.conn)
-	return msg, err
+	return ReadMessage(c.conn)
 }
 
 func (c *Client) getTerminalSize() (width, height int) {
@@ -331,11 +322,6 @@ func (c *Client) SendControlMessage(msg *Message) (*Message, error) {
 	}
 
 	return resp, nil
-}
-
-// GetCodec returns the negotiated codec for this client.
-func (c *Client) GetCodec() Codec {
-	return c.codec
 }
 
 // detectTerminalEnv detects TERM and COLORTERM values.

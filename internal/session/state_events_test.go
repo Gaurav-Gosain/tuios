@@ -103,7 +103,7 @@ func attachSyncingTUI(t *testing.T, d *Daemon, sess *Session) *syncingTUI {
 
 	go func() {
 		for {
-			if _, _, err := ReadMessageWithCodec(clientSide); err != nil {
+			if _, err := ReadMessage(clientSide); err != nil {
 				return
 			}
 		}
@@ -114,7 +114,7 @@ func attachSyncingTUI(t *testing.T, d *Daemon, sess *Session) *syncingTUI {
 // sync pushes a state snapshot to the daemon exactly as a TUI client does, via
 // the daemon's update-state handler.
 func (s *syncingTUI) sync(state *SessionState) {
-	msg, err := NewMessageWithCodec(MsgUpdateState, state, DefaultCodec())
+	msg, err := NewMessage(MsgUpdateState, state)
 	if err != nil {
 		return
 	}

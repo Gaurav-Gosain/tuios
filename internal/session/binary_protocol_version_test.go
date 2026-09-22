@@ -41,21 +41,20 @@ func fakeDaemonReplying(t *testing.T, replyType MessageType, welcome *WelcomePay
 			return
 		}
 		defer func() { _ = conn.Close() }()
-		codec := GetCodec(CodecGob)
-		msg, _, err := ReadMessageWithCodec(conn)
+		msg, err := ReadMessage(conn)
 		if err != nil || msg.Type != MsgHello {
 			return
 		}
 		var payload HelloPayload
-		if err := msg.ParsePayloadWithCodec(&payload, codec); err != nil {
+		if err := msg.ParsePayload(&payload); err != nil {
 			return
 		}
 		hello <- &payload
-		reply, err := NewMessageWithCodec(replyType, welcome, codec)
+		reply, err := NewMessage(replyType, welcome)
 		if err != nil {
 			return
 		}
-		_ = WriteMessageWithCodec(conn, reply, codec)
+		_ = WriteMessage(conn, reply)
 		// Hold the connection open so a client that accepts the handshake is
 		// not failed by an EOF it never asked about.
 		time.Sleep(2 * time.Second)
@@ -184,8 +183,6 @@ func TestDaemonAnswersAHello(t *testing.T) {
 	if err != nil {
 		t.Fatalf("socket path: %v", err)
 	}
-	codec := GetCodec(CodecGob)
-
 	say := func(t *testing.T, hello *HelloPayload) *Message {
 		t.Helper()
 		conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
@@ -193,15 +190,15 @@ func TestDaemonAnswersAHello(t *testing.T) {
 			t.Fatalf("dial: %v", err)
 		}
 		t.Cleanup(func() { _ = conn.Close() })
-		msg, err := NewMessageWithCodec(MsgHello, hello, codec)
+		msg, err := NewMessage(MsgHello, hello)
 		if err != nil {
 			t.Fatalf("encode hello: %v", err)
 		}
-		if err := WriteMessageWithCodec(conn, msg, codec); err != nil {
+		if err := WriteMessage(conn, msg); err != nil {
 			t.Fatalf("send hello: %v", err)
 		}
 		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-		resp, _, err := ReadMessageWithCodec(conn)
+		resp, err := ReadMessage(conn)
 		if err != nil {
 			t.Fatalf("read reply: %v", err)
 		}
@@ -217,7 +214,7 @@ func TestDaemonAnswersAHello(t *testing.T) {
 			t.Fatalf("expected an error reply, got type %d", resp.Type)
 		}
 		var errPayload ErrorPayload
-		if err := resp.ParsePayloadWithCodec(&errPayload, codec); err != nil {
+		if err := resp.ParsePayload(&errPayload); err != nil {
 			t.Fatalf("parse error reply: %v", err)
 		}
 		if !strings.Contains(errPayload.Message, "tuios kill-server") {
@@ -231,7 +228,7 @@ func TestDaemonAnswersAHello(t *testing.T) {
 			t.Fatalf("a client announcing no protocol version was not refused (reply type %d)", resp.Type)
 		}
 		var errPayload ErrorPayload
-		if err := resp.ParsePayloadWithCodec(&errPayload, codec); err != nil {
+		if err := resp.ParsePayload(&errPayload); err != nil {
 			t.Fatalf("parse error reply: %v", err)
 		}
 		if !strings.Contains(errPayload.Message, "tuios kill-server") {
@@ -245,7 +242,7 @@ func TestDaemonAnswersAHello(t *testing.T) {
 			t.Fatalf("a current client was refused by this daemon (reply type %d)", resp.Type)
 		}
 		var welcome WelcomePayload
-		if err := resp.ParsePayloadWithCodec(&welcome, codec); err != nil {
+		if err := resp.ParsePayload(&welcome); err != nil {
 			t.Fatalf("parse welcome: %v", err)
 		}
 		if welcome.Protocol != ProtocolVersion {

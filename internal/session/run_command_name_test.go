@@ -32,12 +32,12 @@ func routedCommand(t *testing.T, d *Daemon, sessionID string) (chan RemoteComman
 	tui, clientSide := newFakeTUI(t, d, sessionID)
 	routed := make(chan RemoteCommandPayload, 1)
 	go func() {
-		msg, _, err := ReadMessageWithCodec(clientSide)
+		msg, err := ReadMessage(clientSide)
 		if err != nil {
 			return
 		}
 		var rc RemoteCommandPayload
-		if err := msg.ParsePayloadWithCodec(&rc, DefaultCodec()); err != nil {
+		if err := msg.ParsePayload(&rc); err != nil {
 			return
 		}
 		routed <- rc
@@ -116,7 +116,7 @@ func TestExecuteCommandRefusesAnUnknownName(t *testing.T) {
 	// The reply is written on the handler's goroutine into an unbuffered pipe,
 	// so the handler runs beside the read.
 	go func() { _ = d.handleExecuteCommand(cli, msg) }()
-	reply, _, err := ReadMessageWithCodec(cliSide)
+	reply, err := ReadMessage(cliSide)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestExecuteCommandRefusesAnUnknownName(t *testing.T) {
 		t.Fatalf("the CLI path routed toggle_zooom to the client instead of refusing it (got message type %v)", reply.Type)
 	}
 	var res CommandResultPayload
-	if err := reply.ParsePayloadWithCodec(&res, DefaultCodec()); err != nil {
+	if err := reply.ParsePayload(&res); err != nil {
 		t.Fatal(err)
 	}
 	if res.Success {

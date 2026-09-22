@@ -36,7 +36,7 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 	// can prove it got its own answer.
 	go func() {
 		for {
-			m, _, err := ReadMessageWithCodec(server)
+			m, err := ReadMessage(server)
 			if err != nil {
 				return
 			}
@@ -47,11 +47,11 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 				if reqType == MsgKill {
 					marker = "kill"
 				}
-				resp, _ := NewMessageWithCodec(MsgSessionList, &SessionListPayload{
+				resp, _ := NewMessage(MsgSessionList, &SessionListPayload{
 					Sessions: []SessionInfo{{Name: marker}},
-				}, DefaultCodec())
+				})
 				writeMu.Lock()
-				_ = WriteMessageWithCodec(server, resp, DefaultCodec())
+				_ = WriteMessage(server, resp)
 				writeMu.Unlock()
 				atomic.AddInt32(&inFlight, -1)
 			}(m.Type)
@@ -65,7 +65,7 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 	results := make(chan result, 2)
 
 	roundTrip := func(reqType MessageType, want string) {
-		msg, err := NewMessageWithCodec(reqType, &KillPayload{SessionName: want}, c.codec)
+		msg, err := NewMessage(reqType, &KillPayload{SessionName: want})
 		if err != nil {
 			results <- result{err: err}
 			return
@@ -76,7 +76,7 @@ func TestSendAndWaitResponseSerializesSharedTypes(t *testing.T) {
 			return
 		}
 		var payload SessionListPayload
-		if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := resp.ParsePayload(&payload); err != nil {
 			results <- result{err: err}
 			return
 		}

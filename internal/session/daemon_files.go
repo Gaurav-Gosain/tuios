@@ -32,7 +32,7 @@ const dirListingMax = 2000
 // named it is actually in it.
 func (d *Daemon) handleReadDir(cs *connState, msg *Message) error {
 	var payload ReadDirPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return d.sendError(cs, ErrCodeInvalidMessage, "invalid read-dir payload")
 	}
 	dir := filepath.Clean(payload.Dir)

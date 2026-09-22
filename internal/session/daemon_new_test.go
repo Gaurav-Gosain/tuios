@@ -15,20 +15,19 @@ func runHandleNew(t *testing.T, d *Daemon, payload *NewPayload) error {
 		conn:             clientConn,
 		clientID:         "test-client",
 		done:             make(chan struct{}),
-		codec:            DefaultCodec(),
 		ptySubscriptions: make(map[string]struct{}),
 	}
 
 	// Drain whatever the handler sends back.
 	go func() {
 		_ = server.SetReadDeadline(time.Now().Add(2 * time.Second))
-		_, _, _ = ReadMessageWithCodec(server)
+		_, _ = ReadMessage(server)
 		_ = server.Close()
 	}()
 
-	msg, err := NewMessageWithCodec(MsgNew, payload, cs.codec)
+	msg, err := NewMessage(MsgNew, payload)
 	if err != nil {
-		t.Fatalf("NewMessageWithCodec failed: %v", err)
+		t.Fatalf("NewMessage failed: %v", err)
 	}
 	err = d.handleNew(cs, msg)
 	_ = clientConn.Close()

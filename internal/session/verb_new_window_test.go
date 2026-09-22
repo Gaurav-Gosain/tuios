@@ -16,7 +16,7 @@ func collectStateSyncs(clientSide net.Conn) <-chan *SessionState {
 	pushed := make(chan *SessionState, 8)
 	go func() {
 		for {
-			msg, _, err := ReadMessageWithCodec(clientSide)
+			msg, err := ReadMessage(clientSide)
 			if err != nil {
 				return
 			}
@@ -24,7 +24,7 @@ func collectStateSyncs(clientSide net.Conn) <-chan *SessionState {
 				continue
 			}
 			var p StateSyncPayload
-			if err := msg.ParsePayloadWithCodec(&p, DefaultCodec()); err == nil {
+			if err := msg.ParsePayload(&p); err == nil {
 				pushed <- p.State
 			}
 		}

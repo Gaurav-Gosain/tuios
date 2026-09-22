@@ -72,7 +72,7 @@ func unknownCommandMessage(name string) string {
 // handleExecuteCommand routes a tape command to the TUI client attached to the session.
 func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 	var payload ExecuteCommandPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return fmt.Errorf("invalid execute command payload: %w", err)
 	}
 
@@ -169,7 +169,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 // Forwards results back to the original requester if there's a pending request.
 func (d *Daemon) handleCommandResult(cs *connState, msg *Message) error {
 	var payload CommandResultPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return fmt.Errorf("invalid command result payload: %w", err)
 	}
 
@@ -308,7 +308,7 @@ func (d *Daemon) sendCommandResult(cs *connState, requestID string, success bool
 // handleGetLogs retrieves recent log entries from the daemon's log buffer.
 func (d *Daemon) handleGetLogs(cs *connState, msg *Message) error {
 	var payload GetLogsPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return fmt.Errorf("invalid get logs payload: %w", err)
 	}
 

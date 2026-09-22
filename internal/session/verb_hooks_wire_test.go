@@ -26,8 +26,7 @@ func TestClientHookRowsSurviveTheCodec(t *testing.T) {
 		"last_ms":    int64(7),
 	}}
 
-	codec := DefaultCodec()
-	encoded, err := codec.Encode(&CommandResultPayload{
+	encoded, err := encodePayload(&CommandResultPayload{
 		Success: true,
 		Data:    map[string]any{"type": "hook_list", "hooks": sent},
 	})
@@ -35,7 +34,7 @@ func TestClientHookRowsSurviveTheCodec(t *testing.T) {
 		t.Fatalf("encode: %v", err)
 	}
 	var got CommandResultPayload
-	if err := codec.Decode(encoded, &got); err != nil {
+	if err := decodePayload(encoded, &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 
@@ -59,7 +58,6 @@ func TestClientHookRowsSurviveTheCodec(t *testing.T) {
 // socket. gob drops a nil map and drops an empty slice, so a client that holds
 // no hooks at all must not make the verb fail or report rows it never sent.
 func TestAnEmptyClientHookTableSurvivesTheCodec(t *testing.T) {
-	codec := DefaultCodec()
 	for _, tc := range []struct {
 		name string
 		sent []map[string]any
@@ -68,7 +66,7 @@ func TestAnEmptyClientHookTableSurvivesTheCodec(t *testing.T) {
 		{"a client with no table sends nil", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			encoded, err := codec.Encode(&CommandResultPayload{
+			encoded, err := encodePayload(&CommandResultPayload{
 				Success: true,
 				Data:    map[string]any{"type": "hook_list", "hooks": tc.sent},
 			})
@@ -76,7 +74,7 @@ func TestAnEmptyClientHookTableSurvivesTheCodec(t *testing.T) {
 				t.Fatalf("encode: %v", err)
 			}
 			var got CommandResultPayload
-			if err := codec.Decode(encoded, &got); err != nil {
+			if err := decodePayload(encoded, &got); err != nil {
 				t.Fatalf("decode: %v", err)
 			}
 			if rows := clientHookRows(got.Data["hooks"]); len(rows) != 0 {

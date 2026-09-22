@@ -7,15 +7,13 @@ import (
 
 func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	var payload HelloPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return fmt.Errorf("invalid hello payload: %w", err)
 	}
 
 	cs.hello = &payload
 
 	// Refuse a client this daemon cannot serve before it can attach to anything.
-	// The codec is negotiated below, so the refusal goes out on the codec the
-	// client opened with, which is the one it can read.
 	if protocolMismatch(payload.Protocol) {
 		LogBasic("Client %s refused: speaks protocol %d, this daemon serves %d..%d",
 			cs.clientID, peerProtocol(payload.Protocol), MinProtocolVersion, ProtocolVersion)
@@ -36,10 +34,8 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 			cs.clientID, payload.CellWidth, payload.CellHeight, payload.KittyGraphics, payload.SixelGraphics, payload.TerminalName)
 	}
 
-	// gob is the only payload codec; PreferredCodec stays in the handshake
+	// gob is the only payload codec. PreferredCodec stays in the handshake
 	// for wire stability but cannot select anything else.
-	cs.codec = DefaultCodec()
-
 	sessions := d.manager.ListSessions()
 	names := make([]string, len(sessions))
 	for i, s := range sessions {
@@ -49,14 +45,14 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	return d.sendMessage(cs, MsgWelcome, &WelcomePayload{
 		Version:      d.version,
 		SessionNames: names,
-		Codec:        cs.codec.Type().String(),
+		Codec:        wireCodecName,
 		Protocol:     ProtocolVersion,
 	})
 }
 
 func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	var payload AttachPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return fmt.Errorf("invalid attach payload: %w", err)
 	}
 
@@ -281,7 +277,7 @@ func (d *Daemon) handleDetach(cs *connState) error {
 
 func (d *Daemon) handleNew(cs *connState, msg *Message) error {
 	var payload NewPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return fmt.Errorf("invalid new payload: %w", err)
 	}
 
@@ -330,7 +326,7 @@ func (d *Daemon) handleList(cs *connState) error {
 
 func (d *Daemon) handleKill(cs *connState, msg *Message) error {
 	var payload KillPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return fmt.Errorf("invalid kill payload: %w", err)
 	}
 
@@ -343,7 +339,7 @@ func (d *Daemon) handleKill(cs *connState, msg *Message) error {
 
 func (d *Daemon) handleResurrect(cs *connState, msg *Message) error {
 	var payload ResurrectPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return fmt.Errorf("invalid resurrect payload: %w", err)
 	}
 
@@ -408,7 +404,7 @@ func (d *Daemon) handleInput(cs *connState, msg *Message) error {
 
 func (d *Daemon) handleResize(cs *connState, msg *Message) error {
 	var payload ResizePTYPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return fmt.Errorf("invalid resize payload: %w", err)
 	}
 
@@ -458,7 +454,7 @@ func (d *Daemon) handleCreatePTY(cs *connState, msg *Message) error {
 	}
 
 	var payload CreatePTYPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		debugLog("[DEBUG] handleCreatePTY: invalid payload: %v", err)
 		return fmt.Errorf("invalid create PTY payload: %w", err)
 	}
@@ -510,7 +506,7 @@ func (d *Daemon) handleClosePTY(cs *connState, msg *Message) error {
 	}
 
 	var payload ClosePTYPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return fmt.Errorf("invalid close PTY payload: %w", err)
 	}
 
@@ -537,7 +533,7 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	}
 
 	var state SessionState
-	if err := msg.ParsePayloadWithCodec(&state, cs.codec); err != nil {
+	if err := msg.ParsePayload(&state); err != nil {
 		return fmt.Errorf("invalid state payload: %w", err)
 	}
 
@@ -606,7 +602,7 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	}
 
 	var payload SubscribePTYPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return fmt.Errorf("invalid subscribe PTY payload: %w", err)
 	}
 
@@ -669,7 +665,7 @@ func (d *Daemon) handleUnsubscribePTY(cs *connState, msg *Message) error {
 	}
 
 	var payload UnsubscribePTYPayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return fmt.Errorf("invalid unsubscribe PTY payload: %w", err)
 	}
 
@@ -706,7 +702,7 @@ func (d *Daemon) handleGetTerminalState(cs *connState, msg *Message) error {
 	}
 
 	var payload GetTerminalStatePayload
-	if err := msg.ParsePayloadWithCodec(&payload, cs.codec); err != nil {
+	if err := msg.ParsePayload(&payload); err != nil {
 		return fmt.Errorf("invalid get terminal state payload: %w", err)
 	}
 

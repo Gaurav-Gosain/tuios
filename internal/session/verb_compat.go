@@ -229,7 +229,7 @@ func probeLegacyDaemon(clientVersion string) (*WelcomePayload, error) {
 	}
 
 	_ = conn.SetReadDeadline(time.Now().Add(clientHandshakeTimeout))
-	resp, _, err := ReadMessageWithCodec(conn)
+	resp, err := ReadMessage(conn)
 	if err != nil {
 		return nil, err
 	}

@@ -72,9 +72,6 @@ type TUIClient struct {
 	// sidebar refresh cannot pile up requests on a busy daemon.
 	refreshInFlight atomic.Bool
 
-	// Codec negotiated with daemon (gob by default)
-	codec Codec
-
 	// PTY output handlers (raw-byte path)
 	ptyHandlers   map[string]func([]byte)
 	ptyHandlersMu sync.RWMutex
@@ -162,7 +159,6 @@ type TUIClient struct {
 // NewTUIClient creates a new TUI client for daemon communication.
 func NewTUIClient() *TUIClient {
 	return &TUIClient{
-		codec:             DefaultCodec(), // gob by default
 		ptyHandlers:       make(map[string]func([]byte)),
 		ptyClosedHandlers: make(map[string]func()),
 		ptyResizeHandlers: make(map[string]func(int, int)),
@@ -238,7 +234,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	}
 
 	// Send hello with capabilities
-	msg, err := NewMessageWithCodec(MsgHello, hello, c.codec)
+	msg, err := NewMessage(MsgHello, hello)
 	if err != nil {
 		return err
 	}
@@ -257,7 +253,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		// The only thing the daemon refuses at hello is the handshake itself,
 		// and its message already names the fix.
 		var errPayload ErrorPayload
-		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		_ = resp.ParsePayload(&errPayload)
 		return fmt.Errorf("the daemon refused this client: %s", errPayload.Message)
 	}
 	if resp.Type != MsgWelcome {
@@ -269,9 +265,8 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		return numberingMismatch(version, resp.Type)
 	}
 
-	// Parse welcome to get negotiated codec
 	var welcome WelcomePayload
-	if err := resp.ParsePayloadWithCodec(&welcome, c.codec); err != nil {
+	if err := resp.ParsePayload(&welcome); err != nil {
 		return fmt.Errorf("failed to parse welcome: %w", err)
 	}
 
@@ -292,9 +287,6 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	// Recorded rather than refused: the two builds can talk, and refusing would
 	// turn a note into an outage.
 	c.noteDaemonBuild(version, welcome.Version)
-
-	// Update codec based on what server negotiated
-	c.codec = DefaultCodec()
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
 	infos := make([]SessionInfo, 0, len(welcome.SessionNames))
@@ -333,13 +325,13 @@ func (c *TUIClient) BuildMismatch() (clientBuild, daemonBuild string) {
 // AttachSession attaches to a session (creates if createNew is true).
 // Returns the session state for restoration.
 func (c *TUIClient) AttachSession(name string, createNew bool, width, height int) (*SessionState, error) {
-	msg, err := NewMessageWithCodec(MsgAttach, &AttachPayload{
+	msg, err := NewMessage(MsgAttach, &AttachPayload{
 		SessionName: name,
 		CreateNew:   createNew,
 		Width:       width,
 		Height:      height,
 		Reserve:     c.OwnLayoutReserve(),
-	}, c.codec)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +348,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 	switch resp.Type {
 	case MsgAttached:
 		var payload AttachedPayload
-		if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := resp.ParsePayload(&payload); err != nil {
 			return nil, err
 		}
 		c.sessionID = payload.SessionID
@@ -367,7 +359,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 
 	case MsgError:
 		var errPayload ErrorPayload
-		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		_ = resp.ParsePayload(&errPayload)
 		return nil, &attachRefused{msg: errPayload.Message}
 
 	default:
@@ -394,7 +386,7 @@ func AttachRefused(err error) bool {
 
 // Detach detaches from the current session.
 func (c *TUIClient) Detach() error {
-	msg, err := NewMessageWithCodec(MsgDetach, nil, c.codec)
+	msg, err := NewMessage(MsgDetach, nil)
 	if err != nil {
 		return err
 	}
@@ -448,7 +440,7 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 	debugLog("[SWITCH] Starting session switch to %q", targetName)
 
 	// 1. Detach (fire-and-forget, daemon sends MsgDetached back)
-	detachMsg, err := NewMessageWithCodec(MsgDetach, nil, c.codec)
+	detachMsg, err := NewMessage(MsgDetach, nil)
 	if err != nil {
 		return nil, fmt.Errorf("detach encode: %w", err)
 	}
@@ -522,12 +514,12 @@ func (c *TUIClient) SwitchSession(targetName string, width, height int) (*Sessio
 // attachWhileReading performs the attach round trip through the read loop, for
 // the paths that run with the read loop already started.
 func (c *TUIClient) attachWhileReading(name string, createNew bool, width, height int) (*SessionState, error) {
-	msg, err := NewMessageWithCodec(MsgAttach, &AttachPayload{
+	msg, err := NewMessage(MsgAttach, &AttachPayload{
 		SessionName: name,
 		CreateNew:   createNew,
 		Width:       width,
 		Height:      height,
-	}, c.codec)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("attach encode: %w", err)
 	}
@@ -540,7 +532,7 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 	switch resp.Type {
 	case MsgAttached:
 		var payload AttachedPayload
-		if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := resp.ParsePayload(&payload); err != nil {
 			return nil, err
 		}
 		c.sessionID = payload.SessionID
@@ -550,7 +542,7 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 
 	case MsgError:
 		var errPayload ErrorPayload
-		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		_ = resp.ParsePayload(&errPayload)
 		return nil, &attachRefused{msg: errPayload.Message}
 
 	default:
@@ -561,12 +553,12 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 // CreatePTY creates a new PTY in the session. windowID, if non-empty, is the
 // client-side window UUID exported to the shell as TUIOS_WINDOW_ID.
 func (c *TUIClient) CreatePTY(title, windowID string, width, height int) (string, error) {
-	msg, err := NewMessageWithCodec(MsgCreatePTY, &CreatePTYPayload{
+	msg, err := NewMessage(MsgCreatePTY, &CreatePTYPayload{
 		Title:    title,
 		Width:    width,
 		Height:   height,
 		WindowID: windowID,
-	}, c.codec)
+	})
 	if err != nil {
 		return "", err
 	}
@@ -579,14 +571,14 @@ func (c *TUIClient) CreatePTY(title, windowID string, width, height int) (string
 	switch resp.Type {
 	case MsgPTYCreated:
 		var payload PTYCreatedPayload
-		if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := resp.ParsePayload(&payload); err != nil {
 			return "", err
 		}
 		return payload.ID, nil
 
 	case MsgError:
 		var errPayload ErrorPayload
-		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		_ = resp.ParsePayload(&errPayload)
 		return "", fmt.Errorf("create PTY failed: %s", errPayload.Message)
 
 	default:
@@ -606,9 +598,9 @@ func (c *TUIClient) CreatePTY(title, windowID string, width, height int) (string
 // whether that pane announced a directory its shell is not in. Empty for a
 // directory the user walked to by hand, which is theirs whatever a pane says.
 func (c *TUIClient) ReadDir(windowID, dir string, max int, pinned bool) (*DirListingPayload, error) {
-	msg, err := NewMessageWithCodec(MsgReadDir, &ReadDirPayload{
+	msg, err := NewMessage(MsgReadDir, &ReadDirPayload{
 		WindowID: windowID, Dir: dir, Max: max, Pinned: pinned,
-	}, c.codec)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -621,14 +613,14 @@ func (c *TUIClient) ReadDir(windowID, dir string, max int, pinned bool) (*DirLis
 	switch resp.Type {
 	case MsgDirListing:
 		var payload DirListingPayload
-		if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := resp.ParsePayload(&payload); err != nil {
 			return nil, err
 		}
 		return &payload, nil
 
 	case MsgError:
 		var errPayload ErrorPayload
-		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		_ = resp.ParsePayload(&errPayload)
 		return nil, fmt.Errorf("read dir failed: %s", errPayload.Message)
 
 	default:
@@ -638,7 +630,7 @@ func (c *TUIClient) ReadDir(windowID, dir string, max int, pinned bool) (*DirLis
 
 // ClosePTY closes a PTY.
 func (c *TUIClient) ClosePTY(ptyID string) error {
-	msg, err := NewMessageWithCodec(MsgClosePTY, &ClosePTYPayload{PTYID: ptyID}, c.codec)
+	msg, err := NewMessage(MsgClosePTY, &ClosePTYPayload{PTYID: ptyID})
 	if err != nil {
 		return err
 	}
@@ -657,7 +649,7 @@ func (c *TUIClient) SubscribePTY(ptyID string, fromSeq int64, fromSnapshot bool,
 	c.ptyHandlers[ptyID] = handler
 	c.ptyHandlersMu.Unlock()
 
-	msg, err := NewMessageWithCodec(MsgSubscribePTY, &SubscribePTYPayload{PTYID: ptyID, FromSeq: fromSeq, FromSnapshot: fromSnapshot}, c.codec)
+	msg, err := NewMessage(MsgSubscribePTY, &SubscribePTYPayload{PTYID: ptyID, FromSeq: fromSeq, FromSnapshot: fromSnapshot})
 	if err != nil {
 		return err
 	}
@@ -675,7 +667,7 @@ func (c *TUIClient) UnsubscribePTY(ptyID string) {
 	c.ptyResizeHandlersMu.Unlock()
 
 	// Send unsubscribe message to daemon to stop streaming
-	msg, err := NewMessageWithCodec(MsgUnsubscribePTY, &UnsubscribePTYPayload{PTYID: ptyID}, c.codec)
+	msg, err := NewMessage(MsgUnsubscribePTY, &UnsubscribePTYPayload{PTYID: ptyID})
 	if err != nil {
 		return // Silent failure - handler already removed locally
 	}
@@ -874,12 +866,12 @@ func (c *TUIClient) SendCommandResult(requestID string, success bool, message st
 
 // SendCommandResultWithData sends the result with optional structured data.
 func (c *TUIClient) SendCommandResultWithData(requestID string, success bool, message string, data map[string]any) error {
-	msg, err := NewMessageWithCodec(MsgCommandResult, &CommandResultPayload{
+	msg, err := NewMessage(MsgCommandResult, &CommandResultPayload{
 		RequestID: requestID,
 		Success:   success,
 		Message:   message,
 		Data:      data,
-	}, c.codec)
+	})
 	if err != nil {
 		return err
 	}
@@ -897,11 +889,11 @@ func (c *TUIClient) WritePTY(ptyID string, data []byte) error {
 
 // ResizePTY resizes a PTY.
 func (c *TUIClient) ResizePTY(ptyID string, width, height int) error {
-	msg, err := NewMessageWithCodec(MsgResize, &ResizePTYPayload{
+	msg, err := NewMessage(MsgResize, &ResizePTYPayload{
 		PTYID:  ptyID,
 		Width:  width,
 		Height: height,
-	}, c.codec)
+	})
 	if err != nil {
 		return err
 	}
@@ -913,12 +905,12 @@ func (c *TUIClient) ResizePTY(ptyID string, width, height int) error {
 // Called when the terminal is resized.
 func (c *TUIClient) NotifyTerminalSize(width, height int) error {
 	// Send resize with empty PTYID to indicate client terminal resize
-	msg, err := NewMessageWithCodec(MsgResize, &ResizePTYPayload{
+	msg, err := NewMessage(MsgResize, &ResizePTYPayload{
 		PTYID:   "", // Empty = client terminal resize, not PTY resize
 		Width:   width,
 		Height:  height,
 		Reserve: c.OwnLayoutReserve(),
-	}, c.codec)
+	})
 	if err != nil {
 		return err
 	}
@@ -937,11 +929,11 @@ func (c *TUIClient) NotifyTerminalSize(width, height int) error {
 // same news. A send error means the socket is gone, which the read loop is
 // already reporting as a disconnect.
 func (c *TUIClient) SendIntent(commandType string, args ...string) error {
-	msg, err := NewMessageWithCodec(MsgExecuteCommand, &ExecuteCommandPayload{
+	msg, err := NewMessage(MsgExecuteCommand, &ExecuteCommandPayload{
 		SessionName: c.sessionName,
 		CommandType: commandType,
 		Args:        args,
-	}, c.codec)
+	})
 	if err != nil {
 		return err
 	}
@@ -950,7 +942,7 @@ func (c *TUIClient) SendIntent(commandType string, args ...string) error {
 
 // UpdateState sends a state update to the daemon.
 func (c *TUIClient) UpdateState(state *SessionState) error {
-	msg, err := NewMessageWithCodec(MsgUpdateState, state, c.codec)
+	msg, err := NewMessage(MsgUpdateState, state)
 	if err != nil {
 		return err
 	}
@@ -976,9 +968,9 @@ func (c *TUIClient) KillSessionByName(name string) error {
 	if name == "" {
 		return fmt.Errorf("session name cannot be empty")
 	}
-	msg, err := NewMessageWithCodec(MsgKill, &KillPayload{
+	msg, err := NewMessage(MsgKill, &KillPayload{
 		SessionName: name,
-	}, c.codec)
+	})
 	if err != nil {
 		return err
 	}
@@ -989,11 +981,11 @@ func (c *TUIClient) KillSessionByName(name string) error {
 	}
 	if resp.Type == MsgError {
 		var errPayload ErrorPayload
-		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		_ = resp.ParsePayload(&errPayload)
 		return fmt.Errorf("kill session: %s", errPayload.Message)
 	}
 	var payload SessionListPayload
-	if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+	if err := resp.ParsePayload(&payload); err != nil {
 		return err
 	}
 	c.applySessionListing(payload.Sessions, stamp)
@@ -1009,13 +1001,13 @@ func (c *TUIClient) KillSessionByName(name string) error {
 // use: an emulator that survived keeps its own history and merges just what
 // scrolled off while it was away. Pass zero for a fresh emulator.
 func (c *TUIClient) GetTerminalState(ptyID string, maxScrollback, have int) (*TerminalState, error) {
-	msg, err := NewMessageWithCodec(MsgGetTerminalState, &GetTerminalStatePayload{
+	msg, err := NewMessage(MsgGetTerminalState, &GetTerminalStatePayload{
 		PTYID:              ptyID,
 		IncludeScrollback:  maxScrollback >= 0,
 		MaxScrollbackLines: max(maxScrollback, 0),
 		HaveScrollback:     max(have, 0),
 		Packed:             true,
-	}, c.codec)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -1028,7 +1020,7 @@ func (c *TUIClient) GetTerminalState(ptyID string, maxScrollback, have int) (*Te
 	switch resp.Type {
 	case MsgTerminalState:
 		var payload TerminalStatePayload
-		if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := resp.ParsePayload(&payload); err != nil {
 			return nil, err
 		}
 		// The cells were asked for packed and are unpacked here, so every
@@ -1040,7 +1032,7 @@ func (c *TUIClient) GetTerminalState(ptyID string, maxScrollback, have int) (*Te
 
 	case MsgError:
 		var errPayload ErrorPayload
-		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		_ = resp.ParsePayload(&errPayload)
 		return nil, fmt.Errorf("get terminal state failed: %s", errPayload.Message)
 
 	default:
@@ -1074,7 +1066,7 @@ func (c *TUIClient) readLoop() {
 		// wakes this read, so an idle client sleeps until the daemon speaks.
 		// The body gets a deadline so a large payload cannot be cut mid-frame
 		// and desync framing.
-		msg, _, err := ReadMessageBuffered(c.conn, c.reader(), 0, 30*time.Second)
+		msg, err := ReadMessageBuffered(c.conn, c.reader(), 0, 30*time.Second)
 		c.readMu.Unlock()
 
 		if err != nil {
@@ -1131,7 +1123,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 
 	case MsgPTYResized:
 		var payload PTYResizedPayload
-		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := msg.ParsePayload(&payload); err != nil {
 			return
 		}
 		c.ptyResizeHandlersMu.RLock()
@@ -1143,7 +1135,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 
 	case MsgPTYClosed:
 		var payload ClosePTYPayload
-		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := msg.ParsePayload(&payload); err != nil {
 			return
 		}
 		// Get the closed handler before removing
@@ -1174,7 +1166,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		// client, or over the control plane). Notify once so the app can exit;
 		// the connection itself is still usable, so it is not torn down here.
 		var payload SessionEndedPayload
-		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := msg.ParsePayload(&payload); err != nil {
 			debugLog("[CLIENT] Failed to parse session ended: %v", err)
 		}
 		name := payload.SessionName
@@ -1192,7 +1184,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 
 	case MsgAgentMail:
 		var payload AgentMailPayload
-		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := msg.ParsePayload(&payload); err != nil {
 			debugLog("[CLIENT] Failed to parse agent mail: %v", err)
 			return
 		}
@@ -1210,7 +1202,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			return
 		}
 		var payload HostsChangedPayload
-		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := msg.ParsePayload(&payload); err != nil {
 			debugLog("[CLIENT] Failed to parse a hosts change: %v", err)
 			return
 		}
@@ -1229,7 +1221,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 	case MsgRemoteCommand:
 		// Remote command from CLI routed through daemon
 		var payload RemoteCommandPayload
-		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := msg.ParsePayload(&payload); err != nil {
 			debugLog("[REMOTE] Failed to parse remote command: %v", err)
 			return
 		}
@@ -1264,7 +1256,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 	case MsgStateSync:
 		// Another client updated the session state
 		var payload StateSyncPayload
-		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := msg.ParsePayload(&payload); err != nil {
 			debugLog("[MULTICLIENT] Failed to parse state sync: %v", err)
 			return
 		}
@@ -1290,7 +1282,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 	case MsgClientJoined:
 		// Another client joined the session
 		var payload ClientJoinedPayload
-		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := msg.ParsePayload(&payload); err != nil {
 			debugLog("[MULTICLIENT] Failed to parse client joined: %v", err)
 			return
 		}
@@ -1306,7 +1298,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 	case MsgClientLeft:
 		// Another client left the session
 		var payload ClientLeftPayload
-		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := msg.ParsePayload(&payload); err != nil {
 			debugLog("[MULTICLIENT] Failed to parse client left: %v", err)
 			return
 		}
@@ -1322,7 +1314,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 	case MsgSessionResize:
 		// Session effective size changed (min of all clients)
 		var payload SessionResizePayload
-		if err := msg.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+		if err := msg.ParsePayload(&payload); err != nil {
 			debugLog("[MULTICLIENT] Failed to parse session resize: %v", err)
 			return
 		}
@@ -1519,13 +1511,13 @@ func (c *TUIClient) CreateGlobalSession(name string, width, height int) error {
 }
 
 func (c *TUIClient) createSession(name string, width, height int, global bool) error {
-	msg, err := NewMessageWithCodec(MsgNew, &NewPayload{
+	msg, err := NewMessage(MsgNew, &NewPayload{
 		SessionName: name,
 		Width:       width,
 		Height:      height,
 		Detach:      true,
 		Global:      global,
-	}, c.codec)
+	})
 	if err != nil {
 		return err
 	}
@@ -1536,11 +1528,11 @@ func (c *TUIClient) createSession(name string, width, height int, global bool) e
 	}
 	if resp.Type == MsgError {
 		var errPayload ErrorPayload
-		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		_ = resp.ParsePayload(&errPayload)
 		return fmt.Errorf("create session: %s", errPayload.Message)
 	}
 	var payload SessionListPayload
-	if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+	if err := resp.ParsePayload(&payload); err != nil {
 		return err
 	}
 	c.applySessionListing(payload.Sessions, stamp)
@@ -1551,7 +1543,7 @@ func (c *TUIClient) createSession(name string, width, height int, global bool) e
 // updates the cached availableSessionNames. Blocks until response arrives.
 // Safe to call while the read loop is running.
 func (c *TUIClient) RefreshSessionList() ([]SessionInfo, error) {
-	listMsg, err := NewMessageWithCodec(MsgList, nil, c.codec)
+	listMsg, err := NewMessage(MsgList, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1562,11 +1554,11 @@ func (c *TUIClient) RefreshSessionList() ([]SessionInfo, error) {
 	}
 	if resp.Type == MsgError {
 		var errPayload ErrorPayload
-		_ = resp.ParsePayloadWithCodec(&errPayload, c.codec)
+		_ = resp.ParsePayload(&errPayload)
 		return nil, fmt.Errorf("list sessions: %s", errPayload.Message)
 	}
 	var payload SessionListPayload
-	if err := resp.ParsePayloadWithCodec(&payload, c.codec); err != nil {
+	if err := resp.ParsePayload(&payload); err != nil {
 		return nil, err
 	}
 	c.applySessionListing(payload.Sessions, stamp)
@@ -1693,7 +1685,7 @@ func (c *TUIClient) send(msg *Message) error {
 	defer c.mu.Unlock()
 
 	_ = c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	return WriteMessageWithCodec(c.conn, msg, c.codec)
+	return WriteMessage(c.conn, msg)
 }
 
 func (c *TUIClient) recv() (*Message, error) {
@@ -1701,8 +1693,7 @@ func (c *TUIClient) recv() (*Message, error) {
 	defer c.readMu.Unlock()
 
 	_ = c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
-	msg, _, err := ReadMessageWithCodec(c.reader())
-	return msg, err
+	return ReadMessage(c.reader())
 }
 
 // reader is the buffered reader over conn, built on first use so a client

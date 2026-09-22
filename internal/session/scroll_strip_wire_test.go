@@ -19,12 +19,12 @@ import "testing"
 func TestScrollStripSurvivesTheWireAtHome(t *testing.T) {
 	for _, offset := range []int{0, 1, 65} {
 		state := &SessionState{Name: "wire", ScrollStrip: &ScrollStripState{ViewportX: offset}}
-		data, err := gobCodec.Encode(state)
+		data, err := encodePayload(state)
 		if err != nil {
 			t.Fatalf("encode: %v", err)
 		}
 		var back SessionState
-		if err := gobCodec.Decode(data, &back); err != nil {
+		if err := decodePayload(data, &back); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
 		if back.ScrollStrip == nil {
@@ -37,12 +37,12 @@ func TestScrollStripSurvivesTheWireAtHome(t *testing.T) {
 
 	// The other half: a peer that really has said nothing still decodes as nil,
 	// so "keep the strip you have" stays reachable.
-	data, err := gobCodec.Encode(&SessionState{Name: "wire"})
+	data, err := encodePayload(&SessionState{Name: "wire"})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
 	var back SessionState
-	if err := gobCodec.Decode(data, &back); err != nil {
+	if err := decodePayload(data, &back); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if back.ScrollStrip != nil {
