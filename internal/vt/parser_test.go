@@ -3,10 +3,14 @@ package vt
 import (
 	"bytes"
 	"encoding/base64"
+	"math/rand/v2"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/ansi/parser"
 )
 
 // TestSeqParserGrowsToTheCap pins the buffer's shape: it starts small, a
@@ -50,6 +54,66 @@ func TestSeqParserGrowsToTheCap(t *testing.T) {
 	feed("\x1b]0;title\x1b\\")
 	if string(got) != "0;title" {
 		t.Fatalf("a short OSC after a long one arrived as %q", got)
+	}
+}
+
+// TestSeqParserCsiParamsMatchUpstream feeds the same random CSI-heavy input
+// to this parser and to upstream's and requires the same dispatches, action by
+// action. The CSI parameter bytes take a direct path in advance that skips the
+// transition table, and this is what holds it to the table's result: digits,
+// ':' and ';' in any mix, sub-parameters, missing parameters, and more
+// parameters than the buffer holds.
+func TestSeqParserCsiParamsMatchUpstream(t *testing.T) {
+	type dispatch struct {
+		cmd    ansi.Cmd
+		params string
+	}
+	record := func(out *[]dispatch) ansi.Handler {
+		return ansi.Handler{
+			HandleCsi: func(cmd ansi.Cmd, params ansi.Params) {
+				var b strings.Builder
+				for _, p := range params {
+					b.WriteString(strconv.Itoa(p.Param(-1)))
+					if p.HasMore() {
+						b.WriteByte(':')
+					} else {
+						b.WriteByte(';')
+					}
+				}
+				*out = append(*out, dispatch{cmd, b.String()})
+			},
+		}
+	}
+
+	alphabet := []byte("0123456789;;;::\x1b[[m?<>= $")
+	rng := rand.New(rand.NewPCG(1, 2))
+	for round := range 2000 {
+		var in []byte
+		for range 1 + rng.IntN(8) {
+			in = append(in, "\x1b["...)
+			for range rng.IntN(120) {
+				in = append(in, alphabet[rng.IntN(len(alphabet))])
+			}
+			in = append(in, "mHJ"[rng.IntN(3)])
+		}
+
+		var got, want []dispatch
+		ours := newSeqParser(1024)
+		ours.SetHandler(record(&got))
+		theirs := ansi.NewParser()
+		theirs.SetParamsSize(parser.MaxParamsSize)
+		theirs.SetHandler(record(&want))
+		for i, b := range in {
+			if a, w := ours.Advance(b), theirs.Advance(b); a != w {
+				t.Fatalf("round %d byte %d (%q) of %q: action %d, upstream %d", round, i, b, in, a, w)
+			}
+			if ours.State() != theirs.State() {
+				t.Fatalf("round %d byte %d (%q) of %q: state %d, upstream %d", round, i, b, in, ours.State(), theirs.State())
+			}
+		}
+		if !slices.Equal(got, want) {
+			t.Fatalf("round %d, input %q:\n got  %v\n want %v", round, in, got, want)
+		}
 	}
 }
 

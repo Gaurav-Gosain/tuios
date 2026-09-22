@@ -1,9 +1,15 @@
 package vt
 
 // The sequence parser. This is charmbracelet/x/ansi's Parser (v0.11.8, MIT,
-// Copyright (c) 2023 Charmbracelet, Inc.) with one change: the string data
-// buffer starts small and grows on demand up to its cap, instead of being
-// allocated at the cap up front.
+// Copyright (c) 2023 Charmbracelet, Inc.) with three changes:
+//
+//   - the string data buffer starts small and grows on demand up to its cap,
+//     instead of being allocated at the cap up front;
+//   - a byte with the top bit set inside a string state is payload, never an
+//     8-bit C1 control (see advance);
+//   - a parameter byte inside a CSI takes a direct path in advance that makes
+//     the same change to the params as the transition table and performAction
+//     would, without the table lookup and the action switch.
 //
 // Upstream allocates the whole buffer in SetDataSize, and the emulator needs
 // a 4 MiB cap so a sixel image or a large OSC 52 write is not cut short. That
@@ -16,8 +22,8 @@ package vt
 // exceeds the cap. A payload longer than the cap is cut at the cap, exactly
 // as it was before.
 //
-// The state machine, the parameter handling and the dispatch are verbatim
-// upstream, so every sequence parses as it did.
+// Apart from those, the state machine, the parameter handling and the
+// dispatch are verbatim upstream, so every sequence parses as it did.
 
 import (
 	"unicode/utf8"
@@ -217,6 +223,32 @@ func (p *seqParser) advance(b byte) parser.Action {
 	if b >= 0x80 && p.inStringState() {
 		p.performAction(parser.PutAction, p.state, b)
 		return parser.PutAction
+	}
+
+	// A parameter byte inside a CSI. In an SGR-heavy stream these are most of
+	// the bytes, and the transition table maps every one of them to
+	// ParamAction with the state unchanged (x/ansi parser/transition_table.go:
+	// AddRange(0x30, 0x3B, CsiParamState, ParamAction, CsiParamState)). With
+	// no state change, nothing below but performAction(ParamAction) has an
+	// effect, so the update is done here directly. A full params buffer falls
+	// through to the generic path, which ignores the byte.
+	if p.state == parser.CsiParamState && b >= '0' && b <= ';' && p.paramsLen < len(p.params) {
+		if b <= '9' {
+			v := p.params[p.paramsLen]
+			if v == parser.MissingParam {
+				v = 0
+			}
+			p.params[p.paramsLen] = v*10 + int(b-'0')
+			return parser.ParamAction
+		}
+		if b == ':' {
+			p.params[p.paramsLen] |= parser.HasMoreFlag
+		}
+		p.paramsLen++
+		if p.paramsLen < len(p.params) {
+			p.params[p.paramsLen] = parser.MissingParam
+		}
+		return parser.ParamAction
 	}
 
 	state, action := parser.Table.Transition(p.state, b)

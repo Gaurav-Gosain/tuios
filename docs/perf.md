@@ -845,3 +845,37 @@ ultraviolet's `TerminalRenderer`, outside this repo.
 ```
 BenchmarkIdleTick-8   0 render/tick   0 work/tick   296 B/op   5 allocs/op
 ```
+
+## 2026-09 vt parse and scroll pass
+
+Profiled `internal/vt` over the SGR-heavy repaint (`BenchmarkBackendDoomFire*`),
+the short-line and long-line scroll floods (`BenchmarkEmulatorShortLineScroll`,
+`BenchmarkEmulatorScrollThroughput`) and the log replays
+(`BenchmarkEmulatorWriteHeavyOutput`), then took each hotspot as its own commit
+so a bad one can be reverted alone.
+
+### Measurement conditions
+
+The machine was shared with other agents, load average 13 to 18 on 11 cores,
+and wall time swung by +/-100% between identical runs. So every figure below is
+process CPU time (user plus sys) per iteration: each benchmark runs at a fixed
+`-test.benchtime Nx` with `-test.cpu 1`, old and new binaries alternate, six
+rounds a side, compared with `benchstat`. CPU time still includes the process
+start and the benchmark setup, which dilutes a change towards zero but never
+inflates it. Allocation counts are exact.
+
+### What moved
+
+**CSI parameter bytes skip the transition table** (`parser.go`). Every byte of
+`38;2;r;g;b` went through `parser.Table.Transition` and the `performAction`
+switch to reach three lines of arithmetic, and in a truecolor repaint those
+bytes are most of the stream. `advance` now does the digit, `:` and `;` update
+directly when the state is `CsiParamState`, which is exactly what the table
+does for 0x30 to 0x3B there. `TestSeqParserCsiParamsMatchUpstream` feeds random
+CSI input to this parser and to upstream's and requires the same action, state
+and dispatch for every byte.
+
+| CPU per op | before | after | |
+|---|---|---|---|
+| `BackendDoomFire158x40` | 99.4 ms | 82.0 ms | -17.5% (p=0.002) |
+| every other vt benchmark | | | `~` |
