@@ -21,8 +21,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/netutil"
+	"github.com/Gaurav-Gosain/tuios/internal/served"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/fang"
@@ -578,22 +578,50 @@ func createTUIOSHandler(sess sip.Session) tea.Model {
 	// whatever font size the reader had.
 	hostCaps := webHostCaps(cellSize(pty))
 
-	// Determine session name
-	sessionName := webServerConfig.defaultSession
+	// The kind says the rest: read-only config, no desktop, graphics forced on
+	// because stdin is not a TTY here. Kitty and sixel output is routed
+	// through the sip PTY slave, the same pipe as the text, so the browser's
+	// image addon renders it.
+	opts := app.OSOptions{
+		Client:         app.ClientBrowser,
+		ShowKeys:       interfaceFlags.ShowKeys,
+		Width:          pty.Width,
+		Height:         pty.Height,
+		GraphicsOutput: graphicsOut,
+		TouchClient:    touch,
+		Caps:           hostCaps,
+	}
 
 	// If ephemeral mode or daemon not available, use old behavior
 	if webServerConfig.ephemeral {
-		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut, touch, hostCaps)
+		return served.NewModel(opts, webAppearanceOverrides())
 	}
 
-	// Try to connect to daemon
-	model, err := createDaemonTUIOSInstance(sessionName, pty.Width, pty.Height, graphicsOut, touch, hostCaps)
+	version := webServerConfig.version
+	if version == "" {
+		version = "web-client"
+	}
+
+	// Try to connect to daemon. The daemon is told this browser's own cell
+	// size, measured from the canvas it reports beside its grid (see
+	// cellSize), and hands it to every guest as the pixel size of its window.
+	// A hardcoded 10x20 there made a tool that asks how big a cell is before
+	// drawing, kitty icat being the usual one, draw at the wrong scale.
+	daemonOpts := opts
+	daemonOpts.SessionName = webServerConfig.defaultSession
+	model, err := served.Attach(daemonOpts, webAppearanceOverrides(), version, app.ClientCapabilitiesOf(hostCaps), pickWebSession)
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
-		return createEphemeralTUIOSInstance(pty.Width, pty.Height, graphicsOut, touch, hostCaps)
+		return served.NewModel(opts, webAppearanceOverrides())
 	}
 	return model
 }
+
+// pickWebSession is the session a browser gets when --default-session names
+// none: a dedicated one called "web", created when missing. Picking one of the
+// existing sessions instead was arbitrary and changed as sessions came and
+// went. The session switcher reaches the others from inside tuios.
+func pickWebSession([]string) string { return "web" }
 
 // webHostCaps is the browser terminal one connection draws to. sip's bundled
 // xterm.js loads the image addon with kitty and sixel support, so both
@@ -623,44 +651,6 @@ const (
 	webFallbackCellHeight = 20
 )
 
-// createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
-func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch bool, hostCaps *app.HostCapabilities) tea.Model {
-	// Load user configuration
-	userConfig, err := config.LoadUserConfig()
-	if err != nil {
-		userConfig = config.DefaultConfig()
-	}
-
-	// Set up the input handler
-	app.SetInputHandler(input.HandleInput)
-
-	// Create keybind registry
-	keybindRegistry := config.NewKeybindRegistry(userConfig)
-
-	// Create TUIOS instance with kitty/sixel graphics routed through the
-	// sip PTY slave. sip v0.1.12+ bundles xterm.js's image addon with
-	// kittySupport enabled, so APC sequences we forward here are rendered
-	// by the browser terminal.
-	//
-	// The kind says the rest: read-only config, no desktop, graphics forced
-	// on because stdin is not a TTY here.
-	seed := config.AppearanceFrom(userConfig, webAppearanceOverrides())
-	tuiosInstance := app.NewOS(app.OSOptions{
-		Client:          app.ClientBrowser,
-		KeybindRegistry: keybindRegistry,
-		UserConfig:      userConfig,
-		Settings:        &seed,
-		ShowKeys:        interfaceFlags.ShowKeys,
-		Width:           width,
-		Height:          height,
-		GraphicsOutput:  graphicsOut,
-		TouchClient:     touch,
-		Caps:            hostCaps,
-	})
-
-	return tuiosInstance
-}
-
 // cellSize works out what one cell measures in the browser's pixels, from the
 // canvas size the browser reports beside its grid. It is a real measurement:
 // the browser sends widthPx and heightPx with every resize, so the answer
@@ -682,96 +672,6 @@ func cellSize(pty sip.Pty) (cellWidth, cellHeight int) {
 		}
 	}
 	return cellWidth, cellHeight
-}
-
-// createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon.
-// hostCaps is this browser's own, from webHostCaps.
-func createDaemonTUIOSInstance(sessionName string, width, height int, graphicsOut *os.File, touch bool, hostCaps *app.HostCapabilities) (tea.Model, error) {
-	// Connect to daemon
-	client := session.NewTUIClient()
-	v := webServerConfig.version
-	if v == "" {
-		v = "web-client"
-	}
-
-	// Advertise kitty graphics capability to the daemon. sip v0.1.12+
-	// bundles xterm.js's image addon with kittySupport enabled, so the
-	// browser terminal can render kitty APC sequences forwarded by child
-	// processes.
-	//
-	// The cell dimensions are this browser's own, measured from the canvas size
-	// it reports beside its grid (see cellSize). They used to be a hardcoded
-	// 10x20, which the daemon then handed to every guest in the session as the
-	// pixel size of its window: a tool that asks the terminal how big a cell is
-	// before drawing - kitty icat is the usual one - was told a number that had
-	// nothing to do with the reader's font, and drew at the wrong scale.
-	webCaps := app.ClientCapabilitiesOf(hostCaps)
-	if err := client.ConnectWithCapabilities(v, width, height, webCaps); err != nil {
-		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
-	}
-
-	// Determine which session to attach to. The previous behavior  - picking
-	// an arbitrary existing session  - was confusing and non-deterministic.
-	// New behavior:
-	//   - If --default-session is set, use that (create if missing).
-	//   - Otherwise attach to a dedicated session named "web" (create if
-	//     missing). Users can then `Ctrl+B S` to switch to any other session
-	//     from inside TUIOS using the built-in session switcher.
-	if sessionName == "" {
-		sessionName = "web"
-	}
-
-	// Attach to session (create if doesn't exist)
-	state, err := client.AttachSession(sessionName, true, width, height)
-	if err != nil {
-		_ = client.Close()
-		return nil, fmt.Errorf("failed to attach to session: %w", err)
-	}
-
-	// Start read loop for daemon messages
-	client.StartReadLoop()
-
-	// Load user configuration
-	userConfig, err := config.LoadUserConfig()
-	if err != nil {
-		log.Printf("Warning: Failed to load config for web session, using defaults: %v", err)
-		userConfig = config.DefaultConfig()
-	}
-	keybindRegistry := config.NewKeybindRegistry(userConfig)
-
-	// Set up the input handler
-	app.SetInputHandler(input.HandleInput)
-
-	// Create TUIOS instance connected to daemon. Graphics passthrough is
-	// force-enabled and routed through the sip PTY slave so kitty/sixel
-	// sequences reach the browser's xterm.js image addon (sip v0.1.12+).
-	seed := config.AppearanceFrom(userConfig, webAppearanceOverrides())
-	tuiosInstance := app.NewOS(app.OSOptions{
-		Client:          app.ClientBrowser,
-		KeybindRegistry: keybindRegistry,
-		UserConfig:      userConfig,
-		Settings:        &seed,
-		ShowKeys:        interfaceFlags.ShowKeys,
-		Width:           width,
-		Height:          height,
-		IsDaemonSession: true,
-		DaemonClient:    client,
-		SessionName:     sessionName,
-		GraphicsOutput:  graphicsOut,
-		TouchClient:     touch,
-		// This browser's own cell measurement, not the process-wide placeholder
-		// installed at startup before any browser had connected. One process
-		// serves several readers at several font sizes, and the image cell math
-		// has to answer for the one it is drawing to.
-		Caps: hostCaps,
-	})
-
-	// Everything the daemon sends an attached client, then the windows it
-	// handed over. The same two calls every client makes.
-	tuiosInstance.WireDaemonClient(client)
-	tuiosInstance.RestoreAttachedSession(state)
-
-	return tuiosInstance, nil
 }
 
 // webAppearanceOverrides is the interface flags this server layers over the

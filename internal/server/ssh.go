@@ -24,7 +24,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
-	"github.com/Gaurav-Gosain/tuios/internal/input"
+	"github.com/Gaurav-Gosain/tuios/internal/served"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
@@ -372,21 +372,59 @@ func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) tea.Model 
 	// with two clients the last to connect decides it.
 	app.SetAccentColorProfile(colorprofile.Env(append(sshSession.Environ(), "TERM="+pty.Term)))
 
-	// Determine session name from SSH context
-	sessionName := determineSessionName(sshSession, cfg)
+	// The kind says the rest: read-only config, no desktop, file-medium
+	// graphics re-encoded for a terminal that cannot read server paths.
+	opts := app.OSOptions{
+		Client:        app.ClientSSH,
+		ShowKeys:      cfg.ShowKeys,
+		Width:         pty.Window.Width,
+		Height:        pty.Window.Height,
+		SSHSession:    sshSession,
+		SSHIsLoopback: isLoopbackAddr(sshSession.RemoteAddr()),
+		// Route kitty/sixel APC sequences to the SSH session so they reach the
+		// client's terminal, via the serialized writer shared with the
+		// bubbletea renderer so graphics and text writes never interleave on
+		// the SSH channel. The passthrough enables itself only when the
+		// client's detected capabilities (Caps, below) say the terminal can
+		// render them, so this is a no-op for a plain client.
+		GraphicsOutput: graphicsOut,
+		// The terminal this client connected from, not the last one to connect.
+		Caps: hostCaps,
+	}
 
 	// If ephemeral mode or daemon not available, use old behavior
 	if cfg.Ephemeral {
-		return createEphemeralTUIOSInstance(sshSession, graphicsOut, pty.Window.Width, pty.Window.Height, hostCaps)
+		return served.NewModel(opts, cfg.Overrides)
 	}
 
-	// Try to connect to daemon
-	model, err := createDaemonTUIOSInstance(sshSession, graphicsOut, sessionName, pty.Window.Width, pty.Window.Height, cfg, clientCaps, hostCaps)
+	version := cfg.Version
+	if version == "" {
+		version = "ssh-client"
+	}
+
+	// Try to connect to daemon. The CLIENT's capabilities go to the daemon,
+	// which uses the cell pixel size to set each PTY's winsize pixel fields.
+	// Those drive SGR-pixel mouse reporting (DEC 1016) and kitty geometry, so
+	// they must describe the terminal the user connected from, not the server.
+	daemonOpts := opts
+	daemonOpts.SessionName = determineSessionName(sshSession, cfg)
+	model, err := served.Attach(daemonOpts, cfg.Overrides, version, clientCaps, pickSSHSession)
 	if err != nil {
 		log.Printf("Warning: Failed to connect to daemon, using ephemeral mode: %v", err)
-		return createEphemeralTUIOSInstance(sshSession, graphicsOut, pty.Window.Width, pty.Window.Height, hostCaps)
+		return served.NewModel(opts, cfg.Overrides)
 	}
 	return model
+}
+
+// pickSSHSession is which session a connection with no name gets, and says
+// so in the log when that was a choice between several.
+func pickSSHSession(available []string) string {
+	name := chooseSSHSession(available)
+	if len(available) > 1 && name == DefaultSSHSessionName {
+		log.Printf("Several sessions exist (%s) and the connection named none, so it gets %q",
+			strings.Join(available, ", "), name)
+	}
+	return name
 }
 
 // determineSessionName determines which session to attach to based on SSH context
@@ -410,132 +448,6 @@ func determineSessionName(sshSession ssh.Session, cfg *SSHServerConfig) string {
 
 	// Priority 4: Empty string = show session picker or use default
 	return ""
-}
-
-// createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
-func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, width, height int, hostCaps *app.HostCapabilities) tea.Model {
-	cfg := sshServerConfig
-	if cfg == nil {
-		cfg = &SSHServerConfig{Ephemeral: true}
-	}
-
-	// Load user configuration and create keybind registry
-	userConfig, err := config.LoadUserConfig()
-	if err != nil {
-		log.Printf("Warning: Failed to load config for SSH session, using defaults: %v", err)
-		userConfig = config.DefaultConfig()
-	}
-	keybindRegistry := config.NewKeybindRegistry(userConfig)
-
-	// Set up the input handler
-	app.SetInputHandler(input.HandleInput)
-
-	// The kind says the rest: read-only config, no desktop, file-medium
-	// graphics re-encoded for a terminal that cannot read server paths.
-	seed := config.AppearanceFrom(userConfig, cfg.Overrides)
-	tuiosInstance := app.NewOS(app.OSOptions{
-		Client:          app.ClientSSH,
-		KeybindRegistry: keybindRegistry,
-		UserConfig:      userConfig,
-		Settings:        &seed,
-		ShowKeys:        cfg.ShowKeys,
-		Width:           width,
-		Height:          height,
-		SSHSession:      sshSession,
-		SSHIsLoopback:   isLoopbackAddr(sshSession.RemoteAddr()),
-		// Route kitty/sixel APC sequences to the SSH session so they reach the
-		// client's terminal, via the serialized writer shared with the
-		// bubbletea renderer so graphics and text writes never interleave on
-		// the SSH channel. The passthrough enables itself only when the
-		// client's detected capabilities (Caps, below) say the terminal can
-		// render them, so this is a no-op for a plain
-		// client.
-		GraphicsOutput: graphicsOut,
-		// The terminal this client connected from, not the last one to connect.
-		Caps: hostCaps,
-	})
-
-	return tuiosInstance
-}
-
-// createDaemonTUIOSInstance creates a TUIOS instance connected to the daemon
-func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, sessionName string, width, height int, cfg *SSHServerConfig, clientCaps *session.ClientCapabilities, hostCaps *app.HostCapabilities) (tea.Model, error) {
-	// Connect to daemon
-	client := session.NewTUIClient()
-	version := cfg.Version
-	if version == "" {
-		version = "ssh-client"
-	}
-
-	// Forward the CLIENT's capabilities to the daemon. The daemon uses the cell
-	// pixel size to set each PTY's winsize pixel fields, which drive SGR-pixel
-	// mouse reporting (DEC 1016) and kitty geometry. These must describe the
-	// terminal the user connected from, not the server.
-	if err := client.ConnectWithCapabilities(version, width, height, clientCaps); err != nil {
-		return nil, fmt.Errorf("failed to connect to daemon: %w", err)
-	}
-
-	// Which session a connection with no name asked for gets.
-	if sessionName == "" {
-		available := client.AvailableSessionNames()
-		sessionName = chooseSSHSession(available)
-		if len(available) > 1 && sessionName == DefaultSSHSessionName {
-			log.Printf("Several sessions exist (%s) and the connection named none, so it gets %q",
-				strings.Join(available, ", "), sessionName)
-		}
-	}
-
-	// Attach to session (create if doesn't exist)
-	state, err := client.AttachSession(sessionName, true, width, height)
-	if err != nil {
-		_ = client.Close()
-		return nil, fmt.Errorf("failed to attach to session: %w", err)
-	}
-
-	// Start read loop for daemon messages
-	client.StartReadLoop()
-
-	// Load user configuration
-	userConfig, err := config.LoadUserConfig()
-	if err != nil {
-		log.Printf("Warning: Failed to load config for SSH session, using defaults: %v", err)
-		userConfig = config.DefaultConfig()
-	}
-	keybindRegistry := config.NewKeybindRegistry(userConfig)
-
-	// Set up the input handler
-	app.SetInputHandler(input.HandleInput)
-
-	// Create TUIOS instance connected to daemon. The kind says the rest, as
-	// in the ephemeral path above.
-	seed := config.AppearanceFrom(userConfig, cfg.Overrides)
-	tuiosInstance := app.NewOS(app.OSOptions{
-		Client:          app.ClientSSH,
-		KeybindRegistry: keybindRegistry,
-		UserConfig:      userConfig,
-		Settings:        &seed,
-		ShowKeys:        cfg.ShowKeys,
-		Width:           width,
-		Height:          height,
-		SSHSession:      sshSession,
-		SSHIsLoopback:   isLoopbackAddr(sshSession.RemoteAddr()),
-		IsDaemonSession: true,
-		DaemonClient:    client,
-		SessionName:     sessionName,
-		// Route graphics to the SSH session (through the serialized writer
-		// shared with the renderer) so kitty/sixel APCs reach the client's
-		// terminal.
-		GraphicsOutput: graphicsOut,
-		// The terminal this client connected from, not the last one to connect.
-		Caps: hostCaps,
-	})
-
-	// Everything the daemon sends an attached client, then the windows it
-	// handed over. The same two calls every client makes.
-	tuiosInstance.WireDaemonClient(client)
-	tuiosInstance.RestoreAttachedSession(state)
-
-	return tuiosInstance, nil
 }
 
 // isLoopbackAddr reports whether an SSH connection arrived from the same
