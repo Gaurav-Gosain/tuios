@@ -14,6 +14,7 @@ This document provides a complete reference for TUIOS command-line interface.
   - [Daemon Mode (Session Persistence)](#daemon-mode-session-persistence)
   - [Remote Control Commands](#remote-control-commands)
   - [Inspection Commands](#inspection-commands)
+  - [More Commands](#more-commands)
   - [Scripting Examples](#scripting-examples)
   - [tuios ssh](#tuios-ssh)
   - [tuios-web (separate binary)](#tuios-web-separate-binary)
@@ -38,7 +39,6 @@ TUIOS uses a modern command-line interface built with Cobra and Fang, providing:
 - Subcommand structure for better organization
 - Styled help output and error messages
 - Shell completion generation
-- Man page generation support
 
 ## Installation
 
@@ -107,33 +107,41 @@ tuios --standalone
 ```
 
 **Flags:**
-- `--theme <name>` - Set color theme (default: none, the terminal's own colors)
-- `--list-themes` - List all available themes and exit
-- `--preview-theme <name>` - Preview a theme's 16 ANSI colors and exit
-- `--skill` - Print the embedded agent skill and exit
-- `--ascii-only` - Use ASCII characters instead of Nerd Font icons
-- `--show-keys` - Enable showkeys overlay (screencaster-style key display)
-- `--border-style <style>` - Window border style (rounded, normal, thick, double, hidden, block, ascii)
-- `--dockbar-position <pos>` - Dockbar position (bottom, top, hidden)
-- `--hide-window-buttons` - Hide window control buttons (minimize, maximize, close)
-- `--window-button-style <style>` - How the window controls are drawn: `dots` (default, macOS traffic lights) or `pill`
-- `--window-button-position <position>` - Which end of the title bar the window controls sit on: `left` (default, macOS) or `right`
-- `--scrollback-lines <num>` - Number of lines in scrollback buffer (100-1000000)
-- `--window-title-position <pos>` - Window title position (bottom, top, hidden)
-- `--hide-clock` - Hide the clock overlay
-- `--no-animations` - Disable UI animations for instant transitions
-- `--show-clock` - Show clock in the status area
-- `--show-cpu` - Show CPU usage in the status area
-- `--show-ram` - Show RAM usage in the status area
-- `--shared-borders` - Enable shared borders between tiled windows
-- `--debug` - Enable debug logging
-- `--cpuprofile <file>` - Write CPU profile to file
-- `-h, --help` - Show help for tuios
-- `-v, --version` - Show version information
+
+`tuios --help` is the authoritative list. These are the flags it shows today:
+
+- `--standalone`: Run a standalone session without the daemon, overriding `startup.daemon`. `TUIOS_NO_DAEMON=1` does the same for a whole shell
+- `--theme <name>`: Color theme to use, such as dracula, nord or tokyonight. Leave it empty (the default) to use the terminal's own colors without theming
+- `--list-themes`: List all available themes and exit
+- `--preview-theme <name>`: Preview a theme's 16 ANSI colors and exit
+- `--skill`: Print the embedded agent skill and exit
+- `--ascii-only`: Use ASCII characters instead of Nerd Font icons
+- `--show-keys`: Enable showkeys overlay (screencaster-style key display)
+- `--border-style <style>`: Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (default: from config or rounded)
+- `--dockbar-position <pos>`: Dockbar position: bottom, top, hidden
+- `--hide-window-buttons`: Hide window control buttons (minimize, maximize, close)
+- `--window-button-style <style>`: How the window controls are drawn: `dots` (default, macOS traffic lights) or `pill`
+- `--window-button-position <position>`: Which end of the title bar the window controls sit on: `left` (default, macOS) or `right`
+- `--window-title-position <pos>`: Window title position: bottom, top, hidden
+- `--scrollback-lines <num>`: Number of lines in scrollback buffer (default: from config or 10000, 100 to 1000000)
+- `--hide-scrollbar`: Hide the window scrollbar thumb on the border
+- `--zoom-max-width <cells>`: Max width in cells for zoom mode (0 is fullscreen)
+- `--confirm-quit`: Always show the quit confirmation dialog
+- `--hide-clock`: Hide the clock overlay (deprecated, the clock is hidden by default)
+- `--show-clock`: Show the clock overlay
+- `--show-cpu`: Show a CPU graph in the dock
+- `--show-ram`: Show RAM usage in the dock
+- `--no-animations`: Disable UI animations for instant transitions
+- `--shared-borders`: Share borders between adjacent tiled windows
+- `--debug`: Enable debug logging
+- `--cpuprofile <file>`: Write CPU profile to file
+- `--pprof <addr>`: Serve net/http/pprof on this address for live profiling, such as localhost:6060
+- `-h, --help`: Show help for tuios
+- `-v, --version`: Show version information
 
 **Examples:**
 ```bash
-tuios                          # Start TUIOS normally (no theme, terminal colors)
+tuios                          # Start TUIOS normally
 tuios --theme dracula          # Start with Dracula theme
 tuios --ascii-only             # Start without Nerd Font icons
 tuios --show-keys              # Start with showkeys overlay enabled
@@ -162,6 +170,8 @@ List all available themes:
 ```bash
 tuios --list-themes
 ```
+
+With no theme set, tuios uses the terminal's own colors.
 
 **Popular themes include:**
 - `tokyonight` - A clean, dark theme with vibrant colors
@@ -266,16 +276,25 @@ tuios new [session-name] [flags]
 ```
 
 **Flags:**
-- `--theme <name>` - Set color theme for the session
-- `--ascii-only` - Use ASCII characters instead of Nerd Font icons
-- `--show-keys` - Enable showkeys overlay
-- `--no-animations` - Disable UI animations
+- `--theme <name>`: Set color theme for the session
+- `--ascii-only`: Use ASCII characters instead of Nerd Font icons
+- `--show-keys`: Enable showkeys overlay
+- `--no-animations`: Disable UI animations
+- `-d, --detach`: Create the session headless without attaching a client
+- `--host <name>`: Create the session on this host from the `[hosts]` table
+- `--ssh`: With `--host`, run ssh to the host and its own tuios instead of attaching here
+- `--global`: Create a global session, which holds panes from more than one machine
+- `--hold`: After a failure, wait for enter before the command exits
+- The appearance flags of the root command (`tuios new --help` lists them)
 
 **Examples:**
 ```bash
 tuios new                      # Create session with auto-generated name
 tuios new mysession            # Create session named "mysession"
 tuios new work --theme dracula # Create session with Dracula theme
+tuios new ci --detach          # Create a headless session and return
+tuios new --host build         # Create a session on the host build and attach it
+tuios new deploy --global      # Create a global session
 ```
 
 ### `tuios attach`
@@ -288,7 +307,10 @@ tuios attach [session-name] [flags]
 ```
 
 **Flags:**
-- `-c, --create` - Create session if it doesn't exist
+- `-c, --create`: Create session if it doesn't exist
+- `--host <name>`: Attach to a session on this host from the `[hosts]` table
+- `--ssh`: With `--host`, run ssh to the host and its own tuios instead of attaching here
+- `--hold`: After a failure, wait for enter before the command exits
 - Same as `tuios new` (theme, ascii-only, etc.)
 
 **Examples:**
@@ -297,6 +319,7 @@ tuios attach                   # Attach to most recent session (or only session)
 tuios attach mysession         # Attach to session named "mysession"
 tuios attach mysession -c      # Attach or create if doesn't exist
 tuios attach mysession --theme nord  # Attach with different theme
+tuios attach --host build api  # Attach the session api on the host build
 ```
 
 ### `tuios ls`
@@ -305,8 +328,16 @@ List all TUIOS sessions.
 
 **Usage:**
 ```bash
-tuios ls
+tuios ls [flags]
 ```
+
+**Flags:**
+- `--json`: Output as JSON. Saved sessions carry `"saved": true`
+- `--all-hosts`: Also list the sessions on every host in the `[hosts]` table. A host that does not answer gets a row saying so and never fails the command
+- `--host <name>`: List the sessions on one host (`local` means this machine)
+
+With no daemon running, `tuios ls` lists the sessions saved on disk instead,
+marked `saved`, and exits 3.
 
 **Output:**
 Shows a table with:
@@ -447,7 +478,8 @@ tuios daemon [flags]
 ```
 
 **Flags:**
-- `--log-level <level>` - Debug log level: `off`, `errors`, `basic`, `messages`, `verbose`, `trace`
+- `--log-level <level>`: Debug log level: `off`, `errors`, `basic`, `messages`, `verbose`, `trace`
+- `--no-restore`: Do not restore saved sessions on start. Run `tuios resurrect` to restore one on demand
 
 **Debug log levels:**
 - `off` - No debug output (default)
@@ -577,12 +609,19 @@ holding on to the id.
 
 **Usage:**
 ```bash
-tuios new-window [name] [flags]
+tuios new-window [name] [command...] [flags]
 ```
 
+Words after the name are the argv the window runs instead of a shell, with no
+shell in between: `tuios new-window htop /usr/bin/htop`.
+
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `--json` - Output result as JSON
+- `-s, --session <name>`: Target session (default: most recently active)
+- `--workspace <n>`: Workspace to open the window on (default: the current one)
+- `--cwd <dir>`: Directory to start the shell in (default: the daemon's)
+- `--no-focus`: Leave the focus where it is
+- `--host <name>`: Run the window's process on this machine from the `[hosts]` table (default: this machine)
+- `--json`: Output result as JSON
 
 **Output:**
 The 8-character window id and the window's name, separated by two spaces:
@@ -792,15 +831,17 @@ tuios wait-for <condition> [flags]
 | `window-exit` | The window's shell exited |
 | `window-idle` | The window printed nothing for `--idle` milliseconds |
 | `agent-state` | An agent reached one of the `--until` states; without `--window`, any agent pane in the session matches |
+| `agent-message` | A message arrived. With `--window`, the first unread message in that inbox; without it, any message left in the session after the wait began |
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `-w, --window <id-or-name>` - Target window (default: focused; `agent-state`: any window)
-- `--pattern <regexp>` - Go regular expression (RE2), required by `window-output`
-- `--until <states>` - Agent state(s) to wait for, comma-separated, required by `agent-state`
-- `--idle <ms>` - Milliseconds of silence that count as idle (default: 500)
-- `--timeout <ms>` - Milliseconds to wait before giving up (default: 30000)
-- `--json` - Output result as JSON
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <id-or-name>`: Target window (default: focused; `agent-state`: any window)
+- `--pattern <regexp>`: Go regular expression (RE2), required by `window-output`
+- `--until <states>`: Agent state(s) to wait for, comma-separated, required by `agent-state`
+- `--thread <id>`: Only match a message in this thread, for `agent-message`. Pass any message id in it
+- `--idle <ms>`: Milliseconds of silence that count as idle (default: 500)
+- `--timeout <ms>`: Milliseconds to wait before giving up (default: 30000)
+- `--json`: Output result as JSON
 
 The `window-output` pattern is matched against the window's scrollback, so
 output that has already scrolled off the visible screen still matches, and
@@ -829,6 +870,9 @@ tuios wait-for session-exists -s work
 
 # Wait until any agent in the session is waiting on a human
 tuios wait-for agent-state -s work --until needs_input
+
+# Wait for mail in your own inbox
+tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --timeout 600000
 
 # Branch on the result
 if tuios wait-for window-output -w build --pattern 'BUILD OK' --timeout 60000; then
@@ -1524,6 +1568,74 @@ in the TUI and drag, or press `f`.
 
 ---
 
+## More Commands
+
+These commands have no section of their own here. Each one's `--help` lists
+its flags and examples, and `tuios --skill` shows how an agent in a pane uses
+them.
+
+**Windows and workspaces:**
+
+| Command | What it does |
+|---------|--------------|
+| `tuios focus-window [window]` | Move the focus to a pane, by name, id, `--relative next` or `--direction left` |
+| `tuios move-window <workspace>` | Move a window to another workspace (`--follow` goes with it) |
+| `tuios select-workspace <workspace>` | Show a workspace |
+| `tuios list-workspaces` | List the workspaces in a session and how many windows each holds |
+| `tuios set-window` | Rename a window (`--name`), minimize it (`--minimize`) or restore it (`--restore`) |
+| `tuios split-window <horizontal\|vertical>` | Divide a pane and open a new one beside it. Needs an attached client and tiling on |
+| `tuios set-layout` | Turn tiling on or off (`--tiling`), reset split ratios (`--equalize`), or flip the focused split (`--rotate`) |
+
+**Agents:**
+
+| Command | What it does |
+|---------|--------------|
+| `tuios list-agents` | List the agent panes in a session and what each is doing |
+| `tuios get-agent-state` | Read a pane's reported agent state |
+| `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session |
+| `tuios read-agent-messages` | Read the messages agents have left in this session |
+| `tuios ask-agent <text>` | Ask another agent a question and wait for its answer |
+| `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
+| `tuios explain-agent-screen` | Show what a harness's screen rules make of a pane |
+| `tuios stash put <file>` | Copy a file into the session store and print the stored path |
+| `tuios stash get <stored-path> [file]` | Copy a stashed file out of the session store, across a link |
+| `tuios stash list` | List the files in the session store |
+
+**Other machines:**
+
+| Command | What it does |
+|---------|--------------|
+| `tuios hosts` | List the machines in the `[hosts]` config table and the state of each link |
+| `tuios hosts add <name> <addr>` | Add a machine. `--tailnet` takes the address from your tailnet; `--command`, `--ssh-option` and `--connect-timeout` tune the link |
+| `tuios hosts remove <name>` | Remove a machine |
+| `tuios hosts test <name>` | Open one link to a host and report what happened |
+| `tuios hosts tailnet` | List the machines on your tailnet and which are offered as addresses |
+
+**Configuration and appearance:**
+
+| Command | What it does |
+|---------|--------------|
+| `tuios list-options [prefix]` | List every settable configuration option, with its type, default and accepted values |
+| `tuios get-config <path>` | Read a configuration option from a running session |
+| `tuios list-themes [theme]` | List the themes, and describe one |
+| `tuios import-theme <file>` | Convert a terminal colour scheme into a tuios theme |
+| `tuios list-glyphs [set]` | List the glyph sets, and describe one |
+| `tuios logs` | View daemon logs |
+
+**Tape scripts:**
+
+| Command | What it does |
+|---------|--------------|
+| `tuios tape play <file.tape>` | Run a tape file in interactive mode |
+| `tuios tape exec <file.tape>` | Execute a tape file in a running session |
+| `tuios tape validate <file.tape>` | Validate a tape file without running it |
+| `tuios tape list` | List all saved tape recordings |
+| `tuios tape show <name>` | Display the contents of a tape file |
+| `tuios tape delete <name>` | Delete a tape recording |
+| `tuios tape dir` | Show the tape recordings directory path |
+
+---
+
 ## Scripting Examples
 
 These remote control and inspection commands enable powerful scripting workflows.
@@ -1772,18 +1884,7 @@ tuios-web [flags]
 - `--window-button-position <position>` - Which end they sit on: `right`, `left`
 - `--scrollback-lines <int>` - Scrollback buffer size
 - `--no-animations` - Disable UI animations
-- `--hide-scrollbar` - Hide the window scrollbar thumb on the border
-- `--window-title-position <pos>` - Window title position: `bottom`, `top`, `hidden`
-- `--hide-clock` - Hide the clock overlay (deprecated, the clock is hidden by default)
-- `--show-clock` - Show the clock overlay
-- `--show-cpu` - Show the CPU graph in the dock
-- `--show-ram` - Show RAM usage in the dock
-- `--shared-borders` - Share borders between adjacent tiled windows
-- `--zoom-max-width <int>` - Max width in cells for zoom mode (0 = fullscreen)
-- `--confirm-quit` - Always show the quit confirmation dialog
 - `--debug` - Enable debug logging
-
-The interface flags are the same set `tuios` and `tuios ssh` take.
 
 **Subcommands:**
 - `tuios-web cert` - Show the status of the self-signed TLS certificate `--auto-tls` uses
@@ -2183,21 +2284,8 @@ tuios help config edit  # Show help for config edit subcommand
 
 ## Global Flags
 
-These flags are available on the root command:
-
-- `--theme <name>` - Set color theme (default: none, the terminal's own colors)
-- `--list-themes` - List all available themes and exit
-- `--preview-theme <name>` - Preview a theme's colors and exit
-- `--skill` - Print the embedded agent skill and exit
-- `--ascii-only` - Use ASCII characters instead of Nerd Font icons
-- `--show-keys` - Enable showkeys overlay (screencaster-style key display)
-- `--show-clock` - Show clock in the status area
-- `--show-cpu` - Show CPU usage in the status area
-- `--show-ram` - Show RAM usage in the status area
-- `--shared-borders` - Enable shared borders between tiled windows
-- `--debug` - Enable debug logging
-- `--cpuprofile <file>` - Write CPU profile to file
-- `-h, --help` - Show help
+The root command's flags are listed under [Root Command](#root-command).
+`--debug`, `--cpuprofile` and `--pprof` are accepted by every subcommand too.
 
 ---
 
@@ -2346,18 +2434,6 @@ tuios completion fish > ~/.config/fish/completions/tuios.fish
 
 ---
 
-## Man Pages
-
-TUIOS supports man page generation through the Fang framework using mango.
-
-**Generate man page:**
-```bash
-# This feature is built-in via Fang
-# Man page generation will be available in a future release
-```
-
----
-
 ## Environment Variables
 
 ### `$EDITOR` / `$VISUAL`
@@ -2372,6 +2448,16 @@ tuios config edit
 ```
 
 **Fallback order:** `$EDITOR` → `$VISUAL` → vim → vi → nano → emacs
+
+### `TUIOS_NO_DAEMON`
+
+Set to `1` to make a plain `tuios` run a standalone session without the daemon,
+the same as `--standalone`, for every run in that shell.
+
+```bash
+export TUIOS_NO_DAEMON=1
+tuios
+```
 
 ### `$SHELL`
 
@@ -2476,8 +2562,11 @@ tuios list-verbs --json          # for scripting
 
 ## Exit Codes
 
-- `0` - Success
-- `1` - Error (configuration error, network error, file not found, etc.)
+- `0`: Success
+- `1`: Error (configuration error, network error, file not found, etc.)
+- `3`: `tuios ls` found no daemon running. It lists the sessions saved on disk
+  instead, so a script can tell a stopped daemon from a running one with no
+  sessions, which exits `0`
 
 A `tuios attach` that ends because its session was killed, or because the daemon
 was lost, exits `1`. A normal detach exits `0`.
@@ -2494,11 +2583,13 @@ tuios --version
 
 **Output:**
 ```
-tuios version v0.0.24
+tuios version v0.0.24 [pure-Go backend]
 Commit: a1b2c3d
 Built: 2025-01-15T10:30:00Z
 By: goreleaser
 ```
+
+The bracket names the terminal emulator backend the binary was built with.
 
 ---
 
@@ -2515,7 +2606,7 @@ If you're upgrading from an older version of TUIOS, here's how the commands have
 | `--list-custom-keybinds` | `tuios keybinds list-custom` |
 | `--ssh` | `tuios ssh` |
 | `--ssh --host X --port Y` | `tuios ssh --host X --port Y` |
-| `--version` | `tuios --version` or `tuios version` |
+| `--version` | `tuios --version` |
 | `--help` | `tuios --help` or `tuios help` |
 
 ---
