@@ -124,7 +124,13 @@ tiling         floating
 size           183x42
 attached       true
 named          2=review
+order          2 1
 ```
+
+`order` appears only when the workspaces have been rearranged, and it is only
+the order they are shown in. They keep their numbers, so `select-workspace 2`
+still means workspace 2. The `set-workspace-order` verb sets it, and has no CLI
+wrapper (see The rest of the surface).
 
 ## Other machines
 
@@ -540,10 +546,21 @@ tuios set-window -s work -w build --minimize
 
 ```
 $ tuios list-workspaces -s work
- WS  NAME    WINDOWS
- *1  -       3
-  2  review  1
-  3  -       0
+╭────┬────────┬─────────╮
+│ WS │ NAME   │ WINDOWS │
+├────┼────────┼─────────┤
+│ *1 │        │ 2       │
+│ 2  │ review │ 1       │
+│ 3  │        │ 0       │
+│ 4  │        │ 0       │
+│ 5  │        │ 0       │
+│ 6  │        │ 0       │
+│ 7  │        │ 0       │
+│ 8  │        │ 0       │
+│ 9  │        │ 0       │
+╰────┴────────┴─────────╯
+
+9 workspace(s). * marks the one showing.
 ```
 
 Focusing a window switches to that window's workspace, so `focus-window` is
@@ -719,13 +736,17 @@ tuios get-agent-state -s work -w build --json
 
 ```json
 {
-  "state": "working",
-  "message": "running the test suite",
-  "source": "report",
+  "activity": "working",
+  "agent_state_at": 1790099335280722000,
+  "confidence": "certain",
   "harness_id": "claude-code",
-  "agent_state_at": 1786610813544385500,
-  "window_id": "293f8b0c-8fe4-467f-8efb-225ff5d7da5c",
-  "success": true
+  "identity": "report",
+  "message": "running the test suite",
+  "needs_you": false,
+  "source": "report",
+  "state": "working",
+  "success": true,
+  "window_id": "739bc078-7522-4a37-bb9b-e5140e918666"
 }
 ```
 
@@ -1251,18 +1272,24 @@ tuios list-options appearance.dock
 tuios list-options --json | jq -r '.options[].path'
 ```
 
+The start of the first command's output. Each option gives its path, type and
+default, then a line saying what it does, then the accepted values when the set
+is closed:
+
 ```
- PATH                              TYPE    DEFAULT  ACCEPTED
- appearance.sidebar.enabled        bool    false
- appearance.sidebar.position       string  left     left, right, hidden
- appearance.sidebar.width          int     28
- appearance.sidebar.sections       string  sessions:25,terminals,files:25,agents:34
- appearance.sidebar.file_icons     bool    true
- appearance.sidebar.file_icon_colors bool  true
- appearance.sidebar.folder_click   string  navigate  navigate, cd, both
- appearance.sidebar.file_actions   bool    true
- appearance.sidebar.file_delete    string  trash    trash, permanent
- appearance.sidebar.show_agents    bool    true      (deprecated)
+[sidebar]
+  appearance.git_dirty                 bool    default true
+                                       Count staged, changed and untracked paths in the rail's git section. The only part of it that costs a walk of the working tree.
+  appearance.sidebar.enabled           bool    default false
+                                       Show the session rail
+  appearance.sidebar.file_actions      bool    default true
+                                       Let the files section create, rename, delete, copy and paste
+  appearance.sidebar.file_delete       string  default trash
+                                       Where a delete sends the file: the trash, or nowhere
+                                       one of: trash, permanent
+  appearance.sidebar.position          string  default left
+                                       Edge the rail sits on, or hidden
+                                       one of: left, right, hidden
 ```
 
 `sections` is the rail's whole layout: which sections it stacks, in what order,
