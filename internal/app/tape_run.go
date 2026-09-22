@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
-	"github.com/Gaurav-Gosain/tuios/internal/tape/trust"
 )
 
 // tapeSeedSettle is how long the seeded window in a freshly created project
@@ -244,20 +243,4 @@ func sanitizeSessionName(s string) string {
 // so it survives as one argument when typed into a POSIX shell.
 func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
-// reCheckTape re-reads and re-classifies the tape at path through the trust
-// store, so a caller can confirm nothing changed between detection and
-// execution. It returns the fresh result; the caller decides what a status or
-// hash change means.
-func (m *OS) reCheckTape(path string) (trust.Result, bool) {
-	store := m.ensureTapeTrust()
-	if store == nil {
-		return trust.Result{}, false
-	}
-	res, err := store.Check(path)
-	if err != nil {
-		m.LogInfo("tape re-check: %v", err)
-	}
-	return res, true
 }

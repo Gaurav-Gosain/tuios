@@ -15,10 +15,6 @@ import (
 const (
 	keybindInnerWidth  = 74
 	keybindVisibleRows = 11
-	// keybindDetailRows is the fixed-height box under the list that explains the
-	// selected row. Fixed so the panel does not change height as the selection
-	// moves, which is the same reason the settings panel fixes its own.
-	keybindDetailRows = 4
 	// keybindKeyColumn is how much of a row the chord gets before the
 	// description starts. Wide enough for "ctrl+b shift+tab" unabbreviated,
 	// because a truncated chord is not a chord.

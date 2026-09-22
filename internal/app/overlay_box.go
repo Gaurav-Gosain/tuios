@@ -11,10 +11,6 @@ import (
 // the panel grammar and size themselves from their own content. The helpers
 // here fit them to the screen the same way overlay_fit.go fits the panels.
 
-// dialogChrome is what a bordered dialog spends on its own frame: a border cell
-// and two padding cells on each side.
-const dialogChrome = 6
-
 // dialogRows returns how many scrolling content rows a centered dialog can show
 // given the rows it spends on everything else.
 func (m *OS) dialogRows(preferred, chrome int) int {

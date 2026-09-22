@@ -263,19 +263,10 @@ func (m *OS) ToggleFocusFollowsMouse() tea.Cmd {
 
 const themeNone = "none"
 
-var (
-	borderStyleOptions = config.BorderStyles
-	positionOptions    = config.DockbarPositions
-	whichKeyPosOptions = config.WhichKeyPositions
-	// 144 is gone: it is above the renderer's ceiling, so offering it was
-	// offering a number that could not be honoured. See config.MaxFPSCap.
-	fpsOptions             = []string{"30", "60", "90", "120", "unlimited"}
-	sidebarPositionOptions = config.SidebarPositions
-	scrollbarStyleOptions  = config.ScrollbarStyles
-	windowButtonOptions    = config.WindowButtonStyles
-	windowButtonPosOptions = config.WindowButtonPositions
-	clickToTypeOptions     = config.ClickToTypeModes
-)
+// fpsOptions are the frame caps the settings row offers. 144 is gone: it is
+// above the renderer's ceiling, so offering it was offering a number that could
+// not be honoured. See config.MaxFPSCap.
+var fpsOptions = []string{"30", "60", "90", "120", "unlimited"}
 
 // boolPtr returns a pointer to b, for the *bool config fields.
 func boolPtr(b bool) *bool { return &b }
