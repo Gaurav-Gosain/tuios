@@ -254,15 +254,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	hostCaps := app.GetHostCapabilities()
 
 	// Build client capabilities from detected host capabilities
-	clientCaps := &session.ClientCapabilities{
-		PixelWidth:    hostCaps.PixelWidth,
-		PixelHeight:   hostCaps.PixelHeight,
-		CellWidth:     hostCaps.CellWidth,
-		CellHeight:    hostCaps.CellHeight,
-		KittyGraphics: hostCaps.KittyGraphics,
-		SixelGraphics: hostCaps.SixelGraphics,
-		TerminalName:  hostCaps.TerminalName,
-	}
+	clientCaps := app.ClientCapabilitiesOf(hostCaps)
 	log.Printf("[CLIENT] Capabilities: cell=%dx%d, kitty=%v, sixel=%v, term=%s",
 		clientCaps.CellWidth, clientCaps.CellHeight, clientCaps.KittyGraphics, clientCaps.SixelGraphics, clientCaps.TerminalName)
 

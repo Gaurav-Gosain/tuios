@@ -136,7 +136,12 @@ func (m *OS) rebuildForSessionOn(state *session.SessionState, savedWidth, savedH
 
 // clientCapabilities is this client's terminal, as the daemon wants it told.
 func (m *OS) clientCapabilities() *session.ClientCapabilities {
-	caps := m.hostCaps()
+	return ClientCapabilitiesOf(m.hostCaps())
+}
+
+// ClientCapabilitiesOf is a host terminal's capabilities in the form the hello
+// hands them to the daemon. It returns nil for nil.
+func ClientCapabilitiesOf(caps *HostCapabilities) *session.ClientCapabilities {
 	if caps == nil {
 		return nil
 	}
