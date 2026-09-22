@@ -42,13 +42,13 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 		return nil
 	})
 	client.OnStateSync(func(state *session.SessionState, triggerType, sourceID string) {
-		clientLog("State sync: trigger=%s, source=%s", triggerType, shortClientID(sourceID))
+		clientLog("State sync: trigger=%s, source=%s", triggerType, shortID(sourceID))
 		if m.QueueStateSync(StateSyncMsg{State: state, TriggerType: triggerType, SourceID: sourceID}) {
 			clientLog("StateSyncChan full, superseded the queued snapshot")
 		}
 	})
 	client.OnClientJoined(func(clientID string, clientCount int, width, height int) {
-		clientLog("Client joined: %s (total: %d, size: %dx%d)", shortClientID(clientID), clientCount, width, height)
+		clientLog("Client joined: %s (total: %d, size: %dx%d)", shortID(clientID), clientCount, width, height)
 		m.QueueClientEvent(ClientEvent{Type: "joined", ClientID: clientID, ClientCount: clientCount, Width: width, Height: height})
 	})
 	// Mail an agent left in the session's ring, and receipts for mail an agent
@@ -66,7 +66,7 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 		}
 	})
 	client.OnClientLeft(func(clientID string, clientCount int) {
-		clientLog("Client left: %s (remaining: %d)", shortClientID(clientID), clientCount)
+		clientLog("Client left: %s (remaining: %d)", shortID(clientID), clientCount)
 		m.QueueClientEvent(ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount})
 	})
 	// The session's size is the minimum over its clients. The geometry
@@ -140,15 +140,6 @@ func (m *OS) QueueClientEvent(ev ClientEvent) (displaced bool) {
 	default:
 	}
 	return true
-}
-
-// shortClientID is the first 8 characters of a client id for a log line, or
-// the whole id when it is shorter, so a non-UUID id cannot panic the call.
-func shortClientID(id string) string {
-	if len(id) < 8 {
-		return id
-	}
-	return id[:8]
 }
 
 // RestoreAttachedSession brings the windows the daemon handed over at attach
