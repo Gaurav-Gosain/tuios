@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/shot"
 )
 
 // This file implements resolved colour capture for capture-pane.
@@ -22,34 +24,28 @@ import (
 // daemon still knows nothing about themes; the palette is an explicit
 // parameter of the request.
 
-// xtermDefaultHex is xterm's own default 16-colour palette, as hex literals.
+// xtermDefault is xterm's own default 16-colour palette, taken from shot's
+// xterm reference palette.
 //
 // This deliberately is not derived from a colour library's BasicColor, whose
 // indices follow the darker VGA scheme (index 1 maroon, index 4 navy). A
 // capture resolved against those shades disagrees with what xterm actually
 // paints when a client sends no palette of its own, and the default has to be
 // the honest one.
-var xtermDefaultHex = [16]string{
-	"#000000", "#cd0000", "#00cd00", "#cdcd00",
-	"#0000ee", "#cd00cd", "#00cdcd", "#e5e5e5",
-	"#7f7f7f", "#ff0000", "#00ff00", "#ffff00",
-	"#5c5cff", "#ff00ff", "#00ffff", "#ffffff",
-}
+var xtermDefault = func() [16]color.Color {
+	var pal [16]color.Color
+	for i, c := range shot.XTermPalette().ANSI {
+		pal[i] = c
+	}
+	return pal
+}()
 
 // xtermPalette returns the standard xterm 16-colour palette as RGB, used when
 // a resolved capture arrives without an explicit palette. The daemon has no
 // theme, so this is the honest default: better than emitting indices for a
 // consumer that cannot resolve them, and identical for every caller.
 func xtermPalette() [16]color.Color {
-	var pal [16]color.Color
-	for i, h := range xtermDefaultHex {
-		c, ok := parseHexColor(h)
-		if !ok {
-			panic("tuios: built-in xterm colour " + h + " is not hex")
-		}
-		pal[i] = c
-	}
-	return pal
+	return xtermDefault
 }
 
 // parseHexColor reads #rgb or #rrggbb, with or without the leading hash. It is
@@ -117,30 +113,6 @@ func csiFieldInt(s string) (int, bool) {
 		return 0, false
 	}
 	return n, true
-}
-
-// xterm256ToRGB resolves a standard 256-colour index to its fixed 24-bit RGB
-// value. These colours are not part of any palette a theme can override: the
-// 6x6x6 cube (16-231) and the grey ramp (232-255) carry their levels in the
-// index itself, so every terminal resolves them identically.
-func xterm256ToRGB(n int) (uint8, uint8, uint8) {
-	switch {
-	case n >= 232:
-		grey := uint8(8 + 10*(n-232))
-		return grey, grey, grey
-	default: // 16 <= n <= 231
-		n -= 16
-		return colourCubeLevel(n / 36), colourCubeLevel((n / 6) % 6), colourCubeLevel(n % 6)
-	}
-}
-
-// colourCubeLevel converts one cube coordinate (0-5) into an 8-bit channel:
-// zero levels stay dark and the rest spread 55 to 235 evenly.
-func colourCubeLevel(v int) uint8 {
-	if v == 0 {
-		return 0
-	}
-	return uint8(55 + 40*v)
 }
 
 // sgrUnits splits an SGR parameter list into units, where a unit is one
@@ -226,8 +198,11 @@ func resolveSGRUnit(u []string, pal [16]color.Color) []string {
 		case idx < 16:
 			return trueColourUnit(n, pal[idx])
 		default:
-			r, g, b := xterm256ToRGB(idx)
-			return rgbUnit(n, r, g, b)
+			// The 6x6x6 cube (16-231) and the grey ramp (232-255) are not part
+			// of any palette a theme can override: they carry their levels in
+			// the index itself, so every terminal resolves them identically.
+			c := shot.XTerm256(idx)
+			return rgbUnit(n, c.R, c.G, c.B)
 		}
 	}
 	// 38;2;r;g;b / 48;2;r;g;b and anything else: already resolved or opaque.

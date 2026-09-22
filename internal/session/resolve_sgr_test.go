@@ -2,6 +2,7 @@ package session
 
 import (
 	"image/color"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -119,6 +120,44 @@ func TestResolveSGR256CubeAndRampResolved(t *testing.T) {
 	for _, c := range cases {
 		if got := ResolveSGR(c.in, pal); got != c.want {
 			t.Fatalf("ResolveSGR(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestResolveSGR256EveryIndex resolves each of the 256 indexes against the
+// xterm default palette and checks the result against the table worked out
+// from its definition: xterm's basic 16, a cube whose nonzero levels are
+// 55+40v, and a grey ramp of 8+10n.
+func TestResolveSGR256EveryIndex(t *testing.T) {
+	basic := [16][3]int{
+		{0, 0, 0}, {205, 0, 0}, {0, 205, 0}, {205, 205, 0},
+		{0, 0, 238}, {205, 0, 205}, {0, 205, 205}, {229, 229, 229},
+		{127, 127, 127}, {255, 0, 0}, {0, 255, 0}, {255, 255, 0},
+		{92, 92, 255}, {255, 0, 255}, {0, 255, 255}, {255, 255, 255},
+	}
+	level := func(v int) int {
+		if v == 0 {
+			return 0
+		}
+		return 55 + 40*v
+	}
+	pal := xtermPalette()
+	for i := range 256 {
+		var r, g, b int
+		switch {
+		case i < 16:
+			r, g, b = basic[i][0], basic[i][1], basic[i][2]
+		case i < 232:
+			n := i - 16
+			r, g, b = level(n/36), level(n/6%6), level(n%6)
+		default:
+			r = 8 + 10*(i-232)
+			g, b = r, r
+		}
+		in := "\x1b[38;5;" + strconv.Itoa(i) + "m"
+		want := "\x1b[38;2;" + strconv.Itoa(r) + ";" + strconv.Itoa(g) + ";" + strconv.Itoa(b) + "m"
+		if got := ResolveSGR(in, pal); got != want {
+			t.Errorf("ResolveSGR(38;5;%d) = %q, want %q", i, got, want)
 		}
 	}
 }
@@ -279,7 +318,7 @@ func TestXtermPaletteIsRGB(t *testing.T) {
 			t.Fatalf("xterm colour %d is black; palette not populated", i)
 		}
 		// Pin the exact RGB as literals — xterm's own defaults, written out
-		// here rather than read back from xtermDefaultHex so a regression to
+		// here rather than read back from shot's xterm table so a regression to
 		// a colour library's VGA shades (index 1 = #800000) cannot pass by
 		// changing both sides together. The daemon resolves against what
 		// xterm actually paints when no palette is sent; a capture that

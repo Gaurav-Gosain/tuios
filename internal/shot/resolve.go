@@ -56,21 +56,22 @@ func XTermPalette() *Palette {
 	return &Palette{FG: XTermFg, BG: XTermBg, ANSI: xtermBasic}
 }
 
-// xterm256 is the standard 256-color mapping above the basic 16: the 6x6x6
-// cube, then the grayscale ramp.
-func xterm256(i int) Color {
+// XTerm256 is the standard 256-color mapping: xterm's basic 16, then the
+// 6x6x6 cube, then the grayscale ramp. An index outside 0-255 gives the zero
+// Color.
+//
+// Indexes 16-255 come from the x/ansi table, whose cube and ramp are xterm's.
+// Its first 16 entries follow the darker VGA scheme instead, so those come
+// from xtermBasic.
+func XTerm256(i int) Color {
 	switch {
 	case i < 0 || i > 255:
 		return Color{}
 	case i < 16:
 		return xtermBasic[i]
-	case i < 232:
-		i -= 16
-		levels := [6]uint8{0, 95, 135, 175, 215, 255}
-		return RGB(levels[i/36], levels[i/6%6], levels[i%6])
 	default:
-		v := uint8(8 + (i-232)*10)
-		return RGB(v, v, v)
+		r, g, b, _ := ansi.IndexedColor(uint8(i)).RGBA()
+		return RGB(uint8(r>>8), uint8(g>>8), uint8(b>>8))
 	}
 }
 
@@ -94,7 +95,7 @@ func (p *Palette) Resolve(c color.Color, def Color) Color {
 		if int(v) < 16 {
 			return p.ANSI[v]
 		}
-		return xterm256(int(v))
+		return XTerm256(int(v))
 	default:
 		r, g, b, a := c.RGBA()
 		if a == 0 {
