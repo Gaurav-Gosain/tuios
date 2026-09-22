@@ -9,7 +9,6 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 )
 
@@ -231,20 +230,18 @@ func (c *Client) ResurrectSession(name string) error {
 }
 
 func (c *Client) sendHello() error {
-	// The same detection the standalone window path uses, so a session this
-	// client creates runs the shell and TERM a standalone pane would.
+	// The same TERM detection the standalone window path uses. The hello names
+	// no shell: the daemon resolves it from its appearance.preferred_shell,
+	// which a config reload keeps current, then $SHELL and the platform
+	// default. This client runs behind every control command and shell
+	// completion, so it must not load the config, write a default one, or print
+	// config warnings.
 	termType, colorTerm := guestenv.DetectTerm()
-	userCfg, err := config.LoadUserConfig()
-	if err != nil {
-		userCfg = nil
-	}
-	shell := config.ResolveShell(userCfg)
 
 	msg, err := NewMessage(MsgHello, &HelloPayload{
 		Version:        c.version,
 		Term:           termType,
 		ColorTerm:      colorTerm,
-		Shell:          shell,
 		Width:          c.width,
 		Height:         c.height,
 		PreferredCodec: "gob", // Request gob (default)

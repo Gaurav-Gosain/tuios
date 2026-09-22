@@ -11,8 +11,8 @@ import (
 // ResolveShell returns the shell a new pane runs when nothing more specific
 // names one, in the order ShellFor uses. A nil cfg skips
 // appearance.preferred_shell. A preferred shell that does not exist is
-// reported on stderr, which is where the standalone and CLI paths that call
-// this have always reported it.
+// reported on stderr, which is where the standalone path that calls this has
+// always reported it.
 func ResolveShell(cfg *UserConfig) string {
 	preferred := ""
 	if cfg != nil {
@@ -33,8 +33,8 @@ func ResolveShell(cfg *UserConfig) string {
 // On Windows a missing .exe suffix is added to preferred and the name is
 // looked up on PATH; elsewhere it must be a path that exists.
 //
-// The standalone window path, the CLI client and the daemon all come here, so
-// a pane runs the same shell whichever of them spawns it.
+// The standalone window path and the daemon both come here, so a pane runs
+// the same shell whichever of them spawns it.
 func ShellFor(preferred string) (shell string, missing bool) {
 	if preferred != "" {
 		if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(preferred), ".exe") {
