@@ -70,18 +70,18 @@ func TestClientConnectLeavesTheConfigAlone(t *testing.T) {
 					return
 				}
 				defer conn.Close()
-				msg, _, err := ReadMessageWithCodec(conn)
+				msg, err := ReadMessage(conn)
 				if err != nil {
 					return
 				}
 				var hello HelloPayload
-				_ = msg.ParsePayloadWithCodec(&hello, DefaultCodec())
+				_ = msg.ParsePayload(&hello)
 				hellos <- hello
-				resp, _ := NewMessageWithCodec(MsgWelcome, &WelcomePayload{
+				resp, _ := NewMessage(MsgWelcome, &WelcomePayload{
 					Codec:    "gob",
 					Protocol: ProtocolVersion,
-				}, DefaultCodec())
-				_ = WriteMessageWithCodec(conn, resp, DefaultCodec())
+				})
+				_ = WriteMessage(conn, resp)
 				// Hold the connection until the client closes it.
 				_, _ = io.Copy(io.Discard, conn)
 			}()
