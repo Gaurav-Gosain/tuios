@@ -10,7 +10,7 @@ import (
 // (*color.RGBA)(nil).
 //
 // color.Color's RGBA method has a value receiver, so invoking it through an
-// interface that holds a nil pointer does not return zeros — it panics with
+// interface that holds a nil pointer does not return zeros. It panics with
 // "value method image/color.RGBA.RGBA called using nil *RGBA pointer". Terminal
 // cells occasionally arrive with such wrapped-nil style colors, so every RGBA()
 // call on a cell style color must screen for this first. The common colors
