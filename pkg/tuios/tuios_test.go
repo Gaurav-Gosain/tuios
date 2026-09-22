@@ -3,6 +3,7 @@ package tuios_test
 import (
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/pkg/tuios"
 )
 
@@ -192,6 +193,33 @@ func TestWithScrollbackLines_Bounds(t *testing.T) {
 	validOpt(&opts)
 	if opts.ScrollbackLines != 5000 {
 		t.Errorf("Expected 5000 scrollback lines, got %d", opts.ScrollbackLines)
+	}
+}
+
+// TestNew_OptionsReachTheAppearanceGlobals checks the embed options land on
+// the settings they name, layered over the config the way CLI flags are.
+func TestNew_OptionsReachTheAppearanceGlobals(t *testing.T) {
+	saved := config.Global
+	t.Cleanup(func() { config.Global = saved })
+
+	_ = tuios.New(
+		tuios.WithASCIIOnly(true),
+		tuios.WithBorderStyle("double"),
+		tuios.WithDockbarPosition("top"),
+		tuios.WithHideWindowButtons(true),
+		tuios.WithWindowButtonStyle("pill"),
+		tuios.WithWindowButtonPosition("right"),
+		tuios.WithScrollbackLines(500),
+		tuios.WithAnimations(false),
+	)
+
+	g := config.Global
+	if !g.UseASCIIOnly || g.BorderStyle != "double" || g.DockbarPosition != "top" ||
+		!g.HideWindowButtons || g.WindowButtonStyle != "pill" || g.WindowButtonPosition != "right" ||
+		g.ScrollbackLines != 500 || g.AnimationsEnabled {
+		t.Errorf("the options did not all reach the globals: ascii=%v border=%q dock=%q hideButtons=%v style=%q position=%q scrollback=%d animations=%v",
+			g.UseASCIIOnly, g.BorderStyle, g.DockbarPosition, g.HideWindowButtons,
+			g.WindowButtonStyle, g.WindowButtonPosition, g.ScrollbackLines, g.AnimationsEnabled)
 	}
 }
 

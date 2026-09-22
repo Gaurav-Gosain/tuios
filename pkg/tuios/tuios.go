@@ -41,7 +41,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // Model is the main TUIOS model that implements tea.Model.
@@ -297,41 +296,25 @@ func newModel(options Options) *Model {
 	// layer here, exactly as CLI flags are in cmd/tuios.
 	config.ApplyAppearanceConfig(userConfig, &config.Global)
 
-	// Apply global config options
-	if options.ASCIIOnly {
-		config.Global.UseASCIIOnly = true
-	}
-	if options.BorderStyle != "" {
-		config.Global.BorderStyle = options.BorderStyle
-	}
-	if options.DockbarPosition != "" {
-		config.Global.DockbarPosition = options.DockbarPosition
-	}
-	if options.HideWindowButtons {
-		config.Global.HideWindowButtons = true
-	}
-	if options.WindowButtonStyle != "" {
-		config.Global.WindowButtonStyle = options.WindowButtonStyle
-	}
-	if options.WindowButtonPosition != "" {
-		config.Global.WindowButtonPosition = options.WindowButtonPosition
-	}
-	if options.ScrollbackLines > 0 {
-		config.Global.ScrollbackLines = options.ScrollbackLines
-	}
-	if !options.Animations {
-		config.Global.AnimationsEnabled = false
-	}
-
-	// Initialize theme
-	if options.Theme != "" {
-		_ = theme.Initialize(options.Theme)
-	}
+	// The embed options, layered the way every other entrypoint layers its
+	// CLI flags. A zero value leaves the config's value standing.
+	config.ApplyOverrides(config.Overrides{
+		ASCIIOnly:            options.ASCIIOnly,
+		BorderStyle:          options.BorderStyle,
+		DockbarPosition:      options.DockbarPosition,
+		HideWindowButtons:    options.HideWindowButtons,
+		WindowButtonStyle:    options.WindowButtonStyle,
+		WindowButtonPosition: options.WindowButtonPosition,
+		ScrollbackLines:      options.ScrollbackLines,
+		NoAnimations:         !options.Animations,
+		ThemeName:            options.Theme,
+	}, &config.Global)
 
 	// Create keybind registry
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
-	// Create the model using the factory function
+	// Create the model using the factory function. ClientSSH implies
+	// IsSSHMode, so the kind is all SSHMode has to set.
 	kind := app.ClientLocal
 	if options.SSHMode {
 		kind = app.ClientSSH
@@ -344,7 +327,6 @@ func newModel(options Options) *Model {
 		NumWorkspaces:   options.Workspaces,
 		Width:           options.Width,
 		Height:          options.Height,
-		IsSSHMode:       options.SSHMode,
 	})
 }
 
