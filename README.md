@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>TUIOS - Terminal UI Operating System</h1>
+  <h1>TUIOS: Terminal UI Operating System</h1>
 
   <a href="https://github.com/Gaurav-Gosain/tuios/releases"><img src="https://img.shields.io/github/release/Gaurav-Gosain/tuios.svg" alt="Latest Release"></a>
   <a href="https://pkg.go.dev/github.com/Gaurav-Gosain/tuios?tab=doc"><img src="https://godoc.org/github.com/Gaurav-Gosain/tuios?status.svg" alt="GoDoc"></a>
@@ -10,7 +10,7 @@
 
 ![TUIOS](./assets/demo.gif)
 
-TUIOS is a modern terminal multiplexer and window manager built with Go. It provides a vim-like modal interface with multiple terminal panes, workspaces, BSP tiling, kitty graphics protocol support, and a command palette - all running inside your existing terminal.
+TUIOS is a modern terminal multiplexer and window manager built with Go. It provides a vim-like modal interface with multiple terminal panes, workspaces, BSP tiling, kitty graphics protocol support, and a command palette, all running inside your existing terminal. A daemon keeps sessions alive, reaches sessions on your other machines, and lets the coding agents in your panes report their state and message each other.
 
 Built on the Charm stack (Bubble Tea v2, Lipgloss v2), TUIOS features event-driven rendering for near-zero idle CPU usage, flicker-free kitty image passthrough, and comprehensive keyboard/mouse interaction.
 
@@ -19,19 +19,20 @@ Built on the Charm stack (Bubble Tea v2, Lipgloss v2), TUIOS features event-driv
 Full documentation is available at **[tuios-docs](https://tuios.gaurav.zip)** (hosted) or in the [`docs/`](./docs/) folder.
 
 ### Quick Links
-- **[Getting Started](https://tuios.gaurav.zip/docs/getting-started)** - Install and first session
-- **[Keybindings](docs/KEYBINDINGS.md)** - Default keys and how to rebind them
-- **[BSP Tiling](docs/BSP_TILING.md)** - Tiling with preselection and split control
-- **[Layout Modes](docs/LAYOUT_MODES.md)** - BSP, master-stack and scrolling layouts, aggregate view, multifocus
-- **[Configuration](docs/CONFIGURATION.md)** - Customize keybindings, themes, and behavior
-- **[Hooks](docs/HOOKS.md)** - Run shell commands on window and session events
-- **[Themes](docs/THEMES.md)** - Built-in themes and custom theme JSON
-- **[Glyph sets](docs/GLYPHS.md)** - The characters the chrome is drawn with
-- **[CLI Reference](docs/CLI_REFERENCE.md)** - All command-line options
-- **[Tape Scripting](docs/TAPE_SCRIPTING.md)** - Automate workflows
-- **[Sessions](docs/SESSIONS.md)** - Daemon mode, attach/detach, and what survives
-- **[Control Protocol](docs/protocol.md)** - JSON verb protocol for driving the daemon
-- **[Architecture](docs/ARCHITECTURE.md)** - Technical design
+- **[Getting Started](https://tuios.gaurav.zip/docs/getting-started)**: Install and first session
+- **[Keybindings](docs/KEYBINDINGS.md)**: Default keys and how to rebind them
+- **[BSP Tiling](docs/BSP_TILING.md)**: Tiling with preselection and split control
+- **[Layout Modes](docs/LAYOUT_MODES.md)**: BSP, master-stack and scrolling layouts, aggregate view, multifocus
+- **[Configuration](docs/CONFIGURATION.md)**: Customize keybindings, themes, and behavior
+- **[Hooks](docs/HOOKS.md)**: Run shell commands on window, session and agent events
+- **[Themes](docs/THEMES.md)**: Built-in themes and custom theme JSON
+- **[Glyph sets](docs/GLYPHS.md)**: The characters the chrome is drawn with
+- **[CLI Reference](docs/CLI_REFERENCE.md)**: All command-line options
+- **[Tape Scripting](docs/TAPE_SCRIPTING.md)**: Automate workflows
+- **[Sessions](docs/SESSIONS.md)**: Daemon mode, attach/detach, other machines, and what survives
+- **[Agent State](docs/AGENT_STATE.md)**: How panes running coding agents report and show their state
+- **[Control Protocol](docs/protocol.md)**: JSON verb protocol for driving the daemon
+- **[Architecture](docs/ARCHITECTURE.md)**: Technical design
 
 <details>
 <summary>Table of Contents</summary>
@@ -81,7 +82,7 @@ go install github.com/Gaurav-Gosain/tuios/cmd/tuios@latest
 docker run -it --rm ghcr.io/gaurav-gosain/tuios:latest
 ```
 
-**[GitHub Releases](https://github.com/Gaurav-Gosain/tuios/releases)** - Pre-built binaries for all platforms.
+**[GitHub Releases](https://github.com/Gaurav-Gosain/tuios/releases)**: Pre-built binaries for all platforms.
 
 **Updating.** If you installed with the quick install script or a release
 binary, `tuios update` fetches the newest release and puts it in place
@@ -96,69 +97,90 @@ and prints the right command rather than overwriting it.
 ![TUIOS](./assets/tuios.gif)
 
 ### Core
-- **Multiple Terminal Panes** - Create, resize, drag, and organize terminal sessions
-- **9 Workspaces** - Independent workspace isolation with instant switching
-- **Modal Interface** - Vim-inspired Window Management and Terminal modes
-- **Command Palette** - Fuzzy-searchable action launcher (<kbd>Ctrl</kbd>+<kbd>P</kbd>)
-- **Launcher** - Fuzzy search everything on `$PATH` plus your installed desktop apps (<kbd>Alt</kbd>+<kbd>Space</kbd>), ranked by what you actually run. <kbd>Enter</kbd> starts it; <kbd>Tab</kbd> opens a shell with the command typed but not entered, so you can add arguments. App icons are drawn where the terminal supports kitty graphics.
-- **Pane Zoom** - Fullscreen any pane with <kbd>z</kbd> (WM mode) or <kbd>Prefix</kbd>+<kbd>z</kbd>. Shared borders hidden when zoomed, dockbar shows **Z** indicator.
+- **Multiple Terminal Panes**: Create, resize, drag, and organize terminal sessions
+- **9 Workspaces**: Independent workspace isolation with instant switching
+- **Modal Interface**: Vim-inspired Window Management and Terminal modes
+- **Command Palette**: Fuzzy-searchable action launcher (<kbd>Ctrl</kbd>+<kbd>P</kbd>)
+- **Launcher**: Fuzzy search everything on `$PATH` plus your installed desktop apps (<kbd>Alt</kbd>+<kbd>Space</kbd>), ranked by what you actually run. <kbd>Enter</kbd> starts it; <kbd>Tab</kbd> opens a shell with the command typed but not entered, so you can add arguments. App icons are drawn where the terminal supports kitty graphics.
+- **Pane Zoom**: Fullscreen any pane with <kbd>z</kbd> (WM mode) or <kbd>Prefix</kbd>+<kbd>z</kbd>. Shared borders hidden when zoomed, dockbar shows **Z** indicator.
+- **Session Rail**: A sidebar with sessions, terminals, files, git state and agents (`appearance.sidebar.enabled`)
+- **Settings Page**: Change options in the app with <kbd>Prefix</kbd>+<kbd>,</kbd>
+- **Popups**: `tuios popup -- fzf` runs a command in a floating pane that closes when it exits
+
+### Agents
+- **Agent State**: Panes running a coding agent show whether it is working, idle or waiting for you. Agents report it with `tuios set-agent-state`, or tuios detects 22 agent CLIs by their process and screen ([docs](docs/AGENT_STATE.md))
+- **Agent List**: `tuios list-agents` shows every agent pane and what it is doing
+- **Messages**: `tuios send-agent-message` leaves a message in another agent's inbox, `tuios ask-agent` asks and waits for the answer, and the person watching has an inbox of their own
+- **Worktrees**: `tuios worktree new` opens a session in a new git worktree, and `tuios fan` starts one prompt in several agents, each in its own worktree
+- **Session Stash**: `tuios stash put` keeps a file for the session, so another agent can still open it
+- **Agent Skill**: `tuios --skill` prints the guide an agent in a pane reads to drive tuios
+
+### Machines
+- **Hosts**: `tuios hosts add` names another machine, reached over ssh. `tuios hosts tailnet` lists the machines on a Tailscale tailnet
+- **Remote Sessions**: `tuios attach --host build api` draws a session on another machine in this client, and `-s HOST:SESSION` sends any command there
+- **Hosted Panes**: `tuios new-window NAME --host build` runs one pane's process on another machine, in a session here
+- **Global Sessions**: `tuios new NAME --global` holds panes from several machines ([docs](docs/SESSIONS.md))
 
 ### Tiling
-- **BSP Tiling** - Binary Space Partitioning with spiral layout
-- **Scrolling Layout** - niri-style columns on an infinite horizontal strip ([docs](docs/LAYOUT_MODES.md))
-- **Master-Stack Layout** - One master pane with the rest stacked beside it
-- **Smart Auto-Split** - Aspect-ratio-aware splitting (opt-in)
-- **Shared Borders** - tmux-style separator lines between panes (`--shared-borders`)
-- **Preselection** - Control where the next pane spawns
-- **Equalize Splits** - Reset all splits to balanced ratios
+- **BSP Tiling**: Binary Space Partitioning with spiral layout
+- **Scrolling Layout**: niri-style columns on an infinite horizontal strip ([docs](docs/LAYOUT_MODES.md))
+- **Master-Stack Layout**: One master pane with the rest stacked beside it
+- **Smart Auto-Split**: Aspect-ratio-aware splitting (opt-in)
+- **Shared Borders**: tmux-style separator lines between panes (`--shared-borders`)
+- **Preselection**: Control where the next pane spawns
+- **Equalize Splits**: Reset all splits to balanced ratios
 
 ### Scrollback & Copy Mode
-- **Vim-Style Copy Mode** - Navigate 10,000-line scrollback with hjkl, search with `/`, yank with `y`
-- **Mouse Wheel Scrollback** - The wheel scrolls history with no mode entered; typing or reaching the bottom returns to live output
-- **Interactive Scrollbar** - Click or drag the right border to jump to scroll position
-- **Selection Auto-Scroll** - Drag selection above/below pane to scroll
-- **Scrollback Browser** - OSC 133-aware command/output block navigation
-- **Scroll Position Indicator** - Shows offset/total on the bottom border
+- **Vim-Style Copy Mode**: Navigate 10,000-line scrollback with hjkl, search with `/`, yank with `y`
+- **Mouse Wheel Scrollback**: The wheel scrolls history with no mode entered; typing or reaching the bottom returns to live output
+- **Interactive Scrollbar**: Click or drag the right border to jump to scroll position
+- **Selection Auto-Scroll**: Drag selection above/below pane to scroll
+- **Scrollback Browser**: OSC 133-aware command/output block navigation
+- **Scroll Position Indicator**: Shows offset/total on the bottom border
 
 ### Graphics & Protocols
-- **Kitty Graphics Protocol** - Full image rendering with flicker-free video playback. `mpv --vo=kitty` works (both shm and base64), and [youterm](https://github.com/Gaurav-Gosain/youterm) works.
-- **Sixel Graphics** - Sixel image passthrough (experimental, no pixel-level clipping yet)
-- **Kitty Keyboard Protocol** - Progressive enhancement (CSI u) with push/pop/query support. Fish 4.x compatible; Shift+printable bypasses the protocol and sends text directly.
-- **Synchronized Output** - Mode 2026 prevents screen tearing
-- **Shared Memory Support** - `t=s` passthrough for mpv `--vo-kitty-use-shm`
-- **Animation Frames** - A guest's `a=f` frame edits are forwarded to the host, so a program that patches its own image costs a rectangle instead of a whole bitmap. TUIOS also patches guests that only retransmit. Panes are told whether the host carries frame edits through `TUIOS_KITTY_ANIMATION`, because the host's reply is not relayed back into the pane and a guest cannot find out for itself.
-- **Terminal Queries** - OSC 4 palette, OSC 10-12 colors, CSI 14/16/18t sizing, DA1/DA2
-- **Experimental** - Kitty text sizing protocol (OSC 66) - basic passthrough works but has known issues with scrollback and window repositioning
-- **Kitty Animation Protocol** - Frame transmission, composition, and control (a=f, a=a, a=c), with damage-patch streaming for animated guests
+- **Kitty Graphics Protocol**: Full image rendering with flicker-free video playback. `mpv --vo=kitty` works (both shm and base64), and [youterm](https://github.com/Gaurav-Gosain/youterm) works.
+- **Sixel Graphics**: Sixel image passthrough (experimental, no pixel-level clipping yet)
+- **Kitty Keyboard Protocol**: Progressive enhancement (CSI u) with push/pop/query support. Fish 4.x compatible; Shift+printable bypasses the protocol and sends text directly.
+- **Synchronized Output**: Mode 2026 prevents screen tearing
+- **Shared Memory Support**: `t=s` passthrough for mpv `--vo-kitty-use-shm`
+- **Animation Frames**: A guest's `a=f` frame edits are forwarded to the host, so a program that patches its own image costs a rectangle instead of a whole bitmap. TUIOS also patches guests that only retransmit. Panes are told whether the host carries frame edits through `TUIOS_KITTY_ANIMATION`, because the host's reply is not relayed back into the pane and a guest cannot find out for itself.
+- **Terminal Queries**: OSC 4 palette, OSC 10-12 colors, CSI 14/16/18t sizing, DA1/DA2
+- **Experimental**: Kitty text sizing protocol (OSC 66). Basic passthrough works but has known issues with scrollback and window repositioning
+- **Kitty Animation Protocol**: Frame transmission, composition, and control (a=f, a=a, a=c), with damage-patch streaming for animated guests
 
 ### Session Management
-- **Daemon Mode** - Persistent sessions with detach/reattach (like tmux)
-- **Session Resurrection** - Sessions come back after a daemon restart or reboot with their structure and working directories ([docs](docs/SESSIONS.md))
-- **Session Switcher** - In-app session list (<kbd>Prefix</kbd>+<kbd>S</kbd>)
-- **Layout Templates** - Save/load window arrangements with working directories and startup commands
-- **Layout CLI** - `tuios layout list`, `tuios layout delete`, `tuios layout export`
+- **Daemon Mode**: Persistent sessions with detach/reattach (like tmux)
+- **Session Resurrection**: Sessions come back after a daemon restart or reboot with their structure and working directories ([docs](docs/SESSIONS.md))
+- **Session Switcher**: In-app session list (<kbd>Prefix</kbd>+<kbd>S</kbd>)
+- **Layout Templates**: Save/load window arrangements with working directories and startup commands
+- **Layout CLI**: `tuios layout list`, `tuios layout delete`, `tuios layout export`
 
 ### Automation
-- **Tape Scripting** - DSL for recording and replaying terminal workflows
-- **Tape Recording** - Record live sessions (<kbd>Prefix</kbd>+<kbd>T</kbd> <kbd>r</kbd>)
-- **Headless Execution** - `tuios tape exec` runs a tape against a running daemon session
-- **Layout Export** - Convert layouts to tape scripts for sharing
+- **Tape Scripting**: DSL for recording and replaying terminal workflows
+- **Tape Recording**: Record live sessions (<kbd>Prefix</kbd>+<kbd>T</kbd> <kbd>r</kbd>)
+- **Headless Execution**: `tuios tape exec` runs a tape against a running daemon session
+- **Layout Export**: Convert layouts to tape scripts for sharing
 
 ### Discovery & Navigation
-- **Which-Key Popup** - Hold the prefix key to see the chords available ([docs](docs/CONFIGURATION.md))
-- **App Launcher** - <kbd>Alt</kbd>+<kbd>Space</kbd> runs anything on `$PATH`, frecency-ranked, with desktop-entry names and icons
-- **Keybind Manager** - <kbd>Prefix</kbd>+<kbd>k</kbd> in-app, or `tuios keybinds doctor` and `tuios keybinds explain <key>` from the shell
-- **Aggregate View** - Searchable list of every window across every workspace, with previews ([docs](docs/LAYOUT_MODES.md#aggregate-view))
-- **Multifocus** - Broadcast typing to several panes at once, `Ctrl`+`Shift`+click to select ([docs](docs/LAYOUT_MODES.md#multifocus))
+- **Which-Key Popup**: Hold the prefix key to see the chords available (`appearance.whichkey_enabled`, [docs](docs/KEYBINDINGS.md))
+- **App Launcher**: <kbd>Alt</kbd>+<kbd>Space</kbd> runs anything on `$PATH`, frecency-ranked, with desktop-entry names and icons
+- **Keybind Manager**: <kbd>Prefix</kbd>+<kbd>k</kbd> in-app, or `tuios keybinds doctor` and `tuios keybinds explain <key>` from the shell
+- **Aggregate View**: Searchable list of every window across every workspace, with previews ([docs](docs/LAYOUT_MODES.md#aggregate-view))
+- **Multifocus**: Broadcast typing to several panes at once, `Ctrl`+`Shift`+click to select ([docs](docs/LAYOUT_MODES.md#multifocus))
 
 ### More
-- **Showkeys Overlay** - Display pressed keys for presentations
-- **Customizable Keybindings** - TOML configuration with Kitty protocol support
-- **Hooks** - Run shell commands on window create, close and focus events ([docs](docs/HOOKS.md))
-- **Mouse Support** - Wheel scrollback, drag-to-select with copy on release, double-click word and triple-click line, window drag, resize, scrollbar
-- **SSH Server Mode** - Remote terminal multiplexing
-- **Web Terminal Mode** - Browser-based access (separate `tuios-web` binary)
-- **Themes** - Bundled themes plus custom themes from JSON ([docs](docs/THEMES.md))
+- **Showkeys Overlay**: Display pressed keys for presentations
+- **Spotlight**: Light one area of the screen and dim the rest, for demos and recordings (`[spotlight]` config table)
+- **Screenshots**: `tuios screenshot` renders a pane to PNG, SVG, ANSI, HTML or text
+- **Dock Components**: Your own commands drawn in the dock, updated on events, from a running command, or by polling ([examples](examples/dock/README.md))
+- **Customizable Keybindings**: TOML configuration with Kitty protocol support
+- **Hooks**: Run shell commands on nine events, including window, workspace, attach and agent state changes ([docs](docs/HOOKS.md))
+- **Mouse Support**: Wheel scrollback, drag-to-select with copy on release, double-click word and triple-click line, window drag, resize, scrollbar
+- **SSH Server Mode**: Remote terminal multiplexing
+- **Web Terminal Mode**: Browser-based access (separate `tuios-web` binary)
+- **Themes**: Bundled themes plus custom themes from JSON ([docs](docs/THEMES.md))
+- **Glyph Sets**: Choose the characters the chrome is drawn with ([docs](docs/GLYPHS.md))
 
 ## Quick Start
 
@@ -176,8 +198,8 @@ terminal window it started in. New panes are tiled. See
 
 | Key | Action |
 |-----|--------|
-| <kbd>Ctrl</kbd>+<kbd>P</kbd> | **Command palette** - search and run any action |
-| <kbd>Alt</kbd>+<kbd>Space</kbd> | **Launcher** - search and start a program (<kbd>Enter</kbd> runs it, <kbd>Tab</kbd> types it out) |
+| <kbd>Ctrl</kbd>+<kbd>P</kbd> | **Command palette**: search and run any action |
+| <kbd>Alt</kbd>+<kbd>Space</kbd> | **Launcher**: search and start a program (<kbd>Enter</kbd> runs it, <kbd>Tab</kbd> types it out) |
 | <kbd>n</kbd> | New pane (Window Management mode) |
 | <kbd>i</kbd> / <kbd>Enter</kbd> | Enter Terminal mode |
 | <kbd>Prefix</kbd>+<kbd>Esc</kbd> or <kbd>Alt</kbd>+<kbd>Esc</kbd> | Back to Window Management mode (a bare <kbd>Esc</kbd> goes to the shell) |
@@ -227,26 +249,26 @@ See [Configuration Guide](docs/CONFIGURATION.md) for all options including `show
 TUIOS follows the Model-View-Update pattern on Bubble Tea v2. For details, see [Architecture Guide](docs/ARCHITECTURE.md).
 
 **Key design decisions:**
-- **Event-driven rendering** - PTY reader goroutines signal bubbletea via a buffered channel. No fixed-rate ticking for terminal content.
-- **Kitty graphics passthrough** - Image IDs are reused across frames for flicker-free video. Output is batched with the render cycle and wrapped in mode 2026 sync.
-- **BSP tiling** - Binary space partitioning tree with configurable schemes (spiral, smart split). Shared borders mode overlaps window rects and draws separator lines as a separate layer.
-- **Copy mode** - Full vim navigation over scrollback. Wheel scrolling and mouse selection borrow the same machinery through an implicit session that presents as nothing at all, plus scrollbar interaction and selection auto-scroll (timer-based continuous drag scrolling).
+- **Event-driven rendering**: PTY reader goroutines signal bubbletea via a buffered channel. No fixed-rate ticking for terminal content.
+- **Kitty graphics passthrough**: Image IDs are reused across frames for flicker-free video. Output is batched with the render cycle and wrapped in mode 2026 sync.
+- **BSP tiling**: Binary space partitioning tree with configurable schemes (spiral, smart split). Shared borders mode overlaps window rects and draws separator lines as a separate layer.
+- **Copy mode**: Full vim navigation over scrollback. Wheel scrolling and mouse selection borrow the same machinery through an implicit session that presents as nothing at all, plus scrollbar interaction and selection auto-scroll (timer-based continuous drag scrolling).
 
 **Core Components:**
-- **Window Manager** ([`internal/app/os.go`](./internal/app/os.go)) - Central state, workspaces, overlays
-- **Terminal Emulation** ([`internal/vt/`](./internal/vt/)) - ANSI parser with scrollback, kitty/sixel graphics, kitty keyboard protocol, OSC 133
-- **Rendering** ([`internal/app/render.go`](./internal/app/render.go)) - Layer composition, viewport culling, graphics batching
-- **Input** ([`internal/input/`](./internal/input/)) - Modal routing, 100+ configurable keybindings, mouse handling
-- **Kitty Passthrough** ([`internal/app/kitty_passthrough.go`](./internal/app/kitty_passthrough.go)) - Flicker-free image forwarding with ID reuse and sync output
+- **Window Manager** ([`internal/app/os.go`](./internal/app/os.go)): Central state, workspaces, overlays
+- **Terminal Emulation** ([`internal/vt/`](./internal/vt/)): ANSI parser with scrollback, kitty/sixel graphics, kitty keyboard protocol, OSC 133
+- **Rendering** ([`internal/app/render.go`](./internal/app/render.go)): Layer composition, viewport culling, graphics batching
+- **Input** ([`internal/input/`](./internal/input/)): Modal routing, 100+ configurable keybindings, mouse handling
+- **Kitty Passthrough** ([`internal/app/kitty_passthrough.go`](./internal/app/kitty_passthrough.go)): Flicker-free image forwarding with ID reuse and sync output
 
 ## Performance
 
-- **Event-driven rendering** - Zero CPU at idle. Renders only when PTY data arrives or interaction occurs.
-- **Kitty graphics** - Flicker-free via image ID reuse. Tearing-free via mode 2026 sync + render cycle batching.
-- **Fast unfocused render** - Unfocused panes use emulator's built-in `Render()` instead of cell-by-cell.
-- **Style caching** - LRU cache with sequence-based change detection (40-60% allocation reduction).
-- **Viewport culling** - Off-screen and minimized panes skip rendering.
-- **Memory pooling** - Pooled strings, buffers, and styles.
+- **Event-driven rendering**: Zero CPU at idle. Renders only when PTY data arrives or interaction occurs.
+- **Kitty graphics**: Flicker-free via image ID reuse. Tearing-free via mode 2026 sync + render cycle batching.
+- **Fast unfocused render**: Unfocused panes use emulator's built-in `Render()` instead of cell-by-cell.
+- **Style caching**: LRU cache with sequence-based change detection (40-60% allocation reduction).
+- **Viewport culling**: Off-screen and minimized panes skip rendering.
+- **Memory pooling**: Pooled strings, buffers, and styles.
 
 ## Development
 
@@ -289,7 +311,7 @@ staticcheck ./...          # Static analysis
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License. See [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
