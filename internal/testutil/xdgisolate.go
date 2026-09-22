@@ -40,6 +40,12 @@ func isolateXDG() (dir string, check func() error) {
 	if err != nil {
 		panic(fmt.Sprintf("testutil: create XDG tree: %v", err))
 	}
+	// Pin the Go toolchain's own directories before HOME moves. A test that runs
+	// the go command would otherwise derive GOPATH, the module cache and the
+	// build cache from the throwaway HOME, download every module into the tree
+	// (about 155 MB), and leave it behind: the module cache is read-only, so
+	// the cleanup below cannot remove it.
+	pinGoDirs()
 	for _, name := range xdgVars {
 		if err := os.Setenv(name, tmp); err != nil {
 			panic(fmt.Sprintf("testutil: set %s: %v", name, err))
@@ -56,6 +62,32 @@ func isolateXDG() (dir string, check func() error) {
 	return tmp, func() error {
 		defer func() { _ = os.RemoveAll(tmp) }()
 		return stillRedirected(tmp)
+	}
+}
+
+// pinGoDirs sets GOPATH, GOMODCACHE and GOCACHE to the values the go command
+// would use for the real HOME, unless they are already set. It must run before
+// HOME is redirected. Go derives GOPATH from HOME and GOCACHE from the user
+// cache dir, which on Linux follows XDG_CACHE_HOME, so both would move with
+// the redirect.
+func pinGoDirs() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		gopath = filepath.Join(home, "go")
+		_ = os.Setenv("GOPATH", gopath)
+	}
+	if os.Getenv("GOMODCACHE") == "" {
+		first, _, _ := strings.Cut(gopath, string(os.PathListSeparator))
+		_ = os.Setenv("GOMODCACHE", filepath.Join(first, "pkg", "mod"))
+	}
+	if os.Getenv("GOCACHE") == "" {
+		if cache, err := os.UserCacheDir(); err == nil {
+			_ = os.Setenv("GOCACHE", filepath.Join(cache, "go-build"))
+		}
 	}
 }
 

@@ -173,3 +173,21 @@ func TestRedirectCheckCatchesAnEscapedGlobal(t *testing.T) {
 		t.Fatalf("this binary's own tree was reported as escaped: %v", err)
 	}
 }
+
+// TestGoDirsStayOutsideTheTree checks that the Go toolchain's directories point
+// at the developer's real ones during an isolated run. Derived from the
+// redirected HOME, a test that runs the go command downloads every module into
+// the throwaway tree, and the read-only module cache then outlives the cleanup.
+func TestGoDirsStayOutsideTheTree(t *testing.T) {
+	tree := filepath.Clean(os.Getenv("HOME")) + string(filepath.Separator)
+	for _, name := range []string{"GOPATH", "GOMODCACHE", "GOCACHE"} {
+		v := os.Getenv(name)
+		if v == "" {
+			t.Errorf("%s is unset, so the go command derives it from the redirected HOME", name)
+			continue
+		}
+		if strings.HasPrefix(filepath.Clean(v)+string(filepath.Separator), tree) {
+			t.Errorf("%s is %s, inside the throwaway tree %s", name, v, tree)
+		}
+	}
+}
