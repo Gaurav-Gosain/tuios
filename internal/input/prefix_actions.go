@@ -45,7 +45,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_selection", handlePrefixSelection)
 	d.Register("prefix_scrollback", handlePrefixScrollback)
 	d.Register("prefix_screenshot", handlePrefixScreenshot)
-	d.Register("prefix_help", handlePrefixHelp)
+	d.Register("prefix_help", handleToggleHelp)
 	d.Register("prefix_command_palette", handleOpenCommandPalette)
 	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
 	d.Register("prefix_session_switcher", handlePrefixSessionSwitcher)
@@ -339,11 +339,6 @@ func handlePrefixScrollback(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 // pointer switches it over.
 func handlePrefixScreenshot(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.BeginCapture(false)
-	return o, nil
-}
-
-func handlePrefixHelp(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.ShowHelp = !o.ShowHelp
 	return o, nil
 }
 
