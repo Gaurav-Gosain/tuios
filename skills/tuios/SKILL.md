@@ -1077,9 +1077,9 @@ it in the raw JSON.
   a conversation in that ring only.
 - **There is no verb that stops another agent.** If you mean to interrupt one,
   send it `ctrl+c` with `send-keys`, and be sure that is what you want.
-- **The stash is not storage.** It holds files for one session, on one host, and
-  deletes them when that session ends. It is not a cache, not a workspace, and
-  not a way to move a file to another machine.
+- **The stash is not storage.** It holds files for one session and deletes them
+  when that session ends. It is not a cache and not a workspace. To move a file
+  to another machine, use `stash put -s HOST:SESSION`, which is capped at 8 MB.
 
 ### Orchestrating one agent from another, end to end
 
