@@ -63,7 +63,7 @@ func TestHashCellAttrsWrappedNilDoesNotPanic(t *testing.T) {
 	cell := &uv.Cell{
 		Content: "x",
 		Width:   1,
-		Style:   uv.Style{Fg: (*color.RGBA)(nil), Bg: (*color.RGBA)(nil)},
+		Style:   uv.Style{Fg: (*color.RGBA)(nil), Bg: (*color.RGBA)(nil), UnderlineColor: (*color.RGBA)(nil)},
 	}
-	_ = sc.hashCellAttrs(cell, false, false)
+	_ = sc.hashCellAttrs(cell, false)
 }

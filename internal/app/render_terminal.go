@@ -372,8 +372,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	maxY := min(contentH, screen.Height())
 	maxX := min(contentW, screen.Width())
 
-	useOptimizedRendering := !isFocused && !inTerminalMode
-
 	scrollbackLen := window.ScrollbackLen()
 	inScrollbackMode := window.ScrollbackOffset > 0
 
@@ -588,7 +586,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return prevIsCursor == isCursorPos &&
 			safeColorEquals(prevStyle.Fg, cell.Style.Fg) &&
 			safeColorEquals(prevStyle.Bg, cell.Style.Bg) &&
-			prevStyle.Attrs == cell.Style.Attrs
+			prevStyle.Attrs == cell.Style.Attrs &&
+			prevStyle.Underline == cell.Style.Underline &&
+			safeColorEquals(prevStyle.UnderlineColor, cell.Style.UnderlineColor)
 	}
 	// notePrev records the cell just emitted for the next comparison.
 	notePrev := func(cell *uv.Cell) {
@@ -863,11 +863,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				if dimT > 0 {
 					styleCell = dimCell(&dimScratch, cell, dimFg, dimBg, dimT)
 				}
-				if useOptimizedRendering {
-					currentStyle, currentPrefix, currentSuffix = buildOptimizedCellStyleCachedANSI(styleCell)
-				} else {
-					currentStyle, currentPrefix, currentSuffix = buildCellStyleCachedANSI(styleCell, isCursorPos)
-				}
+				currentStyle, currentPrefix, currentSuffix = buildCellStyleCachedANSI(styleCell, isCursorPos)
 				currentStyleCached = true
 				batchHasStyle = true
 			}

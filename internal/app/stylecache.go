@@ -2,6 +2,7 @@ package app
 
 import (
 	"hash/maphash"
+	"image/color"
 	"sync"
 	"sync/atomic"
 
@@ -46,21 +47,35 @@ func NewStyleCache(maxSize int) *StyleCache {
 	}
 }
 
+// hashColor writes a cell style colour into h. A wrapped-nil colour hashes like
+// an absent one, because calling RGBA through it panics.
+func hashColor(h *maphash.Hash, c color.Color) {
+	if isNilColor(c) {
+		_ = h.WriteByte(0)
+		return
+	}
+	if ansiColor, ok := c.(lipgloss.ANSIColor); ok {
+		_ = h.WriteByte(1)
+		_ = h.WriteByte(byte(ansiColor))
+		return
+	}
+	r, g, b, a := c.RGBA()
+	_ = h.WriteByte(2)
+	_ = h.WriteByte(byte(r >> 8))
+	_ = h.WriteByte(byte(g >> 8))
+	_ = h.WriteByte(byte(b >> 8))
+	_ = h.WriteByte(byte(a >> 8))
+}
+
 // hashCellAttrs creates a hash key from cell attributes.
-// The hash combines foreground color, background color, text attributes, and cursor state.
-func (sc *StyleCache) hashCellAttrs(cell *uv.Cell, isCursor bool, isOptimized bool) uint64 {
+// The hash combines the colours, text attributes, underline style and cursor
+// state, which is everything buildCellStyle reads.
+func (sc *StyleCache) hashCellAttrs(cell *uv.Cell, isCursor bool) uint64 {
 	var h maphash.Hash
 	h.SetSeed(sc.seed)
 
 	// Hash cursor state (1 bit)
 	if isCursor {
-		_ = h.WriteByte(1)
-	} else {
-		_ = h.WriteByte(0)
-	}
-
-	// Hash optimized flag (1 bit)
-	if isOptimized {
 		_ = h.WriteByte(1)
 	} else {
 		_ = h.WriteByte(0)
@@ -84,49 +99,18 @@ func (sc *StyleCache) hashCellAttrs(cell *uv.Cell, isCursor bool, isOptimized bo
 	_ = h.WriteByte(byte(attrs >> 40))
 	_ = h.WriteByte(byte(attrs >> 48))
 	_ = h.WriteByte(byte(attrs >> 56))
+	_ = h.WriteByte(byte(cell.Style.Underline))
 
-	// Hash foreground color
-	if !isNilColor(cell.Style.Fg) {
-		if ansiColor, ok := cell.Style.Fg.(lipgloss.ANSIColor); ok {
-			_ = h.WriteByte(1)
-			_ = h.WriteByte(byte(ansiColor))
-		} else {
-			r, g, b, a := cell.Style.Fg.RGBA()
-			_ = h.WriteByte(2)
-			// Write RGBA values as bytes
-			_ = h.WriteByte(byte(r >> 8))
-			_ = h.WriteByte(byte(g >> 8))
-			_ = h.WriteByte(byte(b >> 8))
-			_ = h.WriteByte(byte(a >> 8))
-		}
-	} else {
-		_ = h.WriteByte(0)
-	}
-
-	// Hash background color
-	if !isNilColor(cell.Style.Bg) {
-		if ansiColor, ok := cell.Style.Bg.(lipgloss.ANSIColor); ok {
-			_ = h.WriteByte(1)
-			_ = h.WriteByte(byte(ansiColor))
-		} else {
-			r, g, b, a := cell.Style.Bg.RGBA()
-			_ = h.WriteByte(2)
-			// Write RGBA values as bytes
-			_ = h.WriteByte(byte(r >> 8))
-			_ = h.WriteByte(byte(g >> 8))
-			_ = h.WriteByte(byte(b >> 8))
-			_ = h.WriteByte(byte(a >> 8))
-		}
-	} else {
-		_ = h.WriteByte(0)
-	}
+	hashColor(&h, cell.Style.Fg)
+	hashColor(&h, cell.Style.Bg)
+	hashColor(&h, cell.Style.UnderlineColor)
 
 	return h.Sum64()
 }
 
 // getEntry retrieves a cached style entry or builds and caches it if not found.
-func (sc *StyleCache) getEntry(cell *uv.Cell, isCursor bool, optimized bool) styleEntry {
-	hash := sc.hashCellAttrs(cell, isCursor, optimized)
+func (sc *StyleCache) getEntry(cell *uv.Cell, isCursor bool) styleEntry {
+	hash := sc.hashCellAttrs(cell, isCursor)
 
 	// Fast path: try read lock first
 	sc.mu.RLock()
@@ -140,12 +124,7 @@ func (sc *StyleCache) getEntry(cell *uv.Cell, isCursor bool, optimized bool) sty
 	// Cache miss: build style and cache it
 	sc.misses.Add(1)
 
-	var style lipgloss.Style
-	if optimized {
-		style = buildOptimizedCellStyle(cell)
-	} else {
-		style = buildCellStyle(cell, isCursor)
-	}
+	style := buildCellStyle(cell, isCursor)
 	prefix, suffix := styleToANSI(style)
 	entry := styleEntry{style: style, prefix: prefix, suffix: suffix}
 
@@ -164,16 +143,16 @@ func (sc *StyleCache) getEntry(cell *uv.Cell, isCursor bool, optimized bool) sty
 
 // Get retrieves a cached style or builds and caches it if not found.
 // This is the main entry point for cached style access.
-func (sc *StyleCache) Get(cell *uv.Cell, isCursor bool, optimized bool) lipgloss.Style {
-	return sc.getEntry(cell, isCursor, optimized).style
+func (sc *StyleCache) Get(cell *uv.Cell, isCursor bool) lipgloss.Style {
+	return sc.getEntry(cell, isCursor).style
 }
 
 // GetWithANSI retrieves a cached style together with its derived ANSI escape
 // prefix and suffix, building and caching the entry on a miss. The escape is a
 // pure function of the style, so the render loop can emit the cached prefix and
 // suffix directly instead of re-deriving them via styleToANSI on every flush.
-func (sc *StyleCache) GetWithANSI(cell *uv.Cell, isCursor bool, optimized bool) (lipgloss.Style, string, string) {
-	entry := sc.getEntry(cell, isCursor, optimized)
+func (sc *StyleCache) GetWithANSI(cell *uv.Cell, isCursor bool) (lipgloss.Style, string, string) {
+	entry := sc.getEntry(cell, isCursor)
 	return entry.style, entry.prefix, entry.suffix
 }
 

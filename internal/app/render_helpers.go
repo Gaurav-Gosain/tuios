@@ -434,8 +434,13 @@ func styleToANSI(s lipgloss.Style) (prefix string, suffix string) {
 	if s.GetItalic() {
 		te = te.Italic(true)
 	}
-	if s.GetUnderline() {
-		te = te.Underline(true)
+	if ul := s.GetUnderlineStyle(); ul != lipgloss.UnderlineNone {
+		te = te.UnderlineStyle(ul)
+	}
+	if uc := s.GetUnderlineColor(); uc != nil {
+		if _, ok := uc.(lipgloss.NoColor); !ok {
+			te = te.UnderlineColor(ansi.Color(uc))
+		}
 	}
 	if s.GetStrikethrough() {
 		te = te.Strikethrough(true)
@@ -469,44 +474,14 @@ func shouldApplyStyle(cell *uv.Cell) bool {
 	if cell == nil {
 		return false
 	}
-	return cell.Style.Fg != nil || cell.Style.Bg != nil || cell.Style.Attrs != 0
-}
-
-// buildOptimizedCellStyleCachedANSI returns the cached style together with its
-// cached ANSI escape prefix/suffix, avoiding a styleToANSI rebuild on flush.
-func buildOptimizedCellStyleCachedANSI(cell *uv.Cell) (lipgloss.Style, string, string) {
-	return GetGlobalStyleCache().GetWithANSI(cell, false, true)
+	return cell.Style.Fg != nil || cell.Style.Bg != nil || cell.Style.Attrs != 0 ||
+		cell.Style.Underline != uv.UnderlineNone || cell.Style.UnderlineColor != nil
 }
 
 // buildCellStyleCachedANSI returns the cached style together with its cached
 // ANSI escape prefix/suffix, avoiding a styleToANSI rebuild on flush.
 func buildCellStyleCachedANSI(cell *uv.Cell, isCursor bool) (lipgloss.Style, string, string) {
-	return GetGlobalStyleCache().GetWithANSI(cell, isCursor, false)
-}
-
-func buildOptimizedCellStyle(cell *uv.Cell) lipgloss.Style {
-	cellStyle := lipgloss.NewStyle()
-
-	if cell == nil {
-		return cellStyle
-	}
-
-	if cell.Style.Fg != nil {
-		if ansiColor, ok := cell.Style.Fg.(lipgloss.ANSIColor); ok {
-			cellStyle = cellStyle.Foreground(ansiColor)
-		} else if isColorSafe(cell.Style.Fg) {
-			cellStyle = cellStyle.Foreground(cell.Style.Fg)
-		}
-	}
-	if cell.Style.Bg != nil {
-		if ansiColor, ok := cell.Style.Bg.(lipgloss.ANSIColor); ok {
-			cellStyle = cellStyle.Background(ansiColor)
-		} else if isColorSafe(cell.Style.Bg) {
-			cellStyle = cellStyle.Background(cell.Style.Bg)
-		}
-	}
-
-	return cellStyle
+	return GetGlobalStyleCache().GetWithANSI(cell, isCursor)
 }
 
 func isColorSafe(c color.Color) bool {
@@ -578,21 +553,34 @@ func buildCellStyle(cell *uv.Cell, isCursor bool) lipgloss.Style {
 
 	if cell.Style.Attrs != 0 {
 		attrs := cell.Style.Attrs
-		if attrs&1 != 0 {
+		if attrs&uv.AttrBold != 0 {
 			cellStyle = cellStyle.Bold(true)
 		}
-		if attrs&2 != 0 {
+		if attrs&uv.AttrFaint != 0 {
 			cellStyle = cellStyle.Faint(true)
 		}
-		if attrs&4 != 0 {
+		if attrs&uv.AttrItalic != 0 {
 			cellStyle = cellStyle.Italic(true)
 		}
-		if attrs&32 != 0 {
+		if attrs&uv.AttrBlink != 0 {
+			cellStyle = cellStyle.Blink(true)
+		}
+		if attrs&uv.AttrReverse != 0 {
 			cellStyle = cellStyle.Reverse(true)
 		}
-		if attrs&128 != 0 {
+		if attrs&uv.AttrStrikethrough != 0 {
 			cellStyle = cellStyle.Strikethrough(true)
 		}
+	}
+
+	// The emulator's own renderer, which draws the unfocused fast path, emits
+	// the underline and its colour, so this path has to as well or the same
+	// pane changes how it looks when it gains focus.
+	if cell.Style.Underline != uv.UnderlineNone {
+		cellStyle = cellStyle.UnderlineStyle(cell.Style.Underline)
+	}
+	if isColorSafe(cell.Style.UnderlineColor) {
+		cellStyle = cellStyle.UnderlineColor(cell.Style.UnderlineColor)
 	}
 
 	return cellStyle
