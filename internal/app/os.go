@@ -180,7 +180,7 @@ type OS struct {
 	RAMUsage       float64         // Cached RAM usage percentage
 	LastRAMUpdate  time.Time       // Last time RAM was updated
 	AutoTiling     bool            // Automatic tiling mode enabled
-	MasterRatio    float64         // Master window width ratio for tiling (0.3-0.7)
+	MasterRatio    float64         // Master window width ratio for tiling (0.1-0.9)
 	// TouchClient marks a session whose pointer is a finger. It is per session
 	// rather than a config global because one server holds several at once and
 	// a phone attaching must not change what the desktop beside it can hit.
@@ -285,6 +285,7 @@ type OS struct {
 	WorkspaceLayouts       map[int][]WindowLayout  // Stores custom layouts per workspace
 	WorkspaceHasCustom     map[int]bool            // Tracks if workspace has custom layout
 	WorkspaceMasterRatio   map[int]float64         // Stores master ratio per workspace
+	WorkspaceStackRatio    map[int]float64         // Stack ratio per workspace, the only copy (see setWorkspaceStackRatio)
 	ShowLogs               bool                    // True when showing log overlay
 	LogMessages            []LogMessage            // Store log messages
 	LogScrollOffset        int                     // Scroll offset for log viewer

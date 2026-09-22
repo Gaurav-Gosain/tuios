@@ -151,6 +151,12 @@ func (m *OS) BuildSessionState() *session.SessionState {
 	if len(state.WorkspaceMasterRatio) == 0 {
 		state.WorkspaceMasterRatio = nil
 	}
+	// The stack ratios travel for the same reason. There is no live value to
+	// fold in: the map is the only copy. Nil when no workspace has one, so a
+	// session nobody resized a stack in says nothing, as older clients do.
+	if len(m.WorkspaceStackRatio) > 0 {
+		state.WorkspaceStackRatio = maps.Clone(m.WorkspaceStackRatio)
+	}
 	// Which workspaces hold a layout a user arranged, for the reason the ratios
 	// above travel: a peer that has never visited a workspace has no entry for it,
 	// reads that as the tiler owning the workspace, and retiles over a layout
@@ -241,6 +247,8 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// with: they belong to the session being left.
 	m.WorkspaceMasterRatio = make(map[int]float64, len(state.WorkspaceMasterRatio))
 	m.adoptWorkspaceMasterRatio(state)
+	m.WorkspaceStackRatio = make(map[int]float64, len(state.WorkspaceStackRatio))
+	m.adoptWorkspaceStackRatio(state)
 	// Same for the custom-layout flags, and for the same reason: they belong to
 	// the session being left.
 	m.WorkspaceHasCustom = make(map[int]bool, len(state.WorkspaceHasCustom))
@@ -628,6 +636,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	tilingWasOn := m.AutoTiling
 	m.AutoTiling = state.AutoTiling
 	m.adoptWorkspaceMasterRatio(state)
+	m.adoptWorkspaceStackRatio(state)
 	m.adoptWorkspaceHasCustom(state)
 
 	// Update focused window index
@@ -947,6 +956,19 @@ func (m *OS) adoptWorkspaceMasterRatio(state *session.SessionState) {
 		m.WorkspaceMasterRatio = make(map[int]float64, len(state.WorkspaceMasterRatio))
 	}
 	maps.Copy(m.WorkspaceMasterRatio, state.WorkspaceMasterRatio)
+}
+
+// adoptWorkspaceStackRatio is adoptWorkspaceMasterRatio for the stack ratios,
+// merged on the same terms: a state that says nothing leaves what this client
+// holds alone, and an entry that is present wins.
+func (m *OS) adoptWorkspaceStackRatio(state *session.SessionState) {
+	if len(state.WorkspaceStackRatio) == 0 {
+		return
+	}
+	if m.WorkspaceStackRatio == nil {
+		m.WorkspaceStackRatio = make(map[int]float64, len(state.WorkspaceStackRatio))
+	}
+	maps.Copy(m.WorkspaceStackRatio, state.WorkspaceStackRatio)
 }
 
 // adoptWorkspaceHasCustom takes the session's custom-layout flags onto this

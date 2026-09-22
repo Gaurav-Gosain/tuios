@@ -357,6 +357,9 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 		// Mark layout as custom if resizing in tiling mode (BSP only)
 		if wasResizing && o.AutoTiling && !o.UseScrollingLayout {
+			// Master-stack keeps its layout as ratios, so the drag is written
+			// into them before the retile below recomputes the rectangles.
+			o.SyncMasterStackFromGeometry()
 			o.MarkLayoutCustom()
 			o.SyncBSPTreeFromGeometry()
 		}

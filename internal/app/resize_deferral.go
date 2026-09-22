@@ -197,6 +197,7 @@ func (m *OS) endLostGesture() {
 	// A resize drag is what the BSP tree derives its ratios from; without this
 	// the next retile discards everything the drag did.
 	if wasResizing && m.AutoTiling && !m.UseScrollingLayout {
+		m.SyncMasterStackFromGeometry()
 		m.SyncBSPTreeFromGeometry()
 	}
 	m.renderSkipped = false

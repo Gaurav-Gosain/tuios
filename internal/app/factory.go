@@ -180,6 +180,7 @@ func NewOS(opts OSOptions) *OS {
 		WorkspaceLayouts:     make(map[int][]WindowLayout),
 		WorkspaceHasCustom:   make(map[int]bool),
 		WorkspaceMasterRatio: make(map[int]float64),
+		WorkspaceStackRatio:  make(map[int]float64),
 
 		// Resize tracking
 		PendingResizes: make(map[string][2]int),

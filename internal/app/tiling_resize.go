@@ -450,6 +450,7 @@ func (m *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 
 		resized.Resize(resized.Width, resized.Height)
 		resized.MarkPositionDirty()
+		m.SyncMasterStackFromGeometry()
 	}
 	m.MarkLayoutCustom()
 
@@ -479,6 +480,95 @@ func (m *OS) AdjustTilingNeighborsVisual(resized *terminal.Window, newX, newY, n
 	m.PendingResizes[resized.ID] = [2]int{resized.Width, resized.Height}
 	resized.MarkPositionDirty()
 	return false
+}
+
+// SyncMasterStackFromGeometry writes the split the master-stack panes now show
+// back into the ratios the tiler lays them out from, so a resize survives the
+// next retile.
+//
+// A master-stack resize goes through the geometry scan, which moves the pane
+// rectangles and nothing else. The tiler keeps no tree: it recomputes every
+// rectangle from MasterRatio and the stack ratio, so without this the next
+// retile put the split back where it was. applyBSPResize avoids the same loss
+// by writing into the tree first; this is the master-stack equivalent, run
+// after the fact because the layout has only ratios to write into.
+//
+// It covers the layouts that have ratios: two panes, side by side or stacked,
+// where the master ratio is the first pane's share, and three panes, where it
+// is the master column's width and the stack ratio is the top stacked pane's
+// height. A grid of four or more panes is equal-share and has nothing to
+// record, so a resize there is still replaced on the next retile. Geometry
+// that is not the shape the tiler would draw (a zoom, or panes out of their
+// slots) is left alone rather than read as a ratio.
+//
+// The ratios are derived with layout.SplitRatioFor, which reserves the
+// separator gap exactly as the tiler does, so a retile gives the first pane
+// the size the resize left it at. The second pane can come back a cell
+// narrower, because the geometry scan closes the separator gap that the
+// retile opens again.
+//
+// The keyboard path calls this on every press. The mouse path calls it once,
+// on release, before the layout is marked custom and the state is pushed.
+func (m *OS) SyncMasterStackFromGeometry() {
+	if !m.AutoTiling || m.UseBSPLayout || m.UseScrollingLayout || m.zoomedWindow() != nil {
+		return
+	}
+	left, top := m.GetLeftMargin(), m.GetTopMargin()
+	width, height := m.GetContentWidth(), m.GetUsableHeight()
+	right, bottom := left+width, top+height
+	gap := m.separatorGap()
+
+	panes := m.tilablePanes(m.CurrentWorkspace)
+	switch len(panes) {
+	case 2:
+		a, b := panes[0], panes[1]
+		if layout.MasterStackSideBySide(width, height) {
+			if a.X != left || b.X < a.X+a.Width || b.X+b.Width != right {
+				return
+			}
+			m.setMasterRatio(layout.SplitRatioFor(a.Width, width, gap))
+			return
+		}
+		if a.Y != top || b.Y < a.Y+a.Height || b.Y+b.Height != bottom {
+			return
+		}
+		m.setMasterRatio(layout.SplitRatioFor(a.Height, height, gap))
+	case 3:
+		master, upper, lower := panes[0], panes[1], panes[2]
+		if master.X != left || upper.X < master.X+master.Width || upper.X != lower.X ||
+			upper.X+upper.Width != right {
+			return
+		}
+		m.setMasterRatio(layout.SplitRatioFor(master.Width, width, gap))
+		if upper.Y == top && lower.Y >= upper.Y+upper.Height && lower.Y+lower.Height == bottom {
+			m.setWorkspaceStackRatio(m.CurrentWorkspace, layout.SplitRatioFor(upper.Height, height, gap))
+		}
+	}
+}
+
+// setMasterRatio sets the master ratio in force and records it for the current
+// workspace, the two places a retile and a workspace switch read it from.
+func (m *OS) setMasterRatio(ratio float64) {
+	m.MasterRatio = ratio
+	if m.WorkspaceMasterRatio == nil {
+		m.WorkspaceMasterRatio = make(map[int]float64)
+	}
+	m.WorkspaceMasterRatio[m.CurrentWorkspace] = ratio
+}
+
+// setWorkspaceStackRatio records a workspace's stack ratio: the top stacked
+// pane's share of the height in the three pane master-stack layout.
+//
+// WorkspaceStackRatio has no live copy beside it the way MasterRatio has one:
+// the tiler reads the current workspace's entry straight from the map, so
+// there is nothing to save on the way out of a workspace or restore on the way
+// in. No entry means the stacked panes split the height equally. The map may be
+// nil in an OS built by hand, which is why writes go through here.
+func (m *OS) setWorkspaceStackRatio(workspace int, ratio float64) {
+	if m.WorkspaceStackRatio == nil {
+		m.WorkspaceStackRatio = make(map[int]float64)
+	}
+	m.WorkspaceStackRatio[workspace] = ratio
 }
 
 // findWindowsOnVerticalSplitAll finds all windows on a vertical split line (not excluding any window)

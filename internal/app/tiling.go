@@ -42,7 +42,8 @@ func (m *OS) contentTileLayouts(n int) []layout.TileLayout {
 // camera's size rather than computed at the screen's and stretched, so the gaps
 // between panes stay the width the user asked for. See zoom_canvas.go.
 func (m *OS) tileLayoutsIn(n int, bounds layout.Rect) []layout.TileLayout {
-	layouts := layout.CalculateTilingLayout(n, bounds.W, bounds.H, bounds.Y, m.MasterRatio, m.separatorGap())
+	layouts := layout.CalculateMasterStackLayout(n, bounds.W, bounds.H, bounds.Y,
+		m.MasterRatio, m.WorkspaceStackRatio[m.CurrentWorkspace], m.separatorGap())
 	if bounds.X != 0 {
 		for i := range layouts {
 			layouts[i].X += bounds.X
