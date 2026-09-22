@@ -168,7 +168,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return finalizeCtrlDrag(o, X, Y)
 	}
 
-	// Fast hit testing - find which window was clicked without expensive canvas generation
+	// Fast hit testing: find which window was clicked without expensive canvas generation
 	clickedWindowIndex := findClickedWindow(X, Y, o)
 
 	// Ctrl + left press on a window: multi-select on a click, or grab the pane
@@ -223,7 +223,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Scrollbar click: left press on cells the bar was drawn on. The bar floats
 	// in the pane's last content column and only while the pane is scrolled
-	// back, so the grab is gated on the rect the renderer recorded - otherwise a
+	// back, so the grab is gated on the rect the renderer recorded. Otherwise a
 	// click on the rightmost content cell of a pane with history would
 	// jump-scroll instead of reaching the guest.
 	if clickedWindowIndex != -1 && msg.Button == tea.MouseLeft {
@@ -473,7 +473,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.RightPressX, o.RightPressY = X, Y
 	}
 
-	// Zoomed windows are immune to drag/resize  - skip interaction state setup.
+	// Zoomed windows are immune to drag/resize: skip interaction state setup.
 	// The click still focuses the window (already done above) but no drag/resize starts.
 	if clickedWindow.Zoomed {
 		return o, nil

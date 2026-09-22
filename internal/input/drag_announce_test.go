@@ -66,7 +66,7 @@ func TestDragBackIntoASameSizeSlotTellsTheGuestNothing(t *testing.T) {
 
 // TestDraggingTheDividerTellsTheGuestOnce is the positive half, in the same
 // fixture. Moving the shared border really does change how many columns each
-// pane has, so the guest has to be told - once, for the width it settled at,
+// pane has, so the guest has to be told once, for the width it settled at,
 // not once per column the pointer crossed.
 //
 // Without this the test above could pass because the fixture never resizes

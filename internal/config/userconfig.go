@@ -134,8 +134,8 @@ type StartupConfig struct {
 // AutoReview (default false) is an opt-in convenience: when true, entering a
 // directory with a reviewable tape opens the review/trust dialog automatically
 // instead of only surfacing the passive banner and badge, saving the keypress
-// that opens it. It never weakens the trust boundary - the user still chooses Run
-// once / Trust and run / Never / Not now - and it never auto-opens for a denied
+// that opens it. It never weakens the trust boundary: the user still chooses Run
+// once / Trust and run / Never / Not now, and it never auto-opens for a denied
 // tape, an already-handled directory this session, or (in auto mode) a
 // trusted-unedited tape that runs on its own.
 type TapeConfig struct {
@@ -1191,7 +1191,7 @@ func LoadUserConfig() (*UserConfig, error) {
 	if validation.HasErrors() {
 		// Log all errors
 		for _, err := range validation.Errors {
-			fmt.Fprintf(os.Stderr, "Config error in [%s]: %s - %s\n", err.Field, err.Key, err.Message)
+			fmt.Fprintf(os.Stderr, "Config error in [%s]: %s: %s\n", err.Field, err.Key, err.Message)
 		}
 		return nil, fmt.Errorf("configuration has %d error(s), please fix and restart", len(validation.Errors))
 	}

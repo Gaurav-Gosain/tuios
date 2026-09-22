@@ -53,7 +53,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			// Don't sync motion events
 			return result, cmd
 		}
-		// Don't sync on motion - too frequent
+		// Don't sync on motion: too frequent
 		return handleMouseMotion(msg, o)
 	case tea.MouseReleaseMsg:
 		if o.CaptureActive() {
@@ -242,7 +242,7 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return handleSessionCloseInput(msg, o)
 	}
 
-	// Handle the quit menu (highest priority - works in any mode)
+	// Handle the quit menu (highest priority, works in any mode)
 	if o.ShowQuitMenu {
 		return handleQuitMenuKey(msg, o)
 	}
@@ -311,7 +311,7 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
-	// Handle tape manager overlay (high priority - intercepts keys when shown)
+	// Handle tape manager overlay (high priority, intercepts keys when shown)
 	if o.ShowTapeManager {
 		if o.HandleTapeManagerInput(msg.String()) {
 			return o, nil

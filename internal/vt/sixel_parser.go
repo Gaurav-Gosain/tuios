@@ -111,7 +111,7 @@ func calculateSixelDimensions(data []byte) (width, height int) {
 			continue
 
 		case c == '$':
-			// Carriage return - go to left edge
+			// Carriage return: go to left edge
 			if x > maxX {
 				maxX = x
 			}

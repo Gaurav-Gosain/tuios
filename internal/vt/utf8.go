@@ -8,7 +8,7 @@ import (
 )
 
 // maxClusterBytes caps how much text one cell can hold. Terminals bound this
-// - xterm keeps a fixed number of combining characters per cell - because a
+// (xterm keeps a fixed number of combining characters per cell) because a
 // guest can pour combining marks onto one base forever, and every path that
 // grows a cell re-reads its whole content: unbounded content turns a mark
 // flood quadratic. 64 bytes holds any real cluster (a four-person ZWJ family
@@ -347,20 +347,20 @@ const (
 // cluster to extend: a combining mark after a control or a cursor move, a
 // bidi control, a mark at the start of a row.
 //
-// Terminals attach these to the cell just written - ghostty and xterm both
+// Terminals attach these to the cell just written (ghostty and xterm both
 // combine with the cell before the cursor, or with the cursor's own cell
-// under a pending wrap - and drop them when there is nothing there: at
+// under a pending wrap) and drop them when there is nothing there: at
 // column 0, over a never-written cell, or when the code point cannot form
 // one cluster with the cell's content (a bidi control breaks the cluster
 // where a combining mark extends it). Storing them as cells of their own
-// instead gave the row more cells than columns, and Render, which emits
-// nothing for them, shifted everything after one column left.
+// would give the row more cells than columns, and Render, which emits
+// nothing for them, would shift everything after one column left.
 func (e *Emulator) attachZeroWidth(content string) printOutcome {
 	x, y := e.scr.CursorPosition()
 	tx := x - 1
 	if x == e.parkedX && y == e.parkedY {
-		// The cursor is still standing on the cell it last drew - a print at
-		// the right margin, wrapped or not - so that cell is the base.
+		// The cursor is still standing on the cell it last drew (a print at
+		// the right margin, wrapped or not), so that cell is the base.
 		tx = x
 	}
 	if tx < 0 {
@@ -376,8 +376,8 @@ func (e *Emulator) attachZeroWidth(content string) printOutcome {
 	}
 	if c == nil || c.Content == "" {
 		// Nothing to combine with yet. The cluster may still be completed by
-		// a later write - a Prepend character measures zero until its base
-		// arrives - so it stays buffered rather than dropped.
+		// a later write (a Prepend character measures zero until its base
+		// arrives), so it stays buffered rather than dropped.
 		return printDeferred
 	}
 
@@ -398,8 +398,8 @@ func (e *Emulator) attachZeroWidth(content string) printOutcome {
 			continue
 		}
 		if _, rw := ansi.FirstGraphemeCluster(rs, ansi.GraphemeWidth); rw != 0 {
-			// A rune that occupies columns on its own - the emoji after a
-			// joiner - is dropped rather than folded in: arriving at a
+			// A rune that occupies columns on its own (the emoji after a
+			// joiner) is dropped rather than folded in: arriving at a
 			// cluster boundary instead it would start a cell of its own,
 			// and its fate must not depend on where a write boundary fell.
 			continue
@@ -646,8 +646,8 @@ func (e *Emulator) handleGraphemeWithin(content string, width, left, right int) 
 	// wrap the cluster whole.
 	if cell.Width > 1 && x+cell.Width > right {
 		if !awm {
-			// Nothing to wrap to. A cluster wide from its first rune - a CJK
-			// character - is discarded whole and the cell keeps what it
+			// Nothing to wrap to. A cluster wide from its first rune (a CJK
+			// character) is discarded whole and the cell keeps what it
 			// already held, which is what ghostty does. A cluster a selector
 			// widened has a base that fits on its own, so the base is drawn
 			// as it would have been arriving first. Either way the zero-width

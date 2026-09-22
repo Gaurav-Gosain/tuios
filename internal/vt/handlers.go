@@ -329,25 +329,25 @@ func (e *Emulator) registerDefaultOscHandlers() {
 		})
 	}
 
-	// OSC 4 - Set/Query indexed color palette
+	// OSC 4: Set/Query indexed color palette
 	e.RegisterOscHandler(4, func(data []byte) bool {
 		e.handlePaletteColor(data)
 		return true
 	})
 
-	// OSC 104 - Reset indexed colors the guest set with OSC 4
+	// OSC 104: Reset indexed colors the guest set with OSC 4
 	e.RegisterOscHandler(104, func(data []byte) bool {
 		e.handleResetPaletteColor(data)
 		return true
 	})
 
-	// OSC 52 - Clipboard operations (query/set)
+	// OSC 52: Clipboard operations (query/set)
 	e.RegisterOscHandler(52, func(data []byte) bool {
 		e.handleClipboard(data)
 		return true
 	})
 
-	// OSC 66 - Kitty text sizing protocol
+	// OSC 66: Kitty text sizing protocol
 	// We can't render scaled text in a cell-grid multiplexer, but we extract
 	// the text content and display it at normal size so it doesn't vanish.
 	e.RegisterOscHandler(66, func(data []byte) bool {
@@ -355,23 +355,23 @@ func (e *Emulator) registerDefaultOscHandlers() {
 		return true
 	})
 
-	// OSC 133 - Semantic prompt / shell integration (FinalTerm)
+	// OSC 133: Semantic prompt / shell integration (FinalTerm)
 	e.RegisterOscHandler(133, func(data []byte) bool {
 		e.handleSemanticZone(data)
 		return true
 	})
 
-	// OSC 9 - iTerm2 desktop notification
+	// OSC 9: iTerm2 desktop notification
 	e.RegisterOscHandler(9, func(data []byte) bool {
 		return e.handleNotify9(data)
 	})
 
-	// OSC 777 - urxvt desktop notification
+	// OSC 777: urxvt desktop notification
 	e.RegisterOscHandler(777, func(data []byte) bool {
 		return e.handleNotify777(data)
 	})
 
-	// OSC 99 - kitty desktop notification
+	// OSC 99: kitty desktop notification
 	e.RegisterOscHandler(99, func(data []byte) bool {
 		return e.handleNotify99(data)
 	})
@@ -649,7 +649,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			rect2 := uv.Rect(0, y+1, width, height-y-1) // next line onwards
 			e.scr.FillArea(e.scr.blankCell(), rect1)
 			e.scr.FillArea(e.scr.blankCell(), rect2)
-			// Don't clear images for ED 0 - commonly used by apps
+			// Don't clear images for ED 0: commonly used by apps
 			// But clear text sizing placements if clearing from top (ctrl+l pattern: CUP(1,1) + ED 0)
 			if x == 0 && y == 0 && e.cb.ScreenClear != nil {
 				e.cb.ScreenClear()
@@ -664,7 +664,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 				e.scr.FillArea(e.scr.blankCell(), uv.Rect(0, 0, width, y))
 			}
 			e.scr.FillArea(e.scr.blankCell(), uv.Rect(0, y, min(x+1, width), 1))
-			// Don't clear images for ED 1 - commonly used by apps
+			// Don't clear images for ED 1: commonly used by apps
 		case 2: // erase screen (clear command)
 			e.scr.Clear()
 			e.KittyState().ClearPlacements()
@@ -897,25 +897,25 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 	})
 
 	e.RegisterCsiHandler('h', func(params ansi.Params) bool {
-		// Set Mode [ansi.SM] - ANSI
+		// Set Mode [ansi.SM] (ANSI)
 		e.handleMode(params, true, true)
 		return true
 	})
 
 	e.RegisterCsiHandler(ansi.Command('?', 0, 'h'), func(params ansi.Params) bool {
-		// Set Mode [ansi.SM] - DEC
+		// Set Mode [ansi.SM] (DEC)
 		e.handleMode(params, true, false)
 		return true
 	})
 
 	e.RegisterCsiHandler('l', func(params ansi.Params) bool {
-		// Reset Mode [ansi.RM] - ANSI
+		// Reset Mode [ansi.RM] (ANSI)
 		e.handleMode(params, false, true)
 		return true
 	})
 
 	e.RegisterCsiHandler(ansi.Command('?', 0, 'l'), func(params ansi.Params) bool {
-		// Reset Mode [ansi.RM] - DEC
+		// Reset Mode [ansi.RM] (DEC)
 		e.handleMode(params, false, false)
 		return true
 	})
@@ -987,7 +987,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 	})
 
 	e.RegisterCsiHandler('t', func(params ansi.Params) bool {
-		// XTWINOPS - Window Manipulation
+		// XTWINOPS: Window Manipulation
 		// See: https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Functions-using-CSI-_-ordered-by-the-final-character_s_
 		n, _, ok := params.Param(0, 0)
 
@@ -1041,13 +1041,13 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 	})
 
 	e.RegisterCsiHandler(ansi.Command(0, '$', 'p'), func(params ansi.Params) bool {
-		// Request Mode [ansi.DECRQM] - ANSI
+		// Request Mode [ansi.DECRQM] (ANSI)
 		e.handleRequestMode(params, true)
 		return true
 	})
 
 	e.RegisterCsiHandler(ansi.Command('?', '$', 'p'), func(params ansi.Params) bool {
-		// Request Mode [ansi.DECRQM] - DEC
+		// Request Mode [ansi.DECRQM] (DEC)
 		e.handleRequestMode(params, false)
 		return true
 	})

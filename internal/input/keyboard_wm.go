@@ -6,18 +6,18 @@ import (
 )
 
 // remoteKeyBypassesCopyMode reports whether the key being handled came from a
-// remote sender - tuios send-keys, or a tape run from outside - rather than
+// remote sender (tuios send-keys, or a tape run from outside) rather than
 // from the person at this client.
 //
 // Copy mode, implicit or explicit, is that person's viewport: a scrolled view
 // they are reading, or a selection they are making. Their own keystroke ends
 // an implicit session because they have stopped reading, and drives an
 // explicit one because they asked for it. A remote key is neither. It goes
-// where it would go with no copy mode in progress - to the guest, or to the
-// binding it names - and the viewport stays where the person put it. An agent
-// typing into the pane while the person reads its earlier output was one of
-// the things that made scrolling feel random: the view returned to the bottom
-// at a moment decided by another process.
+// where it would go with no copy mode in progress (to the guest, or to the
+// binding it names), and the viewport stays where the person put it.
+// Otherwise an agent typing into the pane while the person reads its earlier
+// output would return the view to the bottom at a moment decided by another
+// process.
 //
 // The flag is set for the whole run of a remote key sequence or tape and
 // cleared when it is done, on the Update goroutine that dispatches both.
@@ -38,7 +38,7 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		focusedWindow.ExitCopyMode()
 	}
 
-	// Handle copy mode (vim-style scrollback/selection) - takes priority
+	// Handle copy mode (vim-style scrollback/selection), which takes priority
 	if focusedWindow.InCopyMode() && !remoteKeyBypassesCopyMode(o) {
 		return HandleCopyModeKey(msg, o, focusedWindow)
 	}
@@ -114,7 +114,7 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 	//
 	// It runs before the registry dispatch because esc is bound to
 	// enter_window_mode, which is what already has the key here and does nothing
-	// with it: this is window mode. So nothing is taken from the user - and to
+	// with it: this is window mode. So nothing is taken from the user, and to
 	// keep that true for a user who bound esc to something of their own, the
 	// claim is made only while that default binding is the one in force.
 	if key == "esc" && o.FocusedPopup() != nil {

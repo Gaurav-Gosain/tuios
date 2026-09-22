@@ -145,7 +145,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 			result.Warnings = append(result.Warnings, ValidationError{
 				Field:   section,
 				Key:     action,
-				Message: fmt.Sprintf("Essential action '%s' has no keybinding - TUIOS may be difficult to use", action),
+				Message: fmt.Sprintf("Essential action '%s' has no keybinding, so TUIOS may be difficult to use", action),
 			})
 		}
 	}

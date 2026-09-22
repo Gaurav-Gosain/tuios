@@ -229,7 +229,7 @@ func (t *BSPTree) InsertWindow(windowID int, focusedWindowID int, direction Spli
 
 	newLeaf := NewLeafNode(windowID)
 
-	// First window - just make it the root
+	// First window: just make it the root
 	if t.Root == nil {
 		t.Root = newLeaf
 		t.WindowToNode[windowID] = newLeaf
@@ -436,7 +436,7 @@ func (t *BSPTree) applyLayoutRecursive(node *TileNode, bounds Rect, result map[i
 		return
 	}
 
-	// Leaf node - this is a window
+	// Leaf node: this is a window
 	if node.IsLeaf() {
 		// A leaf occupies exactly the rectangle the tree partitioned for it.
 		// Growing it to a fixed minimum instead pushed it past that rectangle and
@@ -515,8 +515,8 @@ func (e ResizeEdge) far() bool {
 // caller should leave the geometry alone rather than invent one.
 //
 // This is the only correct way to resize a BSP layout. Matching panes by
-// geometry instead - collecting every window whose edge happens to fall on the
-// dragged line - sweeps in panes from unrelated subtrees whenever two dividers
+// geometry instead (collecting every window whose edge happens to fall on the
+// dragged line) sweeps in panes from unrelated subtrees whenever two dividers
 // coincide, which they do by default because fresh splits are all 0.5. The tree
 // says exactly which two subtrees the divider separates, and nothing outside
 // them may move.
@@ -666,8 +666,8 @@ func (t *BSPTree) syncRatiosRecursive(node *TileNode, bounds Rect, windows map[i
 	//
 	// So the rule is: sync may only move the ratios whose geometry actually
 	// disagrees with the tree. That is exactly the set the paths this function
-	// exists for change - master-stack, floating windows, windows outside the
-	// tree, and the geometry-scan fallback - and it leaves every other split
+	// exists for change (master-stack, floating windows, windows outside the
+	// tree, and the geometry-scan fallback), and it leaves every other split
 	// holding the value a resize deliberately put there.
 	expectedLeft, expectedRight := childBounds(node, bounds, gap)
 

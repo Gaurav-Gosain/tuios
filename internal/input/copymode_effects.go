@@ -12,12 +12,11 @@ import (
 // perform, so they can be applied AFTER the window's I/O read lock is dropped.
 //
 // The handlers walk the emulator cell buffer (CellAt/Width/Height/scrollback)
-// and therefore have to run under RLockIO. Everything else they used to do
-// inline - notifications, cache invalidation, leaving copy mode, entering
-// terminal mode, setting the clipboard - touches OS/Window state that has
-// nothing to do with the cell buffer. Running those inside the lock is what
-// made the handler "one SendInput call away" from the recursive read-lock
-// deadlock: any effect that grows a PTY write or a second RLockIO would park
+// and therefore have to run under RLockIO. Everything else they do
+// (notifications, cache invalidation, leaving copy mode, entering terminal
+// mode, setting the clipboard) touches OS/Window state that has nothing to do
+// with the cell buffer. Running those inside the lock would leave the handler
+// one SendInput call away from a recursive read-lock deadlock: any effect that grows a PTY write or a second RLockIO would park
 // the handler behind a queued writer while it still holds the read lock that
 // writer is waiting on.
 //

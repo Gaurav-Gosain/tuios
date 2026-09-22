@@ -66,7 +66,7 @@ func (r *KeybindRegistry) buildMappings() {
 	r.addSection(r.config.Keybindings.System)
 	r.addSection(r.config.Keybindings.Navigation)
 	r.addSection(r.config.Keybindings.RestoreMinimized)
-	// Prefix sections are handled separately - don't add them to the main registry:
+	// Prefix sections are handled separately. Don't add them to the main registry:
 	// - PrefixMode (used after Ctrl+B)
 	// - WindowPrefix (used after Ctrl+B, t)
 	// - MinimizePrefix (used after Ctrl+B, m)
@@ -94,7 +94,7 @@ func (r *KeybindRegistry) buildMappings() {
 // buildMappings decides a cross-section clash.
 func (r *KeybindRegistry) addSection(section map[string][]string) {
 	// Store keys exactly as normalized (preserves case for single letters)
-	// Don't lowercase here - we need case sensitivity for M vs m, etc.
+	// Don't lowercase here: we need case sensitivity for M vs m, etc.
 	maps.Copy(r.keyToAction, r.sectionKeyMap(section))
 }
 
@@ -226,7 +226,7 @@ func (r *KeybindRegistry) lookupKey(key string, keyMap map[string]string) string
 	// For compound keys (ctrl+x, shift+tab), normalize to lowercase.
 	// Rune-aware so multi-byte AZERTY letters (é/è/à/ç) match too.
 	if isSingleRuneLetter(key) {
-		// Single letter - check both exact case and lowercase
+		// Single letter: check both exact case and lowercase.
 		// This handles both "M" (shift+m) and "m" inputs
 		if action, ok := keyMap[key]; ok {
 			return action

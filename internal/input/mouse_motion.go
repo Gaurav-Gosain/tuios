@@ -274,7 +274,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// a move and the pane can give up its shared-border allowance now. The
 		// press did not: see untilePaneForDrag.
 		untilePaneForDrag(focusedWindow)
-		// Calculate new position - allow windows to go partially off-screen for edge snapping
+		// Calculate new position, allowing windows to go partially off-screen for edge snapping
 		newX := mouse.X - o.DragOffsetX
 		newY := mouse.Y - o.DragOffsetY
 
@@ -397,10 +397,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		// Right edge: prevent window from exceeding the content region
 		if newX+newWidth > contentRight {
 			if o.ResizeCorner == app.TopRight || o.ResizeCorner == app.BottomRight {
-				// Resizing from right edge - constrain width
+				// Resizing from right edge: constrain width
 				newWidth = contentRight - newX
 			} else {
-				// Resizing from left edge - constrain X position
+				// Resizing from left edge: constrain X position
 				newX = contentRight - newWidth
 			}
 		}
@@ -410,10 +410,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		maxY := topMargin + o.GetUsableHeight()
 		if newY+newHeight > maxY {
 			if o.ResizeCorner == app.BottomLeft || o.ResizeCorner == app.BottomRight {
-				// Resizing from bottom edge - constrain height
+				// Resizing from bottom edge: constrain height
 				newHeight = maxY - newY
 			} else {
-				// Resizing from top edge - constrain Y position
+				// Resizing from top edge: constrain Y position
 				newY = maxY - newHeight
 			}
 		}
@@ -478,7 +478,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// to catch up with the new geometry before the next frame. Mark it
 			// rather than syncing here: syncing walks every node in the tree and
 			// reapplies the layout, and motion events outnumber frames. A resize
-			// the BSP tree drove needs none of this - the ratios are already what
+			// the BSP tree drove needs none of this: the ratios are already what
 			// the geometry was built from.
 			if o.SharedBorders && !treeInSync {
 				o.MarkBSPSyncPending()
@@ -525,7 +525,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				win.X = stripLeft + rect.X
 				win.Y = rect.Y
 				win.Width = rect.W
-				// Don't call ResizeVisual or Resize  - just set visual width.
+				// Don't call ResizeVisual or Resize, just set visual width.
 				// Terminal emulator keeps old dimensions until release.
 				win.MarkPositionDirty()
 				win.InvalidateCache()

@@ -53,20 +53,18 @@ func key(s string) tea.KeyPressMsg {
 
 // Note on what is NOT tested here, deliberately.
 //
-// The lock narrowing moved the copy-mode side effects out of the RLockIO
-// region. No runtime test distinguishes the pre-fix structure from this one,
-// and one was tried and removed rather than kept as false comfort: asserting
-// the lock is free after HandleCopyModeKey returns passes on BOTH structures,
-// because the old code's `defer window.RUnlockIO()` also released before
-// returning. The pre-fix defect is latent - nothing currently called inside
-// that region blocks or re-locks - so there is no observable behaviour to
-// assert on.
+// The copy-mode side effects run outside the RLockIO region. No runtime test
+// can tell that apart from running them inside it: asserting the lock is free
+// after HandleCopyModeKey returns passes either way, because a deferred
+// window.RUnlockIO() also releases before returning. The hazard is latent
+// (nothing called inside that region blocks or re-locks), so there is no
+// observable behaviour to assert on.
 //
-// What actually guarantees the fix is structural, and the compiler enforces
-// it: handleNormalInput, handleSearchInput and handleVisualInput no longer
-// receive a *app.OS at all. Code running under the lock has no route to the
+// The guarantee is structural, and the compiler enforces it:
+// handleNormalInput, handleSearchInput and handleVisualInput do not receive a
+// *app.OS at all. Code running under the lock has no route to the
 // OS, and therefore no route to a PTY write or a second RLockIO. Reintroducing
-// the hazard now requires changing those signatures, which is a visible edit
+// the hazard requires changing those signatures, which is a visible edit
 // rather than an accidental one.
 //
 // The tests below cover what IS observable: that the traversal is still

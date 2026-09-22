@@ -47,7 +47,7 @@ func findClickedWindow(x, y int, o *app.OS) int {
 		// Check if click is within window bounds
 		if x >= window.X && x < window.X+window.Width &&
 			y >= window.Y && y < window.Y+window.Height {
-			// This window contains the click - check if it's the topmost so far
+			// This window contains the click: check if it's the topmost so far
 			if window.Z > topZ {
 				topZ = window.Z
 				topWindow = i
@@ -69,7 +69,7 @@ func abs(x int) int {
 // scrollbarGrab answers a press on the bar and returns the offset the drag that
 // follows holds: the rows between the pointer and the thumb's first row. A press
 // on the bare track jumps the thumb under the pointer first and takes its offset
-// from where the thumb landed, after opentui's Slider - taking it before the
+// from where the thumb landed, after opentui's Slider. Taking it before the
 // jump makes the thumb leap a second time on the first pixel of the drag.
 func scrollbarGrab(win *terminal.Window, rect app.ScrollbarRect, mouseY int, s *config.Settings) int {
 	if rect.OnThumb(mouseY) {

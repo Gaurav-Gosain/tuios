@@ -136,7 +136,7 @@ const (
 )
 
 // =============================================================================
-// Dock Visual Characters - Nerd Font Icons (Default)
+// Dock Visual Characters: Nerd Font Icons (Default)
 // Initialized from go-nf library in init()
 // =============================================================================
 
@@ -153,13 +153,13 @@ var (
 	// DockModeIconTerminal is the icon for terminal mode (Nerd Font: nf-fa-terminal)
 	DockModeIconTerminal string
 
-	// DockModeIconTiling is the icon for tiling mode (Nerd Font: nf-fa-th - 3x3 grid)
+	// DockModeIconTiling is the icon for tiling mode (Nerd Font: nf-fa-th, a 3x3 grid)
 	DockModeIconTiling string
 
 	// DockIconTerminalCount is the icon for terminal count (Nerd Font: nf-fa-terminal)
 	DockIconTerminalCount string
 
-	// DockIconWorkspaceCount is the icon for workspace count (Nerd Font: nf-fa-th_large - 2x2 grid)
+	// DockIconWorkspaceCount is the icon for workspace count (Nerd Font: nf-fa-th_large, a 2x2 grid)
 	DockIconWorkspaceCount string
 
 	// DockIconLeaveRunning is the icon for the control that quits this client and
@@ -206,7 +206,7 @@ func init() {
 }
 
 // =============================================================================
-// Dock Visual Characters - ASCII Fallback
+// Dock Visual Characters: ASCII Fallback
 // =============================================================================
 
 const (
@@ -597,22 +597,22 @@ const (
 
 // How far one wheel event walks the scrolling layout's strip, in cells.
 //
-// It used to be a fifth of the visible width, which is fine for a wheel and
-// unusable on a trackpad: a terminal reports precision scrolling as one wheel
-// event per cell the fingers cross, so a single flick and its momentum tail are
-// tens of events, and a fifth of the screen each sent the strip to its clamp
-// before the fingers had left the glass. A flat number of cells is the same
-// distance whatever the screen is, small enough that a flick lands somewhere the
-// user aimed at, and large enough that a few notches of a wheel still get
-// somewhere. Someone who only ever scrolls the strip with a wheel can raise it.
+// It is a flat number of cells rather than a fraction of the visible width
+// because a terminal reports trackpad scrolling as one wheel event per cell the
+// fingers cross. A single flick and its momentum tail are tens of events, so a
+// step of a fifth of the screen sends the strip to its clamp before the fingers
+// leave the glass. A flat number is the same distance whatever the screen is,
+// small enough that a flick lands where the user aimed, and large enough that a
+// few notches of a wheel still get somewhere. Someone who only ever scrolls the
+// strip with a wheel can raise it.
 const (
 	NiriScrollCellsMin     = 1
 	NiriScrollCellsMax     = 200
 	NiriScrollCellsDefault = 8
 )
 
-// DimUnfocusedMax caps it. The cap is not a legibility floor - content is the
-// user's own text and they may quiet it as far as they like - it only stops a
+// DimUnfocusedMax caps it. The cap is not a legibility floor (content is the
+// user's own text and they may quiet it as far as they like). It only stops a
 // pane from being erased outright, where there is nothing left to show the
 // setting worked and no way to tell a dimmed pane from a crashed one.
 const DimUnfocusedMax = 90
@@ -949,8 +949,8 @@ func (s *Settings) glyphSetBorder() lipgloss.Border {
 // rather than as two different shapes stacked in a column. Box-drawing
 // verticals are drawn cell-height, so the track is an unbroken hairline, and
 // they sit centred in the cell, which keeps the bar clear of the pane border
-// instead of thickening it - the half and eighth blocks it replaced hugged the
-// right edge and read as part of the frame.
+// instead of thickening it. Half and eighth blocks would hug the right edge and
+// read as part of the frame.
 //
 // The track style fills its column instead, so its thumb is a whole block and
 // its track is the surface fill behind it rather than a glyph.
@@ -1030,7 +1030,7 @@ func (s *Settings) ScrollbarTintResolved() string {
 
 // GetScrollbarTrackChar returns the glyph drawn on the track's uncovered cells.
 // An empty string is a blank cell, which in the track style is its surface fill
-// and in the thin style is no track at all - the pre-track look, and what ASCII
+// and in the thin style is no track at all. That is also what ASCII
 // gets since it has no hairline to draw one with.
 func (s *Settings) GetScrollbarTrackChar() string {
 	if s.ScrollbarTrack == ScrollbarTrackNone {
@@ -1107,9 +1107,9 @@ func (s *Settings) GetWindowButtonMaximizeMark() string {
 		WindowButtonMaximizeMark, WindowButtonMaximizeMarkASCII)
 }
 
-// GetWindowButtonMinimizeMark returns the one-cell minimize mark. It had no
-// accessor and no ASCII form: the pill drew a literal "  - ", so --ascii-only
-// was being honoured there only because the glyph happened to be 7-bit already.
+// GetWindowButtonMinimizeMark returns the one-cell minimize mark. It has no
+// separate ASCII form because the mark is already 7-bit, so --ascii-only needs
+// nothing different here.
 func (s *Settings) GetWindowButtonMinimizeMark() string {
 	return s.glyphOr(func(g *theme.GlyphSet) string { return g.Minimize },
 		WindowButtonMinimizeMark, WindowButtonMinimizeMark)

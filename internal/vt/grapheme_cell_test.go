@@ -169,7 +169,7 @@ func TestGrapheme_ASCIIBaseKeepsCombiningMarks(t *testing.T) {
 		{
 			// A cursor move closes the cluster, so a mark after one is not
 			// pulled back onto the character the cursor left. It combines
-			// with the cell before the cursor instead - a blank here - the
+			// with the cell before the cursor instead (a blank here), the
 			// way ghostty and xterm attach a mark that has no base of its
 			// own.
 			name: "cursor move ends the cluster",

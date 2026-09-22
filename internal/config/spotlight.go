@@ -69,12 +69,10 @@ const (
 	SpotlightMaxRadius     = 200
 	// SpotlightDefaultDim leaves an unlit cell at a quarter of its light.
 	//
-	// It was 60 while the pass carried each colour toward the theme's ground,
-	// which barely moved a background and left a colourless one alone, so the
-	// number never meant what it said. Now that it does - dim N leaves the
-	// screen at (100-N) percent of its light - 60 reads as a screen merely a bit
-	// darker, and the text outside the beam still competes with the text
-	// inside it. A quarter is near tuiffects' own unlit character, which sits
+	// Dim N leaves the screen at (100-N) percent of its light. At 60 the
+	// screen reads as merely a bit darker, and the text outside the beam still
+	// competes with the text inside it. A quarter is near tuiffects' own unlit
+	// character, which sits
 	// at a fifth, and it leaves the layout visible while giving the beam the
 	// whole of the reader's attention.
 	SpotlightDefaultDim = 75

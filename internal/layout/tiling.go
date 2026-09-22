@@ -14,9 +14,8 @@ type span struct{ Pos, Size int }
 // each adjacent pair.
 //
 // The gap comes out of the extent before it is divided, so the shares are even.
-// Taking it out of one side afterwards - which is what this tiler used to do -
-// made the far pane narrower than the near one by the whole gap, on every split
-// and at every pane count.
+// Taking it out of one side afterwards would make the far pane narrower than
+// the near one by the whole gap, on every split and at every pane count.
 //
 // The remainder is spread a cell at a time from the first share rather than
 // handed to the last, so no two neighbours differ by more than one cell. A
@@ -24,9 +23,9 @@ type span struct{ Pos, Size int }
 // screen, and it is the pane a rounding bug hides in.
 //
 // Shares are floored at one cell and never at a fixed minimum. A minimum wider
-// than the share is what pushed a pane past its own rectangle and into its
-// neighbour's, so a workspace holding more panes than fit at a comfortable size
-// drew them overlapping instead of simply smaller. This is the rule the BSP
+// than the share pushes a pane past its own rectangle and into its neighbour's,
+// so a workspace holding more panes than fit at a comfortable size would draw
+// them overlapping instead of simply smaller. This is the rule the BSP
 // tiler already follows (bsp.go applyLayoutRecursive): tiling never overlaps;
 // when space runs short the panes shrink.
 func spans(origin, total, n, gap int) []span {
@@ -39,8 +38,8 @@ func spans(origin, total, n, gap int) []span {
 	// A region too tight to hold the asked-for gaps gives up ground first. A
 	// gap is only ever spacing; a share pushed past the end of the extent is a
 	// pane drawn outside the region, which is the same class of fault as the
-	// overlap above. One cell per neighbour is the floor, and below that - fewer
-	// cells in the extent than neighbours to divide it between - there is no
+	// overlap above. One cell per neighbour is the floor. Below that, with fewer
+	// cells in the extent than neighbours to divide it between, there is no
 	// arrangement at all.
 	if total-gap*(n-1) < n {
 		gap = max((total-n)/(n-1), 0)
@@ -113,7 +112,7 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 	// Status bar is an overlay, windows use full usable height starting at Y=0
 	switch n {
 	case 1:
-		// Single window - full screen
+		// Single window: full screen
 		layouts = append(layouts, TileLayout{
 			X:      0,
 			Y:      topMargin,
@@ -143,7 +142,7 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 		)
 
 	case 3:
-		// Three windows - one left (master), two right stacked
+		// Three windows: one left (master), two right stacked
 		master, stack := splitByRatio(0, screenWidth, masterRatio, gap)
 		rows := spans(topMargin, usableHeight, 2, gap)
 		layouts = append(layouts,

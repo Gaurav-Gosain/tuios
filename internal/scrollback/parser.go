@@ -20,7 +20,7 @@ type CommandBlock struct {
 	ExitCode     int    // -1 if unknown
 	StartLine    int    // absolute line index
 	EndLine      int    // absolute line index (inclusive)
-	Method       string // "osc133" or "regex"  - how this block was parsed
+	Method       string // "osc133" or "regex": how this block was parsed
 }
 
 // DebugLogFunc can be set to capture parser diagnostic output.
@@ -91,7 +91,7 @@ func parseWithMarkers(term vt.Terminal, markers []vt.SemanticMarker) []CommandBl
 					dMarker = &markers[j]
 				}
 			case vt.MarkerPromptStart:
-				// Next prompt starts - record its position and stop looking
+				// Next prompt starts: record its position and stop looking
 				nextPromptAbsLine = markers[j].AbsLine
 				goto buildBlock
 			}
@@ -117,7 +117,7 @@ func parseWithMarkers(term vt.Terminal, markers []vt.SemanticMarker) []CommandBl
 			continue
 		}
 
-		// Require C (command executed) or D (command finished)  - without either,
+		// Require C (command executed) or D (command finished). Without either,
 		// this is an unexecuted prompt (e.g., initial shell prompt, current input line).
 		// Reading text from these positions is unreliable because the line content
 		// may have changed since the marker was created (overwritten by output).

@@ -76,8 +76,8 @@ func TestGhosttyReflowIsReversible(t *testing.T) {
 // backend marks it wrapped. Narrowing still has to put its last column
 // somewhere. Ghostty rewraps it onto a second row and keeps every character;
 // the pure emulator has no reflow and drops the characters that no longer
-// fit. Ghostty is right - losing a character on resize is data loss, and
-// every reflowing terminal (ghostty, kitty, wezterm) rewraps here - but the
+// fit. Ghostty is right (losing a character on resize is data loss, and
+// every reflowing terminal, ghostty, kitty and wezterm, rewraps here), but the
 // extra row is what a shell's fixed-step repaint then trips over.
 func TestGhosttyResizeSplitsAFullWidthLine(t *testing.T) {
 	const w, h = 31, 8

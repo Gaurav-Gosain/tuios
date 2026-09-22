@@ -17,7 +17,7 @@ import (
 )
 
 // A glyph set is the other half of a rice. A theme says what colour the chrome
-// is; a set says what shape it is - which corner the border turns, what the
+// is; a set says what shape it is: which corner the border turns, what the
 // close button is a picture of, what a rule is drawn with, which mark says
 // "you are here" on the rail. Every one of those was a literal in the render
 // path, so the only rice tuios could be asked for was a recolour.
@@ -488,7 +488,7 @@ func GlyphSetProblemsFor(id string) []string {
 func GlyphSetDroppedRoles(id string) []string {
 	var roles []string
 	for _, line := range GlyphSetProblemsFor(id) {
-		// "glyph set <id>: <role> is N cells wide and ..." - the role is the
+		// "glyph set <id>: <role> is N cells wide and ...": the role is the
 		// word after the colon. A border rune's line names no role, so it is
 		// reported under the border it belongs to.
 		_, rest, ok := strings.Cut(line, ": ")

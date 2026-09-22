@@ -4,11 +4,11 @@ import "github.com/charmbracelet/x/ansi"
 
 // defaultModes lists the recognized modes and their default values, in the
 // order their effects apply on a reset. The order is fixed because several
-// setMode calls have side effects - resetting 1048 restores the cursor,
+// setMode calls have side effects (resetting 1048 restores the cursor,
 // resetting DECOM homes it, resetting DECLRMM clears the margins, resetting
-// the alternate screen switches back to the main one - and ranging over a
-// map applied them in a different order on every run, so RIS left the
-// terminal in a state that varied between runs. DECOM goes last so a reset
+// the alternate screen switches back to the main one), and ranging over a
+// map would apply them in a different order on every run, leaving RIS with a
+// terminal state that varies between runs. DECOM goes last so a reset
 // deterministically ends with the cursor homed.
 var defaultModes = []struct {
 	mode    ansi.Mode

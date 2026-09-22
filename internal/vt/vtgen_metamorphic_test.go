@@ -2,14 +2,13 @@ package vt_test
 
 // Oracles that need nobody to write down the right answer.
 //
-// The existing generated-input targets check three structural invariants: the
-// screen is not negative, the scroll region is inside it, the cursor is inside
-// it, and no cell claims more columns than the row has. A campaign measured
-// over internal/vt reaches 55% of its statements and 590k executions found
-// none of the eleven bugs a conformance round found by hand. That is not
-// because the generator fails to produce the sequences - it produces DECSED,
-// DECSTBM and the rest thousands of times - but because nothing looks at what
-// they did. An emulator that silently does the wrong thing satisfies all four
+// The other generated-input targets check structural invariants: the screen
+// is not negative, the scroll region is inside it, the cursor is inside it,
+// and no cell claims more columns than the row has. A campaign measured over
+// internal/vt reaches 55% of its statements, and 590k executions found none of
+// the eleven bugs a conformance round found by hand. The generator does
+// produce the sequences (DECSED, DECSTBM and the rest, thousands of times),
+// but those targets do not look at what they did. An emulator that silently does the wrong thing satisfies all four
 // invariants.
 //
 // The two properties below need no expectations. They relate one run of the
@@ -275,10 +274,10 @@ func FuzzEmulatorRenderRoundTrip(f *testing.F) {
 
 // TestVTGen_Metamorphic is the deterministic half of both properties.
 //
-// It runs on every build now that both properties hold; the bugs it used to
-// gate on - a zero-width character eating a visible cell, and the screen
-// depending on where a PTY read boundary fell - are fixed and pinned by
-// TestVTGen_ZeroWidthAttachesOrDrops and the grapheme cell tests.
+// It runs on every build. The two bugs it has caught (a zero-width character
+// eating a visible cell, and the screen depending on where a PTY read boundary
+// fell) are also pinned by TestVTGen_ZeroWidthAttachesOrDrops and the grapheme
+// cell tests.
 // TUIOS_METAMORPHIC_SEEDS widens the sweep for a longer campaign; the
 // default keeps an ordinary `go test` fast.
 func TestVTGen_Metamorphic(t *testing.T) {
@@ -324,8 +323,8 @@ func TestVTGen_Metamorphic(t *testing.T) {
 // TestVTGen_MetamorphicOraclesCanFail guards the oracles themselves.
 //
 // A property that cannot fail passes forever and proves nothing, and both of
-// these compare an emulator to itself, so a mistake in the harness - reading
-// the same emulator twice, comparing an empty screen to an empty screen -
+// these compare an emulator to itself, so a mistake in the harness (reading
+// the same emulator twice, comparing an empty screen to an empty screen)
 // would be invisible. Feeding a deliberately mismatched pair proves each
 // comparison is looking at something.
 func TestVTGen_MetamorphicOraclesCanFail(t *testing.T) {
@@ -348,19 +347,18 @@ func TestVTGen_MetamorphicOraclesCanFail(t *testing.T) {
 	}
 }
 
-// TestVTGen_ZeroWidthAttachesOrDrops pins the fix for the bug the render
-// round trip found: a zero-width character with nothing to attach to used to
-// be given a cell of its own, taken from whatever was there, and the row
-// then held one more cell than it had columns. Render emitted the row
-// without it, everything after shifted one column left, and the last column
-// fell off the end - with DECALN, an E the emulator still believed was on
-// screen.
+// TestVTGen_ZeroWidthAttachesOrDrops pins a bug the render round trip found.
+// A zero-width character with nothing to attach to must not get a cell of its
+// own: taking one from whatever was there leaves the row with one more cell
+// than it has columns. Render emits the row without it, everything after
+// shifts one column left, and the last column falls off the end (with DECALN,
+// an E the emulator still believes is on screen).
 //
-// The fix follows what ghostty and xterm do: a zero-width arrival combines
-// with the cell before the cursor (the cursor's own cell when a print is
-// parked at the margin), and is dropped when there is nothing there or when
-// it cannot extend that cell's cluster - a bidi control breaks the cluster
-// where a combining mark extends it.
+// The emulator follows ghostty and xterm: a zero-width arrival combines with
+// the cell before the cursor (the cursor's own cell when a print is parked at
+// the margin), and is dropped when there is nothing there or when it cannot
+// extend that cell's cluster. A bidi control breaks the cluster where a
+// combining mark extends it.
 func TestVTGen_ZeroWidthAttachesOrDrops(t *testing.T) {
 	const w, h = 40, 4
 

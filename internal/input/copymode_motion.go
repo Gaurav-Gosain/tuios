@@ -49,15 +49,15 @@ func moveRight(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 }
 
-// moveUp moves cursor up (k key) - keeps cursor in middle of viewport when possible
+// moveUp moves cursor up (k key). It keeps cursor in middle of viewport when possible
 func moveUp(cm *terminal.CopyMode, window *terminal.Window) {
 	midPoint := window.Height / 2
 
 	if cm.CursorY > midPoint {
-		// Cursor below middle - just move it up
+		// Cursor below middle: just move it up
 		cm.CursorY--
 	} else if cm.ScrollOffset < window.ScrollbackLen() {
-		// Cursor at/above middle - scroll content instead (cursor stays in place)
+		// Cursor at/above middle: scroll content instead (cursor stays in place)
 		cm.ScrollOffset++
 		window.ScrollbackOffset = cm.ScrollOffset
 	} else if cm.CursorY > 0 {
@@ -66,15 +66,15 @@ func moveUp(cm *terminal.CopyMode, window *terminal.Window) {
 	}
 }
 
-// moveDown moves cursor down (j key) - keeps cursor in middle of viewport when possible
+// moveDown moves cursor down (j key). It keeps cursor in middle of viewport when possible
 func moveDown(cm *terminal.CopyMode, window *terminal.Window) {
 	midPoint := window.Height / 2
 
 	if cm.CursorY < midPoint {
-		// Cursor above middle - just move it down
+		// Cursor above middle: just move it down
 		cm.CursorY++
 	} else if cm.ScrollOffset > 0 {
-		// Cursor at/below middle - scroll content instead (cursor stays in place)
+		// Cursor at/below middle: scroll content instead (cursor stays in place)
 		cm.ScrollOffset--
 		window.ScrollbackOffset = cm.ScrollOffset
 	} else if cm.CursorY < window.Height-3 {
@@ -117,7 +117,7 @@ func moveWordForward(cm *terminal.CopyMode, window *terminal.Window) {
 		cell := getCellAtCursor(cm, window)
 		charType := getCharType(cellContent(cell))
 
-		// Found a non-whitespace character - we're at start of next word
+		// Found a non-whitespace character: we're at start of next word
 		if charType != 0 {
 			break
 		}
@@ -154,7 +154,7 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 		cell := getCellAtCursor(cm, window)
 		charType := getCharType(cellContent(cell))
 
-		// Found non-whitespace - move to phase 2
+		// Found non-whitespace: move to phase 2
 		if charType != 0 {
 			break
 		}
@@ -181,7 +181,7 @@ func moveWordBackward(cm *terminal.CopyMode, window *terminal.Window) {
 
 	for range maxIterations {
 		if cm.CursorX == 0 {
-			// At start of line - this is the word start
+			// At start of line: this is the word start
 			break
 		}
 
@@ -237,7 +237,7 @@ func moveWordEnd(cm *terminal.CopyMode, window *terminal.Window) {
 	for range maxIterations {
 		cell := getCellAtCursor(cm, window)
 
-		// Found non-whitespace - move to phase 2
+		// Found non-whitespace: move to phase 2
 		if cell != nil && cell.Content != "" && cell.Content != " " && cell.Content != "\t" {
 			break
 		}

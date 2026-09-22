@@ -12,16 +12,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
-// These tests exist because the ones next door were not enough. Selection had
-// its own tests, they drove the real mouse handlers, and they passed for months
-// while copying a selection did nothing at all: every one of them read the
-// selection back through extractVisualText, the function the selection is made
-// with. Nothing asked the questions the rest of the program asks -- is there a
-// selection to copy, and what does the copy action produce -- so the answer
-// being "no" and "nothing" went unnoticed.
-//
-// So these drive the mouse and then go out through the consumers: the context
-// menu's enablement, and the copy action reached through the dispatcher.
+// These tests drive the mouse and then check the selection through its
+// consumers: the context menu's enablement, and the copy action reached through
+// the dispatcher. Reading the selection back through extractVisualText, the
+// function the selection is made with, passes even when copying a selection
+// does nothing, because it never asks what the rest of the program asks: is
+// there a selection to copy, and what does the copy action produce.
 
 // clipboardText runs a command and returns the text it wrote to the clipboard,
 // or "" when it wrote nothing. tea's set-clipboard message is an unexported

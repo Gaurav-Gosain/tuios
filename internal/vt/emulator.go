@@ -699,7 +699,7 @@ func (e *Emulator) IsCursorHidden() bool {
 
 // IsAltScreen returns whether the terminal is currently using the alternate screen buffer.
 // The alternate screen is used by full-screen applications like vim, less, htop, btop, etc.
-// This is important for mouse event forwarding - mouse events should only be forwarded
+// This is important for mouse event forwarding: mouse events should only be forwarded
 // to applications when they are in alternate screen mode.
 func (e *Emulator) IsAltScreen() bool {
 	return e.isModeSet(ansi.ModeAltScreen) || e.isModeSet(ansi.ModeAltScreenSaveCursor)
@@ -730,12 +730,12 @@ func (e *Emulator) altScreen() *Screen {
 // RestoreAltScreenMode restores the alternate screen mode state.
 // This is used when reconnecting to a daemon session to restore the emulator state
 // without re-sending the escape sequences that would trigger the mode change.
-// This method ONLY switches the screen buffer pointer - it does NOT modify the
+// This method ONLY switches the screen buffer pointer. It does NOT modify the
 // modes map to avoid concurrent map access issues.
 func (e *Emulator) RestoreAltScreenMode(enabled bool) {
 	if enabled {
 		// Switch to alt screen buffer if not already there
-		// Don't clear it - we want to preserve any content that gets restored
+		// Don't clear it: we want to preserve any content that gets restored
 		if e.scr != &e.scrs[1] {
 			e.scr = e.altScreen()
 		}

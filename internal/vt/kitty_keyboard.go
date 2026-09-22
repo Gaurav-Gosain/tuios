@@ -102,7 +102,7 @@ func (k *kittyKeyboardState) HasReportAllKeys() bool {
 
 // registerKittyKeyboardHandlers registers CSI handlers for kitty keyboard protocol.
 func (e *Emulator) registerKittyKeyboardHandlers() {
-	// CSI > flags u  - Push keyboard mode
+	// CSI > flags u: Push keyboard mode
 	e.RegisterCsiHandler(ansi.Command('>', 0, 'u'), func(params ansi.Params) bool {
 		flags := 0
 		if len(params) > 0 {
@@ -114,7 +114,7 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		return true
 	})
 
-	// CSI < count u  - Pop keyboard mode
+	// CSI < count u: Pop keyboard mode
 	e.RegisterCsiHandler(ansi.Command('<', 0, 'u'), func(params ansi.Params) bool {
 		count := 1
 		if len(params) > 0 {
@@ -126,7 +126,7 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		return true
 	})
 
-	// CSI ? u  - Query keyboard mode
+	// CSI ? u: Query keyboard mode
 	e.RegisterCsiHandler(ansi.Command('?', 0, 'u'), func(_ ansi.Params) bool {
 		flags := e.kittyKbd.CurrentFlags()
 		// Respond with CSI ? flags u
@@ -136,7 +136,7 @@ func (e *Emulator) registerKittyKeyboardHandlers() {
 		return true
 	})
 
-	// CSI = flags ; mode u  - Set keyboard mode
+	// CSI = flags ; mode u: Set keyboard mode
 	e.RegisterCsiHandler(ansi.Command('=', 0, 'u'), func(params ansi.Params) bool {
 		flags := 0
 		mode := 1
@@ -271,9 +271,9 @@ func kittyAssociatedText(text string) string {
 }
 
 // csiuForm is how one key is spelled in the CSI u family: a number, then the
-// modifier field, then a terminator. Three shapes exist -- \x1b[<code>u for
+// modifier field, then a terminator. Three shapes exist: \x1b[<code>u for
 // ordinary keys, \x1b[1;<mods><letter> for the arrows and F1-F4, and
-// \x1b[<n>;<mods>~ for Insert through F12 -- and they differ only in those two
+// \x1b[<n>;<mods>~ for Insert through F12. They differ only in those two
 // values. Presses and releases read the same table, so a release can never name
 // a different key than the press it ends.
 type csiuForm struct {
@@ -364,8 +364,8 @@ func encodeFormCSIu(form csiuForm, mod KeyMod) string {
 // Only the event-type flag makes a release reportable, and it is the flag a
 // compositor running in a pane cannot do without: a Wayland client is told a key
 // is down and waits to be told it came up, so a dropped release leaves the key
-// held and xkb repeating it forever. The press form is unchanged by the flag --
-// kitty sends a bare \x1b[97u for the press and \x1b[97;1:3u for its release --
+// held and xkb repeating it forever. The press form is unchanged by the flag
+// (kitty sends a bare \x1b[97u for the press and \x1b[97;1:3u for its release),
 // so the release always carries the modifier field, even when empty, because the
 // event type rides on it as a subparameter.
 func EncodeKeyReleaseCSIu(key KeyPressEvent, flags int) string {

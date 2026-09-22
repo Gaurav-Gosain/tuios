@@ -87,7 +87,7 @@ func getRawKeyBytesWithMode(msg tea.KeyPressMsg, applicationCursorKeys bool) []b
 
 	// Handle modifier combinations first
 	if actualMod != 0 {
-		// Handle Shift+Tab (backtab) - sends CSI Z
+		// Handle Shift+Tab (backtab): sends CSI Z
 		if actualMod&tea.ModShift != 0 && key.Code == tea.KeyTab {
 			return []byte{0x1b, '[', 'Z'}
 		}

@@ -439,8 +439,8 @@ func shrinkTo(s vtgen.Script, want string, replay func(vtgen.Script) divergence)
 // The two backends currently disagree about at least eight distinct things
 // (each pinned below), and several of them are common enough that most
 // generated streams hit one. A target that fails on nearly every input is
-// not a gate, it is noise, and the alternative - an allowlist of the 43
-// signatures a census turns up - covers so much of the space that it would
+// not a gate, it is noise, and the alternative (an allowlist of the 43
+// signatures a census turns up) covers so much of the space that it would
 // pass a genuinely new bug. So these run only when asked for, and the
 // durable regression value lives in the pinned tests instead: those assert
 // what each backend does today, and fire when either one changes.
@@ -758,7 +758,7 @@ func probeBoth(t *testing.T, in string, x, y int) diffProbe {
 //
 // The pure emulator is the xterm-compatible side here: xterm and kitty both
 // run the command and ignore surplus parameters. The consequence of the
-// divergence is concrete - a guest emitting a slightly malformed cursor move
+// divergence is concrete: a guest emitting a slightly malformed cursor move
 // moves the cursor on one backend and not the other, so the same byte stream
 // rehydrates into two different screens depending on which backend the daemon
 // was built with.
@@ -888,8 +888,8 @@ func TestGhosttyDivergence_SelectiveErase(t *testing.T) {
 // The pure emulator applies background-colour erase to EL, IL, DL and SU; the
 // library applies it to ED and to nothing else. xterm with bce set fills all
 // of them, so the pure emulator is the compatible side. What a user sees on
-// the library backend is a coloured application - anything with a themed
-// background - growing default-coloured bands wherever it inserts, deletes or
+// the library backend is a coloured application (anything with a themed
+// background) growing default-coloured bands wherever it inserts, deletes or
 // scrolls lines.
 func TestGhosttyDivergence_BackgroundColourErase(t *testing.T) {
 	// bgAt reports whether a blanked cell carries a background colour.
@@ -907,7 +907,7 @@ func TestGhosttyDivergence_BackgroundColourErase(t *testing.T) {
 		// ED is the odd one out on BOTH sides: neither carries the
 		// background into a cleared screen, though xterm with bce does.
 		// It stays here as the case that guards the probe, and as a note
-		// that the pure emulator is inconsistent with itself - it applies
+		// that the pure emulator is inconsistent with itself: it applies
 		// bce to the four operations below but not to this one.
 		{"ED carries the background on neither", "\x1b[41m\x1b[2J", 0, 0, false, false},
 		{"EL carries it only on the pure emulator", "ABCD\x1b[H\x1b[41m\x1b[K", 0, 0, true, false},

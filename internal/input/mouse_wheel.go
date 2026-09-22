@@ -148,7 +148,7 @@ func handleMouseWheel(msg tea.MouseWheelMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			switch msg.Button {
 			case tea.MouseWheelUp:
 				if focusedWindow.InCopyMode() {
-					// Already in copy mode  - scroll up
+					// Already in copy mode: scroll up
 					scrollCopyModeUp(focusedWindow, &o.Settings)
 				} else if o.Mode == app.TerminalMode && focusedWindow.Terminal != nil && !focusedWindow.Terminal.HasMouseMode() && !focusedWindow.IsAltScreen() && focusedWindow.ScrollbackLen() > 0 {
 					// No mouse tracking, not alt screen, and there is history to

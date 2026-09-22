@@ -187,7 +187,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 		// Calculate drag distance to determine if this was actually a drag or just a click
 		dragDistance := abs(mouse.X-o.DragStartX) + abs(mouse.Y-o.DragStartY)
-		const dragThreshold = 5 // pixels - must move at least this much to be considered a drag
+		const dragThreshold = 5 // pixels: must move at least this much to be considered a drag
 
 		draggedWindow := o.Windows[o.DraggedWindowIndex]
 
@@ -270,10 +270,10 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			}
 
 			if targetWindowIndex >= 0 && targetWindowIndex != o.DraggedWindowIndex {
-				// Swap windows - dragged window goes to target's position, target goes to dragged window's original position
+				// Swap windows: dragged window goes to target's position, target goes to dragged window's original position
 				o.SwapWindowsWithOriginal(o.DraggedWindowIndex, targetWindowIndex, o.TiledX, o.TiledY, o.TiledWidth, o.TiledHeight)
 			} else {
-				// No swap - snap dragged window back to its original tiled position
+				// No swap: snap dragged window back to its original tiled position
 				// Immediately set window back to tiled position to prevent layout corruption
 				draggedWindow.X = o.TiledX
 				draggedWindow.Y = o.TiledY
@@ -284,7 +284,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				draggedWindow.InvalidateCache()
 			}
 		} else {
-			// Drag distance below threshold - snap back to prevent layout corruption from micro-drags
+			// Drag distance below threshold: snap back to prevent layout corruption from micro-drags
 			// Even small mouse movements can displace the window during motion events
 			draggedWindow.X = o.TiledX
 			draggedWindow.Y = o.TiledY
@@ -418,7 +418,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.InteractionMode = false
 	}
 
-	// Mouse edge snapping disabled - use keyboard shortcuts for snapping
+	// Mouse edge snapping disabled: use keyboard shortcuts for snapping
 
 	// Click-to-type: the press was on a pane's content and never became a drag,
 	// so finish what a newcomer expects a click to do. The dispatcher runs the

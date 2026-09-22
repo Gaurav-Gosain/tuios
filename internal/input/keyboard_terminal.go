@@ -205,7 +205,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return m, cmd
 	}
 
-	// Handle paste shortcuts - intercept and request clipboard via OSC 52.
+	// Handle paste shortcuts: intercept and request clipboard via OSC 52.
 	// Plain ctrl+v is deliberately not bound to terminal_paste_host so it falls
 	// through to the passthrough block and reaches the child PTY as 0x16 (needed
 	// for vim visual-block, etc.), matching the tmux/zellij convention.
@@ -221,7 +221,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 		return o, nil
 	}
-	// Normal terminal mode - pass through all keys
+	// Normal terminal mode: pass through all keys
 	if focusedWindow != nil {
 		appCursorKeys := false
 		if focusedWindow.Terminal != nil {

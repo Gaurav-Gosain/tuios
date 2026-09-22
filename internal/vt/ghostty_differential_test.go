@@ -356,9 +356,9 @@ func TestGhosttyDiffModes(t *testing.T) {
 // exposed: scrollback is the MAIN screen's history whichever screen is
 // active. The app computes kitty placement lines as ScrollbackLen()+cursorY
 // while a full-screen guest owns the alternate screen, so an implementation
-// answering with the alternate screen's empty history shifted placements by
-// the pane's entire history and previews went blank - but only in panes
-// that had history, which is why it looked intermittent.
+// answering with the alternate screen's empty history shifts placements by
+// the pane's entire history and previews go blank. That happens only in panes
+// that have history, so the failure looks intermittent.
 func TestGhosttyDiffAltScreenScrollback(t *testing.T) {
 	p := newDiffPair(t, 20, 5)
 	var b strings.Builder

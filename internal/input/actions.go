@@ -826,7 +826,7 @@ func handleToggleLogs(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	wasShowing := o.ShowLogs
 	o.ShowLogs = !o.ShowLogs
 	if o.ShowLogs && !wasShowing {
-		// Opening the log viewer - log the message first
+		// Opening the log viewer: log the message first
 		o.LogInfo("Log viewer opened")
 
 		// Scroll to bottom to show most recent entries

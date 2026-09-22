@@ -6,13 +6,13 @@ import "sync"
 type SemanticMarkerType byte
 
 const (
-	// MarkerPromptStart is 'A' - prompt start
+	// MarkerPromptStart is 'A': prompt start
 	MarkerPromptStart SemanticMarkerType = 'A'
-	// MarkerCommandStart is 'B' - command input start (after prompt)
+	// MarkerCommandStart is 'B': command input start (after prompt)
 	MarkerCommandStart SemanticMarkerType = 'B'
-	// MarkerCommandExecuted is 'C' - command execution start (output begins)
+	// MarkerCommandExecuted is 'C': command execution start (output begins)
 	MarkerCommandExecuted SemanticMarkerType = 'C'
-	// MarkerCommandFinished is 'D' - command finished (exit code available)
+	// MarkerCommandFinished is 'D': command finished (exit code available)
 	MarkerCommandFinished SemanticMarkerType = 'D'
 )
 

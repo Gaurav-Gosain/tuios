@@ -24,8 +24,8 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 	// so the traversal needs the shared lock.
 	//
 	// The lock is scoped to the traversal ONLY. Every side effect the handlers
-	// want - notifications, cache invalidation, leaving copy mode, entering
-	// terminal mode, clipboard writes - is recorded in fx and applied below,
+	// want (notifications, cache invalidation, leaving copy mode, entering
+	// terminal mode, clipboard writes) is recorded in fx and applied below,
 	// after the lock is dropped. Do not reintroduce direct o.* / window.* calls
 	// inside this region: the handler would then be one PTY write or one nested
 	// RLockIO away from the recursive read-lock deadlock, because a queued
@@ -122,7 +122,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		fx.EnterTerminalMode()
 		return
 
-	// Navigation - basic movement
+	// Navigation: basic movement
 	case "h", "left":
 		for range count {
 			moveLeft(cm, window)
@@ -140,7 +140,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 			moveUp(cm, window)
 		}
 
-	// Navigation - word movement
+	// Navigation: word movement
 	case "w":
 		for range count {
 			moveWordForward(cm, window)
@@ -166,7 +166,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 			moveWordEndBig(cm, window)
 		}
 
-	// Navigation - line movement
+	// Navigation: line movement
 	case "0":
 		cm.CursorX = 0
 	case "^":
@@ -174,7 +174,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 	case "$":
 		cm.CursorX = max(0, window.Width-3) // Account for borders
 
-	// Navigation - page movement
+	// Navigation: page movement
 	case "ctrl+u":
 		for range count {
 			moveHalfPageUp(cm, window)
@@ -192,7 +192,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 			movePageDown(cm, window)
 		}
 
-	// Navigation - jump to top/bottom
+	// Navigation: jump to top/bottom
 	case "g":
 		// Handle 'gg' sequence
 		if cm.PendingGCount && time.Since(cm.LastCommandTime) < 500*time.Millisecond {
@@ -229,7 +229,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 			moveToBottom(cm, window)
 		}
 
-	// Navigation - screen position
+	// Navigation: screen position
 	case "H":
 		// Move to top of screen
 		cm.CursorY = 0
@@ -240,7 +240,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		// Move to bottom of screen
 		cm.CursorY = window.Height - 3
 
-	// Navigation - paragraph movement
+	// Navigation: paragraph movement
 	case "{":
 		for range count {
 			moveParagraphUp(cm, window)
@@ -250,7 +250,7 @@ func handleNormalInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 			moveParagraphDown(cm, window)
 		}
 
-	// Navigation - matching bracket
+	// Navigation: matching bracket
 	case "%":
 		moveToMatchingBracket(cm, window)
 
@@ -462,7 +462,7 @@ func handleVisualInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, window *termi
 		fx.SetClipboard(text)
 		return
 
-	// Movement in visual mode extends selection - basic
+	// Movement in visual mode extends selection: basic
 	case "h", "left":
 		for range count {
 			moveLeft(cm, window)

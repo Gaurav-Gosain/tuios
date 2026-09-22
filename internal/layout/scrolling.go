@@ -14,10 +14,9 @@ type ScrollColumn struct {
 	// Active is the index in WindowIDs of the window this column is focused on,
 	// which is the window focus lands on when the column is focused.
 	//
-	// A column remembers it. Without it, focusing a column always focused its
-	// top window: stack three, work in the bottom one, step right and step back,
-	// and you were in the top one - which is niri's behaviour inverted, since
-	// there a column's focus is exactly what stepping back returns you to.
+	// A column remembers it, so stepping away from a column and back returns
+	// to the window that was focused there, as niri does. Without it, focusing
+	// a column would always focus its top window.
 	Active int
 }
 
@@ -111,7 +110,7 @@ func (s *ScrollingLayout) RemoveWindow(windowID int) {
 				)
 				// The window that left was above the active one, so the active
 				// one has moved up a place. Removing the active window itself
-				// leaves the index where it is, which is now the window below -
+				// leaves the index where it is, which is now the window below:
 				// the same rule the column strip follows for a closed column.
 				if j < s.Columns[i].Active {
 					s.Columns[i].Active--
@@ -426,7 +425,7 @@ func (s *ScrollingLayout) FocusColumnContaining(windowID int) bool {
 }
 
 // ComputePositions computes positions for ALL columns using current ViewportX.
-// Pure function  - does NOT modify ViewportX. Caller must call EnsureFocusedVisible
+// Pure function: does NOT modify ViewportX. Caller must call EnsureFocusedVisible
 // and ClampViewport beforehand if needed.
 func (s *ScrollingLayout) ComputePositions(screenWidth, usableHeight, topMargin int) map[int]Rect {
 	result := make(map[int]Rect)

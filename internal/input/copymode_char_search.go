@@ -158,7 +158,7 @@ func findCharOnLine(cm *terminal.CopyMode, window *terminal.Window, char rune, d
 			}
 		}
 	}
-	// Character not found - no movement
+	// Character not found: no movement
 }
 
 // repeatCharSearch repeats the last character search

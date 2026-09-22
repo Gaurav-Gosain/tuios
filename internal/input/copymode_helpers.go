@@ -176,7 +176,7 @@ func charIndexToColumn(cells []uv.Cell, charIndex int) int {
 		charsProcessed++
 	}
 
-	// Past the end - return the last column
+	// Past the end: return the last column
 	return len(cells)
 }
 

@@ -356,7 +356,7 @@ func (e *Emulator) handleClipboard(data []byte) {
 			response := "\x1b]52;" + selection + ";" + encoded + "\x1b\\"
 			_, _ = io.WriteString(e.pipe, response)
 		} else {
-			// No callback - respond empty
+			// No callback: respond empty
 			response := "\x1b]52;" + selection + ";\x1b\\"
 			_, _ = io.WriteString(e.pipe, response)
 		}

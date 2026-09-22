@@ -293,14 +293,14 @@ func TestConform_MarginsSurviveAResize(t *testing.T) {
 //
 // A real resize resets DECSTBM, on both backends and in every terminal that
 // implements it, and that is correct. A resize that changes no dimension is not
-// a real resize, and it used to reset the margins anyway - which matters here
-// because tuios announces a pane's size from every client attached to it, so a
-// second client attaching, or any client re-announcing after a layout that
-// moved nothing, arrived as a resize to the size already set. A full-screen
-// program in that pane lost its scroll region to a message about nothing.
+// a real resize and must keep the margins. This matters because tuios
+// announces a pane's size from every client attached to it, so a second
+// client attaching, or any client re-announcing after a layout that moved
+// nothing, arrives as a resize to the size already set. Resetting the margins
+// then would cost a full-screen program in that pane its scroll region.
 //
 // NEGATIVE CONTROL: fails on both backends without the guard at the top of
-// Resize - the region comes back as the whole screen.
+// Resize: the region comes back as the whole screen.
 func TestConform_ResizeToTheSameSizeKeepsTheMargins(t *testing.T) {
 	emu, _ := newConformEmulator(t, conformCase{cols: 20, rows: 10})
 	if _, err := emu.Write([]byte("\x1b[3;7r")); err != nil {

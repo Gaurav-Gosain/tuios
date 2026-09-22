@@ -216,8 +216,8 @@ func BorderUnfocused() color.Color {
 	if t == nil {
 		return lipgloss.Color("#FAAAAA")
 	}
-	// Light pinkish red - use theme's red (or bright red depending on theme)
-	// Using regular Red gives a softer, more muted tone for unfocused windows
+	// Light pinkish red: the theme's regular red, which gives a softer, more
+	// muted tone for unfocused windows than bright red.
 	return borderInk(t.Red)
 }
 
@@ -230,7 +230,7 @@ func BorderFocusedWindow() color.Color {
 	if t == nil {
 		return lipgloss.Color("#AFFFFF")
 	}
-	// Light cyan for window mode - use bright cyan
+	// Light cyan for window mode: use bright cyan
 	return borderInk(chromeOr(func(c *Chrome) color.Color { return c.AccentBright }, t.BrightCyan))
 }
 
@@ -243,7 +243,7 @@ func BorderFocusedTerminal() color.Color {
 	if t == nil {
 		return lipgloss.Color("#AAFFAA")
 	}
-	// Light green for terminal mode - use bright green
+	// Light green for terminal mode: use bright green
 	return borderInk(chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen))
 }
 

@@ -466,7 +466,7 @@ type Settings struct {
 	// reason the master ratio is.
 	//
 	// The default is deliberately over half. The strip is meant to be wider than
-	// the viewport - that is what makes it a strip rather than a grid - so a
+	// the viewport (that is what makes it a strip rather than a grid), so a
 	// default that let two columns sit side by side exactly would show the layout
 	// as a two-pane split and never as something you scroll.
 	ScrollColumnWidth int
@@ -668,8 +668,8 @@ func DefaultSettings() Settings {
 }
 
 // DefaultScrollbackLines is how many lines a pane keeps behind it as it ships.
-// Named because a caller with no session in reach - a window built in a test,
-// or a harness - still has to say how deep the scrollback is, and the number is
+// Named because a caller with no session in reach (a window built in a test,
+// or a harness) still has to say how deep the scrollback is, and the number is
 // better said once here than repeated at every one of them.
 const DefaultScrollbackLines = 10000
 

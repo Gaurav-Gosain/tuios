@@ -19,12 +19,12 @@ import (
 // things: opening a window, closing one, switching workspace, a terminal
 // resize.
 //
-// Two separate defects broke that. Resizes were matched to neighbours by
-// geometry, collecting every pane whose edge fell on the dragged line, so a
-// divider in one column dragged the identically-placed divider in another
-// column with it - and fresh splits are all 0.5, so dividers line up by
-// default. And the keyboard path never wrote its result back into the tree, so
-// the next retile discarded the resize and snapped every pane back.
+// These tests guard two ways to break that. Matching resizes to neighbours by
+// geometry, collecting every pane whose edge falls on the dragged line, makes a
+// divider in one column drag the identically-placed divider in another column
+// with it, and fresh splits are all 0.5, so dividers line up by default. A
+// keyboard resize that does not write its result back into the tree is
+// discarded by the next retile, which snaps every pane back.
 
 // isoOS builds an auto-tiling model with n real windows and no layout yet.
 func isoOS(tb testing.TB, n int) *app.OS {
@@ -386,8 +386,8 @@ func TestMouseResizeMovesOnlyTheDividersSubtrees(t *testing.T) {
 // over on the next tick and the layout jumps back to a frame of the transition
 // the user had already moved past.
 //
-// Windows animate on any layout change - opening a pane, closing one,
-// switching workspace, applying a template - so starting a drag on top of one
+// Windows animate on any layout change (opening a pane, closing one,
+// switching workspace, applying a template), so starting a drag on top of one
 // is ordinary, not a corner case.
 func TestResizeSurvivesAnInFlightSnapAnimation(t *testing.T) {
 	app.SetInputHandler(HandleInput)
