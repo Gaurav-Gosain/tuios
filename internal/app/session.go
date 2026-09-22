@@ -1231,30 +1231,7 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 
 	// Set up PTY handlers if we have a daemon client
 	if m.DaemonClient != nil {
-		ptyID := ws.PTYID
-
-		window.DaemonWriteFunc = func(data []byte) error {
-			return m.DaemonClient.WritePTY(ptyID, data)
-		}
-
-		window.DaemonResizeFunc = func(width, height int) error {
-			return m.DaemonClient.ResizePTY(ptyID, width, height)
-		}
-
-		window.StartDaemonResponseReader()
-
-		// Only subscribe to PTY output if window is in current workspace
-		// Windows in other workspaces will be subscribed when switching to them
-		if ws.Workspace == m.CurrentWorkspace {
-			m.primePaneFromDaemon(window)
-		}
-
-		// Register exit handler (always needed regardless of workspace)
-		windowID := window.ID
-		m.DaemonClient.OnPTYClosed(ptyID, func() {
-			m.queueWindowExit(windowID)
-		})
-
+		m.wireDaemonPTY(window, func() { m.primePaneFromDaemon(window) })
 		window.EnableCallbacks()
 	}
 
@@ -1680,38 +1657,43 @@ func (m *OS) SetupPTYOutputHandlers() error {
 	for i, w := range m.Windows {
 		m.LogInfo("[SETUP] Window %d: DaemonMode=%v, PTYID=%s, Workspace=%d", i, w.DaemonMode, w.PTYID, w.Workspace)
 		if w.DaemonMode && w.PTYID != "" {
-			// Capture window and ptyID for closures
-			window := w
-			ptyID := w.PTYID
-
-			// Set up the daemon write function for input
-			window.DaemonWriteFunc = func(data []byte) error {
-				return m.DaemonClient.WritePTY(ptyID, data)
-			}
-
-			// Set up the daemon resize function
-			window.DaemonResizeFunc = func(width, height int) error {
-				return m.DaemonClient.ResizePTY(ptyID, width, height)
-			}
-
-			// Start the response reader to handle DA queries and other terminal responses
-			window.StartDaemonResponseReader()
-
-			// Only subscribe to PTYs for windows in the current workspace
-			// Windows in other workspaces will be subscribed when switching to them
-			if w.Workspace == m.CurrentWorkspace {
-				m.subscribeToPTY(window, m.RestoredStreamSeq[ptyID])
-			}
-
-			// Register handler for when PTY process exits
-			windowID := window.ID
-			m.DaemonClient.OnPTYClosed(ptyID, func() {
-				m.queueWindowExit(windowID)
-			})
+			m.wireDaemonPTY(w, func() { m.subscribeToPTY(w, m.RestoredStreamSeq[w.PTYID]) })
 		}
 	}
 
 	return nil
+}
+
+// wireDaemonPTY connects a daemon window to its PTY: input and resizes go to
+// the daemon, the response reader answers DA queries and other terminal
+// responses, and the window is queued for exit when its PTY closes.
+//
+// subscribe starts the output stream. It runs only for a window in the current
+// workspace, because windows in other workspaces are subscribed when the user
+// switches to them. It runs before the exit handler is registered, which is
+// the order both callers have always used. Attaching and adopting a synced
+// window start the stream differently, so each caller passes its own.
+func (m *OS) wireDaemonPTY(window *terminal.Window, subscribe func()) {
+	ptyID := window.PTYID
+
+	window.DaemonWriteFunc = func(data []byte) error {
+		return m.DaemonClient.WritePTY(ptyID, data)
+	}
+	window.DaemonResizeFunc = func(width, height int) error {
+		return m.DaemonClient.ResizePTY(ptyID, width, height)
+	}
+
+	window.StartDaemonResponseReader()
+
+	if window.Workspace == m.CurrentWorkspace {
+		subscribe()
+	}
+
+	// Registered regardless of workspace: a hidden window's process can exit too.
+	windowID := window.ID
+	m.DaemonClient.OnPTYClosed(ptyID, func() {
+		m.queueWindowExit(windowID)
+	})
 }
 
 // primePaneFromDaemon fills a pane's local emulator with the daemon's copy of
