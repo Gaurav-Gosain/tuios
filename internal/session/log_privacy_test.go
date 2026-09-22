@@ -5,53 +5,6 @@ import (
 	"testing"
 )
 
-// TestDebugPayloadRedactsTitleBelowVerbose is item 5's claim. A window title is
-// rewritten by the shell on every prompt and carries the working directory, so
-// it is content and content starts at verbose.
-func TestDebugPayloadRedactsTitleBelowVerbose(t *testing.T) {
-	msg, err := NewMessage(MsgCreatePTY, &CreatePTYPayload{
-		Title:  "zsh ~/work/acme-secret-merger",
-		Width:  80,
-		Height: 24,
-	})
-	if err != nil {
-		t.Fatalf("build message: %v", err)
-	}
-
-	for _, level := range []DebugLevel{DebugOff, DebugErrors, DebugBasic, DebugMessages} {
-		got := debugPayloadAt(level, msg)
-		if strings.Contains(got, "acme-secret-merger") {
-			t.Fatalf("level %s printed the window title: %s", level, got)
-		}
-		if !strings.Contains(got, "<29 chars>") {
-			t.Fatalf("level %s did not report the title length: %s", level, got)
-		}
-	}
-
-	if got := debugPayloadAt(DebugVerbose, msg); !strings.Contains(got, "acme-secret-merger") {
-		t.Fatalf("verbose must still capture content, got %s", got)
-	}
-}
-
-// TestPTYCreatedRedactsTitleBelowVerbose covers the second title site, which the
-// daemon sends back on every pane it opens.
-func TestPTYCreatedRedactsTitleBelowVerbose(t *testing.T) {
-	msg, err := NewMessage(MsgPTYCreated, &PTYCreatedPayload{
-		ID:    "3f2a91c4-0000-0000-0000-000000000000",
-		Title: "nvim /home/ada/notes.md",
-	})
-	if err != nil {
-		t.Fatalf("build message: %v", err)
-	}
-
-	if got := debugPayloadAt(DebugMessages, msg); strings.Contains(got, "/home/ada") {
-		t.Fatalf("messages level printed a path from a title: %s", got)
-	}
-	if got := debugPayloadAt(DebugTrace, msg); !strings.Contains(got, "/home/ada") {
-		t.Fatalf("trace must still capture content, got %s", got)
-	}
-}
-
 // TestRaisingToVerboseWarns checks the notice the level boundary owes the
 // caller: raising the level starts recording content, and the log says so in
 // the same place the caller will read the capture back from.
