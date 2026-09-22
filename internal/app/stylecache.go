@@ -49,14 +49,18 @@ func NewStyleCache(maxSize int) *StyleCache {
 
 // hashColor writes a cell style colour into h. A wrapped-nil colour hashes like
 // an absent one, because calling RGBA through it panics.
+//
+// The indexed colour, the one the emulator hands out most, is tested before
+// isNilColor, whose reflection it does not need: a value type cannot hold a
+// nil pointer.
 func hashColor(h *maphash.Hash, c color.Color) {
-	if isNilColor(c) {
-		_ = h.WriteByte(0)
-		return
-	}
 	if ansiColor, ok := c.(lipgloss.ANSIColor); ok {
 		_ = h.WriteByte(1)
 		_ = h.WriteByte(byte(ansiColor))
+		return
+	}
+	if c == nil || isNilColor(c) {
+		_ = h.WriteByte(0)
 		return
 	}
 	r, g, b, a := c.RGBA()
@@ -88,22 +92,20 @@ func (sc *StyleCache) hashCellAttrs(cell *uv.Cell, isCursor bool) uint64 {
 
 	_ = h.WriteByte(1)
 
-	// Hash text attributes (bold, italic, etc.)
-	// Write as bytes to avoid alignment issues
-	attrs := uint64(cell.Style.Attrs)
-	_ = h.WriteByte(byte(attrs))
-	_ = h.WriteByte(byte(attrs >> 8))
-	_ = h.WriteByte(byte(attrs >> 16))
-	_ = h.WriteByte(byte(attrs >> 24))
-	_ = h.WriteByte(byte(attrs >> 32))
-	_ = h.WriteByte(byte(attrs >> 40))
-	_ = h.WriteByte(byte(attrs >> 48))
-	_ = h.WriteByte(byte(attrs >> 56))
+	// Text attributes (bold, italic, etc.) and the underline style are one
+	// byte each.
+	_ = h.WriteByte(cell.Style.Attrs)
 	_ = h.WriteByte(byte(cell.Style.Underline))
 
 	hashColor(&h, cell.Style.Fg)
 	hashColor(&h, cell.Style.Bg)
-	hashColor(&h, cell.Style.UnderlineColor)
+	// Almost no cell carries an underline colour, so the absent case skips
+	// the call.
+	if cell.Style.UnderlineColor == nil {
+		_ = h.WriteByte(0)
+	} else {
+		hashColor(&h, cell.Style.UnderlineColor)
+	}
 
 	return h.Sum64()
 }
