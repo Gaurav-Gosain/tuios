@@ -411,9 +411,11 @@ func (e *Emulator) attachZeroWidth(content string) printOutcome {
 // of a run: it reads the margins and the modes, builds a cell from the pen,
 // records the last cluster, moves the cursor and fires its callback, and arms
 // the open cluster. Only the last byte's bookkeeping survives to the next
-// byte, so the run pays for it once. The cell writes themselves still go
-// through Screen.SetCell one column at a time, which is what keeps a
-// double-width character the run lands on handled exactly as before.
+// byte, so the run pays for it once. When the row exists and every cell the
+// run overwrites is one column wide, the cells are stored straight into the
+// row. Otherwise the writes go through Screen.SetCell one column at a time,
+// which is what keeps a double-width character the run lands on, and the lazy
+// allocation of a row nothing has written, handled exactly as before.
 //
 // Anything that makes one byte differ from the next goes to handlePrint
 // instead: a pending wrap, insert mode, a designated character set, or a
@@ -456,9 +458,19 @@ func (e *Emulator) printASCIIRun(run []byte) {
 			Style: e.scr.cursorPen(),
 			Link:  e.scr.cursorLink(),
 		}
-		for k := range n {
-			cell.Content = asciiStr[run[k]]
-			e.scr.SetCell(x+k, y, &cell)
+		if row := e.scr.buf.Row(y); row != nil && narrowRun(row[x:x+n]) {
+			// Every cell being overwritten is one column wide, so no
+			// double-width character is cut, and Screen.SetCell and
+			// uv.Line.Set would each come down to this one store.
+			for k := range n {
+				cell.Content = asciiStr[run[k]]
+				row[x+k] = cell
+			}
+		} else {
+			for k := range n {
+				cell.Content = asciiStr[run[k]]
+				e.scr.SetCell(x+k, y, &cell)
+			}
 		}
 
 		// The bookkeeping handleGraphemeWithin does for the last character
@@ -484,6 +496,17 @@ func (e *Emulator) printASCIIRun(run []byte) {
 		e.openGrapheme.arm(x+n-1, y, 1, left, right, last, "")
 		run = run[n:]
 	}
+}
+
+// narrowRun reports whether every cell is exactly one column wide: neither the
+// lead of a double-width character nor one of its continuation cells.
+func narrowRun(cells uv.Line) bool {
+	for i := range cells {
+		if cells[i].Width != 1 {
+			return false
+		}
+	}
+	return true
 }
 
 // handleGrapheme handles UTF-8 graphemes.

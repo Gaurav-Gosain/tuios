@@ -901,3 +901,25 @@ full path on random mixed lines.
 | `BackendScroll` | 100.8 ms | 86.7 ms | -14.1% (p=0.037) |
 | `EmulatorWriteHeavyOutput/colored-log` | 61.7 us | 56.7 us | -8.1% (p=0.026) |
 | every other vt benchmark | | | `~` |
+
+**An ASCII run is stored straight into its row** (`utf8.go`). `printASCIIRun`
+wrote each byte through `Screen.SetCell`, `grid.SetCell` and `uv.Line.Set`:
+three calls and two bounds-checked reads per byte, all of which come down to
+one store when the cell being overwritten is one column wide. When the row
+exists and every cell under the run is narrow, the run now stores its cells
+directly; anything wide under it, or a row nothing has written, takes the old
+path. `TestASCIIRunMatchesPerCharacterPath` holds the result to the
+per-character path on random input with wide characters in the way.
+
+| CPU per op | before | after | |
+|---|---|---|---|
+| `Emulator_PlainTextWrite` | 17.1 us | 12.9 us | -25.0% (p=0.002) |
+| `EmulatorScrollThroughput/with-scrollback` | 2.80 us | 2.13 us | -24.1% (p=0.002) |
+| `PrintASCII` | 685 us | 531 us | -22.5% (p=0.002) |
+| `BackendTUI` | 6.37 ms | 5.17 ms | -18.9% (p=0.002) |
+| `EmulatorWriteHeavyOutput/plain-log` | 51.7 us | 44.6 us | -13.7% (p=0.006) |
+| `EmulatorWriteHeavyOutput/colored-log` | 54.2 us | 48.8 us | -10.0% (p=0.002) |
+| `EmulatorWriteHeavyOutput/fullscreen-repaint` | 93.1 us | 85.0 us | -8.7% (p=0.002) |
+| `EmulatorScrollThroughput/alt-screen-no-scrollback` | 1.71 us | 1.55 us | -9.5% (p=0.028) |
+| `EmulatorShortLineScroll/alt-screen-no-scrollback` | 600 ns | 545 ns | -9.2% (p=0.015) |
+| every other vt benchmark | | | `~` |
