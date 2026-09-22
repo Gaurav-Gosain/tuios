@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,8 +26,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/terminal"
-	"strings"
 )
 
 // SSHServerConfig holds configuration for the SSH server.
@@ -208,15 +207,6 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelShutdown()
 	return server.Shutdown(shutdownCtx)
-}
-
-// shortID returns the first 8 characters of an id for logging, or the whole id
-// when it is shorter, so a non-UUID id cannot panic the log call.
-func shortID(id string) string {
-	if len(id) < 8 {
-		return id
-	}
-	return id[:8]
 }
 
 // recoverMiddleware wraps a session handler so a panic in it (or any inner
@@ -530,9 +520,6 @@ func createDaemonTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer, se
 
 	return tuiosInstance, nil
 }
-
-// Window is an alias for terminal.Window for use in this package
-type Window = terminal.Window
 
 // isLoopbackAddr reports whether an SSH connection arrived from the same
 // machine (127.0.0.1, ::1, or a unix socket with no port). The native clipboard

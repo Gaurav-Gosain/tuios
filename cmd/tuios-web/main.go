@@ -612,15 +612,6 @@ const (
 	webFallbackCellHeight = 20
 )
 
-// shortID returns the first 8 characters of an id for logging, or the whole id
-// when it is shorter, so a non-UUID id cannot panic the log call.
-func shortID(id string) string {
-	if len(id) < 8 {
-		return id
-	}
-	return id[:8]
-}
-
 // createEphemeralTUIOSInstance creates a standalone TUIOS instance (old behavior)
 func createEphemeralTUIOSInstance(width, height int, graphicsOut *os.File, touch bool) tea.Model {
 	// Load user configuration
