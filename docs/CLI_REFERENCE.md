@@ -782,9 +782,9 @@ tuios set-config <path> <value> [flags]
 **Available Paths:**
 | Path | Values | Description |
 |------|--------|-------------|
-| `dockbar_position` | `top`, `bottom`, `left`, `right` | Dockbar position |
-| `border_style` | `rounded`, `normal`, `thick`, `double`, `hidden`, `block`, `ascii` | Border style |
-| `animations` | `true`, `false`, `toggle` | Enable/disable animations |
+| `dockbar_position` | `bottom`, `top`, `hidden` | Dockbar position |
+| `border_style` | `rounded`, `normal`, `thick`, `double`, `block`, `outer-half-block`, `inner-half-block`, `ascii`, `hidden`, `glyphs` | Border style |
+| `animations_enabled` | `true`, `false` | Enable/disable animations |
 | `hide_window_buttons` | `true`, `false` | Hide window buttons |
 | `window_button_style` | `pill`, `dots` | How the window controls are drawn |
 | `window_button_position` | `right`, `left` | Which end of the title bar they sit on |
@@ -797,8 +797,8 @@ tuios set-config dockbar_position top
 # Change border style
 tuios set-config border_style rounded
 
-# Toggle animations
-tuios set-config animations toggle
+# Turn animations off
+tuios set-config animations_enabled false
 
 # Hide window buttons
 tuios set-config hide_window_buttons true

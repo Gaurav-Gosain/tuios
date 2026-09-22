@@ -979,8 +979,8 @@ and appearance.border_style are the same path.
   # Change border style
   tuios set-config border_style rounded
 
-  # Toggle animations
-  tuios set-config animations toggle
+  # Turn animations off
+  tuios set-config animations_enabled false
 
   # Hide window buttons
   tuios set-config hide_window_buttons true`,
