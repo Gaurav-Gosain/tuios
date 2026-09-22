@@ -621,6 +621,19 @@ type PTY struct {
 	// streamMu, which readOutput also holds to close.
 	vtClosed bool
 
+	// winsizeMu serializes writes of the real PTY's window size, and guards
+	// the cell size in pixels they are computed from. Resize takes it under
+	// streamMu; UpdatePixelDimensions takes it alone. It is held across the
+	// ioctl, so it must not be taken under terminalMu.
+	//
+	// The cell size is kept so a resize carries the pixel size in the same
+	// ioctl as the cell size. Two ioctls, one without pixels and one with,
+	// gave the guest two SIGWINCHes for one resize. Zero means no client has
+	// reported a cell size yet, and the pixel size stays zero.
+	winsizeMu  sync.Mutex
+	cellWidth  int
+	cellHeight int
+
 	// vtSeq is the stream position the emulator has consumed, guarded by
 	// terminalMu. It trails outputSeq by whatever is still queued.
 	vtSeq int64
@@ -2262,16 +2275,31 @@ func (p *PTY) SetCellSize(cellWidth, cellHeight int) {
 	}
 }
 
-// UpdatePixelDimensions sets the cell size on the VT emulator and updates the PTY's
-// pixel dimensions based on the current terminal size and the given cell dimensions.
-// This is a convenience method that combines SetCellSize and SetPixelSize.
+// UpdatePixelDimensions sets the cell size on the VT emulator, records it for
+// later resizes, and sets the PTY's pixel size from it and the current size.
+//
+// The PTY is only written when the cell size changed. Resize already carries
+// the pixel size, so the call that follows every resize has nothing to add,
+// and writing the same winsize again is a wasted syscall. A pane that cannot
+// take pixels (a remote pane, ConPTY) is not written at all.
 func (p *PTY) UpdatePixelDimensions(cellWidth, cellHeight int) error {
 	if cellWidth <= 0 || cellHeight <= 0 {
 		return nil
 	}
 	p.SetCellSize(cellWidth, cellHeight)
+
+	p.winsizeMu.Lock()
+	defer p.winsizeMu.Unlock()
+	if p.cellWidth == cellWidth && p.cellHeight == cellHeight {
+		return nil
+	}
+	p.cellWidth, p.cellHeight = cellWidth, cellHeight
+	ws, ok := p.pty.(ptyspawn.WinsizeSetter)
+	if !ok {
+		return nil
+	}
 	width, height := p.Size()
-	return p.SetPixelSize(width, height, width*cellWidth, height*cellHeight)
+	return ws.SetWinsize(width, height, width*cellWidth, height*cellHeight)
 }
 
 // Resize changes the PTY and terminal emulator size.
@@ -2341,9 +2369,12 @@ func (p *PTY) Resize(width, height int) error {
 	}
 
 	// The real PTY is resized now regardless, so the guest gets its SIGWINCH
-	// without waiting for the emulator to catch up with the backlog.
+	// without waiting for the emulator to catch up with the backlog. The
+	// pixel size goes in the same ioctl: see ptyspawn.SetWinsize.
 	if p.pty != nil {
-		return p.pty.Resize(width, height)
+		p.winsizeMu.Lock()
+		defer p.winsizeMu.Unlock()
+		return ptyspawn.SetWinsize(p.pty, width, height, width*p.cellWidth, height*p.cellHeight)
 	}
 	return nil
 }
