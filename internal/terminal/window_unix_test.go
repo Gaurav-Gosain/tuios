@@ -8,10 +8,13 @@ import (
 	"unsafe"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"golang.org/x/sys/unix"
 )
 
-func TestSetPtyPixelSize(t *testing.T) {
+// TestSetWinsizeCarriesPixels checks that a window's real PTY takes the pixel
+// size through ptyspawn.SetWinsize, which is what kitty icat reads.
+func TestSetWinsizeCarriesPixels(t *testing.T) {
 	exitChan := make(chan string, 1)
 	window, err := NewWindow("test-id-12345678", "Test", 0, 0, 80, 24, 0, exitChan, nil, config.DefaultScrollbackLines)
 	if err != nil {
@@ -30,9 +33,9 @@ func TestSetPtyPixelSize(t *testing.T) {
 	xpixel := termWidth * cellWidth
 	ypixel := termHeight * cellHeight
 
-	err = window.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
+	err = ptyspawn.SetWinsize(window.Pty, termWidth, termHeight, xpixel, ypixel)
 	if err != nil {
-		t.Fatalf("SetPtyPixelSize failed: %v", err)
+		t.Fatalf("SetWinsize failed: %v", err)
 	}
 
 	var ws unix.Winsize

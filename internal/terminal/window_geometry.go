@@ -1,5 +1,7 @@
 package terminal
 
+import "github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+
 // contentSize is the drawable box inside an outer rectangle of the given
 // dimensions. Every consumer of a pane's inner size derives it from here: the
 // renderer's clip (ContentWidth/ContentHeight), the emulator grid and the PTY
@@ -166,14 +168,17 @@ func (w *Window) tellGuest(termWidth, termHeight int) {
 		AnnounceTrace(w, termWidth, termHeight)
 	}
 	if w.Pty != nil {
-		if err := w.Pty.Resize(termWidth, termHeight); err != nil {
-			_ = err
-		}
+		// Cells and pixels in one winsize write, so the kernel signals the
+		// guest once for it. See ptyspawn.SetWinsize.
+		var xpixel, ypixel int
 		if w.CellPixelWidth > 0 && w.CellPixelHeight > 0 {
-			xpixel := termWidth * w.CellPixelWidth
-			ypixel := termHeight * w.CellPixelHeight
-			_ = w.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
+			xpixel = termWidth * w.CellPixelWidth
+			ypixel = termHeight * w.CellPixelHeight
 		}
+		_ = ptyspawn.SetWinsize(w.Pty, termWidth, termHeight, xpixel, ypixel)
+		// The kernel signals the tty's foreground process group. This also
+		// signals the shell itself, which the kernel does not while a job
+		// holds the foreground.
 		w.TriggerRedraw()
 	} else if w.DaemonMode && w.DaemonResizeFunc != nil {
 		// In daemon mode, use the resize callback to notify the daemon
@@ -263,12 +268,12 @@ func (w *Window) SetCellPixelDimensions(cellWidth, cellHeight int) {
 
 	w.Terminal.SetCellSize(cellWidth, cellHeight)
 
-	if w.Pty != nil && cellWidth > 0 && cellHeight > 0 {
+	// Only a pty that can carry pixels is written. Anything else would only be
+	// resized to the size it already has.
+	if ws, ok := w.Pty.(ptyspawn.WinsizeSetter); ok && cellWidth > 0 && cellHeight > 0 {
 		termWidth := w.ContentWidth()
 		termHeight := w.ContentHeight()
-		xpixel := termWidth * cellWidth
-		ypixel := termHeight * cellHeight
-		_ = w.SetPtyPixelSize(termWidth, termHeight, xpixel, ypixel)
+		_ = ws.SetWinsize(termWidth, termHeight, termWidth*cellWidth, termHeight*cellHeight)
 	}
 }
 
