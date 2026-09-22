@@ -1,7 +1,11 @@
 package terminal
 
 import (
+	"os"
 	"sync"
+	"sync/atomic"
+
+	"golang.org/x/term"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
@@ -61,8 +65,38 @@ func detectShell() string {
 func getTerminalEnv() (termType, colorTerm string) {
 	localEnvOnce.Do(func() {
 		localTermType, localColorTerm = guestenv.DetectTerm()
+		// A server with no terminal of its own (a service manager, nohup, a
+		// log file) detects NoTTY, which makes every pane TERM=dumb even though
+		// the panes are drawn on a client's real terminal. A real terminal that
+		// answers dumb keeps its answer.
+		if localTermType == "dumb" && !term.IsTerminal(int(os.Stdout.Fd())) {
+			if d := headlessGuestTerm.Load(); d != nil {
+				localTermType, localColorTerm = d.term, d.colorTerm
+			}
+		}
 	})
 	return localTermType, localColorTerm
+}
+
+// guestTermDefault is a TERM and COLORTERM pair for panes.
+type guestTermDefault struct {
+	term, colorTerm string
+}
+
+// headlessGuestTerm is what SetHeadlessGuestTerm installed, or nil.
+var headlessGuestTerm atomic.Pointer[guestTermDefault]
+
+// SetHeadlessGuestTerm sets the TERM and COLORTERM a pane gets when this
+// process's stdout is not a terminal, in place of the TERM=dumb that detection
+// answers there. A server calls it because its panes are drawn on a client's
+// terminal, not on its own stdout. With a real terminal on stdout detection
+// still runs, and a TERM and COLORTERM=truecolor already in the environment
+// still win.
+//
+// Detection runs once, at the first window, so this must be called before any
+// window is created.
+func SetHeadlessGuestTerm(termType, colorTerm string) {
+	headlessGuestTerm.Store(&guestTermDefault{term: termType, colorTerm: colorTerm})
 }
 
 // enableTerminalFeatures enables advanced terminal features

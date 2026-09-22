@@ -26,6 +26,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // SSHServerConfig holds configuration for the SSH server.
@@ -103,6 +104,12 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		// which wish configures per connection from the client's own TERM.
 		// tuios-web pins the same global for the same reason.
 		lipgloss.Writer.Profile = colorprofile.TrueColor
+
+		// The same reasoning for the panes: an ephemeral pane's TERM is
+		// detected from this process's stdout, and a headless server would
+		// hand every one TERM=dumb. This gives them what daemon panes get. A
+		// server started in a real terminal still detects from it.
+		terminal.SetHeadlessGuestTerm("xterm-256color", "truecolor")
 
 		if userConfig, err := config.LoadUserConfig(); err == nil {
 			config.ApplyAppearanceConfig(userConfig, &config.Global)
