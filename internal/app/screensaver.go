@@ -68,10 +68,6 @@ type screensaverState struct {
 	capture [][]tfx.InputCell
 }
 
-// ScreensaverActive reports whether the saver is on screen. Other packages ask
-// so they can leave the input alone.
-func (m *OS) ScreensaverActive() bool { return m.screensaver.active }
-
 // screensaverConfig is the [screensaver] section this client holds.
 func (m *OS) screensaverConfig() config.ScreensaverConfig {
 	if m.UserConfig == nil {

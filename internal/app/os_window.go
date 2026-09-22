@@ -135,28 +135,6 @@ func (m *OS) ClearMultifocus() {
 	m.ShowNotification("Multifocus: cleared", "info", 0)
 }
 
-// IsMultifocused returns true if the window at the given index is in the multifocus set.
-func (m *OS) IsMultifocused(windowIndex int) bool {
-	if m.MultifocusSet == nil || windowIndex < 0 || windowIndex >= len(m.Windows) {
-		return false
-	}
-	return m.MultifocusSet[m.Windows[windowIndex].ID]
-}
-
-// GetMultifocusWindows returns the current slice indices of all windows in the multifocus set.
-func (m *OS) GetMultifocusWindows() []int {
-	if m.MultifocusSet == nil {
-		return nil
-	}
-	var indices []int
-	for i, w := range m.Windows {
-		if m.MultifocusSet[w.ID] {
-			indices = append(indices, i)
-		}
-	}
-	return indices
-}
-
 // cyclableWindows lists the indexes the window cycle steps through: the visible
 // panes on the current workspace, with popups left out.
 //

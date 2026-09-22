@@ -237,22 +237,15 @@ func (m *OS) zoomedWindow() *terminal.Window {
 // ZoomMaxWidth is the one term in it that is a per-client setting rather than a
 // session-agreed one, so two clients that have set it differently will hand the
 // same shell two widths. It is off by default and it was already the width the
-// zooming client pushed, so nothing regressed here - but it is the one input to
+// zooming client pushed, so nothing regressed here, but it is the one input to
 // this box that the session does not settle, and settling it is a job of its
 // own.
-func (m *OS) zoomRect() (x, y, w, h int) {
-	return m.zoomRectFor(nil)
-}
-
-// zoomRectFor is zoomRect for a named pane.
 //
-// win is unused and kept so the two callers read the same. A zoom of part of
-// the screen is a camera over the layout rather than a box for one pane, so the
-// only zoom that comes through here is the zoom of the whole screen, which is
-// the same rectangle whichever pane asked for it. See zoom_canvas.go and
-// zoomUsesLayout.
-func (m *OS) zoomRectFor(win *terminal.Window) (x, y, w, h int) {
-	_ = win
+// It takes no pane. A zoom of part of the screen is a camera over the layout
+// rather than a box for one pane, so the only zoom that comes through here is
+// the zoom of the whole screen, which is the same rectangle whichever pane
+// asked for it. See zoom_canvas.go and zoomUsesLayout.
+func (m *OS) zoomRect() (x, y, w, h int) {
 	topMargin := m.GetTopMargin()
 	leftMargin := m.GetLeftMargin()
 	contentWidth := m.GetContentWidth()
@@ -291,7 +284,7 @@ func (m *OS) applyZoomRectAnimated(w *terminal.Window, deferring, animate bool) 
 	// before it places a pane. Retired even when the box already matches: the
 	// snap is heading somewhere else regardless.
 	m.CancelSnapAnimation(w)
-	x, y, width, height := m.zoomRectFor(w)
+	x, y, width, height := m.zoomRect()
 	if w.X == x && w.Y == y && w.Width == width && w.Height == height {
 		return
 	}

@@ -45,28 +45,6 @@ func (m *OS) HasActiveAnimations() bool {
 	return len(m.Animations) > 0
 }
 
-// CompleteWindowAnimations immediately completes all animations for a specific window
-// This is used when starting a new drag to avoid conflicts with pending animations
-func (m *OS) CompleteWindowAnimations(windowIndex int) {
-	if windowIndex < 0 || windowIndex >= len(m.Windows) {
-		return
-	}
-
-	window := m.Windows[windowIndex]
-
-	// Find and complete all animations for this window
-	for i := len(m.Animations) - 1; i >= 0; i-- {
-		anim := m.Animations[i]
-		if anim.Window == window {
-			// Landed through the animation's own last step, so the pane gets
-			// the state its type leaves behind and its guest gets the one
-			// resize, exactly as running the slide out would have given it.
-			anim.Finish()
-			m.Animations = slices.Delete(m.Animations, i, i+1)
-		}
-	}
-}
-
 // CancelAnimationsForWindow removes all pending animations for a window
 // without completing them (the caller will set the new position).
 func (m *OS) CancelAnimationsForWindow(w *terminal.Window) {
@@ -82,8 +60,9 @@ func (m *OS) CancelAnimationsForWindow(w *terminal.Window) {
 func (m *OS) CompleteAllAnimations() {
 	// Complete all animations by snapping windows to their final positions
 	for i := len(m.Animations) - 1; i >= 0; i-- {
-		// See CompleteWindowAnimations: landing goes through the animation's
-		// own last step so the guest is resized.
+		// Landed through the animation's own last step, so the pane gets the
+		// state its type leaves behind and its guest gets the one resize,
+		// exactly as running the slide out would have given it.
 		m.Animations[i].Finish()
 	}
 

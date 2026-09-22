@@ -69,15 +69,6 @@ func defaultRenderTracePath() string {
 	return filepath.Join(os.TempDir(), name)
 }
 
-// RenderTracePath reports where the trace is being written, or the empty string
-// when tracing is off.
-func RenderTracePath() string {
-	if !renderTraceEnabled {
-		return ""
-	}
-	return renderTracePath
-}
-
 func traceWrite(line string) {
 	renderTraceMu.Lock()
 	defer renderTraceMu.Unlock()

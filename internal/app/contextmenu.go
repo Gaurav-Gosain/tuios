@@ -266,7 +266,7 @@ func (m *OS) ContextMenuMove(delta int) {
 	if delta < 0 {
 		dir = -1
 	}
-	for range absInt(delta) {
+	for range abs(delta) {
 		m.ContextMenu.Move(dir)
 	}
 }
@@ -308,14 +308,6 @@ func (m *OS) ContextMenuHover(x, y int) {
 	if idx := cm.HitTest(x, y); idx >= 0 {
 		cm.Selected = idx
 	}
-}
-
-// absInt is the absolute value of an int.
-func absInt(v int) int {
-	if v < 0 {
-		return -v
-	}
-	return v
 }
 
 // ============================================================================

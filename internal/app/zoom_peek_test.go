@@ -50,7 +50,7 @@ func TestAFullZoomIsUnchanged(t *testing.T) {
 	m, _ := zoomPeekOS(t)
 	m.Settings.ZoomSize = config.ZoomSizeDefault
 
-	x, y, w, h := m.zoomRectFor(m.Windows[3])
+	x, y, w, h := m.zoomRect()
 
 	if x != m.GetLeftMargin() || y != m.GetTopMargin() {
 		t.Errorf("a full zoom starts at (%d,%d), want the region's own corner (%d,%d)",

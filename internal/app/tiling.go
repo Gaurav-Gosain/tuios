@@ -496,16 +496,6 @@ func (m *OS) bringPanesIntoView() {
 	}
 }
 
-// TileNewWindow arranges the new window in the tiling layout
-func (m *OS) TileNewWindow() {
-	if !m.AutoTiling {
-		return
-	}
-
-	// Retile all windows including the new one
-	m.TileAllWindows()
-}
-
 // masterZoomCanvas works the camera out for a master-stack layout.
 //
 // Two passes, for the reason bspZoomCanvas takes two: the rectangle the tiler
@@ -537,16 +527,6 @@ func (m *OS) masterZoomCanvas(wins []*terminal.Window, layouts []layout.TileLayo
 	}
 	g := grown[slot]
 	return m.zoomCanvasAt(zoomBounds, layout.Rect{X: g.X, Y: g.Y, W: g.Width, H: g.Height}), zoomBounds, true
-}
-
-// RetileAfterClose handles window close in tiling mode
-func (m *OS) RetileAfterClose() {
-	if !m.AutoTiling {
-		return
-	}
-
-	// Retile remaining windows
-	m.TileAllWindows()
 }
 
 // SaveCurrentLayout saves the current window layout for the active workspace
