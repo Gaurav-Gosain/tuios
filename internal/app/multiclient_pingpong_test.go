@@ -15,8 +15,8 @@ import (
 // and any chrome a client draws around them has to come out of that client's
 // own screen rather than out of the panes.
 //
-// These tests hold two full clients on one session - each with its own
-// connection, its own OS and its own chrome - and watch what one client's
+// These tests hold two full clients on one session (each with its own
+// connection, its own OS and its own chrome) and watch what one client's
 // ordinary push does to the other's panes and to the shared PTYs.
 
 // peer is a second full client on the rig's session, restored and subscribed by
@@ -107,14 +107,14 @@ func (e *exchange) settle(limit int, quiet time.Duration) int {
 // up as one failure in a hundred: the announcements above cross on the wire, so
 // the daemon can settle the reserve twice, and the second broadcast can still be
 // in flight when a fixed quiet period expires. It is then delivered by the next
-// settle - inside the measurement - where applying it re-lays the panes out and
+// settle, inside the measurement, where applying it re-lays the panes out and
 // resizes their shells, which is exactly what the test is counting.
 //
 // So the condition is the state rather than the silence: both clients hold the
 // same session reserve, both have applied it, and the queue is empty. The
 // clients' own copies are read rather than the daemon's, because they are what
 // the OS lays out against and they are updated by the read loop the instant a
-// broadcast lands - so a broadcast received but not yet applied cannot look
+// broadcast lands, so a broadcast received but not yet applied cannot look
 // settled.
 func (e *exchange) settleBox(r *rig, p *peer) {
 	e.t.Helper()
@@ -247,8 +247,8 @@ func twoClientsDisagreeingOnChrome(t *testing.T) (*rig, *peer, *exchange) {
 // TestTwoClientsAgreeOnEveryPaneSize is the invariant the report violates: a
 // PTY has one size, so both clients and the daemon have to name the same one.
 //
-// NEGATIVE CONTROL: measured. On the unfixed tree - no agreed reserve and a
-// rail nothing shares - it fails with the two clients running the same two
+// NEGATIVE CONTROL: measured. On the unfixed tree (no agreed reserve and a
+// rail nothing shares) it fails with the two clients running the same two
 // shells at 56x36 and 57x36 on one side and 46x36 on the other. It is the
 // invariant rather than either mechanism, so it is satisfied by either one on
 // its own: with the rail shared but the reserve still private it passes,
@@ -285,7 +285,7 @@ func TestTwoClientsAgreeOnEveryPaneSize(t *testing.T) {
 // they agree about chrome.
 //
 // It is the state a sync loop starts from, and unlike a chrome disagreement it
-// cannot be settled by sharing anything - the message that settles it is
+// cannot be settled by sharing anything: the message that settles it is
 // already on its way.
 func twoClientsMidSizeChange(t *testing.T) (*rig, *peer, *exchange) {
 	t.Helper()
@@ -322,14 +322,14 @@ func twoClientsMidSizeChange(t *testing.T) (*rig, *peer, *exchange) {
 // rectangles are the argument and every round trip is a resize of a real shell.
 //
 // So a client may not push a layout it worked out because it disagreed with a
-// peer's. It may push one thing from inside a sync - a window the daemon asked
-// it to place, which is an answer rather than an echo - and that answer is
+// peer's. It may push one thing from inside a sync (a window the daemon asked
+// it to place, which is an answer rather than an echo), and that answer is
 // terminal: the peer applying it has nothing left to place and so has nothing
 // to say back.
 //
 // NEGATIVE CONTROL: measured, not assumed. Removing the applyingPeerSync guard
-// in SyncStateToDaemon and letting ApplyStateSync's re-layout push - which is
-// the shape of fix this area invites - turns this into an exchange that does
+// in SyncStateToDaemon and letting ApplyStateSync's re-layout push (the shape
+// of fix this area invites) turns this into an exchange that does
 // not stop. Run that way it reaches the sixty-round cap with the two clients
 // still trading rectangles, 60-0 wide against 48-48, and would have gone on for
 // as long as the test let it.
@@ -370,8 +370,8 @@ func TestApplyingAPeerSyncPushesNothingBack(t *testing.T) {
 // the unfixed tree a single pane switch resizes the two shells four times: the
 // peer adopts the pushed rectangles and resizes its PTYs to them, finds the
 // layout does not fill its own box, retiles, and resizes them back. Sharing the
-// rail alone is not enough - that still leaves two, from the peer folding in
-// chrome the pusher had not - so this is the assertion that holds the agreed
+// rail alone is not enough (that still leaves two, from the peer folding in
+// chrome the pusher had not), so this is the assertion that holds the agreed
 // reserve in place.
 func TestFocusSwitchResizesNothing(t *testing.T) {
 	r, p, ex := twoClientsDisagreeingOnChrome(t)

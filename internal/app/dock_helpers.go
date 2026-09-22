@@ -886,7 +886,7 @@ func (layout *DockLayout) calculateItemPositions(screenWidth int, allItems []Doc
 	// Calculate available space for dock items
 	availableSpace := screenWidth - layout.LeftWidth - layout.RightWidth - dockItemsWidth(allItems)
 	if availableSpace < 0 {
-		// Items don't fit - need to truncate
+		// Items don't fit, so truncate them.
 		layout.truncateItems(screenWidth, allItems)
 		return
 	}

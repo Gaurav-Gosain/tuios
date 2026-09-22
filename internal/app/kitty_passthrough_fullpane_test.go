@@ -16,7 +16,7 @@ import (
 // The window is border=1 and exactly as tall as the screen, mirroring a
 // maximized tuios pane. A full-window graphics app (terminal-browser, awrit)
 // draws an image that fills the pane, so its placement reaches the bottom screen
-// edge - the geometry that used to be hidden outright.
+// edge. That is the geometry the regression hid outright.
 func feedTBFrame(t *testing.T, stream []byte, screenW, screenH int) []byte {
 	return feedTBFrameBorder(t, stream, screenW, screenH, 1)
 }

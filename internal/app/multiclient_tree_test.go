@@ -27,8 +27,8 @@ import (
 //     (adoptTopology := newerState), which is the tree before this fix:
 //     TestAPeerAdoptsATreeAnotherClientBuilt fails in settleGeometry, the
 //     pair never agreeing on one arithmetic because the peer's panes keep a
-//     border of their own (118x17 against 120x19) after tiling turned on -
-//     which is the frame in the report, a box around every borderless pane.
+//     border of their own (118x17 against 120x19) after tiling turned on.
+//     That is the frame in the report, a box around every borderless pane.
 //   - The exchange applying every sync as the daemon's own
 //     (ApplyStateSync(state) in place of ApplyStateSyncFrom): the peer holds
 //     a side-by-side tree while the client that built it holds a stacked one,

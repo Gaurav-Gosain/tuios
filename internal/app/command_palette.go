@@ -492,7 +492,7 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 				return m, nil
 			},
 		},
-		// Layout mode  - individual commands
+		// Layout mode: individual commands
 		{
 			Name:     "Layout: BSP tiling",
 			Category: "Layout",

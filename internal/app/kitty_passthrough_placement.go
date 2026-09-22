@@ -91,7 +91,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		// visibly crop and jitter many times a second: the flicker. So while a
 		// window is being manipulated AND its size differs from the size the
 		// placement was last laid out at, the existing placement is left exactly
-		// where it is - kitty keeps the last a=p on screen - and no delete or
+		// where it is (kitty keeps the last a=p on screen), and no delete or
 		// re-place is emitted for it.
 		//
 		// resizeFreezeSize records the size seen on the PREVIOUS pass, and is
@@ -102,9 +102,9 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		// geometry. A plain window move (manipulated, unchanged size) is never
 		// frozen and still follows the pointer.
 		//
-		// Keying it on the flag instead is what stretched a browser pane. The flag
-		// is cleared by mouse release, and release is the event that goes missing
-		// when the pointer leaves the surface mid-drag - the case
+		// Keying it on the flag instead stretches a browser pane. The flag is
+		// cleared by mouse release, and release is the event that goes missing
+		// when the pointer leaves the surface mid-drag. That is the case
 		// clearStaleManipulation exists for, and the one that sweep skips while
 		// InteractionMode is set. A hold released only by that flag then outlives
 		// its gesture forever, and a frozen pane is not an idle one: the guest has
@@ -123,7 +123,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		// content. Watching the outer rectangle sees nothing happen, so the
 		// hold never arms and the placement is recomputed against a content
 		// area two cells narrower and two shorter than the bitmap the host is
-		// holding - the image jumps a cell and loses its right-hand and bottom
+		// holding: the image jumps a cell and loses its right-hand and bottom
 		// edges for the length of a drag. The content rectangle is also the
 		// one the guest is told about and the one the placement is measured in,
 		// so it is the rectangle whose movement matters here.
@@ -412,10 +412,10 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			// In native mode, an image whose bottom reaches the last screen row
 			// makes the host terminal scroll to make room, and the next frame
 			// then places at the same (now scrolled) Y, cascading into duplicate
-			// frames (see 2e288e6). The original guard hid any such image, but
-			// that blanks a pane whose content legitimately fills to the screen
-			// edge  - exactly what a full-window app like terminal-browser or
-			// awrit draws every frame. Instead of hiding, clamp the visible
+			// frames (see 2e288e6). Hiding any such image would blank a pane
+			// whose content legitimately fills to the screen edge, which is
+			// exactly what a full-window app like terminal-browser or awrit
+			// draws every frame. Instead of hiding, clamp the visible
 			// rows/cols so the image stops one row short of the bottom edge
 			// (keeping the final row free avoids the scroll) and one column short
 			// of the right edge. Hide only when nothing fits at all.
@@ -697,7 +697,7 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 
 	// Use a stable, non-zero placement ID so we can delete the previous
 	// placement unambiguously before creating a new one. Kitty's a=p with
-	// the same (i, p) replaces  - without p, kitty can stack placements.
+	// the same (i, p) replaces. Without p, kitty can stack placements.
 	if p.PlacementID == 0 {
 		p.PlacementID = 1
 	}
@@ -806,7 +806,7 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 		}
 		srcH := visibleRows * pixelsPerRow
 		// Clamp against the image's native pixel height so we never request
-		// a source region that overflows the image  - xterm-addon-image rejects
+		// a source region that overflows the image. xterm-addon-image rejects
 		// such requests (real kitty silently clamps).
 		if p.ImagePixelHeight > 0 && srcY+srcH > p.ImagePixelHeight {
 			srcH = max(p.ImagePixelHeight-srcY, 0)
@@ -838,7 +838,8 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	if p.ZIndex != 0 {
 		fmt.Fprintf(&buf, ",z=%d", p.ZIndex)
 	}
-	// Note: Don't send U=1 to host - TUIOS renders guest content itself
+	// Note: don't send U=1 to the host, because TUIOS renders guest content
+	// itself.
 	buf.WriteString(",q=2\x1b\\")
 	buf.WriteString("\x1b8") // Restore cursor position
 	kittyPassthroughLog("placeOne: emitted kitty cmd: %q", buf.String())

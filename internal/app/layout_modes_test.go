@@ -20,7 +20,7 @@ import (
 //
 // The contract: every pane's rectangle is inside the region, no two of them
 // overlap, and the cells between two neighbours are exactly the ones the
-// settings asked for - the divider's column when the panes gave up their
+// settings asked for: the divider's column when the panes gave up their
 // borders, appearance.gap of empty ground when they did not.
 
 // modeOS builds a tiled session of n panes at a given size, under the given
@@ -181,7 +181,7 @@ var contractSizes = []struct{ w, h int }{{160, 48}, {120, 40}, {80, 24}, {51, 37
 // BSP is held to it up to six panes everywhere. Past that its own insertion
 // scheme is the limit, not its arithmetic: a fresh tree splits the pane it just
 // inserted, so the nth pane is a 2^(n-1)th of the screen and the ninth is one
-// 256th of it - a single row on any terminal a person owns. Six is where a
+// 256th of it, a single row on any terminal a person owns. Six is where a
 // split is still a split. TestBSPExhaustsTheRegionByHalvingIt states that limit
 // on its own so it cannot drift quietly.
 func contractCounts(mode string) []int {
@@ -232,8 +232,8 @@ func TestLayoutModesKeepTheirContract(t *testing.T) {
 // pane halves the last one's region. Six panes still leave every pane several
 // rows; nine leave the last one a single row on a 120x40 screen, and a region
 // one row tall cannot hold two panes and a divider however the arithmetic is
-// written. Improving the insertion scheme - inserting into the largest region
-// rather than the newest - would fail this test, which is the point: it would
+// written. Improving the insertion scheme (inserting into the largest region
+// rather than the newest) would fail this test, which is the point: it would
 // mean the exclusion above can be lifted.
 func TestBSPExhaustsTheRegionByHalvingIt(t *testing.T) {
 	roomy := modeOS(t, LayoutModeBSP, true, 0, 6, 120, 40)
@@ -287,7 +287,7 @@ func isBoxDrawing(r rune) bool {
 // TestGapBetweenBorderedPanesIsEmptyGround holds appearance.gap to i3's inner
 // gap: ground between the panes. With shared borders off, each pane draws its
 // own box, so the cells between two of them are that pane's border, then the
-// ground, then the other pane's border - and nothing else.
+// ground, then the other pane's border, and nothing else.
 //
 // The frame has always been right here, on both tilers: View only asks for the
 // separator overlay when the panes are borderless, so nothing ever drew a rule

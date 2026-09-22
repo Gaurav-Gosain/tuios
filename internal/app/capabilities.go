@@ -489,8 +489,8 @@ const (
 // writeAnimationProbe appends a test of a=f that a host which gets frame edits
 // wrong has to fail.
 //
-// Animation cannot be asked about with a=q, so it is tried. The obvious try --
-// a one-pixel image with a one-pixel patch -- cannot fail. The patch covers the
+// Animation cannot be asked about with a=q, so it is tried. The obvious try,
+// a one-pixel image with a one-pixel patch, cannot fail. The patch covers the
 // whole image, so a host that reads s= and v= as the patch rectangle (which is
 // right) and a host that reads them as the image's new size (which is wrong,
 // and leaves the image the size of the patch) behave identically and both

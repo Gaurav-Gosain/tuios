@@ -93,8 +93,8 @@ func lastPlacement(s string) string {
 // TestResizeCoalescesPlacementChurn is the objective anti-flicker proof. During
 // an interactive resize the pane size changes every render tick while the guest
 // image is still the old size (its PTY resize is deferred). The passthrough must
-// NOT re-clip and re-place the stale image on every tick - that churn is the
-// flicker. It must hold the last placement and re-place once when the size
+// NOT re-clip and re-place the stale image on every tick, because that churn is
+// the flicker. It must hold the last placement and re-place once when the size
 // settles.
 //
 // Fails on main, where every size-changing tick emits a fresh a=p.
@@ -135,8 +135,8 @@ func TestResizeCoalescesPlacementChurn(t *testing.T) {
 }
 
 // TestPlacementIdempotentOnUnrelatedRefresh proves that refreshing repeatedly
-// while the browser pane's geometry is unchanged - which is what happens when a
-// SIBLING pane redraws or scrolls and re-invokes the render loop - emits nothing
+// while the browser pane's geometry is unchanged (which is what happens when a
+// SIBLING pane redraws or scrolls and re-invokes the render loop) emits nothing
 // after the first placement. The visible region must be byte-stable: no stretch,
 // no ratcheting shrink to invisible, no delete+place churn.
 func TestPlacementIdempotentOnUnrelatedRefresh(t *testing.T) {

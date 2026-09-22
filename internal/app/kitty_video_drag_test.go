@@ -106,8 +106,8 @@ func TestRemoteVideoTracksDragCoalesced(t *testing.T) {
 // TestRemoteVideoFreezesDuringResize proves a self-placed video image follows
 // the same interactive-resize discipline as regular placements: while the
 // gesture changes the window SIZE (PTY resize deferred, guest still drawing the
-// old size), the image is held untouched - no a=p per tick even though the
-// window origin moves - and when the gesture settles it re-places exactly once
+// old size), the image is held untouched (no a=p per tick even though the
+// window origin moves), and when the gesture settles it re-places exactly once
 // at the final geometry.
 //
 // Pre-fix this failed twice over: remote video windows never got a

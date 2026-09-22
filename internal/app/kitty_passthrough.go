@@ -115,8 +115,8 @@ type KittyPassthrough struct {
 	// lastFrameHash is the CRC32 of the last bitmap sent per (windowID,
 	// hostImageID) remote video stream. A browser re-sends identical frames
 	// while idle (only a cursor blink changes), so skipping an unchanged one
-	// avoids a compress + base64 + ssh write for nothing - the biggest idle-load
-	// and lag win. A CRC collision at worst holds one stale frame until the next
+	// avoids a compress + base64 + ssh write for nothing. This is the biggest
+	// idle-load and lag win. A CRC collision at worst holds one stale frame until the next
 	// differing one, which for a video stream is a few milliseconds.
 	lastFrameHash map[string]map[uint32]uint32
 
@@ -127,8 +127,8 @@ type KittyPassthrough struct {
 	// how many cells, and everything about how big that image is has to come
 	// from the transmission that preceded it. Without it the only figure left
 	// to divide by is the host's cell size, which assumes the guest drew one
-	// cell's worth of pixels per cell. A guest that draws at any other scale -
-	// a browser at a device pixel ratio above one is the ordinary case - then
+	// cell's worth of pixels per cell. A guest that draws at any other scale
+	// (a browser at a device pixel ratio above one is the ordinary case) then
 	// has its source rectangle computed at the wrong scale, and the picture is
 	// magnified by exactly the ratio between the two.
 	//
@@ -268,7 +268,7 @@ type PassthroughPlacement struct {
 	Hidden    bool // True when placement is completely out of view
 	DataDirty bool // Image data was re-transmitted, so the placement must be re-sent
 
-	// Source clipping parameters (pixels) - preserved for re-placement
+	// Source clipping parameters (pixels), preserved for re-placement.
 	SourceX      int
 	SourceY      int
 	SourceWidth  int
@@ -279,8 +279,9 @@ type PassthroughPlacement struct {
 	Virtual      bool
 
 	// Image's NATIVE pixel dimensions as transmitted (from s/v params).
-	// Used to derive an accurate pixels-per-cell for source-region cropping
-	//  - critical when client and daemon have different cell sizes (web mode).
+	// Used to derive an accurate pixels-per-cell for source-region cropping.
+	// This is critical when client and daemon have different cell sizes (web
+	// mode).
 	ImagePixelWidth  int
 	ImagePixelHeight int
 
@@ -347,7 +348,7 @@ func (st *remoteVideoState) showGeometry() (cols, rows, srcW, srcH int) {
 	// one. Capping is where a frame first stops fitting, and comparing with the
 	// capped number cannot see that: an image wider than its pane has
 	// cols == st.cols, so no crop was emitted and the whole bitmap was scaled
-	// into the pane instead - a squeeze on one axis, which is a stretched
+	// into the pane instead: a squeeze on one axis, which is a stretched
 	// picture. The fraction shown is exact rather than a cell-size estimate,
 	// because the pixel count and the cell count both came off the same
 	// transmit.
@@ -415,8 +416,8 @@ type WindowPositionInfo struct {
 	// the sidebar rail's columns and the dock's rows.
 	//
 	// It is not the same box as the screen, and the difference is the whole
-	// reason it is here. A pane is allowed to hang past this box - a floating
-	// pane is only clamped far enough to keep a strip of it reachable - and
+	// reason it is here. A pane is allowed to hang past this box (a floating
+	// pane is only clamped far enough to keep a strip of it reachable), and
 	// every cell tuios composes for such a pane still stops at the boundary,
 	// because the rail and the dock are drawn over the pane layer. A kitty
 	// placement is the one thing on screen tuios does not draw: the host paints
@@ -560,8 +561,8 @@ func releaseScratch(buf []byte) []byte {
 // orders the writers that take it and the renderer is not one of them. What
 // orders those two is sharing one *os.File (see PostRenderWriter): the runtime
 // locks it per Write, so a whole sequence handed over in one call is delivered
-// whole. Emitting it as three - the sync brackets and the payload they wrap -
-// left two seams a frame could be written into.
+// whole. Emitting it as three writes (the sync brackets and the payload they
+// wrap) would leave two seams a frame could be written into.
 //
 // Lock ordering: hostMu is the innermost host-output lock. Callers may hold
 // kp.mu when they call this (kp.mu outer, hostMu inner); this method never

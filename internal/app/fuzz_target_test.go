@@ -113,7 +113,7 @@ func (f *fuzzOS) Reset() error {
 	config.Global.SessionColors = true
 
 	// Redirected for the life of the target, not just for this call. Actions
-	// write the state file too - collapsing the rail persists it - and
+	// write the state file too (collapsing the rail persists it), and
 	// XDG_STATE_HOME cannot be used to catch them, because the xdg package
 	// resolves its paths once at init and t.Setenv comes far too late. A run that
 	// left the redirect behind wrote a collapsed rail into the developer's own

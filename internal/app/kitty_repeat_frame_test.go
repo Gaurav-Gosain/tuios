@@ -20,8 +20,8 @@ import (
 // (see "place every frame of a stream, not just the first"). A still page was
 // therefore redrawn several times a second for as long as it was open.
 //
-// The other two transmission paths have always dropped a repeat - the direct
-// one by diffing the bitmap, the inline one by hashing it. This pins the same
+// The other two transmission paths drop a repeat: the direct one by diffing
+// the bitmap, the inline one by hashing it. This pins the same
 // behaviour on the file path, and pins the other half of it too: a frame that
 // does differ must still get through, or the pane freezes on the frame it
 // started with, which is the fault that put the a=p there in the first place.

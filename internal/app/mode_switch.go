@@ -15,11 +15,13 @@ func (m *OS) EnterTerminalMode() tea.Cmd {
 
 	m.Mode = TerminalMode
 
-	// Raw reader disabled - Bubbletea handles all input correctly including:
+	// The raw reader is disabled. Bubbletea handles all input correctly,
+	// including:
 	// - Bracketed paste for Cmd+V (via PasteMsg)
 	// - OSC 52 clipboard reading for Ctrl+Shift+V (via ClipboardMsg)
 	// - All key events properly parsed
-	// Raw reader conflicts with Bubbletea in modern terminals using CSI u encoding
+	// The raw reader conflicts with Bubbletea in modern terminals using CSI u
+	// encoding.
 	return nil
 }
 
@@ -33,6 +35,6 @@ func (m *OS) ExitTerminalMode() tea.Cmd {
 
 	m.Mode = WindowManagementMode
 
-	// Raw reader disabled - Bubbletea handles all input correctly
+	// The raw reader is disabled. Bubbletea handles all input correctly.
 	return nil
 }

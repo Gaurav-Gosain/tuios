@@ -36,7 +36,7 @@ func ratioClient(t *testing.T) *OS {
 // The master ratio used to live only in each client's own WorkspaceMasterRatio
 // map, which nothing ever sent. A client that had never been to a workspace
 // therefore had no entry for it, laid it out at its own configured ratio on the
-// first visit, and pushed that ratio back as the session's - destroying the
+// first visit, and pushed that ratio back as the session's, destroying the
 // value another client had tuned, for every client, with no way back but tuning
 // it again.
 //

@@ -185,8 +185,8 @@ func (kp *KittyPassthrough) ForwardCommand(
 // forwardQuery answers a guest's a=q capability probe.
 //
 // The answer has to be honest about the transmission medium, not just about
-// graphics in general. kitten icat opens with three probes - direct, temp file
-// and shared memory - and commits to whichever medium comes back OK. Answering
+// graphics in general. kitten icat opens with three probes (direct, temp file
+// and shared memory) and commits to whichever medium comes back OK. Answering
 // OK to all three makes it pick a file medium and send us a path, which we
 // forward to the host; a host that does not share our filesystem (sip's
 // browser client) drops it silently and no image is ever drawn. Reporting file
@@ -239,7 +239,7 @@ func (kp *KittyPassthrough) hostReadsFiles() bool {
 func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte, windowID string, andPlace bool, windowX, windowY, contentCols, contentRows, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen int, isAltScreen bool) *PlacementResult {
 	if cmd.Medium == vt.KittyMediumSharedMemory || cmd.Medium == vt.KittyMediumTempFile || cmd.Medium == vt.KittyMediumFile {
 		kp.forwardFileTransmit(cmd, windowID, andPlace, windowX, windowY, contentCols, contentRows, contentOffsetX, contentOffsetY, cursorX, cursorY, scrollbackLen, isAltScreen)
-		// Don't flush immediately  - accumulate in pendingOutput.
+		// Don't flush immediately. Accumulate in pendingOutput.
 		// Flushed during render cycle (GetKittyGraphicsCmd) so graphics
 		// and text arrive in the same frame, preventing tearing.
 		return nil
@@ -314,7 +314,7 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		return nil
 	}
 
-	// Final chunk  - process complete image
+	// Final chunk: process the complete image.
 	defer delete(kp.pendingDirectData, windowID)
 
 	if len(pending.Data) == 0 {
@@ -419,17 +419,17 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		// The record of where it goes is a different question and is rewritten
 		// in full, the way the file and shared-memory path rewrites it.
 		//
-		// Refreshing only the position is what froze a pane's width. The cell
+		// Refreshing only the position would freeze a pane's width. The cell
 		// box an image is drawn into is the pane's, not the bitmap's, and the
 		// pane changes size under a bitmap that does not: a guest still
 		// painting the frame it has while its pane grows sends frame after
-		// frame that patches cleanly, and every one of them left the cell count
+		// frame that patches cleanly, and each one would leave the cell count
 		// from the pane the image was first transmitted for. The refresh pass
-		// cannot recover it - it clamps what the record holds and never widens
-		// it - so the image stayed cropped to the old pane, with the new
+		// cannot recover it (it clamps what the record holds and never widens
+		// it), so the image would stay cropped to the old pane, with the new
 		// columns blank, until something forced a whole bitmap through. Rows
-		// escaped, because the refresh recomputes those from the image's own
-		// row count, so one axis followed the pane and the other did not.
+		// are not affected, because the refresh recomputes those from the
+		// image's own row count.
 		existing.HostX, existing.HostY = hostX, hostY
 		existing.AbsoluteLine = pending.ScrollbackLen + pending.CursorY
 		existing.GuestX = pending.CursorX
@@ -476,7 +476,7 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		Hidden:            true, // RefreshAllPlacements places it
 		PlacedOnAltScreen: pending.IsAltScreen,
 		// The image's native pixel dimensions from the s/v params. These are
-		// what the image ACTUALLY has on disk/in kitty  - independent of the
+		// what the image ACTUALLY has on disk/in kitty, independent of the
 		// client's notion of cell size. placeOne uses these to derive accurate
 		// pixels-per-row for source-region cropping, which is critical in
 		// web/daemon mode where the client and daemon may have different
@@ -546,7 +546,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 			kp.imageIDMap[windowID][cmd.ImageID] = hostID
 		}
 	} else if andPlace {
-		// Reusing ID  - check if dimensions changed (e.g., window resize).
+		// Reusing ID: check if dimensions changed (e.g., window resize).
 		// If so, delete old placement so it gets recreated at the new size.
 		if placements := kp.placements[windowID]; placements != nil {
 			for _, p := range placements {
@@ -571,10 +571,10 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	// redraw of the whole image to go with it. That is the flicker: a still
 	// page redrawn a few times a second forever.
 	//
-	// The other two transmission paths have always dropped an unchanged frame -
-	// the direct one by diffing the bitmap, the inline one by hashing it. This
-	// one could not, because its whole point is to hand the host a path instead
-	// of reading the bytes. Reading them only to hash them is a great deal
+	// The other two transmission paths drop an unchanged frame: the direct one
+	// by diffing the bitmap, the inline one by hashing it. This path is harder,
+	// because its whole point is to hand the host a path instead of reading the
+	// bytes. Reading them only to hash them is a great deal
 	// cheaper than what it saves, and nothing is kept: four bytes per image.
 	if !kp.forwardFileFrameIsNew(filePath, windowID, hostID, cmd) {
 		// The pixels are the ones on screen, but where they go may not be: a
@@ -595,8 +595,8 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	}
 
 	// PERFORMANCE: Forward the file path directly to the host terminal.
-	// The host (Ghostty/Kitty) reads the file itself  - no need to read the
-	// entire file into memory, base64 encode it, and chunk it.
+	// The host (Ghostty/Kitty) reads the file itself, so there is no need to
+	// read the entire file into memory, base64 encode it, and chunk it.
 	// For t=s (shm), send the original shm name (NOT /dev/shm/ prefixed path).
 	// The host terminal prepends /dev/shm/ itself.
 	// For t=f/t=t, send the full file path.
@@ -615,8 +615,9 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	// Note: calculateImageCells returns (rows, cols) in that order
 	imgRows, imgCols := kp.calculateImageCells(cmd)
 
-	// Cap to content area (not cursor position) - allow full-height images
-	// The image will be repositioned by RefreshAllPlacements after scrolling
+	// Cap to the content area (not the cursor position) to allow full-height
+	// images. The image will be repositioned by RefreshAllPlacements after
+	// scrolling.
 	displayCols := imgCols
 	displayRows := imgRows
 	if displayCols > contentWidth && contentWidth > 0 {
@@ -630,7 +631,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		hostID, hostX, hostY, imgCols, imgRows, displayCols, displayRows, contentWidth, contentHeight)
 
 	// Build a single transmit command with the correct medium type.
-	// The host terminal reads the file/shm directly  - no chunking needed.
+	// The host terminal reads the file/shm directly, so no chunking is needed.
 	//
 	// For video playback (reusing ID + andPlace), use a=T (transmit+place)
 	// to avoid race conditions where RefreshAllPlacements runs before the
@@ -758,7 +759,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 	}
 
-	// Don't clean up files here  - for shared memory (t=s), the guest app
+	// Don't clean up files here. For shared memory (t=s), the guest app
 	// manages the lifecycle. For temp files (t=t), the host terminal deletes
 	// them after reading. For regular files (t=f), they persist.
 
@@ -930,7 +931,7 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	// Skip an unchanged frame before any compress/encode/send. A browser
 	// re-sends the same bitmap while idle (only a blinking cursor differs);
 	// re-transmitting identical pixels is pure waste and adds to the lag. Only
-	// for a reused stream on a remote terminal - the first frame of an id always
+	// for a reused stream on a remote terminal; the first frame of an id always
 	// sends. Hash the raw bytes (before compression) so the comparison is stable.
 	if kp.remoteClient && cmd.ImageID != 0 {
 		if existingID, reusing := kp.imageIDMap[windowID][cmd.ImageID]; reusing {
@@ -997,8 +998,8 @@ func (kp *KittyPassthrough) forwardFileTransmitInline(
 	// Real remote terminal (ssh) video: the host does not repaint an existing
 	// placement when its bitmap is re-transmitted, and letting RefreshAllPlacements
 	// place this image races the async re-transmit (its delete + re-place against
-	// the new bitmap) and blanks the pane. Make each frame self-contained -
-	// transmit AND place in one a=T at the tracked position - and keep the image
+	// the new bitmap) and blanks the pane. Make each frame self-contained
+	// (transmit AND place in one a=T at the tracked position), and keep the image
 	// out of `placements` so the render loop never touches it. The overlay
 	// (inlineGraphics) keeps its transmit-only path: it re-renders live placements
 	// on re-transmit itself.
@@ -1581,7 +1582,7 @@ func (kp *KittyPassthrough) forgetImagePixels(windowID string, guestImageID uint
 // frameHashSampleEvery is how often an image whose frames keep changing is
 // hashed anyway. A stream that never repeats itself gains nothing from the
 // comparison and should not pay for it on every frame, but one that stops
-// moving - a video paused, a page that finished loading - has to be noticed
+// moving (a video paused, a page that finished loading) has to be noticed
 // without a clock to notice it with. So the check backs off to one frame in
 // this many and comes straight back the moment it finds a repeat.
 const frameHashSampleEvery = 16
@@ -1618,7 +1619,7 @@ func (kp *KittyPassthrough) forwardFileFrameIsNew(
 
 	// Opened once and asked about itself, rather than stat'd and then opened:
 	// one lookup, and the thing described is the thing read. A path that is not
-	// a plain file is refused for the reason the inline path refuses one - a
+	// a plain file is refused for the reason the inline path refuses one: a
 	// fifo would block here and a device would read without end.
 	f, err := os.Open(filePath)
 	if err != nil {

@@ -14,7 +14,7 @@ import (
 
 // TestDockEngineArmsNoTimerWhenNothingPolls is the idle invariant, stated as a
 // test: a dock made only of once, push and event components must not wake at
-// all. Not "wake cheaply" - not wake.
+// all. Not "wake cheaply": not wake.
 //
 // It is the unit-test form of the spike's phase 2, and it is what lets
 // BenchmarkIdleTick stay where it is with the dock's refresh machinery loaded.

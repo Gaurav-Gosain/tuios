@@ -9,13 +9,13 @@ import (
 // recomputed whenever the pane's geometry changes, and is held only while it is
 // still changing.
 //
-// The resize freeze exists to coalesce an interactive drag. It used to be armed
-// by IsBeingManipulated and released only by that flag going false, comparing
-// the live size against the size recorded on the last unfrozen pass - a record
-// the frozen passes never update. A gesture whose release is lost (the pointer
-// leaving the surface mid-drag, which is why clearStaleManipulation exists, and
-// which that sweep skips while InteractionMode is set) therefore leaves the
-// pane frozen for good.
+// The resize freeze exists to coalesce an interactive drag. The regression this
+// guards: a freeze armed by IsBeingManipulated and released only by that flag
+// going false, comparing the live size against the size recorded on the last
+// unfrozen pass, a record the frozen passes never update. A gesture whose
+// release is lost (the pointer leaving the surface mid-drag, which is why
+// clearStaleManipulation exists, and which that sweep skips while
+// InteractionMode is set) then leaves the pane frozen for good.
 //
 // Frozen is not idle. The guest is resized, redraws at its new size and keeps
 // streaming frames, and every one of those frames is forwarded to the host as a

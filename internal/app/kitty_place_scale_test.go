@@ -14,8 +14,8 @@ import (
 //
 // Working out that region needs one number the placement command does not
 // carry: how many of the image's pixels one cell is worth. That comes from the
-// transmission - a=p says which image and how many cells and nothing about how
-// big the image is - and the placement record built for a guest's own a=p did
+// transmission (a=p says which image and how many cells and nothing about how
+// big the image is), and the placement record built for a guest's own a=p did
 // not keep it. With nothing to divide, the refresh pass fell back to the host's
 // cell size, which is the right answer only for a guest that draws exactly one
 // cell's worth of pixels per cell.
@@ -24,13 +24,13 @@ import (
 // 119x40 cells is a bitmap of twice that many pixels on each axis, and the
 // region asked for was then half the width and half the height of the one that
 // belonged in the box: the top-left quarter of the page, drawn across the whole
-// pane at twice its size. Which is the report - the same page, legible, several
-// times too big.
+// pane at twice its size. That matches the report: the same page, legible,
+// several times too big.
 //
 // The first placement is fine, because it is the guest's own a=p forwarded on
 // with the guest's own numbers and no region at all. The wrong one is the
 // refresh pass's, and the refresh pass only re-places when something changes
-// while the render loop is running - which is why the pane was reported to blow
+// while the render loop is running. That is why the pane was reported to blow
 // up not when the image arrived but when a neighbouring pane started printing.
 
 // transmitThenPlace is the efficient shape a long-lived graphics client uses:

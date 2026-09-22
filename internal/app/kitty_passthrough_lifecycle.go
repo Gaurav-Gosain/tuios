@@ -201,7 +201,7 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 				} else if win.DaemonWriteFunc != nil {
 					_ = win.DaemonWriteFunc(response)
 				} else {
-					kittyPassthroughLog("ptyInput callback: WARNING - both Pty and DaemonWriteFunc are nil, response dropped!")
+					kittyPassthroughLog("ptyInput callback: WARNING: both Pty and DaemonWriteFunc are nil, response dropped!")
 				}
 			},
 		)

@@ -18,7 +18,7 @@ import (
 // A pane's PTY has one size, and zooming resizes it: toggleZoom routes the
 // zoomed rectangle through Window.Resize. So a client that does not know a pane
 // is zoomed is not merely drawing a different picture, it is drawing a guest
-// grid the shell is not running in - and worse, it counts the pane among the
+// grid the shell is not running in. Worse, it counts the pane among the
 // tiled ones, tiles it back and pushes that, which takes the zoom away from the
 // person who asked for it.
 //
@@ -69,7 +69,7 @@ func clientsOnOneTiledSession(t *testing.T, panes int, shared bool) (*rig, *peer
 	// The tiling topology reaches the daemon before the second client attaches.
 	// A tree is adopted from the attach reply and from a strictly newer daemon
 	// state, never from a peer's push, so a client that joins a session no one
-	// has pushed builds its own tree against its own box - and two clients on
+	// has pushed builds its own tree against its own box, and two clients on
 	// two trees disagree about every rectangle, zoom or no zoom. That is a
 	// divergence of its own, not this one.
 	var daemonState atomic.Pointer[session.SessionState]
@@ -163,8 +163,8 @@ func rectOf(w *terminal.Window) string {
 // TestZoomTravelsToTheOtherClient is the first half: A zooms, and B has to show
 // the same pane filling its own box and must not tile it away.
 //
-// NEGATIVE CONTROL: measured. Dropping Zoomed from BuildSessionState - the one
-// line that puts the flag on the wire - fails it with B holding the pane at
+// NEGATIVE CONTROL: measured. Dropping Zoomed from BuildSessionState (the one
+// line that puts the flag on the wire) fails it with B holding the pane at
 // "@24,2 82x30 guest 80x28 zoom=false" against A's "@24,2 82x30 zoom=true", and
 // B's frame still carrying HIDDEN beside it. That is the whole bug in one
 // line: the rectangle arrived, the reason did not, and B is one retile away
@@ -339,7 +339,7 @@ func TestTheOtherClientCanUnzoom(t *testing.T) {
 // With tiling on, the rectangle a pane comes back to is the layout's and the
 // pre-zoom one is only a shortcut. With tiling off nothing will ever place the
 // pane again, so the rectangle it was zoomed from is the only record of where it
-// belongs - and the client doing the unzooming need not be the client that made
+// belongs, and the client doing the unzooming need not be the client that made
 // the record. That is the same argument the four PreMinimize fields are already
 // synced for.
 //
@@ -414,8 +414,8 @@ func focusElsewhere(t *testing.T, m *OS, zoomPTY string) {
 // has to draw that pane over everything.
 //
 // NEGATIVE CONTROL: measured. Putting render.go back on
-// GetFocusedWindow().Zoomed fails it with B drawing the whole tiled layout -
-// HIDDEN beside ZOOMED - underneath a pane that is covering the box
+// GetFocusedWindow().Zoomed fails it with B drawing the whole tiled layout
+// (HIDDEN beside ZOOMED) underneath a pane that is covering the box
 // on every other client.
 func TestAPeersZoomIsDrawnWhoeverIsFocused(t *testing.T) {
 	r, p, ex := twoClientsOnOneTiledSession(t)
@@ -449,7 +449,7 @@ func TestAPeersZoomIsDrawnWhoeverIsFocused(t *testing.T) {
 
 // TestNoDividersAcrossAPeersZoom is the same question for the shared borders.
 // The divider grid is drawn from the tiling splits, which are still there
-// behind a zoom, so the overlay has to be told a zoom is up - and it has to be
+// behind a zoom, so the overlay has to be told a zoom is up, and it has to be
 // told by the session rather than by this client's focus.
 //
 // NEGATIVE CONTROL: measured. Putting renderSeparatorOverlay back on
@@ -489,7 +489,7 @@ func TestNoDividersAcrossAPeersZoom(t *testing.T) {
 // and a client only pushes when its state's fingerprint has changed.
 //
 // NEGATIVE CONTROL: measured. Taking Zoomed back out of StateFingerprint fails
-// it - A's push is suppressed as a no-op and B never hears that anything
+// it: A's push is suppressed as a no-op and B never hears that anything
 // happened.
 func TestZoomOfTheOnlyPaneStillTravels(t *testing.T) {
 	r, p, ex := clientsOnOneTiledSession(t, 1, false)
@@ -517,9 +517,9 @@ func TestZoomOfTheOnlyPaneStillTravels(t *testing.T) {
 // second terminal has to walk in on the zoom, because the shell they are about
 // to draw is running at the zoomed size whether they know it or not.
 //
-// It is a different carry path from the sync one - the attach reply is restored
-// by RestoreFromState, which builds every window from scratch - and it is a path
-// that used to go missing on its own (see adoptWindowState's own comment about
+// It is a different carry path from the sync one (the attach reply is restored
+// by RestoreFromState, which builds every window from scratch), and it is a path
+// that has gone missing on its own before (see adoptWindowState's own comment about
 // the agents section).
 //
 // NEGATIVE CONTROL: measured. Taking the flag back out of adoptWindowState fails

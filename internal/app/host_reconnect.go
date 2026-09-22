@@ -44,8 +44,8 @@ import (
 
 const (
 	// hostReconnectFirstDelay is the wait before the first redial. It is short
-	// because the common loss is a momentary one - a keepalive that lapsed, a
-	// far daemon restarted - and the link is usually back on the first try.
+	// because the common loss is a momentary one (a keepalive that lapsed, a
+	// far daemon restarted), and the link is usually back on the first try.
 	hostReconnectFirstDelay = time.Second
 	// hostReconnectMaxDelay caps the backoff. A machine that is really down
 	// must not be dialed harder than this, and a machine that is coming back

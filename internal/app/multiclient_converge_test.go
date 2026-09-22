@@ -38,7 +38,7 @@ import (
 // box (the session's effective size and its chrome reserve).
 //
 // Client against daemon: the set of panes and their workspace, minimized and
-// floating flags; which pane is focused; and - the one that matters most - the
+// floating flags; which pane is focused; and, the one that matters most, the
 // size the daemon is actually running each pane's shell at has to be the guest
 // grid every client draws it in. A PTY has exactly one size, so this is not a
 // convention, it is arithmetic: if the clients disagree, one of them is lying
@@ -80,11 +80,11 @@ import (
 //
 // # What it is measured to catch
 //
-// Reverting 846b7d28 - the pane geometry arithmetic back onto the config
-// globals - fails all five sequences, naming the panes that two clients give
+// Reverting 846b7d28 (the pane geometry arithmetic back onto the config
+// globals) fails all five sequences, naming the panes that two clients give
 // the same rectangle and different guest grids. Reverting the reserve
-// negotiation of 8de5a589 - paneReserve returning this client's own chrome
-// instead of the session's agreed reserve - fails three of five, naming the
+// negotiation of 8de5a589 (paneReserve returning this client's own chrome
+// instead of the session's agreed reserve) fails three of five, naming the
 // pane two clients put at different x.
 //
 // Two of the four it was written for it does not catch, which is worth saying
@@ -104,7 +104,7 @@ import (
 // broadcasts until the fleet satisfies the predicate above and the queue is
 // empty, or until a generous deadline expires; on expiry it reports the
 // predicate's own complaint. A converged fleet reaches the condition in
-// milliseconds, so the deadline is never the timing knob - it only bounds a
+// milliseconds, so the deadline is never the timing knob. It only bounds a
 // failure. A separate cap on deliveries catches the other failure mode, two
 // clients trading rectangles without end, which no deadline can tell from slow.
 //
@@ -150,7 +150,7 @@ const (
 
 // procConfig is one simulated client process's copy of the geometry globals.
 // The fleet runs in one process, so without this every client would read one
-// set of globals and two clients could never disagree about the arithmetic -
+// set of globals and two clients could never disagree about the arithmetic,
 // which is the disagreement 846b7d28 was about. Installing a client's own
 // values before anything runs on its behalf is what makes the fleet behave like
 // N processes with N config files. It doubles as a canary: any layout path that
@@ -218,7 +218,7 @@ func (f *fleet) daemon() *session.SessionState {
 }
 
 // waitDaemon blocks until the daemon's published state satisfies cond. A client
-// sync is sent without waiting for an answer - the daemon has no reply to make -
+// sync is sent without waiting for an answer (the daemon has no reply to make),
 // so anything that reads the daemon after pushing to it has to wait on the
 // state rather than on the send returning.
 func (f *fleet) waitDaemon(what string, cond func(*session.SessionState) bool) {
@@ -313,8 +313,8 @@ func newFleet(t *testing.T, seed uint64) *fleet {
 	})
 
 	// The clients join one at a time, each settling before the next arrives.
-	// That is the ordinary shape - a person opens a second terminal seconds
-	// after the first, and the first has pushed after every key it saw - and it
+	// That is the ordinary shape (a person opens a second terminal seconds
+	// after the first, and the first has pushed after every key it saw), and it
 	// is deliberately not the simultaneous case. Three clients that all attach
 	// before any of them pushes each build their own tiling topology against
 	// their own box, and a client push never carries the topology (see
@@ -433,7 +433,7 @@ func (f *fleet) route(fc *fleetClient) {
 //     border, so the same rectangle carries two guest grids. Reproduce with
 //     TUIOS_CONVERGE_MODES=1 TUIOS_CONVERGE_SEED=508165.
 //
-// The strip's offset - the thing this switch was added while pinning - is not
+// The strip's offset (the thing this switch was added while pinning) is not
 // among them: it is session state now (SessionState.ScrollStrip) and
 // clientView compares it.
 var convergeModes = os.Getenv("TUIOS_CONVERGE_MODES") != ""
@@ -453,7 +453,7 @@ func (f *fleet) trace(fc *fleetClient, what string) {
 
 // commit is what internal/input does after any input that might have changed
 // state: push, then say what this client keeps for its chrome. Nothing else is
-// added here on purpose - a harness that helpfully re-announced every PTY size
+// added here on purpose: a harness that helpfully re-announced every PTY size
 // after every action would paper over exactly the bug it exists to find.
 func (fc *fleetClient) commit() {
 	fc.m.SyncStateToDaemon()
@@ -539,8 +539,8 @@ func viewOf(m *OS) clientView {
 		// anybody: tiling walks the current workspace, so the rectangle such a
 		// pane holds is whatever it had when its workspace was last on screen,
 		// and two clients that last showed it at different sizes hold different
-		// numbers with nothing wrong. The daemon's own view of those panes -
-		// which workspace, minimized, floating - is still compared, below.
+		// numbers with nothing wrong. The daemon's own view of those panes
+		// (which workspace, minimized, floating) is still compared, below.
 		if w.Workspace == m.CurrentWorkspace {
 			p.x, p.y = w.X, w.Y
 			p.w, p.h = w.Width, w.Height
@@ -932,7 +932,7 @@ func (f *fleet) step() string {
 	case 9: // this client's terminal goes away and comes back
 		// A client leaving is the one event nothing on the remaining clients
 		// caused: the session's box grows back around them, and the layout the
-		// departing client had pushed - computed for the smaller box - is the
+		// departing client had pushed, computed for the smaller box, is the
 		// last thing the daemon holds. It is also the window a5d974ed lived in:
 		// a broadcast landing between the rejoining client's read loop starting
 		// and its handlers existing.

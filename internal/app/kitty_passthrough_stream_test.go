@@ -25,8 +25,8 @@ func streamFileFrame(em *vt.Emulator, id, w, h int, path string) {
 // Transmitting an image id the host already holds replaces the stored image,
 // and the placement drawn from the old pixels does not follow it. A stream that
 // is only placed once therefore shows its first frame forever while every frame
-// after it is received, stored, and never drawn -- which is what tuios did: 210
-// frames forwarded, two placements sent, one picture on screen.
+// after it is received, stored, and never drawn. That was the bug: 210 frames
+// forwarded, two placements sent, one picture on screen.
 func TestStreamedFileFrameIsPlacedEveryFrame(t *testing.T) {
 	_, em, _, refresh := placementHarness(t, 100, 40, 1)
 	refresh() // let the harness's own frame settle
@@ -41,7 +41,7 @@ func TestStreamedFileFrameIsPlacedEveryFrame(t *testing.T) {
 	for frame := 1; frame <= 4; frame++ {
 		// New pixels behind the same id, which is what a stream sends and what
 		// the placement has to follow. Re-advertising the same bytes is a
-		// different thing entirely - a frame the host is already showing - and
+		// different thing entirely (a frame the host is already showing), and
 		// is covered by TestRepeatFileFrameIsNotForwarded.
 		if err := os.WriteFile(path, []byte{byte(frame)}, 0o600); err != nil {
 			t.Fatal(err)

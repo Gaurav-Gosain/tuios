@@ -13,7 +13,7 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// LayoutTemplate v2  - comprehensive layout specification.
+// LayoutTemplate is the v2 layout specification.
 //
 // A layout template captures everything needed to recreate a terminal
 // workspace: window positions, BSP tree structure, per-window startup
@@ -38,7 +38,7 @@ type LayoutTemplate struct {
 	TilingScheme string  `json:"tiling_scheme,omitempty"` // "spiral", "alternate", "smart_split", etc.
 	MasterRatio  float64 `json:"master_ratio,omitempty"`
 
-	// Windows  - each window's configuration
+	// Windows holds each window's configuration.
 	Windows []LayoutWindow `json:"windows"`
 
 	// Screen dimensions at save time (for proportional scaling on different screens)
@@ -206,7 +206,7 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 			// Reuse existing window
 			win = existingWindows[i]
 		} else {
-			// Need more windows than we have  - create new ones
+			// Need more windows than we have, so create new ones.
 			title := tw.CustomName
 			if title == "" {
 				title = tw.Title
@@ -291,7 +291,7 @@ func ApplyLayoutTemplate(tmpl LayoutTemplate, m *OS) {
 			m.RebuildBSPTreeFromPositions()
 		}
 	} else {
-		// Always clamp windows after loading - handles resolution differences
+		// Always clamp windows after loading, to handle resolution differences.
 		m.ClampWindowsToView()
 	}
 

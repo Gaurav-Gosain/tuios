@@ -411,7 +411,7 @@ func TestVideoFollowsWindowMove(t *testing.T) {
 
 // TestRemoteVideoCropsRatherThanSqueezes is the reported stretch on the remote
 // path. A frame bigger than its pane has its cell count capped to what fits,
-// and kitty maps whatever source rectangle it is given onto that cell area - so
+// and kitty maps whatever source rectangle it is given onto that cell area. So
 // a cap with no source rectangle to match is not a crop, it is a scale, and a
 // scale on one axis and not the other is a distorted picture.
 //

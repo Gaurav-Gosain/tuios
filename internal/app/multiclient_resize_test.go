@@ -404,7 +404,7 @@ func TestSettledSizeIsTheSameFromBothAttachOrders(t *testing.T) {
 // NEGATIVE CONTROL: fails on the tree where handleAttach stamped the effective
 // size onto the reply only when it differed from what the client asked for. A
 // client attaching at the session's minimum matched, skipped the stamp, and was
-// handed whatever width the last client to sync happened to render at - which
+// handed whatever width the last client to sync happened to render at, which
 // for a local client joining a browser session is the browser's.
 func TestAttachingAtTheMinimumIsToldTheMinimum(t *testing.T) {
 	// The rig client is wide and syncs its wide layout to the daemon.
@@ -436,7 +436,7 @@ func TestAttachingAtTheMinimumIsToldTheMinimum(t *testing.T) {
 // resizes as you interact" half of the report, seen from the wire.
 //
 // A client pushes its whole state after every keystroke, every click and every
-// wheel event. That is deliberate - nothing a user does may go unrecorded - and
+// wheel event. That is deliberate (nothing a user does may go unrecorded), and
 // it means the great majority of pushes say exactly what the last one said.
 // Measured on the unfixed tree with two clients attached, thirty-one keystrokes
 // produced thirty-two peer broadcasts and all thirty-two carried a state
@@ -447,7 +447,7 @@ func TestAttachingAtTheMinimumIsToldTheMinimum(t *testing.T) {
 // The assertion is on what reaches the peer, which is where the cost lands.
 // Two guards stand between the keystroke and that: the client does not send a
 // state it has already sent, and the daemon does not forward one it has already
-// forwarded. This proves them jointly, not separately - either one alone would
+// forwarded. This proves them jointly, not separately: either one alone would
 // satisfy it.
 //
 // NEGATIVE CONTROL: fails on the tree before StateFingerprint existed. Every

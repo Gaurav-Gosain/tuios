@@ -94,7 +94,7 @@ func (m *OS) getRealCursor() *tea.Cursor {
 	contentWidth := window.ContentWidth()
 	contentHeight := window.ContentHeight()
 
-	// Bounds check - cursor must be within visible content area
+	// Bounds check: the cursor must be within the visible content area.
 	if pos.X < 0 || pos.X >= contentWidth || pos.Y < 0 || pos.Y >= contentHeight {
 		return nil
 	}

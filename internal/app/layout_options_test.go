@@ -200,7 +200,7 @@ func TestAnUnsetStartupLayoutKeepsTheDefault(t *testing.T) {
 // falls back to has to be the ratio in force rather than a literal half.
 //
 // NEGATIVE CONTROL: with the fallback back at 0.5, switching to a workspace for
-// the first time takes a 70% split to 50% and leaves it there - the setting
+// the first time takes a 70% split to 50% and leaves it there. The setting
 // reads as ignored, and a ratio the resize keys had moved is thrown away.
 func TestAFreshWorkspaceStartsAtTheConfiguredMasterRatio(t *testing.T) {
 	prev := config.Global.MasterRatioPercent

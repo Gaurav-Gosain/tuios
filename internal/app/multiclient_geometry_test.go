@@ -12,8 +12,8 @@ import (
 // but the arithmetic inside the box used to read process-global config that
 // nothing synced: shared borders and the pane gap. Two clients whose configs
 // disagreed there partitioned the same box into different rectangles, or the
-// same rectangles into different guest grids, and every ordinary state push -
-// a focus switch, alt+n - moved the shared PTYs between the two answers.
+// same rectangles into different guest grids, and every ordinary state push
+// (a focus switch, alt+n) moved the shared PTYs between the two answers.
 //
 // These tests hold two full clients on one session whose *processes* disagree
 // about the geometry config, which is what a local client and a tuios-web
@@ -104,8 +104,8 @@ func geometryRig(t *testing.T, localG, peerG clientGlobals) (*rig, *peer, *excha
 	return r, p, ex
 }
 
-// settleGeometry waits for the pair to genuinely converge - one agreed
-// arithmetic, one set of pane sizes, an empty queue - rather than for a fixed
+// settleGeometry waits for the pair to genuinely converge (one agreed
+// arithmetic, one set of pane sizes, an empty queue) rather than for a fixed
 // quiet window. The lesson is settleBox's: on a loaded machine a broadcast can
 // outlive any constant, and one delivered after a fixed window expires lands
 // inside the measurement, where the settling it performs is exactly what the
@@ -132,7 +132,7 @@ func settleGeometry(t *testing.T, r *rig, p *peer, ex *exchange) {
 
 // settleUntil delivers broadcasts until cond holds, so an assertion can wait
 // for the event it needs rather than for a fixed window a loaded machine can
-// outlast - and so a message that never arrives is a named failure rather
+// outlast, and so a message that never arrives is a named failure rather
 // than a vacuous pass.
 func settleUntil(t *testing.T, ex *exchange, what string, cond func() bool) {
 	t.Helper()
@@ -149,8 +149,8 @@ func settleUntil(t *testing.T, ex *exchange, what string, cond func() bool) {
 	}
 }
 
-// measureFocusSwitch performs the report's trigger - a plain focus switch on
-// the local client - and returns the PTY resizes it caused and both clients'
+// measureFocusSwitch performs the report's trigger (a plain focus switch on
+// the local client) and returns the PTY resizes it caused and both clients'
 // content sizes afterwards. It waits for the switch to be visible on the peer
 // before reading anything, so a slow broadcast cannot escape the measurement
 // and hand back a vacuous zero.
@@ -181,10 +181,10 @@ func measureFocusSwitch(t *testing.T, r *rig, p *peer, ex *exchange, localG clie
 // inside the box.
 //
 // NEGATIVE CONTROLS: measured on the unfixed tree (20f17bbd).
-//   - identical: passes both ways by design - it is the baseline that says the
+//   - identical: passes both ways by design. It is the baseline that says the
 //     focus switch itself is innocent (0 resizes before and after the fix).
 //   - shared borders disagree: failed with 1 PTY resize on the switch and a
-//     permanent disagreement - local ran the panes at 60x38/59x38, the peer ran
+//     permanent disagreement: local ran the panes at 60x38/59x38, the peer ran
 //     the same PTYs at 58x36/57x36: the same rectangles under different border
 //     arithmetic, which is exactly the "wrong heights" reported.
 //   - pane gap disagree: failed with 1 PTY resize on the switch (56x36 vs the
@@ -219,7 +219,7 @@ func TestFocusSwitchMovesNoPTY(t *testing.T) {
 // PTY sizes are checked too, so agreement between the clients cannot be
 // agreement on the wrong answer.
 //
-// NEGATIVE CONTROL: on the unfixed tree there is nothing to adopt - the peer
+// NEGATIVE CONTROL: on the unfixed tree there is nothing to adopt. The peer
 // keeps its own config's arithmetic, which is the disagreement the test above
 // measures.
 func TestJoiningClientAdoptsSessionPaneGeometry(t *testing.T) {
@@ -277,7 +277,7 @@ func TestSharedBordersToggleReachesEveryClient(t *testing.T) {
 // among the tiled panes, tiles it back into the box, and pushes the result,
 // which destroys the float and moves every shared PTY.
 //
-// NEGATIVE CONTROL: measured on the unfixed tree - the peer's copy of the
+// NEGATIVE CONTROL: measured on the unfixed tree. The peer's copy of the
 // floated pane keeps IsFloating=false and the peer's layout still tiles it.
 func TestFloatedPaneStaysFloatedEverywhere(t *testing.T) {
 	r, p, ex := geometryRig(t, clientGlobals{}, clientGlobals{})

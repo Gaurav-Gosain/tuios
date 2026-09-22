@@ -172,6 +172,6 @@ func TestKittyNoStaleAccumulation(t *testing.T) {
 	count := len(kp.placements[winID])
 	kp.mu.Unlock()
 	if count != 3 {
-		t.Errorf("after 10 scroll redraws expected 3 placements tracked (one per visible thumbnail), got %d — placements are leaking", count)
+		t.Errorf("after 10 scroll redraws expected 3 placements tracked (one per visible thumbnail), got %d: placements are leaking", count)
 	}
 }
