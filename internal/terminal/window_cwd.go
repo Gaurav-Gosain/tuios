@@ -3,6 +3,8 @@ package terminal
 import (
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
 // cwdRefreshInterval bounds how often the shell's working directory is read
@@ -59,8 +61,5 @@ func (w *Window) CWD() string {
 // The path comes back with its symlinks resolved on every platform that has an
 // answer, which is why sameDir compares by identity as well as by name.
 func ShellCWD(pgid int) (string, bool) {
-	if pgid <= 0 {
-		return "", false
-	}
-	return shellCWD(pgid)
+	return ptyspawn.ProcessCwd(pgid)
 }

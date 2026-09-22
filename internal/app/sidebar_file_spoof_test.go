@@ -24,12 +24,12 @@ import (
 //
 // cwdIsSpoofed compares the directory a pane claims over OSC 7 against the one
 // its process group is really in, and terminal.ShellCWD answers that second
-// half by reading /proc/<pgid>/cwd. There is no /proc on darwin, so ShellCWD
-// reports "nobody looked", cwdIsSpoofed fails open, and the six file actions
-// stay live on whatever directory a pane names. Every test in this file then
-// passes or fails for a reason that has nothing to do with what it claims: the
-// ones asserting a refusal fail, and the ones asserting the actions survive
-// pass because the guard never ran.
+// half through /proc/<pgid>/cwd on Linux and proc_pidinfo on darwin. On any
+// other platform ShellCWD reports "nobody looked", cwdIsSpoofed fails open, and
+// the six file actions stay live on whatever directory a pane names. Every test
+// in this file then passes or fails for a reason that has nothing to do with
+// what it claims: the ones asserting a refusal fail, and the ones asserting the
+// actions survive pass because the guard never ran.
 //
 // The gate is the capability rather than the GOOS, so these light up by
 // themselves on the day ShellCWD learns to answer somewhere else.

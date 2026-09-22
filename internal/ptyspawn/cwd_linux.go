@@ -1,15 +1,15 @@
 //go:build linux
 
-package session
+package ptyspawn
 
 import (
 	"fmt"
 	"os"
 )
 
-// processCwd reads the directory out of procfs, where the kernel publishes it
+// ProcessCwd reads the directory out of procfs, where the kernel publishes it
 // as a symlink the owner can read.
-func processCwd(pid int) (string, bool) {
+func ProcessCwd(pid int) (string, bool) {
 	if pid <= 0 {
 		return "", false
 	}

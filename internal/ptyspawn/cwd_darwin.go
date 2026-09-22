@@ -1,6 +1,6 @@
 //go:build darwin
 
-package terminal
+package ptyspawn
 
 import (
 	"context"
@@ -8,19 +8,20 @@ import (
 	"github.com/shirou/gopsutil/v4/process"
 )
 
-// shellCWD asks the kernel through proc_pidinfo(PROC_PIDVNODEPATHINFO), which
-// is darwin's answer to procfs for this question.
+// ProcessCwd asks the kernel through proc_pidinfo(PROC_PIDVNODEPATHINFO),
+// which is darwin's answer to procfs for this question.
 //
 // gopsutil reaches it with purego rather than cgo, so this keeps the
-// CGO_ENABLED=0 build the release uses, and gopsutil is already a dependency.
-// It costs a couple of microseconds, which is well inside what the one second
-// cache above it and the sidebar's own listing cadence can absorb.
+// CGO_ENABLED=0 build the release uses. It costs a couple of microseconds.
 //
 // It answers only for a process the effective uid may inspect, which is the
 // right boundary: every pane tuios owns is a child of this process, and a pid
 // belonging to somebody else is one this build has no business reading.
-func shellCWD(pgid int) (string, bool) {
-	p, err := process.NewProcess(int32(pgid))
+func ProcessCwd(pid int) (string, bool) {
+	if pid <= 0 {
+		return "", false
+	}
+	p, err := process.NewProcess(int32(pid))
 	if err != nil {
 		return "", false
 	}

@@ -377,5 +377,5 @@ func (hp *hostedPane) processCwd() (string, bool) {
 	if hp.cmd == nil || hp.cmd.Process == nil {
 		return "", false
 	}
-	return processCwd(hp.cmd.Process.Pid)
+	return ptyspawn.ProcessCwd(hp.cmd.Process.Pid)
 }

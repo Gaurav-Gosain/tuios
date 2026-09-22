@@ -3053,7 +3053,7 @@ func (p *PTY) ProcessCwd() (string, bool) {
 	if p.cmd == nil || p.cmd.Process == nil {
 		return "", false
 	}
-	return processCwd(p.cmd.Process.Pid)
+	return ptyspawn.ProcessCwd(p.cmd.Process.Pid)
 }
 
 // ShellPID returns the process id of the PTY's shell child, or 0 when the process

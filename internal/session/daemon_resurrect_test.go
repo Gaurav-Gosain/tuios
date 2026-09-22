@@ -115,8 +115,8 @@ func TestDaemonRestoreSkipsLiveSession(t *testing.T) {
 // state enriches each window with its live shell's working directory (which
 // clients never provide).
 func TestResurrectionStateCapturesCwd(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("processCwd reads /proc, only reliable on Linux")
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("ptyspawn.ProcessCwd has an answer only on Linux and darwin")
 	}
 
 	sess, err := NewSession("cwd-test", &SessionConfig{}, 80, 24)
