@@ -103,24 +103,12 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 	fmt.Println(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14")).Render("TUIOS Keybindings"))
 	fmt.Println()
 
+	// The whole press, chord included, from every section that binds the
+	// action. GetKeys gave the bare key of the first section only, which
+	// listed launcher as "a" (its key after the leader) and not alt+space.
+	presses := config.PressesByAction(registry)
 	for _, section := range sections {
-		rows := [][]string{}
-
-		for _, action := range section.Actions {
-			keys := registry.GetKeys(action)
-			if len(keys) == 0 {
-				continue
-			}
-
-			desc := config.ActionDescriptions[action]
-			if desc == "" {
-				desc = action
-			}
-
-			keysStr := strings.Join(keys, ", ")
-			rows = append(rows, []string{keysStr, desc})
-		}
-
+		rows := keybindListRows(presses, section.Actions)
 		if len(rows) == 0 {
 			continue
 		}
@@ -152,6 +140,24 @@ func printKeybindingsTable(registry *config.KeybindRegistry) {
 			"Run `tuios keybinds doctor` for every scope, including the ones not listed here.")
 	fmt.Println(note)
 	fmt.Println()
+}
+
+// keybindListRows is the Keys and Action columns for one section of
+// 'tuios keybinds list'. An action with nothing to press is left out.
+func keybindListRows(presses map[string][]string, actions []string) [][]string {
+	var rows [][]string
+	for _, action := range actions {
+		keys := presses[action]
+		if len(keys) == 0 {
+			continue
+		}
+		desc := config.ActionDescriptions[action]
+		if desc == "" {
+			desc = action
+		}
+		rows = append(rows, []string{strings.Join(keys, ", "), desc})
+	}
+	return rows
 }
 
 func listCustomKeybindings() error {

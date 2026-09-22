@@ -240,7 +240,10 @@ func (r *KeybindRegistry) lookupKey(key string, keyMap map[string]string) string
 	return keyMap[normalizedKey]
 }
 
-// GetKeys returns all keys bound to a given action
+// GetKeys returns the keys bound to an action in the first section below that
+// binds it, as bare keys with no chord. An action bound in two sections, such
+// as launcher (global alt+space and prefix a), answers with one of them only.
+// Use PressesByAction to show a binding to a person.
 func (r *KeybindRegistry) GetKeys(action string) []string {
 	// Search through all sections
 	sections := []map[string][]string{
@@ -273,10 +276,13 @@ func (r *KeybindRegistry) GetKeys(action string) []string {
 
 // PressesByAction maps every action to the whole thing a user presses to reach
 // it, chord included: "1" for a window-mode binding, "ctrl+b L 1" for one that
-// lives under a prefix.
+// lives under a prefix. An action bound in several scopes gets every press:
+// launcher is both "alt+space" and "ctrl+b a".
 //
-// GetKeys answers with the bare key, which is the right answer for the keymap
-// and the wrong one for anything that shows a binding to a human. An action
+// GetKeys answers with the bare key of the first section that binds the
+// action, which is the right answer for the keymap and the wrong one for
+// anything that shows a binding to a human. launcher came back as "a", its key
+// under the prefix, and not its global alt+space. An action
 // reachable only under a chord would be listed as "1", and a help screen that
 // says 1 snaps a window to a corner, while 1 selects a window, is the same
 // class of lie this whole surface exists to catch.
@@ -296,6 +302,13 @@ func PressesByAction(r *KeybindRegistry) map[string][]string {
 		if b.Unbound || b.Shadowed || b.Press == "" {
 			continue
 		}
+		// The rail's keymaps and the playback keymap are live only while
+		// that context owns the keyboard, and they have no chord to say so.
+		// new_window is n in window mode and t on the rail, and listing both
+		// as plain keys tells a reader that t opens a window anywhere.
+		if contextOnlyScope(b.Scope) {
+			continue
+		}
 		id := b.Action + "\x00" + b.Press
 		if seen[id] {
 			continue
@@ -304,6 +317,17 @@ func PressesByAction(r *KeybindRegistry) map[string][]string {
 		out[b.Action] = append(out[b.Action], b.Press)
 	}
 	return out
+}
+
+// contextOnlyScope reports whether a scope's keys act only inside one
+// context (the rail, its files listing, or tape playback) and are shown with
+// no chord that would say so.
+func contextOnlyScope(scope string) bool {
+	switch scope {
+	case ScopeSidebar, ScopeSidebarFiles, ScopeScript:
+		return true
+	}
+	return false
 }
 
 // HasAction checks if an action exists in the registry
