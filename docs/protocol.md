@@ -167,6 +167,19 @@ asked for.
   rule without a kind is. `get-agent-state` also gains `ready`, with the same
   meaning as in `list-agents`.
 
+**A prompt is pasted and submitted with a carriage return.** `ask-agent` and
+`fan` used to write the text followed by a line feed. Claude Code and Codex
+submit on a carriage return, which is what the Enter key sends, and several
+agent TUIs bind a line feed to "insert a newline", so a prompt could sit in the
+input box unsent, and a prompt of several lines was a sequence of Enters. Both
+verbs now write the text with its trailing line breaks dropped, wrapped in
+`ESC[200~` and `ESC[201~` when the pane has bracketed paste (DECSET 2004) on,
+then wait about 300 ms, or less once the pane has drawn the paste and gone
+quiet, then write one carriage return. Line endings inside the text become line
+feeds, and the paste delimiters are removed from it so the text cannot end the
+paste early. A pane without bracketed paste still reads each line feed in the
+text as the application decides, which for a shell is one command per line.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -807,7 +820,9 @@ Fan one prompt out across several agents. Creates `count` worktrees and
 sessions, starts the agent in each, and types the prompt into each agent once
 it is ready to read: `idle`, `done`, or `unknown` for an agent that reports
 nothing and has gone quiet. An agent in `needs_input` is left for the person
-to answer, and the prompt is typed after. The verb returns as soon as the
+to answer, and the prompt is typed after. The prompt goes in as one paste and
+is submitted with a carriage return (see Changes to existing verbs). The verb
+returns as soon as the
 sessions exist. `list-worktrees` reports `prompt_status` per session:
 `pending`, `sent`, or `not_sent` with a `prompt_note`.
 

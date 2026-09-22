@@ -1098,7 +1098,13 @@ then does three things in order:
    interleaves your text with whatever it is doing. If the target is still
    `working` after `--ready-timeout`, the call fails with `not_ready` and sends
    nothing.
-2. **Types the question**, with the trailing newline that submits it.
+2. **Types the question and submits it.** The question goes in as one paste,
+   wrapped in bracketed paste when the target has that on, as every agent TUI
+   does. About 300 ms later, or sooner once the pane has drawn the paste and
+   gone quiet, a carriage return submits it: the Enter key, not a line feed,
+   which several agent TUIs read as "insert a newline". A question of several
+   lines is therefore one message, submitted once. Trailing line breaks are
+   dropped. `fan` types its prompt the same way.
 3. **Waits until the target has actually dealt with it**, then returns what the
    pane printed in between.
 

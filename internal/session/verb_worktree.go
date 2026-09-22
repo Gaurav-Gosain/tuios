@@ -571,10 +571,9 @@ func (d *Daemon) deliverFanPrompt(sess *Session, windowID, text string, timeout 
 		sess.setPromptStatus(PromptNotSent, "The agent's pane is gone.", 0)
 		return
 	}
-	if !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	if _, err := pty.Write([]byte(text)); err != nil {
+	// Pasted and submitted with a carriage return, the way ask-agent types its
+	// question. See prompt_submit.go.
+	if err := submitPrompt(d.ctx, pty, text); err != nil {
 		sess.setPromptStatus(PromptNotSent, "Could not write to the agent's pane: "+err.Error(), 0)
 		return
 	}

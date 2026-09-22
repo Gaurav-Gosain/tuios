@@ -587,11 +587,9 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 			return nil, verr
 		}
 	}
-	text := p.Text
-	if !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	if _, werr := pty.Write([]byte(text)); werr != nil {
+	// Pasted and submitted with a carriage return, the way fan types its
+	// prompt. See prompt_submit.go.
+	if werr := submitPrompt(d.ctx, pty, p.Text); werr != nil {
 		return nil, newVerbError(ErrVerbInternal, werr.Error())
 	}
 	sentAt := time.Now().UnixNano()

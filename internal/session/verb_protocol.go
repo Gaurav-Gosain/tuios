@@ -354,7 +354,7 @@ func init() {
 			params: []verbParam{
 				{Name: "count", Type: "int", Required: true, Description: "How many worktrees and agents, 1 to 16."},
 				{Name: "agent", Type: "string", Required: true, Description: "The agent to run, by harness id or program name: claude, codex, gemini. list-verbs and the harness manifests name the ones tuios recognises."},
-				{Name: "prompt", Type: "string", Required: true, Description: "The prompt every agent gets."},
+				{Name: "prompt", Type: "string", Required: true, Description: "The prompt every agent gets. It is typed as one paste (wrapped in bracketed paste when the agent has it on) and submitted with a carriage return, the way ask-agent types a question."},
 				{Name: "repo", Type: "string", Required: true, Description: "A directory inside the repository."},
 				{Name: "base", Type: "string", Description: "Ref every branch starts from. Omit for HEAD of the main checkout."},
 				{Name: "name", Type: "string", Description: "Branch stem. The branches are the stem, then stem-2, stem-3 and so on. Omit for fan/ and the first words of the prompt."},
@@ -1083,7 +1083,7 @@ func init() {
 				{Name: "window", Type: "string", Required: true, Description: "The agent to ask, by window id or name. list-agents is how you find it."},
 				{Name: "from", Type: "string", Description: "The asking window, normally $TUIOS_PANE_ID. It is what the cycle guard is keyed on, so omitting it gives up loop detection."},
 				{Name: "from_host", Type: "string", Description: "The name of the machine the caller is on, normally $TUIOS_HOST. Kept on the record only for an ask that arrived over a link."},
-				{Name: "text", Type: "string", Required: true, Description: "The question. A trailing newline is added if it has none, which is the Enter that submits it."},
+				{Name: "text", Type: "string", Required: true, Description: "The question. It is typed as one paste (wrapped in bracketed paste when the target has it on) and submitted with a carriage return, the Enter key. Trailing line breaks are dropped, and a question of several lines is submitted once."},
 				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for the target to stop working before giving up with not_ready.", Default: "30000"},
 				{Name: "settle", Type: "int", Description: "Milliseconds of silence from the target that count as it having finished, for a pane that reports no state.", Default: "2000"},
 				{Name: "timeout", Type: "int", Description: "Milliseconds to wait for the answer overall.", Default: "300000"},

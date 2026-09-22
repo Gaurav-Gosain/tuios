@@ -429,7 +429,8 @@ tuios fan keep api-fan-add-retry-backoff-http-2 --stash
 
 The branches are a stem, then `stem-2`, `stem-3`. The stem is `fan/` and the
 first words of the prompt, or `--name`. Each prompt is typed once its agent is
-ready to read, so the command returns at once and `tuios worktree ls` shows
+ready to read, as one paste submitted with a carriage return (the Enter key),
+so the command returns at once and `tuios worktree ls` shows
 `pending`, `sent` or `not sent` per session. `--wait` blocks until every prompt
 is sent or given up on.
 
