@@ -21,9 +21,13 @@ exe_glob  = ["**/share/claude/versions/*", "**/claude"]
 # calls it idle, and the alert policy ignores idle, so the one moment a human is
 # being waited for is the one moment nothing says so.
 #
-# Only needs_input ships. Working is already carried by OSC 9;4 and by output
-# arriving at all, and a rule keyed on a spinner glyph is what breaks first when
-# an agent's TUI changes in a patch release.
+# Working and idle ship too, so an unhooked pane can say it finished rather
+# than drifting to unknown on the silence timer. Working keys on the live turn
+# footer and the spinner line, and idle on the empty prompt box, both after
+# herdr's claude manifest. needs_input outranks both, working outranks idle, and
+# the daemon holds an idle verdict through a confirmation window before it
+# publishes it, so the box that stays on screen during a turn cannot flap the
+# pane to idle.
 #
 # A rule that stops matching costs nothing: classification returns no opinion and
 # the pane behaves exactly as it did before this block existed. A rule that
@@ -67,6 +71,80 @@ priority = 10
 message  = "Waits for approval of the plan."
 all      = ["Would you like to proceed"]
 any      = ["1. Yes", "❯ 1."]
+
+# A turn in progress. Claude Code draws a footer under the prompt box that ends
+# in "esc to interrupt" while a turn runs:
+#
+#   ⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt
+[[screen.rule]]
+state    = "working"
+priority = 8
+message  = "Works on a turn."
+regex    = ['^\s*[⏸⏵].*esc to interrupt']
+
+# The spinner line above the prompt box, for a footer that hides the hint:
+#
+#   ✻ Thinking… (12s · ↑ 1.2k tokens)
+[[screen.rule]]
+state    = "working"
+priority = 8
+message  = "Works on a turn."
+regex    = ['^\s*[*·✢✳✶✻✽]\s+\S.*…(?:\s+\(\d+[smh]|\s*$)']
+
+# The empty prompt box, read inside the box and nowhere else. Measured on
+# Claude Code 2.1.280:
+#
+#   ────────────────────────────────────────────
+#   ❯
+#   ────────────────────────────────────────────
+#
+# A permission menu marks its choice with the same ❯, so a numbered choice or a
+# menu footer in the box refuses the rule.
+[[screen.rule]]
+state     = "idle"
+priority  = 5
+message   = "Waits at its prompt."
+region    = "prompt_box"
+regex     = ['^\s*❯']
+not_regex = ['^\s*❯\s*\d+\.', '(?i)esc to cancel|enter to select|to navigate']
+
+# The window title. Claude Code puts a spinner there while a turn runs and a ✳
+# when it is at rest: "✳ Claude Code" was measured on 2.1.280. Braille covers
+# older releases and the half circles newer ones, after herdr.
+[title]
+enabled = true
+
+[[title.rule]]
+state    = "working"
+priority = 10
+message  = "Works on a turn."
+regex    = ['^[\x{2800}-\x{28FF}\x{25D0}-\x{25D3}] ']
+
+[[title.rule]]
+state    = "idle"
+priority = 5
+message  = "Waits at its prompt."
+regex    = ['^\x{2733} ']
+
+# Desktop notifications, which Claude Code sends over OSC 9 when its
+# notification channel is a terminal one. The permission request is the one
+# that matters: it reaches the daemon even when nobody is attached.
+[notify]
+enabled   = true
+fold_case = true
+
+[[notify.rule]]
+state    = "needs_input"
+priority = 10
+kind     = "approval"
+message  = "Asks for permission."
+any      = ["needs your permission", "permission to use"]
+
+[[notify.rule]]
+state    = "idle"
+priority = 5
+message  = "Waits for your input."
+any      = ["waiting for your input"]
 
 # Claude Code writes one JSON-per-line record file per session under
 # ~/.claude/projects/<cwd with every "/" turned into "-">/<session-uuid>.jsonl,

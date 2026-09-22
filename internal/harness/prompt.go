@@ -50,6 +50,15 @@ func (r *Registry) TitleRuleKind(id string, rule int) string {
 	return ruleKind(&m.Title.Rule[rule])
 }
 
+// NotifyRuleKind is RuleKind for a notify rule.
+func (r *Registry) NotifyRuleKind(id string, rule int) string {
+	m := r.Lookup(id)
+	if m == nil || rule < 0 || rule >= len(m.Notify.Rule) {
+		return ""
+	}
+	return ruleKind(&m.Notify.Rule[rule])
+}
+
 // GuessPromptKind reads free text, such as the message a hook reported with
 // needs_input, for the words that mean approval. It is the guess RuleKind makes
 // for a rule that names no kind, applied to text that came with no rule. Empty
@@ -98,8 +107,9 @@ func (r *Registry) RulePrompt(id string, rule int, tail []string) string {
 		return ""
 	}
 	rl := &m.Screen.Rule[rule]
+	lines := regionLines(tail, rl.Region)
 	for _, list := range [][]string{rl.All, rl.Any} {
-		for _, line := range tail {
+		for _, line := range lines {
 			hay := line
 			if m.Screen.FoldCase {
 				hay = strings.ToLower(line)

@@ -17,7 +17,9 @@ alongside the rest of the pane-driving surface.
 - [Recognising a harness](#recognising-a-harness)
 - [Screen rules](#screen-rules)
 - [Title rules](#title-rules)
+- [Notification rules](#notification-rules)
 - [The stall heuristic](#the-stall-heuristic)
+- [Finished turns](#finished-turns)
 - [Indicator](#indicator)
 - [Claude Code integration](#claude-code-integration)
 - [Environment](#environment)
@@ -52,17 +54,25 @@ proceeding, confirming or trust reads as `approval`, anything else as
 source did not say.
 
 Both verbs report `ready`, which is whether `ask-agent` would type at the pane
-now. It is false for `needs_input`: an agent there is waiting on a prompt, text
-typed at it answers the prompt, and `ask-agent` refuses it with
-`agent_blocked`. Until this changed, `ready` was true for `needs_input` and an
-ask typed straight into a permission menu. See the protocol changes in
-[protocol.md](protocol.md).
+now: true for `idle`, `done`, `errored` and `none`. It is false for
+`needs_input`: an agent there is waiting on a prompt, text typed at it answers
+the prompt, and `ask-agent` refuses it with `agent_blocked`. It is false for
+`unknown` too, for the reason below. Until these changed, `ready` was true for
+both, and an ask could type straight into a permission menu. See the protocol
+changes in [protocol.md](protocol.md).
 
 `unknown` exists so that no evidence is never reported as at rest. The silence
 timer writes it, not `idle`, when the screen tier looked at a quiet pane and
 found nothing: `idle` says nothing needs you, and a pane that went quiet on a
 prompt no rule knows would be lying. A client that predates the state draws no
 glyph for it.
+
+`unknown` is a display state and not a ready one. `fan` waits for `idle` or
+`done`, `ask-agent` also takes `errored` and `none`, and neither types into an
+`unknown` pane, because a quiet pane with nothing on its screen may be in the
+middle of a long tool call. A harness whose manifest reads its prompt box reaches `idle` instead (see
+[Screen rules](#screen-rules)); for any other, pass `force` to `ask-agent`, or
+send a fan prompt with `send-text` once the pane is at its prompt.
 
 State is daemon-owned per-window state. It rides the same versioned state sync
 every other window property uses, so it survives detach/reattach and reaches all
@@ -354,14 +364,71 @@ of the pane. They report as `source: screen`, below both a harness reporting for
 itself and an escape sequence it emitted (except when one of them has gone stale
 with a prompt on the pane, see [the one exception](#the-one-exception-a-visible-blocker)),
 and a rule that stops matching returns
-no opinion rather than falling back to a state. Only `needs_input` rules ship
-enabled: `working` is already carried by output arriving at all, and a rule keyed
-on a spinner glyph is the first thing to break when an agent's TUI changes in a
-patch release.
+no opinion rather than falling back to a state. `needs_input` rules ship for
+every harness that has a stable prompt. `working` and `idle` rules ship for
+Claude Code, Codex, Gemini CLI and opencode, after herdr's manifests, so an
+unhooked pane of one of those can say it is back at its prompt rather than
+drifting to `unknown` on the silence timer.
 
 Rules run when a pane writes, throttled, plus once more shortly after it goes
 quiet, because the prompt is painted by the last chunk before the silence. A pane
 that stays silent costs nothing: there is no ticker.
+
+### Regions
+
+A rule reads the pane's tail by default. It may name a `region` instead:
+
+| Region             | What the rule reads                                        |
+| ------------------ | ---------------------------------------------------------- |
+| `tail` (default)   | The bottom `lines` non-empty lines                         |
+| `prompt_box`       | The lines between the last two border lines of the tail    |
+| `above_prompt_box` | Everything in the tail above that box                      |
+
+A border line is a run of at least three box-drawing dashes (`─` or `━`),
+optionally opened by a corner (`╭`, `╰`, `┌`, `└` and the like). Claude Code
+draws its prompt between two bare dash rules and Gemini CLI inside a rounded
+box, and both are found. A box region on a screen with fewer than two border
+lines is empty, and a rule reading it matches nothing. `explain-agent-screen`
+reports each rule's region, and `no_region` for a rule whose region is not on
+the screen.
+
+### Idle rules
+
+No evidence is not rest, so an `idle` rule has to prove the agent is at its
+prompt. The loader refuses an idle screen rule unless it reads
+`region = "prompt_box"` or carries a `regex` that pins the input box's own
+structure (opencode's closing edge, Codex's `›` composer at column zero). Every
+bundled idle rule is also outranked by every `working` and `needs_input` rule of
+its manifest, because the prompt box stays on the screen during a turn.
+
+An idle reading is then held before it is published:
+
+- A pane that is `working` moves to `idle` only when the reading holds on three
+  further looks at least 100 ms apart, or has held for 700 ms, whichever comes
+  first. The daemon schedules those looks itself. A look that reads anything
+  else cancels the wait, so a frame that shows the box between two spinner
+  frames never flaps the pane.
+- For 3 seconds after a harness is first seen in a pane, no idle reading counts:
+  a TUI that is starting paints its frame in pieces.
+- A pane in any other state takes the idle at once.
+
+An idle reading also gives way to a louder reading from the other tier: a rest
+glyph in the title does not hide a permission prompt on the screen, and an empty
+prompt box does not hide a spinner in the title. When a look later finds no rule
+matching at all, the screen stops defending an idle it took, and the pane goes
+back to the tiers that handled it before.
+
+These are herdr's numbers. An idle rule in a user manifest goes through the same
+gate, which is a change: before it, a user's idle screen rule was published on
+the first look.
+
+### A rest claim gives way to a prompt at once
+
+The visible-blocker exception below normally waits two seconds for a stale claim
+to refresh itself. A claim that says the agent is at rest (`idle` or `unknown`)
+gets no such wait: a rest glyph or a cleared progress bar is not a source midway
+through describing a new prompt, and the settle look that sees the prompt runs
+well inside two seconds.
 
 ### Seeing what a rule would match
 
@@ -423,10 +490,56 @@ Title rules report as `source: osc`, because that is what they are: an escape
 sequence the program emitted about itself, alongside the progress sequence
 already read there.
 
-Only one ships enabled, Codex's, because its phrase is unambiguous and written
-deliberately. A spinner glyph is neither: it proves animation, and every TUI
-animates. `tuios explain-agent-screen` prints the pane's title and what the
-title rules made of it beside the screen half, which is the way to write one.
+Three ship enabled. Codex writes `Action Required` when it blocks and a braille
+spinner while a turn runs. Claude Code writes a spinner while a turn runs and a
+`✳` at rest (`✳ Claude Code`, measured on 2.1.280). Gemini CLI writes its status
+after a glyph: `Action Required`, `Working` and `Ready`. A spinner proves
+animation, not work, which is why a title rule only moves a pane some other tier
+attributed, and why the silence timer still demotes a pane that stops drawing.
+An idle title rule goes through the same confirmation gate as an idle screen
+rule. `tuios explain-agent-screen` prints the pane's title and what the title
+rules made of it beside the screen half, which is the way to write one.
+
+## Notification rules
+
+A harness that wants its user sends a desktop notification with OSC 9, OSC 777
+or OSC 99. The daemon now reads them. Every one is published on the event
+stream as a `notification` event carrying `title` and `body` (each capped at 512
+bytes), for panes in any session, attached or not. One from a pane attributed to
+a harness is also matched against the manifest's `[notify]` block, which has the
+shape of `[title]` but matches substrings anywhere, as prose. The title and body
+are read as one text, title first.
+
+```toml
+[notify]
+enabled   = true
+fold_case = true
+
+[[notify.rule]]
+state    = "needs_input"
+priority = 10
+kind     = "approval"
+any      = ["approval requested", "wants to edit"]
+
+[[notify.rule]]
+state    = "done"
+priority = 0
+regex    = ['\S']
+```
+
+A notify rule may say `done`, which no screen or title rule may: the
+notification is the harness speaking, and "the turn finished" is a claim only
+the harness can make. The claim is `source: osc`, and its message is the
+notification's own words, fronted by the rule's kind. Because a notification is
+sent once and never repeated, its claim goes stale the moment the pane writes
+again: from then on a title or screen look may replace it, so an approval given
+and followed by work does not leave the pane on `needs_input`.
+
+Claude Code (`needs your permission` as an approval, `waiting for your input` as
+`idle`) and Codex (`approval requested` as an approval, anything else as the
+turn finishing) ship rules. A state change from a notification reaches the rail,
+the alert policy and the `after-agent-state` hook like any other, so a harness
+asking for approval in a session nobody is attached to still runs the hook.
 
 ## The stall heuristic
 
@@ -455,6 +568,31 @@ The fallback is strictly secondary to explicit reporting:
 The silence window defaults to 30 seconds. Override it with the
 `TUIOS_AGENT_STALL_SECONDS` environment variable when starting the daemon; set it
 to `0` (or a negative value) to disable the heuristic entirely.
+
+## Finished turns
+
+`done` comes only from an explicit report or the Claude transcript, so an
+unhooked pane never used to say it had finished. The daemon now counts turns:
+each window carries a `completion_seq` that goes up by one every time its state
+moves from `working` to `idle`, `done` or `unknown` after at least 5 seconds of
+work. An explicit `done` counts however short the turn. `needs_input` in the
+middle of a turn does not end it, and `errored` is not a finished turn. When the
+silence timer ends a turn, the turn is measured to the pane's last output rather
+than to when the timer noticed, so a redraw that bumped a detected pane to
+`working` for an instant is not counted.
+
+The count rides the window state (`completion_seq`, additive, omitted when
+zero) and the session listing, so an older client ignores it. `list-agents`
+reports `completion_seq` and `finished_unread`: the daemon's own view, true while
+the pane is at rest and has finished a turn since an attached client last pushed
+state with it focused.
+
+"Has this person looked at it" is per client, so the rail keeps its own record:
+the count each pane had when this client's user last focused it, saved beside
+the other window-keyed rail state. A pane at rest (`idle` or `unknown`) whose
+count has moved past that is drawn exactly as an unread `done` pane is, and
+focusing it puts it back to its own state. A turn that ends in the focused pane
+counts as seen.
 
 ## Indicator
 

@@ -471,6 +471,11 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				if state, ok := pty.takeAgentProgress(); ok {
 					s.applyAgentProgress(ev.Window, state)
 				}
+				// A desktop notification the emulator parked while writing these
+				// bytes, on the same terms: the harness speaking about itself.
+				if n, ok := pty.takeAgentNotify(); ok {
+					s.applyAgentNotify(ev.PTYID, n, d.agentMatcher.registry)
+				}
 				// Where a pane on another machine is.
 				//
 				// It tells nobody when its shell changes directory: there is no
@@ -513,6 +518,14 @@ func (d *Daemon) onSessionCreated(s *Session) {
 					// one stays correct.
 					if !pty.hasScreenLook() {
 						pty.setScreenLook(func() {
+							// The output event can run before the emulator
+							// has parsed its bytes, so a notification sent in
+							// a pane's last chunk is picked up here, on the
+							// settle look, rather than waiting for output
+							// that may never come.
+							if n, ok := pty.takeAgentNotify(); ok {
+								s.applyAgentNotify(ptyID, n, reg)
+							}
 							s.readTranscriptOnOutput(ptyID)
 							s.scanPaneForAgent(ptyID, reg)
 						})
@@ -534,6 +547,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 			Window:    ev.Window,
 			PTYID:     ev.PTYID,
 			Title:     ev.Title,
+			Body:      ev.Body,
 			Bytes:     ev.Bytes,
 			Mode:      ev.Mode,
 			Enabled:   ev.Enabled,

@@ -52,7 +52,7 @@ var (
 		EventWindowCreated, EventWindowClosed, EventWindowExit, EventWindowRetitled,
 		EventWindowFocused, EventWindowMoved, EventWindowMinimized, EventWindowRestored,
 		EventWorkspaceSwitched, EventAgentState, EventAgentMessage,
-		EventOutput, EventBell, EventModeChanged,
+		EventOutput, EventBell, EventNotification, EventModeChanged,
 		EventSessionCreated, EventSessionClosed, EventGap,
 	}
 	// knownEventTypes are the event types a subscribe filter can name.

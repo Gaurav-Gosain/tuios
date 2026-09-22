@@ -31,6 +31,9 @@ type lifecycleWindow struct {
 	// report them and neither field alone raises an event.
 	agentHarness string
 	agentMessage string
+	// agentStateAt rides along for the turn count, which needs to know when a
+	// working phase began if nothing recorded it. See agent_turns.go.
+	agentStateAt int64
 }
 
 // lifecycleSnapshot is a copy of the lifecycle-relevant parts of a SessionState.
@@ -66,6 +69,7 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 			agentState:   w.AgentState,
 			agentHarness: w.AgentHarness,
 			agentMessage: w.AgentMessage,
+			agentStateAt: w.AgentStateAt,
 		})
 	}
 	return snap

@@ -1,0 +1,14 @@
+# harness: gemini-cli
+# want: needs_input
+# how: derived. The shell tool confirmation in the words herdr's gemini
+# manifest keys on.
+---
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ ?  Shell go test ./...                                                       │
+│                                                                              │
+│ Allow execution of: 'go'?                                                    │
+│                                                                              │
+│ ● 1. Yes, allow once                                                         │
+│   2. Yes, allow always ...                                                   │
+│   3. No, suggest changes (esc)                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯

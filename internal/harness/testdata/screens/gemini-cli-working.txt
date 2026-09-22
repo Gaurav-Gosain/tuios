@@ -1,0 +1,11 @@
+# harness: gemini-cli
+# want: working
+# how: derived. A turn in progress: the spinner line with the cancel hint that
+# herdr's gemini manifest keys on, above an input box that stays on screen.
+---
+⠏ Thinking about the test layout (esc to cancel, 4s)
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+~/dev/tuios (main*)           no sandbox (see /docs)            gemini-2.5-pro (98% context left)

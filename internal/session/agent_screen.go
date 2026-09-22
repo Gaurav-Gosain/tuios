@@ -41,45 +41,47 @@ const screenSettleDelay = 400 * time.Millisecond
 // even when a higher-ranked source owns the window, and the silence timer needs
 // that fact to know it must not call the pane idle.
 func (s *Session) scanScreenForAgent(ptyID string, reg *harness.Registry) bool {
-	if reg == nil {
-		return false
-	}
-	pty := s.GetPTY(ptyID)
-	if pty == nil {
-		return false
-	}
+	return s.lookAtPane(ptyID, reg, false, true)
+}
 
-	winID, hid := s.agentHarnessOf(ptyID)
-	if hid == "" {
-		return false
-	}
+// screenVerdict matches the harness's screen rules against the bottom of the
+// pane. looked is false when there was nothing to read at all: no rules, or an
+// empty screen.
+func screenVerdict(pty *PTY, hid string, reg *harness.Registry) (v agentVerdict, looked bool) {
 	lines := reg.ScreenLines(hid)
 	if lines <= 0 {
-		return false
+		return agentVerdict{}, false
 	}
-
 	tail := pty.tailText(lines)
 	if len(tail) == 0 {
-		return false
+		return agentVerdict{}, false
 	}
 	state, rule, ok := reg.Classify(hid, tail)
 	if !ok {
-		// Nothing on the screen now, so any claim a blocker took here is given
-		// back. This look is the only thing that runs when the prompt goes away,
-		// and a prompt can only go away by being painted over, which is what
-		// brought us here.
-		s.releaseAgentBlockerOverride(winID)
-		return false
+		return agentVerdict{}, true
 	}
-	s.ApplyAgentReport(winID, AgentReport{
-		State:       AgentState(state),
-		Message:     screenRuleMessage(reg, hid, rule, tail),
-		Kind:        reg.RuleKind(hid, rule),
-		Source:      AgentSourceScreen,
-		Harness:     hid,
-		paneWroteAt: pty.LastOutput(),
-	})
-	return true
+	return agentVerdict{
+		ok:      true,
+		state:   AgentState(state),
+		message: screenRuleMessage(reg, hid, rule, tail),
+		kind:    reg.RuleKind(hid, rule),
+		source:  AgentSourceScreen,
+	}, true
+}
+
+// releaseScreenIdle stops defending an idle state the screen tier took, once a
+// look finds no rule matching: the prompt box that proved rest is off the
+// screen. The state stays where it is and the claim is yielded, so the pane is
+// back under the tiers that handled it before, and the detector can move it to
+// working on the next output from the agent.
+func (s *Session) releaseScreenIdle(windowID string) {
+	if claim, held := s.agentClaimHeld(windowID); !held || claim.source != AgentSourceScreen {
+		return
+	}
+	if state, _ := s.windowAgentState(windowID); state != AgentStateIdle {
+		return
+	}
+	s.yieldAgentClaim(windowID, AgentSourceScreen)
 }
 
 // screenRuleMessage is what a screen claim says about itself: the prompt line

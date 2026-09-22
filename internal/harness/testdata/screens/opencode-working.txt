@@ -1,0 +1,13 @@
+# harness: opencode
+# want: working
+# how: derived. The measured input box with the progress bar and interrupt
+# hint herdr's opencode manifest keys on in its footer.
+---
+  Thinking: reading the session package
+
+             ┃
+             ┃  Ask anything… "Fix a TODO in the codebase"
+             ┃
+             ┃  Build · Muse Spark 1.3 Free OpenCode Zen
+             ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+             ⬝⬝⬝⬝■■■■  esc interrupt                         tab agents  ctrl+p commands

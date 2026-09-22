@@ -30,10 +30,13 @@ type Manifest struct {
 	DisplayName   string `toml:"display_name"`
 	// Priority breaks a tie when two manifests match the same process. Higher
 	// wins; equal priorities fall back to the id so the answer is stable.
-	Priority   int        `toml:"priority"`
-	Detect     Detect     `toml:"detect"`
-	Screen     Screen     `toml:"screen"`
-	Title      Title      `toml:"title"`
+	Priority int    `toml:"priority"`
+	Detect   Detect `toml:"detect"`
+	Screen   Screen `toml:"screen"`
+	Title    Title  `toml:"title"`
+	// Notify is the rules matched against a desktop notification the program
+	// sent with OSC 9, OSC 777 or OSC 99. It has the shape of Title.
+	Notify     Title      `toml:"notify"`
 	Transcript Transcript `toml:"transcript"`
 }
 
@@ -145,11 +148,14 @@ func (r *Require) satisfied(p ProcInfo) bool {
 
 // Screen holds optional rules matched against a pane's rendered text.
 //
-// Bundled manifests ship at most their needs_input rules enabled; working and
-// idle rules are user opt-in, because those states already reach the daemon
-// through output and OSC 9;4, and the stall timer (the policy test in
-// registry_test.go makes the full argument). A rule here is coupled to one
-// agent's TUI at one version,
+// Bundled manifests ship needs_input rules, and working and idle rules for the
+// harnesses whose screens have a stable shape to key on. An idle rule has to
+// prove an input box is on the screen, with region = "prompt_box" or with a
+// regex pinning the box's structure, because the absence of work is not
+// evidence of rest (the policy test in registry_test.go makes the full
+// argument). The daemon also holds an idle verdict through a short
+// confirmation window before it publishes it, so a redraw cannot flap the
+// pane. A rule here is coupled to one agent's TUI at one version,
 // and agent TUIs change in patch releases, so a rule that silently stops matching
 // degrades to no opinion without telling anyone. The signals tuios prefers (the
 // harness reporting for itself, and the escape sequences it emits) are
@@ -196,6 +202,15 @@ type ScreenRule struct {
 	// cost a load error but never a stalled screen scan.
 	Regex    []string `toml:"regex"`
 	NotRegex []string `toml:"not_regex"`
+	// Region is the part of the screen tail the rule reads. Empty and "tail"
+	// mean the whole tail. "prompt_box" is the body of the input box at the
+	// bottom of the tail: the lines between the last two border lines, a border
+	// being a run of at least three box-drawing dashes, optionally opened by a
+	// corner. "above_prompt_box" is everything above that box. A rule reading a
+	// box region matches nothing when no box is on the screen, which is what
+	// lets an idle rule prove a prompt box is there. Only screen rules take a
+	// region.
+	Region string `toml:"region"`
 
 	// Compiled forms of Regex and NotRegex, index-aligned so a report can name
 	// the pattern as the manifest spells it. Filled by parseManifest.
@@ -248,35 +263,22 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 	if err := m.Detect.checkGenericNames(name, m.ID); err != nil {
 		return nil, err
 	}
+	// Title and notify rules are the same shape as screen rules and are checked
+	// the same way, so a mistake in one is reported in the same words as a
+	// mistake in the other.
 	for i := range m.Screen.Rule {
-		r := &m.Screen.Rule[i]
-		if _, ok := screenStates[r.State]; !ok {
-			return nil, fmt.Errorf("%s: manifest %q screen rule %d: unknown state %q",
-				name, m.ID, i, r.State)
-		}
-		if err := r.compile(m.Screen.FoldCase); err != nil {
+		if err := m.Screen.Rule[i].check("screen", screenStates, m.Screen.FoldCase); err != nil {
 			return nil, fmt.Errorf("%s: manifest %q screen rule %d: %w", name, m.ID, i, err)
 		}
-		if r.Kind = strings.ToLower(strings.TrimSpace(r.Kind)); r.Kind != "" && !promptKinds[r.Kind] {
-			return nil, fmt.Errorf("%s: manifest %q screen rule %d: unknown kind %q (approval or question)",
-				name, m.ID, i, r.Kind)
-		}
 	}
-	// Title rules are the same shape as screen rules and are checked the same
-	// way, so a mistake in one is reported in the same words as a mistake in
-	// the other.
 	for i := range m.Title.Rule {
-		r := &m.Title.Rule[i]
-		if _, ok := screenStates[r.State]; !ok {
-			return nil, fmt.Errorf("%s: manifest %q title rule %d: unknown state %q",
-				name, m.ID, i, r.State)
-		}
-		if err := r.compile(m.Title.FoldCase); err != nil {
+		if err := m.Title.Rule[i].check("title", screenStates, m.Title.FoldCase); err != nil {
 			return nil, fmt.Errorf("%s: manifest %q title rule %d: %w", name, m.ID, i, err)
 		}
-		if r.Kind = strings.ToLower(strings.TrimSpace(r.Kind)); r.Kind != "" && !promptKinds[r.Kind] {
-			return nil, fmt.Errorf("%s: manifest %q title rule %d: unknown kind %q (approval or question)",
-				name, m.ID, i, r.Kind)
+	}
+	for i := range m.Notify.Rule {
+		if err := m.Notify.Rule[i].check("notify", notifyStates, m.Notify.FoldCase); err != nil {
+			return nil, fmt.Errorf("%s: manifest %q notify rule %d: %w", name, m.ID, i, err)
 		}
 	}
 	if m.Screen.Lines <= 0 {
@@ -289,6 +291,38 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 		m.DisplayName = m.ID
 	}
 	return &m, nil
+}
+
+// check validates one rule of the given block and compiles it. block is
+// "screen", "title" or "notify", and states is what that block may assert.
+func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bool) error {
+	if _, ok := states[r.State]; !ok {
+		return fmt.Errorf("unknown state %q", r.State)
+	}
+	if err := r.compile(foldCase); err != nil {
+		return err
+	}
+	if r.Kind = strings.ToLower(strings.TrimSpace(r.Kind)); r.Kind != "" && !promptKinds[r.Kind] {
+		return fmt.Errorf("unknown kind %q (approval or question)", r.Kind)
+	}
+	r.Region = strings.ToLower(strings.TrimSpace(r.Region))
+	if block != "screen" {
+		if r.Region != "" {
+			return fmt.Errorf("region %q: only screen rules read a region", r.Region)
+		}
+		return nil
+	}
+	if !screenRegions[r.Region] {
+		return fmt.Errorf("unknown region %q (tail, prompt_box or above_prompt_box)", r.Region)
+	}
+	// An idle rule has to prove the agent is at rest, and the proof is an input
+	// box on the screen. Reading the box region is that proof; a regex can be,
+	// when it pins the box's own structure. A rule resting on a loose substring
+	// would call a pane idle because a word appeared in its output.
+	if r.State == "idle" && r.Region != RegionPromptBox && len(r.Regex) == 0 {
+		return fmt.Errorf("an idle rule must read region = %q or carry a regex that pins the input box", RegionPromptBox)
+	}
+	return nil
 }
 
 // compile turns a rule's regex predicates into matchers and, when the manifest
@@ -339,6 +373,30 @@ var screenStates = map[string]struct{}{
 	"working":     {},
 	"needs_input": {},
 	"idle":        {},
+}
+
+// notifyStates are the states a notify rule may assert. done is allowed here
+// and nowhere else: a desktop notification is the harness itself speaking, and
+// "the turn finished" is a claim only the harness can honestly make.
+var notifyStates = map[string]struct{}{
+	"working":     {},
+	"needs_input": {},
+	"idle":        {},
+	"done":        {},
+}
+
+// Screen regions a rule may read. See ScreenRule.Region.
+const (
+	RegionTail           = "tail"
+	RegionPromptBox      = "prompt_box"
+	RegionAbovePromptBox = "above_prompt_box"
+)
+
+var screenRegions = map[string]bool{
+	"":                   true,
+	RegionTail:           true,
+	RegionPromptBox:      true,
+	RegionAbovePromptBox: true,
 }
 
 // normalize lowercases and trims every predicate so matching can be a plain

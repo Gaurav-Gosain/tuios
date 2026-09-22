@@ -23,7 +23,7 @@ func TestBundledManifestsLoad(t *testing.T) {
 	}
 }
 
-// TestBundledScreenRulesShipOnlyForNeedsInput is the policy check, narrowed from
+// TestBundledScreenRulesPolicy is the policy check, narrowed from
 // "nothing ships enabled" and argued for on purpose.
 //
 // The old rule cost more than it saved. Reading another program's UI is a
@@ -40,21 +40,37 @@ func TestBundledManifestsLoad(t *testing.T) {
 // rule matching something it should not, so bundled rules carry several strings
 // together rather than any one of them.
 //
-// working stays off, and that is the part still worth policing. It is already
-// carried by OSC 9;4 and by output arriving at all, so a screen rule for it buys
-// nothing and would be keyed on a spinner glyph, which is the first thing to
-// change in a patch release.
-func TestBundledScreenRulesShipOnlyForNeedsInput(t *testing.T) {
+// Working and idle ship for the harnesses listed in screenRestHarnesses, so an
+// unhooked pane can say it finished rather than drifting to unknown on the
+// silence timer. Two things keep that honest. An idle rule has to prove an
+// input box is on the screen (the loader refuses one that does not), and every
+// idle rule is outranked by every working and needs_input rule of its manifest,
+// so a screen showing the box and a live turn at once reads as the louder
+// state. The daemon then holds an idle verdict through a confirmation window.
+func TestBundledScreenRulesPolicy(t *testing.T) {
+	screenRestHarnesses := map[string]bool{
+		"claude-code": true, "codex": true, "gemini-cli": true, "opencode": true,
+	}
 	r, _ := Load()
 	for _, id := range r.IDs() {
 		m := r.Lookup(id)
 		if !m.Screen.Enabled {
 			continue
 		}
+		minLoud := 1 << 30
+		for _, rule := range m.Screen.Rule {
+			if rule.State != "idle" && rule.Priority < minLoud {
+				minLoud = rule.Priority
+			}
+		}
 		for i, rule := range m.Screen.Rule {
-			if rule.State != "needs_input" {
-				t.Errorf("bundled manifest %q ships rule %d enabled for state %q; only needs_input may ship on",
+			if rule.State != "needs_input" && !screenRestHarnesses[id] {
+				t.Errorf("bundled manifest %q ships rule %d enabled for state %q; only needs_input may ship on here",
 					id, i, rule.State)
+			}
+			if rule.State == "idle" && rule.Priority >= minLoud {
+				t.Errorf("bundled manifest %q idle rule %d has priority %d, not below every louder rule (%d)",
+					id, i, rule.Priority, minLoud)
 			}
 			// A regex counts as corroboration on its own: a pattern pins the
 			// structure of a rendered line, which is harder to meet by accident

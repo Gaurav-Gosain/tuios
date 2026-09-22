@@ -1020,7 +1020,7 @@ func init() {
 				{Name: "all", Type: "bool", Description: "Include every window, not only the panes something has identified as an agent.", Default: "false"},
 			},
 			returns: []verbParam{
-				{Name: "agents", Type: "[]object", Description: "One entry per pane: window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence. ready is whether ask-agent would type at the pane now, and is false on needs_input. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state."},
+				{Name: "agents", Type: "[]object", Description: "One entry per pane: window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, completion_seq, finished_unread. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since."},
 				{Name: "total", Type: "int", Description: "How many panes are listed."},
 			},
 			examples: []string{
@@ -1099,7 +1099,7 @@ func init() {
 				{Name: "from", Type: "string", Description: "The asking window, normally $TUIOS_PANE_ID. It is what the cycle guard is keyed on, so omitting it gives up loop detection."},
 				{Name: "from_host", Type: "string", Description: "The name of the machine the caller is on, normally $TUIOS_HOST. Kept on the record only for an ask that arrived over a link."},
 				{Name: "text", Type: "string", Required: true, Description: "The question. It is typed as one paste (wrapped in bracketed paste when the target has it on) and submitted with a carriage return, the Enter key. Trailing line breaks are dropped, and a question of several lines is submitted once."},
-				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for the target to stop working before giving up with not_ready.", Default: "30000"},
+				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for the target to be ready before giving up with not_ready. Ready is idle, done, errored or none; unknown is not ready. A target on needs_input ends the wait at once with agent_blocked.", Default: "30000"},
 				{Name: "settle", Type: "int", Description: "Milliseconds of silence from the target that count as it having finished, for a pane that reports no state.", Default: "2000"},
 				{Name: "timeout", Type: "int", Description: "Milliseconds to wait for the answer overall.", Default: "300000"},
 				{Name: "lines", Type: "int", Description: "Cap the reply to this many lines, newest kept.", Default: "200"},

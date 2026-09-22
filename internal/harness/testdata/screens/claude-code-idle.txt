@@ -1,0 +1,22 @@
+# harness: claude-code
+# want: idle
+# how: measured. Claude Code 2.1.280 just started, in a 100x30 pane, read with
+# tmux capture-pane. One footer line specific to the capturing environment
+# (a transcript-saving warning) was dropped.
+---
+ ▐▛███▛█   Claude Code v2.1.280
+▝▜██████▀  Opus 5.5 (1M context) · Claude Max
+  ▝▝ ▝▝    ~/dev/tuios/.claude/worktrees/wf_db0a85e5-fac-4
+
+  Get to finished work sooner with Opus 5.5. Switch anytime with /model.
+
+⏺ agents-md: no CLAUDE.md found; AGENTS.md loaded:
+  /Users/gaurav/dev/tuios/.claude/worktrees/wf_db0a85e5-fac-4/AGENTS.md
+
+
+
+                                                                                ◐ medium · /effort
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)

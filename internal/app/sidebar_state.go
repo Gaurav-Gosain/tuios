@@ -50,6 +50,9 @@ type sidebarStateFile struct {
 	// AgentSeen holds the window IDs of finished panes already looked at, so a
 	// pane reviewed before a detach does not come back demanding attention.
 	AgentSeen map[string]bool `json:"agent_seen,omitempty"`
+	// AgentSeenSeq holds, by window ID, the finished-turn count a pane had when
+	// it was last looked at, for the same reason.
+	AgentSeenSeq map[string]uint64 `json:"agent_seen_seq,omitempty"`
 	// AgentsFilter and AgentsSort are the agents section's two header controls.
 	// Absent means the default ("all" and "priority"), so a file written before
 	// they existed needs no migration.
@@ -105,6 +108,9 @@ func (m *OS) loadSidebarState() {
 	if len(st.AgentSeen) > 0 {
 		m.SidebarAgentSeen = st.AgentSeen
 	}
+	if len(st.AgentSeenSeq) > 0 {
+		m.SidebarAgentSeenSeq = st.AgentSeenSeq
+	}
 	m.SidebarAgentFilter, m.SidebarAgentSort = st.AgentsFilter, st.AgentsSort
 	m.SidebarCollapsed = st.Collapsed
 	if st.SectionSplit >= sidebarSplitMin && st.SectionSplit <= sidebarSplitMax {
@@ -152,6 +158,7 @@ func (m *OS) saveSidebarState() {
 		Accents:          slots,
 		AccentColors:     colors,
 		AgentSeen:        m.SidebarAgentSeen,
+		AgentSeenSeq:     m.SidebarAgentSeenSeq,
 		AgentsFilter:     m.SidebarAgentFilter,
 		AgentsSort:       m.SidebarAgentSort,
 		Collapsed:        m.SidebarCollapsed,
@@ -209,7 +216,7 @@ func (m *OS) ownsSidebarState() bool {
 }
 
 func (m *OS) pruneWindowKeyedState() {
-	if len(m.SidebarAccents) == 0 && len(m.SidebarAgentSeen) == 0 {
+	if len(m.SidebarAccents) == 0 && len(m.SidebarAgentSeen) == 0 && len(m.SidebarAgentSeenSeq) == 0 {
 		return
 	}
 	known, ok := m.knownWindowIDs()
@@ -226,6 +233,12 @@ func (m *OS) pruneWindowKeyedState() {
 	for id := range m.SidebarAgentSeen {
 		if !known[id] {
 			delete(m.SidebarAgentSeen, id)
+			changed = true
+		}
+	}
+	for id := range m.SidebarAgentSeenSeq {
+		if !known[id] {
+			delete(m.SidebarAgentSeenSeq, id)
 			changed = true
 		}
 	}

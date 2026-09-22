@@ -143,6 +143,9 @@ type agentClaim struct {
 	// goes back exactly as it was.
 	blocker bool
 	prior   agentPriorClaim
+	// event marks a claim read from a one-off event, a desktop notification,
+	// which goes stale when the pane writes again. See AgentReport.event.
+	event bool
 }
 
 // agentPriorClaim is what a visible-blocker override displaced, held so the

@@ -1090,6 +1090,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.AgentMessage = ws.AgentMessage
 	w.AgentHarness = ws.AgentHarness
 	w.AgentStateAt = ws.AgentStateAt
+	w.AgentCompletionSeq = ws.CompletionSeq
 	// Last, and it adopts AgentState itself: an alert raised from here reads the
 	// message and harness above, which have to be the ones that arrived with the
 	// state rather than the ones it replaced.
@@ -1198,6 +1199,7 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.AgentMessage = ws.AgentMessage
 	window.AgentHarness = ws.AgentHarness
 	window.AgentStateAt = ws.AgentStateAt
+	window.AgentCompletionSeq = ws.CompletionSeq
 	window.ForegroundCmd = ws.ForegroundCmd
 	// The shell's pid, as the daemon that spawned it knows it, and the only
 	// second source a daemon-backed pane has for the directory it reports over

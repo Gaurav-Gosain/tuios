@@ -1,0 +1,13 @@
+# harness: claude-code
+# want: idle
+# how: measured. Claude Code 2.1.280 with "/" typed, so the command picker is
+# open above the box.
+---
+  /workflow-authoring                     Reference for writing a Workflow tool script (script API
+                                          and gotchas, resume, quality patterns, worked examples)…
+  /terminal-browser                       A real browser running inside the terminal. It splits
+                                          the human's terminal pane automatically, so you can sho…
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ /
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)

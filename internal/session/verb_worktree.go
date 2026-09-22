@@ -50,14 +50,17 @@ const fanDefaultReadyTimeout = 10 * time.Minute
 const fanMaxCount = 16
 
 // fanReadyStates are the states in which the fan-out types its prompt. idle
-// and done are an agent at its prompt. unknown is what the silence timer
-// writes to an agent that reports nothing, which is most of them, once it has
-// stopped drawing. needs_input is not here: an agent asking to trust the
+// and done are an agent at its prompt. unknown is not here: it is what the
+// silence timer writes when nothing on the screen said what the agent is
+// doing, and a quiet agent that has not proved it is at its prompt may be
+// mid-startup or mid-call. The harnesses with idle rules (claude-code, codex,
+// gemini-cli, opencode) reach idle from their prompt box; for any other the
+// prompt is left unsent when the wait ends, and the record says to send it
+// with send-text. needs_input is not here either: an agent asking to trust the
 // folder must be answered by the person, and the prompt is typed after.
 var fanReadyStates = map[string]bool{
-	AgentStateIdle.Name():    true,
-	AgentStateDone.Name():    true,
-	AgentStateUnknown.Name(): true,
+	AgentStateIdle.Name(): true,
+	AgentStateDone.Name(): true,
 }
 
 // worktreeTarget is what every worktree verb needs from a session: the

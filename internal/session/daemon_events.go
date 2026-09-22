@@ -41,9 +41,12 @@ const (
 	// the recipient's window id, or empty for a session-wide notice. It carries
 	// nothing else on purpose: a subscriber reads the message back from the ring
 	// rather than trusting a payload that went stale the moment it was queued.
-	EventAgentMessage   = "agent-message"
-	EventOutput         = "output"          // a window produced output (activity)
-	EventBell           = "bell"            // a window rang the terminal bell
+	EventAgentMessage = "agent-message"
+	EventOutput       = "output" // a window produced output (activity)
+	EventBell         = "bell"   // a window rang the terminal bell
+	// EventNotification is a window sending a desktop notification with OSC 9,
+	// OSC 777 or OSC 99. Title and Body carry its text.
+	EventNotification   = "notification"
 	EventModeChanged    = "mode-changed"    // a terminal mode toggled (e.g. alt-screen)
 	EventSessionCreated = "session-created" // a session was created
 	EventSessionClosed  = "session-closed"  // a session was terminated
@@ -87,6 +90,9 @@ type streamEvent struct {
 	Window  string `json:"window,omitempty"`
 	PTYID   string `json:"pty_id,omitempty"`
 	Title   string `json:"title,omitempty"`
+	// Body is a notification event's text. Title carries its title, which
+	// OSC 9 never sets.
+	Body    string `json:"body,omitempty"`
 	Bytes   int    `json:"bytes,omitempty"`
 	Mode    string `json:"mode,omitempty"`
 	Enabled bool   `json:"enabled,omitempty"`
@@ -116,6 +122,7 @@ type SessionEvent struct {
 	Window    string
 	PTYID     string
 	Title     string
+	Body      string
 	Bytes     int
 	Mode      string
 	Enabled   bool

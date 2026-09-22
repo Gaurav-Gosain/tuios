@@ -683,7 +683,11 @@ tuios set-agent-state none                  # clear it
 
 The states are `none`, `working`, `needs_input`, `idle`, `done`, `errored` and
 `unknown`. `unknown` is what the daemon writes to a pane it has lost track of:
-an agent is there and nothing says what it is doing. Read `needs_you` from
+an agent is there and nothing says what it is doing. It is not ready:
+`ask-agent` and `fan` do not type into an `unknown` pane, and `list-agents`
+reports `ready: false` for it. `list-agents` also reports `completion_seq`, the
+turns a pane has finished, and `finished_unread`, true while a pane is at rest
+after a turn nobody has focused it since. Read `needs_you` from
 `get-agent-state` or `list-agents` when the question is "does a person have to
 act", and `message` for what the agent waits for. With
 no `-w` the report lands on the focused window, which is wrong when you are not
@@ -707,6 +711,12 @@ that can run a command on its lifecycle events.
 A harness that emits OSC 9;4 progress reports needs no wiring at all: tuios
 reads them from the pane. Setting a bar maps to `working`, clearing it to
 `idle`, the error state to `errored`, and the warning state to `needs_input`.
+
+A desktop notification (OSC 9, OSC 777 or OSC 99) from a recognised harness is
+read the same way, through the harness's notification rules: Claude Code asking
+for permission and Codex requesting approval become `needs_input`, and Codex's
+end-of-turn notification becomes `done`. Every notification is also published
+on `subscribe` as a `notification` event with `title` and `body`.
 
 Without either, tuios recognises 22 agent CLIs by their foreground process,
 claude-code and codex and gemini-cli and cursor-agent among them, and marks the
@@ -831,8 +841,9 @@ A pane on `needs_input` is waiting on a prompt, and the STATE column says which
 kind: `approval` for a yes or no on something the agent proposed, `question`
 for one that wants an answer in words. With `--json` that is `blocked_by`,
 empty when nothing said which. `ready` in the JSON is whether `ask-agent` would
-type at the pane now, and it is false for `needs_input`: text typed at a
-prompt answers it.
+type at the pane now: true for `idle`, `done`, `errored` and `none`. It is
+false for `needs_input`, since text typed at a prompt answers it, and for
+`unknown`, since nothing says the agent is at its prompt.
 
 ID and NAME are exactly what `-w` takes, so a row is addressable without a second
 lookup. `--all` lists every window including the panes nothing has identified as
@@ -1101,8 +1112,9 @@ then does three things in order:
    free text.
 1. **Waits until the target is not mid-turn.** Typing at a working agent
    interleaves your text with whatever it is doing. If the target is still
-   `working` after `--ready-timeout`, the call fails with `not_ready` and sends
-   nothing.
+   `working`, or `unknown`, after `--ready-timeout`, the call fails with
+   `not_ready` and sends nothing. `unknown` means nothing on its screen said it
+   is at its prompt; look at it with `capture-pane` and pass `--force` if it is.
 2. **Types the question and submits it.** The question goes in as one paste,
    wrapped in bracketed paste when the target has that on, as every agent TUI
    does. About 300 ms later, or sooner once the pane has drawn the paste and
@@ -1296,9 +1308,11 @@ Watch them with 'tuios worktree ls --group fan/add-retry-backoff-http'. Keep one
 
 The branches are a stem and then `stem-2`, `stem-3`. The stem is `fan/` and
 the first words of the prompt, or `--name`. The prompt is not typed the moment
-the agent starts. The daemon waits for the agent to be at its prompt (`idle`,
-`done`, or `unknown` for an agent that reports nothing and has gone quiet) and
-types it then, so it is never interleaved with a start-up screen. An agent
+the agent starts. The daemon waits for the agent to be at its prompt (`idle`
+or `done`) and types it then, so it is never interleaved with a start-up
+screen. Claude Code, Codex, Gemini CLI and opencode reach `idle` from their
+prompt box. Another agent that only ever reads `unknown` is not typed at, its
+prompt ends `not_sent`, and you send it with `send-text`. An agent
 asking to trust the folder is `needs_input`, and the prompt waits for the
 person to answer. `list-worktrees` says `prompt_status` per session: `pending`,
 `sent`, or `not_sent` with a note. `--wait` makes the command block until

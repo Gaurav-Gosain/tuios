@@ -352,6 +352,9 @@ func (m *OS) sidebarSignature() uint64 {
 		mixS(w.ID)
 		mixS(m.railTitleShown(w))
 		mixS(w.AgentState)
+		// A finished turn changes how the row is drawn with no state change of
+		// its own once the user has looked, so the count is folded in too.
+		mixU(w.AgentCompletionSeq)
 		// The agents section prints which agent a row is running and the note it
 		// reported, so a pane that swaps harness or says something new redraws
 		// even when its state and title hold still.
@@ -386,6 +389,17 @@ func (m *OS) sidebarSignature() uint64 {
 		seenFold ^= e
 	}
 	mixU(seenFold)
+	// And the finished-turn counts looked at, on the same terms.
+	var seqFold uint64
+	for id, seq := range m.SidebarAgentSeenSeq {
+		e := uint64(1469598103934665603) ^ seq
+		for i := range len(id) {
+			e ^= uint64(id[i])
+			e *= prime
+		}
+		seqFold ^= e
+	}
+	mixU(seqFold)
 
 	return h
 }

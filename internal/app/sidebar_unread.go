@@ -12,6 +12,13 @@ import (
 // sets it, and any state change out of done drops it, so the next time that
 // pane finishes it is unread again. There is no daemon protocol for it because
 // "has this human looked at it" is per client, not per session.
+//
+// done only comes from an explicit report, so the daemon also counts finished
+// turns: every working-to-rest transition bumps a pane's CompletionSeq (see
+// session/agent_turns.go). This client remembers the count each pane had when
+// its user last focused it, and a pane at rest (idle or unknown) whose count
+// has moved past that is drawn exactly as an unread done pane is. Looking at it
+// records the new count, and the pane goes back to its own state on the rail.
 
 // agentSeen reports whether a finished pane has already been looked at.
 func (m *OS) agentSeen(windowID string) bool {
@@ -78,6 +85,10 @@ func (m *OS) noteAgentState(w *terminal.Window, to string) {
 	case focused:
 		m.markAgentSeen(w.ID)
 	}
+	// A turn that finished under the user's own eyes has been seen.
+	if focused {
+		m.markAgentSeenSeq(w.ID, w.AgentCompletionSeq)
+	}
 
 	m.considerAgentAlert(w, from, to)
 }
@@ -89,7 +100,44 @@ func (m *OS) markFocusedAgentSeen(i int) {
 	if i < 0 || i >= len(m.Windows) {
 		return
 	}
-	if w := m.Windows[i]; w != nil && w.AgentState == "done" {
+	w := m.Windows[i]
+	if w == nil {
+		return
+	}
+	if w.AgentState == "done" {
 		m.markAgentSeen(w.ID)
 	}
+	m.markAgentSeenSeq(w.ID, w.AgentCompletionSeq)
+}
+
+// markAgentSeenSeq records that a pane was looked at with seq turns finished.
+// Guarded by the current value, like markAgentSeen, so refocusing costs
+// nothing.
+func (m *OS) markAgentSeenSeq(windowID string, seq uint64) {
+	if windowID == "" || seq == 0 || m.SidebarAgentSeenSeq[windowID] >= seq {
+		return
+	}
+	if m.SidebarAgentSeenSeq == nil {
+		m.SidebarAgentSeenSeq = make(map[string]uint64, 1)
+	}
+	m.SidebarAgentSeenSeq[windowID] = seq
+	m.saveSidebarState()
+}
+
+// agentFinishedUnread reports whether a pane at rest finished a turn this
+// client's user has not looked at.
+func (m *OS) agentFinishedUnread(windowID, state string, seq uint64) bool {
+	if seq == 0 || (state != "idle" && state != "unknown") {
+		return false
+	}
+	return seq > m.SidebarAgentSeenSeq[windowID]
+}
+
+// railAgentState is the state and unread bit the rail draws for a pane: an
+// unread finished turn reads as an unread done, and anything else as itself.
+func (m *OS) railAgentState(windowID, state string, seq uint64) (string, bool) {
+	if m.agentFinishedUnread(windowID, state, seq) {
+		return "done", false
+	}
+	return state, m.agentSeen(windowID)
 }

@@ -20,20 +20,18 @@ func (r *Registry) Classify(id string, tail []string) (state string, rule int, o
 		return "", -1, false
 	}
 
-	// Joined once rather than per predicate: a rule carries several strings and
-	// every one of them would otherwise walk the slice again. The folded copy is
-	// likewise made once per scan, not per rule, and only when the manifest asks.
-	hay := strings.Join(tail, "\n")
-	folded := hay
-	if m.Screen.FoldCase {
-		folded = strings.ToLower(hay)
-	}
+	// Joined once per region rather than per predicate: a rule carries several
+	// strings and every one of them would otherwise walk the slice again. The
+	// folded copy is likewise made once per scan, not per rule, and only when
+	// the manifest asks.
+	text := newRegionText(tail, m.Screen.FoldCase)
 
 	best, bestIdx := "", -1
 	bestPri := 0
 	for i := range m.Screen.Rule {
 		rl := &m.Screen.Rule[i]
-		if !checkRule(rl, hay, folded, nil, strings.Contains) {
+		hay, folded, ok := text.get(rl.Region)
+		if !ok || !checkRule(rl, hay, folded, nil, strings.Contains) {
 			continue
 		}
 		if bestIdx == -1 || rl.Priority > bestPri {
@@ -143,6 +141,12 @@ type RuleReport struct {
 	// Empty marks a rule that names no strings at all, which would otherwise
 	// match every pane the harness runs in and is refused for that reason.
 	Empty bool `json:"empty,omitempty"`
+	// Region is the part of the screen the rule reads, empty for the whole
+	// tail.
+	Region string `json:"region,omitempty"`
+	// NoRegion marks a rule whose region is not on the screen at all, such as
+	// a prompt_box rule on a screen with no input box.
+	NoRegion bool `json:"no_region,omitempty"`
 }
 
 // Explain classifies tail and reports what every rule made of it.
@@ -157,17 +161,18 @@ func (r *Registry) Explain(id string, tail []string) (state string, rule int, re
 	if m == nil {
 		return "", -1, nil
 	}
-	hay := strings.Join(tail, "\n")
-	folded := hay
-	if m.Screen.FoldCase {
-		folded = strings.ToLower(hay)
-	}
+	text := newRegionText(tail, m.Screen.FoldCase)
 	reports = make([]RuleReport, 0, len(m.Screen.Rule))
 	best, bestIdx, bestPri := "", -1, 0
 	for i := range m.Screen.Rule {
 		rl := &m.Screen.Rule[i]
-		rep := RuleReport{Index: i, State: rl.State, Priority: rl.Priority}
-		rep.Matched = checkRule(rl, hay, folded, &rep, strings.Contains)
+		rep := RuleReport{Index: i, State: rl.State, Priority: rl.Priority, Region: rl.Region}
+		hay, folded, ok := text.get(rl.Region)
+		if ok {
+			rep.Matched = checkRule(rl, hay, folded, &rep, strings.Contains)
+		} else {
+			rep.NoRegion = true
+		}
 		reports = append(reports, rep)
 		if !rep.Matched || !m.Screen.Enabled || len(tail) == 0 {
 			continue

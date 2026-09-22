@@ -1,0 +1,11 @@
+# harness: claude-code
+# want: none
+# how: derived. A prompt character in the transcript with no input box under
+# it, as when a full-screen view has taken the bottom of the pane. There is no
+# box to prove rest, so nothing may say idle.
+---
+❯ fix the flaky test in agent_state_test.go
+
+⏺ I'll look at the test first.
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  Showing detailed transcript · ctrl+o to toggle

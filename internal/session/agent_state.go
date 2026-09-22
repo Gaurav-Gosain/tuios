@@ -124,6 +124,14 @@ type AgentReport struct {
 	// only blockerOverridesClaim reads it: it is how a claim is shown to be
 	// describing a screen the pane has since painted over.
 	paneWroteAt int64
+	// event marks a report read from a one-off event rather than a standing
+	// fact: a desktop notification says what was true when it was sent and is
+	// never repeated. Its claim is stale as soon as the pane writes again, and
+	// from then on a look at the title or screen may replace it. Without that
+	// a notification asking for approval held the pane on needs_input after
+	// the approval was given, against every tier that could see the agent
+	// working again. Only the daemon sets it.
+	event bool
 }
 
 // SetDaemonWindowAgentState records an explicit report on the window matching
@@ -166,14 +174,14 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 		override := false
 		// held, not the zero claim's rank: a window nobody has claimed is open to
 		// any source, including the weakest.
-		if held && r.Source.rank() < claim.source.rank() {
+		if held && r.Source.rank() < claim.source.rank() && !eventClaimStale(claim, w, r) {
 			if !blockerOverridesClaim(w, r, time.Now()) {
 				effective = w.AgentState
 				return errAgentClaimHeld
 			}
 			override = true
 		}
-		next := agentClaim{source: r.Source, harness: harnessAfterReport(w, r), auto: claim.auto, misses: claim.misses}
+		next := agentClaim{source: r.Source, harness: harnessAfterReport(w, r), auto: claim.auto, misses: claim.misses, event: r.event}
 		next.identity = identityAfterReport(claim, r, next.harness)
 		switch {
 		case override:
@@ -337,7 +345,23 @@ func blockerOverridesClaim(w *WindowState, r AgentReport, now time.Time) bool {
 	if r.paneWroteAt <= w.AgentStateAt {
 		return false
 	}
+	// A claim that says the agent is at rest is not a source mid-way through
+	// describing the new screen, so it gets no grace. It is what a rest glyph
+	// in the title or a cleared progress bar leaves behind, and waiting two
+	// seconds on it meant the one look that sees the prompt, the settle look,
+	// was always too early and nothing else looked again.
+	if w.AgentState == AgentStateIdle || w.AgentState == AgentStateUnknown {
+		return true
+	}
 	return now.UnixNano()-w.AgentStateAt >= int64(agentBlockerOverrideGrace)
+}
+
+// eventClaimStale reports whether a claim read from a one-off event may be
+// replaced by r: the pane has written since the claim was stamped, and r is a
+// look at the pane (the title or the screen) rather than a guess from the
+// detector or the silence timer. See AgentReport.event.
+func eventClaimStale(claim agentClaim, w *WindowState, r AgentReport) bool {
+	return claim.event && r.paneWroteAt > w.AgentStateAt && r.Source.rank() >= AgentSourceScreen.rank()
 }
 
 // releaseAgentBlockerOverride puts back the claim a visible blocker displaced,
@@ -495,6 +519,12 @@ func (s *Session) applyStallHeuristic(now time.Time, stall time.Duration, lastOu
 			if w.AgentState != AgentStateWorking || !stalledAt(w.AgentStateAt, w.PTYID, cutoff, lastOutput) {
 				continue
 			}
+			// The turn ended when the pane went quiet, not now.
+			workEnd := w.AgentStateAt
+			if w.PTYID != "" {
+				workEnd = max(workEnd, lastOutput(w.PTYID))
+			}
+			s.noteWorkEndLocked(w.ID, workEnd)
 			w.AgentState = quiet
 			w.AgentStateAt = now.UnixNano()
 			claim := s.agentClaims[w.ID]

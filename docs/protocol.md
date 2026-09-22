@@ -153,16 +153,28 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
-**An agent on `needs_input` is not ready to be asked.** An agent on
-`needs_input` is most often sitting on a permission menu, and text typed there
-is read as the answer: the question approved or denied whatever the agent had
-asked for.
+**An agent on `needs_input` or `unknown` is not ready to be asked.** The
+states that count as ready are now `idle`, `done`, `errored` and `none`. They
+used to include `needs_input` and `unknown` as well. `fan` types its first
+prompt only on `idle` or `done`, and used to accept `unknown` too.
 
-- `list-agents` returns `ready: false` for a pane on `needs_input`. It used to
-  return `true`. `ready` still means what it always meant, that `ask-agent`
-  would type at the pane without waiting, and it is that answer that changed.
-  A script that polls `ready` before asking now waits for the prompt to be
-  answered.
+An agent on `needs_input` is most often sitting on a permission menu, and text
+typed there is read as the answer: the question approved or denied whatever
+the agent had asked for. `unknown` is what the silence timer writes when a pane
+went quiet and nothing on its screen said the agent is at its prompt, and an
+agent in the middle of a long tool call looks the same.
+
+- `list-agents` returns `ready: false` for a pane on `needs_input` or
+  `unknown`. It used to return `true`. `ready` still means what it always
+  meant, that `ask-agent` would type at the pane without waiting, and it is
+  that answer that changed. A script that polls `ready` before asking now waits
+  for the prompt to be answered, or for the agent to reach its prompt.
+- `ask-agent` waits on a pane on `unknown` like one that is `working`, and
+  fails with `not_ready` when `ready_timeout` runs out, with a message that
+  says the state was unknown. `force` sends anyway.
+- `fan` does not type into an agent on `unknown`. Claude Code, Codex, Gemini
+  CLI and opencode reach `idle` from their prompt box; for another agent the
+  prompt is left `not_sent` when the wait ends.
 - `ask-agent` against a pane on `needs_input` fails with the new code
   `agent_blocked` and writes nothing. It used to type the question. It also
   stops waiting with `agent_blocked` when a pane it is waiting on reaches
@@ -854,11 +866,13 @@ Response:
 
 Fan one prompt out across several agents. Creates `count` worktrees and
 sessions, starts the agent in each, and types the prompt into each agent once
-it is ready to read: `idle`, `done`, or `unknown` for an agent that reports
-nothing and has gone quiet. An agent in `needs_input` is left for the person
-to answer, and the prompt is typed after. The prompt goes in as one paste and
-is submitted with a carriage return (see Changes to existing verbs). The verb
-returns as soon as the
+it is ready to read: `idle` or `done`. An agent in `needs_input` is left for
+the person to answer, and the prompt is typed after. `unknown` is not ready
+(see Changes to existing verbs). Claude Code, Codex, Gemini CLI and opencode
+reach `idle` from their prompt box; for another agent the prompt is left
+`not_sent` when the wait ends, and `prompt_note` says to send it with
+`send-text`. The prompt goes in as one paste and is submitted with a carriage
+return (see Changes to existing verbs). The verb returns as soon as the
 sessions exist. `list-worktrees` reports `prompt_status` per session:
 `pending`, `sent`, or `not_sent` with a `prompt_note`.
 
@@ -954,6 +968,7 @@ Event types:
 | `agent-message` | A message was left in the session's ring. `window` is the recipient, or empty for a session-wide notice. Read the message itself with `read-agent-messages`. | `session`, `window` |
 | `output` | A window produced output (activity signal only; the raw bytes still flow over the binary stream). | `session`, `window`, `pty_id`, `bytes` |
 | `bell` | A window rang the terminal bell. | `session`, `window`, `pty_id` |
+| `notification` | A window sent a desktop notification with OSC 9, OSC 777 or OSC 99. Each text field is capped at 512 bytes. For a pane attributed to a harness the notification may also move its agent state; see [AGENT_STATE.md](AGENT_STATE.md#notification-rules). | `session`, `window`, `pty_id`, `title`, `body` |
 | `mode-changed` | A terminal mode toggled (for example alt-screen). | `session`, `window`, `mode`, `enabled` |
 | `session-created` | A session was created. | `session` |
 | `session-closed` | A session was terminated. | `session` |
@@ -974,7 +989,7 @@ it, so:
 - Lifecycle events fire for mutations a **human drives from the TUI**, not just
   for ones a control-plane verb requested. Creating a window with the keyboard
   raises `window-created` exactly as `new-window` does.
-- The PTY-driven events (`output`, `bell`, `mode-changed`, `window-exit`) hang
+- The PTY-driven events (`output`, `bell`, `notification`, `mode-changed`, `window-exit`) hang
   off the PTY rather than off window state, so they have always fired on both
   routes and are unaffected.
 

@@ -8,5 +8,40 @@ comm      = ["opencode"]
 argv0     = ["opencode"]
 argv_path = ["opencode-ai", "/opencode/"]
 
+# After herdr's opencode manifest, plus an idle rule on the input box. opencode
+# draws its input with a heavy bar on the left and closes it with a half-block
+# edge, with the key hints under it. Measured on opencode 1.18.30:
+#
+#   ┃  Ask anything… "Fix a TODO in the codebase"
+#   ┃
+#   ┃  Build · Muse Spark 1.3 Free OpenCode Zen
+#   ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+#                                  tab agents  ctrl+p commands
 [screen]
-enabled = false
+enabled = true
+lines   = 8
+
+# A permission request.
+[[screen.rule]]
+state    = "needs_input"
+priority = 30
+kind     = "approval"
+message  = "Waits for permission."
+all      = ["△ Permission required"]
+
+# A turn in progress: the footer offers to interrupt it.
+[[screen.rule]]
+state    = "working"
+priority = 10
+message  = "Works on a turn."
+any      = ["esc interrupt", "esc to interrupt", "ctrl+c to interrupt"]
+
+# The input box at rest: its bottom edge and the key hints under it, with no
+# interrupt offered.
+[[screen.rule]]
+state    = "idle"
+priority = 5
+message  = "Waits at its prompt."
+regex    = ['^\s*╹▀{8,}\s*$']
+any      = ["ctrl+p commands", "tab agents"]
+not      = ["interrupt"]

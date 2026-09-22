@@ -124,9 +124,10 @@ func TestHerdrManifestsSpotTheirBlockers(t *testing.T) {
 	}
 }
 
-// The working and idle chrome herdr also has rules for does not ship here, so a
-// busy or resting pane must classify as nothing rather than as a blocker. This
-// is the flip side of shipping only needs_input: silence is the contract.
+// The working and idle chrome herdr also has rules for does not ship for these
+// harnesses (only claude-code, codex, gemini-cli and opencode carry working and
+// idle rules; see screen_fixtures_test.go), so a busy or resting pane must
+// classify as nothing rather than as a blocker. Silence is the contract.
 func TestHerdrManifestsStayQuietOffTheirBlockers(t *testing.T) {
 	r := testRegistry(t)
 	for _, tc := range []struct {

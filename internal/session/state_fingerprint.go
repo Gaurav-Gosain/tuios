@@ -104,6 +104,7 @@ func StateFingerprint(s *SessionState) uint64 {
 		str(w.AgentMessage)
 		num(int(w.AgentStateAt))
 		str(w.AgentHarness)
+		num(int(w.CompletionSeq))
 		flag(w.Popup)
 		str(w.PopupWidth)
 		str(w.PopupHeight)

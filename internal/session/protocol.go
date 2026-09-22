@@ -272,6 +272,11 @@ type WindowSummary struct {
 	// Additive and omitted when empty, which is what an older peer sends and
 	// what every client reads as "the agent did not say".
 	AgentMessage string `json:"agent_message,omitempty"`
+	// CompletionSeq is the pane's count of finished turns (see
+	// WindowState.CompletionSeq), so a rail can mark a finished turn in a
+	// session it is not attached to. Additive and omitted when zero, which is
+	// what an older peer sends and what reads as no turn counted.
+	CompletionSeq uint64 `json:"completion_seq,omitempty"`
 	// ForegroundCmd is what the pane is running, for a row that would otherwise
 	// repeat the title its siblings carry. Empty for a shell and for a pane the
 	// user has named, whose name is already the answer. Additive and omitted

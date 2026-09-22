@@ -41,11 +41,17 @@ var agentRestStates = map[string]bool{
 	AgentStateDone.Name():    true,
 	AgentStateErrored.Name(): true,
 	AgentStateNone.Name():    true,
-	// unknown is in the set for the same reason idle is: it is what the silence
-	// timer writes to a pane that has said nothing for the stall window, which
-	// was idle before unknown existed, and an ask must not wait forever on a
-	// pane that is silent because it is at rest.
-	AgentStateUnknown.Name(): true,
+	// unknown is not in the set. It is what the silence timer writes to a pane
+	// that said nothing for the stall window when the screen showed nothing a
+	// rule knows, and silence is also what a long tool call looks like, so
+	// typing at such a pane can land in the middle of a turn. A harness with
+	// rules that read its prompt box reaches idle instead, and a caller that
+	// knows better passes force. It stays on the rail as a display state.
+	//
+	// fanReadyStates in verb_worktree.go is a subset of this set: it also
+	// leaves out errored and none, because fan types a first prompt into an
+	// agent it just started, and neither of those says the agent reached its
+	// prompt. Neither set holds needs_input or unknown.
 }
 
 // askDefaults bound the three waits ask-agent performs.
@@ -127,6 +133,12 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 			"blocked_by":     agentBlockedBy(w),
 			"needs_you":      w.AgentState.NeedsYou(),
 			"confidence":     claim.identity.confidence(),
+			// completion_seq counts the pane's finished turns, and
+			// finished_unread says the latest one has not been in front of
+			// anybody: no attached client has pushed state with the pane
+			// focused since. See agent_turns.go.
+			"completion_seq":  w.CompletionSeq,
+			"finished_unread": sess.finishedUnread(&w),
 		})
 	}
 
@@ -775,10 +787,16 @@ func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Dura
 	for {
 		select {
 		case <-deadline:
-			return "", hintedVerbError(ErrVerbNotReady, "the target agent was still working when the ready timeout elapsed", &VerbHint{
+			msg := "the target agent was still working when the ready timeout elapsed"
+			detail := "Typing at an agent mid-turn interleaves with what it is doing. Wait for it to come to rest, raise ready_timeout, leave a message with send-agent-message instead, or pass force to send anyway."
+			if name, _ := check(); name == AgentStateUnknown.Name() {
+				msg = "the target agent's state was unknown when the ready timeout elapsed"
+				detail = "unknown means the pane went quiet and nothing on its screen said whether the agent is at its prompt or in the middle of a long call, so it is not treated as ready. Look at the pane with capture-pane, pass force to send anyway, or leave a message with send-agent-message."
+			}
+			return "", hintedVerbError(ErrVerbNotReady, msg, &VerbHint{
 				Param:   "ready_timeout",
 				Command: "tuios wait-for agent-state -w " + shortWindowID(windowID) + " --until idle,needs_input,done",
-				Detail:  "Typing at an agent mid-turn interleaves with what it is doing. Wait for it to come to rest, raise ready_timeout, leave a message with send-agent-message instead, or pass force to send anyway.",
+				Detail:  detail,
 			})
 		case <-d.ctx.Done():
 			return "", newVerbError(ErrVerbInternal, "daemon is shutting down")

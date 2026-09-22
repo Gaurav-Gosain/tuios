@@ -144,6 +144,13 @@ type WindowState struct {
 	// the ranked source that won stays daemon-side, where get-agent-state reads
 	// it from the claim.
 	AgentHarness string `json:"agent_harness,omitempty"`
+	// CompletionSeq counts the turns this pane has finished: it goes up by one
+	// each time the agent goes from working to idle, done or unknown after
+	// working for a few seconds (see agent_turns.go). A client compares it with
+	// the value it saw when its user last focused the pane to tell a finished
+	// turn nobody has looked at. Daemon-owned like AgentState. Zero, which is
+	// what an older daemon sends, means no turn has been counted.
+	CompletionSeq uint64 `json:"completion_seq,omitempty"`
 	// Popup marks a transient floating pane that runs one command and closes
 	// when the command exits. It is session state, not a client's own, for the
 	// two reasons IsFloating and Zoomed are: a peer that does not know the pane
@@ -692,6 +699,10 @@ type PTY struct {
 	// session state would re-enter that lock, so it only stores here and the PTY
 	// read goroutine applies it on the output event that carried the sequence.
 	agentProgress atomic.Int64
+	// agentNotify parks the most recent desktop notification (OSC 9, 777 or
+	// 99) for the read goroutine, for the reason agentProgress does. See
+	// agent_notify.go.
+	agentNotify atomic.Pointer[paneNotification]
 
 	// title is the last title this PTY's application set. The daemon reads every
 	// byte of every window, so this is the freshest title anyone holds: a client
@@ -863,6 +874,18 @@ type Session struct {
 	// went silent. Nil when nothing is waiting. Guarded by agentHoldMu.
 	agentHoldTimer *time.Timer
 	agentHoldMu    sync.Mutex
+
+	// idle holds idle readings from the title and screen tiers until they are
+	// confirmed (see agent_idle.go). It has its own lock.
+	idle idleGate
+
+	// agentTurns records, by window ID, when the window's current working
+	// phase began, so a return to rest can be counted as a finished turn (see
+	// agent_turns.go). completionSeen is the CompletionSeq each window had when
+	// an attached client last pushed state with it focused. Both are guarded by
+	// stateMu and neither is serialised.
+	agentTurns     map[string]agentTurn
+	completionSeen map[string]uint64
 
 	// Graphics capabilities of the attached client's host terminal. The daemon
 	// records them on attach so shells spawned afterwards can advertise a
@@ -1241,6 +1264,14 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		// output event carrying these same bytes.
 		Progress: func(state vt.ProgressState, _ int) {
 			pty.storeAgentProgress(state)
+		},
+		// A desktop notification: published at once, like the bell, and parked
+		// for the read goroutine to match against the harness's rules, like the
+		// progress report.
+		Notify: func(title, body string) {
+			title, body = capNotifyText(title), capNotifyText(body)
+			pty.storeAgentNotify(title, body)
+			pty.emit(SessionEvent{Type: EventNotification, Title: title, Body: body})
 		},
 	})
 
@@ -1705,6 +1736,9 @@ func (s *Session) UpdateState(state *SessionState) bool {
 
 	before := snapshotLifecycle(prev)
 	s.state = state
+	// A client pushing state with a pane focused has that pane in front of
+	// its user, so whatever it finished has been seen.
+	s.markCompletionSeenLocked(state.FocusedWindowID)
 	s.TouchActive()
 	s.stateDirty.Store(true)
 	s.emitLifecycleLocked(before)
@@ -1741,6 +1775,7 @@ func (s *Session) mutateStateLocked(fn func(state *SessionState) error) (*Sessio
 	if err := fn(s.state); err != nil {
 		return nil, err
 	}
+	s.noteAgentTurnsLocked(before, time.Now().UnixNano())
 	// A daemon-side mutation is exactly what a client sync must not undo, so it
 	// is what advances the version. A client that pushes a snapshot built before
 	// this point is reconciled by UpdateState rather than winning by arriving
@@ -1781,6 +1816,7 @@ func (s *Session) Stop() {
 	// Before the panes go, so a hold cannot publish a state against a session
 	// that has already saved and stopped.
 	s.stopAgentHoldTimer()
+	s.idle.stop()
 
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
@@ -1933,6 +1969,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			AgentStateAt:  w.AgentStateAt,
 			AgentHarness:  w.AgentHarness,
 			AgentMessage:  w.AgentMessage,
+			CompletionSeq: w.CompletionSeq,
 			ForegroundCmd: fg,
 			Workspace:     w.Workspace,
 		})

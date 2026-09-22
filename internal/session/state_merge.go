@@ -167,8 +167,15 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// The field is daemon-owned like every other one in this block, and it was
 	// added without being put here.
 	hosts := make(map[string]string, len(canonical.Windows))
+	// The turn count is daemon-owned and only ever goes up. A client echoes the
+	// value it was last sent, which can be behind, and an older client sends
+	// none, so canonical wins whenever it is ahead.
+	completions := make(map[string]uint64, len(canonical.Windows))
 	for i := range canonical.Windows {
 		w := &canonical.Windows[i]
+		if w.CompletionSeq != 0 {
+			completions[w.ID] = w.CompletionSeq
+		}
 		if cwd := w.Cwd; cwd != "" {
 			cwds[w.ID] = cwd
 		}
@@ -201,6 +208,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		}
 		if w.Host == "" {
 			w.Host = hosts[w.ID]
+		}
+		if c := completions[w.ID]; c > w.CompletionSeq {
+			w.CompletionSeq = c
 		}
 		if p, ok := popups[w.ID]; ok {
 			w.Popup = true

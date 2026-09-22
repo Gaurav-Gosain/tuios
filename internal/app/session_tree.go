@@ -67,11 +67,12 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 		if w == nil {
 			continue
 		}
+		state, seen := m.railAgentState(w.ID, w.AgentState, w.AgentCompletionSeq)
 		windows = append(windows, sessiontree.WindowInput{
 			ID:         w.ID,
 			Title:      m.railTitleShown(w),
-			AgentState: w.AgentState,
-			DoneSeen:   m.agentSeen(w.ID),
+			AgentState: state,
+			DoneSeen:   seen,
 			StateAt:    w.AgentStateAt,
 			Harness:    w.AgentHarness,
 			Message:    w.AgentMessage,
@@ -111,13 +112,14 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 	summaries := client.SessionWindows(name)
 	windows := make([]sessiontree.WindowInput, 0, len(summaries))
 	for _, w := range summaries {
+		state, seen := m.railAgentState(w.ID, w.AgentState, w.CompletionSeq)
 		windows = append(windows, sessiontree.WindowInput{
 			ID: w.ID,
 			// The daemon folds a custom name into Title and withholds a command
 			// for a named pane, so passing no name here still lets one win.
 			Title:      railWindowLabel("", w.ForegroundCmd, w.Title),
-			AgentState: w.AgentState,
-			DoneSeen:   m.agentSeen(w.ID),
+			AgentState: state,
+			DoneSeen:   seen,
 			StateAt:    w.AgentStateAt,
 			Harness:    w.AgentHarness,
 			Message:    w.AgentMessage,

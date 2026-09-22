@@ -1,0 +1,15 @@
+# harness: codex
+# want: none
+# how: derived. The Codex command approval, whose choices sit behind the same
+# "›" the composer uses. Codex's blocked state comes from its title and its
+# notifications, so the screen must say nothing here, and above all not idle.
+---
+  Would you like to run the following command?
+
+  $ go test ./...
+
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for this command (a)
+  3. No, and tell Codex what to do differently (esc)
+
+  Press enter to confirm or esc to cancel

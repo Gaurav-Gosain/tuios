@@ -637,6 +637,7 @@ func (s *Session) applyAgentDetection(
 				// A window that went away must not leave a held state behind for
 				// the settle sweep to publish against nothing.
 				s.dropAgentHold(id)
+				s.idle.forget(id)
 			}
 		}
 		if changed == 0 && labels == 0 {

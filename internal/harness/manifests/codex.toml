@@ -9,18 +9,46 @@ argv0     = ["codex"]
 argv_path = ["@openai/codex"]
 exe_glob  = ["**/vendor/*/bin/codex", "**/codex"]
 
+# The screen carries working and idle, after herdr's codex manifest. Codex has
+# no stable blocking prompt to key on, so its blocked state comes from the title
+# and from notifications below, never from the screen.
 [screen]
-enabled = false
+enabled = true
+lines   = 8
+
+# A turn in progress: the status line above the composer carries an elapsed
+# timer and the interrupt hint.
+#
+#   • Working (12s • esc to interrupt)
+[[screen.rule]]
+state    = "working"
+priority = 10
+message  = "Works on a turn."
+regex    = ['\((?:[0-9]+[hm] )*[0-9]+s • [^)\n]*to interrupt\)']
+
+# The composer at rest: its "›" marker at column zero and the footer under it.
+# An approval menu numbers its choices behind the same marker, and a turn in
+# progress shows the interrupt hint, so either refuses the rule.
+#
+#   › Explain this codebase
+#
+#     ? for shortcuts                                100% context left
+[[screen.rule]]
+state     = "idle"
+priority  = 5
+message   = "Waits at its prompt."
+regex     = ['^›(?:\s|$)']
+any       = ["? for shortcuts", "context left"]
+not       = ["to interrupt"]
+not_regex = ['^›\s*[0-9]+\.']
 
 # Codex writes "Action Required" into the window title when it is waiting on a
-# person, which is the one thing a rail most needs to know and the one channel
-# this harness offers: its screen rules are off, because its TUI has no stable
-# prompt to key on.
+# person, and a braille spinner while a turn runs.
 #
-# Enabled here and nowhere else on purpose. A title proves that something set a
-# title, so a rule is only worth shipping when the phrase is unambiguous and
-# the agent writes it deliberately. A spinner glyph is neither: it proves
-# animation, and every TUI animates.
+# A title proves that something set a title, so a rule is only worth shipping
+# when the phrase is unambiguous and the agent writes it deliberately. There is
+# no idle rule here: an idle Codex title is just a name, and a title left behind
+# by the shell would read the same.
 [title]
 enabled   = true
 fold_case = true
@@ -31,3 +59,29 @@ priority = 10
 kind     = "approval"
 message  = "Codex says an action is required"
 any      = ["action required"]
+
+[[title.rule]]
+state    = "working"
+priority = 5
+message  = "Works on a turn."
+regex    = ['(?:^| )[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏](?: |$)']
+
+# Desktop notifications over OSC 9. Codex sends one when it wants an approval
+# and one when a turn ends, whose text is the start of its answer, so anything
+# that is not an approval request is the turn finishing.
+[notify]
+enabled   = true
+fold_case = true
+
+[[notify.rule]]
+state    = "needs_input"
+priority = 10
+kind     = "approval"
+message  = "Asks for approval."
+any      = ["approval requested", "wants to edit"]
+
+[[notify.rule]]
+state    = "done"
+priority = 0
+message  = "Finished its turn."
+regex    = ['\S']

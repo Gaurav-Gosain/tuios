@@ -1126,6 +1126,11 @@ type OS struct {
 	// looked at a pane is that client's business, not the daemon's, so it lives
 	// beside the accents rather than in session state.
 	SidebarAgentSeen map[string]bool
+	// SidebarAgentSeenSeq is, by window ID, the daemon's finished-turn count
+	// (CompletionSeq) the pane had when this client's user last focused it. A
+	// pane at rest whose count has moved past it finished a turn nobody here
+	// has looked at, and the rail draws it as finished and unread.
+	SidebarAgentSeenSeq map[string]uint64
 	// sidebarStateSocket is the daemon socket the persisted window-keyed maps
 	// were written against, and the guard on pruning them: window IDs mean
 	// nothing outside the daemon that issued them.

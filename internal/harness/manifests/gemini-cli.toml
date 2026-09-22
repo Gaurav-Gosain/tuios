@@ -8,5 +8,66 @@ comm      = ["gemini"]
 argv0     = ["gemini"]
 argv_path = ["@google/gemini-cli"]
 
+# After herdr's gemini manifest, plus an idle rule on the input box. Gemini CLI
+# draws its input in a rounded box:
+#
+#   ╭──────────────────────────────────────────────╮
+#   │ >   Type your message or @path/to/file       │
+#   ╰──────────────────────────────────────────────╯
+#
+# Not measured here: Gemini CLI is not installed on the machine these rules
+# were written on. A rule that does not match costs nothing.
 [screen]
-enabled = false
+enabled = true
+lines   = 8
+
+# A tool call waiting for approval.
+[[screen.rule]]
+state    = "needs_input"
+priority = 30
+kind     = "approval"
+message  = "Waits for approval of a tool call."
+any      = ["│ Apply this change", "│ Allow execution", "Waiting for user confirmation"]
+
+# A turn in progress: the spinner line above the box carries the cancel hint.
+#
+#   ⠏ Thinking... (esc to cancel, 3s)
+[[screen.rule]]
+state    = "working"
+priority = 10
+message  = "Works on a turn."
+all      = ["esc to cancel"]
+
+# The input box at rest, read inside the box: its ">" prompt, or "!" in shell
+# mode. An approval dialog in the box has neither at the start of a line.
+[[screen.rule]]
+state    = "idle"
+priority = 5
+message  = "Waits at its prompt."
+region   = "prompt_box"
+regex    = ['^\s*│\s*[>!]\s']
+
+# The window title. Gemini CLI writes its status there with a glyph in front:
+# "✋  Action Required", "✦  Working…" and "◇  Ready", each followed by the
+# folder. Documented in the Gemini CLI change that added it, not measured.
+[title]
+enabled = true
+
+[[title.rule]]
+state    = "needs_input"
+priority = 10
+kind     = "approval"
+message  = "Gemini CLI says an action is required"
+regex    = ['(?i)^\W*action required']
+
+[[title.rule]]
+state    = "working"
+priority = 5
+message  = "Works on a turn."
+regex    = ['(?i)^\W*working\b|^\s*✦']
+
+[[title.rule]]
+state    = "idle"
+priority = 1
+message  = "Waits at its prompt."
+regex    = ['(?i)^\W*ready\b']

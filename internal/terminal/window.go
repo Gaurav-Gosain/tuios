@@ -397,6 +397,10 @@ type Window struct {
 	// the daemon stamped it. The rail shows the elapsed time so a pane waiting
 	// on input reads differently from one that just started working.
 	AgentStateAt int64
+	// AgentCompletionSeq is the daemon's count of turns this pane has finished
+	// (session.WindowState.CompletionSeq). The rail compares it with the count
+	// the pane had when it was last focused.
+	AgentCompletionSeq uint64
 	// ForegroundCmd is the base name of what the pane is running, as the daemon
 	// detected it, or empty at a shell prompt. Session surfaces label a row with
 	// it, because a title is the same string for every pane in one directory.

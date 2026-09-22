@@ -215,14 +215,25 @@ func TestTheShippedCodexTitleRuleReadsItsPhrase(t *testing.T) {
 	}
 }
 
-// TestNoOtherBundledManifestReadsTitlesYet. The rule for shipping one is that
-// the phrase is unambiguous and the agent writes it deliberately, and a
-// spinner is neither. This is here so enabling a second one is a decision
-// somebody makes rather than something that happens.
-func TestNoOtherBundledManifestReadsTitlesYet(t *testing.T) {
+// TestOnlyReviewedManifestsReadTitles keeps the list of harnesses whose titles
+// are read a decision somebody makes rather than something that happens. Each
+// entry says why its title is evidence:
+//
+//   - codex writes "Action Required" there when it blocks, and a braille
+//     spinner while a turn runs.
+//   - claude-code writes a spinner while a turn runs and a ✳ at rest, and the
+//     rest glyph was measured on a live pane.
+//   - gemini-cli writes its status word after a glyph: Action Required,
+//     Working, Ready.
+//
+// A spinner proves animation, not work, which is why a title rule only moves a
+// pane some other tier already attributed to the harness, and why the silence
+// timer still demotes a pane that stops drawing.
+func TestOnlyReviewedManifestsReadTitles(t *testing.T) {
+	reviewed := map[string]bool{"codex": true, "claude-code": true, "gemini-cli": true}
 	r := testRegistry(t)
 	for _, id := range r.IDs() {
-		if id == "codex" {
+		if reviewed[id] {
 			continue
 		}
 		if m := r.Lookup(id); m != nil && m.Title.Enabled {

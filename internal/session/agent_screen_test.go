@@ -477,7 +477,8 @@ func TestExplainAgentScreenVerbShowsWhatTheClassifierSaw(t *testing.T) {
 			continue
 		}
 		refused++
-		if m["missing"] == nil && m["none_of"] == nil && m["blocked"] == nil && m["empty"] == nil {
+		if m["missing"] == nil && m["none_of"] == nil && m["blocked"] == nil && m["empty"] == nil &&
+			m["missing_regex"] == nil && m["blocked_regex"] == nil && m["no_region"] == nil {
 			t.Errorf("rule %v refused without saying why: %v", m["index"], m)
 		}
 	}
@@ -527,4 +528,49 @@ func TestStallTimerStillDemotesAPaneWithNothingOnItsScreen(t *testing.T) {
 	if got := agentStateOf(t, sess, winID); got != AgentStateUnknown {
 		t.Fatalf("state = %q, want unknown: the screen was read and said nothing", got)
 	}
+}
+
+// TestLooksCarryTheRuleKind checks that the kind a title, screen or notify rule
+// names reaches the window, which is what blocked_by reports. The title and
+// screen tiers hand their reading to lookAtPane as an agentVerdict, so the kind
+// has to ride on the verdict. The codex title rule is the case that tells a
+// carried kind from a guessed one: its message, "Codex says an action is
+// required", has none of the words that make a guess read approval.
+func TestLooksCarryTheRuleKind(t *testing.T) {
+	reg := bundledRegistry(t)
+
+	t.Run("title rule", func(t *testing.T) {
+		sess, winID, ptyID := agentPaneWithHarness(t, "codex", AgentStateWorking)
+		feedVT(t, sess.GetPTY(ptyID), "\x1b]0;Action Required\x07")
+		if !sess.scanTitleForAgent(ptyID, reg) {
+			t.Fatal("no title rule matched")
+		}
+		w := windowStateOf(t, sess, winID)
+		if w.AgentState != AgentStateNeedsInput || w.AgentKind != harness.PromptKindApproval {
+			t.Fatalf("state %q kind %q, want needs_input and approval", w.AgentState, w.AgentKind)
+		}
+	})
+
+	t.Run("screen rule", func(t *testing.T) {
+		sess, winID, ptyID := agentPaneWithHarness(t, "claude-code", AgentStateWorking)
+		paintPane(t, sess.GetPTY(ptyID), claudePermissionPrompt)
+		if !sess.scanScreenForAgent(ptyID, reg) {
+			t.Fatal("no screen rule matched")
+		}
+		w := windowStateOf(t, sess, winID)
+		if w.AgentState != AgentStateNeedsInput || w.AgentKind != harness.PromptKindApproval {
+			t.Fatalf("state %q kind %q, want needs_input and approval", w.AgentState, w.AgentKind)
+		}
+	})
+
+	t.Run("notify rule", func(t *testing.T) {
+		sess, winID, ptyID := agentPaneWithHarness(t, "codex", AgentStateWorking)
+		if !sess.applyAgentNotify(ptyID, paneNotification{body: "Approval requested: go test ./..."}, reg) {
+			t.Fatal("no notify rule matched")
+		}
+		w := windowStateOf(t, sess, winID)
+		if w.AgentState != AgentStateNeedsInput || w.AgentKind != harness.PromptKindApproval {
+			t.Fatalf("state %q kind %q, want needs_input and approval", w.AgentState, w.AgentKind)
+		}
+	})
 }

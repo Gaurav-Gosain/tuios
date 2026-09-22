@@ -1,0 +1,13 @@
+# harness: codex
+# want: idle
+# how: derived. The Codex composer at rest, in the shape herdr's codex
+# manifest reads: the "›" marker at column zero and the footer under it.
+---
+• Ran go test ./internal/harness/
+  └ ok  	github.com/Gaurav-Gosain/tuios/internal/harness	0.014s
+
+• All tests pass.
+
+› Explain this codebase
+
+  ? for shortcuts                                                   98% context left
