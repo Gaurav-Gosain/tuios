@@ -76,6 +76,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbCommandFailed, "The verb was routed to the attached client and came back failed."},
 	{ErrVerbTimeout, "A wait-for condition did not match before its timeout elapsed."},
 	{ErrVerbNotReady, "The target agent was mid-turn, so the call declined to type at it. Wait for it, leave a message instead, or force it."},
+	{ErrVerbAgentBlocked, "The target agent is on needs_input, waiting on an approval or a question, and text typed now would answer it. Nothing was typed. Read the prompt with capture-pane, then answer it yourself or ask the person. allow_blocked overrides it."},
 	{ErrVerbLoopRefused, "The call was refused because it would loop: a pane addressing itself, or an ask that closes a cycle with one in flight."},
 	{ErrVerbRateLimited, "The sender is over the cross-agent message rate cap."},
 	{ErrVerbNoKeyboard, "The target is the person's inbox, human, which has no pane to type into. Leave a message with send-agent-message -w human and wait for the reply on your own inbox."},

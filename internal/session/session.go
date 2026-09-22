@@ -128,6 +128,13 @@ type WindowState struct {
 	// AgentMessage is an optional short note the pane reported alongside its
 	// state, e.g. what it is waiting for. Daemon-owned, like AgentState.
 	AgentMessage string `json:"agent_message,omitempty"`
+	// AgentKind is what sort of block a needs_input state is: "approval" for a
+	// yes or no on something the agent proposed, "question" for one that wants
+	// an answer in words, empty when the source did not say. It is taken from
+	// the rule that matched, or guessed from the reported message, and is
+	// meaningless in any other state. Daemon-owned like AgentState, and empty in
+	// older state, which reads as "not said".
+	AgentKind string `json:"agent_kind,omitempty"`
 	// AgentStateAt is the unix-nano time AgentState was last set. It is stamped
 	// daemon-side and drives the output-stall heuristic (see applyStallHeuristic).
 	AgentStateAt int64 `json:"agent_state_at,omitempty"`

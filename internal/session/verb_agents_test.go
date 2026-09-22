@@ -299,8 +299,14 @@ func TestListAgentsFindsAnAgentPane(t *testing.T) {
 	if got["window_id"] != b || got["state"] != "needs_input" || got["harness_id"] != "claude-code" {
 		t.Errorf("agent row is wrong: %v", got)
 	}
-	if got["ready"] != true {
-		t.Error("an agent waiting for input did not read as ready to be asked")
+	// An agent on needs_input is not ready to be asked: text typed at it would
+	// answer its prompt. blocked_by says what the prompt is, guessed here from
+	// the reported message.
+	if got["ready"] != false {
+		t.Error("an agent waiting on a prompt read as ready to be asked")
+	}
+	if got["blocked_by"] != "approval" {
+		t.Errorf("blocked_by = %v, want approval for a message about approval", got["blocked_by"])
 	}
 
 	// Unread mail shows against the pane it is waiting for.
@@ -419,6 +425,153 @@ func TestAskWaitsForAWorkingAgent(t *testing.T) {
 	e := resp["error"].(map[string]any)
 	if !strings.Contains(e["message"].(string), "still working") {
 		t.Errorf("refusal did not say why: %v", e["message"])
+	}
+}
+
+// TestAskRefusesABlockedAgent covers the permission menu. An agent on
+// needs_input is waiting on a prompt, and text typed there is read as the
+// answer, so ask-agent refuses it with agent_blocked and writes nothing. force
+// does not change that; only allow_blocked does.
+func TestAskRefusesABlockedAgent(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess, a, b := twoWindowSession(t, d, "blocked")
+	c := dialVerb(t, sp)
+
+	if _, _, err := sess.ApplyAgentReport(b, AgentReport{
+		State: AgentStateNeedsInput, Message: "Do you want to run rm -rf build?", Kind: "approval",
+	}); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+	pty, err := d.resolvePTYForTarget(sess, b)
+	if err != nil {
+		t.Fatalf("resolvePTYForTarget: %v", err)
+	}
+	// A shell echoes what is typed at it, so a pane that was written to prints
+	// the marker. Wait for the prompt to be drawn first, so the comparison is
+	// between two settled screens.
+	waitForQuiet(t, pty, 300*time.Millisecond, 5*time.Second)
+	before := pty.CaptureContent(true, false)
+
+	for _, params := range []string{
+		`"text":"echo tuios_blocked_marker"`,
+		`"text":"echo tuios_blocked_marker","force":true`,
+	} {
+		resp := c.call(t, `{"id":1,"verb":"ask-agent","params":{"session":"blocked","window":"`+b+`","from":"`+a+`",`+params+`,"ready_timeout":250}}`)
+		if code := errCode(t, resp); code != ErrVerbAgentBlocked {
+			t.Fatalf("with %s: code = %q, want %q", params, code, ErrVerbAgentBlocked)
+		}
+		e := resp["error"].(map[string]any)
+		if !strings.Contains(e["message"].(string), "an approval") {
+			t.Errorf("refusal did not say what the agent waits on: %v", e["message"])
+		}
+		hint, _ := e["hint"].(map[string]any)
+		if hint == nil || hint["verb"] != "capture-pane" {
+			t.Errorf("refusal did not point at capture-pane: %v", e["hint"])
+		}
+	}
+
+	time.Sleep(300 * time.Millisecond)
+	if after := pty.CaptureContent(true, false); after != before || strings.Contains(after, "tuios_blocked_marker") {
+		t.Errorf("a refused ask wrote to the pane:\nbefore %q\nafter  %q", before, after)
+	}
+
+	// allow_blocked is the caller saying it read the prompt and it takes text.
+	res := result(t, c.call(t, `{"id":2,"verb":"ask-agent","params":{"session":"blocked","window":"`+b+`","from":"`+a+`","text":"echo tuios_blocked_marker","allow_blocked":true,"settle":700,"timeout":15000}}`))
+	if res["waited_for"] != "needs_input" {
+		t.Errorf("waited_for = %v, want needs_input", res["waited_for"])
+	}
+	if reply, _ := res["reply"].(string); !strings.Contains(reply, "tuios_blocked_marker") {
+		t.Errorf("allow_blocked did not type the question: %q", reply)
+	}
+}
+
+// waitForQuiet waits until the pane has printed nothing for quiet, so a test
+// compares screens after the shell has drawn its prompt.
+func waitForQuiet(t *testing.T, pty *PTY, quiet, limit time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(limit)
+	for time.Now().Before(deadline) {
+		if last := pty.LastOutput(); last != 0 && time.Since(time.Unix(0, last)) >= quiet {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("the pane did not go quiet within %v", limit)
+}
+
+// TestAskStopsWaitingWhenTheAgentBlocks covers an agent that goes from working
+// to a prompt while an ask waits on it. Waiting on does not clear a prompt, so
+// the wait ends with agent_blocked instead of running out the ready timeout.
+func TestAskStopsWaitingWhenTheAgentBlocks(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess, a, b := twoWindowSession(t, d, "blocks")
+	c := dialVerb(t, sp)
+
+	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateWorking}); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		_, _, _ = sess.ApplyAgentReport(b, AgentReport{State: AgentStateNeedsInput, Message: "which branch?", Kind: "question"})
+	}()
+
+	start := time.Now()
+	resp := c.call(t, `{"id":1,"verb":"ask-agent","params":{"session":"blocks","window":"`+b+`","from":"`+a+`","text":"hello","ready_timeout":20000}}`)
+	if code := errCode(t, resp); code != ErrVerbAgentBlocked {
+		t.Fatalf("code = %q, want %q", code, ErrVerbAgentBlocked)
+	}
+	if waited := time.Since(start); waited > 10*time.Second {
+		t.Errorf("the wait ran on for %v after the agent blocked", waited)
+	}
+	if msg := errorOf(t, resp)["message"].(string); !strings.Contains(msg, "a question") {
+		t.Errorf("refusal did not say the agent waits on a question: %q", msg)
+	}
+}
+
+// TestBlockedByFollowsTheRuleKind covers blocked_by in list-agents and
+// get-agent-state: the kind a report carries while the pane is on
+// needs_input, and nothing once it has moved on.
+func TestBlockedByFollowsTheRuleKind(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess, _, b := twoWindowSession(t, d, "kind")
+	c := dialVerb(t, sp)
+
+	read := func() (map[string]any, map[string]any) {
+		t.Helper()
+		row := result(t, c.call(t, `{"id":1,"verb":"list-agents","params":{"session":"kind"}}`))["agents"].([]any)[0].(map[string]any)
+		st := result(t, c.call(t, `{"id":2,"verb":"get-agent-state","params":{"session":"kind","window":"`+b+`"}}`))
+		return row, st
+	}
+
+	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateNeedsInput, Message: "pick one", Kind: "question", Source: AgentSourceScreen}); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+	row, st := read()
+	for name, got := range map[string]map[string]any{"list-agents": row, "get-agent-state": st} {
+		if got["blocked_by"] != "question" || got["ready"] != false {
+			t.Errorf("%s: blocked_by = %v ready = %v, want question and false", name, got["blocked_by"], got["ready"])
+		}
+	}
+
+	if _, _, err := sess.ApplyAgentReport(b, AgentReport{State: AgentStateIdle}); err != nil {
+		t.Fatalf("ApplyAgentReport: %v", err)
+	}
+	row, st = read()
+	for name, got := range map[string]map[string]any{"list-agents": row, "get-agent-state": st} {
+		if got["blocked_by"] != "" || got["ready"] != true {
+			t.Errorf("%s: blocked_by = %v ready = %v after idle, want empty and true", name, got["blocked_by"], got["ready"])
+		}
+	}
+}
+
+// TestAgentKindSurvivesAClientSync covers the merge: a client never sends the
+// kind, so a sync that omits it must not wipe it.
+func TestAgentKindSurvivesAClientSync(t *testing.T) {
+	canonical := &SessionState{Windows: []WindowState{{ID: "w", AgentState: AgentStateNeedsInput, AgentKind: "approval", AgentStateAt: 1}}}
+	incoming := &SessionState{Windows: []WindowState{{ID: "w"}}}
+	retainDaemonExclusive(incoming, canonical)
+	if got := incoming.Windows[0].AgentKind; got != "approval" {
+		t.Errorf("AgentKind = %q after a client sync, want approval", got)
 	}
 }
 

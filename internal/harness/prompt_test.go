@@ -49,6 +49,22 @@ func TestRuleKindGuessesFromTheRulesWords(t *testing.T) {
 	}
 }
 
+// TestGuessPromptKind covers the guess made for a needs_input report that
+// carries no rule and no kind, such as a hook's notification.
+func TestGuessPromptKind(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"Claude needs your permission to use Bash", PromptKindApproval},
+		{"Approval requested: rm -rf build", PromptKindApproval},
+		{"Claude is waiting for your input", PromptKindQuestion},
+		{"", ""},
+		{"   ", ""},
+	} {
+		if got := GuessPromptKind(tc.in); got != tc.want {
+			t.Errorf("GuessPromptKind(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 // TestCleanPromptLineStripsChrome pins what is taken off a prompt line before
 // it travels as a message.
 func TestCleanPromptLineStripsChrome(t *testing.T) {

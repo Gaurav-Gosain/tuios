@@ -38,7 +38,31 @@ func (r *Registry) RuleKind(id string, rule int) string {
 	if m == nil || rule < 0 || rule >= len(m.Screen.Rule) {
 		return ""
 	}
-	rl := &m.Screen.Rule[rule]
+	return ruleKind(&m.Screen.Rule[rule])
+}
+
+// TitleRuleKind is RuleKind for a title rule.
+func (r *Registry) TitleRuleKind(id string, rule int) string {
+	m := r.Lookup(id)
+	if m == nil || rule < 0 || rule >= len(m.Title.Rule) {
+		return ""
+	}
+	return ruleKind(&m.Title.Rule[rule])
+}
+
+// GuessPromptKind reads free text, such as the message a hook reported with
+// needs_input, for the words that mean approval. It is the guess RuleKind makes
+// for a rule that names no kind, applied to text that came with no rule. Empty
+// text says nothing and gets no kind.
+func GuessPromptKind(text string) string {
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	return kindOfWords(strings.ToLower(text))
+}
+
+// ruleKind is the kind a rule names, or the guess from its own words.
+func ruleKind(rl *ScreenRule) string {
 	if rl.Kind != "" {
 		return rl.Kind
 	}
@@ -50,7 +74,12 @@ func (r *Registry) RuleKind(id string, rule int) string {
 			b.WriteString(strings.ToLower(s))
 		}
 	}
-	words := b.String()
+	return kindOfWords(b.String())
+}
+
+// kindOfWords is approval when lowercased text carries one of approvalWords,
+// and question otherwise.
+func kindOfWords(words string) string {
 	for _, w := range approvalWords {
 		if strings.Contains(words, w) {
 			return PromptKindApproval

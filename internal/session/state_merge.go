@@ -141,6 +141,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	type agent struct {
 		state   AgentState
 		message string
+		kind    string
 		harness string
 		at      int64
 	}
@@ -184,7 +185,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			shellPIDs[w.ID] = pid
 		}
 		if w.AgentState != AgentStateNone || w.AgentMessage != "" || w.AgentHarness != "" || w.AgentStateAt != 0 {
-			agents[w.ID] = agent{w.AgentState, w.AgentMessage, w.AgentHarness, w.AgentStateAt}
+			agents[w.ID] = agent{w.AgentState, w.AgentMessage, w.AgentKind, w.AgentHarness, w.AgentStateAt}
 		}
 	}
 	for i := range incoming.Windows {
@@ -210,6 +211,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if a, ok := agents[w.ID]; ok && w.AgentState == AgentStateNone && w.AgentMessage == "" && w.AgentHarness == "" && w.AgentStateAt == 0 {
 			w.AgentState = a.state
 			w.AgentMessage = a.message
+			w.AgentKind = a.kind
 			w.AgentHarness = a.harness
 			w.AgentStateAt = a.at
 		}

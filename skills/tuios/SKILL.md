@@ -811,11 +811,11 @@ tuios list-agents -s work
 ```
 
 ```
-╭──────────┬────────┬─────────────┬─────────────┬────────┬──────┬────────────────────────╮
-│ ID       │ NAME   │ STATE       │ HARNESS     │ SOURCE │ MAIL │ NOTE                   │
-├──────────┼────────┼─────────────┼─────────────┼────────┼──────┼────────────────────────┤
-│ c7be946f │ review │ needs_input │ claude-code │ report │ 1    │ waiting for a question │
-╰──────────┴────────┴─────────────┴─────────────┴────────┴──────┴────────────────────────╯
+╭──────────┬────────┬────────────────────────┬─────────────┬────────┬──────┬────────────────────────╮
+│ ID       │ NAME   │ STATE                  │ HARNESS     │ SOURCE │ MAIL │ NOTE                   │
+├──────────┼────────┼────────────────────────┼─────────────┼────────┼──────┼────────────────────────┤
+│ c7be946f │ review │ needs_input (question) │ claude-code │ report │ 1    │ waiting for a question │
+╰──────────┴────────┴────────────────────────┴─────────────┴────────┴──────┴────────────────────────╯
 
 1 agent pane(s). * marks the focused one. Address one with -w and its ID or NAME.
 ```
@@ -823,6 +823,13 @@ tuios list-agents -s work
 Every column is per-window state the daemon already tracks. `list-agents`
 answers "who else is working here" in one call, without listing every window
 and guessing which are agents.
+
+A pane on `needs_input` is waiting on a prompt, and the STATE column says which
+kind: `approval` for a yes or no on something the agent proposed, `question`
+for one that wants an answer in words. With `--json` that is `blocked_by`,
+empty when nothing said which. `ready` in the JSON is whether `ask-agent` would
+type at the pane now, and it is false for `needs_input`: text typed at a
+prompt answers it.
 
 ID and NAME are exactly what `-w` takes, so a row is addressable without a second
 lookup. `--all` lists every window including the panes nothing has identified as
@@ -1075,8 +1082,18 @@ settled by agent-state; review (c7be946f) now reports needs_input
 ```
 
 This works with any agent, because it types at the target's keyboard rather
-than expecting it to check a mailbox. It does three things in order:
+than expecting it to check a mailbox. It refuses one kind of target outright,
+then does three things in order:
 
+0. **Refuses a target on `needs_input`.** Such an agent is waiting on a prompt,
+   most often a permission menu, and your question would be read as the answer
+   to it: it would approve or deny whatever the agent asked for. The call fails
+   with `agent_blocked`, names what the target waits on, and types nothing. It
+   fails the same way if the target reaches `needs_input` while step 1 waits.
+   Read the prompt with `capture-pane`. If answering it is yours to do, answer
+   it with `send-keys`; otherwise ask the person with `send-agent-message -w
+   human`. `--allow-blocked` types anyway, for a prompt you have read that takes
+   free text.
 1. **Waits until the target is not mid-turn.** Typing at a working agent
    interleaves your text with whatever it is doing. If the target is still
    `working` after `--ready-timeout`, the call fails with `not_ready` and sends
@@ -1097,7 +1114,8 @@ which ended the wait.
   fallback for a pane that reports no state, and it is a guess.
 - `timeout`: neither happened inside `--timeout`, so the reply may be partial.
 
-`--force` skips step 1 and interleaves deliberately. `--lines` caps the reply.
+`--force` skips step 1 and interleaves deliberately. It does not skip step 0:
+only `--allow-blocked` does. `--lines` caps the reply.
 
 `ask-agent` does not use the mailbox. The reply is what the pane printed, so it
 has no message id and no thread, and `--reply-to` has nothing to name. Threads
@@ -2061,8 +2079,8 @@ Over the socket, every failure carries a stable code in the error envelope, for
 when you are matching rather than reading: `invalid_request`, `unknown_verb`,
 `invalid_params`, `session_not_found`, `session_exists`, `window_not_found`,
 `no_windows`, `pty_not_found`, `needs_client`, `option_not_found`,
-`command_failed`, `timeout`, `not_ready`, `loop_refused`, `rate_limited`,
-`no_keyboard`, `protocol_mismatch`, `unknown_host`, `host_unreachable`,
+`command_failed`, `timeout`, `not_ready`, `agent_blocked`, `loop_refused`,
+`rate_limited`, `no_keyboard`, `protocol_mismatch`, `unknown_host`, `host_unreachable`,
 `host_refused`, `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
 `internal`. The CLI folds the same information into its messages.
 
@@ -2073,8 +2091,9 @@ carries the closest match; `list-options` describes them all.
 nobody attached. Reading, writing, waiting, creating, moving and everything in
 the agent chapter never need one; splitting, tiling and directional focus do.
 
-`not_ready`, `loop_refused`, `rate_limited` and `no_keyboard` come only from
-the cross-agent verbs, and each has a different remedy: wait for the target,
+`not_ready`, `agent_blocked`, `loop_refused`, `rate_limited` and `no_keyboard`
+come only from the cross-agent verbs, and each has a different remedy: wait for
+the target, read the target's prompt and answer it or ask the person,
 restructure what you were doing, stop sending, or send a message to `human`
 instead of asking it. They are not timeouts, and retrying them unchanged will
 fail the same way.

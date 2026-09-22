@@ -43,6 +43,7 @@ func (s *Session) scanTitleForAgent(ptyID string, reg *harness.Registry) bool {
 	s.ApplyAgentReport(winID, AgentReport{
 		State:       AgentState(state),
 		Message:     reg.TitleRuleMessage(hid, rule),
+		Kind:        reg.TitleRuleKind(hid, rule),
 		Source:      AgentSourceOSC,
 		Harness:     hid,
 		paneWroteAt: pty.LastOutput(),

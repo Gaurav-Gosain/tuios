@@ -135,6 +135,38 @@ line should read that as a version mismatch, not as a transport fault; the
 daemon has always answered, and reports both versions along with the
 `tuios kill-server` command that resolves it.
 
+### Changes to existing verbs
+
+Changes that alter what an existing verb does, for a caller that relied on the
+old behaviour. None of them bumps the protocol integer: every field keeps its
+name and type, and a caller that sends nothing new keeps working. What changes
+is an answer, and each entry says which.
+
+**An agent on `needs_input` is not ready to be asked.** An agent on
+`needs_input` is most often sitting on a permission menu, and text typed there
+is read as the answer: the question approved or denied whatever the agent had
+asked for.
+
+- `list-agents` returns `ready: false` for a pane on `needs_input`. It used to
+  return `true`. `ready` still means what it always meant, that `ask-agent`
+  would type at the pane without waiting, and it is that answer that changed.
+  A script that polls `ready` before asking now waits for the prompt to be
+  answered.
+- `ask-agent` against a pane on `needs_input` fails with the new code
+  `agent_blocked` and writes nothing. It used to type the question. It also
+  stops waiting with `agent_blocked` when a pane it is waiting on reaches
+  `needs_input`, instead of running out `ready_timeout`.
+- `force` on `ask-agent` still skips the wait for a working agent. It no longer
+  types at a pane on `needs_input`; the new param `allow_blocked` does, for a
+  caller that has read the prompt and knows it takes free text. `force` and
+  `allow_blocked` together are what `force` alone used to be.
+- `list-agents` and `get-agent-state` gain `blocked_by`: `approval` or
+  `question` for a pane on `needs_input`, empty when the source did not say and
+  for every other state. A screen or title rule supplies it from its `kind`, and
+  a report without one, such as a hook's, is guessed from its message the way a
+  rule without a kind is. `get-agent-state` also gains `ready`, with the same
+  meaning as in `list-agents`.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -198,6 +230,7 @@ catalog.
 | `command_failed` | A verb routed to the attached client came back failed or timed out. |
 | `timeout` | A wait-for condition did not match before its timeout elapsed. |
 | `not_ready` | The target agent was mid-turn, so the call declined to type at it. |
+| `agent_blocked` | ask-agent declined to type at an agent on `needs_input`, because the text would answer its prompt. Nothing was typed. The hint names `capture-pane`. |
 | `loop_refused` | The call would loop: a pane addressing itself, or an ask that closes a cycle with one in flight. |
 | `rate_limited` | The sender is over the cross-agent message rate cap. |
 | `no_keyboard` | The target is the person's inbox, `human`, which has no pane to type into. |

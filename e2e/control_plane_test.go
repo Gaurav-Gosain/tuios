@@ -864,9 +864,10 @@ func TestAgentsTalkToEachOtherHeadless(t *testing.T) {
 	}
 
 	// The review pane reports itself, which is what makes it discoverable and
-	// what makes it askable.
+	// what makes it askable. It reports idle: a pane on needs_input is waiting
+	// on a prompt, and ask-agent refuses it with agent_blocked.
 	c.result(3, "set-agent-state", map[string]any{
-		"session": "crew", "window": review, "state": "needs_input",
+		"session": "crew", "window": review, "state": "idle",
 		"harness": "claude-code", "message": "ready",
 	}, 5*time.Second)
 

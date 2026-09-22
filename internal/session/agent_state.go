@@ -3,6 +3,8 @@ package session
 import (
 	"errors"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
 // AgentState is the semantic state of an agent (a coding-agent CLI or any other
@@ -112,6 +114,11 @@ type AgentReport struct {
 	Message string
 	Source  AgentSource
 	Harness string // optional harness id, reported back by get-agent-state
+	// Kind is what sort of block a needs_input report is: harness.PromptKindApproval
+	// or harness.PromptKindQuestion. The screen and title tiers take it from the
+	// rule that matched. A report that names none is guessed from its message;
+	// see agentKindOf. It means nothing for any other state.
+	Kind string
 	// paneWroteAt is the unix-nano time the pane last produced output, as the
 	// source read it at the moment it looked. Only the screen tier sets it, and
 	// only blockerOverridesClaim reads it: it is how a claim is shown to be
@@ -190,6 +197,7 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 		}
 		w.AgentState = r.State
 		w.AgentMessage = r.Message
+		w.AgentKind = agentKindOf(r)
 		w.AgentHarness = next.harness
 		w.AgentStateAt = time.Now().UnixNano()
 		// auto is carried over: it says the detector will clear this pane when the
@@ -231,6 +239,34 @@ func harnessAfterReport(w *WindowState, r AgentReport) string {
 		return r.Harness
 	}
 	return w.AgentHarness
+}
+
+// agentKindOf is the block kind a window records once r is applied. Only
+// needs_input carries one. A report that names a kind is believed; one that
+// names none, such as the Claude Code hook shim's, is guessed from its message
+// the way a rule without a kind is guessed from its words. A report with
+// neither leaves the kind empty, which blocked_by reports as the source not
+// having said.
+func agentKindOf(r AgentReport) string {
+	if r.State != AgentStateNeedsInput {
+		return ""
+	}
+	if r.Kind != "" {
+		return r.Kind
+	}
+	return harness.GuessPromptKind(r.Message)
+}
+
+// agentBlockedBy is what list-agents and get-agent-state report as blocked_by:
+// the recorded kind while the pane is on needs_input, and nothing otherwise. The
+// state is checked rather than trusted to have cleared the kind, because the
+// detector and the stall timer move a pane off needs_input without going
+// through ApplyAgentReport.
+func agentBlockedBy(w WindowState) string {
+	if w.AgentState != AgentStateNeedsInput {
+		return ""
+	}
+	return w.AgentKind
 }
 
 // identityAfterReport decides what kind of evidence stands behind a window's
@@ -329,6 +365,7 @@ func (s *Session) releaseAgentBlockerOverride(windowID string) bool {
 		}
 		w.AgentState = claim.prior.state
 		w.AgentMessage = ""
+		w.AgentKind = ""
 		w.AgentHarness = claim.prior.harness
 		w.AgentStateAt = time.Now().UnixNano()
 		s.setAgentClaim(w.ID, agentClaim{

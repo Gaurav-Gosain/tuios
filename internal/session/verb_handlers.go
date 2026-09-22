@@ -789,6 +789,11 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 		// bool so a consumer does not have to know which states mean it.
 		"needs_you": w.AgentState.NeedsYou(),
 		"activity":  w.AgentState.Activity(),
+		// ready and blocked_by are the same answers list-agents gives: whether
+		// ask-agent would type at the pane now, and, for a pane on needs_input,
+		// whether it waits on an approval or a question.
+		"ready":      agentRestStates[w.AgentState.Name()],
+		"blocked_by": agentBlockedBy(w),
 	}, nil
 }
 

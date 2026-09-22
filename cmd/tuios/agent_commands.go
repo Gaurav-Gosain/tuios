@@ -87,6 +87,7 @@ type agentRow struct {
 	Focused    bool   `json:"focused"`
 	Unread     int    `json:"unread"`
 	Ready      bool   `json:"ready"`
+	BlockedBy  string `json:"blocked_by"`
 }
 
 // runListAgents prints the agent panes in a session: the board an orchestrating
@@ -136,10 +137,14 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 		if a.Unread > 0 {
 			unread = fmt.Sprintf("%d", a.Unread)
 		}
+		state := a.State
+		if a.BlockedBy != "" {
+			state += " (" + plainLine(a.BlockedBy) + ")"
+		}
 		rows = append(rows, []string{
 			marker + shortWindowID(a.WindowID),
 			plainLine(a.Name),
-			a.State,
+			state,
 			orNone(plainLine(a.HarnessID)),
 			orNone(a.Source),
 			unread,
@@ -409,7 +414,7 @@ func agoOf(nanos int64) string {
 // reason runWaitFor stretches its own: the daemon answers only when the ask
 // resolves, so a shorter client deadline would report a connection failure for
 // an ask that was still perfectly healthy.
-func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, settle, timeout, lines int, force, jsonOutput bool) error {
+func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, settle, timeout, lines int, force, allowBlocked, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
@@ -421,6 +426,12 @@ func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, set
 		"text":   text,
 		"force":  force,
 	})
+	// Sent only when set, so an ask against an older daemon, which refuses a
+	// param it does not know, still works for every caller that does not ask
+	// for it.
+	if allowBlocked {
+		params["allow_blocked"] = true
+	}
 	if from != "" {
 		params["from"] = from
 	}

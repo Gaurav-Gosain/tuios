@@ -127,3 +127,26 @@ func TestPrintedMailCannotReachTheTerminal(t *testing.T) {
 		}
 	}
 }
+
+// TestAgentListingNamesTheBlock covers the STATE column for a pane on
+// needs_input: it says whether the pane waits on an approval or a question, so
+// a reader knows before asking that ask-agent will refuse it.
+func TestAgentListingNamesTheBlock(t *testing.T) {
+	raw, _ := json.Marshal(map[string]any{
+		"agents": []map[string]any{
+			{"window_id": "abcdefgh1234", "name": "review", "state": "needs_input", "blocked_by": "approval"},
+			{"window_id": "bbcdefgh1234", "name": "build", "state": "idle", "ready": true},
+		},
+		"total": 2,
+	})
+	var buf bytes.Buffer
+	if err := printAgentList(&buf, raw, false, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "needs_input (approval)") {
+		t.Errorf("the listing does not say what the blocked pane waits on:\n%s", buf.String())
+	}
+	if strings.Contains(buf.String(), "idle (") {
+		t.Errorf("a pane that is not blocked was given a block:\n%s", buf.String())
+	}
+}

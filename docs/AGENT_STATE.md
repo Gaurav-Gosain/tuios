@@ -42,6 +42,22 @@ and `explain-agent-detect` also report `needs_you`, true for `needs_input` and
 `errored`, so a consumer that only wants "does a person have to act" does not
 have to know which states mean it.
 
+`get-agent-state` and `list-agents` also report `blocked_by`, `approval` or
+`question`, for a pane on `needs_input`. A screen or title rule supplies it
+from its `kind` (named in the manifest, or guessed from the rule's words). A
+report such as a hook's carries no kind, so it is guessed from the reported
+message the same way: a message that mentions approval, permission, allowing,
+proceeding, confirming or trust reads as `approval`, anything else as
+`question`. An empty message gives an empty `blocked_by`, which means the
+source did not say.
+
+Both verbs report `ready`, which is whether `ask-agent` would type at the pane
+now. It is false for `needs_input`: an agent there is waiting on a prompt, text
+typed at it answers the prompt, and `ask-agent` refuses it with
+`agent_blocked`. Until this changed, `ready` was true for `needs_input` and an
+ask typed straight into a permission menu. See the protocol changes in
+[protocol.md](protocol.md).
+
 `unknown` exists so that no evidence is never reported as at rest. The silence
 timer writes it, not `idle`, when the screen tier looked at a quiet pane and
 found nothing: `idle` says nothing needs you, and a pane that went quiet on a

@@ -74,6 +74,7 @@ func (s *Session) scanScreenForAgent(ptyID string, reg *harness.Registry) bool {
 	s.ApplyAgentReport(winID, AgentReport{
 		State:       AgentState(state),
 		Message:     screenRuleMessage(reg, hid, rule, tail),
+		Kind:        reg.RuleKind(hid, rule),
 		Source:      AgentSourceScreen,
 		Harness:     hid,
 		paneWroteAt: pty.LastOutput(),

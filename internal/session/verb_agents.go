@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
 // This file implements the cross-agent verbs: who is here (list-agents), leaving
@@ -28,12 +30,17 @@ import (
 // question sent to it will be read rather than typed over whatever it is doing.
 // errored is in the set on purpose: an agent that stopped on an error is at its
 // prompt and can be told about it.
+//
+// needs_input is not in the set. An agent on needs_input is most often sitting
+// on a permission menu, and text typed there is read as the answer to the menu:
+// the question approves or denies whatever the agent asked for. ask-agent
+// refuses such a pane with agent_blocked unless the caller passes allow_blocked,
+// and list-agents reports it as not ready.
 var agentRestStates = map[string]bool{
-	AgentStateNeedsInput.Name(): true,
-	AgentStateIdle.Name():       true,
-	AgentStateDone.Name():       true,
-	AgentStateErrored.Name():    true,
-	AgentStateNone.Name():       true,
+	AgentStateIdle.Name():    true,
+	AgentStateDone.Name():    true,
+	AgentStateErrored.Name(): true,
+	AgentStateNone.Name():    true,
 	// unknown is in the set for the same reason idle is: it is what the silence
 	// timer writes to a pane that has said nothing for the stall window, which
 	// was idle before unknown existed, and an ask must not wait forever on a
@@ -117,6 +124,7 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 			"focused":        w.ID == state.FocusedWindowID,
 			"unread":         unread[w.ID],
 			"ready":          agentRestStates[w.AgentState.Name()],
+			"blocked_by":     agentBlockedBy(w),
 			"needs_you":      w.AgentState.NeedsYou(),
 			"confidence":     claim.identity.confidence(),
 		})
@@ -460,6 +468,7 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 		Timeout      int    `json:"timeout"`
 		Lines        int    `json:"lines"`
 		Force        bool   `json:"force"`
+		AllowBlocked bool   `json:"allow_blocked"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -543,22 +552,41 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 		lines = askDefaultLines
 	}
 
-	// Step one: do not type into an agent that is mid-turn. force skips the
+	// Step one: do not type into an agent that is blocked on a prompt, because
+	// the text would answer the prompt. This holds with force too: force skips
+	// the wait for a working agent, and only allow_blocked says the caller knows
+	// the prompt takes free text.
+	if !p.AllowBlocked {
+		if verr := d.refuseBlockedAgent(sess, target.ID); verr != nil {
+			return nil, verr
+		}
+	}
+
+	// Step two: do not type into an agent that is mid-turn. force skips the
 	// wait, and is the caller taking responsibility for interleaving its text
 	// with whatever the target is doing.
 	waitedFor := ""
 	if !p.Force {
-		reached, verr := d.waitAgentRest(sess, target.ID, readyTimeout)
+		reached, verr := d.waitAgentRest(sess, target.ID, readyTimeout, p.AllowBlocked)
 		if verr != nil {
 			return nil, verr
 		}
 		waitedFor = reached
 	}
 
-	// Step two: the baseline for the reply. Everything the pane prints from here
-	// on is what it printed in answer.
+	// Step three: the baseline for the reply. Everything the pane prints from
+	// here on is what it printed in answer.
 	before := contentLines(pty.CaptureContent(true, false))
 
+	// The pane is checked once more right before anything is typed, since a
+	// prompt can have come up while the wait above returned or the baseline was
+	// read. Nothing has been written yet, so a refusal here still leaves the
+	// pane untouched.
+	if !p.AllowBlocked {
+		if verr := d.refuseBlockedAgent(sess, target.ID); verr != nil {
+			return nil, verr
+		}
+	}
 	text := p.Text
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
@@ -568,7 +596,7 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 	}
 	sentAt := time.Now().UnixNano()
 
-	// Step three: wait for the target to have dealt with it.
+	// Step four: wait for the target to have dealt with it.
 	settledBy, endState := d.waitAgentSettled(sess, target.ID, pty, sentAt, settle, timeout)
 
 	after := pty.CaptureContent(true, false)
@@ -655,26 +683,81 @@ func durationOr(ms int, fallback time.Duration) time.Duration {
 	return fallback
 }
 
+// agentBlockedError is the refusal ask-agent gives a pane on needs_input. It
+// names what the pane waits on when that is known, and the remedy is always
+// to look first: the prompt is on the pane's screen, and whoever answers it
+// should have read it.
+func agentBlockedError(w WindowState) *verbError {
+	what := "a prompt"
+	switch agentBlockedBy(w) {
+	case harness.PromptKindApproval:
+		what = "an approval"
+	case harness.PromptKindQuestion:
+		what = "a question"
+	}
+	msg := "the target agent is waiting on " + what + ", and text typed now would answer it"
+	if note := printableClaim(w.AgentMessage, agentMsgMaxSubject); note != "" {
+		msg += ": " + note
+	}
+	return hintedVerbError(ErrVerbAgentBlocked, msg, &VerbHint{
+		Verb:    "capture-pane",
+		Command: "tuios capture-pane -w " + shortWindowID(w.ID),
+		Detail:  "Nothing was typed. Read the prompt with capture-pane first. Then answer it yourself with send-keys if answering it is yours to do, or ask the person with send-agent-message -w human. Pass allow_blocked only when you have read the prompt and it takes free text.",
+	})
+}
+
+// refuseBlockedAgent returns agentBlockedError when the window is on
+// needs_input now, and nil otherwise, including when the window is gone: the
+// caller's own lookups report that.
+func (d *Daemon) refuseBlockedAgent(sess *Session, windowID string) *verbError {
+	st := sess.GetState()
+	i, err := findWindowStateIndex(st.Windows, windowID)
+	if err != nil {
+		return nil
+	}
+	if st.Windows[i].AgentState == AgentStateNeedsInput {
+		return agentBlockedError(st.Windows[i])
+	}
+	return nil
+}
+
 // waitAgentRest blocks until the window is in a state that means it is not
 // mid-turn, and reports which state that was.
-func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Duration) (string, *verbError) {
+//
+// A window that reaches needs_input ends the wait with agent_blocked, since
+// waiting on does not help: the prompt stays until somebody answers it. With
+// allowBlocked, needs_input counts as at rest instead, which is what every
+// caller got before needs_input left agentRestStates.
+func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Duration, allowBlocked bool) (string, *verbError) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name,
 		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true, EventSessionClosed: true},
 	}, defaultEventQueue)
 	defer d.events.unsubscribe(sub)
 
+	var blocked *verbError
 	check := func() (string, bool) {
 		st := sess.GetState()
 		i, err := findWindowStateIndex(st.Windows, windowID)
 		if err != nil {
 			return "", false
 		}
-		name := st.Windows[i].AgentState.Name()
+		w := st.Windows[i]
+		name := w.AgentState.Name()
+		if w.AgentState == AgentStateNeedsInput {
+			if allowBlocked {
+				return name, true
+			}
+			blocked = agentBlockedError(w)
+			return name, false
+		}
 		return name, agentRestStates[name]
 	}
 	if name, ok := check(); ok {
 		return name, nil
+	}
+	if blocked != nil {
+		return "", blocked
 	}
 
 	deadline := time.After(timeout)
@@ -697,6 +780,9 @@ func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Dura
 			}
 			if name, ok := check(); ok {
 				return name, nil
+			}
+			if blocked != nil {
+				return "", blocked
 			}
 		}
 	}
@@ -764,7 +850,10 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, sent
 			if ev.Time <= sentAt {
 				continue
 			}
-			if name := currentState(); agentRestStates[name] && name != AgentStateNone.Name() {
+			// needs_input ends the wait too, though it is not a rest state: an
+			// agent that answers with a prompt of its own has dealt with the
+			// question as far as it can, and the reply is what it printed.
+			if name := currentState(); (agentRestStates[name] || name == AgentStateNeedsInput.Name()) && name != AgentStateNone.Name() {
 				return "agent-state", name
 			}
 		case <-timer.C:
