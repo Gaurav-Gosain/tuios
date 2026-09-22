@@ -57,46 +57,36 @@ type SessionKilledMsg struct {
 	Err   error
 }
 
-// ListenForSessionKill waits for a kill of another session to finish.
-func ListenForSessionKill(ch chan SessionKilledMsg) tea.Cmd {
+// listenOnce returns a command that reads one value from ch and turns it into
+// a message with wrap. It returns a nil command for a nil channel, and the
+// command yields nil once the channel is closed, so the listener stops instead
+// of spinning. The caller re-arms it after each message it handles.
+func listenOnce[T any](ch <-chan T, wrap func(T) tea.Msg) tea.Cmd {
 	if ch == nil {
 		return nil
 	}
 	return func() tea.Msg {
-		res, ok := <-ch
+		v, ok := <-ch
 		if !ok {
 			return nil
 		}
-		return res
+		return wrap(v)
 	}
+}
+
+// ListenForSessionKill waits for a kill of another session to finish.
+func ListenForSessionKill(ch chan SessionKilledMsg) tea.Cmd {
+	return listenOnce(ch, func(res SessionKilledMsg) tea.Msg { return res })
 }
 
 // ListenForSessionCreate waits for a detached-session creation to finish.
 func ListenForSessionCreate(ch chan SessionCreatedMsg) tea.Cmd {
-	if ch == nil {
-		return nil
-	}
-	return func() tea.Msg {
-		res, ok := <-ch
-		if !ok {
-			return nil
-		}
-		return res
-	}
+	return listenOnce(ch, func(res SessionCreatedMsg) tea.Msg { return res })
 }
 
 // ListenForClipboardSet creates a command that listens for OSC 52 clipboard set events.
 func ListenForClipboardSet(ch chan string) tea.Cmd {
-	if ch == nil {
-		return nil
-	}
-	return func() tea.Msg {
-		text, ok := <-ch
-		if !ok {
-			return nil
-		}
-		return ClipboardSetMsg{Text: text}
-	}
+	return listenOnce(ch, func(text string) tea.Msg { return ClipboardSetMsg{Text: text} })
 }
 
 // ScriptCommandMsg represents a command from a tape script to be executed.
@@ -378,32 +368,13 @@ func (m *OS) Init() tea.Cmd {
 // ListenForWindowExits creates a command that listens for window process exits.
 // It safely reads from the exit channel and converts exit signals to messages.
 func ListenForWindowExits(exitChan chan string) tea.Cmd {
-	return func() tea.Msg {
-		// Safe channel read with protection against closed channel
-		windowID, ok := <-exitChan
-		if !ok {
-			// Channel closed, return nil to stop listening
-			return nil
-		}
-		return WindowExitMsg{WindowID: windowID}
-	}
+	return listenOnce(exitChan, func(windowID string) tea.Msg { return WindowExitMsg{WindowID: windowID} })
 }
 
 // ListenForStateSync creates a command that listens for state sync from other clients.
 // It safely reads from the sync channel and converts state to messages for the update loop.
 func ListenForStateSync(syncChan chan StateSyncMsg) tea.Cmd {
-	if syncChan == nil {
-		return nil
-	}
-	return func() tea.Msg {
-		// Safe channel read with protection against closed channel
-		sync, ok := <-syncChan
-		if !ok {
-			// Channel closed, return nil to stop listening
-			return nil
-		}
-		return sync
-	}
+	return listenOnce(syncChan, func(sync StateSyncMsg) tea.Msg { return sync })
 }
 
 // ListenForClientEvents creates a command that listens for client join/leave events.
@@ -415,52 +386,46 @@ func ListenForStateSync(syncChan chan StateSyncMsg) tea.Cmd {
 // a phone turned sideways got the columns it had before, because the effective
 // size the daemon recalculated was sitting in a channel nobody was reading.
 func ListenForClientEvents(eventChan chan ClientEvent) tea.Cmd {
-	if eventChan == nil {
-		return nil
-	}
-	return func() tea.Msg {
-		// Safe channel read with protection against closed channel
-		event, ok := <-eventChan
-		if !ok {
-			// Channel closed, return nil to stop listening
-			return nil
+	return listenOnce(eventChan, clientEventMsg)
+}
+
+// clientEventMsg maps a ClientEvent to the message the update loop handles.
+func clientEventMsg(event ClientEvent) tea.Msg {
+	switch event.Type {
+	case "joined":
+		return ClientJoinedMsg{
+			ClientID:    event.ClientID,
+			ClientCount: event.ClientCount,
+			Width:       event.Width,
+			Height:      event.Height,
 		}
-		switch event.Type {
-		case "joined":
-			return ClientJoinedMsg{
-				ClientID:    event.ClientID,
-				ClientCount: event.ClientCount,
-				Width:       event.Width,
-				Height:      event.Height,
-			}
-		case "resize":
-			return SessionResizeMsg{
-				Width:       event.Width,
-				Height:      event.Height,
-				ClientCount: event.ClientCount,
-				Reserve:     event.Reserve,
-			}
-		case "refresh":
-			return ForceRefreshMsg{Reason: event.Reason}
-		case "agent-mail":
-			return AgentMailMsg{Payload: event.Mail}
-		case "agent-mail-load":
-			return AgentMailLoadMsg{}
-		case "hosts-changed":
-			return HostsChangedMsg{}
-		case "agent-mail-mark":
-			// The payload carries the thread to mark in ReadIDs[0]; see
-			// jumpToNotifTarget.
-			var thread uint64
-			if len(event.Mail.ReadIDs) > 0 {
-				thread = event.Mail.ReadIDs[0]
-			}
-			return AgentMailMarkMsg{Thread: thread}
-		default:
-			return ClientLeftMsg{
-				ClientID:    event.ClientID,
-				ClientCount: event.ClientCount,
-			}
+	case "resize":
+		return SessionResizeMsg{
+			Width:       event.Width,
+			Height:      event.Height,
+			ClientCount: event.ClientCount,
+			Reserve:     event.Reserve,
+		}
+	case "refresh":
+		return ForceRefreshMsg{Reason: event.Reason}
+	case "agent-mail":
+		return AgentMailMsg{Payload: event.Mail}
+	case "agent-mail-load":
+		return AgentMailLoadMsg{}
+	case "hosts-changed":
+		return HostsChangedMsg{}
+	case "agent-mail-mark":
+		// The payload carries the thread to mark in ReadIDs[0]; see
+		// jumpToNotifTarget.
+		var thread uint64
+		if len(event.Mail.ReadIDs) > 0 {
+			thread = event.Mail.ReadIDs[0]
+		}
+		return AgentMailMarkMsg{Thread: thread}
+	default:
+		return ClientLeftMsg{
+			ClientID:    event.ClientID,
+			ClientCount: event.ClientCount,
 		}
 	}
 }
