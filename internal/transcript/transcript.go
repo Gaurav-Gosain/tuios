@@ -33,6 +33,7 @@
 package transcript
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -228,7 +229,7 @@ func (r *Reader) Read() (Observation, bool, error) {
 // atBoundary says the buffer begins where a record begins. When it does not,
 // the leading partial record is dropped.
 func (r *Reader) scan(buf []byte, atBoundary bool) (Observation, bool, int) {
-	end := lastIndexByte(buf, '\n')
+	end := bytes.LastIndexByte(buf, '\n')
 	if end < 0 {
 		// No complete line. Consume nothing and wait for the newline; a file
 		// whose single record is longer than the window would otherwise stall
@@ -239,7 +240,7 @@ func (r *Reader) scan(buf []byte, atBoundary bool) (Observation, bool, int) {
 	lines := buf[:end]
 
 	if !atBoundary {
-		if i := indexByte(lines, '\n'); i >= 0 {
+		if i := bytes.IndexByte(lines, '\n'); i >= 0 {
 			lines = lines[i+1:]
 		} else {
 			lines = nil
@@ -250,7 +251,7 @@ func (r *Reader) scan(buf []byte, atBoundary bool) (Observation, bool, int) {
 	found := false
 	for len(lines) > 0 {
 		line := lines
-		if i := indexByte(lines, '\n'); i >= 0 {
+		if i := bytes.IndexByte(lines, '\n'); i >= 0 {
 			line, lines = lines[:i], lines[i+1:]
 		} else {
 			lines = nil
@@ -314,24 +315,4 @@ func (r record) turn() (Turn, bool) {
 	default:
 		return TurnUnknown, false
 	}
-}
-
-// indexByte and lastIndexByte are here rather than bytes.IndexByte only to keep
-// the buffer's lifetime obvious in one file; they compile to the same thing.
-func indexByte(b []byte, c byte) int {
-	for i := range b {
-		if b[i] == c {
-			return i
-		}
-	}
-	return -1
-}
-
-func lastIndexByte(b []byte, c byte) int {
-	for i := len(b) - 1; i >= 0; i-- {
-		if b[i] == c {
-			return i
-		}
-	}
-	return -1
 }
