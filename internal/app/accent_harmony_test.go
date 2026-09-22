@@ -25,7 +25,7 @@ func TestAccentHarmonyChipZeroIsTheComplement(t *testing.T) {
 		count := m.accentPlan().HarmonyCount()
 		want := hslToRGB(s.baseHue()+180, s.Sat, s.Light)
 		if got := s.harmonyColor(0, count); got != want {
-			t.Errorf("w=%d: chip 0 is %s, want the complement %s", w, hexString(got), hexString(want))
+			t.Errorf("w=%d: chip 0 is %s, want the complement %s", w, overlay.Hex(got), overlay.Hex(want))
 		}
 
 		// And the rest are even turns around the circle from it, bar the compact
@@ -75,12 +75,12 @@ func TestAccentHarmonyKeepsTheHeldSaturationAndLightness(t *testing.T) {
 	// Walking the chips must not move the chips.
 	before := make([]string, count)
 	for i := range count {
-		before[i] = hexString(m.AccentPicker.harmonyColor(i, count))
+		before[i] = overlay.Hex(m.AccentPicker.harmonyColor(i, count))
 	}
 	for i := range count {
 		m.AccentPickerHarmonyAt(i)
 		for j := range count {
-			if got := hexString(m.AccentPicker.harmonyColor(j, count)); got != before[j] {
+			if got := overlay.Hex(m.AccentPicker.harmonyColor(j, count)); got != before[j] {
 				t.Fatalf("landing on chip %d moved chip %d from %s to %s", i, j, before[j], got)
 			}
 		}
@@ -179,7 +179,7 @@ func TestAccentHintsArePressable(t *testing.T) {
 		t.Error("the apply hint left the picker open")
 	}
 	if got, _ := m.WindowAccent(id); got.RGB() != want {
-		t.Errorf("the apply hint stored %s, want %s", got.Hex(), hexString(want))
+		t.Errorf("the apply hint stored %s, want %s", got.Hex(), overlay.Hex(want))
 	}
 
 	// Cancel closes and writes nothing, even after moving.
@@ -256,7 +256,7 @@ func TestAccentPickerStaysCoherentOnALesserTerminal(t *testing.T) {
 				text := strings.Join(lines, "\n")
 				// The numbers are the picker's floor: they survive every profile,
 				// and on the ones that cannot show the colour they are all there is.
-				if !strings.Contains(text, hexString(m.AccentPicker.Cur)) {
+				if !strings.Contains(text, overlay.Hex(m.AccentPicker.Cur)) {
 					t.Errorf("%s ascii=%v w=%d: the frame lost the hex:\n%s", name, ascii, w, text)
 				}
 				// Where the sliders are drawn at all, their numbers are the last
@@ -308,7 +308,7 @@ func TestAccentChipsSurviveAMonochromeTerminal(t *testing.T) {
 	}
 	// And the hex line still says what the chip under the cursor holds, which is
 	// what makes it pickable rather than merely visible.
-	if want := hexString(m.AccentPicker.Cur); !strings.Contains(strings.Join(lines, "\n"), want) {
+	if want := overlay.Hex(m.AccentPicker.Cur); !strings.Contains(strings.Join(lines, "\n"), want) {
 		t.Errorf("the colour under the chip cursor (%s) is not printed anywhere", want)
 	}
 }

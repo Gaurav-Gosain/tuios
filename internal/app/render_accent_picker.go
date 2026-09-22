@@ -547,7 +547,7 @@ func (m *OS) accentNowLine(width, y int, pal overlay.Palette) string {
 	}
 	// A keyword selection prints the keyword, not the hex it resolves to: the
 	// hex is what it looks like today and the keyword is what would be stored.
-	now := hexString(s.Cur)
+	now := overlay.Hex(s.Cur)
 	if s.Named != "" {
 		now = s.Named
 	}

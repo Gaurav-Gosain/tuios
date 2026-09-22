@@ -6,6 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // railText renders the rail and returns its rows with styling stripped, which is
@@ -204,13 +205,13 @@ func TestAccentPickerPicksAndClears(t *testing.T) {
 	}
 	got, ok := m.WindowAccent("w1")
 	if !ok || got.RGB() != want {
-		t.Fatalf("accent = %+v, want the colour under the cursor %s", got, hexString(want))
+		t.Fatalf("accent = %+v, want the colour under the cursor %s", got, overlay.Hex(want))
 	}
 
 	m.OpenAccentPicker("w1")
 	if m.AccentPicker.Cur != want {
 		t.Errorf("the picker reopened on %s, want the accent the window has (%s)",
-			hexString(m.AccentPicker.Cur), hexString(want))
+			overlay.Hex(m.AccentPicker.Cur), overlay.Hex(want))
 	}
 	m.AccentPickerClear()
 	if _, ok := m.WindowAccent("w1"); ok {

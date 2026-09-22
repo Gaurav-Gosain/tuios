@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -109,7 +110,7 @@ func (s *accentPickerState) settingSelection() string {
 	if s.Named != "" {
 		return s.Named
 	}
-	return hexString(s.Cur)
+	return overlay.Hex(s.Cur)
 }
 
 // applySettingColor commits the picker's selection to the option it was opened

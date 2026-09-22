@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
@@ -77,7 +78,7 @@ func (a Accent) slotIndex() (color.Color, bool) {
 }
 
 // Hex is the accent's colour as #rrggbb.
-func (a Accent) Hex() string { return hexString(a.RGB()) }
+func (a Accent) Hex() string { return overlay.Hex(a.RGB()) }
 
 // Label is what a readout prints beside the accent's swatch. A slot the user's
 // terminal owns is named rather than given a hex, because the hex would be the
@@ -105,43 +106,16 @@ func toRGBA(c color.Color) color.RGBA {
 	return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 0xff}
 }
 
-// hexString formats a colour as #rrggbb, lowercase like the rest of the
-// dialog's furniture.
-func hexString(c color.RGBA) string {
-	const digits = "0123456789abcdef"
-	out := []byte("#000000")
-	for i, v := range [3]uint8{c.R, c.G, c.B} {
-		out[1+i*2] = digits[v>>4]
-		out[2+i*2] = digits[v&0x0f]
-	}
-	return string(out)
-}
-
-// parseHexColor reads #rgb or #rrggbb, with or without the hash. The short form
-// is expanded the way CSS expands it, so #f0a and #ff00aa are the same colour.
+// parseHexColor reads #rgb or #rrggbb, with or without the hash, as
+// overlay.ParseHex does. What it adds is space: it is fed what a person typed,
+// so space around the whole value and between the hash and the digits is
+// dropped. A second hash is still refused.
 func parseHexColor(s string) (color.RGBA, bool) {
 	s = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(s), "#"))
-	var v [6]byte
-	switch len(s) {
-	case 3:
-		for i := range 3 {
-			v[i*2], v[i*2+1] = s[i], s[i]
-		}
-	case 6:
-		copy(v[:], s)
-	default:
+	if strings.HasPrefix(s, "#") {
 		return color.RGBA{}, false
 	}
-	out := color.RGBA{A: 0xff}
-	ch := [3]*uint8{&out.R, &out.G, &out.B}
-	for i := range 3 {
-		n, err := strconv.ParseUint(string(v[i*2:i*2+2]), 16, 8)
-		if err != nil {
-			return color.RGBA{}, false
-		}
-		*ch[i] = uint8(n)
-	}
-	return out, true
+	return overlay.ParseHex(s)
 }
 
 // isHexDigit reports whether r can go in the hex field.

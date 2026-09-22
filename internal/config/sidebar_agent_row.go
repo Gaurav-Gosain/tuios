@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // The agent row's tokens and how each is drawn, from [appearance.sidebar.agent_row].
@@ -426,12 +428,8 @@ func isHexColor(s string) bool {
 	if !strings.HasPrefix(s, "#") {
 		return false
 	}
-	h := s[1:]
-	if len(h) != 3 && len(h) != 6 {
-		return false
-	}
-	_, err := strconv.ParseUint(h, 16, 32)
-	return err == nil
+	_, ok := overlay.ParseHex(s)
+	return ok
 }
 
 // stringList reads a TOML array of strings.

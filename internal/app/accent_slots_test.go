@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -31,7 +32,7 @@ func TestAnsiQuickPickStoresASlotNotAHex(t *testing.T) {
 	const cyan = 6 // bright cyan
 	m.AccentPickerSlot(cyan)
 	if got := m.AccentPicker.Cur; got != SlotAccent(cyan).RGB() {
-		t.Errorf("picking a slot left the working colour at %s", hexString(got))
+		t.Errorf("picking a slot left the working colour at %s", overlay.Hex(got))
 	}
 	m.AccentPickerApply()
 
@@ -44,7 +45,7 @@ func TestAnsiQuickPickStoresASlotNotAHex(t *testing.T) {
 	before := got.RGB()
 	withTheme(t, "atom_one_light")
 	if after := got.RGB(); after == before {
-		t.Errorf("the slot resolves to %s under both themes, so it was stored as a literal", hexString(after))
+		t.Errorf("the slot resolves to %s under both themes, so it was stored as a literal", overlay.Hex(after))
 	}
 }
 

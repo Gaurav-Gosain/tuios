@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // mochaPalette is catppuccin_mocha's first 8 colours plus bright variants, as
@@ -19,7 +21,7 @@ func mochaPalette() [16]color.Color {
 	}
 	var pal [16]color.Color
 	for i, h := range hex {
-		c, ok := parseHexColor(h)
+		c, ok := overlay.ParseHex(h)
 		if !ok {
 			panic("bad test palette: " + h)
 		}
@@ -243,27 +245,6 @@ func TestResolveSGRMixedContent(t *testing.T) {
 	want := "line \x1b[38;2;243;139;168mred\x1b[0m and \x1b[1;48;2;137;180;250mblue bold\x1b[m done"
 	if got != want {
 		t.Fatalf("ResolveSGR(mixed) = %q, want %q", got, want)
-	}
-}
-
-func TestParseHexColor(t *testing.T) {
-	cases := []struct {
-		in   string
-		want color.RGBA
-		ok   bool
-	}{
-		{"#f38ba8", color.RGBA{0xf3, 0x8b, 0xa8, 0xff}, true},
-		{"f38ba8", color.RGBA{0xf3, 0x8b, 0xa8, 0xff}, true},
-		{"#fab", color.RGBA{0xff, 0xaa, 0xbb, 0xff}, true},
-		{"#f38ba", color.RGBA{}, false},
-		{"#gggggg", color.RGBA{}, false},
-		{"", color.RGBA{}, false},
-	}
-	for _, c := range cases {
-		got, ok := parseHexColor(c.in)
-		if ok != c.ok || (ok && got != c.want) {
-			t.Fatalf("parseHexColor(%q) = %v,%v want %v,%v", c.in, got, ok, c.want, c.ok)
-		}
 	}
 }
 

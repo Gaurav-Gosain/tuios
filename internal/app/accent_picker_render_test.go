@@ -69,7 +69,7 @@ func TestAccentPickerReachesTheWholeColourSpace(t *testing.T) {
 	// they landed on.
 	m.AccentPickerCell(cols-1, rows/2)
 	text := strings.Join(pickerLines(t, m), "\n")
-	if want := hexString(m.AccentPicker.Cur); !strings.Contains(text, want) {
+	if want := overlay.Hex(m.AccentPicker.Cur); !strings.Contains(text, want) {
 		t.Errorf("the dialog does not show the selected colour %s:\n%s", want, text)
 	}
 }
@@ -86,7 +86,7 @@ func TestAccentGridAndHexConverge(t *testing.T) {
 		m.AccentPickerHueCell(9)
 		m.AccentPickerCell(cell[0], cell[1])
 		want := m.AccentPicker.Cur
-		wantHex := hexString(want)
+		wantHex := overlay.Hex(want)
 
 		// Type the same hex in, digit by digit, the way a user would.
 		m.AccentPickerCell(0, 0) // walk away first, so converging means something
@@ -94,7 +94,7 @@ func TestAccentGridAndHexConverge(t *testing.T) {
 			m.AccentPickerHexKey(r)
 		}
 		if got := m.AccentPicker.Cur; got != want {
-			t.Errorf("cell %v: typing %s gave %s", cell, wantHex, hexString(got))
+			t.Errorf("cell %v: typing %s gave %s", cell, wantHex, overlay.Hex(got))
 		}
 		if m.AccentPicker.Col != cell[0] || m.AccentPicker.Row != cell[1] {
 			t.Errorf("cell %v: typing %s put the cursor on (%d,%d)",
@@ -138,7 +138,7 @@ func TestAccentPickerCancelRestores(t *testing.T) {
 		t.Error("applying left the picker open")
 	}
 	if got, _ := m.WindowAccent("aaaaaaaa1111"); got.RGB() != want {
-		t.Errorf("applied accent = %s, want %s", got.Hex(), hexString(want))
+		t.Errorf("applied accent = %s, want %s", got.Hex(), overlay.Hex(want))
 	}
 }
 
@@ -205,7 +205,7 @@ func TestAccentPickerHitsMatchTheDrawnCells(t *testing.T) {
 			want := accentCellColor(m.AccentPicker.Hue, h.Col, h.Row, cols, rows)
 			if m.AccentPicker.Cur != want {
 				t.Fatalf("w=%d: cell (%d,%d) selected %s, want %s",
-					w, h.Col, h.Row, hexString(m.AccentPicker.Cur), hexString(want))
+					w, h.Col, h.Row, overlay.Hex(m.AccentPicker.Cur), overlay.Hex(want))
 			}
 		}
 		m.OverlayMouseRelease()
@@ -341,7 +341,7 @@ func TestAccentPickerFallsBackHonestly(t *testing.T) {
 		t.Errorf("truecolour reported a fallback of %q", label)
 	}
 	if got := toRGBA(accentShown(want)); got != want {
-		t.Errorf("truecolour changed the colour: %s -> %s", hexString(want), hexString(got))
+		t.Errorf("truecolour changed the colour: %s -> %s", overlay.Hex(want), overlay.Hex(got))
 	}
 
 	for _, p := range []colorprofile.Profile{colorprofile.ANSI256, colorprofile.ANSI} {
@@ -358,7 +358,7 @@ func TestAccentPickerFallsBackHonestly(t *testing.T) {
 		// The fallback is the nearest colour the profile has, not an arbitrary one.
 		if d := colorDistance(got, want); d > colorDistance(toRGBA(p.Convert(want)), want) {
 			t.Errorf("%v: %s fell back to %s, which is not what the profile converts to",
-				p, hexString(want), hexString(got))
+				p, overlay.Hex(want), overlay.Hex(got))
 		}
 		// And the user is told, in the frame.
 		text := strings.Join(pickerLines(t, m), "\n")

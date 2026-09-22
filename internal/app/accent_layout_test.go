@@ -249,7 +249,7 @@ func TestAccentSeedLandsOnItsOwnCell(t *testing.T) {
 			wantHue, wantCol, wantRow := accentCellFor(want, 0, cols, rows)
 			s := &m.AccentPicker
 			if s.Cur != want {
-				t.Errorf("%s w=%d: the picker opened on %s", hex, w, hexString(s.Cur))
+				t.Errorf("%s w=%d: the picker opened on %s", hex, w, overlay.Hex(s.Cur))
 			}
 			if s.Hue != wantHue || s.Col != wantCol || s.Row != wantRow {
 				t.Errorf("%s w=%d: the cursor opened on hue %v (%d,%d), want %v (%d,%d)",
@@ -323,9 +323,9 @@ func TestAccentHueNudgeReachesBetweenTheCells(t *testing.T) {
 	// The colour is the exact hue, not the cell's, and the dialog prints it.
 	s := &m.AccentPicker
 	if want := hslToRGB(213, s.Sat, s.Light); s.Cur != want {
-		t.Errorf("hue 213 holds %s, want %s", hexString(s.Cur), hexString(want))
+		t.Errorf("hue 213 holds %s, want %s", overlay.Hex(s.Cur), overlay.Hex(want))
 	}
-	if want := hexString(s.Cur); !strings.Contains(strings.Join(pickerLines(t, m), "\n"), want) {
+	if want := overlay.Hex(s.Cur); !strings.Contains(strings.Join(pickerLines(t, m), "\n"), want) {
 		t.Errorf("the dialog does not print the nudged colour %s", want)
 	}
 

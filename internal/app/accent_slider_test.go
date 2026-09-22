@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // sliderRow is what one slider drew: the rect its track was recorded at, the
@@ -107,7 +109,7 @@ func TestAccentSLStepsOffACellAndBackOntoIt(t *testing.T) {
 					m.AccentPickerSliderStep(ch, -dir)
 					if got := m.AccentPicker.Cur; got != want {
 						t.Fatalf("cell (%d,%d): %s out and back gave %s, want %s",
-							col, row, ch.label(), hexString(got), hexString(want))
+							col, row, ch.label(), overlay.Hex(got), overlay.Hex(want))
 					}
 					// And the grid cursor is back on the cell it started on.
 					if m.AccentPicker.Col != col || m.AccentPicker.Row != row {
@@ -190,7 +192,7 @@ func TestAccentSLAndGridAreOneModel(t *testing.T) {
 		// The colour is built from the model, not from the cell under the cursor.
 		if want := hslToRGB(m.AccentPicker.Hue, m.AccentPicker.Sat, m.AccentPicker.Light); m.AccentPicker.Cur != want {
 			t.Errorf("S=%d%%: the colour is %s, want %s from the model it holds",
-				v, hexString(m.AccentPicker.Cur), hexString(want))
+				v, overlay.Hex(m.AccentPicker.Cur), overlay.Hex(want))
 		}
 	}
 }
@@ -285,7 +287,7 @@ func TestAccentSliderDragRidesThePointer(t *testing.T) {
 	m.accentPickerDragTo(red.X0+5, red.Y0)
 	if m.AccentPicker.Cur != before {
 		t.Errorf("motion with no button held moved the slider: %s -> %s",
-			hexString(before), hexString(m.AccentPicker.Cur))
+			overlay.Hex(before), overlay.Hex(m.AccentPicker.Cur))
 	}
 
 	m.pointerDown = true
@@ -387,7 +389,7 @@ func TestAccentSliderReturningToTheSeedWritesNothing(t *testing.T) {
 	m.AccentPickerSetSlider(accentChanR, was)
 	if m.AccentPicker.Cur != seedRGB {
 		t.Fatalf("the slider did not come back to the seed: %s vs %s",
-			hexString(m.AccentPicker.Cur), seed.Hex())
+			overlay.Hex(m.AccentPicker.Cur), seed.Hex())
 	}
 
 	// Take the stored accent away behind the picker's back. An apply that writes
@@ -407,6 +409,6 @@ func TestAccentSliderReturningToTheSeedWritesNothing(t *testing.T) {
 	want := m.AccentPicker.Cur
 	m.AccentPickerApply()
 	if got, _ := m.WindowAccent(id); got.RGB() != want {
-		t.Errorf("a moved slider stored %s, want %s", got.Hex(), hexString(want))
+		t.Errorf("a moved slider stored %s, want %s", got.Hex(), overlay.Hex(want))
 	}
 }

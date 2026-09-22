@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // TestSessionAccentPickerSeedsOnTheSessionColour: the picker one level up opens
@@ -22,7 +24,7 @@ func TestSessionAccentPickerSeedsOnTheSessionColour(t *testing.T) {
 		t.Fatalf("the picker targets %v %q, want the session", m.AccentPickerTarget, m.AccentPickerTargetID)
 	}
 	if got := m.AccentPicker.Cur; got != want.RGB() {
-		t.Errorf("the picker opened on %s, want the session's colour %s", hexString(got), want.Hex())
+		t.Errorf("the picker opened on %s, want the session's colour %s", overlay.Hex(got), want.Hex())
 	}
 	if m.AccentPicker.Src != accentSourceAuto {
 		t.Error("an automatic colour opened the picker as though the user had pinned it")
@@ -32,7 +34,7 @@ func TestSessionAccentPickerSeedsOnTheSessionColour(t *testing.T) {
 	m.SessionAccent = "cyan"
 	m.OpenSessionAccentPicker("main")
 	if got, want := m.AccentPicker.Cur, SlotAccent(13).RGB(); got != want {
-		t.Errorf("a pinned session opened the picker on %s, want its own accent %s", hexString(got), hexString(want))
+		t.Errorf("a pinned session opened the picker on %s, want its own accent %s", overlay.Hex(got), overlay.Hex(want))
 	}
 	if m.AccentPicker.Src != accentSourceOwn {
 		t.Error("a pinned session opened the picker claiming an automatic colour")
@@ -50,7 +52,7 @@ func TestSessionAccentGoesThroughTheDaemon(t *testing.T) {
 	m.OpenSessionAccentPicker("main")
 	m.AccentPickerHueCell(3)
 	m.AccentPickerCell(6, 1)
-	want := hexString(m.AccentPicker.Cur)
+	want := overlay.Hex(m.AccentPicker.Cur)
 	if cmd := m.AccentPickerApply(); cmd == nil {
 		t.Fatal("applying a session accent returned no command, so nothing reached the daemon")
 	}

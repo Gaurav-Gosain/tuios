@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -44,9 +45,9 @@ func TestAccentCursorReadsOnEverySwatch(t *testing.T) {
 
 	if worst < accentCursorFloor {
 		t.Errorf("the cursor measures %.2f:1 on %s, under the %.1f:1 graphics floor",
-			worst, hexString(worstOn), accentCursorFloor)
+			worst, overlay.Hex(worstOn), accentCursorFloor)
 	}
-	t.Logf("worst cursor contrast %.2f:1 on %s", worst, hexString(worstOn))
+	t.Logf("worst cursor contrast %.2f:1 on %s", worst, overlay.Hex(worstOn))
 }
 
 // TestContrastTextPicksTheBetterInk: whichever ink in its vocabulary reads
@@ -77,7 +78,7 @@ func TestContrastTextPicksTheBetterInk(t *testing.T) {
 		for ink := range inks {
 			if best := theme.ContrastRatio(ink, bg); best > got+0.001 {
 				t.Fatalf("on %s the chosen ink reads %.2f:1 where %v reads %.2f:1",
-					hexString(bg), got, ink, best)
+					overlay.Hex(bg), got, ink, best)
 			}
 		}
 	}

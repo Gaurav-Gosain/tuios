@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
 )
 
@@ -48,24 +49,6 @@ func xtermPalette() [16]color.Color {
 	return xtermDefault
 }
 
-// parseHexColor reads #rgb or #rrggbb, with or without the leading hash. It is
-// the session-package twin of the app's parseHexColor: the daemon must accept
-// a palette without importing the client package.
-func parseHexColor(s string) (color.RGBA, bool) {
-	s = strings.TrimPrefix(s, "#")
-	if len(s) == 3 {
-		s = string([]byte{s[0], s[0], s[1], s[1], s[2], s[2]})
-	}
-	if len(s) != 6 {
-		return color.RGBA{}, false
-	}
-	v, err := strconv.ParseUint(s, 16, 32)
-	if err != nil {
-		return color.RGBA{}, false
-	}
-	return color.RGBA{uint8(v >> 16), uint8(v >> 8), uint8(v), 0xff}, true
-}
-
 // paletteFromParams builds a 16-colour palette from the hex strings a client
 // sent with a resolved capture. An empty slice means "no palette given" and
 // falls back to the xterm default. Any other length, or an unparsable entry,
@@ -80,7 +63,7 @@ func paletteFromParams(hex []string) ([16]color.Color, *verbError) {
 	}
 	var pal [16]color.Color
 	for i, h := range hex {
-		c, ok := parseHexColor(h)
+		c, ok := overlay.ParseHex(h)
 		if !ok {
 			return [16]color.Color{}, newVerbError(ErrVerbInvalidParams, "palette["+strconv.Itoa(i)+"] is not a hex colour: "+h)
 		}

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
 // writeSidebarStateFile drops raw JSON where loadSidebarState will find it.
@@ -84,7 +85,7 @@ func TestLegacyAccentFileRendersIdentically(t *testing.T) {
 	}
 	if got.RGB() != toRGBA(accentColor(4)) {
 		t.Errorf("slot 4 resolved to %s, want the theme's ANSI slot %s",
-			got.Hex(), hexString(toRGBA(accentColor(4))))
+			got.Hex(), overlay.Hex(toRGBA(accentColor(4))))
 	}
 }
 
@@ -108,7 +109,7 @@ func TestLegacyAccentIndexZeroIsBrightBlack(t *testing.T) {
 	}
 	// Slot 0 is ANSI 8, bright black, which is what it has always been.
 	if want := toRGBA(theme8()); got.RGB() != want {
-		t.Errorf("slot 0 resolved to %s, want bright black %s", got.Hex(), hexString(want))
+		t.Errorf("slot 0 resolved to %s, want bright black %s", got.Hex(), overlay.Hex(want))
 	}
 }
 
@@ -198,7 +199,7 @@ func TestAccentPickerOpensOnALegacySlot(t *testing.T) {
 	}
 	if m.AccentPicker.Cur != toRGBA(accentColor(4)) {
 		t.Errorf("the picker opened on %s, want the slot's colour %s",
-			hexString(m.AccentPicker.Cur), hexString(toRGBA(accentColor(4))))
+			overlay.Hex(m.AccentPicker.Cur), overlay.Hex(toRGBA(accentColor(4))))
 	}
 	// The old colour is named on screen.
 	if plain := stripANSIForTrace(mustRenderPicker(t, m)); !strings.Contains(plain, m.AccentPicker.Prev.Hex()) {

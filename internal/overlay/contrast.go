@@ -226,3 +226,61 @@ func Tone(bg color.Color, ratio float64) color.Color {
 	}
 	return MixColors(bg, ink, hi)
 }
+
+// ParseHex reads #rgb or #rrggbb, with or without the leading hash. The short
+// form is expanded the way CSS expands it, so #f0a and #ff00aa are the same
+// colour. Anything else, surrounding space included, reports false.
+func ParseHex(s string) (color.RGBA, bool) {
+	if len(s) > 0 && s[0] == '#' {
+		s = s[1:]
+	}
+	var n [6]byte
+	switch len(s) {
+	case 3:
+		for i := range 3 {
+			d, ok := unhex(s[i])
+			if !ok {
+				return color.RGBA{}, false
+			}
+			n[i*2], n[i*2+1] = d, d
+		}
+	case 6:
+		for i := range 6 {
+			d, ok := unhex(s[i])
+			if !ok {
+				return color.RGBA{}, false
+			}
+			n[i] = d
+		}
+	default:
+		return color.RGBA{}, false
+	}
+	return color.RGBA{R: n[0]<<4 | n[1], G: n[2]<<4 | n[3], B: n[4]<<4 | n[5], A: 0xff}, true
+}
+
+// unhex decodes one hex digit.
+func unhex(c byte) (byte, bool) {
+	switch {
+	case c >= '0' && c <= '9':
+		return c - '0', true
+	case c >= 'a' && c <= 'f':
+		return c - 'a' + 10, true
+	case c >= 'A' && c <= 'F':
+		return c - 'A' + 10, true
+	}
+	return 0, false
+}
+
+// Hex formats c as lowercase #rrggbb. Alpha is dropped.
+//
+// It takes color.RGBA rather than color.Color so a caller holding an RGBA
+// value does not box it to make the call.
+func Hex(c color.RGBA) string {
+	const digits = "0123456789abcdef"
+	out := [7]byte{'#'}
+	for i, v := range [3]uint8{c.R, c.G, c.B} {
+		out[1+i*2] = digits[v>>4]
+		out[2+i*2] = digits[v&0x0f]
+	}
+	return string(out[:])
+}

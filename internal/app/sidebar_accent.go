@@ -498,7 +498,7 @@ func (s *accentPickerState) setCur(c color.RGBA) {
 // numbers that were never rounded.
 func (s *accentPickerState) takeColor(c color.RGBA) {
 	s.Cur, s.Base = c, c
-	s.Hex = hexString(c)
+	s.Hex = overlay.Hex(c)
 	s.Slot, s.Named = -1, ""
 }
 
@@ -512,7 +512,7 @@ func (m *OS) takeHarmony(i int) {
 	s.Harmony = clampInt(i, 0, max(count-1, 0))
 	c := s.harmonyColor(s.Harmony, count)
 	s.Cur = c
-	s.Hex = hexString(c)
+	s.Hex = overlay.Hex(c)
 	s.Slot, s.Named = -1, ""
 }
 

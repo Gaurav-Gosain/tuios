@@ -2,12 +2,12 @@
 package theme
 
 import (
-	"fmt"
 	"image/color"
 	"log"
 	"sync"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/charmbracelet/x/ansi"
 	tint "github.com/lrstanley/bubbletint/v2"
 )
@@ -362,15 +362,14 @@ func NotificationSeverity(notifType string) color.Color {
 	}
 }
 
-// ColorToString converts a color.Color to a hex string
-// Used for dock_helpers.go where colors need to be stored as strings
+// ColorToString converts a color.Color to a lowercase #rrggbb string, with nil
+// reading as #000000. dock_helpers.go uses it where colors are stored as
+// strings.
 func ColorToString(c color.Color) string {
 	if c == nil {
 		return "#000000"
 	}
 	r, g, b, _ := c.RGBA()
 	// RGBA returns values in range 0-65535, convert to 0-255
-	r8, g8, b8 := uint8(r>>8), uint8(g>>8), uint8(b>>8)
-	// Format as hex string
-	return fmt.Sprintf("#%02x%02x%02x", r8, g8, b8)
+	return overlay.Hex(color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 0xff})
 }

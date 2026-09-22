@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -38,7 +39,7 @@ func TestAccentPickerSeedsOnTheColourThePaneWears(t *testing.T) {
 	}
 	m.OpenAccentPicker("aaaaaaaa1111")
 	if got := m.AccentPicker.Cur; got != want.RGB() {
-		t.Errorf("the picker opened on %s, want the session's colour %s", hexString(got), want.Hex())
+		t.Errorf("the picker opened on %s, want the session's colour %s", overlay.Hex(got), want.Hex())
 	}
 	if m.AccentPicker.Src != accentSourceSession {
 		t.Error("the picker opened on the session's colour without saying it was inherited")
@@ -50,7 +51,7 @@ func TestAccentPickerSeedsOnTheColourThePaneWears(t *testing.T) {
 	m.SessionAccent = "brightmagenta"
 	m.OpenAccentPicker("aaaaaaaa1111")
 	if got, want := m.AccentPicker.Cur, SlotAccent(5).RGB(); got != want {
-		t.Errorf("with an explicit session accent the picker opened on %s, want %s", hexString(got), hexString(want))
+		t.Errorf("with an explicit session accent the picker opened on %s, want %s", overlay.Hex(got), overlay.Hex(want))
 	}
 	m.CloseAccentPicker()
 	m.SessionAccent = ""
@@ -60,7 +61,7 @@ func TestAccentPickerSeedsOnTheColourThePaneWears(t *testing.T) {
 	m.SetWindowAccent("aaaaaaaa1111", green)
 	m.OpenAccentPicker("aaaaaaaa1111")
 	if got := m.AccentPicker.Cur; got != green.RGB() {
-		t.Errorf("a pinned pane opened the picker on %s, want its own accent %s", hexString(got), green.Hex())
+		t.Errorf("a pinned pane opened the picker on %s, want its own accent %s", overlay.Hex(got), green.Hex())
 	}
 	if m.AccentPicker.Src == accentSourceSession {
 		t.Error("a pinned pane opened the picker claiming an inherited colour")
@@ -77,7 +78,7 @@ func TestAccentPickerSeedWithSessionColoursOff(t *testing.T) {
 	m.OpenAccentPicker("aaaaaaaa1111")
 	s := m.AccentPicker
 	if got, want := s.Cur, toRGBA(theme.UI().Accent); got != want {
-		t.Errorf("the picker seeded %s, want the chrome accent %s", hexString(got), hexString(want))
+		t.Errorf("the picker seeded %s, want the chrome accent %s", overlay.Hex(got), overlay.Hex(want))
 	}
 	if s.HadPrev || s.Src != accentSourceNone {
 		t.Errorf("with session colours off the picker claims a colour it is not wearing (had=%v src=%v)", s.HadPrev, s.Src)
@@ -137,7 +138,7 @@ func TestAccentApplyWithoutMovingKeepsInheritance(t *testing.T) {
 	want := m.AccentPicker.Cur
 	m.AccentPickerApply()
 	if a, ok := m.WindowAccent("aaaaaaaa1111"); !ok || a != RGBAccent(want) {
-		t.Errorf("picking a colour stored %+v, want %s", a, hexString(want))
+		t.Errorf("picking a colour stored %+v, want %s", a, overlay.Hex(want))
 	}
 }
 

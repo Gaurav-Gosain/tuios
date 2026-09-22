@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
@@ -33,7 +34,7 @@ func TestAccentPickerOpensOnOneAnswer(t *testing.T) {
 		if s.Cur.R == 0 && s.Cur.G == 0 && s.Cur.B == 0 {
 			t.Errorf("prior=%v: the picker opened on black", prior)
 		}
-		if got := hexString(s.Cur); got != s.Hex {
+		if got := overlay.Hex(s.Cur); got != s.Hex {
 			t.Errorf("prior=%v: the hex field reads %q while the working colour is %q", prior, s.Hex, got)
 		}
 		if s.Base != s.Cur {
