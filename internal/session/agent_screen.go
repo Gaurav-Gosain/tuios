@@ -41,7 +41,7 @@ const screenSettleDelay = 400 * time.Millisecond
 // even when a higher-ranked source owns the window, and the silence timer needs
 // that fact to know it must not call the pane idle.
 func (s *Session) scanScreenForAgent(ptyID string, reg *harness.Registry) bool {
-	return s.lookAtPane(ptyID, reg, false, true)
+	return s.lookAtPane(ptyID, reg, paneLook{screen: true})
 }
 
 // screenVerdict matches the harness's screen rules against the bottom of the

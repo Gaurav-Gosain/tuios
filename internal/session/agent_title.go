@@ -59,7 +59,19 @@ func titleVerdict(pty *PTY, hid string, reg *harness.Registry) agentVerdict {
 // scanTitleForAgent is the look at the title alone. It reports whether a rule
 // matched, on the terms scanPaneForAgent does.
 func (s *Session) scanTitleForAgent(ptyID string, reg *harness.Registry) bool {
-	return s.lookAtPane(ptyID, reg, true, false)
+	return s.lookAtPane(ptyID, reg, paneLook{title: true})
+}
+
+// paneLook says which tiers a look reads and why it runs.
+type paneLook struct {
+	title, screen bool
+	// stalled marks the silence timer's look. The timer only runs on a pane
+	// that has written nothing for the whole stall window, and a title that
+	// says the agent is working is a spinner, which writes a new frame each
+	// time it turns. One that has not turned for that long is a frame left
+	// behind, not an answer, so the look ignores it and the timer can demote
+	// the pane.
+	stalled bool
 }
 
 // scanPaneForAgent is the look the daemon takes at a pane that has gone quiet:
@@ -71,7 +83,13 @@ func (s *Session) scanTitleForAgent(ptyID string, reg *harness.Registry) bool {
 // reports whether either found something, which is the question the silence
 // timer asks: a pane with a rule matching is not idle, whoever owns its claim.
 func (s *Session) scanPaneForAgent(ptyID string, reg *harness.Registry) bool {
-	return s.lookAtPane(ptyID, reg, true, true)
+	return s.lookAtPane(ptyID, reg, paneLook{title: true, screen: true})
+}
+
+// scanStalledPane is the silence timer's look: scanPaneForAgent, except that a
+// working title does not count. See paneLook.stalled.
+func (s *Session) scanStalledPane(ptyID string, reg *harness.Registry) bool {
+	return s.lookAtPane(ptyID, reg, paneLook{title: true, screen: true, stalled: true})
 }
 
 // lookAtPane reads the tiers it is asked to and applies what they say.
@@ -83,11 +101,16 @@ func (s *Session) scanPaneForAgent(ptyID string, reg *harness.Registry) bool {
 // louder. Every idle reading then goes through the confirmation gate in
 // agent_idle.go before it is published.
 //
+// A blocking reading on the screen also silences a working title. The prompt
+// is the fact a user needs, and a spinner frame left in the title would
+// otherwise take the pane back to working on every look, ahead of the screen
+// reading that is trying to override that claim.
+//
 // The result is whether the look found an answer the silence timer must
 // respect: any rule matching, except an idle reading a stronger claim would
 // refuse anyway, since that pane is still owned by whatever said it was
 // working and the timer is how that claim is retired.
-func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, useTitle, useScreen bool) bool {
+func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, look paneLook) bool {
 	if reg == nil {
 		return false
 	}
@@ -102,11 +125,14 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, useTitle, useS
 	s.idle.noteHarnessSeen(winID, hid, time.Now())
 
 	var title, screen agentVerdict
-	if useTitle {
+	if look.title {
 		title = titleVerdict(pty, hid, reg)
+		if look.stalled && title.ok && title.state == AgentStateWorking {
+			title.ok = false
+		}
 	}
 	screenLooked := false
-	if useScreen {
+	if look.screen {
 		screen, screenLooked = screenVerdict(pty, hid, reg)
 		if screenLooked && !screen.ok {
 			// Nothing on the screen now, so any claim a blocker or an idle
@@ -119,6 +145,9 @@ func (s *Session) lookAtPane(ptyID string, reg *harness.Registry, useTitle, useS
 	}
 
 	if title.ok && title.state == AgentStateIdle && screen.ok && screen.state != AgentStateIdle {
+		title.ok = false
+	}
+	if title.ok && title.state == AgentStateWorking && screen.ok && agentStateBlocks(screen.state) {
 		title.ok = false
 	}
 	if screen.ok && screen.state == AgentStateIdle && title.ok && title.state != AgentStateIdle {

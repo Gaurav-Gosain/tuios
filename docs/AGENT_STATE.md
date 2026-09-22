@@ -193,6 +193,14 @@ hold:
   window: a harness with a hook reports the prompt itself in far less than that,
   and it is the better answer.
 
+Only a report refreshes a claim. A title or screen look that reads back the
+claim its own source already holds (same state, message and harness) writes
+nothing: no new stamp, no version bump, no push. Before this, a spinner frame
+left in the title restamped its `working` claim on every look, so the claim never
+went two seconds unrefreshed and the prompt under it never showed. A hook or a
+`tuios set-agent-state` caller repeating itself still restamps, since that is a
+source actively reporting.
+
 The override is a loan. It records the claim it displaced, and the next look that
 finds no rule matching puts that claim back exactly as it was, source and state
 together. A prompt can only leave a screen by being painted over, and painting
@@ -414,7 +422,10 @@ An idle reading is then held before it is published:
 
 An idle reading also gives way to a louder reading from the other tier: a rest
 glyph in the title does not hide a permission prompt on the screen, and an empty
-prompt box does not hide a spinner in the title. When a look later finds no rule
+prompt box does not hide a spinner in the title. A spinner in the title does not
+hide a permission prompt either: when the screen reads `needs_input`, the look
+drops a `working` title reading rather than applying it first and leaving the
+prompt to argue with a claim stamped a moment earlier. When a look later finds no rule
 matching at all, the screen stops defending an idle it took, and the pane goes
 back to the tiers that handled it before.
 
@@ -495,7 +506,9 @@ spinner while a turn runs. Claude Code writes a spinner while a turn runs and a
 `✳` at rest (`✳ Claude Code`, measured on 2.1.280). Gemini CLI writes its status
 after a glyph: `Action Required`, `Working` and `Ready`. A spinner proves
 animation, not work, which is why a title rule only moves a pane some other tier
-attributed, and why the silence timer still demotes a pane that stops drawing.
+attributed, and why the silence timer still demotes a pane that stops drawing:
+the timer's own last look ignores a `working` title, because a spinner that has
+not turned for the whole stall window is a frame left behind, not an answer.
 An idle title rule goes through the same confirmation gate as an idle screen
 rule. `tuios explain-agent-screen` prints the pane's title and what the title
 rules made of it beside the screen half, which is the way to write one.

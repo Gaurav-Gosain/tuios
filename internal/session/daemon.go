@@ -1337,7 +1337,7 @@ func (d *Daemon) stallMonitor() {
 					// The last look before the pane is called idle. A stalled pane
 					// emits nothing, so the scan the output path would have run is
 					// the one that never happens.
-					return sess.scanPaneForAgent(ptyID, reg)
+					return sess.scanStalledPane(ptyID, reg)
 				})
 			}
 		}

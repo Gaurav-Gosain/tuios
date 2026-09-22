@@ -120,9 +120,10 @@ type AgentReport struct {
 	// see agentKindOf. It means nothing for any other state.
 	Kind string
 	// paneWroteAt is the unix-nano time the pane last produced output, as the
-	// source read it at the moment it looked. Only the screen tier sets it, and
-	// only blockerOverridesClaim reads it: it is how a claim is shown to be
-	// describing a screen the pane has since painted over.
+	// source read it at the moment it looked. Only the daemon's own looks set
+	// it (the title, the screen and a notification). blockerOverridesClaim reads
+	// it to show a claim is describing a screen the pane has since painted over,
+	// and lookRepeatsClaim reads it to tell a look from a report.
 	paneWroteAt int64
 	// event marks a report read from a one-off event rather than a standing
 	// fact: a desktop notification says what was true when it was sent and is
@@ -170,6 +171,10 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 		}
 		w := &st.Windows[idx]
 		claim, held := s.agentClaims[w.ID]
+		if lookRepeatsClaim(claim, held, w, r) {
+			effective = w.AgentState
+			return errAgentLookUnchanged
+		}
 		prev := w.AgentState
 		override := false
 		// held, not the zero claim's rank: a window nobody has claimed is open to
@@ -215,7 +220,7 @@ func (s *Session) ApplyAgentReport(target string, r AgentReport) (AgentState, bo
 		applied = true
 		return nil
 	})
-	if errors.Is(err, errAgentClaimHeld) {
+	if errors.Is(err, errAgentClaimHeld) || errors.Is(err, errAgentLookUnchanged) {
 		return effective, false, nil
 	}
 	if err != nil {
@@ -420,6 +425,37 @@ var errAgentClaimHeld = agentClaimHeld{}
 type agentClaimHeld struct{}
 
 func (agentClaimHeld) Error() string { return "agent state is held by a higher-ranked source" }
+
+// errAgentLookUnchanged tells mutateState that a look read back what its own
+// claim already says, so nothing is written, stamped or pushed. It never leaves
+// the package.
+var errAgentLookUnchanged = agentLookUnchanged{}
+
+type agentLookUnchanged struct{}
+
+func (agentLookUnchanged) Error() string { return "agent state is unchanged" }
+
+// lookRepeatsClaim reports whether r is a look at the pane (the title or the
+// screen, which set paneWroteAt) reading back exactly the claim its own source
+// already holds: same source, state, message, block kind and harness.
+//
+// Such a report is not new evidence, and applying it restamped AgentStateAt on
+// every look. A spinner frame left in the title then kept its working claim
+// looking fresh forever, and blockerOverridesClaim, which waits for a claim to
+// go unrefreshed, never let the permission prompt under it through.
+//
+// A report from anything else still restamps. A hook or a caller saying working
+// again is a source that is actively reporting, which is what the override's
+// grace and the silence timer both measure, and a notification is a new event
+// even when it says the same thing as the last one.
+func lookRepeatsClaim(claim agentClaim, held bool, w *WindowState, r AgentReport) bool {
+	return held && r.paneWroteAt != 0 && !r.event && !claim.event &&
+		claim.source == r.Source &&
+		w.AgentState == r.State &&
+		w.AgentMessage == r.Message &&
+		w.AgentKind == agentKindOf(r) &&
+		harnessAfterReport(w, r) == w.AgentHarness
+}
 
 // applyStallHeuristic moves any window that has been silently working for at
 // least stall into AgentStateIdle, and reports how many it moved. It is the

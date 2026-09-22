@@ -137,6 +137,8 @@ type WindowState struct {
 	AgentKind string `json:"agent_kind,omitempty"`
 	// AgentStateAt is the unix-nano time AgentState was last set. It is stamped
 	// daemon-side and drives the output-stall heuristic (see applyStallHeuristic).
+	// A title or screen look that reads back its own claim unchanged does not
+	// restamp it (see lookRepeatsClaim).
 	AgentStateAt int64 `json:"agent_state_at,omitempty"`
 	// AgentHarness is the harness id the reporting source named, empty when
 	// nothing named one (the foreground detector never does). It is synced

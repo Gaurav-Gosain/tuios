@@ -252,6 +252,132 @@ func TestIdleYieldsToALouderTier(t *testing.T) {
 	})
 }
 
+// TestSpinnerTitleDoesNotHideAPermissionPrompt is the regression test for a
+// working title keeping a prompt from ever showing. A spinner title left on the
+// pane re-stamped its working claim on every look, just before the screen's
+// needs_input reading asked to override it. The override then always saw a
+// claim fresher than the pane's last write, the grace never ran out, and the
+// pane stayed working for as long as the prompt stood.
+func TestSpinnerTitleDoesNotHideAPermissionPrompt(t *testing.T) {
+	reg := bundledRegistry(t)
+	sess, winID, ptyID := agentPaneWithHarness(t, "claude-code", AgentStateWorking)
+	pastStartupGrace(sess, winID, "claude-code")
+	pty := sess.GetPTY(ptyID)
+	feedVT(t, pty, "\x1b]0;\xe2\xa0\x82 Fix the test\x07")
+	pty.lastOutput.Store(time.Now().UnixNano())
+	sess.scanPaneForAgent(ptyID, reg)
+	if src := sess.agentClaimFor(winID).source; src != AgentSourceOSC {
+		t.Fatalf("working came from %q, want the title (osc)", src)
+	}
+
+	time.Sleep(20 * time.Millisecond)
+	paintPane(t, pty, claudePermissionPrompt)
+	deadline := time.Now().Add(agentBlockerOverrideGrace + time.Second)
+	for time.Now().Before(deadline) {
+		sess.scanPaneForAgent(ptyID, reg)
+		if agentStateOf(t, sess, winID) == AgentStateNeedsInput {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("state = %q after %v of looks, want needs_input", agentStateOf(t, sess, winID), agentBlockerOverrideGrace+time.Second)
+}
+
+// TestPromptSilencesAWorkingTitleInTheSameLook checks one look that reads a
+// spinner in the title and a permission prompt on the screen reports the
+// prompt. Applying the title first moved an at-rest pane to working with a fresh
+// stamp, and the prompt read a moment later was refused as older than it.
+func TestPromptSilencesAWorkingTitleInTheSameLook(t *testing.T) {
+	reg := bundledRegistry(t)
+	sess, winID, ptyID := agentPaneWithHarness(t, "claude-code", AgentStateUnknown)
+	pastStartupGrace(sess, winID, "claude-code")
+	rest := AgentReport{State: AgentStateIdle, Source: AgentSourceOSC, Harness: "claude-code", paneWroteAt: 1}
+	if _, applied, err := sess.ApplyAgentReport(winID, rest); err != nil || !applied {
+		t.Fatalf("rest claim: applied=%v err=%v", applied, err)
+	}
+	pty := sess.GetPTY(ptyID)
+	feedVT(t, pty, "\x1b]0;\xe2\xa0\x82 Fix the test\x07")
+	paintPane(t, pty, claudePermissionPrompt)
+	sess.scanPaneForAgent(ptyID, reg)
+	if got := agentStateOf(t, sess, winID); got != AgentStateNeedsInput {
+		t.Fatalf("state = %q, want needs_input", got)
+	}
+}
+
+// TestRepeatedLookKeepsItsStamp checks a look reading back the claim its own
+// source already holds changes nothing: no new stamp and no version bump. A
+// title that stays on one spinner frame is read on every look, and a restamp
+// each time kept its claim looking fresh forever. A report from outside the
+// daemon's looks still restamps, since that is a source actively reporting.
+func TestRepeatedLookKeepsItsStamp(t *testing.T) {
+	sess, winID := bareSessionWithWindow(t)
+	look := AgentReport{State: AgentStateWorking, Message: "busy", Source: AgentSourceOSC, Harness: "claude-code", paneWroteAt: 1}
+	if _, applied, err := sess.ApplyAgentReport(winID, look); err != nil || !applied {
+		t.Fatalf("first look: applied=%v err=%v", applied, err)
+	}
+	stampOf := func() int64 {
+		st := sess.GetState()
+		idx, err := findWindowStateIndex(st.Windows, winID)
+		if err != nil {
+			t.Fatalf("find window: %v", err)
+		}
+		return st.Windows[idx].AgentStateAt
+	}
+	before, version := stampOf(), sess.GetState().Version
+	time.Sleep(5 * time.Millisecond)
+	state, applied, err := sess.ApplyAgentReport(winID, look)
+	if err != nil || applied || state != AgentStateWorking {
+		t.Fatalf("repeat look: state=%q applied=%v err=%v, want working, false, nil", state, applied, err)
+	}
+	if got := stampOf(); got != before {
+		t.Fatalf("repeat look restamped the state: %d, was %d", got, before)
+	}
+	if got := sess.GetState().Version; got != version {
+		t.Fatalf("repeat look bumped the version: %d, was %d", got, version)
+	}
+
+	look.Message = "still busy"
+	if _, applied, _ := sess.ApplyAgentReport(winID, look); !applied {
+		t.Fatal("a new message from the same look was not applied")
+	}
+
+	before = stampOf()
+	time.Sleep(5 * time.Millisecond)
+	report := AgentReport{State: AgentStateWorking, Message: "still busy", Source: AgentSourceOSC, Harness: "claude-code"}
+	if _, applied, _ := sess.ApplyAgentReport(winID, report); !applied {
+		t.Fatal("a repeated report from outside the looks was not applied")
+	}
+	if got := stampOf(); got == before {
+		t.Fatal("a repeated report from outside the looks did not restamp the state")
+	}
+}
+
+// TestStallTimerIgnoresALeftoverSpinnerTitle checks a working title on a pane
+// that has been silent for the whole stall window does not keep the pane
+// working. A spinner writes a new frame each time it turns, so one that has
+// not turned is a frame left behind.
+func TestStallTimerIgnoresALeftoverSpinnerTitle(t *testing.T) {
+	reg := bundledRegistry(t)
+	const stall = 30 * time.Second
+	sess, winID, ptyID := agentPaneWithHarness(t, "claude-code", AgentStateWorking)
+	pastStartupGrace(sess, winID, "claude-code")
+	pty := sess.GetPTY(ptyID)
+	paintPane(t, pty, "\x1b]0;\xe2\xa0\x82 Fix the test\x07")
+	sess.scanPaneForAgent(ptyID, reg)
+	if src := sess.agentClaimFor(winID).source; src != AgentSourceOSC {
+		t.Fatalf("working came from %q, want the title (osc)", src)
+	}
+
+	quiet := func(string) int64 { return 0 }
+	look := func(id string) bool { return sess.scanStalledPane(id, reg) }
+	if n := sess.applyStallHeuristic(time.Now().Add(stall+time.Second), stall, quiet, look); n != 1 {
+		t.Fatalf("demoted %d panes, want 1", n)
+	}
+	if got := agentStateOf(t, sess, winID); got != AgentStateUnknown {
+		t.Fatalf("state = %q, want unknown", got)
+	}
+}
+
 // TestIdleUnderAStrongerClaimDoesNotHoldOffTheTimer checks an idle box on a
 // pane a hook reported working for is not counted as an answer: the rule's
 // claim would be refused, and the silence timer is what retires a hook that
