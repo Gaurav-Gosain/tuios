@@ -35,8 +35,11 @@ func TestCalculateTilingLayout_TwoWindows(t *testing.T) {
 		{"60-40 split", 0.6, 120, 80},
 		{"30-70 split", 0.3, 60, 140},
 		{"70-30 split", 0.7, 140, 60},
-		{"Clamped low", 0.2, 60, 140},  // Should clamp to 0.3
-		{"Clamped high", 0.9, 140, 60}, // Should clamp to 0.7
+		{"20-80 split", 0.2, 40, 160},
+		{"90-10 split", 0.9, 180, 20},
+		{"Clamped low", 0.05, 20, 180},  // Should clamp to 0.1
+		{"Clamped high", 0.95, 180, 20}, // Should clamp to 0.9
+		{"Unset", 0, 100, 100},          // Zero is the default split
 	}
 
 	for _, tt := range tests {
@@ -293,5 +296,55 @@ func BenchmarkCalculateTilingLayout(b *testing.B) {
 func BenchmarkCalculateTilingLayout_ManyWindows(b *testing.B) {
 	for b.Loop() {
 		_ = CalculateTilingLayout(50, 1920, 1080, 0, 0.5, 0)
+	}
+}
+
+// TestMasterStackStackRatio checks that the stack ratio splits the two stacked
+// panes of the three pane layout, and that an unset ratio keeps the equal
+// split the layout always used.
+func TestMasterStackStackRatio(t *testing.T) {
+	equal := CalculateMasterStackLayout(3, 200, 60, 0, 0.5, 0, 1)
+	legacy := CalculateTilingLayout(3, 200, 60, 0, 0.5, 1)
+	for i := range equal {
+		if equal[i] != legacy[i] {
+			t.Errorf("pane %d: unset stack ratio gave %+v, want the equal split %+v", i, equal[i], legacy[i])
+		}
+	}
+
+	got := CalculateMasterStackLayout(3, 200, 60, 0, 0.5, 0.25, 1)
+	// 60 rows less one gap row is 59, and a quarter of that is 14.
+	if got[1].Height != 14 {
+		t.Errorf("top stacked pane is %d rows, want 14", got[1].Height)
+	}
+	if got[2].Y != got[1].Y+got[1].Height+1 || got[2].Y+got[2].Height != 60 {
+		t.Errorf("bottom stacked pane %+v does not fill the rest below %+v", got[2], got[1])
+	}
+	if got[1].X != got[2].X || got[1].Width != got[2].Width {
+		t.Errorf("stacked panes are not one column: %+v and %+v", got[1], got[2])
+	}
+}
+
+// TestSplitRatioForRoundTrips checks that the ratio derived from a near side
+// reproduces that near side exactly, for every size inside the tiler's range.
+func TestSplitRatioForRoundTrips(t *testing.T) {
+	for _, gap := range []int{0, 1, 2} {
+		for _, total := range []int{37, 80, 121, 240} {
+			avail := total - gap
+			for near := 1; near < avail; near++ {
+				ratio := SplitRatioFor(near, total, gap)
+				if ratio < MinSplitRatio || ratio > MaxSplitRatio {
+					t.Errorf("total %d gap %d: near %d gave ratio %v outside the clamp", total, gap, near, ratio)
+				}
+				// Sizes at the very ends of the range are clamped, so only the
+				// ones strictly inside it must come back exactly.
+				share := (float64(near) + 0.5) / float64(avail)
+				if share <= MinSplitRatio || share >= MaxSplitRatio {
+					continue
+				}
+				if got, _ := splitByRatio(0, total, ratio, gap); got.Size != near {
+					t.Errorf("total %d gap %d: near %d gave ratio %v, which splits at %d", total, gap, near, ratio, got.Size)
+				}
+			}
+		}
 	}
 }

@@ -563,12 +563,13 @@ const (
 // LayoutModes is the accepted set, for the registry and the validator.
 var LayoutModes = []string{LayoutModeBSP, LayoutModeMasterStack, LayoutModeScrolling}
 
-// The master ratio's range and its default. The bounds are the ones the resize
-// keys have always clamped to: past them one side of the split is too narrow to
-// be a pane rather than a strip.
+// The master ratio's range and its default. The master-stack tiler clamps to
+// the same range (layout.MinSplitRatio and MaxSplitRatio are read from here),
+// and it matches the resize_width_N actions, which go from 10 to 90 percent, so
+// a percentage resize the tiler keeps is one the settings row can show.
 const (
-	MasterRatioMin     = 30
-	MasterRatioMax     = 70
+	MasterRatioMin     = 10
+	MasterRatioMax     = 90
 	MasterRatioDefault = 50
 )
 

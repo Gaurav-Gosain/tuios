@@ -1,6 +1,8 @@
 // Package layout provides window tiling and layout management for the terminal.
 package layout
 
+import "github.com/Gaurav-Gosain/tuios/internal/config"
+
 // TileLayout represents the position and size for a tiled window
 type TileLayout struct {
 	X, Y, Width, Height int
@@ -72,6 +74,30 @@ func splitByRatio(origin, total int, ratio float64, gap int) (span, span) {
 	return span{Pos: origin, Size: near}, span{Pos: origin + near + gap, Size: avail - near}
 }
 
+// MinSplitRatio and MaxSplitRatio bound the master ratio and the stack ratio
+// the master-stack tiler accepts. They are the appearance.master_ratio range,
+// so the settings row, a percentage resize and the tiler agree on one range.
+var (
+	MinSplitRatio = float64(config.MasterRatioMin) / 100
+	MaxSplitRatio = float64(config.MasterRatioMax) / 100
+)
+
+// clampSplitRatio keeps a ratio inside MinSplitRatio..MaxSplitRatio.
+func clampSplitRatio(ratio float64) float64 {
+	return min(max(ratio, MinSplitRatio), MaxSplitRatio)
+}
+
+// SplitRatioFor is the inverse of splitByRatio: the ratio at which a split of
+// total cells with gap cells between the two sides gives the near side exactly
+// near cells. The ratio aims at the middle of the cell, so the truncation in
+// splitByRatio lands on near rather than one short of it. The result is
+// clamped to the tiler's range, so a near side outside that range comes back
+// at the nearest size the tiler will produce.
+func SplitRatioFor(near, total, gap int) float64 {
+	avail := max(total-gap, 2)
+	return clampSplitRatio((float64(near) + 0.5) / float64(avail))
+}
+
 // gridColumns is how many columns the grid uses for n panes. Two up to six,
 // three beyond, which keeps a pane roughly as wide as it is tall at the sizes a
 // terminal actually is.
@@ -82,8 +108,28 @@ func gridColumns(n int) int {
 	return 3
 }
 
-// CalculateTilingLayout returns optimal positions for n windows
-// masterRatio controls the width ratio of the master (left) pane (0.3-0.7)
+// MasterStackSideBySide reports whether the master-stack tiler puts two panes
+// side by side in a region of this size. When it does not, it stacks them and
+// the master ratio is the top pane's share of the height.
+func MasterStackSideBySide(screenWidth, usableHeight int) bool {
+	return screenWidth >= usableHeight*cellAspect
+}
+
+// CalculateTilingLayout is CalculateMasterStackLayout with the two stacked
+// panes of the three pane layout sharing the height equally.
+func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin int, masterRatio float64, gap int) []TileLayout {
+	return CalculateMasterStackLayout(n, screenWidth, usableHeight, topMargin, masterRatio, 0, gap)
+}
+
+// CalculateMasterStackLayout returns the master-stack positions for n windows.
+//
+// masterRatio is the master pane's share of the split: its width, or its height
+// when two panes are stacked on a tall screen. stackRatio is the top stacked
+// pane's share of the height in the three pane layout. Zero or less means
+// unset and the two stacked panes share the height equally, which is what the
+// layout did before the ratio existed. A masterRatio of zero or less is the
+// default split. Both ratios are clamped to MinSplitRatio..MaxSplitRatio. A
+// grid of four or more panes is equal-share and reads neither.
 //
 // gap is the cells reserved between neighbours for the drawn divider, on the
 // same terms as the BSP splitter (bsp.go childBounds). Both layouts hand the
@@ -95,19 +141,20 @@ func gridColumns(n int) int {
 // it is what the fixed pane minimum this used to enforce broke: on a 51x37
 // terminal seven panes were each grown to twenty columns inside a region that
 // could give them seventeen, and the frame showed panes on top of each other.
-func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin int, masterRatio float64, gap int) []TileLayout {
+func CalculateMasterStackLayout(n int, screenWidth int, usableHeight int, topMargin int, masterRatio, stackRatio float64, gap int) []TileLayout {
 	if n == 0 {
 		return nil
 	}
 
 	layouts := make([]TileLayout, 0, n)
 
-	// Clamp master ratio to reasonable bounds (30%-70%)
-	if masterRatio < 0.3 {
-		masterRatio = 0.3
-	} else if masterRatio > 0.7 {
-		masterRatio = 0.7
+	// Zero is a model that never set a ratio (an OS built by hand, or state
+	// with the field missing), and gets the default split rather than the
+	// narrowest one the clamp allows.
+	if masterRatio <= 0 {
+		masterRatio = float64(config.MasterRatioDefault) / 100
 	}
+	masterRatio = clampSplitRatio(masterRatio)
 
 	// Status bar is an overlay, windows use full usable height starting at Y=0
 	switch n {
@@ -127,7 +174,7 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 		// obviously upright to the eye; splitting it side by side hands out two
 		// 25 column panes. Compare against the scaled height so the split
 		// follows the shape on screen, and stack when it is taller.
-		if screenWidth >= usableHeight*cellAspect {
+		if MasterStackSideBySide(screenWidth, usableHeight) {
 			near, far := splitByRatio(0, screenWidth, masterRatio, gap)
 			layouts = append(layouts,
 				TileLayout{X: near.Pos, Y: topMargin, Width: near.Size, Height: usableHeight},
@@ -145,6 +192,10 @@ func CalculateTilingLayout(n int, screenWidth int, usableHeight int, topMargin i
 		// Three windows: one left (master), two right stacked
 		master, stack := splitByRatio(0, screenWidth, masterRatio, gap)
 		rows := spans(topMargin, usableHeight, 2, gap)
+		if stackRatio > 0 {
+			top, bottom := splitByRatio(topMargin, usableHeight, clampSplitRatio(stackRatio), gap)
+			rows = []span{top, bottom}
+		}
 		layouts = append(layouts,
 			TileLayout{X: master.Pos, Y: topMargin, Width: master.Size, Height: usableHeight},
 			TileLayout{X: stack.Pos, Y: rows[0].Pos, Width: stack.Size, Height: rows[0].Size},
