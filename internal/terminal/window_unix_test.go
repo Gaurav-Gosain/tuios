@@ -56,6 +56,32 @@ func TestSetPtyPixelSize(t *testing.T) {
 	}
 }
 
+// TestForegroundPgrpIsTheIdleShell checks that the foreground process group
+// read from a fresh pane is the shell's own group, which is what
+// HasForegroundProcess compares against.
+func TestForegroundPgrpIsTheIdleShell(t *testing.T) {
+	exitChan := make(chan string, 1)
+	window, err := NewWindow("test-id-fgpgrp01", "Test", 0, 0, 80, 24, 0, exitChan, nil, config.DefaultScrollbackLines)
+	if err != nil {
+		t.Skipf("Failed to create window with PTY: %v", err)
+	}
+	defer window.Close()
+	if window.Pty == nil || window.ShellPgid <= 0 {
+		t.Skip("No PTY or shell process group available")
+	}
+
+	got, ok := foregroundPgrp(window.Pty.Fd())
+	if !ok {
+		t.Fatal("foregroundPgrp gave no answer for a live pane")
+	}
+	if got != window.ShellPgid {
+		t.Errorf("foregroundPgrp = %d, want the shell's pgid %d", got, window.ShellPgid)
+	}
+	if window.HasForegroundProcess() {
+		t.Error("HasForegroundProcess is true for a pane running only its shell")
+	}
+}
+
 func TestSetCellPixelDimensions(t *testing.T) {
 	exitChan := make(chan string, 1)
 	window, err := NewWindow("test-id-87654321", "Test", 0, 0, 80, 24, 0, exitChan, nil, config.DefaultScrollbackLines)
