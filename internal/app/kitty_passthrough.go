@@ -291,7 +291,6 @@ type PassthroughPlacement struct {
 	ClipTop         int
 	ClipBottom      int
 	ClipLeft        int
-	ClipRight       int
 	MaxShowable     int // Max rows that can be shown in current viewport
 	MaxShowableCols int // Max cols that can be shown in current viewport
 

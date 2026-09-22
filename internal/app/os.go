@@ -166,7 +166,6 @@ type OS struct {
 	pointerSeenY    int
 	ShowHelp        bool
 	InteractionMode bool              // True when actively dragging/resizing
-	MouseSnapping   bool              // Enable/disable mouse snapping
 	WindowExitChan  chan string       // Channel to signal window closure
 	windowExits     windowExitQueue   // Overflow for exits WindowExitChan could not take
 	PTYDataChan     chan struct{}     // Signaled by PTY readers when new output arrives (buffered 1, coalescing)
@@ -787,10 +786,6 @@ type OS struct {
 	// See tape_review.go.
 	ShowTapeReview bool
 	TapeReview     *TapeReviewState
-	// TerminalModeEnteredAt tracks when we last switched to TerminalMode.
-	// Used to suppress misparsed mouse-sequence fragments (phantom keypresses)
-	// during the AllMotion→CellMotion transition window.
-	TerminalModeEnteredAt time.Time
 	// Scrollback browser overlay
 	ShowScrollbackBrowser bool
 	ScrollbackBrowser     any // *scrollback.Browser  - typed as any to avoid import cycle
@@ -855,7 +850,6 @@ type OS struct {
 	SessionSwitcherSelected      int
 	SessionSwitcherScroll        int
 	SessionSwitcherItems         []sessiontree.Node
-	SessionSwitcherError         string
 	SessionSwitcherConfirmDelete string // non-empty = confirming deletion of this session name
 
 	// FederationHosts is what the daemon last said about the machines in the

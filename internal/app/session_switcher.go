@@ -65,7 +65,6 @@ func (m *OS) OpenSessionSwitcher() {
 	m.SessionSwitcherQuery = ""
 	m.SessionSwitcherSelected = 0
 	m.SessionSwitcherScroll = 0
-	m.SessionSwitcherError = ""
 	m.SessionSwitcherItems = m.BuildSessionTree().Sessions
 }
 

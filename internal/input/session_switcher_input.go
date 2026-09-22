@@ -39,7 +39,6 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		o.SessionSwitcherQuery = ""
 		o.SessionSwitcherSelected = 0
 		o.SessionSwitcherScroll = 0
-		o.SessionSwitcherError = ""
 		return o, nil
 
 	case "enter":
@@ -63,7 +62,6 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		o.SessionSwitcherQuery = ""
 		o.SessionSwitcherSelected = 0
 		o.SessionSwitcherScroll = 0
-		o.SessionSwitcherError = ""
 		return o, nil
 
 	case "up", "ctrl+p":

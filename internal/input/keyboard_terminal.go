@@ -20,9 +20,8 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// longer switches the host's mouse mode: the view holds it in all-motion
 	// tracking for the whole session, so there is no transition to guard and
 	// the guard only ate the first keystrokes of anyone who typed the moment
-	// they entered the mode. TerminalModeEnteredAt is still recorded, for the
-	// tape recorder and for any host that turns out to need a transition
-	// guard again; nothing reads it on this path.
+	// they entered the mode. The time of entry is no longer recorded either,
+	// because nothing read it.
 	focusedWindow := o.GetFocusedWindow()
 
 	// Handle help menu first (takes priority over everything in terminal mode)

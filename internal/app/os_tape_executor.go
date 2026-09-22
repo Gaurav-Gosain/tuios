@@ -502,7 +502,6 @@ func (m *OS) SetMode(mode string) error {
 	switch mode {
 	case "terminal", "Terminal", "TerminalMode":
 		m.Mode = TerminalMode
-		m.TerminalModeEnteredAt = time.Now()
 		if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
 			for i, w := range m.Windows {
 				if w.Workspace == m.CurrentWorkspace && !w.Minimized {

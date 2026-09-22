@@ -329,7 +329,6 @@ func (m *OS) TapeManagerConfirmRecording() {
 	// This ensures keystrokes are recorded
 	if m.GetFocusedWindow() != nil {
 		m.Mode = TerminalMode
-		m.TerminalModeEnteredAt = time.Now()
 	}
 
 	m.ShowNotification("Recording started: "+name, "success", 2*time.Second)
