@@ -4,7 +4,23 @@ import (
 	"image/color"
 
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
+
+// applyTheme sets the active theme's colors on an emulator, or clears them to
+// the terminal defaults when theming is disabled.
+func applyTheme(t vt.Terminal) {
+	if theme.IsEnabled() {
+		t.SetThemeColors(
+			theme.TerminalFg(),
+			theme.TerminalBg(),
+			theme.TerminalCursor(),
+			theme.GetANSIPalette(),
+		)
+	} else {
+		t.SetThemeColors(nil, nil, nil, [16]color.Color{})
+	}
+}
 
 // UpdateThemeColors pushes the active theme's palette into the emulator so
 // already-rendered SGR indexed colors resolve to the new theme on the next
@@ -14,16 +30,7 @@ import (
 func (w *Window) UpdateThemeColors() {
 	w.ioMu.Lock()
 	if w.Terminal != nil {
-		if theme.IsEnabled() {
-			w.Terminal.SetThemeColors(
-				theme.TerminalFg(),
-				theme.TerminalBg(),
-				theme.TerminalCursor(),
-				theme.GetANSIPalette(),
-			)
-		} else {
-			w.Terminal.SetThemeColors(nil, nil, nil, [16]color.Color{})
-		}
+		applyTheme(w.Terminal)
 	}
 	w.ioMu.Unlock()
 

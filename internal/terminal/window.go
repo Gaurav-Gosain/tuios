@@ -4,7 +4,6 @@ package terminal
 import (
 	"context"
 	"fmt"
-	"image/color"
 	"log"
 	"os"
 	"os/exec"
@@ -20,7 +19,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -525,20 +523,11 @@ func shortID(id string) string {
 	return id[:8]
 }
 
-// NewWindow creates a new terminal window with the specified properties.
-// It spawns a shell process, sets up PTY communication, and initializes the virtual terminal.
-//
-// A failure returns a nil window and the reason. The reason used to be dropped
-// on the floor, which is how a pane that never appeared came to leave nothing
-// behind to look at; the daemon path has always returned this error, and a user
-// who cannot open a pane is owed the same answer whichever path they are on.
-//
-// command, when given, becomes the pane's process in place of the shell: argv
-// exec'd directly, no shell parsing anything. The launcher runs programs this
-// way because bytes typed at a shell are re-parsed by whatever shell it is,
-// and the window closes when the program exits, the same way it does when a
-// shell does.
-func NewWindow(id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}, scrollbackLines int, command ...string) (*Window, error) {
+// newWindowBase builds the part of a window both constructors share: the
+// emulator sized to the inner area, the common fields, the cursor cache, the
+// title, the theme and the emulator callbacks. It starts no goroutine and
+// touches no PTY.
+func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan chan struct{}, scrollbackLines int) *Window {
 	if title == "" {
 		title = "Terminal " + shortID(id)
 	}
@@ -546,7 +535,6 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	// Create VT terminal with inner dimensions (accounting for borders)
 	terminalWidth := max(width-2, 1)
 	terminalHeight := max(height-2, 1)
-	// Create terminal with scrollback buffer support
 	// How deep the scrollback goes is the session's setting, handed in rather
 	// than read from a package global: one server process holds several
 	// sessions and they need not agree about it.
@@ -557,21 +545,18 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	terminal.SetCellSize(10, 20)
 
 	window := &Window{
-		Width:              width,
-		Height:             height,
-		X:                  x,
-		Y:                  y,
-		Z:                  z,
-		ID:                 id,
-		Terminal:           terminal,
-		PTYDataChan:        ptyDataChan,
-		LastUpdate:         time.Now(),
-		Dirty:              true,
-		ContentDirty:       true,
-		PositionDirty:      true,
-		CachedContent:      "",
-		CachedLayer:        nil,
-		IsBeingManipulated: false,
+		Width:         width,
+		Height:        height,
+		X:             x,
+		Y:             y,
+		Z:             z,
+		ID:            id,
+		Terminal:      terminal,
+		PTYDataChan:   ptyDataChan,
+		LastUpdate:    time.Now(),
+		Dirty:         true,
+		ContentDirty:  true,
+		PositionDirty: true,
 	}
 	// The cursor cache is served whenever the render loop cannot take the I/O
 	// lock, including on the very first frame, so it starts on what the fresh
@@ -579,18 +564,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	window.CachedCursorStyle, window.CachedCursorSteady = terminal.CursorStyle()
 	window.SetTitle(title)
 
-	// Apply theme colors to the terminal (only if theming is enabled)
-	if theme.IsEnabled() {
-		terminal.SetThemeColors(
-			theme.TerminalFg(),
-			theme.TerminalBg(),
-			theme.TerminalCursor(),
-			theme.GetANSIPalette(),
-		)
-	} else {
-		// When theming is disabled, just set nil colors to use terminal defaults
-		terminal.SetThemeColors(nil, nil, nil, [16]color.Color{})
-	}
+	applyTheme(terminal)
 
 	// Set up callbacks to track terminal state changes
 	terminal.SetCallbacks(vt.Callbacks{
@@ -632,6 +606,27 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 			}
 		},
 	})
+
+	return window
+}
+
+// NewWindow creates a new terminal window with the specified properties.
+// It spawns a shell process, sets up PTY communication, and initializes the virtual terminal.
+//
+// A failure returns a nil window and the reason. The reason used to be dropped
+// on the floor, which is how a pane that never appeared came to leave nothing
+// behind to look at; the daemon path has always returned this error, and a user
+// who cannot open a pane is owed the same answer whichever path they are on.
+//
+// command, when given, becomes the pane's process in place of the shell: argv
+// exec'd directly, no shell parsing anything. The launcher runs programs this
+// way because bytes typed at a shell are re-parsed by whatever shell it is,
+// and the window closes when the program exits, the same way it does when a
+// shell does.
+func NewWindow(id, title string, x, y, width, height, z int, exitChan chan string, ptyDataChan chan struct{}, scrollbackLines int, command ...string) (*Window, error) {
+	window := newWindowBase(id, title, x, y, width, height, z, ptyDataChan, scrollbackLines)
+	terminalWidth := max(width-2, 1)
+	terminalHeight := max(height-2, 1)
 
 	// Get cached terminal environment (detected once on first window creation)
 	termType, colorTerm := getTerminalEnv()
@@ -751,104 +746,22 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 // Unlike NewWindow, this doesn't spawn a local PTY - I/O is proxied through the daemon.
 // The caller is responsible for subscribing to PTY output and handling I/O.
 func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string, ptyDataChan chan struct{}, scrollbackLines int) *Window {
-	if title == "" {
-		title = "Terminal " + shortID(id)
-	}
+	window := newWindowBase(id, title, x, y, width, height, z, ptyDataChan, scrollbackLines)
+	window.PTYID = ptyID
+	window.DaemonMode = true
+	// Each item is one batch off the daemon stream, up to 256 KiB.
+	// maxQueuedBytes bounds the bytes; the slots only bound the count, and
+	// 4096 of them is 160 KiB of channel per pane for a queue that never gets
+	// a hundred items deep.
+	window.outputChan = make(chan outputChunk, 4096)
+	window.outputDone = make(chan struct{})
+	window.coalesceWake = make(chan struct{}, 1)
 
-	// Create VT terminal with inner dimensions (accounting for borders)
-	terminalWidth := max(width-2, 1)
-	terminalHeight := max(height-2, 1)
-	terminal := vt.NewWithScrollback(terminalWidth, terminalHeight, scrollbackLines)
-	terminal.SetCellSize(10, 20)
-
-	window := &Window{
-		Width:              width,
-		Height:             height,
-		X:                  x,
-		Y:                  y,
-		Z:                  z,
-		ID:                 id,
-		Terminal:           terminal,
-		PTYDataChan:        ptyDataChan,
-		LastUpdate:         time.Now(),
-		Dirty:              true,
-		ContentDirty:       true,
-		PositionDirty:      true,
-		CachedContent:      "",
-		CachedLayer:        nil,
-		IsBeingManipulated: false,
-		PTYID:              ptyID,
-		DaemonMode:         true,
-		// Each item is one batch off the daemon stream, up to 256 KiB.
-		// maxQueuedBytes bounds the bytes; the slots only bound the count,
-		// and 4096 of them is 160 KiB of channel per pane for a queue that
-		// never gets a hundred items deep.
-		outputChan:   make(chan outputChunk, 4096),
-		outputDone:   make(chan struct{}),
-		coalesceWake: make(chan struct{}, 1),
-		// suppressCallbacks defaults to false (zero value)
-	}
-	// See NewWindow: the cursor cache must not start on a zero value.
-	window.CachedCursorStyle, window.CachedCursorSteady = terminal.CursorStyle()
-	window.SetTitle(title)
-
+	// The goroutines start last, after the theme and callbacks are in place.
 	// Start output writer goroutine to serialize writes
 	go window.outputWriter()
 	// Start render coalescer to prevent partial-frame flickering
 	go window.renderCoalescer()
-
-	// Apply theme colors to the terminal (only if theming is enabled)
-	if theme.IsEnabled() {
-		terminal.SetThemeColors(
-			theme.TerminalFg(),
-			theme.TerminalBg(),
-			theme.TerminalCursor(),
-			theme.GetANSIPalette(),
-		)
-	} else {
-		terminal.SetThemeColors(nil, nil, nil, [16]color.Color{})
-	}
-
-	// Set up callbacks to track terminal state changes
-	terminal.SetCallbacks(vt.Callbacks{
-		AltScreen: func(enabled bool) {
-			// Suppress callback during state restoration to prevent race conditions
-			// where buffered PTY output overwrites restored state
-			if !window.suppressCallbacks.Load() {
-				window.SetAltScreen(enabled)
-			}
-		},
-		Title: func(title string) {
-			// Update window title from terminal escape sequence
-			if title != "" {
-				window.SetTitle(title)
-			}
-		},
-		ClipboardSet: func(_ string, content string) {
-			window.setClipboard(content)
-			if window.ClipboardSetFunc != nil {
-				window.ClipboardSetFunc(content)
-			}
-		},
-		ClipboardQuery: func(_ string) string {
-			return window.clipboard()
-		},
-		Notify: func(title, body string) {
-			if window.NotifyFunc != nil {
-				window.NotifyFunc(title, body)
-			}
-		},
-		Bell: func() {
-			if window.BellFunc != nil {
-				window.BellFunc()
-			}
-		},
-		WorkingDirectory: func(cwd string) {
-			if window.CwdFunc != nil {
-				window.CwdFunc(cwd)
-			}
-		},
-	})
 
 	return window
 }
