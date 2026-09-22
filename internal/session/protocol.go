@@ -365,15 +365,6 @@ type ErrorPayload struct {
 
 // PTY-related payloads
 
-// PTYInfo describes a single PTY.
-type PTYInfo struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-	Exited bool   `json:"exited"`
-}
-
 // CreatePTYPayload requests creation of a new PTY.
 type CreatePTYPayload struct {
 	Title  string `json:"title,omitempty"`
@@ -392,11 +383,6 @@ type PTYCreatedPayload struct {
 
 // ClosePTYPayload requests closing a PTY.
 type ClosePTYPayload struct {
-	PTYID string `json:"pty_id"`
-}
-
-// FocusPTYPayload requests focus on a PTY.
-type FocusPTYPayload struct {
 	PTYID string `json:"pty_id"`
 }
 
@@ -496,25 +482,6 @@ type ExecuteCommandPayload struct {
 	Args        []string `json:"args,omitempty"`         // Command arguments
 	TapeScript  string   `json:"tape_script,omitempty"`  // Raw tape script to execute (alternative to CommandType)
 	RequestID   string   `json:"request_id,omitempty"`   // Optional ID for matching responses
-}
-
-// SendKeysPayload requests sending keystrokes to a session.
-type SendKeysPayload struct {
-	SessionName  string `json:"session_name,omitempty"`  // Target session (empty = most recently active)
-	Keys         string `json:"keys"`                    // Key sequence (e.g., "ctrl+b,n" or "Hello World")
-	Literal      bool   `json:"literal,omitempty"`       // If true, send keys literally to PTY (no parsing)
-	Raw          bool   `json:"raw,omitempty"`           // If true, treat each character as a separate key (no splitting on space/comma)
-	WindowTarget string `json:"window_target,omitempty"` // Target window by name or ID (empty = focused window)
-	RequestID    string `json:"request_id,omitempty"`    // Optional ID for matching responses
-}
-
-// CapturePanePayload requests capturing the content of a pane.
-type CapturePanePayload struct {
-	SessionName  string `json:"session_name,omitempty"`  // Target session (empty = most recently active)
-	WindowTarget string `json:"window_target,omitempty"` // Target window by name or ID (empty = focused)
-	Scrollback   bool   `json:"scrollback,omitempty"`    // Include scrollback history (not just visible screen)
-	ANSI         bool   `json:"ansi,omitempty"`          // Include ANSI escape codes in output
-	RequestID    string `json:"request_id,omitempty"`    // Optional ID for matching responses
 }
 
 // CommandResultPayload contains the result of a remote command execution.

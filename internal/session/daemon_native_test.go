@@ -126,22 +126,20 @@ func TestSendKeysAndCaptureDaemonSide(t *testing.T) {
 
 	// Type a command with a distinctive marker into the focused pane's PTY.
 	const marker = "tuios-headless-marker"
-	err := d.sendKeysDaemonSide(sess, &SendKeysPayload{
-		Keys:    "echo " + marker + "\n",
-		Literal: true,
-	})
+	err := d.sendKeysDaemonSide(sess, "", "echo "+marker+"\n", true, false)
 	if err != nil {
 		t.Fatalf("sendKeysDaemonSide failed: %v", err)
 	}
 
 	// Poll the daemon-side capture until the marker's echoed output appears.
+	pty, err := d.resolvePTYForTarget(sess, "")
+	if err != nil {
+		t.Fatalf("resolvePTYForTarget failed: %v", err)
+	}
 	deadline := time.Now().Add(5 * time.Second)
 	var content string
 	for time.Now().Before(deadline) {
-		content, err = d.capturePaneDaemonSide(sess, &CapturePanePayload{})
-		if err != nil {
-			t.Fatalf("capturePaneDaemonSide failed: %v", err)
-		}
+		content = pty.CaptureContent(false, false)
 		if strings.Contains(content, marker) {
 			return // success
 		}
@@ -152,7 +150,7 @@ func TestSendKeysAndCaptureDaemonSide(t *testing.T) {
 
 func TestSendKeysDaemonSideNoWindows(t *testing.T) {
 	d, sess := newTestDaemonSession(t)
-	err := d.sendKeysDaemonSide(sess, &SendKeysPayload{Keys: "Enter"})
+	err := d.sendKeysDaemonSide(sess, "", "Enter", false, false)
 	if err == nil {
 		t.Error("expected error sending keys to a session with no windows")
 	}

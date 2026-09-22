@@ -323,27 +323,17 @@ func (d *Daemon) resolvePTYForTarget(sess *Session, target string) (*PTY, error)
 
 // sendKeysDaemonSide writes a send-keys request straight to the target window's
 // PTY, with no TUI client involved.
-func (d *Daemon) sendKeysDaemonSide(sess *Session, payload *SendKeysPayload) error {
-	pty, err := d.resolvePTYForTarget(sess, payload.WindowTarget)
+func (d *Daemon) sendKeysDaemonSide(sess *Session, target, keys string, literal, raw bool) error {
+	pty, err := d.resolvePTYForTarget(sess, target)
 	if err != nil {
 		return err
 	}
-	data, err := keysToBytes(payload.Keys, payload.Literal, payload.Raw)
+	data, err := keysToBytes(keys, literal, raw)
 	if err != nil {
 		return err
 	}
 	_, err = pty.Write(data)
 	return err
-}
-
-// capturePaneDaemonSide renders the target pane from the daemon-side VT
-// emulator, with no TUI client involved.
-func (d *Daemon) capturePaneDaemonSide(sess *Session, payload *CapturePanePayload) (string, error) {
-	pty, err := d.resolvePTYForTarget(sess, payload.WindowTarget)
-	if err != nil {
-		return "", err
-	}
-	return pty.CaptureContent(payload.Scrollback, payload.ANSI), nil
 }
 
 // buildWindowListData builds the window-list result map from session state. It

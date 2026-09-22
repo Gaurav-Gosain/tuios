@@ -420,13 +420,6 @@ func (d *Daemon) verbSendKeys(_ *connState, params json.RawMessage) (any, *verbE
 		return nil, verr
 	}
 
-	payload := &SendKeysPayload{
-		Keys:         p.Keys,
-		Literal:      p.Literal,
-		Raw:          p.Raw,
-		WindowTarget: p.Window,
-	}
-
 	// Route to the TUI when attached so window-manager keys (the prefix) are
 	// honored; otherwise write the parsed bytes straight to the target PTY.
 	if tui := d.findTUIClient(sess.ID); tui != nil {
@@ -446,7 +439,7 @@ func (d *Daemon) verbSendKeys(_ *connState, params json.RawMessage) (any, *verbE
 		return map[string]any{"type": "ok"}, nil
 	}
 
-	if err := d.sendKeysDaemonSide(sess, payload); err != nil {
+	if err := d.sendKeysDaemonSide(sess, p.Window, p.Keys, p.Literal, p.Raw); err != nil {
 		return nil, mapResolveErr(err, sess)
 	}
 	return map[string]any{"type": "ok"}, nil
