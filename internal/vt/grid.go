@@ -1,6 +1,7 @@
 package vt
 
 import (
+	"slices"
 	"strings"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -36,6 +37,17 @@ type grid struct {
 	// read that needs a whole row for a nil one and shared by later reads.
 	// It is never written.
 	blank uv.Line
+	// ext holds, for each row, a column from which every cell to the right
+	// is a plain blank (isBlankCell). It is 0 for a row nothing has written.
+	// It is an upper bound, not the exact end of the text: a write raises
+	// it, and only blanking the whole row lowers it.
+	//
+	// A scroll blanks the rows it brings in and packs the rows it pushes into
+	// the scrollback, and both used to walk the whole row. A shell's output
+	// is short lines on a wide screen, so almost all of that walk was over
+	// blanks: at 207 columns a 10-character line cost 22 KB of cell reads and
+	// writes. With the extent they stop where the text does.
+	ext []int
 }
 
 // gridBlank is the cell CellAt returns for a column of a row that has not
@@ -45,7 +57,15 @@ type grid struct {
 var gridBlank = uv.EmptyCell
 
 func newGrid(width, height int) *grid {
-	return &grid{rows: make([]uv.Line, height), width: width}
+	return &grid{rows: make([]uv.Line, height), ext: make([]int, height), width: width}
+}
+
+// raiseExt records that row y may hold something other than a blank up to
+// column end.
+func (g *grid) raiseExt(y, end int) {
+	if end > g.ext[y] {
+		g.ext[y] = min(end, g.width)
+	}
 }
 
 // Width returns the number of columns.
@@ -82,7 +102,9 @@ func (g *grid) Row(y int) uv.Line {
 }
 
 // row returns row y for writing, allocating it if it has not been written.
+// The caller may write any column, so the row's extent becomes its width.
 func (g *grid) row(y int) uv.Line {
+	g.ext[y] = g.width
 	if g.rows[y] == nil {
 		g.rows[y] = newBlankLine(g.width)
 	}
@@ -128,6 +150,12 @@ func (g *grid) SetCell(x, y int, c *uv.Cell) {
 		g.rows[y] = newBlankLine(g.width)
 	}
 	g.rows[y].Set(x, c)
+	// A blank written over a wide character leaves its other half as a
+	// styled space, but that half was already inside the extent the wide
+	// character raised it to, so only a non-blank write can move it.
+	if !isBlankFill(c) && x >= 0 {
+		g.raiseExt(y, x+max(c.Width, 1))
+	}
 }
 
 // Resize changes the grid to width columns and height rows. Rows added at
@@ -147,22 +175,30 @@ func (g *grid) Resize(width, height int) {
 		}
 		g.blank = nil
 		g.width = width
+		// Columns added on the right are blank, so only a narrower grid
+		// has to pull the extents in.
+		for y := range g.ext {
+			g.ext[y] = min(g.ext[y], width)
+		}
 	}
 	if height > len(g.rows) {
+		g.ext = append(g.ext, make([]int, height-len(g.rows))...)
 		g.rows = append(g.rows, make([]uv.Line, height-len(g.rows))...)
 	} else if height < len(g.rows) {
 		clear(g.rows[height:])
 		g.rows = g.rows[:height]
+		g.ext = g.ext[:height]
 	}
 }
 
 // Clear sets every cell to a blank, as uv.Buffer.Clear does: by assignment,
 // without the wide-cell handling of Set, because every cell goes.
 func (g *grid) Clear() {
-	for _, row := range g.rows {
-		for x := range row {
+	for y, row := range g.rows {
+		for x := range row[:g.ext[y]] {
 			row[x] = uv.EmptyCell
 		}
+		g.ext[y] = 0
 	}
 }
 
@@ -197,12 +233,16 @@ func (g *grid) fullWidth(area uv.Rectangle) bool {
 
 // blankRows writes c across every column of rows y to end-1, in place where
 // the row exists and by leaving it nil where it does not and c is a blank.
+// A blank fill writes only up to each row's extent: past it the row is blank
+// already.
 func (g *grid) blankRows(y, end int, c *uv.Cell) {
 	if isBlankFill(c) {
 		for i := y; i < end; i++ {
-			for x := range g.rows[i] {
-				g.rows[i][x] = uv.EmptyCell
+			row := g.rows[i]
+			for x := range row[:g.ext[i]] {
+				row[x] = uv.EmptyCell
 			}
+			g.ext[i] = 0
 		}
 		return
 	}
@@ -252,6 +292,7 @@ func (g *grid) InsertLineArea(y, n int, c *uv.Cell, area uv.Rectangle) {
 		copy(dropped, g.rows[end-n:end])
 		copy(g.rows[y+n:end], g.rows[y:end-n])
 		copy(g.rows[y:y+n], dropped)
+		g.rotateExt(y, end, end-n)
 		g.blankRows(y, y+n, c)
 		return
 	}
@@ -298,6 +339,7 @@ func (g *grid) DeleteLineArea(y, n int, c *uv.Cell, area uv.Rectangle) {
 		copy(dropped, g.rows[y:y+n])
 		copy(g.rows[y:end-n], g.rows[y+n:end])
 		copy(g.rows[end-n:end], dropped)
+		g.rotateExt(y, end, y+n)
 		g.blankRows(end-n, end, c)
 		return
 	}
@@ -319,6 +361,16 @@ func (g *grid) DeleteLineArea(y, n int, c *uv.Cell, area uv.Rectangle) {
 			g.SetCell(x, i, c)
 		}
 	}
+}
+
+// rotateExt moves the extents of rows y to end-1 the way a full-width line
+// shift moved the rows: rotated left so the extent at mid comes first. The
+// rows about to be blanked keep the extents they carried, which is what
+// lets blankRows stop at the text they held.
+func (g *grid) rotateExt(y, end, mid int) {
+	slices.Reverse(g.ext[y:mid])
+	slices.Reverse(g.ext[mid:end])
+	slices.Reverse(g.ext[y:end])
 }
 
 // anyRow reports whether any of rows y to end-1 has been written.

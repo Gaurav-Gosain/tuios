@@ -528,15 +528,18 @@ func (s *Screen) rotateWholeScreenUp(n int, save bool) bool {
 	copy(recycled, lines[:n])
 	copy(lines, lines[n:])
 	if save {
-		for _, row := range recycled {
+		// ext still describes the departing rows here: they have moved in
+		// lines but not yet in ext, which is rotated below.
+		for i, row := range recycled {
 			if row == nil {
 				s.scrollback.PushBlankLine(s.buf.Width())
 			} else {
-				s.scrollback.PushLine(row)
+				s.scrollback.pushTrimmed(row, s.buf.ext[i])
 			}
 		}
 	}
 	copy(lines[height-n:], recycled)
+	s.buf.rotateExt(0, height, n)
 
 	s.buf.blankRows(height-n, height, s.blankCell())
 	return true

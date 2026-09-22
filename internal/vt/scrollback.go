@@ -172,6 +172,20 @@ func (sb *Scrollback) PushLine(line uv.Line) {
 	sb.push(line[:n], len(line))
 }
 
+// pushTrimmed is PushLine for a grid row whose cells from column ext on are
+// known to be blank, so the search for the trailing blanks starts there
+// instead of at the end of the row.
+func (sb *Scrollback) pushTrimmed(line uv.Line, ext int) {
+	if len(line) == 0 {
+		return
+	}
+	n := min(ext, len(line))
+	for n > 0 && isBlankCell(&line[n-1]) {
+		n--
+	}
+	sb.push(line[:n], len(line))
+}
+
 // PushBlankLine stores a blank line of the given width as the newest
 // scrollback line: what a row of the screen that nothing has written holds.
 func (sb *Scrollback) PushBlankLine(width int) {

@@ -923,3 +923,28 @@ per-character path on random input with wide characters in the way.
 | `EmulatorScrollThroughput/alt-screen-no-scrollback` | 1.71 us | 1.55 us | -9.5% (p=0.028) |
 | `EmulatorShortLineScroll/alt-screen-no-scrollback` | 600 ns | 545 ns | -9.2% (p=0.015) |
 | every other vt benchmark | | | `~` |
+
+**A row knows where its text ends** (`grid.go`). On a short-line flood 72% of
+the time was the blank tail of each 207-column row: the scrollback's
+trailing-blank trim (`isBlankCell`, 39%) and the blanking of the row brought in
+at the bottom (`blankRows`, 33%), each walking about 22 KB of cells for a line
+of ten characters. This is the lever the `BlankFill` entry above left open:
+moving fewer bytes. The grid now keeps, per row, a column past which every cell
+is a plain blank. `SetCell` raises it, a write through `row()` and the ASCII
+run's direct store raise it, a full-width line shift and the whole-screen
+rotation carry it with the row, and blanking a row resets it. `blankRows`,
+`Clear` and the scrollback push stop there.
+`TestGridMatchesUVBufferUnderRandomOperations` now checks the invariant after
+every grid operation, and
+`TestGridExtentHoldsUnderGeneratedInput` checks it on both screens after every
+step of generated terminal input. It costs one int per row.
+
+| CPU per op | before | after | |
+|---|---|---|---|
+| `EmulatorShortLineScroll/with-scrollback` | 1120 ns | 240 ns | -78.6% (p=0.002) |
+| `EmulatorShortLineScroll/alt-screen-no-scrollback` | 555 ns | 195 ns | -64.9% (p=0.002) |
+| `EmulatorWriteHeavyOutput/plain-log` | 46.3 us | 24.2 us | -47.8% (p=0.002) |
+| `EmulatorWriteHeavyOutput/colored-log` | 50.0 us | 26.7 us | -46.7% (p=0.002) |
+| `BackendScroll` | 71.3 ms | 47.1 ms | -33.9% (p=0.002) |
+| `Emulator_ANSIColorWrite` | 993 ns | 693 ns | -30.2% (p=0.002) |
+| every other vt benchmark | | | `~` |

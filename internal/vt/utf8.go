@@ -466,6 +466,9 @@ func (e *Emulator) printASCIIRun(run []byte) {
 				cell.Content = asciiStr[run[k]]
 				row[x+k] = cell
 			}
+			// Written behind the grid's back, so its extent is raised here
+			// (see grid.ext).
+			e.scr.buf.raiseExt(y, x+n)
 		} else {
 			for k := range n {
 				cell.Content = asciiStr[run[k]]

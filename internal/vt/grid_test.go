@@ -108,6 +108,9 @@ func gridsAgree(t *testing.T, g *grid, b *uv.Buffer, what string) {
 			}
 		}
 	}
+	if bad := extentHolds(g); bad != "" {
+		t.Fatalf("after %s: %s", what, bad)
+	}
 	if gs, bs := g.String(), b.String(); gs != bs {
 		t.Fatalf("after %s: String differs:\n grid %q\n   uv %q", what, gs, bs)
 	}
