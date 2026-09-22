@@ -1,63 +1,10 @@
 package pool
 
 import (
-	"strings"
-	"sync"
 	"testing"
 
 	"charm.land/lipgloss/v2"
 )
-
-// TestStringBuilderPool tests the string builder pool
-func TestStringBuilderPool(t *testing.T) {
-	// Get a string builder from pool
-	sb := GetStringBuilder()
-	if sb == nil {
-		t.Fatal("GetStringBuilder returned nil")
-	}
-
-	// Use it
-	sb.WriteString("test")
-	if sb.String() != "test" {
-		t.Errorf("Expected 'test', got %q", sb.String())
-	}
-
-	// Return it to pool
-	PutStringBuilder(sb)
-
-	// Get again and verify it's reset
-	sb2 := GetStringBuilder()
-	if sb2.Len() != 0 {
-		t.Errorf("String builder should be reset, but has length %d", sb2.Len())
-	}
-
-	PutStringBuilder(sb2)
-}
-
-// TestStringBuilderPool_Concurrent tests concurrent access to string builder pool
-func TestStringBuilderPool_Concurrent(t *testing.T) {
-	const goroutines = 10
-	const iterations = 100
-
-	var wg sync.WaitGroup
-	wg.Add(goroutines)
-
-	for i := range goroutines {
-		go func(id int) {
-			defer wg.Done()
-			for j := range iterations {
-				sb := GetStringBuilder()
-				sb.WriteString("test")
-				if sb.String() != "test" {
-					t.Errorf("Goroutine %d iteration %d: unexpected content", id, j)
-				}
-				PutStringBuilder(sb)
-			}
-		}(i)
-	}
-
-	wg.Wait()
-}
 
 // TestLayerSlicePool tests the layer slice pool
 func TestLayerSlicePool(t *testing.T) {
@@ -119,75 +66,6 @@ func TestByteSlicePool(t *testing.T) {
 	PutByteSlice(buf2)
 }
 
-// TestStylePool tests the lipgloss style pool
-func TestStylePool(t *testing.T) {
-	// Get a style from pool
-	style := GetStyle()
-	if style == nil {
-		t.Fatal("GetStyle returned nil")
-	}
-
-	// Return it to pool
-	PutStyle(style)
-
-	// Get again
-	style2 := GetStyle()
-	if style2 == nil {
-		t.Fatal("Second GetStyle returned nil")
-	}
-
-	PutStyle(style2)
-}
-
-// TestPoolReuse tests that pools actually reuse objects
-func TestPoolReuse(t *testing.T) {
-	// String builder pool
-	sb1 := GetStringBuilder()
-	ptr1 := &sb1
-	PutStringBuilder(sb1)
-	sb2 := GetStringBuilder()
-	ptr2 := &sb2
-
-	// The pointers should be the same (reused from pool)
-	// Note: This is not guaranteed by sync.Pool but is typical behavior
-	_ = ptr1
-	_ = ptr2
-
-	PutStringBuilder(sb2)
-}
-
-// BenchmarkStringBuilderPool benchmarks the string builder pool
-func BenchmarkStringBuilderPool(b *testing.B) {
-	b.Run("WithPool", func(b *testing.B) {
-		for b.Loop() {
-			sb := GetStringBuilder()
-			sb.WriteString("test string")
-			_ = sb.String()
-			PutStringBuilder(sb)
-		}
-	})
-
-	b.Run("WithoutPool", func(b *testing.B) {
-		for b.Loop() {
-			sb := &strings.Builder{}
-			sb.WriteString("test string")
-			_ = sb.String()
-		}
-	})
-}
-
-// BenchmarkStringBuilderPool_Parallel benchmarks concurrent pool usage
-func BenchmarkStringBuilderPool_Parallel(b *testing.B) {
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			sb := GetStringBuilder()
-			sb.WriteString("test string for parallel benchmark")
-			_ = sb.String()
-			PutStringBuilder(sb)
-		}
-	})
-}
-
 // BenchmarkByteSlicePool benchmarks the byte slice pool
 func BenchmarkByteSlicePool(b *testing.B) {
 	b.Run("WithPool", func(b *testing.B) {
@@ -218,22 +96,6 @@ func BenchmarkLayerSlicePool(b *testing.B) {
 	b.Run("WithoutPool", func(b *testing.B) {
 		for b.Loop() {
 			_ = make([]*lipgloss.Layer, 0, 16)
-		}
-	})
-}
-
-// BenchmarkStylePool benchmarks the style pool
-func BenchmarkStylePool(b *testing.B) {
-	b.Run("WithPool", func(b *testing.B) {
-		for b.Loop() {
-			style := GetStyle()
-			PutStyle(style)
-		}
-	})
-
-	b.Run("WithoutPool", func(b *testing.B) {
-		for b.Loop() {
-			_ = lipgloss.NewStyle()
 		}
 	})
 }

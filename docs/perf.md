@@ -185,10 +185,12 @@ inside ultraviolet's `renderLine`, which the profile attributes upward to the
 builder because that is where the bytes land. Recorded because the profile line
 is genuinely misleading.
 
-`pool.PutStringBuilder` drops the buffer via `Reset`, keeping only the 16-byte
-header, which reads like the exact bug this pass was hunting. It is not:
+The string builder pool that `renderTerminal` once used dropped the buffer via
+`Reset`, keeping only the 16-byte header. Reusing the buffer would be wrong:
 `strings.Builder.String()` returns a string aliasing that buffer, so reusing it
-would corrupt strings already handed out. Left alone deliberately.
+would corrupt strings already handed out. Since the pool kept nothing of value,
+it was removed in favour of a local `strings.Builder`, with no change in
+allocs/op on `BenchmarkRenderTerminalReal`.
 
 The rail's signature fold runs even when the sidebar reserves no columns, at
 about 0.5 µs per frame. Guarding it is correct but worth 0.006% of a frame at

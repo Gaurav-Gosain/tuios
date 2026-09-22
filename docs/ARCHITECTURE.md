@@ -120,7 +120,7 @@ graph TB
 
 - **Rendering Engine**: Composites all visual layers
 - **Style Cache**: LRU cache for Lipgloss styles (40-60% allocation reduction)
-- **Object Pools**: Reusable buffers for strings, bytes, and layers
+- **Object Pools**: Reusable byte buffers, layer slices, and highlight grids
 
 ## Data Flow
 
@@ -440,8 +440,8 @@ graph TD
 2. **Content Caching**: Unchanged window content reused from cache
 3. **Viewport Clipping**: Window content clipped to viewport bounds using ANSI-aware line-based approach
 4. **Drag Bounds Checking**: Mouse operations prevent windows from going off-screen during drag (improves UX and prevents ANSI clipping edge cases)
-5. **Style Caching**: Lipgloss styles pooled and reused (LRU cache)
-6. **Object Pooling**: String builders, byte buffers, and layer objects pooled
+5. **Style Caching**: Lipgloss styles cached and reused (LRU cache)
+6. **Object Pooling**: Byte buffers, layer slices, and highlight grids pooled
 7. **Z-Index Sorting**: Windows stacked by priority (focused, animating, minimized)
 8. **Frame Skipping**: No render when no changes and no animations
 9. **Event-Driven Refresh**: renders are scheduled by state changes, not a timer; an idle session schedules none (see [perf.md](perf.md))
@@ -587,8 +587,8 @@ This ensures:
 | **SSH Server**        | `internal/server/ssh.go`        | Remote access              | Wish middleware, per-session isolation, authentication          |
 | **Config System**     | `internal/config/userconfig.go` | Configuration              | TOML parsing, keybinding validation, defaults management        |
 | **Keybind Registry**  | `internal/config/registry.go`   | Keybinding mapping         | Action lookup, conflict detection, help generation              |
-| **Style Cache**       | `internal/app/stylecache.go`    | Performance optimization   | Lipgloss style pooling, LRU cache (40-60% allocation reduction) |
-| **Object Pools**      | `internal/pool/pool.go`         | Memory management          | String/byte/layer pooling, GC pressure reduction                |
+| **Style Cache**       | `internal/app/stylecache.go`    | Performance optimization   | Lipgloss style caching, LRU cache (40-60% allocation reduction) |
+| **Object Pools**      | `internal/pool/pool.go`         | Memory management          | Byte/layer/grid pooling, GC pressure reduction                  |
 | **Copy Mode**         | `internal/input/copymode_*.go`  | Vim navigation             | 50+ vim motions, search, visual selection, character search     |
 | **Workspace Manager** | `internal/app/workspace.go`     | Multi-workspace support    | Workspace switching, window movement, focus memory              |
 | **Animation System**  | `internal/app/animations.go`    | Visual transitions         | Minimize/restore/snap animations, easing functions              |

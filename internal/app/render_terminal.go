@@ -360,8 +360,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	cursorX := cursor.X
 	cursorY := cursor.Y
 
-	builder := pool.GetStringBuilder()
-	defer pool.PutStringBuilder(builder)
+	var builder strings.Builder
 
 	contentW := window.ContentWidth()
 	contentH := window.ContentHeight()

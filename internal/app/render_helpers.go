@@ -8,7 +8,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/pool"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -126,8 +125,7 @@ func borderRowGlyphs(isTop bool, s *config.Settings) (fill, cornerLeft, cornerRi
 // windowTitleBadge wraps a window's name in the pill caps the title bar shows
 // it in.
 func windowTitleBadge(windowName, agentState string, col color.Color, s *config.Settings) string {
-	style := pool.GetStyle()
-	defer pool.PutStyle(style)
+	style := lipgloss.NewStyle()
 	render := style.Foreground(col).Render
 	return render(s.GetWindowPillLeft()) +
 		titleBadgeText(windowName, agentState, col) +
@@ -156,8 +154,7 @@ type buttonBorderRow struct {
 // show is still readable from the dock, while a close button nobody can press
 // is simply gone.
 func layoutBorderRow(badge, pill string, width int, col color.Color, isTop bool, s *config.Settings) buttonBorderRow {
-	style := pool.GetStyle()
-	defer pool.PutStyle(style)
+	style := lipgloss.NewStyle()
 	render := style.Foreground(col).Render
 
 	fill, cornerLeft, cornerRight := borderRowGlyphs(isTop, s)
@@ -189,8 +186,7 @@ func layoutBorderRow(badge, pill string, width int, col color.Color, isTop bool,
 }
 
 func makeRounded(content string, color color.Color, s *config.Settings) string {
-	style := pool.GetStyle()
-	defer pool.PutStyle(style)
+	style := lipgloss.NewStyle()
 	render := style.Foreground(color).Render
 	content = render(s.GetWindowPillLeft()) + content + render(s.GetWindowPillRight())
 	return content
@@ -322,8 +318,7 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 	width = max(width, 0)
 	titlePos := m.Settings.WindowTitlePosition
 
-	style := pool.GetStyle()
-	defer pool.PutStyle(style)
+	style := lipgloss.NewStyle()
 
 	// Build window buttons first so we know their width, and record where each
 	// one landed as the pill is assembled rather than measuring it back
@@ -389,8 +384,7 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 
 // renderTitleBadge renders a border with a centered title badge.
 func renderTitleBadge(windowName, agentState string, width int, color color.Color, isTop bool, s *config.Settings) string {
-	style := pool.GetStyle()
-	defer pool.PutStyle(style)
+	style := lipgloss.NewStyle()
 	borderStyle := style.Foreground(color)
 
 	borderChar, cornerLeft, cornerRight := borderRowGlyphs(isTop, s)
