@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -29,18 +30,32 @@ const waitOutputRecheck = 200 * time.Millisecond
 
 // verbSubscribe opens a long-lived event stream on this connection. It registers
 // a hub subscription with the requested filter, returns a subscribed ack (with
-// the current sequence baseline), and hands the subscription to the dispatch loop
-// which starts the streamer after the ack is written. Only a connection that
-// issued this verb ever receives events.
+// the current sequence baseline and the boot id), and hands the subscription to
+// the dispatch loop which starts the streamer after the ack is written. Only a
+// connection that issued this verb ever receives events.
+//
+// An omitted session means every session: the filter matches on session only
+// when one is named. That differs from most verbs, where an omitted session
+// means the most recently active one.
+//
+// With after_seq the stream first replays the retained events after that seq,
+// preceded by a gap marker when the replay cannot be exact (see replayLocked).
 func (d *Daemon) verbSubscribe(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string   `json:"session"`
 		Window  string   `json:"window"`
 		Types   []string `json:"types"`
 		Queue   int      `json:"queue"`
+		// AfterSeq is a pointer so after_seq 0 ("everything since this daemon
+		// started") is distinguishable from not resuming at all.
+		AfterSeq *uint64 `json:"after_seq"`
+		BootID   string  `json:"boot_id"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if p.BootID != "" && p.AfterSeq == nil {
+		return nil, invalidParam("boot_id", "boot_id only means something with after_seq: pass the seq the stream last delivered under that boot id")
 	}
 
 	cs.mu.Lock()
@@ -61,7 +76,17 @@ func (d *Daemon) verbSubscribe(cs *connState, params json.RawMessage) (any, *ver
 		}
 	}
 
-	sub := d.events.subscribe(filter, p.Queue)
+	var from *resumePoint
+	if p.AfterSeq != nil {
+		from = &resumePoint{afterSeq: *p.AfterSeq, bootID: p.BootID}
+	}
+	sub, baseline, err := d.events.subscribeFrom(filter, p.Queue, from)
+	if err != nil {
+		return nil, hintedVerbError(ErrVerbInvalidParams, err.Error(), &VerbHint{
+			Param:  "after_seq",
+			Detail: "Pass the seq of the last event the stream delivered. A seq this daemon has not reached yet cannot have been delivered under this boot id.",
+		})
+	}
 
 	cs.mu.Lock()
 	cs.eventSub = sub
@@ -69,7 +94,17 @@ func (d *Daemon) verbSubscribe(cs *connState, params json.RawMessage) (any, *ver
 	cs.streaming = true
 	cs.mu.Unlock()
 
-	return map[string]any{"type": EventSubscribed, "seq": d.events.currentSeq()}, nil
+	ack := map[string]any{"type": EventSubscribed, "seq": baseline, "boot_id": d.events.bootIdentity()}
+	if from != nil {
+		replayed := 0
+		for _, ev := range sub.preface {
+			if ev.Type != EventGap {
+				replayed++
+			}
+		}
+		ack["replayed"] = replayed
+	}
+	return ack, nil
 }
 
 // verbUnsubscribe closes this connection's event stream. The streamer observes
@@ -123,6 +158,17 @@ func (d *Daemon) streamEvents(cs *connState, sub *eventSub) {
 		cs.mu.Unlock()
 	}()
 
+	// A resumed subscription first writes what it missed. Live events that
+	// arrive meanwhile wait in sub.ch, and all of them are newer than anything
+	// in the preface.
+	for _, ev := range sub.preface {
+		if err := d.writeEventLine(cs, ev); err != nil {
+			cs.drop()
+			return
+		}
+	}
+	sub.preface = nil
+
 	for {
 		select {
 		case <-cs.done:
@@ -133,7 +179,7 @@ func (d *Daemon) streamEvents(cs *connState, sub *eventSub) {
 			return
 		case ev := <-sub.ch:
 			if dropped := sub.dropped.Swap(0); dropped > 0 {
-				if err := d.writeEventLine(cs, streamEvent{Type: EventGap, Dropped: dropped}); err != nil {
+				if err := d.writeEventLine(cs, streamEvent{Type: EventGap, Dropped: dropped, Reason: GapOverflow, BootID: d.events.bootIdentity()}); err != nil {
 					cs.drop()
 					return
 				}
@@ -176,6 +222,8 @@ func (d *Daemon) verbWaitFor(_ *connState, params json.RawMessage) (any, *verbEr
 		Idle      int    `json:"idle"`
 		Thread    uint64 `json:"thread"`
 		Timeout   int    `json:"timeout"`
+		// AnySession widens agent-state to every session on the daemon.
+		AnySession bool `json:"any_session"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -186,6 +234,16 @@ func (d *Daemon) verbWaitFor(_ *connState, params json.RawMessage) (any, *verbEr
 		timeout = time.Duration(p.Timeout) * time.Millisecond
 	}
 	deadline := time.After(timeout)
+
+	if p.AnySession {
+		if p.Condition != "agent-state" {
+			return nil, invalidParam("any_session", "any_session only applies to the agent-state condition")
+		}
+		if p.Session != "" || p.Window != "" {
+			return nil, invalidParam("any_session", "any_session watches every session, so it takes no session or window. Drop one or the other")
+		}
+		return d.waitAgentStateAnySession(p.Until, deadline)
+	}
 
 	switch p.Condition {
 	case "session-exists":
@@ -392,17 +450,16 @@ func (d *Daemon) waitAgentState(sessionName, window, until string, deadline <-ch
 		return "", "", false
 	}
 
+	matched := func(id, name string) map[string]any {
+		return waitMatched("agent-state", map[string]any{"session": sess.Name, "window": id, "state": name})
+	}
 	if id, name, ok := check(); ok {
-		return waitMatched("agent-state", map[string]any{"window": id, "state": name}), nil
+		return matched(id, name), nil
 	}
 	for {
 		select {
 		case <-deadline:
-			return nil, hintedVerbError(ErrVerbTimeout, "timed out waiting for agent state "+until, &VerbHint{
-				Param:  "until",
-				Verb:   "get-agent-state",
-				Detail: "No agent reached the named state before the timeout. Read the current state, or raise timeout (milliseconds).",
-			})
+			return nil, agentStateTimeout(until)
 		case <-d.ctx.Done():
 			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
 		case ev := <-sub.ch:
@@ -410,7 +467,68 @@ func (d *Daemon) waitAgentState(sessionName, window, until string, deadline <-ch
 				return nil, newVerbError(ErrVerbWindowNotFound, "the watched window closed before reaching "+until)
 			}
 			if id, name, ok := check(); ok {
-				return waitMatched("agent-state", map[string]any{"window": id, "state": name}), nil
+				return matched(id, name), nil
+			}
+		}
+	}
+}
+
+// agentStateTimeout is the error an agent-state wait returns when it runs out.
+func agentStateTimeout(until string) *verbError {
+	return hintedVerbError(ErrVerbTimeout, "timed out waiting for agent state "+until, &VerbHint{
+		Param:  "until",
+		Verb:   "get-agent-state",
+		Detail: "No agent reached the named state before the timeout. Read the current state, or raise timeout (milliseconds).",
+	})
+}
+
+// waitAgentStateAnySession is waitAgentState across every session on the
+// daemon, for a supervisor that watches agents in several sessions and would
+// otherwise hold one wait per session. It never fails because a session is
+// missing: sessions created while it blocks are watched too, since the check
+// reads the session list again on every event.
+//
+// The subscription is taken before the first check, the same discipline as
+// the single-session wait, so a transition in between is not missed.
+func (d *Daemon) waitAgentStateAnySession(until string, deadline <-chan time.Time) (any, *verbError) {
+	states, verr := parseUntilStates(until)
+	if verr != nil {
+		return nil, verr
+	}
+	sub := d.events.subscribe(eventFilter{types: map[string]bool{EventAgentState: true}}, defaultEventQueue)
+	defer d.events.unsubscribe(sub)
+
+	check := func() (map[string]any, bool) {
+		sessions := d.manager.AllSessions()
+		// Sorted, so when several panes already match the answer does not
+		// depend on map order.
+		slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name, b.Name) })
+		for _, sess := range sessions {
+			state := sess.GetState()
+			for i := range state.Windows {
+				w := &state.Windows[i]
+				if states[w.AgentState.Name()] {
+					return waitMatched("agent-state", map[string]any{
+						"session": sess.Name, "window": w.ID, "state": w.AgentState.Name(),
+					}), true
+				}
+			}
+		}
+		return nil, false
+	}
+
+	if res, ok := check(); ok {
+		return res, nil
+	}
+	for {
+		select {
+		case <-deadline:
+			return nil, agentStateTimeout(until)
+		case <-d.ctx.Done():
+			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
+		case <-sub.ch:
+			if res, ok := check(); ok {
+				return res, nil
 			}
 		}
 	}

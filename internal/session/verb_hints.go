@@ -46,14 +46,17 @@ var (
 	}
 	// waitConditions are the conditions wait-for understands.
 	waitConditions = WaitConditionNames
-	// knownEventTypes are the event types a subscribe filter can name.
-	knownEventTypes = []string{
+	// EventTypeNames are the event types a subscribe filter can name. It is
+	// exported so the CLI completes exactly this set.
+	EventTypeNames = []string{
 		EventWindowCreated, EventWindowClosed, EventWindowExit, EventWindowRetitled,
 		EventWindowFocused, EventWindowMoved, EventWindowMinimized, EventWindowRestored,
 		EventWorkspaceSwitched, EventAgentState, EventAgentMessage,
 		EventOutput, EventBell, EventModeChanged,
 		EventSessionCreated, EventSessionClosed, EventGap,
 	}
+	// knownEventTypes are the event types a subscribe filter can name.
+	knownEventTypes = EventTypeNames
 )
 
 // errorCodeCatalog documents every stable error code for the list-verbs result,

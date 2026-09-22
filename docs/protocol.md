@@ -87,7 +87,18 @@ Every `result` carries a `type` discriminator string so a generic client can
 dispatch on the result shape without tracking which verb it sent.
 
 Most verbs that name a session accept an empty or omitted `session`, which
-resolves to the most recently active session.
+resolves to the most recently active session. The exceptions say so in their
+own `session` parameter description in `list-verbs`:
+
+- `subscribe` reads an omitted `session` as every session. Its `session` is a
+  filter, not a target.
+- `wait-for` with `session-exists` requires `session`, because it names the
+  session to wait for. `wait-for` with `agent-state` and `any_session` takes no
+  `session` and watches every session.
+- `kill-session` and `remove-worktree` require `session` and never guess.
+- `list-hooks`, `list-options`, `list-themes` and `list-glyphs` fall back to the
+  most recently active session, and to the daemon's defaults when there is no
+  session at all, rather than failing.
 
 ## Versioning and introspection
 
@@ -918,8 +929,13 @@ A key that was never set returns an `option_not_found` error.
 The daemon can push events instead of a caller polling. A connection that issues
 the `subscribe` verb is turned into a long-lived event stream; every other
 connection never receives events. Each event is one JSON line carrying a
-daemon-global monotonic `seq`, a `type`, and the fields relevant to that type.
-Two subscribers always see the same `seq` for the same event.
+daemon-global monotonic `seq`, the daemon's `boot_id`, a `type`, and the fields
+relevant to that type. Two subscribers always see the same `seq` for the same
+event.
+
+`boot_id` is a random id the daemon picks each time it starts. A restarted
+daemon numbers events from 1 again, so a `seq` only identifies an event
+together with the `boot_id` it came with. Keep both if you plan to resume.
 
 Event types:
 
@@ -941,7 +957,7 @@ Event types:
 | `mode-changed` | A terminal mode toggled (for example alt-screen). | `session`, `window`, `mode`, `enabled` |
 | `session-created` | A session was created. | `session` |
 | `session-closed` | A session was terminated. | `session` |
-| `gap` | Slow-subscriber marker: `dropped` events were dropped for this connection. | `dropped` |
+| `gap` | Some events were not delivered to this connection. `reason` says why (see below). A gap has no `seq`. | `reason`, `dropped`, `boot_id` |
 
 ### What fires when
 
@@ -982,17 +998,27 @@ Two cases are worth stating plainly because they are easy to guess wrong:
 Restoring a session (daemon cold start, or `tuios resurrect`) raises
 `session-created` followed by a `window-created` for each restored window, since
 from a subscriber's point of view those windows come into existence at that
-moment. A subscriber that connects afterwards sees no backfill: the stream
-carries what happens from the subscription onward, and the ack's `seq` is the
-baseline. Use `list-windows` to establish initial state, then follow the stream.
+moment. A plain subscribe carries what happens from the subscription onward,
+and the ack's `seq` is the baseline. Use `list-windows` to establish initial
+state, then follow the stream. A subscriber that reconnects can ask for what it
+missed with `after_seq` (see "Resuming a stream" below).
 
 ### subscribe
 
 Open the event stream on this connection.
 
-Params: `session` (optional filter), `window` (optional filter), `types`
-(optional list of event types to include; empty means all), `queue` (optional
-per-connection queue size; defaults to 256).
+Params:
+
+- `session` (optional): only events from this session. Omit it for events from
+  every session. This is unlike most verbs, where an omitted session means the
+  most recently active one.
+- `window` (optional): only events about this window id. The filter compares
+  window ids, so a window name matches nothing.
+- `types` (optional): event types to include; empty means all.
+- `queue` (optional): per-connection queue size; defaults to 256.
+- `after_seq` (optional): resume. Replay the retained events with a higher
+  `seq` before streaming live. `0` replays everything the daemon still holds.
+- `boot_id` (optional, needs `after_seq`): the boot id `after_seq` came with.
 
 Request:
 
@@ -1003,16 +1029,52 @@ Request:
 Ack response (the stream begins after this line):
 
 ```json
-{"id": 1, "result": {"type": "subscribed", "seq": 42}}
+{"id": 1, "result": {"type": "subscribed", "seq": 42, "boot_id": "9f2c41d07a3e8b65"}}
 ```
 
 Subsequent lines are events, for example:
 
 ```json
-{"seq": 43, "type": "output", "session": "work", "window": "1f3c...", "pty_id": "9ab2...", "bytes": 64, "time": 1737200000000000000}
+{"seq": 43, "type": "output", "session": "work", "window": "1f3c...", "pty_id": "9ab2...", "bytes": 64, "boot_id": "9f2c41d07a3e8b65", "time": 1737200000000000000}
 ```
 
 A second `subscribe` on the same connection is rejected with `invalid_request`.
+
+### Resuming a stream
+
+The daemon keeps the last 4096 events in a replay ring, apart from `output`
+events, which fire on every PTY read and would push everything else out within
+seconds. A subscriber that kept the `seq` of the last event it read, and the
+`boot_id` that came with it, can reconnect and pass both:
+
+```json
+{"id": 1, "verb": "subscribe", "params": {"types": ["agent-state"], "after_seq": 118, "boot_id": "9f2c41d07a3e8b65"}}
+```
+
+The ack then carries `replayed`, the number of events that follow before the
+live stream:
+
+```json
+{"id": 1, "result": {"type": "subscribed", "seq": 131, "boot_id": "9f2c41d07a3e8b65", "replayed": 3}}
+```
+
+Every replayed event has a `seq` above `after_seq` and at or below the ack's
+`seq`, and every live event has a higher one, so no event is delivered twice.
+The replay honours the same `session`, `window` and `types` filter as the live
+stream.
+
+When the replay cannot be everything the caller missed, a gap marker comes
+first. Read current state again after a gap (`list-agents`, `list-windows`)
+rather than assuming you saw every change:
+
+| `reason` | Meaning | What follows |
+| --- | --- | --- |
+| `evicted` | Events after `after_seq` have already left the ring. | The events the ring still holds, then live. |
+| `boot_changed` | `boot_id` names another daemon start, or no `boot_id` was passed and `after_seq` is above anything this daemon has assigned. The numbers are not comparable. | Live events only. |
+| `not_retained` | The filter admits `output` events, and at least one was published after `after_seq`. Output is never replayed. | The retained events, then live. Leave `output` out of `types` for an exact replay. |
+
+Passing this daemon's own `boot_id` with an `after_seq` it has not reached yet
+is refused with `invalid_params`, and so is `boot_id` without `after_seq`.
 
 ### Slow subscriber policy
 
@@ -1021,11 +1083,14 @@ the event and counts the drop rather than blocking; the next event delivered to
 that connection is preceded by a gap marker:
 
 ```json
-{"type": "gap", "dropped": 12}
+{"type": "gap", "dropped": 12, "reason": "overflow", "boot_id": "9f2c41d07a3e8b65"}
 ```
 
 so the connection learns it fell behind (the `seq` values also jump). One slow
-reader never stalls the daemon or any other subscriber.
+reader never stalls the daemon or any other subscriber. A client that reconnects
+after an overflow can resume from the last `seq` it read and get the dropped
+events back from the ring, as long as they were not `output` events and have
+not been evicted.
 
 ### unsubscribe
 
@@ -1049,7 +1114,8 @@ Params: `condition` (required), `session`, `window`, `pattern` (regex, for
 for `window-output`), `idle` (quiet-period milliseconds, for `window-idle`;
 default 500), `until` (agent state names, comma-separated, for `agent-state`),
 `thread` (any message id in a thread, to narrow `agent-message` to that
-thread), `timeout` (milliseconds; default 30000).
+thread), `any_session` (bool, for `agent-state` only: watch every session and
+take no `session` or `window`), `timeout` (milliseconds; default 30000).
 
 Conditions:
 
@@ -1065,7 +1131,10 @@ Conditions:
   resolves at once). With `window` it watches that pane and fails with
   `window_not_found` if the pane closes mid-wait; without `window` any window
   in the session matches, which is the "tell me when any agent here needs
-  input" shape. The result names the `window` and the `state` that matched.
+  input" shape. With `any_session` any window in any session matches,
+  including sessions created during the wait; passing `session` or `window`
+  with it, or using it with another condition, is `invalid_params`. The result
+  names the `session`, the `window` and the `state` that matched.
 - `agent-message` resolves when a message arrives. With `window` it watches
   that inbox, matches the first unread message already there, and fails with
   `window_not_found` if the inbox's window closes mid-wait. Without `window` it
@@ -1115,6 +1184,9 @@ printf '{"verb":"wait-for","params":{"condition":"window-output","pattern":"buil
 printf '{"verb":"subscribe","params":{"types":["output","bell","window-exit"]}}\n' \
   | socat - "UNIX-CONNECT:$SOCK" | jq -c .
 ```
+
+`tuios subscribe` does the last one without socat, and resumes with
+`--after-seq` and `--boot-id`.
 
 The tuios CLI speaks this protocol directly. `tuios ls`, `tuios kill-session`,
 `tuios send-keys`, `tuios capture-pane`, `tuios list-windows`,

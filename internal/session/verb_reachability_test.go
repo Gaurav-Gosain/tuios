@@ -114,6 +114,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// verb that is supposed to block: a handler that returned early would answer.
 	"wait-for#0": {blocks: true, why: "no pane prints \"done\""},
 	"wait-for#1": {blocks: true, why: "no pane reports an agent state"},
+	"wait-for#4": {blocks: true, why: "no pane in any session reports an agent state"},
 }
 
 // blockBudget is how long a call gets to answer. Every example that answers at
@@ -266,7 +267,7 @@ var verbsWithNoDocumentedResult = map[string]bool{
 	"list-windows": true, "resize": true, "send-keys": true, "send-text": true,
 	"session-info": true, "set-agent-state": true, "set-session-accent": true,
 	"set-session-name": true, "set-workspace-name": true,
-	"set-workspace-order": true, "subscribe": true, "unsubscribe": true,
+	"set-workspace-order": true, "unsubscribe": true,
 	"wait-for": true,
 }
 
