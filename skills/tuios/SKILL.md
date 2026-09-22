@@ -40,6 +40,10 @@ TUIOS_HOST=laptop
 window. Pass it to `-w` whenever you mean yourself rather than whatever happens
 to be focused. It is also your address when another agent wants to reach you.
 
+`TMUX` and `TMUX_PANE` are never set in a tuios pane, even when tuios itself
+runs inside tmux. You are in a tuios pane, not a tmux one, so do not drive panes
+through `tmux` commands here: use the tuios verbs below.
+
 A shell the daemon started again after a restore also has `TUIOS_RESTORED=1`.
 It is a new shell in the old place: nothing that ran in the pane before is
 still running.

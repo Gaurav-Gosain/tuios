@@ -1960,7 +1960,10 @@ func (s *Session) resolveShell() (shell, missing string) {
 }
 
 func (s *Session) buildEnv(windowID string, restored bool) []string {
-	env := os.Environ()
+	// The daemon's environment, less TMUX and TMUX_PANE. A daemon started from
+	// inside tmux would otherwise hand every pane the variables that make a
+	// program believe it is in a tmux pane. See guestenv.WithoutHostMultiplexer.
+	env := guestenv.WithoutHostMultiplexer(os.Environ())
 
 	term := "xterm-256color"
 	if s.config != nil && s.config.Term != "" {

@@ -658,7 +658,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		} else {
 			cmd = exec.Command(detectShell())
 		}
-		cmd.Env = append(os.Environ(),
+		cmd.Env = append(guestBaseEnv(),
 			"TERM="+termType,
 			"COLORTERM="+colorTerm,
 			"TERM_PROGRAM="+guestTermProgram(), // Terminal identity guests can act on

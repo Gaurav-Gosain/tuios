@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"os"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -94,6 +95,27 @@ func TestGuestTermProgramFollowsGraphicsCapabilities(t *testing.T) {
 				t.Errorf("guestTermProgram() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestGuestBaseEnvDropsHostTmux covers tuios started from inside tmux: a
+// standalone pane must not inherit the variables that make it read as a tmux
+// pane.
+func TestGuestBaseEnvDropsHostTmux(t *testing.T) {
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	t.Setenv("TMUX_PANE", "%3")
+	t.Setenv("TUIOS_TEST_KEEP", "1")
+	kept := false
+	for _, kv := range guestBaseEnv() {
+		switch {
+		case strings.HasPrefix(kv, "TMUX="), strings.HasPrefix(kv, "TMUX_PANE="):
+			t.Errorf("standalone pane environment carries %q from the enclosing tmux", kv)
+		case kv == "TUIOS_TEST_KEEP=1":
+			kept = true
+		}
+	}
+	if !kept {
+		t.Error("the rest of the environment was not passed through")
 	}
 }
 

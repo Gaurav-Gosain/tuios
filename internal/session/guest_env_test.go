@@ -96,3 +96,30 @@ func TestAttachRecordsClientGraphicsCapabilities(t *testing.T) {
 		t.Errorf("TERM_PROGRAM = %q, want ghostty", got)
 	}
 }
+
+// TestPaneEnvDropsHostTmux covers a daemon started from inside tmux. Its panes
+// are tuios panes, and a pane that inherits TMUX and TMUX_PANE reads as a tmux
+// pane: Codex then wraps its notifications for tmux, and an agent that splits
+// panes through tmux reaches the outer one.
+func TestPaneEnvDropsHostTmux(t *testing.T) {
+	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+	t.Setenv("TMUX_PANE", "%3")
+
+	sess, err := NewSession("env", &SessionConfig{Shell: "/bin/sh"}, 80, 24)
+	if err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	defer sess.Stop()
+
+	envs := map[string][]string{
+		"daemon pane": sess.buildEnv("win-1", false),
+		"hosted pane": hostedPaneEnv(&Daemon{}, hostedPaneSpec{}),
+	}
+	for name, env := range envs {
+		for _, key := range []string{"TMUX", "TMUX_PANE"} {
+			if got := envValue(env, key); got != "" {
+				t.Errorf("%s environment carries %s=%q from the enclosing tmux", name, key, got)
+			}
+		}
+	}
+}

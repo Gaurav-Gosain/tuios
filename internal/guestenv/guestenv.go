@@ -50,3 +50,34 @@ func KittyAnimationVar(supported bool) string {
 	}
 	return "TUIOS_KITTY_ANIMATION=0"
 }
+
+// hostMultiplexerVars are the variables an enclosing tmux sets for its own
+// panes. A tuios started from inside tmux inherits them, and a pane that
+// inherits them in turn believes it is a tmux pane: Codex wraps its OSC 9
+// notifications in tmux DCS passthrough, which tuios drops, and an agent that
+// splits panes through tmux reaches the outer tmux instead of the pane it is
+// in. The pane is a tuios pane, so these are removed.
+var hostMultiplexerVars = []string{"TMUX", "TMUX_PANE"}
+
+// WithoutHostMultiplexer returns env with every assignment of TMUX and
+// TMUX_PANE removed. The slice is filtered in place, so callers pass a copy
+// they own, such as the fresh one os.Environ returns.
+func WithoutHostMultiplexer(env []string) []string {
+	kept := env[:0]
+	for _, kv := range env {
+		if isHostMultiplexerVar(kv) {
+			continue
+		}
+		kept = append(kept, kv)
+	}
+	return kept
+}
+
+func isHostMultiplexerVar(kv string) bool {
+	for _, name := range hostMultiplexerVars {
+		if len(kv) > len(name) && kv[len(name)] == '=' && kv[:len(name)] == name {
+			return true
+		}
+	}
+	return false
+}

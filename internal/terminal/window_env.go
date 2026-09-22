@@ -49,6 +49,14 @@ func guestTermProgram() string {
 	return guestenv.TermProgram(kittyGraphicsHost, sixelGraphicsHost)
 }
 
+// guestBaseEnv is the environment a standalone pane starts from: this
+// process's, without the variables of a tmux that tuios itself runs inside,
+// so the pane does not read as a tmux pane. See
+// guestenv.WithoutHostMultiplexer.
+func guestBaseEnv() []string {
+	return guestenv.WithoutHostMultiplexer(os.Environ())
+}
+
 // detectShell returns the shell a standalone pane runs, honouring
 // appearance.preferred_shell. The config is read on every call so an edit
 // applies to the next pane.

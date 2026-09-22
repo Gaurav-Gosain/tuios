@@ -508,6 +508,14 @@ reboot.
   restore time, so the shell comes from the daemon process's `$SHELL` and
   inherits the daemon's environment, not that of whichever terminal you later
   attach from.
+- **Panes never inherit `TMUX` or `TMUX_PANE`.** Every pane starts from the
+  environment of the process that spawns it, less these two, whether it is a
+  daemon pane, a pane hosted for another machine, or a standalone pane. A tuios
+  started from inside tmux used to pass them on, and a program in the pane then
+  believed it was in a tmux pane: Codex wrapped its notifications in tmux
+  passthrough, which tuios drops, and an agent that opens panes through tmux
+  reached the outer tmux. Running tmux inside a tuios pane still works, and no
+  longer warns about nesting.
 - **Resurrection restores structure, not work.** It is a way to get your layout
   and directories back, not a way to survive a crash without losing anything.
 

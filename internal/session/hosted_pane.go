@@ -184,7 +184,7 @@ func clampHostedDim(v int) int {
 // therefore cannot report its own state, and is detected instead by the daemon
 // that owns the window asking this one what is running; see pane-agent.
 func hostedPaneEnv(d *Daemon, spec hostedPaneSpec) []string {
-	env := os.Environ()
+	env := guestenv.WithoutHostMultiplexer(os.Environ())
 
 	term := spec.Term
 	if term == "" {
