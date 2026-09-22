@@ -2095,8 +2095,8 @@ The theme is not listed here. It is a session option. Read it with
   # Get as JSON for scripting
   tuios session-info --json
 
-  # Use with jq to check if tiling is enabled
-  tuios session-info --json | jq '.tiling_enabled'`,
+  # Use with jq to check if tiling is enabled ("tiling" or "floating")
+  tuios session-info --json | jq -r '.tiling_mode'`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return querySession(sessionInfoSession, sessionInfoJSON)
 		},

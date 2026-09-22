@@ -649,7 +649,7 @@ tuios new-window --json | jq -r .window_id
 
 # JSON output carries the full id and the name
 tuios new-window --json build
-# Output: {"success":true,"message":"command executed","window_id":"a1b2c3d4-...","name":"build"}
+# Output: {"focused":true,"host":"","message":"command executed","name":"build","pty_id":"8fe359af-0f9e-4efe-9595-7b1d3467dc50","success":true,"unplaced":true,"window_id":"a6e55709-071e-4345-9363-ff4ef0a63c02","workspace":1}
 
 # Target a specific session
 tuios new-window -s mysession dev
@@ -754,7 +754,7 @@ tuios run-command NewWindow "my-terminal"
 
 # Create window and get JSON output with window ID
 tuios run-command --json NewWindow "my-terminal"
-# Output: {"success":true,"message":"Created window 'my-terminal'","data":{"window_id":"abc123","name":"my-terminal"}}
+# Output: {"message":"command executed","name":"my-terminal","success":true,"window_id":"75684348-98ba-4e60-a9c4-0b1e1920b25e"}
 
 # Switch workspace
 tuios run-command SwitchWorkspace 2
@@ -1250,12 +1250,12 @@ tuios list-windows -s mysession --json
 
 **Example output:**
 ```
-╭─────┬──────────┬───────┬────┬────────┬─────────╮
-│ IDX │ ID       │ NAME  │ WS │ SIZE   │ AGENT   │
-├─────┼──────────┼───────┼────┼────────┼─────────┤
-│ *1  │ a1b2c3d4 │ dev   │ 1  │ 120x40 │         │
-│ 2   │ e5f6a7b8 │ build │ 1  │ 120x40 │ working │
-╰─────┴──────────┴───────┴────┴────────┴─────────╯
+╭─────┬──────────┬───────┬────┬───────┬───────╮
+│ IDX │ ID       │ NAME  │ WS │ SIZE  │ AGENT │
+├─────┼──────────┼───────┼────┼───────┼───────┤
+│ *0  │ 0ceb415a │ dev   │ 1  │ 60x38 │ none  │
+│ 1   │ ce9ae44c │ build │ 1  │ 60x38 │ none  │
+╰─────┴──────────┴───────┴────┴───────┴───────╯
 
 2 window(s). * marks the focused one.
 ```
@@ -1266,32 +1266,57 @@ the command says so and points at `tuios new-window`.
 **JSON Output Structure:**
 ```json
 {
+  "current_workspace": 1,
+  "focused_index": 0,
+  "focused_window_id": "0ceb415a-9f5c-44d8-a57c-60c132f54572",
+  "message": "command executed",
+  "success": true,
+  "total": 2,
   "windows": [
     {
-      "id": "a1b2c3d4",
-      "title": "Terminal a1b2c3d4",
+      "agent_state": "none",
       "custom_name": "dev",
+      "cwd": "/home/me/src/api",
       "display_name": "dev",
-      "workspace": 1,
       "focused": true,
+      "height": 38,
+      "index": 0,
       "minimized": false,
-      "fullscreen": false,
+      "pty_id": "fd022e1f-7d42-4c45-8ddf-5ecaf8bee488",
+      "title": "Terminal 0ceb415a",
+      "width": 60,
+      "window_id": "0ceb415a-9f5c-44d8-a57c-60c132f54572",
+      "workspace": 1,
       "x": 0,
-      "y": 0,
-      "width": 120,
-      "height": 40,
-      "cursor_x": 5,
-      "cursor_y": 10,
-      "cursor_visible": true,
-      "scrollback_lines": 1000,
-      "shell_pid": 12345,
-      "has_foreground_process": false
+      "y": 0
+    },
+    {
+      "agent_state": "none",
+      "custom_name": "build",
+      "cwd": "/home/me/src/api",
+      "display_name": "build",
+      "focused": false,
+      "height": 38,
+      "index": 1,
+      "minimized": false,
+      "pty_id": "23ed3d8a-b6f4-4047-b01a-3d2f1dd83515",
+      "title": "build",
+      "width": 60,
+      "window_id": "ce9ae44c-7e64-424c-acd9-48cb21ac55c5",
+      "workspace": 1,
+      "x": 60,
+      "y": 0
     }
   ],
-  "total": 1,
-  "focused_id": "a1b2c3d4"
+  "workspace_windows": [2, 0, 0, 0, 0, 0, 0, 0, 0]
 }
 ```
+
+`custom_name` is present only on a window that was given a name, `cwd` only
+when the shell has reported its directory, and `host` only when the window's
+process runs on another machine. `agent_message` and `agent_state_at` appear
+once a pane has reported an agent state. The daemon answers this from its own
+state, so the shape is the same whether or not a client is attached.
 
 ### `tuios get-window`
 
@@ -1344,28 +1369,38 @@ agent message  awaiting approval
 The `agent message` line appears only when the pane reported one.
 
 **JSON Output Structure:**
+
+With a client attached, the client answers:
+
 ```json
 {
-  "id": "a1b2c3d4",
-  "title": "Terminal a1b2c3d4",
-  "custom_name": "dev",
-  "display_name": "dev",
-  "workspace": 1,
-  "focused": true,
-  "minimized": false,
-  "fullscreen": false,
-  "x": 0,
-  "y": 0,
-  "width": 120,
-  "height": 40,
-  "cursor_x": 5,
-  "cursor_y": 10,
   "cursor_visible": true,
-  "scrollback_lines": 1000,
-  "shell_pid": 12345,
-  "has_foreground_process": false
+  "cursor_x": 40,
+  "cursor_y": 0,
+  "custom_name": "build",
+  "display_name": "build",
+  "focused": false,
+  "fullscreen": false,
+  "has_foreground_process": false,
+  "height": 38,
+  "id": "ce9ae44c-7e64-424c-acd9-48cb21ac55c5",
+  "message": "command executed",
+  "minimized": false,
+  "pty_id": "23ed3d8a-b6f4-4047-b01a-3d2f1dd83515",
+  "scrollback_lines": 0,
+  "shell_pgid": 46889,
+  "success": true,
+  "title": "build",
+  "width": 60,
+  "workspace": 1,
+  "x": 60,
+  "y": 0
 }
 ```
+
+With no client attached, the daemon answers with one entry of the
+`list-windows` shape above: `window_id` rather than `id`, plus `index`, `cwd`
+and `agent_state`, and no cursor or process fields.
 
 ### `tuios session-info`
 
@@ -1399,7 +1434,7 @@ display name   Payments API
 accent         cyan
 windows        3
 workspace      1 of 9
-tiling         bsp
+tiling         tiling
 size           120x40
 attached       true
 named          2=review
@@ -1410,34 +1445,48 @@ The `display name`, `accent` and `named` lines appear only when those are set.
 **JSON Output Structure:**
 ```json
 {
+  "accent": "",
   "current_workspace": 1,
-  "total_windows": 3,
-  "mode": "terminal",
-  "tiling_enabled": true,
-  "tiling_mode": "tiling",
+  "display_name": "",
+  "height": 40,
   "layout_mode": "bsp",
-  "theme": "tokyonight",
-  "dockbar_position": "bottom",
-  "animations_enabled": true,
-  "script_mode": false,
-  "workspace_windows": [2, 1, 0, 0, 0, 0, 0, 0, 0]
+  "master_ratio": 0.5,
+  "message": "command executed",
+  "mode": "unknown",
+  "num_workspaces": 9,
+  "session_id": "2e131c6c-4555-4d08-8c4e-7abb25f5522f",
+  "session_name": "work",
+  "success": true,
+  "tiling_mode": "tiling",
+  "tui_attached": true,
+  "width": 120,
+  "window_count": 2,
+  "workspace_names": {},
+  "workspace_order": null
 }
 ```
 
 **Fields:**
 | Field | Description |
 |-------|-------------|
-| `current_workspace` | Active workspace number (1-9) |
-| `total_windows` | Total number of windows across all workspaces |
-| `mode` | Current input mode: `terminal` or `window_management` |
-| `tiling_enabled` | Whether tiling mode is active |
-| `tiling_mode` | `tiling` or `floating`. The same two words the `session-info` verb reports. |
-| `layout_mode` | The tiling layout in use: `bsp`, `master-stack` or `scrolling` |
-| `theme` | Current color theme |
-| `dockbar_position` | Dockbar location: `top`, `bottom` or `hidden` |
-| `animations_enabled` | Whether animations are enabled |
-| `script_mode` | Whether in tape script execution mode |
-| `workspace_windows` | Array of window counts per workspace (indices 0-8 for workspaces 1-9) |
+| `session_name` | The session's name, the one `-s` takes |
+| `session_id` | The session's id |
+| `display_name` | The session's display name, empty when none is set |
+| `accent` | The session's accent, empty when none is set |
+| `current_workspace` | Active workspace number |
+| `num_workspaces` | Number of workspaces the session has |
+| `workspace_names` | Named workspaces, keyed by number. A workspace with no name is left out |
+| `workspace_order` | The workspace order when it was rearranged, `null` for the plain ascending order |
+| `window_count` | Number of windows across all workspaces |
+| `tiling_mode` | `tiling` or `floating` |
+| `layout_mode` | The tiling layout in use: `bsp`, `master-stack` or `scrolling`, or `unknown` before a client has reported one |
+| `master_ratio` | The master pane's share of the width in the `master-stack` layout |
+| `mode` | Always `unknown`. The input mode belongs to the attached client, which the daemon does not ask |
+| `width`, `height` | The session's size in cells |
+| `tui_attached` | Whether a client is attached |
+
+The theme is not listed here. It is a session option: read it with
+`tuios get-config appearance.theme`.
 
 ### `tuios capture-pane`
 
@@ -1649,9 +1698,9 @@ These remote control and inspection commands enable powerful scripting workflows
 # Create a development layout
 
 # Create windows and capture their IDs
-EDITOR_ID=$(tuios run-command --json NewWindow "editor" | jq -r '.data.window_id')
-TERMINAL_ID=$(tuios run-command --json NewWindow "terminal" | jq -r '.data.window_id')
-LOGS_ID=$(tuios run-command --json NewWindow "logs" | jq -r '.data.window_id')
+EDITOR_ID=$(tuios run-command --json NewWindow "editor" | jq -r '.window_id')
+TERMINAL_ID=$(tuios run-command --json NewWindow "terminal" | jq -r '.window_id')
+LOGS_ID=$(tuios run-command --json NewWindow "logs" | jq -r '.window_id')
 
 # Enable tiling
 tuios run-command ToggleTiling
@@ -1671,7 +1720,7 @@ tuios send-keys --literal --raw "tail -f /var/log/system.log" && tuios send-keys
 
 # Wait until there are at least 3 windows
 while true; do
-    WINDOW_COUNT=$(tuios session-info --json | jq '.total_windows')
+    WINDOW_COUNT=$(tuios session-info --json | jq '.window_count')
     if [ "$WINDOW_COUNT" -ge 3 ]; then
         echo "Ready with $WINDOW_COUNT windows"
         break
@@ -1707,7 +1756,7 @@ fi
 # Use fzf to select and focus a window
 
 WINDOW=$(tuios list-windows --json | \
-    jq -r '.windows[] | "\(.display_name)\t\(.id)"' | \
+    jq -r '.windows[] | "\(.display_name)\t\(.window_id)"' | \
     fzf --with-nth=1 | \
     cut -f2)
 
@@ -1725,9 +1774,12 @@ fi
 tuios send-keys --literal --raw "echo 'test-marker-12345'" && tuios send-keys Enter
 sleep 0.5
 
-# Check if command completed (cursor moved)
-CURSOR_Y=$(tuios get-window --json | jq '.cursor_y')
-echo "Cursor at line: $CURSOR_Y"
+# The marker shows twice once the command ran: in the echoed command line and
+# in its output
+COUNT=$(tuios capture-pane | grep -c 'test-marker-12345')
+if [ "$COUNT" -ge 2 ]; then
+    echo "command ran"
+fi
 ```
 
 ---
