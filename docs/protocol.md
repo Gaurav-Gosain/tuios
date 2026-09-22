@@ -938,6 +938,69 @@ Response:
 
 A key that was never set returns an `option_not_found` error.
 
+### set-agent-state
+
+Record the agent state a pane reports. Params: `session`, `window`, `state`
+(required), `message`, `source` (default `report`), `harness`, and four fields
+a hook reporter adds, each optional:
+
+- `kind`: `approval` or `question`, what a `needs_input` state waits for. Only
+  valid with `needs_input`. Stored as the window's `agent_kind` and reported by
+  `get-agent-state` and `list-agents` as `blocked_by`. Without it the kind is
+  guessed from `message`, as described under Changes to existing verbs.
+- `agent_session_id`: the harness's own conversation id. Stored as the window's
+  `agent_session_id`, persisted, and kept when the agent exits. It also turns
+  on the nested-session guard below.
+- `transcript_path`: the transcript file the harness writes. For a harness whose
+  manifest has a transcript reader, the window is joined to exactly that file.
+  It is held in daemon memory and never synced.
+- `if_state`: comma-separated states. The report applies only while the window
+  is in one of them.
+
+Request:
+
+```json
+{"verb": "set-agent-state", "params": {"session": "work", "window": "build", "state": "working", "if_state": "needs_input", "agent_session_id": "5f1c"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "agent_state_set", "state": "done", "message": "", "source": "report", "applied": false, "reason": "if_state"}}
+```
+
+`state` is what the window shows after the call. `reason` is present only when
+`applied` is false: `outranked` (a higher-ranked source owns the window),
+`if_state` (the condition did not hold), `foreign_session` or
+`foreign_harness`. The last two refuse a report carrying `agent_session_id`
+while the window's own harness is `working` or `needs_input` by its own report
+and the report names a different session, or comes from a different harness:
+a nested run, such as a `claude -p` a tool call started inside the pane. At rest
+a different session is accepted and replaces the stored id.
+
+`reason` and the four hook fields are additive. A client that sends none of
+the fields is handled exactly as before. A daemon older than them rejects them
+as unknown params with `invalid_params`, which is how `tuios agent-hook` knows
+to resend without them.
+
+### resolve-pane
+
+Name the pane a process runs in, for a hook reporter whose environment lost
+`TUIOS_PANE_ID`. Params: `sid` (the caller's session id) and `pids` (its
+ancestors, nearest first). A pane's shell leads the session of the pane's
+terminal, so `sid` is matched first; then the first ancestor that is a pane's
+shell. Only panes on the daemon's own machine are matched.
+
+```json
+{"verb": "resolve-pane", "params": {"sid": 4242, "pids": [4250, 4242]}}
+```
+
+```json
+{"result": {"type": "pane_resolved", "session": "work", "window_id": "3c1f6e4e", "by": "tty", "pid": 4242}}
+```
+
+No match is `window_not_found`.
+
 ## Event stream
 
 The daemon can push events instead of a caller polling. A connection that issues

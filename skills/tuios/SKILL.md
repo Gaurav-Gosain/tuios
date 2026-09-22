@@ -713,7 +713,7 @@ tuios doctor agents                      # also lists agent panes missing theirs
 Each installed hook runs `tuios agent-hook <harness>`, which reads the hook
 payload on stdin and reports for the pane it runs in. A prompt or a tool call
 reports `working`, a permission request reports `needs_input` with `kind`
-`approval`, the tool finishing after an approval moves the pane back to
+`approval` (read back as `blocked_by`), the tool finishing after an approval moves the pane back to
 `working`, the end of the turn reports `done`, and the harness's session id is
 stored on the pane (`agent_session_id` in `get-agent-state` and `list-agents`).
 A payload it cannot read, a subagent's event and an unmapped event report

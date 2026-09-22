@@ -21,7 +21,7 @@ alongside the rest of the pane-driving surface.
 - [The stall heuristic](#the-stall-heuristic)
 - [Finished turns](#finished-turns)
 - [Indicator](#indicator)
-- [Claude Code integration](#claude-code-integration)
+- [Harness integrations](#harness-integrations)
 - [Environment](#environment)
 - [Alerts](#alerts)
 
@@ -45,10 +45,11 @@ and `explain-agent-detect` also report `needs_you`, true for `needs_input` and
 have to know which states mean it.
 
 `get-agent-state` and `list-agents` also report `blocked_by`, `approval` or
-`question`, for a pane on `needs_input`. A screen or title rule supplies it
-from its `kind` (named in the manifest, or guessed from the rule's words). A
-report such as a hook's carries no kind, so it is guessed from the reported
-message the same way: a message that mentions approval, permission, allowing,
+`question`, for a pane on `needs_input`. A screen, title or notify rule
+supplies it from its `kind` (named in the manifest, or guessed from the rule's
+words), and a report supplies it with the `kind` param of `set-agent-state`, as
+`tuios agent-hook` does. A report that carries no kind has it guessed from the
+reported message the same way: a message that mentions approval, permission, allowing,
 proceeding, confirming or trust reads as `approval`, anything else as
 `question`. An empty message gives an empty `blocked_by`, which means the
 source did not say.
@@ -152,6 +153,7 @@ and `stall` is a timer. For identity, `get-agent-state` reports `identity` and
 | `report`    | `certain`    | The harness named itself with `--harness`            |
 | `manifest`  | `strong`     | A manifest rule matched the process's own identity   |
 | `list`      | `strong`     | The built-in or user name list matched its name      |
+| `hint`      | `strong`     | `TUIOS_AGENT` on the foreground process named it     |
 | (empty)     | `none`       | Nothing has named a harness                          |
 
 A screen rule never names a harness, and a word inside an argument never counts
@@ -262,9 +264,25 @@ not its identity. On Linux the walk reads `/proc/<pid>/task/*/children`; on
 macOS one `kern.proc.pgrp` sysctl lists the group. A process in another process
 group, a background job, is never read.
 
-Not covered: an agent in a container or over `ssh`, whose process is not a
-descendant of the pane, and an agent run under `go run` or `cargo run`, since
-build tools are not walked.
+Not covered by the walk: an agent in a container or over `ssh`, whose process
+is not a descendant of the pane, and an agent run under `go run` or `cargo run`,
+since build tools are not walked. For those, name the harness on the wrapper:
+
+```sh
+TUIOS_AGENT=claude-code docker run -it sandbox claude
+TUIOS_AGENT=codex ssh devbox codex
+```
+
+When neither the foreground process nor anything behind it is recognised, the
+detector reads `TUIOS_AGENT` from that process's environment (`/proc/<pid>/environ`
+on Linux, `kern.procargs2` on macOS) and, if it names a manifest by id or by
+program name, attributes the pane to that harness with identity `hint`, so its
+screen and title rules run. A real agent binary always wins over the hint, a
+value naming no manifest is ignored, and a process whose environment cannot be
+read (another user's, or one of macOS's own platform binaries) has no hint.
+Only this one variable is read. `explain-agent-detect` reports the match as
+"named by TUIOS_AGENT=<id> on pid N". Set it per command, not in the pane's
+shell profile, or every program the pane runs is taken for that agent.
 
 ### Losing an agent
 
@@ -625,11 +643,154 @@ The glyphs are distinct shapes rather than the same shape in different colors, s
 the state reads at a glance and survives a monochrome capture. The indicator
 shows even for a window with no name.
 
-## Claude Code integration
+## Harness integrations
 
-A reference shim maps Claude Code's lifecycle hooks to these states. See
-[integrations/claude-code](../integrations/claude-code/README.md) for the script
-and how to wire it.
+A harness with a hooks system reports its own state, which outranks everything
+tuios can work out by looking. tuios wires four of them itself:
+
+```sh
+tuios integration install claude-code   # or codex, gemini-cli, opencode, or --all
+tuios integration status                # installed and current, per harness
+tuios integration uninstall codex
+tuios doctor agents                     # PATH, install state, and panes missing theirs
+```
+
+| Harness     | What is written                                     | Format source |
+| ----------- | --------------------------------------------------- | ------------- |
+| Claude Code | `hooks` in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`) | [hooks reference](https://code.claude.com/docs/en/hooks) |
+| Codex       | `~/.codex/hooks.json` (or `$CODEX_HOME`)            | [Codex hooks](https://developers.openai.com/codex/hooks) |
+| Gemini CLI  | `hooks` in `~/.gemini/settings.json`                | [hooks reference](https://geminicli.com/docs/hooks/reference/) |
+| opencode    | `plugins/tuios-agent-state.js` in `~/.config/opencode` (or `$XDG_CONFIG_HOME/opencode`) | [plugins](https://opencode.ai/docs/plugins/) |
+
+Every hook entry runs `tuios agent-hook <harness> --integration <version>`. The
+version marker is how a later install replaces an older entry, how uninstall
+finds exactly what tuios wrote, and how status tells current from out of date.
+The installer keeps everything else in the file, in its order, replaces the
+file atomically, keeps the previous copy as `<file>.tuios.bak`, and writes
+nothing when nothing changed. It refuses a file it cannot parse rather than
+rewrite it, and refuses when the harness's configuration directory does not
+exist yet (run the harness once first). `--command` names the program the hooks
+run when `tuios` is not on the harness's PATH.
+
+Codex gets hooks rather than the older `notify` command: `notify` takes one
+command only, so it would replace a user's own, and it reports only that a turn
+finished. Hooks are on by default in Codex; `status` notes a `config.toml` that
+turns them off with `[features] hooks = false`. `tuios agent-hook codex` still
+reads a `notify` payload, so a hand-wired `notify` reports `done`.
+
+### What each event reports
+
+`tuios agent-hook` reads the payload on stdin (the Codex `notify` payload
+arrives as the last argument) and sends one `set-agent-state`, or nothing.
+
+| Claude Code event | Reports |
+| ----------------- | ------- |
+| `SessionStart` | `idle`, with the session id and transcript path. `source: compact` reports nothing |
+| `UserPromptSubmit`, `PreToolUse` | `working` |
+| `PermissionRequest` | `needs_input`, kind `approval`, message `approve <tool>: <command or path>` |
+| `PostToolUse`, `PostToolUseFailure`, `PermissionDenied`, `ElicitationResult` | `working`, only if the pane is `needs_input` |
+| `Notification` `permission_prompt` | `needs_input`, kind `approval` |
+| `Notification` `elicitation_dialog`, `elicitation_url_dialog`, `agent_needs_input` | `needs_input`, kind `question` |
+| `Notification` `idle_prompt` | `idle`, only if the pane is `working` or `unknown` |
+| `Notification` `auth_success` and the rest | nothing |
+| `Stop` | `done` |
+| `StopFailure` | `errored`, message `stopped on <error_type>` |
+| `SessionEnd` | `none` |
+| `SubagentStop`, anything with `agent_id` | nothing |
+
+Codex maps the same events the same way, plus `Interrupt` to `idle`. Gemini CLI
+maps `BeforeAgent` and `BeforeTool` to `working`, `AfterTool` to `working` only
+from `needs_input`, `Notification` `ToolPermission` to `needs_input` kind
+`approval`, `AfterAgent` to `done`, and `SessionStart` and `SessionEnd` as
+above. The opencode plugin maps `session.status` busy and `chat.message` to
+`working`, `permission.asked` to `needs_input` kind `approval`,
+`question.asked` to kind `question`, the replies to `working` from
+`needs_input`, `session.idle` to `done`, `session.error` to `errored`, and
+drops every event from a child session.
+
+`idle_prompt` does not report `done`: `Stop` already did, and `done` has to stay
+so the person still sees that the turn finished. It only corrects a pane still
+showing `working` after a `Stop` that never arrived.
+
+Nothing defaults. A payload that is not a JSON object, an empty stdin, an event
+with no mapping and a notification type it does not know all report nothing,
+and an explicit `--explain` says why on stderr. This replaces the old shim,
+which read every `Notification`, `auth_success` included, as `needs_input`, and
+needed `python3`.
+
+A `needs_input` message is cut to 100 characters, with whitespace collapsed and
+anything that looks like a credential replaced by `***`: `NAME=value` where the
+name says token, secret, password or key, `--token value`, `Bearer` headers,
+credentials in a URL, and long runs mixing letters and digits. The message
+leaves the pane: it reaches every attached client, alerts and
+`after-agent-state` hooks.
+
+### Finding the pane
+
+A hook is a child of the harness, which usually carries the pane's environment.
+The pane is taken from, in order:
+
+1. `--window` (and `--session`) on the command line.
+2. `TUIOS_PANE_ID` (and `TUIOS_SESSION`).
+3. The hook process's session id. A pane's shell leads the session of the
+   pane's terminal, so every process whose controlling terminal is the pane
+   shares that id, however deep. The daemon's `resolve-pane` verb matches it.
+4. The hook process's parent chain, for a process that left the terminal's
+   session: the first ancestor that is a pane's shell names the pane.
+
+Steps 3 and 4 are what keep a harness or a sandbox that scrubs the environment
+reported for. Only panes on the daemon's own machine are matched.
+
+### Nested and foreign events
+
+Hooks are configured per user, so they fire for every harness process, not only
+the one that owns the pane. Three filters keep those events off the pane:
+
+- A subagent's events (`agent_id` set, `SubagentStop`, opencode child sessions)
+  are dropped by the reporter.
+- An event from a harness other than the one `TUIOS_AGENT` names is dropped by
+  the reporter. So is a Claude Code hook that Cursor runs (it reads the same
+  hook configuration), and a Codex hook whose session is not the
+  `CODEX_THREAD_ID` it inherited.
+- The daemon refuses a report whose `agent_session_id` differs from the pane's
+  while the pane's own harness is `working` or `needs_input` by its own report,
+  and one from a different harness in the same case. That is the `claude -p` a
+  tool call started inside the pane: without this its `Stop` would mark the pane
+  `done` mid-turn. At rest a new session takes the pane over, as `/clear`,
+  `/resume` and a restart should, and the pane's `agent_session_id` becomes the
+  new one.
+
+### Session identity
+
+The session id a hook reports is stored on the pane as `agent_session_id`,
+returned by `get-agent-state` and `list-agents`, and persisted with the
+session, so the conversation a pane last ran can be resumed after the agent,
+or the daemon, restarts. It is kept when the agent exits and replaced when
+another session reports into the pane.
+
+The transcript path is not stored anywhere a client can read. It goes straight
+to the transcript source: for a harness whose manifest has a transcript reader
+(Claude Code today), the pane is joined to exactly that file, which replaces the
+search that refuses whenever two files in one directory could both be the
+pane's.
+
+### Failure behaviour
+
+Harnesses run some hooks synchronously, `PreToolUse` and `PermissionRequest`
+among them. `tuios agent-hook` exits 0 whatever happens, prints nothing a
+harness could read as an answer (Gemini CLI, which parses stdout, gets `{}`),
+and gives up after 500 ms (`--timeout`) when the daemon is slow, restarting or
+gone. A daemon that predates the hook fields rejects them; the report is then
+sent again without them, except a report with `if_state`, which is dropped
+rather than sent without its condition.
+
+### The old shim
+
+`integrations/claude-code/tuios-agent-state.sh` is now a wrapper that runs
+`tuios agent-hook claude-code`, so settings that point at it get the new map.
+Wired alongside an installed integration it reports every event twice;
+`status` and `doctor` say so. See
+[integrations/claude-code](../integrations/claude-code/README.md).
 
 ## Environment
 
@@ -644,7 +805,12 @@ When tuios spawns a pane it exports the environment a state-reporting shim needs
 | `TUIOS_SESSION`   | The session name                                 |
 
 A shim guards on these and no-ops when they are unset, so it is safe to leave
-wired up outside tuios.
+wired up outside tuios. `tuios agent-hook` uses `TUIOS_PANE_ID` and
+`TUIOS_SESSION` when they are set and finds the pane from its process otherwise
+(see [Finding the pane](#finding-the-pane)).
+
+One variable goes the other way: `TUIOS_AGENT` is set by you, on a wrapper, to
+name the harness it runs. See [Behind a wrapper](#behind-a-wrapper).
 
 ## Alerts
 

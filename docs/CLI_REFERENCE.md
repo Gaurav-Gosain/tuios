@@ -949,7 +949,7 @@ attention.
 tuios set-agent-state <state> [flags]
 ```
 
-**States:** `none`, `working`, `needs_input`, `idle`, `done`, `errored`
+**States:** `none`, `working`, `needs_input`, `idle`, `done`, `errored`, `unknown`
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)
@@ -957,6 +957,21 @@ tuios set-agent-state <state> [flags]
 - `-m, --message <text>`: Short note reported with the state
 - `--source <source>`: Where the state came from: `report`, `osc`, `screen`, `stall` (default: `report`)
 - `--harness <id>`: Id of the harness the state is about, e.g. `claude-code`
+- `--kind <kind>`: What a `needs_input` state waits for: `approval` or `question`. Only valid with `needs_input`
+- `--agent-session-id <id>`: The harness's own conversation id. Stored on the pane, and turns on the nested-session guard (below)
+- `--transcript-path <path>`: The transcript file the harness writes. For a harness whose manifest has a transcript reader, the pane is joined to this exact file
+- `--if-state <states>`: Apply only when the pane is in one of these comma-separated states
+
+**Hook fields:**
+The last four flags are what `tuios agent-hook` sends, and each is sent only when
+set, so a call that uses none of them works against an older daemon.
+`--if-state` is how "the tool ran after an approval" moves a pane from
+`needs_input` back to `working` without also turning a `done` pane back to
+`working`. A report with `--agent-session-id` is refused while the pane's own
+agent is `working` or `needs_input` by its own report and the report names a
+different session, or a different harness: that is a nested run, such as a
+`claude -p` a tool call started inside the pane. At rest a different session
+takes the pane over, as `/clear` or a restart should.
 
 **Sources and precedence:**
 More than one source can have an opinion about the same pane. Each source is
@@ -985,8 +1000,11 @@ authority. A report the daemon declines prints to stderr and leaves the state
 alone:
 
 ```
-Not applied: a higher-ranked source owns this pane; it still reports working.
+Not applied: a higher-ranked source owns this pane. It still reports working.
 ```
+
+The other refusals name their own reason on that line: an `--if-state` that did
+not hold, or a nested run from another conversation or another harness.
 
 **Examples:**
 ```bash
@@ -995,6 +1013,12 @@ tuios set-agent-state working
 
 # Mark a specific pane as needing input, with a note
 tuios set-agent-state needs_input -w build -m "awaiting approval"
+
+# Say the block is an approval, for a named conversation
+tuios set-agent-state needs_input --kind approval --agent-session-id 5f1c -m "approve Bash: make"
+
+# Clear a block after the tool ran, and leave any other state alone
+tuios set-agent-state working --if-state needs_input
 
 # Report on behalf of a named harness, from an escape sequence
 tuios set-agent-state working --source osc --harness claude-code
@@ -1703,6 +1727,11 @@ them.
 | `tuios ask-agent <text>` | Ask another agent a question and wait for its answer |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
 | `tuios explain-agent-screen` | Show what a harness's screen rules make of a pane |
+| `tuios integration install [harness...]` | Write tuios's managed hook entries into Claude Code, Codex, Gemini CLI or opencode's configuration (`--all` for every harness that has run here, `--command` for a tuios not on PATH) |
+| `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, and nothing else |
+| `tuios integration status [harness...]` | Say whether each integration is installed and current (`--json`) |
+| `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, and the running agent panes missing theirs (`--json`) |
+| `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state. `--explain` prints the decision to stderr. See [Agent state](AGENT_STATE.md#harness-integrations) |
 | `tuios stash put <file>` | Copy a file into the session store and print the stored path |
 | `tuios stash get <stored-path> [file]` | Copy a stashed file out of the session store, across a link |
 | `tuios stash list` | List the files in the session store |
@@ -2566,6 +2595,18 @@ the same as `--standalone`, for every run in that shell.
 ```bash
 export TUIOS_NO_DAEMON=1
 tuios
+```
+
+### `TUIOS_AGENT`
+
+Set on a wrapper that runs an agent tuios cannot see, such as one in a
+container or a VM, to name its harness. The daemon reads it from the pane's
+foreground process when nothing else identifies the process, and attributes
+the pane to that harness, so its screen and title rules run. `tuios agent-hook`
+ignores a hook from a different harness than the one it names.
+
+```bash
+TUIOS_AGENT=claude-code docker run -it sandbox claude
 ```
 
 ### `$SHELL`

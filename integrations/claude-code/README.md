@@ -37,7 +37,7 @@ You do not need Claude Code to check the wiring. From inside a tuios pane:
 ```sh
 echo '{"hook_event_name":"PermissionRequest","session_id":"s1","tool_name":"Bash","tool_input":{"command":"make"}}' \
   | tuios agent-hook claude-code --explain
-tuios get-agent-state --json     # needs_input, kind approval, agent_session_id s1
+tuios get-agent-state --json     # needs_input, blocked_by approval, agent_session_id s1
 echo '{"hook_event_name":"Stop","session_id":"s1"}' | tuios agent-hook claude-code
 tuios get-agent-state            # done
 tuios set-agent-state none       # clear it
