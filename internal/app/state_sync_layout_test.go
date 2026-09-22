@@ -74,7 +74,7 @@ func TestSyncedWindowJoinsTheTiledLayout(t *testing.T) {
 	if tree == nil {
 		t.Fatal("no BSP tree for workspace 1")
 	}
-	if intID := m.getWindowIntID(daemonID); !tree.HasWindow(intID) {
+	if intID := m.GetWindowIntID(daemonID); !tree.HasWindow(intID) {
 		t.Fatalf("daemon-created window (int ID %d) is not in the BSP tree; tree holds %v",
 			intID, tree.GetAllWindowIDs())
 	}
@@ -111,7 +111,7 @@ func TestSyncedWindowJoinsTheScrollingLayout(t *testing.T) {
 	}
 
 	sl := m.GetOrCreateScrollingLayout()
-	if intID := m.getWindowIntID(daemonID); !sl.HasWindow(intID) {
+	if intID := m.GetWindowIntID(daemonID); !sl.HasWindow(intID) {
 		t.Fatalf("daemon-created window (int ID %d) has no column in the scrolling layout", intID)
 	}
 	if got := sl.WindowCount(); got != 2 {
@@ -128,7 +128,7 @@ func TestSyncedCloseLeavesNoTile(t *testing.T) {
 	m := tiledOS(keepID)
 	m.Windows = append(m.Windows, &terminal.Window{ID: goneID, Workspace: 1, Width: 60, Height: 40})
 	m.TileAllWindows()
-	if !m.WorkspaceTrees[1].HasWindow(m.getWindowIntID(goneID)) {
+	if !m.WorkspaceTrees[1].HasWindow(m.GetWindowIntID(goneID)) {
 		t.Fatal("setup: second window never made it into the tree")
 	}
 
@@ -154,7 +154,7 @@ func TestSyncedCloseLeavesNoTile(t *testing.T) {
 	if tree == nil {
 		t.Fatal("no BSP tree for workspace 1")
 	}
-	if tree.HasWindow(m.getWindowIntID(goneID)) {
+	if tree.HasWindow(m.GetWindowIntID(goneID)) {
 		t.Error("closed window is still in the BSP tree")
 	}
 	// The survivor takes the whole area back.

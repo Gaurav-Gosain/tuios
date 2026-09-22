@@ -26,7 +26,7 @@ func TestDaemonCloseKeepsTheOtherPanesPut(t *testing.T) {
 	bounds := m.GetBSPBounds()
 	before := map[string]layout.Rect{}
 	for id, r := range m.WorkspaceTrees[m.CurrentWorkspace].ApplyLayout(bounds, m.separatorGap()) {
-		before[m.getWindowByIntID(id).ID] = r
+		before[m.GetWindowByIntID(id).ID] = r
 	}
 
 	// The daemon closes window-0004 and pushes the survivors.
@@ -55,7 +55,7 @@ func TestDaemonCloseKeepsTheOtherPanesPut(t *testing.T) {
 
 	after := map[string]layout.Rect{}
 	for id, r := range m.WorkspaceTrees[m.CurrentWorkspace].ApplyLayout(bounds, m.separatorGap()) {
-		after[m.getWindowByIntID(id).ID] = r
+		after[m.GetWindowByIntID(id).ID] = r
 	}
 
 	// window-0004 split window-0003, so window-0003 inherits their shared box and

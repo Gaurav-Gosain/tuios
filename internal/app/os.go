@@ -264,7 +264,7 @@ type OS struct {
 	pendingSplitDir        layout.PreselectionDir
 	pendingSplitTarget     string
 	WindowToBSPID          map[string]int          // Maps window UUID to stable BSP integer ID
-	BSPIDToWindowID        map[int]string          // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for getWindowByIntID)
+	BSPIDToWindowID        map[int]string          // Reverse of WindowToBSPID: BSP integer ID to window UUID (speed-up for GetWindowByIntID)
 	NextBSPWindowID        int                     // Next BSP window ID to assign (starts at 1)
 	RenameKind             RenameKind              // What the open rename editor targets (RenameNone when closed)
 	RenameBuffer           string                  // Buffer for new window name

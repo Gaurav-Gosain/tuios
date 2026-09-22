@@ -299,7 +299,7 @@ func TestFloatedPaneStaysFloatedEverywhere(t *testing.T) {
 	// The peer's tree must have let go of the pane, or its tiled panes underfill
 	// the box forever and every sync reads as a stale layout.
 	if tree := p.m.WorkspaceTrees[p.m.CurrentWorkspace]; tree != nil {
-		intID := p.m.getWindowIntID(floatedID)
+		intID := p.m.GetWindowIntID(floatedID)
 		for _, id := range tree.GetAllWindowIDs() {
 			if id == intID {
 				t.Fatalf("the peer's tree still holds the floated pane")

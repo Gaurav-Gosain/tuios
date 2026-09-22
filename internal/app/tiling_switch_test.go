@@ -184,7 +184,7 @@ func scrolledPastTheEdge(t *testing.T, m *OS) {
 	m.FocusWindow(len(m.Windows) - 1)
 	sl := m.GetOrCreateScrollingLayout()
 	sl.EnsureFocusedVisible(m.ScrollingViewWidth())
-	m.scrollingSetPositions()
+	m.ScrollingSetPositions()
 	if len(offScreen(m)) == 0 {
 		t.Fatalf("the strip fits on screen, so nothing can be left behind: %v", paneRects(m))
 	}

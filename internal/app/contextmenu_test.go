@@ -477,12 +477,12 @@ func TestContextMenuDockBandExcludesTopWindowRow(t *testing.T) {
 	m.CurrentWorkspace, m.FocusedWindow = 1, 0
 
 	for y := range config.DockHeight {
-		if !m.inDockBand(y) {
+		if !m.InDockBand(y) {
 			t.Errorf("row %d is drawn on by a %d-row top dock but is not in the dock band",
 				y, config.DockHeight)
 		}
 	}
-	if m.inDockBand(top) {
+	if m.InDockBand(top) {
 		t.Errorf("row %d is the first row of the topmost window, but the dock band claims it; "+
 			"the pane is unreachable there", top)
 	}

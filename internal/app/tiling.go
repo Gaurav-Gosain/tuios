@@ -135,11 +135,11 @@ func (m *OS) tileAllWindows() {
 	// Revealing belongs to the events where the focus or the column set really
 	// changed, and each of those has its own call: ScrollingOnFocusChange,
 	// ScrollingOnWindowRemoved, adoptScrollStrip, and the restore in
-	// os_minimize.go. scrollingSetPositions still clamps, so a retile that
+	// os_minimize.go. ScrollingSetPositions still clamps, so a retile that
 	// narrowed the box or removed columns pulls the viewport back into range.
 	if m.UseScrollingLayout {
 		m.LogInfo("[SCROLL-TILE] TileAllWindows scrolling path, %d visible windows", len(visibleWindows))
-		m.scrollingSetPositions()
+		m.ScrollingSetPositions()
 		return
 	}
 
@@ -270,7 +270,7 @@ func (m *OS) tileAllWindows() {
 		treeIDs := tree.GetAllWindowIDs()
 		visibleIDs := make(map[int]bool)
 		for _, win := range visibleWindows {
-			intID := m.getWindowIntID(win.ID)
+			intID := m.GetWindowIntID(win.ID)
 			visibleIDs[intID] = true
 			if verboseLog {
 				m.LogInfo("BSP: Visible window %s has int ID %d", shortID(win.ID), intID)
@@ -314,7 +314,7 @@ func (m *OS) tileAllWindows() {
 		var lastInsertedID = 0
 
 		for i, win := range visibleWindows {
-			windowIntID := m.getWindowIntID(win.ID)
+			windowIntID := m.GetWindowIntID(win.ID)
 			tree.InsertWindow(windowIntID, lastInsertedID, layout.SplitNone, 0.5, bounds, m.separatorGap())
 			lastInsertedID = windowIntID
 			m.LogInfo("BSP: Added window %d (int ID %d) with target %d", i+1, windowIntID, lastInsertedID)
@@ -327,7 +327,7 @@ func (m *OS) tileAllWindows() {
 	// Tree exists and is valid - check if all visible windows are in it
 	allInTree := true
 	for _, win := range visibleWindows {
-		windowIntID := m.getWindowIntID(win.ID)
+		windowIntID := m.GetWindowIntID(win.ID)
 		if !tree.HasWindow(windowIntID) {
 			allInTree = false
 			break
@@ -343,7 +343,7 @@ func (m *OS) tileAllWindows() {
 	m.LogInfo("BSP: Adding missing windows to existing tree")
 
 	for _, win := range visibleWindows {
-		windowIntID := m.getWindowIntID(win.ID)
+		windowIntID := m.GetWindowIntID(win.ID)
 		if !tree.HasWindow(windowIntID) {
 			existingIDs := tree.GetAllWindowIDs()
 			targetIntID := 0
@@ -410,7 +410,7 @@ func (m *OS) setAutoTiling(on bool) {
 		delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
 		sl := m.GetOrCreateScrollingLayout()
 		sl.EnsureFocusedVisible(m.ScrollingViewWidth())
-		m.scrollingSetPositions()
+		m.ScrollingSetPositions()
 		for _, w := range m.Windows {
 			if w.Workspace == m.CurrentWorkspace {
 				w.InvalidateCache()

@@ -45,7 +45,7 @@ func TestSyncCloseReleasesWindowReferences(t *testing.T) {
 	m, w := osWithWindow(t, "doomed")
 
 	// Give the window everything a live one accumulates.
-	intID := m.getWindowIntID(w.ID)
+	intID := m.GetWindowIntID(w.ID)
 	if intID == 0 {
 		t.Fatal("window was not assigned a BSP id")
 	}

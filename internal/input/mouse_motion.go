@@ -486,7 +486,7 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		} else if o.UseScrollingLayout {
 			// Scrolling mode: compute width from horizontal drag delta. All
 			// strip math runs against the content width beside the sidebar band,
-			// matching scrollingSetPositions.
+			// matching ScrollingSetPositions.
 			viewW := o.ScrollingViewWidth()
 			switch o.ResizeCorner {
 			case app.TopLeft, app.BottomLeft:

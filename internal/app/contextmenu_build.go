@@ -90,7 +90,7 @@ func (m *OS) OpenContextMenu(x, y int) {
 // wins over any window drawn near it, then the topmost window under the point,
 // then the desktop.
 func (m *OS) contextMenuTargetAt(x, y int) (target ContextMenuTarget, windowIndex, workspace int) {
-	if m.inDockBand(y) {
+	if m.InDockBand(y) {
 		if idx := m.DockItemAt(x, y); idx >= 0 {
 			return CtxTargetDockItem, idx, 0
 		}
@@ -110,20 +110,15 @@ func (m *OS) contextMenuTargetAt(x, y int) (target ContextMenuTarget, windowInde
 }
 
 // InDockBand reports whether a screen row falls in the reserved dock band.
-// Exported for the input layer's hover routing (focus-follows-mouse must never
-// treat the dock band as a pane).
-func (m *OS) InDockBand(y int) bool {
-	return m.inDockBand(y)
-}
-
-// inDockBand reports whether a screen row falls in the reserved dock band.
+// The input layer's hover routing uses it too, because focus-follows-mouse
+// must never treat the dock band as a pane.
 //
 // A dock of DockHeight rows at the top of the screen occupies rows 0 to
 // DockHeight-1, so the test is exclusive. Writing it inclusive, as the click
 // handler in internal/input still does, claims one row more than the dock draws
 // on: with the dock at the top that extra row is the first row of the topmost
 // window, which is how the pane menu came to be unreachable there.
-func (m *OS) inDockBand(y int) bool {
+func (m *OS) InDockBand(y int) bool {
 	switch m.Settings.DockbarPosition {
 	case "hidden":
 		return false

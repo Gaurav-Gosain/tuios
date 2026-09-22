@@ -79,7 +79,7 @@ func (m *OS) reclaimSeparatorGaps() {
 				continue
 			}
 			for intID, r := range tree.ApplyLayout(bounds, m.separatorGap()) {
-				win := m.getWindowByIntID(intID)
+				win := m.GetWindowByIntID(intID)
 				if win == nil || win.Workspace != ws {
 					continue
 				}

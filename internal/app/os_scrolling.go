@@ -34,7 +34,7 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 		} else {
 			for _, w := range m.Windows {
 				if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.IsFloating {
-					intID := m.getWindowIntID(w.ID)
+					intID := m.GetWindowIntID(w.ID)
 					sl.AddColumn(intID)
 				}
 			}
@@ -60,7 +60,7 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 		if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 			fw := m.Windows[m.FocusedWindow]
 			if fw.Workspace == m.CurrentWorkspace && !fw.IsFloating {
-				intID := m.getWindowIntID(fw.ID)
+				intID := m.GetWindowIntID(fw.ID)
 				sl.FocusColumnContaining(intID)
 			}
 		}
@@ -83,7 +83,7 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 	// the other layouts build a canvas for.
 	sl.ZoomedCol, sl.ZoomProportion = -1, 0
 	if zw := m.zoomedWindow(); zw != nil && m.Settings.GetZoomSize() < 100 {
-		if i := sl.ColumnContaining(m.getWindowIntID(zw.ID)); i >= 0 {
+		if i := sl.ColumnContaining(m.GetWindowIntID(zw.ID)); i >= 0 {
 			sl.ZoomedCol = i
 			sl.ZoomProportion = float64(m.Settings.GetZoomSize()) / 100
 		}
@@ -105,9 +105,9 @@ func (m *OS) ScrollingViewWidth() int {
 	return m.GetContentWidth()
 }
 
-// scrollingSetPositions applies the scrolling layout positions and dimensions.
-// When animate is true, windows slide to their new positions.
-func (m *OS) scrollingSetPositions() {
+// ScrollingSetPositions applies the scrolling layout positions and dimensions,
+// sliding windows to their new positions.
+func (m *OS) ScrollingSetPositions() {
 	m.scrollingSetPositionsAnimated(true)
 }
 
@@ -142,7 +142,7 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		// ComputePositions works in strip coordinates; place the strip inside
 		// the content region.
 		rect.X += leftMargin
-		win := m.getWindowByIntID(windowIntID)
+		win := m.GetWindowByIntID(windowIntID)
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
 		}
@@ -181,7 +181,7 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 
 		// If this window already has an in-flight animation heading to
 		// the same target, don't touch it. TileAllWindows and other
-		// callers re-run scrollingSetPositions frequently; without this
+		// callers re-run ScrollingSetPositions frequently; without this
 		// guard each call would cancel + recreate the animation from the
 		// current intermediate position, making it stutter.
 		if m.windowHasAnimationTo(win, rect.X, rect.Y, rect.W, rect.H) {
@@ -221,7 +221,7 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 
 // windowHasAnimationTo checks if a window has an active animation
 // heading to the exact target position. Used to avoid canceling
-// in-flight animations when scrollingSetPositions is called repeatedly.
+// in-flight animations when ScrollingSetPositions is called repeatedly.
 func (m *OS) windowHasAnimationTo(win *terminal.Window, x, y, w, h int) bool {
 	for _, anim := range m.Animations {
 		if anim.Window == win && !anim.Complete &&
@@ -239,7 +239,7 @@ func (m *OS) ScrollingFocusLeft() {
 	sl.FocusLeft()
 	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
 	m.scrollingSyncFocusToOS()
-	m.scrollingSetPositions()
+	m.ScrollingSetPositions()
 }
 
 // ScrollingFocusRight navigates to the column to the right.
@@ -248,7 +248,7 @@ func (m *OS) ScrollingFocusRight() {
 	sl.FocusRight()
 	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
 	m.scrollingSyncFocusToOS()
-	m.scrollingSetPositions()
+	m.ScrollingSetPositions()
 }
 
 // ScrollingMoveColumnLeft moves the focused column left.
@@ -256,7 +256,7 @@ func (m *OS) ScrollingMoveColumnLeft() {
 	sl := m.GetOrCreateScrollingLayout()
 	sl.MoveColumnLeft()
 	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
-	m.scrollingSetPositions()
+	m.ScrollingSetPositions()
 }
 
 // ScrollingMoveColumnRight moves the focused column right.
@@ -264,7 +264,7 @@ func (m *OS) ScrollingMoveColumnRight() {
 	sl := m.GetOrCreateScrollingLayout()
 	sl.MoveColumnRight()
 	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
-	m.scrollingSetPositions()
+	m.ScrollingSetPositions()
 }
 
 // ScrollingCycleWidth cycles the focused column through preset widths.
@@ -272,7 +272,7 @@ func (m *OS) ScrollingCycleWidth() {
 	sl := m.GetOrCreateScrollingLayout()
 	sl.CycleWidth()
 	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
-	m.scrollingSetPositions()
+	m.ScrollingSetPositions()
 }
 
 // ScrollingConsumeWindow absorbs the next column's window into the focused
@@ -284,7 +284,7 @@ func (m *OS) ScrollingConsumeWindow() {
 	sl.ConsumeWindow()
 	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
 	m.scrollingSyncFocusToOS()
-	m.scrollingSetPositions()
+	m.ScrollingSetPositions()
 }
 
 // ScrollingExpelWindow pushes the focused window out into its own column, and
@@ -294,7 +294,7 @@ func (m *OS) ScrollingExpelWindow() {
 	sl.ExpelWindow()
 	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
 	m.scrollingSyncFocusToOS()
-	m.scrollingSetPositions()
+	m.ScrollingSetPositions()
 }
 
 // ScrollingScrollViewport scrolls the viewport manually (mouse wheel).
@@ -340,14 +340,14 @@ func (m *OS) ScrollingOnFocusChange() {
 	if fw == nil {
 		return
 	}
-	intID := m.getWindowIntID(fw.ID)
+	intID := m.GetWindowIntID(fw.ID)
 	if !sl.FocusColumnContaining(intID) {
 		sl.AddColumn(intID)
 		sl.FocusColumnContaining(intID)
 	}
 
 	sl.EnsureFocusedVisible(m.ScrollingViewWidth())
-	m.scrollingSetPositions()
+	m.ScrollingSetPositions()
 }
 
 // FocusWindowFromClick focuses a pane the user pressed on, and arms the
@@ -403,9 +403,9 @@ func (m *OS) RevealFocusedColumn() {
 		return
 	}
 	sl := m.GetOrCreateScrollingLayout()
-	if sl.FocusColumnContaining(m.getWindowIntID(fw.ID)) {
+	if sl.FocusColumnContaining(m.GetWindowIntID(fw.ID)) {
 		sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
-		m.scrollingSetPositions()
+		m.ScrollingSetPositions()
 	}
 }
 
@@ -465,9 +465,9 @@ func (m *OS) ReleaseClickReveal(x, y int) {
 		return
 	}
 	sl := m.GetOrCreateScrollingLayout()
-	if sl.FocusColumnContaining(m.getWindowIntID(fw.ID)) {
+	if sl.FocusColumnContaining(m.GetWindowIntID(fw.ID)) {
 		sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
-		m.scrollingSetPositions()
+		m.ScrollingSetPositions()
 	}
 }
 
@@ -475,7 +475,7 @@ func (m *OS) ReleaseClickReveal(x, y int) {
 // Only adds the column  - FocusWindow handles viewport and positioning.
 func (m *OS) ScrollingOnWindowAdded(w *terminal.Window) {
 	sl := m.GetOrCreateScrollingLayout()
-	intID := m.getWindowIntID(w.ID)
+	intID := m.GetWindowIntID(w.ID)
 	// GetOrCreateScrollingLayout populates from m.Windows on first call.
 	// If the window was already appended to m.Windows before this call,
 	// the layout already has it. Don't add a duplicate.
@@ -494,7 +494,7 @@ func (m *OS) ScrollingOnWindowRemoved(windowIntID int) {
 	if sl.WindowCount() > 0 {
 		sl.EnsureFocusedVisible(m.ScrollingViewWidth())
 		m.scrollingSyncFocusToOS()
-		m.scrollingSetPositions()
+		m.ScrollingSetPositions()
 	}
 }
 
@@ -518,7 +518,7 @@ func (m *OS) scrollingLayoutStale() bool {
 		if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized || w.IsFloating {
 			continue
 		}
-		rect, ok := want[m.getWindowIntID(w.ID)]
+		rect, ok := want[m.GetWindowIntID(w.ID)]
 		if !ok {
 			// A pane the strip has never heard of: the strip is behind the
 			// window list, which the retile is what fixes.
@@ -599,7 +599,7 @@ func (m *OS) adoptScrollStrip(strip *session.ScrollStripState, focusChanged bool
 			// window in a column keeps its row whichever of them is active, so
 			// there is nothing to lay out again.
 			was := sl.FocusedCol
-			if sl.FocusColumnContaining(m.getWindowIntID(fw.ID)) && sl.FocusedCol != was {
+			if sl.FocusColumnContaining(m.GetWindowIntID(fw.ID)) && sl.FocusedCol != was {
 				moved = true
 			}
 		}
@@ -613,24 +613,8 @@ func (m *OS) adoptScrollStrip(strip *session.ScrollStripState, focusChanged bool
 		moved = moved || sl.ViewportX != before
 	}
 	if moved {
-		m.scrollingSetPositions()
+		m.ScrollingSetPositions()
 	}
-}
-
-// scrollingSyncFocusToOS sets the OS focused window to match the scrolling layout's focus.
-// GetWindowIntID returns the integer BSP ID for a window by its string ID.
-func (m *OS) GetWindowIntID(windowID string) int {
-	return m.getWindowIntID(windowID)
-}
-
-// ScrollingSetPositions applies scrolling layout positions (public wrapper).
-func (m *OS) ScrollingSetPositions() {
-	m.scrollingSetPositions()
-}
-
-// GetWindowByIntID returns the window with the given integer BSP ID.
-func (m *OS) GetWindowByIntID(intID int) *terminal.Window {
-	return m.getWindowByIntID(intID)
 }
 
 // scrollingResizeColumn changes the focused column's width by delta pixels.
@@ -656,7 +640,7 @@ func (m *OS) scrollingSyncFocusToOS() {
 	if focusedWinID < 0 {
 		return
 	}
-	win := m.getWindowByIntID(focusedWinID)
+	win := m.GetWindowByIntID(focusedWinID)
 	if win == nil {
 		return
 	}
@@ -706,7 +690,7 @@ func (m *OS) scrollColumnsToState(cols []layout.ScrollColumn) []session.Serializ
 		ids := make([]string, 0, len(c.WindowIDs))
 		active := 0
 		for i, intID := range c.WindowIDs {
-			w := m.getWindowByIntID(intID)
+			w := m.GetWindowByIntID(intID)
 			if w == nil {
 				continue
 			}
@@ -752,7 +736,7 @@ func (m *OS) scrollColumnsFromState(ws int, cols []session.SerializedScrollColum
 			if !tileable(m.windowByID(windowID)) {
 				continue
 			}
-			intID := m.getWindowIntID(windowID)
+			intID := m.GetWindowIntID(windowID)
 			if placed[intID] {
 				continue
 			}
@@ -776,7 +760,7 @@ func (m *OS) scrollColumnsFromState(ws int, cols []session.SerializedScrollColum
 		if !tileable(w) {
 			continue
 		}
-		if intID := m.getWindowIntID(w.ID); !placed[intID] {
+		if intID := m.GetWindowIntID(w.ID); !placed[intID] {
 			placed[intID] = true
 			out = append(out, layout.ScrollColumn{WindowIDs: []int{intID}})
 		}

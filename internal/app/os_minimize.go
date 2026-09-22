@@ -44,11 +44,11 @@ func (m *OS) MinimizeWindow(i int) {
 		if m.AutoTiling {
 			if m.UseScrollingLayout {
 				// Remove from scrolling layout and retile
-				intID := m.getWindowIntID(window.ID)
+				intID := m.GetWindowIntID(window.ID)
 				sl := m.GetOrCreateScrollingLayout()
 				sl.RemoveWindow(intID)
 				sl.EnsureFocusedVisible(m.ScrollingViewWidth())
-				m.scrollingSetPositions()
+				m.ScrollingSetPositions()
 			} else if m.UseBSPLayout {
 				// Remove from the BSP tree and reflow the remaining panes,
 				// mirroring the close path (DeleteWindow). Using the
@@ -75,7 +75,7 @@ func (m *OS) RestoreWindow(i int) {
 
 			if m.UseScrollingLayout {
 				// Re-add to scrolling layout
-				intID := m.getWindowIntID(window.ID)
+				intID := m.GetWindowIntID(window.ID)
 				sl := m.GetOrCreateScrollingLayout()
 				if !sl.HasWindow(intID) {
 					sl.AddColumn(intID)
@@ -343,7 +343,7 @@ func (m *OS) zoomPane(w *terminal.Window) bool {
 		// growing a column that is half off the edge leaves the pane you asked
 		// for further off it than before.
 		if m.UseScrollingLayout {
-			m.scrollingSetPositions()
+			m.ScrollingSetPositions()
 			m.RevealFocusedColumn()
 		}
 		return true

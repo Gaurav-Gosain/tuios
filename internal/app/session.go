@@ -358,7 +358,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	}
 
 	// Restore window to BSP ID mapping FIRST (before BSP trees)
-	// This ensures getWindowIntID() returns correct IDs when we deserialize trees
+	// This ensures GetWindowIntID() returns correct IDs when we deserialize trees
 	if state.WindowToBSPID != nil {
 		m.WindowToBSPID = make(map[string]int)
 		for k, v := range state.WindowToBSPID {
@@ -593,7 +593,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// Close windows that were deleted by other client
 	var removed []int
 	for _, w := range existingByID {
-		removed = append(removed, m.getWindowIntID(w.ID))
+		removed = append(removed, m.GetWindowIntID(w.ID))
 		m.closeWindowFromSync(w)
 	}
 
@@ -706,7 +706,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// tree it keys (see adoptTopology), and even then merge rather than replace:
 	// a window this client has already mapped keeps its int ID, so a stale echo
 	// that omits it (or an already applied one) cannot strip the mapping and
-	// force getWindowIntID to hand out a fresh number. A churned int ID orphans
+	// force GetWindowIntID to hand out a fresh number. A churned int ID orphans
 	// the window's node in the tree, which TileAllWindows then rebuilds from
 	// scratch with the spiral scheme, discarding any forced split direction.
 	if adoptTopology && state.WindowToBSPID != nil {
@@ -718,7 +718,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 				m.WindowToBSPID[id] = intID
 			}
 		}
-		// Keep the reverse map consistent with the merge; getWindowByIntID trusts
+		// Keep the reverse map consistent with the merge; GetWindowByIntID trusts
 		// it as a fast path before falling back to a linear scan.
 		m.BSPIDToWindowID = make(map[int]string, len(m.WindowToBSPID))
 		for id, intID := range m.WindowToBSPID {
@@ -773,7 +773,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// where this client would add one of its own; on another workspace the
 	// tree catches up when that workspace next tiles.
 	for _, w := range floated {
-		intID := m.getWindowIntID(w.ID)
+		intID := m.GetWindowIntID(w.ID)
 		for _, tree := range m.WorkspaceTrees {
 			if tree != nil {
 				tree.RemoveWindow(intID)
@@ -792,7 +792,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 			continue
 		}
 		if tree := m.WorkspaceTrees[m.CurrentWorkspace]; tree != nil {
-			intID := m.getWindowIntID(w.ID)
+			intID := m.GetWindowIntID(w.ID)
 			if !slices.Contains(tree.GetAllWindowIDs(), intID) {
 				m.AddWindowToBSPTree(w)
 			}
@@ -1309,7 +1309,7 @@ func (m *OS) closeWindowFromSync(w *terminal.Window) {
 	}
 
 	if m.WindowToBSPID != nil {
-		intID := m.getWindowIntID(w.ID)
+		intID := m.GetWindowIntID(w.ID)
 		delete(m.WindowToBSPID, w.ID)
 		if m.BSPIDToWindowID != nil {
 			delete(m.BSPIDToWindowID, intID)
@@ -1500,11 +1500,11 @@ func (m *OS) applyPendingForcedSplit(win *terminal.Window) {
 	}
 
 	tree := m.GetOrCreateBSPTree()
-	windowIntID := m.getWindowIntID(win.ID)
+	windowIntID := m.GetWindowIntID(win.ID)
 	if tree.HasWindow(windowIntID) {
 		return // already in the tree; nothing to force
 	}
-	targetIntID := m.getWindowIntID(targetID)
+	targetIntID := m.GetWindowIntID(targetID)
 	tree.InsertWindowWithPreselection(windowIntID, targetIntID, dir, m.GetBSPBounds(), m.separatorGap())
 }
 

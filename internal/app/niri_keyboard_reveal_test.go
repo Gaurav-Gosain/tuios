@@ -63,7 +63,7 @@ func TestWalkingToTheNextPaneBringsAllOfItOnScreen(t *testing.T) {
 func parkStraddling(m *OS, n int) bool {
 	sl := m.GetOrCreateScrollingLayout()
 	viewW := m.ScrollingViewWidth()
-	id := m.getWindowIntID(m.Windows[n].ID)
+	id := m.GetWindowIntID(m.Windows[n].ID)
 	for x := range sl.TotalStripWidth(viewW) {
 		sl.ViewportX = x
 		r, ok := sl.ComputePositions(viewW, m.GetUsableHeight(), 0)[id]
@@ -86,7 +86,7 @@ func columnFullyVisible(m *OS, n int) bool {
 	sl := m.GetOrCreateScrollingLayout()
 	viewW := m.ScrollingViewWidth()
 	rects := sl.ComputePositions(viewW, m.GetUsableHeight(), 0)
-	r, ok := rects[m.getWindowIntID(m.Windows[n].ID)]
+	r, ok := rects[m.GetWindowIntID(m.Windows[n].ID)]
 	if !ok {
 		return false
 	}

@@ -53,7 +53,7 @@ func treeShape(m *OS) string {
 			return "_"
 		}
 		if n.Left == nil && n.Right == nil {
-			if w := m.getWindowByIntID(n.WindowID); w != nil {
+			if w := m.GetWindowByIntID(n.WindowID); w != nil {
 				return shortID(w.PTYID)
 			}
 			return fmt.Sprintf("int%d", n.WindowID)

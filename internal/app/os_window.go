@@ -31,8 +31,8 @@ func (m *OS) ToggleFloating() {
 				// and moves the focus to the strip's column, and the pane the
 				// user just floated is the pane they are still in.
 				sl := m.GetOrCreateScrollingLayout()
-				sl.RemoveWindow(m.getWindowIntID(fw.ID))
-				m.scrollingSetPositions()
+				sl.RemoveWindow(m.GetWindowIntID(fw.ID))
+				m.ScrollingSetPositions()
 			} else {
 				m.RemoveWindowFromBSPTree(fw)
 			}
@@ -45,7 +45,7 @@ func (m *OS) ToggleFloating() {
 		// Re-add to tiling layout when unfloating
 		if m.AutoTiling {
 			if m.UseScrollingLayout {
-				intID := m.getWindowIntID(fw.ID)
+				intID := m.GetWindowIntID(fw.ID)
 				sl := m.GetOrCreateScrollingLayout()
 				if !sl.HasWindow(intID) {
 					sl.AddColumn(intID)
@@ -679,7 +679,7 @@ func (m *OS) DeleteWindow(i int) *OS {
 	// Get the window int ID BEFORE deleting (for BSP tree removal), and the
 	// workspace it lived on: the pointer is cleared below, and the tree that has
 	// to lose its leaf is the window's own, not whichever one is on screen.
-	windowIntID := m.getWindowIntID(deletedWindow.ID)
+	windowIntID := m.GetWindowIntID(deletedWindow.ID)
 	deletedWorkspace := deletedWindow.Workspace
 
 	// Clean up the BSP ID mapping

@@ -47,9 +47,9 @@ func (m *OS) GetBSPBounds() layout.Rect {
 	}
 }
 
-// getWindowIntID returns a stable integer ID for a window string ID.
+// GetWindowIntID returns a stable integer ID for a window string ID.
 // Uses a direct map lookup for reliable ID assignment.
-func (m *OS) getWindowIntID(stringID string) int {
+func (m *OS) GetWindowIntID(stringID string) int {
 	if stringID == "" {
 		return 0
 	}
@@ -79,8 +79,8 @@ func (m *OS) getWindowIntID(stringID string) int {
 	return newID
 }
 
-// getWindowByIntID returns the window for a given integer ID
-func (m *OS) getWindowByIntID(intID int) *terminal.Window {
+// GetWindowByIntID returns the window for a given integer ID
+func (m *OS) GetWindowByIntID(intID int) *terminal.Window {
 	if intID <= 0 {
 		return nil
 	}
@@ -181,7 +181,7 @@ func (m *OS) ApplyBSPLayout() {
 	zoomRetile := m.takeZoomRelayout()
 
 	for windowIntID, rect := range layouts {
-		win := m.getWindowByIntID(windowIntID)
+		win := m.GetWindowByIntID(windowIntID)
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
 		}
@@ -350,7 +350,7 @@ func (m *OS) bspZoomCanvas(tree *layout.BSPTree, bounds layout.Rect, layouts map
 	if zw == nil {
 		return zoomCanvas{}, bounds, false
 	}
-	id := m.getWindowIntID(zw.ID)
+	id := m.GetWindowIntID(zw.ID)
 	tile, ok := layouts[id]
 	if !ok {
 		return zoomCanvas{}, bounds, false
@@ -415,7 +415,7 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 	m.requireRealLayout()
 
 	tree := m.GetOrCreateBSPTree()
-	windowIntID := m.getWindowIntID(window.ID)
+	windowIntID := m.GetWindowIntID(window.ID)
 
 	if verboseLog {
 		m.LogInfo("BSP: AddWindowToBSPTree for window %s (int ID %d)", shortID(window.ID), windowIntID)
@@ -426,7 +426,7 @@ func (m *OS) AddWindowToBSPTree(window *terminal.Window) {
 
 	// If SplitTargetWindowID is set (for explicit splits like Ctrl+B, -), use that
 	if m.SplitTargetWindowID != "" {
-		targetIntID = m.getWindowIntID(m.SplitTargetWindowID)
+		targetIntID = m.GetWindowIntID(m.SplitTargetWindowID)
 		m.LogInfo("BSP: Using explicit split target (int ID %d)", targetIntID)
 	} else {
 		// Use the last window in the BSP tree as the target
@@ -471,7 +471,7 @@ func (m *OS) RemoveWindowFromBSPTree(window *terminal.Window) {
 		return
 	}
 
-	windowIntID := m.getWindowIntID(window.ID)
+	windowIntID := m.GetWindowIntID(window.ID)
 	tree.RemoveWindow(windowIntID)
 
 	// Apply the new layout
@@ -522,7 +522,7 @@ func (m *OS) SyncBSPTreeFromGeometry() {
 	geometry := make(map[int]layout.Rect)
 	for _, win := range m.Windows {
 		if win.Workspace == m.CurrentWorkspace && !win.Minimized {
-			windowIntID := m.getWindowIntID(win.ID)
+			windowIntID := m.GetWindowIntID(win.ID)
 			geometry[windowIntID] = layout.Rect{
 				X: win.X,
 				Y: win.Y,
@@ -685,7 +685,7 @@ func (m *OS) RotateFocusedSplit() {
 		return
 	}
 
-	windowIntID := m.getWindowIntID(focusedWin.ID)
+	windowIntID := m.GetWindowIntID(focusedWin.ID)
 
 	// Check if window is in the tree
 	if !tree.HasWindow(windowIntID) {
@@ -735,8 +735,8 @@ func (m *OS) SwapWindowsInBSPTree(window1, window2 *terminal.Window) {
 		return
 	}
 
-	id1 := m.getWindowIntID(window1.ID)
-	id2 := m.getWindowIntID(window2.ID)
+	id1 := m.GetWindowIntID(window1.ID)
+	id2 := m.GetWindowIntID(window2.ID)
 	tree.SwapWindows(id1, id2)
 }
 

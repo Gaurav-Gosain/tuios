@@ -389,7 +389,7 @@ func TestAddWindowPlacesThePaneBeforeFocusingIt(t *testing.T) {
 		t.Errorf("the new pane is %dx%d, larger than the %dx%d region",
 			fresh.Width, fresh.Height, m.GetContentWidth(), m.GetUsableHeight())
 	}
-	if !m.GetOrCreateBSPTree().HasWindow(m.getWindowIntID(fresh.ID)) {
+	if !m.GetOrCreateBSPTree().HasWindow(m.GetWindowIntID(fresh.ID)) {
 		t.Error("the new pane is not in the tiling tree")
 	}
 	// And the tree holds each pane once: the repair path inserting it and the

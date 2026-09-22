@@ -359,7 +359,7 @@ func (m *OS) applyBSPResize(resized *terminal.Window, newX, newY, newWidth, newH
 		return false
 	}
 
-	intID := m.getWindowIntID(resized.ID)
+	intID := m.GetWindowIntID(resized.ID)
 	if !tree.HasWindow(intID) {
 		return false
 	}
@@ -395,7 +395,7 @@ func (m *OS) applyBSPResize(resized *terminal.Window, newX, newY, newWidth, newH
 		m.bspResizeScratch = make(map[int]layout.Rect, len(m.Windows))
 	}
 	for windowIntID, rect := range tree.ApplyLayoutInto(bounds, m.bspResizeScratch, m.separatorGap()) {
-		win := m.getWindowByIntID(windowIntID)
+		win := m.GetWindowByIntID(windowIntID)
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
 		}

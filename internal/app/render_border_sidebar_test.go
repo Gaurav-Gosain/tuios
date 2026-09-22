@@ -70,7 +70,7 @@ func sharedBorderSidebarOS(t *testing.T, n int, side string) *OS {
 		t.Fatal("sharedBorderSidebarOS: no BSP tree")
 	}
 	for intID, rect := range tree.ApplyLayout(m.GetBSPBounds(), m.separatorGap()) {
-		if win := m.getWindowByIntID(intID); win != nil {
+		if win := m.GetWindowByIntID(intID); win != nil {
 			win.X, win.Y, win.Width, win.Height = rect.X, rect.Y, rect.W, rect.H
 		}
 	}
