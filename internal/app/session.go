@@ -118,6 +118,13 @@ func (m *OS) BuildSessionState() *session.SessionState {
 			}
 		}
 	}
+	// The scrolling layout's columns, for the reason the trees are here: a
+	// session switch rebuilds from this state, and without them a widened column
+	// came back at the default width. Not under the trees' check, because a
+	// workspace only ever laid out as a strip has no tree.
+	if m.AutoTiling {
+		state.WorkspaceScrollColumns = m.scrollColumnsState()
+	}
 
 	// Save window to BSP ID mapping
 	if m.WindowToBSPID != nil {
@@ -364,6 +371,13 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// Reattaching is the case this field exists for: the mode is what a user
 	// most obviously notices losing, and it was the one part of the tiling state
 	// that did not survive.
+	//
+	// The scrolling columns are set aside first, because entering the mode is
+	// what builds the strip, and the strip is built from them.
+	m.pendingScrollColumns = nil
+	if state.AutoTiling {
+		m.adoptScrollColumns(state.WorkspaceScrollColumns)
+	}
 	m.ApplyLayoutModeName(state.LayoutMode)
 	m.LogInfo("[RESTORE] NextBSPWindowID=%d, TilingScheme=%d, LayoutMode=%s", m.NextBSPWindowID, m.TilingScheme, m.LayoutModeName())
 
@@ -740,6 +754,11 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 				m.WorkspaceTrees[ws] = layoutSerialized.Deserialize()
 			}
 		}
+	}
+	// The scrolling columns, on the same terms as the trees. Nil is a peer that
+	// did not say, which leaves this client's columns alone.
+	if adoptTopology && state.WorkspaceScrollColumns != nil && state.AutoTiling {
+		m.adoptScrollColumns(state.WorkspaceScrollColumns)
 	}
 
 	// Mirror the structural half of a float toggled elsewhere. The peer that

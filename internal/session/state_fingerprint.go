@@ -171,6 +171,26 @@ func StateFingerprint(s *SessionState) uint64 {
 		num(s.ScrollStrip.ViewportX)
 	}
 
+	// The scrolling layout's columns, for the reason the trees above are here:
+	// a peer acts on them. Left out, widening a column changed nothing a push
+	// was compared on, so the push was suppressed as a repeat and the width
+	// lived on this client alone.
+	num(len(s.WorkspaceScrollColumns))
+	for _, k := range sortedIntKeys(s.WorkspaceScrollColumns) {
+		num(k)
+		cols := s.WorkspaceScrollColumns[k]
+		num(len(cols))
+		for _, c := range cols {
+			num(len(c.Windows))
+			for _, id := range c.Windows {
+				str(id)
+			}
+			f64(c.Proportion)
+			num(c.FixedWidth)
+			num(c.Active)
+		}
+	}
+
 	// Nil and the zero value are distinguished: nil is a peer that has not said,
 	// and a peer adopting on receipt has to see the difference.
 	if s.PaneGeometry == nil {

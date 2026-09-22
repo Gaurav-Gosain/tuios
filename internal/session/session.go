@@ -419,6 +419,43 @@ type SessionState struct {
 	// "nothing to say". A non-nil pointer to a struct survives, which is what
 	// makes home a value this can carry.
 	ScrollStrip *ScrollStripState `json:"scroll_strip,omitempty"`
+	// WorkspaceScrollColumns is the scrolling layout's columns on each
+	// workspace: which panes each column holds, top to bottom, and how wide it
+	// is.
+	//
+	// It is layout intent on the same terms as WorkspaceTrees, which carries the
+	// BSP layout's splits and ratios. Before it existed the strip kept only its
+	// offset, so anything that rebuilt a session from its state brought every
+	// column back one pane wide at the default width: a column widened with the
+	// width key lost the width and two stacked panes came back side by side. A
+	// session switch is exactly such a rebuild, which is how it was reported.
+	//
+	// A column's width moves rectangles, so it is also the kind of thing two
+	// clients have to agree on: a pane's PTY has one size, and two clients
+	// holding different widths for its column drag it between them.
+	//
+	// Nil means unstated, and a client that receives nil keeps the columns it
+	// has, which is the behaviour that predates the field.
+	WorkspaceScrollColumns map[int][]SerializedScrollColumn `json:"workspace_scroll_columns,omitempty"`
+}
+
+// SerializedScrollColumn is one column of the scrolling layout.
+//
+// Panes are named by their window ID rather than by the integer a client
+// numbers them with. The integers are that client's own, and naming panes by
+// them would make the columns mean something only alongside a mapping that has
+// to be restored first and kept in step.
+type SerializedScrollColumn struct {
+	// Windows are the panes in the column, top to bottom.
+	Windows []string `json:"windows"`
+	// Proportion is the column's width as a share of the screen, and zero is
+	// the default width.
+	Proportion float64 `json:"proportion,omitempty"`
+	// FixedWidth is the column's width in cells, and zero means it goes by
+	// Proportion.
+	FixedWidth int `json:"fixed_width,omitempty"`
+	// Active is the index in Windows the column is focused on.
+	Active int `json:"active,omitempty"`
 }
 
 // PaneGeometryState carries the appearance settings that change cell geometry.

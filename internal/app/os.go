@@ -922,12 +922,16 @@ type OS struct {
 	UseScrollingLayout        bool                            // true = scrolling columns mode
 	WorkspaceScrollingLayouts map[int]*layout.ScrollingLayout // per-workspace scrolling layouts
 	scrollingFocusSyncing     bool                            // guard to prevent recursive sync
-	LayoutPickerItems         []LayoutTemplate
-	LayoutPickerSelected      int
-	LayoutPickerScroll        int
-	LayoutPickerQuery         string
-	LayoutPickerMode          string // "load" or "save"
-	LayoutSaveBuffer          string // Buffer for layout name when saving
+	// pendingScrollColumns holds the session's columns for a workspace that has
+	// no strip yet, until GetOrCreateScrollingLayout builds one from them. See
+	// adoptScrollColumns.
+	pendingScrollColumns map[int][]session.SerializedScrollColumn
+	LayoutPickerItems    []LayoutTemplate
+	LayoutPickerSelected int
+	LayoutPickerScroll   int
+	LayoutPickerQuery    string
+	LayoutPickerMode     string // "load" or "save"
+	LayoutSaveBuffer     string // Buffer for layout name when saving
 
 	// Settings overlay state.
 	ShowSettings       bool
@@ -1475,6 +1479,7 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 	m.FocusedWindow = -1
 	m.WorkspaceTrees = make(map[int]*layout.BSPTree)
 	m.WorkspaceScrollingLayouts = make(map[int]*layout.ScrollingLayout)
+	m.pendingScrollColumns = nil
 	m.WindowToBSPID = make(map[string]int)
 	m.BSPIDToWindowID = make(map[int]string)
 	m.NextBSPWindowID = 1

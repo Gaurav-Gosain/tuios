@@ -21,11 +21,22 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 		sl = layout.NewScrollingLayout()
 		m.WorkspaceScrollingLayouts[m.CurrentWorkspace] = sl
 
-		// Populate with existing visible windows
-		for _, w := range m.Windows {
-			if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.IsFloating {
-				intID := m.getWindowIntID(w.ID)
-				sl.AddColumn(intID)
+		// The columns the session holds for this workspace, when a restore left
+		// any; otherwise one column per visible window.
+		//
+		// Built here, in the one place a strip comes into being, rather than by
+		// the restore itself, so a strip rebuilt from the session gets the same
+		// focus sync and the same reveal below as one built from nothing. The
+		// restore only says what the columns are.
+		if pending, ok := m.pendingScrollColumns[m.CurrentWorkspace]; ok {
+			delete(m.pendingScrollColumns, m.CurrentWorkspace)
+			sl.Columns = m.scrollColumnsFromState(m.CurrentWorkspace, pending)
+		} else {
+			for _, w := range m.Windows {
+				if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.IsFloating {
+					intID := m.getWindowIntID(w.ID)
+					sl.AddColumn(intID)
+				}
 			}
 		}
 
@@ -655,6 +666,153 @@ func (m *OS) scrollingSyncFocusToOS() {
 		if w == win {
 			m.FocusWindow(i)
 			return
+		}
+	}
+}
+
+// scrollColumnsState is the scrolling layout's columns on every workspace, in
+// the form the session state carries them. See
+// session.SessionState.WorkspaceScrollColumns.
+//
+// A workspace restored and not visited since has its columns waiting in
+// pendingScrollColumns rather than in a strip. They are still the session's
+// columns, so they are sent as they are: leaving them out would tell a peer the
+// workspace has none.
+func (m *OS) scrollColumnsState() map[int][]session.SerializedScrollColumn {
+	out := make(map[int][]session.SerializedScrollColumn)
+	for ws, sl := range m.WorkspaceScrollingLayouts {
+		if sl == nil {
+			continue
+		}
+		if cols := m.scrollColumnsToState(sl.Columns); len(cols) > 0 {
+			out[ws] = cols
+		}
+	}
+	for ws, cols := range m.pendingScrollColumns {
+		if _, built := out[ws]; !built && len(cols) > 0 {
+			out[ws] = cols
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// scrollColumnsToState names a strip's columns by window ID.
+func (m *OS) scrollColumnsToState(cols []layout.ScrollColumn) []session.SerializedScrollColumn {
+	out := make([]session.SerializedScrollColumn, 0, len(cols))
+	for _, c := range cols {
+		ids := make([]string, 0, len(c.WindowIDs))
+		active := 0
+		for i, intID := range c.WindowIDs {
+			w := m.getWindowByIntID(intID)
+			if w == nil {
+				continue
+			}
+			// The index is re-counted as panes are skipped, so it still names
+			// the pane the column was focused on.
+			if i == c.Active {
+				active = len(ids)
+			}
+			ids = append(ids, w.ID)
+		}
+		if len(ids) == 0 {
+			continue
+		}
+		out = append(out, session.SerializedScrollColumn{
+			Windows:    ids,
+			Proportion: c.Proportion,
+			FixedWidth: c.FixedWidth,
+			Active:     active,
+		})
+	}
+	return out
+}
+
+// scrollColumnsFromState turns the session's columns for one workspace back
+// into a strip's.
+//
+// The session can name panes this client should not put in a column: one that
+// has closed, one on another workspace, one minimized or floating, or one
+// already placed by an earlier column. Those are left out, the way the strip
+// built from nothing leaves them out. A pane on the workspace that no column
+// names, which is one opened since the state was written, gets a column of its
+// own at the end, which is where a new pane goes.
+func (m *OS) scrollColumnsFromState(ws int, cols []session.SerializedScrollColumn) []layout.ScrollColumn {
+	tileable := func(w *terminal.Window) bool {
+		return w != nil && w.Workspace == ws && !w.Minimized && !w.IsFloating
+	}
+	placed := make(map[int]bool)
+	out := make([]layout.ScrollColumn, 0, len(cols))
+	for _, c := range cols {
+		ids := make([]int, 0, len(c.Windows))
+		active := 0
+		for i, windowID := range c.Windows {
+			if !tileable(m.windowByID(windowID)) {
+				continue
+			}
+			intID := m.getWindowIntID(windowID)
+			if placed[intID] {
+				continue
+			}
+			placed[intID] = true
+			if i == c.Active {
+				active = len(ids)
+			}
+			ids = append(ids, intID)
+		}
+		if len(ids) == 0 {
+			continue
+		}
+		out = append(out, layout.ScrollColumn{
+			WindowIDs:  ids,
+			Proportion: c.Proportion,
+			FixedWidth: c.FixedWidth,
+			Active:     active,
+		})
+	}
+	for _, w := range m.Windows {
+		if !tileable(w) {
+			continue
+		}
+		if intID := m.getWindowIntID(w.ID); !placed[intID] {
+			placed[intID] = true
+			out = append(out, layout.ScrollColumn{WindowIDs: []int{intID}})
+		}
+	}
+	return out
+}
+
+// adoptScrollColumns takes the session's columns for every workspace it names.
+//
+// A workspace with a strip already has its columns replaced in place, so the
+// strip keeps its offset and the focus stays on the pane it was on. A workspace
+// without one has the columns set aside for GetOrCreateScrollingLayout, which
+// builds them the first time the strip is wanted, with the focus sync and the
+// reveal every new strip gets.
+func (m *OS) adoptScrollColumns(cols map[int][]session.SerializedScrollColumn) {
+	if len(cols) == 0 {
+		return
+	}
+	if m.pendingScrollColumns == nil {
+		m.pendingScrollColumns = make(map[int][]session.SerializedScrollColumn)
+	}
+	for ws, c := range cols {
+		sl := m.WorkspaceScrollingLayouts[ws]
+		if sl == nil {
+			m.pendingScrollColumns[ws] = c
+			continue
+		}
+		focused := -1
+		if sl.FocusedCol >= 0 && sl.FocusedCol < len(sl.Columns) {
+			if col := sl.Columns[sl.FocusedCol]; col.Active >= 0 && col.Active < len(col.WindowIDs) {
+				focused = col.WindowIDs[col.Active]
+			}
+		}
+		sl.Columns = m.scrollColumnsFromState(ws, c)
+		if focused < 0 || !sl.FocusColumnContaining(focused) {
+			sl.FocusedCol = clampInt(sl.FocusedCol, 0, max(len(sl.Columns)-1, 0))
 		}
 	}
 }
