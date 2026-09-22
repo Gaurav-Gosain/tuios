@@ -606,20 +606,26 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		batchHasStyle = false
 		prevValid = false
 
+		// The scrollback line this row shows, when it shows one, read once for
+		// the row. Every cell of the row reads from it, and each ScrollbackLine
+		// call takes the scrollback cache's lock and does a map lookup.
+		var sbLine uv.Line
+		sbRow := inScrollbackMode && y < window.ScrollbackOffset
+		if sbRow {
+			scrollbackIndex := scrollbackLen - window.ScrollbackOffset + y
+			if scrollbackIndex >= 0 && scrollbackIndex < scrollbackLen {
+				sbLine = window.ScrollbackLine(scrollbackIndex)
+			}
+		}
+
 		lineEndX := maxX - 1
 		if inVisualMode && visualSelection != nil && visualSelection.HasRow(y) {
 			if inScrollbackMode {
-				if y < window.ScrollbackOffset {
-					scrollbackIndex := scrollbackLen - window.ScrollbackOffset + y
-					if scrollbackIndex >= 0 && scrollbackIndex < scrollbackLen {
-						lineCells := window.ScrollbackLine(scrollbackIndex)
-						if lineCells != nil {
-							for i := len(lineCells) - 1; i >= 0; i-- {
-								if lineCells[i].Width > 0 && lineCells[i].Content != "" && lineCells[i].Content != " " {
-									lineEndX = i
-									break
-								}
-							}
+				if sbRow {
+					for i := len(sbLine) - 1; i >= 0; i-- {
+						if sbLine[i].Width > 0 && sbLine[i].Content != "" && sbLine[i].Content != " " {
+							lineEndX = i
+							break
 						}
 					}
 				} else {
@@ -655,18 +661,14 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				charWidth := 1
 
 				if inScrollbackMode {
-					if y < window.ScrollbackOffset {
-						scrollbackIndex := scrollbackLen - window.ScrollbackOffset + y
-						if scrollbackIndex >= 0 && scrollbackIndex < scrollbackLen {
-							scrollbackLine := window.ScrollbackLine(scrollbackIndex)
-							if scrollbackLine != nil && x < len(scrollbackLine) {
-								cursorCell = &scrollbackLine[x]
-								if cursorCell.Content != "" {
-									char = cursorCell.Content
-								}
-								if cursorCell.Width > 0 {
-									charWidth = cursorCell.Width
-								}
+					if sbRow {
+						if x < len(sbLine) {
+							cursorCell = &sbLine[x]
+							if cursorCell.Content != "" {
+								char = cursorCell.Content
+							}
+							if cursorCell.Width > 0 {
+								charWidth = cursorCell.Width
 							}
 						}
 					} else {
@@ -703,13 +705,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			}
 
 			if inScrollbackMode {
-				if y < window.ScrollbackOffset {
-					scrollbackIndex := scrollbackLen - window.ScrollbackOffset + y
-					if scrollbackIndex >= 0 && scrollbackIndex < scrollbackLen {
-						scrollbackLine := window.ScrollbackLine(scrollbackIndex)
-						if scrollbackLine != nil && x < len(scrollbackLine) {
-							cell = &scrollbackLine[x]
-						}
+				if sbRow {
+					if x < len(sbLine) {
+						cell = &sbLine[x]
 					}
 				} else {
 					screenY := y - window.ScrollbackOffset
