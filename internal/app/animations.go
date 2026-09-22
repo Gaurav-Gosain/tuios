@@ -104,20 +104,6 @@ func (m *OS) UpdateAnimations() {
 
 		// If animation is complete, handle post-animation logic
 		if isComplete {
-			// Handle minimize animation completion
-			if anim.Type == ui.AnimationMinimize {
-				// Find the window index for this animation
-				for winIdx, win := range m.Windows {
-					if win == anim.Window {
-						// NOW change focus after animation completes
-						if winIdx == m.FocusedWindow {
-							m.FocusNextVisibleWindow()
-						}
-						break
-					}
-				}
-			}
-
 			if m.KittyPassthrough != nil && anim.Window != nil && anim.Window.Terminal != nil {
 				scrollbackLen := anim.Window.Terminal.ScrollbackLen()
 				viewportHeight := anim.Window.ContentHeight()
@@ -137,11 +123,11 @@ func (m *OS) UpdateAnimations() {
 
 // calculateDockPosition calculates the position in the dock for a minimized window
 func (m *OS) calculateDockPosition(windowIndex int) (int, int) {
-	// Find all minimized/minimizing windows in current workspace
+	// Find all minimized windows in current workspace
 	dockWindows := []int{}
 
 	for i, window := range m.Windows {
-		if window.Workspace == m.CurrentWorkspace && (window.Minimized || window.Minimizing) {
+		if window.Workspace == m.CurrentWorkspace && window.Minimized {
 			dockWindows = append(dockWindows, i)
 			if len(dockWindows) >= 9 {
 				break

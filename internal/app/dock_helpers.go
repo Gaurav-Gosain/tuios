@@ -846,7 +846,7 @@ func (m *OS) getDockItems() []DockItem {
 	// Find all minimized/minimizing windows in current workspace
 	dockWindows := []int{}
 	for i, window := range m.Windows {
-		if window.Workspace == m.CurrentWorkspace && (window.Minimized || window.Minimizing) {
+		if window.Workspace == m.CurrentWorkspace && window.Minimized {
 			dockWindows = append(dockWindows, i)
 		}
 	}

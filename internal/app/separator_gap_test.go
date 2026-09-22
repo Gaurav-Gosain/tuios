@@ -40,7 +40,7 @@ func wantCells(d division) int {
 func paneDivisions(m *OS) []division {
 	var vis []*terminal.Window
 	for _, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing && !w.IsFloating {
+		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.IsFloating {
 			vis = append(vis, w)
 		}
 	}

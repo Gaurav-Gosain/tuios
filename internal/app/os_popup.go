@@ -76,7 +76,7 @@ func (m *OS) applyPopupRect(w *terminal.Window, deferring bool) {
 // happened, so this is called from the same place applyZoomRect is.
 func (m *OS) applyPopupRects(deferring bool) {
 	for _, w := range m.Windows {
-		if w == nil || !w.IsPopup || w.Minimized || w.Minimizing {
+		if w == nil || !w.IsPopup || w.Minimized {
 			continue
 		}
 		if w.Workspace != m.CurrentWorkspace {

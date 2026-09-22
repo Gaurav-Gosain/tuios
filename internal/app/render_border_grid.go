@@ -94,7 +94,7 @@ func (m *OS) tiledPaneLayers() []paneLayer {
 	}
 	wins := make([]*terminal.Window, 0, len(m.Windows))
 	for _, w := range m.Windows {
-		if w.Workspace != m.CurrentWorkspace || w.Minimized || w.Minimizing || w.IsFloating || !w.Tiled {
+		if w.Workspace != m.CurrentWorkspace || w.Minimized || w.IsFloating || !w.Tiled {
 			continue
 		}
 		wins = append(wins, w)

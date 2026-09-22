@@ -17,7 +17,7 @@ func (m *OS) MinimizeWindow(i int) {
 	if i >= 0 && i < len(m.Windows) && m.Windows[i].IsPopup {
 		return
 	}
-	if i >= 0 && i < len(m.Windows) && !m.Windows[i].Minimized && !m.Windows[i].Minimizing {
+	if i >= 0 && i < len(m.Windows) && !m.Windows[i].Minimized {
 		// Get pointer to the actual window (not a copy)
 		window := m.Windows[i]
 
@@ -30,7 +30,6 @@ func (m *OS) MinimizeWindow(i int) {
 		// Immediately minimize without animation
 		now := time.Now()
 		window.Minimized = true
-		window.Minimizing = false
 		window.MinimizeOrder = now.UnixNano() // Track order for dock sorting
 
 		// Set highlight timestamp for dock tab
@@ -217,7 +216,7 @@ func (m *OS) zoomedWindow() *terminal.Window {
 		if w == nil || !w.Zoomed {
 			continue
 		}
-		if w.Workspace != m.CurrentWorkspace || w.Minimized || w.Minimizing {
+		if w.Workspace != m.CurrentWorkspace || w.Minimized {
 			continue
 		}
 		return w
@@ -415,7 +414,7 @@ func (m *OS) ZoomFollowsFocus(i int) bool {
 	w := m.Windows[i]
 	// A popup is drawn over the zoom and focused in front of it, so focusing
 	// one is not a request to see it filling the region.
-	if w == nil || w.IsPopup || w.Minimized || w.Minimizing || w.Workspace != m.CurrentWorkspace {
+	if w == nil || w.IsPopup || w.Minimized || w.Workspace != m.CurrentWorkspace {
 		return false
 	}
 	zw := m.zoomedWindow()
@@ -646,7 +645,7 @@ func (m *OS) FocusNextVisibleWindow() {
 
 	// First pass: find any visible window in current workspace
 	for i := range len(m.Windows) {
-		if m.Windows[i].Workspace == m.CurrentWorkspace && !m.Windows[i].Minimized && !m.Windows[i].Minimizing {
+		if m.Windows[i].Workspace == m.CurrentWorkspace && !m.Windows[i].Minimized {
 			m.FocusWindow(i)
 			return
 		}

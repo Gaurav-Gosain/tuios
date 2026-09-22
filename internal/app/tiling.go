@@ -75,7 +75,7 @@ func (m *OS) tileAllWindows() {
 	// Get list of visible windows in current workspace (not minimized)
 	var visibleWindows []*terminal.Window
 	for _, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing && !w.IsFloating {
+		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.IsFloating {
 			visibleWindows = append(visibleWindows, w)
 		}
 	}
@@ -482,7 +482,7 @@ func (m *OS) bringPanesIntoView() {
 	for _, w := range m.Windows {
 		// A floating pane was never under the tiler, and where it sits is where
 		// its user dragged it, edge and all.
-		if w.Minimized || w.Minimizing || w.IsFloating {
+		if w.Minimized || w.IsFloating {
 			continue
 		}
 		x := min(max(w.X, left), left+max(width-w.Width, 0))

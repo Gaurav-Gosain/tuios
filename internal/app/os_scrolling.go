@@ -515,7 +515,7 @@ func (m *OS) scrollingLayoutStale() bool {
 	want := sl.ComputePositions(m.ScrollingViewWidth(), m.GetUsableHeight(), m.GetTopMargin())
 	leftMargin := m.GetLeftMargin()
 	for _, w := range m.Windows {
-		if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized || w.Minimizing || w.IsFloating {
+		if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized || w.IsFloating {
 			continue
 		}
 		rect, ok := want[m.getWindowIntID(w.ID)]

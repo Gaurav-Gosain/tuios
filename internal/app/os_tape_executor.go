@@ -505,7 +505,7 @@ func (m *OS) SetMode(mode string) error {
 		m.TerminalModeEnteredAt = time.Now()
 		if m.FocusedWindow < 0 || m.FocusedWindow >= len(m.Windows) {
 			for i, w := range m.Windows {
-				if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
+				if w.Workspace == m.CurrentWorkspace && !w.Minimized {
 					m.FocusWindow(i)
 					break
 				}
@@ -1396,7 +1396,7 @@ func (m *OS) findWindowInDirection(from *terminal.Window, dx, dy int) int {
 	minDistance := m.Width + m.Height // Start with max possible distance
 
 	for i, win := range m.Windows {
-		if win == from || win.Workspace != m.CurrentWorkspace || win.Minimized || win.Minimizing {
+		if win == from || win.Workspace != m.CurrentWorkspace || win.Minimized {
 			continue
 		}
 

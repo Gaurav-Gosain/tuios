@@ -32,82 +32,6 @@ func createTestWindow(x, y, width, height int) *terminal.Window {
 }
 
 // =============================================================================
-// NewMinimizeAnimation Tests
-// =============================================================================
-
-func TestNewMinimizeAnimation_CreatesAnimation(t *testing.T) {
-	w := createTestWindow(100, 50, 80, 24)
-	defer func() { _ = w.Terminal.Close() }()
-
-	duration := 200 * time.Millisecond
-	dockX, dockY := 10, 300
-
-	anim := NewMinimizeAnimation(w, dockX, dockY, duration)
-
-	if anim == nil {
-		t.Fatal("NewMinimizeAnimation returned nil for non-zero duration")
-	}
-
-	if anim.Type != AnimationMinimize {
-		t.Errorf("Expected animation type AnimationMinimize, got %d", anim.Type)
-	}
-
-	if anim.Window != w {
-		t.Error("Animation window reference does not match")
-	}
-
-	if anim.Duration != duration {
-		t.Errorf("Expected duration %v, got %v", duration, anim.Duration)
-	}
-
-	// Check start position matches window position
-	if anim.StartX != 100 || anim.StartY != 50 {
-		t.Errorf("Expected start position (100, 50), got (%d, %d)", anim.StartX, anim.StartY)
-	}
-
-	if anim.StartWidth != 80 || anim.StartHeight != 24 {
-		t.Errorf("Expected start size (80, 24), got (%d, %d)", anim.StartWidth, anim.StartHeight)
-	}
-
-	// Check end position matches dock position
-	if anim.EndX != dockX || anim.EndY != dockY {
-		t.Errorf("Expected end position (%d, %d), got (%d, %d)", dockX, dockY, anim.EndX, anim.EndY)
-	}
-
-	// Check minimized end size (5x3)
-	if anim.EndWidth != 5 || anim.EndHeight != 3 {
-		t.Errorf("Expected end size (5, 3), got (%d, %d)", anim.EndWidth, anim.EndHeight)
-	}
-
-	if anim.Progress != 0 {
-		t.Errorf("Expected initial progress 0, got %f", anim.Progress)
-	}
-
-	if anim.Complete {
-		t.Error("Animation should not be complete initially")
-	}
-}
-
-func TestNewMinimizeAnimation_ZeroDuration(t *testing.T) {
-	w := createTestWindow(100, 50, 80, 24)
-	defer func() { _ = w.Terminal.Close() }()
-
-	anim := NewMinimizeAnimation(w, 10, 300, 0)
-
-	if anim != nil {
-		t.Error("Expected nil animation for zero duration")
-	}
-
-	if !w.Minimized {
-		t.Error("Window should be minimized instantly for zero duration")
-	}
-
-	if w.Minimizing {
-		t.Error("Window minimizing flag should be false for zero duration")
-	}
-}
-
-// =============================================================================
 // NewRestoreAnimation Tests
 // =============================================================================
 
@@ -315,37 +239,16 @@ func TestUpdate_CompletesAtFullDuration(t *testing.T) {
 	}
 }
 
-func TestUpdate_MinimizeCompletion(t *testing.T) {
-	w := createTestWindow(100, 50, 80, 24)
+func TestFinish_ZeroTypeLeavesMinimizedWindowAlone(t *testing.T) {
+	w := createTestWindow(10, 300, 5, 3)
 	defer func() { _ = w.Terminal.Close() }()
+	w.Minimized = true
 
-	w.PreMinimizeX = 100
-	w.PreMinimizeY = 50
-	w.PreMinimizeWidth = 80
-	w.PreMinimizeHeight = 24
-	w.Minimizing = true
-
-	duration := 50 * time.Millisecond
-	anim := NewMinimizeAnimation(w, 10, 300, duration)
-	if anim == nil {
-		t.Fatal("Failed to create minimize animation")
-	}
-
-	// Complete the animation
-	anim.StartTime = time.Now().Add(-100 * time.Millisecond)
-	anim.Update()
+	anim := &Animation{Window: w, EndX: 10, EndY: 300, EndWidth: 5, EndHeight: 3}
+	anim.Finish()
 
 	if !w.Minimized {
-		t.Error("Window should be minimized after animation completes")
-	}
-
-	if w.Minimizing {
-		t.Error("Minimizing flag should be cleared after animation completes")
-	}
-
-	// Position should be restored to pre-minimize values
-	if w.X != 100 || w.Y != 50 {
-		t.Errorf("Expected position restored to (100, 50), got (%d, %d)", w.X, w.Y)
+		t.Error("an animation with no type restored a minimized window")
 	}
 }
 
@@ -583,20 +486,15 @@ func TestInterpolate_Rounding(t *testing.T) {
 func TestAnimationType_Constants(t *testing.T) {
 	// Verify animation type constants are distinct
 	types := map[AnimationType]string{
-		AnimationMinimize: "AnimationMinimize",
-		AnimationRestore:  "AnimationRestore",
-		AnimationSnap:     "AnimationSnap",
+		AnimationRestore: "AnimationRestore",
+		AnimationSnap:    "AnimationSnap",
 	}
 
-	if len(types) != 3 {
-		t.Error("Expected 3 distinct animation types")
+	if len(types) != 2 {
+		t.Error("Expected 2 distinct animation types")
 	}
 
-	// Verify they start from 0 (iota)
-	if AnimationMinimize != 0 {
-		t.Errorf("Expected AnimationMinimize = 0, got %d", AnimationMinimize)
-	}
-
+	// The zero value is reserved so a zero Animation means no type at all.
 	if AnimationRestore != 1 {
 		t.Errorf("Expected AnimationRestore = 1, got %d", AnimationRestore)
 	}

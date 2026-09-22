@@ -11,20 +11,20 @@ import (
 // AnimationType represents the type of animation being performed.
 type AnimationType int
 
+// The zero AnimationType is not a valid type, so a zero Animation settles to
+// nothing rather than restoring or resizing its window.
 const (
-	// AnimationMinimize represents a window minimize animation.
-	AnimationMinimize AnimationType = iota
 	// AnimationRestore represents a window restore animation.
-	AnimationRestore
+	AnimationRestore AnimationType = iota + 1
 	// AnimationSnap represents a window snap animation.
 	AnimationSnap
 )
 
 const (
 	// MinAnimatedWidth and MinAnimatedHeight are the smallest box an animation
-	// is allowed to shrink a window to. It is the size a minimize travels down
-	// to, so it is the smallest box the renderer is known to still draw a
-	// border into; anything an animation scales down has to stop here.
+	// is allowed to shrink a window to. It is the size a restore grows from,
+	// so it is the smallest box the renderer is known to still draw a border
+	// into; anything an animation scales down has to stop here.
 	MinAnimatedWidth  = 5
 	MinAnimatedHeight = 3
 )
@@ -46,34 +46,6 @@ type Animation struct {
 	Progress       float64
 	Complete       bool
 	InitialResized bool // Track if we've done the initial resize
-}
-
-// NewMinimizeAnimation creates a minimize animation for the specified window.
-// dockX and dockY specify the target dock position for the minimized window.
-func NewMinimizeAnimation(w *terminal.Window, dockX, dockY int, duration time.Duration) *Animation {
-	// If duration is 0, instantly minimize without animation
-	if duration == 0 {
-		w.Minimized = true
-		w.Minimizing = false
-		return nil
-	}
-
-	return &Animation{
-		Window:      w,
-		Type:        AnimationMinimize,
-		StartTime:   time.Now(),
-		Duration:    duration,
-		StartX:      w.X,
-		StartY:      w.Y,
-		StartWidth:  w.Width,
-		StartHeight: w.Height,
-		EndX:        dockX,
-		EndY:        dockY,
-		EndWidth:    MinAnimatedWidth, // Small size when minimized
-		EndHeight:   MinAnimatedHeight,
-		Progress:    0,
-		Complete:    false,
-	}
 }
 
 // NewRestoreAnimation creates a restore animation for the specified window.
@@ -226,14 +198,6 @@ func (a *Animation) Finish() {
 // to mean different things.
 func (a *Animation) settle() {
 	switch a.Type {
-	case AnimationMinimize:
-		// Actually minimize the window
-		a.Window.Minimized = true
-		a.Window.Minimizing = false // Clear minimizing flag
-		a.Window.X = a.Window.PreMinimizeX
-		a.Window.Y = a.Window.PreMinimizeY
-		a.Window.Width = a.Window.PreMinimizeWidth
-		a.Window.Height = a.Window.PreMinimizeHeight
 	case AnimationRestore, AnimationSnap:
 		// Resize at completion for clean, one-time resize
 		a.Window.Resize(a.EndWidth, a.EndHeight)

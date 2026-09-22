@@ -521,7 +521,7 @@ func (m *OS) SyncBSPTreeFromGeometry() {
 	// Build geometry map from current window positions
 	geometry := make(map[int]layout.Rect)
 	for _, win := range m.Windows {
-		if win.Workspace == m.CurrentWorkspace && !win.Minimized && !win.Minimizing {
+		if win.Workspace == m.CurrentWorkspace && !win.Minimized {
 			windowIntID := m.getWindowIntID(win.ID)
 			geometry[windowIntID] = layout.Rect{
 				X: win.X,
@@ -793,7 +793,7 @@ func (m *OS) tiledLayoutStale() bool {
 	right, bottom := 0, 0
 	any := false
 	for _, w := range m.Windows {
-		if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized || w.Minimizing || w.IsFloating {
+		if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized || w.IsFloating {
 			continue
 		}
 		// A pane in mid-drag is read at the slot it left, not where the

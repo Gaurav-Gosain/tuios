@@ -239,7 +239,7 @@ func (m *OS) renderDockString() (string, int) {
 			switch {
 			case isHighlighted:
 				bgColor, emphasis = pal.Success, true
-			case windowIndex == m.FocusedWindow && !window.Minimizing:
+			case windowIndex == m.FocusedWindow:
 				bgColor, emphasis = pal.Accent, true
 			}
 			if emphasis {

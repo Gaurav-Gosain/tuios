@@ -253,7 +253,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// Find which window is under the cursor (excluding the dragged window)
 			targetWindowIndex := -1
 			for i := range o.Windows {
-				if i == o.DraggedWindowIndex || o.Windows[i].Minimized || o.Windows[i].Minimizing || o.Windows[i].IsFloating {
+				if i == o.DraggedWindowIndex || o.Windows[i].Minimized || o.Windows[i].IsFloating {
 					continue
 				}
 				// Only consider windows in current workspace

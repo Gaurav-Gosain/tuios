@@ -103,7 +103,7 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	// If no saved focus or it's invalid, find first visible window in new workspace
 	if !focusedSet {
 		for i, w := range m.Windows {
-			if w.Workspace == workspace && !w.Minimized && !w.Minimizing {
+			if w.Workspace == workspace && !w.Minimized {
 				m.FocusWindow(i)
 				m.LogInfo("Focused first visible window (index: %d)", i)
 				focusedSet = true
@@ -197,7 +197,7 @@ func (m *OS) settleBorderMode(workspace int) {
 		}
 	}
 	for _, w := range m.Windows {
-		if w.Workspace != workspace || w.Minimized || w.Minimizing || w.IsFloating {
+		if w.Workspace != workspace || w.Minimized || w.IsFloating {
 			continue
 		}
 		w.SetTiled(m.panesBorderless())
@@ -305,7 +305,7 @@ func (m *OS) FocusNextVisibleWindowInWorkspace() {
 	// Find the next non-minimized window in current workspace to focus
 	for i := range m.Windows {
 		w := m.Windows[i]
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
+		if w.Workspace == m.CurrentWorkspace && !w.Minimized {
 			m.FocusWindow(i)
 			return
 		}
@@ -322,7 +322,7 @@ func (m *OS) FocusNextVisibleWindowInWorkspace() {
 func (m *OS) GetVisibleWindows() []*terminal.Window {
 	visible := make([]*terminal.Window, 0)
 	for _, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
+		if w.Workspace == m.CurrentWorkspace && !w.Minimized {
 			visible = append(visible, w)
 		}
 	}

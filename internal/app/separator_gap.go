@@ -100,7 +100,7 @@ func (m *OS) reclaimSeparatorGaps() {
 func (m *OS) tilablePanes(workspace int) []*terminal.Window {
 	var panes []*terminal.Window
 	for _, w := range m.Windows {
-		if w.Workspace == workspace && !w.Minimized && !w.Minimizing && !w.IsFloating {
+		if w.Workspace == workspace && !w.Minimized && !w.IsFloating {
 			panes = append(panes, w)
 		}
 	}

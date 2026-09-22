@@ -675,7 +675,7 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 		return nil, false
 	}
 	window := visible[0]
-	if window.IsBeingManipulated || window.Minimizing {
+	if window.IsBeingManipulated {
 		return nil, false
 	}
 	// A scrolled-back pane shows a scrollbar thumb, which only the compositor

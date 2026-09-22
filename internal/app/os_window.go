@@ -168,7 +168,7 @@ func (m *OS) GetMultifocusWindows() []int {
 func (m *OS) cyclableWindows() []int {
 	out := []int{}
 	for i, w := range m.Windows {
-		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing && !w.IsPopup {
+		if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.IsPopup {
 			out = append(out, i)
 		}
 	}
@@ -804,7 +804,7 @@ func (m *OS) DeleteWindow(i int) *OS {
 			// sizes announced for one close, and a guest repaints on each.
 			hasVisibleInWorkspace := false
 			for _, w := range m.Windows {
-				if w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
+				if w.Workspace == m.CurrentWorkspace && !w.Minimized {
 					hasVisibleInWorkspace = true
 					break
 				}

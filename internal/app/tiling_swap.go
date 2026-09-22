@@ -116,7 +116,7 @@ func (m *OS) TileRemainingWindows(excludeIndex int) {
 	var visibleWindows []*terminal.Window
 	var visibleIndices []int
 	for i, w := range m.Windows {
-		if i != excludeIndex && w.Workspace == m.CurrentWorkspace && !w.Minimized && !w.Minimizing {
+		if i != excludeIndex && w.Workspace == m.CurrentWorkspace && !w.Minimized {
 			visibleWindows = append(visibleWindows, w)
 			visibleIndices = append(visibleIndices, i)
 		}
@@ -189,7 +189,7 @@ func (m *OS) findAdjacentWindow(focused *terminal.Window, dir Direction) int {
 	}
 
 	for i, window := range m.Windows {
-		if i == m.FocusedWindow || window.Workspace != m.CurrentWorkspace || window.Minimized || window.Minimizing || window.IsFloating {
+		if i == m.FocusedWindow || window.Workspace != m.CurrentWorkspace || window.Minimized || window.IsFloating {
 			continue
 		}
 

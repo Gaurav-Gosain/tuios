@@ -141,7 +141,7 @@ func TestAPopupCannotBeMinimized(t *testing.T) {
 	m, popup := popupOS(t, "50%", "50%")
 
 	m.MinimizeWindow(1)
-	if popup.Minimized || popup.Minimizing {
+	if popup.Minimized {
 		t.Error("the popup was minimized")
 	}
 	for _, item := range m.getDockItems() {
@@ -153,7 +153,7 @@ func TestAPopupCannotBeMinimized(t *testing.T) {
 	// The tiled pane beside it still minimizes, so the guard is about popups and
 	// not about minimizing.
 	m.MinimizeWindow(0)
-	if !m.Windows[0].Minimized && !m.Windows[0].Minimizing {
+	if !m.Windows[0].Minimized {
 		t.Error("an ordinary pane no longer minimizes")
 	}
 }
