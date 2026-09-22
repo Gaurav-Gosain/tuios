@@ -1,8 +1,6 @@
 package input
 
 import (
-	"unicode/utf8"
-
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -26,130 +24,14 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Handle help menu first (takes priority over everything in terminal mode)
 	if o.ShowHelp {
-		key := msg.String()
-
-		// Handle escape - exit search first if active, then close help
-		if key == "esc" {
-			if o.HelpSearchMode {
-				// Exit search mode first
-				o.HelpSearchMode = false
-				o.HelpSearchQuery = ""
-				o.HelpScrollOffset = 0
-				return o, nil
-			}
-			// Close help menu
-			o.ShowHelp = false
-			o.HelpScrollOffset = 0
-			o.HelpCategory = -1
-			return o, nil
-		}
-
-		// Handle ? to close help
-		if key == "?" {
-			o.ShowHelp = false
-			o.HelpScrollOffset = 0
-			o.HelpCategory = -1 // Reset to trigger auto-selection next time
-			o.HelpSearchQuery = ""
-			o.HelpSearchMode = false
-			return o, nil
-		}
-
-		// Handle up/down arrows for scrolling
-		// Scroll by 2 rows at a time (1 entry + 1 gap row)
-		if key == "up" {
-			if o.HelpScrollOffset > 0 {
-				o.HelpScrollOffset -= 2
-				if o.HelpScrollOffset < 0 {
-					o.HelpScrollOffset = 0
-				}
-			}
-			return o, nil
-		}
-		if key == "down" {
-			o.HelpScrollOffset += 2
-			return o, nil
-		}
-
-		// Handle left/right arrows for category navigation
-		if key == "left" {
-			o.HelpScrollOffset = 0 // Reset scroll when changing categories
-			return handleLeftKey(msg, o)
-		}
-		if key == "right" {
-			o.HelpScrollOffset = 0 // Reset scroll when changing categories
-			return handleRightKey(msg, o)
-		}
-
-		// Toggle search mode with "/"
-		if key == "/" {
-			o.HelpSearchMode = !o.HelpSearchMode
-			o.HelpScrollOffset = 0 // Reset scroll when toggling search
-			if !o.HelpSearchMode {
-				o.HelpSearchQuery = "" // Clear query when exiting search
-			}
-			return o, nil
-		}
-
-		// Handle typing in search mode
-		if o.HelpSearchMode {
-			// Handle backspace
-			if key == "backspace" {
-				if len(o.HelpSearchQuery) > 0 {
-					_, size := utf8.DecodeLastRuneInString(o.HelpSearchQuery)
-					o.HelpSearchQuery = o.HelpSearchQuery[:len(o.HelpSearchQuery)-size]
-					o.HelpScrollOffset = 0 // Reset scroll when query changes
-				}
-				return o, nil
-			}
-
-			// Handle regular character input (single printable characters)
-			if len(key) == 1 && key[0] >= 32 && key[0] <= 126 {
-				o.HelpSearchQuery += key
-				o.HelpScrollOffset = 0 // Reset scroll when query changes
-				return o, nil
-			}
-		}
-
-		// Help is showing but key wasn't handled - ignore it
-		return o, nil
+		return handleHelpOverlayKey(msg, o)
 	}
 
-	// Handle theme picker overlay (opens on top of settings)
-	if o.ShowThemePicker {
-		return handleThemePickerInput(msg, o)
-	}
-	if o.ShowGlyphPicker {
-		return handleGlyphPickerInput(msg, o)
-	}
-	if o.ShowEffectPicker {
-		return handleEffectPickerInput(msg, o)
-	}
-	if o.ShowSectionEditor {
-		return handleSectionEditorInput(msg, o)
-	}
-	if o.ShowDockEditor {
-		return handleDockEditorInput(msg, o)
-	}
-
-	// Handle the keybind manager (opens over settings, like the theme picker)
-	if o.ShowKeybindManager {
-		return handleKeybindManagerInput(msg, o)
-	}
-
-	// Handle settings overlay (takes priority in terminal mode)
-	if o.ShowSettings {
-		return handleSettingsInput(msg, o)
-	}
-
-	// Handle layout picker (takes priority in terminal mode)
-	if o.ShowLayoutPicker {
-		return handleLayoutPickerInput(msg, o)
-	}
-
-	// The machine picker, for the same reason: a letter typed into it is a
-	// search and must not reach the shell.
-	if o.ShowHostPicker {
-		return handleHostPickerInput(msg, o)
+	// Settings, the pickers over it, and the layout and machine pickers take
+	// priority in terminal mode: a letter typed into them must not reach the
+	// shell.
+	if out, cmd, ok := routeSettingsOverlayKey(msg, o); ok {
+		return out, cmd
 	}
 
 	// Handle session switcher (takes priority in terminal mode)
@@ -189,23 +71,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 	// Handle cache stats viewer (takes priority in terminal mode)
 	if o.ShowCacheStats {
-		key := msg.String()
-
-		// Close cache stats with q, esc, or c
-		if key == "q" || key == "esc" || key == "c" {
-			o.ShowCacheStats = false
-			return o, nil
-		}
-
-		// Reset cache stats with r
-		if key == "r" {
-			app.GetGlobalStyleCache().ResetStats()
-			o.ShowNotification("Cache statistics reset", "info", 2*time.Second)
-			return o, nil
-		}
-
-		// Ignore other keys when cache stats is active
-		return o, nil
+		return handleCacheStatsKey(msg, o)
 	}
 
 	// Shift+Up/Shift+Down: scroll the scrollback, the keyboard spelling of the

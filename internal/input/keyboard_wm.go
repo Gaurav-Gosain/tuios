@@ -1,10 +1,6 @@
 package input
 
 import (
-	"unicode/utf8"
-
-	"time"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
@@ -52,41 +48,9 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return HandleScrollbackBrowserKey(msg, o)
 	}
 
-	// Handle theme picker overlay (opens on top of settings)
-	if o.ShowThemePicker {
-		return handleThemePickerInput(msg, o)
-	}
-	if o.ShowGlyphPicker {
-		return handleGlyphPickerInput(msg, o)
-	}
-	if o.ShowEffectPicker {
-		return handleEffectPickerInput(msg, o)
-	}
-	if o.ShowSectionEditor {
-		return handleSectionEditorInput(msg, o)
-	}
-	if o.ShowDockEditor {
-		return handleDockEditorInput(msg, o)
-	}
-
-	// Handle the keybind manager (opens over settings, like the theme picker)
-	if o.ShowKeybindManager {
-		return handleKeybindManagerInput(msg, o)
-	}
-
-	// Handle settings overlay
-	if o.ShowSettings {
-		return handleSettingsInput(msg, o)
-	}
-
-	// Handle layout picker overlay
-	if o.ShowLayoutPicker {
-		return handleLayoutPickerInput(msg, o)
-	}
-
-	// Handle the machine picker overlay
-	if o.ShowHostPicker {
-		return handleHostPickerInput(msg, o)
+	// Settings, the pickers over it, and the layout and machine pickers.
+	if out, cmd, ok := routeSettingsOverlayKey(msg, o); ok {
+		return out, cmd
 	}
 
 	// Handle command palette overlay
@@ -121,89 +85,13 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 
 	key := msg.String()
 
-	// Handle help menu interactions before general keybind dispatch
+	// Handle help menu interactions before general keybind dispatch. Help is
+	// modal, exactly as in terminal mode: an unhandled key used to fall through
+	// to the window-manager dispatch below, where the overlay hid what it did.
+	// n created and focused a window behind the help panel, x closed one, t
+	// toggled tiling, and every other single-letter binding fired unseen.
 	if o.ShowHelp {
-		// Handle escape - exit search first if active, then close help
-		if key == "esc" || key == "q" || key == "?" {
-			if o.HelpSearchMode {
-				// Exit search mode first
-				o.HelpSearchMode = false
-				o.HelpSearchQuery = ""
-				o.HelpScrollOffset = 0
-				return o, nil
-			}
-			// Close help menu
-			o.ShowHelp = false
-			o.HelpScrollOffset = 0
-			o.HelpCategory = -1
-			o.HelpSearchQuery = ""
-			o.HelpSearchMode = false
-			return o, nil
-		}
-
-		// Handle up/down arrows for scrolling
-		// Scroll by 2 rows at a time (1 entry + 1 gap row)
-		if key == "up" {
-			if o.HelpScrollOffset > 0 {
-				o.HelpScrollOffset -= 2
-				if o.HelpScrollOffset < 0 {
-					o.HelpScrollOffset = 0
-				}
-			}
-			return o, nil
-		}
-		if key == "down" {
-			o.HelpScrollOffset += 2
-			return o, nil
-		}
-
-		// Handle left/right arrows for category navigation (reset scroll)
-		if key == "left" {
-			o.HelpScrollOffset = 0
-			return handleLeftKey(msg, o)
-		}
-		if key == "right" {
-			o.HelpScrollOffset = 0
-			return handleRightKey(msg, o)
-		}
-
-		// Toggle search mode with "/"
-		if key == "/" {
-			o.HelpSearchMode = !o.HelpSearchMode
-			o.HelpScrollOffset = 0 // Reset scroll when toggling search
-			if !o.HelpSearchMode {
-				o.HelpSearchQuery = "" // Clear query when exiting search
-			}
-			return o, nil
-		}
-
-		// Handle typing in search mode
-		if o.HelpSearchMode {
-			// Handle backspace
-			if key == "backspace" {
-				if len(o.HelpSearchQuery) > 0 {
-					_, size := utf8.DecodeLastRuneInString(o.HelpSearchQuery)
-					o.HelpSearchQuery = o.HelpSearchQuery[:len(o.HelpSearchQuery)-size]
-					o.HelpScrollOffset = 0 // Reset scroll when query changes
-				}
-				return o, nil
-			}
-
-			// Handle regular character input (single printable characters)
-			if len(key) == 1 && key[0] >= 32 && key[0] <= 126 {
-				o.HelpSearchQuery += key
-				o.HelpScrollOffset = 0 // Reset scroll when query changes
-				return o, nil
-			}
-		}
-
-		// Help is showing but the key wasn't handled - ignore it, exactly as
-		// terminal mode does. Falling through sent it on to the window-manager
-		// dispatch below, where the overlay hides what it does: n created and
-		// focused a window behind the help panel, x closed one, t toggled
-		// tiling, and every other single-letter binding fired unseen. Help is
-		// the only overlay in this function that was not modal.
-		return o, nil
+		return handleHelpOverlayKey(msg, o)
 	}
 
 	// Handle log viewer (takes priority in window management mode)
@@ -213,21 +101,7 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 
 	// Handle cache stats viewer (takes priority in window management mode)
 	if o.ShowCacheStats {
-		// Close cache stats with q, esc, or c
-		if key == "q" || key == "esc" || key == "c" {
-			o.ShowCacheStats = false
-			return o, nil
-		}
-
-		// Reset cache stats with r
-		if key == "r" {
-			app.GetGlobalStyleCache().ResetStats()
-			o.ShowNotification("Cache statistics reset", "info", 2*time.Second)
-			return o, nil
-		}
-
-		// Ignore other keys when cache stats is active
-		return o, nil
+		return handleCacheStatsKey(msg, o)
 	}
 
 	// Esc closes the focused popup.
