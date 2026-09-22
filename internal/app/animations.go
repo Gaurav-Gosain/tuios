@@ -2,9 +2,7 @@ package app
 
 import (
 	"slices"
-	"sort"
 
-	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
@@ -121,83 +119,17 @@ func (m *OS) UpdateAnimations() {
 	}
 }
 
-// calculateDockPosition calculates the position in the dock for a minimized window
+// calculateDockPosition returns the cell a restore animation starts from: the
+// centre of the entry the dock drew for the window on the last frame. The
+// renderer records those rectangles in dockItemHits, so the animation starts
+// where the user saw the entry, on whichever row the dock sits. A window with
+// no drawn entry (dock hidden, or the entry overflowed) starts from the
+// middle of the dock row.
 func (m *OS) calculateDockPosition(windowIndex int) (int, int) {
-	// Find all minimized windows in current workspace
-	dockWindows := []int{}
-
-	for i, window := range m.Windows {
-		if window.Workspace == m.CurrentWorkspace && window.Minimized {
-			dockWindows = append(dockWindows, i)
-			if len(dockWindows) >= 9 {
-				break
-			}
+	for _, h := range m.dockItemHits {
+		if h.WindowIndex == windowIndex {
+			return (h.X0 + h.X1) / 2, h.Y
 		}
 	}
-
-	// Sort by minimize order to match renderDock
-	sort.Slice(dockWindows, func(i, j int) bool {
-		return m.Windows[dockWindows[i]].MinimizeOrder < m.Windows[dockWindows[j]].MinimizeOrder
-	})
-
-	// Find target window's position in sorted dock
-	targetDockIndex := -1
-	for idx, winIdx := range dockWindows {
-		if winIdx == windowIndex {
-			targetDockIndex = idx
-			break
-		}
-	}
-
-	// If not found in dock windows, use the next position
-	if targetDockIndex == -1 {
-		targetDockIndex = len(dockWindows)
-	}
-
-	// Dock is at the bottom of the screen
-	dockY := m.GetRenderHeight() - config.DockHeight + 1 // +1 for the separator line
-
-	// Calculate dock layout matching renderDock() logic EXACTLY
-	leftWidth := 30
-	// Right width changes based on copy mode, but during animation use default
-	rightWidth := 32 // CPU graph + RAM stats
-
-	// Calculate actual width of each dock item (matching renderDock pill rendering)
-	var dockItemsWidth int
-	for idx, winIdx := range dockWindows {
-		// Add left circle (1) + label + right circle (1)
-		itemWidth := 1 + m.dockItemLabelWidth(idx, winIdx) + 1
-		dockItemsWidth += itemWidth
-
-		// Add space between items
-		if idx > 0 {
-			dockItemsWidth++
-		}
-	}
-
-	// Calculate center positioning
-	availableSpace := max(m.GetRenderWidth()-leftWidth-rightWidth-dockItemsWidth, 0)
-	leftSpacer := availableSpace / 2
-
-	// Calculate X position for target dock item
-	dockX := leftWidth + leftSpacer
-	for idx, winIdx := range dockWindows {
-		itemWidth := 1 + m.dockItemLabelWidth(idx, winIdx) + 1
-		if idx == targetDockIndex {
-			// Add half the item width to center on it
-			dockX += itemWidth / 2
-			break
-		}
-
-		// Add width of previous items
-		dockX += itemWidth + 1 // +1 for space between items
-	}
-
-	return dockX, dockY
-}
-
-// dockItemLabelWidth is the cell width of the pill the dock will draw for a
-// window, measured off the label the dock itself builds.
-func (m *OS) dockItemLabelWidth(idx, winIdx int) int {
-	return lipgloss.Width(dockItemLabel(idx+1, m.Windows[winIdx].CustomName))
+	return m.GetRenderWidth() / 2, m.GetDockbarContentYPosition()
 }
