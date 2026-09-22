@@ -8,6 +8,8 @@ import (
 	"time"
 
 	gossh "golang.org/x/crypto/ssh"
+
+	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
 // freePort asks the OS for an unused localhost TCP port and returns it. There is
@@ -136,5 +138,13 @@ func TestSSHServer_AcceptsPTYSessionAndRenders(t *testing.T) {
 		}
 	case <-time.After(8 * time.Second):
 		t.Fatal("timed out waiting for TUIOS output over SSH")
+	}
+
+	// The session carries this client's terminal as its own. The process-wide
+	// seed must not have become it: with that, the last client to connect
+	// decided what every reader outside a session saw.
+	if caps := app.GetHostCapabilities(); caps.KittyGraphics || caps.TerminalName != "" {
+		t.Errorf("a connecting client rewrote the process capability seed: kitty=%v term=%q",
+			caps.KittyGraphics, caps.TerminalName)
 	}
 }

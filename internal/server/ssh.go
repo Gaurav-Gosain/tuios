@@ -84,6 +84,15 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 
 	sshServerConfig = cfg
 
+	// One read of the config file feeds both the appearance globals and the
+	// daemon settings below, so the two cannot disagree about what it said.
+	// Nil after an error, which each consumer takes as the defaults.
+	userConfig, err := config.LoadUserConfig()
+	if err != nil {
+		log.Printf("Warning: Failed to load config for the SSH server, using defaults: %v", err)
+		userConfig = nil
+	}
+
 	// Apply the process-wide render globals once, at first server startup and
 	// single-threaded, so every per-connection session shares a consistent view
 	// of them. LoadUserConfig is pure and NewOS no longer re-applies per
@@ -111,7 +120,13 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		// server started in a real terminal still detects from it.
 		terminal.SetHeadlessGuestTerm("xterm-256color", "truecolor")
 
-		if userConfig, err := config.LoadUserConfig(); err == nil {
+		// The process-wide capability seed. Every SSH session carries its own
+		// client's capabilities (OSOptions.Caps), so this is only what a reader
+		// with no session in reach sees. It is neutral, no graphics, and it
+		// exists so such a reader never probes this server's own stdin.
+		app.SetClientCapabilities(&app.HostCapabilities{TrueColor: true})
+
+		if userConfig != nil {
 			config.ApplyAppearanceConfig(userConfig, &config.Global)
 		}
 		// Flags over file, the same order loadAndApplyConfig gives every
@@ -142,10 +157,7 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 		// `tuios daemon` maps them. This server used to hand over the hooks
 		// alone, so a daemon it started ran with no agent detection settings
 		// and no hosts.
-		daemonCfg := session.DaemonConfigFromUser(nil)
-		if userConfig, err := config.LoadUserConfig(); err == nil {
-			daemonCfg = session.DaemonConfigFromUser(userConfig)
-		}
+		daemonCfg := session.DaemonConfigFromUser(userConfig)
 		if err := session.EnsureDaemonRunningWith(cfg.Version, daemonCfg); err != nil {
 			log.Printf("Warning: Failed to start daemon, falling back to ephemeral mode: %v", err)
 			cfg.Ephemeral = true
@@ -345,21 +357,19 @@ func buildSessionModel(sshSession ssh.Session, graphicsOut io.Writer) tea.Model 
 
 	// Detect the CLIENT terminal's graphics capabilities. The terminal that
 	// must render forwarded images is the one the user connected from, reached
-	// over this session, not the (often headless) server. Install them as the
-	// process host capabilities so the image cell math and cell-size lookups
-	// that read GetHostCapabilities report the client, not the server.
+	// over this session, not the (often headless) server. The session gets
+	// them as its own (app.OSOptions.Caps), which is what every consumer inside
+	// it reads. The process global is not rewritten per connection: that was
+	// last writer wins across clients, and StartSSHServer seeds it once.
 	clientCaps := detectClientGraphics(sshSession)
 	hostCaps := clientToHostCapabilities(clientCaps)
-	// The session gets its own copy (app.OSOptions.Caps), which is what every
-	// consumer inside it reads. The process global is still seeded for the few
-	// readers that have no session in reach.
-	app.SetClientCapabilities(hostCaps)
 
 	// The accent picker's fallback labels describe what the terminal showing
 	// the frame will do to each colour. Its default probe reads this process's
 	// stdout and environment, which describe the server; pin the profile wish
 	// derives for this client's renderer instead, so the labels and the frame
-	// agree. Process-global like SetClientCapabilities, same caveat.
+	// agree. This one is still a process global written per connection, so
+	// with two clients the last to connect decides it.
 	app.SetAccentColorProfile(colorprofile.Env(append(sshSession.Environ(), "TERM="+pty.Term)))
 
 	// Determine session name from SSH context
@@ -437,8 +447,8 @@ func createEphemeralTUIOSInstance(sshSession ssh.Session, graphicsOut io.Writer,
 		// client's terminal, via the serialized writer shared with the
 		// bubbletea renderer so graphics and text writes never interleave on
 		// the SSH channel. The passthrough enables itself only when the
-		// client's detected capabilities (installed via SetClientCapabilities)
-		// say the terminal can render them, so this is a no-op for a plain
+		// client's detected capabilities (Caps, below) say the terminal can
+		// render them, so this is a no-op for a plain
 		// client.
 		GraphicsOutput: graphicsOut,
 		// The terminal this client connected from, not the last one to connect.
