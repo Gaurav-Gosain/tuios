@@ -190,14 +190,9 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 
 		alreadyPlaced := win.X != 0 || win.Y != 0 || win.Width != 0
 		if animate && alreadyPlaced && (win.X != rect.X || win.Y != rect.Y) {
-			if !m.windowHasAnimationTo(win, rect.X, rect.Y, rect.W, rect.H) {
-				m.CancelAnimationsForWindow(win)
-				anim := ui.NewSnapAnimation(win, rect.X, rect.Y, rect.W, rect.H, dur)
-				if anim != nil {
-					m.Animations = append(m.Animations, anim)
-					continue
-				}
-			} else {
+			m.CancelAnimationsForWindow(win)
+			if anim := ui.NewSnapAnimation(win, rect.X, rect.Y, rect.W, rect.H, dur); anim != nil {
+				m.Animations = append(m.Animations, anim)
 				continue
 			}
 		}
