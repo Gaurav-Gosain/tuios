@@ -272,3 +272,42 @@ func formatActionName(action string) string {
 	}
 	return strings.ReplaceAll(action, "_", " ")
 }
+
+// loadKeybindConfig reads the user's config for a command that only reports
+// keys. Unlike config.LoadUserConfig it never writes a default config file, and
+// any failure falls back to the defaults.
+func loadKeybindConfig() *config.UserConfig {
+	path, err := config.GetConfigPath()
+	if err != nil {
+		return config.DefaultConfig()
+	}
+	// #nosec G304 - the path is the user's own config file
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return config.DefaultConfig()
+	}
+	cfg, err := config.ParseUserConfig(data)
+	if err != nil {
+		return config.DefaultConfig()
+	}
+	return cfg
+}
+
+// layoutSaveHint is what 'tuios layout list' prints when nothing is saved. A
+// layout is saved from inside a session, with the layout prefix or the command
+// palette, so the hint names the keys the user's config binds for it.
+func layoutSaveHint(cfg *config.UserConfig) string {
+	const palette = `pick "Save layout" in the command palette`
+	kb := cfg.Keybindings
+	leader := kb.LeaderKey
+	if leader == "" {
+		leader = "ctrl+b"
+	}
+	layoutKeys := kb.PrefixMode["prefix_layout"]
+	saveKeys := kb.LayoutPrefix["layout_prefix_save"]
+	if len(layoutKeys) == 0 || len(saveKeys) == 0 {
+		return "No saved layouts. To save one, open a session and " + palette + "."
+	}
+	return fmt.Sprintf("No saved layouts. To save one, open a session and press %s %s %s, or %s.",
+		leader, layoutKeys[0], saveKeys[0], palette)
+}

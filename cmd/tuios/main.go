@@ -2148,7 +2148,7 @@ Name a verb to describe only that verb.`,
 				return err
 			}
 			if len(templates) == 0 {
-				fmt.Println("No saved layouts. Use 'tuios layout save <name>' or the command palette.")
+				fmt.Println(layoutSaveHint(loadKeybindConfig()))
 				return nil
 			}
 			for _, t := range templates {

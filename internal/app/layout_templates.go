@@ -23,9 +23,10 @@ import (
 //
 // Integration points:
 //   - Command palette: "Save Layout", "Load Layout"
-//   - Keybinding: prefix+L (load), command palette (save)
+//   - Keybinding: prefix+L l (load), prefix+L s (save)
 //   - Tape scripting: SaveLayout/LoadLayout commands
-//   - CLI API: tuios layout save/load/list/delete
+//   - CLI: tuios layout list/delete/dir/export (no save or load, since
+//     both need a running session)
 type LayoutTemplate struct {
 	// Metadata
 	Name        string    `json:"name"`
