@@ -183,7 +183,7 @@ func runStashPut(sessionName, path string, jsonOutput bool) error {
 	if jsonOutput {
 		return printVerbResultOn(t, raw, jsonOutput)
 	}
-	return printStashPut(os.Stdout, raw)
+	return printStashPut(os.Stdout, os.Stderr, raw)
 }
 
 // readForTransfer reads a file here for a put on another machine, refusing one
@@ -245,12 +245,21 @@ func runStashGet(sessionName, stored, out string, jsonOutput bool) error {
 		outputJSON(map[string]any{"success": true, "message": "file copied", "path": out, "bytes": len(data), "host": t.host, "stored": stored})
 		return nil
 	}
-	fmt.Println(out)
-	fmt.Printf("copied %s%s\n", stashBytes(int64(len(data))), t.on())
+	printStashGet(os.Stdout, os.Stderr, out, int64(len(data)), t.on())
 	return nil
 }
 
-func printStashPut(w io.Writer, raw json.RawMessage) error {
+// printStashGet prints the written path to out and the size note to notes, so
+// stdout carries only the path.
+func printStashGet(out, notes io.Writer, path string, size int64, on string) {
+	fmt.Fprintln(out, path)
+	fmt.Fprintf(notes, "copied %s%s\n", stashBytes(size), on)
+}
+
+// printStashPut prints the stored path to out and the note about what the put
+// did to notes. Stdout holds only the path, so `path=$(tuios stash put f)`
+// captures a path that --attach can use.
+func printStashPut(out, notes io.Writer, raw json.RawMessage) error {
 	var res struct {
 		Path      string `json:"path"`
 		Bytes     int64  `json:"bytes"`
@@ -261,8 +270,7 @@ func printStashPut(w io.Writer, raw json.RawMessage) error {
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-	// The path goes on its own line first, so `path=$(tuios stash put f)` works.
-	fmt.Fprintln(w, res.Path)
+	fmt.Fprintln(out, res.Path)
 	note := fmt.Sprintf("stored %s", stashBytes(res.Bytes))
 	if res.Deduped {
 		note = fmt.Sprintf("already stored, %s", stashBytes(res.Bytes))
@@ -272,7 +280,7 @@ func printStashPut(w io.Writer, raw json.RawMessage) error {
 	} else if res.Evictions > 0 {
 		note += fmt.Sprintf(", %d file(s) dropped so far in this session", res.Evictions)
 	}
-	fmt.Fprintln(w, note)
+	fmt.Fprintln(notes, note)
 	return nil
 }
 

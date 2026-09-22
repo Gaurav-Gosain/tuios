@@ -203,7 +203,8 @@ from. A message from another machine is the least trusted of all: it was
 written by a program the owner of that machine does not run.
 
 A file crosses a link through the stash. `stash put -s HOST:SESSION FILE`
-reads the file here, sends its bytes, and prints the path it has there. Attach
+reads the file here, sends its bytes, and prints the path it has there on
+stdout, with the size note on stderr. Attach
 that path. `stash get -s HOST:SESSION STORED [FILE]` brings a stashed file
 back here. Both are capped at 8 MB.
 
@@ -941,9 +942,10 @@ tuios send-agent-message -s work -w review --attach /run/user/1000/tuios/stash/<
 tuios stash list -s work
 ```
 
-`stash put` prints the stored path on the first line and a short note on the
-second, so a script can read the first line and pass it straight to `--attach`. A
-stashed path is an ordinary absolute path: `--attach` takes it like any other,
+`stash put` prints the stored path on stdout and nothing else there. The short
+note about what it stored goes to stderr, so `path=$(tuios stash put FILE)`
+holds a path you can pass straight to `--attach`. `stash get` does the same with
+the path it wrote. A stashed path is an ordinary absolute path: `--attach` takes it like any other,
 and a message that carries one reads back with `"stashed": true`.
 
 What the stash promises, and what it does not:
