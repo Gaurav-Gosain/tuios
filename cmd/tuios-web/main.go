@@ -216,9 +216,7 @@ func runWebServer() error {
 	// canvas. See cellSize and webHostCaps.
 	app.SetClientCapabilities(webHostCaps(webFallbackCellWidth, webFallbackCellHeight))
 
-	// Set terminal environment variables
-	_ = os.Setenv("TERM", "xterm-256color")
-	_ = os.Setenv("COLORTERM", "truecolor")
+	pinGuestTerminalEnv()
 
 	if debugMode {
 		_ = os.Setenv("TUIOS_DEBUG_INTERNAL", "1")
@@ -281,18 +279,6 @@ func runWebServer() error {
 			}
 		}()
 	}()
-
-	// Advertise kitty graphics support to child processes. tuios-web runs
-	// atop sip+xterm.js with xterm-addon-image (kittySupport=true), so the
-	// host terminal understands kitty graphics. Apps like `kitten icat` and
-	// `yazi` refuse to emit graphics unless TERM looks kitty-aware, so we
-	// override TERM/TERM_PROGRAM here. This is per-process and affects all
-	// web sessions spawned by this tuios-web instance. getTerminalEnv() in
-	// internal/terminal caches on first call via sync.Once, so we must set
-	// this BEFORE any window is created.
-	_ = os.Setenv("TERM", "xterm-kitty")
-	_ = os.Setenv("COLORTERM", "truecolor")
-	_ = os.Setenv("TERM_PROGRAM", "tuios-web")
 
 	// The appearance globals, written once on the startup goroutine. A later
 	// connection must never rewrite them: they are read by the render loop of
@@ -370,6 +356,22 @@ func runWebServer() error {
 	// the shared options go on last: sip's MakeOptions carries a WithFilter of
 	// its own, and Serve would append it after ours (see app.ProgramOptions).
 	return server.ServeWithProgram(ctx, createTUIOSProgram)
+}
+
+// pinGuestTerminalEnv sets the TERM and COLORTERM this process's panes get.
+//
+// This process's stdout is not the terminal anyone sees, so detecting from it
+// would hand an ephemeral pane TERM=dumb. getTerminalEnv in internal/terminal
+// trusts the environment when COLORTERM=truecolor is set, and it caches on the
+// first window, so this has to run before any window exists.
+//
+// TERM stays xterm-256color, the value daemon panes get, because a claim such
+// as xterm-kitty needs a terminfo entry the server may not have. Image tools
+// find kitty graphics through TERM_PROGRAM, which every spawn path sets from
+// the passthrough state (see guestenv.TermProgram), so it is not set here.
+func pinGuestTerminalEnv() {
+	_ = os.Setenv("TERM", "xterm-256color")
+	_ = os.Setenv("COLORTERM", "truecolor")
 }
 
 // createTUIOSProgram builds the program for one web session.
