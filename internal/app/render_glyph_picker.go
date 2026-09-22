@@ -38,61 +38,23 @@ func (m *OS) glyphPickerLayout() (width, rows int, hints []overlay.Hint) {
 // preview per set, returning the panel, geometry, and per-row hit rects.
 func (m *OS) renderGlyphPicker() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.glyphPickerItems()
-	pal := theme.UI()
-	bg := pal.Surface
-
-	if len(items) > 0 {
-		m.GlyphPickerSelected = clampInt(m.GlyphPickerSelected, 0, len(items)-1)
-	} else {
-		m.GlyphPickerSelected = 0
-	}
 	width, visible, hints := m.glyphPickerLayout()
-	m.GlyphPickerScroll = scrollWindow(m.GlyphPickerScroll, m.GlyphPickerSelected, len(items), visible)
-
-	var lines []string
-
-	cursor := overlay.Style(bg).Foreground(pal.Accent).Render("█")
-	search := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("› ") +
-		overlay.Style(bg).Foreground(pal.Fg).Render(m.GlyphPickerQuery) + cursor
-	lines = append(lines, search, overlay.Rule(width, bg, pal))
-
-	start := m.GlyphPickerScroll
-	end := min(start+visible, len(items))
-	shown := 0
-	for i := start; i < end; i++ {
-		lines = append(lines, m.glyphRow(items[i], i == m.GlyphPickerSelected, pal, width))
-		shown++
-	}
-	if len(items) == 0 {
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).
-			Render("  No matching glyph sets"))
-		shown++
-	}
-	for shown < visible {
-		lines = append(lines, overlay.Style(bg).Render(" "))
-		shown++
-	}
-
-	lines = append(lines, m.glyphPickerDetail(items, pal, width)...)
-
-	panel := overlay.Panel{
-		Glyph: "󰊄", // glyph set
-		Title: "Glyph set",
-		Width: width,
-		Body:  strings.Join(lines, "\n"),
-		Hints: hints,
-	}
-	content, geo := panel.Render(pal)
-
-	var rows []overlayRowHit
-	for i := start; i < end; i++ {
-		rowY := geo.BodyY + (i - start) + 2 // +2 for the search line and its rule
-		rows = append(rows, overlayRowHit{
-			Rect: overlay.Rect{X0: 0, Y0: rowY, X1: geo.Width, Y1: rowY + 1},
-			Idx:  i,
-		})
-	}
-	return content, geo, rows
+	return renderLivePicker(livePickerPanel{
+		Glyph:    "󰊄", // glyph set
+		Title:    "Glyph set",
+		Query:    m.GlyphPickerQuery,
+		Items:    items,
+		Selected: &m.GlyphPickerSelected,
+		Scroll:   &m.GlyphPickerScroll,
+		Width:    width,
+		Visible:  visible,
+		Hints:    hints,
+		Empty:    "No matching glyph sets",
+		Row:      m.glyphRow,
+		Footer: func(pal overlay.Palette) []string {
+			return m.glyphPickerDetail(items, pal, width)
+		},
+	})
 }
 
 // glyphRow renders one set: its name on the left and the shape strip on the

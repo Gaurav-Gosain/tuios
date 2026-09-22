@@ -198,16 +198,9 @@ func (m *OS) applyGlyphSet(id string) {
 // view, and live-previews the newly selected set.
 func (m *OS) GlyphPickerMove(delta int) {
 	items := m.glyphPickerItems()
-	if len(items) == 0 {
-		return
-	}
-	m.GlyphPickerSelected = clampInt(m.GlyphPickerSelected+delta, 0, len(items)-1)
 	_, visible, _ := m.glyphPickerLayout()
-	if m.GlyphPickerSelected < m.GlyphPickerScroll {
-		m.GlyphPickerScroll = m.GlyphPickerSelected
-	}
-	if m.GlyphPickerSelected >= m.GlyphPickerScroll+visible {
-		m.GlyphPickerScroll = m.GlyphPickerSelected - visible + 1
+	if !livePickerMove(&m.GlyphPickerSelected, &m.GlyphPickerScroll, delta, len(items), visible) {
+		return
 	}
 	m.applyGlyphSet(items[m.GlyphPickerSelected])
 }

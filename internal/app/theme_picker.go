@@ -83,16 +83,9 @@ func (m *OS) CancelThemePicker() tea.Cmd {
 // view, and live-previews the newly selected theme.
 func (m *OS) ThemePickerMove(delta int) {
 	items := m.themePickerItems()
-	if len(items) == 0 {
-		return
-	}
-	m.ThemePickerSelected = clampInt(m.ThemePickerSelected+delta, 0, len(items)-1)
 	_, visible, _ := m.themePickerLayout()
-	if m.ThemePickerSelected < m.ThemePickerScroll {
-		m.ThemePickerScroll = m.ThemePickerSelected
-	}
-	if m.ThemePickerSelected >= m.ThemePickerScroll+visible {
-		m.ThemePickerScroll = m.ThemePickerSelected - visible + 1
+	if !livePickerMove(&m.ThemePickerSelected, &m.ThemePickerScroll, delta, len(items), visible) {
+		return
 	}
 	// Live preview.
 	m.applyTheme(items[m.ThemePickerSelected])

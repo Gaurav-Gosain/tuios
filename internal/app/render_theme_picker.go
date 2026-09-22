@@ -38,67 +38,28 @@ func (m *OS) themePickerLayout() (width, rows int, hints []overlay.Hint) {
 // preview per theme, returning the panel, geometry, and per-row hit rects.
 func (m *OS) renderThemePicker() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.themePickerItems()
-	pal := theme.UI()
-	bg := pal.Surface
-
-	// Clamp selection/scroll to the filtered list.
-	if len(items) > 0 {
-		m.ThemePickerSelected = clampInt(m.ThemePickerSelected, 0, len(items)-1)
-	} else {
-		m.ThemePickerSelected = 0
-	}
 	width, visible, hints := m.themePickerLayout()
-	m.ThemePickerScroll = scrollWindow(m.ThemePickerScroll, m.ThemePickerSelected, len(items), visible)
-
-	var lines []string
-
-	// Search input.
-	cursor := overlay.Style(bg).Foreground(pal.Accent).Render("█")
-	search := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("› ") +
-		overlay.Style(bg).Foreground(pal.Fg).Render(m.ThemePickerQuery) + cursor
-	lines = append(lines, search, overlay.Rule(width, bg, pal))
-
-	start := m.ThemePickerScroll
-	end := min(start+visible, len(items))
-	shown := 0
-	for i := start; i < end; i++ {
-		lines = append(lines, m.themeRow(items[i], i == m.ThemePickerSelected, pal, width))
-		shown++
-	}
-	if len(items) == 0 {
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  No matching themes"))
-		shown++
-	}
-	for shown < visible {
-		lines = append(lines, overlay.Style(bg).Render(" "))
-		shown++
-	}
-
-	if len(items) > visible {
-		info := lipgloss.Sprintf("%d of %d themes", m.ThemePickerSelected+1, len(items))
-		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  "+info))
-	} else {
-		lines = append(lines, overlay.Style(bg).Render(" "))
-	}
-
-	panel := overlay.Panel{
-		Glyph: "", // palette
-		Title: "Theme",
-		Width: width,
-		Body:  strings.Join(lines, "\n"),
-		Hints: hints,
-	}
-	content, geo := panel.Render(pal)
-
-	var rows []overlayRowHit
-	for i := start; i < end; i++ {
-		rowY := geo.BodyY + (i - start) + 2 // +2 for search line and rule
-		rows = append(rows, overlayRowHit{
-			Rect: overlay.Rect{X0: 0, Y0: rowY, X1: geo.Width, Y1: rowY + 1},
-			Idx:  i,
-		})
-	}
-	return content, geo, rows
+	return renderLivePicker(livePickerPanel{
+		Glyph:    "", // palette
+		Title:    "Theme",
+		Query:    m.ThemePickerQuery,
+		Items:    items,
+		Selected: &m.ThemePickerSelected,
+		Scroll:   &m.ThemePickerScroll,
+		Width:    width,
+		Visible:  visible,
+		Hints:    hints,
+		Empty:    "No matching themes",
+		Row:      m.themeRow,
+		Footer: func(pal overlay.Palette) []string {
+			bg := pal.Surface
+			if len(items) > visible {
+				info := lipgloss.Sprintf("%d of %d themes", m.ThemePickerSelected+1, len(items))
+				return []string{overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("  " + info)}
+			}
+			return []string{overlay.Style(bg).Render(" ")}
+		},
+	})
 }
 
 // themeRow renders one theme entry: a name on the left and a color-swatch
