@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
@@ -155,20 +154,4 @@ func hostTapeCommandAllowed(t tape.CommandType) bool {
 	// this machine's files; Source runs a tape file from this machine's disk;
 	// the animation toggles change this client's own settings.
 	return false
-}
-
-// hostCommandFenceNames is the list a test reads to prove the fence names
-// every refused command it claims to.
-func hostCommandFenceNames() string {
-	refused := []tape.CommandType{
-		tape.CommandTypeSetConfig, tape.CommandTypeSetTheme, tape.CommandTypeSetDockbarPosition,
-		tape.CommandTypeSetBorderStyle, tape.CommandTypeSet, tape.CommandTypeScreenshot,
-		tape.CommandTypeOutput, tape.CommandTypeSaveLayout, tape.CommandTypeLoadLayout,
-		tape.CommandTypeSource,
-	}
-	names := make([]string, 0, len(refused))
-	for _, r := range refused {
-		names = append(names, string(r))
-	}
-	return strings.Join(names, ",")
 }

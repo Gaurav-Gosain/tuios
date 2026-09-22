@@ -74,7 +74,6 @@ func TestSessionOptionsConcurrent(t *testing.T) {
 			for range 100 {
 				sess.SetOption("k", "v")
 				_, _ = sess.GetOption("k")
-				_ = sess.AllOptions()
 				_ = sess.GetState()
 			}
 		})

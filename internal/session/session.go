@@ -1602,15 +1602,6 @@ func (s *Session) OptionKeys() []string {
 	return keys
 }
 
-// AllOptions returns a copy of every daemon-owned session option.
-func (s *Session) AllOptions() map[string]string {
-	s.stateMu.RLock()
-	defer s.stateMu.RUnlock()
-	out := make(map[string]string, len(s.state.Options))
-	maps.Copy(out, s.state.Options)
-	return out
-}
-
 // ResurrectionState returns a copy of the session state enriched for on-disk
 // resurrection: each window's Cwd is filled from its live PTY process so a
 // cold-start restore can respawn the shell in the same directory. Clients never

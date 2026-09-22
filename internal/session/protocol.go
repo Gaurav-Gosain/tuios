@@ -772,14 +772,6 @@ func NewMessage(msgType MessageType, payload any) (*Message, error) {
 	}, nil
 }
 
-// NewRawMessage creates a message with raw bytes payload (for binary data like PTY I/O).
-func NewRawMessage(msgType MessageType, data []byte) *Message {
-	return &Message{
-		Type:    msgType,
-		Payload: data,
-	}
-}
-
 // ParsePayload decodes the message's gob payload into v. An empty payload
 // leaves v untouched.
 func (m *Message) ParsePayload(v any) error {

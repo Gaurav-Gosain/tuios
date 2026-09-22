@@ -116,7 +116,7 @@ func TestProtocolMessages(t *testing.T) {
 // TestRawMessage tests raw message encoding (for input/output)
 func TestRawMessage(t *testing.T) {
 	data := []byte("hello world")
-	msg := NewRawMessage(MsgInput, data)
+	msg := &Message{Type: MsgInput, Payload: data}
 
 	var buf bytes.Buffer
 	if err := WriteMessage(&buf, msg); err != nil {

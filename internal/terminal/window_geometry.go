@@ -148,9 +148,6 @@ func (w *Window) ReleaseAnnouncements() {
 	}
 }
 
-// AnnouncementsHeld reports whether any hold is open on this pane.
-func (w *Window) AnnouncementsHeld() bool { return w.announceHolds > 0 }
-
 // AnnounceTrace, when set, is called with every size handed to a guest, from
 // the goroutine that hands it over. It is a diagnostic hook for the client's
 // render trace, which records the size and the code path that announced it,

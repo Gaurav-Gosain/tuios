@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
@@ -400,6 +401,22 @@ func TestARoutedCommandFromAHostCannotChangeThisMachine(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatalf("ASSERTION: an allowed command never reached the handler")
 	}
+}
+
+// hostCommandFenceNames lists the commands hostCommandAllowed claims to refuse,
+// joined by commas.
+func hostCommandFenceNames() string {
+	refused := []tape.CommandType{
+		tape.CommandTypeSetConfig, tape.CommandTypeSetTheme, tape.CommandTypeSetDockbarPosition,
+		tape.CommandTypeSetBorderStyle, tape.CommandTypeSet, tape.CommandTypeScreenshot,
+		tape.CommandTypeOutput, tape.CommandTypeSaveLayout, tape.CommandTypeLoadLayout,
+		tape.CommandTypeSource,
+	}
+	names := make([]string, 0, len(refused))
+	for _, r := range refused {
+		names = append(names, string(r))
+	}
+	return strings.Join(names, ",")
 }
 
 func TestTheHostCommandFenceRefusesEveryCommandItNames(t *testing.T) {

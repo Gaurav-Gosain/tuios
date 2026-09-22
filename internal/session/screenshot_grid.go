@@ -1,8 +1,6 @@
 package session
 
 import (
-	uv "github.com/charmbracelet/ultraviolet"
-
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
@@ -71,35 +69,6 @@ func gridOf(t vt.Terminal, palette *shot.Palette, scrollbackRows int, cursor boo
 	if cursor {
 		pos := t.CursorPosition()
 		g.ReverseCursor(pos.X, scrollbackRows+pos.Y)
-	}
-	return g
-}
-
-// gridFromCells builds a grid from an already-walked rectangle of cells, which
-// is the shape a client-side region capture arrives in.
-func gridFromCells(cells [][]*uv.Cell, palette *shot.Palette) *shot.Grid {
-	if palette == nil {
-		palette = shot.XTermPalette()
-	}
-	rows := len(cells)
-	if rows == 0 {
-		return nil
-	}
-	cols := 0
-	for _, row := range cells {
-		cols = max(cols, len(row))
-	}
-	if cols == 0 {
-		return nil
-	}
-	g := shot.NewGrid(cols, rows, palette.FG, palette.BG)
-	for y, row := range cells {
-		for x, cell := range row {
-			if cell == nil {
-				continue
-			}
-			g.Cells[y][x] = shot.MakeCell(cell.Content, cell.Width, cell.Style, cell.Link, palette)
-		}
 	}
 	return g
 }
