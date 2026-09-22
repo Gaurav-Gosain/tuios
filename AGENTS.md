@@ -1,4 +1,4 @@
-# AGENTS.md - Agent Guide for TUIOS
+# AGENTS.md: Agent Guide for TUIOS
 
 This file is for an agent **working on the TUIOS codebase**: how it is laid out,
 how to build it, and the conventions to follow when changing it.
@@ -95,16 +95,24 @@ tuios/
 │   │   ├── handler.go      # Main input coordinator
 │   │   ├── keyboard.go     # Key event dispatch
 │   │   ├── mouse.go        # Mouse interactions
-│   │   ├── actions.go      # Action handlers (75 here, 66 more in prefix_actions.go)
+│   │   ├── actions.go      # Action handlers (the prefix handlers are in prefix_actions.go)
 │   │   └── copymode_*.go   # Vim-style copy mode (50+ motions)
 │   ├── terminal/           # Terminal window management
 │   │   ├── window.go       # Window struct, PTY lifecycle
-│   │   └── pty_*.go        # Platform-specific PTY (unix/windows)
+│   │   └── window_unix.go / window_windows.go  # Platform-specific window and PTY glue
+│   ├── ptyspawn/           # The one path every PTY-backed process is spawned through (spawn_unix.go, spawn_windows.go)
 │   ├── vt/                 # Terminal emulation: pure Go, plus libghostty-vt behind -tags ghostty
 │   │   ├── emulator.go     # Parser state machine
 │   │   ├── screen.go       # Screen buffer management
 │   │   └── scrollback.go   # 10,000 line history
-│   ├── session/            # The daemon: sessions, PTYs, wire protocol, JSON verbs
+│   ├── session/            # The daemon: sessions, PTYs (pty_unix.go, pty_windows.go), wire protocol, JSON verbs
+│   ├── federation/         # The link layer between this daemon and the daemons on other machines
+│   ├── worktree/           # Git worktrees: detect, create, and remove without losing uncommitted work
+│   ├── gitstate/           # Branch and upstream drift for the sidebar
+│   ├── capture/            # Turns a screenshot request and config into what shot renders
+│   ├── shot/               # Renders a cell grid to SVG, PNG, ANSI, HTML or text
+│   ├── release/            # Finds published releases and verifies a downloaded binary (tuios update)
+│   ├── netutil/            # Small network helpers the servers share
 │   ├── harness/            # Agent harness manifests and detection
 │   ├── hooks/              # Shell hooks on window/session/agent events
 │   ├── scrollback/         # OSC 133 scrollback browser
@@ -127,7 +135,11 @@ tuios/
 │   ├── KEYBINDINGS.md      # Complete keybinding reference
 │   ├── CONFIGURATION.md    # Config options
 │   └── CLI_REFERENCE.md    # CLI flags and commands
-├── examples/               # Tape script examples
+├── examples/               # Tape script examples, and dock components under examples/dock/
+├── skills/                 # The tuios skill (skills/tuios/SKILL.md), embedded and printed by tuios --skill
+├── integrations/           # Harness integrations, such as the claude-code agent-state shim
+├── e2e/                    # End-to-end tests; e2e/tui is its own Go module
+├── clienttests/            # Playwright tests for the web client
 └── nix/                    # Nix packaging
 ```
 
@@ -170,14 +182,14 @@ Tiling itself toggles on `Ctrl+B` `Space` (or bare `t` in window-management mode
 
 ## Key Dependencies
 
-- **Bubble Tea v2** (`charm.land/bubbletea/v2`) - TUI framework
-- **Lipgloss v2** (`charm.land/lipgloss/v2`) - Styling
-- **Wish v2** (`charm.land/wish/v2`) - SSH server
-- **Ultraviolet** (`github.com/charmbracelet/ultraviolet`) - Terminal emulation base
-- **Cobra** (`github.com/spf13/cobra`) - CLI commands
-- **xpty** (`github.com/charmbracelet/x/xpty`) - Cross-platform PTY
-- **libghostty-vt** (`go.mitchellh.com/libghostty`, behind `-tags ghostty`) - Alternative VT emulation backend; `scripts/install.sh` builds it (see `docs/ghostty-vt.md`)
-- **sip** (`github.com/Gaurav-Gosain/sip`) - WebGL terminal serving for `tuios-web`
+- **Bubble Tea v2** (`charm.land/bubbletea/v2`): TUI framework
+- **Lipgloss v2** (`charm.land/lipgloss/v2`): Styling
+- **Wish v2** (`charm.land/wish/v2`): SSH server
+- **Ultraviolet** (`github.com/charmbracelet/ultraviolet`): Terminal emulation base
+- **Cobra** (`github.com/spf13/cobra`): CLI commands
+- **xpty** (`github.com/charmbracelet/x/xpty`): Cross-platform PTY
+- **libghostty-vt** (`go.mitchellh.com/libghostty`, behind `-tags ghostty`): Alternative VT emulation backend; `scripts/install.sh` builds it (see `docs/ghostty-vt.md`)
+- **sip** (`github.com/Gaurav-Gosain/sip`): WebGL terminal serving for `tuios-web`
 
 > **Note:** As of December 2025, the Charm stack packages have migrated from `github.com/charmbracelet/*` to `charm.land/*` module paths.
 
@@ -319,14 +331,16 @@ go run ./cmd/tuios tape play examples/demo.tape
 
 ### Performance Considerations
 
-- Style cache in `internal/app/stylecache.go` - check hit rates with `Ctrl+B, D, c`
+- Style cache in `internal/app/stylecache.go`: check hit rates with `Ctrl+B, D, c`
 - Object pools in `internal/pool/pool.go` reduce GC pressure
 - Viewport culling skips off-screen windows
 - Rendering is event-driven: idle sessions schedule no timer renders (see `docs/perf.md` for the measured baselines)
 
 ### Platform Differences
 
-- PTY handling differs: `pty_unix.go` vs `pty_windows.go`
+- PTY handling differs: `internal/terminal/window_unix.go` vs `window_windows.go`,
+  `internal/session/pty_unix.go` vs `pty_windows.go`, and
+  `internal/ptyspawn/spawn_unix.go` vs `spawn_windows.go`
 - Workspace keybinds differ: `opt+N` on macOS, `alt+N` on Linux
 - See `internal/config/userconfig.go` → `getDefaultWorkspaceKeybinds()`
 
@@ -354,12 +368,12 @@ go run ./cmd/tuios tape play examples/demo.tape
 ## Commit Message Format
 
 Use conventional commits:
-- `feat:` - New feature
-- `fix:` - Bug fix
-- `docs:` - Documentation changes
-- `refactor:` - Code refactoring
-- `test:` - Adding or updating tests
-- `chore:` - Maintenance tasks
+- `feat:` New feature
+- `fix:` Bug fix
+- `docs:` Documentation changes
+- `refactor:` Code refactoring
+- `test:` Adding or updating tests
+- `chore:` Maintenance tasks
 
 Examples:
 ```
@@ -377,13 +391,13 @@ Releases are automated via GitHub Actions with GoReleaser:
 
 ## Additional Resources
 
-- **Architecture**: `docs/ARCHITECTURE.md` - Technical diagrams and component details
-- **Keybindings**: `docs/KEYBINDINGS.md` - Complete keyboard shortcut reference
-- **Configuration**: `docs/CONFIGURATION.md` - TOML config options
-- **Contributing**: `docs/CONTRIBUTING.md` - Contribution guidelines
-- **Tape Scripting**: `docs/TAPE_SCRIPTING.md` - Automation script syntax
-- **Web Terminal**: `docs/WEB.md` - Web terminal documentation (tuios-web binary)
-- **VT Backends**: `docs/ghostty-vt.md` - The pure Go and libghostty-vt emulators, and how to build each
-- **Rehydration**: `docs/REHYDRATION.md` - The snapshot-vs-stream contract for pane content on attach
-- **Performance**: `docs/perf.md` - Measured baselines and the "measured and not changed" ledger
-- **Sip**: https://github.com/Gaurav-Gosain/sip - the library serving Bubble Tea apps as web apps (used by `cmd/tuios-web`)
+- **Architecture**: `docs/ARCHITECTURE.md`. Technical diagrams and component details
+- **Keybindings**: `docs/KEYBINDINGS.md`. Complete keyboard shortcut reference
+- **Configuration**: `docs/CONFIGURATION.md`. TOML config options
+- **Contributing**: `docs/CONTRIBUTING.md`. Contribution guidelines
+- **Tape Scripting**: `docs/TAPE_SCRIPTING.md`. Automation script syntax
+- **Web Terminal**: `docs/WEB.md`. Web terminal documentation (tuios-web binary)
+- **VT Backends**: `docs/ghostty-vt.md`. The pure Go and libghostty-vt emulators, and how to build each
+- **Rehydration**: `docs/REHYDRATION.md`. The snapshot-vs-stream contract for pane content on attach
+- **Performance**: `docs/perf.md`. Measured baselines and the "measured and not changed" ledger
+- **Sip**: https://github.com/Gaurav-Gosain/sip. The library serving Bubble Tea apps as web apps (used by `cmd/tuios-web`)
