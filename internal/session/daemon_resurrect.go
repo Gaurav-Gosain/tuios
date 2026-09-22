@@ -98,6 +98,7 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 	copy(restored.Windows, state.Windows)
 	restored.WorkspaceFocus = maps.Clone(state.WorkspaceFocus)
 	restored.WorkspaceMasterRatio = maps.Clone(state.WorkspaceMasterRatio)
+	restored.WorkspaceStackRatio = maps.Clone(state.WorkspaceStackRatio)
 	restored.WorkspaceHasCustom = maps.Clone(state.WorkspaceHasCustom)
 
 	// A window whose shell will not start is dropped rather than kept. Keeping it

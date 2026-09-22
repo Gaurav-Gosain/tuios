@@ -94,6 +94,18 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 			}
 		}
 	}
+	// The stack ratios beside them are unioned on the same terms and for the
+	// same reason.
+	if len(canonical.WorkspaceStackRatio) > 0 {
+		if incoming.WorkspaceStackRatio == nil {
+			incoming.WorkspaceStackRatio = make(map[int]float64, len(canonical.WorkspaceStackRatio))
+		}
+		for ws, ratio := range canonical.WorkspaceStackRatio {
+			if _, ok := incoming.WorkspaceStackRatio[ws]; !ok {
+				incoming.WorkspaceStackRatio[ws] = ratio
+			}
+		}
+	}
 
 	// The custom-layout flags are unioned on the same terms and for the same
 	// reason. A client only holds an entry for a workspace it has been told about
@@ -278,7 +290,7 @@ func reconcileStale(incoming, canonical *SessionState, hasLivePTY func(ptyID str
 	// and a stale snapshot still reports a ratio the client itself just moved
 	// correctly. What a stale snapshot can do is omit an entry it never learned,
 	// and the union in retainDaemonExclusive, which runs on this path too, is what
-	// stops that.
+	// stops that. WorkspaceStackRatio is left alone for the same reason.
 	incoming.FocusedWindowID = canonical.FocusedWindowID
 	incoming.CurrentWorkspace = canonical.CurrentWorkspace
 	if canonical.WorkspaceFocus != nil {

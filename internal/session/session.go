@@ -333,6 +333,13 @@ type SessionState struct {
 	// way, which matters because gob drops a nil map and sends an empty one, so
 	// both forms reach a reader.
 	WorkspaceMasterRatio map[int]float64 `json:"workspace_master_ratio,omitempty"`
+	// WorkspaceStackRatio is the other split of the three pane master-stack
+	// layout, keyed by workspace: the top stacked pane's share of the height. It
+	// is session state for the reason WorkspaceMasterRatio is, and it follows the
+	// same rules. Absent, or with no entry for a workspace, means the stacked
+	// panes split the height equally, which is what every client did before the
+	// field existed, so an older peer that never sends it changes nothing.
+	WorkspaceStackRatio map[int]float64 `json:"workspace_stack_ratio,omitempty"`
 	// WorkspaceHasCustom says, per workspace, whether the panes there sit where a
 	// user put them rather than where the tiler would. It is what the retile on a
 	// workspace switch is skipped on, and it is the session's answer for the same
@@ -1512,6 +1519,9 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	}
 	if s.state.WorkspaceMasterRatio != nil {
 		stateCopy.WorkspaceMasterRatio = maps.Clone(s.state.WorkspaceMasterRatio)
+	}
+	if s.state.WorkspaceStackRatio != nil {
+		stateCopy.WorkspaceStackRatio = maps.Clone(s.state.WorkspaceStackRatio)
 	}
 	if s.state.WorkspaceHasCustom != nil {
 		stateCopy.WorkspaceHasCustom = maps.Clone(s.state.WorkspaceHasCustom)

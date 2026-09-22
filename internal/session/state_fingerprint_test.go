@@ -23,6 +23,7 @@ func fingerprintFixture() *SessionState {
 		WorkspaceFocus:       map[int]string{1: "win-1", 2: "win-2", 3: "win-1", 4: "win-2", 5: "win-1"},
 		WorkspaceNames:       map[int]string{1: "one", 2: "two", 3: "three", 4: "four", 5: "five"},
 		WorkspaceMasterRatio: map[int]float64{1: 0.5, 2: 0.55, 3: 0.6, 4: 0.65, 5: 0.7},
+		WorkspaceStackRatio:  map[int]float64{1: 0.3, 2: 0.4, 3: 0.5, 4: 0.6, 5: 0.7},
 		WorkspaceHasCustom:   map[int]bool{1: true, 2: false, 3: true, 4: false, 5: true},
 		WindowToBSPID:        map[string]int{"win-1": 1, "win-2": 2, "win-3": 3, "win-4": 4, "win-5": 5},
 		WorkspaceTrees: map[int]*SerializedBSPTree{
@@ -137,6 +138,9 @@ func TestStateFingerprintNoticesEveryChange(t *testing.T) {
 		"workspace ratio":  func(s *SessionState) { s.WorkspaceMasterRatio[1] = 0.51 },
 		"ratio added":      func(s *SessionState) { s.WorkspaceMasterRatio[6] = 0.5 },
 		"ratio dropped":    func(s *SessionState) { delete(s.WorkspaceMasterRatio, 5) },
+		"stack ratio":      func(s *SessionState) { s.WorkspaceStackRatio[1] = 0.31 },
+		"stack added":      func(s *SessionState) { s.WorkspaceStackRatio[6] = 0.5 },
+		"stack dropped":    func(s *SessionState) { delete(s.WorkspaceStackRatio, 5) },
 		"workspace custom": func(s *SessionState) { s.WorkspaceHasCustom[1] = false },
 		"custom added":     func(s *SessionState) { s.WorkspaceHasCustom[6] = true },
 		"custom dropped":   func(s *SessionState) { delete(s.WorkspaceHasCustom, 5) },
