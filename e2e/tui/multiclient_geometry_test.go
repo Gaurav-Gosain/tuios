@@ -7,14 +7,14 @@ import (
 
 // The report this file exists for: a local client attached to a daemon session
 // and a second client (tuios-web, in the report) attached beside it, a split
-// open, and a plain pane switch - alt+n - resizes the panes. Nobody touched a
+// open, and a plain pane switch (alt+n) resizes the panes. Nobody touched a
 // window boundary.
 //
 // The chrome round settled the outer box (multiclient_chrome_test.go). What
 // was left was the arithmetic inside it: shared borders and the pane gap were
 // process-global config that nothing synced, so two clients whose configs
-// disagreed partitioned the same box into different rectangles - or the same
-// rectangles into different guest grids - and every state push dragged the
+// disagreed partitioned the same box into different rectangles (or the same
+// rectangles into different guest grids), and every state push dragged the
 // shared PTYs between the two answers. The web client is exactly the second
 // process with its own configuration in force.
 //
@@ -26,9 +26,9 @@ import (
 //
 // NEGATIVE CONTROL: measured against a binary built from the unfixed tree
 // (20f17bbd, the build the report was filed against): the second client's
-// attach alone moved the daemon's windows - the pane at 61,0 59x38 was dragged
+// attach alone moved the daemon's windows (the pane at 61,0 59x38 was dragged
 // to 60,0 60x38, the config-less client reclaiming the divider column the
-// shared-borders client had reserved - and the assertion on `joined` failed.
+// shared-borders client had reserved), and the assertion on `joined` failed.
 // Every later push re-fights the same argument, which is the report's
 // "switching terminals triggers updates". On the fixed tree the geometry
 // inputs are session state, the second client adopts them on attach, and

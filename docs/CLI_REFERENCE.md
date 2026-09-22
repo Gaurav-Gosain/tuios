@@ -174,15 +174,15 @@ tuios --list-themes
 With no theme set, tuios uses the terminal's own colors.
 
 **Popular themes include:**
-- `tokyonight` - A clean, dark theme with vibrant colors
-- `dracula` - Dark theme with purple accent
-- `nord` - An arctic, north-bluish color palette
-- `gruvbox_dark` - Retro groove color scheme
-- `catppuccin_mocha` - Soothing pastel theme
-- `monokai_pro` - Professional dark theme
-- `solarized_dark` - Precision colors for machines and people
-- `github` - GitHub's light theme
-- `one_dark` - Atom's iconic dark theme
+- `tokyonight`: A clean, dark theme with vibrant colors
+- `dracula`: Dark theme with purple accent
+- `nord`: An arctic, north-bluish color palette
+- `gruvbox_dark`: Retro groove color scheme
+- `catppuccin_mocha`: Soothing pastel theme
+- `monokai_pro`: Professional dark theme
+- `solarized_dark`: Precision colors for machines and people
+- `github`: GitHub's light theme
+- `one_dark`: Atom's iconic dark theme
 
 ### Preview Themes
 
@@ -482,12 +482,12 @@ tuios daemon [flags]
 - `--no-restore`: Do not restore saved sessions on start. Run `tuios resurrect` to restore one on demand
 
 **Debug log levels:**
-- `off` - No debug output (default)
-- `errors` - Only error messages
-- `basic` - Connection events and errors
-- `messages` - All protocol messages except PTY I/O
-- `verbose` - All messages including PTY I/O
-- `trace` - Full payload hex dumps
+- `off`: No debug output (default)
+- `errors`: Only error messages
+- `basic`: Connection events and errors
+- `messages`: All protocol messages except PTY I/O
+- `verbose`: All messages including PTY I/O
+- `trace`: Full payload hex dumps
 
 **Note:** This is primarily for debugging. The daemon starts automatically in the background when you run `tuios new` or `tuios attach`. Use this command to run the daemon in the foreground with debug logging.
 
@@ -527,9 +527,9 @@ tuios send-keys <keys> [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `-l, --literal` - Send keys directly to terminal PTY (bypass TUIOS key handling)
-- `-r, --raw` - Treat each character as a separate key (no splitting on space/comma). **Required when sending text containing spaces or commas**
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-l, --literal`: Send keys directly to terminal PTY (bypass TUIOS key handling)
+- `-r, --raw`: Treat each character as a separate key (no splitting on space/comma). **Required when sending text containing spaces or commas**
 
 **Key Format:**
 - Single keys: `i`, `n`, `Enter`, `Escape`, `Space`
@@ -583,8 +583,8 @@ tuios send-text <text> [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `-w, --window <id-or-name>` - Target window (default: focused)
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <id-or-name>`: Target window (default: focused)
 
 **Examples:**
 ```bash
@@ -673,16 +673,16 @@ tuios popup [flags] -- <command> [args...]
 ```
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `--width <size>` - Width in cells (`60`) or percent (`60%`). Default `80%`
-- `--height <size>` - Height in cells (`20`) or percent (`50%`). Default `60%`
+- `-s, --session <name>`: Target session (default: most recently active)
+- `--width <size>`: Width in cells (`60`) or percent (`60%`). Default `80%`
+- `--height <size>`: Height in cells (`20`) or percent (`50%`). Default `60%`
 
 Neither size flag has a short form: `-w` selects a window everywhere else, and
 `-h` is help.
-- `--name <name>` - Name for the popup
-- `--cwd <dir>` - Directory to run the command in
-- `--workspace <n>` - Workspace to open the popup on
-- `--json` - Output result as JSON
+- `--name <name>`: Name for the popup
+- `--cwd <dir>`: Directory to run the command in
+- `--workspace <n>`: Workspace to open the popup on
+- `--json`: Output result as JSON
 
 A size larger than the pane region is cut down to the region.
 
@@ -721,9 +721,9 @@ tuios run-command <command> [args...] [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `--json` - Output result as JSON (useful for scripting)
-- `--list` - List all available commands
+- `-s, --session <name>`: Target session (default: most recently active)
+- `--json`: Output result as JSON (useful for scripting)
+- `--list`: List all available commands
 
 **Available Commands:**
 | Command | Arguments | Description |
@@ -777,7 +777,7 @@ tuios set-config <path> <value> [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: most recently active)
 
 **Available Paths:**
 | Path | Values | Description |
@@ -895,11 +895,11 @@ tuios set-agent-state <state> [flags]
 **States:** `none`, `working`, `needs_input`, `idle`, `done`, `errored`
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `-w, --window <id-or-name>` - Target window (default: focused)
-- `-m, --message <text>` - Short note reported with the state
-- `--source <source>` - Where the state came from: `report`, `osc`, `screen`, `stall` (default: `report`)
-- `--harness <id>` - Id of the harness the state is about, e.g. `claude-code`
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <id-or-name>`: Target window (default: focused)
+- `-m, --message <text>`: Short note reported with the state
+- `--source <source>`: Where the state came from: `report`, `osc`, `screen`, `stall` (default: `report`)
+- `--harness <id>`: Id of the harness the state is about, e.g. `claude-code`
 
 **Sources and precedence:**
 More than one source can have an opinion about the same pane. Each source is
@@ -960,7 +960,7 @@ tuios set-session-name [name] [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: most recently active)
 
 **Examples:**
 ```bash
@@ -985,7 +985,7 @@ tuios set-session-accent [accent] [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: most recently active)
 
 **Examples:**
 ```bash
@@ -1011,11 +1011,11 @@ tuios set-workspace-name <workspace> [name] [flags]
 ```
 
 **Arguments:**
-- `workspace` - Workspace number, 1-based
-- `name` - Label for the workspace. Omit to clear it.
+- `workspace`: Workspace number, 1-based
+- `name`: Label for the workspace. Omit to clear it.
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: most recently active)
 
 **Examples:**
 ```bash
@@ -1074,9 +1074,9 @@ tuios list-hooks [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `--event <name>` - Only the hooks on this event
-- `--json` - Output as JSON (default is human-readable table)
+- `-s, --session <name>`: Target session (default: most recently active)
+- `--event <name>`: Only the hooks on this event
+- `--json`: Output as JSON (default is human-readable table)
 
 **Example output:**
 ```
@@ -1137,8 +1137,8 @@ tuios list-dock-components [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `--json` - Output as JSON (default is human-readable table)
+- `-s, --session <name>`: Target session (default: most recently active)
+- `--json`: Output as JSON (default is human-readable table)
 
 **Example output:**
 ```
@@ -1206,8 +1206,8 @@ a component that failed five times in a row starts working again once its script
 is fixed, without restarting the session.
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `--json` - Output as JSON
+- `-s, --session <name>`: Target session (default: most recently active)
+- `--json`: Output as JSON
 
 **Examples:**
 ```bash
@@ -1231,8 +1231,8 @@ tuios list-windows [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `--json` - Output as JSON (default is human-readable table)
+- `-s, --session <name>`: Target session (default: most recently active)
+- `--json`: Output as JSON (default is human-readable table)
 
 **Examples:**
 ```bash
@@ -1301,11 +1301,11 @@ tuios get-window [id-or-name] [flags]
 ```
 
 **Arguments:**
-- `id-or-name` - Window ID or custom name. If omitted, returns the focused window.
+- `id-or-name`: Window ID or custom name. If omitted, returns the focused window.
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `--json` - Output as JSON (default is human-readable)
+- `-s, --session <name>`: Target session (default: most recently active)
+- `--json`: Output as JSON (default is human-readable)
 
 **Examples:**
 ```bash
@@ -1375,8 +1375,8 @@ tuios session-info [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `--json` - Output as JSON (default is human-readable)
+- `-s, --session <name>`: Target session (default: most recently active)
+- `--json`: Output as JSON (default is human-readable)
 
 **Examples:**
 ```bash
@@ -1447,17 +1447,17 @@ tuios capture-pane [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `-w, --window <id-or-name>` - Target window (default: focused)
-- `-S, --scrollback` - Include the full scrollback history
-- `--lines <N>` - Keep only the last N lines (0 keeps all)
-- `--ansi` - Preserve ANSI escape codes (colors, styles)
-- `--resolved` - Rewrite ANSI index colours (31, 91, 38;5;n, ...) to 24-bit
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <id-or-name>`: Target window (default: focused)
+- `-S, --scrollback`: Include the full scrollback history
+- `--lines <N>`: Keep only the last N lines (0 keeps all)
+- `--ansi`: Preserve ANSI escape codes (colors, styles)
+- `--resolved`: Rewrite ANSI index colours (31, 91, 38;5;n, ...) to 24-bit
   RGB, so a capture matches what a themed client paints. Indices below 16 come
   from the palette; the rest of the standard 256-colour cube and grey ramp use
   their fixed values. Implies `--ansi`. Without a palette this uses the xterm
   defaults.
-- `--palette <#rrggbb,...>` - The 16 hex colours a client's theme paints ANSI
+- `--palette <#rrggbb,...>`: The 16 hex colours a client's theme paints ANSI
   indices 0-15 with, used by `--resolved`. Must have exactly 16 entries.
 
 A `--ansi` capture without `--resolved` keeps the guest's SGR indices (e.g.
@@ -1501,17 +1501,17 @@ tuios screenshot [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>` - Target session (default: most recently active)
-- `-w, --window <id-or-name>` - Target window (default: focused)
-- `-f, --format <fmt>` - `png` (default), `svg`, `ansi`, `html` or `txt`
-- `--frame <style>` - `window` (default), `plain` or `none`
-- `--theme <name>` - Render in this palette instead of the session's
-- `-o, --out <path>` - Write here instead of a generated name
-- `-S, --scrollback` - Put the pane's history above the screen
-- `--lines <N>` - Bound the history to the last N rows
-- `--cursor` - Draw the cursor cell
-- `--no-copy` - Do not try to copy the image to the clipboard
-- `--json` - Output the result as JSON
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <id-or-name>`: Target window (default: focused)
+- `-f, --format <fmt>`: `png` (default), `svg`, `ansi`, `html` or `txt`
+- `--frame <style>`: `window` (default), `plain` or `none`
+- `--theme <name>`: Render in this palette instead of the session's
+- `-o, --out <path>`: Write here instead of a generated name
+- `-S, --scrollback`: Put the pane's history above the screen
+- `--lines <N>`: Bound the history to the last N rows
+- `--cursor`: Draw the cursor cell
+- `--no-copy`: Do not try to copy the image to the clipboard
+- `--json`: Output the result as JSON
 
 The daemon renders and writes the file, so this works on a detached session
 with nobody attached. It prints the path it wrote.
@@ -1745,13 +1745,13 @@ tuios ssh [flags]
 ```
 
 **Flags:**
-- `--host <string>` - SSH server host (default: "localhost")
-- `--port <string>` - SSH server port (default: "2222")
-- `--key-path <string>` - Path to SSH host key (auto-generated if not specified)
-- `--default-session <string>` - Default session name for all connections
-- `--ephemeral` - Run in ephemeral mode (standalone, no daemon)
-- `--authorized-keys <string>` - Path to the public keys allowed to connect (default: `~/.config/tuios/authorized_keys`, then `~/.ssh/authorized_keys`)
-- `--no-auth` - Give every connection a shell without checking who it is (trusted networks only)
+- `--host <string>`: SSH server host (default: "localhost")
+- `--port <string>`: SSH server port (default: "2222")
+- `--key-path <string>`: Path to SSH host key (auto-generated if not specified)
+- `--default-session <string>`: Default session name for all connections
+- `--ephemeral`: Run in ephemeral mode (standalone, no daemon)
+- `--authorized-keys <string>`: Path to the public keys allowed to connect (default: `~/.config/tuios/authorized_keys`, then `~/.ssh/authorized_keys`)
+- `--no-auth`: Give every connection a shell without checking who it is (trusted networks only)
 
 **Who can connect:**
 
@@ -1863,32 +1863,32 @@ tuios-web [flags]
 ```
 
 **Flags:**
-- `--host <string>` - Web server host (default: "localhost")
-- `--port <string>` - Web server port (default: "7681")
-- `--read-only` - Disable input from clients (view only mode)
-- `--max-connections <int>` - Maximum concurrent connections (default: 0 = unlimited)
-- `--cert <path>` - TLS certificate in PEM form (serves HTTPS; required to bind a non-loopback host)
-- `--key <path>` - TLS private key in PEM form (required with `--cert`)
-- `--auto-tls` - Generate and serve a self-signed certificate (managed with `tuios-web cert`)
-- `--insecure` - Serve a non-loopback host over plain HTTP, unencrypted (trusted networks only)
-- `--touch <auto|on|off>` - Touch support and the on-screen key bar (default: auto-detect)
-- `--default-session <string>` - Default session name for all connections (creates shared session)
-- `--ephemeral` - Disable daemon mode (sessions don't persist)
-- `--theme <name>` - Color theme forwarded to TUIOS instances
-- `--show-keys` - Enable showkeys overlay
-- `--ascii-only` - Use ASCII characters instead of Nerd Font icons
-- `--border-style <style>` - Window border style
-- `--dockbar-position <pos>` - Dockbar position
-- `--hide-window-buttons` - Hide window control buttons
-- `--window-button-style <style>` - Window control style: `pill`, `dots`
-- `--window-button-position <position>` - Which end they sit on: `right`, `left`
-- `--scrollback-lines <int>` - Scrollback buffer size
-- `--no-animations` - Disable UI animations
-- `--debug` - Enable debug logging
+- `--host <string>`: Web server host (default: "localhost")
+- `--port <string>`: Web server port (default: "7681")
+- `--read-only`: Disable input from clients (view only mode)
+- `--max-connections <int>`: Maximum concurrent connections (default: 0 = unlimited)
+- `--cert <path>`: TLS certificate in PEM form (serves HTTPS; required to bind a non-loopback host)
+- `--key <path>`: TLS private key in PEM form (required with `--cert`)
+- `--auto-tls`: Generate and serve a self-signed certificate (managed with `tuios-web cert`)
+- `--insecure`: Serve a non-loopback host over plain HTTP, unencrypted (trusted networks only)
+- `--touch <auto|on|off>`: Touch support and the on-screen key bar (default: auto-detect)
+- `--default-session <string>`: Default session name for all connections (creates shared session)
+- `--ephemeral`: Disable daemon mode (sessions don't persist)
+- `--theme <name>`: Color theme forwarded to TUIOS instances
+- `--show-keys`: Enable showkeys overlay
+- `--ascii-only`: Use ASCII characters instead of Nerd Font icons
+- `--border-style <style>`: Window border style
+- `--dockbar-position <pos>`: Dockbar position
+- `--hide-window-buttons`: Hide window control buttons
+- `--window-button-style <style>`: Window control style: `pill`, `dots`
+- `--window-button-position <position>`: Which end they sit on: `right`, `left`
+- `--scrollback-lines <int>`: Scrollback buffer size
+- `--no-animations`: Disable UI animations
+- `--debug`: Enable debug logging
 
 **Subcommands:**
-- `tuios-web cert` - Show the status of the self-signed TLS certificate `--auto-tls` uses
-- `tuios-web cert new|info|path|remove` - Rotate, explain, locate, or delete it
+- `tuios-web cert`: Show the status of the self-signed TLS certificate `--auto-tls` uses
+- `tuios-web cert new|info|path|remove`: Rotate, explain, locate, or delete it
 
 **Features:**
 - Full TUIOS experience in the browser
@@ -1901,7 +1901,7 @@ tuios-web [flags]
 - Self-signed TLS certificate generation for development
 - No CGO dependencies (pure Go)
 - **Persistent sessions via daemon mode** (default)
-- **Multi-client support** - multiple browsers share the same session
+- **Multi-client support**: multiple browsers share the same session
 
 **Examples:**
 ```bash
@@ -1956,8 +1956,8 @@ open https://localhost:7681
 
 **Protocol Selection:**
 The client automatically selects the best available transport:
-1. **WebTransport (HTTP/3 over QUIC)** - Lower latency, better multiplexing (requires HTTPS)
-2. **WebSocket (fallback)** - Broad browser compatibility
+1. **WebTransport (HTTP/3 over QUIC)**: Lower latency, better multiplexing (requires HTTPS)
+2. **WebSocket (fallback)**: Broad browser compatibility
 
 For complete documentation, see [Web Terminal Mode](WEB.md).
 
@@ -1968,9 +1968,9 @@ For complete documentation, see [Web Terminal Mode](WEB.md).
 Manage TUIOS configuration file.
 
 **Subcommands:**
-- `tuios config path` - Print configuration file path
-- `tuios config edit` - Edit configuration in $EDITOR
-- `tuios config reset` - Reset configuration to defaults
+- `tuios config path`: Print configuration file path
+- `tuios config edit`: Edit configuration in $EDITOR
+- `tuios config reset`: Reset configuration to defaults
 
 #### `tuios config path`
 
@@ -2015,12 +2015,12 @@ View and inspect keybinding configuration.
 **Aliases:** `keys`, `kb`
 
 **Subcommands:**
-- `tuios keybinds list` - List all configured keybindings
-- `tuios keybinds list-custom` - List only customized keybindings
-- `tuios keybinds doctor` - Report every key claimed twice and every key tuios takes from the pane
-- `tuios keybinds explain <key>` - Say what tuios does with one key
-- `tuios keybinds unbind <action> [key]` - Take a key off one action
-- `tuios keybinds free <key>` - Hand a key back to the program in the pane
+- `tuios keybinds list`: List all configured keybindings
+- `tuios keybinds list-custom`: List only customized keybindings
+- `tuios keybinds doctor`: Report every key claimed twice and every key tuios takes from the pane
+- `tuios keybinds explain <key>`: Say what tuios does with one key
+- `tuios keybinds unbind <action> [key]`: Take a key off one action
+- `tuios keybinds free <key>`: Hand a key back to the program in the pane
 
 #### `tuios keybinds list`
 
@@ -2114,8 +2114,8 @@ tuios update --check --pre
 ```
 
 **Flags:**
-- `--check` - Report what would be installed and change nothing
-- `--pre` - Count a prerelease as the newest release
+- `--check`: Report what would be installed and change nothing
+- `--pre`: Count a prerelease as the newest release
 
 **What it will and will not replace.** This only updates a binary that came from
 a release archive, which is what the [install script](#quick-install-script-linuxmacos)
@@ -2156,10 +2156,10 @@ never required and no token is created for you.
 Manage saved layout templates.
 
 **Subcommands:**
-- `tuios layout list` - List all saved layout templates
-- `tuios layout delete <name>` - Delete a saved layout template
-- `tuios layout dir` - Print the layout templates directory path
-- `tuios layout export <name>` - Export a layout template as JSON
+- `tuios layout list`: List all saved layout templates
+- `tuios layout delete <name>`: Delete a saved layout template
+- `tuios layout dir`: Print the layout templates directory path
+- `tuios layout export <name>`: Export a layout template as JSON
 
 #### `tuios layout list`
 
@@ -2613,7 +2613,7 @@ If you're upgrading from an older version of TUIOS, here's how the commands have
 
 ## Related Documentation
 
-- [Configuration Guide](CONFIGURATION.md) - How to customize TUIOS
-- [Keybindings Reference](KEYBINDINGS.md) - Complete keyboard shortcut reference
-- [Architecture Guide](ARCHITECTURE.md) - Technical architecture details
-- [README](../README.md) - Project overview and quick start
+- [Configuration Guide](CONFIGURATION.md): How to customize TUIOS
+- [Keybindings Reference](KEYBINDINGS.md): Complete keyboard shortcut reference
+- [Architecture Guide](ARCHITECTURE.md): Technical architecture details
+- [README](../README.md): Project overview and quick start

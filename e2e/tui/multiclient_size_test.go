@@ -11,7 +11,7 @@ import (
 // Two clients of different sizes against one session, asserted on the frame
 // each one draws. Nothing else in this suite runs two clients at once, and
 // every multi-client bug reported so far has been one where the model and the
-// screen disagreed - so these read the grid and nothing else.
+// screen disagreed, so these read the grid and nothing else.
 
 const (
 	bigCols, bigRows     = 120, 40
@@ -111,7 +111,7 @@ func waitSpanRight(t *testing.T, term *tuitest.Terminal, want int, what string) 
 // NEGATIVE CONTROL: the last stage fails on the unfixed tree. Captured there,
 // after the narrow client left, the dock and the separator redrew across all
 // 120 columns while the two panes stayed 28 wide in the top-left corner, with
-// 20 rows of dead space under them - the departing client's last state sync
+// 20 rows of dead space under them: the departing client's last state sync
 // carried its own layout and nothing pulled it back out. That is the
 // "the borders don't come back" report.
 func TestSessionHoldsOneSizeForTwoClients(t *testing.T) {

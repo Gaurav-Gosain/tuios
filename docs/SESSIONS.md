@@ -513,7 +513,7 @@ reboot.
 
 ## Related Documentation
 
-- [CLI_REFERENCE.md](CLI_REFERENCE.md) - every command-line option
-- [protocol.md](protocol.md) - the JSON verb protocol for controlling the daemon
-- [KEYBINDINGS.md](KEYBINDINGS.md) - default keybindings
-- [HOOKS.md](HOOKS.md) - shell commands run on session and window events
+- [CLI_REFERENCE.md](CLI_REFERENCE.md): every command-line option
+- [protocol.md](protocol.md): the JSON verb protocol for controlling the daemon
+- [KEYBINDINGS.md](KEYBINDINGS.md): default keybindings
+- [HOOKS.md](HOOKS.md): shell commands run on session and window events

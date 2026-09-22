@@ -236,8 +236,8 @@ func TestPopupRunsAPickerAndTheSelectionLands(t *testing.T) {
 //
 // This is why it is shared. The pane is the session's and its shell has one
 // size, so a client that did not know about the popup would count it among the
-// panes it tiles, tile it back into the box, and push that layout to everybody -
-// which is exactly what a peer does to a float it has not been told about.
+// panes it tiles, tile it back into the box, and push that layout to everybody.
+// That is exactly what a peer does to a float it has not been told about.
 //
 // The second client is started narrower than the first on purpose. The session
 // settles to the smaller of the two, so both end up rendering the same box here;

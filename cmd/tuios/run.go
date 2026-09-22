@@ -258,7 +258,7 @@ func runSSHServer(f sshServerFlags) error {
 		// The full flag set, not a subset: `tuios ssh` registers the same
 		// interface flags as every other run command, and the server applies
 		// them over the appearance baseline it loads. Applying them here
-		// instead used to happen before that baseline, which clobbered them.
+		// instead would run before that baseline, which would clobber them.
 		Overrides: flagOverrides(),
 	}
 	if err := server.StartSSHServer(ctx, cfg); err != nil {

@@ -93,9 +93,8 @@ func commandKeys(reg *config.KeybindRegistry, leader string) []sip.MobileKey {
 // the same command through a key the bar already has.
 //
 // The binding's own Ctrl and Alt ride along, because sip v0.7.0 sends a
-// prefixed key with the modifiers the button declares. A command bound to
-// ctrl+p behind the leader used to arrive as a bare p, which is why every such
-// binding was dropped here instead.
+// prefixed key with the modifiers the button declares, so a command bound to
+// ctrl+p behind the leader arrives as ctrl+p and not as a bare p.
 func commandKey(reg *config.KeybindRegistry, label, action, leader string) (sip.MobileKey, bool) {
 	for _, bound := range reg.GetKeys(action) {
 		spec, ok := resolveKey(bound)

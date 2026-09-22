@@ -21,9 +21,9 @@ import (
 // font index in fontindex.go reads the names out of the font files themselves,
 // which works on every platform and needs nothing installed; fontconfig is
 // asked second, for the fonts a machine keeps somewhere only fontconfig was
-// told about. Asking fontconfig first, or only, is what this used to do, and it
-// meant no capture on macOS ever found a font at all: fc-match is fontconfig's
-// command line and macOS does not ship fontconfig.
+// told about. It cannot be asked first or only: fc-match is fontconfig's
+// command line and macOS does not ship fontconfig, so no capture on macOS
+// would find a font at all.
 //
 // The one trap in the fontconfig half is that fc-match never fails. Asked for a
 // font that does not exist it substitutes its best guess and reports success,

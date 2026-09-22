@@ -726,8 +726,8 @@ func (p *ptyTarget) checkAlt(w daemonWindow, grid []string) []fuzz.Violation {
 //
 // "Far" is one screen, and that slack is not a hedge. A scrollback capture is
 // the history plus whatever is on the screen right now, so anything that empties
-// the screen without touching the history - an erase, or a switch to the
-// alternate screen, both of which the guest pool generates - legitimately takes
+// the screen without touching the history (an erase, or a switch to the
+// alternate screen, both of which the guest pool generates) legitimately takes
 // the last screenful off the end of the answer. Losing more than a screen is
 // losing history, and that is the thing worth reporting.
 func (p *ptyTarget) checkScrollback(w daemonWindow, grid []string) []fuzz.Violation {

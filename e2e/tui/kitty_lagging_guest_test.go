@@ -17,7 +17,7 @@ import (
 // while every frame arriving is still the old bitmap. So both halves are held
 // open here rather than waited for. The guest is told to take most of a second
 // to relay out, the way a browser does, and the pane is resized by a mouse
-// press that is never released - a press untiles a tiled pane, which drops its
+// press that is never released. A press untiles a tiled pane, which drops its
 // borderless allowance and hands the guest a box two cells smaller in each
 // direction (internal/input/mouse_click.go, beginWindowDrag).
 //

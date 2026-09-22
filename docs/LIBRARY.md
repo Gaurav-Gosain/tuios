@@ -313,24 +313,24 @@ The TUIOS model provides several public methods:
 
 ### Window Management
 
-- `AddWindow(title string)` - Create a new terminal window
-- `DeleteWindow(i int)` - Close window at index
-- `FocusWindow(i int)` - Focus window at index
-- `GetFocusedWindow()` - Get the currently focused window
+- `AddWindow(title string)`: Create a new terminal window
+- `DeleteWindow(i int)`: Close window at index
+- `FocusWindow(i int)`: Focus window at index
+- `GetFocusedWindow()`: Get the currently focused window
 
 ### Workspace Management
 
-- `SwitchWorkspace(n int)` - Switch to workspace n (1-9)
-- `MoveWindowToWorkspace(windowIndex, workspace int)` - Move a window
+- `SwitchWorkspace(n int)`: Switch to workspace n (1-9)
+- `MoveWindowToWorkspace(windowIndex, workspace int)`: Move a window
 
 ### Layout
 
-- `ToggleTiling()` - Toggle automatic tiling mode
-- `TileAllWindows()` - Retile all windows
+- `ToggleTiling()`: Toggle automatic tiling mode
+- `TileAllWindows()`: Retile all windows
 
 ### Cleanup
 
-- `Cleanup()` - Clean up resources (call when done)
+- `Cleanup()`: Clean up resources (call when done)
 
 ## Example: Custom Wrapper
 
@@ -367,8 +367,8 @@ func (m *MyApp) View() string {
 
 ## Related Documentation
 
-- [Architecture](ARCHITECTURE.md) - Technical architecture
-- [Keybindings](KEYBINDINGS.md) - Keyboard shortcuts
-- [Configuration](CONFIGURATION.md) - Config file options
-- [Web Terminal](WEB.md) - Browser-based access
-- [sip](https://github.com/Gaurav-Gosain/sip) - the web serving library behind `tuios-web`
+- [Architecture](ARCHITECTURE.md): Technical architecture
+- [Keybindings](KEYBINDINGS.md): Keyboard shortcuts
+- [Configuration](CONFIGURATION.md): Config file options
+- [Web Terminal](WEB.md): Browser-based access
+- [sip](https://github.com/Gaurav-Gosain/sip): the web serving library behind `tuios-web`

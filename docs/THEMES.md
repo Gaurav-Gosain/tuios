@@ -233,7 +233,7 @@ a dark one is the case to raise if a pill disappears.
 
 ## Related Documentation
 
-- [GLYPHS.md](GLYPHS.md) - the shape half of the same question: the characters
+- [GLYPHS.md](GLYPHS.md): the shape half of the same question, the characters
   the chrome is drawn with
-- [CONFIGURATION.md](CONFIGURATION.md) - the config file and every other option
-- [CLI_REFERENCE.md](CLI_REFERENCE.md) - `--theme`, `--list-themes`, `--preview-theme`
+- [CONFIGURATION.md](CONFIGURATION.md): the config file and every other option
+- [CLI_REFERENCE.md](CLI_REFERENCE.md): `--theme`, `--list-themes`, `--preview-theme`

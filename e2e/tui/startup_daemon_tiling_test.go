@@ -13,8 +13,8 @@ import (
 // holds the window the daemon opened for it. That window is what used to make
 // the [startup] settings look inapplicable: the session was not empty, so every
 // one of them was skipped. Scrolling mode failed for a second reason on top of
-// that - the client turned tiling on without telling the daemon, and the
-// daemon's next state took it away again - which is why all three modes are
+// that: the client turned tiling on without telling the daemon, and the
+// daemon's next state took it away again. That is why all three modes are
 // driven here.
 func TestStartupTilingOnADaemonBuiltSession(t *testing.T) {
 	for _, mode := range []string{"bsp", "master-stack", "scrolling"} {

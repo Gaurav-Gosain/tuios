@@ -8,15 +8,12 @@ import (
 	"time"
 )
 
-// This file carries the answer to the oldest unanswerable question about
-// tuios's oldest extension point: "why does my hook not fire?".
+// This file answers "why does my hook not fire?".
 //
-// A hook used to run with stdout and stderr set to nil and its error dropped,
-// so a command that was never found, exited non-zero, or was never registered
-// at all produced exactly the same observable result as one that worked. The
-// dock's components already report what their command last did, and that is why
-// "my dock component prints nothing" is answerable. Hooks now report the same
-// three facts in the same three field names: last_exit, last_run, last_error.
+// A hook whose output and error are discarded looks the same whether its
+// command was not found, exited non-zero, was never registered, or worked.
+// So hooks report the same three facts the dock's components do, under the
+// same field names: last_exit, last_run, last_error.
 
 // stderrTailLimit bounds how many bytes of a hook's stderr are kept. A hook is
 // a user command and may write without limit, so the capture is a tail with a

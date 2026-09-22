@@ -75,7 +75,7 @@ func TestDragIntoASameSizeSlotResizesNothing(t *testing.T) {
 
 // TestDragIntoADifferentSizeSlotResizesOnce is the positive half, in the same
 // fixture. The armed pane is dragged onto the full-height pane on the left, so
-// the swap really does change its size and the guest has to be told - once, for
+// the swap really does change its size and the guest has to be told once, for
 // the size it settled at, not once per size the gesture passed through.
 //
 // Without this row the test above could pass because the fixture never resizes

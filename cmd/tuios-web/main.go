@@ -1,4 +1,4 @@
-// Package main implements tuios-web - a web-based terminal server for TUIOS.
+// Package main implements tuios-web, a web-based terminal server for TUIOS.
 // This uses the sip library to serve TUIOS through the browser.
 package main
 
@@ -69,7 +69,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "tuios-web",
 		Short: "Web-based terminal server for TUIOS",
-		Long: `tuios-web - Web Terminal Server for TUIOS
+		Long: `tuios-web: Web Terminal Server for TUIOS
 
 Serves TUIOS through the browser with full terminal emulation capabilities.
 Powered by sip (github.com/Gaurav-Gosain/sip).
@@ -275,13 +275,12 @@ func runWebServer() error {
 	// every session already drawing. internal/server/ssh.go's applyAppearanceOnce
 	// enforces the same rule for the same reason.
 	//
-	// ApplyOverrides used to be called here with a nil config, which is what
-	// made a served session ignore the file. Everything reaching the client
-	// through a package global (theme, borders, dock, sidebar, scrollbar,
-	// which-key, notification timings) came out at its built-in default, while
-	// the few settings that ride on *UserConfig (startup, hooks, agent alerts,
-	// keybindings) applied, so half the config arriving looked more like a
-	// rendering bug than a missing load.
+	// ApplyOverrides must get the loaded config, not nil. With nil, everything
+	// reaching the client through a package global (theme, borders, dock,
+	// sidebar, scrollbar, which-key, notification timings) comes out at its
+	// built-in default, while the settings that ride on *UserConfig (startup,
+	// hooks, agent alerts, keybindings) still apply, and the half-applied
+	// config looks like a rendering bug.
 	//
 	// The file is the baseline; CLI flags win. Order matters: ApplyOverrides
 	// layers the flags on top of what this leaves behind.
@@ -302,8 +301,8 @@ func runWebServer() error {
 
 	// How the page looks. Read after the config file and the flags have both
 	// landed on the globals above, because that is when theme.Current() is the
-	// theme the user asked for. A browser used to get sip's own palette
-	// whatever the user had picked.
+	// theme the user asked for. Without it a browser gets sip's own palette
+	// whatever the user picked.
 	sipConfig.Appearance = browserAppearance()
 
 	// The colours the browser will resolve palette indices to follow from that
@@ -573,9 +572,9 @@ func createTUIOSHandler(sess sip.Session) tea.Model {
 	touch := sessionIsTouch(sess.Context())
 
 	// This browser's own terminal, measured from its canvas, for either kind
-	// of session. The ephemeral path used to get none and fell back to the
-	// process-wide placeholder, so its image cell math used a 10x20 cell
-	// whatever font size the reader had.
+	// of session. Without it the ephemeral path falls back to the process-wide
+	// placeholder, and its image cell math uses a 10x20 cell whatever font
+	// size the reader has.
 	hostCaps := webHostCaps(cellSize(pty))
 
 	// The kind says the rest: read-only config, no desktop, graphics forced on

@@ -120,11 +120,10 @@ func (s *Settings) GetRailFoldShutGlyph() string {
 // GetRailRuleGlyph is the rule that runs out of a group heading to the rail's
 // right spine. One cell, repeated.
 //
-// The heading used to be told from the rows under it by weight and by the
-// brightest ink on the rail, which put the loudest treatment on the least
-// actionable row and left the session names, the things you actually act on,
-// one step down. The rule carries the distinction instead, and it carries it
-// as structure rather than as emphasis, so it holds with colour switched off.
+// The rule, not weight or the brightest ink, tells the heading from the rows
+// under it. Emphasis there would put the loudest treatment on the least
+// actionable row, above the session names you actually act on. The rule is
+// structure rather than emphasis, so it holds with colour switched off.
 // It shares the "rule" role with the window separator rather than taking a role
 // of its own: both are a hairline made of one repeated cell, and a set that
 // restyles one has said what it wants the other to be.

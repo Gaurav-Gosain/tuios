@@ -16,13 +16,13 @@ type KeybindRegistry struct {
 	// looked up on its own rather than through keyToAction: every prefix, the
 	// global and script scopes, the direct terminal-mode binds and the rail.
 	//
-	// They used to be rebuilt from the config on every lookup, which meant
-	// every letter typed into a shell sorted the terminal-mode section, ran
-	// the normalizer over each of its keys and allocated a fresh map, three or
-	// four times over as the key passed each gate on its way to the PTY.
-	// Measured at 177 allocations and 19 us per typed key against 7 and 0.65
-	// us for a window-mode key that reads the flattened map. A binding is
-	// resolved once here, at build time, and read per key like the rest.
+	// A binding is resolved once here, at build time, and read per key like
+	// the rest. Rebuilding from the config on every lookup would sort the
+	// terminal-mode section, run the normalizer over each of its keys and
+	// allocate a fresh map for every letter typed into a shell, three or four
+	// times over as the key passes each gate on its way to the PTY. Measured
+	// at 177 allocations and 19 us per typed key that way, against 7 and 0.65
+	// us for a window-mode key that reads the flattened map.
 	//
 	// The maps are as stale as keyToAction is, and for the same reason: the
 	// config is edited in place by the keybind manager and the unbind

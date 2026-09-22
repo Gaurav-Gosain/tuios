@@ -176,7 +176,7 @@ func windowTopLeft(t *testing.T, term *tuitest.Terminal) (col, row int) {
 
 // TestKittyImageStaysOutOfTheRailWhenPaneOverlapsIt is the same contract for a
 // floating pane. A floating pane is deliberately allowed to hang past the
-// content region - ClampWindowsToView only keeps a strip of it reachable - so
+// content region (ClampWindowsToView only keeps a strip of it reachable), so
 // its guest is told a width that runs under the rail. Every cell tuios composes
 // for such a pane still stops at the rail, because the rail is drawn over the
 // panes. The image has to stop there too.
@@ -301,7 +301,7 @@ func dockTopRow(s tuitest.Screen) int {
 
 // TestKittyImageStaysOutOfTheDock is the vertical half of the same contract. The
 // dock reserves rows at the bottom the way the rail reserves columns at the
-// side, and a floating pane is allowed to hang past them - the clamp only keeps
+// side, and a floating pane is allowed to hang past them: the clamp only keeps
 // a few rows of it reachable. The image in such a pane has to stop where the
 // pane layout box stops, not one row short of the screen.
 func TestKittyImageStaysOutOfTheDock(t *testing.T) {
@@ -393,7 +393,7 @@ func paintedFrame(s tuitest.Screen, col, row, cols, rows int) string {
 // TestKittyImageStopsAtAShortPaneBottom is the same contract against a pane that
 // is neither full height nor hanging past anything: the image has to end on the
 // pane's last content row, the row above its bottom rule. It is here so the clip
-// cannot be a special case for a pane that overlaps chrome - the ordinary pane
+// cannot be a special case for a pane that overlaps chrome. The ordinary pane
 // has to keep working, and its bottom is its own border, not the layout box.
 func TestKittyImageStopsAtAShortPaneBottom(t *testing.T) {
 	base := t.TempDir()

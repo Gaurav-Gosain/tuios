@@ -5,9 +5,9 @@
 # Both are installed together and stamped with the same commit, because they are
 # two halves of one thing: tuios-web is a client of the same daemon, and a
 # tuios-web left behind by an upgrade is a client running last month's code
-# against this month's daemon. That used to be silent. It is now visible - the
-# two builds are compared at the handshake and the window says so - but the
-# better answer is that it does not happen.
+# against this month's daemon. The two builds are compared at the handshake and
+# the window reports a mismatch, but the better answer is that it does not
+# happen.
 #
 # Usage: scripts/install.sh [ghostty|pure] [options]
 #
@@ -154,7 +154,7 @@ say "==> tuios ($backend backend)"
 chmod 755 "$tmp"
 
 # Built before either is moved into place, so a compile error in one does not
-# leave the pair half installed and mismatched - the state this is here to
+# leave the pair half installed and mismatched, the state this is here to
 # prevent.
 say "==> tuios-web ($backend backend)"
 (cd "$ROOT" && go build ${buildtags:+"$buildtags"} -trimpath \

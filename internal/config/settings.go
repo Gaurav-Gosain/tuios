@@ -501,17 +501,16 @@ type Settings struct {
 	// WindowButtonZoom draws the third title bar control on a tiled pane, where
 	// it toggles the zoom.
 	//
-	// A tiled bar used to carry two: there was nothing a maximize could mean
-	// when the tiler owns the rectangle. There is now, because zoom means it,
-	// and a tiled pane is exactly where a zoom is worth reaching for. The green
-	// disc is the control everybody already knows.
+	// On a tiled pane a maximize means zoom, since the tiler owns the
+	// rectangle, and a tiled pane is exactly where a zoom is worth reaching
+	// for. The green disc is the control everybody already knows.
 	WindowButtonZoom bool
 
 	// ZoomFollowsFocus hands the zoom to the pane the focus lands on.
 	//
-	// A zoomed workspace shows one pane, and focus used to move underneath it
-	// regardless: the next-pane key focused the pane after it, the zoomed pane
-	// kept the box, and keys went to a pane nobody could see. The zoom is the
+	// A zoomed workspace shows one pane. If focus moved underneath it, the
+	// next-pane key would focus the pane after it while the zoomed pane kept
+	// the box, and keys would go to a pane nobody can see. The zoom is the
 	// statement that you want one pane and the whole region for it; a focus
 	// move is the statement of which pane.
 	ZoomFollowsFocus bool
@@ -519,9 +518,9 @@ type Settings struct {
 	// ZoomAnimation slides a pane between its tile and the zoom box instead of
 	// swapping the two in one frame.
 	//
-	// Zoom used to be a cut: the pane was at its tile in one frame and filling
-	// the region in the next, with nothing to say which pane had grown. That is
-	// worst exactly when it matters, which is a zoom that moves from one pane to
+	// Without it, zoom is a cut: the pane is at its tile in one frame and
+	// filling the region in the next, with nothing to say which pane has grown.
+	// That is worst exactly when it matters, which is a zoom that moves from one pane to
 	// another, where two panes change at once and neither says so.
 	ZoomAnimation bool
 

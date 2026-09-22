@@ -116,8 +116,8 @@ func kittyFrameFile(t *testing.T, dir string, wpx, hpx int) string {
 // live in one tiled pane while the pane beside it prints. The placement the host
 // is given while the neighbour is busy must be the one it is given when nothing
 // else is happening, and the one a click's full redraw produces. Anything else
-// is an image drawn to the wrong rectangle - stretched, or spilling over the
-// pane beside it - which is what the report describes and what only a click
+// is an image drawn to the wrong rectangle (stretched, or spilling over the
+// pane beside it), which is what the report describes and what only a click
 // repaired.
 func TestKittyPlacementSurvivesNeighbourOutput(t *testing.T) {
 	stream := &hostStream{}

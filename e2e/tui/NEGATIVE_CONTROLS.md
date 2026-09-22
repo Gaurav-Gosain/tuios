@@ -80,7 +80,7 @@ a working negative control look like a broken one for half an hour.
 | Clipboard: every mouse release copies, so a bare single click clobbers the clipboard | n/a, injected | `deliberate := moved \|\| window.ClickCount >= 2` → `deliberate := true` in `internal/input/mouse_select.go` | `TestDoubleClickCopiesAWordAndTripleClickTheLine` ("the gesture wrote the clipboard more times than it should: got [\"b\"], want []") | **caught, and invisible before this change** |
 | Drag state never cleared on release, so one click freezes every pane forever | n/a, injected | drop `o.Dragging = false` from the copy-mode branch of `handleMouseRelease` | `TestClickInPaneDoesNotFreezeOutput` | **caught, and invisible before this change** |
 | Agent-state feature absent (no verb, no indicator) | whole feature | build `origin/main` and point `TUIOS_E2E_BIN` at it | `TestAgentStateIndicatorRenders` (fails at the set step: `Unknown command "set-agent-state"`) | **caught** |
-| Two clients with different chrome laid the panes out in different boxes, dragging the shared PTYs between the two answers | n/a, see verdict | `paneReserve` in `internal/app/os_geometry.go` returns `m.OwnLayoutReserve()` instead of folding in `m.SessionReserve` | none | **not caught** — see below |
+| Two clients with different chrome laid the panes out in different boxes, dragging the shared PTYs between the two answers | n/a, see verdict | `paneReserve` in `internal/app/os_geometry.go` returns `m.OwnLayoutReserve()` instead of folding in `m.SessionReserve` | none | **not caught**, see below |
 | Pane body one column wider than the renderer vouches for, with the wrap skipped | n/a, injected | append a space to every row of the cell loop's output in `internal/app/render_terminal.go` while still reporting `maxX` | `TestWideRunesKeepThePaneRectangleOnScreen` ("pane has no right border glyph beside its content at column 119, its body is not 78 columns wide"), `TestSkippingTheWrapDrawsTheSameScreenAsWrapping` | **caught** |
 | A workspace round trip threw away where the strip was scrolled to | n/a, see verdict | `ScrollingOnFocusChange` in `internal/app/os_scrolling.go` calls `sl.ScrollToFocusedColumn` instead of `sl.EnsureFocusedVisible` | `TestWorkspaceRoundTripKeepsTheScrolledStrip` ("a workspace round trip moved the strip. The focused column was on screen the whole time") | **caught** |
 | The strip stops revealing a focused column with none of it on screen | n/a, injected | `EnsureFocusedVisible` in `internal/layout/scrolling.go` returns without calling `reveal` | `TestWorkspaceRoundTripRevealsAHiddenColumn` ("the round trip left the focused column off screen") | **caught**, and it is the positive control on the row above |
@@ -188,7 +188,7 @@ deliberate passes-both-ways control, and the reason is worth having written
 down, because it says what this harness can and cannot see about multi-client
 layout.
 
-With the reserve removed, the two clients still reach the same frame - by
+With the reserve removed, the two clients still reach the same frame, by
 fighting to it. The client with the rail reads the other's rectangles as a
 layout for somebody else's screen, works out its own and pushes it; the client
 without one reads what comes back as settled, because a layout that sits inside
@@ -199,7 +199,7 @@ What that convergence costs is not on the grid: each round trip resizes the
 shared PTYs twice, once to the pushed rectangles and once back. That is what
 damages scrollback, and it is counted rather than looked at, by
 `TestFocusSwitchResizesNothing` and `TestTwoClientsAgreeOnEveryPaneSize` in
-`internal/app` - both of which do fail with the reserve removed (four resizes
+`internal/app`. Both of those do fail with the reserve removed (four resizes
 per pane switch, and the two clients running the same shells at different
 sizes). The frame test guards the property those cannot see: that what the two
 people are looking at is the same layout. It would catch a change that bought

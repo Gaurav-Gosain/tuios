@@ -369,11 +369,10 @@ func (d *Detect) any() bool {
 // checkGenericNames enforces the collision policy: a short bare name may only
 // match with corroboration.
 //
-// The check used to accept any other predicate standing alongside the name, which
-// was no check at all: predicates are alternatives, so an argv_path sitting next
-// to comm = ["pi"] never constrained the comm match and every process called pi
-// still matched. Only [detect.require] constrains a name, so only that satisfies
-// this.
+// Only [detect.require] constrains a name, so only that satisfies this. Another
+// predicate standing alongside the name does not: predicates are alternatives,
+// so an argv_path next to comm = ["pi"] does not constrain the comm match and
+// every process called pi would still match.
 func (d *Detect) checkGenericNames(file, id string) error {
 	if d.Require.any() {
 		return nil

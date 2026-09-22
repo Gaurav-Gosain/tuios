@@ -2,9 +2,8 @@
 // client: the SSH server in internal/server and the web server in
 // cmd/tuios-web.
 //
-// Both servers used to carry two copies each of the same sequence, one for an
-// ephemeral session and one attached to the daemon, and the copies had drifted.
-// This is the one copy. It lives apart from internal/server so tuios-web can
+// This is the one copy of the sequence, for both an ephemeral session and one
+// attached to the daemon, so the servers cannot drift apart. It lives apart from internal/server so tuios-web can
 // use it without linking wish.
 package served
 

@@ -36,8 +36,8 @@ func isPaneCorner(r rune) bool {
 }
 
 // paneStarts is where every pane begins, as row,column pairs read off the top
-// left corner of each one. It is the layout itself: where the splits fall - "the
-// old ratio" in the report - and where the box begins and ends. Two clients of
+// left corner of each one. It is the layout itself: where the splits fall ("the
+// old ratio" in the report) and where the box begins and ends. Two clients of
 // one session have to agree on it exactly, because the shells behind those
 // columns are the same shells.
 func paneStarts(s tuitest.Screen) []string {
@@ -91,15 +91,15 @@ func waitPaneBox(t *testing.T, term *tuitest.Terminal, want, what string) {
 // pushes it; the client without one reads what comes back as settled, because a
 // layout that sits inside a wider box and still reaches its far edges is
 // indistinguishable from one that belongs there. So the wider client always
-// yields and the frames converge - after both have dragged the shared PTYs to
+// yields and the frames converge, after both have dragged the shared PTYs to
 // their own answer and back. The cost is real and it is not on the grid: it is
 // a pair of resizes per push, one of them narrowing, which is what damages
 // scrollback under a reflowing emulator.
 //
 // The tests that fail on the unfixed tree therefore count resizes rather than
 // read frames: TestFocusSwitchResizesNothing and TestTwoClientsAgreeOnEveryPaneSize
-// in internal/app. What this one is for is the property those cannot see - that
-// what the two people are looking at is the same layout - and it would catch a
+// in internal/app. What this one is for is the property those cannot see: that
+// what the two people are looking at is the same layout. It would catch a
 // change that settled the resizes by letting the two frames drift apart.
 func TestOneClientsRailDoesNotMoveAnotherClientsPanes(t *testing.T) {
 	railed, base := twoClientSession(t, "chrome", bigCols, bigRows)
@@ -110,7 +110,7 @@ func TestOneClientsRailDoesNotMoveAnotherClientsPanes(t *testing.T) {
 
 	// The second client keeps its own config directory and shares only the
 	// daemon. Without that the two share a config file and a watcher, so the
-	// toggle below reaches the second client by the back door - which is not
+	// toggle below reaches the second client by the back door, which is not
 	// the situation in the report, where the browser is a separate process with
 	// its own configuration that nothing propagates to.
 	bare := attachIn(t, base, "chrome", startOpts{

@@ -129,7 +129,7 @@ func (a *Animation) Update() bool {
 		return true
 	}
 
-	// Don't resize the VT emulator during animation - wait until complete
+	// Don't resize the VT emulator during animation. Wait until it completes.
 	// This prevents content overflow and size mismatch issues
 
 	now := time.Now()
@@ -173,10 +173,10 @@ func (a *Animation) Update() bool {
 //
 // It is what a caller that has to cut an animation short uses: starting a drag
 // on a pane that is still sliding, or a layout change that has to happen at
-// once. Those used to stamp the end rectangle on the window by hand and mark
-// the animation complete, which skipped the resize below, so the pane arrived
-// at its destination with its guest still reflowed for the size it had when the
-// slide began. Nothing corrected it until something else resized that pane.
+// once. Stamping the end rectangle on the window by hand and marking the
+// animation complete would skip the resize below, leaving the guest reflowed
+// for the size the pane had when the slide began until something else resized
+// it.
 func (a *Animation) Finish() {
 	if a.Complete {
 		return

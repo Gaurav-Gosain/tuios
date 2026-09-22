@@ -120,7 +120,7 @@ type HostReport struct {
 	DropReason string `json:"drop_reason,omitempty"`
 	// Stalls counts streams this link dropped because nothing was reading
 	// them. It is the one number that separates a slow client from a dead
-	// machine, and both used to be reported as a lost link.
+	// machine, which would otherwise both read as a lost link.
 	Stalls int `json:"stalls,omitempty"`
 }
 

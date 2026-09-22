@@ -265,11 +265,10 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// The session's size is the minimum over its attached clients, and this is
 	// the number this client contributes to that minimum. A placeholder 80x24
 	// is not a neutral guess: it is smaller than almost any real terminal, so a
-	// local client attaching beside a browser client used to collapse the whole
-	// session to 80x24 for as long as it took Bubble Tea to deliver the first
-	// WindowSizeMsg. Every other client clamped or scaled its panes into that
-	// box and back out again, which is the resize storm an attach was reported
-	// to cause. Bubble Tea still delivers the authoritative size a moment
+	// local client attaching beside a browser client would collapse the whole
+	// session to 80x24 until Bubble Tea delivers the first WindowSizeMsg, and
+	// every other client would clamp or scale its panes into that box and back
+	// out again (a resize storm). Bubble Tea still delivers the authoritative size a moment
 	// later; this only stops the interval in between from being a lie.
 	width, height := hostTerminalSize()
 

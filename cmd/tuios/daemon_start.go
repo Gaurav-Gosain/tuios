@@ -47,11 +47,10 @@ func ensureDaemon() error {
 // daemonStderr opens the daemon log file for the child to write its stderr to,
 // and returns nil when it cannot be opened.
 //
-// The child's stderr used to go nowhere. That is fine for everything the daemon
-// logs, which now reaches the same file through its own sink, and wrong for the
-// one thing it cannot log: a Go runtime panic the recover in handleConnection
-// does not catch writes its message and stack straight to stderr and then the
-// process is gone. Sending it here is what makes a crashed daemon leave a
+// Everything the daemon logs reaches the same file through its own sink.
+// Stderr is for the one thing it cannot log: a Go runtime panic the recover in
+// handleConnection does not catch writes its message and stack straight to
+// stderr, and then the process is gone. Sending it here is what makes a crashed daemon leave a
 // reason behind.
 //
 // The daemon appends to this file too, and may rotate it. Both ends open it

@@ -174,8 +174,8 @@ END {
 	#
 	# Annotations rest at opacity 1 and are faded in by a delayed animation
 	# with backwards fill, so each label arrives with the star it describes
-	# and every failure mode - style stripped, media query unmatched, reduced
-	# motion - falls back to the finished static chart. Reduced motion also
+	# and every failure mode (style stripped, media query unmatched, reduced
+	# motion) falls back to the finished static chart. Reduced motion also
 	# lifts the clip, which is the one thing CSS can do about a SMIL sweep.
 	printf "<style>text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}"
 	printf "@keyframes ap{from{opacity:0}}@keyframes bk{50%%{opacity:0}}"

@@ -78,7 +78,7 @@ func lastPlacement(t *testing.T, stream []byte) placedRect {
 // TestKittyImageStopsAtPaneBorder is the reported scenario: shared borders on,
 // two tiled panes, and a full-window graphical guest (terminal-browser) drawing
 // into the left one. The image must be given exactly the columns the guest was
-// told it had, and its right edge must land on the pane's last content column -
+// told it had, and its right edge must land on the pane's last content column:
 // the column before the divider, which tuios still has to draw.
 //
 // A narrower c= is the reported symptom from the other side: kitty scales the

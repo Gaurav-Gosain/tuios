@@ -15,8 +15,7 @@ import (
 
 // ConfigFileHeader is the comment block written at the top of a generated
 // config file. Exported so `tuios config reset` writes the same guidance a
-// first-run config gets; it used to keep its own shorter copy, so resetting
-// quietly threw away the notes on which keys cost you what.
+// first-run config gets, including the notes on which keys cost you what.
 func ConfigFileHeader(configPath string) string {
 	return configFileHeader(configPath)
 }

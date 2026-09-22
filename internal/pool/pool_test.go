@@ -210,7 +210,7 @@ func TestHighlightGrid_Reuse(t *testing.T) {
 	grid1.Set(2, 2)
 	PutHighlightGrid(grid1)
 
-	// Get again - should be reset
+	// Get again: it should be reset
 	grid2 := GetHighlightGrid()
 	grid2.Init(10, 10)
 

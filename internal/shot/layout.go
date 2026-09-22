@@ -164,10 +164,9 @@ type ControlsStyle int
 const (
 	// ControlsMacOS draws the traffic lights, and is what "auto" resolves to.
 	//
-	// It used to resolve to three accent-tinted dots. They sat at the traffic
-	// lights' size, spacing and position, so they did not read as a quieter
-	// variant of the arrangement everyone knows; they read as that arrangement
-	// with the colours broken. Red, amber and green are what a window control
+	// Accent-tinted dots at the traffic lights' size, spacing and position do
+	// not read as a quieter variant of the arrangement everyone knows; they
+	// read as that arrangement with the colours broken. Red, amber and green are what a window control
 	// is, everywhere, so they are not the theme's to tint. See the rule in the
 	// corrective spec's section 4: chrome that carries a learned meaning keeps
 	// its learned colours.

@@ -199,5 +199,5 @@ anywhere.
 
 ## Related Documentation
 
-- [THEMES.md](THEMES.md) - the colour half of the same question
-- [CONFIGURATION.md](CONFIGURATION.md) - the config file and every other option
+- [THEMES.md](THEMES.md): the colour half of the same question
+- [CONFIGURATION.md](CONFIGURATION.md): the config file and every other option

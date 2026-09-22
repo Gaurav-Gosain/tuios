@@ -1,4 +1,4 @@
-// Package main implements TUIOS - Terminal UI Operating System.
+// Package main implements TUIOS, the Terminal UI Operating System.
 // TUIOS is a terminal-based window manager that provides a modern interface
 // for managing multiple terminal sessions with workspace support, tiling modes,
 // and comprehensive keyboard/mouse interactions.
@@ -77,7 +77,7 @@ func newRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "tuios",
 		Short: "Terminal UI Operating System",
-		Long: `TUIOS - Terminal UI Operating System
+		Long: `TUIOS: Terminal UI Operating System
 
 A terminal-based window manager that provides a modern interface for managing
 multiple terminal sessions with workspace support, tiling modes, and
@@ -676,12 +676,12 @@ run this command manually.`,
 This is useful for debugging. Normally the daemon runs in the background.
 
 Debug log levels:
-  off      - No debug output (default)
-  errors   - Only error messages
-  basic    - Connection events and errors
-  messages - All protocol messages except PTY I/O
-  verbose  - All messages including PTY I/O
-  trace    - Full payload hex dumps`,
+  off:      No debug output (default)
+  errors:   Only error messages
+  basic:    Connection events and errors
+  messages: All protocol messages except PTY I/O
+  verbose:  All messages including PTY I/O
+  trace:    Full payload hex dumps`,
 		Example: `  tuios daemon
   tuios daemon --log-level=messages
   tuios daemon --log-level=verbose`,
@@ -691,7 +691,7 @@ Debug log levels:
 			}
 			// The daemon owns every emulator and scrollback ring, so it is
 			// the process a memory question is about. --pprof is a
-			// persistent flag and used to be accepted here and ignored.
+			// persistent flag, so it has to be honoured here too.
 			startPprofServer()
 			return runDaemon(true, daemonNoRestore)
 		},

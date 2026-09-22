@@ -93,7 +93,7 @@ func TestClickToFocusAddsNoLineToThePane(t *testing.T) {
 
 // TestDraggingTheDividerResizesOnce is the positive half of the test above, in
 // the same fixture. Dragging the shared border between the two panes really does
-// change how many columns each of them has, so the guest has to be told - once,
+// change how many columns each of them has, so the guest has to be told once,
 // for the width it settled at, not once per column the pointer crossed.
 //
 // Without this row the test above could pass because the fixture never resizes

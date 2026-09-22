@@ -37,7 +37,7 @@ graph TB
     end
 
     subgraph "Application Layer"
-        OS[OS - Window Manager]
+        OS[OS: Window Manager]
         IH[Input Handler]
         WS[Workspace Manager 1-9]
         ANI[Animation System]
@@ -761,7 +761,7 @@ would otherwise leave every one of them resident in the host.
 
 ## Related Documentation
 
-- [Keybindings Reference](KEYBINDINGS.md) - Complete keyboard shortcut reference
-- [Configuration Guide](CONFIGURATION.md) - Customize keybindings and settings
-- [CLI Reference](CLI_REFERENCE.md) - Command-line options and flags
-- [README](../README.md) - Project overview
+- [Keybindings Reference](KEYBINDINGS.md): Complete keyboard shortcut reference
+- [Configuration Guide](CONFIGURATION.md): Customize keybindings and settings
+- [CLI Reference](CLI_REFERENCE.md): Command-line options and flags
+- [README](../README.md): Project overview

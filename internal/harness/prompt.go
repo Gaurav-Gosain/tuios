@@ -5,11 +5,10 @@ import (
 	"unicode"
 )
 
-// A blocked agent's alert used to say that the agent needs somebody and not
-// what it wants. The screen rule that read the prompt had the line in hand; it
-// reported a fixed sentence from the manifest instead. This file is the other
-// half of that read: which line the rule matched on, cleaned of the chrome a
-// TUI paints around it, and what sort of block it is.
+// A blocked agent's alert says what the agent wants, not only that it needs
+// somebody. The screen rule that reads the prompt has the line in hand, and
+// this file turns it into the alert: which line the rule matched on, cleaned
+// of the chrome a TUI paints around it, and what sort of block it is.
 
 // Prompt kinds. A rule names one in its manifest, or RuleKind guesses from the
 // rule's own words.

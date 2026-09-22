@@ -139,8 +139,8 @@ func TestConfig_DefaultConfig(t *testing.T) {
 
 func TestConfig_GetConfigPath(t *testing.T) {
 	path, err := tuios.Config.GetConfigPath()
-	// In Nix sandbox or restricted environments, this may fail
-	// which is expected behavior - just verify it doesn't panic
+	// In a Nix sandbox or other restricted environment this may fail,
+	// which is expected. Only verify it does not panic.
 	if err != nil {
 		// Acceptable in restricted environments (e.g., Nix sandbox)
 		t.Logf("GetConfigPath error (expected in restricted env): %v", err)

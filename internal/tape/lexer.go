@@ -200,7 +200,7 @@ func (l *Lexer) NextToken() Token {
 		l.readChar()
 
 	case '/':
-		// Could be division or regex - peek ahead
+		// Could be division or regex: peek ahead
 		if l.peekChar() == '/' || isIdentifierChar(l.peekChar()) {
 			// Likely regex for Wait command
 			regex := l.readRegex()

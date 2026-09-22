@@ -38,8 +38,8 @@ func TestKittyImageSurvivesAltScreenWithHistory(t *testing.T) {
 	// alt-screen switch, a cursor move to the preview cell, and the image,
 	// all in the same chunk. Any emulator state read at APC time that lags
 	// the chunk (cursor, alt flag, history length) sends the placement to
-	// wherever the previous frame finished, clipped in a corner - which on
-	// screen is a blank preview pane.
+	// wherever the previous frame finished, clipped in a corner. On
+	// screen that is a blank preview pane.
 	frame := kittyFrameFile(t, t.TempDir(), 64, 48)
 	payload, err := os.ReadFile(frame)
 	if err != nil {

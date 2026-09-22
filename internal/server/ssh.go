@@ -43,7 +43,7 @@ type SSHServerConfig struct {
 	AuthorizedKeysPath string
 	// ShowKeys turns the key display overlay on in every served session. It is
 	// the --show-keys flag `tuios ssh` registers with the rest of the interface
-	// flags, and it used to be registered and then ignored.
+	// flags.
 	ShowKeys bool
 	// NoAuth accepts every connection without checking who it is. It is the
 	// opt-out that lets a non-loopback bind run with no authorized keys, and
@@ -154,9 +154,8 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	// without them would stop running those commands rather than run them twice.
 	if !cfg.Ephemeral {
 		// The [daemon] section, the hosts and the hooks, mapped the same way
-		// `tuios daemon` maps them. This server used to hand over the hooks
-		// alone, so a daemon it started ran with no agent detection settings
-		// and no hosts.
+		// `tuios daemon` maps them, so a daemon this server starts gets the
+		// agent detection settings and the hosts, not only the hooks.
 		daemonCfg := session.DaemonConfigFromUser(userConfig)
 		if err := session.EnsureDaemonRunningWith(cfg.Version, daemonCfg); err != nil {
 			log.Printf("Warning: Failed to start daemon, falling back to ephemeral mode: %v", err)
@@ -254,8 +253,8 @@ func recoverMiddleware() wish.Middleware {
 // share one packet buffer (packetPool), so overlapping writes corrupt the
 // channel-data header inside an otherwise valid transport packet. The client
 // then fails the stream with "ssh: wrong packet length" and drops the whole
-// connection, which is exactly how a kitty graphics flood used to kill the
-// session. Every writer to the session must go through one shared
+// connection. A kitty graphics flood from several writers kills the session
+// that way. Every writer to the session must go through one shared
 // serialWriter.
 type serialWriter struct {
 	mu sync.Mutex

@@ -387,16 +387,16 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 }
 
 // errMissingArg reports a tape command that was given no argument to act on.
-// These used to fall through to a bare `return nil`, so a mistyped or truncated
-// command in a tape did nothing at all and reported nothing at all, which is
-// indistinguishable from the command having worked.
+// Returning nil instead would make a mistyped or truncated command do nothing
+// and report nothing, which is indistinguishable from the command having
+// worked.
 func errMissingArg(command, want string) error {
 	return fmt.Errorf("%s needs %s", command, want)
 }
 
-// workspaceArg parses a workspace number argument. The parse error used to be
-// discarded, so a non-numeric argument became workspace 0 and the command was
-// dropped on the floor by the range check downstream.
+// workspaceArg parses a workspace number argument. It returns the parse error
+// rather than discarding it, because a non-numeric argument would otherwise
+// become workspace 0 and be silently dropped by the range check downstream.
 func workspaceArg(command string, cmd *Command) (int, error) {
 	if len(cmd.Args) == 0 {
 		return 0, errMissingArg(command, "a workspace number")

@@ -858,7 +858,7 @@ func DefaultConfig() *UserConfig {
 				"layout_prefix_save":   {"s"},
 				"layout_prefix_cancel": {"esc"},
 				// Corner snapping lives here rather than on the bare digits in
-				// window mode, where it used to shadow select_window_1 through
+				// window mode, where it would shadow select_window_1 through
 				// _4. See getDefaultLayoutKeybinds for why it lost that contest.
 				"snap_corner_1": {"1"},
 				"snap_corner_2": {"2"},
@@ -1092,11 +1092,10 @@ func getDefaultLayoutKeybinds() map[string][]string {
 		"snap_right":      {"l"},
 		"snap_fullscreen": {"f"},
 		"unsnap":          {"u"},
-		// snap_corner_1 through _4 are deliberately absent here. They used to
-		// hold "1" through "4", and because the layout table is merged into the
-		// window-mode keymap after window_management, they won those keys
-		// outright: select_window_1 through _4 never fired in a default
-		// install, while 5 through 9 did, because corner snapping stops at 4.
+		// snap_corner_1 through _4 are deliberately absent here. The layout
+		// table is merged into the window-mode keymap after window_management,
+		// so "1" through "4" here would win those keys outright and
+		// select_window_1 through _4 would never fire in a default install.
 		//
 		// Window mode has room for four ordinal digit rows and it already has
 		// four: plain digits select a window, shift+digits restore a minimized
@@ -1215,10 +1214,9 @@ func LoadUserConfig() (*UserConfig, error) {
 // missing section filled from the defaults. It does not validate.
 //
 // It is one function rather than a list of calls at each call site because the
-// list is the part that goes wrong. A live reload used to fill four sections
-// of the seven, so a file reloaded from disk came back with an empty
-// [spotlight], [tape], [screenshot] and [screensaver], and a beam whose radius
-// had been read as zero.
+// list is the part that goes wrong. A caller that fills only some sections
+// gets back, for example, an empty [spotlight], [tape], [screenshot] and
+// [screensaver], and a beam whose radius reads as zero.
 func ParseUserConfig(data []byte) (*UserConfig, error) {
 	var cfg UserConfig
 	if err := toml.Unmarshal(data, &cfg); err != nil {
@@ -1377,13 +1375,10 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 //
 // This is the whole of the config-file-to-globals mapping, deliberately: an
 // entrypoint that loads a config and calls this gets every setting the settings
-// page can write, with nothing left needing a second call. It used to cover
-// only part of the [appearance] section and the rest lived in ApplyOverrides,
-// so border style, dock position, the dock meters, the scrollbar, the window
-// buttons, scrollback, scroll direction, the frame cap and the theme were
-// applied by cmd/tuios (which calls both) and silently dropped everywhere else:
-// `tuios tape`, the pkg/tuios embed, and every live config reload through
-// ConfigReloadedMsg. ApplyOverrides still layers CLI flags on top, so flags
+// page can write, with nothing left needing a second call. That matters for
+// callers that do not also call ApplyOverrides: `tuios tape`, the pkg/tuios
+// embed, and every live config reload through ConfigReloadedMsg. A setting
+// mapped only in ApplyOverrides would be dropped for them. ApplyOverrides still layers CLI flags on top, so flags
 // keep winning where they are set.
 func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	// BorderStyle defaults to rounded. Empty means "not configured", so the
@@ -2130,9 +2125,9 @@ func dropStaleDuplicateKeys(section, defaults map[string][]string) {
 }
 
 // ConfigWarnings returns the non-fatal problems in cfg as human-readable lines,
-// for surfacing inside the running TUI. Config problems used to be reported
-// only to a stream nobody sees, so a typo in a keybinding looked like the
-// feature was broken rather than like the config was.
+// for surfacing inside the running TUI. Reported only to a log nobody reads,
+// a typo in a keybinding looks like a broken feature rather than a broken
+// config.
 func ConfigWarnings(cfg *UserConfig) []string {
 	if cfg == nil {
 		return nil

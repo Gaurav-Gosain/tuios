@@ -28,11 +28,11 @@ Nothing runs until you review the content and choose to run or trust it.
    **Tape: Review Project Tape**). A dialog shows the tape's path, its trust
    status, what it will build, and its full content.
 4. Read it, then choose an action:
-   - **`r` Run once** - run it now without remembering the decision.
-   - **`t` Trust and run** - remember this exact file and run it. Future visits
+   - **`r` Run once**: run it now without remembering the decision.
+   - **`t` Trust and run**: remember this exact file and run it. Future visits
      follow your configured `autorun` mode.
-   - **`n` Never** - never prompt for this path again.
-   - **`Esc` Not now** - dismiss; the dock badge stays so it is still reachable.
+   - **`n` Never**: never prompt for this path again.
+   - **`Esc` Not now**: dismiss; the dock badge stays so it is still reachable.
 5. On a later visit the badge reads `tape ✓` (trusted); one keypress runs it,
    which just switches you to the still-existing project session.
 
@@ -75,7 +75,7 @@ badge, and no dialog until you clear it.
 
 ## The review dialog
 
-The dialog is only ever opened deliberately - by `Ctrl+B` `T` `t`, the command
+The dialog is only ever opened deliberately: by `Ctrl+B` `T` `t`, the command
 palette, or (in `auto` mode, for a still-untrusted tape) the passive path. It
 never steals focus because you typed `cd`. It shows:
 
@@ -94,10 +94,10 @@ autorun = "ask"        # off | ask | auto
 auto_review = false    # auto-open the review dialog on detection
 ```
 
-- **`off`** - no scanning, no indicators, feature invisible.
-- **`ask`** (default) - detection on; every encounter surfaces the passive banner
+- **`off`**: no scanning, no indicators, feature invisible.
+- **`ask`** (default): detection on; every encounter surfaces the passive banner
   and badge. Nothing runs without you opening the dialog and choosing Run.
-- **`auto`** - a trusted, unedited tape runs automatically on entry. An untrusted
+- **`auto`**: a trusted, unedited tape runs automatically on entry. An untrusted
   or changed tape behaves exactly as in `ask`: banner, badge, dialog, never an
   autorun. There is no mode in which unreviewed content executes.
 
@@ -111,7 +111,7 @@ the review dialog yourself. Set `auto_review = true` to have the review dialog
 open **automatically** when you enter a directory with a reviewable tape, saving
 the keypress that opens it.
 
-It never weakens the trust boundary - the auto-opened dialog still requires you to
+It never weakens the trust boundary: the auto-opened dialog still requires you to
 choose Run once / Trust and run / Never / Not now. The behavior matrix:
 
 | Mode | Tape | `auto_review = false` (default) | `auto_review = true` |
@@ -145,7 +145,7 @@ body command is treated as body. A tape with no header runs with the defaults.
 
 ## The tape body
 
-The body is a small, explicit layout language - a defined subset tuned for
+The body is a small, explicit layout language, a defined subset tuned for
 building a project layout, not the full [recorder tape language](TAPE_SCRIPTING.md)
 (whose one-command-per-line grammar cannot express `Type "x" Enter`,
 `Split vertical`, or `Focus "name"` the way a project tape needs). One command per
@@ -213,7 +213,7 @@ TUIOS falls back to running the tape in the current session and says so.
 
 `Scope current` applies the tape to the current session, starting from the
 focused window. It composes with whatever state exists, so it is honest
-best-effort - good for tiny tapes ("split once, run `make watch`").
+best-effort, good for tiny tapes ("split once, run `make watch`").
 
 ### Requirements
 

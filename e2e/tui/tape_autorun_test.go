@@ -80,12 +80,12 @@ func TestProjectTapeAutoReviewOpensDialog(t *testing.T) {
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 
-	// Entering the directory auto-opens the review dialog - no leader T t.
+	// Entering the directory auto-opens the review dialog, with no leader T t.
 	enterProjectDir(t, term, dir)
 	if err := term.WaitForText("project tape", uiTimeout); err != nil {
 		t.Fatalf("review dialog did not auto-open with auto_review=true: %v\n%s", err, term.Snapshot())
 	}
-	// It is the untrusted review, and it shows the actions - nothing has run.
+	// It is the untrusted review, and it shows the actions. Nothing has run.
 	if err := term.WaitForText("trust and run", uiTimeout); err != nil {
 		t.Fatalf("auto-opened dialog missing the trust and run action: %v\n%s", err, term.Snapshot())
 	}
@@ -123,7 +123,7 @@ func TestProjectTapeAutoReviewOpensDialog(t *testing.T) {
 
 // TestProjectTapeAutoReviewDisabledStaysPassive is the negative case: with the
 // default (auto_review off), entering a tape directory surfaces only the passive
-// indicator - the review dialog does NOT auto-open.
+// indicator. The review dialog does NOT auto-open.
 func TestProjectTapeAutoReviewDisabledStaysPassive(t *testing.T) {
 	term, base := start(t, startOpts{cols: 120, rows: 40, args: []string{"new", "scratch"}})
 	killDaemon(t, base)
@@ -205,8 +205,8 @@ func TestProjectTapeCurrentScopeRendersLayout(t *testing.T) {
 //
 // The building client's in-place render of a session it just switched into and
 // populated is a separate, pre-existing client-sync limitation (a fresh attach
-// renders it correctly, as this test shows); the tape's job - constructing the
-// session correctly - is what is asserted here.
+// renders it correctly, as this test shows); the tape's job, constructing the
+// session correctly, is what is asserted here.
 func TestProjectTapeSessionScopeBuildsSession(t *testing.T) {
 	term, base := start(t, startOpts{cols: 120, rows: 40, args: []string{"new", "scratch"}})
 	killDaemon(t, base)

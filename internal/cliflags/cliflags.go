@@ -1,9 +1,8 @@
 // Package cliflags holds the interface flags every binary that renders the
 // TUI registers: `tuios` and its TUI commands, `tuios ssh`, and `tuios-web`.
 //
-// They live here so the binaries cannot drift apart. tuios-web used to register
-// nine of the eighteen overrides by hand, so the rest could only be set from the
-// config file there. The package is kept apart from internal/config so the
+// They live here so the binaries cannot drift apart and each one accepts every
+// override on the command line. The package is kept apart from internal/config so the
 // widely imported config package does not pick up a pflag dependency.
 package cliflags
 

@@ -301,11 +301,11 @@ func (kn *KeyNormalizer) NormalizeKey(key string) []string {
 		// held with, so the alt+ spelling is always one of the ways an opt+
 		// binding actually arrives.
 		//
-		// This used to be added only inside the branches above, and each of
-		// those needs one of the glyph tables to match. A key that composes no
-		// glyph on macOS therefore kept the opt+ spelling alone, which no key
-		// event ever produces, and the binding was dead: opt+esc, the default
-		// for terminal_exit_mode, and any opt+<named key> a user writes.
+		// It is added here rather than only inside the branches above, because
+		// each of those needs a glyph table to match. A key that composes no
+		// glyph on macOS would otherwise keep only the opt+ spelling, which no
+		// key event produces, and the binding would be dead: opt+esc, the
+		// default for terminal_exit_mode, and any opt+<named key> a user writes.
 		if strings.HasPrefix(keyLower, "opt+") || strings.HasPrefix(keyLower, "option+") {
 			result = append(result, optionToAltReplacer.Replace(keyLower))
 		}

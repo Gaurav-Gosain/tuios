@@ -13,11 +13,9 @@ import (
 
 // The agent row's tokens and how each is drawn, from [appearance.sidebar.agent_row].
 //
-// An agent row used to be fixed Go: which facts it showed, in what order and
-// in what ink were all decided here. herdr lets a person style each token of
-// its sidebar by the token's value, with ordered text and numeric rules, and
-// the maintainer named that as the thing to have. This is that surface, shaped
-// so a person who has never seen it can read it:
+// Which facts an agent row shows, in what order and in what ink, is set by the
+// config. Like herdr's sidebar, each token can be styled by its value with
+// ordered text and numeric rules:
 //
 //	[appearance.sidebar.agent_row]
 //	tokens = ["session", "harness", "name", "elapsed", "message"]

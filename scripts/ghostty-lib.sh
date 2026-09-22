@@ -62,7 +62,7 @@ TFLAG=""
 [ "$TARGET" != "native" ] && TFLAG="-Dtarget=$TARGET"
 # We link the static archive, never the xcframework. Ghostty defaults
 # emit-xcframework on when an xcodebuild is merely on PATH, which the Command
-# Line Tools install a stub for -- it then fails the build on any mac without
+# Line Tools install a stub for. It then fails the build on any mac without
 # full Xcode. Saying no also skips the universal build the packaging needs.
 (cd "$SRC" && zig build -Demit-lib-vt -Demit-xcframework=false -Doptimize=ReleaseFast -Dcpu="$CPU" $TFLAG --prefix "$OUT/dist")
 

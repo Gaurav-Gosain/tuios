@@ -495,7 +495,7 @@ func TestSweepingTheMouseLeavesTheSpotlightAlone(t *testing.T) {
 // TestShakingTheMouseWorksWithLinkHoverOff is what pins the filter clause.
 //
 // The whitelist has a clause for link hover that passes bare motion over pane
-// content, and with links on - which is the default - that clause carries the
+// content, and with links on (the default), that clause carries the
 // shake by accident. Turn links off, as anyone who wants the CPU guard does,
 // and the gesture has nothing left but its own clause.
 func TestShakingTheMouseWorksWithLinkHoverOff(t *testing.T) {

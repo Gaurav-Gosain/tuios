@@ -56,10 +56,10 @@ type Option struct {
 	// panel and a % after its number.
 	//
 	// The line it draws is between a proportion and a count. Both are ints with
-	// a Max, so the panel used to gauge both, and on a count the result said
-	// nothing: notifications.duration allows up to an hour, so the usual four
-	// seconds drew an empty bar, and appearance.scrollback_lines allows a
-	// million, so ten thousand drew an empty bar too. A proportion is the case
+	// a Max, but a gauge on a count says nothing: notifications.duration allows
+	// up to an hour, so the usual four seconds would draw an empty bar, and
+	// appearance.scrollback_lines allows a million, so ten thousand would too.
+	// A proportion is the case
 	// where the far end is a place you would actually put the value, which is
 	// the only case where seeing how far along it sits tells you anything.
 	Percent bool `json:"percent,omitempty"`

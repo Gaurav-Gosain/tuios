@@ -131,7 +131,7 @@ func (r *Recorder) RecordKey(key string) {
 	}
 }
 
-// RecordType records typing text - accumulates consecutive characters
+// RecordType records typed text, accumulating consecutive characters.
 func (r *Recorder) RecordType(text string) {
 	if !r.enabled {
 		return
@@ -375,7 +375,7 @@ func (r *Recorder) keyToCommand(key string) *Command {
 			cmdType = CommandTypeKeyCombo
 			raw = key
 		} else if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
-			// Single printable character - record as Type command
+			// Single printable character: record as a Type command
 			cmdType = CommandTypeType
 			// %q escapes quotes, backslashes, and newlines so the tape round-trips.
 			raw = fmt.Sprintf("Type %q", key)

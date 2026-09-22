@@ -163,7 +163,7 @@ type faceSet struct {
 // parseFontFace reads one face out of font bytes that may hold several.
 //
 // opentype.Parse refuses a collection outright ("invalid single font"), and
-// since fontconfig answers "Menlo" with a .ttc that refusal used to fail the
+// since fontconfig answers "Menlo" with a .ttc, that refusal would fail the
 // whole capture rather than cost it its icons. ParseCollection reads a plain
 // TTF or OTF as a collection of one, so it is the single path for both.
 func parseFontFace(data []byte, index int) (*sfnt.Font, error) {
@@ -227,13 +227,10 @@ func loadFaces(f *Frame, size float64) (*faceSet, error) {
 // cellSize derives the grid cell from the primary face: the advance of "M"
 // wide, the face's own line box tall.
 //
-// The height used to be a hardcoded 1.25 em while the width came from the
-// font, so the cell's shape was half measured and half guessed. Against
-// JetBrainsMono, whose advance is 0.600 em and whose hhea line box is 1.320 em,
-// that gave 0.486 where the terminal itself draws 0.455: every saved capture
-// came out about seven percent wider per cell than the screen it pictured,
-// uniformly, which is what "horizontally stretched" looks like to someone
-// holding the picture up next to their own terminal. Metrics().Height is
+// Both dimensions are measured from the font. A hardcoded 1.25 em height
+// against JetBrainsMono (advance 0.600 em, hhea line box 1.320 em) gives an
+// aspect of 0.486 where the terminal draws 0.455, so every capture comes out
+// about seven percent wider per cell than the screen it pictures. Metrics().Height is
 // ascent - descent + lineGap, which is the same line box kitty and ghostty
 // size their cells from, so taking it makes the picture's aspect the host's.
 func (fs *faceSet) cellSize() (float64, float64) {

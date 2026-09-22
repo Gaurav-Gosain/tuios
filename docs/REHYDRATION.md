@@ -133,10 +133,10 @@ snapshot carries.
 Seven routes reach a pane. They collapse into exactly two client-side
 mechanisms.
 
-**M1 - `primePaneFromDaemon`.** Snapshot, then subscribe with whatever
+**M1: `primePaneFromDaemon`.** Snapshot, then subscribe with whatever
 `ptyResume` the daemon still holds for this pane.
 
-**M2 - `RestoreTerminalStates` then `SetupPTYOutputHandlers`.** Snapshot for
+**M2: `RestoreTerminalStates` then `SetupPTYOutputHandlers`.** Snapshot for
 every window in the session, then subscribe the current workspace's panes. Every
 route that reaches M2 has been through `handleDetach`, which clears `ptyResume`
 whole, so every subscribe here resumes from 0 and is answered with the entire

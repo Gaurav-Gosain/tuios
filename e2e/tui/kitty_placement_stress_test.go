@@ -71,7 +71,7 @@ func settlePhase(host *kittyHost, name string, d time.Duration) func([]byte) []w
 // changed shape from one whose placement drifted away from its bitmap. The
 // guest draws to whatever it was last told, so a rectangle it was never told is
 // a rectangle no bitmap it will ever send can fill, and the difference is the
-// scale factor kitty applies - the stretch.
+// scale factor kitty applies: the stretch.
 //
 // The guest reports every size it is given, so the set is ground truth rather
 // than a restatement of tuios's own belief.

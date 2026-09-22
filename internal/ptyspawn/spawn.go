@@ -16,10 +16,9 @@
 // refusal is about that index. A persistent EPERM still surfaces at the bound,
 // and no other error is ever retried.
 //
-// The daemon path and the standalone path both call Spawn. They used to carry
-// their own copy of this sequence, and only one of them learned about the
-// refusal; a pane whose shell never started was the standalone copy's share of
-// the same kernel behaviour.
+// The daemon path and the standalone path both call Spawn, so both get the
+// same retry. A separate copy per path can miss the refusal, and the result is
+// a pane whose shell never starts.
 package ptyspawn
 
 import (

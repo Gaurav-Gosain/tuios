@@ -80,12 +80,12 @@ func TestDetachAndReattachKeepsLayoutAndPaneContent(t *testing.T) {
 
 	// Raise the pane that holds the marker before reading it off the screen.
 	// Both windows are floating and the second one was opened on top, so the
-	// marker is behind it - which is what a floating layout is, not a loss of
-	// content. This assertion used to be satisfied without the raise only
-	// because the restored window was placed at the wrong size: the first
-	// client attached claiming a placeholder 80x24, placed it in an 80x24 box,
-	// and nothing ever grew it, so it stuck out from under the newer window.
-	// Now that both are the size they should be, the newer one covers it.
+	// marker is behind it. That is what a floating layout is, not a loss of
+	// content. Without the raise, the marker is visible only when the
+	// restored window has the wrong size (a client that attaches claiming a
+	// placeholder 80x24 leaves it in an 80x24 box that sticks out from under
+	// the newer window). With both windows at their right size, the newer one
+	// covers it.
 	windowManagementMode(t, second)
 	if err := second.SendKeys(tuitest.Tab); err != nil {
 		t.Fatalf("cycle focus to the pane holding the marker: %v", err)
