@@ -171,12 +171,7 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		}
 		// A changed allowance owes the guest a new box even at the same rectangle.
 		if borderChanged || win.Width != rect.W || win.Height != rect.H {
-			if deferring {
-				win.ResizeVisual(rect.W, rect.H)
-				m.PendingResizes[win.ID] = [2]int{rect.W, rect.H}
-			} else {
-				win.Resize(rect.W, rect.H)
-			}
+			m.resizePane(win, rect.W, rect.H, deferring)
 		}
 
 		// If this window already has an in-flight animation heading to

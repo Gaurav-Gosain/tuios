@@ -249,12 +249,7 @@ func (m *OS) tileAllWindows() {
 				visibleWindows[i].Tiled = m.panesBorderless()
 				// Mid-resize the PTY round trip is deferred, exactly as the BSP
 				// path does it; ViewportResizeSettledMsg drains PendingResizes.
-				if deferring {
-					visibleWindows[i].ResizeVisual(l.Width, l.Height)
-					m.PendingResizes[visibleWindows[i].ID] = [2]int{l.Width, l.Height}
-				} else {
-					visibleWindows[i].Resize(l.Width, l.Height)
-				}
+				m.resizePane(visibleWindows[i], l.Width, l.Height, deferring)
 				visibleWindows[i].InvalidateCache()
 			}
 		}

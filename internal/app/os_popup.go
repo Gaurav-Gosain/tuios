@@ -57,15 +57,7 @@ func (m *OS) applyPopupRect(w *terminal.Window, deferring bool) {
 	if w.X == x && w.Y == y && w.Width == width && w.Height == height {
 		return
 	}
-	w.X, w.Y = x, y
-	w.InvalidateCache()
-	if deferring {
-		w.ResizeVisual(width, height)
-		m.PendingResizes[w.ID] = [2]int{width, height}
-		w.MarkPositionDirty()
-		return
-	}
-	w.Resize(width, height)
+	m.placePaneAt(w, x, y, width, height, deferring)
 }
 
 // applyPopupRects re-centres every popup on the current workspace.

@@ -295,15 +295,7 @@ func (m *OS) applyZoomRectAnimated(w *terminal.Window, deferring, animate bool) 
 			return
 		}
 	}
-	w.X, w.Y = x, y
-	w.InvalidateCache()
-	if deferring {
-		w.ResizeVisual(width, height)
-		m.PendingResizes[w.ID] = [2]int{width, height}
-		w.MarkPositionDirty()
-		return
-	}
-	w.Resize(width, height)
+	m.placePaneAt(w, x, y, width, height, deferring)
 }
 
 // zoomPane gives w the workspace's zoom, taking it from whichever pane held it,

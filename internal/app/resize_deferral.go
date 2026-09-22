@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
 // The deferred half of a resize, and the rule that it can never outlive the
@@ -68,6 +69,29 @@ func (m *OS) resizeDeferralActive() bool {
 
 	m.endResizeDeferral()
 	return false
+}
+
+// resizePane gives a pane its size the way the caller's retile asked: while
+// deferring, visually only, with the real size recorded in PendingResizes for
+// the drain, and otherwise through the full Resize that tells its guest.
+//
+// deferring is the caller's one answer to resizeDeferralActive for the whole
+// retile, not asked again per pane.
+func (m *OS) resizePane(win *terminal.Window, width, height int, deferring bool) {
+	if deferring {
+		win.ResizeVisual(width, height)
+		m.PendingResizes[win.ID] = [2]int{width, height}
+		return
+	}
+	win.Resize(width, height)
+}
+
+// placePaneAt moves a pane to (x, y) and gives it a width and height through
+// resizePane. It is the tail the zoom box and the popup box share.
+func (m *OS) placePaneAt(win *terminal.Window, x, y, width, height int, deferring bool) {
+	win.X, win.Y = x, y
+	win.InvalidateCache()
+	m.resizePane(win, width, height, deferring)
 }
 
 // PendingViewportResize reports the generation of the terminal resize still in
