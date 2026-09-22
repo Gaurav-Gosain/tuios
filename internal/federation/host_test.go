@@ -63,22 +63,6 @@ func TestLookupNamesTheConfiguredHosts(t *testing.T) {
 	}
 }
 
-func TestSplitTargetTreatsUnqualifiedAsLocal(t *testing.T) {
-	cases := []struct{ in, host, target string }{
-		{"work", LocalHostName, "work"},
-		{"build:api", "build", "api"},
-		{"local:api", LocalHostName, "api"},
-		{":api", LocalHostName, ":api"},
-		{"build:", "build", ""},
-	}
-	for _, tc := range cases {
-		host, target := SplitTarget(tc.in)
-		if host != tc.host || target != tc.target {
-			t.Errorf("SplitTarget(%q) = (%q, %q), want (%q, %q)", tc.in, host, target, tc.host, tc.target)
-		}
-	}
-}
-
 func errStrings(errs []error) []string {
 	out := make([]string, 0, len(errs))
 	for _, e := range errs {

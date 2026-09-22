@@ -252,20 +252,3 @@ func TestRecorder_CommandCount(t *testing.T) {
 		t.Errorf("Expected 3 commands, got %d", r.CommandCount())
 	}
 }
-
-func TestRecorder_Stats(t *testing.T) {
-	r := NewRecorder()
-	r.Start()
-
-	stats := r.GetStats()
-	if !stats.IsRecording {
-		t.Error("Expected IsRecording to be true")
-	}
-
-	r.Stop()
-
-	stats = r.GetStats()
-	if stats.IsRecording {
-		t.Error("Expected IsRecording to be false")
-	}
-}

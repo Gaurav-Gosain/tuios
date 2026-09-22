@@ -2,16 +2,14 @@ package tape
 
 import (
 	"fmt"
-	"time"
 )
 
-// Player manages script playback
+// Player manages script playback. Pausing is tracked by the caller, in
+// app.OS.ScriptPaused, not here.
 type Player struct {
-	commands     []Command
-	index        int           // Current command index
-	paused       bool          // Whether playback is paused
-	finished     bool          // Whether all commands have been played
-	currentDelay time.Duration // Remaining delay before next command
+	commands []Command
+	index    int  // Current command index
+	finished bool // Whether all commands have been played
 }
 
 // NewPlayer creates a new script player from a list of commands
@@ -19,7 +17,6 @@ func NewPlayer(commands []Command) *Player {
 	return &Player{
 		commands: commands,
 		index:    0,
-		paused:   false,
 		finished: false,
 	}
 }
@@ -48,22 +45,10 @@ func (p *Player) IsFinished() bool {
 	return p.finished
 }
 
-// IsPaused returns true if playback is paused
-func (p *Player) IsPaused() bool {
-	return p.paused
-}
-
-// SetPaused sets the paused state
-func (p *Player) SetPaused(paused bool) {
-	p.paused = paused
-}
-
 // Reset resets the player to the beginning
 func (p *Player) Reset() {
 	p.index = 0
-	p.paused = false
 	p.finished = false
-	p.currentDelay = 0
 }
 
 // CurrentIndex returns the current command index
@@ -84,19 +69,10 @@ func (p *Player) Progress() int {
 	return (p.index * 100) / len(p.commands)
 }
 
-// CommandStr returns a string representation of the current command for display
-func (p *Player) CommandStr() string {
-	if p.index >= len(p.commands) {
-		return "Script finished"
-	}
-	cmd := p.commands[p.index]
-	return cmd.String()
-}
-
 // String returns a debug string representation
 func (p *Player) String() string {
 	return fmt.Sprintf(
-		"Player{index=%d/%d, paused=%v, finished=%v}",
-		p.index, len(p.commands), p.paused, p.finished,
+		"Player{index=%d/%d, finished=%v}",
+		p.index, len(p.commands), p.finished,
 	)
 }

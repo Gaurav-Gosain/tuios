@@ -74,10 +74,3 @@ func ParseWindowTarget(s string) Target {
 	}
 	return Target{Host: parts[0], Qualified: true, Session: parts[1], Window: parts[2]}
 }
-
-// SplitTarget is ParseSessionTarget for callers that want only the pair. It
-// is kept so nothing that used it has to change.
-func SplitTarget(addr string) (host, target string) {
-	t := ParseSessionTarget(addr)
-	return t.Host, t.Session
-}

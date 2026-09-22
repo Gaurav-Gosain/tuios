@@ -82,9 +82,6 @@ func RailRuleOn(bg color.Color) color.Color {
 // background: near-white on a dark or mid accent, near-black on a light one.
 func ContrastText(bg color.Color) color.Color { return overlay.ContrastText(bg) }
 
-// mixColors blends a toward b by t in 0..1.
-func mixColors(a, b color.Color, t float64) color.Color { return overlay.MixColors(a, b, t) }
-
 // UIPalette is the chrome color set for TUIOS floating overlays. It is an alias
 // for overlay.Palette so the overlay package stays free of any tuios
 // dependency and could be published on its own.
