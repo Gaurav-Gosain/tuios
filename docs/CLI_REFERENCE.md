@@ -740,7 +740,7 @@ tuios run-command <command> [args...] [flags]
 | `MoveToWorkspace` | `<1-9>` | Move focused window to workspace |
 | `MinimizeWindow` | | Minimize focused window |
 | `RestoreWindow` | `<id-or-name>` | Restore a minimized window |
-| `SetDockbarPosition` | `<position>` | Set dockbar position (top/bottom/left/right) |
+| `SetDockbarPosition` | `<position>` | Set dockbar position (top/bottom/hidden) |
 
 **Examples:**
 ```bash
@@ -1432,7 +1432,7 @@ The `display name`, `accent` and `named` lines appear only when those are set.
 | `tiling_mode` | `tiling` or `floating`. The same two words the `session-info` verb reports. |
 | `layout_mode` | The tiling layout in use: `bsp`, `master-stack` or `scrolling` |
 | `theme` | Current color theme |
-| `dockbar_position` | Dockbar location: `top`, `bottom`, `left`, `right` |
+| `dockbar_position` | Dockbar location: `top`, `bottom` or `hidden` |
 | `animations_enabled` | Whether animations are enabled |
 | `script_mode` | Whether in tape script execution mode |
 | `workspace_windows` | Array of window counts per workspace (indices 0-8 for workspaces 1-9) |

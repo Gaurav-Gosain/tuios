@@ -968,16 +968,17 @@ func (m *OS) SetTheme(themeName string) error {
 
 // SetDockbarPosition changes the dockbar position.
 func (m *OS) SetDockbarPosition(position string) error {
-	switch position {
-	case "top", "bottom", "hidden":
-		m.Settings.DockbarPosition = position
-		m.remember("appearance.dockbar_position", position)
-		m.ShowNotification(fmt.Sprintf("Dockbar: %s", position), "info", m.Settings.NotificationDuration)
-		m.MarkAllDirty()
-		return nil
-	default:
-		return fmt.Errorf("invalid dockbar position: %s (use: top, bottom, hidden)", position)
+	// Checked against config.DockbarPositions, the list set-config, the
+	// config validator and 'run-command --list' all read.
+	if !slices.Contains(config.DockbarPositions, position) {
+		return fmt.Errorf("invalid dockbar position: %s (use: %s)",
+			position, strings.Join(config.DockbarPositions, ", "))
 	}
+	m.Settings.DockbarPosition = position
+	m.remember("appearance.dockbar_position", position)
+	m.ShowNotification(fmt.Sprintf("Dockbar: %s", position), "info", m.Settings.NotificationDuration)
+	m.MarkAllDirty()
+	return nil
 }
 
 // SetBorderStyle changes the window border style.

@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/Gaurav-Gosain/tuios/internal/capture"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
@@ -1632,13 +1633,18 @@ func outputJSON(v any) {
 	_ = enc.Encode(v)
 }
 
-// listAvailableCommands lists all available tape commands that can be executed remotely.
-func listAvailableCommands() {
-	commands := []struct {
-		name        string
-		description string
-		example     string
-	}{
+// runCommandEntry is one row of 'tuios run-command --list'.
+type runCommandEntry struct {
+	name        string
+	description string
+	example     string
+}
+
+// runCommandCatalog is what 'tuios run-command --list' prints. A closed set of
+// values is spelled from the list the executor checks against, so the listing
+// cannot offer a value the command refuses.
+func runCommandCatalog() []runCommandEntry {
+	return []runCommandEntry{
 		// Window management
 		{"NewWindow [name]", "Create a new terminal window", "tuios run-command NewWindow \"My Terminal\""},
 		{"CloseWindow [name]", "Close window(s) - all matching if name given", "tuios run-command CloseWindow \"Build\""},
@@ -1678,7 +1684,7 @@ func listAvailableCommands() {
 		{"ToggleAnimations", "Toggle UI animations", "tuios run-command ToggleAnimations"},
 
 		// Config commands
-		{"SetDockbarPosition top|bottom|left|right", "Change dockbar position", "tuios run-command SetDockbarPosition top"},
+		{"SetDockbarPosition " + strings.Join(config.DockbarPositions, "|"), "Change dockbar position", "tuios run-command SetDockbarPosition top"},
 		{"SetBorderStyle style", "Change window border style", "tuios run-command SetBorderStyle rounded"},
 		{"SetTheme themename", "Change the color theme", "tuios run-command SetTheme dracula"},
 		{"ShowNotification message [type]", "Show a notification", "tuios run-command ShowNotification \"Hello!\" info"},
@@ -1688,12 +1694,21 @@ func listAvailableCommands() {
 		{"GetWindow [id-or-name]", "Get window info (use --json)", "tuios get-window --json"},
 		{"GetSessionInfo", "Get session info (use --json)", "tuios session-info --json"},
 	}
+}
+
+// listAvailableCommands lists all available tape commands that can be executed remotely.
+func listAvailableCommands() {
+	commands := runCommandCatalog()
 
 	fmt.Println("Available commands for 'tuios run-command':")
 	fmt.Println()
 
+	width := 0
 	for _, cmd := range commands {
-		fmt.Printf("  %-35s %s\n", cmd.name, cmd.description)
+		width = max(width, len(cmd.name))
+	}
+	for _, cmd := range commands {
+		fmt.Printf("  %-*s  %s\n", width, cmd.name, cmd.description)
 	}
 
 	fmt.Println()
@@ -1841,11 +1856,11 @@ func getRunCommandArgCompletions(command string, argIndex int, toComplete string
 		}
 	case "SetDockbarPosition":
 		if argIndex == 1 {
-			return []string{"top", "bottom", "hidden"}
+			return slices.Clone(config.DockbarPositions)
 		}
 	case "SetBorderStyle":
 		if argIndex == 1 {
-			return []string{"rounded", "normal", "thick", "double", "hidden", "block", "ascii"}
+			return slices.Clone(config.BorderStyles)
 		}
 	case "FocusDirection":
 		if argIndex == 1 {

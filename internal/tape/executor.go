@@ -354,7 +354,7 @@ func (ce *CommandExecutor) Execute(cmd *Command) error {
 
 	case CommandTypeSetDockbarPosition:
 		if len(cmd.Args) == 0 {
-			return errMissingArg("SetDockbarPosition", "top or bottom")
+			return errMissingArg("SetDockbarPosition", "top, bottom or hidden")
 		}
 		return ce.executor.SetDockbarPosition(cmd.Args[0])
 
