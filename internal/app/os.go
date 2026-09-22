@@ -1490,12 +1490,9 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 		return
 	}
 
+	// RestoreFromState also adopts the session's current workspace.
 	if err := m.RestoreFromState(state); err != nil {
 		m.LogError("Failed to restore state: %v", err)
-	}
-	// Restore current workspace from state
-	if state.CurrentWorkspace > 0 {
-		m.CurrentWorkspace = state.CurrentWorkspace
 	}
 	// Restore real screen dimensions (RestoreFromState may overwrite with saved values)
 	m.Width = savedWidth

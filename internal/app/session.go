@@ -283,37 +283,12 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// Create windows from state
 	for i, ws := range state.Windows {
 		m.LogInfo("[RESTORE] Creating window %d: ID=%s, PTYID=%s", i, shortID(ws.ID), shortID(ws.PTYID))
-		window := terminal.NewDaemonWindow(
-			ws.ID,
-			ws.Title,
-			ws.X, ws.Y,
-			ws.Width, ws.Height,
-			ws.Z,
-			ws.PTYID,
-			m.PTYDataChan,
-			m.Settings.ScrollbackLines,
-		)
-		adoptWindowCwd(window, ws.Cwd)
-		adoptWindowHost(window, ws.Host)
-		if window == nil {
-			m.LogError("Failed to create daemon window for %s", shortID(ws.ID))
-			continue
-		}
-
-		caps := m.hostCaps()
-		if caps.CellWidth > 0 && caps.CellHeight > 0 {
-			window.SetCellPixelDimensions(caps.CellWidth, caps.CellHeight)
-		}
-
-		adoptWindowState(window, ws)
+		window := m.newWindowFromState(&ws)
 
 		// CRITICAL: Suppress callbacks during restoration to prevent race condition
 		// where buffered PTY output overwrites the restored IsAltScreen state
 		// Callbacks will be re-enabled in restoreTerminalContent() after state is fully restored
 		window.DisableCallbacks()
-
-		m.installPassthroughs(window)
-		m.setupCwdWatch(window)
 
 		m.Windows = append(m.Windows, window)
 		m.LogInfo("[RESTORE] Window %d created: DaemonMode=%v, PTYID=%s", i, window.DaemonMode, shortID(window.PTYID))
@@ -337,12 +312,6 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 				break
 			}
 		}
-	}
-
-	// Start in terminal mode so input goes to the focused terminal immediately
-	// (previously stayed in WM mode, causing typing to not work until click)
-	if m.FocusedWindow >= 0 {
-		m.Mode = TerminalMode
 	}
 
 	// Restore workspace focus (window ID -> window index)
@@ -401,11 +370,6 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 		}
 	}
 
-	// Restore current workspace
-	if state.CurrentWorkspace > 0 {
-		m.CurrentWorkspace = state.CurrentWorkspace
-	}
-
 	// A client joining a scrolling session starts where the session is looking,
 	// not at the left end of the strip. The strip is built here rather than left
 	// to the first retile because that retile only ever reveals the focused
@@ -449,8 +413,9 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// and allows the layout to be preserved as the user left it
 	m.RestoredFromState = true
 
-	// If we have windows and a focused window, switch to terminal mode
-	// This ensures mouse events are forwarded to terminals after restore
+	// Start in terminal mode so input goes to the focused terminal immediately
+	// and mouse events are forwarded to it. Staying in window management mode
+	// meant typing did nothing until a click.
 	if len(m.Windows) > 0 && m.FocusedWindow >= 0 {
 		m.Mode = TerminalMode
 	}
@@ -1225,13 +1190,11 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	}
 }
 
-// createWindowFromSync creates a new window from sync state
-func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
-	// Safety check for empty IDs
-	if ws.ID == "" || ws.PTYID == "" {
-		return nil
-	}
-
+// newWindowFromState builds a live daemon window from the daemon's record of
+// it. Restoring a session and adopting a window a sync pushed build the window
+// the same way, so both call this and add only what differs: the restore
+// suppresses callbacks until the content is back, and the sync wires the PTY.
+func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 	window := terminal.NewDaemonWindow(
 		ws.ID,
 		ws.Title,
@@ -1244,9 +1207,6 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 	)
 	adoptWindowCwd(window, ws.Cwd)
 	adoptWindowHost(window, ws.Host)
-	if window == nil {
-		return nil
-	}
 
 	caps := m.hostCaps()
 	if caps.CellWidth > 0 && caps.CellHeight > 0 {
@@ -1257,6 +1217,17 @@ func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
 
 	m.installPassthroughs(window)
 	m.setupCwdWatch(window)
+	return window
+}
+
+// createWindowFromSync creates a new window from sync state
+func (m *OS) createWindowFromSync(ws *session.WindowState) *terminal.Window {
+	// Safety check for empty IDs
+	if ws.ID == "" || ws.PTYID == "" {
+		return nil
+	}
+
+	window := m.newWindowFromState(ws)
 
 	// Set up PTY handlers if we have a daemon client
 	if m.DaemonClient != nil {
