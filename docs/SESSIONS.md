@@ -302,7 +302,7 @@ machine it is running on. `TUIOS_SESSION_REMOTE` carries the name for anything
 that wants to know where the pane came from.
 
 Sending mail between machines is a different thing and it does work: see
-`tuios send-agent-message --to build:api:1`.
+`tuios send-agent-message -s build:api -w 1 'text'`.
 
 ### What crosses, and what does not
 

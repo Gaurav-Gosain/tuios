@@ -94,7 +94,8 @@ In order of preference, because the order is also the order of cost:
   `window-closed`, `layout-changed`, `attached`, `detached`, `resized`).
   Several at once: `refresh = "event:after-focus-change,after-new-window"`.
 - **`push`** keeps your command running and takes each line it writes as an
-  update. Bring your own `inotifywait`, `upower --monitor`, `tuios subscribe`.
+  update. Bring your own `inotifywait`, `upower --monitor`, or a loop around
+  `tuios wait-for`.
   Wakes are driven by the pipe, never by a clock.
 - **`"30s"`** polls. The floor is one second. One timer is armed for the
   earliest deadline across every polling component, and a value that has not
