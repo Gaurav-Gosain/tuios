@@ -390,6 +390,18 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		copyModeCursorY = window.CopyMode.CursorY
 	}
 
+	// Only render fake cursor when real terminal cursor is not being
+	// used. Suppressing the real one during a resize must not hand the
+	// job to this path instead: the gesture draws no cursor either way.
+	// An open overlay is the same case. The panel covers the pane and
+	// draws its own caret, so a cursor here would be a second one in the
+	// pane behind it, and hiding only the real cursor would have moved
+	// the mark rather than removed it.
+	//
+	// Every term is fixed for the frame, the emulator's included since the
+	// IO lock is held, so it is decided once here rather than per cell.
+	drawFakeCursor := !useRealCursor && !m.Resizing && !overlayOpen && isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden()
+
 	// Use pooled highlight grids to reduce allocations
 	var searchHighlights, currentMatchHighlight, visualSelection *pool.HighlightGrid
 
@@ -583,12 +595,17 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		if !prevValid || cell == nil {
 			return false
 		}
+		// This runs once per cell. The integer fields go first, and each
+		// colour is tried for identity inline before the call, which is what
+		// settles it for neighbouring cells written with one pen. The identity
+		// test is the same one safeColorEquals starts with.
 		return prevIsCursor == isCursorPos &&
-			safeColorEquals(prevStyle.Fg, cell.Style.Fg) &&
-			safeColorEquals(prevStyle.Bg, cell.Style.Bg) &&
 			prevStyle.Attrs == cell.Style.Attrs &&
 			prevStyle.Underline == cell.Style.Underline &&
-			safeColorEquals(prevStyle.UnderlineColor, cell.Style.UnderlineColor)
+			(prevStyle.Fg == cell.Style.Fg || safeColorEquals(prevStyle.Fg, cell.Style.Fg)) &&
+			(prevStyle.Bg == cell.Style.Bg || safeColorEquals(prevStyle.Bg, cell.Style.Bg)) &&
+			(prevStyle.UnderlineColor == cell.Style.UnderlineColor ||
+				safeColorEquals(prevStyle.UnderlineColor, cell.Style.UnderlineColor))
 	}
 	// notePrev records the cell just emitted for the next comparison.
 	notePrev := func(cell *uv.Cell) {
@@ -826,14 +843,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				continue
 			}
 
-			// Only render fake cursor when real terminal cursor is not being
-			// used. Suppressing the real one during a resize must not hand the
-			// job to this path instead: the gesture draws no cursor either way.
-			// An open overlay is the same case. The panel covers the pane and
-			// draws its own caret, so a cursor here would be a second one in the
-			// pane behind it, and hiding only the real cursor would have moved
-			// the mark rather than removed it.
-			isCursorPos := !useRealCursor && !m.Resizing && !overlayOpen && isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden() && x == cursorX && y == cursorY
+			isCursorPos := drawFakeCursor && x == cursorX && y == cursorY
+
+			if x > 0 && !styleMatches(cell, isCursorPos) {
+				flushBatch()
+			}
 
 			// A dimmed pane styles every cell it has, not only the ones the
 			// guest coloured. shouldApplyStyle asks whether a cell carries
@@ -841,13 +855,10 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			// the dim on it left the setting doing nothing to most of a pane
 			// even with a theme set, which reads as a broken option rather
 			// than as a subtle one.
-			needsStyling := shouldApplyStyle(cell) || isCursorPos || (dimT > 0 && cell != nil)
-
-			if x > 0 && !styleMatches(cell, isCursorPos) {
-				flushBatch()
-			}
-
-			if needsStyling && batchBuilder.Len() == 0 {
+			//
+			// Asked only where a batch starts, since a cell that continues a
+			// batch takes the style the batch already has.
+			if batchBuilder.Len() == 0 && (shouldApplyStyle(cell) || isCursorPos || (dimT > 0 && cell != nil)) {
 				// Pure cached style: reuse the cached ANSI escape so flushBatch
 				// skips styleToANSI.
 				//
