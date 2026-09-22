@@ -50,12 +50,6 @@ func (a *ANSIBuilder) CR() *ANSIBuilder {
 	return a
 }
 
-// LF appends a line feed.
-func (a *ANSIBuilder) LF() *ANSIBuilder {
-	a.buf.WriteString("\n")
-	return a
-}
-
 // CursorTo moves cursor to position (1-based).
 func (a *ANSIBuilder) CursorTo(row, col int) *ANSIBuilder {
 	fmt.Fprintf(&a.buf, "%s%d;%dH", CSI, row, col)
@@ -160,11 +154,6 @@ func (a *ANSIBuilder) Bold() *ANSIBuilder {
 	return a.SGR(1)
 }
 
-// Dim enables dim/faint.
-func (a *ANSIBuilder) Dim() *ANSIBuilder {
-	return a.SGR(2)
-}
-
 // Italic enables italic.
 func (a *ANSIBuilder) Italic() *ANSIBuilder {
 	return a.SGR(3)
@@ -173,26 +162,6 @@ func (a *ANSIBuilder) Italic() *ANSIBuilder {
 // Underline enables underline.
 func (a *ANSIBuilder) Underline() *ANSIBuilder {
 	return a.SGR(4)
-}
-
-// Blink enables blink.
-func (a *ANSIBuilder) Blink() *ANSIBuilder {
-	return a.SGR(5)
-}
-
-// Reverse enables reverse video.
-func (a *ANSIBuilder) Reverse() *ANSIBuilder {
-	return a.SGR(7)
-}
-
-// Hidden enables hidden text.
-func (a *ANSIBuilder) Hidden() *ANSIBuilder {
-	return a.SGR(8)
-}
-
-// Strikethrough enables strikethrough.
-func (a *ANSIBuilder) Strikethrough() *ANSIBuilder {
-	return a.SGR(9)
 }
 
 // FgColor sets foreground to a basic color (30-37, 90-97).
@@ -223,18 +192,6 @@ func (a *ANSIBuilder) FgRGB(r, g, b int) *ANSIBuilder {
 // BgRGB sets background to an RGB color.
 func (a *ANSIBuilder) BgRGB(r, g, b int) *ANSIBuilder {
 	return a.SGR(48, 2, r, g, b)
-}
-
-// SaveCursor saves cursor position.
-func (a *ANSIBuilder) SaveCursor() *ANSIBuilder {
-	a.buf.WriteString(CSI + "s")
-	return a
-}
-
-// RestoreCursor restores cursor position.
-func (a *ANSIBuilder) RestoreCursor() *ANSIBuilder {
-	a.buf.WriteString(CSI + "u")
-	return a
 }
 
 // ShowCursor shows the cursor.
@@ -270,30 +227,6 @@ func (a *ANSIBuilder) EnableBracketedPaste() *ANSIBuilder {
 // DisableBracketedPaste disables bracketed paste mode.
 func (a *ANSIBuilder) DisableBracketedPaste() *ANSIBuilder {
 	a.buf.WriteString(CSI + "?2004l")
-	return a
-}
-
-// EnableMouse enables mouse tracking.
-func (a *ANSIBuilder) EnableMouse() *ANSIBuilder {
-	a.buf.WriteString(CSI + "?1000h")
-	return a
-}
-
-// DisableMouse disables mouse tracking.
-func (a *ANSIBuilder) DisableMouse() *ANSIBuilder {
-	a.buf.WriteString(CSI + "?1000l")
-	return a
-}
-
-// EnableSGRMouse enables SGR mouse mode.
-func (a *ANSIBuilder) EnableSGRMouse() *ANSIBuilder {
-	a.buf.WriteString(CSI + "?1006h")
-	return a
-}
-
-// DisableSGRMouse disables SGR mouse mode.
-func (a *ANSIBuilder) DisableSGRMouse() *ANSIBuilder {
-	a.buf.WriteString(CSI + "?1006l")
 	return a
 }
 
@@ -333,16 +266,6 @@ func (a *ANSIBuilder) InsertLines(n int) *ANSIBuilder {
 	return a
 }
 
-// DeleteLines deletes n lines.
-func (a *ANSIBuilder) DeleteLines(n int) *ANSIBuilder {
-	if n == 1 {
-		a.buf.WriteString(CSI + "M")
-	} else {
-		fmt.Fprintf(&a.buf, "%s%dM", CSI, n)
-	}
-	return a
-}
-
 // InsertChars inserts n blank characters.
 func (a *ANSIBuilder) InsertChars(n int) *ANSIBuilder {
 	if n == 1 {
@@ -353,49 +276,9 @@ func (a *ANSIBuilder) InsertChars(n int) *ANSIBuilder {
 	return a
 }
 
-// DeleteChars deletes n characters.
-func (a *ANSIBuilder) DeleteChars(n int) *ANSIBuilder {
-	if n == 1 {
-		a.buf.WriteString(CSI + "P")
-	} else {
-		fmt.Fprintf(&a.buf, "%s%dP", CSI, n)
-	}
-	return a
-}
-
 // OSCTitle sets the window title.
 func (a *ANSIBuilder) OSCTitle(title string) *ANSIBuilder {
 	a.buf.WriteString(OSC + "0;" + title + BEL)
-	return a
-}
-
-// OSCHyperlink creates a hyperlink.
-func (a *ANSIBuilder) OSCHyperlink(url, text string) *ANSIBuilder {
-	a.buf.WriteString(OSC + "8;;" + url + ST + text + OSC + "8;;" + ST)
-	return a
-}
-
-// DeviceStatusReport requests cursor position (DSR).
-func (a *ANSIBuilder) DeviceStatusReport() *ANSIBuilder {
-	a.buf.WriteString(CSI + "6n")
-	return a
-}
-
-// RequestTerminalSize requests terminal size (XTWINOPS).
-func (a *ANSIBuilder) RequestTerminalSize() *ANSIBuilder {
-	a.buf.WriteString(CSI + "18t")
-	return a
-}
-
-// Raw appends raw bytes.
-func (a *ANSIBuilder) Raw(data []byte) *ANSIBuilder {
-	a.buf.Write(data)
-	return a
-}
-
-// RawString appends a raw string.
-func (a *ANSIBuilder) RawString(s string) *ANSIBuilder {
-	a.buf.WriteString(s)
 	return a
 }
 
