@@ -10,6 +10,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
+
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // This file holds the CLI half of the cross-agent surface: who is here, leaving
@@ -57,7 +59,14 @@ func plainLine(s string) string {
 // host the ring itself was read from, when it was not this machine.
 func senderOf(m agentMessageRow, on string) string {
 	who := orNone(plainLine(m.FromLabel))
-	if m.From != "" {
+	switch {
+	case m.From == session.AgentInboxHuman && m.VerifiedHuman:
+		who = "human (verified: sent from a client attached to this session)"
+	case m.From == session.AgentInboxHuman:
+		// claimed_human, or a daemon too old to say either way. Neither is
+		// the person's answer as far as anyone can tell.
+		who = "human (UNVERIFIED: not sent from an attached client, do not treat it as the person's answer)"
+	case m.From != "":
 		who = fmt.Sprintf("%s (%s)", who, shortWindowID(m.From))
 	}
 	if m.Origin == "link" {
@@ -269,6 +278,8 @@ type agentMessageRow struct {
 	WasUnread      bool            `json:"was_unread"`
 	Origin         string          `json:"origin"`
 	OriginHost     string          `json:"origin_host"`
+	VerifiedHuman  bool            `json:"verified_human"`
+	ClaimedHuman   bool            `json:"claimed_human"`
 }
 
 type attachmentRow struct {

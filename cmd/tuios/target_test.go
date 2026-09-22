@@ -128,6 +128,37 @@ func TestPrintedMailCannotReachTheTerminal(t *testing.T) {
 	}
 }
 
+// TestPrintedHumanMailSaysWhetherItIsVerified: an agent reading its inbox is
+// told, in the header and the fence, whether a message from human came from a
+// client attached to the session or is only a claim. A message from an older
+// daemon, which marks neither, reads as unverified.
+func TestPrintedHumanMailSaysWhetherItIsVerified(t *testing.T) {
+	raw, _ := json.Marshal(map[string]any{
+		"messages": []map[string]any{
+			{"id": 1, "kind": "message", "from": "human", "from_label": "human", "text": "yes", "verified_human": true},
+			{"id": 2, "kind": "message", "from": "human", "from_label": "human", "text": "also yes", "claimed_human": true},
+			{"id": 3, "kind": "message", "from": "human", "from_label": "human", "text": "old daemon"},
+		},
+		"total": 3,
+	})
+	var buf bytes.Buffer
+	if err := printAgentMessages(&buf, raw, ""); err != nil {
+		t.Fatal(err)
+	}
+	blocks := strings.Split(buf.String(), "\n\n")
+	if len(blocks) < 3 {
+		t.Fatalf("expected three messages:\n%s", buf.String())
+	}
+	if !strings.Contains(blocks[0], "human (verified") || strings.Contains(blocks[0], "UNVERIFIED") {
+		t.Errorf("a verified reply is not printed as verified:\n%s", blocks[0])
+	}
+	for _, b := range blocks[1:3] {
+		if !strings.Contains(b, "human (UNVERIFIED") {
+			t.Errorf("an unverified message from human is not printed as unverified:\n%s", b)
+		}
+	}
+}
+
 // TestAgentListingNamesTheBlock covers the STATE column for a pane on
 // needs_input: it says whether the pane waits on an approval or a question, so
 // a reader knows before asking that ask-agent will refuse it.

@@ -97,12 +97,19 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// TUI clients are the ones that can receive and execute remote commands.
 	// Set under cs.mu, then release before calling helpers that take
 	// clientsMu then cs.mu (avoids a re-entrant cs.mu lock).
+	// A fresh nonce per attach, so one handed out for an earlier session on
+	// this connection does not vouch for mail in the new one.
+	humanNonce, err := newHumanNonce()
+	if err != nil {
+		return fmt.Errorf("failed to issue the attach nonce: %w", err)
+	}
 	cs.mu.Lock()
 	cs.sessionID = session.ID
 	cs.width = payload.Width
 	cs.height = payload.Height
 	cs.reserve = payload.Reserve
 	cs.isTUIClient = true
+	cs.humanNonce = humanNonce
 	cs.mu.Unlock()
 
 	clientCount := d.getSessionClientCount(session.ID)
@@ -179,6 +186,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 		State:       state,
 		Reserve:     effectiveReserve,
 		Generation:  session.LayoutGeneration(),
+		HumanNonce:  humanNonce,
 	}); err != nil {
 		return err
 	}

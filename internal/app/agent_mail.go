@@ -143,6 +143,11 @@ func agentMailOriginHost(m session.AgentMessage) string {
 // origin is in the name itself and not only in a mark beside it.
 func agentMailSender(m session.AgentMessage) string {
 	name := agentMailName(m.From, m.FromLabel, false)
+	// Something said it was the person and the daemon could not match it to
+	// an attached client, so it is not drawn as the person's own reply.
+	if m.From == session.AgentInboxHuman && m.ClaimedHuman {
+		name += " (unverified)"
+	}
 	if agentMailFromLink(m) {
 		return name + " @ " + agentMailOriginHost(m)
 	}
@@ -721,34 +726,45 @@ func (m *OS) AgentMailSendReply() tea.Cmd {
 	}
 	st.Sending = true
 	st.Error = ""
-	return agentMailSendCmd(m.agentMailDialer(), m.AttachedHost != "", name, inbox, replyTo, text)
+	return agentMailSendCmd(m.agentMailDialer(), m.AttachedHost != "", name, inbox, replyTo, text, m.DaemonClient.HumanNonce())
 }
 
 // agentMailSendCmd is the send-agent-message call a reply makes. remote says
 // the ring is on another machine, in which case the reply signs with this
-// machine's name, as any sender over a link does.
-func agentMailSendCmd(dial agentMailDial, remote bool, sessionName, inbox string, replyTo uint64, text string) tea.Cmd {
+// machine's name, as any sender over a link does. nonce is the one the daemon
+// issued in this client's attach reply, and it is what makes the daemon store
+// the reply as verified_human rather than as a claim. It is sent only when
+// there is one, since a daemon that issues none also refuses the parameter.
+func agentMailSendCmd(dial agentMailDial, remote bool, sessionName, inbox string, replyTo uint64, text, nonce string) tea.Cmd {
 	return func() tea.Msg {
 		client, err := dial()
 		if err != nil {
 			return AgentMailSentMsg{Err: err}
 		}
 		defer func() { _ = client.Close() }()
-		params := map[string]any{
-			"session":  sessionName,
-			"text":     text,
-			"reply_to": replyTo,
-			"from":     session.AgentInboxHuman,
-		}
-		if remote {
-			params["from_host"] = thisMachineName()
-		}
-		if inbox != "" {
-			params["to"] = inbox
-		}
-		_, err = client.Call("send-agent-message", params)
+		_, err = client.Call("send-agent-message", agentMailReplyParams(remote, sessionName, inbox, replyTo, text, nonce))
 		return AgentMailSentMsg{Err: err}
 	}
+}
+
+// agentMailReplyParams is the send-agent-message request a reply makes.
+func agentMailReplyParams(remote bool, sessionName, inbox string, replyTo uint64, text, nonce string) map[string]any {
+	params := map[string]any{
+		"session":  sessionName,
+		"text":     text,
+		"reply_to": replyTo,
+		"from":     session.AgentInboxHuman,
+	}
+	if remote {
+		params["from_host"] = thisMachineName()
+	}
+	if nonce != "" {
+		params["human_nonce"] = nonce
+	}
+	if inbox != "" {
+		params["to"] = inbox
+	}
+	return params
 }
 
 // applyAgentMailSent closes the reply line on success and says what happened

@@ -51,6 +51,11 @@ type TUIClient struct {
 
 	sessionID   string
 	sessionName string
+	// humanNonce is the secret the daemon issued in the last attach reply. The
+	// mail overlay sends it with a reply from the person, so the daemon can
+	// store the reply as verified_human. Empty before an attach and after one
+	// to a daemon that issues none.
+	humanNonce atomic.Pointer[string]
 
 	// Cached session listing from the daemon, including each session's window
 	// summaries once fetched. Seeded name-only from the welcome message and kept
@@ -354,6 +359,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		}
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
+		c.humanNonce.Store(&payload.HumanNonce)
 		c.NoteSession(payload.SessionName)
 		c.noteSessionLayout(payload.Generation, payload.Reserve)
 		return payload.State, nil
@@ -538,6 +544,7 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 		}
 		c.sessionID = payload.SessionID
 		c.sessionName = payload.SessionName
+		c.humanNonce.Store(&payload.HumanNonce)
 		c.NoteSession(payload.SessionName)
 		return payload.State, nil
 
@@ -1362,6 +1369,16 @@ func (c *TUIClient) Close() error {
 // SessionName returns the attached session name.
 func (c *TUIClient) SessionName() string {
 	return c.sessionName
+}
+
+// HumanNonce returns the secret the daemon issued for the current attach, or
+// "" when there is none. Pass it as human_nonce on send-agent-message from
+// human; see AttachedPayload.HumanNonce.
+func (c *TUIClient) HumanNonce() string {
+	if p := c.humanNonce.Load(); p != nil {
+		return *p
+	}
+	return ""
 }
 
 // AvailableSessionNames returns the list of available sessions from the daemon.

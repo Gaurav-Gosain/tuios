@@ -186,6 +186,7 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 		Text        string   `json:"text"`
 		ReplyTo     uint64   `json:"reply_to"`
 		Attachments []string `json:"attachments"`
+		HumanNonce  string   `json:"human_nonce"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -247,6 +248,14 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 			return nil, mapResolveErr(err, sess)
 		}
 		msg.From, msg.FromLabel = id, label
+	}
+
+	// A message from human is verified only when it carries the nonce of a
+	// client attached to this session now; see human_sender.go. The link and
+	// the local socket are checked the same way, each against its own attaches.
+	if msg.From == AgentInboxHuman {
+		msg.VerifiedHuman = d.verifyHumanNonce(p.HumanNonce, sess.ID, viaLink)
+		msg.ClaimedHuman = !msg.VerifiedHuman
 	}
 
 	if p.To != "" {
@@ -360,6 +369,10 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 		// daemon decides it from the connection; the sender cannot.
 		"origin":      stored.Origin,
 		"origin_host": stored.OriginHost,
+		// For a send from human: whether the daemon verified it came from an
+		// attached client, or stored it as a claim.
+		"verified_human": stored.VerifiedHuman,
+		"claimed_human":  stored.ClaimedHuman,
 	}, nil
 }
 

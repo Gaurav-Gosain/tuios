@@ -185,6 +185,16 @@ type AgentMessage struct {
 	// first thing that decides how much of it to believe.
 	Origin     string `json:"origin,omitempty"`
 	OriginHost string `json:"origin_host,omitempty"`
+	// VerifiedHuman and ClaimedHuman say how far a message from human can be
+	// believed, and at most one is set. VerifiedHuman means the send carried
+	// the nonce of a client attached to this session at the time, which is the
+	// mail overlay's reply path. ClaimedHuman means the send said from=human
+	// and carried no such nonce: anything that can open the socket can do that,
+	// so it is a claim. Both are set by the daemon at send time and never taken
+	// from the request. Both false on a message not from human, and on one
+	// stored by an older daemon, which verified nothing.
+	VerifiedHuman bool `json:"verified_human,omitempty"`
+	ClaimedHuman  bool `json:"claimed_human,omitempty"`
 	// Undeliverable is resolved at read time and means the recipient window is
 	// gone. A message is never re-homed onto a new pane that happens to carry
 	// the old one's name, because that pane is a different agent holding

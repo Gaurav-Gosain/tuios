@@ -296,6 +296,36 @@ func TestMailPushIsMappedToItsMessage(t *testing.T) {
 	}
 }
 
+// TestReplyCarriesTheAttachNonce: a reply from the mail overlay signs with the
+// nonce the daemon issued in the attach reply, which is what makes the daemon
+// store it as verified_human rather than as a claim. With no nonce, from an
+// older daemon, the parameter is left out, since such a daemon refuses it.
+func TestReplyCarriesTheAttachNonce(t *testing.T) {
+	params := agentMailReplyParams(false, "main", "cccccccc3333", 5, "take exponential", "abc123")
+	if params["human_nonce"] != "abc123" || params["from"] != session.AgentInboxHuman {
+		t.Errorf("reply params = %v, want from human with human_nonce abc123", params)
+	}
+	params = agentMailReplyParams(false, "main", "cccccccc3333", 5, "take exponential", "")
+	if _, sent := params["human_nonce"]; sent {
+		t.Errorf("a reply with no nonce still sent the parameter: %v", params)
+	}
+}
+
+// TestUnverifiedHumanMailIsNotDrawnAsThePerson: a message from human that the
+// daemon could not match to an attached client is named as unverified, so the
+// person does not read something else's words as their own reply.
+func TestUnverifiedHumanMailIsNotDrawnAsThePerson(t *testing.T) {
+	m := mail(3, session.AgentInboxHuman, "human", "cccccccc3333", "build", "", "approved")
+	m.VerifiedHuman = true
+	if got := agentMailSender(m); got != "you" {
+		t.Errorf("a verified reply is drawn as %q, want you", got)
+	}
+	m.VerifiedHuman, m.ClaimedHuman = false, true
+	if got := agentMailSender(m); got != "you (unverified)" {
+		t.Errorf("a claimed reply is drawn as %q, want you (unverified)", got)
+	}
+}
+
 // TestMailChangesTheRailSignature: the rail's render cache keys on the
 // mailbox, so a count that changed is drawn rather than served from the frame
 // before.

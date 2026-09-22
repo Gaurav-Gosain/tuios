@@ -260,6 +260,11 @@ type connState struct {
 	// on that.
 	attached bool
 
+	// humanNonce is the secret handed to this client in its attach reply, and
+	// replaced on every attach. A mail reply signed with it, from=human, is
+	// stored as verified_human; see verifyHumanNonce. Guarded by mu.
+	humanNonce string
+
 	// Client terminal dimensions (for multi-client size calculation)
 	width  int
 	height int

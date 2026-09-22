@@ -221,6 +221,12 @@ type AttachedPayload struct {
 	// written, so a broadcast still in flight from before it is recognised as
 	// stale. See SessionResizePayload.Generation.
 	Generation uint64 `json:"generation,omitempty"`
+	// HumanNonce is a secret issued for this attach. The client passes it as
+	// human_nonce when it sends mail from=human, and the daemon stores such
+	// mail as verified_human only while the attach it was issued to is live.
+	// Empty from an older daemon, which verifies nothing; a client then sends
+	// no nonce and its mail is stored as claimed_human.
+	HumanNonce string `json:"human_nonce,omitempty"`
 }
 
 // NewPayload requests creation of a new session.

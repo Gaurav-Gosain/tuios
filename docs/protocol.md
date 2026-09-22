@@ -180,6 +180,31 @@ feeds, and the paste delimiters are removed from it so the text cannot end the
 paste early. A pane without bracketed paste still reads each line feed in the
 text as the application decides, which for a shell is one command per line.
 
+**A message from `human` says whether it is verified.** Any caller can send
+`send-agent-message` with `from: "human"`, and such a message used to be stored
+exactly like the person's reply from the mail overlay. Now:
+
+- The attach reply (`AttachedPayload`) carries `human_nonce`, a fresh random
+  secret per attach. It is an additive field, empty from an older daemon.
+- `send-agent-message` takes a new param `human_nonce`. The tuios client sends
+  it with a reply from the mail overlay, and only when it has one, since an
+  older daemon refuses the param.
+- A message from `human` is stored with `verified_human: true` when
+  `human_nonce` matches a client attached to the same session now, over the
+  same kind of connection: a nonce issued to an attach on the link socket
+  verifies only a send on the link socket, and a local one only a local send.
+  Otherwise it is stored with `claimed_human: true`. The send result and
+  `read-agent-messages` both report the two fields, and the mail overlay and
+  `tuios read-agent-messages` show a claimed one as unverified.
+- Over a link, the hub relays the stream without reading it, so no flag in the
+  request can stand for a check the hub made. A client attached through the
+  link got its nonce from this daemon, and its reply verifies against that
+  attach; every other `from: "human"` over the link is claimed.
+
+This is an interim check, not an identity. Every process of the same user can
+attach and so hold a nonce. It separates the person's reply from a plain
+`--from human` call, which is what an agent can do by mistake or be told to do.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
