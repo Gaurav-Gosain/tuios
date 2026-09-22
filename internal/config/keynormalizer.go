@@ -1,10 +1,27 @@
 package config
 
 import (
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
+
+// maxFunctionKey is the highest function key Bubble Tea names (KeyF63). A
+// terminal sends F13 to F24 as ordinary escape sequences, and keys above that
+// under the Kitty keyboard protocol.
+const maxFunctionKey = 63
+
+// isFunctionKeyName reports whether name is f1 to f63, the names Bubble Tea
+// gives the function keys.
+func isFunctionKeyName(name string) bool {
+	digits, ok := strings.CutPrefix(name, "f")
+	if !ok || digits == "" || digits[0] == '0' {
+		return false
+	}
+	n, err := strconv.Atoi(digits)
+	return err == nil && n >= 1 && n <= maxFunctionKey
+}
 
 // isSingleRuneLetter reports whether s is exactly one rune and that rune is a
 // letter. Keys that are a single letter must preserve case (m and M, é and É
@@ -429,10 +446,12 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 		"tab": true, "space": true, "backspace": true, "delete": true,
 		"up": true, "down": true, "left": true, "right": true,
 		"home": true, "end": true, "pgup": true, "pageup": true,
-		"pgdown": true, "pagedown": true,
-		"f1": true, "f2": true, "f3": true, "f4": true,
-		"f5": true, "f6": true, "f7": true, "f8": true,
-		"f9": true, "f10": true, "f11": true, "f12": true,
+		"pgdown": true, "pagedown": true, "insert": true,
+		// Keys Bubble Tea names that most keyboards have but that a terminal
+		// reports only under the Kitty keyboard protocol. They suit a held-key
+		// binding, which needs that protocol anyway.
+		"capslock": true, "scrolllock": true, "numlock": true,
+		"printscreen": true, "pause": true, "menu": true,
 	}
 
 	// If there are modifiers, check if the actual key is valid
@@ -446,7 +465,7 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 	}
 
 	// Check if it's a valid special key
-	if !validSpecialKeys[actualKey] {
+	if !validSpecialKeys[actualKey] && !isFunctionKeyName(actualKey) {
 		return false, "unknown special key: " + actualKey
 	}
 

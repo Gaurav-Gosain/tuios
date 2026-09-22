@@ -107,8 +107,8 @@ func configFileHeader(configPath string) string {
 	sb.WriteString("# WezTerm, foot, Alacritty; not Terminal.app), because nothing else reports\n")
 	sb.WriteString("# that a key was released. Naming a modifier key (leftalt, rightalt, leftctrl,\n")
 	sb.WriteString("# leftsuper) asks the terminal for one more thing on top: every keystroke in\n")
-	sb.WriteString("# the session then arrives as an escape code. Any ordinary key (f13, scroll\n")
-	sb.WriteString("# lock, a spare letter) avoids that. Unbound by default.\n")
+	sb.WriteString("# the session then arrives as an escape code. Any ordinary key (f13 to f63,\n")
+	sb.WriteString("# scrolllock, a spare letter) avoids that. Unbound by default.\n")
 	sb.WriteString("# ============================================================================\n\n")
 
 	sb.WriteString("# ============================================================================\n")
