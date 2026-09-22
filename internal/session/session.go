@@ -574,7 +574,7 @@ type PTY struct {
 	width      int
 	height     int
 
-	// Output buffer for reconnection (ring buffer) - legacy, kept for raw output.
+	// Output ring buffer that drives resubscribe catch-up.
 	// outputSeq is the total number of bytes this PTY has ever produced, so the
 	// buffer holds the stream's last outputPos bytes ending at outputSeq. It is
 	// what lets a resubscribing client be resumed where it left off instead of

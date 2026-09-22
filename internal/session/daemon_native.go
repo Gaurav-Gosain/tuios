@@ -337,7 +337,7 @@ func (d *Daemon) sendKeysDaemonSide(sess *Session, target, keys string, literal,
 }
 
 // buildWindowListData builds the window-list result map from session state. It
-// is shared by handleQueryWindows and the headless ListWindows verb.
+// is shared by the list-windows JSON verb and the headless ListWindows command.
 func buildWindowListData(state *SessionState) map[string]any {
 	windows := make([]map[string]any, 0, len(state.Windows))
 	for i := range state.Windows {
@@ -420,7 +420,8 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 }
 
 // buildSessionInfoData builds the session-info result map from session state.
-// It is shared by handleQuerySession and the headless GetSessionInfo verb.
+// It is shared by the session-info JSON verb and the headless GetSessionInfo
+// command.
 func buildSessionInfoData(sess *Session, state *SessionState, hasClient bool) map[string]any {
 	tilingMode := "floating"
 	if state.AutoTiling {

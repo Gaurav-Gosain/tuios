@@ -9,7 +9,9 @@ import (
 	"syscall"
 )
 
-// handleSignals handles Unix signals for daemon shutdown and reload.
+// handleSignals handles Unix signals for daemon shutdown. SIGHUP is caught so
+// it does not kill the daemon, and otherwise ignored: config changes are
+// picked up by the file watcher.
 func (d *Daemon) handleSignals() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
@@ -23,7 +25,7 @@ func (d *Daemon) handleSignals() {
 				d.cancel()
 				return
 			case syscall.SIGHUP:
-				LogBasic("Received SIGHUP, reloading configuration...")
+				LogBasic("Received SIGHUP, ignoring it: config changes are picked up from the file watcher")
 			}
 		case <-d.ctx.Done():
 			return

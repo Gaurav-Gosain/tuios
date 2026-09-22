@@ -45,11 +45,11 @@ const (
 	MsgAttached      // Successfully attached to session
 	MsgDetached      // Confirm detach
 	MsgSessionList   // List of sessions
-	MsgOutput        // Terminal output bytes
+	MsgOutput        // Reserved: never sent
 	MsgError         // Error message
 	MsgPong          // Reserved: response to MsgPing
 	MsgSessionEnded  // Session terminated
-	MsgWindowChanged // Window size changed (from other client)
+	MsgWindowChanged // Reserved: never sent
 	MsgPTYList       // Reserved: response to MsgListPTYs
 	MsgPTYCreated    // New PTY created
 	MsgPTYClosed     // PTY closed
