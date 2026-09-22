@@ -26,10 +26,10 @@ import (
 // through a prefix chord.
 func (d *ActionDispatcher) registerPrefixHandlers() {
 	// Main prefix (leader, ...)
-	d.Register("prefix_new_window", handlePrefixNewWindow)
+	d.Register("prefix_new_window", handleNewWindow)
 	d.Register("prefix_close_window", handlePrefixCloseWindow)
 	d.Register("prefix_rename_window", handlePrefixRenameWindow)
-	d.Register("prefix_settings", handlePrefixSettings)
+	d.Register("prefix_settings", handleOpenSettings)
 	d.Register("prefix_keybinds", handlePrefixKeybinds)
 	d.Register("prefix_next_window", handlePrefixNextWindow)
 	d.Register("prefix_prev_window", handlePrefixPrevWindow)
@@ -38,15 +38,15 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	}
 	d.Register("prefix_toggle_tiling", handlePrefixToggleTiling)
 	d.Register("prefix_fullscreen", handlePrefixFullscreen)
-	d.Register("prefix_split_horizontal", handlePrefixSplitHorizontal)
-	d.Register("prefix_split_vertical", handlePrefixSplitVertical)
-	d.Register("prefix_rotate_split", handlePrefixRotateSplit)
-	d.Register("prefix_equalize_splits", handlePrefixEqualizeSplits)
+	d.Register("prefix_split_horizontal", handleSplitHorizontal)
+	d.Register("prefix_split_vertical", handleSplitVertical)
+	d.Register("prefix_rotate_split", handleRotateSplit)
+	d.Register("prefix_equalize_splits", handleEqualizeSplits)
 	d.Register("prefix_selection", handlePrefixSelection)
 	d.Register("prefix_scrollback", handlePrefixScrollback)
 	d.Register("prefix_screenshot", handlePrefixScreenshot)
 	d.Register("prefix_help", handlePrefixHelp)
-	d.Register("prefix_command_palette", handlePrefixCommandPalette)
+	d.Register("prefix_command_palette", handleOpenCommandPalette)
 	d.Register("prefix_toggle_sidebar", handlePrefixToggleSidebar)
 	d.Register("prefix_session_switcher", handlePrefixSessionSwitcher)
 	d.Register("prefix_workspace_switcher", handlePrefixWorkspaceSwitcher)
@@ -68,7 +68,7 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_layout", makeSubPrefixHandler(func(o *app.OS) { o.LayoutPrefixActive = true }))
 
 	// Window prefix (leader, t, ...)
-	d.Register("window_prefix_new", handlePrefixNewWindow)
+	d.Register("window_prefix_new", handleNewWindow)
 	d.Register("window_prefix_close", handlePrefixCloseWindow)
 	d.Register("window_prefix_rename", handleWindowPrefixRename)
 	d.Register("window_prefix_next", handlePrefixNextWindow)
@@ -183,11 +183,6 @@ func handlePrefixCancel(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handlePrefixNewWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.NewWindowHere()
-	return o, nil
-}
-
 func handlePrefixCloseWindow(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if len(o.Windows) == 0 || o.FocusedWindow < 0 {
 		return o, nil
@@ -259,11 +254,6 @@ func handleWorkspacePillSwitch(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) 
 	return o, nil
 }
 
-func handlePrefixSettings(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	o.OpenSettings()
-	return o, nil
-}
-
 func handlePrefixKeybinds(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.OpenKeybindManager()
 	return o, nil
@@ -330,38 +320,6 @@ func handlePrefixFullscreen(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
-func handlePrefixSplitHorizontal(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.AutoTiling {
-		o.SplitFocusedHorizontal()
-		o.ShowNotification("Split horizontal", "info", o.Settings.NotificationDuration)
-	}
-	return o, nil
-}
-
-func handlePrefixSplitVertical(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.AutoTiling {
-		o.SplitFocusedVertical()
-		o.ShowNotification("Split vertical", "info", o.Settings.NotificationDuration)
-	}
-	return o, nil
-}
-
-func handlePrefixRotateSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.AutoTiling {
-		o.RotateFocusedSplit()
-		o.ShowNotification("Split rotated", "info", o.Settings.NotificationDuration)
-	}
-	return o, nil
-}
-
-func handlePrefixEqualizeSplits(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	if o.AutoTiling {
-		o.EqualizeSplits()
-		o.ShowNotification("Splits equalized", "info", o.Settings.NotificationDuration)
-	}
-	return o, nil
-}
-
 func handlePrefixSelection(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if focused := o.GetFocusedWindow(); focused != nil {
 		focused.EnterCopyMode()
@@ -387,10 +345,6 @@ func handlePrefixScreenshot(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handlePrefixHelp(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	o.ShowHelp = !o.ShowHelp
 	return o, nil
-}
-
-func handlePrefixCommandPalette(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return o, o.OpenCommandPalette()
 }
 
 func handlePrefixToggleSidebar(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
