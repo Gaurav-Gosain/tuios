@@ -864,6 +864,11 @@ rounds a side, compared with `benchstat`. CPU time still includes the process
 start and the benchmark setup, which dilutes a change towards zero but never
 inflates it. Allocation counts are exact.
 
+The noise floor is the base binary against a copy of itself under the same
+alternation: every one of the fifteen benchmarks reads `~` (p=0.37 to 1.00),
+geomean -1.0%, with intervals of +/-4% to +/-43%. A figure is quoted below
+only where the change clears that with p < 0.05.
+
 ### What moved
 
 **CSI parameter bytes skip the transition table** (`parser.go`). Every byte of
@@ -878,4 +883,21 @@ and dispatch for every byte.
 | CPU per op | before | after | |
 |---|---|---|---|
 | `BackendDoomFire158x40` | 99.4 ms | 82.0 ms | -17.5% (p=0.002) |
+| every other vt benchmark | | | `~` |
+
+**A plain letter enters the scrollback as its byte** (`scrollback.go`).
+`encodeLine` ran `packStyle` and a two-string link compare on every cell of a
+line leaving the screen, about 20 ns a cell, to find out nothing had changed.
+While no style or link is in force, a narrow unstyled ASCII cell now appends its
+byte directly, which is exactly what the full path writes for it.
+`TestEncodeLinePlainShortcutWritesTheSameBytes` compares the output against the
+full path on random mixed lines.
+
+| CPU per op | before | after | |
+|---|---|---|---|
+| `EmulatorScrollThroughput/with-scrollback` | 3.45 us | 2.78 us | -19.6% (p=0.004) |
+| `Emulator_PlainTextWrite` | 21.4 us | 17.1 us | -20.0% (p=0.002) |
+| `PrintASCII` | 915 us | 700 us | -23.5% (p=0.002) |
+| `BackendScroll` | 100.8 ms | 86.7 ms | -14.1% (p=0.037) |
+| `EmulatorWriteHeavyOutput/colored-log` | 61.7 us | 56.7 us | -8.1% (p=0.026) |
 | every other vt benchmark | | | `~` |

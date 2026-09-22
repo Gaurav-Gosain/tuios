@@ -229,6 +229,16 @@ func isBlankCell(c *uv.Cell) bool {
 		c.Link.URL == "" && c.Link.Params == ""
 }
 
+// isPlainASCIICell reports whether c is one narrow ASCII character with no
+// style and no link: a cell whose encoding, with no style or link in force, is
+// its one content byte.
+func isPlainASCIICell(c *uv.Cell) bool {
+	return c.Width == 1 && len(c.Content) == 1 && c.Content[0] < utf8.RuneSelf &&
+		c.Style.Fg == nil && c.Style.Bg == nil && c.Style.UnderlineColor == nil &&
+		c.Style.Attrs == 0 && c.Style.Underline == 0 &&
+		c.Link.URL == "" && c.Link.Params == ""
+}
+
 // encodeLine appends the encoding of cells, a line of the given width whose
 // blank tail has been trimmed, to buf.
 func (sb *Scrollback) encodeLine(buf []byte, cells uv.Line, width int) []byte {
@@ -237,6 +247,13 @@ func (sb *Scrollback) encodeLine(buf []byte, cells uv.Line, width int) []byte {
 	var link uv.Link
 	for i := range cells {
 		c := &cells[i]
+		if style == (packedStyle{}) && link == (uv.Link{}) && isPlainASCIICell(c) {
+			// A plain letter while no style or link is in force: the path
+			// below would write no style, link or width token and then this
+			// one byte, so write the byte. Most of a log line is this.
+			buf = append(buf, c.Content[0])
+			continue
+		}
 		if st := sb.packStyle(&c.Style); st != style {
 			style = st
 			buf = append(buf, sbStyle)

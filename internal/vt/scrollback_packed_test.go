@@ -1,6 +1,7 @@
 package vt
 
 import (
+	"bytes"
 	"encoding/binary"
 	"image/color"
 	"math/rand"
@@ -260,6 +261,68 @@ func TestScrollbackRoundTripsRandomLines(t *testing.T) {
 				}
 			}
 			t.Fatalf("line %d: got %d cells, want %d", i, len(got), len(pushed[i]))
+		}
+	}
+}
+
+// encodeLineReference is encodeLine without its plain-ASCII shortcut: every
+// cell goes through the style, link, width and content tokens.
+func (sb *Scrollback) encodeLineReference(buf []byte, cells uv.Line, width int) []byte {
+	buf = binary.AppendUvarint(buf, uint64(width))
+	var style packedStyle
+	var link uv.Link
+	for i := range cells {
+		c := &cells[i]
+		if st := sb.packStyle(&c.Style); st != style {
+			style = st
+			buf = append(buf, sbStyle)
+			buf = binary.AppendUvarint(buf, uint64(st.fg))
+			buf = binary.AppendUvarint(buf, uint64(st.bg))
+			buf = binary.AppendUvarint(buf, uint64(st.ul))
+			buf = append(buf, st.attrs, st.underline)
+		}
+		if c.Link != link {
+			link = c.Link
+			buf = append(buf, sbLink)
+			buf = binary.AppendUvarint(buf, uint64(sb.packLink(link)))
+		}
+		if c.Width != 1 {
+			buf = append(buf, sbCell, uint8(max(0, min(c.Width, 255))))
+		}
+		buf = sb.appendContent(buf, c.Content)
+	}
+	return buf
+}
+
+// TestEncodeLinePlainShortcutWritesTheSameBytes holds encodeLine's shortcut for
+// plain ASCII cells to the bytes the full path writes, on lines that mix plain
+// runs with styled, linked, wide and non-ASCII cells in every order.
+func TestEncodeLinePlainShortcutWritesTheSameBytes(t *testing.T) {
+	rng := rand.New(rand.NewSource(2))
+	styles := []uv.Style{{}, {Fg: ansi.BasicColor(1)}, {Bg: ansi.TrueColor(0x123456)},
+		{Attrs: 1}, {Underline: 1}, {UnderlineColor: ansi.IndexedColor(7)}}
+	links := []uv.Link{{}, {URL: "https://a.test"}, {Params: "id=1"}}
+	contents := []string{"a", "b", " ", "~", "\x00", "\x7f", "é", "漢", "", "ab", "\xff"}
+	sb := NewScrollback(16)
+	for round := range 2000 {
+		line := make(uv.Line, rng.Intn(40))
+		for x := range line {
+			c := uv.Cell{Content: contents[rng.Intn(len(contents))], Width: 1}
+			if rng.Intn(4) == 0 {
+				c.Width = rng.Intn(3)
+			}
+			if rng.Intn(3) == 0 {
+				c.Style = styles[rng.Intn(len(styles))]
+			}
+			if rng.Intn(5) == 0 {
+				c.Link = links[rng.Intn(len(links))]
+			}
+			line[x] = c
+		}
+		got := sb.encodeLine(nil, line, len(line))
+		want := sb.encodeLineReference(nil, line, len(line))
+		if !bytes.Equal(got, want) {
+			t.Fatalf("round %d: line %#v\n got  %x\n want %x", round, line, got, want)
 		}
 	}
 }
