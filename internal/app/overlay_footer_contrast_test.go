@@ -69,8 +69,8 @@ func inkBefore(t *testing.T, frame, needle string) (fg, bg color.Color) {
 //
 // Every panel's footer said what its keys do in FgMute, the token for
 // separators and disabled things, picked to disappear against the canvas. On
-// the panel's lighter Surface it measured 1.81:1 - below every threshold there
-// is - so "move / run / close" were barely on the screen at all.
+// the panel's lighter Surface it measured 1.81:1, below every threshold there
+// is, so "move / run / close" were barely on the screen at all.
 //
 // The measurement is taken off the composed frame, so a renderer that goes back
 // to a furniture token, or a palette that darkens the label, fails here.

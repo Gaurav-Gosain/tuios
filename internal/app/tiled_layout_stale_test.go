@@ -45,9 +45,9 @@ func nPaneTiledOS(t testing.TB, n, w, h int) *OS {
 // stale would retile on every state sync a peer sends, which is churn traded
 // for churn.
 //
-// Every setting that changes how much of the box the panes cover is here - a
+// Every setting that changes how much of the box the panes cover is here (a
 // gap between panes, shared borders, both, and a sidebar taking columns off the
-// side - because the check is an equality against the box's edges and each of
+// side), because the check is an equality against the box's edges and each of
 // these moves one.
 //
 // NEGATIVE CONTROL: none, deliberately. tiledLayoutStale did not exist before,

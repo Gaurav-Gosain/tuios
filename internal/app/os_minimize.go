@@ -185,8 +185,8 @@ func (m *OS) toggleZoom() {
 		// pane left the first one flagged and still holding the whole box,
 		// invisible until the focus came back to it and the layout was wrong
 		// when it did. Shared, that ambiguity is a divergence rather than a
-		// latent mess - each client picks a pane to blow up and they need not
-		// pick the same one - so the previous zoom is retired here.
+		// latent mess (each client picks a pane to blow up and they need not
+		// pick the same one), so the previous zoom is retired here.
 		retireRetile := m.zoomPane(fw)
 		if retireRetile {
 			// A pane the retirement above handed back to the layout. Retiling
@@ -209,7 +209,7 @@ func (m *OS) toggleZoom() {
 // travel in the same broadcast but a client applies them a step apart, a client
 // whose focused id is not in its window list holds -1, and a peer can be sitting
 // in its sidebar. Every reader that asked the focused window read those moments
-// as "nothing is zoomed" - which retiles the zoom away and drags every other
+// as "nothing is zoomed", which retiles the zoom away and drags every other
 // client's shell back to its tile with it.
 func (m *OS) zoomedWindow() *terminal.Window {
 	for _, w := range m.Windows {
@@ -279,7 +279,7 @@ func (m *OS) applyZoomRect(w *terminal.Window, deferring bool) {
 // whole region in motion whenever anything at all changed.
 func (m *OS) applyZoomRectAnimated(w *terminal.Window, deferring, animate bool) {
 	// A snap still in flight owns this pane's rectangle and stamps its own back
-	// on the next tick, so it is retired before the box is set - the same thing
+	// on the next tick, so it is retired before the box is set. It is the same thing
 	// toggleZoom does before it zooms, and the same thing ApplyBSPLayout does
 	// before it places a pane. Retired even when the box already matches: the
 	// snap is heading somewhere else regardless.
@@ -311,8 +311,8 @@ func (m *OS) zoomPane(w *terminal.Window) bool {
 	// pane left the first one flagged and still holding the whole box,
 	// invisible until the focus came back to it and the layout was wrong
 	// when it did. Shared, that ambiguity is a divergence rather than a
-	// latent mess - each client picks a pane to blow up and they need not
-	// pick the same one - so the previous zoom is retired here.
+	// latent mess (each client picks a pane to blow up and they need not
+	// pick the same one), so the previous zoom is retired here.
 	retireRetile := m.retireOtherZooms(w)
 
 	// Save current position and zoom to fullscreen
@@ -585,8 +585,8 @@ func (m *OS) retireOtherZooms(keep *terminal.Window) bool {
 //
 // Under a tiling layout the pre-zoom rectangle is not the answer. It is a record
 // of where the pane sat at the moment it was zoomed, and the box has had every
-// chance to move since - a client resized, a peer joined narrower, the reserve
-// was renegotiated - so restoring it puts the pane at a size the layout does not
+// chance to move since (a client resized, a peer joined narrower, the reserve
+// was renegotiated), so restoring it puts the pane at a size the layout does not
 // agree with and the shell at a width no client is drawing. The layout knows
 // where the pane goes; the caller is told to ask it.
 //

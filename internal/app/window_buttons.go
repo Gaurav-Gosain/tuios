@@ -286,7 +286,7 @@ var (
 // windowDotMinContrast is the floor a dot has to clear against the ground it is
 // drawn on: WCAG 2.1 SC 1.4.11, which asks 3:1 of a control that carries its
 // meaning as a shape rather than as text. It is below theme.ContrastFloor for
-// the same reason the scrollbar's is - nothing here has to be read - and above
+// the same reason the scrollbar's is (nothing here has to be read), and above
 // the scrollbar's, because these are targets to hit and not a readout.
 const windowDotMinContrast = 3.0
 

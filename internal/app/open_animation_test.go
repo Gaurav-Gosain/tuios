@@ -191,7 +191,7 @@ func TestRepeatCreationSyncLeavesAPlacedPaneAlone(t *testing.T) {
 	// already knows, but the newest one still carrying the flag AND the nominal
 	// full-size box that goes with it, because the client's answer has not
 	// reached the daemon yet. Rebuilding the state from the client and only
-	// flipping the flag is not the same test - it hands the echo the client's own
+	// flipping the flag is not the same test: it hands the echo the client's own
 	// correct geometry, so a client that wrongly adopts it looks fine.
 	replay := h.m.BuildSessionState()
 	replay.Version = h.state.Version + 1

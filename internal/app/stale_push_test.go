@@ -99,7 +99,7 @@ func guestGridsMatchTheDaemon(t *testing.T, r *rig, m *OS) {
 // have been split for it stays at its full width on somebody's screen.
 //
 // NEGATIVE CONTROL: measured. Taking the daemonWindowIntent guard out of
-// SyncStateToDaemon - the one thing that declines the pre-mutation snapshot -
+// SyncStateToDaemon (the one thing that declines the pre-mutation snapshot)
 // fails it on the overlap, with the pane that was split still holding the whole
 // box and the new pane inside it.
 func TestOpeningAPaneDoesNotPushTheOldLayout(t *testing.T) {

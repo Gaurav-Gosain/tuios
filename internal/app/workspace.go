@@ -47,7 +47,7 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	// something retiles the workspace, which may be never.
 	//
 	// Land each one where it was already heading. The old code recomputed a
-	// master-stack layout instead - the wrong rectangles under BSP or scrolling -
+	// master-stack layout instead (the wrong rectangles under BSP or scrolling)
 	// and stamped Width and Height straight onto the window, so the emulator and
 	// the guest kept the size the pane had before the switch and only heard the
 	// real one on some later, unrelated action.

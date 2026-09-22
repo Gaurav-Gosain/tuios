@@ -26,7 +26,7 @@ func (m *OS) CaptureKeyEvent(msg tea.KeyPressMsg) {
 	if key.Mod&tea.ModAlt != 0 {
 		modifiers = append(modifiers, "Alt")
 	}
-	// Skip Shift modifier for single letter keys - it's implied by uppercase
+	// Skip Shift modifier for single letter keys: it's implied by uppercase.
 	// We only show Shift for non-letter keys (like Shift+Space, Shift+Tab, etc.)
 	if key.Mod&tea.ModShift != 0 && !isSingleLetter(keyStr) {
 		modifiers = append(modifiers, "Shift")
@@ -126,7 +126,7 @@ func formatKeyDisplay(keyStr string, modifiers []string) string {
 		if special, ok := specialKeys[keyStr]; ok {
 			displayKey = special
 		} else if len(keyStr) == 1 {
-			// Single character key - preserve case
+			// Single character key: preserve case
 			displayKey = keyStr
 		}
 	}
@@ -189,7 +189,7 @@ func renderShowkeysFrom(recentKeys []KeyEvent, s *config.Settings) string {
 	leaderKeyBgColor := lipgloss.Color("#00d9ff")
 	leaderKeyPillColor := lipgloss.Color("#00d9ff")
 
-	// Style for individual key pills - background with text
+	// Style for individual key pills: background with text
 	keyPillStyle := lipgloss.NewStyle().
 		Background(keyBgColor).
 		Foreground(lipgloss.Color("#ffffff")).

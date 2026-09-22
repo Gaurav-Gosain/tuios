@@ -961,8 +961,8 @@ func (m *OS) ScreenshotFocusedWindow() tea.Cmd { return m.ScreenshotWindow(m.Foc
 // captures inside one second share it; keying the upload on the name meant the
 // second capture was drawn from the first capture's pixels, which is the "it
 // shows the previous screenshot" report. A content hash would answer the same
-// question, but it answers a different one as well -- two captures of an
-// unchanged screen are one picture to a hash and two captures to the user --
+// question, but it answers a different one as well (two captures of an
+// unchanged screen are one picture to a hash and two captures to the user),
 // and it costs a hash of a whole PNG on the Update goroutine. The serial is
 // exact, free, and cannot collide.
 type screenshotPlacementState struct {

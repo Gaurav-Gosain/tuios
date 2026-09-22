@@ -81,8 +81,8 @@ func (m *OS) SwapWindowsWithOriginal(draggedIndex, targetIndex int, origX, origY
 		m.FocusedWindow = draggedIndex
 	}
 
-	// Now create animations - note: after slice swap, indices are swapped
-	// draggedWindow is now at targetIndex, targetWindow is now at draggedIndex
+	// Now create animations. After the slice swap the indices are swapped:
+	// draggedWindow is now at targetIndex, targetWindow is now at draggedIndex.
 
 	// Dragged window goes to target's original position (with animation)
 	anim1 := ui.NewSnapAnimation(

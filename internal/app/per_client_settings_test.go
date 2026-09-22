@@ -37,7 +37,7 @@ func boxTopLeft(t *testing.T, m *OS, win *terminal.Window) string {
 //
 // Negative control, confirmed red: point setConfigFromRegistry back at
 // &config.Global and make Settings.GetBorderForStyle read config.Global's
-// BorderStyle - the old design for this one setting. The frame assertion fails
+// BorderStyle (the old design for this one setting). The frame assertion fails
 // with "the other session's pane is drawing Bob's border: corner \"╔\", was
 // \"╭\"", which is the bug as it was reported.
 func TestOneClientsSettingsStopAtThatClient(t *testing.T) {
@@ -101,7 +101,7 @@ func TestOneClientsSettingsStopAtThatClient(t *testing.T) {
 // inherits the first client's taste.
 //
 // Negative control, confirmed red: point setConfigFromRegistry back at
-// &config.Global. Three assertions fail, the last naming the symptom - the
+// &config.Global. Three assertions fail, the last naming the symptom: the
 // next connection opens on the previous client's zen mode.
 func TestTheProcessSeedIsNotWrittenByASession(t *testing.T) {
 	seed := config.Global

@@ -284,7 +284,7 @@ func (m *OS) getWindowInfo(w *terminal.Window, isFocused bool) map[string]any {
 		info["scrollback_lines"] = w.Terminal.ScrollbackLen()
 	}
 
-	// Get process info (Unix only - will be 0 on Windows)
+	// Get process info (Unix only, will be 0 on Windows)
 	if w.Cmd != nil && w.Cmd.Process != nil {
 		info["shell_pid"] = w.Cmd.Process.Pid
 	}
@@ -346,7 +346,7 @@ func (m *OS) GetSessionInfoData() map[string]any {
 		tilingMode = "tiling"
 	}
 
-	// Get dockbar position - it's stored as a string in config
+	// Get dockbar position. It's stored as a string in config
 	dockbarPosition := m.Settings.DockbarPosition
 	if dockbarPosition == "" {
 		dockbarPosition = "bottom"
@@ -1197,7 +1197,7 @@ func (m *OS) executeTapeScript(script string, requestID string) (tea.Cmd, error)
 	m.ScriptMode = true
 	m.ScriptPaused = false
 	m.ScriptFinishedTime = time.Time{}
-	// Note: We don't use ScriptPlayer for remote exec - we track progress via message fields
+	// Note: We don't use ScriptPlayer for remote exec. We track progress via message fields
 
 	// Start processing the first command
 	totalCmds := len(commands)
@@ -1219,7 +1219,7 @@ func (m *OS) executeTapeScript(script string, requestID string) (tea.Cmd, error)
 }
 
 // parseKeysToMessagesRaw parses a key sequence treating each character as a separate key.
-// No splitting on spaces or commas - useful for typing literal text with spaces.
+// No splitting on spaces or commas, which is useful for typing literal text with spaces.
 func (m *OS) parseKeysToMessagesRaw(keys string) []tea.KeyPressMsg {
 	var msgs []tea.KeyPressMsg
 	for _, char := range keys {

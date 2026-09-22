@@ -63,7 +63,7 @@ func (m *OS) tileAllWindows() {
 	// they are on.
 	deferring := m.resizeDeferralActive()
 
-	// A popup is floating, so every branch below skips it - but skipping is not
+	// A popup is floating, so every branch below skips it, but skipping is not
 	// the whole answer, for the reason it is not the whole answer for a zoomed
 	// pane: the popup box is this client's own and it moves whenever the box the
 	// panes go in moves. A retile is exactly when that has happened, and every
@@ -85,7 +85,7 @@ func (m *OS) tileAllWindows() {
 		// still feeds CollectSplits and paints stale separators over the splash
 		// after the last pane closes. The local close path nils the tree when it
 		// empties (DeleteWindow); the daemon close path arrives through here
-		// instead, where the early return used to skip the cleanup, so clear the
+		// instead, and the early return skips that cleanup, so clear the
 		// current workspace's tree to keep the two paths in step.
 		if m.WorkspaceTrees != nil {
 			m.WorkspaceTrees[m.CurrentWorkspace] = nil
@@ -107,7 +107,7 @@ func (m *OS) tileAllWindows() {
 	}
 
 	// A zoomed pane is not tiled, and the three branches below all skip its
-	// rectangle - but skipping is not the whole answer, because the zoom box is
+	// rectangle, but skipping is not the whole answer, because the zoom box is
 	// this client's own and it moves whenever the box the panes go in moves. A
 	// retile is exactly when that has happened: every resize path ends here.
 	// Left out, a client that resized while a peer held the zoom kept drawing
@@ -123,14 +123,12 @@ func (m *OS) tileAllWindows() {
 	// Scrolling layout mode (niri-like)
 	//
 	// It lays the strip out where the strip already is. It does not reveal the
-	// focused column, which is the one thing this branch used to do that a
-	// retile has no business doing: a retile is not a focus change. The events
-	// that reach here are mostly not even this client's user - a peer
-	// attaching, a routed setting change, a config file reload, a peer opening
-	// its sidebar, any client adding or closing a window on any workspace - and
-	// each of them dragged a strip the user had deliberately scrolled past the
-	// focused column back to it, then pushed that offset to every peer as
-	// session state.
+	// focused column, because a retile is not a focus change. The events that
+	// reach here are mostly not even this client's user (a peer attaching, a
+	// routed setting change, a config file reload, a peer opening its sidebar,
+	// any client adding or closing a window on any workspace). Revealing here
+	// would drag a strip the user had deliberately scrolled past the focused
+	// column back to it, then push that offset to every peer as session state.
 	//
 	// Revealing belongs to the events where the focus or the column set really
 	// changed, and each of those has its own call: ScrollingOnFocusChange,
@@ -283,9 +281,8 @@ func (m *OS) tileAllWindows() {
 		}
 
 		// Drop the stale windows and keep the splits around them. Rebuilding
-		// the whole tree here used to throw the arrangement away whenever a
-		// pane closed while tiling was off, which was every time the toggle
-		// remembered a layout worth keeping.
+		// the whole tree here would throw the arrangement away whenever a pane
+		// closed while tiling was off.
 		if hasStaleWindows {
 			m.LogInfo("BSP: Removing stale windows from the tree")
 			for _, id := range treeIDs {
@@ -319,7 +316,7 @@ func (m *OS) tileAllWindows() {
 		return
 	}
 
-	// Tree exists and is valid - check if all visible windows are in it
+	// Tree exists and is valid. Check if all visible windows are in it
 	allInTree := true
 	for _, win := range visibleWindows {
 		windowIntID := m.GetWindowIntID(win.ID)
@@ -334,7 +331,7 @@ func (m *OS) tileAllWindows() {
 		return
 	}
 
-	// Some windows missing from tree - add them individually
+	// Some windows missing from tree: add them individually
 	m.LogInfo("BSP: Adding missing windows to existing tree")
 
 	for _, win := range visibleWindows {
@@ -363,11 +360,9 @@ func (m *OS) ToggleAutoTiling() {
 //
 // It is the one transition every entry point goes through: the tiling key,
 // the two palette rows, the tape commands, and the set-layout verb behind
-// them. There used to be five copies, each writing the fields it remembered.
-// The tape copy left every pane flagged borderless, so turning tiling off
-// from a tape or the CLI drew panes with no borders and no dividers between
-// them. The palette copy forgot the same flag on other workspaces and left a
-// preselection armed. None of them brought a scrolling strip back on screen.
+// them. One copy means every entry point writes the same fields. Separate
+// copies drift: a path that forgets the borderless flag, for example, draws
+// panes with no borders and no dividers after tiling is turned off.
 func (m *OS) SetAutoTiling(on bool) {
 	m.settleSizes(func() { m.setAutoTiling(on) })
 }
@@ -449,8 +444,8 @@ func (m *OS) leaveTiling() {
 	// strip, they were floating panes at x = -144 that no click could reach.
 	m.bringPanesIntoView()
 	for i := range m.Windows {
-		// Still needed for the panes reclaim does not place - minimized and
-		// floating ones - which keep their rectangle and owe the guest the two
+		// Still needed for the panes reclaim does not place (minimized and
+		// floating ones), which keep their rectangle and owe the guest the two
 		// columns and rows their border has just taken back. A no-op for the
 		// panes reclaim already settled.
 		m.Windows[i].SetTiled(false)
@@ -559,9 +554,8 @@ func (m *OS) RestoreWorkspaceLayout(workspace int) {
 	// client left it at rather than at whatever this one has configured. A
 	// workspace no client has a value for has no entry, and falls back to the
 	// configured ratio rather than to a literal half: with appearance.master_ratio
-	// at 70 the first visit to a workspace used to snap the split back to 50 and
-	// stay there, which reads as the setting being ignored and is the same
-	// surprise for a ratio the resize keys had moved.
+	// at 70, a literal half would snap the split back to 50 on the first visit
+	// to a workspace, which reads as the setting being ignored.
 	if ratio, exists := m.WorkspaceMasterRatio[workspace]; exists {
 		m.MasterRatio = ratio
 	} else {
@@ -570,17 +564,14 @@ func (m *OS) RestoreWorkspaceLayout(workspace int) {
 
 	// The rectangles this client cached the last time it left this workspace.
 	//
-	// Having none is not an answer about whether the workspace is custom. It used
-	// to be read as one, and the flag was cleared here - which was harmless while
-	// the flag was this client's own private memory, because a client only ever
-	// asked about a workspace it had been to. The flag is the session's now (see
-	// SessionState.WorkspaceHasCustom), and a client that has never been to a
-	// workspace caches nothing for it, so clearing the flag here was the whole
-	// bug: the first visit threw away the flag another client had set, retiled the
-	// workspace and pushed the tiler's rectangles over the layout a user had
-	// arranged.
+	// Having none is not an answer about whether the workspace is custom. The
+	// flag is the session's (see SessionState.WorkspaceHasCustom), and a client
+	// that has never been to a workspace caches nothing for it. Clearing the flag
+	// here would make the first visit throw away the flag another client had
+	// set, retile the workspace and push the tiler's rectangles over the layout
+	// a user had arranged.
 	//
-	// Nothing to re-apply is now just that. The panes are already at the session's
+	// Nothing to re-apply means just that. The panes are already at the session's
 	// rectangles, which arrived on the windows themselves, so they are left where
 	// they are and the flag is left as the session set it. The cache fills itself
 	// in on the way out of the workspace, from those same rectangles.

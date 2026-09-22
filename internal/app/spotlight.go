@@ -30,8 +30,8 @@ import (
 // is flat in pane count.
 //
 // What it costs. About 0.3 ms on a nine-pane 207x55 frame, and no allocations
-// at all once the blend cache is warm. The naive spelling - blendColors per
-// cell, boxing the result - allocates about 16,000 times a frame, which is what
+// at all once the blend cache is warm. The naive spelling (blendColors per
+// cell, boxing the result) allocates about 16,000 times a frame, which is what
 // would make the feature a permanent tax rather than a thing you switch on.
 // Two lines are the whole difference: the grounds are held as pre-boxed
 // color.Color values rather than assigned from a color.RGBA per cell, and every
@@ -43,8 +43,8 @@ import (
 // space, and the frame goes from 11 KB to 40 KB.
 //
 // A cell the guest left at the terminal default gets the theme's pair and is
-// dimmed from there. That is most of a real screen - a shell prompt, ls output,
-// a blank pane - and tuios emits no colour for any of it, so a pass that left
+// dimmed from there. That is most of a real screen (a shell prompt, ls output,
+// a blank pane), and tuios emits no colour for any of it, so a pass that left
 // such a cell alone dimmed the syntax highlighting and nothing else. No unit
 // fixture full of explicit SGR can see that; the e2es that read Cell.Fg and
 // Cell.Bg off a real pane are what found both halves of it.
@@ -70,8 +70,8 @@ import (
 // It is client-local, like the showkeys overlay. Nothing crosses the wire and a
 // peer attached to the same session sees its own screen unchanged. The screen
 // saver suspends the pass, the crash overlay never reaches it (View draws that
-// before composeFrame), and everything else in the canvas - popups, pickers,
-// panels - dims with the rest, because they are composed before the pass runs.
+// before composeFrame), and everything else in the canvas (popups, pickers,
+// panels) dims with the rest, because they are composed before the pass runs.
 
 const (
 	// spotlightMinBrightness is the floor on the rim, so the edge of the beam
@@ -98,7 +98,7 @@ const (
 // 1-t, so the setting is a brightness control: the unlit part of the screen is
 // the picture the compositor drew with the light turned down. Hue survives it,
 // a light theme and a dark theme behave the same way, and it is the model
-// tuiffects' own spotlights effect uses - spotlightsDarkBrightness is 0.2, an
+// tuiffects' own spotlights effect uses: spotlightsDarkBrightness is 0.2, an
 // unlit character at a fifth of its brightness.
 //
 // Boxed once at package level. Assigning a color.RGBA into a color.Color per
@@ -142,8 +142,8 @@ type spotlightState struct {
 	// and the settings row, and seeded from [spotlight] enabled at startup.
 	on bool
 	// x, y is where the beam last had an answer, in screen cells. When the
-	// anchor goes quiet - an overlay hides the cursor, or the pointer has not
-	// moved yet - the beam stays here rather than jumping to the middle.
+	// anchor goes quiet (an overlay hides the cursor, or the pointer has not
+	// moved yet), the beam stays here rather than jumping to the middle.
 	x, y     int
 	anchored bool
 
@@ -347,16 +347,14 @@ func spotlightLevel(dx, dy, full, rim float64) uint8 {
 // with. That is the case most of a real screen is in and both halves of it are
 // easy to get wrong.
 //
-// The foreground half was found by an e2e: tuios emits no colour for text the
-// guest left at the terminal default - a shell prompt, ls output, most of
-// everything - so a pass that left those cells alone dimmed the syntax
-// highlighting and nothing else.
+// Foreground: tuios emits no colour for text the guest left at the terminal
+// default (a shell prompt, ls output, most of everything), so a pass that left
+// those cells alone would dim the syntax highlighting and nothing else.
 //
-// The background half is what made the whole feature read as not working. A
-// cell with no background of its own is showing the terminal's ground, and
-// leaving it alone leaves it at full brightness, so the unlit region kept a lit
-// background under dimmed text however far the setting was pushed. It now gets
-// the ground, dimmed like everything else. Both substitutions need a theme,
+// Background: a cell with no background of its own is showing the terminal's
+// ground, and leaving it alone leaves it at full brightness, so the unlit
+// region would keep a lit background under dimmed text however far the
+// setting was pushed. It gets the ground, dimmed like everything else. Both substitutions need a theme,
 // because the theme's own pair is what the host is painting those cells with.
 // With no theme there is no pair to stand in, so such a cell takes SGR 2 on the
 // foreground and keeps whatever ground the host paints.

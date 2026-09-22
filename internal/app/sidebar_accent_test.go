@@ -154,7 +154,7 @@ func TestRenameDialogIsCentred(t *testing.T) {
 
 // TestSidebarSignatureFoldsWhatTheRailDraws is the render-cache guard: the
 // rail is served from a cache keyed by this signature, so any input the rows
-// draw from has to move it or the row goes stale on screen - and anything the
+// draw from has to move it or the row goes stale on screen, and anything the
 // rows do not draw has to stay out, or it rebuilds them for nothing.
 func TestSidebarSignatureFoldsWhatTheRailDraws(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")

@@ -114,7 +114,7 @@ func (m *OS) tilablePanes(workspace int) []*terminal.Window {
 // of the rectangle the guest can draw in: announcing the new size first would
 // tell the guest a box measured against the border it is about to stop drawing.
 // The flag is written directly rather than through SetTiled, which resizes to
-// the rectangle the pane has now - one announcement at a size the pane never
+// the rectangle the pane has now: one announcement at a size the pane never
 // occupied, then a second at the real one. Both are SIGWINCHes and a
 // full-screen guest repaints for each.
 func (m *OS) placePane(win *terminal.Window, x, y, w, h int, borderless bool) {

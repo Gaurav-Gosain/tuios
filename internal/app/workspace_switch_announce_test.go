@@ -11,8 +11,7 @@ import (
 // A workspace switch moves no pane between screens: every pane keeps the tile it
 // already had. So it must send zero SIGWINCH. A guest told its size again
 // repaints its prompt, and the paint it drew before the switch is left stranded
-// above the new one - the stacked prompts and the blank gap between them that a
-// switch used to leave behind.
+// above the new one: stacked prompts with a blank gap between them.
 
 // newSwitchOS builds a client with panes spread over two workspaces, each pane
 // carrying a recorder for the sizes its PTY is told.

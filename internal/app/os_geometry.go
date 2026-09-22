@@ -304,7 +304,7 @@ func (m *OS) GetTimeYPosition() int {
 }
 
 // GetUsableHeight returns the usable height excluding the dock. Auto-hide
-// mode keeps the reservation so tiled windows have a stable layout  - the dock
+// mode keeps the reservation so tiled windows have a stable layout. The dock
 // only hides when a specific window (zoom/float) explicitly expands into its
 // rows.
 //
@@ -426,8 +426,8 @@ func (m *OS) sidebarWidthFor(prefer int) int {
 
 // OwnLayoutReserve is the chrome this client draws around the panes: its own
 // sidebar rail and its own dock, in its own configuration. It is what this
-// client tells the daemon it needs, never what it lays the panes out around -
-// see GetLeftMargin.
+// client tells the daemon it needs, never what it lays the panes out around.
+// See GetLeftMargin.
 func (m *OS) OwnLayoutReserve() session.LayoutReserve {
 	var r session.LayoutReserve
 	switch m.Settings.SidebarPosition {

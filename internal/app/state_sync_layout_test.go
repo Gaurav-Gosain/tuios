@@ -174,13 +174,11 @@ func TestSyncedCloseLeavesNoTile(t *testing.T) {
 // compute, so it must be adopted as it stands: retiling on every peer render
 // would have each client re-running tiling for the other's benefit.
 //
-// This used to assert something stronger and wrong: that a geometry-only sync
-// is adopted verbatim whatever it says. Under tiling a pane's rectangle is not
-// shared state - it is what the shared tree and the client's own render size
-// come to between them - so a rectangle from a differently sized peer is not
-// this client's answer. The old fixture synced a single 40x20 pane at (5,3)
-// into a 120x40 tiled client, which is a layout tiling could not produce, and
-// pinned the client to it. See TestSyncFromASmallerPeerIsRetiled.
+// It does not assert that a geometry-only sync is adopted verbatim whatever it
+// says. Under tiling a pane's rectangle is not shared state: it is what the
+// shared tree and the client's own render size come to between them, so a
+// rectangle from a differently sized peer is not this client's answer. See
+// TestSyncFromASmallerPeerIsRetiled.
 func TestSyncFromAnEqualPeerDoesNotRetile(t *testing.T) {
 	const existingID = "win-0000-0000-0000-0000-000000000001"
 

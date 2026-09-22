@@ -489,7 +489,7 @@ func isColorSafe(c color.Color) bool {
 		color.YCbCr:
 		return true
 	default:
-		// Unknown type  - attempt RGBA() and recover on panic
+		// Unknown type: attempt RGBA() and recover on panic
 		safe := true
 		func() {
 			defer func() {
@@ -708,7 +708,7 @@ func clipWindowContent(content string, x, y, viewportWidth, viewportHeight int) 
 							}
 						}
 
-						// Always include escape sequences  - they set terminal state (colors, styles)
+						// Always include escape sequences. They set terminal state (colors, styles)
 						result.WriteString(string(runes[seqStart:runeIdx]))
 						continue
 					}

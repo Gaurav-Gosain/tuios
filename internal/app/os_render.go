@@ -105,7 +105,7 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 				window.MarkContentDirty()
 				hasChanges = true
 			} else {
-				// Don't clear the flag  - let it stay set so the window
+				// Don't clear the flag. Let it stay set so the window
 				// updates on the next cycle or when focused
 				window.HasNewOutput.Store(true)
 			}

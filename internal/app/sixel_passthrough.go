@@ -24,7 +24,7 @@ func sixelPassthroughLog(format string, args ...any) {
 }
 
 // SixelPassthrough handles forwarding sixel graphics to the host terminal.
-// Unlike Kitty graphics, sixel images don't have IDs - they're placed inline
+// Unlike Kitty graphics, sixel images don't have IDs. They're placed inline
 // at the cursor position and scroll with text.
 type SixelPassthrough struct {
 	mu      sync.Mutex
@@ -317,7 +317,7 @@ func (sp *SixelPassthrough) RefreshAllPlacements(getWindowInfo func(windowID str
 				continue
 			}
 
-			// Check if position changed - only re-render if needed
+			// Check if position changed, and only re-render if needed
 			positionChanged := !p.IsPlaced ||
 				p.PlacedAtX != hostX || p.PlacedAtY != hostY
 

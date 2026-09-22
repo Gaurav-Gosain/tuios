@@ -45,7 +45,7 @@ func TestPreviewBoxKeepsThePicturesShape(t *testing.T) {
 // own proportions, to a cell.
 //
 // Negative control: passing the launcher's icon box (cellW*2) as the cell width
-// -- which is what the caller used to do -- gives 25 columns here instead of
+// gives 25 columns here instead of
 // 51, and this fails. Widening the tolerance to two cells still failed, so the
 // assertion is about the arithmetic and not about rounding.
 func TestPreviewBoxIsTheRightSizeAndNotJustTheRightShape(t *testing.T) {

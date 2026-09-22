@@ -363,9 +363,9 @@ func (m *OS) NewWindowPlacement() (x, y, width, height int) {
 // Without it the placement is a pure function of the screen, so every floating
 // window opens at exactly the same rectangle and each one hides the last
 // completely: two panes exist, one is visible, and nothing on screen says
-// otherwise. It is reachable from an ordinary sequence - a window the daemon
+// otherwise. It is reachable from an ordinary sequence: a window the daemon
 // created while nothing was attached is placed by the first client to see it,
-// and the next window opened takes the same slot - and what it looks like is a
+// and the next window opened takes the same slot. What it looks like is a
 // pane and its whole scrollback disappearing.
 //
 // Only an exact collision is stepped away from. Windows overlapping is what a

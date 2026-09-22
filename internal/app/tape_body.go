@@ -31,8 +31,8 @@ import (
 // command (robust to hostile or future input).
 
 // tapeStructuralSettle is the pause inserted after a command that creates a pane
-// (Split, NewWindow). In a daemon session the pane is created asynchronously -
-// the daemon makes it, starts its shell, and pushes it back - so the next
+// (Split, NewWindow). In a daemon session the pane is created asynchronously
+// (the daemon makes it, starts its shell, and pushes it back), so the next
 // command waits this out both for the pane to exist and for its shell to be
 // ready to accept input, before typing into it.
 const tapeStructuralSettle = 900 * time.Millisecond

@@ -17,7 +17,7 @@ import (
 // interpolates a window's X, Y, Width and Height on every tick and deliberately
 // leaves the emulator alone until the transition ends. So for the length of the
 // animation the pane's rectangle is the new one while its body is still the old
-// one, and renderTerminal hands back a body sized by the emulator - the
+// one, and renderTerminal hands back a body sized by the emulator: the
 // unfocused fast path returns the emulator's own Render() verbatim.
 //
 // lipgloss's Width and Height pad but never truncate, so that oversized body
@@ -68,7 +68,7 @@ func TestWindowBoxNeverExceedsItsRectangle(t *testing.T) {
 // when it completes. Deciding whether to draw from HasActiveAnimations AFTER
 // UpdateAnimations has removed the finished animation answers "nothing is
 // happening", the frame is skipped, and the last frame the user sees is the
-// second-to-last animation step - with every pane still drawn at its
+// second-to-last animation step, with every pane still drawn at its
 // pre-animation size, forever, because nothing dirties the model afterwards.
 func TestAnimationCompletionTickStillRenders(t *testing.T) {
 	win := newTestWindow(t, "anim-tick-0001", 60, 34)

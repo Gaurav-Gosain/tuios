@@ -16,7 +16,7 @@ import (
 // column for the rest of the session.
 //
 // The scrolling layout is where this bites, because it animates its slide even
-// when animations are off - the viewport shift is disorienting without it - so
+// when animations are off (the viewport shift is disorienting without it), so
 // there is always a snap in flight for the next action to trample.
 
 func TestNoStaleSnapSurvivesALayoutChange(t *testing.T) {

@@ -116,18 +116,17 @@ func (m *OS) GetWindowByIntID(intID int) *terminal.Window {
 // that destination's centre, so the pane grows outward into the space it is
 // about to occupy.
 //
-// It replaces the start the layout used to inherit by accident. A new pane was
-// parked at NewWindowPlacement's box first - half the screen, centred on it -
-// and the snap animation captured that as its start, so every pane opened by
-// travelling from a half-screen rectangle to a tile. Centred is not what that
-// looks like: the box is far larger than a tile, so its top-left corner sits up
-// and to the left of any tile but the middle one, and what the eye reads is a
-// window flying in from the corner and shrinking, not a window appearing.
+// Without it, a new pane is parked at NewWindowPlacement's box first (half the
+// screen, centred on it) and the snap animation captures that as its start, so
+// the pane travels from a half-screen rectangle to a tile. The box is far
+// larger than a tile, so its top-left corner sits up and to the left of any
+// tile but the middle one, and what the eye reads is a window flying in from
+// the corner and shrinking, not a window appearing.
 //
 // Growing from the destination rather than from the centre of the screen is a
 // deliberate choice between two fixes that both remove the corner. A pane
 // belongs to its tile, and opening in place says so, while a small box crossing
-// half the screen from the middle is motion that means nothing - and under
+// half the screen from the middle is motion that means nothing, and under
 // shared borders it also passes over two neighbours on the way. The exception
 // proves it: the first pane on a workspace has the whole screen as its tile, so
 // it does grow from the centre of the screen, because there its tile is the
@@ -187,12 +186,11 @@ func (m *OS) ApplyBSPLayout() {
 		}
 		rect = canvas.apply(rect)
 		// A zoomed pane keeps its slot in the tree and loses its rectangle to the
-		// zoom box, so the tiler leaves the rectangle alone. This is new with
-		// shared zoom: while the flag was local, nothing retiled a workspace that
-		// had a zoomed pane on it, so the tiler never met one. Now a peer's sync
-		// can bring a pane, close one or move the box while somebody else holds
-		// the zoom, and each of those retiles - and a retile that placed the
-		// zoomed pane would drop the zoom on every client at once.
+		// zoom box, so the tiler leaves the rectangle alone. Zoom is shared, so
+		// a peer's sync can bring a pane, close one or move the box while
+		// somebody else holds the zoom. Each of those retiles, and a retile
+		// that placed the zoomed pane would drop the zoom on every client at
+		// once.
 		//
 		// Under a camera it is placed like every other pane: it is not holding
 		// a box of its own, it is simply the pane the camera is on.
@@ -236,11 +234,11 @@ func (m *OS) ApplyBSPLayout() {
 		// release already drains into one real resize per window.
 		// A terminal resize is the same kind of event, one step removed: the
 		// browser or the terminal emulator delivers a size per frame for as long
-		// as the user drags the window edge, and easing toward each one built a
-		// fresh 300ms snap per pane per step. The panes were still easing when
-		// the next size arrived, so they never arrived anywhere, and after the
-		// pointer stopped the layout kept moving for the rest of the last
-		// animation - which is exactly the catch-up a drag feels like. The size
+		// as the user drags the window edge, and easing toward each one would
+		// build a fresh 300ms snap per pane per step. The panes would still be
+		// easing when the next size arrived, so they never arrive anywhere, and
+		// after the pointer stops the layout keeps moving for the rest of the
+		// last animation. The size
 		// is not a destination to travel to; it is where the panes already are.
 		//
 		// Only while the resize is actually live, though. See
@@ -379,8 +377,8 @@ func (m *OS) CancelSnapAnimation(win *terminal.Window) {
 // retires it, leaving the other animation kinds alone.
 //
 // Cancelling is right for a caller that is about to place the window itself.
-// A caller that is not - a structural change that settles the layout by some
-// other route - has to land the snap instead: a snap deliberately leaves the
+// A caller that is not (a structural change that settles the layout by some
+// other route) has to land the snap instead: a snap deliberately leaves the
 // emulator at the size the pane had when it started and catches up in one
 // resize at the end, so dropping it mid-flight leaves the pane at an
 // interpolated rectangle with an emulator that matches neither end. Turning
@@ -487,7 +485,7 @@ func (m *OS) RemoveWindowFromBSPTree(window *terminal.Window) {
 // The deferral is only safe because it is bounded on both ends: the interaction
 // tick composes a frame for as long as a drag is live, so a pending sync is
 // never held for more than one frame interval, and mouse release calls
-// SyncBSPTreeFromGeometry unconditionally. That last one cannot be skipped -
+// SyncBSPTreeFromGeometry unconditionally. That last one cannot be skipped:
 // the tree ratios, not the window rectangles, are what survives a retile, so a
 // drag that ended without a final sync would have its result discarded the next
 // time the layout was applied.
@@ -574,7 +572,7 @@ func (m *OS) SplitFocusedHorizontal() {
 	// Set preselection direction for the next window
 	m.PreselectionDir = layout.PreselectionDown
 
-	// Create a new window - it will be added with the preselection
+	// Create a new window. It will be added with the preselection.
 	m.AddWindow("")
 
 	// Clear the split target
@@ -608,7 +606,7 @@ func (m *OS) SplitFocusedVertical() {
 	// Set preselection direction for the next window
 	m.PreselectionDir = layout.PreselectionRight
 
-	// Create a new window - it will be added with the preselection
+	// Create a new window. It will be added with the preselection.
 	m.AddWindow("")
 
 	// Clear the split target
@@ -630,10 +628,10 @@ func (m *OS) SmartSplitFocused() {
 	// Store the target window ID so AddWindowToBSPTree splits at the focused window
 	m.SplitTargetWindowID = focusedWin.ID
 
-	// No preselection  - let determineAutoSplit (SchemeSmartSplit) pick the direction
+	// No preselection: let determineAutoSplit (SchemeSmartSplit) pick the direction
 	m.PreselectionDir = layout.PreselectionNone
 
-	// Create a new window  - AddWindowToBSPTree will use SplitNone which triggers auto split
+	// Create a new window. AddWindowToBSPTree will use SplitNone which triggers auto split
 	m.AddWindow("")
 
 	// Clear the split target
@@ -669,19 +667,19 @@ func (m *OS) ClearPreselection() {
 // RotateFocusedSplit toggles the split direction at the focused window's parent
 func (m *OS) RotateFocusedSplit() {
 	if !m.AutoTiling {
-		m.LogInfo("BSP: RotateSplit ignored - tiling not active")
+		m.LogInfo("BSP: RotateSplit ignored, tiling not active")
 		return
 	}
 
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree == nil {
-		m.LogInfo("BSP: RotateSplit ignored - no tree for workspace %d", m.CurrentWorkspace)
+		m.LogInfo("BSP: RotateSplit ignored, no tree for workspace %d", m.CurrentWorkspace)
 		return
 	}
 
 	focusedWin := m.GetFocusedWindow()
 	if focusedWin == nil {
-		m.LogInfo("BSP: RotateSplit ignored - no focused window")
+		m.LogInfo("BSP: RotateSplit ignored, no focused window")
 		return
 	}
 
@@ -689,8 +687,8 @@ func (m *OS) RotateFocusedSplit() {
 
 	// Check if window is in the tree
 	if !tree.HasWindow(windowIntID) {
-		m.LogInfo("BSP: RotateSplit - window %d not in tree, has %d windows", windowIntID, tree.WindowCount())
-		// Window not in tree - this can happen if tiling was enabled after windows were created
+		m.LogInfo("BSP: RotateSplit: window %d not in tree, has %d windows", windowIntID, tree.WindowCount())
+		// Window not in tree. This can happen if tiling was enabled after windows were created
 		// but the tree wasn't properly built. Let's rebuild it.
 		m.LogInfo("BSP: Rebuilding tree to include all windows")
 		m.TileAllWindows()
@@ -699,7 +697,7 @@ func (m *OS) RotateFocusedSplit() {
 
 	node := tree.FindNode(windowIntID)
 	if node == nil || node.Parent == nil {
-		m.LogInfo("BSP: RotateSplit - window has no parent (is root), cannot rotate")
+		m.LogInfo("BSP: RotateSplit: window has no parent (is root), cannot rotate")
 		m.ShowNotification("Cannot rotate: window has no parent split", "warning", 2000000000)
 		return
 	}
@@ -745,8 +743,8 @@ func (m *OS) SwapWindowsInBSPTree(window1, window2 *terminal.Window) {
 //
 // Tiling covers GetBSPBounds exactly: every visible, non-floating pane sits
 // inside it, and together they reach its right and bottom edges. Either half of
-// that failing means the rectangles were computed against some other box - a
-// peer client's, at its own size - and this client has to lay them out again.
+// that failing means the rectangles were computed against some other box (a
+// peer client's, at its own size), and this client has to lay them out again.
 //
 // Checked in both directions on purpose. Asking only whether a pane overflows
 // finds a peer that is larger and is blind to one that is smaller, and a
@@ -755,10 +753,10 @@ func (m *OS) tiledLayoutStale() bool {
 	// The scrolling strip is asked a different question, because it is not a
 	// partition of the box and never claims to be: it is longer than the screen
 	// and the columns either side of the viewport are meant to be off it. Every
-	// test below reads a settled strip as stale, so a state sync used to retile
-	// in that layout whatever it said - and a retile brings the focused column
-	// back on screen, so a strip somebody had deliberately scrolled away from
-	// was pulled back by the next broadcast anybody made.
+	// test below reads a settled strip as stale, so a state sync would retile
+	// in that layout whatever it said. A retile brings the focused column back
+	// on screen, so a strip somebody had deliberately scrolled away from would
+	// be pulled back by the next broadcast anybody made.
 	if m.UseScrollingLayout {
 		return m.scrollingLayoutStale()
 	}
@@ -772,10 +770,8 @@ func (m *OS) tiledLayoutStale() bool {
 	// below is a test of the rectangles: the panes have to cover the box
 	// exactly. One of them covering it on its own passes that test whatever the
 	// others are doing, so with a zoom on the workspace the check is blind, and
-	// blind is not a licence to answer "settled". While the flag was local that
-	// hardly mattered - the zoom lasted as long as the keypress that ended it,
-	// and unzooming retiles - but a shared zoom can be somebody else's and can
-	// stand for as long as they leave it. Measured: three clients holding a
+	// blind is not a licence to answer "settled". A shared zoom can be somebody
+	// else's and can stand for as long as they leave it. Measured: three clients holding a
 	// peer's zoom kept three different widths for the pane behind it, because
 	// nothing looked while the zoom was up.
 	//
@@ -817,9 +813,8 @@ func (m *OS) tiledLayoutStale() bool {
 	// out of the space between them, never off the far edge, so a settled
 	// layout always reaches all four.
 	//
-	// All four, not two. The check used to measure the far edges alone, which
-	// misses a layout inset from the near ones - and that is not a hypothetical
-	// shape. A client attaching is handed the session's reserve as it stands,
+	// All four, not two. Measuring the far edges alone misses a layout inset
+	// from the near ones, and that is not a hypothetical shape. A client attaching is handed the session's reserve as it stands,
 	// lays the panes out against it and pushes; if the reserve then shrinks
 	// because that same client asks for less chrome than the one already there,
 	// the pushed rectangles start too far in and still reach the far edges

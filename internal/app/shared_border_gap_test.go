@@ -68,8 +68,8 @@ func paintMarkers(m *OS) {
 //
 // The BSP splitter reserved a cell between two panes for the line drawn between
 // them; the master-stack tiler butted its panes together and the separator
-// overlay - which kept reading the BSP tree, because the tree outlives a switch
-// to master-stack - drew straight down the right-hand pane's first column. The
+// overlay (which kept reading the BSP tree, because the tree outlives a switch
+// to master-stack) drew straight down the right-hand pane's first column. The
 // frame showed "laude" where the pane had written "claude".
 //
 // This asserts the composed frame, per mode: every pane's first column is still

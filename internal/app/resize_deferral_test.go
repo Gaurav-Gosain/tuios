@@ -103,9 +103,9 @@ func assertNoOverlap(t *testing.T, m *OS, when string) {
 // reported defect: tiled mode showing panes at stale, overlapping positions.
 //
 // A terminal resize sets viewportResizing and arms a settle to clear it. If
-// that settle never arrives - Update recovers a panic and returns a nil
-// command, taking the settle with it, or the message is otherwise lost - the
-// flag used to stay set for the rest of the session. Every later retile then
+// that settle never arrives (Update recovers a panic and returns a nil
+// command, taking the settle with it, or the message is otherwise lost), the
+// flag stayed set for the rest of the session. Every later retile then
 // took the "place directly, resize visually only" branch and recorded its work
 // in PendingResizes for a drain that would never happen, so no pane ever got a
 // real size again.

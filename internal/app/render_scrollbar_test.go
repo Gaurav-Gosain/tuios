@@ -433,7 +433,7 @@ func TestScrollbarThinStyleIsAHeavyStrokeOnAHairline(t *testing.T) {
 
 // The track style is the one that fills its column with a surface: a block
 // thumb on a fill rather than two hairlines. Both styles still obey the rules
-// that make the bar composable - same column, same visibility, same clip.
+// that make the bar composable: same column, same visibility, same clip.
 func TestScrollbarTrackStyleFillsTheColumn(t *testing.T) {
 	scrollbarDefaults(t)
 	win := newTestWindow(t, "sbtrack-0001", 60, 20)
@@ -569,7 +569,7 @@ func TestScrollbarDegradesToASCII(t *testing.T) {
 func must(rows []string, _, _ int) []string { return rows }
 
 // The owner's rule: the bar matches the highlighted terminal. The focused
-// pane's thumb takes its accent, every other pane keeps the quiet grey - and
+// pane's thumb takes its accent, every other pane keeps the quiet grey, and
 // both still draw, because the bar reports a scroll position and hiding it on
 // an unfocused pane would hide that position.
 func TestScrollbarTintFollowsTheFocusedPane(t *testing.T) {
@@ -662,7 +662,7 @@ func TestScrollbarTintFloorRejectsAnUnreadableAccent(t *testing.T) {
 }
 
 // A hex in the config is a deliberate override of the measurement, so it is
-// used as given - including the very colour the floor rejects when it is
+// used as given, including the very colour the floor rejects when it is
 // derived. muted is the look every bar had before the rule.
 func TestScrollbarTintKeywordsAndHex(t *testing.T) {
 	scrollbarDefaults(t)

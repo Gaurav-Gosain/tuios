@@ -98,11 +98,11 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
    ╚═╝    ╚═════╝ ╚═╝ ╚═════╝ ╚══════╝`
 
 		// The splash is the first thing anyone sees, at whatever width. Its
-		// three parts have fixed widths - 38 columns of block letters, a 28
-		// column subtitle and a 44 column hint line - and the box adds a border
-		// and two columns of padding on each side. Asking for all of it needs 74
-		// columns, so on anything narrower it used to run off the right edge
-		// with the border cut away. Drop to what fits instead.
+		// three parts have fixed widths (38 columns of block letters, a 28
+		// column subtitle and a 44 column hint line), and the box adds a border
+		// and two columns of padding on each side. All of it needs 74 columns,
+		// so on anything narrower it would run off the right edge with the
+		// border cut away. Drop to what fits instead.
 		const (
 			artCols      = 38
 			subtitleCols = 28

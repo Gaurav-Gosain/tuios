@@ -9,8 +9,8 @@ import (
 )
 
 // TestUsableHeightNeverGoesNegative pins the floor rather than the crash it
-// caused. Every caller of GetUsableHeight reads it as an extent - a row count to
-// tile inside, to clip against, to hit-test within - and a negative extent is
+// caused. Every caller of GetUsableHeight reads it as an extent (a row count to
+// tile inside, to clip against, to hit-test within), and a negative extent is
 // nonsense in all of them; the render loop is only where it happened to be fatal.
 func TestUsableHeightNeverGoesNegative(t *testing.T) {
 	for _, pos := range []string{"bottom", "top", "hidden"} {

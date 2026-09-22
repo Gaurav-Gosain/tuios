@@ -137,7 +137,7 @@ func TestPercentGuardrails(t *testing.T) {
 	m.FocusedWindow = 1
 	beforeRight := right.Width
 
-	// Out of the 10..90 range: ignored (100 included — no resize_width_100).
+	// Out of the 10..90 range: ignored (100 included, since there is no resize_width_100).
 	m.SetFocusedWindowWidthPercent(5)
 	m.SetFocusedWindowWidthPercent(95)
 	m.SetFocusedWindowWidthPercent(100)

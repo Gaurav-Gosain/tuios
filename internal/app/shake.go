@@ -100,8 +100,8 @@ type shakeState struct {
 }
 
 // reset forgets the gesture in progress. The suspension survives it, because
-// the reasons a gesture is abandoned - a button went down, an overlay took the
-// pointer - are not the pointer coming to rest.
+// the reasons a gesture is abandoned (a button went down, an overlay took the
+// pointer) are not the pointer coming to rest.
 func (s *shakeState) reset() {
 	s.dir, s.count, s.started = 0, 0, false
 	s.lastTurn = time.Time{}

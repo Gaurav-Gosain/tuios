@@ -297,7 +297,7 @@ func (m *OS) evaluateTapeDir(dir string) {
 
 	// Auto-open the review dialog when the user opted in and the tape is one they
 	// can act on (eligible: untrusted, changed, or trusted). This only saves the
-	// keypress that opens the dialog - the user still chooses Run once / Trust and
+	// keypress that opens the dialog. The user still chooses Run once / Trust and
 	// run / Never / Not now, so the trust boundary is unchanged. An ineligible
 	// tape keeps the passive notice: a dismiss-only popup for something you cannot
 	// act on would only be in the way.

@@ -97,7 +97,7 @@ func noAnimations(t *testing.T) {
 // map, which nothing ever sent. A client that had never been to a workspace had
 // no entry for it, RestoreWorkspaceLayout read the missing entry as "not
 // custom", the workspace switch retiled, and the client pushed the tiler's
-// rectangles - taking away, for every client, the layout another client had
+// rectangles, taking away, for every client, the layout another client had
 // arranged by hand.
 //
 // NEGATIVE CONTROL: drop the WorkspaceHasCustom block from BuildSessionState,
@@ -334,9 +334,9 @@ func TestAWorkspaceNobodyArrangedIsStillTheTilers(t *testing.T) {
 //
 // It is the case the report names, played by the route a user plays it: A drags
 // a border, B leaves the workspace and comes back, and A's layout has to still
-// be there afterwards - on B's screen, on A's, and in what B pushes.
+// be there afterwards: on B's screen, on A's, and in what B pushes.
 //
-// NEGATIVE CONTROL: measured with both halves of the fix reverted - the flag
+// NEGATIVE CONTROL: measured with both halves of the fix reverted: the flag
 // cleared again in RestoreWorkspaceLayout and the retile back on any workspace
 // change in ApplyStateSync. The arranging client comes out at 60x38 and 60x38,
 // the tiler's answer, over the 40 and 80 it was left at.

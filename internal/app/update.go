@@ -723,10 +723,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	// windows survive the bad event. Named returns let the deferred recover set
 	// them.
 	//
-	// It used to recover, log and say nothing. LogError draws nothing on its own
-	// (the log ring is behind leader D l), so the whole of what a user saw when
-	// tuios hit an impossible state was a frame that did not update, and a bug
-	// nobody can see is a bug nobody reports. The overlay is what changed.
+	// Logging alone is not enough. LogError draws nothing on its own (the log
+	// ring is behind leader D l), so without the overlay a user who hit an
+	// impossible state would see only a frame that did not update, and a bug
+	// nobody can see is a bug nobody reports.
 	defer func() {
 		if r := recover(); r != nil {
 			stack := debug.Stack()
@@ -744,7 +744,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case PTYDataMsg:
-		// PTY output arrived  - mark dirty terminals and re-render immediately.
+		// PTY output arrived: mark dirty terminals and re-render immediately.
 		// This is the primary render trigger, replacing tick-driven rendering.
 		// Graphics refresh (kitty/sixel) happens in GetCanvas during View().
 		m.MarkTerminalsWithNewContent()
@@ -971,7 +971,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 					}
 				}
 			} else if player.IsFinished() {
-				// Script just finished - record the time if not already set
+				// Script just finished: record the time if not already set
 				if m.ScriptFinishedTime.IsZero() {
 					m.ScriptFinishedTime = time.Now()
 					// A tape that builds a layout creates panes whose early output
@@ -999,13 +999,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		// Messages expire here, on the tick, and not inside render composition.
 		//
-		// They used to be retired by the renderer, which meant expiry could only
-		// happen on a frame that was already being drawn for some other reason.
-		// Once a session went quiet the last frame was served from the render
-		// cache with the expired toast still painted on it, for as long as
-		// nothing else happened; seventeen seconds was the recorded case, and a
-		// project tape finishing correctly while its own banner covered the pane
-		// it had just built was the symptom that found it.
+		// Retiring them in the renderer would mean expiry only happens on a
+		// frame already being drawn for some other reason. Once a session goes
+		// quiet the last frame is served from the render cache, so the expired
+		// toast would stay painted on it for as long as nothing else happened
+		// (seventeen seconds in the recorded case).
 		//
 		// The tick that retires something draws one more frame so the message
 		// actually leaves the screen, which is what notifExpired carries. A live
@@ -1431,9 +1429,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.Height = max(1, msg.Height)
 		m.MarkAllDirty()
 		// A resize is drawn immediately and finished later. Everything below
-		// lays the panes out at the new size; the expensive half - resizing each
+		// lays the panes out at the new size; the expensive half (resizing each
 		// emulator's backing store for real, telling the PTY and the daemon,
-		// and asking every guest to redraw - waits until the sizes stop
+		// and asking every guest to redraw) waits until the sizes stop
 		// arriving. Without this a drag of the terminal's own edge pays that
 		// whole bill once per delivered size.
 		m.viewportResizing = true
@@ -1441,7 +1439,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.viewportResizeGen++
 		// The timestamp, not the flag, is what keeps the deferral alive. The
 		// settle below is the normal way it ends; noteResizeStep is what makes
-		// sure it ends at all if the settle never arrives - which it does not
+		// sure it ends at all if the settle never arrives, which it does not
 		// when a panic in this handler is recovered, since the recovery returns
 		// a nil command and takes the settle with it.
 		m.noteResizeStep(time.Now())
@@ -1480,7 +1478,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				// SessionResizeMsg before tiling. That broke when the effective
 				// size didn't change (e.g. a web client reattaches to a session
 				// whose cached min-of-all-clients matches or is larger than
-				// the browser viewport)  - no SessionResizeMsg ever arrives and
+				// the browser viewport), no SessionResizeMsg ever arrives and
 				// the restored layout stays at the stale saved dimensions.
 				// Tile using the browser's actual size now; if the daemon
 				// later reports a different effective size via SessionResizeMsg,
@@ -1489,14 +1487,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 					m.LogInfo("[RESIZE] Daemon mode restore: tiling to %dx%d (was %dx%d)",
 						msg.Width, msg.Height, oldWidth, oldHeight)
 					// Fall back to this client's own viewport only when the
-					// daemon has not said what the session's size is. It used to
-					// be forced to the viewport unconditionally, on the reasoning
-					// that a SessionResizeMsg would correct it - but the daemon
-					// only announces a size that changed, so a client whose join
-					// left the minimum where it was never heard anything, and
-					// went on rendering at its own width inside a session sized
-					// for someone smaller. The attach reply carries the effective
-					// size, which is the answer here.
+					// daemon has not said what the session's size is. A
+					// SessionResizeMsg cannot be relied on to correct it: the
+					// daemon only announces a size that changed, so a client
+					// whose join left the minimum where it was hears nothing
+					// and would render at its own width inside a session sized
+					// for someone smaller. The attach reply carries the
+					// effective size, which is the answer here.
 					if m.EffectiveWidth <= 0 || m.EffectiveHeight <= 0 {
 						m.EffectiveWidth = msg.Width
 						m.EffectiveHeight = msg.Height
@@ -1537,11 +1534,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if m.AutoTiling {
 			m.TileAllWindows()
 		} else if msg.Width < oldWidth || msg.Height < oldHeight {
-			// Terminal got smaller in floating mode - clamp windows back into view
+			// Terminal got smaller in floating mode: clamp windows back into view
 			m.ClampWindowsToView()
 		}
 
-		// NOTE: Don't HideAllPlacements on kitty here  - the delete+re-place cycle
+		// NOTE: Don't HideAllPlacements on kitty here. The delete+re-place cycle
 		// can lose image data on some terminals. RefreshAllPlacements runs every
 		// render and will reposition in place via `a=p` (the image data persists
 		// across `d=i` deletes per the kitty protocol).
@@ -1607,7 +1604,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	// Multi-client daemon messages
 	case StateSyncMsg:
-		// Another client updated state - apply incrementally
+		// Another client updated state: apply incrementally
 		if msg.State != nil {
 			// Track what changed for notifications
 			oldWindowCount := len(m.Windows)
@@ -1709,7 +1706,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case SessionResizeMsg:
 		// Effective session size changed (min of all clients)
-		// Set the effective size - GetRenderWidth/Height will use min(terminal, effective)
+		// Set the effective size. GetRenderWidth/Height will use min(terminal, effective)
 		//
 		// The agreed chrome reserve is half of the same answer and moves the
 		// panes' box exactly as the size does, so a change to either one is a
@@ -2117,7 +2114,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, nextCmd
 		}
 
-		// Last key - schedule cleanup
+		// Last key: schedule cleanup
 		doneCmd := func() tea.Msg {
 			return RemoteKeysDoneMsg{RequestID: msg.RequestID}
 		}
@@ -2127,7 +2124,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, doneCmd
 
 	case RemoteKeysDoneMsg:
-		// All remote keys have been processed - do final cleanup
+		// All remote keys have been processed: do final cleanup
 		// Re-enable animations
 		m.ProcessingRemoteKeys = false
 		m.Settings.AnimationsSuppressed = false
@@ -2156,7 +2153,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.RemoteScriptIndex = msg.CommandIndex
 		m.RemoteScriptTotal = msg.TotalCommands
 
-		// Handle Sleep commands specially - they just wait
+		// Handle Sleep commands specially: they just wait
 		if msg.Command.Type == tape.CommandTypeSleep && msg.Command.Delay > 0 {
 			// For remote execution, we use tea.Tick to wait
 			nextIndex := msg.CommandIndex + 1
@@ -2210,14 +2207,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, nextCmdFunc
 		}
 
-		// Last command - schedule cleanup with a delay for final render
+		// Last command: schedule cleanup with a delay for final render
 		doneCmd := tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
 			return RemoteTapeScriptDoneMsg{RequestID: msg.RequestID}
 		})
 		return m, doneCmd
 
 	case RemoteTapeScriptDoneMsg:
-		// All tape commands have been processed - do final cleanup
+		// All tape commands have been processed: do final cleanup
 		// Re-enable animations
 		m.ProcessingRemoteKeys = false
 		m.Settings.AnimationsSuppressed = false

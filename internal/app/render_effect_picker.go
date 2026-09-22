@@ -181,8 +181,7 @@ func effectOpeningWord(band effectOpeningBand) string {
 //
 // Every band that hides the screen says the time depends on the screen, because
 // it does: the same effect over a bare prompt and over a full 200x50 screen can
-// differ by more than tenfold. The band survives that. A number would not, and
-// the panel used to print one.
+// differ by more than tenfold. The band survives that. A number would not.
 //
 // The none band says something stronger and keeps saying it. An effect gets
 // there by never taking a character off the screen and never moving one, on any

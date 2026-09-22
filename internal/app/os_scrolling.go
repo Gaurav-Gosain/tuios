@@ -45,9 +45,9 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 		// strip where that column is on screen.
 		//
 		// The reveal belongs here, at the one moment a strip has no position
-		// yet, rather than in tileAllWindows where it used to be. A workspace
-		// laid out for the first time - a client starting up, a session
-		// restored, a workspace entered - has focus on a column that nothing
+		// yet, rather than in tileAllWindows. A workspace laid out for the
+		// first time (a client starting up, a session restored, a workspace
+		// entered) has focus on a column that nothing
 		// has scrolled to, and without this the user is typing into a pane off
 		// the left of the screen. Every later retile reuses this strip and so
 		// leaves the offset alone, which is the whole point: a retile is not a
@@ -66,9 +66,9 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 		}
 	}
 	// The two geometry inputs the session settles are pushed in on every access
-	// rather than stored once at creation. Both can move under a live layout -
-	// a peer client's setting arriving by state sync, or this client's own
-	// settings row - and a strip built before the change would otherwise keep
+	// rather than stored once at creation. Both can move under a live layout
+	// (a peer client's setting arriving by state sync, or this client's own
+	// settings row), and a strip built before the change would otherwise keep
 	// laying its columns out with the old arithmetic until something happened
 	// to rebuild it. Every caller reaches the strip through here, so this is the
 	// one place that has to be right.
@@ -132,10 +132,10 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 	}
 
 	// Asked once for the whole layout, as ApplyBSPLayout does, because it ends a
-	// stale deferral as a side effect. The strip used to skip the deferral
-	// altogether and announce a real size per pane per resize step, which is one
-	// SIGWINCH per pane for every column the user drags the host edge through -
-	// the exact storm the deferral exists to stop.
+	// stale deferral as a side effect. Skipping the deferral would announce a
+	// real size per pane per resize step, which is one SIGWINCH per pane for
+	// every column the user drags the host edge through: the exact storm the
+	// deferral exists to stop.
 	deferring := m.resizeDeferralActive()
 
 	for windowIntID, rect := range layouts {
@@ -195,8 +195,8 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		// A snap left over from an earlier placement owns this window's geometry
 		// and stamps its own rectangle back on the next tick, without resizing
 		// the emulator with it. The branch above only retires one when it creates
-		// a replacement, so a column that changed width without changing column -
-		// the host resizing while the strip stays put - fell through to here with
+		// a replacement, so a column that changed width without changing column
+		// (the host resizing while the strip stays put) fell through to here with
 		// the old snap still live, and one tick later the pane was drawing at one
 		// size while its guest wrote at another.
 		m.CancelSnapAnimation(win)
@@ -462,7 +462,7 @@ func (m *OS) ReleaseClickReveal(x, y int) {
 }
 
 // ScrollingOnWindowAdded adds a new window to the scrolling layout.
-// Only adds the column  - FocusWindow handles viewport and positioning.
+// Only adds the column. FocusWindow handles viewport and positioning.
 func (m *OS) ScrollingOnWindowAdded(w *terminal.Window) {
 	sl := m.GetOrCreateScrollingLayout()
 	intID := m.GetWindowIntID(w.ID)
@@ -558,7 +558,7 @@ func (m *OS) ScrollStripState() *session.ScrollStripState {
 // this exists for: the border moves to a window that is not on screen.
 //
 // It acts only on a change. A broadcast repeating the state everyone already
-// holds must not restart the slide, and - now that the offset is shared - must
+// holds must not restart the slide, and, since the offset is shared, must
 // not drag the strip back to the focused column either: a peer scrolling away
 // from the focused window is a decision, and re-broadcasting it is not a
 // request to undo it. EnsureFocusedVisible therefore runs on a focus change and
@@ -584,8 +584,8 @@ func (m *OS) adoptScrollStrip(strip *session.ScrollStripState, focusChanged bool
 		if fw := m.GetFocusedWindow(); fw != nil && !fw.IsFloating && !fw.Minimized &&
 			fw.Workspace == m.CurrentWorkspace {
 			// Only a column change is a move. Focus landing on another window
-			// stacked in the column it was already on is worth recording - it is
-			// what the column returns to when it is focused again - but every
+			// stacked in the column it was already on is worth recording (it is
+			// what the column returns to when it is focused again), but every
 			// window in a column keeps its row whichever of them is active, so
 			// there is nothing to lay out again.
 			was := sl.FocusedCol

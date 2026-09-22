@@ -25,8 +25,8 @@ const (
 //
 // The sequence goes through writeHostSequence rather than os.Stdout: stdout is
 // the right terminal only for a local run, while an SSH- or web-served client
-// reads a different handle entirely, and the bytes used to land on the server's
-// own console. writeHostSequence already routes to the per-mode host output.
+// reads a different handle entirely, and stdout there is the server's own
+// console. writeHostSequence already routes to the per-mode host output.
 func (m *OS) SetPointerShape(shape PointerShape) {
 	if shape == m.currentPointer {
 		return

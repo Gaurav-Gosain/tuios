@@ -386,7 +386,7 @@ type OS struct {
 	// deferrals above expire on their own: see resizeDeferralActive. A flag that
 	// is only ever cleared by a message arriving is a flag that stays set
 	// forever the one time that message does not arrive, and there is no way to
-	// guarantee it does - a panic recovered in Update drops the command that
+	// guarantee it does: a panic recovered in Update drops the command that
 	// would have armed the settle, and a mouse release is lost whenever the
 	// pointer leaves the surface the events come from.
 	viewportResizeAt time.Time
@@ -601,14 +601,14 @@ type OS struct {
 	// much empty ground the tiler keeps between neighbours. They are model state
 	// rather than reads of the config globals because they are inputs to pane
 	// geometry, and every input to pane geometry has to be identical across a
-	// session's attached clients - a PTY has exactly one size. Two clients whose
+	// session's attached clients, because a PTY has exactly one size. Two clients whose
 	// config files (or live settings) disagreed here computed different
 	// rectangles for the same panes and dragged the shared PTYs back and forth
 	// between the two answers on every push.
 	//
 	// Seeded from this client's config, then settled across the session by state
-	// sync (session.PaneGeometryState). Purely visual appearance - theme,
-	// colours, border style, title position, dimming - deliberately stays
+	// sync (session.PaneGeometryState). Purely visual appearance (theme,
+	// colours, border style, title position, dimming) deliberately stays
 	// per-client and configurable; these two are synced only because they move
 	// rectangles.
 	SharedBorders bool
@@ -630,7 +630,7 @@ type OS struct {
 	// SessionReserve is the chrome reserve every client attached to this
 	// session lays its panes out around: the largest any of them asks for, as
 	// settled by the daemon. The panes' box is the render size less this, which
-	// is what makes the box - and so every pane's size - identical on every
+	// is what makes the box, and so every pane's size, identical on every
 	// client. Zero outside a daemon session, where this client's own chrome is
 	// the only chrome there is.
 	SessionReserve session.LayoutReserve
@@ -652,7 +652,7 @@ type OS struct {
 	// reverse. See SyncStateToDaemon and syncAnswerOwed.
 	applyingPeerSync bool
 	// syncAnswerOwed records that something inside the sync did have news for
-	// the daemon - a window the daemon asked this client to place, and it
+	// the daemon: a window the daemon asked this client to place, and it
 	// placed. That is an answer to a question, not an echo of a layout, so it is
 	// sent once, after the sync has been applied and the guard is down.
 	syncAnswerOwed bool
@@ -788,7 +788,7 @@ type OS struct {
 	TapeReview     *TapeReviewState
 	// Scrollback browser overlay
 	ShowScrollbackBrowser bool
-	ScrollbackBrowser     any // *scrollback.Browser  - typed as any to avoid import cycle
+	ScrollbackBrowser     any // *scrollback.Browser, typed as any to avoid import cycle
 	// Command palette overlay
 	ShowCommandPalette     bool
 	CommandPaletteQuery    string
@@ -1390,7 +1390,7 @@ func createID() string {
 var verboseLog = os.Getenv("TUIOS_DEBUG_INTERNAL") == "1"
 
 // SwitchToSession detaches from the current daemon session and attaches to another.
-// The connection to the daemon stays open  - only the session binding changes.
+// The connection to the daemon stays open. Only the session binding changes.
 //
 // The round trip goes first and the windows come down only once it has landed.
 // Tearing down first meant a switch the daemon refused answered "show me that

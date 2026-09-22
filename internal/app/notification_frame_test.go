@@ -11,8 +11,8 @@ import (
 // Messages expire on a wall-clock timer, and the only thing that retires one is
 // CleanupNotifications. That used to run while a frame was being composed, so
 // the maintenance tick had no reason to compose a frame just because a message
-// was on screen; once the session went quiet - no animation, no PTY output, no
-// keystroke - the last frame drawn was served from the render cache
+// was on screen. Once the session went quiet (no animation, no PTY output, no
+// keystroke), the last frame drawn was served from the render cache
 // indefinitely, with whatever message happened to be up still painted over the
 // panes underneath it.
 //

@@ -7,7 +7,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The pane geometry inputs - shared borders and the pane gap - are session
+// The pane geometry inputs (shared borders and the pane gap) are session
 // state, because they are arithmetic and not appearance: they decide where the
 // rectangles inside the panes' box fall and how much of each rectangle a guest
 // may draw in. A PTY has exactly one size, so every client of a session has to
@@ -98,8 +98,8 @@ func (m *OS) MasterRatioPercent() int {
 }
 
 // adoptPaneGeometry takes the pane geometry as the session has it. Nil is a
-// peer that has not said - an older client, or state written before the field
-// existed - and leaves this client on its own configured values, which is the
+// peer that has not said (an older client, or state written before the field
+// existed) and leaves this client on its own configured values, which is the
 // pre-existing behaviour. It reports whether anything moved, because a moved
 // input obsoletes every tiled rectangle and the caller owes the layout a
 // retile that the geometry checks cannot always see: flipping shared borders
@@ -113,8 +113,8 @@ func (m *OS) adoptPaneGeometry(state *session.SessionState) bool {
 	changed := m.SharedBorders != pg.SharedBorders || m.PaneGap != pg.PaneGap
 	m.SharedBorders = pg.SharedBorders
 	m.PaneGap = pg.PaneGap
-	// Zero is a peer that has not said - state written before the field existed
-	// - and leaves this client on its own configured width, which is the
+	// Zero is a peer that has not said (state written before the field existed)
+	// and leaves this client on its own configured width, which is the
 	// pre-existing behaviour and the rule a nil PaneGeometry already follows.
 	if pg.ScrollColumnWidth != 0 && pg.ScrollColumnWidth != m.ScrollColumnWidth {
 		m.ScrollColumnWidth = pg.ScrollColumnWidth

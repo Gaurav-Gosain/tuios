@@ -17,16 +17,15 @@ import (
 // SIGWINCH, the daemon round trip, every guest's full repaint) costs more than
 // a frame and the user is not finished choosing a size yet.
 //
-// It is wrong the moment the gesture ends, and the original design ended it
-// only when a message arrived: ViewportResizeSettledMsg for a terminal resize,
-// mouse release for a drag. Neither is guaranteed. Update recovers panics and
-// returns a nil command when it does, which drops the settle that the very same
-// handler had just armed; the mouse release itself goes missing whenever the
-// pointer leaves the surface the events come from mid-drag, which a browser
-// client does every time. Either way the flag stayed set for the rest
-// of the session, so every retile after it - including the one a new window
-// triggers - took the visual-only branch, no pane ever got its real size, and
-// the layout was left showing whatever rectangles happened to be current.
+// It is wrong the moment the gesture ends, and a message marking that end
+// (ViewportResizeSettledMsg for a terminal resize, mouse release for a drag)
+// is not guaranteed to arrive. Update recovers panics and returns a nil
+// command when it does, which drops the settle the same handler had just
+// armed. The mouse release goes missing whenever the pointer leaves the
+// surface the events come from mid-drag, which a browser client does every
+// time. A flag cleared only by such a message stays set for the rest of the
+// session, so every later retile (including the one a new window triggers)
+// takes the visual-only branch and no pane gets its real size again.
 //
 // So the deferral is keyed on freshness instead. It holds only while a resize
 // event has arrived recently; past that it expires by itself and drains the
@@ -138,7 +137,7 @@ func (m *OS) notePointerEvent(at time.Time) {
 	// that the idle melt hid must come back. The event forces its own frame,
 	// but each window's CachedLayer still holds the borderless render and is
 	// reused until the window is dirty, so the reveal must mark the affected
-	// windows dirty here - otherwise the borders would never be drawn again.
+	// windows dirty here. Otherwise the borders would never be drawn again.
 	if m.Settings.ZenMode == config.ZenModeMouse && m.zenHidden && !m.pointerRecentlyMoved() {
 		m.markZenDirty()
 	}
@@ -146,7 +145,7 @@ func (m *OS) notePointerEvent(at time.Time) {
 }
 
 // requireRealLayout settles every transient geometry mechanism before a
-// structural change to the layout - a window opening, closing or splitting,
+// structural change to the layout: a window opening, closing or splitting,
 // tiling being toggled, a layout being loaded. Those are not resize steps, and
 // their result is what the user is left looking at, so they must never be laid
 // out visually-only and left for a message that may not come.
@@ -169,7 +168,7 @@ func (m *OS) requireRealLayout() {
 // It does what mouse release does minus the parts that need the release's own
 // coordinates: the gesture is over, the panes keep the geometry the last motion
 // gave them, and the deferred resizes are pushed through. The alternative is a
-// gesture that never ends, and that is not merely a stuck flag - while it is
+// gesture that never ends, and that is not merely a stuck flag: while it is
 // set, MarkTerminalsWithNewContent refuses to look at any pane, so no window
 // shows another byte of output for the rest of the session.
 func (m *OS) endLostGesture() {
@@ -206,9 +205,9 @@ func (m *OS) endLostGesture() {
 // endGestureWithoutButton is the per-frame backstop: a gesture cannot outlive
 // the button that started it.
 //
-// Every release path ends the gesture, but a release can go missing entirely -
-// the pointer leaves the surface the events come from, a recovered panic in
-// Update drops the event - and then nothing at all has to arrive for the resize
+// Every release path ends the gesture, but a release can go missing entirely
+// (the pointer leaves the surface the events come from, a recovered panic in
+// Update drops the event), and then nothing at all has to arrive for the resize
 // to be over. Run once per maintenance tick, so no frame is drawn with the size
 // readout up and no button pressed.
 func (m *OS) endGestureWithoutButton() {
@@ -254,11 +253,11 @@ func (m *OS) EndPointerGrabs() {
 // EndStrayGesture ends a drag or resize that something other than the window
 // layer claimed the release for.
 //
-// Mouse release can leave down a dozen paths - an overlay, the sidebar band, a
-// guest that asked for mouse tracking, the scrollbar, a copy-mode selection -
-// and each one used to return before the cleanup at the bottom of the handler.
-// A resize that survived one of them kept the size readout on screen and every
-// pane in resize borders with nothing pressed. It is idempotent so the normal
+// Mouse release can leave down a dozen paths (an overlay, the sidebar band, a
+// guest that asked for mouse tracking, the scrollbar, a copy-mode selection),
+// and each one returns before the cleanup at the bottom of the handler. A
+// resize that survived one of them would keep the size readout on screen and
+// every pane in resize borders with nothing pressed. It is idempotent so the normal
 // path, which has already finished the gesture properly, finds nothing to do.
 func (m *OS) EndStrayGesture() {
 	if !m.Dragging && !m.Resizing && !m.BorderResizing {

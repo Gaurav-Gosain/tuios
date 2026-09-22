@@ -524,7 +524,7 @@ func TestApplyStateSyncFocusUpdate(t *testing.T) {
 		FocusedWindow: 0, // win1 focused
 	}
 
-	// Sync with win2 focused - include both windows to avoid deletion
+	// Sync with win2 focused. Include both windows to avoid deletion
 	state := &session.SessionState{
 		FocusedWindowID: win2ID,
 		Windows: []session.WindowState{
@@ -556,8 +556,8 @@ func TestApplyStateSyncSkipsInvalidWindows(t *testing.T) {
 	// Sync with an invalid window (empty ID)
 	state := &session.SessionState{
 		Windows: []session.WindowState{
-			{ID: "", PTYID: ""},         // Invalid - empty ID
-			{ID: "valid-id", PTYID: ""}, // Invalid - empty PTYID
+			{ID: "", PTYID: ""},         // Invalid: empty ID
+			{ID: "valid-id", PTYID: ""}, // Invalid: empty PTYID
 		},
 	}
 
@@ -566,7 +566,7 @@ func TestApplyStateSyncSkipsInvalidWindows(t *testing.T) {
 		t.Fatalf("ApplyStateSync failed: %v", err)
 	}
 
-	// Should have 0 windows - both were invalid
+	// Should have 0 windows, since both were invalid
 	if len(m.Windows) != 0 {
 		t.Errorf("Windows count = %d, want 0", len(m.Windows))
 	}

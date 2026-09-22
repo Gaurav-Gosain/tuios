@@ -194,7 +194,7 @@ func (m *OS) dividerLines(bounds layout.Rect) ([]dividerLine, []paneLayer) {
 	// Restricting this to BSP left the two modes disagreeing about one setting:
 	// with shared borders on and appearance.gap at 2, BSP drew one divider and a
 	// column of ground while master-stack drew a two-column rule. It also left
-	// layout.SplitsBetween - written for exactly this - reachable only from a
+	// layout.SplitsBetween (written for exactly this) reachable only from a
 	// test.
 	if !m.UseScrollingLayout && !m.transitioning() {
 		splits := m.separatorSplits()

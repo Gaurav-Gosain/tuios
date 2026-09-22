@@ -99,7 +99,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			continue
 		}
 
-		// When a zoomed window covers the region, only render it - and the
+		// When a zoomed window covers the region, only render it and the
 		// popups over it. A popup covers a rectangle in the middle of the
 		// region and closes when its command exits, so it has to be drawn over
 		// whatever is underneath or it runs where nobody can see or type into
@@ -337,7 +337,7 @@ func windowLayerZ(window *terminal.Window, animating bool) int {
 // renderTerminal does not guarantee that on its own: the unfocused fast path
 // returns the emulator's own Render(), sized by the emulator rather than by the
 // window, and a window's rectangle can change without the emulator following it
-// in the same frame. A snap animation is the ordinary way that happens - it
+// in the same frame. A snap animation is the ordinary way that happens: it
 // interpolates X, Y, Width and Height every tick and deliberately leaves the VT
 // alone until the transition ends, so mid-animation the body is still the size
 // the pane used to be.
@@ -818,8 +818,8 @@ func (m *OS) View() tea.View {
 		m.cachedViewContent = content
 		// This frame carries the beam at the pointer's newest position, so the
 		// skipped move it was waiting for has been drawn. Cleared here rather
-		// than on the motion path so a frame composed for any other reason - a
-		// keystroke, pane output - counts too.
+		// than on the motion path so a frame composed for any other reason (a
+		// keystroke, pane output) counts too.
 		m.spotlightMotionPending = false
 		m.zenHidden = m.zenBordersHidden(false)
 		view.SetContent(content)
@@ -891,7 +891,7 @@ func (m *OS) flushGraphicsForView() {
 
 	// Hide images ONLY during full-screen overlays (help, palette, etc.) and
 	// for the length of a resize gesture. Copy-mode scroll is NOT a reason to
-	// hide  - RefreshAllPlacements uses the window's scrollback offset to
+	// hide: RefreshAllPlacements uses the window's scrollback offset to
 	// reposition images so they scroll naturally with the terminal content.
 	//
 	// A resize hides for the same reason an overlay does: an image is drawn in
@@ -973,7 +973,7 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 		return nil
 	}
 
-	// Always refresh placements if there are any - this handles window movement
+	// Always refresh placements if there are any. This handles window movement.
 	if m.KittyPassthrough.HasPlacements() {
 		m.snapshotPlacementScrollbackLens()
 		m.KittyPassthrough.RefreshAllPlacements(func() map[string]*WindowPositionInfo {
@@ -1049,7 +1049,7 @@ func (m *OS) GetKittyGraphicsCmd() tea.Cmd {
 		})
 	}
 
-	// Always flush pending output - this includes delete commands even after placements are removed
+	// Always flush pending output. This includes delete commands even after placements are removed
 	data := m.KittyPassthrough.FlushPending()
 	if len(data) == 0 {
 		return nil

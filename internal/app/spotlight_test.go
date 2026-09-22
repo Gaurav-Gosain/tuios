@@ -140,7 +140,7 @@ func TestSpotlightDimsAColouredBlank(t *testing.T) {
 func TestSpotlightDoesNotSplitStyleRuns(t *testing.T) {
 	// Both screens: a themed one, where every cell is scaled, and a themeless
 	// one, where the pass writes a colour to some cells and SGR 2 to others. A
-	// mixed screen must not defeat the run cache - the cells that share a
+	// mixed screen must not defeat the run cache: the cells that share a
 	// source colour and a level still come out of it as one style.
 	for _, themeID := range []string{"catppuccin_mocha", ""} {
 		name := themeID
@@ -394,8 +394,8 @@ func TestSpotlightDimsWhatItCanResolveWithNoTheme(t *testing.T) {
 }
 
 // TestSpotlightKeepsAThemedScreenWhole is the other side of the rule. With a
-// theme set tuios owns the sixteen - it pushes theme.GetANSIPalette into every
-// emulator - so nothing on a themed screen falls back to SGR 2, and the pass
+// theme set tuios owns the sixteen (it pushes theme.GetANSIPalette into every
+// emulator), so nothing on a themed screen falls back to SGR 2, and the pass
 // stays the single blend it was.
 func TestSpotlightKeepsAThemedScreenWhole(t *testing.T) {
 	styles := []uv.Style{
@@ -472,8 +472,8 @@ func TestSpotlightLeavesWideGlyphPlaceholdersAlone(t *testing.T) {
 
 // TestSpotlightDimsTextTheGuestLeftAtTheDefault is the case most of a real
 // screen is in, and the one a fixture full of explicit SGR hides. tuios emits
-// no colour for text the guest never coloured - a shell prompt, ls output,
-// almost everything - so a pass that only touched cells carrying a colour of
+// no colour for text the guest never coloured (a shell prompt, ls output,
+// almost everything), so a pass that only touched cells carrying a colour of
 // their own dimmed the syntax highlighting and left the rest at full
 // brightness. An e2e reading a real screen is what found it.
 func TestSpotlightDimsTextTheGuestLeftAtTheDefault(t *testing.T) {
@@ -724,8 +724,8 @@ func TestSpotlightAnchorHoldsWhenTheCursorGoesAway(t *testing.T) {
 	}
 }
 
-// TestSpotlightAnchorStartsInTheMiddle. A beam that has never had an answer -
-// turned on in window mode, where no pane owns a cursor - has to draw
+// TestSpotlightAnchorStartsInTheMiddle. A beam that has never had an answer
+// (turned on in window mode, where no pane owns a cursor) has to draw
 // somewhere, or the toggle reads as a toggle that did nothing.
 func TestSpotlightAnchorStartsInTheMiddle(t *testing.T) {
 	win := newTestWindow(t, "spotlight-first", 60, 12)
@@ -873,7 +873,7 @@ func TestSpotlightMotionThrottleIsOffWithTheBeamOff(t *testing.T) {
 
 // TestSpotlightPendingMotionWakesTheTick is the other half of the throttle. The
 // beam has no tick of its own, so the skipped position is flushed by the one
-// term the maintenance tick carries for it - and that term must be false the
+// term the maintenance tick carries for it, and that term must be false the
 // rest of the time, or every idle client pays a wake-up for a setting it is not
 // using. BenchmarkIdleTick is what that costs.
 func TestSpotlightPendingMotionWakesTheTick(t *testing.T) {

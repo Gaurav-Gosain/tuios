@@ -251,11 +251,11 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	// rather than its own config's.
 	m.adoptPaneGeometry(state)
 
-	// Set effective dimensions from state - this is the min of all connected clients
+	// Set effective dimensions from state. This is the min of all connected clients
 	// as calculated by the daemon. This ensures a new client joining respects
 	// the existing effective size even before receiving a SessionResizeMsg.
 	// Also set Width/Height so that window scaling works correctly when the terminal
-	// size changes - without this, oldWidth/oldHeight would be 0 and windows
+	// size changes. Without this, oldWidth/oldHeight would be 0 and windows
 	// would be clamped instead of scaled proportionally.
 	if state.Width > 0 && state.Height > 0 {
 		m.EffectiveWidth = state.Width
@@ -386,7 +386,7 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 
 	// A zoomed pane came in holding the box of whichever client zoomed it, at
 	// that client's size. The flag is session state and the rectangle is not, so
-	// it is recomputed here - and it has to be here, because RestoredFromState
+	// it is recomputed here. It has to be here, because RestoredFromState
 	// below suppresses the first retile, which is the only other thing that
 	// would have looked.
 	if zw := m.zoomedWindow(); zw != nil {
@@ -409,8 +409,8 @@ func (m *OS) RestoreFromState(state *session.SessionState) error {
 	m.MarkAllDirty()
 	m.LogInfo("[RESTORE] Restored session state: %d windows, FocusedWindow=%d, AutoTiling=%v, Workspace=%d", len(m.Windows), m.FocusedWindow, m.AutoTiling, m.CurrentWorkspace)
 
-	// Mark that we restored from state - this prevents the first resize from retiling
-	// and allows the layout to be preserved as the user left it
+	// Mark that we restored from state. This prevents the first resize from retiling
+	// and allows the layout to be preserved as the user left it.
 	m.RestoredFromState = true
 
 	// Start in terminal mode so input goes to the focused terminal immediately
@@ -469,7 +469,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// The round trip has landed. Whatever this client asked the daemon to open
 	// or close, it is about to learn the answer, so the snapshot it holds from
 	// here on is current and may be pushed again. This is also what stops an
-	// intent sent from somewhere other than an input - a tape command, say -
+	// intent sent from somewhere other than an input (a tape command, say)
 	// from leaving the guard set with no push behind it to spend it.
 	m.daemonWindowIntent = false
 
@@ -615,7 +615,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	m.DaemonStateVersion = state.Version
 	// A workspace switch adopted from a sync moves which panes are laid out, and
 	// the panes it brings on screen were last laid out whenever their workspace
-	// was last shown here - under whatever shared-borders setting was in force
+	// was last shown here, under whatever shared-borders setting was in force
 	// then. The rectangles in the sync are right, so nothing reads as stale, and
 	// the only thing wrong is the border allowance each pane keeps: two rows and
 	// two columns of every guest on the workspace, on this client alone. It is
@@ -647,9 +647,8 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	focusChanged := focusAfter != focusBefore
 
 	// Terminal mode with nothing focused is a dead end: keystrokes have no
-	// terminal to reach. Closing the last window used to drop back to window
-	// management as part of the local close; now that closing is the daemon's,
-	// this is where that happens.
+	// terminal to reach. Closing is the daemon's job, so the drop back to window
+	// management after the last window closes happens here.
 	if m.FocusedWindow < 0 && m.Mode == TerminalMode {
 		m.Mode = WindowManagementMode
 	}
@@ -763,7 +762,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	}
 
 	// Input mode is not synced: it is per-viewer. Applying another client's mode
-	// here used to yank this client between window-management and terminal mode
+	// here would yank this client between window-management and terminal mode
 	// whenever anyone else switched.
 
 	// A window the daemon created carries a nominal box, not a position: the
@@ -777,8 +776,8 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		// A pane the client is placing for the first time is a pane appearing, and
 		// the layout below is what decides where it appears from. Set only under
 		// tiling, and only here rather than inside the placing loop, so the restore
-		// path - which adopts a whole session at once and suppresses the retile
-		// that would consume these - cannot leave the flag on every pane for
+		// path (which adopts a whole session at once and suppresses the retile
+		// that would consume these) cannot leave the flag on every pane for
 		// whenever the next retile happens to run.
 		for _, w := range placedWindows {
 			w.Opening = true
@@ -848,7 +847,7 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// The strip as the session has it, taken before the retile below rather than
 	// after it: that retile lays the strip out from the offset and the focused
 	// column, so giving it the session's answers first is one pass over the
-	// panes instead of two - and on a workspace switch, which is the case that
+	// panes instead of two, and on a workspace switch, which is the case that
 	// retiles, the strip it lays out is then the one this sync named. A sync
 	// that moved neither leaves it alone.
 	//
@@ -891,8 +890,8 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// workspaceChanged above), and a workspace holding a custom layout is the one
 	// case where that is wrong: the rectangles a user arranged arrive in this same
 	// sync, and the retile replaces them with the tiler's. SwitchToWorkspace
-	// already gives a local switch the other answer - settle the border mode, move
-	// nothing - and this gives that answer to the switch that arrives over the
+	// already gives a local switch the other answer (settle the border mode, move
+	// nothing), and this gives that answer to the switch that arrives over the
 	// wire. Without it the flag reaching this client saves nothing: the client
 	// whose user pressed the key keeps the layout and every peer retiles it away.
 	workspaceRetile := workspaceChanged
@@ -937,8 +936,8 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 //
 // Entries are merged rather than replacing the map. Nothing ever removes one, so
 // a merge loses nothing, and a sync that lags a ratio this client has just moved
-// cannot take that ratio away again. A state that says nothing - a peer too old
-// to send the field, or a client that had tiling off - leaves what this client
+// cannot take that ratio away again. A state that says nothing (a peer too old
+// to send the field, or a client that had tiling off) leaves what this client
 // holds alone, which is what makes the field additive: MasterRatio still carries
 // the ratio in force on the workspace the state names, and RestoreWorkspaceLayout
 // still falls back to the configured ratio for a workspace nobody has a value
@@ -954,8 +953,8 @@ func (m *OS) adoptWorkspaceMasterRatio(state *session.SessionState) {
 // client.
 //
 // Merged rather than replacing the map, exactly as the ratios beside it are: a
-// state that says nothing about a workspace - an older peer, or a client that
-// never heard of it - leaves what this client holds alone, which is what makes
+// state that says nothing about a workspace (an older peer, or a client that
+// never heard of it) leaves what this client holds alone, which is what makes
 // the field additive and what lets a workspace nobody has an entry for still
 // mean "the tiler owns it", as it did before this existed. An entry that is
 // present wins, false included, because a client that stopped a workspace being
@@ -974,7 +973,7 @@ func (m *OS) adoptWorkspaceHasCustom(state *session.SessionState) {
 // Adopting it can change what this client keeps for its own chrome, which the
 // session's reserve is settled from. Announcing that is the caller's job and
 // not this one's: nothing may be sent from inside a sync, so the announce
-// happens once the sync has been applied - see the StateSyncMsg case in
+// happens once the sync has been applied. See the StateSyncMsg case in
 // update.go.
 func (m *OS) adoptSidebarState(state *session.SessionState) {
 	// The width is deliberately not taken. It is this viewer's preference, not
@@ -1007,11 +1006,10 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	//
 	// So the geometry in it is not news, it is the question being asked again.
 	// Adopting it drops a full-size pane on top of an otherwise clean split a few
-	// frames after the pane opened. That used to be invisible because
-	// placeUnplacedWindows ran straight afterwards and placed the window a second
-	// time, which repaired the geometry at the cost of throwing the pane back to
-	// the raw placement box mid-animation. Declining the box here is what makes
-	// placing once correct.
+	// frames after the pane opened. Placing the window a second time would
+	// repair the geometry only by throwing the pane back to the raw placement
+	// box mid-animation. Declining the box here is what makes placing once
+	// correct.
 	// The zoomed rectangle is declined for a second reason: it is the content
 	// region of whichever client zoomed the pane, at that client's size, and a
 	// rectangle is not shared state (see the retile at the end of
@@ -1298,9 +1296,9 @@ func (m *OS) closeWindowFromSync(w *terminal.Window) {
 // state after a following mutation, a focus change or a PTY resize, and that
 // broadcast still carries Unplaced until this client's placing push has landed.
 // Placing again on that echo teleports a pane the client has already placed and
-// tiled back to the raw placement box, and it does it a few frames in - which is
-// what tore a newly opened pane out of its open animation and restarted it from
-// the middle of the screen. Answering the question once is also all the daemon
+// tiled back to the raw placement box a few frames in, which tears a newly
+// opened pane out of its open animation and restarts it from the middle of the
+// screen. Answering the question once is also all the daemon
 // ever asked for.
 func (m *OS) placeUnplacedWindows(state *session.SessionState, firstSeen []*terminal.Window) []*terminal.Window {
 	byID := make(map[string]*terminal.Window, len(firstSeen))
@@ -1636,7 +1634,7 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 	// Mark content as dirty to trigger rendering
 	w.MarkContentDirty()
 
-	// DON'T re-enable callbacks here - they will be enabled after buffered output settles
+	// DON'T re-enable callbacks here. They will be enabled after buffered output settles.
 	// See EnableCallbacksMsg which is sent after 500ms delay
 }
 
@@ -1759,7 +1757,7 @@ func (m *OS) primePaneFromDaemon(window *terminal.Window) {
 // subscribeToPTY subscribes to PTY output for a window. fromSeq is the stream
 // position the window's emulator has just been restored to, so the daemon sends
 // what came after the snapshot rather than history the snapshot already shows.
-// Safe to call multiple times - will not double-subscribe.
+// Safe to call multiple times: it will not double-subscribe.
 func (m *OS) subscribeToPTY(window *terminal.Window, fromSeq int64) {
 	if m.DaemonClient == nil || window.PTYID == "" {
 		return
@@ -1853,9 +1851,9 @@ func (m *OS) UnsubscribeWorkspaceWindows(workspace int) {
 // This should be called after state-changing operations.
 //
 // A state that says exactly what the last one said is not sent. The callers are
-// unconditional on purpose - the input handler syncs after every keystroke,
+// unconditional on purpose (the input handler syncs after every keystroke,
 // every click and every wheel event, so that nothing a user does can go
-// unrecorded - and the great majority of those events change nothing the
+// unrecorded), and the great majority of those events change nothing the
 // daemon holds. Each one that is sent costs the daemon a merge and every other
 // attached client a full state application and a redraw, which is what made
 // typing on one client visibly disturb another.
@@ -1871,8 +1869,8 @@ func (m *OS) SyncStateToDaemon() {
 	// A sync being applied is not a moment to speak. Whatever wanted to be sent
 	// was worked out from a peer's state, and sending it back is what turns two
 	// clients that disagree into two clients that argue. The one thing inside a
-	// sync that genuinely has news - a window this client placed because the
-	// daemon could not - says so here and is sent once the sync is applied.
+	// sync that genuinely has news (a window this client placed because the
+	// daemon could not) says so here and is sent once the sync is applied.
 	if m.applyingPeerSync {
 		m.syncAnswerOwed = true
 		return
@@ -1882,7 +1880,7 @@ func (m *OS) SyncStateToDaemon() {
 	// snapshot below, because the client does not open or close windows: it
 	// sends the intent and waits. So the snapshot describes the window set as it
 	// was before the mutation, and it loses the race to the daemon's own change
-	// every time - the daemon reconciles it as stale and keeps the rectangles in
+	// every time: the daemon reconciles it as stale and keeps the rectangles in
 	// it, which are a layout for a window set that no longer exists. That layout
 	// then becomes canonical and reaches every client, and nothing downstream
 	// can tell it from a current one: the panes of the older, smaller set span
@@ -1916,7 +1914,7 @@ func (m *OS) SyncStateToDaemon() {
 
 // warnOnBuildMismatch says so when the daemon is running a different build of
 // tuios from this client. The two still speak, so this is a note and not a
-// refusal - but it is the difference between "the fix does not work" and "the
+// refusal, but it is the difference between "the fix does not work" and "the
 // fix is not installed on both sides", and nothing else says it out loud.
 func (m *OS) warnOnBuildMismatch() {
 	if m.DaemonClient == nil || !m.IsDaemonSession {
@@ -1938,7 +1936,7 @@ func (m *OS) warnOnBuildMismatch() {
 // already carries this client's viewport, so the two halves of "what box do the
 // panes go in" cannot disagree for a frame.
 //
-// It is called from the paths that can change the chrome - a viewport resize,
+// It is called from the paths that can change the chrome: a viewport resize,
 // which moves the sidebar's breakpoint; a config reload; and any input, which is
 // how the rail is folded, dragged or turned off. Nothing polls for it: the
 // answer is a pure function of this client's own state, so a call that finds it

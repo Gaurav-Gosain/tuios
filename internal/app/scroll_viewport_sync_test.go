@@ -13,8 +13,8 @@
 // The strip's offset is session state (SessionState.ScrollStrip): the strip is
 // one long row of columns and the offset is a place on it, so two clients
 // holding one offset are looking at the same place. That is safe because the
-// panes' box is the same on every client - the session's size is the minimum
-// over them and the chrome reserve the maximum - so one offset shows every
+// panes' box is the same on every client (the session's size is the minimum
+// over them and the chrome reserve the maximum), so one offset shows every
 // client the same columns.
 //
 // NEGATIVE CONTROLS, each run by mutating the shipped code and watching the
@@ -354,8 +354,8 @@ func TestScrolledStripIsNotStale(t *testing.T) {
 //
 // It cannot happen, and this is why. The panes' box is settled across the
 // session: the size is the minimum over the attached clients and the chrome
-// reserve is the maximum, so GetContentWidth - the width every strip
-// computation runs against - is the same number on every client whatever their
+// reserve is the maximum, so GetContentWidth (the width every strip
+// computation runs against) is the same number on every client whatever their
 // terminals are. A wider client draws a blank band around the box, not more of
 // the strip. So one offset shows every client the same columns, and there is
 // nothing for a local correction to correct.
@@ -462,7 +462,7 @@ func TestWorkspaceSwitchLandsBothClientsOnOneStrip(t *testing.T) {
 // Each workspace keeps its own strip and nothing on the wire loses the offset.
 // What lost it was local: switching to a workspace restores that workspace's
 // saved focus, FocusWindow calls ScrollingOnFocusChange, and that used
-// ScrollToFocusedColumn - the reveal the keyboard column steps use, which moves
+// ScrollToFocusedColumn, the reveal the keyboard column steps use, which moves
 // the strip to the focused column whether or not the user could already see it.
 // So a round trip overwrote the offset in place.
 //
