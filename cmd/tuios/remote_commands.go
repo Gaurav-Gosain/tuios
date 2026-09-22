@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -1108,7 +1109,10 @@ func callAndReport(verb string, params map[string]any, report func(map[string]an
 // The read deadline is stretched past the requested timeout because the daemon
 // only answers once the wait resolves: a client deadline shorter than the wait
 // would report a connection failure for a wait that was still perfectly healthy.
-func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, jsonOutput bool) error {
+func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, anySession, jsonOutput bool) error {
+	if anySession && (sessionName != "" || windowTarget != "") {
+		return errors.New("--any-session watches every session, so it takes no --session or --window. Drop one or the other")
+	}
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
@@ -1131,6 +1135,9 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 	if thread > 0 {
 		params["thread"] = thread
 	}
+	if anySession {
+		params["any_session"] = true
+	}
 
 	grace := time.Duration(timeout)*time.Millisecond + 10*time.Second
 	raw, err := t.client.CallWithTimeout("wait-for", t.params(params), grace)
@@ -1144,9 +1151,14 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 	var res struct {
 		Condition string `json:"condition"`
 		Window    string `json:"window"`
+		Session   string `json:"session"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if res.Window != "" && anySession && res.Session != "" {
+		fmt.Printf("%s matched on %s in session %s%s\n", res.Condition, res.Window, res.Session, t.on())
+		return nil
 	}
 	if res.Window != "" {
 		fmt.Printf("%s matched on %s%s\n", res.Condition, res.Window, t.on())

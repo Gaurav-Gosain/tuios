@@ -1799,6 +1799,7 @@ straight away without a restart.`,
 	var waitForIdle int
 	var waitForThread uint64
 	var waitForTimeout int
+	var waitForAnySession bool
 	var waitForJSON bool
 	waitForCmd := &cobra.Command{
 		Use:   "wait-for <condition>",
@@ -1811,7 +1812,8 @@ Conditions:
   window-exit     the window's shell exited
   window-idle     the window printed nothing for --idle milliseconds
   agent-state     an agent reached one of the --until states; without --window,
-                  any agent pane in the session matches
+                  any agent pane in the session matches, and with --any-session,
+                  any agent pane in any session
   agent-message   mail arrived. With --window it matches unread mail for that
                   inbox, including mail queued before the wait started; without
                   one, anything said in the session after it started. --thread
@@ -1832,6 +1834,9 @@ non-zero with the timeout error.`,
   # Wait until any agent in the session is waiting on a human
   tuios wait-for agent-state -s work --until needs_input
 
+  # Wait until an agent in any session is waiting on a human
+  tuios wait-for agent-state --any-session --until needs_input
+
   # Block until another agent leaves me a message
   tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --timeout 600000
 
@@ -1841,7 +1846,7 @@ non-zero with the timeout error.`,
 		ValidArgs: session.WaitConditionNames,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runWaitFor(waitForSession, waitForWindow, args[0], waitForPattern,
-				waitForUntil, waitForIdle, waitForThread, waitForTimeout, waitForJSON)
+				waitForUntil, waitForIdle, waitForThread, waitForTimeout, waitForAnySession, waitForJSON)
 		},
 	}
 	waitForCmd.Flags().StringVarP(&waitForSession, "session", "s", "", "Target session (default: most recently active)")
@@ -1851,6 +1856,7 @@ non-zero with the timeout error.`,
 	waitForCmd.Flags().IntVar(&waitForIdle, "idle", 0, "Milliseconds of silence that count as idle, for window-idle (default: 500)")
 	waitForCmd.Flags().Uint64Var(&waitForThread, "thread", 0, "Only match a message in this thread, for agent-message. Pass any message id in it")
 	waitForCmd.Flags().IntVar(&waitForTimeout, "timeout", 30000, "Milliseconds to wait before giving up")
+	waitForCmd.Flags().BoolVar(&waitForAnySession, "any-session", false, "For agent-state: watch every session on the daemon. Takes no --session or --window")
 	waitForCmd.Flags().BoolVar(&waitForJSON, "json", false, "Output result as JSON")
 	_ = waitForCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
@@ -2540,7 +2546,7 @@ It does not start a daemon. If no daemon runs here, the caller is told so.`,
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)
 	rootCmd.AddCommand(setAgentStateCmd, getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
 	rootCmd.AddCommand(listAgentsCmd, sendAgentMessageCmd, readAgentMessagesCmd, askAgentCmd)
-	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd)
+	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand())
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(splitWindowCmd, popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd)
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)

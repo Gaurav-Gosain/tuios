@@ -833,7 +833,7 @@ tuios wait-for <condition> [flags]
 | `window-output` | The window's content matches `--pattern` |
 | `window-exit` | The window's shell exited |
 | `window-idle` | The window printed nothing for `--idle` milliseconds |
-| `agent-state` | An agent reached one of the `--until` states; without `--window`, any agent pane in the session matches |
+| `agent-state` | An agent reached one of the `--until` states; without `--window`, any agent pane in the session matches; with `--any-session`, any agent pane in any session |
 | `agent-message` | A message arrived. With `--window`, the first unread message in that inbox; without it, any message left in the session after the wait began |
 
 **Flags:**
@@ -844,6 +844,7 @@ tuios wait-for <condition> [flags]
 - `--thread <id>`: Only match a message in this thread, for `agent-message`. Pass any message id in it
 - `--idle <ms>`: Milliseconds of silence that count as idle (default: 500)
 - `--timeout <ms>`: Milliseconds to wait before giving up (default: 30000)
+- `--any-session`: For `agent-state`: watch every session on the daemon, including ones created during the wait. Takes no `--session` or `--window`, and the result names the session that matched
 - `--json`: Output result as JSON
 
 The `window-output` pattern is matched against the window's scrollback, so
@@ -874,6 +875,9 @@ tuios wait-for session-exists -s work
 # Wait until any agent in the session is waiting on a human
 tuios wait-for agent-state -s work --until needs_input
 
+# Wait until an agent in any session is waiting on a human
+tuios wait-for agent-state --any-session --until needs_input
+
 # Wait for mail in your own inbox
 tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --timeout 600000
 
@@ -883,6 +887,56 @@ if tuios wait-for window-output -w build --pattern 'BUILD OK' --timeout 60000; t
 else
     echo "build timed out"
 fi
+```
+
+### `tuios subscribe`
+
+Print the daemon's event stream, one JSON object per line.
+
+The first line is the subscribe ack. It carries `seq`, the last event number
+assigned when the stream went live, and `boot_id`, a random id for this daemon
+start. Every event after it carries its own `seq` and `boot_id`. The event
+types and their fields are listed in [protocol.md](protocol.md#event-stream).
+
+Without `--session` the stream covers every session on the daemon. Most
+commands read an omitted session as the most recently active one; this one
+does not.
+
+**Usage:**
+```bash
+tuios subscribe [flags]
+```
+
+**Flags:**
+- `-s, --session <name>`: Only events from this session (default: every session)
+- `-w, --window <id>`: Only events about this window id
+- `--types <list>`: Only these event types, comma-separated (default: all)
+- `--after-seq <n>`: Replay the retained events after this seq before streaming live
+- `--boot-id <id>`: The `boot_id` the `--after-seq` came with, so a daemon restart shows as a gap. Needs `--after-seq`
+- `--count <n>`: Exit after printing this many events, gap lines included (default: run until the stream ends)
+
+To resume after a disconnect, pass the `seq` of the last event you printed and
+its `boot_id`. The daemon keeps the last 4096 events, apart from `output`
+events, and replays the ones after that seq before carrying on live. When it
+cannot replay everything you missed, a `gap` line comes first with a `reason`:
+`evicted` (the oldest events you missed are gone), `boot_changed` (the daemon
+restarted), `not_retained` (your filter includes `output`, which is never
+replayed) or, on a live stream, `overflow` (you read too slowly). After a gap,
+read current state again with `tuios list-agents` or `tuios list-windows`.
+
+**Examples:**
+```bash
+# Every agent state change on the daemon
+tuios subscribe --types agent-state
+
+# One session's window lifecycle
+tuios subscribe -s work --types window-created,window-closed
+
+# Resume where a previous run stopped
+tuios subscribe --types agent-state --after-seq 118 --boot-id 9f2c41d07a3e8b65
+
+# Wait for the next bell anywhere, then exit
+tuios subscribe --types bell --count 1
 ```
 
 ### `tuios set-agent-state`

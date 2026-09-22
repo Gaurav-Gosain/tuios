@@ -473,6 +473,7 @@ tuios wait-for window-idle   -s work -w build --idle 2000
 tuios wait-for window-exit   -s work -w build --timeout 600000
 tuios wait-for session-exists -s work
 tuios wait-for agent-state   -s work --until needs_input
+tuios wait-for agent-state   --any-session --until needs_input
 tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --timeout 600000
 ```
 
@@ -485,7 +486,9 @@ tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --timeout 600000
 - `agent-state` returns when an agent pane reaches one of the `--until` states
   (comma-separated). With `-w` it watches that pane; without it, any agent in
   the session matches, so "tell me when an agent needs input" is one blocking
-  call rather than a poll loop over `get-agent-state`.
+  call rather than a poll loop over `get-agent-state`. With `--any-session` it
+  watches every session on the daemon, takes no `-s` or `-w`, and prints which
+  session matched.
 - `agent-message` returns when another agent leaves you mail. See the agent
   chapter below.
 
@@ -2160,31 +2163,40 @@ Everything here works the same whether the session is attached locally, over
 SSH, in tuios-web, or attached to nobody at all: it is one daemon behind one
 socket, and these verbs never route through a client.
 
-Some verbs have no wrapper, notably `subscribe`, which opens a live event stream
-instead of answering once. Reach those by writing newline-delimited JSON to
-`$TUIOS_SOCKET` and reading one JSON line back per request:
+Some verbs have no wrapper. Reach those by writing newline-delimited JSON to
+`$TUIOS_SOCKET` and reading one JSON line back per request.
+
+`subscribe`, which opens a live event stream instead of answering once, has a
+wrapper that prints the stream as JSON lines:
 
 ```sh
-python3 -c '
-import json, os, socket, sys
-s = socket.socket(socket.AF_UNIX); s.connect(os.environ["TUIOS_SOCKET"])
-s.sendall(json.dumps({"id": 1, "verb": "subscribe", "params": {"types": ["window-created", "window-exit"]}}).encode() + b"\n")
-for line in s.makefile():
-    print(line.strip()); sys.stdout.flush()
-'
+tuios subscribe --types window-created,window-exit
 ```
 
 ```
-{"id":1,"result":{"seq":133,"type":"subscribed"}}
-{"seq":134,"type":"window-created","session":"work","window":"86e5e19f-...","pty_id":"b158e731-...","title":"Terminal 86e5e19f","time":1786611217427984525}
+{"boot_id":"9f2c41d07a3e8b65","seq":133,"type":"subscribed"}
+{"seq":134,"type":"window-created","session":"work","window":"86e5e19f-...","pty_id":"b158e731-...","title":"Terminal 86e5e19f","boot_id":"9f2c41d07a3e8b65","time":1786611217427984525}
 ```
 
-Events arrive from the moment you subscribe, with no backfill, so subscribe
-before you start the thing you want to watch. That is also why mail is a stored
-ring rather than an event: an agent making one-shot calls is never subscribed at
-the moment someone writes to it. `wait-for` is the same machinery with the
-bookkeeping done for you; reach for `subscribe` only when you need to watch
-several things at once.
+Without `-s` it covers every session, not only the current one. Events start
+from the moment you subscribe, so subscribe before you start the thing you want
+to watch. If your stream drops, resume it with the `seq` of the last event you
+read and its `boot_id`:
+
+```sh
+tuios subscribe --types agent-state --after-seq 134 --boot-id 9f2c41d07a3e8b65
+```
+
+The daemon replays what it still holds after that seq and then carries on live.
+A line with `"type":"gap"` means some events are gone for good (the daemon
+restarted, or they aged out); read current state again with `tuios list-agents`
+rather than trusting the stream to be complete. Output events are never
+replayed.
+
+Mail is still a stored ring rather than an event, because an agent making
+one-shot calls is never subscribed at the moment someone writes to it.
+`wait-for` is the same machinery with the bookkeeping done for you; reach for
+`subscribe` only when you need to watch several things at once.
 
 ## Habits worth having
 

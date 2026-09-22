@@ -2,6 +2,7 @@ package session
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -123,6 +124,25 @@ func (c *VerbClient) Close() error {
 		return nil
 	}
 	return c.conn.Close()
+}
+
+// ReadEventLine reads the next line the daemon pushes on a connection that
+// has subscribed, without the trailing newline. A timeout of zero or less
+// waits for as long as it takes, which is what a stream reader wants: an
+// event stream can sit silent for hours and still be healthy.
+func (c *VerbClient) ReadEventLine(timeout time.Duration) ([]byte, error) {
+	c.callMu.Lock()
+	defer c.callMu.Unlock()
+	deadline := time.Time{}
+	if timeout > 0 {
+		deadline = time.Now().Add(timeout)
+	}
+	_ = c.conn.SetReadDeadline(deadline)
+	line, err := c.r.ReadBytes('\n')
+	if err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(line, "\r\n"), nil
 }
 
 // defaultCallTimeout bounds how long a verb call waits for its response. It is
