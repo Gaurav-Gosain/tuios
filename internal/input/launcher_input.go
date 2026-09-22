@@ -1,8 +1,6 @@
 package input
 
 import (
-	"unicode/utf8"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
@@ -33,36 +31,17 @@ func handleLauncherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case "down", "ctrl+n":
 		o.LauncherMove(1)
 		return o, o.LauncherIconWork()
-
-	case "backspace":
-		if len(o.LauncherQuery) > 0 {
-			// A rune at a time. Taking a byte off splits a multi-byte character
-			// and leaves invalid UTF-8 in the query.
-			_, size := utf8.DecodeLastRuneInString(o.LauncherQuery)
-			o.LauncherQuery = o.LauncherQuery[:len(o.LauncherQuery)-size]
-			o.LauncherRefilter()
-		}
-		return o, o.LauncherIconWork()
-
-	case "ctrl+u":
-		o.LauncherQuery = ""
-		o.LauncherRefilter()
-		return o, o.LauncherIconWork()
 	}
 
-	// Accept printable characters. A space is a legitimate character in a
-	// program name, so it types rather than being swallowed as a key.
-	switch keyStr := msg.String(); {
-	case keyStr == "space":
-		o.LauncherQuery += " "
-	case msg.Text != "":
-		o.LauncherQuery += msg.Text
-	case len(keyStr) == 1 && keyStr[0] >= 32 && keyStr[0] <= 126:
-		o.LauncherQuery += keyStr
-	default:
+	// A space is a legitimate character in a program name, so it types rather
+	// than being swallowed as a key.
+	changed, consumed := editFilterQuery(msg, &o.LauncherQuery, true)
+	if !consumed {
 		return o, nil
 	}
-	o.LauncherRefilter()
+	if changed {
+		o.LauncherRefilter()
+	}
 	// Typing changes which rows are on screen, so it changes which icons are
 	// wanted.
 	return o, o.LauncherIconWork()
