@@ -245,95 +245,67 @@ func (m *OS) adjustTilingNeighborsGeneric(resized *terminal.Window, newX, newY, 
 	minX := m.GetLeftMargin()
 	maxX := minX + m.GetContentWidth()
 
-	// Handle right edge movement (vertical split line)
+	// The right edge first, then the left, then the bottom, then the top: each
+	// move sees the panes the one before it already moved.
 	if newRight != oldRight {
-		leftWindows, rightWindows := findWindowsOnVerticalSplitAll(m, oldRight)
-		leftWindows = removeWindowFromList(leftWindows, resized)
-		rightWindows = removeWindowFromList(rightWindows, resized)
-
-		constrainedRight := m.constrainVerticalSplit(newRight, leftWindows, rightWindows, minWidth, minX, maxX)
-
-		for _, win := range leftWindows {
-			resize(m, win, constrainedRight-win.X, win.Height)
-			win.MarkPositionDirty()
-		}
-		for _, win := range rightWindows {
-			oldWinRight := win.X + win.Width
-			win.X = constrainedRight
-			resize(m, win, oldWinRight-constrainedRight, win.Height)
-			win.MarkPositionDirty()
-		}
-
-		newRight = constrainedRight
+		newRight = m.moveVerticalSplit(oldRight, newRight, resized, resize, minWidth, minX, maxX)
 	}
-
-	// Handle left edge movement (vertical split line)
 	if newX != oldX {
-		leftWindows, rightWindows := findWindowsOnVerticalSplitAll(m, oldX)
-		leftWindows = removeWindowFromList(leftWindows, resized)
-		rightWindows = removeWindowFromList(rightWindows, resized)
-
-		constrainedX := m.constrainVerticalSplit(newX, leftWindows, rightWindows, minWidth, minX, maxX)
-
-		for _, win := range leftWindows {
-			resize(m, win, constrainedX-win.X, win.Height)
-			win.MarkPositionDirty()
-		}
-		for _, win := range rightWindows {
-			oldWinRight := win.X + win.Width
-			win.X = constrainedX
-			resize(m, win, oldWinRight-constrainedX, win.Height)
-			win.MarkPositionDirty()
-		}
-
-		newX = constrainedX
+		newX = m.moveVerticalSplit(oldX, newX, resized, resize, minWidth, minX, maxX)
 	}
-
-	// Handle bottom edge movement (horizontal split line)
 	if newBottom != oldBottom {
-		topWindows, bottomWindows := findWindowsOnHorizontalSplitAll(m, oldBottom)
-		topWindows = removeWindowFromList(topWindows, resized)
-		bottomWindows = removeWindowFromList(bottomWindows, resized)
-
-		constrainedBottom := m.constrainHorizontalSplit(newBottom, topWindows, bottomWindows, minHeight, minY, maxY)
-
-		for _, win := range topWindows {
-			resize(m, win, win.Width, constrainedBottom-win.Y)
-			win.MarkPositionDirty()
-		}
-		for _, win := range bottomWindows {
-			oldWinBottom := win.Y + win.Height
-			win.Y = constrainedBottom
-			resize(m, win, win.Width, oldWinBottom-constrainedBottom)
-			win.MarkPositionDirty()
-		}
-
-		newBottom = constrainedBottom
+		newBottom = m.moveHorizontalSplit(oldBottom, newBottom, resized, resize, minHeight, minY, maxY)
 	}
-
-	// Handle top edge movement (horizontal split line)
 	if newY != oldY {
-		topWindows, bottomWindows := findWindowsOnHorizontalSplitAll(m, oldY)
-		topWindows = removeWindowFromList(topWindows, resized)
-		bottomWindows = removeWindowFromList(bottomWindows, resized)
-
-		constrainedY := m.constrainHorizontalSplit(newY, topWindows, bottomWindows, minHeight, minY, maxY)
-
-		for _, win := range topWindows {
-			resize(m, win, win.Width, constrainedY-win.Y)
-			win.MarkPositionDirty()
-		}
-		for _, win := range bottomWindows {
-			oldWinBottom := win.Y + win.Height
-			win.Y = constrainedY
-			resize(m, win, win.Width, oldWinBottom-constrainedY)
-			win.MarkPositionDirty()
-		}
-
-		newY = constrainedY
+		newY = m.moveHorizontalSplit(oldY, newY, resized, resize, minHeight, minY, maxY)
 	}
 
 	return newX, newY, newRight, newBottom
+}
+
+// moveVerticalSplit moves the vertical split line at column old toward
+// requested, resizing every pane on it except resized, and returns the column
+// the line landed on once the neighbours' minimum widths are respected.
+func (m *OS) moveVerticalSplit(old, requested int, resized *terminal.Window, resize resizeOp, minWidth, minX, maxX int) int {
+	leftWindows, rightWindows := findWindowsOnVerticalSplitAll(m, old)
+	leftWindows = removeWindowFromList(leftWindows, resized)
+	rightWindows = removeWindowFromList(rightWindows, resized)
+
+	split := m.constrainVerticalSplit(requested, leftWindows, rightWindows, minWidth, minX, maxX)
+
+	for _, win := range leftWindows {
+		resize(m, win, split-win.X, win.Height)
+		win.MarkPositionDirty()
+	}
+	for _, win := range rightWindows {
+		oldWinRight := win.X + win.Width
+		win.X = split
+		resize(m, win, oldWinRight-split, win.Height)
+		win.MarkPositionDirty()
+	}
+	return split
+}
+
+// moveHorizontalSplit is moveVerticalSplit for the horizontal split line at
+// row old.
+func (m *OS) moveHorizontalSplit(old, requested int, resized *terminal.Window, resize resizeOp, minHeight, minY, maxY int) int {
+	topWindows, bottomWindows := findWindowsOnHorizontalSplitAll(m, old)
+	topWindows = removeWindowFromList(topWindows, resized)
+	bottomWindows = removeWindowFromList(bottomWindows, resized)
+
+	split := m.constrainHorizontalSplit(requested, topWindows, bottomWindows, minHeight, minY, maxY)
+
+	for _, win := range topWindows {
+		resize(m, win, win.Width, split-win.Y)
+		win.MarkPositionDirty()
+	}
+	for _, win := range bottomWindows {
+		oldWinBottom := win.Y + win.Height
+		win.Y = split
+		resize(m, win, win.Width, oldWinBottom-split)
+		win.MarkPositionDirty()
+	}
+	return split
 }
 
 // applyBSPResize moves the dividers that own the edges the caller changed and
