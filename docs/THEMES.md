@@ -65,8 +65,12 @@ built-in one. Subdirectories are not scanned. A file that fails to parse is
 skipped with a warning in the log and does not prevent the other themes, or the
 app, from loading.
 
-Themes are read once, at startup. Adding or editing a theme file requires a
-restart.
+The directory is read at startup, and read again in two cases: when a theme id
+that is not registered yet is selected with `tuios set-config appearance.theme
+<id>`, and on every `tuios list-themes`. So a new theme file can be
+selected without a restart: write the file, then select its id. Selecting a
+theme that is already registered does not re-read its file, so to see an edit
+to a theme that is already loaded, save it under a new id or restart tuios.
 
 ## Theme File Format
 
