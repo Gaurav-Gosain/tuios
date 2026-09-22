@@ -351,7 +351,7 @@ func renderRowBreakingClusters(b *strings.Builder, line uv.Line) {
 			// A continuation cell; the wide cell before it stays prev.
 			continue
 		}
-		if c.Equal(&uv.EmptyCell) {
+		if isBlankCell(c) {
 			if !pen.IsZero() {
 				b.WriteString(ansi.ResetStyle)
 				pen = uv.Style{}
@@ -374,7 +374,7 @@ func renderRowBreakingClusters(b *strings.Builder, line uv.Line) {
 			b.WriteString(ansi.ResetStyle)
 			pen = uv.Style{}
 		}
-		if !c.Style.Equal(&pen) {
+		if !penStyleEqual(&c.Style, &pen) {
 			b.WriteString(c.Style.Diff(&pen))
 			pen = c.Style
 		}
@@ -398,6 +398,50 @@ func renderRowBreakingClusters(b *strings.Builder, line uv.Line) {
 	if !pen.IsZero() {
 		b.WriteString(ansi.ResetStyle)
 	}
+}
+
+// penStyleEqual reports whether a and b are equal in the sense of
+// uv.Style.Equal. It is the render loop's per-cell test, and uv's version
+// converts both sides of every colour to RGBA even when they are the same value
+// copied from one pen, which is nearly always the case for neighbouring cells.
+func penStyleEqual(a, b *uv.Style) bool {
+	return a.Attrs == b.Attrs &&
+		a.Underline == b.Underline &&
+		penColorEqual(a.Fg, b.Fg) &&
+		penColorEqual(a.Bg, b.Bg) &&
+		penColorEqual(a.UnderlineColor, b.UnderlineColor)
+}
+
+// penColorEqual reports whether a and b have the same RGBA value, as uv's
+// colorEqual does. Two values of the same concrete colour type the emulator
+// produces are compared by value first, which needs no RGBA call. Values that
+// differ there can still look the same (indexed 15 and 231 are both white), so
+// anything not settled by that falls back to comparing RGBA.
+func penColorEqual(a, b color.Color) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	switch av := a.(type) {
+	case ansi.BasicColor:
+		if bv, ok := b.(ansi.BasicColor); ok && av == bv {
+			return true
+		}
+	case ansi.IndexedColor:
+		if bv, ok := b.(ansi.IndexedColor); ok && av == bv {
+			return true
+		}
+	case ansi.TrueColor:
+		if bv, ok := b.(ansi.TrueColor); ok && av == bv {
+			return true
+		}
+	case color.RGBA:
+		if bv, ok := b.(color.RGBA); ok && av == bv {
+			return true
+		}
+	}
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
 }
 
 var _ uv.Screen = (*Emulator)(nil)
