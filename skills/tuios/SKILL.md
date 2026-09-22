@@ -40,9 +40,22 @@ TUIOS_HOST=laptop
 window. Pass it to `-w` whenever you mean yourself rather than whatever happens
 to be focused. It is also your address when another agent wants to reach you.
 
+A shell the daemon started again after a restore also has `TUIOS_RESTORED=1`.
+It is a new shell in the old place: nothing that ran in the pane before is
+still running.
+
 A pane in a standalone `tuios` (started without a daemon) gets only
-`TUIOS_WINDOW_ID`. There is no socket to talk to, so guard on `TUIOS_ENV` and
-degrade quietly when it is unset.
+`TUIOS_WINDOW_ID`, and `TUIOS_KITTY_ANIMATION=1` or `0` to say whether kitty
+animation frames reach the terminal. There is no socket to talk to, so guard on
+`TUIOS_ENV` and degrade quietly when it is unset.
+
+A pane whose process runs on another machine (`tuios new-window NAME --host
+HOST`, see Other machines) has `TUIOS_PANE_HOSTED=1`, `TUIOS_HOST` and
+`TUIOS_SESSION_REMOTE`, the session's name on the machine that holds the
+window. It has no `TUIOS_ENV`, `TUIOS_SOCKET`, `TUIOS_PANE_ID` or
+`TUIOS_SESSION`, because nothing on the machine it runs on reaches the daemon
+that holds the window. An agent in such a pane cannot report its state or read
+its mail. Its state is still detected from the side that holds the window.
 
 ## Addressing things
 
@@ -204,9 +217,9 @@ written by a program the owner of that machine does not run.
 
 A file crosses a link through the stash. `stash put -s HOST:SESSION FILE`
 reads the file here, sends its bytes, and prints the path it has there on
-stdout, with the size note on stderr. Attach
-that path. `stash get -s HOST:SESSION STORED [FILE]` brings a stashed file
-back here. Both are capped at 8 MB.
+stdout, with the size note on stderr. Attach that path. `stash get -s
+HOST:SESSION STORED [FILE]` brings a stashed file back here. Both are capped at
+8 MB.
 
 ```sh
 path=$(tuios stash put -s build:api /tmp/flame.png)
@@ -214,9 +227,26 @@ tuios send-agent-message -s build:api -w review --attach "$path" 'the hot path i
 tuios stash get -s build:api "$path" flame.png
 ```
 
-`$TUIOS_HOST` in every pane is the hostname of the machine the pane runs on.
-It is set on every machine, the way `$TUIOS_SESSION` is. A pane is never
-remote to its own daemon, so there is no value that means "elsewhere".
+`$TUIOS_HOST` in every pane is the hostname of the machine the pane's process
+runs on. It is set on every machine, the way `$TUIOS_SESSION` is. In a hosted
+pane (below) that is the other machine, and `TUIOS_PANE_HOSTED=1` says so.
+
+A window's process can run on another machine while the window stays in a
+session here. It is drawn and laid out here, and its title bar reads
+`HOST:NAME`:
+
+```sh
+tuios new-window -s work deploy --host build
+```
+
+The window ends when the link drops, and a resurrected session brings it back
+as a local shell. A global session holds panes from several machines, and every
+way of making a window in it asks which machine to run on. It starts with no
+windows:
+
+```sh
+tuios new deploy --global
+```
 
 A host name is matched exactly. A miss is `unknown_host` with the configured
 names, never a guess, because reaching the wrong machine is worse than reaching
