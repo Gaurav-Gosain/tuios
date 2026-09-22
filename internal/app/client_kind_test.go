@@ -116,8 +116,10 @@ func TestEveryEntryPointNamesItsClientKind(t *testing.T) {
 			return true
 		})
 	}
-	if found < 6 {
-		t.Fatalf("found %d app.OSOptions literals, expected the local, attach, tape, two SSH and two web ones", found)
+	// The SSH and web servers build one literal each and hand it to
+	// internal/served for both their ephemeral and daemon sessions.
+	if found < 5 {
+		t.Fatalf("found %d app.OSOptions literals, expected the local, attach, tape, SSH and web ones", found)
 	}
 }
 
