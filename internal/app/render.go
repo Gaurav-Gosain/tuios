@@ -303,7 +303,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 
 // windowLayerZ is the z-index a window's layer is composed at.
 //
-// Tiled windows are drawn at their own Z, which counts up from ZIndexBase and
+// Tiled windows are drawn at their own Z, which counts up from zero and
 // stays under the separator overlay. Floating windows are lifted into a band of
 // their own above the separators, in their own stacking order, and that band is
 // capped at ZIndexFloatingTop so no number of floating panes can reach the dock
@@ -312,7 +312,7 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 func windowLayerZ(window *terminal.Window, animating bool) int {
 	// A zoomed pane is drawn over the layout whenever the layout is drawn at
 	// all, which is a box smaller than the region or a zoom part way through
-	// its slide. Its own Z counts from ZIndexBase like any tiled pane's, so
+	// its slide. Its own Z counts from zero like any tiled pane's, so
 	// without this the panes it is supposed to be covering draw on top of it
 	// whenever their Z happened to be higher.
 	if window.Zoomed {

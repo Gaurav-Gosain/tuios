@@ -26,9 +26,6 @@ const (
 
 	// MinWindowWidth is the minimum width a window can be resized to
 	MinWindowWidth = 10
-
-	// MinWindowHeight is the minimum height a window can be resized to
-	MinWindowHeight = 3
 )
 
 // =============================================================================
@@ -52,9 +49,6 @@ const (
 // =============================================================================
 
 const (
-	// PrefixCommandTimeout is the timeout for prefix command mode
-	PrefixCommandTimeout = 2 * time.Second
-
 	// CPUUpdateInterval is the interval between CPU usage updates
 	CPUUpdateInterval = 500 * time.Millisecond
 
@@ -63,9 +57,6 @@ const (
 
 	// WhichKeyDelay is the delay before showing which-key style overlay
 	WhichKeyDelay = 500 * time.Millisecond
-
-	// ProcessShutdownTimeout is the timeout for graceful process shutdown
-	ProcessShutdownTimeout = 500 * time.Millisecond
 )
 
 // =============================================================================
@@ -96,13 +87,6 @@ var (
 	// IdleFPS is the refresh rate when the terminal is idle (no output for ~500ms).
 	// Reduces CPU usage from ~10% to near-zero on idle.
 	IdleFPS = 10
-
-	// IdleThresholdFrames is the number of consecutive idle frames at NormalFPS
-	// before switching to IdleFPS (~500ms at 60 FPS).
-	IdleThresholdFrames = 30
-
-	// BackgroundWindowUpdateCycle is the number of update cycles to skip for background windows
-	BackgroundWindowUpdateCycle = 3
 )
 
 // =============================================================================
@@ -135,30 +119,6 @@ const (
 	SidebarBreakpointNarrow = 60 // >= this: narrow rail
 	SidebarBreakpointGlyph  = 40 // >= this: glyph rail; below: auto-hidden
 
-	// StatusBarLeftWidth is the width of the left section of status bar
-	StatusBarLeftWidth = 30
-
-	// LogViewerWidth is the width of the log viewer overlay
-	LogViewerWidth = 80
-
-	// CPUGraphWidth is the width of the CPU graph including label
-	CPUGraphWidth = 19
-
-	// CPUGraphBars is the number of bars in the CPU graph
-	CPUGraphBars = 10
-
-	// CPUGraphScale is the scale factor for CPU graph bars (100/8 blocks)
-	CPUGraphScale = 12.5
-
-	// LeftInfoWidth is the width of the left info area in dock
-	LeftInfoWidth = 30
-
-	// RightInfoWidth is the width of the right info area in dock
-	RightInfoWidth = 20
-
-	// DockItemWidth is the base width of a dock item
-	DockItemWidth = 6
-
 	// NotificationMaxWidth caps the dock's message block. Past about seventy
 	// columns a message that keeps growing stops being a status line and starts
 	// being a paragraph, so the rest is truncated instead.
@@ -173,20 +133,6 @@ const (
 	// dock is too tight to split, and the message takes what the screen has
 	// less a small margin instead.
 	NotificationMinWidth = 14
-
-	// AnimationMargin is the margin for culling animated windows
-	AnimationMargin = 20
-
-	// VisibilityMargin is the margin for culling static windows
-	VisibilityMargin = 5
-
-	// MaxNameLengthDock is the maximum length of window name in dock
-	MaxNameLengthDock = 12
-
-	// MinimizedDockWidth is the width of minimized window visual in the dock.
-	MinimizedDockWidth = 5
-	// MinimizedDockHeight is the height of minimized window visual in the dock.
-	MinimizedDockHeight = 3
 )
 
 // =============================================================================
@@ -315,17 +261,8 @@ const (
 // =============================================================================
 
 const (
-	// TapeManagerTitle is the title icon for the tape manager
-	TapeManagerTitle = "Tape Manager"
-
 	// TapeRecordingIndicator is the recording indicator
 	TapeRecordingIndicator = "[REC]"
-
-	// TapeSuccessIcon is the success checkmark
-	TapeSuccessIcon = "[OK]"
-
-	// TapeSelectedIcon is the selection arrow
-	TapeSelectedIcon = ">"
 )
 
 // =============================================================================
@@ -880,29 +817,14 @@ const (
 )
 
 const (
-	// WindowBorderTopLeftASCII is the top-left corner character for window borders (ASCII fallback).
-	WindowBorderTopLeftASCII = "+"
-	// WindowBorderTopRightASCII is the top-right corner character for window borders (ASCII fallback).
-	WindowBorderTopRightASCII = "+"
-	// WindowBorderBottomLeftASCII is the bottom-left corner character for window borders (ASCII fallback).
-	WindowBorderBottomLeftASCII = "+"
-	// WindowBorderBottomRightASCII is the bottom-right corner character for window borders (ASCII fallback).
-	WindowBorderBottomRightASCII = "+"
-	// WindowBorderHorizontalASCII is the horizontal line character for window borders (ASCII fallback).
-	WindowBorderHorizontalASCII = "-"
-	// WindowBorderVerticalASCII is the vertical line character for window borders (ASCII fallback).
-	WindowBorderVerticalASCII = "|"
-
 	// WindowButtonCloseASCII is the close/kill window button character (ASCII fallback).
 	WindowButtonCloseMarkASCII = "X"
 	// WindowButtonCloseASCII is that mark padded into the three-cell button.
 	WindowButtonCloseASCII = " " + WindowButtonCloseMarkASCII + " "
-	// WindowButtonMaximizeASCII is the maximize window button character (ASCII
-	// fallback). Three cells like the close button, so the pill keeps its width
-	// and the hit-test offsets below still hold.
+	// WindowButtonMaximizeMarkASCII is the maximize mark (ASCII fallback). One
+	// cell like the Unicode mark, so the padded button keeps its three cells and
+	// the hit-test offsets below still hold.
 	WindowButtonMaximizeMarkASCII = "O"
-	// WindowButtonMaximizeASCII is that mark padded into the three-cell button.
-	WindowButtonMaximizeASCII = " " + WindowButtonMaximizeMarkASCII + " "
 	// WindowButtonDotASCII is the dots style's disc in ASCII. One cell like the
 	// disc it stands in for, so the traffic light keeps its layout and its
 	// colours, and only loses the roundness.
@@ -1163,23 +1085,6 @@ func (s *Settings) GetWindowBorderLeft() string {
 	return s.GetBorderForStyle().Left
 }
 
-// GetWindowBorderRight returns the appropriate right border character
-func (s *Settings) GetWindowBorderRight() string {
-	return s.GetBorderForStyle().Right
-}
-
-// GetWindowBorderHorizontal returns the appropriate horizontal border character
-// Deprecated: Use GetWindowBorderTop() or GetWindowBorderBottom() for half-block borders
-func (s *Settings) GetWindowBorderHorizontal() string {
-	return s.GetWindowBorderTop()
-}
-
-// GetWindowBorderVertical returns the appropriate vertical border character
-// Deprecated: Use GetWindowBorderLeft() or GetWindowBorderRight() for half-block borders
-func (s *Settings) GetWindowBorderVertical() string {
-	return s.GetWindowBorderLeft()
-}
-
 // The window controls resolve in two steps: a one-cell mark, which is what a
 // glyph set names and what a user means by "the close button", and the padded
 // button the title bar draws.
@@ -1270,24 +1175,6 @@ const (
 )
 
 // =============================================================================
-// Buffer and Pool Sizes
-// =============================================================================
-
-const (
-	// ByteSliceBufferSize is the size of byte slices in the pool
-	ByteSliceBufferSize = 32 * 1024 // 32KB
-
-	// WindowExitChannelBuffer is the buffer size for window exit channel
-	WindowExitChannelBuffer = 10
-
-	// LayerPoolInitialCapacity is the initial capacity for layer pool slices
-	LayerPoolInitialCapacity = 16
-
-	// StringBuilderInitialCapacity is estimated size for terminal content
-	StringBuilderInitialCapacity = 1000 // Will be adjusted based on window size
-)
-
-// =============================================================================
 // Limits
 // =============================================================================
 
@@ -1297,24 +1184,6 @@ const (
 
 	// MaxWorkspaces is the maximum number of workspaces supported
 	MaxWorkspaces = 9
-
-	// CPUHistorySize is the number of CPU usage samples to keep
-	CPUHistorySize = 10
-
-	// MaxDockItems is the maximum number of minimized windows shown in dock
-	MaxDockItems = 9
-
-	// MaxGridColumns is the maximum number of columns in window grid layout
-	MaxGridColumns = 3
-
-	// MaxTwoColumnGridWindows is the threshold for switching to 2-column grid
-	MaxTwoColumnGridWindows = 6
-
-	// MaxHelpLines is the estimated maximum number of help lines
-	MaxHelpLines = 50
-
-	// MaxSwapDistance is the threshold for directional window swapping
-	MaxSwapDistance = 5
 )
 
 // =============================================================================
@@ -1322,11 +1191,8 @@ const (
 // =============================================================================
 
 const (
-	// ZIndexBase is the base z-index for regular windows
-	ZIndexBase = 0
-
 	// ZIndexSeparators is the z-index for shared border separator lines. It is
-	// above every tiled window, whose Z counts up from ZIndexBase, and below
+	// above every tiled window, whose Z counts up from zero, and below
 	// the floating band.
 	ZIndexSeparators = 500
 
@@ -1395,49 +1261,10 @@ const (
 )
 
 // =============================================================================
-// Default Values
-// =============================================================================
-
-const (
-	// DefaultSSHPort is the default SSH server port
-	DefaultSSHPort = "2222"
-
-	// DefaultSSHHost is the default SSH server host
-	DefaultSSHHost = "localhost"
-
-	// DefaultTerminalWidth is the fallback terminal width when screen size unknown
-	DefaultTerminalWidth = 80
-
-	// DefaultTerminalHeight is the fallback terminal height when screen size unknown
-	DefaultTerminalHeight = 24
-
-	// MinTerminalWidth is the minimum terminal width (accounting for borders)
-	MinTerminalWidth = 1
-
-	// MinTerminalHeight is the minimum terminal height (accounting for borders)
-	MinTerminalHeight = 1
-)
-
-// =============================================================================
-// Fractional Sizes
-// =============================================================================
-
-const (
-	// HalfDivisor is used for calculating half of a dimension
-	HalfDivisor = 2
-
-	// QuarterDivisor is used for calculating quarter of a dimension
-	QuarterDivisor = 4
-)
-
-// =============================================================================
 // Character Constants
 // =============================================================================
 
 const (
-	// CtrlB is the control code for Ctrl+B
-	CtrlB = 0x02
-
 	// DEL is the delete character code
 	DEL = 0x7f
 
@@ -1450,89 +1277,8 @@ const (
 	// Tab is the tab character code
 	Tab = 0x09
 
-	// CarriageReturn is the carriage return character code
-	CarriageReturn = '\r'
-
-	// LineFeed is the line feed character code
-	LineFeed = '\n'
-
 	// Space is the space character code
 	Space = ' '
-
-	// PrintableCharMin is the minimum printable ASCII character
-	PrintableCharMin = 32
-
-	// PrintableCharMax is the maximum printable ASCII character
-	PrintableCharMax = 126
-
-	// ASCIICharMax is the maximum single-byte ASCII character
-	ASCIICharMax = 127
-)
-
-// =============================================================================
-// Terminal Size Adjustments
-// =============================================================================
-
-const (
-	// BorderWidth is the width of window borders (2 for left and right)
-	BorderWidth = 2
-
-	// BorderHeight is the height of window borders (2 for top and bottom)
-	BorderHeight = 2
-
-	// MaxLineLength is the maximum length for display lines
-	MaxLineLength = 2000
-)
-
-// =============================================================================
-// Modifier Parameters (ANSI sequences)
-// =============================================================================
-
-const (
-	// ModParamBase is the base value for modifier parameters
-	ModParamBase = 1
-
-	// ModParamShift is the shift key modifier parameter
-	ModParamShift = 2
-
-	// ModParamAlt is the alt key modifier parameter
-	ModParamAlt = 2
-
-	// ModParamCtrl is the ctrl key modifier parameter
-	ModParamCtrl = 4
-)
-
-// =============================================================================
-// VT Attribute Flags
-// =============================================================================
-
-const (
-	// VTAttrBold is the bit flag for bold text
-	VTAttrBold = 1
-
-	// VTAttrFaint is the bit flag for faint text
-	VTAttrFaint = 2
-
-	// VTAttrItalic is the bit flag for italic text
-	VTAttrItalic = 4
-
-	// VTAttrReverse is the bit flag for reverse video
-	VTAttrReverse = 32
-
-	// VTAttrStrikethrough is the bit flag for strikethrough text
-	VTAttrStrikethrough = 128
-)
-
-// =============================================================================
-// Tiling Layout
-// =============================================================================
-
-const (
-	// TilingModeEnabledWorkspaces is the number of workspaces that support tiling
-	TilingModeEnabledWorkspaces = MaxWorkspaces
-
-	// GridLayoutThreshold is the number of windows before using grid layout
-	GridLayoutThreshold = 4
 )
 
 // =============================================================================
@@ -1540,17 +1286,11 @@ const (
 // =============================================================================
 
 const (
-	// IDPrefixLength is the length of ID prefix used in display (8 chars from UUID)
-	IDPrefixLength = 8
-
 	// MaxNameTruncateLength is the max length before truncating with ellipsis
 	MaxNameTruncateLength = 12
 
 	// EllipsisLength is the length of the ellipsis string
 	EllipsisLength = 3
-
-	// MaxNameLengthBeforeEllipsis is max length before needing ellipsis
-	MaxNameLengthBeforeEllipsis = MaxNameTruncateLength - EllipsisLength
 )
 
 // The colours a pane paints over its own output to mark text. See
