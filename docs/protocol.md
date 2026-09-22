@@ -302,8 +302,8 @@ script that kills a session does not leave a user staring at a dead UI. The
 ## Verbs
 
 This catalog is deliberately partial: it documents the verbs whose semantics
-need prose. The daemon registers 59 verbs, and `tuios list-verbs` is the
-authoritative, always-current list, generated from the same tables the request
+need prose. `tuios list-verbs` is the authoritative, always-current list of
+every verb the daemon registers, generated from the same tables the request
 validator uses.
 
 ### hello
@@ -412,7 +412,13 @@ Response:
 
 Create a new window in a session.
 
-Params: `session` (optional), `name` (optional window name).
+Params, all optional: `session`, `name` (window name; omit to use the shell's
+title), `workspace` (workspace number; omit for the current one), `cwd`
+(directory to start in; omit to inherit the daemon's), `focus` (default true;
+pass false to leave the focus where it is), `command` (argv to exec instead of a
+shell, not parsed by any shell; the window closes when it exits), and `host`
+(run the window's process on a machine from the `[hosts]` table; omit or pass
+`local` for this machine).
 
 Request:
 
@@ -856,6 +862,7 @@ Event types:
 | `window-restored` | A minimized window was restored. | `session`, `window`, `pty_id` |
 | `workspace-switched` | The session's current workspace changed. | `session`, `workspace` |
 | `agent-state` | A window's agent state changed, whichever tier changed it. A pane ceasing to be an agent reports `none`. | `session`, `window`, `pty_id`, `state` |
+| `agent-message` | A message was left in the session's ring. `window` is the recipient, or empty for a session-wide notice. Read the message itself with `read-agent-messages`. | `session`, `window` |
 | `output` | A window produced output (activity signal only; the raw bytes still flow over the binary stream). | `session`, `window`, `pty_id`, `bytes` |
 | `bell` | A window rang the terminal bell. | `session`, `window`, `pty_id` |
 | `mode-changed` | A terminal mode toggled (for example alt-screen). | `session`, `window`, `mode`, `enabled` |
@@ -891,7 +898,7 @@ already knows about the window being focused by the time it is told to focus it.
 
 Two cases are worth stating plainly because they are easy to guess wrong:
 
-- `window-retitled` fires for an **explicit rename** (the `rename-window` verb or
+- `window-retitled` fires for an **explicit rename** (the `set-window` verb or
   the TUI's rename) and, separately, when the **shell changes its own title** via
   an OSC escape sequence. The shell-driven case is reported by the PTY, not by
   the state diff, so a shell retitling itself raises the event once, not twice.
@@ -899,7 +906,7 @@ Two cases are worth stating plainly because they are easy to guess wrong:
   z-order, and alt-screen flags move constantly as a TUI renders and re-tiles;
   none of them produce events, so an attached client does not flood the stream.
 
-Restoring a session (daemon cold start, or the `resurrect` verb) raises
+Restoring a session (daemon cold start, or `tuios resurrect`) raises
 `session-created` followed by a `window-created` for each restored window, since
 from a subscriber's point of view those windows come into existence at that
 moment. A subscriber that connects afterwards sees no backfill: the stream
@@ -968,7 +975,8 @@ Params: `condition` (required), `session`, `window`, `pattern` (regex, for
 `window-output`), `source` (`visible` or the default recent/scrollback content,
 for `window-output`), `idle` (quiet-period milliseconds, for `window-idle`;
 default 500), `until` (agent state names, comma-separated, for `agent-state`),
-`timeout` (milliseconds; default 30000).
+`thread` (any message id in a thread, to narrow `agent-message` to that
+thread), `timeout` (milliseconds; default 30000).
 
 Conditions:
 
@@ -985,6 +993,13 @@ Conditions:
   `window_not_found` if the pane closes mid-wait; without `window` any window
   in the session matches, which is the "tell me when any agent here needs
   input" shape. The result names the `window` and the `state` that matched.
+- `agent-message` resolves when a message arrives. With `window` it watches
+  that inbox, matches the first unread message already there, and fails with
+  `window_not_found` if the inbox's window closes mid-wait. Without `window` it
+  matches any message left in the session after the wait began. `thread`
+  narrows either form to one thread. The result names the message (`message_id`,
+  `kind`, `from`, `subject`) and never carries its body: read it with
+  `read-agent-messages`.
 
 Request:
 
