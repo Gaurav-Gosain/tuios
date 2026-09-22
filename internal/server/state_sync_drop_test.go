@@ -1,6 +1,7 @@
 package server
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -48,6 +49,30 @@ func TestStateSyncFloodLeavesTheClientOnTheNewestSnapshot(t *testing.T) {
 		Height:          24,
 	})
 	m.WireDaemonClient(viewer)
+	// The state-sync hook, the same as WireDaemonClient installs, and one more
+	// thing: it notes when the newest snapshot has reached this client. That is
+	// the barrier the drain below waits on.
+	//
+	// It used to be a round trip on this client's own connection, on the
+	// grounds that the reply comes back only after every sync sent before it.
+	// That holds for syncs already on this connection, and the daemon writes
+	// each client's broadcasts from a goroutine of its own, so the last
+	// broadcast can still be on its way when the reply overtakes it. Under the
+	// race detector it did, and the test reported a dropped snapshot that was
+	// only late.
+	//
+	// Noting the arrival here rather than draining early is what keeps the test
+	// able to fail: the channel is left full while the snapshots land, so a
+	// queue that threw the newest away instead of the oldest would still be
+	// caught.
+	newest := 0.30 + float64(19)*0.01
+	var sawNewest atomic.Bool
+	viewer.OnStateSync(func(state *session.SessionState, triggerType, sourceID string) {
+		m.QueueStateSync(app.StateSyncMsg{State: state, TriggerType: triggerType, SourceID: sourceID})
+		if state != nil && state.MasterRatio == newest {
+			sawNewest.Store(true)
+		}
+	})
 	viewer.StartReadLoop()
 
 	// The other client, making the changes this one has to hear about.
@@ -82,11 +107,16 @@ func TestStateSyncFloodLeavesTheClientOnTheNewestSnapshot(t *testing.T) {
 		t.Fatalf("vacuous: %d pushes fit in a channel of %d", pushes, cap(m.StateSyncChan))
 	}
 
-	// A round trip on the viewer's own connection is the barrier: it is answered
-	// by the read loop, so it comes back only after every sync sent before it was
-	// dispatched.
-	if _, err := viewer.RefreshSessionList(); err != nil {
-		t.Fatalf("viewer round trip: %v", err)
+	if want[len(want)-1] != newest {
+		t.Fatalf("setup: the barrier waits for %.2f but the last push is %.2f", newest, want[len(want)-1])
+	}
+	// Wait for the newest snapshot to reach this client. See the hook above.
+	deadline := time.Now().Add(15 * time.Second)
+	for !sawNewest.Load() {
+		if time.Now().After(deadline) {
+			t.Fatalf("the newest snapshot never reached the viewer")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 
 	got := make([]float64, 0, pushes)
@@ -110,7 +140,6 @@ drain:
 		}
 	}
 
-	newest := want[len(want)-1]
 	if last := got[len(got)-1]; last != newest {
 		t.Fatalf("the viewer is stuck on master ratio %.2f while the daemon holds %.2f: %d of %d syncs were dropped and nothing asks for them again",
 			last, newest, pushes-len(got), pushes)
