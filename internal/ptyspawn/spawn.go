@@ -38,8 +38,8 @@ import (
 const Attempts = 3
 
 // StartProcess is the seam a test injects the kernel's refusal through. The
-// real event cannot be provoked on purpose - it needs a pts index to be
-// recycled out from under a dying session at the exact moment of the fork - so
+// real event cannot be provoked on purpose (it needs a pts index to be
+// recycled out from under a dying session at the exact moment of the fork), so
 // tests replace this to deliver an EPERM the way the kernel delivers it.
 // Production code never assigns to it.
 var StartProcess = func(p xpty.Pty, cmd *exec.Cmd) error {

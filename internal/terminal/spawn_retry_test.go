@@ -22,7 +22,7 @@ import (
 //
 // Negative control, confirmed against the tree before this change: both tests
 // fail there, and they fail on the injection never being consumed. That is the
-// finding stated as an assertion - NewWindow called xpty.NewPty and pty.Start
+// finding stated as an assertion: NewWindow called xpty.NewPty and pty.Start
 // itself, so a refusal aimed at the shared door never reached it, and no policy
 // written at that door could have covered this path.
 

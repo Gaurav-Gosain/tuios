@@ -14,7 +14,7 @@ import (
 //
 // The daemon-side emulator stores colours exactly as the guest sent them: a
 // program that emits SGR 31 leaves an ansi.BasicColor(1) in the cell, and
-// Render() re-emits 31. That is the intended contract — appearance is
+// Render() re-emits 31. That is the intended contract: appearance is
 // client-owned, and a consumer of capture-pane resolves indices against its
 // own palette. But a client that wants to pipe a capture into a tool which
 // renders verbatim (no palette of its own) has no way to get the colours it

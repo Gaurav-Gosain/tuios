@@ -118,16 +118,16 @@ func (d *Daemon) notifyClientLeft(sessionID string, leavingClientID string) {
 	}
 }
 
-// recalculateAndBroadcastSize recalculates what the session measures - its
-// effective size and the chrome reserve its clients lay panes out around -
+// recalculateAndBroadcastSize recalculates what the session measures (its
+// effective size and the chrome reserve its clients lay panes out around),
 // records it, and tells everyone if either moved. It returns what it settled
 // on, so a caller that also has to put those numbers in a reply does not
 // compute them a second time.
 //
 // The whole of it runs under layoutMu, and that is the point rather than an
-// implementation detail. Two of these can run at once - a client announcing its
+// implementation detail. Two of these can run at once (a client announcing its
 // chrome and another client attaching are different connections on different
-// goroutines - and each is a read over every client followed by a write. Run
+// goroutines), and each is a read over every client followed by a write. Run
 // interleaved they record an answer computed from a client set that no longer
 // exists: measured, the session's reserve flapped between the dock's two rows
 // and nothing at all, because the attaching client's recalculation read the

@@ -91,7 +91,7 @@ func TestTheCustomLayoutMapSurvivesTheWire(t *testing.T) {
 // TestAPushUnionsTheCustomFlagsItDoesNotKnowAbout is the merge path. A client
 // only ever holds a flag for a workspace it has been told about or arranged
 // itself, so letting a push replace the set would drop every workspace that
-// client never heard of - which is the bug this field exists to stop, one layer
+// client never heard of, which is the bug this field exists to stop, one layer
 // further down.
 //
 // NEGATIVE CONTROL: replace the union in retainDaemonExclusive with a plain nil

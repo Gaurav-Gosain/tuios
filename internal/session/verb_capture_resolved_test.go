@@ -8,8 +8,8 @@ import (
 )
 
 // TestVerbCapturePaneResolved exercises the resolved capture path end to end:
-// real PTY output carrying an SGR index is captured twice — once plain, once
-// resolved against a palette — and the resolved copy must carry the palette's
+// real PTY output carrying an SGR index is captured twice (once plain, once
+// resolved against a palette), and the resolved copy must carry the palette's
 // RGB instead of the index. This is issue #135's example: a mocha-theme red
 // (index 1) must come out as 38;2;243;139;168, not 31.
 func TestVerbCapturePaneResolved(t *testing.T) {

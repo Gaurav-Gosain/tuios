@@ -357,7 +357,7 @@ func (l *link) attempt(ctx context.Context) bool {
 		return true
 	}
 	// Why the link went down, said in one sentence a person can act on. The
-	// three causes need three different fixes and used to read identically, so
+	// three causes need three different fixes and look identical from outside, so
 	// the reason is worked out here rather than left as "the link closed".
 	reason, detail := lossCause(tr, m.Err())
 	l.mu.Lock()
@@ -549,18 +549,16 @@ const maxControlFailures = 3
 
 // controlStreamFailed runs when a call on the control stream did not answer.
 //
-// It used to tear the whole link down, and that is the bug the maintainer felt.
-// The control stream is one stream among many on a shared pipe, and an attached
-// session is another. A listing that missed its eight second deadline - which a
-// busy pane on a link across an ocean does on its own - killed the ssh child,
-// and killing the ssh child threw away the session the person was typing into.
-// The rail polls that listing every five seconds while it is open, so the link
-// had five seconds to be slow once, over and over, and every miss was fatal.
+// It does not tear the whole link down. The control stream is one stream among
+// many on a shared pipe, and an attached session is another. A busy pane on a
+// long link can miss the eight second listing deadline on its own, and the rail
+// polls that listing every five seconds while it is open. Killing the ssh child
+// on a miss would throw away the session the person is typing into.
 //
-// What happens instead: the stream is replaced, because a stream with an
-// unanswered request on it can never be reused, and the link is left alone
-// while the pipe is still carrying frames. Only a pipe that has gone quiet, or
-// a remote that has failed maxControlFailures calls in a row, ends the link.
+// Instead the stream is replaced, because a stream with an unanswered request
+// on it can never be reused, and the link is left alone while the pipe is
+// still carrying frames. Only a pipe that has gone quiet, or a remote that has
+// failed maxControlFailures calls in a row, ends the link.
 func (l *link) controlStreamFailed(failed *caller) {
 	l.mu.Lock()
 	if l.ctrl != failed {

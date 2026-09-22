@@ -79,7 +79,7 @@ type WindowState struct {
 	// The flag travels; the rectangle does not. A zoomed pane covers the
 	// content region of the client that zoomed it, and that box is that
 	// client's own render size less the agreed reserve. A peer recomputes it
-	// against its own bounds, the way it recomputes a tiled layout - see
+	// against its own bounds, the way it recomputes a tiled layout. See
 	// applyZoomState. The zero value is an unzoomed window, which is what every
 	// older client and older state reads as.
 	Zoomed bool `json:"zoomed,omitempty"`
@@ -239,7 +239,7 @@ type SessionState struct {
 	//
 	// A zero width means the client had no stored preference and is not a
 	// request to narrow anyone's rail. Collapsed is a plain flag, and its zero
-	// value - an open rail - is what state written before this existed reads as,
+	// value (an open rail) is what state written before this existed reads as,
 	// which is the pre-existing behaviour.
 	SidebarWidth     int  `json:"sidebar_width,omitempty"`
 	SidebarCollapsed bool `json:"sidebar_collapsed,omitempty"`
@@ -314,8 +314,8 @@ type SessionState struct {
 	TilingScheme    int                        `json:"tiling_scheme,omitempty"` // Default auto-insertion scheme
 	// WorkspaceMasterRatio is the master-stack split, keyed by workspace, the way
 	// this state already keys the focus, the names, the order and the BSP trees.
-	// The ratio is the session's rather than any one client's - a PTY has one
-	// size, which is why MasterRatio was settled here to begin with - and a
+	// The ratio is the session's rather than any one client's (a PTY has one
+	// size, which is why MasterRatio was settled here to begin with), and a
 	// workspace is what a ratio belongs to: BSP split ratios have been
 	// per-workspace state for as long as they were carried at all, and
 	// master-stack's single flat value was the odd one out. Each client kept a
@@ -341,7 +341,7 @@ type SessionState struct {
 	//
 	// It was each client's own before this. A client that had never been to a
 	// workspace held no entry for it, read that as "not custom", retiled the
-	// workspace on its first visit and pushed the tiler's rectangles - which took
+	// workspace on its first visit and pushed the tiler's rectangles, which took
 	// away, for every client, the layout another client had arranged by hand.
 	//
 	// The rectangles themselves are not carried with it. They are already here,
@@ -402,7 +402,7 @@ type SessionState struct {
 	// rectangle a guest may draw in. See PaneGeometryState for why it is session
 	// state and not a per-client preference.
 	//
-	// Nil means unstated - an older peer, or state written before this existed -
+	// Nil means unstated (an older peer, or state written before this existed),
 	// and a client that receives nil keeps its own configured values, which is
 	// the pre-existing behaviour.
 	PaneGeometry *PaneGeometryState `json:"pane_geometry,omitempty"`
@@ -410,8 +410,8 @@ type SessionState struct {
 	// workspace this state names. It travels with CurrentWorkspace and means
 	// nothing without it: each workspace keeps its own strip.
 	//
-	// Nil means unstated - a client too old to know the field, or state written
-	// before it existed - and a client that receives nil keeps the strip it has,
+	// Nil means unstated (a client too old to know the field, or state written
+	// before it existed), and a client that receives nil keeps the strip it has,
 	// which is the behaviour that predates this. A pointer rather than a plain
 	// field because the offset's zero, a strip at its left end, is the commonest
 	// position there is, and gob omits a zero-valued field from the wire: a plain
@@ -463,15 +463,15 @@ type SerializedScrollColumn struct {
 // A pane's PTY has exactly one size, and every client attached to a session is
 // looking at the same PTYs, so every input to pane geometry has to be identical
 // across attached clients. The outer box is already settled (the session size
-// is the minimum over clients, and the chrome reserve is negotiated - see
+// is the minimum over clients, and the chrome reserve is negotiated; see
 // LayoutReserve); these are the inputs to the arithmetic inside that box. Two
 // clients that disagree on them partition the same box into different
 // rectangles, or the same rectangles into different guest grids, and drag the
 // shared PTYs back and forth between the two answers on every state push.
 //
 // The line is deliberate: anything that moves a rectangle is session state,
-// anything purely visual - theme, colours, glyphs, border style, title
-// position, dimming - stays per-client and riceable. Border style and title
+// anything purely visual (theme, colours, glyphs, border style, title
+// position, dimming) stays per-client and riceable. Border style and title
 // position are visual because they draw on cells the pane already reserves;
 // they never change how many cells it gets.
 type PaneGeometryState struct {
@@ -550,7 +550,7 @@ type PTY struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// Terminal emulator - maintains scrollback, screen state, cursor position
+	// Terminal emulator: maintains scrollback, screen state, cursor position
 	// This persists across client disconnect/reconnect
 	terminal vt.Terminal
 	// terminalMu guards the daemon-side VT emulator (p.terminal) and the
@@ -638,7 +638,7 @@ type PTY struct {
 	// terminalMu. It trails outputSeq by whatever is still queued.
 	vtSeq int64
 
-	// Callback when PTY process exits - used by daemon to notify clients
+	// Callback when PTY process exits, used by daemon to notify clients
 	onExit func(ptyID string)
 
 	// emit, when set, raises a control-plane event (output activity, bell, mode
@@ -1268,7 +1268,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	// Start output reader
 	go pty.readOutput()
 
-	// Start terminal response forwarder - the daemon's emulator generates query responses
+	// Start terminal response forwarder. The daemon's emulator generates query responses
 	// (DA, CPR, etc.) which must be sent to the PTY for applications to receive.
 	// Client emulators DRAIN their responses to prevent duplicates.
 	go pty.forwardTerminalResponses()
@@ -1283,11 +1283,9 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 // TouchActive records that the session was just used.
 //
 // "Used" has to include a keystroke reaching a pane, and that is the only
-// reason this is exported. It used to be updated as a side effect of a client's
-// state sync, which the client sent after every keypress whether or not
-// anything had changed - so the timestamp was right by accident, and stopped
-// being right the moment those redundant syncs were suppressed. A session
-// someone is typing in is active, and the listing and the "most recently
+// reason this is exported. A client's state sync is not a reliable signal,
+// because redundant syncs are suppressed and a keystroke need not change any
+// state. A session someone is typing in is active, and the listing and the "most recently
 // active" session lookup both read this.
 func (s *Session) TouchActive() {
 	s.activeMu.Lock()
@@ -1524,7 +1522,7 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	// something nothing mutates. Deep-copying the BSP trees on every mutation
 	// would cost more than that buys. The invariant is the whole of the safety
 	// here, so a daemon-side write *through* one of those pointers has to clone
-	// the field here first - see the Worktree case above, which is exactly that
+	// the field here first. See the Worktree case above, which is exactly that
 	// invariant broken.
 	return &stateCopy
 }
@@ -2320,9 +2318,9 @@ func (p *PTY) Resize(width, height int) error {
 	// re-announcing after a retile that moved nothing, arrives here with the
 	// size that is already set.
 	//
-	// It was not free. It marked the ring, broadcast a width to every
-	// subscriber, resized the emulator - which drops the scroll region a
-	// full-screen program had set - and SIGWINCHed the guest into repainting.
+	// A resize is not free. It marks the ring, broadcasts a width to every
+	// subscriber, resizes the emulator (which drops the scroll region a
+	// full-screen program had set) and SIGWINCHes the guest into repainting.
 	// A repaint at an unchanged width is invisible when it works and is a line
 	// of lost scrollback when the guest's own idea of where the cursor is does
 	// not survive it.

@@ -76,7 +76,7 @@ type TUIClient struct {
 	ptyHandlers   map[string]func([]byte)
 	ptyHandlersMu sync.RWMutex
 
-	// PTY closed handlers - called when a PTY process exits
+	// PTY closed handlers, called when a PTY process exits
 	ptyClosedHandlers   map[string]func()
 	ptyClosedHandlersMu sync.RWMutex
 
@@ -86,7 +86,7 @@ type TUIClient struct {
 	ptyResizeHandlers   map[string]func(width, height int)
 	ptyResizeHandlersMu sync.RWMutex
 
-	// Remote command handler - called when a remote command is received
+	// Remote command handler, called when a remote command is received
 	remoteCommandHandler RemoteCommandHandler
 	remoteCommandMu      sync.RWMutex
 
@@ -99,9 +99,9 @@ type TUIClient struct {
 	// pendingStateSync and pendingSessionResize hold the newest broadcast of
 	// each kind that arrived while nothing was registered to take it, so the
 	// registration can be handed what it missed. The read loop starts before
-	// the handlers exist - cmd/tuios attaches, starts reading, builds the
-	// program and only then registers - and a broadcast landing in that window
-	// used to be dropped on the floor. Both messages carry a whole answer
+	// the handlers exist (cmd/tuios attaches, starts reading, builds the
+	// program and only then registers), and a broadcast landing in that window
+	// would otherwise be lost. Both messages carry a whole answer
 	// rather than a delta, so keeping only the newest is exact. Guarded by
 	// multiClientMu.
 	pendingStateSync     *StateSyncPayload
@@ -281,9 +281,9 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	// A daemon and a client from different builds speak the same protocol right
 	// up to the moment they do not: the wire version only moves when a message
 	// changes shape, and most drift is a behaviour change on one side of it. It
-	// happens routinely - the daemon outlives an upgrade by design, and a
-	// tuios-web installed separately can be months behind - and it used to be
-	// invisible, so a fix that had been installed appeared not to work.
+	// happens routinely: the daemon outlives an upgrade by design, and a
+	// tuios-web installed separately can be months behind. Unrecorded, it is
+	// invisible, and a fix that has been installed appears not to work.
 	//
 	// Recorded rather than refused: the two builds can talk, and refusing would
 	// turn a note into an outage.
@@ -670,7 +670,7 @@ func (c *TUIClient) UnsubscribePTY(ptyID string) {
 	// Send unsubscribe message to daemon to stop streaming
 	msg, err := NewMessage(MsgUnsubscribePTY, &UnsubscribePTYPayload{PTYID: ptyID})
 	if err != nil {
-		return // Silent failure - handler already removed locally
+		return // Silent failure: handler already removed locally
 	}
 	_ = c.send(msg)
 }
@@ -1052,7 +1052,7 @@ func (c *TUIClient) readLoop() {
 	defer func() {
 		if r := recover(); r != nil {
 			debugLog("[CLIENT] PANIC in readLoop: %v", r)
-			// Don't crash the whole app  - log and try to continue
+			// Don't crash the whole app. Log and try to continue.
 		}
 	}()
 	for {
@@ -1215,7 +1215,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		}
 
 	case MsgDetached:
-		// Session detached  - handled via pendingResponses in SwitchSession.
+		// Session detached. Handled via pendingResponses in SwitchSession.
 		// Do NOT close c.done here; it must stay open for subsequent switches.
 		debugLog("[CLIENT] Received MsgDetached (no-op in handleMessage)")
 
@@ -1245,11 +1245,11 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			debugLog("[REMOTE] Executing command with handler")
 			if err := handler(&payload); err != nil {
 				debugLog("[REMOTE] Command handler error: %v", err)
-				// Only send error result here - success results are sent by the actual command handler
+				// Only send error result here. Success results are sent by the actual command handler
 				// in update.go after the command executes (with proper data)
 				_ = c.SendCommandResult(payload.RequestID, false, err.Error())
 			}
-			// Don't send success result here - let update.go send it with the actual data
+			// Don't send success result here. Let update.go send it with the actual data
 		} else {
 			debugLog("[REMOTE] No handler registered for remote commands")
 		}
@@ -1320,8 +1320,8 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			return
 		}
 
-		// Two of these can be in flight at once - each client is written to on
-		// a goroutine of its own, so the order is the scheduler's - and taking
+		// Two of these can be in flight at once (each client is written to on
+		// a goroutine of its own, so the order is the scheduler's), and taking
 		// the older one last leaves this client laying panes out in a box the
 		// session has moved on from, for good. Anything already passed is
 		// dropped here rather than handed on.

@@ -8,7 +8,7 @@ import (
 // reading, builds the program, and only then registers OnStateSync and
 // OnSessionResize. A broadcast landing in that window used to be dropped on
 // the floor, and both messages are last-value-wins snapshots the daemon does
-// not resend until something changes - so a peer's push racing this client's
+// not resend until something changes, so a peer's push racing this client's
 // attach was simply lost, and the two clients sat on different state until
 // the peer's next change. These pin the retention: the newest missed
 // broadcast of each kind is handed to the handler at registration.

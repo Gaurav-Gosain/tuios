@@ -131,7 +131,7 @@ var describeMu sync.Mutex
 // the previous selection back. That is the honest answer and the only one that
 // cannot drift: the accessors it reads through are the same ones the renderer
 // calls, so a role this reports is a role that draws. It is safe because the
-// daemon does not draw - the selection it borrows is process-local state that
+// daemon does not draw: the selection it borrows is process-local state that
 // no frame of any attached client is composed from.
 func describeGlyphSet(id string, render glyphRenderSettings) map[string]any {
 	set := theme.ResolveGlyphSet(id)

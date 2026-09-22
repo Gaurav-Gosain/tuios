@@ -92,7 +92,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// placeholder; but leaving them at 0 excludes the client from
 	// calculateEffectiveSize until NotifyTerminalSize arrives, which causes
 	// web clients to be stuck at stale session dimensions from a previously-
-	// attached native client. Trust the attach payload  - web/native attach
+	// attached native client. Trust the attach payload: web/native attach
 	// callers already pass the real client viewport.
 	// TUI clients are the ones that can receive and execute remote commands.
 	// Set under cs.mu, then release before calling helpers that take
@@ -118,7 +118,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// measuring it: the effective size and the chrome reserve, settled and
 	// recorded in one place under one lock, and announced to everyone already
 	// attached. The joining client is left out of that announcement and told by
-	// the reply below instead - it has no read loop yet and would read an
+	// the reply below instead, because it has no read loop yet and would read an
 	// unsolicited message as its own answer.
 	//
 	// Both of these used to be computed here by hand and recorded either side
@@ -129,7 +129,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// another goroutine can interleave with.
 	effectiveWidth, effectiveHeight, effectiveReserve := d.recalculateAndBroadcastSize(session.ID, cs.clientID)
 	if effectiveWidth == 0 || effectiveHeight == 0 {
-		// No known sizes yet - fall back to this client's payload.
+		// No known sizes yet: fall back to this client's payload.
 		effectiveWidth = payload.Width
 		effectiveHeight = payload.Height
 		session.Resize(effectiveWidth, effectiveHeight)
@@ -143,8 +143,8 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// Get session state to return.
 	//
 	// The dimensions on it are the session's effective size, always. A client
-	// reads them as "the minimum over everyone attached" - that is what
-	// RestoreFromState does with them - so anything else here is a lie that the
+	// reads them as "the minimum over everyone attached" (that is what
+	// RestoreFromState does with them), so anything else here is a lie that the
 	// attaching client renders at.
 	//
 	// It used to be stamped only when the effective size differed from what
@@ -205,7 +205,7 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// reach this client, because it was not in the broadcast set for that part
 	// of it.
 	// Compare what the reply promised against what the session holds now, and
-	// repair it directly. This runs after the reply, so it cannot race it -
+	// repair it directly. This runs after the reply, so it cannot race it,
 	// which is the whole reason the repair is here rather than left to a
 	// broadcast.
 	if w, h := session.Size(); w > 0 && h > 0 {
@@ -568,8 +568,8 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 	// merged state, not the raw push, so every client converges on the same view.
 	//
 	// A merge that landed on the state already broadcast is not sent again. The
-	// push side is unconditional by design - a client syncs after every
-	// keystroke and every click so nothing it does can be lost - so almost all
+	// push side is unconditional by design (a client syncs after every
+	// keystroke and every click so nothing it does can be lost), so almost all
 	// of them say what the last one said, and each one costs every peer a full
 	// state application and a redraw. A peer already holds this state: it was
 	// either sent it, or handed it in its attach reply, which is this same

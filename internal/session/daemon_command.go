@@ -161,7 +161,7 @@ func (d *Daemon) handleExecuteCommand(cs *connState, msg *Message) error {
 		return d.sendCommandResult(cs, payload.RequestID, false, fmt.Sprintf("failed to send to TUI: %v", err))
 	}
 
-	// Don't send response here - wait for TUI to send result via handleCommandResult
+	// Don't send response here. Wait for TUI to send result via handleCommandResult
 	return nil
 }
 

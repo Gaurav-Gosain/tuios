@@ -9,7 +9,7 @@ import (
 
 // A client attaching has no read loop yet. It writes MsgAttach and then reads
 // one message, and whatever arrives is taken for the answer. So nothing may be
-// sent to it until that answer has been written - not a resize, not a join
+// sent to it until that answer has been written: not a resize, not a join
 // notification, not a routed command.
 //
 // The window is real: handleAttach records the client on the session at the top,
@@ -27,7 +27,7 @@ import (
 // attach reply and the attach fails.
 //
 // NEGATIVE CONTROL: measured. Without the attached gate in broadcastToSession
-// this fails within a few rounds, with "unexpected response: 49" - message 49
+// this fails within a few rounds, with "unexpected response: 49", message 49
 // being MsgSessionResize. The same fault was reaching internal/app as an
 // intermittent failure of TestFloatingPanesAreClampedWhenAnotherClientShrinks
 // TheSession at roughly six runs in a hundred; here it is deterministic enough
@@ -87,7 +87,7 @@ func TestAttachIsNeverOutrunByABroadcast(t *testing.T) {
 // the reply tells it the same thing the broadcast would have: the size and the
 // chrome reserve the session settled on once this client was counted.
 //
-// NEGATIVE CONTROL: none, deliberately - a passes-both-ways control. It states
+// NEGATIVE CONTROL: none, deliberately: a passes-both-ways control. It states
 // what the reply owes, which no other test in this package reads off the reply
 // itself, and it would catch a fix for the ordering that bought it by leaving
 // the joiner uninformed.
@@ -153,8 +153,8 @@ func waitForLayout(t *testing.T, what string, cond func() bool) {
 // been told it was attached to it, which then sits in a dead session forever.
 //
 // NEGATIVE CONTROL: measured, for one of the two things that make it pass.
-// Removing the post-reply check in handleAttach - the one that asks whether the
-// session survived the handshake and tells this client itself if it did not -
+// Removing the post-reply check in handleAttach (the one that asks whether the
+// session survived the handshake and tells this client itself if it did not)
 // fails this three times in two hundred runs. With the check, none in two
 // hundred. That hole was there before any of this work and is what the test
 // found: a session deleted after the client registered on it but before the

@@ -39,7 +39,7 @@ func (e *RemoteError) Error() string {
 
 // caller runs verb calls over one stream. One call is in flight at a time.
 //
-// "One at a time" used to be a comment and is now a lock. The stream is a
+// A lock enforces one call at a time. The stream is a
 // single line of request and reply with no way to pair one with the other, so
 // two callers running at once read each other's answers: two clients polling
 // the rail five seconds apart is enough, and what it produces is one host's

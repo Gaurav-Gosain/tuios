@@ -62,7 +62,7 @@ func EnsureDaemonRunningWith(version string, cfg *DaemonConfig) error {
 		}
 		inProcessDaemon = NewDaemon(cfg)
 
-		// Start() is non-blocking - it starts goroutines and returns
+		// Start() is non-blocking: it starts goroutines and returns
 		if err := inProcessDaemon.Start(); err != nil {
 			inProcessDaemonErr = fmt.Errorf("failed to start in-process daemon: %w", err)
 			return

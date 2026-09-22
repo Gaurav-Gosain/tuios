@@ -1,4 +1,4 @@
-// Package session provides session resurrection - the ability to restore
+// Package session provides session resurrection: the ability to restore
 // session state after a daemon crash or restart.
 package session
 

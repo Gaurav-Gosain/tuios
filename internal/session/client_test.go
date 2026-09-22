@@ -27,7 +27,7 @@ func TestClientCloseConcurrent(t *testing.T) {
 	// Verify done channel is closed
 	select {
 	case <-client.done:
-		// Good - channel is closed
+		// Good: channel is closed
 	default:
 		t.Error("done channel should be closed after Close()")
 	}

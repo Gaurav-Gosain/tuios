@@ -300,7 +300,7 @@ const (
 	// catchUpBacklog is how far behind a pane's emulator has to fall before the
 	// coalescer treats the frames it is being asked for as already spent. It is
 	// about a tenth of a second of the client's own parsing, so an ordinary
-	// burst - a paste, a large directory listing - passes under it and only a
+	// burst (a paste, a large directory listing) passes under it and only a
 	// pane the client has genuinely stopped keeping up with trips it.
 	catchUpBacklog = 4 << 20
 
@@ -488,7 +488,7 @@ func (w *Window) StartDaemonResponseReader() {
 			if err != nil {
 				return
 			}
-			// Drain responses - don't send to PTY to avoid escape sequence leaks
+			// Drain responses. Don't send to PTY to avoid escape sequence leaks.
 		}
 	}()
 }
@@ -545,14 +545,14 @@ func (w *Window) WriteOutputAsync(data []byte) {
 	if !w.waitForQueueRoom(int64(len(dataCopy))) {
 		return
 	}
-	// Queue to channel - non-blocking with buffered channel
+	// Queue to channel, non-blocking with buffered channel
 	select {
 	case <-w.outputDone:
 		// Writer goroutine has stopped, drop data
 	case w.outputChan <- chunk:
 		w.queuedBytes.Add(int64(len(dataCopy)))
 	default:
-		// Channel full - drop data (shouldn't happen with large buffer)
+		// Channel full: drop data (shouldn't happen with large buffer)
 	}
 }
 
@@ -654,7 +654,7 @@ func (w *Window) handleIOOperations() {
 	ctx, cancel := context.WithCancel(context.Background())
 	w.cancelFunc = cancel
 
-	// PTY to Terminal copy (output from shell) - with proper context handling
+	// PTY to Terminal copy (output from shell), with proper context handling
 	w.ioWg.Go(func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -761,7 +761,7 @@ func (w *Window) handleIOOperations() {
 		}
 	})
 
-	// Terminal to PTY copy (input to shell) - with proper context handling
+	// Terminal to PTY copy (input to shell), with proper context handling
 	w.ioWg.Go(func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -853,7 +853,7 @@ func (w *Window) SendInput(input []byte) error {
 			time.Now().Format("15:04:05.000"), shortID(w.ID), len(input), string(input), input)
 	}
 
-	// Local mode - write directly to PTY.
+	// Local mode: write directly to PTY.
 	//
 	// Snapshot the PTY under the read lock and write OUTSIDE it. Pty.Write
 	// blocks once the kernel input buffer fills (a guest that is not reading
@@ -885,7 +885,7 @@ func (w *Window) SendInput(input []byte) error {
 		return fmt.Errorf("partial write to PTY: wrote %d of %d bytes", n, len(input))
 	}
 
-	// Only mark as dirty - don't clear cache here for better input performance
+	// Only mark as dirty. Don't clear cache here, for better input performance.
 	// Cache will be invalidated during render if content actually changed
 	w.Dirty = true
 	w.ContentDirty = true

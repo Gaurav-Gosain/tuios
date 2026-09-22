@@ -7,7 +7,7 @@ import "testing"
 //
 // gob omits a field holding its type's zero value, and it flattens a pointer to
 // the thing pointed at, so a *int carrying 0 is encoded as nothing at all and
-// decodes as nil - "this peer has not said". Home is the commonest place a
+// decodes as nil, "this peer has not said". Home is the commonest place a
 // strip is, so that would have made the one offset that matters most the one
 // offset that never travels. A non-nil pointer to a struct is not elided, which
 // is why ScrollStrip is one.

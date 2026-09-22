@@ -20,7 +20,7 @@ func TestResetTerminal(t *testing.T) {
 	// Redirect stdout to our pipe
 	os.Stdout = w
 
-	// Call ResetTerminal - should not panic
+	// Call ResetTerminal; it should not panic
 	ResetTerminal()
 
 	// Restore stdout

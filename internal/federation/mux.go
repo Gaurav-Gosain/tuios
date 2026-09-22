@@ -76,11 +76,11 @@ const maxStreams = 32
 // usual scheme (ssh and HTTP/2 both do it) and it is load bearing here for one
 // specific reason.
 //
-// Both ends used to start at 1. The hub's control stream is therefore id 1, and
-// the first stream a peer opened was also id 1, so handleOpen's duplicate check
-// answered it with a close before the inbound-open refusal above was ever
-// consulted. The peer saw a closed stream either way, which made the refusal
-// untestable: deleting it changed nothing a test could see. The split means an
+// If both ends started at 1, the hub's control stream (id 1) and the first
+// stream a peer opened would share an id, so handleOpen's duplicate check would
+// answer it with a close before the inbound-open refusal above was consulted.
+// The peer would see a closed stream either way, which makes the refusal
+// untestable: deleting it changes nothing a test could see. The split means an
 // inbound open can only ever name an id this side does not own, so the refusal
 // is the only thing that can answer it.
 const (

@@ -12,11 +12,10 @@ import (
 
 // Hot reload for the [hosts] table.
 //
-// The daemon used to read the table once, at start, so adding a machine meant
-// editing a file and then killing the daemon that held every running session.
-// It now follows the config file: a save that adds a host opens a link, a save
-// that removes one closes it, and a save that changes an address dials the new
-// one. Nothing else in the file is looked at here, and no other part of the
+// The daemon follows the config file, so adding a machine does not mean
+// restarting the daemon that holds every running session. A save that adds a
+// host opens a link, a save that removes one closes it, and a save that changes
+// an address dials the new one. Nothing else in the file is looked at here, and no other part of the
 // daemon's configuration changes under it.
 //
 // The watcher is only started when a config path is set, which

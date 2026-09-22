@@ -12,7 +12,7 @@ import (
 // What is proved here is the reliability of a link that has already worked:
 // that an idle one is held open, that a dropped one says why it dropped and
 // reads as reconnecting rather than as an offline machine, and that the things
-// which are merely slow - a listing, a reader that fell behind - do not end it.
+// which are merely slow (a listing, a reader that fell behind) do not end it.
 //
 // The failure these exist for is a specific one. A session on a cloud host kept
 // being taken away from the person using it, and the three causes below all

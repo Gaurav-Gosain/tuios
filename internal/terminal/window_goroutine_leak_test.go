@@ -10,7 +10,7 @@ import (
 // TestDaemonWindowOpenCloseLeaksNoGoroutines asserts that opening and closing a
 // daemon window leaves nothing running.
 //
-// NewDaemonWindow starts two goroutines - outputWriter and renderCoalescer -
+// NewDaemonWindow starts two goroutines, outputWriter and renderCoalescer,
 // and renderCoalescer owns an 8ms rate-limit timer. Both select on
 // w.outputDone, and Close() is the only thing that closes it. Leaking either
 // one leaks the timer, the Window, and the whole vt.Emulator with its
@@ -20,7 +20,7 @@ import (
 //
 // synctest is what makes this a real assertion rather than a heuristic. Inside
 // a bubble, the test fails if any goroutine started in the bubble is still
-// alive when the bubble's root function returns - no goroutine-count sampling,
+// alive when the bubble's root function returns: no goroutine-count sampling,
 // no sleeping and hoping, no parsing of runtime stack dumps. It also makes the
 // timer's fake time advance only when everything is durably blocked, so a
 // coalescer that survived Close would keep the bubble alive and be reported.

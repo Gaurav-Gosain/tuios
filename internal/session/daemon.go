@@ -36,8 +36,8 @@ type Daemon struct {
 	clients   map[string]*connState
 	clientsMu sync.RWMutex
 
-	// layoutMu serialises the recalculation of what a session measures - its
-	// effective size and its chrome reserve - so that a read over every client
+	// layoutMu serialises the recalculation of what a session measures (its
+	// effective size and its chrome reserve) so that a read over every client
 	// and the write that follows it cannot interleave with another one. See
 	// recalculateAndBroadcastSize.
 	layoutMu sync.Mutex
@@ -248,8 +248,8 @@ type connState struct {
 	// it is what broadcastToSession requires before it will send anything.
 	//
 	// sessionID is set at the top of handleAttach, because everything that
-	// measures the session - the client count, the effective size, the chrome
-	// reserve - has to include the joining client from that moment. But a
+	// measures the session (the client count, the effective size, the chrome
+	// reserve) has to include the joining client from that moment. But a
 	// client is not ready to be spoken to until it has been told it is
 	// attached: it is still inside its attach call reading the one reply it
 	// asked for, with no read loop yet, so an unsolicited message arriving
@@ -593,7 +593,7 @@ func (d *Daemon) Start() error {
 	}
 	// A *net.UnixListener unlinks its socket file on Close by default, and
 	// shutdown closes the listener first, which silently unlinked the socket
-	// at the top of shutdown - while every session's state was still unsaved.
+	// at the top of shutdown, while every session's state was still unsaved.
 	// The socket file is the signal WaitForDaemonShutdown and 'tuios
 	// kill-server' rely on, and the whole contract is that it disappears last,
 	// in shutdown's own explicit Remove. Under load the early unlink was

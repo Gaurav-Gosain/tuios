@@ -298,7 +298,7 @@ func TestXtermPaletteIsRGB(t *testing.T) {
 		if r == 0 && g == 0 && b == 0 && i != 0 {
 			t.Fatalf("xterm colour %d is black; palette not populated", i)
 		}
-		// Pin the exact RGB as literals — xterm's own defaults, written out
+		// Pin the exact RGB as literals: xterm's own defaults, written out
 		// here rather than read back from shot's xterm table so a regression to
 		// a colour library's VGA shades (index 1 = #800000) cannot pass by
 		// changing both sides together. The daemon resolves against what

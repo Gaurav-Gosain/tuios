@@ -16,7 +16,7 @@ import (
 // transient controlling-terminal refusal, by injecting it at the one door every
 // PTY-backed process goes through. The policy itself is pinned in
 // internal/ptyspawn; what is under test here is that this path goes through
-// that door - the thing that stopped being true of the standalone path when the
+// that door, the thing that stopped being true of the standalone path when the
 // policy lived in only one of two copies of the same code.
 
 // failStarts makes the next n starts fail with err, then delegates to the real

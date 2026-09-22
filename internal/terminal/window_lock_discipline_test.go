@@ -128,7 +128,7 @@ func (p *nopPty) Write(b []byte) (int, error) { return len(b), nil }
 // fix. Moving the write out of the lock is only safe because the handle is
 // snapshotted under it: Close() assigns w.Pty = nil while holding the exclusive
 // lock, so reading the field without the lock is an unsynchronized read of an
-// interface value racing that write - a torn read, which is undefined
+// interface value racing that write. That is a torn read, which is undefined
 // behaviour, not merely a stale value.
 //
 // This must be run with -race; it is the race detector, not an assertion, that

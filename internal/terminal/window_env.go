@@ -112,7 +112,7 @@ func (w *Window) enableTerminalFeatures() {
 	// The shell/application running in the PTY will handle bracketed paste mode
 	// if it supports it, based on receiving the wrapped paste content.
 
-	// Don't enable mouse modes automatically - let applications request them
+	// Don't enable mouse modes automatically. Let applications request them.
 	// Applications like vim, less, htop will enable mouse support themselves
 	// by sending the appropriate escape sequences
 }

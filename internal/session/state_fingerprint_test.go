@@ -39,7 +39,7 @@ func fingerprintFixture() *SessionState {
 // TestStateFingerprintIsStableAcrossPasses is the property the whole suppression
 // rests on: the same state must fingerprint the same every time it is asked.
 //
-// It is not free. The obvious implementation - hash an encoding of the state -
+// It is not free. The obvious implementation (hash an encoding of the state)
 // does not have it, because gob and JSON both walk a Go map in the map's own
 // iteration order, and Go randomises that. This test builds a state carrying
 // five multi-entry maps and asks many times, so a fingerprint that depended on

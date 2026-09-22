@@ -121,7 +121,7 @@ func (d *Daemon) notifyPTYClosed(sessionID, ptyID string) {
 		cs.mu.Lock()
 		// attached for the same reason as broadcastToSession. A client mid
 		// attach holds no subscriptions either, so this is belt as well as
-		// braces - but the rule is "nothing unsolicited before the reply", and
+		// braces. But the rule is "nothing unsolicited before the reply", and
 		// a rule each call site re-derives is a rule waiting to be missed.
 		match := cs.sessionID == sessionID && cs.attached
 		if match {
@@ -191,8 +191,8 @@ func (d *Daemon) sendError(cs *connState, code int, message string) error {
 //
 // Setting it after the write instead leaves a window of exactly the wrong kind:
 // the client believes it is attached the moment the reply lands, and anything
-// the session says before the flag catches up - a session being killed, most of
-// all - is dropped on the floor. The window is a few instructions and has not
+// the session says before the flag catches up (a session being killed, most of
+// all) is dropped on the floor. The window is a few instructions and has not
 // been caught in the act; it is closed here because it costs one lock to close
 // and nothing about it is bounded by how narrow it happens to be today.
 func (d *Daemon) sendAttachReply(cs *connState, payload *AttachedPayload) error {

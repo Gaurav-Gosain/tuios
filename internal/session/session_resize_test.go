@@ -46,8 +46,8 @@ func TestSessionResizeLeavesPaneWinsize(t *testing.T) {
 // for itself, so a second client attaching, or any client re-announcing after a
 // retile that moved nothing, arrives with the size the pane already has. Each
 // of those used to mark the ring, broadcast a width to every subscriber, resize
-// the daemon's emulator - which drops the scroll region a full-screen program
-// set - and SIGWINCH the guest into repainting its prompt. Under a reflowing
+// the daemon's emulator (which drops the scroll region a full-screen program
+// set) and SIGWINCH the guest into repainting its prompt. Under a reflowing
 // emulator a repaint that lands one row short is a line of lost scrollback, so
 // a resize that changes nothing was never free.
 //

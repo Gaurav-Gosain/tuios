@@ -64,8 +64,8 @@ func TestPopupSizeRefusesWhatItCannotMean(t *testing.T) {
 // stamped once, by the daemon, and a client snapshot that says nothing about it
 // must not take it away.
 //
-// It matters because a client that did not know about popups - an older build,
-// or one mid-upgrade - would push every window plain, and the mark going missing
+// It matters because a client that did not know about popups (an older build,
+// or one mid-upgrade) would push every window plain, and the mark going missing
 // turns the popup into an ordinary pane that the next retile tiles into the box.
 //
 // Negative control, confirmed red: delete the popups map from

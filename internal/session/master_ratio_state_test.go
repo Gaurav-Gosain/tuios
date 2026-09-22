@@ -95,8 +95,8 @@ func TestTheMasterRatioMapSurvivesTheWire(t *testing.T) {
 
 // TestAPushUnionsTheMasterRatiosItDoesNotKnowAbout is the merge path. A client
 // only ever holds the ratios it has been told about or tuned itself, so letting
-// a push replace the set would drop every workspace that client had not heard of
-// - which is the bug this field exists to stop, one layer further down.
+// a push replace the set would drop every workspace that client had not heard of,
+// which is the bug this field exists to stop, one layer further down.
 //
 // NEGATIVE CONTROL: replace the union in retainDaemonExclusive with a plain nil
 // check and workspace 3 vanishes from the session.

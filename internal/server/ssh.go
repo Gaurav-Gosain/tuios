@@ -231,8 +231,8 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 // recoverMiddleware wraps a session handler so a panic in it (or any inner
 // middleware) is recovered, logged, and confined to that one session. Bubble
 // Tea already recovers panics inside its own program loop and returns from
-// Run; this is the backstop for everything outside that loop - session setup,
-// capability detection, the daemon connect/restore path - so a single bad
+// Run; this is the backstop for everything outside that loop (session setup,
+// capability detection, the daemon connect/restore path), so a single bad
 // session can never crash the long-lived server process.
 func recoverMiddleware() wish.Middleware {
 	return func(next ssh.Handler) ssh.Handler {

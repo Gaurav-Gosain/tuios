@@ -11,9 +11,9 @@ import (
 )
 
 // These tests pin the retry policy at the one door every PTY-backed process in
-// tuios goes through. The real event cannot be provoked on demand - it needs a
+// tuios goes through. The real event cannot be provoked on demand (it needs a
 // pts index to be recycled out from under a dying session at the exact moment
-// of the fork - so the seam injects the refusal the way the kernel delivers it:
+// of the fork), so the seam injects the refusal the way the kernel delivers it:
 // as an EPERM-wrapped start error.
 //
 // Negative control for all four: with the retry removed from Spawn, the

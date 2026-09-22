@@ -174,8 +174,8 @@ type AttachPayload struct {
 	Reserve LayoutReserve `json:"reserve,omitempty"`
 }
 
-// LayoutReserve is the rows and columns a client keeps for its own chrome - the
-// sidebar rail, the dock - before a single pane is placed.
+// LayoutReserve is the rows and columns a client keeps for its own chrome (the
+// sidebar rail, the dock) before a single pane is placed.
 //
 // It is on the wire because a pane's box is not a per-client quantity. Every
 // client attached is looking at the same PTYs, and a PTY has exactly one size,
@@ -187,7 +187,7 @@ type AttachPayload struct {
 // Without this each client folded its own reserve into the box privately, so
 // two clients with different chrome partitioned different boxes, computed
 // different rectangles for the same panes, and dragged the shared PTYs back and
-// forth between the two answers - a narrowing resize each way, on every push.
+// forth between the two answers: a narrowing resize each way, on every push.
 type LayoutReserve struct {
 	Left   int `json:"left,omitempty"`
 	Right  int `json:"right,omitempty"`
@@ -584,13 +584,13 @@ const (
 // The header and the payload go out through net.Buffers. On a *net.UnixConn,
 // which is what every production caller passes, that is one writev with no
 // copy of the payload; on any other writer it is one write for the header and
-// one for the payload. It used to be three writes, one each for the length,
-// the type and codec bytes and the payload, so three syscalls under the
-// caller's send lock. The bytes on the wire are the same.
+// one for the payload. Writing the length, the type and codec bytes and the
+// payload separately would be three syscalls under the caller's send lock,
+// for the same bytes on the wire.
 //
-// Measured on a unix socket, a 64-byte frame went from about 2.2us to 1.3us
-// and a 4 KiB frame from 2.2us to 1.65us. At 64 KiB and above the copy into
-// the socket dominates and the two are within noise of each other.
+// Measured on a unix socket against three writes, a 64-byte frame takes about
+// 1.3us instead of 2.2us and a 4 KiB frame 1.65us instead of 2.2us. At 64 KiB
+// and above the copy into the socket dominates and the two are within noise of each other.
 func WriteMessage(w io.Writer, msg *Message) error {
 	var hdr [6]byte
 	// Length counts the type and codec bytes plus the payload.
@@ -662,12 +662,11 @@ func ReadMessageBuffered(conn net.Conn, r io.Reader, boundaryTimeout, bodyTimeou
 // setBoundaryDeadline arms the deadline for the wait between frames, or
 // clears it when there is none.
 //
-// Both read loops used to wait with a 100 ms deadline so they could look at
-// their done channels between frames, and an idle connection paid for that
-// ten times a second, on each side, forever: a timer, a wakeup and a read
-// that returned nothing. Neither loop needs it. The only things that close
-// those channels close the connection with them, and a closed connection
-// wakes the read on its own.
+// The read loops do not poll their done channels with a short deadline. A
+// 100 ms poll costs an idle connection a timer, a wakeup and an empty read ten
+// times a second on each side, and it is not needed: the only things that
+// close those channels close the connection with them, and a closed
+// connection wakes the read on its own.
 func setBoundaryDeadline(conn net.Conn, timeout time.Duration) {
 	if timeout > 0 {
 		_ = conn.SetReadDeadline(time.Now().Add(timeout))
@@ -758,12 +757,11 @@ var ptyFrameBufs = sync.Pool{New: func() any {
 
 // writePTYFrame writes one binary PTY frame in a single Write.
 //
-// It used to be four: a binary.Write for the length, one for the type and
-// codec bytes, one for a freshly allocated 36-byte id, and one for the data.
-// Both callers write straight to an unbuffered unix socket, so those were four
-// syscalls, and on the input path they are four syscalls the user is waiting
-// through with the client's whole-client mutex held. One assembled frame and
-// one write measured 3346ns to 1140ns for a keystroke.
+// Both callers write straight to an unbuffered unix socket, so separate
+// writes for the length, the type and codec bytes, the 36-byte id and the data
+// would be four syscalls. On the input path the user waits through them with
+// the client's whole-client mutex held. One assembled frame and one write
+// measured 1140ns for a keystroke, against 3346ns for four writes.
 //
 // The bytes are unchanged. The id field is still a fixed 36 bytes, zero padded
 // when the id is shorter and truncated when it is longer, which is what copy

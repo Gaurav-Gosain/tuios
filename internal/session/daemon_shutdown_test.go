@@ -128,7 +128,7 @@ func TestWaitForDaemonShutdownReturnsImmediatelyWhenAbsent(t *testing.T) {
 
 // TestListenerCloseDoesNotUnlinkTheSocket pins the mechanism behind the
 // ordering contract, deterministically. A *net.UnixListener unlinks its socket
-// file on Close by default, and shutdown closes the listener first - so the
+// file on Close by default, and shutdown closes the listener first, so the
 // socket used to vanish at the top of shutdown, before any state was saved,
 // and WaitForDaemonShutdown could return mid-shutdown and find nothing on
 // disk. That is how TestSocketRemovalMeansStateIsPersisted failed under load:

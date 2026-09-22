@@ -36,9 +36,9 @@ import (
 // The rule for callers: never take either lock while already holding either
 // lock on the same window, and do not call a helper that takes one from inside
 // a locked region. Where a value is needed on both sides of that boundary,
-// follow the split this package already uses - a locking entry point plus a
-// lock-free variant for callers that are already inside (ScrollbackLenSync
-// versus ScrollbackLen) - or hoist the read out of the locked region entirely.
+// follow the split this package already uses (a locking entry point plus a
+// lock-free variant for callers that are already inside, as with
+// ScrollbackLenSync and ScrollbackLen), or hoist the read out of the locked region entirely.
 
 // LockIO/UnlockIO: exclusive lock for PTY writes (mutates cell buffer).
 func (w *Window) LockIO()   { w.ioMu.Lock() }
@@ -191,7 +191,7 @@ type Window struct {
 	// wrong the moment a resize is split in two. ResizeVisual sets Width and
 	// Height for the live preview, so by the time the deferred half runs they
 	// already match, Resize concludes nothing changed, and nothing downstream is
-	// told - the guest keeps drawing to the size it had before the drag.
+	// told: the guest keeps drawing to the size it had before the drag.
 	//
 	// INVARIANT: this is the size the real PTY has, and Resize skips announcing
 	// on the strength of it. So the two must move together. Resize and
@@ -726,7 +726,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 		time.Sleep(config.ProcessWaitDelay)
 
 		// Notify exit channel (ctx is already cancelled above, so don't
-		// include ctx.Done  - it would randomly win the select and drop
+		// include ctx.Done: it would randomly win the select and drop
 		// the exit notification, causing the window to stay open)
 		select {
 		case exitChan <- id:
@@ -743,7 +743,7 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 }
 
 // NewDaemonWindow creates a new terminal window that uses a daemon-managed PTY.
-// Unlike NewWindow, this doesn't spawn a local PTY - I/O is proxied through the daemon.
+// Unlike NewWindow, this doesn't spawn a local PTY. I/O is proxied through the daemon.
 // The caller is responsible for subscribing to PTY output and handling I/O.
 func NewDaemonWindow(id, title string, x, y, width, height, z int, ptyID string, ptyDataChan chan struct{}, scrollbackLines int) *Window {
 	window := newWindowBase(id, title, x, y, width, height, z, ptyDataChan, scrollbackLines)

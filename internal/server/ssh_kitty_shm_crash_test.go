@@ -78,7 +78,7 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 		// browser rotates a handful of frame buffers (terminal-browser cycles
 		// *-0-0-0.rgba .. *-0-0-7.rgba), so consecutive frames differ. The client
 		// skips a re-sent IDENTICAL bitmap (an idle optimisation), so the flood
-		// has to vary to stay a flood - which is exactly what a live stream does.
+		// has to vary to stay a flood, which is exactly what a live stream does.
 		const buffers = 4
 		names := make([]string, buffers)
 		for b := range buffers {
@@ -333,7 +333,7 @@ func runKittyFloodSession(addr, floodScript, textMarker string) error {
 			}
 			select {
 			case <-streamClosed:
-				return fmt.Errorf("SSH stdout closed while starting the kitty shm flood - session torn down (%s, read %d bytes)",
+				return fmt.Errorf("SSH stdout closed while starting the kitty shm flood: session torn down (%s, read %d bytes)",
 					teardownReason(), totalRead.Load())
 			case <-time.After(25 * time.Millisecond):
 			}

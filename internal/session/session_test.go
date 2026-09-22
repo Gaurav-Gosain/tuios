@@ -198,7 +198,7 @@ func TestSessionNameGeneration(t *testing.T) {
 	mgr := NewManager()
 	// Leaked sessions keep their periodic resurrection savers ticking for the
 	// rest of the binary, writing state files into whatever directory the
-	// override names at that moment - another test's TempDir included.
+	// override names at that moment, another test's TempDir included.
 	defer mgr.Shutdown()
 
 	// Generate first name
@@ -945,7 +945,7 @@ func TestDaemonCalculateEffectiveSize(t *testing.T) {
 			expectedHeight: 40,
 		},
 		{
-			name: "two clients different sizes - takes minimum",
+			name: "two clients different sizes takes minimum",
 			clients: []struct{ width, height int }{
 				{120, 40},
 				{80, 24},

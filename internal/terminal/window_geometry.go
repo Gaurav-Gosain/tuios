@@ -159,7 +159,7 @@ var AnnounceTrace func(w *Window, cols, rows int)
 
 // tellGuest sends one size downstream. Both the local PTY and the daemon turn
 // it into a SIGWINCH, so it is only ever called for a size the guest does not
-// already have - re-sending an unchanged size makes the shell repaint its
+// already have. Re-sending an unchanged size makes the shell repaint its
 // prompt for nothing, which is what stacked prompts on a same-size session
 // switch were.
 func (w *Window) tellGuest(termWidth, termHeight int) {
@@ -284,7 +284,7 @@ func (w *Window) MarkPositionDirty() {
 	// Position changes invalidate the cached layer but NOT the content cache
 	// This allows us to keep the expensive terminal content rendering
 	w.CachedLayer = nil
-	// DON'T clear w.CachedContent here - keep it for performance
+	// Don't clear w.CachedContent here. Keep it for performance.
 }
 
 // SetCachedContentDim records the dim percentage CachedContent was rendered

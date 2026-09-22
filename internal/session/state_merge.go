@@ -12,10 +12,10 @@ import "maps"
 // geometry, z-order, the shell-reported title, pre-restore geometry, alt-screen
 // state, and the tiling topology it computes.
 //
-// A client sync used to replace the whole state, so any daemon-side mutation
-// that happened after the client built its snapshot was silently undone. The
-// functions below are what replaced that: on the fields the daemon owns, the
-// daemon's value wins whenever the client is demonstrably behind.
+// A client sync does not replace the whole state, because that would silently
+// undo any daemon-side mutation made after the client built its snapshot. On
+// the fields the daemon owns, the daemon's value wins whenever the client is
+// demonstrably behind.
 
 // retainDaemonExclusive carries over the parts of canonical state that no client
 // ever sets, so a sync that simply omits them does not wipe them. Options come
@@ -78,7 +78,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// current client sends every entry it holds, but a client only ever holds the
 	// ones it has been told about or tuned itself, so a snapshot built before
 	// another client tuned a workspace would otherwise drop that workspace's ratio
-	// out of the session - which is the whole failure this field exists to stop,
+	// out of the session, which is the whole failure this field exists to stop,
 	// arriving one layer lower down. Nothing ever removes an entry, so the union
 	// is the complete answer, and the incoming value wins where both sides hold
 	// one: that is a client saying the ratio moved. A nil incoming map (an older
@@ -98,7 +98,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// The custom-layout flags are unioned on the same terms and for the same
 	// reason. A client only holds an entry for a workspace it has been told about
 	// or arranged itself, so replacing the set would drop the flag for every
-	// workspace the pushing client never heard of - the failure the field exists
+	// workspace the pushing client never heard of: the failure the field exists
 	// to stop, one layer lower down. The incoming value wins where both sides hold
 	// one, including an incoming false: a client that moved a pane off a workspace
 	// clears the flag there, and that is news. A push with no entry for a
@@ -273,7 +273,7 @@ func reconcileStale(incoming, canonical *SessionState, hasLivePTY func(ptyID str
 	// too, is what stops that.
 
 	// WorkspaceMasterRatio is deliberately not taken from canonical here. The
-	// daemon never moves a master ratio - no headless operation touches it - so
+	// daemon never moves a master ratio (no headless operation touches it), so
 	// canonical is not newer there by construction the way it is for the focus,
 	// and a stale snapshot still reports a ratio the client itself just moved
 	// correctly. What a stale snapshot can do is omit an entry it never learned,

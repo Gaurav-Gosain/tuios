@@ -18,7 +18,7 @@ func TestMain(m *testing.M) {
 	// A test that creates a session and never stops it leaves the session's
 	// periodic resurrection saver ticking for the rest of the binary, writing
 	// state files every 30 seconds into whatever directory the override names
-	// at that moment - another test's TempDir mid-cleanup included. That
+	// at that moment, another test's TempDir mid-cleanup included. That
 	// contamination surfaced as a once-in-hours "TempDir RemoveAll: directory
 	// not empty" flake, and it can just as silently feed one test's state file
 	// to another test's restore. Catching the leak here names the problem the
