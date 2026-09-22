@@ -147,6 +147,16 @@ tuios ls --all-hosts
 tuios list-agents --all-hosts
 ```
 
+`hosts add` also takes `--command PATH` to run a given tuios binary on the host,
+`--ssh-option ARG` (repeat it) for extra ssh arguments such as a jump host, and
+`--connect-timeout SECONDS` for a slow link. On a Tailscale tailnet, list the
+machines tuios can see and add one by its tailnet name:
+
+```sh
+tuios hosts tailnet
+tuios hosts add build --tailnet
+```
+
 The address is anything ssh understands, including an ssh_config alias. Adding,
 changing or removing a host takes effect at once. The daemon follows the config
 file, so no restart is needed. The [hosts] table in the config file is still
@@ -276,7 +286,10 @@ tuios capture-pane -s work -w build --scrollback --lines 40
 
 `--lines` counts from the last line with content, so a quiet pane still gives you
 its last 40 real lines. Add `--ansi` when you need the colors; leave it off when
-you are matching text, which is almost always.
+you are matching text, which is almost always. With `--ansi`, `--resolved`
+rewrites the 16 indexed colors to 24-bit RGB, against xterm's palette or the 16
+comma-separated `#rrggbb` values you pass to `--palette`, so the colors mean the same thing to a
+reader that does not know the pane's theme.
 
 ## Showing someone a pane
 
@@ -291,7 +304,9 @@ tuios screenshot -s work -w build
 It prints the path it wrote and works on a detached session. `--format` takes
 `png`, `svg`, `ansi`, `html` or `txt`; `--out` names the file; `--scrollback`
 puts the pane's history above the screen; `--json` gives you the path, size and
-any warnings as an object. The file is attachable to `send-agent-message`.
+any warnings as an object. `--theme NAME` renders in another theme, `--frame`
+takes `window`, `plain` or `none`, `--cursor` draws the cursor cell, and
+`--no-copy` skips the clipboard. The file is attachable to `send-agent-message`.
 
 ## Typing into a pane
 
@@ -542,6 +557,7 @@ tuios move-window -s work 2 -w build --follow  # send a pane to workspace 2
 tuios select-workspace -s work 2               # show workspace 2
 tuios set-window -s work -w build --name "api tests"
 tuios set-window -s work -w build --minimize
+tuios set-window -s work -w build --restore
 ```
 
 ```
@@ -576,6 +592,7 @@ client and say `needs_client` when there is none:
 ```sh
 tuios split-window -s work vertical -w build --name logs
 tuios set-layout -s work --tiling true --equalize
+tuios set-layout -s work --rotate       # flip the split holding the focused pane
 tuios focus-window -s work --direction left
 ```
 
@@ -694,6 +711,16 @@ tuios explain-agent-detect -s work -w build --json | jq -r '.manifests[].id'
 rests on, and every word on the command line that looks like an agent's name
 and was not counted. Run it first when a pane is, or is not, marked as an agent
 and you do not see why.
+
+`explain-agent-screen` does the same for screen rules. It prints the pane's
+screen tail as the rules read it, what each rule made of it, and which one
+fired. For a rule that did not match, it names the strings that were the
+reason. `--harness` tries another harness's rules, and `--lines` reads more or
+fewer lines than the manifest does:
+
+```sh
+tuios explain-agent-screen -w build --harness codex --lines 20
+```
 
 Process detection is a coarse fallback: it can never say `needs_input`, which is
 the state a human actually acts on, and it cannot tell a busy agent from one
@@ -883,7 +910,10 @@ mailbox.
 ```sh
 tuios read-agent-messages -s work --limit 50
 tuios read-agent-messages -s work -w "$TUIOS_PANE_ID" --peek
+tuios read-agent-messages -s work -w "$TUIOS_PANE_ID" --notices
 ```
+
+An inbox read with `-w` leaves out session-wide notices. `--notices` adds them.
 
 Rather than polling for mail, block for it:
 
@@ -1243,7 +1273,8 @@ Fix: run 'tuios worktree rm api-feat-retry --stash'.
 
 `--stash` (`"stash": true`) moves the changes into the repository's stash as
 `tuios: <branch>` and then removes a clean worktree. `--force` (`"force": true`)
-discards them, and is the only option that does. The branch is never deleted:
+discards them, and is the only option that does. `--keep-session` removes the
+worktree and leaves the session running. The branch is never deleted:
 every commit made in the worktree stays. `tuios fan keep <session>` applies the
 same rule to every sibling of the session you keep, and leaves a dirty sibling
 in place rather than guess. Nothing here ever runs `git worktree prune`. When a
@@ -1935,8 +1966,9 @@ finding takes:
   twice, or a key tuios withholds from the pane, is a fact about tuios.
 - `observed` was read from a pane at that moment: the foreground process name,
   the alternate screen, the kitty keyboard flags the pane's program pushed. From
-  the CLI there is no pane, so this tier is empty and the report says nothing
-  about one.
+  the CLI there is no pane, so this tier is empty unless `--guest PROGRAM` names
+  the program to assume is running, as in `tuios keybinds doctor --guest nvim`.
+  `keybinds explain` takes `--guest` too.
 - `reference` is a list of what common programs bind by default. Nothing
   is detected and nothing is asked. Treat it as a hint about where to look, never
   as a statement about the user's actual vim config.
