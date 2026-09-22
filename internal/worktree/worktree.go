@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/adrg/xdg"
 )
 
@@ -53,55 +54,18 @@ func Detect(dir string) (Info, bool) {
 	if dir == "" || dir == "." {
 		return Info{}, false
 	}
-	for p := dir; ; {
-		entry := filepath.Join(p, ".git")
-		st, err := os.Lstat(entry)
-		if err == nil {
-			if st.IsDir() {
-				return Info{}, false
-			}
-			if st.Mode().IsRegular() {
-				return readLinked(p, entry)
-			}
-		}
-		parent := filepath.Dir(p)
-		if parent == p {
-			return Info{}, false
-		}
-		p = parent
-	}
-}
-
-// readLinked reads a worktree's ".git" file and the gitdir it names.
-func readLinked(root, gitFile string) (Info, bool) {
-	data, err := os.ReadFile(gitFile)
-	if err != nil {
+	gitdir, commonDir, root, ok := gitstate.Locate(dir)
+	// The two git directories are the same in the main checkout, and when a
+	// ".git" file's gitdir has no commondir pointer. Neither is a linked
+	// worktree.
+	if !ok || gitdir == commonDir {
 		return Info{}, false
 	}
-	line := strings.TrimSpace(string(data))
-	const prefix = "gitdir:"
-	if !strings.HasPrefix(line, prefix) {
-		return Info{}, false
-	}
-	gitdir := strings.TrimSpace(strings.TrimPrefix(line, prefix))
-	if !filepath.IsAbs(gitdir) {
-		gitdir = filepath.Join(root, gitdir)
-	}
-	gitdir = filepath.Clean(gitdir)
 	// Only a gitdir under <common>/worktrees/<name> is a linked worktree. A
 	// submodule also uses a ".git" file, and its gitdir sits under modules/.
 	if filepath.Base(filepath.Dir(gitdir)) != "worktrees" {
 		return Info{}, false
 	}
-	common, err := os.ReadFile(filepath.Join(gitdir, "commondir"))
-	if err != nil {
-		return Info{}, false
-	}
-	commonDir := strings.TrimSpace(string(common))
-	if !filepath.IsAbs(commonDir) {
-		commonDir = filepath.Join(gitdir, commonDir)
-	}
-	commonDir = filepath.Clean(commonDir)
 	repoRoot := commonDir
 	if filepath.Base(commonDir) == ".git" {
 		repoRoot = filepath.Dir(commonDir)

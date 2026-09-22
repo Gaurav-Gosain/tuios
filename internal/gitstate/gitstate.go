@@ -95,7 +95,7 @@ func Read(dir string) (State, bool) {
 		return State{}, false
 	}
 
-	gitdir, commondir, root, ok := locate(dir)
+	gitdir, commondir, root, ok := Locate(dir)
 	if !ok {
 		// Remember it. Otherwise every refresh walks from a home directory to
 		// the filesystem root, stat-ing a ".git" at every level, for a pane
@@ -165,16 +165,17 @@ func Forget() {
 	mu.Unlock()
 }
 
-// locate walks up from dir looking for the ".git" that marks a working tree,
+// Locate walks up from dir looking for the ".git" that marks a working tree,
 // and answers where that tree's own git directory is, where the repository's
-// shared one is, and where the tree starts.
+// shared one is, and where the tree starts. It only reads files.
 //
 // The two git directories are the same thing in a plain checkout and different
 // in a linked worktree, where HEAD is per worktree and the remote-tracking refs
 // are shared. Reading the branch from the shared directory would report the
 // main checkout's branch on every worktree of the repository, which is exactly
-// the case this is for.
-func locate(dir string) (gitdir, commondir, root string, ok bool) {
+// the case this is for. A ".git" file whose git directory has no commondir
+// pointer also reports the two as the same.
+func Locate(dir string) (gitdir, commondir, root string, ok bool) {
 	dir = filepath.Clean(dir)
 	for p := dir; ; {
 		entry := filepath.Join(p, ".git")
