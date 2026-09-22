@@ -82,6 +82,11 @@ var errorCodeCatalog = []struct {
 	{ErrVerbProtocolMismatch, "The caller's protocol version is outside the range this daemon accepts."},
 	{ErrVerbUnknownHost, "No host by that name is configured. The hint lists the hosts that are. A host name is matched exactly, so nothing is guessed."},
 	{ErrVerbHostUnreachable, "The host is configured and is not answering. Nothing was queued. Read the host's status with list-hosts."},
+	{ErrVerbHostRefused, "The host's link is up and cannot take another connection. Close one of the connections to it and try again."},
+	{ErrVerbUnknownPane, "This daemon is not running a pane with that id. The pane was real and is gone, so drop it rather than correct it."},
+	{ErrVerbNotWorktree, "The session is not in a git worktree, so there is nothing to remove or diff."},
+	{ErrVerbWorktreeDirty, "remove-worktree refused: the worktree holds uncommitted changes and neither stash nor force was passed. Nothing was removed."},
+	{ErrVerbGitFailed, "A git command failed. The message is git's own. The repository is as it was."},
 	{ErrVerbInternal, "Unexpected server-side failure."},
 }
 

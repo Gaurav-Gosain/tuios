@@ -189,16 +189,25 @@ catalog.
 | `unknown_verb` | No verb by that name. |
 | `invalid_params` | The params failed to decode, or a required field was missing. |
 | `session_not_found` | The named session does not exist (or no sessions exist). |
+| `session_exists` | new-session was given a name the daemon already holds. |
 | `window_not_found` | The window target did not resolve to a window. |
 | `no_windows` | The session has no windows to act on. |
 | `pty_not_found` | The target window has no live PTY. |
 | `needs_client` | The verb needs a live renderer that is not attached. |
-| `option_not_found` | A get-option key was never set. |
+| `option_not_found` | No option by that path exists. The hint carries the closest match. |
 | `command_failed` | A verb routed to the attached client came back failed or timed out. |
 | `timeout` | A wait-for condition did not match before its timeout elapsed. |
+| `not_ready` | The target agent was mid-turn, so the call declined to type at it. |
+| `loop_refused` | The call would loop: a pane addressing itself, or an ask that closes a cycle with one in flight. |
+| `rate_limited` | The sender is over the cross-agent message rate cap. |
+| `no_keyboard` | The target is the person's inbox, `human`, which has no pane to type into. |
 | `protocol_mismatch` | The caller's protocol version is outside the range this daemon serves. Only `hello` produces it. |
+| `unknown_host` | No host by that name is configured. Host names are matched exactly. |
+| `host_unreachable` | The host is configured and is not answering. Nothing was queued. |
+| `host_refused` | The host's link is up and cannot take another connection. |
+| `unknown_pane` | This daemon is not running a pane with that id. |
 | `internal` | An unexpected server side failure. |
-| `not_worktree` | The session is not in a git worktree, so there is nothing to remove. |
+| `not_worktree` | The session is not in a git worktree, so there is nothing to remove or diff. |
 | `worktree_dirty` | remove-worktree refused: the worktree holds uncommitted changes and neither `stash` nor `force` was passed. Nothing was removed. |
 | `git_failed` | A git command failed. The message is git's own. The repository is as it was. |
 

@@ -2,10 +2,67 @@ package session
 
 import (
 	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
+
+// TestErrorCodeCatalogHasEveryErrVerbConstant reads the package source for
+// every ErrVerb* constant and requires its code in the list-verbs catalogue. A
+// code defined next to the verbs that raise it, such as the worktree ones, is
+// easy to leave out of the catalogue, and list-verbs then never publishes it.
+func TestErrorCodeCatalogHasEveryErrVerbConstant(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalogued := VerbErrorCodes()
+	fset := token.NewFileSet()
+	found := 0
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatalf("parse %s: %v", name, err)
+		}
+		for _, decl := range file.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok || gen.Tok != token.CONST {
+				continue
+			}
+			for _, spec := range gen.Specs {
+				vs := spec.(*ast.ValueSpec)
+				for i, ident := range vs.Names {
+					if !strings.HasPrefix(ident.Name, "ErrVerb") || i >= len(vs.Values) {
+						continue
+					}
+					lit, ok := vs.Values[i].(*ast.BasicLit)
+					if !ok || lit.Kind != token.STRING {
+						continue
+					}
+					code, err := strconv.Unquote(lit.Value)
+					if err != nil {
+						t.Fatalf("%s: %v", ident.Name, err)
+					}
+					found++
+					if !slices.Contains(catalogued, code) {
+						t.Errorf("%s (%q) is defined in %s but missing from errorCodeCatalog", ident.Name, code, name)
+					}
+				}
+			}
+		}
+	}
+	if found == 0 {
+		t.Fatal("found no ErrVerb constants, so the source scan is broken")
+	}
+}
 
 // TestListVerbsDescribesEveryVerb is the contract an agent relies on: list-verbs
 // alone is enough to drive the control plane. Every registered verb must carry a

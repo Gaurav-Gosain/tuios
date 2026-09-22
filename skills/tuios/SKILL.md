@@ -1963,11 +1963,12 @@ tells you to capture the pane. Read the whole error before retrying.
 
 Over the socket, every failure carries a stable code in the error envelope, for
 when you are matching rather than reading: `invalid_request`, `unknown_verb`,
-`invalid_params`, `session_not_found`, `window_not_found`, `no_windows`,
-`pty_not_found`, `needs_client`, `option_not_found`, `command_failed`,
-`timeout`, `not_ready`, `loop_refused`, `rate_limited`, `no_keyboard`,
-`protocol_mismatch`, `unknown_host`, `host_unreachable`, `internal`. The CLI
-folds the same information into its messages.
+`invalid_params`, `session_not_found`, `session_exists`, `window_not_found`,
+`no_windows`, `pty_not_found`, `needs_client`, `option_not_found`,
+`command_failed`, `timeout`, `not_ready`, `loop_refused`, `rate_limited`,
+`no_keyboard`, `protocol_mismatch`, `unknown_host`, `host_unreachable`,
+`host_refused`, `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
+`internal`. The CLI folds the same information into its messages.
 
 `option_not_found` means the path names no option in this build, and its hint
 carries the closest match; `list-options` describes them all.
@@ -1987,6 +1988,14 @@ are final. A host name is matched exactly against the `[hosts]` config table, so
 a near miss is refused rather than resolved for you: reaching the wrong machine
 is worse than reaching none. Nothing is queued for a host that is not answering.
 Run `tuios hosts` to see why, or `tuios hosts test NAME` to dial it again.
+`host_refused` means the link is up and cannot take another connection: close
+one rather than fix the link. `unknown_pane` means a pane id on the far machine
+is gone, so drop it rather than correct it.
+
+`not_worktree`, `worktree_dirty` and `git_failed` come only from the worktree
+verbs. A session outside a git worktree has nothing to remove or diff. A dirty
+worktree is left as it was until you pass `--stash` or `--force`. A git failure
+carries git's own message, and the repository is as it was.
 
 A parameter the verb does not take is refused rather than ignored, and the
 failure lists what the verb does take. This matters more than it sounds: a call
