@@ -275,7 +275,7 @@ is never handed a state older than one it has already applied.
 
 Layout is split the same way, along the line between intent and pixels. The
 daemon carries the layout intent: `layout_mode` (`bsp`, `master-stack` or
-`scrolling`), the BSP tree per workspace, the split ratios, the master ratio, the
+`scrolling`), the BSP tree per workspace, the split ratios, the master and stack ratios, the
 tiling scheme, and `num_workspaces`. It does not carry the pixel rectangles for
 tiled windows, because those depend on the viewport of whichever client is
 rendering, and two clients attached at different sizes must derive different

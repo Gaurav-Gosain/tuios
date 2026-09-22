@@ -40,7 +40,7 @@ Four settings shape the tiling, and all four are in the settings page
 | Setting | What it does |
 |---|---|
 | `startup.layout` | The mode a **new** session starts in: `bsp`, `master-stack` or `scrolling`. A session that already exists keeps its own. |
-| `appearance.master_ratio` | The master pane's share of the screen in master-stack, as a percent (30-70). The `<` and `>` keys move it for the workspace you are on, and every client attached to the session follows. A workspace nobody has moved it on starts at this setting. |
+| `appearance.master_ratio` | The master pane's share of the screen in master-stack, as a percent (10-90). The `<` and `>` keys, the percentage resizes and a mouse drag on the divider move it for the workspace you are on, and every client attached to the session follows. A workspace nobody has moved it on starts at this setting. |
 | `appearance.scroll_column_width` | A column's width in the scrolling layout, as a percent of the screen (20-90). |
 | `appearance.gap` | Cells of empty ground between neighbouring panes, in every mode. |
 
@@ -61,18 +61,23 @@ every percentage is a named keybind, so any of them can be rebound or removed in
 (minimum pane size, gaps, and the pane's neighbours), so the resulting size is
 the requested percentage wherever the layout allows it.
 
-Two layout caveats, documented rather than hidden:
+How a resize is kept depends on the layout:
 
+- **BSP** writes the resize into the split ratios of the tree.
+- **Master-stack** writes it into the workspace's ratios: the master ratio
+  (the master column's width, or the top pane's height when two panes are
+  stacked on a tall screen) and, with three panes, the stack ratio (how the
+  height is split between the two stacked panes). The keyboard resizes, the
+  percentage resizes and a mouse drag on a divider all do this, so the resize
+  survives a retile. Both ratios are session state, so every client attached
+  to the session lays the workspace out the same way. With four or more panes
+  master-stack is an equal-share grid with no ratio to keep, so a resize there
+  lasts only until the next retile.
 - **Scrolling layout: width only.** The width actions reach the focused
   column through the scrolling column resizer, which clamps to the column
   width range; the height actions have no scrolling branch, so
   `Shift+5`..`Shift+9` do nothing there (column heights are recomputed as
   equal spans on the next layout pass).
-- **Master-stack: not durable.** In master-stack the rectangles are
-  recomputed from `appearance.master_ratio` on every retile, so a percentage
-  resize is dropped the next time the layout is recomputed. This is older
-  than the percentage feature itself; BSP (the default) keeps the split
-  ratio, so the percentage survives there.
 
 ## Scrolling Layout
 
