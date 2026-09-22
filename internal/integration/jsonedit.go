@@ -96,7 +96,7 @@ func (o *orderedObject) compact() json.RawMessage {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		key, _ := json.Marshal(k)
+		key, _ := marshalPlain(k)
 		b.Write(key)
 		b.WriteByte(':')
 		_ = json.Compact(&b, o.vals[k])
@@ -237,12 +237,39 @@ func stripManaged(group json.RawMessage) (json.RawMessage, bool, error) {
 	if len(kept) == 0 {
 		return nil, true, nil
 	}
-	arr, err := json.Marshal(kept)
-	if err != nil {
-		return nil, false, err
-	}
-	obj.set("hooks", arr)
+	obj.set("hooks", joinArray(kept))
 	return obj.compact(), true, nil
+}
+
+// marshalPlain encodes v as json.Marshal does, except that it leaves &, < and
+// > as they are. json.Marshal writes them as &, < and >, and it
+// does so even inside a json.RawMessage, so a user's hook command such as
+// `make lint && echo ok > /tmp/x` would come back rewritten. The document is
+// the same JSON either way, but the user's text is not.
+func marshalPlain(v any) (json.RawMessage, error) {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(b.Bytes(), "\n"), nil
+}
+
+// joinArray writes a JSON array of elements exactly as they are. Each element
+// is compacted the way compact writes object values, and nothing is escaped
+// or reordered.
+func joinArray(elems []json.RawMessage) json.RawMessage {
+	var b bytes.Buffer
+	b.WriteByte('[')
+	for i, e := range elems {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		_ = json.Compact(&b, e)
+	}
+	b.WriteByte(']')
+	return b.Bytes()
 }
 
 // editHooks rewrites a settings document's hooks object: every managed
@@ -290,15 +317,11 @@ func editHooks(doc []byte, events []HookEvent, command string, install bool) ([]
 			hooks.del(event)
 			continue
 		}
-		arr, err := json.Marshal(kept)
-		if err != nil {
-			return nil, false, err
-		}
-		hooks.set(event, arr)
+		hooks.set(event, joinArray(kept))
 	}
 	if install {
 		for _, ev := range events {
-			group, err := json.Marshal(map[string]any{
+			group, err := marshalPlain(map[string]any{
 				"hooks": []map[string]any{{"type": "command", "command": command, "timeout": ev.Timeout}},
 			})
 			if err != nil {
@@ -311,11 +334,7 @@ func editHooks(doc []byte, events []HookEvent, command string, install bool) ([]
 				}
 			}
 			groups = append(groups, group)
-			arr, err := json.Marshal(groups)
-			if err != nil {
-				return nil, false, err
-			}
-			hooks.set(ev.Name, arr)
+			hooks.set(ev.Name, joinArray(groups))
 		}
 	}
 	switch {

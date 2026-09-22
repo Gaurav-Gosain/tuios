@@ -665,9 +665,14 @@ tuios doctor agents                     # PATH, install state, and panes missing
 Every hook entry runs `tuios agent-hook <harness> --integration <version>`. The
 version marker is how a later install replaces an older entry, how uninstall
 finds exactly what tuios wrote, and how status tells current from out of date.
-The installer keeps everything else in the file, in its order, replaces the
-file atomically, keeps the previous copy as `<file>.tuios.bak`, and writes
-nothing when nothing changed. It refuses a file it cannot parse rather than
+The installer keeps everything else in the file, in its order and with the
+user's own text as written (`&&`, `<` and `>` in a hook command are not
+escaped), replaces the file atomically, and writes nothing when nothing
+changed. The first time it rewrites a file it keeps the file as it was as
+`<file>.tuios.bak`, and later writes leave that copy alone, so it is always the
+file from before tuios touched it. A settings file that is a symlink, as a
+dotfile manager leaves it, stays a symlink: the file it points to is the one
+rewritten. A symlink to a missing file is refused. It refuses a file it cannot parse rather than
 rewrite it, and refuses when the harness's configuration directory does not
 exist yet (run the harness once first). `--command` names the program the hooks
 run when `tuios` is not on the harness's PATH.

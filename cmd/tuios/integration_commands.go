@@ -61,9 +61,11 @@ settings.json hooks, Codex's hooks.json, Gemini CLI's settings.json hooks,
 and an opencode plugin. Every entry tuios writes runs "tuios agent-hook" and
 carries a version marker, so install replaces an older one, uninstall
 removes exactly what tuios wrote, and status says whether what is there is
-current. The user's own settings and hooks are kept in place, the file is
-replaced atomically, and the previous copy is kept beside it with a
-.tuios.bak suffix.`,
+current. The user's own settings and hooks are kept in place and as written,
+and the file is replaced atomically. A settings file that is a symlink stays
+one: the file it points to is rewritten. The first rewrite keeps the file as
+it was beside it with a .tuios.bak suffix, and later rewrites leave that copy
+alone.`,
 	}
 	cmd.AddCommand(newIntegrationInstallCommand(), newIntegrationUninstallCommand(), newIntegrationStatusCommand())
 	return cmd

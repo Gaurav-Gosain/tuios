@@ -10,8 +10,9 @@ tuios integration status claude-code   # installed, current (v1)
 That writes one managed hook entry per event into `~/.claude/settings.json` (or
 `$CLAUDE_CONFIG_DIR/settings.json`), each running
 `tuios agent-hook claude-code --integration 1`. Your own settings and hooks are
-kept where they are, the file is replaced atomically, and the previous copy is
-kept as `settings.json.tuios.bak`. `tuios integration uninstall claude-code`
+kept where they are, the file is replaced atomically (through a symlink, if
+`settings.json` is one), and the file as it was before tuios first touched it
+is kept as `settings.json.tuios.bak`. `tuios integration uninstall claude-code`
 removes exactly the entries tuios wrote.
 
 The event map, the pane lookup and the nested-session guard are documented in

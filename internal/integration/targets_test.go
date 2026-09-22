@@ -347,3 +347,119 @@ func TestCodexHooksDisabled(t *testing.T) {
 		}
 	}
 }
+
+// TestInstallKeepsTheBytesOfTheUsersCommands checks a user's hook command with
+// &, < and > survives install and uninstall as the user wrote it. json.Marshal
+// escapes those three even inside a json.RawMessage, which turned
+// `make lint && echo ok > /tmp/x` into `make lint && echo ok > /tmp/x`.
+func TestInstallKeepsTheBytesOfTheUsersCommands(t *testing.T) {
+	env := testEnv(t)
+	for _, id := range []string{ClaudeCode, Codex, GeminiCLI} {
+		t.Run(id, func(t *testing.T) {
+			tg := mustTarget(t, id)
+			path := tg.Path(env)
+			event := tg.Events[0].Name
+			cmd := `make lint && echo ok > /tmp/x < /dev/null`
+			writeFile(t, path, `{"hooks":{"`+event+`":[{"hooks":[{"type":"command","command":"`+cmd+`"}]}],"Other<&>":[]}}`)
+			if _, err := tg.Install(env, "tuios"); err != nil {
+				t.Fatal(err)
+			}
+			for _, step := range []string{"install", "uninstall"} {
+				if step == "uninstall" {
+					if _, err := tg.Uninstall(env); err != nil {
+						t.Fatal(err)
+					}
+				}
+				got := readFile(t, path)
+				if !strings.Contains(got, `"command": "`+cmd+`"`) || !strings.Contains(got, `"Other<&>"`) {
+					t.Fatalf("%s rewrote the user's text:\n%s", step, got)
+				}
+				if strings.Contains(got, `\u00`) {
+					t.Fatalf("%s escaped characters the user wrote plainly:\n%s", step, got)
+				}
+			}
+		})
+	}
+}
+
+// TestInstallWritesThroughASymlink checks a settings file a dotfile manager
+// links into place stays a link, and the change lands in the linked file.
+func TestInstallWritesThroughASymlink(t *testing.T) {
+	env := testEnv(t)
+	tg := mustTarget(t, ClaudeCode)
+	path := tg.Path(env)
+	real := filepath.Join(t.TempDir(), "dotfiles", "claude-settings.json")
+	writeFile(t, real, userClaudeSettings)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, path); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	for _, step := range []string{"install", "uninstall"} {
+		var err error
+		if step == "install" {
+			_, err = tg.Install(env, "tuios")
+		} else {
+			_, err = tg.Uninstall(env)
+		}
+		if err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+		fi, err := os.Lstat(path)
+		if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("%s replaced the symlink with a regular file", step)
+		}
+		managed := strings.Contains(readFile(t, real), "agent-hook")
+		if managed != (step == "install") {
+			t.Fatalf("after %s the linked file reads:\n%s", step, readFile(t, real))
+		}
+	}
+	entries, _ := os.ReadDir(filepath.Dir(real))
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".tuios-") {
+			t.Fatalf("a temporary file was left behind: %s", e.Name())
+		}
+	}
+}
+
+// TestInstallRefusesADanglingSymlink checks a link to a missing file is left
+// alone rather than replaced by a regular file.
+func TestInstallRefusesADanglingSymlink(t *testing.T) {
+	env := testEnv(t)
+	tg := mustTarget(t, ClaudeCode)
+	path := tg.Path(env)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(t.TempDir(), "missing.json"), path); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := tg.Install(env, "tuios"); err == nil {
+		t.Fatal("installed through a dangling symlink")
+	}
+	if fi, err := os.Lstat(path); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("the dangling symlink was replaced")
+	}
+}
+
+// TestBackupKeepsTheFileFromBeforeTuios checks a second write that changes the
+// file does not overwrite the backup of the original.
+func TestBackupKeepsTheFileFromBeforeTuios(t *testing.T) {
+	env := testEnv(t)
+	tg := mustTarget(t, ClaudeCode)
+	path := tg.Path(env)
+	writeFile(t, path, userClaudeSettings)
+	if _, err := tg.Install(env, "tuios"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tg.Uninstall(env); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tg.Install(env, "/opt/tuios/bin/tuios"); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, path+BackupSuffix); got != userClaudeSettings {
+		t.Fatalf("the backup is no longer the file from before tuios:\n%s", got)
+	}
+}
