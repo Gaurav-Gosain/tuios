@@ -4,7 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // The rail could show eight agents running and not say which of them was
@@ -108,6 +113,11 @@ func TestRailAgentRowCarriesBothPrefixes(t *testing.T) {
 // pane that is somewhere else, and the whole prefix goes before a cell of the
 // pane name does.
 func TestSidebarAgentPrefixYieldsInOrder(t *testing.T) {
+	m := &OS{Settings: config.Global}
+	tokens := []sidebarAgentToken{
+		{Name: "session", Text: "api"},
+		{Name: "harness", Text: sidebarHarnessLabel("claude-code")},
+	}
 	for _, tc := range []struct {
 		avail int
 		want  string
@@ -118,8 +128,12 @@ func TestSidebarAgentPrefixYieldsInOrder(t *testing.T) {
 		{8, ""},             // and the agent yields before the name
 		{1, ""},
 	} {
-		if got := sidebarAgentPrefix("api", "claude-code", "refactor", tc.avail); got != tc.want {
+		run, w := m.sidebarAgentPrefixRun(tokens, lipgloss.NewStyle(), tc.avail, theme.UI())
+		if got := ansi.Strip(run); got != tc.want {
 			t.Errorf("prefix at avail=%d = %q, want %q", tc.avail, got, tc.want)
+		}
+		if want := lipgloss.Width(tc.want); w != want {
+			t.Errorf("prefix at avail=%d reports width %d, want %d", tc.avail, w, want)
 		}
 	}
 }

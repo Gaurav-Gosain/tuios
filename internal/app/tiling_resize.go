@@ -6,26 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// ResizeMasterWidth adjusts the master window width ratio in tiling mode
-func (m *OS) ResizeMasterWidth(delta float64) {
-	if !m.AutoTiling {
-		return
-	}
-
-	// Adjust ratio
-	m.MasterRatio += delta
-
-	// Clamp between 0.3 and 0.7 (30% to 70%)
-	if m.MasterRatio < 0.3 {
-		m.MasterRatio = 0.3
-	} else if m.MasterRatio > 0.7 {
-		m.MasterRatio = 0.7
-	}
-
-	// Retile all windows with new ratio
-	m.TileAllWindows()
-}
-
 // ResizeFocusedWindowHeight resizes the focused window's height by moving the BOTTOM edge
 // delta is in pixels (positive = grow, negative = shrink)
 func (m *OS) ResizeFocusedWindowHeight(deltaPixels int) {

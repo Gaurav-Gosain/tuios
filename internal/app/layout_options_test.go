@@ -138,15 +138,16 @@ func TestMasterRatioSettingMovesTheSplit(t *testing.T) {
 	}
 }
 
-// The row must not report a value the layout is not using. The resize keys move
-// the ratio underneath it, which is why it reads the model rather than the
-// config, and why it rounds rather than truncating: 0.55 is 55%, not 54%.
-func TestMasterRatioRowFollowsTheResizeKeys(t *testing.T) {
+// The row must not report a value the layout is not using. The ratio moves
+// underneath it, which is why it reads the model rather than the config, and
+// why it rounds rather than truncating: 0.5 plus 0.05 is 55%, not 54%.
+func TestMasterRatioRowReadsTheModelRatio(t *testing.T) {
 	m := modeOS(t, LayoutModeMasterStack, false, 0, 2, 160, 40)
 	m.MasterRatio = 0.5
-	m.ResizeMasterWidth(0.05)
+	m.MasterRatio += 0.05
+	m.TileAllWindows()
 	if got := m.MasterRatioPercent(); got != 55 {
-		t.Errorf("the row reads %d%% after the resize key took the ratio to %.2f", got, m.MasterRatio)
+		t.Errorf("the row reads %d%% with the ratio at %.2f", got, m.MasterRatio)
 	}
 }
 
@@ -219,7 +220,8 @@ func TestAFreshWorkspaceStartsAtTheConfiguredMasterRatio(t *testing.T) {
 
 	// A workspace that was left at its own ratio keeps it, which is the half of
 	// the behaviour the fallback must not trample.
-	m.ResizeMasterWidth(-0.2)
+	m.MasterRatio = 0.5
+	m.TileAllWindows()
 	m.SwitchToWorkspace(1)
 	m.SwitchToWorkspace(2)
 	if got := m.MasterRatioPercent(); got != 50 {

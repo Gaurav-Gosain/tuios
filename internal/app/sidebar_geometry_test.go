@@ -103,17 +103,11 @@ func TestMarginsFollowPosition(t *testing.T) {
 	}
 }
 
-// tileDaemonWindows drives the same daemon create/sync loop the tiling test uses,
-// returning the client OS holding the tiled windows. The sidebar globals must be
-// set before calling.
-func tileDaemonWindows(t *testing.T, width, height, count int) *OS {
-	t.Helper()
-	return tileDaemonWindowsMode(t, width, height, count, LayoutModeBSP)
-}
-
-// tileDaemonWindowsMode is tileDaemonWindows for an explicit layout mode
-// ("bsp", "master-stack", or "scrolling"), so the content-box assertions can
-// run against every tiling path, not only the BSP one.
+// tileDaemonWindowsMode drives the same daemon create/sync loop the tiling test
+// uses, returning the client OS holding the tiled windows, for an explicit
+// layout mode ("bsp", "master-stack", or "scrolling"), so the content-box
+// assertions can run against every tiling path, not only the BSP one. The
+// sidebar globals must be set before calling.
 func tileDaemonWindowsMode(t *testing.T, width, height, count int, layoutMode string) *OS {
 	t.Helper()
 	prevAnim := config.Global.AnimationsEnabled

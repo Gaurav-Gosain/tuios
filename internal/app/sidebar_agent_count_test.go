@@ -29,7 +29,7 @@ func TestAgentsHeaderCountsBlockedAndDone(t *testing.T) {
 	m.SidebarWidthPref = 50 // wide enough for the words beside the mail glyph
 	lines, _ := m.sidebarPanelLinesForTree(tree)
 	header := railAgentsHeader(t, lines)
-	want := sidebarAgentCountText(1, 1)
+	want := sidebarAgentCountInfo{Blocked: 1, Done: 1}.words()
 	if !strings.Contains(header, want) {
 		t.Fatalf("agents header = %q, want it to carry %q", header, want)
 	}
@@ -89,7 +89,7 @@ func TestAgentsHeaderCountIsAFilterTarget(t *testing.T) {
 	if count == nil {
 		t.Fatal("the count token recorded no hit rectangle")
 	}
-	if got, want := count.X1-count.X0, lipgloss.Width(sidebarAgentCountText(1, 1)); got != want {
+	if got, want := count.X1-count.X0, lipgloss.Width(sidebarAgentCountInfo{Blocked: 1, Done: 1}.words()); got != want {
 		t.Fatalf("the count's rectangle spans %d cells, want the text's width %d", got, want)
 	}
 	if !m.SidebarClick(count.X0, count.Y0, false) {

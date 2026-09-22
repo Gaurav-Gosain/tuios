@@ -773,12 +773,6 @@ func (c sidebarAgentCountInfo) render(form int, hover bool, pal overlay.Palette)
 	return strings.Join(parts, " ")
 }
 
-// sidebarAgentCountText is the words form, for callers that only need the
-// text.
-func sidebarAgentCountText(blocked, done int) string {
-	return sidebarAgentCountInfo{Blocked: blocked, Done: done}.words()
-}
-
 // sidebarAttentionCounts is the one predicate behind every "N blocked" and "N
 // done" the rail prints: a state wanting a human counts as blocked, and a
 // finished pane nobody has looked at counts as done.

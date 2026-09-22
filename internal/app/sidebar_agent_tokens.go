@@ -244,27 +244,5 @@ func (m *OS) sidebarAgentPrefixRun(tokens []sidebarAgentToken, base lipgloss.Sty
 	return "", 0
 }
 
-// sidebarAgentPrefix is the muted context in front of an agent row's name:
-// which session the pane is in when it is not this one, and which agent is
-// running in it. It returns what fits, including the trailing separator, or "".
-// Kept as the plain-text form of sidebarAgentPrefixRun for the tests that
-// pin its give-way order.
-func sidebarAgentPrefix(session, harness, name string, avail int) string {
-	var parts []string
-	if session != "" {
-		parts = append(parts, session)
-	}
-	if h := sidebarHarnessLabel(harness); h != "" && !strings.EqualFold(h, name) {
-		parts = append(parts, h)
-	}
-	for len(parts) > 0 {
-		if s := strings.Join(parts, "/") + "/"; lipgloss.Width(s)+2 <= avail {
-			return s
-		}
-		parts = parts[1:]
-	}
-	return ""
-}
-
 // sidebarAgentRowSpec is the spec in force, for callers outside the render.
 func (m *OS) sidebarAgentRowSpec() *config.SidebarAgentRowSpec { return &m.Settings.SidebarAgentRow }
