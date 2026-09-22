@@ -89,7 +89,7 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec) (*hostedPane, error) {
 
 	shell := spec.Shell
 	if shell == "" {
-		shell = (&Session{}).getShell()
+		shell = (&Session{config: &SessionConfig{PreferredShell: d.manager.PreferredShell}}).getShell()
 	}
 	env := hostedPaneEnv(d, spec)
 

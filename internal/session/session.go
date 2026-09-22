@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
-	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -24,6 +23,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/google/uuid"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
@@ -887,6 +887,11 @@ type SessionConfig struct {
 	// InheritCwd starts a new window in the focused pane's working directory
 	// rather than the daemon's. The manager stamps it from the daemon's config.
 	InheritCwd bool
+	// PreferredShell returns appearance.preferred_shell, used when Shell is
+	// empty. The manager stamps it with its own getter, so a config reload
+	// reaches the next pane. Nil, or an empty answer, means $SHELL and then
+	// the platform default.
+	PreferredShell func() string
 	// Global creates the session as a global one. See SessionState.Global.
 	Global bool
 }
@@ -1090,7 +1095,10 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 	id := uuid.New().String()
 	ctx, cancel := context.WithCancel(context.Background())
 
-	shell := s.getShell()
+	shell, missingShell := s.resolveShell()
+	if missingShell != "" {
+		log.Printf("Warning: configured shell %q not found, using %s", missingShell, shell)
+	}
 
 	// The PTY and the process are created together, and retried together, by
 	// ptyspawn: a spawn can be refused with a transient EPERM from the kernel's
@@ -1904,17 +1912,30 @@ func (s *Session) windowSummaries() []WindowSummary {
 	return out
 }
 
+// getShell returns the shell a new pane in this session runs.
 func (s *Session) getShell() string {
+	shell, _ := s.resolveShell()
+	return shell
+}
+
+// resolveShell picks the shell for a new pane: the one the client that made
+// the session named, then the daemon's appearance.preferred_shell, then $SHELL
+// and the platform default, through the same config.ShellFor the standalone
+// path uses. missing is the preferred shell when it was set and not found,
+// for the spawn path to log.
+func (s *Session) resolveShell() (shell, missing string) {
 	if s.config != nil && s.config.Shell != "" {
-		return s.config.Shell
+		return s.config.Shell, ""
 	}
-	if shell := os.Getenv("SHELL"); shell != "" {
-		return shell
+	preferred := ""
+	if s.config != nil && s.config.PreferredShell != nil {
+		preferred = s.config.PreferredShell()
 	}
-	if runtime.GOOS == "windows" {
-		return "cmd.exe"
+	shell, notFound := config.ShellFor(preferred)
+	if notFound {
+		missing = preferred
 	}
-	return "/bin/sh"
+	return shell, missing
 }
 
 func (s *Session) buildEnv(windowID string, restored bool) []string {

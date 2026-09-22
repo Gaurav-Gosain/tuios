@@ -5,6 +5,7 @@ import (
 	"os"
 	"sort"
 	"sync"
+	"sync/atomic"
 )
 
 // Manager manages all persistent sessions for a user.
@@ -25,6 +26,11 @@ type Manager struct {
 	// hostName is the name this machine gives itself, stamped into every
 	// session for TUIOS_HOST. Empty means the operating system's hostname.
 	hostName string
+	// preferredShell is appearance.preferred_shell. Every session this manager
+	// makes reads it at spawn time through PreferredShell, so a config reload
+	// reaches the next pane of a session that already exists. It is atomic so
+	// a spawn never needs m.mu.
+	preferredShell atomic.Pointer[string]
 
 	// Lifecycle hooks (set by the daemon). onCreate fires after a session is
 	// registered; onDelete fires after it is removed but before it is stopped.
@@ -72,6 +78,20 @@ func (m *Manager) SetNewWindowInheritCwd(v bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.inheritCwd = v
+}
+
+// SetPreferredShell sets the shell a pane runs when its session names none.
+// Empty means $SHELL and then the platform default.
+func (m *Manager) SetPreferredShell(shell string) {
+	m.preferredShell.Store(&shell)
+}
+
+// PreferredShell is what SetPreferredShell last set, or "".
+func (m *Manager) PreferredShell() string {
+	if p := m.preferredShell.Load(); p != nil {
+		return *p
+	}
+	return ""
 }
 
 // SetHostName sets the name this machine gives itself, for TUIOS_HOST.
@@ -144,6 +164,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	// Read directly, not through a helper: m.mu is already held here, and the
 	// fields above are read the same way for the same reason.
 	cfg.InheritCwd = m.inheritCwd
+	if cfg.PreferredShell == nil {
+		cfg.PreferredShell = m.PreferredShell
+	}
 
 	// Create the session
 	session, err := NewSession(name, cfg, width, height)

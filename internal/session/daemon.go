@@ -302,6 +302,10 @@ type DaemonConfig struct {
 	// directory, from appearance.new_window_inherit_cwd. The daemon is the side
 	// that spawns the shell, so it is the side that has to know.
 	NewWindowInheritCwd bool
+	// PreferredShell is appearance.preferred_shell: the shell a pane runs when
+	// the client that made its session named none. Empty falls back to $SHELL
+	// and then the platform default, the same order a standalone pane uses.
+	PreferredShell string
 	// AgentStallTimeout overrides how long a pane may report working with no
 	// output before the stall heuristic demotes it to idle. Zero falls back to
 	// the TUIOS_AGENT_STALL_SECONDS environment override, then to the default; a
@@ -366,6 +370,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
 	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
 	d.manager.SetNewWindowInheritCwd(cfg.NewWindowInheritCwd)
+	d.manager.SetPreferredShell(cfg.PreferredShell)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)
 	d.loadHooks(cfg)
 

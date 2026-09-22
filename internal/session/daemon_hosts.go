@@ -69,12 +69,13 @@ func (d *Daemon) stopHostsWatch() {
 }
 
 // onConfigReload runs on the watcher goroutine. It applies the [hosts] table
-// and reads nothing else out of the file.
+// and appearance.preferred_shell, and reads nothing else out of the file.
 func (d *Daemon) onConfigReload(cfg *config.UserConfig, err error) {
 	if err != nil {
 		log.Printf("[FEDERATION] The config file has an error, so the hosts did not change: %v", err)
 		return
 	}
+	d.manager.SetPreferredShell(cfg.Appearance.PreferredShell)
 	d.ApplyHosts(HostsFromConfig(cfg))
 }
 

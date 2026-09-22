@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
-	"runtime"
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/colorprofile"
 	"golang.org/x/term"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 )
 
 // Client connects to the TUIOS daemon for one-shot request/response control
@@ -231,11 +231,14 @@ func (c *Client) ResurrectSession(name string) error {
 }
 
 func (c *Client) sendHello() error {
-	// Detect terminal capabilities
-	termType, colorTerm := detectTerminalEnv()
-
-	// Detect shell
-	shell := detectShell()
+	// The same detection the standalone window path uses, so a session this
+	// client creates runs the shell and TERM a standalone pane would.
+	termType, colorTerm := guestenv.DetectTerm()
+	userCfg, err := config.LoadUserConfig()
+	if err != nil {
+		userCfg = nil
+	}
+	shell := config.ResolveShell(userCfg)
 
 	msg, err := NewMessage(MsgHello, &HelloPayload{
 		Version:        c.version,
@@ -322,78 +325,4 @@ func (c *Client) SendControlMessage(msg *Message) (*Message, error) {
 	}
 
 	return resp, nil
-}
-
-// detectTerminalEnv detects TERM and COLORTERM values.
-func detectTerminalEnv() (termType, colorTerm string) {
-	// Check environment first
-	envTerm := os.Getenv("TERM")
-	envColorTerm := os.Getenv("COLORTERM")
-
-	if envColorTerm == "truecolor" && envTerm != "" && envTerm != "dumb" {
-		return envTerm, envColorTerm
-	}
-
-	// Detect using colorprofile
-	profile := colorprofile.Detect(os.Stdout, os.Environ())
-
-	switch profile {
-	case colorprofile.TrueColor:
-		if envTerm != "" {
-			termType = envTerm
-		} else {
-			termType = "xterm-256color"
-		}
-		colorTerm = "truecolor"
-
-	case colorprofile.ANSI256:
-		if envTerm != "" {
-			termType = envTerm
-		} else {
-			termType = "xterm-256color"
-		}
-		colorTerm = ""
-
-	case colorprofile.ANSI:
-		if envTerm != "" && envTerm != "dumb" {
-			termType = envTerm
-		} else {
-			termType = "xterm"
-		}
-		colorTerm = ""
-
-	default:
-		termType = "dumb"
-		colorTerm = ""
-	}
-
-	return termType, colorTerm
-}
-
-// detectShell detects the user's preferred shell.
-func detectShell() string {
-	// Check SHELL environment variable
-	if shell := os.Getenv("SHELL"); shell != "" {
-		return shell
-	}
-
-	// Platform-specific fallbacks
-	if runtime.GOOS == "windows" {
-		shells := []string{"powershell.exe", "pwsh.exe", "cmd.exe"}
-		for _, shell := range shells {
-			if _, err := exec.LookPath(shell); err == nil {
-				return shell
-			}
-		}
-		return "cmd.exe"
-	}
-
-	// Unix shells
-	shells := []string{"/bin/bash", "/bin/zsh", "/bin/fish", "/bin/sh"}
-	for _, shell := range shells {
-		if _, err := os.Stat(shell); err == nil {
-			return shell
-		}
-	}
-	return "/bin/sh"
 }
