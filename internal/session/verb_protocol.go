@@ -959,6 +959,7 @@ func init() {
 				{Name: "agent_session_id", Type: "string", Description: "The harness's own id for the conversation, as a hook reports it. It is stored on the window for a later resume. It also turns on the nested-session guard: while the pane's harness is working or needs_input by its own report, a report for a different conversation or from a different harness is refused with reason foreign_session or foreign_harness."},
 				{Name: "transcript_path", Type: "string", Description: "The transcript file the harness is writing, as a hook reports it. For a harness whose manifest has a transcript reader, the window is joined to this exact file instead of a searched one. Kept in daemon memory only."},
 				{Name: "if_state", Type: "string", Description: "Comma-separated states. The report applies only when the window is in one of them now, and is otherwise refused with reason if_state.", Accepted: AgentStateNames},
+				{Name: "harness_pid", Type: "int", Description: "The pid of the harness process that ran the hook. With agent_session_id, a different session from the same harness process is a new conversation in that process (/clear or /resume, even after an interrupted turn that never reported Stop), so it takes the pane over instead of being refused as foreign_session. Kept in daemon memory only."},
 			},
 			returns: []verbParam{
 				{Name: "state", Type: "string", Description: "The state the window shows after the call, which is the reported one only when applied is true."},

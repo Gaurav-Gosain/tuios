@@ -338,6 +338,7 @@ func (s *Session) CloseDaemonWindow(target string) (string, error) {
 		// detector sweeps stale claims on its own tick too, but only when it is
 		// running, and a claim can now come from a source that is not the detector.
 		delete(s.agentClaims, closed.ID)
+		delete(s.agentHarnessPIDs, closed.ID)
 
 		// Repair focus if we removed the focused window.
 		if state.FocusedWindowID == closed.ID {

@@ -764,6 +764,15 @@ the one that owns the pane. Three filters keep those events off the pane:
   `done` mid-turn. At rest a new session takes the pane over, as `/clear`,
   `/resume` and a restart should, and the pane's `agent_session_id` becomes the
   new one.
+- Mid-turn, a new session from the same harness process also takes the pane
+  over. Claude Code fires no `Stop` when you interrupt a turn with Esc, so the
+  pane stays `working`, and a `/clear` or `/resume` after that starts a new
+  session id in the same process. Without this exception every report for the
+  new session would be refused until the harness exits. The hook sends the
+  harness's pid as `harness_pid`: the nearest ancestor of the hook process that
+  is not a shell or `env`. A nested run is a process of its own, so it is still
+  refused. A hook that cannot read its ancestors (Windows, or a sandbox with its
+  own pid namespace) sends no pid and gets the plain rule.
 
 ### Session identity
 
@@ -785,9 +794,19 @@ Harnesses run some hooks synchronously, `PreToolUse` and `PermissionRequest`
 among them. `tuios agent-hook` exits 0 whatever happens, prints nothing a
 harness could read as an answer (Gemini CLI, which parses stdout, gets `{}`),
 and gives up after 500 ms (`--timeout`) when the daemon is slow, restarting or
-gone. A daemon that predates the hook fields rejects them; the report is then
-sent again without them, except a report with `if_state`, which is dropped
-rather than sent without its condition.
+gone.
+
+A daemon keeps running across a tuios upgrade, so a new hook talking to an
+older daemon is the ordinary case right after one. Such a daemon does not
+reject the hook fields: it ignores a param it does not know and applies the
+report without it. So before it reports, the hook asks `list-verbs` which
+params `set-agent-state` takes, and sends only those. A report with `if_state`
+is not sent at all to a daemon without it, because applied unconditionally it
+would do what the condition rules out: Claude Code's `idle_prompt` would turn
+`done` into `idle` a minute after every turn, and a late `PostToolUse` would
+turn `done` back into `working`. `--explain` lists the fields it left out as
+`unsupported`. `tuios set-agent-state --if-state` makes the same check and
+fails rather than send the report without its condition.
 
 ### The old shim
 

@@ -941,7 +941,7 @@ A key that was never set returns an `option_not_found` error.
 ### set-agent-state
 
 Record the agent state a pane reports. Params: `session`, `window`, `state`
-(required), `message`, `source` (default `report`), `harness`, and four fields
+(required), `message`, `source` (default `report`), `harness`, and five fields
 a hook reporter adds, each optional:
 
 - `kind`: `approval` or `question`, what a `needs_input` state waits for. Only
@@ -956,6 +956,9 @@ a hook reporter adds, each optional:
   It is held in daemon memory and never synced.
 - `if_state`: comma-separated states. The report applies only while the window
   is in one of them.
+- `harness_pid`: the pid of the harness process that ran the hook. Read only
+  with `agent_session_id`, and held in daemon memory. It lets a new session
+  from the same harness process pass the nested-session guard below.
 
 Request:
 
@@ -976,12 +979,18 @@ Response:
 while the window's own harness is `working` or `needs_input` by its own report
 and the report names a different session, or comes from a different harness:
 a nested run, such as a `claude -p` a tool call started inside the pane. At rest
-a different session is accepted and replaces the stored id.
+a different session is accepted and replaces the stored id. Mid-turn, a
+different session is also accepted when its `harness_pid` is the one the
+window's current session was reported with: that is a new conversation in the
+same process, such as `/clear` after an interrupted turn that never reported
+`Stop`.
 
-`reason` and the four hook fields are additive. A client that sends none of
-the fields is handled exactly as before. A daemon older than them rejects them
-as unknown params with `invalid_params`, which is how `tuios agent-hook` knows
-to resend without them.
+`reason` and the five hook fields are additive. A client that sends none of
+the fields is handled exactly as before. A daemon older than them does not
+reject them: params are decoded leniently, so it ignores the fields and applies
+the report without them. A client that depends on one, `if_state` above all,
+has to ask `list-verbs` for `set-agent-state` first and check the field is
+listed. `tuios agent-hook` and `tuios set-agent-state --if-state` do.
 
 ### resolve-pane
 

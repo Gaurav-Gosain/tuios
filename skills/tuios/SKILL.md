@@ -733,7 +733,11 @@ tuios set-agent-state working -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --if-state
 named, so a "tool finished" event clears a block without turning a finished
 pane back to `working`. A report that carries `--agent-session-id` is refused
 while the pane's own agent is mid-turn in a different session, which is what
-keeps a `claude -p` run inside the pane from marking it done.
+keeps a `claude -p` run inside the pane from marking it done. `tuios
+agent-hook` also sends the harness's pid (`harness_pid` on the verb), so a new
+session in the same harness process, such as `/clear` after you interrupted a
+turn, still takes the pane over. `--if-state` fails, sending nothing, against a
+daemon older than it, since that daemon would apply the report unconditionally.
 
 An agent in a container or a VM is invisible to process detection. Set
 `TUIOS_AGENT` to its harness id on the wrapper you run, for example

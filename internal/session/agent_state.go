@@ -135,6 +135,12 @@ type AgentReport struct {
 	// and foreign session guard in sessionGuard. A report without one is
 	// treated exactly as reports were before the field existed.
 	SessionID string
+	// HarnessPID is the pid of the harness process that ran the hook, as the
+	// hook worked it out, and 0 when it did not say. It only matters with a
+	// SessionID: sessionGuard lets a different session id from the same
+	// harness process take the pane over, since that is a new conversation in
+	// the same program (/clear, /resume) and not a nested run.
+	HarnessPID int
 	// IfState, when not empty, applies the report only if the window's state
 	// is one of these right now. It is how a hook says "clear the block once
 	// the tool ran" without also turning a finished pane back to working.
@@ -219,7 +225,15 @@ func (e errAgentReportRefused) Error() string { return "agent report refused: " 
 // restart, /clear, /resume), and it takes the pane over. A report without a
 // session id never reaches here, so no caller from before this existed changes
 // behaviour.
-func sessionGuard(w *WindowState, claim agentClaim, held bool, r AgentReport) string {
+//
+// Mid-turn, a different session from the same harness process also takes the
+// pane over. Claude Code fires no Stop when the user interrupts a turn, so the
+// pane can sit in working with nothing running, and a /clear or /resume then
+// starts a new session id in the same process. Refusing that would hold the
+// pane in working until the harness exits. ownerPID is the harness pid the
+// pane's current session id was reported with, and 0 when unknown; a nested
+// run is a different process, so it is still refused.
+func sessionGuard(w *WindowState, claim agentClaim, held bool, ownerPID int, r AgentReport) string {
 	if r.SessionID == "" || !held || claim.source != AgentSourceReport {
 		return ""
 	}
@@ -227,6 +241,9 @@ func sessionGuard(w *WindowState, claim agentClaim, held bool, r AgentReport) st
 		return ""
 	}
 	if w.AgentSessionID != "" && w.AgentSessionID != r.SessionID {
+		if r.HarnessPID > 1 && r.HarnessPID == ownerPID {
+			return ""
+		}
 		return agentRefusedForeignSession
 	}
 	if r.Harness != "" && claim.identity == identityReport && claim.harness != "" && claim.harness != r.Harness {
@@ -259,7 +276,7 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 			effective = prev
 			return errAgentReportRefused(agentRefusedIfState)
 		}
-		if reason := sessionGuard(w, claim, held, r); reason != "" {
+		if reason := sessionGuard(w, claim, held, s.agentHarnessPIDs[w.ID], r); reason != "" {
 			effective = prev
 			return errAgentReportRefused(reason)
 		}
@@ -302,6 +319,14 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		w.AgentStateAt = time.Now().UnixNano()
 		if r.SessionID != "" {
 			w.AgentSessionID = r.SessionID
+			if s.agentHarnessPIDs == nil {
+				s.agentHarnessPIDs = make(map[string]int)
+			}
+			if r.HarnessPID > 1 {
+				s.agentHarnessPIDs[w.ID] = r.HarnessPID
+			} else {
+				delete(s.agentHarnessPIDs, w.ID)
+			}
 		}
 		// auto is carried over: it says the detector will clear this pane when the
 		// agent exits, which a report taking the state over does not change.

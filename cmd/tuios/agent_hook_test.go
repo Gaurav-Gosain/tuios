@@ -14,11 +14,17 @@ import (
 // fakeDaemon records the verbs a hook calls and answers them.
 type fakeDaemon struct {
 	calls []fakeCall
-	// rejectNew answers set-agent-state carrying any hook field with
-	// invalid_params, the way a daemon that predates them does.
-	rejectNew bool
-	resolved  map[string]any
+	// old stands in for a daemon that predates the hook fields. Like the real
+	// one it decodes params leniently: set-agent-state ignores a field it does
+	// not know and applies the report anyway, and list-verbs does not list the
+	// hook fields.
+	old      bool
+	resolved map[string]any
 }
+
+// oldSetAgentStateParams are the params set-agent-state took before the hook
+// fields, as list-verbs described them at 1c58fc7d.
+var oldSetAgentStateParams = []string{"session", "window", "state", "message", "source", "harness"}
 
 type fakeCall struct {
 	verb   string
@@ -37,14 +43,20 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 		}
 		out, _ := json.Marshal(f.resolved)
 		return out, nil
-	case "set-agent-state":
-		if f.rejectNew {
-			for _, k := range []string{"kind", "agent_session_id", "transcript_path", "if_state"} {
-				if _, ok := p[k]; ok {
-					return nil, &session.VerbCallError{Code: session.ErrVerbInvalidParams, Message: "unknown field " + k}
-				}
-			}
+	case "list-verbs":
+		names := oldSetAgentStateParams
+		if !f.old {
+			names = append(append([]string(nil), names...), hookFields...)
 		}
+		var ps []map[string]string
+		for _, n := range names {
+			ps = append(ps, map[string]string{"name": n})
+		}
+		out, _ := json.Marshal(map[string]any{"verbs": []any{map[string]any{"verb": "set-agent-state", "params": ps}}})
+		return out, nil
+	case "set-agent-state":
+		// Both kinds of daemon apply the report. The old one never looks at
+		// the hook fields, so if_state does not stop it.
 		return json.RawMessage(`{"applied":true,"state":"` + p["state"].(string) + `"}`), nil
 	}
 	return nil, &session.VerbCallError{Code: session.ErrVerbUnknownVerb, Message: verb}
@@ -85,7 +97,8 @@ func (h *hookRun) run(t *testing.T, o agentHookOptions, payload string, args ...
 			time.Sleep(h.dialWait)
 			return h.daemon, nil
 		},
-		self: func() (int, []int) { return 4242, []int{4250, 4242} },
+		self:       func() (int, []int) { return 4242, []int{4250, 4242} },
+		harnessPID: func(ancestors []int) int { return ancestors[0] },
 	})
 }
 
@@ -130,7 +143,7 @@ func TestAgentHookFindsThePaneWithoutItsEnvironment(t *testing.T) {
 	h := &hookRun{daemon: &fakeDaemon{resolved: map[string]any{"session": "work", "window_id": "w3", "by": "tty"}}}
 	h.run(t, agentHookOptions{}, `{"hook_event_name":"UserPromptSubmit","session_id":"s1"}`, "claude-code")
 
-	if len(h.daemon.calls) != 2 || h.daemon.calls[0].verb != "resolve-pane" {
+	if len(h.daemon.calls) != 3 || h.daemon.calls[0].verb != "resolve-pane" {
 		t.Fatalf("calls = %v", h.daemon.calls)
 	}
 	if sid := h.daemon.calls[0].params["sid"]; sid != float64(4242) {
@@ -166,21 +179,55 @@ func TestAgentHookDoesNotDialForAnEventItSkips(t *testing.T) {
 	}
 }
 
-// TestAgentHookFallsBackForAnOldDaemon checks a daemon that predates the hook
-// fields still gets the state, and that a conditional report is not sent
-// without its condition.
-func TestAgentHookFallsBackForAnOldDaemon(t *testing.T) {
-	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}, daemon: &fakeDaemon{rejectNew: true}}
+// TestAgentHookHandlesAnOldDaemon checks a daemon that predates the hook
+// fields. Such a daemon does not refuse them: it decodes params leniently and
+// applies the report without them. So the hook asks list-verbs first, sends
+// only what the daemon knows, and does not send a conditional report at all,
+// since applied without its if_state it would turn done back to working.
+func TestAgentHookHandlesAnOldDaemon(t *testing.T) {
+	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}, daemon: &fakeDaemon{old: true}}
 	h.run(t, agentHookOptions{}, `{"hook_event_name":"Stop","session_id":"s1"}`, "claude-code")
 	r := h.daemon.reports()
-	if len(r) != 2 || r[1]["state"] != "done" || r[1]["agent_session_id"] != nil {
+	if len(r) != 1 || r[0]["state"] != "done" || r[0]["agent_session_id"] != nil || r[0]["harness_pid"] != nil {
 		t.Fatalf("reports = %v", r)
 	}
+	if !strings.Contains(h.stderr.String(), `"unsupported":["agent_session_id","harness_pid"]`) {
+		t.Fatalf("explain does not name the dropped fields: %s", h.stderr.String())
+	}
 
-	h = &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}, daemon: &fakeDaemon{rejectNew: true}}
+	// PostToolUse (working if needs_input) and idle_prompt (idle if working or
+	// unknown) are both conditional.
+	for _, payload := range []string{
+		`{"hook_event_name":"PostToolUse","session_id":"s1"}`,
+		`{"hook_event_name":"Notification","notification_type":"idle_prompt","session_id":"s1"}`,
+	} {
+		h = &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}, daemon: &fakeDaemon{old: true}}
+		h.run(t, agentHookOptions{}, payload, "claude-code")
+		if r := h.daemon.reports(); len(r) != 0 {
+			t.Fatalf("%s: a conditional report went to a daemon that would drop its condition: %v", payload, r)
+		}
+		if !strings.Contains(h.stderr.String(), "predates if_state") {
+			t.Fatalf("explain: %s", h.stderr.String())
+		}
+	}
+
+	// A current daemon gets the condition and the harness pid.
+	h = &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}}
 	h.run(t, agentHookOptions{}, `{"hook_event_name":"PostToolUse","session_id":"s1"}`, "claude-code")
-	if r := h.daemon.reports(); len(r) != 1 {
-		t.Fatalf("a conditional report was resent without its condition: %v", r)
+	r = h.daemon.reports()
+	if len(r) != 1 || r[0]["if_state"] == nil || r[0]["harness_pid"] != float64(4250) {
+		t.Fatalf("reports = %v", r)
+	}
+}
+
+// TestRequireIfState checks tuios set-agent-state --if-state refuses to send to
+// a daemon that would ignore the condition and apply the report anyway.
+func TestRequireIfState(t *testing.T) {
+	if err := requireIfState(&fakeDaemon{old: true}); err == nil || !strings.Contains(err.Error(), "predates --if-state") {
+		t.Fatalf("an old daemon: %v", err)
+	}
+	if err := requireIfState(&fakeDaemon{}); err != nil {
+		t.Fatalf("a current daemon: %v", err)
 	}
 }
 

@@ -684,6 +684,11 @@ func (s *Session) applyAgentDetection(
 				s.idle.forget(id)
 			}
 		}
+		for id := range s.agentHarnessPIDs {
+			if _, ok := live[id]; !ok {
+				delete(s.agentHarnessPIDs, id)
+			}
+		}
 		if changed == 0 && labels == 0 {
 			// Nothing moved: skip the version bump and client push.
 			return errNoAgentDetectChange

@@ -689,6 +689,7 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 		AgentSessionID string `json:"agent_session_id"`
 		TranscriptPath string `json:"transcript_path"`
 		IfState        string `json:"if_state"`
+		HarnessPID     int    `json:"harness_pid"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -760,13 +761,14 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 	}
 
 	effective, applied, reason, err := sess.applyAgentReport(target, AgentReport{
-		State:     state,
-		Message:   p.Message,
-		Source:    source,
-		Harness:   p.Harness,
-		Kind:      p.Kind,
-		SessionID: p.AgentSessionID,
-		IfState:   ifState,
+		State:      state,
+		Message:    p.Message,
+		Source:     source,
+		Harness:    p.Harness,
+		Kind:       p.Kind,
+		SessionID:  p.AgentSessionID,
+		HarnessPID: p.HarnessPID,
+		IfState:    ifState,
 	})
 	if err != nil {
 		return nil, mapResolveErr(err, sess)

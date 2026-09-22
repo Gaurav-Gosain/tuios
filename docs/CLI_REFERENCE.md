@@ -964,14 +964,20 @@ tuios set-agent-state <state> [flags]
 
 **Hook fields:**
 The last four flags are what `tuios agent-hook` sends, and each is sent only when
-set, so a call that uses none of them works against an older daemon.
+set, so a call that uses none of them works against an older daemon. An older
+daemon ignores these fields rather than refusing them, so `--if-state` asks the
+daemon first and fails, sending nothing, when the daemon does not support it.
 `--if-state` is how "the tool ran after an approval" moves a pane from
 `needs_input` back to `working` without also turning a `done` pane back to
 `working`. A report with `--agent-session-id` is refused while the pane's own
 agent is `working` or `needs_input` by its own report and the report names a
 different session, or a different harness: that is a nested run, such as a
 `claude -p` a tool call started inside the pane. At rest a different session
-takes the pane over, as `/clear` or a restart should.
+takes the pane over, as `/clear` or a restart should. `tuios agent-hook` also
+sends the harness's pid, which lets a new session from the same harness process
+take the pane over mid-turn, as `/clear` after an interrupted turn does. This
+command has no flag for it, so a report from here with a different
+`--agent-session-id` is refused mid-turn.
 
 **Sources and precedence:**
 More than one source can have an opinion about the same pane. Each source is

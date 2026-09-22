@@ -868,6 +868,15 @@ type Session struct {
 	// now. Read and written under stateMu, so it needs no lock of its own.
 	agentClaims map[string]agentClaim
 
+	// agentHarnessPIDs records, by window ID, the pid of the harness process
+	// whose hook last set the window's AgentSessionID, as the hook reported it.
+	// sessionGuard reads it to tell a new conversation in the same harness
+	// process (/clear or /resume after an interrupted turn) from a nested run
+	// in another process. It is kept apart from agentClaims because other
+	// sources replace the claim, and the pid must outlive that. Daemon memory
+	// only, and read and written under stateMu.
+	agentHarnessPIDs map[string]int
+
 	// transcripts binds windows to the record files their harnesses write. It is
 	// held here rather than in SessionState because none of it is state: a
 	// transcript path names a project directory and a session, so it is kept in

@@ -52,6 +52,8 @@ type agentHookIO struct {
 	getenv   func(string) string
 	dial     func() (verbCaller, error)
 	self     func() (sid int, ancestors []int)
+	// harnessPID names the harness process among the ancestors self reports.
+	harnessPID func(ancestors []int) int
 }
 
 func newAgentHookCommand() *cobra.Command {
@@ -74,6 +76,10 @@ parse, an event with no mapping, a subagent's event, and an event from a
 harness other than the one TUIOS_AGENT names are all reported as nothing,
 never as done.
 
+It asks the daemon which set-agent-state fields it supports and sends only
+those. A conditional report (if_state) is not sent to a daemon older than the
+condition, since that daemon would apply it unconditionally.
+
 It always exits 0, prints nothing a harness would read as an answer (Gemini
 CLI gets an empty JSON object), and gives up after 500ms when the daemon is
 slow or gone. Use --explain to see on stderr what it decided and why.`,
@@ -93,7 +99,8 @@ slow or gone. Use --explain to see on stderr what it decided and why.`,
 				dial: func() (verbCaller, error) {
 					return session.DialVerbClientAs(version)
 				},
-				self: integration.SelfProcess,
+				self:       integration.SelfProcess,
+				harnessPID: integration.HarnessPID,
 			})
 			return nil
 		},
@@ -114,10 +121,15 @@ type agentHookOutcome struct {
 	Session string `json:"session,omitempty"`
 	Window  string `json:"window,omitempty"`
 	PaneBy  string `json:"pane_by,omitempty"`
-	Applied *bool  `json:"applied,omitempty"`
-	State   string `json:"state,omitempty"`
-	Reason  string `json:"reason,omitempty"`
-	Error   string `json:"error,omitempty"`
+	// HarnessPID is the harness process the hook ran under, 0 when unknown.
+	HarnessPID int `json:"harness_pid,omitempty"`
+	// Unsupported lists the report's fields the daemon does not know, which
+	// were left out of the call.
+	Unsupported []string `json:"unsupported,omitempty"`
+	Applied     *bool    `json:"applied,omitempty"`
+	State       string   `json:"state,omitempty"`
+	Reason      string   `json:"reason,omitempty"`
+	Error       string   `json:"error,omitempty"`
 }
 
 // runAgentHook runs one hook event under the deadline. It returns nothing,
@@ -180,12 +192,21 @@ func agentHook(o agentHookOptions, args []string, hio agentHookIO) agentHookOutc
 	if c, ok := client.(io.Closer); ok {
 		defer func() { _ = c.Close() }()
 	}
-	out.Session, out.Window, out.PaneBy, err = resolveHookPane(o, hio, client)
+	var sid int
+	var ancestors []int
+	if hio.self != nil {
+		sid, ancestors = hio.self()
+	}
+	if hio.harnessPID != nil {
+		out.HarnessPID = hio.harnessPID(ancestors)
+	}
+	out.Session, out.Window, out.PaneBy, err = resolveHookPane(o, hio, client, sid, ancestors)
 	if err != nil {
 		out.Error = err.Error()
 		return out
 	}
-	res, err := reportHook(client, out.Session, out.Window, out.Harness, *out.Report)
+	res, dropped, err := reportHook(client, out.Session, out.Window, out.Harness, out.HarnessPID, *out.Report)
+	out.Unsupported = dropped
 	if err != nil {
 		out.Error = err.Error()
 		return out
@@ -197,18 +218,17 @@ func agentHook(o agentHookOptions, args []string, hio agentHookIO) agentHookOutc
 // resolveHookPane finds the pane to report for: the --window flag, then
 // TUIOS_PANE_ID, then the daemon's resolve-pane on the process's terminal
 // session and its ancestors.
-func resolveHookPane(o agentHookOptions, hio agentHookIO, client verbCaller) (sess, window, by string, err error) {
+func resolveHookPane(o agentHookOptions, hio agentHookIO, client verbCaller, sid int, ancestors []int) (sess, window, by string, err error) {
 	if o.window != "" {
 		return firstNonEmptyString(o.session, hio.getenv("TUIOS_SESSION")), o.window, "flag", nil
 	}
 	if id := hio.getenv("TUIOS_PANE_ID"); id != "" {
 		return firstNonEmptyString(o.session, hio.getenv("TUIOS_SESSION")), id, "env", nil
 	}
-	if hio.self == nil {
+	if sid <= 1 && len(ancestors) == 0 {
 		return "", "", "", errors.New("no pane: TUIOS_PANE_ID is unset")
 	}
-	sid, pids := hio.self()
-	raw, err := client.Call("resolve-pane", map[string]any{"sid": sid, "pids": pids})
+	raw, err := client.Call("resolve-pane", map[string]any{"sid": sid, "pids": ancestors})
 	if err != nil {
 		return "", "", "", fmt.Errorf("no pane: TUIOS_PANE_ID is unset and %w", err)
 	}
@@ -230,11 +250,67 @@ type hookReportResult struct {
 	Reason  string `json:"reason"`
 }
 
-// reportHook sends one report. A daemon older than the hook fields rejects
-// them as unknown params; the report is then sent again with only the fields
-// every daemon takes, unless it carried an if_state, whose condition cannot be
-// dropped without turning a finished pane back to working.
-func reportHook(client verbCaller, sess, window, harness string, r integration.Report) (hookReportResult, error) {
+// hookFields are the set-agent-state params a hook report may carry beyond
+// the ones every daemon takes.
+var hookFields = []string{"kind", "agent_session_id", "transcript_path", "if_state", "harness_pid"}
+
+// setAgentStateParams asks the daemon which params its set-agent-state takes.
+//
+// A daemon decodes params leniently and ignores a name it does not know, so a
+// daemon older than the hook fields would not refuse them: it would take the
+// report and drop the fields without a word. For most of them that only loses
+// information, but dropping if_state turns a conditional report into an
+// unconditional one, and Claude Code's idle_prompt would then overwrite done
+// about a minute after every turn. So the hook asks first. The daemon keeps
+// running across a tuios upgrade, which makes a new hook talking to an older
+// daemon the ordinary case right after one.
+func setAgentStateParams(client verbCaller) (map[string]bool, error) {
+	raw, err := client.Call("list-verbs", map[string]any{"verb": "set-agent-state"})
+	if err != nil {
+		return nil, err
+	}
+	var res struct {
+		Verbs []struct {
+			Verb   string `json:"verb"`
+			Params []struct {
+				Name string `json:"name"`
+			} `json:"params"`
+		} `json:"verbs"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return nil, err
+	}
+	known := map[string]bool{}
+	for _, v := range res.Verbs {
+		if v.Verb != "set-agent-state" {
+			continue
+		}
+		for _, p := range v.Params {
+			known[p.Name] = true
+		}
+	}
+	return known, nil
+}
+
+// requireIfState returns an error unless the daemon's set-agent-state takes
+// if_state. tuios set-agent-state --if-state calls it before sending.
+func requireIfState(client verbCaller) error {
+	known, err := setAgentStateParams(client)
+	if err != nil {
+		return fmt.Errorf("could not ask the daemon whether it supports --if-state: %w", err)
+	}
+	if !known["if_state"] {
+		return errors.New("the running daemon predates --if-state, so the report was not sent. It works once the daemon restarts")
+	}
+	return nil
+}
+
+// reportHook sends one report. The hook fields go only to a daemon whose
+// set-agent-state lists them, and the ones it does not are returned as
+// dropped. A report with if_state is not sent at all to a daemon without it,
+// since sent without its condition it could turn a finished pane back to
+// working.
+func reportHook(client verbCaller, sess, window, harness string, harnessPID int, r integration.Report) (hookReportResult, []string, error) {
 	params := map[string]any{
 		"session": sess,
 		"window":  window,
@@ -244,10 +320,7 @@ func reportHook(client verbCaller, sess, window, harness string, r integration.R
 	if r.Message != "" {
 		params["message"] = r.Message
 	}
-	full := map[string]any{}
-	for k, v := range params {
-		full[k] = v
-	}
+	extra := map[string]any{}
 	for k, v := range map[string]string{
 		"kind":             r.Kind,
 		"agent_session_id": r.SessionID,
@@ -255,25 +328,41 @@ func reportHook(client verbCaller, sess, window, harness string, r integration.R
 		"if_state":         r.IfState,
 	} {
 		if v != "" {
-			full[k] = v
+			extra[k] = v
 		}
 	}
-	raw, err := client.Call("set-agent-state", full)
-	var callErr *session.VerbCallError
-	if err != nil && errors.As(err, &callErr) && callErr.Code == session.ErrVerbInvalidParams && len(full) > len(params) {
-		if r.IfState != "" {
-			return hookReportResult{}, fmt.Errorf("the daemon predates if_state, so a conditional report was not sent: %w", err)
-		}
-		raw, err = client.Call("set-agent-state", params)
+	if harnessPID > 1 && r.SessionID != "" {
+		extra["harness_pid"] = harnessPID
 	}
+	var dropped []string
+	if len(extra) > 0 {
+		known, err := setAgentStateParams(client)
+		if err != nil {
+			return hookReportResult{}, nil, fmt.Errorf("could not ask the daemon what set-agent-state takes: %w", err)
+		}
+		for _, k := range hookFields {
+			if _, ok := extra[k]; !ok {
+				continue
+			}
+			if !known[k] {
+				dropped = append(dropped, k)
+				continue
+			}
+			params[k] = extra[k]
+		}
+		if r.IfState != "" && !known["if_state"] {
+			return hookReportResult{}, dropped, errors.New("the daemon predates if_state, so a conditional report was not sent")
+		}
+	}
+	raw, err := client.Call("set-agent-state", params)
 	if err != nil {
-		return hookReportResult{}, err
+		return hookReportResult{}, dropped, err
 	}
 	var res hookReportResult
 	if err := json.Unmarshal(raw, &res); err != nil {
-		return hookReportResult{}, err
+		return hookReportResult{}, dropped, err
 	}
-	return res, nil
+	return res, dropped, nil
 }
 
 func firstNonEmptyString(vals ...string) string {

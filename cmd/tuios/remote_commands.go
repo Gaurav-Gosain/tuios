@@ -1018,7 +1018,14 @@ func runSetAgentState(sessionName, windowTarget, state, message, source, harness
 		"harness": harness,
 	}
 	// Sent only when set, so a call that uses none of them works against a
-	// daemon that predates them.
+	// daemon that predates them. Such a daemon ignores a param it does not
+	// know instead of refusing it, so --if-state is checked first: applied
+	// without its condition, the report would do what the caller ruled out.
+	if extra.ifState != "" {
+		if err := requireIfState(client); err != nil {
+			return err
+		}
+	}
 	for k, v := range map[string]string{
 		"kind":             extra.kind,
 		"agent_session_id": extra.sessionID,
