@@ -809,9 +809,9 @@ tuios list-agents -s work
 1 agent pane(s). * marks the focused one. Address one with -w and its ID or NAME.
 ```
 
-Nothing here is new state: every column is something the daemon already tracked
-per window. What the verb adds is the question "who else is working here",
-which otherwise meant listing every window and guessing which were agents.
+Every column is per-window state the daemon already tracks. `list-agents`
+answers "who else is working here" in one call, without listing every window
+and guessing which are agents.
 
 ID and NAME are exactly what `-w` takes, so a row is addressable without a second
 lookup. `--all` lists every window including the panes nothing has identified as
@@ -849,9 +849,9 @@ point: you can leave a message for an agent that is mid-turn and it is there
 when that agent next looks.
 
 Nothing delivers it for you. **The recipient has to be an agent that reads its
-inbox**, and no harness does that on its own today; it is something you or the
-user wires up, the same way state reporting is. For an agent that does not read
-its inbox, `ask-agent` below types the question instead.
+inbox**. No harness does that on its own. You or the user wire it up, the same
+way state reporting is. For an agent that does not read its inbox, `ask-agent`
+below types the question instead.
 
 With no `-w` it is a notice: addressed to the session rather than to anyone,
 readable by everyone, unread by nobody. That is the notification half of this
@@ -863,8 +863,7 @@ tuios send-agent-message -s work 'deploying in five minutes'
 
 ### The person has an address
 
-The person watching the session is not a window, and until now nothing could
-address them. `human` is their inbox. It is reserved: it resolves before any
+The person watching the session is not a window. `human` is their inbox. It is reserved: it resolves before any
 window, so a pane that happens to be called human is still reached by its id.
 
 ```sh
@@ -1064,9 +1063,8 @@ tuios ask-agent -s work -w review --from "$TUIOS_PANE_ID" 'does the payment retr
 settled by agent-state; review (c7be946f) now reports needs_input
 ```
 
-This is the one that works with the agents that exist today, because it types at
-the target's keyboard rather than expecting it to check a mailbox. It does three
-things in order:
+This works with any agent, because it types at the target's keyboard rather
+than expecting it to check a mailbox. It does three things in order:
 
 1. **Waits until the target is not mid-turn.** Typing at a working agent
    interleaves your text with whatever it is doing. If the target is still
@@ -1893,9 +1891,7 @@ session is. SGR colour survives; every other escape is stripped.
 | `"30s"` | polling, floored at one second | one timer for all pollers, no frame when the value has not moved |
 | `once` | at startup, and on `tuios refresh-dock NAME` | none |
 
-Prefer `event:` and `push`. A dock with no polling component arms no timer at
-all, and that is a property worth keeping: it is why the built-in clock no
-longer redraws the screen sixty times a second.
+Prefer `event:` and `push`. A dock with no polling component arms no timer.
 
 ### When a component is not drawing
 
@@ -1910,8 +1906,8 @@ Never conclude a component works because the config parsed. Read it back.
 ### When a hook does not fire
 
 A hook is the other half of the same loop, and it fails the same way: it runs a
-command for its side effects, so a command that was never found and one that
-worked used to look identical.
+command for its side effects, so from outside, a command that was never found
+looks like one that worked. `list-hooks` tells them apart.
 
 ```sh
 tuios list-hooks
