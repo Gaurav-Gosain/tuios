@@ -13,31 +13,57 @@ import "strings"
 // it reproduces and the result is guaranteed to.
 
 // Shrink returns the smallest script it could reach that still fails.
+//
+// simpler makes the steps that remain plainer without making the script
+// shorter. A repeated text run becomes one copy, an oversized payload becomes a
+// small one, and a sequence carrying four parameters loses the ones the failure
+// does not need. What this buys is a report that says which parameter mattered
+// instead of leaving the reader to work it out.
 func Shrink(s Script, still func(Script) bool) Script {
+	return Reduce(s, still, simpler, nil)
+}
+
+// Reduce is the shrinking driver shared by every fuzzer in the tree. It runs
+// dropBlocks, dropSingles and simplify to a fixpoint, then simplifies once
+// more. simpler lists the replacements for one element, most aggressive first.
+//
+// note, when not nil, hears about each candidate: the block pass reports both
+// accepted and rejected candidates, the single and simplify passes report
+// accepted ones only. pass is "block", "single" or "simplify" and n is the
+// candidate's length.
+func Reduce[S ~[]E, E any](s S, still func(S) bool, simpler func(E) []E, note func(pass string, n int, ok bool)) S {
+	if note == nil {
+		note = func(string, int, bool) {}
+	}
 	best := s
 	for {
 		start := len(best)
-		best = dropBlocks(best, still)
-		best = dropSingles(best, still)
-		best = simplify(best, still)
+		best = dropBlocks(best, still, note)
+		best = dropSingles(best, still, note)
+		best = simplify(best, still, simpler, note)
 		if len(best) >= start {
+			// A round that removed nothing has reached the fixpoint. simplify
+			// can change elements without shortening, so the loop ends on
+			// length rather than on equality of the slices.
 			break
 		}
 	}
-	return simplify(best, still)
+	return simplify(best, still, simpler, note)
 }
 
 // dropBlocks is the delta-debugging half: remove contiguous runs, coarse first.
 // A failure that needs a setup step and a trigger collapses fast this way,
 // where removing one at a time stalls on the setup.
-func dropBlocks(s Script, still func(Script) bool) Script {
+func dropBlocks[S ~[]E, E any](s S, still func(S) bool, note func(string, int, bool)) S {
 	for n := len(s) / 2; n >= 1; n /= 2 {
 		for i := 0; i+n <= len(s); {
 			cand := without(s, i, i+n)
 			if len(cand) > 0 && still(cand) {
+				note("block", len(cand), true)
 				s = cand
 				continue
 			}
+			note("block", len(cand), false)
 			i += n
 		}
 		if n == 1 {
@@ -49,30 +75,30 @@ func dropBlocks(s Script, still func(Script) bool) Script {
 
 // dropSingles sweeps back to front so an accepted removal never invalidates an
 // index still to be visited.
-func dropSingles(s Script, still func(Script) bool) Script {
+func dropSingles[S ~[]E, E any](s S, still func(S) bool, note func(string, int, bool)) S {
 	for i := len(s) - 1; i >= 0; i-- {
 		if i >= len(s) {
 			continue
 		}
 		cand := without(s, i, i+1)
 		if len(cand) > 0 && still(cand) {
+			note("single", len(cand), true)
 			s = cand
 		}
 	}
 	return s
 }
 
-// simplify makes the steps that remain plainer without making the script
-// shorter. A repeated text run becomes one copy, an oversized payload becomes a
-// small one, and a sequence carrying four parameters loses the ones the failure
-// does not need. What this buys is a report that says which parameter mattered
-// instead of leaving the reader to work it out.
-func simplify(s Script, still func(Script) bool) Script {
+// simplify replaces each element in place with the first of its simpler
+// versions that still fails.
+func simplify[S ~[]E, E any](s S, still func(S) bool, simpler func(E) []E, note func(string, int, bool)) S {
 	for i := range s {
 		for _, cand := range simpler(s[i]) {
-			trial := clone(s)
+			trial := make(S, len(s))
+			copy(trial, s)
 			trial[i] = cand
 			if still(trial) {
+				note("simplify", len(trial), true)
 				s = trial
 				break
 			}
@@ -113,15 +139,9 @@ func simpler(seq Seq) []Seq {
 	return out
 }
 
-func without(s Script, i, j int) Script {
-	out := make(Script, 0, len(s)-(j-i))
+func without[S ~[]E, E any](s S, i, j int) S {
+	out := make(S, 0, len(s)-(j-i))
 	out = append(out, s[:i]...)
 	out = append(out, s[j:]...)
-	return out
-}
-
-func clone(s Script) Script {
-	out := make(Script, len(s))
-	copy(out, s)
 	return out
 }
