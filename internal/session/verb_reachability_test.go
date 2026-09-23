@@ -148,9 +148,11 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"fan#1":             {errCode: ErrVerbGitFailed, why: "/src/api is not a git repository here"},
 	// The directory is checked before any agent is started, so a developer
 	// with claude installed does not get one started by this test. Starting
-	// and waiting are proved with fake agents in agent_launch_test.go.
+	// and waiting are proved with fake agents in agent_launch_test.go and
+	// verb_start_agent_test.go.
 	"start-agent#0": {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
 	"start-agent#1": {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
+	"start-agent#2": {errCode: ErrVerbInvalidParams, why: "the fixture's home has no ~/src"},
 
 	// No hosts are configured in the fixture.
 	"list-host-agents#1":   {errCode: ErrVerbUnknownHost, why: "no hosts are configured here"},

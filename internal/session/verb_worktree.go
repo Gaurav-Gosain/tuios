@@ -213,7 +213,7 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 	if len(p.Command) > 0 && p.Command[0] == "" {
 		return nil, invalidParam("command", "command[0] is the program to exec and cannot be empty")
 	}
-	root, cloned, verr := d.resolveRepoSource(cs, "new-worktree", p.repoSource)
+	root, cloned, verr := d.resolveRepoSource(cs, "new-worktree", p.repoSource, nil)
 	if verr != nil {
 		return nil, verr
 	}
@@ -527,19 +527,14 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		}
 		return nil
 	}
-	// The repository is checked first, as it always was, except that a fan
-	// that would clone checks its agents first, so a missing agent does not
+	// The repository is checked first, as it always was, except that the
+	// agents are also checked before a clone, so a missing agent does not
 	// cost a clone.
-	if p.Clone {
-		if verr := resolveAgents(); verr != nil {
-			return nil, verr
-		}
-	}
-	root, cloned, verr := d.resolveRepoSource(cs, "fan", p.repoSource)
+	root, cloned, verr := d.resolveRepoSource(cs, "fan", p.repoSource, resolveAgents)
 	if verr != nil {
 		return nil, verr
 	}
-	if !p.Clone {
+	if launches == nil {
 		if verr := resolveAgents(); verr != nil {
 			return nil, verr
 		}

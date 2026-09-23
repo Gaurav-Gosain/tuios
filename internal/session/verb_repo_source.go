@@ -74,7 +74,11 @@ var repoSourceParams = []verbParam{
 
 // resolveRepoSource turns the repository parameters into the main checkout on
 // this machine. cloned says the checkout was made by this call.
-func (d *Daemon) resolveRepoSource(cs *connState, verb string, src repoSource) (root string, cloned bool, verr *verbError) {
+//
+// beforeClone, when not nil, runs just before a clone and can refuse it: it
+// is where a verb checks the rest of its call, so a call that would fail
+// anyway does not clone first.
+func (d *Daemon) resolveRepoSource(cs *connState, verb string, src repoSource, beforeClone func() *verbError) (root string, cloned bool, verr *verbError) {
 	repo := strings.TrimSpace(src.Repo)
 	url := strings.TrimSpace(src.RepoURL)
 	switch {
@@ -123,6 +127,11 @@ func (d *Daemon) resolveRepoSource(cs *connState, verb string, src repoSource) (
 	}
 	if err := worktree.ValidCloneURL(url); err != nil {
 		return "", false, invalidParam("repo_url", err.Error()+". Only https, ssh and git URLs are cloned.")
+	}
+	if beforeClone != nil {
+		if verr := beforeClone(); verr != nil {
+			return "", false, verr
+		}
 	}
 	dest, err := worktree.Clone(url, cloneInto)
 	if err != nil {
