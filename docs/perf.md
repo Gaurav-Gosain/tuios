@@ -1062,3 +1062,25 @@ The copies are large and few, so the CPU they cost is below what this machine
 resolves. The change is kept for the bytes, for the headless colour it no
 longer depends on a global for, and because every test and benchmark that
 composes a frame now sees the frame a terminal gets.
+
+**The divider overlay is reused while its inputs hold** (`render_border_grid.go`).
+`renderSeparatorOverlay` rebuilt a map-keyed grid, the SGR strings, a
+`fmt.Sprintf` id and a `lipgloss.NewLayer` per run on every frame, and a
+vertical divider is one run per row: about 120 layers at nine panes, 8% of a
+tiled keystroke frame. A keystroke changes none of what it reads. It now keeps
+the last overlay with its inputs (bounds, view size, chrome rules, border
+style, focus perimeter, the two SGR strings that carry the theme and the mode,
+and the divider and pane-stack slices) and hands the same layers back when they
+match. The same layer pointers also let the compositor copy their cells rather
+than parse them. `TestSeparatorOverlayMemoFollowsItsInputs` changes focus,
+mode, border style, theme, dock position and screen size in turn and requires
+the reused overlay to match a fresh draw after each.
+
+| per op | before | after | |
+|---|---|---|---|
+| `KeystrokeFrameTiled/panes-9` CPU | 2.02 ms | 1.81 ms | -10.4% (p=0.005) |
+| `KeystrokeFrameTiled/panes-9` allocs | 2302 | 1569 | -31.8% |
+| `KeystrokeFrameTiled/panes-9` B/op | 172.1 KiB | 88.0 KiB | -48.9% |
+| `KeystrokeFrameTiled/panes-4` CPU | 2.01 ms | 1.90 ms | -5.2% (p=0.001) |
+| `KeystrokeFrameTiled/panes-4` allocs | 2082 | 1540 | -26.0% |
+| `KeystrokeFrame/panes-4` (floating, no dividers) | | | `~` |

@@ -419,6 +419,9 @@ type OS struct {
 	// reused so a mouse drag does not allocate a map per motion event.
 	bspResizeScratch map[int]layout.Rect
 	renderCanvas     *frameCanvas // Reused across frames; resized on change, cleared per frame
+	// separatorMemo is the last divider overlay and the inputs it was drawn
+	// from. See renderSeparatorOverlay.
+	separatorMemo separatorMemo
 	// layerCells is each identified layer's string parsed to cells, kept across
 	// frames so an unchanged layer is copied rather than parsed. See compose.go.
 	layerCells     map[string]*cellLayer

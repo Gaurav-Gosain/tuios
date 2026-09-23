@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 
@@ -348,6 +349,73 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		return nil
 	}
 
+	viewW := m.GetRenderWidth()
+	viewH := m.GetRenderHeight()
+
+	// A divider that stops inside the region stops on another divider, and the
+	// junction logic below draws that meeting. One that runs to the region's edge
+	// has the chrome's rule to meet instead, one cell further out.
+	rules := m.chromeRules(bounds)
+	border := m.Settings.GetBorderForStyle()
+	// The perimeter of the focused window, clipped to the tiled bounds. Cells on
+	// it are drawn in the focus color, so the focused pane reads as an outlined
+	// rectangle even though every segment is shared with a neighbour.
+	focus := m.focusPerimeter(bounds)
+	// The focused perimeter is drawn bold as well as tinted so the signal
+	// survives themes where the two border colors are close, and so it is not
+	// carried by hue alone.
+	unfocusedStr := sgrForeground(theme.BorderUnfocused())
+	focusColor := theme.BorderFocusedWindow()
+	if m.Mode == TerminalMode {
+		focusColor = theme.BorderFocusedTerminal()
+	}
+	focusedStr := "\x1b[1m" + sgrForeground(focusColor)
+
+	// Everything below is a function of these inputs, and a keystroke changes
+	// none of them, so a frame that matches the last one reuses its layers.
+	key := separatorKey{
+		bounds: bounds, viewW: viewW, viewH: viewH,
+		rules: rules, border: border, focus: focus,
+		unfocused: unfocusedStr, focused: focusedStr,
+	}
+	if memo := &m.separatorMemo; memo.valid && memo.key == key &&
+		slices.Equal(memo.splits, splits) && slices.Equal(memo.stack, stack) {
+		return memo.layers
+	}
+	layers := m.buildSeparatorLayers(splits, stack, key)
+	m.separatorMemo = separatorMemo{valid: true, key: key, splits: splits, stack: stack, layers: layers}
+	return layers
+}
+
+// separatorKey is every scalar input the divider overlay is drawn from. The
+// divider lines and the pane stack are the rest, and are compared as slices.
+// Theme colours and the input mode reach the overlay only through the two SGR
+// strings, so those stand in for them.
+type separatorKey struct {
+	bounds             layout.Rect
+	viewW, viewH       int
+	rules              chromeRules
+	border             lipgloss.Border
+	focus              borderPerimeter
+	unfocused, focused string
+}
+
+// separatorMemo is the last divider overlay drawn and what it was drawn from.
+// The layers are handed out again unchanged, which also lets the compositor
+// recognise them by pointer and copy their cells instead of parsing them.
+type separatorMemo struct {
+	valid  bool
+	key    separatorKey
+	splits []dividerLine
+	stack  []paneLayer
+	layers []*lipgloss.Layer
+}
+
+// buildSeparatorLayers draws the divider overlay for one set of inputs.
+func (m *OS) buildSeparatorLayers(splits []dividerLine, stack []paneLayer, key separatorKey) []*lipgloss.Layer {
+	bounds, viewW, viewH := key.bounds, key.viewW, key.viewH
+	rules, border, focus := key.rules, key.border, key.focus
+
 	// Nothing may be painted into a cell a pane's guest owns, and two panes
 	// crossing mid-transition put one of them over the other's edge. So an edge
 	// gives way to any pane in front of it, and a pane that is standing still
@@ -369,9 +437,6 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		return false
 	}
 
-	viewW := m.GetRenderWidth()
-	viewH := m.GetRenderHeight()
-
 	// Collect all separator characters with positions
 	grid := make(map[[2]int]*cell)
 	get := func(x, y int) *cell {
@@ -383,11 +448,6 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		grid[k] = c
 		return c
 	}
-
-	// A divider that stops inside the region stops on another divider, and the
-	// junction logic below draws that meeting. One that runs to the region's edge
-	// has the chrome's rule to meet instead, one cell further out.
-	rules := m.chromeRules(bounds)
 
 	for _, s := range splits {
 		if s.corner {
@@ -433,16 +493,10 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 	}
 
 	// Get border characters from the configured style
-	border := m.Settings.GetBorderForStyle()
 	g := dividerGlyphs(border)
 	chVert, chHoriz := g.vert, g.horiz
 	chCross, chTRight, chTLeft := g.cross, g.tRight, g.tLeft
 	chTDown, chTUp := g.tDown, g.tUp
-
-	// The perimeter of the focused window, clipped to the tiled bounds. Cells on
-	// it are drawn in the focus color, so the focused pane reads as an outlined
-	// rectangle even though every segment is shared with a neighbour.
-	focus := m.focusPerimeter(bounds)
 
 	// Resolve each cell to a character
 	type charPos struct {
@@ -531,15 +585,7 @@ func (m *OS) renderSeparatorOverlay() []*lipgloss.Layer {
 		return nil
 	}
 
-	// Build color strings. The focused perimeter is drawn bold as well as tinted
-	// so the signal survives themes where the two border colors are close, and
-	// so it is not carried by hue alone.
-	unfocusedStr := sgrForeground(theme.BorderUnfocused())
-	focusColor := theme.BorderFocusedWindow()
-	if m.Mode == TerminalMode {
-		focusColor = theme.BorderFocusedTerminal()
-	}
-	focusedStr := "\x1b[1m" + sgrForeground(focusColor)
+	unfocusedStr, focusedStr := key.unfocused, key.focused
 	reset := "\x1b[0m"
 
 	// Group into contiguous horizontal runs to minimize layer count.

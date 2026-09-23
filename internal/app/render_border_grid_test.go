@@ -1,8 +1,11 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+
+	"charm.land/lipgloss/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -281,5 +284,78 @@ func TestFocusPerimeterOwnershipAtJunctions(t *testing.T) {
 		if !p.contains(win.X-1, win.Y) && !p.contains(win.X+win.Width, win.Y) {
 			t.Errorf("window %d: neither vertical side of the ring matched", i)
 		}
+	}
+}
+
+// separatorSnapshot is a divider overlay reduced to what the compositor reads
+// from it: each layer's place, depth and text.
+func separatorSnapshot(layers []*lipgloss.Layer) string {
+	var sb strings.Builder
+	for _, l := range layers {
+		fmt.Fprintf(&sb, "%d,%d,%d:%q\n", l.GetX(), l.GetY(), l.GetZ(), l.GetContent())
+	}
+	return sb.String()
+}
+
+// TestSeparatorOverlayMemoFollowsItsInputs holds the reused divider overlay to
+// the one a fresh draw produces. renderSeparatorOverlay hands back the last
+// frame's layers when its inputs match, so an input left out of the key would
+// leave a stale divider on screen: the old focus outline, the old colours, the
+// old glyphs. Each step changes one input and checks both that the overlay
+// moved and that it is exactly what drawing from scratch gives.
+//
+// Negative control: dropping the focus perimeter, the SGR strings or the
+// border from separatorKey fails the matching step here.
+func TestSeparatorOverlayMemoFollowsItsInputs(t *testing.T) {
+	withTheme(t, "catppuccin_mocha")
+	m := sharedBorderOS(t, 4)
+
+	fresh := func() string {
+		m.separatorMemo = separatorMemo{}
+		return separatorSnapshot(m.renderSeparatorOverlay())
+	}
+
+	first := m.renderSeparatorOverlay()
+	if len(first) == 0 {
+		t.Fatal("setup: no divider overlay")
+	}
+	again := m.renderSeparatorOverlay()
+	if len(again) != len(first) || &again[0] != &first[0] {
+		t.Error("an unchanged frame redrew the overlay instead of reusing it")
+	}
+
+	prev := separatorSnapshot(first)
+	steps := []struct {
+		name   string
+		change func()
+	}{
+		{"focus moves", func() { m.FocusedWindow = 2 }},
+		{"focus moves again", func() { m.FocusedWindow = 3 }},
+		{"terminal mode", func() { m.Mode = TerminalMode }},
+		{"window management mode", func() { m.Mode = WindowManagementMode }},
+		{"border style", func() { m.Settings.BorderStyle = "thick" }},
+		{"theme", func() { withTheme(t, "nord") }},
+		{"dock moves to the top", func() { m.Settings.DockbarPosition = "top" }},
+		{"screen resizes", func() {
+			m.Width, m.Height = 100, 30
+			m.TileAllWindows()
+			tree := m.WorkspaceTrees[m.CurrentWorkspace]
+			for intID, rect := range tree.ApplyLayout(m.GetBSPBounds(), m.separatorGap()) {
+				if win := m.GetWindowByIntID(intID); win != nil {
+					win.X, win.Y, win.Width, win.Height = rect.X, rect.Y, rect.W, rect.H
+				}
+			}
+		}},
+	}
+	for _, step := range steps {
+		step.change()
+		got := separatorSnapshot(m.renderSeparatorOverlay())
+		if got == prev {
+			t.Errorf("%s: the overlay did not change", step.name)
+		}
+		if want := fresh(); got != want {
+			t.Errorf("%s: the reused overlay differs from a fresh draw\n got: %s\nwant: %s", step.name, got, want)
+		}
+		prev = got
 	}
 }
