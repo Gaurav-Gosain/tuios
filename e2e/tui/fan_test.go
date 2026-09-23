@@ -22,8 +22,11 @@ import (
 // The fake sets the window title real Claude Code sets at rest ("✳ Claude
 // Code"), which is the evidence the claude-code manifest reads as idle: a
 // quiet pane alone is not ready for a harness that can show it is at its
-// prompt. The agent timers are shortened so detection takes seconds rather
-// than the shipped half minute.
+// prompt. When it reads a prompt it sets the spinner title real Claude Code sets
+// while a turn runs, which the manifest reads as working: that is the evidence
+// fan waits for before it records the prompt as sent rather than stalled, and
+// for this harness output alone is not. The agent timers are shortened so
+// detection takes seconds rather than the shipped half minute.
 func fanFixture(t *testing.T) (base, repo string) {
 	t.Helper()
 	base = t.TempDir()
@@ -33,7 +36,8 @@ func fanFixture(t *testing.T) (base, repo string) {
 	if err := os.MkdirAll(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	script := "#!/bin/sh\nprintf '\\033]0;\\342\\234\\263 Claude Code\\007'\necho fake claude ready\nwhile IFS= read -r line; do echo \"GOT: $line\"; done\n"
+	script := "#!/bin/sh\nprintf '\\033]0;\\342\\234\\263 Claude Code\\007'\necho fake claude ready\n" +
+		"while IFS= read -r line; do printf '\\033]0;\\342\\240\\220 Claude Code\\007'; echo \"GOT: $line\"; sleep 1; printf '\\033]0;\\342\\234\\263 Claude Code\\007'; done\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -115,6 +119,58 @@ func TestFanTypesPromptWhenReady(t *testing.T) {
 	}
 	saveFrame(t, term, "fan-in-progress")
 	t.Logf("fan-out in progress:\n%s", term.Snapshot())
+}
+
+// TestFanReportsAStalledPrompt covers an agent that reads the prompt and never
+// shows it took it: this fake claude echoes what it reads and keeps its title
+// at rest, the way a Claude Code that read Enter as a newline looks. The
+// prompt is typed, and worktree ls says stalled rather than sent, with a note
+// that says to look before sending it again.
+//
+// Negative control: with the stall gate cut from deliverFanPrompt, the status
+// reads sent and the wait below fails.
+func TestFanReportsAStalledPrompt(t *testing.T) {
+	base, repo := fanFixture(t)
+	bin := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\nprintf '\\033]0;\\342\\234\\263 Claude Code\\007'\necho fake claude ready\nwhile IFS= read -r line; do echo \"GOT: $line\"; done\n"
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if out, err := tuiosCLI(t, base, "new", "plain", "--detach"); err != nil {
+		t.Fatalf("start the daemon: %v: %s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "fan", "1", "--agent", "claude", "--repo", repo, "--name", "try/stall", "Add a retry to the client."); err != nil {
+		t.Fatalf("fan: %v: %s", err, out)
+	}
+
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		rows := worktreeRows(t, base, "--group", "try/stall")
+		if len(rows) == 1 && rows[0]["prompt_status"] == "stalled" {
+			if note, _ := rows[0]["prompt_note"].(string); !strings.Contains(note, "Enter was sent") {
+				t.Errorf("the stalled prompt's note does not say it was typed: %q", note)
+			}
+			break
+		}
+		if len(rows) == 1 && rows[0]["prompt_status"] == "sent" {
+			t.Fatalf("a prompt the agent never showed it took was recorded as sent: %v", rows)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the prompt never stalled: %v", rows)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	out, err := tuiosCLI(t, base, "worktree", "ls", "--group", "try/stall")
+	if err != nil {
+		t.Fatalf("worktree ls: %v: %s", err, out)
+	}
+	if !strings.Contains(out, "stalled") {
+		t.Errorf("worktree ls does not say stalled:\n%s", out)
+	}
 }
 
 func TestFanKeepRefusesDirtySibling(t *testing.T) {
