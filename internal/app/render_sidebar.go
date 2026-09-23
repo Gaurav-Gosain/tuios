@@ -1749,10 +1749,11 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 		// a pane running an agent CLI, which is exactly what the terminals section
 		// makes. A "+" on this header would be a second name for new-terminal
 		// pointing at a list the rail only observes.
-		// The count is over the rows the section lists, so a filter that hides
-		// a session hides its figures with it.
+		// The count is the Inbox's while it is connected, narrowed to this
+		// session when the filter is, and over the rows the section lists
+		// otherwise. See sidebarHeaderCounts.
 		controls, tokens := m.sidebarAgentsControls(cw, sidebarHeaderLabelW("agents"), pal,
-			headerHoverX[sidebarSectionAgents], sidebarAgentCounts(agents))
+			headerHoverX[sidebarSectionAgents], m.sidebarHeaderCounts(agents))
 		for _, tk := range tokens {
 			recordToken(tk, "")
 		}

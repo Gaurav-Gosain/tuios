@@ -41,6 +41,9 @@ var repeatablePrefixActions = map[string]bool{
 	"scrolling_move_left":   true,
 	"scrolling_move_right":  true,
 	"scrolling_cycle_width": true,
+	// Each press goes to the next item waiting for the person, so a run of
+	// presses walks the Inbox without opening it.
+	"prefix_next_attention": true,
 }
 
 // armIfRepeatable keeps the prefix live when the command just run is one worth

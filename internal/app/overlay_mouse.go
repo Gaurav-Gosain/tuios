@@ -199,6 +199,8 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 		m.SessionSwitcherSelected = idx
 	case "agentmail":
 		m.AgentMailSelect(idx)
+	case "inbox":
+		m.InboxSelect(idx)
 	case "workspace":
 		m.WorkspaceSwitcherSelected = idx
 	case "aggregate":
@@ -270,6 +272,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		moveListSelection(&m.SessionSwitcherSelected, &m.SessionSwitcherScroll, n, 10, wheelDelta(up))
 	case "agentmail":
 		m.AgentMailMove(wheelDelta(up))
+	case "inbox":
+		m.InboxMove(wheelDelta(up))
 	case "workspace":
 		n := len(FilterWorkspaceItems(m.WorkspaceSwitcherItems, m.WorkspaceSwitcherQuery))
 		moveListSelection(&m.WorkspaceSwitcherSelected, &m.WorkspaceSwitcherScroll, n, workspaceSwitcherRows, wheelDelta(up))
@@ -404,6 +408,14 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		// A click opens, exactly like enter on the selected row.
 		m.AgentMailSelect(row.Idx)
 		return m.AgentMailOpenSelected()
+	case "inbox":
+		// A click goes, exactly like enter on the selected row. A click on a
+		// group heading selects nothing and so does nothing.
+		if rows := m.inboxRows(); row.Idx < 0 || row.Idx >= len(rows) || rows[row.Idx].item == nil {
+			return nil
+		}
+		m.InboxSelect(row.Idx)
+		return m.InboxActivate()
 	case "workspace":
 		m.WorkspaceSwitcherSelected = row.Idx
 		m.WorkspaceSwitcherActivate(row.Idx)
@@ -516,6 +528,8 @@ func (m *OS) closeOverlay(kind string) {
 		m.SessionSwitcherScroll = 0
 	case "agentmail":
 		m.CloseAgentMail()
+	case "inbox":
+		m.CloseInbox()
 	case "workspace":
 		m.CloseWorkspaceSwitcher()
 	case overlayKindShot:

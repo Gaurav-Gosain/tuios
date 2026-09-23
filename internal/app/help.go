@@ -425,7 +425,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 		"prefix_scrollback", "prefix_screenshot", "prefix_command_palette", "prefix_session_switcher",
 		"prefix_workspace_switcher",
 		"prefix_toggle_sidebar", "prefix_explore",
-		"prefix_jump_notif", "prefix_mail",
+		"prefix_jump_notif", "prefix_mail", "prefix_inbox", "prefix_next_attention",
 	}
 
 	// Debug commands are deliberately not listed here. They used to be, built

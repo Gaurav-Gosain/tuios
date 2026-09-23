@@ -291,7 +291,9 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// query) behind an esc that also drops the rail's focus.
 	// The mailbox is the third exception, for the same reason: the rail opens
 	// it, and a reply typed into it must reach it and not the rail.
-	if o.SidebarFocused && !o.ShowHelp && !o.ShowCommandPalette && !o.ShowAgentMail && !o.PrefixActive && !isLeaderKey(msg, &o.Settings) {
+	// The Inbox is the fourth: a prefix chord opens it over the rail, and
+	// its keys must reach it.
+	if o.SidebarFocused && !o.ShowHelp && !o.ShowCommandPalette && !o.ShowAgentMail && !o.ShowInbox && !o.PrefixActive && !isLeaderKey(msg, &o.Settings) {
 		return HandleSidebarKey(msg, o)
 	}
 

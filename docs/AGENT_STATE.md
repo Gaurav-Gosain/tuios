@@ -22,6 +22,7 @@ alongside the rest of the pane-driving surface.
 - [Finished turns](#finished-turns)
 - [Indicator](#indicator)
 - [The rail's agents section](#the-rails-agents-section)
+- [The Inbox](#the-inbox)
 - [Harness integrations](#harness-integrations)
 - [Typing a prompt](#typing-a-prompt)
 - [Environment](#environment)
@@ -876,6 +877,67 @@ pane. `get-agent-state` and `list-agents` report it as a `meta` object. No
 harness feeds it yet; a hook or a statusline command is where a feed goes. See
 [the protocol reference](protocol.md#set-agent-meta).
 
+## The Inbox
+
+The Inbox is one list of everything waiting for you, in every session on the
+daemon: approvals and questions an agent is blocked on, mail an agent wrote to
+you, agents that errored, and finished turns you have not looked at. The daemon
+keeps it, so it is the same list in every client, in `tuios list-attention`,
+and in the `attention` events of `tuios subscribe`. See
+[list-attention](protocol.md#list-attention) for the fields and the rules for
+when an item opens and closes. In short, an item closes by itself when what
+opened it stops being true: the agent leaves `needs_input` or `errored`, the
+mail is read, or a client focuses the pane that finished.
+
+Keys, after the prefix (`ctrl+b` by default):
+
+| Key | What it does |
+| --- | --- |
+| `i` | Open the Inbox. |
+| `o` | Go to the oldest item that needs you (approval, question, mail, errored), switching session and workspace. The prefix stays armed, so `o` again goes to the next one, and past the last it starts over. Finished turns are left to the Inbox. |
+| `M` | Open the Inbox on its mail. It used to open the mailbox; `m` in the Inbox does that now. |
+
+Inside the Inbox:
+
+| Key | What it does |
+| --- | --- |
+| `j` / `k`, arrows | Move. Group headings are skipped. |
+| `g` / `G` | First and last item. |
+| `enter` | Go to the item's pane, switching session and workspace. On mail, open the thread. |
+| `r` | Reply to mail: the thread opens with its reply line. |
+| `d` | Dismiss the item. |
+| `f` | Show one kind, then the next, then all of them. |
+| `m` | Open the mailbox, with every thread including the ones between agents. |
+| `esc` / `q` | Close. |
+
+Rows are grouped under headings in words, Approvals, Questions, Mail, Errored,
+Finished, each with its count, and oldest first inside a group. A row carries
+its kind's glyph, the pane's name, what it said, and on the right its session
+and how long it has waited (`12m`, `3h`). The heading, the name and the wait are
+text, so nothing depends on colour, and the ASCII glyph set covers the marks.
+
+A finished turn that ends in the pane you are looking at is dismissed by your
+client as soon as it arrives, the rule the rail applies to its own unread mark.
+
+The rail's agents header counts the Inbox while the client is connected to it:
+approvals, questions and errored items are `blocked`, finished items are
+`done`, over every session or only this one when the filter says `here`. Rows
+from other machines are added from the rail, since the Inbox holds this
+machine's items only. Without the Inbox (an older daemon, or while reconnecting)
+the header counts its rows, as it did before.
+
+Who can clear it: `dismiss-attention` needs the nonce the daemon issued in a
+client's attach reply, which the Inbox sends and an agent in a pane does not
+have. An agent cannot empty the list the person reads to find out what the
+agents want. Mail is the exception that was already there: reading the person's
+inbox with `read-agent-messages --to human` marks the mail read, from anywhere,
+and the mail item follows the ring.
+
+What it does not do yet: items on linked hosts are not in this machine's Inbox,
+and a client attached to a session on another machine sees this machine's
+Inbox and cannot dismiss from it. Answering an approval from the Inbox, rather
+than going to the pane, is not built either.
+
 ## Harness integrations
 
 A harness with a hooks system reports its own state, which outranks everything
@@ -1219,8 +1281,22 @@ is on another machine; a desktop notification raised by tuios would appear on th
 host running the daemon, which under `tuios ssh` is not where you are. The same
 is true of the audio cue, which is played by the client through a system audio
 player, so over `tuios ssh` it comes out of your laptop rather than the host. And
-alerts are raised by an attached client, so a detached session tracks state
-without announcing it.
+alerts are raised by an attached client, so a session nobody is attached to
+announces nothing unless some client is attached to another session on the same
+daemon: that client hears about it through the Inbox (see
+[The Inbox](#the-inbox)). With no client attached anywhere, the daemon-side
+`after-agent-state` hook is the one thing that still fires, which is how to
+reach a phone.
+
+For the attached session, alerts come from the state sync as they always have.
+For every other session on the same daemon, they come from the Inbox's
+`attention` events and follow the same policy: `needs_input` governs approval
+and question items, `errored` errored items, `done` finished items, and mail
+alerts whenever alerts are on. The settle window, quiet hours and the sound
+cooldown apply as usual. A burst of items arriving together, which is what a
+fan of agents produces, is one dock message ("5 agents need you in fan-1,
+fan-2, fan-3 and 2 more"), one notification and one sound. A single item's dock
+message names its session: `fan-3: claude needs approval · approve Bash: go test`.
 
 ## Who can act as the person
 

@@ -145,7 +145,7 @@ func TestRailMailTokenOpensTheMailbox(t *testing.T) {
 func TestPaletteOpensTheMailbox(t *testing.T) {
 	m := mailOS(t)
 	m.OpenCommandPalette()
-	m.CommandPaletteQuery = "Mail: open inbox"
+	m.CommandPaletteQuery = "Mail: open mailbox"
 	m.CommandPaletteSelected = 0
 	m.ActivateCommandPalette()
 	if !m.ShowAgentMail {

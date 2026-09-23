@@ -866,6 +866,14 @@ type OS struct {
 	// The agent mailbox overlay and the mirror behind it. See agent_mail.go.
 	ShowAgentMail bool
 	AgentMail     AgentMailState
+	// The Inbox overlay and the mirror of the daemon's attention queue behind
+	// it. See inbox.go.
+	ShowInbox bool
+	Inbox     InboxState
+	// inboxEvents carries what the Inbox watcher reads off the daemon, and
+	// stopInbox ends the watcher. Both nil until the watcher starts.
+	inboxEvents chan tea.Msg
+	stopInbox   func()
 	// Session switcher overlay
 	ShowSessionSwitcher          bool
 	SessionSwitcherQuery         string
@@ -1558,6 +1566,7 @@ func (m *OS) Cleanup() {
 
 	m.stopWindowExitDrain()
 	m.endConfigWatch()
+	m.endInboxWatch()
 	// The dock's components are subprocesses this client started, and a push
 	// component is a process that never exits on its own. An ephemeral SSH or
 	// web session is a goroutine inside a long-lived server, so without this

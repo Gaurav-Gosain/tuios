@@ -140,6 +140,9 @@ func (m *OS) sidebarSignature() uint64 {
 	// The mailbox mirror: an unread count beside an agent row, and the count
 	// on the agents header, come from it.
 	mixU(m.AgentMail.Gen)
+	// The Inbox mirror: the agents header counts it while it is live.
+	mixU(m.Inbox.Gen)
+	mixB(m.Inbox.Live)
 
 	// The glyph set the rows are drawn from. ASCII mode swaps the collapse
 	// chevrons and the agent-state indicators for their fallbacks, and both it

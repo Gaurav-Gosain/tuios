@@ -791,8 +791,17 @@ func DefaultConfig() *UserConfig {
 				"prefix_explore":            {"e"}, // the same key goes to the rail and comes back
 				"prefix_jump_notif":         {"j"}, // the keyboard twin of clicking a message
 				// Capital M: m is the minimize prefix, and a slip into it costs
-				// nothing. The mailbox is where agents' messages are read.
+				// nothing. It opens the Inbox on its mail filter, one key (m)
+				// from the whole mailbox.
 				"prefix_mail": {"M"},
+				// i for the Inbox, the key the rail already uses for mail. The
+				// Inbox is everything waiting for the person in every session.
+				"prefix_inbox": {"i"},
+				// o for the oldest item that needs you. a would have been the
+				// obvious letter and is the launcher's, which on macOS is the
+				// only way into it. The prefix stays armed after it, so o o o
+				// walks everything waiting.
+				"prefix_next_attention": {"o"},
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},

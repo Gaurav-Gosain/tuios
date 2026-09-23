@@ -83,8 +83,15 @@ func TestMailCrossesTheLink(t *testing.T) {
 	if err := farTerm.WaitForText("ORCHESTRATOR @ "+me+" to you: ship it?", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: build's dock never announced mail from this machine: %v\n%s", err, farTerm.Snapshot())
 	}
-	// The mailbox lists the thread with the mark for another machine.
+	// The mailbox lists the thread with the mark for another machine. The
+	// leader chord opens the Inbox on its mail, and m the whole mailbox.
 	if err := farTerm.SendKeys(tuitest.Ctrl('b'), "M"); err != nil {
+		t.Fatalf("open the Inbox on build: %v", err)
+	}
+	if err := farTerm.WaitForText("Inbox", uiTimeout); err != nil {
+		t.Fatalf("the Inbox never opened on build: %v\n%s", err, farTerm.Snapshot())
+	}
+	if err := farTerm.SendKeys("m"); err != nil {
 		t.Fatalf("open the mailbox on build: %v", err)
 	}
 	if err := farTerm.WaitFor(func(s tuitest.Screen) bool {
@@ -348,7 +355,15 @@ func TestMailboxFollowsTheSessionAcrossTheLink(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("the client never attached through build: %v\n%s", err, term.Snapshot())
 	}
+	// The leader chord opens the Inbox, which is this machine's, and m the
+	// mailbox, which follows the session to build.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "M"); err != nil {
+		t.Fatalf("open the Inbox: %v", err)
+	}
+	if err := term.WaitForText("Inbox", uiTimeout); err != nil {
+		t.Fatalf("the Inbox never opened: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("m"); err != nil {
 		t.Fatalf("open the mailbox: %v", err)
 	}
 	if err := term.WaitForText("from build itself", uiTimeout); err != nil {

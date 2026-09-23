@@ -73,6 +73,11 @@ func HandleWindowManagementModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea
 		return handleAgentMailInput(msg, o)
 	}
 
+	// So does the Inbox.
+	if o.ShowInbox {
+		return handleInboxInput(msg, o)
+	}
+
 	// Handle workspace switcher overlay
 	if o.ShowWorkspaceSwitcher {
 		return handleWorkspaceSwitcherInput(msg, o)

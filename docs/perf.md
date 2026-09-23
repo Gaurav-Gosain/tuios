@@ -1038,6 +1038,45 @@ changes brought it down, and they are the rules for anyone writing a manifest:
 At twenty agent panes settling four times a second the new manifest costs about
 1 ms of daemon CPU per second, against about 0.4 ms before.
 
+## 2026-09 the Inbox
+
+The rail's agents header counts the Inbox while it is live, and the rail
+signature folds the Inbox's generation. The rail was measured before and after
+with the test binaries of the base commit and of this change run alternately,
+six runs each, one second per run. Medians:
+
+| Benchmark | Before | After | Allocations |
+| --- | --- | --- | --- |
+| `BenchmarkSidebarAgentsRebuild` | 326 µs, 56825 B | 332 µs, 56817 B | 1572, unchanged |
+| `BenchmarkSidebarAgentsCached` | 2838 ns | 2894 ns | 0, unchanged |
+| `BenchmarkSidebarPanelCached` | 1308 ns | 1356 ns | 0, unchanged |
+| `BenchmarkSidebarPanelLinesCached` | 1302 ns | 1372 ns | 0, unchanged |
+
+No change beyond noise: the spread inside each column was larger than the gap
+between them. With a live Inbox of sixteen items the header counts the Inbox
+instead of the rows, and `BenchmarkSidebarAgentsRebuildWithInbox` measured
+351 µs with 1554 allocations, and `BenchmarkSidebarAgentsCachedWithInbox`
+2897 ns with none.
+
+The new surfaces, sixteen items across sixteen sessions:
+
+| Benchmark | Median | Allocations |
+| --- | --- | --- |
+| `BenchmarkInboxRender`, the open overlay | 281 µs, 72411 B | 1642 |
+| `BenchmarkInboxApplyBurst`, sixteen events into the mirror | 2.8 µs, 2560 B | 8 |
+
+The overlay is drawn only while it is open, like every other panel. A burst is
+one render and one alert, since the watcher gathers events for 150 ms before it
+hands them to Update.
+
+On the daemon, the Inbox sits on the session event sink, which every output
+chunk passes through. `BenchmarkAttentionOutputEvent`, an output event reaching
+the queue, is 6 ns with no allocation: the queue switches on the type and
+returns. `BenchmarkAttentionRepeatedBlock`, a pane reporting the same block
+again, is 480 ns and publishes nothing. It was 4.4 µs before the secret mask
+learned to skip its regular expression for a summary with none of the words it
+keys on.
+
 ## 2026-09 second profiling pass: render
 
 Profiled the compositor over a keystroke frame (`BenchmarkKeystrokeFrame`,

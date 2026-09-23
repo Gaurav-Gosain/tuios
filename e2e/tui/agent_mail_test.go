@@ -34,11 +34,18 @@ func saveFrame(t *testing.T, term *tuitest.Terminal, name string) {
 
 // TestMailboxEmptyStateTeaches opens the mailbox on a session with no mail. The
 // overlay has to say what it is and what makes something appear here, because
-// that is the state most people meet it in.
+// that is the state most people meet it in. The leader chord opens the Inbox
+// on its mail, which says there is none, and m from there is the mailbox.
 func TestMailboxEmptyStateTeaches(t *testing.T) {
 	term := attachClient(t)
 
 	if err := term.SendKeys(tuitest.Ctrl('b'), "M"); err != nil {
+		t.Fatalf("open the Inbox on mail: %v", err)
+	}
+	if err := term.WaitForText("No unread mail for you.", uiTimeout); err != nil {
+		t.Fatalf("the Inbox on mail never said it was empty: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("m"); err != nil {
 		t.Fatalf("open the mailbox: %v", err)
 	}
 	for _, want := range []string{"Mail", "No mail.", "send-agent-message"} {
@@ -83,15 +90,15 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 	}
 	saveFrame(t, term, "mail-dock")
 
-	// The leader chord opens the list, which names the thread.
+	// The leader chord opens the Inbox on its mail, which names the thread.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "M"); err != nil {
-		t.Fatalf("open the mailbox: %v", err)
+		t.Fatalf("open the Inbox on mail: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
-		return strings.Contains(text, "REVIEWER") && strings.Contains(text, "which retry policy?") && strings.Contains(text, "unread")
+		return strings.Contains(text, "REVIEWER") && strings.Contains(text, "which retry policy?") && strings.Contains(text, "Mail 1")
 	}, uiTimeout); err != nil {
-		t.Fatalf("the mailbox never listed the thread: %v\n%s", err, term.Snapshot())
+		t.Fatalf("the Inbox never listed the thread: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "mail-list")
 

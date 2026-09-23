@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // The prefix chords used to be two hand-written switch statements over literal
@@ -53,6 +54,8 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_explore", handleToggleFocusSidebar)
 	d.Register("prefix_jump_notif", handlePrefixJumpNotif)
 	d.Register("prefix_mail", handlePrefixMail)
+	d.Register("prefix_inbox", handlePrefixInbox)
+	d.Register("prefix_next_attention", handlePrefixNextAttention)
 	d.Register("prefix_detach", handlePrefixDetach)
 	d.Register("prefix_close_session", handlePrefixCloseSession)
 	d.Register("prefix_exit_mode", handlePrefixExitMode)
@@ -359,8 +362,21 @@ func handlePrefixJumpNotif(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, nil
 }
 
+// handlePrefixMail opens the Inbox on its mail filter. It used to open the
+// mailbox directly; the mailbox is one key (m) from there, and mail waiting for
+// the person is what the chord was for.
 func handlePrefixMail(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return o, o.OpenAgentMail()
+	o.OpenInbox(session.AttentionMail)
+	return o, nil
+}
+
+func handlePrefixInbox(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	o.OpenInbox("")
+	return o, nil
+}
+
+func handlePrefixNextAttention(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.JumpToNextAttention()
 }
 
 func handlePrefixSessionSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

@@ -329,6 +329,12 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 
+	// The Inbox: everything waiting for the person in every session, kept
+	// current by the daemon's attention events.
+	if cmd := m.startInboxWatch(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// Listen for the daemon events that end this client.
 	if cmd := ListenForDaemonExit(m.daemonExitChan()); cmd != nil {
 		cmds = append(cmds, cmd)
@@ -1712,6 +1718,19 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case AgentMailLoadedMsg:
 		m.applyAgentMailLoaded(msg)
+		// An Inbox action that switched session to answer mail opens the
+		// thread now that the session's ring is here.
+		return m, m.takePendingInboxThread()
+
+	case inboxWatchMsg:
+		return m, m.handleInboxWatch(msg)
+
+	case InboxAlertDueMsg:
+		m.applyInboxAlertDue(msg)
+		return m, nil
+
+	case InboxDismissedMsg:
+		m.applyInboxDismissed(msg)
 		return m, nil
 
 	case AgentMailSentMsg:

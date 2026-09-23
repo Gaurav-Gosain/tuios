@@ -6,6 +6,21 @@ Every binding lives in one of the 19 sections under `[keybindings]` in `config.t
 
 To inspect your own effective bindings, use the binary rather than any document: `tuios keybinds list`, `tuios keybinds doctor` for conflicts, `tuios keybinds explain <key>` for everything one key does, or the in-app keybind manager on `Ctrl+B k`.
 
+## The Inbox
+
+Everything waiting for you in every session is one list, the Inbox. See
+[AGENT_STATE.md](AGENT_STATE.md#the-inbox) for what goes in it.
+
+| Keys | What it does |
+|---|---|
+| `ctrl+b i` | Open the Inbox |
+| `ctrl+b o` | Go to the oldest item that needs you; `o` again, inside the repeat window, goes to the next |
+| `ctrl+b M` | Open the Inbox on its mail (`m` there opens the whole mailbox) |
+
+Inside it: `j` and `k` move, `enter` goes to the pane, `r` replies to mail, `d`
+dismisses, `f` steps through the kinds, `m` opens the mailbox, `esc` closes.
+`ctrl+b o` is `o` because `ctrl+b a` is the launcher's.
+
 ## macOS
 
 Option is a compose key on macOS unless the terminal is told otherwise, so an
