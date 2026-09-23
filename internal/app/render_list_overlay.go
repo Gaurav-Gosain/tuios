@@ -30,6 +30,10 @@ type listOverlay struct {
 	Scroll   *int
 	EmptyMsg string
 	Hints    []overlay.Hint
+	// Detail is lines shown under the list, above the position line, each at
+	// most the fitted width: more about the selected row than the row holds.
+	// DetailFor builds them for the fitted width.
+	DetailFor func(width int) []string
 	// RenderRow returns the content for row i on the given row background, at
 	// most width cells wide (width is the fitted panel width, not the requested
 	// one); the helper fills the remainder with rowBg so the selection highlight
@@ -51,6 +55,11 @@ func (m *OS) listOverlayLayout(cfg listOverlay) (width, rows int, hints []overla
 	extra := 1
 	if cfg.Search {
 		extra += 2
+	}
+	if cfg.DetailFor != nil {
+		if n := len(cfg.DetailFor(width)); n > 0 {
+			extra += n + 1 // the lines and a rule above them
+		}
 	}
 	rows, hints = m.panelBody(cfg.MaxVisible, extra, width, nil, cfg.Hints)
 	return width, rows, hints
@@ -101,6 +110,14 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 	for shown < cfg.MaxVisible {
 		lines = append(lines, overlay.Style(bg).Render(" "))
 		shown++
+	}
+	if cfg.DetailFor != nil {
+		if detail := cfg.DetailFor(cfg.Width); len(detail) > 0 {
+			lines = append(lines, overlay.Rule(cfg.Width, bg, pal))
+			for _, l := range detail {
+				lines = append(lines, overlay.Style(bg).Foreground(pal.Fg).Render(l))
+			}
+		}
 	}
 	if cfg.Count > cfg.MaxVisible {
 		info := fmt.Sprintf("%d of %d", cfg.Selected+1, cfg.Count)

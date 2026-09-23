@@ -916,7 +916,7 @@ Inside the Inbox:
 | `g` / `G` | First and last item. |
 | `enter` | Go to the item's pane, switching session and workspace. On mail, open the thread. On a held approval, give the prompt back to the pane first, so the harness shows it there. |
 | `space` | On an approval or a question, read the prompt without leaving the Inbox, and answer it from there. See [Answering a prompt without attaching](#answering-a-prompt-without-attaching). Not on a held approval, which has no prompt on the screen: answer that one with `1`, `2` or `3`. |
-| `1` / `2` / `3` | Answer a held approval: allow once, always allow, deny. The same order as the harness's own menu. Only the keys the prompt offers work. See [Approvals from the Inbox](#approvals-from-the-inbox). |
+| `1` / `2` / `3` | Answer the held approval under the cursor: allow once, always allow, deny. The same order as the harness's own menu. Only the keys the prompt offers work, and only once the prompt has been on screen as it is for 0.4 seconds. The whole prompt, and what `2` adds, is shown under the list. See [Approvals from the Inbox](#approvals-from-the-inbox). |
 | `r` | Reply to mail: the thread opens with its reply line. |
 | `d` | Dismiss the item. |
 | `f` | Show one kind, then the next, then all of them. |
@@ -1120,14 +1120,46 @@ What happens on a prompt:
    `PermissionRequest`, or `permission.asked` through the opencode and Kilo
    plugin. The hook reports the pane as `needs_input`, kind `approval`, as it
    always did.
-2. With the harness enabled, the hook then calls `request-approval` and waits.
-   The Approvals row gets the keys that answer it in text, such as
+2. With the harness enabled, and the call one the Inbox can show whole (see
+   below), the hook then calls `request-approval` and waits. The Approvals row
+   gets the keys that answer it in text, such as
    `[1/3] approve Bash: go test ./...`, and the hint line says what each key
-   does.
-3. You press `1` (allow once), `2` (always allow, offered when the harness can
-   remember the rule) or `3` (deny). The hook prints the harness's own decision
-   and exits, the pane moves to `working`, and the item closes as answered.
-   Every other client that was showing it says it was answered elsewhere.
+   does. With the cursor on it, the whole line is shown under the list, and
+   for `2` the exact rules always adds, such as
+   `Bash(go test:*) in .claude/settings.local.json`.
+3. You press `1` (allow once), `2` (always allow, offered only with the rules
+   it adds) or `3` (deny). The hook prints the harness's own decision and
+   exits, the pane moves to `working`, and the item closes as answered. Every
+   other client that was showing it says it was answered elsewhere.
+
+You answer from one line, so a prompt is only held when that line is the whole
+request. The call must be one whose effect one argument decides, with nothing
+else that changes what it does, and that argument must fit the line exactly:
+not cut, not masked as a secret, no newline, tab or doubled space, no control
+or invisible character. The calls held are Claude Code's `Bash` (not with
+`dangerouslyDisableSandbox`), `Read`, `Glob` and `Grep` without a `path`,
+`WebFetch` and `WebSearch`, and opencode's `bash` (not with `workdir`), `read`
+and `webfetch`. Everything else is answered in the pane as before: `Write`,
+`Edit`, `MultiEdit` and `NotebookEdit`, whose body the line cannot show, MCP
+tools, and a command too long for the line. The daemon checks the line again
+before it holds, and the Inbox does not answer a line it would draw with
+characters left out.
+
+`2` is offered only when every rule it adds can be shown. For Claude Code that
+means every `permission_suggestions` entry is an `addRules` that allows, kept
+in the session or a settings file, with at most four rules; a `setMode` (such
+as `acceptEdits`), an `addDirectories`, a deny or ask rule, or a field tuios
+does not know leaves only `1` and `3`. The rules sent back are rebuilt from the
+ones shown. For opencode, the rules are the request's own `always` patterns.
+
+A key answers only what you read. The cursor stays on the item you selected
+when the list re-sorts, and `1`, `2` and `3` do nothing (and say so) for a held
+approval that has been on screen, as it is, for less than 0.4 seconds: one that
+just arrived, moved under the cursor, changed its line or started a new hold.
+While a hold runs, the item keeps the held call's line even when the same pane
+reports another call, and the answer carries the line it was made from, so the
+daemon refuses it (`changed`) if the hold is on another call by the time it
+arrives.
 
 A hold ends with no decision, and the harness then shows its own prompt as if
 tuios were not there, when any of these happens first: `hold_seconds` passes;
@@ -1141,8 +1173,8 @@ What is supported:
 
 | Harness | Decision channel | Offers |
 | --- | --- | --- |
-| Claude Code | `PermissionRequest` hook output (`hookSpecificOutput.decision`) | once and deny, and always when Claude Code sent `permission_suggestions` |
-| opencode, Kilo | The plugin posts the reply to opencode's permission route | once, always, deny |
+| Claude Code | `PermissionRequest` hook output (`hookSpecificOutput.decision`) | once and deny, and always when every `permission_suggestions` entry is a rule tuios can show |
+| opencode, Kilo | The plugin posts the reply to opencode's permission route | once and deny, and always when the request lists its `always` patterns |
 
 Claude Code's `AskUserQuestion` and `ExitPlanMode` are not held: their answer
 is a choice or a plan, not yes or no, and stays in Claude Code's own dialog.

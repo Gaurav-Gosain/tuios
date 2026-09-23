@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
@@ -88,7 +90,14 @@ const (
 	approvalEndViewed     = "viewed"
 	approvalEndCallerGone = "caller_gone"
 	approvalEndShutdown   = "shutdown"
-	approvalEndResolved   = AttentionClosedResolved
+	// approvalEndNotShown is a hold refused because its line would not show
+	// the whole request: the daemon would have to cut, mask or rewrite it.
+	approvalEndNotShown = "not_shown"
+	// approvalEndChanged is not an end: it is reply-approval's reason for a
+	// decision refused because the held line is not the one it was made from.
+	// The hold keeps running.
+	approvalEndChanged  = "changed"
+	approvalEndResolved = AttentionClosedResolved
 )
 
 // DefaultApprovalHold is how long a hold lasts when the config names none.
@@ -186,6 +195,12 @@ type approvalHold struct {
 	session string
 	window  string
 	options []string
+	// summary is the line the person answers from, which the item shows for
+	// as long as the hold runs. A reply that names another line is refused.
+	summary string
+	// latest is the newest message reported for the pane while the hold
+	// ran, shown on the item again once the hold ends. Empty when none came.
+	latest string
 	// done receives the outcome exactly once. It is buffered, so whatever
 	// ends the hold never waits on the hook.
 	done chan approvalOutcome
@@ -203,7 +218,9 @@ func newApprovalID() string {
 // startHold opens a hold on a pane's approval item. It returns the reason
 // when there is nothing to hold: the pane has no open approval. A hold already
 // on the item ends as superseded, since one pane shows one prompt at a time.
-func (a *attentionStore) startHold(session, window string, options []string, expires time.Time) (*approvalHold, string) {
+// The item shows summary, the held call's own line, and scope beside always,
+// until the hold ends.
+func (a *attentionStore) startHold(session, window, summary string, options, scope []string, expires time.Time) (*approvalHold, string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	id, ok := a.byKey[attentionKey(AttentionApproval, session, window, 0)]
@@ -223,11 +240,16 @@ func (a *attentionStore) startHold(session, window string, options []string, exp
 		session: session,
 		window:  window,
 		options: slices.Clone(options),
+		summary: summary,
 		done:    make(chan approvalOutcome, 1),
+	}
+	if !slices.Contains(options, ApprovalAlways) {
+		scope = nil
 	}
 	a.holds[h.id] = h
 	a.rev++
 	it.RequestID, it.Options, it.Expires = h.id, h.options, expires.UnixNano()
+	it.Summary, it.AlwaysScope = summary, slices.Clone(scope)
 	it.Seq = a.rev
 	a.publish(attentionEvent(AttentionUpdated, *it))
 	a.changedLocked()
@@ -257,7 +279,10 @@ func (a *attentionStore) endHoldLocked(requestID string, out approvalOutcome, cl
 	}
 	if it, ok := a.items[h.itemID]; ok && it.RequestID == requestID {
 		a.rev++
-		it.RequestID, it.Options, it.Expires = "", nil, 0
+		it.RequestID, it.Options, it.Expires, it.AlwaysScope = "", nil, 0, nil
+		if h.latest != "" {
+			it.Summary = h.latest
+		}
 		it.Seq = a.rev
 		a.publish(attentionEvent(AttentionUpdated, *it))
 		a.changedLocked()
@@ -298,8 +323,11 @@ var errNoHold = errors.New("no hold")
 // answer ends a hold with the person's reply. A decision closes the item as
 // answered; ask hands the prompt back to the pane and leaves the item open.
 // A reply to a hold that already ended returns how it ended with applied
-// false, so the first reply wins and a repeat is harmless.
-func (a *attentionStore) answer(requestID, decision, message, by string) (out approvalOutcome, h approvalHold, applied bool, err error) {
+// false, so the first reply wins and a repeat is harmless. A decision that
+// names the line it was made from (shown) is refused with applied false and
+// reason changed when the hold is on another line, so an answer can only
+// approve what the person read.
+func (a *attentionStore) answer(requestID, decision, message, by, shown string) (out approvalOutcome, h approvalHold, applied bool, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	hold, ok := a.holds[requestID]
@@ -316,6 +344,9 @@ func (a *attentionStore) answer(requestID, decision, message, by string) (out ap
 	}
 	if !slices.Contains(hold.options, decision) {
 		return approvalOutcome{}, *hold, false, errBadDecision
+	}
+	if shown != "" && shown != hold.summary {
+		return approvalOutcome{Reason: approvalEndChanged}, *hold, false, nil
 	}
 	out = approvalOutcome{Decision: decision, Message: message, Reason: approvalEndAnswered, By: by}
 	a.endHoldLocked(requestID, out, false)
@@ -344,6 +375,42 @@ func (a *attentionStore) noteFocused(session, window string) {
 	a.endHoldLocked(a.items[id].RequestID, approvalOutcome{Reason: approvalEndViewed}, true)
 }
 
+// approvalMaxScope bounds the rules always may add, the same bound the hook
+// applies (integration.MaxScopeLines).
+const approvalMaxScope = integration.MaxScopeLines
+
+// approvalLineShown reports whether an Inbox item can show line exactly as it
+// is: the item's own cleaning (control characters, whitespace, masking, the
+// length cut) leaves it unchanged, and every rune is a visible character or a
+// space, so no format character such as a bidi override makes it read as
+// something else. The hook checks the same before it asks; the daemon checks
+// again because the person answers from the item, not from the hook.
+func approvalLineShown(line string) bool {
+	if line == "" || !utf8.ValidString(line) || attentionText(line, attentionMaxSummary) != line {
+		return false
+	}
+	for _, r := range line {
+		if !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// approvalScopeShown reports whether always may be offered with scope: one to
+// approvalMaxScope rules, each shown as it is.
+func approvalScopeShown(scope []string) bool {
+	if len(scope) == 0 || len(scope) > approvalMaxScope {
+		return false
+	}
+	for _, line := range scope {
+		if !approvalLineShown(line) {
+			return false
+		}
+	}
+	return true
+}
+
 // approvalResult is request-approval's answer.
 func approvalResult(requestID string, out approvalOutcome) map[string]any {
 	res := map[string]any{
@@ -369,6 +436,8 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 		Window  string   `json:"window"`
 		Harness string   `json:"harness"`
 		Options []string `json:"options"`
+		Summary string   `json:"summary"`
+		Scope   []string `json:"always_scope"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -385,6 +454,9 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	if p.Window == "" {
 		return nil, invalidParam("window", "window is required: the pane whose prompt is held, normally $TUIOS_PANE_ID")
 	}
+	if p.Summary == "" {
+		return nil, invalidParam("summary", "summary is required: the line the person answers from, the message the hook reported")
+	}
 	options := p.Options
 	if len(options) == 0 {
 		options = []string{ApprovalOnce, ApprovalDeny}
@@ -393,6 +465,10 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 		if !slices.Contains(approvalDecisions, o) {
 			return nil, invalidParam("options", "options: "+echoName(o)+" is not a decision", approvalDecisions...)
 		}
+	}
+	// Always is only offered with the rules it adds, each shown as it is.
+	if slices.Contains(options, ApprovalAlways) && !approvalScopeShown(p.Scope) {
+		options = slices.DeleteFunc(slices.Clone(options), func(o string) bool { return o == ApprovalAlways })
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
@@ -421,9 +497,12 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	if d.paneInFrontOfPerson(sess, w.ID) {
 		return approvalResult("", approvalOutcome{Reason: approvalEndViewed}), nil
 	}
+	if !approvalLineShown(p.Summary) {
+		return approvalResult("", approvalOutcome{Reason: approvalEndNotShown}), nil
+	}
 
 	holdFor := policy.holdFor()
-	hold, reason := d.attention.startHold(sess.Name, w.ID, options, time.Now().Add(holdFor))
+	hold, reason := d.attention.startHold(sess.Name, w.ID, p.Summary, options, p.Scope, time.Now().Add(holdFor))
 	if hold == nil {
 		return approvalResult("", approvalOutcome{Reason: reason}), nil
 	}
@@ -463,6 +542,9 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 		Decision   string `json:"decision"`
 		Message    string `json:"message"`
 		HumanNonce string `json:"human_nonce"`
+		// Summary is the line the decision was made from. When it is set
+		// and the hold is on another line, nothing is answered.
+		Summary string `json:"summary"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -502,12 +584,26 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 		requestID = id
 	}
 	message := attentionText(p.Message, approvalMaxMessage)
-	out, hold, applied, err := d.attention.answer(requestID, p.Decision, message, by)
+	out, hold, applied, err := d.attention.answer(requestID, p.Decision, message, by, p.Summary)
 	switch {
 	case errors.Is(err, errNoHold):
 		return nil, noHoldError("no approval is held under request " + echoName(requestID))
 	case errors.Is(err, errBadDecision):
 		return nil, invalidParam("decision", "this prompt does not offer "+echoName(p.Decision), append(slices.Clone(hold.options), ApprovalAsk)...)
+	}
+	if !applied && out.Reason == approvalEndChanged {
+		// The hold is on another call than the one the person read. Nothing
+		// was answered and the hold runs on, so they can read it and answer.
+		return map[string]any{
+			"type":       "approval_replied",
+			"request_id": requestID,
+			"decision":   "",
+			"applied":    false,
+			"reason":     approvalEndChanged,
+			"summary":    hold.summary,
+			"session":    hold.session,
+			"window":     hold.window,
+		}, nil
 	}
 	if !applied && out.Decision == "" && p.Decision != ApprovalAsk {
 		return nil, noHoldError("the hold on request " + echoName(requestID) + " ended (" + out.Reason + ") before this reply")

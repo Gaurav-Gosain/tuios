@@ -143,6 +143,10 @@ type AttentionItem struct {
 	// It is cleared when the hold ends, whatever ended it, and the item then
 	// stays open as long as the pane is still blocked.
 	RequestID string `json:"request_id,omitempty"`
+	// AlwaysScope is what answering always allows from now on, one rule per
+	// line, set only while RequestID is and Options holds always. A client
+	// shows it beside the key; the daemon refuses to offer always without it.
+	AlwaysScope []string `json:"always_scope,omitempty"`
 	// Expires is when the hold ends, in unix nanoseconds, set with RequestID.
 	Expires int64 `json:"expires,omitempty"`
 	// Answer and AnsweredBy are set only on the item a close event with reason
@@ -253,13 +257,22 @@ func (a *attentionStore) upsertLocked(next AttentionItem) {
 		cur := a.items[id]
 		next.ID, next.Since = cur.ID, cur.Since
 		next.Seq = cur.Seq
-		// A hold belongs to the approval it was asked for. A new message or
-		// title on the same approval keeps it; the block turning into a
-		// question means the prompt the hook holds is not the one on the
-		// screen any more, so the hold ends.
+		// A hold belongs to the approval it was asked for, and the item
+		// shows that approval's line for as long as the hold runs, since
+		// that line is what an answer approves. A new message on the same
+		// pane, a second call reported before its hook opens its own hold or
+		// a notification's generic text, is kept for when the hold ends and
+		// does not replace it: the text and the request id an answer
+		// carries never come from two different calls. The block turning
+		// into a question means the prompt the hook holds is not the one on
+		// the screen any more, so the hold ends.
 		if cur.RequestID != "" && next.RequestID == "" {
 			if next.Kind == AttentionApproval {
+				if h := a.holds[cur.RequestID]; h != nil {
+					h.latest = next.Summary
+				}
 				next.RequestID, next.Options, next.Expires = cur.RequestID, cur.Options, cur.Expires
+				next.AlwaysScope, next.Summary = cur.AlwaysScope, cur.Summary
 			} else {
 				a.endHoldLocked(cur.RequestID, approvalOutcome{Reason: approvalEndResolved}, false)
 			}
@@ -298,7 +311,7 @@ func attentionSame(a, b AttentionItem) bool {
 		a.Name == b.Name && a.Summary == b.Summary && a.Count == b.Count &&
 		a.CompletionSeq == b.CompletionSeq && a.Window == b.Window &&
 		a.RequestID == b.RequestID && a.Expires == b.Expires &&
-		slices.Equal(a.Options, b.Options)
+		slices.Equal(a.Options, b.Options) && slices.Equal(a.AlwaysScope, b.AlwaysScope)
 }
 
 // closeLocked closes the item with this id, if it is open. The caller holds mu.

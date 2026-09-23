@@ -416,8 +416,14 @@ an existing caller:
 
 - An `approval` item gains `request_id` and `expires` while a hook holds it,
   and `options` is now filled then: the decisions `reply-approval` takes for
-  it. All three are absent when nothing holds the item, which is every item
-  when approvals are off.
+  it, with `always_scope` (the rules always adds) when `options` holds
+  `always`. All four are absent when nothing holds the item, which is every
+  item when approvals are off.
+- While a hook holds an `approval` item, its `summary` is the held call's
+  line, the one `request-approval` was given, and a new message the pane
+  reports meanwhile does not replace it. When the hold ends the item shows the
+  newest message reported during it. With nothing held, a new message updates
+  `summary` as before.
 - The `attention` event's `closed` gains the reason `answered`. The closing
   item then carries `answer` (`once`, `always` or `deny`) and `answered_by`
   (the id of the client that answered).
@@ -434,7 +440,12 @@ an existing caller:
   status` reports a version 1 install as out of date until it is installed
   again. The opencode and Kilo plugins are version 2 as well: a
   `permission.asked` event runs the hook and waits for what it prints, and
-  sends a reply to opencode only when the hook printed one.
+  sends a reply to opencode only when the hook printed one. The plugin names
+  the tool call a request is about, from `tool.execute.before`, so the Inbox
+  line is `approve bash: <command>` rather than opencode's permission name.
+- Only a call the Inbox can show whole on one line is held; every other
+  prompt is reported as before and answered in the pane. See
+  [request-approval](#request-approval).
 - In the Inbox, `space` on a held approval does not open the peek of
   [respond](#respond): the hook keeps the prompt off the pane, so there is
   nothing to read. The TUI says to answer with `1`, `2` or `3` instead.
@@ -1363,7 +1374,9 @@ for this machine; a hub will fill it for items from linked hosts), `session`,
 `window`, `workspace`, `harness`, `name`, `summary`, `options` (the decisions
 `reply-approval` takes, set only while a hook holds the item), `request_id` and
 `expires` (the held request and when its hold ends, in unix nanoseconds; see
-[request-approval](#request-approval)), `since`
+[request-approval](#request-approval)), `always_scope` (what answering
+`always` adds, one rule per line, set only while held with `always` offered),
+`since`
 (unix nanoseconds, when the item started waiting; an update keeps it), `seq`
 (the Inbox revision of the item's last change), `thread` and `count` (mail),
 `completion_seq` (finished).
@@ -1507,11 +1520,27 @@ hold_seconds = 120
 
 Params: `session` (optional), `window` (required), `harness` (required, an id
 or alias), `options` (optional list of the decisions the harness can take, from
-`once`, `always`, `deny`; omitted means `once` and `deny`).
+`once`, `always`, `deny`; omitted means `once` and `deny`), `summary`
+(required: the line the person answers from, which must be the whole request),
+`always_scope` (optional list: what `always` allows from now on, one rule per
+line).
 
 The pane must already be on `needs_input` with an `approval` item open, which
 the hook's own report sets up just before. The item then carries `request_id`,
-`options` and `expires`, and the Inbox shows the keys that answer it.
+`options`, `expires` and `always_scope`, its `summary` becomes the given line
+for as long as the hold runs, and the Inbox shows the keys that answer it.
+
+The person answers from that line, so it has to be the whole request. The hook
+only asks for a call whose effect one argument decides and whose line shows
+that argument in full (see
+[Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox)). The
+daemon checks again: a `summary` the Inbox could not show as it is, because it
+is longer than 160 bytes, has a control or format character (a bidi override,
+a zero width space), a newline, tab or doubled space, or text the Inbox would
+mask as a secret, holds nothing and answers at once with reason `not_shown`.
+`always` is dropped from `options` unless `always_scope` has one to four
+lines, each of which passes the same check, so `always` is never offered
+without the rules it adds on screen.
 
 Response, when the person answered:
 
@@ -1528,6 +1557,7 @@ tuios, and `reason` says why:
 | `answered` | The person answered. `decision` is set, and `message` too when they gave a reason for a deny. |
 | `disabled` | `[agents.approvals]` does not name the harness. Answered at once. |
 | `not_blocked` | The pane is not on `needs_input` with an `approval` item. Answered at once. |
+| `not_shown` | The Inbox could not show `summary` as it is. Answered at once. |
 | `viewed` | A client of the person has the pane focused, or focused it during the hold. The prompt is quickest to answer in the pane. |
 | `timeout` | `hold_seconds` passed (120 by default, kept between 10 and 300). |
 | `handed_back` | The person pressed enter on the item to go to the pane, or sent `reply-approval` with `ask`. |
@@ -1558,7 +1588,14 @@ Params: `request_id` (the item's; or name the pane with `session` and `window`
 instead), `decision` (required: `once`, `always`, `deny`, or `ask` to give the
 prompt back to the pane with no decision), `message` (optional, the reason for
 a deny, passed to the model; one line, at most 500 bytes), `human_nonce`
-(required, as for `dismiss-attention`).
+(required, as for `dismiss-attention`), `summary` (optional: the item's
+`summary` the decision was made from; the TUI always sends it).
+
+When `summary` is given and the hold is now on another line, nothing is
+answered: the response has `applied: false`, reason `changed`, an empty
+`decision` and the `summary` the hold is on now, and the hold runs on so the
+person can read it and answer. This closes the gap between drawing an item and
+the key arriving. `ask` is never refused this way.
 
 Only a client attached right now can answer, with the nonce its attach reply
 carried, checked exactly as `dismiss-attention` checks it: a caller inside a
@@ -1580,6 +1617,8 @@ Response:
 
 Wire compatibility: both verbs are new, and the item fields are additive. An
 older daemon answers `unknown_verb`, which the hook reads as no decision.
+`reply-approval` without `summary` answers as before, with no check of the
+line.
 
 ## Event stream
 

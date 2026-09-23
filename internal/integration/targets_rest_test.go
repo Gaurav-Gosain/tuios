@@ -399,8 +399,8 @@ func TestHermesRefusesAnInlineList(t *testing.T) {
 func TestOpenCodePluginIsUnchanged(t *testing.T) {
 	tg := mustTarget(t, OpenCode)
 	for cmd, want := range map[string]string{
-		"tuios":               "5cc5d9ba7b42e7ed243b4085459cae7e0c1760301defd92eb626451ace29621c",
-		"/opt/my tuios/tuios": "d11438b9120c5e885674d7db56f8494ce10404ef4ab3a3313f3b734225c07cc1",
+		"tuios":               "bc65dd5cde2a60b2abc9ca3a1b8ae65c73985337cc8027d7816ca5c11e075776",
+		"/opt/my tuios/tuios": "2629d58f33224ff61b1d5bb1cc6f0fb4daaad9e6b4f0ac49d7c8ef0c2cac5a37",
 	} {
 		sum := sha256.Sum256(tg.format.(ownedFile).render(tg, cmd))
 		if got := hex.EncodeToString(sum[:]); got != want {

@@ -63,8 +63,17 @@ type InboxState struct {
 	// Selected is the overlay's cursor, an index into its rows. It is always
 	// on an item row, never on a group heading, unless there are no items.
 	Selected int
+	// SelectedID is the item under the cursor. The list re-sorts on every
+	// event, so the cursor follows this id rather than staying on a row: a
+	// key acts on the item the person selected, not on whatever moved into
+	// its row since.
+	SelectedID string
 	// Scroll is the overlay's scroll offset.
 	Scroll int
+	// shown is the held approval the overlay last drew under the cursor, and
+	// when it was first drawn as it is. 1, 2 and 3 answer only that item as
+	// drawn, once it has been on screen for inboxAnswerSettle.
+	shown inboxShown
 
 	// lastJumpID and lastJumpAt let the next-attention key cycle.
 	lastJumpID string
@@ -745,13 +754,23 @@ func (m *OS) inboxRows() []inboxRow {
 	return rows
 }
 
-// clampInboxSelection keeps the cursor on an item row.
+// clampInboxSelection keeps the cursor on an item row: on the selected item's
+// row wherever the list moved it, else the nearest item row to where it was.
 func (m *OS) clampInboxSelection() {
 	rows := m.inboxRows()
 	st := &m.Inbox
+	defer m.syncInboxSelectedID()
 	if len(rows) == 0 {
 		st.Selected = 0
 		return
+	}
+	if st.SelectedID != "" {
+		for i, r := range rows {
+			if r.item != nil && r.item.ID == st.SelectedID {
+				st.Selected = i
+				return
+			}
+		}
 	}
 	st.Selected = clampInt(st.Selected, 0, len(rows)-1)
 	if rows[st.Selected].item != nil {
@@ -771,14 +790,25 @@ func (m *OS) clampInboxSelection() {
 	}
 }
 
+// syncInboxSelectedID records the item under the cursor as the one to follow.
+func (m *OS) syncInboxSelectedID() {
+	if it, ok := m.inboxSelected(); ok {
+		m.Inbox.SelectedID = it.ID
+		return
+	}
+	m.Inbox.SelectedID = ""
+}
+
 // OpenInbox shows the Inbox, narrowed to one kind or to none.
 func (m *OS) OpenInbox(filter string) {
 	st := &m.Inbox
 	m.ShowInbox = true
 	st.Filter = filter
-	st.Selected = 0
+	st.Selected, st.SelectedID = 0, ""
 	st.Scroll = 0
 	st.Peek = nil
+	// Nothing has been on screen yet, so nothing can be answered until it is.
+	st.shown = inboxShown{}
 	m.clampInboxSelection()
 }
 
@@ -812,6 +842,7 @@ func (m *OS) InboxMove(delta int) {
 		delta--
 	}
 	st.Selected = i
+	m.syncInboxSelectedID()
 }
 
 // InboxSelect puts the cursor on row idx, when it is an item.
@@ -819,6 +850,7 @@ func (m *OS) InboxSelect(idx int) {
 	rows := m.inboxRows()
 	if idx >= 0 && idx < len(rows) && rows[idx].item != nil {
 		m.Inbox.Selected = idx
+		m.syncInboxSelectedID()
 	}
 }
 
@@ -842,7 +874,7 @@ func (m *OS) InboxCycleFilter() {
 		next = session.AttentionKindNames[i+1]
 	}
 	st.Filter = next
-	st.Selected = 0
+	st.Selected, st.SelectedID = 0, ""
 	st.Scroll = 0
 	m.clampInboxSelection()
 }
@@ -877,7 +909,10 @@ type InboxApprovalRepliedMsg struct {
 	// when Applied is false.
 	Standing string
 	Applied  bool
-	Err      error
+	// Reason is the daemon's reason. changed means the prompt was on another
+	// line by the time the answer arrived, and nothing was answered.
+	Reason string
+	Err    error
 }
 
 // InboxReplyApproval answers the selected held approval with decision: once,
@@ -898,7 +933,57 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 		m.ShowNotification("This prompt does not offer "+inboxDecisionWords(decision), "info", m.Settings.NotificationDuration)
 		return nil
 	}
+	if !inboxShowsWhole(it) {
+		m.ShowNotification("This prompt cannot be shown whole here. Enter answers it in the pane", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	if !m.inboxAnswerSettled(it, time.Now()) {
+		m.ShowNotification("This prompt just changed. Read it, then answer", "info", m.Settings.NotificationDuration)
+		return nil
+	}
 	return m.inboxReplyCmd(it, decision)
+}
+
+// inboxAnswerSettle is how long a held approval must have been on screen, as
+// it is, before a key answers it. An item that arrived, moved under the
+// cursor or changed its text just before the key was pressed was not what
+// the person read, so the key does nothing and they are told to look again.
+const inboxAnswerSettle = 400 * time.Millisecond
+
+// inboxShown is a held approval as the overlay drew it.
+type inboxShown struct {
+	key   string
+	since time.Time
+}
+
+// inboxShownKey is everything about a held approval an answer depends on: the
+// item, the hold, the line, the answers and what always adds.
+func inboxShownKey(it session.AttentionItem) string {
+	return strings.Join([]string{
+		it.ID, it.RequestID, it.Summary,
+		strings.Join(it.Options, ","), strings.Join(it.AlwaysScope, "\n"),
+	}, "\x00")
+}
+
+// noteInboxShown records the held approval under the cursor as drawn at now,
+// keeping the time it was first drawn while it stays the same.
+func (m *OS) noteInboxShown(it session.AttentionItem, held bool, now time.Time) {
+	st := &m.Inbox
+	if !held {
+		st.shown = inboxShown{}
+		return
+	}
+	if key := inboxShownKey(it); st.shown.key != key {
+		st.shown = inboxShown{key: key, since: now}
+	}
+}
+
+// inboxAnswerSettled reports whether it is the held approval last drawn under
+// the cursor, exactly as drawn, and has been on screen long enough to have
+// been read.
+func (m *OS) inboxAnswerSettled(it session.AttentionItem, now time.Time) bool {
+	st := &m.Inbox
+	return st.shown.key != "" && st.shown.key == inboxShownKey(it) && now.Sub(st.shown.since) >= inboxAnswerSettle
 }
 
 // inboxReplyCmd is the reply-approval call, with this client's attach nonce,
@@ -929,6 +1014,9 @@ func (m *OS) inboxReplyCmd(it session.AttentionItem, decision string) tea.Cmd {
 			"request_id":  it.RequestID,
 			"decision":    decision,
 			"human_nonce": nonce,
+			// The line the person read. The daemon answers nothing when
+			// the hold is on another one.
+			"summary": it.Summary,
 		}, 5*time.Second)
 		if err != nil {
 			return InboxApprovalRepliedMsg{Name: name, Decision: decision, Err: err}
@@ -936,11 +1024,12 @@ func (m *OS) inboxReplyCmd(it session.AttentionItem, decision string) tea.Cmd {
 		var res struct {
 			Decision string `json:"decision"`
 			Applied  bool   `json:"applied"`
+			Reason   string `json:"reason"`
 		}
 		if err := json.Unmarshal(raw, &res); err != nil {
 			return InboxApprovalRepliedMsg{Name: name, Decision: decision, Err: err}
 		}
-		return InboxApprovalRepliedMsg{Name: name, Decision: decision, Standing: res.Decision, Applied: res.Applied}
+		return InboxApprovalRepliedMsg{Name: name, Decision: decision, Standing: res.Decision, Applied: res.Applied, Reason: res.Reason}
 	}
 }
 
@@ -954,6 +1043,8 @@ func (m *OS) applyInboxApprovalReplied(msg InboxApprovalRepliedMsg) {
 			return
 		}
 		m.ShowNotification("The answer did not go through: "+msg.Err.Error()+". Answer in the pane", "error", m.Settings.NotificationDuration*2)
+	case !msg.Applied && msg.Reason == inboxReplyChanged:
+		m.ShowNotification(msg.Name+" is asking about something else now, so nothing was answered. Read it again", "info", m.Settings.NotificationDuration*2)
 	case !msg.Applied:
 		m.ShowNotification(msg.Name+" was already answered: "+inboxDecisionWords(msg.Standing), "info", m.Settings.NotificationDuration)
 	case msg.Decision != session.ApprovalAsk:
@@ -969,6 +1060,10 @@ func (m *OS) noteAnsweredElsewhere(was, closed session.AttentionItem) {
 	}
 	m.ShowNotification(inboxWho(was)+" was answered from another client: "+inboxDecisionWords(closed.Answer), "info", m.Settings.NotificationDuration)
 }
+
+// inboxReplyChanged is reply-approval's reason for an answer refused because
+// the held prompt is on another line than the one it was made from.
+const inboxReplyChanged = "changed"
 
 // inboxDecisionWords is a decision as the person reads it.
 func inboxDecisionWords(decision string) string {

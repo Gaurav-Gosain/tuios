@@ -30,8 +30,11 @@ the prompt again, `enter` goes to the pane, `esc` goes back to the list. See
 On an approval the Inbox is holding (`[agents.approvals]`, see
 [AGENT_STATE.md](AGENT_STATE.md#approvals-from-the-inbox)), `1` allows it
 once, `2` always allows it and `3` denies it; `enter` gives the prompt back to
-the pane. `space` does not open a held approval: the hook keeps its prompt off
-the pane until the Inbox answers, so there is nothing on the screen to read.
+the pane. The keys act on the item under the cursor, whose whole prompt, and
+the rules `2` adds, are shown under the list, and only once it has been on
+screen as it is for 0.4 seconds. `space` does not open a held approval: the
+hook keeps its prompt off the pane until the Inbox answers, so there is
+nothing on the screen to read.
 
 ## macOS
 

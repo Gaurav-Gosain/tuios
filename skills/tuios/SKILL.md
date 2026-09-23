@@ -948,8 +948,14 @@ permission prompts (Claude Code's `PermissionRequest`, opencode's and Kilo's
 `needs_input`, then calls `request-approval` and waits for the person to press
 `1` (allow once), `2` (always) or `3` (deny) on the row. The row ends with
 `(held: answer in the Inbox)` in `list-attention`, and its JSON carries
-`request_id`, `options` and `expires`. The installed integration does all of
+`request_id`, `options`, `expires` and, when always is offered,
+`always_scope` (the rules it adds). The installed integration does all of
 this; there is nothing for you to call.
+
+Only a call the person can read whole from one line is held: a short `Bash`
+command, a `Read`, a `WebFetch` and the like. A `Write`, `Edit`, MCP tool or a
+command too long, multi-line or with a masked secret is answered in your pane
+as before, so do not expect every prompt to go to the Inbox.
 
 What it means for you:
 
@@ -961,8 +967,9 @@ What it means for you:
   (`send-keys`, `send-text`, `ask-agent`, mail) reaches the hold.
 - `request-approval` from a pane may hold only that pane's own prompt, and is
   refused over a link. If you are a harness wrapper with a decision channel of
-  your own, you may call it for your own pane; an empty `decision` means ask in
-  your pane as you would without tuios.
+  your own, you may call it for your own pane with `summary`, the whole
+  request on one line; an empty `decision` means ask in your pane as you would
+  without tuios. `not_shown` means the line could not be shown as it is.
 - Every way a hold ends without an answer (timeout, the person going to the
   pane, a dismiss, a daemon restart, any error) gives no decision, and the
   harness shows its own prompt.

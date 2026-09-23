@@ -14,6 +14,8 @@
 // A permission request is also offered to the tuios Inbox. The hook prints a
 // reply only when [agents.approvals] in the tuios config names this harness and
 // the person answered it there; this plugin then sends that reply to opencode.
+// It names the tool call the request is about, so the Inbox can show it, and
+// the Inbox only offers a request whose call it can show whole.
 // When the hook prints nothing, which is every other case, nothing is sent and
 // opencode's own prompt stands.
 
@@ -26,6 +28,19 @@ const ARGS = ["agent-hook", "__TUIOS_HARNESS__", "--integration", "__TUIOS_VERSI
 const HOLD_LIMIT_MS = 310000;
 const REPLIES = ["once", "always", "reject"];
 const children = new Set();
+// calls maps a tool call id to its tool and arguments, from
+// tool.execute.before, so a permission request can say which call it is about.
+// The Inbox only offers a request whose call it can show whole.
+const calls = new Map();
+const CALLS_MAX = 256;
+
+function remember(callID, tool, args) {
+  if (!callID || !tool) return;
+  calls.set(callID, { tool, args: args && typeof args === "object" ? args : {} });
+  while (calls.size > CALLS_MAX) {
+    calls.delete(calls.keys().next().value);
+  }
+}
 
 function payloadFor(event, sessionID, extra) {
   return JSON.stringify({
@@ -146,9 +161,10 @@ export const TuiosAgentState = async (ctx) => {
       if (sessionID && children.has(sessionID)) return;
       report("chat.message", sessionID, {});
     },
-    "tool.execute.before": async (input) => {
+    "tool.execute.before": async (input, output) => {
       const sessionID = text(input?.sessionID);
       if (sessionID && children.has(sessionID)) return;
+      remember(text(input?.callID), text(input?.tool), output?.args);
       report("tool.execute.before", sessionID, {});
     },
     event: async ({ event }) => {
@@ -180,8 +196,17 @@ export const TuiosAgentState = async (ctx) => {
             report(type, sessionID, { title });
             break;
           }
+          const extra = { title, permission_id: requestID, permission: text(props.permission) };
+          const call = calls.get(text(props.tool?.callID));
+          if (call) {
+            extra.tool = call.tool;
+            extra.tool_input = call.args;
+          }
+          if (Array.isArray(props.always)) {
+            extra.always = props.always.filter((p) => typeof p === "string");
+          }
           // Not awaited: opencode's event loop must not wait on the person.
-          ask(type, sessionID, { title, permission_id: requestID }).then((answer) => {
+          ask(type, sessionID, extra).then((answer) => {
             if (answer) return reply(client, sessionID, requestID, answer);
           }).catch(() => {});
           break;

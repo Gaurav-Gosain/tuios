@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
@@ -50,9 +51,17 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		{Key: "m", Label: "mailbox"},
 		{Key: "esc", Label: "close"},
 	}
-	if it, ok := m.inboxSelected(); ok && it.RequestID != "" {
-		hints = inboxApprovalHints(it)
+	var detailFor func(int) []string
+	selected, ok := m.inboxSelected()
+	held := ok && selected.Kind == session.AttentionApproval && selected.RequestID != ""
+	if held {
+		hints = inboxApprovalHints(selected)
+		// The row cuts the line to fit, so the held prompt is shown whole
+		// under the list, with what always adds beside its key. The keys
+		// only answer the item under the cursor, which is the one shown.
+		detailFor = func(width int) []string { return inboxApprovalDetail(selected, width) }
 	}
+	m.noteInboxShown(selected, held && inboxShowsWhole(selected), time.Now())
 	rows := m.inboxRows()
 	if len(rows) == 0 {
 		lines := inboxEmptyLines
@@ -77,6 +86,7 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		Selected:   st.Selected,
 		Scroll:     &st.Scroll,
 		Hints:      hints,
+		DetailFor:  detailFor,
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 			r := rows[i]
 			if r.item == nil {
@@ -312,6 +322,45 @@ func inboxAnswerKeys(it session.AttentionItem) string {
 		}
 	}
 	return strings.Join(keys, "/")
+}
+
+// inboxApprovalDetail is the held approval under the cursor in full: its whole
+// line, wrapped, and for always the rules it adds from now on. The daemon only
+// holds a prompt whose line is the whole request, so this is everything the
+// answer approves.
+func inboxApprovalDetail(it session.AttentionItem, width int) []string {
+	width = max(width-2, 8)
+	if !inboxShowsWhole(it) {
+		return wrapPlain("  This prompt has characters this terminal cannot show, so it is not answered here. Enter answers it in the pane.", width)
+	}
+	var lines []string
+	for _, l := range wrapPlain(printableTitle(it.Summary), width) {
+		lines = append(lines, "  "+l)
+	}
+	if slices.Contains(it.Options, session.ApprovalAlways) && len(it.AlwaysScope) > 0 {
+		for _, l := range wrapPlain("2 (always) also allows from now on:", width) {
+			lines = append(lines, "  "+l)
+		}
+		for _, rule := range it.AlwaysScope {
+			for _, l := range wrapPlain(printableTitle(rule), width-2) {
+				lines = append(lines, "    "+l)
+			}
+		}
+	}
+	return lines
+}
+
+// inboxShowsWhole reports whether this client draws a held approval's line
+// and rules exactly as they are. A character it would leave out, such as one
+// an ASCII-only terminal cannot draw, would make the line read as something
+// it does not say, so such a prompt is answered in the pane.
+func inboxShowsWhole(it session.AttentionItem) bool {
+	for _, line := range append([]string{it.Summary}, it.AlwaysScope...) {
+		if printableTitle(line) != line || strings.IndexFunc(line, func(r rune) bool { return !unicode.IsPrint(r) }) >= 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // inboxApprovalHints are the hints for a held approval under the cursor: its

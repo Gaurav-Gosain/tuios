@@ -52,9 +52,11 @@ hold_seconds = 120
 
 `enabled` names the harnesses, by id or alias: `claude-code` (or `claude`),
 `opencode` and `kilo` have a decision channel tuios can answer through. Other
-names are accepted and hold nothing. `hold_seconds` is how long a prompt waits
-for your answer before the harness asks in its pane after all: 120 when unset,
-kept between 10 and 300.
+names are accepted and hold nothing. Even for these, only a call the Inbox can
+show whole on one line is held, such as a short shell command or a file read;
+an edit, an MCP tool or a long command is answered in the pane.
+`hold_seconds` is how long a prompt waits for your answer before the harness
+asks in its pane after all: 120 when unset, kept between 10 and 300.
 
 The daemon reads the table when it starts and again when the file changes; a
 change applies to the next prompt. Like `[dock]` and `[hosts]`, it is not in

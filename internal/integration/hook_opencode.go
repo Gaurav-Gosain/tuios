@@ -43,8 +43,14 @@ func translateOpenCode(id string, in Input, p fields) Decision {
 		}
 	case "permission.asked", "permission.updated":
 		r.State, r.Kind = "needs_input", "approval"
-		r.Message = "approve " + Clip(p.str("title"))
-		if p.str("title") == "" {
+		switch {
+		case p.str("tool") != "":
+			// The version 2 plugin names the tool call the request is
+			// about, which says more than opencode's permission name.
+			r.Message = "approve " + ToolSummary(p.str("tool"), p.obj("tool_input"))
+		case p.str("title") != "":
+			r.Message = "approve " + Clip(p.str("title"))
+		default:
 			r.Message = "approve a tool call"
 		}
 	case "question.asked":

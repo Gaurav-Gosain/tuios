@@ -273,6 +273,12 @@ func requestAnswer(out agentHookOutcome, hio agentHookIO, limit time.Duration) (
 		"window":  out.Window,
 		"harness": out.Harness,
 		"options": out.Approval.Options,
+		// The line the person answers from. The daemon shows it on the
+		// held item and refuses a hold whose line it would have to cut.
+		"summary": out.Report.Message,
+	}
+	if len(out.Approval.Scope) > 0 {
+		params["always_scope"] = out.Approval.Scope
 	}
 	var raw json.RawMessage
 	if tc, ok := client.(timedCaller); ok {

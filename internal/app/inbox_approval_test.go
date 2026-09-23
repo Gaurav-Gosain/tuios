@@ -50,7 +50,7 @@ func TestInboxHeldApprovalSaysHowToAnswer(t *testing.T) {
 	}
 }
 
-// TestInboxAnswerOnlySendsWhatThePromptTakes: a key that does not answer the
+// TestInboxReplyApprovalOnlySendsWhatThePromptTakes: a key that does not answer the
 // selected item says so and sends nothing.
 func TestInboxReplyApprovalOnlySendsWhatThePromptTakes(t *testing.T) {
 	m := inboxOS(t, zeroSettle())
@@ -126,5 +126,168 @@ func TestInboxSaysWhatBecameOfAnAnswer(t *testing.T) {
 		case tc.want != "" && (len(m.Notifications) != 1 || !strings.Contains(m.Notifications[0].Message, tc.want)):
 			t.Errorf("%+v said %+v, want %q", tc.msg, m.Notifications, tc.want)
 		}
+	}
+}
+
+// lastNote is the newest notification's message, or empty.
+func lastNote(m *OS) string {
+	if len(m.Notifications) == 0 {
+		return ""
+	}
+	return m.Notifications[len(m.Notifications)-1].Message
+}
+
+// settleShown makes the held approval last drawn count as on screen long
+// enough to have been read.
+func settleShown(m *OS) {
+	m.Inbox.shown.since = time.Now().Add(-time.Minute)
+}
+
+// reachedSend says an answer passed every check the Inbox makes and got as
+// far as sending, which a test OS with no daemon client refuses.
+func reachedSend(m *OS) bool {
+	return strings.Contains(lastNote(m), "needs a client attached")
+}
+
+// TestInboxSelectionFollowsTheItem: an item that arrives and sorts above the
+// cursor does not move a different prompt under it. The cursor stays on the
+// item the person selected.
+func TestInboxSelectionFollowsTheItem(t *testing.T) {
+	m := inboxOS(t, zeroSettle())
+	now := time.Now().UnixNano()
+	a := heldApproval("1", "r1", session.ApprovalOnce, session.ApprovalDeny)
+	a.Since = now - 2e9
+	b := heldApproval("2", "r2", session.ApprovalOnce, session.ApprovalDeny)
+	b.Since = now - 1e9
+	b.Summary = "approve Bash: ls"
+	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{a, b}})
+	m.OpenInbox("")
+	m.InboxMove(1)
+	if it, _ := m.inboxSelected(); it.ID != "2" {
+		t.Fatalf("selected %s, want 2", it.ID)
+	}
+	m.renderInbox()
+
+	// An older approval opens and sorts first, pushing both down a row.
+	c := heldApproval("3", "r3", session.ApprovalOnce, session.ApprovalDeny)
+	c.Since = now - 3e9
+	c.Summary = "approve Bash: rm -rf build"
+	m.applyInboxEvents(opened(c))
+	if it, _ := m.inboxSelected(); it.ID != "2" {
+		t.Fatalf("after a re-sort the cursor is on %s (%q), want the selected item 2", it.ID, it.Summary)
+	}
+	settleShown(m)
+	m.InboxReplyApproval(session.ApprovalOnce)
+	if !reachedSend(m) {
+		t.Fatalf("the selected, settled prompt was not answered: %q", lastNote(m))
+	}
+
+	// When the selected item closes, the cursor lands on a neighbour, which
+	// is a prompt the person has not read: it does not answer until drawn.
+	closed := b
+	closed.Closed = session.AttentionClosedResolved
+	m.applyInboxEvents(InboxEventsMsg{Events: []InboxEvent{{Action: session.AttentionClosed, Item: &closed}}})
+	if it, _ := m.inboxSelected(); it.ID == "2" {
+		t.Fatal("the cursor is on a closed item")
+	}
+	m.InboxReplyApproval(session.ApprovalOnce)
+	if reachedSend(m) {
+		t.Fatal("a prompt that moved under the cursor was answered before it was drawn")
+	}
+}
+
+// TestInboxAnswersOnlyWhatWasOnScreen: a key answers the held approval only as
+// it was drawn, and only once it has been on screen long enough to read. A
+// prompt that just appeared or just changed its line is not answered.
+func TestInboxAnswersOnlyWhatWasOnScreen(t *testing.T) {
+	m := inboxOS(t, zeroSettle())
+	held := heldApproval("1", "r1", session.ApprovalOnce, session.ApprovalDeny)
+	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{held}})
+	m.OpenInbox("")
+
+	// Never drawn.
+	m.InboxReplyApproval(session.ApprovalOnce)
+	if reachedSend(m) || !strings.Contains(lastNote(m), "just changed") {
+		t.Fatalf("a prompt never drawn was answered: %q", lastNote(m))
+	}
+	// Drawn this instant.
+	m.renderInbox()
+	m.InboxReplyApproval(session.ApprovalOnce)
+	if reachedSend(m) {
+		t.Fatal("a prompt drawn this instant was answered")
+	}
+	// Drawn and read.
+	settleShown(m)
+	m.InboxReplyApproval(session.ApprovalOnce)
+	if !reachedSend(m) {
+		t.Fatalf("a settled prompt was not answered: %q", lastNote(m))
+	}
+
+	// The same hold on a new line, between the render and the key.
+	changed := held
+	changed.Summary = "approve Bash: rm -rf ~"
+	m.applyInboxEvents(InboxEventsMsg{Events: []InboxEvent{{Action: session.AttentionUpdated, Item: &changed}}})
+	m.InboxReplyApproval(session.ApprovalOnce)
+	if reachedSend(m) {
+		t.Fatal("a key answered a line that was never drawn")
+	}
+	m.renderInbox()
+	settleShown(m)
+	m.InboxReplyApproval(session.ApprovalOnce)
+	if !reachedSend(m) {
+		t.Fatalf("the new line, once read, was not answered: %q", lastNote(m))
+	}
+
+	// A new hold on the same line is a new request, drawn afresh.
+	renewed := changed
+	renewed.RequestID = "r2"
+	m.applyInboxEvents(InboxEventsMsg{Events: []InboxEvent{{Action: session.AttentionUpdated, Item: &renewed}}})
+	m.InboxReplyApproval(session.ApprovalOnce)
+	if reachedSend(m) {
+		t.Fatal("a new hold was answered before it was drawn")
+	}
+}
+
+// TestInboxShowsTheWholePrompt: the row cuts the line, so the held approval
+// under the cursor is shown whole below the list, with the rules always adds
+// beside its key.
+func TestInboxShowsTheWholePrompt(t *testing.T) {
+	m := inboxOS(t, zeroSettle())
+	held := heldApproval("1", "r1", session.ApprovalOnce, session.ApprovalAlways, session.ApprovalDeny)
+	tail := "&& echo the-end-of-the-command"
+	held.Summary = "approve Bash: go test ./internal/session/ ./internal/app/ ./cmd/tuios/ -run Approval -count=1 " + tail
+	held.AlwaysScope = []string{"Bash(go test:*) in .claude/settings.local.json"}
+	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{held}})
+	m.OpenInbox("")
+	out, _, _ := m.renderInbox()
+	plain := ansi.Strip(out)
+	flat := strings.Join(strings.Fields(plain), " ")
+	for _, want := range []string{"the-end-of-the-command", "2 (always) also allows from now on:", "Bash(go test:*) in .claude/settings.local.json"} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("the Inbox does not show %q:\n%s", want, plain)
+		}
+	}
+
+	// A line this client would draw with characters left out is not
+	// answered here.
+	odd := held
+	odd.Summary = "approve Bash: echo \u200bhi"
+	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{odd}})
+	out, _, _ = m.renderInbox()
+	if !strings.Contains(strings.Join(strings.Fields(ansi.Strip(out)), " "), "not answered here") {
+		t.Errorf("a line with a hidden character reads as answerable:\n%s", ansi.Strip(out))
+	}
+	settleShown(m)
+	m.InboxReplyApproval(session.ApprovalOnce)
+	if reachedSend(m) || !strings.Contains(lastNote(m), "cannot be shown whole") {
+		t.Fatalf("a line with a hidden character was answered: %q", lastNote(m))
+	}
+}
+
+func TestInboxSaysWhenThePromptMovedOn(t *testing.T) {
+	m := inboxOS(t, zeroSettle())
+	m.applyInboxApprovalReplied(InboxApprovalRepliedMsg{Name: "api", Decision: session.ApprovalOnce, Reason: "changed"})
+	if !strings.Contains(lastNote(m), "api is asking about something else now, so nothing was answered") {
+		t.Fatalf("said %q", lastNote(m))
 	}
 }

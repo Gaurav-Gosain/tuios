@@ -3,6 +3,8 @@ package session
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,11 +24,27 @@ func enableApprovals(t *testing.T, d *Daemon, hold time.Duration) {
 // returns a channel with its response.
 func requestApproval(t *testing.T, sp, session, window string, options ...string) (<-chan map[string]any, *verbConn) {
 	t.Helper()
-	c := dialVerb(t, sp)
-	params := map[string]any{"session": session, "window": window, "harness": "claude"}
+	params := map[string]any{"session": session, "window": window, "harness": "claude", "summary": testHeldLine}
 	if len(options) > 0 {
 		params["options"] = options
 	}
+	if slices.Contains(options, ApprovalAlways) {
+		params["always_scope"] = []string{testHeldScope}
+	}
+	return requestApprovalWith(t, sp, params)
+}
+
+// testHeldLine and testHeldScope are the line and the always rule the test
+// hook holds a prompt with.
+const (
+	testHeldLine  = "approve Bash: go test ./..."
+	testHeldScope = "Bash(go test:*) in .claude/settings.local.json"
+)
+
+// requestApprovalWith is requestApproval with every parameter given.
+func requestApprovalWith(t *testing.T, sp string, params map[string]any) (<-chan map[string]any, *verbConn) {
+	t.Helper()
+	c := dialVerb(t, sp)
 	raw, _ := json.Marshal(params)
 	c.send(t, fmt.Sprintf(`{"id":1,"verb":"request-approval","params":%s}`, raw))
 	out := make(chan map[string]any, 1)
@@ -141,7 +159,7 @@ func TestApprovalDisabledHoldsNothing(t *testing.T) {
 	setAgentState(t, c, "work", a, "needs_input", "approval", "ok?")
 
 	start := time.Now()
-	res := result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code"}}`))
+	res := result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code","summary":"ok?"}}`))
 	if res["decision"] != "" || res["reason"] != approvalEndDisabled || res["request_id"] != "" {
 		t.Fatalf("a disabled harness answered %v", res)
 	}
@@ -155,7 +173,7 @@ func TestApprovalDisabledHoldsNothing(t *testing.T) {
 
 	// Another harness than the one enabled is disabled too.
 	enableApprovals(t, d, time.Second)
-	res = result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"opencode"}}`))
+	res = result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"opencode","summary":"ok?"}}`))
 	if res["reason"] != approvalEndDisabled {
 		t.Errorf("opencode, not enabled, answered %v", res)
 	}
@@ -295,13 +313,13 @@ func TestApprovalRefusals(t *testing.T) {
 	c := dialVerb(t, sp)
 
 	// Not blocked: nothing to hold.
-	res := result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code"}}`))
+	res := result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code","summary":"ok?"}}`))
 	if res["reason"] != approvalEndNotBlocked || res["decision"] != "" {
 		t.Errorf("a pane not on needs_input answered %v", res)
 	}
 	// A question is not an approval.
 	setAgentState(t, c, "work", a, "needs_input", "question", "which?")
-	res = result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code"}}`))
+	res = result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code","summary":"ok?"}}`))
 	if res["reason"] != approvalEndNotBlocked {
 		t.Errorf("a question answered %v", res)
 	}
@@ -309,12 +327,12 @@ func TestApprovalRefusals(t *testing.T) {
 	// A process inside a pane may hold only its own pane's prompt.
 	setAgentState(t, c, "work", b, "needs_input", "approval", "ok?")
 	d.approvalPeer = func(*connState) (bool, string) { return true, a }
-	resp := c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+b+`","harness":"claude-code"}}`)
+	resp := c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+b+`","harness":"claude-code","summary":"ok?"}}`)
 	if code := errCode(t, resp); code != ErrVerbForbidden {
 		t.Errorf("a request for another pane answered %s", code)
 	}
 	d.approvalPeer = func(*connState) (bool, string) { return true, "" }
-	resp = c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+b+`","harness":"claude-code"}}`)
+	resp = c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+b+`","harness":"claude-code","summary":"ok?"}}`)
 	if code := errCode(t, resp); code != ErrVerbForbidden {
 		t.Errorf("a pane process that could not be placed answered %s", code)
 	}
@@ -327,7 +345,7 @@ func TestApprovalRefusals(t *testing.T) {
 	}
 
 	// An option that is not a decision.
-	resp = c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+b+`","harness":"claude-code","options":["yes"]}}`)
+	resp = c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+b+`","harness":"claude-code","summary":"ok?","options":["yes"]}}`)
 	if code := errCode(t, resp); code != ErrVerbInvalidParams {
 		t.Errorf("options [yes] answered %s", code)
 	}
@@ -373,7 +391,7 @@ func TestApprovalNotHeldForAPaneThePersonIsLookingAt(t *testing.T) {
 	attachTUI(t, sp, "work")
 
 	setAgentState(t, c, "work", a, "needs_input", "approval", "ok?")
-	res := result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code"}}`))
+	res := result(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code","summary":"ok?"}}`))
 	if res["reason"] != approvalEndViewed || res["decision"] != "" {
 		t.Errorf("a focused pane answered %v", res)
 	}
@@ -395,5 +413,141 @@ func TestApprovalPolicyFromConfig(t *testing.T) {
 	}
 	if len(ApprovalPolicyFromConfig(config.ApprovalsConfig{}).Enabled) != 0 {
 		t.Error("an empty table enabled something")
+	}
+}
+
+// replyShown is reply with the summary the decision was made from.
+func replyShown(c *verbConn, t *testing.T, requestID, decision, nonce, shown string) map[string]any {
+	t.Helper()
+	raw, _ := json.Marshal(map[string]any{"request_id": requestID, "decision": decision, "human_nonce": nonce, "summary": shown})
+	return c.call(t, fmt.Sprintf(`{"id":1,"verb":"reply-approval","params":%s}`, raw))
+}
+
+// TestApprovalAnswersOnlyTheLineThePersonRead: while a hold runs the item
+// shows the held call's line, even when a second call on the same pane is
+// reported before its hook opens its own hold, so the text and the request id
+// an answer carries always belong to one call. A reply made from another line
+// is refused and the hold runs on.
+func TestApprovalAnswersOnlyTheLineThePersonRead(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	enableApprovals(t, d, 30*time.Second)
+	_, a, _ := twoWindowSession(t, d, "work")
+	makeSessionWithWindow(t, d, "other")
+	c := dialVerb(t, sp)
+	tui := attachTUI(t, sp, "other")
+
+	setAgentState(t, c, "work", a, "needs_input", "approval", testHeldLine)
+	pending, _ := requestApproval(t, sp, "work", a, "once", "always", "deny")
+	it := heldItem(t, c, a)
+	id := it["request_id"].(string)
+	if it["summary"] != testHeldLine || fmt.Sprint(it["always_scope"]) != "["+testHeldScope+"]" {
+		t.Fatalf("the held item is %v", it)
+	}
+
+	// Hook 2 reports its call; its hold is not open yet.
+	second := "approve Bash: rm -rf build"
+	setAgentState(t, c, "work", a, "needs_input", "approval", second)
+	items, _ := listAttention(t, c, "")
+	if len(items) != 1 || items[0]["summary"] != testHeldLine || items[0]["request_id"] != id {
+		t.Fatalf("a second report while held left %v, want the held line on the held request", items)
+	}
+
+	// A reply made from the second call's line does not answer the first.
+	res := result(t, replyShown(c, t, id, ApprovalOnce, tui.HumanNonce(), second))
+	if res["applied"] != false || res["reason"] != approvalEndChanged || res["decision"] != "" || res["summary"] != testHeldLine {
+		t.Fatalf("a reply from another line answered %v", res)
+	}
+	select {
+	case got := <-pending:
+		t.Fatalf("the hold ended on a refused reply: %v", got)
+	default:
+	}
+
+	// Handing it back ends the hold, and the item then shows the newest
+	// report, which is what the pane is on.
+	result(t, replyShown(c, t, id, ApprovalAsk, tui.HumanNonce(), ""))
+	if got := awaitResult(t, pending); got["decision"] != "" || got["reason"] != approvalEndHandedBack {
+		t.Fatalf("the hook got %v", got)
+	}
+	items = waitAttention(t, c, "the item back on the newest line", func(items []map[string]any) bool {
+		return len(items) == 1 && items[0]["request_id"] == nil && items[0]["summary"] == second
+	})
+	if items[0]["always_scope"] != nil {
+		t.Errorf("the ended hold left its scope: %v", items[0])
+	}
+
+	// Hook 2's hold, answered from its own line, applies.
+	pending, _ = requestApprovalWith(t, sp, map[string]any{"session": "work", "window": a, "harness": "claude", "summary": second})
+	id2 := heldItem(t, c, a)["request_id"].(string)
+	res = result(t, replyShown(c, t, id2, ApprovalOnce, tui.HumanNonce(), second))
+	if res["applied"] != true || res["decision"] != ApprovalOnce {
+		t.Fatalf("a reply from the held line answered %v", res)
+	}
+	if got := awaitResult(t, pending); got["decision"] != ApprovalOnce {
+		t.Fatalf("the hook got %v", got)
+	}
+}
+
+// TestApprovalNotHeldUnlessShownWhole: the daemon refuses to hold a prompt
+// whose line the Inbox would have to cut, mask or rewrite, whatever the hook
+// checked, and drops always unless the rules it adds can be shown.
+func TestApprovalNotHeldUnlessShownWhole(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	enableApprovals(t, d, 30*time.Second)
+	_, a, _ := twoWindowSession(t, d, "work")
+	c := dialVerb(t, sp)
+	setAgentState(t, c, "work", a, "needs_input", "approval", "ok?")
+
+	for name, line := range map[string]string{
+		"too long":          "approve Bash: echo " + strings.Repeat("a", attentionMaxSummary),
+		"a newline":         "approve Bash: ls\nrm -rf ~",
+		"doubled spaces":    "approve Bash: ls  -la",
+		"a bidi override":   "approve Bash: echo ‮ftp",
+		"a masked secret":   "approve Bash: API_TOKEN=abcdef123456 make",
+		"a control char":    "approve Bash: ls\x1b[2J",
+		"a zero width char": "approve Bash: rm​ -rf",
+	} {
+		t.Run(name, func(t *testing.T) {
+			raw, _ := json.Marshal(map[string]any{"session": "work", "window": a, "harness": "claude-code", "summary": line})
+			res := result(t, c.call(t, fmt.Sprintf(`{"id":1,"verb":"request-approval","params":%s}`, raw)))
+			if res["reason"] != approvalEndNotShown || res["decision"] != "" || res["request_id"] != "" {
+				t.Fatalf("a line with %s answered %v", name, res)
+			}
+			if items, _ := listAttention(t, c, ""); len(items) != 1 || items[0]["request_id"] != nil {
+				t.Fatalf("a line with %s left %v", name, items)
+			}
+		})
+	}
+
+	// No summary at all is a bad call.
+	if code := errCode(t, c.call(t, `{"id":1,"verb":"request-approval","params":{"session":"work","window":"`+a+`","harness":"claude-code"}}`)); code != ErrVerbInvalidParams {
+		t.Errorf("no summary answered %s", code)
+	}
+
+	// Always is offered only with a scope it can show.
+	for name, scope := range map[string][]string{
+		"no scope":         nil,
+		"too many rules":   {"a", "b", "c", "d", "e"},
+		"a rule with a CR": {"Bash(ls:*)\r in .claude/settings.json"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			params := map[string]any{"session": "work", "window": a, "harness": "claude", "summary": testHeldLine, "options": []string{"once", "always", "deny"}}
+			if scope != nil {
+				params["always_scope"] = scope
+			}
+			pending, conn := requestApprovalWith(t, sp, params)
+			it := heldItem(t, c, a)
+			if opts := fmt.Sprint(it["options"]); opts != "[once deny]" || it["always_scope"] != nil {
+				t.Errorf("with %s the held item is %v", name, it)
+			}
+			_ = conn.conn.Close()
+			waitAttention(t, c, "the hold ending", func(items []map[string]any) bool {
+				return len(items) == 1 && items[0]["request_id"] == nil
+			})
+			select {
+			case <-pending:
+			case <-time.After(5 * time.Second):
+			}
+		})
 	}
 }
