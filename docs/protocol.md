@@ -129,7 +129,8 @@ Result:
   "daemon_version": "1.4.0",
   "pid": 4242,
   "sessions": 2,
-  "link_policy": true
+  "link_policy": true,
+  "pane_grants": true
 }}
 ```
 
@@ -137,6 +138,12 @@ Result:
 policy (see [What a linked machine may do here](#what-a-linked-machine-may-do-here)).
 `tuios stdio-proxy` reads it before it would reach the daemon on its own socket
 for a link, and refuses when it is set. It is absent from an older daemon.
+
+`pane_grants` says the daemon holds calls from panes to their grants (see
+[pane-grants](#pane-grants)) and takes a pane's token with `pane-grants`. On a
+platform where the daemon cannot read the peer's pid, the `tuios` CLI reads it
+and then presents `$TUIOS_PANE_ID` and `$TUIOS_PANE_TOKEN` on every
+connection it opens from a pane. It is absent from an older daemon.
 
 The handshake is optional, not a gate: a daemon serves every other verb whether
 or not `hello` was called, and a daemon older than the handshake answers
@@ -815,6 +822,45 @@ existing caller:
   it. It is not saved: after a daemon restart a restored pane's approvals
   follow `[agents.approvals]` like any other pane's.
 
+**Calls from a pane are held to the pane's grants.** Every pane holds grants
+(`read`, `write`, `fan`, `respond`, `admin`; see [pane-grants](#pane-grants)),
+and the daemon checks every JSON verb and every client protocol message from
+a connection placed in a pane against them before the handler runs. With no
+`[agents.permissions]` in the config and no pane given grants of its own,
+every pane holds `admin`, which is everything a pane could do before, and
+every call is answered exactly as before. What changes:
+
+- Every pane is started with `TUIOS_PANE_GRANTS`, the grants it holds as it
+  starts, comma separated, or `none`.
+- `hello` answers with `pane_grants: true`.
+- `new-window`, `start-agent` and `fan` take the new param `grants`. A call
+  that sends none is answered as before, except from a pane that does not
+  hold `admin`: the new pane then holds the caller's own grants rather than
+  the default. A `grants` the calling pane does not hold is `forbidden`.
+- `respond` may now be answered for a pane that holds `respond`, without a
+  `human_nonce`, on a pane in its reach. Its result then carries the new field
+  `by_pane`. A pane without `respond` gets `not_human` as before, whose hint
+  now says the grant exists. `admin` does not include `respond`, so no pane
+  can answer a prompt unless the person gave it the grant.
+- `list-windows` entries gain `grants` for a pane given grants of its own. The
+  entries of every other pane keep their shape.
+- The session record's windows gain a daemon-owned `grants` field. It is
+  additive in JSON and gob, a client sync can neither set nor clear it, and an
+  older daemon reads a newer record and drops it, so a pane restored by an
+  older daemon holds that daemon's (unchecked) rights.
+- For a pane without `admin`: a verb its grants do not cover answers
+  `forbidden` with a hint naming `pane-grants`, the pane's grants and the
+  config key; a verb that names no session gets the pane's own session, not
+  the most recently active one; a subscription carries only the sessions the
+  pane may read; and every client protocol message except the hello answers
+  an error, so such a pane cannot attach.
+- `restrict-connection` and pane grants share the code that fills in and
+  checks a caller's session and window. A restricted connection is answered
+  as it was; a refusal of a parameter that reaches every session now reads
+  "and the connection is restricted to its own", the words it used before.
+
+The new verbs `pane-grants` and `set-pane-grants` change no old one.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -1086,7 +1132,127 @@ This scopes what goes through a restricted connection. A process in a pane can
 still open a connection of its own with the tuios CLI and not restrict it; a
 harness's shell tool can do that. What the restriction bounds is the MCP
 surface, which is what an agent reaches without writing a shell command, and
-the one a harness can offer without a shell tool at all.
+the one a harness can offer without a shell tool at all. Pane grants, below,
+bound that connection too.
+
+### pane-grants
+
+Say what the caller may do through tuios. Every pane holds a set of grants,
+and the daemon holds every JSON verb and every client protocol message from a
+connection placed in a pane to them, before the handler runs and before
+`restrict-connection` is applied. A connection placed in no pane (the
+person's own CLI, the attached client, the hooks and dock components the
+person configured) is held to nothing new.
+
+| Grant | Allows |
+|---|---|
+| `read` | Read the pane's own session and the sessions of its fan group (the reach `restrict-connection` calls `own`): listings, captures, agent state, waits, the event stream, mail and stash reads |
+| `write` | Type into the panes of its own session (`send-text`, `send-keys`, `ask-agent`, `run`) and leave mail and stashed files there |
+| `fan` | What `write` allows, in the sessions of its fan group and the sessions it launched, and start agents with `fan` and `start-agent` |
+| `respond` | Answer an on-screen prompt with `respond`, without the person's `human_nonce`, on a pane it may write to |
+| `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, and the client protocol (attach). Implies `read`, `write` and `fan`, never `respond` |
+
+Whatever it holds, a pane may call `hello`, `list-verbs`, `unsubscribe`,
+`restrict-connection`, `pane-grants` and `resolve-pane`, and report about
+itself: `set-agent-state`, `set-agent-meta`, `set-agent-session`,
+`ask-human` and `request-approval`, on its own pane only.
+
+A pane holds the grants it was given: `new-window`, `start-agent` and `fan`
+take `grants`, and `set-pane-grants` changes them later. A pane given none
+holds the default of `[agents.permissions]` in config.toml: `admin` under
+`mode = "open"`, which is the default mode, and the `grants` list under
+`mode = "strict"` (default `read`, `write`, `fan`). A mode the daemon does not
+know is read as strict, and an unknown grant name is dropped.
+
+A pane can never hand out more than it holds. From a pane that does not hold
+`admin`, a launch that names no `grants` gives the new pane the caller's own,
+and a `grants` the caller does not hold is `forbidden`. `admin` cannot give
+`respond`. A link or a pane run for another machine cannot give `respond`.
+
+How a connection is placed in a pane, strongest first:
+
+1. The kernel's record of the peer's pid (`SO_PEERCRED`, `LOCAL_PEERPID`),
+   walked up to a pane's shell or matched by its controlling terminal, as
+   `request-approval` does. A process does not change panes, so the answer is
+   kept for the connection once it names one.
+2. For a process the kernel places inside the daemon's panes but in no pane
+   yet, the `TUIOS_PANE_ID` in its environment, when it names a pane the
+   daemon is still creating. Every local pane is entered in the grant table
+   before its process starts, so a process never runs before its grants hold.
+3. Where the daemon cannot read the peer's pid (Windows, the BSDs), the pane
+   id and token the connection presents with `pane-grants`. The `tuios` CLI
+   does this on every connection it opens from a pane. The token is the
+   `restrict-connection` token: an HMAC of the window id under a key picked at
+   daemon start, so it names one pane and cannot be made for another.
+
+A connection over a link is held to that link's policy instead (see
+[What a linked machine may do here](#what-a-linked-machine-may-do-here)), and
+a report from a pane run for another machine is held on the machine that owns
+the pane. A call such a process makes to this machine's daemon directly holds
+this machine's default and reaches no session here, so under `strict` it may
+call only the verbs every pane may.
+
+Params:
+
+- `pane_id`, `pane_token`: the caller's `$TUIOS_PANE_ID` and
+  `$TUIOS_PANE_TOKEN`. Used only where the kernel places the caller in no
+  pane; a `pane_id` that disagrees with the kernel is `forbidden`, and so is a
+  token that does not match. A connection placed by token stays in that pane
+  for as long as it is open, and a second pane's token is `forbidden`.
+
+Result, from a pane:
+
+```json
+{"result": {"type": "pane_grants", "pane": true, "window": "7f3c...", "session": "work",
+ "via": "pid", "grants": ["read", "write", "fan"], "explicit": false,
+ "mode": "strict", "default_grants": ["read", "write", "fan"]}}
+```
+
+From outside every pane, `pane` is false and only `mode` and
+`default_grants` are set. `via` is `pid`, `env` or `token`. `explicit` is true
+for a pane given grants of its own.
+
+A refusal:
+
+```json
+{"error": {"code": "forbidden",
+ "message": "send-text is refused for this pane: writing into the pane's own session needs the write grant",
+ "hint": {"verb": "pane-grants", "command": "tuios pane-grants",
+  "detail": "Pane 7f3c1a2b holds read, the grants it was given. Nothing was done. The person can give this pane more with tuios set-pane-grants -w 7f3c1a2b --grants <names>, or every pane started with none with mode and grants under [agents.permissions] in config.toml."}}}
+```
+
+The daemon log records every refusal. For a pane without `admin`, a verb that
+takes `session` and names none gets the pane's own session, and a subscription
+carries only the sessions the pane may read, as they stood at its subscribe.
+
+This scopes accidents and prompt-injected agents that use tuios the ordinary
+way, not a determined local attacker: a process that leaves its pane on
+purpose (a double fork with a cleaned environment, a service manager) is not
+placed in it, and is then treated as the person, as the human checks are. See
+[AGENT_STATE.md](AGENT_STATE.md#what-a-pane-may-do).
+
+### set-pane-grants
+
+Give a pane grants, or with `reset` the default of `[agents.permissions]`.
+
+Params: `session` and `window` (omit either from a pane for its own; from
+outside every pane `session` defaults to the most recently active one),
+`grants` (names, or `["none"]`), `reset`. Pass `grants` or `reset`, not both.
+
+From outside every pane anything may be given. From a pane, the target must be
+its own pane unless it holds `admin`, and what it gives, or the default for
+`reset`, must be something it holds, so a pane can narrow itself and never
+widen itself. Refused over a link and for a window on another machine. The
+change applies to the pane's next call; `TUIOS_PANE_GRANTS` in the running
+process is not rewritten. The grants are saved with the window and hold again
+after a restore.
+
+Result:
+
+```json
+{"result": {"type": "pane_grants_set", "session": "work", "window": "7f3c...",
+ "grants": ["read"], "explicit": true, "previous": ["read", "write", "fan"], "previous_explicit": false}}
+```
 
 ### list-verbs
 
@@ -2746,13 +2912,13 @@ the one before. The configuration is in
 
 | Capability | Verbs |
 | --- | --- |
-| none | `hello`, `list-verbs`, `link-peer`, `restrict-connection` |
+| none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
 | `list` | `list-*`, `session-info`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
 | `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `close-window`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway) |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask` |
-| every one | `open-host-connection` |
+| every one | `open-host-connection`, `set-pane-grants` (whose handler refuses a link caller anyway) |
 
 Binary messages: `MsgList`, the PTY subscribe messages, `MsgGetTerminalState`,
 `MsgReadDir` and `MsgGetLogs` need `list`; `MsgAttach` needs `list` and

@@ -35,14 +35,45 @@ TUIOS_SESSION=work
 TUIOS_SOCKET=/run/user/1000/tuios/tuios.sock
 TUIOS_HOST=laptop
 TUIOS_PANE_TOKEN=3f9a...
+TUIOS_PANE_GRANTS=admin
 ```
 
 `TUIOS_PANE_ID` and `TUIOS_WINDOW_ID` are the same uuid under two names: your own
 window. Pass it to `-w` whenever you mean yourself rather than whatever happens
 to be focused. It is also your address when another agent wants to reach you.
-`TUIOS_PANE_TOKEN` proves that pane id to `tuios mcp` where the kernel cannot
-say which pane a process runs in; nothing else reads it, and you never pass it
-by hand.
+`TUIOS_PANE_TOKEN` proves that pane id to the daemon where the kernel cannot
+say which pane a process runs in; `tuios mcp` and the CLI send it on their
+own, and you never pass it by hand.
+
+### What your pane may do
+
+`TUIOS_PANE_GRANTS` is what your pane was allowed to do through tuios when it
+started, and `tuios pane-grants` is what it may do now:
+
+```sh
+tuios pane-grants
+```
+
+```
+Pane 98db8226 in session work holds read, write, fan (the default of [agents.permissions], mode strict).
+```
+
+| Grant | What it lets you do |
+| --- | --- |
+| `read` | Read your own session and your fan group: list, capture, agent state, waits, the event stream, mail |
+| `write` | Type into the panes of your own session and leave mail there |
+| `fan` | Write in your fan group and start agents with `fan` and `start-agent` |
+| `respond` | Answer another pane's prompt with `respond`, for the person |
+| `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options |
+
+Whatever you hold, you can report your own state and meta, ask the person
+with `ask-human`, and read your grants. A call your grants do not cover fails
+with `forbidden`, does nothing, and says which grant it needed. That is the
+person's decision about this pane: do the work inside what you hold, or ask
+the person with `tuios ask-human` or `send-agent-message -w human`. Do not look
+for another verb or another process that does the same thing, and do not try
+to raise your own grants; you cannot, and trying says the wrong thing about
+what you are doing.
 
 `TMUX` and `TMUX_PANE` are never set in a tuios pane, even when tuios itself
 runs inside tmux. You are in a tuios pane, not a tmux one, so do not drive panes
@@ -1838,10 +1869,20 @@ the person to answer. With `--prompt` the first prompt is typed once it is
 ready and checked the way `fan` checks it. `--repo` starts it in a
 repository's main checkout, and a session `-s` names that does not exist is
 created. The verb is `start-agent`, with `agent`, `args`, `name`, `cwd`,
-`repo`, `workspace`, `focus`, `prompt`, `ready_timeout`, `env` and
-`protocol`. On a session on another machine (`-s host:session`) the CLI sends no
+`repo`, `workspace`, `focus`, `prompt`, `ready_timeout`, `env`, `protocol` and
+`grants`. On a session on another machine (`-s host:session`) the CLI sends no
 `PATH`, so the agent comes from that machine's `PATH`, and `env` is refused
 there.
+
+Give a helper no more than its job needs. A reviewer that only reads:
+
+```sh
+tuios start-agent claude --name reviewer --grants read
+```
+
+`--grants` works the same on `fan` and `new-window`. Without it, a helper you
+start holds your own grants when you hold no `admin`, and the default of the
+person's config otherwise. You can give only what you hold.
 
 #### Headless, over a protocol: --protocol
 
@@ -2747,7 +2788,8 @@ the agent chapter never need one; splitting, tiling and directional focus do.
 
 `not_human` comes only from `dismiss-attention`, `respond` and
 `reply-approval`: clearing the person's Inbox and answering an agent's prompt
-are for the person at an attached client, and a call from a pane cannot. Do
+are for the person at an attached client, and a call from a pane cannot,
+unless the person gave that pane the `respond` grant for `respond`. Do
 not look for a way around it. Change your own state, or answer the mail, and
 the item closes by itself; for another agent's prompt, ask the person.
 
@@ -2774,6 +2816,11 @@ or ask the person, look at the target's pane before typing the question again,
 restructure what you were doing, stop sending, send a message to `human`
 instead of asking it, or send as your own pane rather than as `human`. They are
 not timeouts, and retrying them unchanged will fail the same way.
+
+`forbidden` also comes from a call your pane's grants do not cover (see What
+your pane may do). The message names the grant it needed and the hint says
+what your pane holds. Report it to the person if the work needs more; do not
+retry it another way.
 
 `forbidden` also comes from any verb addressed to another machine
 (`HOST:...`) that the far machine's link policy does not let this machine do.

@@ -31,6 +31,7 @@ alongside the rest of the pane-driving surface.
 - [Environment](#environment)
 - [Alerts](#alerts)
 - [Who can act as the person](#who-can-act-as-the-person)
+- [What a pane may do](#what-a-pane-may-do)
 
 ## States
 
@@ -1254,10 +1255,17 @@ Answering a prompt is acting as the person: it approves a tool call. So
   every pane: a shell in another terminal, or a script the person runs. The
   grant is off by default, and it cannot be switched with `set-option`, since
   any pane can call that verb.
+- Or the caller is a pane the person gave the `respond` grant (see
+  [What a pane may do](#what-a-pane-may-do)), answering a pane in its own
+  session, in its fan group when it also holds `fan`, or anywhere when it also
+  holds `admin`. The result names it in `by_pane` and the daemon log records
+  it. No mode gives `respond` by default, `admin` does not include it, and a
+  pane can give it only when it holds it, so it comes from the person: a
+  supervisor agent the person trusts to approve its workers' tool calls.
 
-A caller inside a pane is refused with `not_human` either way, even with a live
-nonce copied out of the person's client. An agent cannot approve its own tool
-call or another agent's through tuios. A key that `send-keys` or `run-command`
+A caller inside a pane without the `respond` grant is refused with
+`not_human`, even with a live nonce copied out of the person's client. Such an
+agent cannot approve its own tool call or another agent's through tuios. A key that `send-keys` or `run-command`
 routed into the person's client does not answer from the peek either: the peek
 refuses it and says why, the same rule that keeps such keys from signing a mail
 reply.
@@ -1862,7 +1870,8 @@ When tuios spawns a pane it exports the environment a state-reporting shim needs
 | `TUIOS_PANE_ID`   | The pane's window id                             |
 | `TUIOS_WINDOW_ID` | The pane's window id (alias of `TUIOS_PANE_ID`)  |
 | `TUIOS_SESSION`   | The session name                                 |
-| `TUIOS_PANE_TOKEN` | Proves `TUIOS_PANE_ID` to `restrict-connection` where the kernel cannot name the caller's pane. Good for one pane of one daemon start |
+| `TUIOS_PANE_TOKEN` | Proves `TUIOS_PANE_ID` to `restrict-connection` and `pane-grants` where the kernel cannot name the caller's pane. Good for one pane of one daemon start |
+| `TUIOS_PANE_GRANTS` | What the pane may do through tuios as it starts, comma separated (`read,write,fan`, `admin`, `none`). `tuios pane-grants` gives the current answer. See [What a pane may do](#what-a-pane-may-do) |
 
 A shim guards on these and no-ops when they are unset, so it is safe to leave
 wired up outside tuios. `tuios agent-hook` uses `TUIOS_PANE_ID` and
@@ -2053,7 +2062,8 @@ proof, as before.
 | `read-agent-messages -w human` from a pane, to clear the person's unread mail | Served as a peek: nothing is marked read, and the result says `peek_forced`. |
 | A client attached from a pane, to clear `finished_unread` by focusing panes | Its state pushes do not mark a finished turn seen. |
 | `dismiss-attention` from a pane, to empty the person's Inbox | Refused with `not_human`, even with a live nonce copied from the person's client: the nonce is checked the way a reply's is. |
-| `respond` from a pane, to approve its own tool call or another agent's | Refused with `not_human`, with or without a copied nonce, and with or without `respond_from_shell`, which only grants callers outside every pane. Nothing is pressed. |
+| `respond` from a pane, to approve its own tool call or another agent's | Refused with `not_human`, with or without a copied nonce, and with or without `respond_from_shell`, which only grants callers outside every pane. Nothing is pressed. Only a pane the person gave the `respond` grant may answer, and no pane can give itself that grant. |
+| `set-pane-grants` from a pane, to widen itself or another pane | Refused with `forbidden`: a pane may change only its own grants unless it holds `admin`, and never give more than it holds. `admin` cannot give `respond`. |
 | `send-keys` or `run-command` driving the person's Inbox peek, to press `a` | The peek sends no answer for a routed key and says why. |
 | `reply-approval` from a pane, to approve its own or another agent's call | Refused with `not_human` on the same check. `request-approval` from a pane may hold only that pane's prompt, and returns only what the person answered about it. |
 | An agent in a hub pane attaching through the link to this machine | The hub vouches only for a caller outside its panes, in the stream's open frame, which the caller cannot write. The proxy here dials the link-human socket only for a vouched stream. An attach through the plain link socket gets no nonce. |
@@ -2072,8 +2082,12 @@ proof, as before.
   its connections write only the agent's own pane's record, and the first is
   possible only with `--write` and only inside the agent's own session and fan
   group (see [The MCP server](#the-mcp-server)). Through the CLI both still
-  are, until a restriction is required of every connection from a pane. `ask-agent` refuses a pane on `needs_input` (`agent_blocked`),
-  which covers the accident but not an agent set on it.
+  are under the default `mode = "open"`, where every pane holds `admin`. Pane
+  grants close that: under `mode = "strict"`, or for a pane started with
+  narrower grants, every call from the pane is held to them, however it was
+  made (see [What a pane may do](#what-a-pane-may-do)). `ask-agent` refuses a
+  pane on `needs_input` (`agent_blocked`), which covers the accident but not
+  an agent set on it.
 - **The person's screen.** `popup` and a program in a pane can draw anything,
   including a fake question. Read what a prompt asks before answering it.
 - **Leaving the pane on purpose.** See above.
@@ -2091,3 +2105,101 @@ attach`, or `tuios-web` or the SSH server started from a pane, counts as inside
 a pane: its mail replies are refused with `forbidden`, its reads of the
 mailbox do not mark mail read, and its Inbox cannot dismiss an item. Start
 those from a terminal outside tuios.
+
+## What a pane may do
+
+Every pane holds a set of grants that says what a process in it may do through
+tuios, and the daemon checks every call from a pane against them: every JSON
+verb, from the CLI, a script or `tuios mcp`, and every message of the client
+protocol, before anything runs. The person's own shell and client, outside
+every pane, are held to nothing new.
+
+| Grant | What the pane may do |
+| --- | --- |
+| `read` | Read its own session and its fan group: list, capture, agent state, waits, the event stream, mail |
+| `write` | Type into the panes of its own session (`send-text`, `send-keys`, `ask-agent`, `run`) and leave mail and stashed files there |
+| `fan` | Do what `write` does in its fan group and the sessions it launched, and start agents with `fan` and `start-agent` |
+| `respond` | Answer another pane's prompt with `respond`, without the person (see [Who may answer](#who-may-answer)) |
+| `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, attach. Includes `read`, `write` and `fan`, never `respond` |
+
+Whatever it holds, a pane can always report about itself (`set-agent-state`,
+`set-agent-meta`, `set-agent-session`, `ask-human`, `request-approval`, on its
+own pane only), and ask what it holds with `tuios pane-grants`. So
+`tuios agent-hook` works in every pane, whatever the pane holds.
+
+### Where a pane's grants come from
+
+- The grants it was started with: `tuios start-agent --grants`,
+  `tuios fan --grants` and `tuios new-window --grants`, or the `grants` param
+  of those verbs.
+- Or the ones `tuios set-pane-grants` gave it later.
+- Or else the default of `[agents.permissions]` in config.toml:
+
+```toml
+[agents.permissions]
+mode = "strict"                    # open (the default) or strict
+grants = ["read", "write", "fan"]  # what a pane holds under strict
+```
+
+Under `mode = "open"`, which is the default, a pane given no grants holds
+`admin`, so every existing script in a pane keeps working exactly as it did.
+Under `mode = "strict"` it holds the `grants` list, `read`, `write` and `fan`
+when the list is not set. A mode tuios does not know is read as strict and an
+unknown grant is dropped, so a typo never turns the protection off. A change
+to the table reaches every pane on the default at its next call.
+
+A pane can never give more than it holds. A pane without `admin` that starts
+an agent without `--grants` gives it its own grants, a pane can change only
+its own grants unless it holds `admin`, and `admin` cannot give `respond`. A
+script can therefore drop its pane's grants before it starts an agent, and no
+agent can raise its own:
+
+```bash
+tuios set-pane-grants --grants read,write && exec claude
+```
+
+The grants are saved with the window, so a restored pane holds what it held,
+and `tuios list-windows --json` shows `grants` on every pane that was given
+its own.
+
+### A refusal
+
+A call the grants do not cover does nothing and answers `forbidden`, with a
+hint that names the grant it needed, what the pane holds and where that came
+from, and how the person gives more:
+
+```
+send-text is refused for this pane: writing into the pane's own session needs the write grant
+```
+
+The daemon log records every refusal. From a pane without `admin`, a verb
+that names no session means the pane's own session, not the most recently
+active one, and an event stream carries only the sessions the pane may read.
+
+### How the daemon knows the pane
+
+The kernel's record of the caller's pid comes first, walked up to a pane's
+shell or matched by its terminal, the same test [How a process is placed](#how-a-process-is-placed)
+describes; a process in a pane that is still being created is placed by the
+`TUIOS_PANE_ID` in its environment, since every pane's grants are in force
+before its process starts. On Windows and the BSDs, where the daemon cannot
+read the pid, the CLI presents `TUIOS_PANE_ID` and `TUIOS_PANE_TOKEN` on
+every connection it opens from a pane, and the daemon holds that connection to
+the pane the token proves. A process there that strips both from its
+environment is treated as the person.
+
+A pane on another machine is held by that machine, and a call over a link by
+the link's policy (see [CONFIGURATION.md](CONFIGURATION.md#what-another-machine-may-do-here)).
+A process in a pane this machine runs for another machine has no session
+here: a call it makes to this machine's daemon directly holds this machine's
+default and reaches no session, so under `strict` it can only ask what it
+holds. Its reports travel to the machine that owns the pane as before.
+
+### What grants do not cover
+
+Grants scope accidents and prompt-injected agents that use tuios the ordinary
+way. They are not a sandbox: a process that leaves its pane on purpose, the
+way [Who can act as the person](#who-can-act-as-the-person) lists, is not
+placed in it and is treated as the person. Grants say what a pane may do
+through tuios; what its process may do to files and other programs is the
+operating system's business.

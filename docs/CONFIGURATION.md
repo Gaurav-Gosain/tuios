@@ -67,6 +67,37 @@ run `tuios integration install claude-code` (or `opencode`, `kilo`) again after
 upgrading. [AGENT_STATE.md](AGENT_STATE.md#approvals-from-the-inbox) says how
 a prompt is held, answered and handed back.
 
+## What a pane may do
+
+Every pane holds grants that say what a process in it may do through tuios:
+`read` (its own session and fan group), `write` (type into its own session),
+`fan` (write in its fan group and start agents), `respond` (answer prompts
+without you) and `admin` (everything else, as before grants). A pane started
+with `--grants` (`tuios start-agent`, `fan`, `new-window`) or given grants
+with `tuios set-pane-grants` holds those. Every other pane holds the default
+this table sets:
+
+```toml
+[agents.permissions]
+mode = "strict"
+grants = ["read", "write", "fan"]
+```
+
+`mode` is `open`, the default, or `strict`. Under `open` a pane holds `admin`,
+so every script in a pane works as it always has. Under `strict` it holds
+`grants`, which is `read`, `write` and `fan` when unset; an empty list gives
+nothing but the right to report about itself. Any other `mode` is read as
+`strict`, and an unknown grant is dropped: both are reported as config
+warnings, and both fail toward less. `admin` never includes `respond`, and no
+default gives it, so listing `respond` here is how you let every pane answer
+prompts for you.
+
+The daemon reads the table when it starts and again when the file changes; a
+change reaches every pane on the default at its next call. Like
+`[agents.approvals]`, it is not in `list-options` and `set-option` cannot
+change it, so no pane can loosen it.
+[AGENT_STATE.md](AGENT_STATE.md#what-a-pane-may-do) has the whole model.
+
 ## What another machine may do here
 
 A `[hosts.NAME]` table names a machine this one links to. Read on the machine

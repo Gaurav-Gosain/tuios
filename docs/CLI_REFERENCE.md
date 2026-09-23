@@ -460,6 +460,7 @@ tuios fan keep [<host>:]<session> [--stash | --force]
 - `--agent <agent>`: The agent as you would type it, arguments included: `claude`, `'codex --model o5'`, or any program. Several, comma-separated or repeated, are cycled across the sessions (required)
 - `--prompt <prompt>`: One session's prompt, repeated once per session, in place of the prompt argument. The count is then how many there are
 - `--env NAME` or `--env NAME=VALUE`: Pass your value of a variable, or set one, for every agent. Repeatable. `PATH` is always sent, so the agents are found where your shell finds them
+- `--grants <grant>[,<grant>...]`: What every agent may do through tuios, as for `start-agent`
 - `--repo <dir>`, `--base <ref>`, `--name <stem>`, `--wait`, `--json`
 
 **Examples:**
@@ -514,8 +515,13 @@ is ready for a prompt.
 
 **Usage:**
 ```bash
-tuios start-agent <agent> [-s [<host>:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--json] [-- <args>...]
+tuios start-agent <agent> [-s [<host>:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--grants <grant>[,<grant>...]] [--json] [-- <args>...]
 ```
+
+`--grants` says what the agent may do through tuios: `read`, `write`, `fan`,
+`respond`, `admin`, or `none` (see [`tuios pane-grants`](#tuios-pane-grants)).
+Without it the pane holds the default of `[agents.permissions]`, or, started
+from a pane without `admin`, that pane's own grants.
 
 **Examples:**
 ```bash
@@ -783,6 +789,7 @@ command that has flags of its own, or tuios reads them as its own flags:
 - `--cwd <dir>`: Directory to start the shell in (default: the daemon's)
 - `--no-focus`: Leave the focus where it is
 - `--host <name>`: Run the window's process on this machine from the `[hosts]` table (default: this machine)
+- `--grants <grant>[,<grant>...]`: What the window's process may do through tuios: `read`, `write`, `fan`, `respond`, `admin`, or `none` (default: `[agents.permissions]`). See [`tuios pane-grants`](#tuios-pane-grants)
 - `--json`: Output result as JSON
 
 **Output:**
@@ -2290,7 +2297,7 @@ them.
 | `tuios list-agents` | List the agent panes in a session and what each is doing. `--all-sessions` lists every session on this machine, each row named `session/name`; `--all-hosts` lists every session on every host, with a SESSION column, and a host that is down shows the rows it last gave. `--select` lists the panes a [selector](AGENT_STATE.md#selectors) matches, in every session, and prints the `--confirm` token for them |
 | `tuios list-attention` | List the Inbox: what is waiting for you in every session, on this machine and on every linked host (see below). `--host` narrows it to one machine, `--select` to what a selector matches |
 | `tuios peek-prompt` | Show the prompt an agent is blocked on, its options and the answers it takes, without attaching |
-| `tuios respond <action> [value]` | Answer the prompt an agent is blocked on. Only from the person: an attached client's Inbox, or a shell outside every pane with `[daemon] respond_from_shell` |
+| `tuios respond <action> [value]` | Answer the prompt an agent is blocked on. Only from the person: an attached client's Inbox, or a shell outside every pane with `[daemon] respond_from_shell`, or from a pane the person gave the `respond` grant |
 | `tuios get-agent-state` | Read a pane's reported agent state |
 | `tuios set-agent-meta [key=value ...]` | Record display metadata about a pane's agent (model, context, a summary) for the rail |
 | `tuios set-agent-session <id> --harness <h>` | Record which conversation a pane's agent runs, for a later resume, without changing its state |
@@ -2311,6 +2318,8 @@ them.
 | `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
 | `tuios tmux-shim [-- command]` | Run a command (your shell when none is given) with a `tmux` on PATH that answers in this tuios session, so a tool that drives tmux, such as Claude Code agent teams (`tuios tmux-shim -- env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude`), opens its panes here. Off until you run it. `--log FILE` moves the log of calls the shim could not answer from `$XDG_STATE_HOME/tuios/tmux-shim.log`; `--log-all` records every call. Not on Windows. See [The tmux shim](TMUX_SHIM.md) |
 | `tuios tmux <tmux arguments>` | The shim asked for by name: answer one tmux command line in the caller's session (`tuios tmux display-message -p '#{pane_id}'`). A tmux session is the tuios session, a window `@N` is workspace N, a pane `%N` is a tuios window. See [The tmux shim](TMUX_SHIM.md#commands) for the commands it answers |
+| `tuios pane-grants` | Show the pane this runs in and what it may do through tuios. See [below](#tuios-pane-grants) |
+| `tuios set-pane-grants` | Give a pane grants (`--grants read,write`), or the default back (`--reset`). See [below](#tuios-pane-grants) |
 | `tuios stash put <file>` | Copy a file into the session store and print the stored path |
 | `tuios stash get <stored-path> [file]` | Copy a stashed file out of the session store, across a link |
 | `tuios stash list` | List the files in the session store |
@@ -2354,6 +2363,56 @@ there.
 | `tuios tape show <name>` | Display the contents of a tape file |
 | `tuios tape delete <name>` | Delete a tape recording |
 | `tuios tape dir` | Show the tape recordings directory path |
+
+### `tuios pane-grants`
+
+Show what the pane this command runs in may do through tuios.
+
+**Usage:**
+```bash
+tuios pane-grants [--json]
+tuios set-pane-grants [-s <session>] [-w <window>] (--grants <grant>[,<grant>...] | --reset) [--json]
+```
+
+Every pane holds grants, and the daemon checks every call from a pane against
+them, however it was made:
+
+| Grant | What the pane may do |
+|-------|----------------------|
+| `read` | Read its own session and its fan group |
+| `write` | Type into the panes of its own session and leave mail there |
+| `fan` | Write in its fan group and start agents with `fan` and `start-agent` |
+| `respond` | Answer another pane's prompt with `respond`, without the person |
+| `admin` | Everything else, as every pane could before grants. Includes `read`, `write` and `fan`, never `respond` |
+
+A pane holds the grants it was started with (`--grants` on `start-agent`,
+`fan` and `new-window`), the ones `set-pane-grants` gave it, or else the
+default of `[agents.permissions]` (see
+[CONFIGURATION.md](CONFIGURATION.md#what-a-pane-may-do)): `admin` under
+`mode = "open"`, the default, and the `grants` list under `mode = "strict"`.
+A call the grants do not cover fails with `forbidden`, and the message names
+the grant it needed.
+
+`set-pane-grants` from outside every pane may give anything. From a pane it
+may change only that pane's own grants unless the pane holds `admin`, and
+never give more than the pane holds, so an agent cannot widen itself.
+
+**Output:**
+```
+Pane a1b2c3d4 in session work holds read, write, fan (the default of [agents.permissions], mode strict).
+```
+
+**Examples:**
+```bash
+# From inside an agent's pane
+tuios pane-grants
+
+# Let the reviewer only read
+tuios set-pane-grants -w reviewer --grants read
+
+# Drop this pane's grants, then start an agent in it
+tuios set-pane-grants --grants read,write && exec claude
+```
 
 ---
 
