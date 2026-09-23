@@ -12,7 +12,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/ssh"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
@@ -463,7 +462,7 @@ type OS struct {
 	// kp.mu/sp.mu, so reading ioMu under kp.mu/sp.mu closes a lock cycle.
 	placementScrollbackLen map[string]int
 	// SSH mode fields
-	SSHSession ssh.Session // SSH session reference (nil in local mode)
+	SSHSession SSHConn // SSH session reference (nil in local mode)
 	// configReloads is this session's subscription to the config file, and
 	// stopConfigWatch ends it. See config_watch.go.
 	configReloads   <-chan tea.Msg

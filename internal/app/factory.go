@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/ssh"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -75,7 +74,7 @@ type OSOptions struct {
 	SSHIsLoopback bool
 
 	// SSHSession is the SSH session reference (nil in local mode).
-	SSHSession ssh.Session
+	SSHSession SSHConn
 
 	// ForceGraphicsEnabled skips capability detection for the graphics
 	// passthroughs. Use this in web mode where stdin isn't a real TTY so

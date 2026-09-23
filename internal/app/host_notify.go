@@ -126,11 +126,11 @@ const (
 // the server's $TMUX/$STY describe only where the server was started.
 func (m *OS) detectOuterMultiplexer() outerMultiplexer {
 	if m.IsSSHMode && m.SSHSession != nil {
-		if pty, _, ok := m.SSHSession.Pty(); ok {
+		if term, ok := sshClientTerm(m.SSHSession); ok {
 			switch {
-			case strings.HasPrefix(pty.Term, "tmux"):
+			case strings.HasPrefix(term, "tmux"):
 				return outerTmux
-			case strings.HasPrefix(pty.Term, "screen"):
+			case strings.HasPrefix(term, "screen"):
 				return outerScreen
 			}
 		}
