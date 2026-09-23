@@ -10,7 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/skills"
 )
 
 // The skill is the only thing standing between an agent and guessing, so the
@@ -42,7 +41,7 @@ func TestSkillDocumentsTalkingToOtherAgents(t *testing.T) {
 		"is a claim",
 		"Nothing is durable",
 	} {
-		if !strings.Contains(skills.TUIOS, want) {
+		if !strings.Contains(skillText(t, "mail"), want) {
 			t.Errorf("the agent chapter no longer mentions %q", want)
 		}
 	}
@@ -53,7 +52,7 @@ func TestSkillDocumentsTalkingToOtherAgents(t *testing.T) {
 // to distrust the whole document.
 func TestSkillCountsTheOptions(t *testing.T) {
 	want := fmt.Sprintf("The %d options above are scalars", len(config.Options()))
-	if !strings.Contains(skills.TUIOS, want) {
+	if !strings.Contains(skillText(t, "config"), want) {
 		t.Errorf("the skill does not say %q; the registry holds %d options", want, len(config.Options()))
 	}
 }
@@ -64,12 +63,12 @@ func TestSkillCountsTheOptions(t *testing.T) {
 func TestSkillCountsTheHarnesses(t *testing.T) {
 	reg, _ := harness.Load()
 	n := len(reg.IDs())
-	if !strings.Contains(skills.TUIOS, fmt.Sprintf("recognises %d agent CLIs", n)) {
+	if !strings.Contains(skillText(t, "state"), fmt.Sprintf("recognises %d agent CLIs", n)) {
 		t.Errorf("the skill does not say the detector recognises %d agent CLIs", n)
 	}
 	// Naming a list is what rotted last time, so the skill has to name the way
 	// to ask instead.
-	if !strings.Contains(skills.TUIOS, "tuios explain-agent-detect") {
+	if !strings.Contains(skillText(t, "state"), "tuios explain-agent-detect") {
 		t.Error("the skill names no way to discover the harness list")
 	}
 }
@@ -78,7 +77,7 @@ func TestSkillCountsTheHarnesses(t *testing.T) {
 // transcript entirely, which is the tier between a harness reporting for itself
 // and an escape sequence, so a reader could not explain what they were seeing.
 func TestSkillRanksTheAgentSources(t *testing.T) {
-	if !strings.Contains(skills.TUIOS, "`report`, `transcript`,\n`osc`, `screen`, `detect`, then `stall`") {
+	if !strings.Contains(skillText(t, "state"), "`report`, `transcript`,\n`osc`, `screen`, `detect`, then `stall`") {
 		t.Error("the skill's source ranking is not the full ordered set")
 	}
 	// The two the socket refuses have to be named as such, or a caller will try.
@@ -93,7 +92,7 @@ func TestSkillRanksTheAgentSources(t *testing.T) {
 // A code the skill omits is one a caller matching on codes will not handle.
 func TestSkillListsEveryErrorCode(t *testing.T) {
 	for _, code := range session.VerbErrorCodes() {
-		if !strings.Contains(skills.TUIOS, "`"+code+"`") {
+		if !strings.Contains(skillText(t, "errors"), "`"+code+"`") {
 			t.Errorf("the skill does not document the %q error code", code)
 		}
 	}
@@ -117,11 +116,11 @@ func TestSkillIsHonestAboutRestoringConfig(t *testing.T) {
 	}
 
 	for _, path := range unrestorable {
-		if !strings.Contains(skills.TUIOS, path) {
+		if !strings.Contains(skillText(t, "config"), path) {
 			t.Errorf("%s cannot be restored to its own default, and the skill does not warn about it", path)
 		}
 	}
-	if !strings.Contains(skills.TUIOS, fmt.Sprintf("%d options are in that state today", len(unrestorable))) {
+	if !strings.Contains(skillText(t, "config"), fmt.Sprintf("%d options are in that state today", len(unrestorable))) {
 		t.Errorf("the skill does not say that %d options cannot be restored to their defaults", len(unrestorable))
 	}
 
@@ -132,7 +131,7 @@ func TestSkillIsHonestAboutRestoringConfig(t *testing.T) {
 	// A backticked comma-separated list is the shape of every option list in the
 	// skill, and searching the whole text for one made the ricing table's
 	// `appearance.gap`, `appearance.panel_padding` read as a restore warning.
-	warned := warnedUnrestorable(skills.TUIOS)
+	warned := warnedUnrestorable(skillText(t, "config"))
 	for _, opt := range config.Options() {
 		if slices.Contains(unrestorable, opt.Path) {
 			continue

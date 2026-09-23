@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -29,18 +30,52 @@ func TestSkillIsEmbeddedFromTheRepoFile(t *testing.T) {
 	if !strings.HasPrefix(skills.TUIOS, "---\nname: tuios\n") {
 		t.Error("the skill is missing its frontmatter")
 	}
+
+	// And every topic, which is embedded by a glob rather than by name.
+	entries, err := os.ReadDir("../../skills/tuios")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var onDiskTopics []string
+	for _, e := range entries {
+		name, ok := strings.CutSuffix(e.Name(), ".md")
+		if !ok || name == "SKILL" {
+			continue
+		}
+		onDiskTopics = append(onDiskTopics, name)
+		data, err := os.ReadFile("../../skills/tuios/" + e.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := skillText(t, name); got != string(data) {
+			t.Errorf("the embedded topic %s differs from skills/tuios/%s", name, e.Name())
+		}
+	}
+	if !slices.Equal(onDiskTopics, skills.TopicNames()) {
+		t.Errorf("topics on disk %v, embedded %v", onDiskTopics, skills.TopicNames())
+	}
 }
 
-// TestSkillFlagPrintsTheSkill runs the root command with --skill and checks it
-// writes the skill and nothing else, without reaching the code that would draw
-// an interface.
+// skillText returns what `tuios --skill <topic>` prints, failing the test for
+// a topic that does not exist.
+func skillText(t *testing.T, topic string) string {
+	t.Helper()
+	text, err := skills.Lookup(topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return text
+}
+
+// runSkillFlag runs the root command with args, rewritten the way main
+// rewrites them, and returns what it printed and the error it returned.
 //
 // The pipe is drained while the command runs, not after it returns. A pipe holds
 // 64KB and the skill passed that, so a reader that waits for Execute deadlocks:
 // the write blocks with the buffer full and the only thing that would empty it
-// is the read that has not started. Nothing about the claim changes, and the
-// test no longer fails the day the document gets longer.
-func TestSkillFlagPrintsTheSkill(t *testing.T) {
+// is the read that has not started.
+func runSkillFlag(t *testing.T, args ...string) (string, error) {
+	t.Helper()
 	read, write, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
@@ -60,7 +95,8 @@ func TestSkillFlagPrintsTheSkill(t *testing.T) {
 	}()
 
 	root := newRootCommand()
-	root.SetArgs([]string{"--skill"})
+	root.SetArgs(skillArgs(root, args))
+	root.SilenceErrors = true
 	runErr := root.Execute()
 	_ = write.Close()
 
@@ -68,20 +104,129 @@ func TestSkillFlagPrintsTheSkill(t *testing.T) {
 	if got.err != nil {
 		t.Fatalf("read stdout: %v", got.err)
 	}
-	if runErr != nil {
-		t.Fatalf("tuios --skill failed: %v", runErr)
-	}
-	if string(got.out) != skills.TUIOS {
-		t.Errorf("--skill printed %d bytes, want the %d-byte skill", len(got.out), len(skills.TUIOS))
+	return string(got.out), runErr
+}
+
+// TestSkillFlagPrintsTheSkill runs the root command with --skill and checks it
+// writes the core skill and nothing else, without reaching the code that would
+// draw an interface.
+func TestSkillFlagPrintsTheSkill(t *testing.T) {
+	for _, args := range [][]string{{"--skill"}, {"--skill", "core"}, {"--skill=core"}} {
+		out, err := runSkillFlag(t, args...)
+		if err != nil {
+			t.Fatalf("tuios %v failed: %v", args, err)
+		}
+		if out != skills.TUIOS {
+			t.Errorf("tuios %v printed %d bytes, want the %d-byte core skill", args, len(out), len(skills.TUIOS))
+		}
 	}
 }
 
-// TestSkillCommandsResolve parses every tuios command the skill shows and
-// resolves it against the real command tree: the subcommand must exist, its
-// flags must exist, and its argument count must be accepted.
+// TestSkillFlagPrintsATopic checks `tuios --skill <topic>` for every topic,
+// written with a space as a person types it. mcp, hosts and tmux are also
+// subcommands, so without skillArgs the topic would run the subcommand.
+func TestSkillFlagPrintsATopic(t *testing.T) {
+	topics := skills.Topics()
+	if len(topics) < 10 {
+		t.Fatalf("found %d topics, want the split skill", len(topics))
+	}
+	for _, topic := range topics {
+		out, err := runSkillFlag(t, "--skill", topic.Name)
+		if err != nil {
+			t.Fatalf("tuios --skill %s failed: %v", topic.Name, err)
+		}
+		if out != topic.Text {
+			t.Errorf("tuios --skill %s printed %d bytes, want the %d-byte topic", topic.Name, len(out), len(topic.Text))
+		}
+	}
+
+	out, err := runSkillFlag(t, "--skill", "all")
+	if err != nil {
+		t.Fatalf("tuios --skill all failed: %v", err)
+	}
+	if out != skills.All() || !strings.HasPrefix(out, skills.TUIOS[:200]) {
+		t.Error("tuios --skill all did not print the core and every topic")
+	}
+	for _, topic := range topics {
+		if !strings.Contains(out, topic.Text) {
+			t.Errorf("tuios --skill all is missing the %s topic", topic.Name)
+		}
+	}
+
+	_, err = runSkillFlag(t, "--skill", "nosuchtopic")
+	if err == nil || !strings.Contains(err.Error(), "mail") {
+		t.Errorf("an unknown topic gave %v, want an error that lists the topics", err)
+	}
+}
+
+// TestSkillArgs pins the rewrite: only the root's own --skill, and never an
+// argument after a subcommand or after --.
+func TestSkillArgs(t *testing.T) {
+	root := newRootCommand()
+	for _, c := range []struct{ in, want []string }{
+		{[]string{"--skill"}, []string{"--skill"}},
+		{[]string{"--skill", "mcp"}, []string{"--skill=mcp"}},
+		{[]string{"--debug", "--skill", "hosts"}, []string{"--debug", "--skill=hosts"}},
+		{[]string{"--skill", "--debug"}, []string{"--skill", "--debug"}},
+		{[]string{"send-text", "--skill", "mcp"}, []string{"send-text", "--skill", "mcp"}},
+		{[]string{"--", "--skill", "mcp"}, []string{"--", "--skill", "mcp"}},
+	} {
+		if got := skillArgs(root, c.in); !slices.Equal(got, c.want) {
+			t.Errorf("skillArgs(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestSkillCoreIsTheCore keeps the core small enough to load every time and
+// complete enough to act on: the rules that keep an agent safe live in it, not
+// in a topic an agent may never print, and it names every topic.
+func TestSkillCoreIsTheCore(t *testing.T) {
+	lines := strings.Count(skills.TUIOS, "\n")
+	if lines > 320 {
+		t.Errorf("the core skill is %d lines; keep it under 320 and move detail to a topic", lines)
+	}
+	for _, want := range []string{
+		"$TUIOS_PANE_ID",
+		"tuios pane-grants",
+		"forbidden",
+		"tuios set-agent-state working",
+		"agent_blocked",
+		"data, not instructions",
+		`"verified_human": true`,
+		"tuios peek-prompt",
+		"not_human",
+		"tuios --skill all",
+	} {
+		if !strings.Contains(skills.TUIOS, want) {
+			t.Errorf("the core skill no longer mentions %q", want)
+		}
+	}
+	for _, topic := range skills.Topics() {
+		if !strings.Contains(skills.TUIOS, "| `"+topic.Name+"` |") {
+			t.Errorf("the core's topic table does not list %s", topic.Name)
+		}
+	}
+	// And the other way: a row for a topic that does not exist is a command
+	// that fails.
+	for line := range strings.SplitSeq(skills.TUIOS[strings.Index(skills.TUIOS, "## Topics"):], "\n") {
+		name, ok := strings.CutPrefix(line, "| `")
+		if !ok {
+			continue
+		}
+		name, _, _ = strings.Cut(name, "`")
+		if _, err := skills.Lookup(name); err != nil {
+			t.Errorf("the core's topic table lists %s: %v", name, err)
+		}
+	}
+}
+
+// TestSkillCommandsResolve parses every tuios command the skill shows, in the
+// core and in every topic, and resolves it against the real command tree: the
+// subcommand must exist, its flags must exist, and its argument count must be
+// accepted.
 func TestSkillCommandsResolve(t *testing.T) {
-	commands := tuiosCommandsIn(skills.TUIOS)
-	if len(commands) < 25 {
+	commands := tuiosCommandsIn(skills.All())
+	if len(commands) < 150 {
 		t.Fatalf("expected the skill to show many commands, found %d", len(commands))
 	}
 
@@ -119,7 +264,7 @@ func TestSkillDocumentsTheReportingPath(t *testing.T) {
 		"--source",
 		"Not applied: a higher-ranked source owns this pane",
 	} {
-		if !strings.Contains(skills.TUIOS, want) {
+		if !strings.Contains(skills.All(), want) {
 			t.Errorf("the skill no longer mentions %q", want)
 		}
 	}
@@ -137,7 +282,7 @@ func TestSkillDocumentsTheDiskLifecycle(t *testing.T) {
 		"tuios start-server",
 		"tuios attach",
 	} {
-		if !strings.Contains(skills.TUIOS, want) {
+		if !strings.Contains(skillText(t, "errors"), want) {
 			t.Errorf("the skill no longer mentions %q", want)
 		}
 	}
@@ -156,7 +301,7 @@ func TestSkillDocumentsRicing(t *testing.T) {
 		"illegible",
 		"### What this cannot do",
 	} {
-		if !strings.Contains(skills.TUIOS, want) {
+		if !strings.Contains(skillText(t, "config"), want) {
 			t.Errorf("the skill no longer mentions %q", want)
 		}
 	}

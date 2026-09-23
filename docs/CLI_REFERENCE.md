@@ -113,7 +113,7 @@ tuios --standalone
 - `--theme <name>`: Color theme to use, such as dracula, nord or tokyonight. Leave it empty (the default) to use the terminal's own colors without theming
 - `--list-themes`: List all available themes and exit
 - `--preview-theme <name>`: Preview a theme's 16 ANSI colors and exit
-- `--skill`: Print the embedded agent skill and exit
+- `--skill [topic]`: Print the embedded agent skill and exit: the core, one topic, or `all` (see [Agent Skill](#agent-skill))
 - `--ascii-only`: Use ASCII characters instead of Nerd Font icons
 - `--show-keys`: Enable showkeys overlay (screencaster-style key display)
 - `--border-style <style>`: Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (default: from config or rounded)
@@ -147,6 +147,7 @@ tuios --show-keys              # Start with showkeys overlay enabled
 tuios --list-themes            # List all available themes
 tuios --preview-theme nord     # Preview Nord theme colors
 tuios --skill                  # Print the agent skill and exit
+tuios --skill recipes          # Print one topic of it
 tuios --debug                  # Start with debug logging
 tuios --cpuprofile cpu.prof    # Start with CPU profiling
 
@@ -237,24 +238,35 @@ exec tuios --theme dracula "$@"
 ## Agent Skill
 
 `tuios --skill` prints the agent skill embedded in the binary and exits. The
-skill teaches an agent to drive TUIOS from inside a pane: how to tell it is in
-one, how to address sessions and windows, how to read and write other panes,
-how to wait on a condition, and how to report its own state.
+skill teaches an agent to drive TUIOS from inside a pane. It is split so an
+agent loads only what it needs:
+
+- `tuios --skill` prints the core (about 250 lines): how to tell it is in a
+  pane, what its pane may do, addressing, reading and writing panes, running
+  work and waiting for it, reporting its own state, talking to other agents and
+  the person safely, and a table of the topics.
+- `tuios --skill TOPIC` prints one topic: `panes`, `state`, `inbox`, `mail`,
+  `fleet`, `hosts`, `events`, `mcp`, `tmux`, `grants`, `config`, `errors` or
+  `recipes`. `recipes` has end-to-end recipes: a fleet of agents, answering
+  from the Inbox, approvals, agents on another machine, MCP setup, the tmux
+  shim, scoped grants, a conductor pane and a phone alert.
+- `tuios --skill all` prints the core and every topic.
+- An unknown topic is an error that lists the topics.
 
 ```bash
 tuios --skill
+tuios --skill fleet
+tuios --skill all
 ```
 
-The text ships inside the binary as `skills/tuios/SKILL.md`, so it always
-describes the TUIOS that printed it. Nothing is fetched and no daemon is
-needed.
+The text ships inside the binary as `skills/tuios/SKILL.md` and the other
+files in `skills/tuios/`, so it always describes the TUIOS that printed it.
+Nothing is fetched and no daemon is needed. `tuios --skill=TOPIC` works too.
 
 **Examples:**
 ```bash
-# Read it
-tuios --skill
-
-# Install it where an agent harness looks for skills
+# Install the core where an agent harness looks for skills. The core tells
+# the agent to run tuios --skill TOPIC for the rest.
 mkdir -p ~/.claude/skills/tuios
 tuios --skill > ~/.claude/skills/tuios/SKILL.md
 ```

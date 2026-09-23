@@ -4,10 +4,14 @@ This file is for an agent **working on the TUIOS codebase**: how it is laid out,
 how to build it, and the conventions to follow when changing it.
 
 An agent **running inside a TUIOS pane** wants the other document. Run
-`tuios --skill` for the recipes that drive a running session: addressing panes,
-reading and writing them, opening panes to run work in, waiting on conditions,
-and reporting agent state. The source is [skills/tuios/SKILL.md](skills/tuios/SKILL.md),
-embedded in the binary so the printed copy always matches the build.
+`tuios --skill` for the core that drives a running session: addressing panes,
+reading and writing them, running work and waiting on it, reporting agent
+state, and talking to other agents safely. `tuios --skill TOPIC` prints the
+rest (fleets, the Inbox, mail, hosts, events, MCP, the tmux shim, grants,
+config, errors, recipes). The source is [skills/tuios/SKILL.md](skills/tuios/SKILL.md)
+and the other files in `skills/tuios/`, embedded in the binary so the printed
+copy always matches the build. `cmd/tuios` tests resolve every command the
+skill shows against the command tree.
 
 ## Project Overview
 
@@ -160,7 +164,7 @@ tuios/
 │   ├── CONFIGURATION.md    # Config options
 │   └── CLI_REFERENCE.md    # CLI flags and commands
 ├── examples/               # Tape script examples, and dock components under examples/dock/
-├── skills/                 # The tuios skill (skills/tuios/SKILL.md), embedded and printed by tuios --skill
+├── skills/                 # The tuios skill (skills/tuios/SKILL.md and its topics), embedded and printed by tuios --skill [topic]
 ├── integrations/           # Harness integrations, such as the claude-code agent-state shim
 ├── e2e/                    # End-to-end tests; e2e/tui is its own Go module
 ├── clienttests/            # Playwright tests for the web client

@@ -37,7 +37,7 @@ var (
 	pprofAddr      string
 	listThemes     bool
 	previewTheme   string
-	printSkill     bool
+	skillTopic     string
 	standaloneMode bool
 	// interfaceFlags is the appearance and interface flags, shared by every
 	// command that renders the TUI. See registerInterfaceFlags.
@@ -57,6 +57,7 @@ func main() {
 	}
 
 	rootCmd := newRootCommand()
+	rootCmd.SetArgs(skillArgs(rootCmd, os.Args[1:]))
 
 	// Command failures are printed here rather than by fang, which would query
 	// the terminal for its background color first and stall for seconds when
@@ -123,13 +124,21 @@ comprehensive keyboard/mouse interactions.`,
   tuios keybinds list
 
   # Print the agent skill for driving tuios from a pane
-  tuios --skill`,
+  tuios --skill
+
+  # Print one topic of it, or all of it
+  tuios --skill fleet
+  tuios --skill all`,
 		Version: version,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			// The skill is printed before anything else can decide to draw: it is
 			// a document, and a caller asking for it never wants the interface.
-			if printSkill {
-				fmt.Print(skills.TUIOS)
+			if cmd.Flags().Changed("skill") {
+				text, err := skills.Lookup(skillTopic)
+				if err != nil {
+					return err
+				}
+				fmt.Print(text)
 				return nil
 			}
 
@@ -157,7 +166,13 @@ comprehensive keyboard/mouse interactions.`,
 	// Local to the root command: the skill describes tuios as a whole, and the
 	// theme listing and preview are root-level actions that print and exit, so
 	// offering them on every subcommand would only add noise to their help.
-	rootCmd.Flags().BoolVar(&printSkill, "skill", false, "Print the agent skill for driving tuios from a pane and exit")
+	//
+	// --skill takes an optional topic. A bare --skill prints the core, and
+	// skillArgs turns "--skill TOPIC" into "--skill=TOPIC" before cobra sees
+	// it, because an optional value only binds with "=", and a topic such as
+	// mcp or hosts is also the name of a subcommand.
+	rootCmd.Flags().StringVar(&skillTopic, "skill", "", "Print the agent skill for driving tuios from a pane and exit; --skill TOPIC prints one topic, --skill all prints every topic")
+	rootCmd.Flags().Lookup("skill").NoOptDefVal = "core"
 	// The way out of startup.daemon for one run. It is on the root command
 	// because that is the only command the setting changes.
 	rootCmd.Flags().BoolVar(&standaloneMode, "standalone", false, "Run a standalone session without the daemon, overriding startup.daemon (TUIOS_NO_DAEMON=1 does the same for a whole shell)")

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/mcp"
-	"github.com/Gaurav-Gosain/tuios/skills"
 )
 
 // runMCPChild runs tuios mcp in this process, for a test that started the test
@@ -132,7 +131,7 @@ func TestSkillNamesEveryMCPTool(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range names {
-		if !strings.Contains(skills.TUIOS, name) {
+		if !strings.Contains(skillText(t, "mcp"), name) {
 			t.Errorf("the skill does not name the MCP tool %s", name)
 		}
 		if !strings.Contains(string(ref), name) {
