@@ -104,6 +104,12 @@ func TestRestrictConnectionOwnScopeReachesOnlyTheCallersSession(t *testing.T) {
 	}
 	wantForbidden(t, "mail from another pane", callP(c, t, "send-agent-message", map[string]any{"to": a1, "from": a2, "text": "spoof"}))
 	wantForbidden(t, "reading another pane's inbox", callP(c, t, "read-agent-messages", map[string]any{"to": a2}))
+	// A session on another machine is never in reach, even one named like
+	// the caller's own.
+	wantForbidden(t, "mail to another machine", callP(c, t, "send-agent-message", map[string]any{"host": "build", "session": "a", "to": a2, "text": "out"}))
+	// The link and held-mail verbs are not for a restricted caller.
+	wantForbidden(t, "close-pane", callP(c, t, "close-pane", map[string]any{"pane": "f2c1"}))
+	wantForbidden(t, "release-agent-message", callP(c, t, "release-agent-message", map[string]any{"session": "a", "id": 1}))
 
 	// An unrestricted connection is untouched.
 	plain := dialVerb(t, sp)

@@ -60,6 +60,9 @@ var verbCapabilities = map[string][]string{
 	"hello":      nil,
 	"list-verbs": nil,
 	"link-peer":  nil,
+	// restrict-connection only gives up authority on the calling
+	// connection, so it needs nothing.
+	"restrict-connection": nil,
 
 	"list-hooks":           {config.LinkAllowList},
 	"list-dock-components": {config.LinkAllowList},

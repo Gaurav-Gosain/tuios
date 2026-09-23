@@ -915,6 +915,8 @@ Under `own`:
   from linked hosts, are not written.
 - `all_sessions` on `list-agents`, `any_session` on `wait-for` and `hosts` on
   `subscribe` are refused.
+- A `host` naming another machine, such as `send-agent-message`'s outbox
+  delivery, is refused: no session on another machine is in reach.
 - `set-agent-state`, `set-agent-meta` and `set-agent-session` with no
   `window` land on the caller's own pane, and naming another pane is refused.
 - `send-agent-message` and `ask-agent` in the caller's own session get `from`
@@ -2141,7 +2143,7 @@ the one before. The configuration is in
 
 | Capability | Verbs |
 | --- | --- |
-| none | `hello`, `list-verbs`, `link-peer` |
+| none | `hello`, `list-verbs`, `link-peer`, `restrict-connection` |
 | `list` | `list-*`, `session-info`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |

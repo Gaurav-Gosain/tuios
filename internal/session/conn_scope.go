@@ -175,6 +175,13 @@ var verbScopes = map[string]scopeKind{
 	"dismiss-attention":    scopeDeny,
 	"request-approval":     scopeDeny,
 	"reply-approval":       scopeDeny,
+
+	// From the host policy and dropped-link work: the link handshake,
+	// ending a hosted pane, and passing on held mail are for a link
+	// connection or the person's client, never a restricted caller.
+	"link-peer":             scopeDeny,
+	"close-pane":            scopeDeny,
+	"release-agent-message": scopeDeny,
 }
 
 // verbRestrictConnection narrows what this connection may do from now on.
@@ -469,6 +476,11 @@ func (d *Daemon) checkScope(cs *connState, verb string, params json.RawMessage) 
 		if flag(wide) {
 			return nil, scopeForbidden(verb, wide+" reaches every session, and the connection is restricted to its own")
 		}
+	}
+	// A session on another machine is never in reach: send-agent-message's
+	// host sends there over this machine's link.
+	if h := str("host"); h != "" && h != "local" {
+		return nil, scopeForbidden(verb, "host "+echoName(h)+" is another machine, and the connection is restricted to its own session")
 	}
 
 	own := func(name string) *verbError {
