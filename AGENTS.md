@@ -58,6 +58,25 @@ PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
     ./internal/vt/ ./internal/session/ ./internal/terminal/
 ```
 
+### Browser build (Learn tuios)
+
+`cmd/tuios-wasm` is tuios compiled to WebAssembly for the guided tour at
+tuios.gaurav.zip/learn: the real app in Learn mode, with a fake shell
+(`internal/webshell`) in every pane and an event stream for lessons
+(`internal/learn`). Browser-only code is behind `js` build tags or in those
+three directories, so the native build is unchanged. The page API and event
+contract are in [cmd/tuios-wasm/README.md](cmd/tuios-wasm/README.md).
+
+```bash
+cmd/tuios-wasm/build.sh out/                  # the files the docs site needs
+node cmd/tuios-wasm/serve.mjs out/ 8765       # try it at http://127.0.0.1:8765
+go test ./internal/webshell/ ./internal/learn/  # native tests of the Go side
+```
+
+A change to `internal/app` or `internal/input` can break the js build without
+breaking any native one. The learn-web workflow builds it on every pull
+request.
+
 ### Development with Nix
 
 ```bash
@@ -79,6 +98,7 @@ docker run -it --rm tuios
 tuios/
 ├── cmd/tuios/              # CLI entry point (main.go with cobra commands)
 ├── cmd/tuios-web/          # Web terminal server binary (separate for security)
+├── cmd/tuios-wasm/         # Browser build for the Learn tuios tour (js/wasm)
 ├── internal/
 │   ├── app/                # Core window manager, OS model, rendering
 │   │   ├── os.go           # Central state (OS struct), window lifecycle
@@ -114,6 +134,8 @@ tuios/
 │   ├── release/            # Finds published releases and verifies a downloaded binary (tuios update)
 │   ├── netutil/            # Small network helpers the servers share
 │   ├── harness/            # Agent harness manifests and detection
+│   ├── learn/              # Learn tuios: tour model, event contract, page commands
+│   ├── webshell/           # In-memory pty and fake shell for the browser build
 │   ├── hooks/              # Shell hooks on window/session/agent events
 │   ├── scrollback/         # OSC 133 scrollback browser
 │   ├── overlay/            # Panel and dialog primitives for chrome
