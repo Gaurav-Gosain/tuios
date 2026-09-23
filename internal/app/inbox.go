@@ -73,6 +73,15 @@ type InboxState struct {
 	// its reply line too.
 	pendingThread uint64
 	pendingReply  bool
+
+	// Peek is the prompt read over the list, nil when the list shows. See
+	// inbox_peek.go.
+	Peek *inboxPeek
+	// peekGen numbers peeks, so a reply to one since closed is dropped.
+	peekGen uint64
+	// call and nonce replace the daemon and the attach nonce in tests.
+	call  inboxVerbCall
+	nonce func() string
 }
 
 // InboxSnapshotMsg is a fresh listing from the watcher.
@@ -764,12 +773,14 @@ func (m *OS) OpenInbox(filter string) {
 	st.Filter = filter
 	st.Selected = 0
 	st.Scroll = 0
+	st.Peek = nil
 	m.clampInboxSelection()
 }
 
-// CloseInbox hides the Inbox.
+// CloseInbox hides the Inbox, and the peek with it.
 func (m *OS) CloseInbox() {
 	m.ShowInbox = false
+	m.Inbox.Peek = nil
 }
 
 // InboxMove moves the cursor by delta items, stepping over group headings.

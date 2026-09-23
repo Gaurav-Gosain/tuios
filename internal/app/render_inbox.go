@@ -3,11 +3,14 @@ package app
 import (
 	"image/color"
 	"strconv"
+	"strings"
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
 // inboxWidth is the Inbox overlay's preferred inner width: a row carries a
@@ -27,6 +30,9 @@ var inboxEmptyLines = []string{
 // alone: the heading names the kind, the row names the session and the wait.
 func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 	st := &m.Inbox
+	if st.Peek != nil {
+		return m.renderInboxPeek(st.Peek, time.Now())
+	}
 	title := "Inbox"
 	if st.Filter != "" {
 		title += ": " + inboxGroupTitle(st.Filter)
@@ -36,6 +42,7 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 	}
 	hints := []overlay.Hint{
 		{Key: overlay.EnterKey(), Label: "go"},
+		{Key: "space", Label: "peek"},
 		{Key: "d", Label: "dismiss"},
 		{Key: "r", Label: "reply"},
 		{Key: "f", Label: "filter"},
@@ -116,6 +123,163 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 		left += overlay.Style(bg).Foreground(pal.FgDim).Render("  " + overlay.Truncate(summary, summaryW))
 	}
 	return listRowSpans(width, listRowMarker(selected), left, right, bg, pal)
+}
+
+// inboxPeekMaxLines is how many prompt lines the peek shows at most. A prompt
+// longer than the screen allows keeps its bottom, where the question and the
+// options are.
+const inboxPeekMaxLines = 14
+
+// renderInboxPeek draws the peek: who waits and for how long, the prompt as
+// the pane shows it behind a bar that marks it as the pane's text, its
+// options, and the keys that answer it. What the peek says is in words; the
+// colours only repeat it.
+func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geometry, []overlayRowHit) {
+	pal := theme.UI()
+	bg := pal.Surface
+	width := m.panelWidth(inboxWidth)
+	textW := max(width-2, 1)
+	it := p.Item
+	pk := p.Peek
+
+	var body []string
+	add := func(ink color.Color, s string) {
+		for _, l := range wrapPlain(s, textW) {
+			body = append(body, overlay.Style(bg).Foreground(ink).Render("  "+l))
+		}
+	}
+
+	since := it.Since
+	if pk != nil && pk.Blocked && pk.StateAt > 0 {
+		since = pk.StateAt
+	}
+	what := inboxKindWords(it)
+	if pk != nil && !pk.Blocked {
+		what = "is " + strings.ReplaceAll(pk.State, "_", " ") + " now, not waiting on a prompt"
+	}
+	add(pal.Fg, inboxWho(it)+" in "+inboxWhere(it)+" "+what+sepWord()+"waited "+inboxWait(since, now))
+	if p.Note != "" {
+		add(pal.Warning, p.Note)
+	}
+
+	bar := "│ "
+	if overlay.UseASCII() {
+		bar = "| "
+	}
+	hints := []overlay.Hint{}
+	switch {
+	case pk == nil && p.Loading:
+		body = append(body, "")
+		add(pal.FgDim, "Reading the prompt...")
+	case pk == nil:
+	case !pk.Found:
+		body = append(body, "")
+		add(pal.FgDim, capitalize(printableTitle(pk.Reason))+".")
+	default:
+		body = append(body, "")
+		lines := pk.Lines
+		if len(lines) > inboxPeekMaxLines {
+			lines = lines[len(lines)-inboxPeekMaxLines:]
+		}
+		for _, l := range lines {
+			body = append(body, overlay.Style(bg).Foreground(pal.FgMute).Render("  "+bar)+
+				overlay.Style(bg).Foreground(pal.FgDim).Render(overlay.Truncate(printableRunes(l), max(textW-2, 1))))
+		}
+		if len(pk.Options) > 0 {
+			body = append(body, "")
+			for _, o := range pk.Options {
+				key := strconv.Itoa(o.N)
+				body = append(body, overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("  "+key)+
+					overlay.Style(bg).Foreground(pal.Fg).Render("  "+overlay.Truncate(printableTitle(o.Label), max(textW-len(key)-2, 1))))
+			}
+		}
+		if !pk.Answerable {
+			body = append(body, "")
+			add(pal.FgDim, capitalize(printableTitle(pk.Reason))+". Enter goes to the pane.")
+		}
+		hints = inboxPeekHints(pk)
+	}
+
+	if p.Composing {
+		body = append(body, "")
+		add(pal.Fg, "Answer: "+printableRunes(p.Draft)+"_")
+		hints = []overlay.Hint{{Key: overlay.EnterKey(), Label: "send"}, {Key: "esc", Label: "cancel"}}
+	}
+	switch {
+	case p.Sending:
+		body = append(body, "")
+		add(pal.FgDim, "Answering, and waiting for the pane to move on...")
+	case p.Loading && pk != nil:
+		body = append(body, "")
+		add(pal.FgDim, "Reading the prompt again...")
+	}
+	if p.Err != "" {
+		body = append(body, "")
+		add(pal.Warn, p.Err)
+	}
+	if !p.Composing {
+		hints = append(hints,
+			overlay.Hint{Key: overlay.EnterKey(), Label: "go to pane"},
+			overlay.Hint{Key: "r", Label: "read again"},
+			overlay.Hint{Key: "esc", Label: "back"})
+	}
+
+	title := "Prompt"
+	if pk != nil && pk.Kind != "" {
+		title = inboxGroupTitle(inboxKindForPrompt(pk.Kind))
+		title = strings.TrimSuffix(title, "s")
+	}
+	panel := overlay.Panel{
+		Glyph: inboxKindGlyph(it.Kind),
+		Title: title + ": " + inboxWho(it),
+		Width: width,
+		Body:  strings.Join(body, "\n"),
+		Hints: hints,
+	}
+	content, geo := panel.Render(pal)
+	return content, geo, nil
+}
+
+// inboxKindForPrompt is the Inbox kind a prompt kind reads as.
+func inboxKindForPrompt(kind string) string {
+	if kind == harness.PromptKindQuestion {
+		return session.AttentionQuestion
+	}
+	return session.AttentionApproval
+}
+
+// sepWord is the separator between two clauses of a peek's first line.
+func sepWord() string {
+	if overlay.UseASCII() {
+		return ", "
+	}
+	return " · "
+}
+
+// inboxPeekHints are the keys that answer a peeked prompt: only the answers
+// the prompt takes now are offered.
+func inboxPeekHints(pk *session.PromptPeek) []overlay.Hint {
+	var hints []overlay.Hint
+	if pk.Offers(harness.ActionChoose) && len(pk.Options) > 0 {
+		key := strconv.Itoa(pk.Options[0].N)
+		if last := pk.Options[len(pk.Options)-1].N; last != pk.Options[0].N {
+			key += "-" + strconv.Itoa(min(last, 9))
+		}
+		hints = append(hints, overlay.Hint{Key: key, Label: "choose"})
+	}
+	if pk.Offers(harness.ActionApprove) {
+		hints = append(hints, overlay.Hint{Key: "a", Label: "approve"})
+	}
+	if pk.Offers(harness.ActionApproveAlways) {
+		hints = append(hints, overlay.Hint{Key: "A", Label: "always"})
+	}
+	if pk.Offers(harness.ActionDeny) {
+		hints = append(hints, overlay.Hint{Key: "d", Label: "deny"})
+	}
+	if pk.Offers(harness.ActionText) {
+		hints = append(hints, overlay.Hint{Key: "tab", Label: "type"})
+	}
+	return hints
 }
 
 // inboxKindColor is the ink of a kind's mark, the same the rail gives the

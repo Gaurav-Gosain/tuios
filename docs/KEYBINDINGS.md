@@ -17,9 +17,15 @@ Everything waiting for you in every session is one list, the Inbox. See
 | `ctrl+b o` | Go to the oldest item that needs you; `o` again, inside the repeat window, goes to the next |
 | `ctrl+b M` | Open the Inbox on its mail (`m` there opens the whole mailbox) |
 
-Inside it: `j` and `k` move, `enter` goes to the pane, `r` replies to mail, `d`
-dismisses, `f` steps through the kinds, `m` opens the mailbox, `esc` closes.
-`ctrl+b o` is `o` because `ctrl+b a` is the launcher's.
+Inside it: `j` and `k` move, `enter` goes to the pane, `space` reads an
+approval's or a question's prompt, `r` replies to mail, `d` dismisses, `f` steps
+through the kinds, `m` opens the mailbox, `esc` closes. `ctrl+b o` is `o`
+because `ctrl+b a` is the launcher's.
+
+In the prompt `space` opens: a digit chooses that option, `a` approves, `A`
+approves and does not ask again, `d` denies, `tab` types an answer, `r` reads
+the prompt again, `enter` goes to the pane, `esc` goes back to the list. See
+[Answering a prompt without attaching](AGENT_STATE.md#answering-a-prompt-without-attaching).
 
 ## macOS
 

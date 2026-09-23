@@ -1,10 +1,13 @@
 package input
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -62,6 +65,49 @@ func TestInboxEnterGoesToThePane(t *testing.T) {
 	}
 	if w := o.GetFocusedWindow(); w == nil || w.ID != "a" {
 		t.Errorf("enter on the question did not focus pane a")
+	}
+}
+
+// TestInboxSpacePeeksAndKeysAnswer: space on the approval opens the peek, a
+// digit chooses that option, and keys that are the list's (j, f) do nothing
+// to the list while the peek owns the keyboard. esc returns to the list.
+func TestInboxSpacePeeksAndKeysAnswer(t *testing.T) {
+	o := inboxInputOS(t)
+	var calls []string
+	var params map[string]any
+	o.SetInboxVerbCaller(func(verb string, p map[string]any, _ time.Duration) (json.RawMessage, error) {
+		calls = append(calls, verb)
+		if verb == "peek-prompt" {
+			return json.Marshal(session.PromptPeek{
+				Session: "local", Window: "b", State: "needs_input", Blocked: true, Found: true, Answerable: true,
+				PromptID: "p1", Options: []harness.Option{{N: 1, Label: "Yes"}, {N: 2, Label: "No"}},
+				Actions: []string{"approve", "deny", "choose"},
+			})
+		}
+		params = p
+		return nil, &session.VerbCallError{Code: session.ErrVerbPromptChanged}
+	}, func() string { return "n" })
+	o = leader(o, press("i"))
+	o, cmd := HandleKeyPress(press("space"), o)
+	if !o.InboxPeeking() || cmd == nil {
+		t.Fatal("space did not open the peek")
+	}
+	o.Update(cmd())
+	o, _ = HandleKeyPress(press("f"), o)
+	if o.Inbox.Filter != "" {
+		t.Error("f reached the list under the peek")
+	}
+	o, cmd = HandleKeyPress(press("2"), o)
+	if cmd == nil {
+		t.Fatal("2 did not answer")
+	}
+	cmd()
+	if calls[len(calls)-1] != "respond" || params["action"] != "choose" || params["value"] != "2" {
+		t.Errorf("2 sent %v %v", calls, params)
+	}
+	o, _ = HandleKeyPress(press("esc"), o)
+	if o.InboxPeeking() || !o.ShowInbox {
+		t.Error("esc did not return to the list")
 	}
 }
 

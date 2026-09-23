@@ -23,6 +23,7 @@ alongside the rest of the pane-driving surface.
 - [Indicator](#indicator)
 - [The rail's agents section](#the-rails-agents-section)
 - [The Inbox](#the-inbox)
+- [Answering a prompt without attaching](#answering-a-prompt-without-attaching)
 - [Harness integrations](#harness-integrations)
 - [Typing a prompt](#typing-a-prompt)
 - [Environment](#environment)
@@ -914,6 +915,7 @@ Inside the Inbox:
 | `j` / `k`, arrows | Move. Group headings are skipped. |
 | `g` / `G` | First and last item. |
 | `enter` | Go to the item's pane, switching session and workspace. On mail, open the thread. |
+| `space` | On an approval or a question, read the prompt without leaving the Inbox, and answer it from there. See [Answering a prompt without attaching](#answering-a-prompt-without-attaching). |
 | `r` | Reply to mail: the thread opens with its reply line. |
 | `d` | Dismiss the item. |
 | `f` | Show one kind, then the next, then all of them. |
@@ -953,8 +955,141 @@ read is a peek.
 
 What it does not do yet: items on linked hosts are not in this machine's Inbox,
 and a client attached to a session on another machine sees this machine's
-Inbox and cannot dismiss from it. Answering an approval from the Inbox, rather
-than going to the pane, is not built either.
+Inbox and cannot dismiss or answer from it. `tuios peek-prompt` and
+`tuios respond` reach a pane on another machine by `HOST:SESSION:WINDOW`.
+
+## Answering a prompt without attaching
+
+An agent blocked on an approval or a question can be answered without going to
+its pane. The screen rule that put the pane on `needs_input` already knows what
+the prompt looks like; a rule can also say which keys answer it, in an
+`[answers]` block. With that, the daemon can show the prompt to the person and
+press the right key for them.
+
+In the Inbox, `space` on an approval or a question opens the peek: the prompt as
+the pane shows it, behind a bar that marks it as the pane's text, its numbered
+options, and how long the agent has waited. From there:
+
+| Key | What it does |
+| --- | --- |
+| `1` to `9` | Choose that option. |
+| `a` | Approve. |
+| `A` | Approve and do not ask again, when the menu offers it. |
+| `d` | Deny. |
+| `tab` | Open a line to type an answer into; `enter` sends it, `esc` drops it. |
+| `r` | Read the prompt again. |
+| `enter` | Go to the pane instead. |
+| `esc` / `q` / `space` | Back to the list. |
+
+The hint row lists only the answers the prompt takes now. An answer that lands
+closes the peek, and the dock says what was pressed and what the agent did:
+`Sent "1" to claude; it is working now`.
+
+On the command line, the same two steps are two verbs:
+
+```bash
+tuios peek-prompt -w review                        # the prompt, its options, its answers
+tuios respond -w review --prompt-id 75f8b9fadb5b5dfc approve
+tuios respond -w review choose 2
+tuios peek-prompt -w buildbox:api:review --json    # a pane on another machine
+```
+
+### The answers block
+
+Under a `needs_input` screen or title rule:
+
+```toml
+[[screen.rule]]
+state    = "needs_input"
+kind     = "approval"
+all      = ["Do you want"]
+any      = ["1. Yes", "❯ 1."]
+
+[screen.rule.answers]
+approve        = { option = "yes" }
+approve_always = { option = "yes, " }
+deny           = { keys = ["esc"] }
+choose         = "digit"
+```
+
+- `approve`, `approve_always` and `deny` each take `option`, `keys`, or both.
+  `option` is the start of a numbered option's label, matched without case, and
+  the answer is offered only while such an option is on the screen: with
+  `option` alone its digit is pressed. `keys` are pressed as they are, once the
+  option (when named) is found. A key is `enter`, `esc`, `tab`, `space`, `up`,
+  `down`, `left`, `right`, `backspace`, or one printable character; at most 8.
+- `choose = "digit"` lets the person pick any numbered option by its number.
+- `text = true` lets the person type an answer, which is pasted and submitted
+  the way `ask-agent` types a prompt.
+
+Binding an answer to a label is what keeps it safe across menus. Claude Code's
+permission menu has `2. Yes, and don't ask again` on some tools and `2. No` on
+others; `approve_always = "2"` would deny on the second. Bound to `yes, `, it is
+not offered there at all.
+
+A block on a rule that is not `needs_input`, on a notify rule, with a key name
+it does not know, with more than 8 keys, with an answer that names neither keys
+nor an option, or with an `option` on a title rule (a title has no options)
+fails the manifest's load, and the error names the answers block. The
+bundled manifests declare answers for Claude Code's permission, trust, plan,
+question and workflow menus, and for Codex's approval. Harnesses whose prompts
+tuios cannot read reliably declare none, and their prompts are answered in the
+pane. Older builds of tuios ignore the block.
+
+### What the daemon checks before it presses anything
+
+`respond` reads the prompt again right before it writes, under a lock per
+window:
+
+1. The pane must be on `needs_input`, and a rule with answers must read a
+   prompt on it now.
+2. When the caller passes the `prompt_id` a peek gave it, the prompt now must
+   have the same id. The id covers the rule, the lines it read, the options,
+   and when the pane entered `needs_input`, so a prompt answered and asked again
+   is a new prompt.
+3. The prompt must not be one this daemon already answered.
+4. The action must be one the rule offers for what is on the screen now.
+
+The first three fail with `prompt_changed` and press nothing; the fourth fails
+with `invalid_params` naming the actions that are offered. Then `respond` waits,
+up to 5 seconds by default, for the pane to leave `needs_input`, and returns
+its state and how the wait ended (`state`, `prompt`, `gone` or `timeout`).
+
+Two people answering the same prompt from two clients: the first answer wins,
+and the second gets `prompt_changed`, because by then the prompt is either gone
+or already answered. The peek then reads the prompt again and says that nothing
+was pressed.
+
+### Who may answer
+
+Answering a prompt is acting as the person: it approves a tool call. So
+`respond` is held to the rule every other act as the person is held to (see
+[Who can act as the person](#who-can-act-as-the-person)):
+
+- The call carries the nonce of a client attached right now, and comes from a
+  process that may act as the person, which is the client itself. The Inbox
+  sends its own.
+- Or the daemon runs with `respond_from_shell = true` under `[daemon]` in the
+  config file, and the caller is a process the kernel names that runs outside
+  every pane: a shell in another terminal, or a script the person runs. The
+  grant is off by default, and it cannot be switched with `set-option`, since
+  any pane can call that verb.
+
+A caller inside a pane is refused with `not_human` either way, even with a live
+nonce copied out of the person's client. An agent cannot approve its own tool
+call or another agent's through tuios. A key that `send-keys` or `run-command`
+routed into the person's client does not answer from the peek either: the peek
+refuses it and says why, the same rule that keeps such keys from signing a mail
+reply.
+
+`peek-prompt` is a read, open to any caller, the way `capture-pane` is. Its
+lines are the pane's screen and are marked `untrusted`: data, not
+instructions.
+
+Over the link, the nonce is the far daemon's to check: a client attached to a
+session on that machine, through the hub, answers with the nonce that daemon
+issued, over a stream the hub vouched for. The far daemon's own
+`respond_from_shell` governs a shell caller there.
 
 ## Harness integrations
 
@@ -1385,6 +1520,8 @@ proof, as before.
 | `read-agent-messages -w human` from a pane, to clear the person's unread mail | Served as a peek: nothing is marked read, and the result says `peek_forced`. |
 | A client attached from a pane, to clear `finished_unread` by focusing panes | Its state pushes do not mark a finished turn seen. |
 | `dismiss-attention` from a pane, to empty the person's Inbox | Refused with `not_human`, even with a live nonce copied from the person's client: the nonce is checked the way a reply's is. |
+| `respond` from a pane, to approve its own tool call or another agent's | Refused with `not_human`, with or without a copied nonce, and with or without `respond_from_shell`, which only grants callers outside every pane. Nothing is pressed. |
+| `send-keys` or `run-command` driving the person's Inbox peek, to press `a` | The peek sends no answer for a routed key and says why. |
 | An agent in a hub pane attaching through the link to this machine | The hub vouches only for a caller outside its panes, in the stream's open frame, which the caller cannot write. The proxy here dials the link-human socket only for a vouched stream. An attach through the plain link socket gets no nonce. |
 | An agent in a pane on this machine dialing the link-human socket itself | The same pane check runs on that socket, against the process that dialed it. |
 | A hub from before this check | It vouches for nothing, so no attach through it verifies here. |

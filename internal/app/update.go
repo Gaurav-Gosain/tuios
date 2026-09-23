@@ -1733,6 +1733,13 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyInboxDismissed(msg)
 		return m, nil
 
+	case InboxPeekMsg:
+		m.applyInboxPeek(msg)
+		return m, nil
+
+	case InboxRespondedMsg:
+		return m, m.applyInboxResponded(msg)
+
 	case AgentMailSentMsg:
 		m.applyAgentMailSent(msg)
 		return m, nil
