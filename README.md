@@ -55,7 +55,6 @@ Full documentation is available at **[tuios-docs](https://tuios.gaurav.zip)** (h
 
 **Homebrew (macOS/Linux):**
 ```bash
-brew tap Gaurav-Gosain/tap
 brew install tuios
 ```
 

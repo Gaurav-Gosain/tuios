@@ -298,7 +298,6 @@ release:
 
     **Homebrew (macOS/Linux):**
     ```bash
-    brew tap Gaurav-Gosain/tap
     brew install tuios
     ```
 

@@ -45,7 +45,6 @@ TUIOS uses a modern command-line interface built with Cobra and Fang, providing:
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew tap Gaurav-Gosain/tap
 brew install tuios
 ```
 
