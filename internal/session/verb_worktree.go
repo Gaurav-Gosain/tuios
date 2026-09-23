@@ -621,7 +621,7 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 // detached from the verb, so fan returns as soon as the sessions exist and the
 // person watches the rail rather than a blocked command.
 func (d *Daemon) deliverFanPrompt(sess *Session, windowID, harness, text string, timeout time.Duration) {
-	w, outcome := d.waitAgentStart(sess, windowID, harness, timeout, false, func(WindowState) {
+	w, outcome := d.waitAgentStart(sess, windowID, harness, timeout, false, false, func(WindowState) {
 		sess.setPromptStatus(PromptHeld, "The agent is not at a prompt tuios recognises. Look at the pane: it may be showing a first-run choice. The prompt is typed as soon as the agent is ready.", 0)
 	})
 	switch outcome {

@@ -141,6 +141,13 @@ type Daemon struct {
 	// peerPaneWindow; a test sets it to stand in for a process table.
 	approvalPeer func(cs *connState) (fromPane bool, window string)
 
+	// protocolPanes holds the windows start-agent --protocol opened, window
+	// id to protocol. See agent_protocol.go.
+	protocolPanes sync.Map
+	// agentProtoExe finds the binary a protocol pane runs. Nil is
+	// os.Executable; a test points it at a built tuios.
+	agentProtoExe func() (string, error)
+
 	// stash is the per-session file store the stash verbs write into. It is held
 	// beside agents for the same reason: it must never reach disk as state, and
 	// its lifetime is the session's. Unlike the ring it does put bytes on disk,

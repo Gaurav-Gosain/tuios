@@ -264,6 +264,9 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			// The fan-out group of the pane's session, empty outside one. It
 			// is what a group: selector term reads.
 			"group": group,
+			// acp or codex for an agent start-agent runs headless over a
+			// protocol, empty for every other pane.
+			"protocol": d.paneProtocol(w.ID),
 		})
 	}
 	return agents

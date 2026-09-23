@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -29,6 +30,11 @@ import (
 //
 // It grants nothing new-window with a command does not already grant: the
 // argv is exec'd directly, never a shell line.
+//
+// With protocol, the agent runs headless over ACP or the Codex app-server
+// protocol, under `tuios agent-proto` as the pane's process, which shows it as
+// a transcript and reports its state (agent_protocol.go). The pane is ready on
+// that report alone, and the first prompt is typed into it the same way.
 
 // startAgentDefaultReadyTimeout bounds the wait. It is shorter than fan's,
 // because a caller is blocked on it.
@@ -47,9 +53,15 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		Prompt       string            `json:"prompt"`
 		ReadyTimeout int               `json:"ready_timeout"`
 		Env          map[string]string `json:"env"`
+		Protocol     string            `json:"protocol"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if p.Protocol != "" {
+		if verr := checkProtocol(p.Protocol); verr != nil {
+			return nil, verr
+		}
 	}
 	if strings.TrimSpace(p.Agent) == "" {
 		return nil, invalidParam("agent", "agent is required: the harness or program to start, with its arguments, such as claude or \"codex --model o5\"")
@@ -96,6 +108,16 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		}
 	}
 	argv := append(append([]string{}, launch.argv...), p.Args...)
+	// A protocol pane runs the pane program with the agent's argv after it.
+	// The agent is still exec'd directly, by the pane program, with no shell.
+	command := argv
+	if p.Protocol != "" {
+		argv = protocolAgentArgv(p.Protocol, launch.argv, p.Args)
+		var verr *verbError
+		if command, verr = d.protocolArgv(p.Protocol, launch.harness, argv); verr != nil {
+			return nil, verr
+		}
+	}
 
 	// The session: the named one, made when it does not exist, or the most
 	// recently active one, made when there is none at all.
@@ -117,7 +139,23 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	}
 
 	sessionID := sess.ID
-	onExit := func(ptyID string) { d.notifyPTYClosed(sessionID, ptyID) }
+	// The window id is known only once the window exists, and the process
+	// can exit before then, so the mark is set and dropped under one lock:
+	// a pane whose process already exited is never marked.
+	var (
+		markMu   sync.Mutex
+		markedID string
+		exited   bool
+	)
+	onExit := func(ptyID string) {
+		d.notifyPTYClosed(sessionID, ptyID)
+		markMu.Lock()
+		exited = true
+		if markedID != "" {
+			d.unmarkProtocolPane(markedID)
+		}
+		markMu.Unlock()
+	}
 	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
 		Title:     p.Name,
 		Name:      p.Name,
@@ -126,15 +164,25 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		// Not focused unless asked: an agent starting a helper should not
 		// pull the person out of the pane they are in.
 		Focus:   p.Focus,
-		Command: argv,
+		Command: command,
 		Env:     env,
 	}, onExit)
 	if err != nil {
 		return nil, newWindowErr(err, sess, p.Workspace)
 	}
+	if p.Protocol != "" {
+		markMu.Lock()
+		if !exited {
+			markedID = win.ID
+			d.markProtocolPane(win.ID, p.Protocol)
+		}
+		markMu.Unlock()
+	}
 
 	timeout := durationOr(p.ReadyTimeout, startAgentDefaultReadyTimeout)
-	w, outcome := d.waitAgentStart(sess, win.ID, launch.harness, timeout, true, nil)
+	// A protocol pane is ready only on its own report: its screen is a
+	// transcript no manifest rule reads, so unknown never means quiet.
+	w, outcome := d.waitAgentStart(sess, win.ID, launch.harness, timeout, true, p.Protocol != "", nil)
 	out := map[string]any{
 		"type":            "agent_started",
 		"session":         sess.Name,
@@ -153,6 +201,9 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	}
 	if cloned {
 		out["cloned"] = true
+	}
+	if p.Protocol != "" {
+		out["protocol"] = p.Protocol
 	}
 	if w.ID != "" {
 		out["name"] = windowLabelOf(w)

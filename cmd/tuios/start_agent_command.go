@@ -13,7 +13,7 @@ import (
 
 // newStartAgentCommand builds `tuios start-agent`.
 func newStartAgentCommand() *cobra.Command {
-	var sessionName, name, cwd, repo, prompt string
+	var sessionName, name, cwd, repo, prompt, protocol string
 	var env []string
 	var workspace, readyTimeout int
 	var focus, clone, jsonOutput bool
@@ -48,7 +48,16 @@ list-agents shows and -w takes, so you can address it as 'reviewer'.
 An agent that stops on a question of its own, such as whether to trust the
 folder, is not ready: the command prints what it waits on and exits non-zero,
 and the pane is kept for the person to answer. So is one that shows nothing
-before --ready-timeout.`,
+before --ready-timeout.
+
+--protocol runs the agent headless over a structured protocol instead of in
+its own TUI: acp (the Agent Client Protocol) for an agent command that speaks
+it, such as "opencode acp", or codex (the Codex app-server; app-server is
+added to the codex command). The pane shows the conversation as a transcript
+you type prompts into, and reports the agent's state itself. A permission the
+agent asks for is answered in the pane with a number key, or from the Inbox
+when one line shows the whole request, with no [agents.approvals] needed. See
+tuios agent-proto --help.`,
 		Example: `  # A reviewer beside you, addressed by name afterwards
   tuios start-agent claude --name reviewer
   tuios ask-agent -w reviewer 'review the diff on this branch'
@@ -57,7 +66,10 @@ before --ready-timeout.`,
   tuios start-agent 'codex --model o5' --name tests --cwd ~/src/api --prompt 'Run the tests and fix what fails.'
 
   # Claude Code on host build, in its checkout of this repository
-  tuios start-agent -s build:api claude --prompt 'Profile the build.' -- --model opus`,
+  tuios start-agent -s build:api claude --prompt 'Profile the build.' -- --model opus
+
+  # An ACP agent, headless, answered from the Inbox
+  tuios start-agent --protocol acp 'opencode acp' --name helper --prompt 'Summarise the TODOs.'`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(c *cobra.Command, args []string) error {
 			positional, extra := args, []string(nil)
@@ -72,7 +84,7 @@ before --ready-timeout.`,
 				return err
 			}
 			return runStartAgent(startAgentOptions{
-				session: sessionName, agent: positional[0], args: extra, name: name, cwd: cwd, repo: repo, prompt: prompt,
+				session: sessionName, agent: positional[0], args: extra, name: name, cwd: cwd, repo: repo, prompt: prompt, protocol: protocol,
 				env: callerEnv, explicitEnv: len(env) > 0, workspace: workspace, readyTimeout: readyTimeout, focus: focus, clone: clone,
 			}, jsonOutput)
 		},
@@ -85,6 +97,8 @@ before --ready-timeout.`,
 	cmd.Flags().IntVar(&workspace, "workspace", 0, "The workspace to open the pane on (default: the current one)")
 	cmd.Flags().BoolVar(&focus, "focus", false, "Focus the new pane")
 	cmd.Flags().StringVar(&prompt, "prompt", "", "A first prompt, typed once the agent is ready")
+	cmd.Flags().StringVar(&protocol, "protocol", "", "Run the agent headless over acp or codex (the Codex app-server) instead of in its own TUI")
+	_ = cmd.RegisterFlagCompletionFunc("protocol", cobra.FixedCompletions([]string{"acp", "codex"}, cobra.ShellCompDirectiveNoFileComp))
 	cmd.Flags().IntVar(&readyTimeout, "ready-timeout", 0, "Milliseconds to wait for the agent to be ready (default 120000)")
 	cmd.Flags().StringArrayVar(&env, "env", nil, "Pass a variable to the agent: NAME for your own value, NAME=VALUE to set one. Repeatable. PATH is sent too, except to a session on another machine")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
@@ -95,8 +109,10 @@ before --ready-timeout.`,
 // startAgentOptions is what `tuios start-agent` sends.
 type startAgentOptions struct {
 	session, agent, name, cwd, repo, prompt string
-	args                                    []string
-	env                                     map[string]string
+	// protocol is --protocol, empty for the agent's own TUI.
+	protocol string
+	args     []string
+	env      map[string]string
 	// explicitEnv says the person passed --env. Without it the env holds
 	// only the PATH the CLI adds on its own.
 	explicitEnv             bool
@@ -163,7 +179,9 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	for k, v := range place {
 		params[k] = v
 	}
-	for k, v := range map[string]string{"name": o.name, "prompt": o.prompt} {
+	// A daemon older than protocol refuses the parameter by name, so an old
+	// daemon never starts the agent in its TUI when a protocol was asked for.
+	for k, v := range map[string]string{"name": o.name, "prompt": o.prompt, "protocol": o.protocol} {
 		if v != "" {
 			params[k] = v
 		}

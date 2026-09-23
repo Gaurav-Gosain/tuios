@@ -10,6 +10,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/agentproto"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
@@ -509,6 +510,7 @@ func init() {
 				{Name: "prompt", Type: "string", Description: "A first prompt, typed once the agent is ready and checked the way fan checks it."},
 				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for the agent to be ready.", Default: "120000"},
 				{Name: "env", Type: "object", Description: "Environment variables for the agent, name to value, on top of the daemon's; PATH in it is where the program is looked up. The rules are fan's."},
+				{Name: "protocol", Type: "string", Description: "Run the agent headless over a structured protocol instead of in its own TUI: acp (the Agent Client Protocol, for an agent command such as \"opencode acp\") or codex (the Codex app-server; app-server is added to the codex command). The pane runs tuios agent-proto, which shows the conversation as a transcript and reports the agent's state itself; the pane is ready on that report alone. Its permission requests are answered in the pane or, for a request one line shows whole, from the Inbox without [agents.approvals]. Omit for the agent's own TUI.", Accepted: agentproto.Protocols},
 			}, repoSourceParams...),
 			returns: []verbParam{
 				{Name: "session", Type: "string", Description: "The session the pane is in."},
@@ -521,7 +523,8 @@ func init() {
 				{Name: "window_id", Type: "string", Description: "The new pane."},
 				{Name: "name", Type: "string", Description: "Its name."},
 				{Name: "agent", Type: "string", Description: "The harness id, from the manifest or detection, empty when nothing recognises the program."},
-				{Name: "command", Type: "string", Description: "The command that was started."},
+				{Name: "command", Type: "string", Description: "The command that was started. With protocol, the agent's command, which tuios agent-proto runs."},
+				{Name: "protocol", Type: "string", Description: "The protocol, when one was asked for. Absent otherwise."},
 				{Name: "ready", Type: "bool", Description: "True when the agent showed it is at its prompt."},
 				{Name: "ready_by", Type: "string", Description: "The evidence: idle or done, or quiet for unknown on a harness that cannot show idle."},
 				{Name: "state", Type: "string", Description: "The pane's agent state when the wait ended."},
@@ -535,6 +538,7 @@ func init() {
 				`{"id":1,"verb":"start-agent","params":{"session":"work","agent":"claude","name":"reviewer","cwd":"/src/api"}}`,
 				`{"id":1,"verb":"start-agent","params":{"session":"work","agent":"codex --model o5","name":"tests","cwd":"/src/api","prompt":"Run the test suite and fix what fails.","ready_timeout":300000}}`,
 				`{"id":1,"verb":"start-agent","params":{"session":"api","agent":"codex","repo_url":"git@github.com:acme/api.git","repos_root":"~/src","args":["--model","o4"],"prompt":"Fix the flaky test."}}`,
+				`{"id":1,"verb":"start-agent","params":{"session":"work","agent":"opencode acp","protocol":"acp","name":"helper","prompt":"Summarise the open TODOs."}}`,
 			},
 			handler: (*Daemon).verbStartAgent,
 		},
@@ -1360,7 +1364,7 @@ func init() {
 				{Name: "select", Type: "string", Description: selectorSyntax + " Keeps only the panes it matches, in every session unless session is also given. The answer then carries the confirm token a write by the same selector takes."},
 			},
 			returns: []verbParam{
-				{Name: "agents", Type: "[]object", Description: "One entry per pane: session, window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, completion_seq, finished_unread, agent_session_id, meta, group. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it. meta is the set-agent-meta keys, key to value. group is the fan-out group of the pane's session, empty outside one."},
+				{Name: "agents", Type: "[]object", Description: "One entry per pane: session, window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, completion_seq, finished_unread, agent_session_id, meta, group, protocol. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it. meta is the set-agent-meta keys, key to value. group is the fan-out group of the pane's session, empty outside one. protocol is acp or codex for an agent start-agent runs headless over that protocol, empty for every other pane."},
 				{Name: "total", Type: "int", Description: "How many panes are listed."},
 				{Name: "select", Type: "string", Description: "The selector as parsed, when one was given."},
 				{Name: "confirm", Type: "string", Description: "With select, and without all or session: the token for exactly the listed panes, which send-agent-message and ask-agent take as confirm to write to them."},
@@ -1535,7 +1539,7 @@ func init() {
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Required: true, Description: "The pane whose prompt is held, normally $TUIOS_PANE_ID."},
-				{Name: "harness", Type: "string", Required: true, Description: "The harness the prompt belongs to, by id or alias. Nothing is held unless [agents.approvals] enabled names it."},
+				{Name: "harness", Type: "string", Required: true, Description: "The harness the prompt belongs to, by id or alias. Nothing is held unless [agents.approvals] enabled names it, or the pane is one start-agent --protocol opened."},
 				{Name: "options", Type: "[]string", Description: "The decisions the harness can take. Omit for once and deny. always is dropped unless always_scope shows what it adds.", Accepted: approvalDecisions},
 				{Name: "summary", Type: "string", Required: true, Description: "The line the person answers from: the whole request, as the hook reported it. The held item shows it for as long as the hold runs. Nothing is held (reason not_shown) when the Inbox could not show it as it is: longer than 160 bytes, with a control or format character, whitespace it would collapse, or text it would mask."},
 				{Name: "always_scope", Type: "[]string", Description: "What always allows from now on, one rule per line, shown beside the key. Required for always to be offered: one to four lines, each shown as it is."},

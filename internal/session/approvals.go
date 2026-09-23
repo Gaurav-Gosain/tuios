@@ -482,7 +482,10 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 	w := st.Windows[idx]
 
 	policy := d.approvalPolicy()
-	if !policy.Enabled[harnessID] {
+	// A pane start-agent --protocol opened holds without the table: choosing
+	// the protocol is the opt-in (agent_protocol.go). Every check below still
+	// applies to it.
+	if !policy.Enabled[harnessID] && d.paneProtocol(w.ID) == "" {
 		return approvalResult("", approvalOutcome{Reason: approvalEndDisabled}), nil
 	}
 	if fromPane, own := d.peerPane(cs); fromPane && own != w.ID {

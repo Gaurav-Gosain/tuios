@@ -289,7 +289,11 @@ func readyBy(w WindowState) string {
 // reads unknown before the detector has named its harness would count as a
 // harness that can never show idle, and the prompt would be typed into
 // whatever the agent shows first.
-func (d *Daemon) waitAgentStart(sess *Session, windowID, harness string, timeout time.Duration, stopOnBlocked bool, held func(WindowState)) (WindowState, agentStartOutcome) {
+//
+// reportedOnly counts only a state the pane shows, never unknown, whatever the
+// harness: a protocol pane's screen is a transcript no manifest rule reads, and
+// its own report is the evidence.
+func (d *Daemon) waitAgentStart(sess *Session, windowID, harness string, timeout time.Duration, stopOnBlocked, reportedOnly bool, held func(WindowState)) (WindowState, agentStartOutcome) {
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name,
 		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true, EventSessionClosed: true},
@@ -317,7 +321,11 @@ func (d *Daemon) waitAgentStart(sess *Session, windowID, harness string, timeout
 		}
 		judged := w
 		judged.AgentHarness = firstNonEmpty(w.AgentHarness, harness)
-		if d.agentReady(judged, fanReadyStates) {
+		ready := fanReadyStates[w.AgentState.Name()]
+		if !reportedOnly {
+			ready = d.agentReady(judged, fanReadyStates)
+		}
+		if ready {
 			return w, agentStartReady, true
 		}
 		if stopOnBlocked && w.AgentState == AgentStateNeedsInput {
