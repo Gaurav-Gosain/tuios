@@ -112,8 +112,11 @@ var verbCapabilities = map[string][]string{
 	"pane-agent":   {config.LinkAllowOpen},
 	"pane-calls":   {config.LinkAllowOpen},
 
-	"refresh-dock":        {config.LinkAllowWrite},
-	"remove-worktree":     {config.LinkAllowWrite},
+	"refresh-dock":    {config.LinkAllowWrite},
+	"remove-worktree": {config.LinkAllowWrite},
+	// bundle-worktree reads a worktree's files out, which write already
+	// reaches through a shell, and list must not.
+	"bundle-worktree":     {config.LinkAllowWrite},
 	"focus-window":        {config.LinkAllowWrite},
 	"move-window":         {config.LinkAllowWrite},
 	"set-window":          {config.LinkAllowWrite},

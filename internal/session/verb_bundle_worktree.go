@@ -33,9 +33,9 @@ import (
 // connection that made a transfer can read it.
 //
 // What a caller reads here is the worktree's git objects and its files, which
-// any caller that can run a command in a pane can read already. The verb goes
-// through checkLinkPolicy as files, so a host policy that refuses files to a
-// linked machine refuses this too.
+// any caller that can run a command in a pane can read already. Over a link it
+// needs the write capability, the one that lets a machine type into a shell
+// here, checked before the handler and again in checkLinkPolicy.
 
 // bundleChunkBytes is the most one reply carries, before base64. It is well
 // under the 16 MB a reply line may hold. A variable so a test can make a small

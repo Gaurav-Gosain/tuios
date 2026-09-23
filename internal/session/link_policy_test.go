@@ -356,3 +356,47 @@ func (f *farSide) proxyDialer(pinned string) federation.Dialer {
 		return hub, nil
 	}
 }
+
+// TestTheIntegratedVerbsAreHeldToTheLinkPolicy covers the verbs the other
+// units of the stage added after the policy was written: a machine that may
+// only list cannot start an agent, read a worktree's files out, run a line
+// at a prompt or answer a question for the person, and one that may open but
+// not write still cannot read a worktree out. checkLinkPolicy, the call site
+// inside the repository and bundle code, answers the same as the table.
+func TestTheIntegratedVerbsAreHeldToTheLinkPolicy(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	_, a, _ := twoWindowSession(t, d, "work")
+	d.SetLinkPolicies(map[string]config.HostConfig{
+		"viewer": {Allow: []string{"list"}},
+		"opener": {Allow: []string{"list", "open"}},
+	})
+
+	viewer := dialLink(t, sp)
+	result(t, linkPeer(t, viewer, "viewer"))
+	for verb, params := range map[string]string{
+		"start-agent":     `{"session":"work","agent":"true"}`,
+		"bundle-worktree": `{"session":"work"}`,
+		"run":             `{"session":"work","window":"` + a + `","command":"true"}`,
+		"answer-ask":      `{"request_id":"x","answer":"yes","human_nonce":"n"}`,
+	} {
+		mustRefuse(t, viewer.call(t, `{"id":1,"verb":"`+verb+`","params":`+params+`}`),
+			ErrVerbForbidden, verb+" from a machine that may only list")
+	}
+
+	opener := dialLink(t, sp)
+	result(t, linkPeer(t, opener, "opener"))
+	mustRefuse(t, opener.call(t, `{"id":1,"verb":"bundle-worktree","params":{"session":"work"}}`),
+		ErrVerbForbidden, "bundle-worktree from a machine that may open but not write")
+
+	// The call site inside the handlers agrees with the table.
+	cs := &connState{viaLink: true, linkPeer: "opener", linkPeerSet: true}
+	if verr := d.checkLinkPolicy(cs, linkCapSpawn, "fan"); verr != nil {
+		t.Errorf("a clone from a machine that may open was refused: %v", verr.Message)
+	}
+	if verr := d.checkLinkPolicy(cs, linkCapFiles, "bundle-worktree"); verr == nil || verr.Code != ErrVerbForbidden {
+		t.Errorf("reading files out from a machine that may not write was allowed")
+	}
+	if verr := d.checkLinkPolicy(&connState{}, linkCapFiles, "bundle-worktree"); verr != nil {
+		t.Errorf("a caller on this machine was held to a link policy: %v", verr.Message)
+	}
+}

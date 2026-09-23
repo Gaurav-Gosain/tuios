@@ -191,6 +191,10 @@ var verbScopes = map[string]scopeKind{
 	"run":        scopeWrite,
 	"ask-human":  scopeSelf,
 	"answer-ask": scopeDeny,
+
+	// From the host targeting work: reading a worktree's files out is for
+	// the person's own CLI (worktree pull), not a restricted caller.
+	"bundle-worktree": scopeDeny,
 }
 
 // verbRestrictConnection narrows what this connection may do from now on.

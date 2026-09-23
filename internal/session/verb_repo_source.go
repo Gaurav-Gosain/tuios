@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
@@ -21,33 +22,35 @@ import (
 // machine's directories hold a checkout of a URL it already knows, and, with
 // clone, make git fetch a network URL into a new directory. Both are less
 // than what the same caller can already do with new-window and a command, so
-// neither widens a link or pane caller's reach. clone is still gated as a
-// spawn below, so a host policy that refuses spawning refuses it too.
+// neither widens a link or pane caller's reach. clone is still checked
+// against the link policy's open capability below.
 
 // ErrVerbRepoNotFound reports a repo_url that matches no checkout on this
 // machine, and no clone was asked for. Its remedy is clone, a repos_root, or
 // a directory, which is why it does not share a code with git_failed.
 const ErrVerbRepoNotFound = "repo_not_found"
 
-// Link capabilities, as the per-host capability policy names them. See
-// checkLinkPolicy.
+// Link capabilities the repository and worktree verbs check at the point they
+// act, on top of the check every verb gets before its handler runs
+// (link_policy.go). A clone starts a program, git, so it is open, the
+// capability that starts sessions and windows. Reading a worktree's files
+// out is write: a machine that may type into a shell here can read every one
+// of them already, and list, which only reads screens, must not.
 const (
-	linkCapSpawn = "spawn"
-	linkCapFiles = "files"
+	linkCapSpawn = config.LinkAllowOpen
+	linkCapFiles = config.LinkAllowWrite
 )
 
-// checkLinkPolicy is the call site of the per-host capability policy for the
-// verbs this unit adds or extends: start-agent, fan and new-worktree with
-// repo_url or clone (spawn), and bundle-worktree (files).
-//
-// The policy itself, [hosts.NAME] allow on the receiving machine, is its own
-// piece of work. Until it lands this refuses nothing, which keeps what a link
-// connection may do exactly what it was: it could already open sessions and
-// windows running any command, which is more than any of these verbs does.
-// When the policy lands, it is enforced here for these verbs, and the verb
-// to capability map gains the same four entries.
-func (d *Daemon) checkLinkPolicy(_ *connState, _, _ string) *verbError {
-	return nil
+// checkLinkPolicy holds a call from another machine to that machine's link
+// policy for one capability. A call that did not come over a link passes.
+// The verbs that reach it are also in verbCapabilities, so the check before
+// the handler already covers them; this one stays at the point of the action,
+// so a verb that gains a path to it later cannot skip it.
+func (d *Daemon) checkLinkPolicy(cs *connState, capability, verb string) *verbError {
+	if cs == nil || !cs.viaLink {
+		return nil
+	}
+	return d.checkLinkCaps(cs, verb, []string{capability})
 }
 
 // repoSource is the repository parameters new-worktree, fan and start-agent
