@@ -42,8 +42,9 @@ install look like it did nothing:
 - **A running daemon**, which keeps serving the build it started from until
   it is stopped. Pass `--kill-server` to have the script run
   `tuios kill-server` for you, or `--keep-server` to be told and left alone;
-  with neither, it asks. Sessions are saved on the way out and restored when
-  the daemon next starts.
+  with neither, it asks. Stopping the daemon ends the programs in your panes;
+  each session's layout and working directories are saved on the way out and
+  come back with new shells when the daemon next starts.
 
 Because the two builds install under one name, the binary is the only thing
 that can say which emulator it carries, and `tuios --version` does:

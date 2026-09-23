@@ -2705,8 +2705,10 @@ Most likely cause: TUIOS was upgraded while the daemon kept running, so the old 
 Fix: run 'tuios kill-server', then run this command again.
 ```
 
-Run `tuios kill-server`. Sessions are saved before the daemon exits and restored
-when it next starts; `tuios resurrect` lists what is restorable.
+Run `tuios kill-server`. This ends every program running in your panes. Each
+session's layout, window names and working directories are saved before the
+daemon exits and come back when it next starts, each pane with a new shell;
+`tuios resurrect` lists what is restorable.
 
 ### A session name is not found
 

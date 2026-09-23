@@ -193,7 +193,7 @@ if pid=$(daemon_pid); then
         keep) daemon_action=no ;;
         ask)
             if [ -t 0 ] && [ -r /dev/tty ]; then
-                printf '\nA daemon (pid %s) is still running the previous build. Stop it now? [y/N] ' "$pid" >&2
+                printf '\nA daemon (pid %s) is still running the previous build.\nStopping it ends the programs running in your panes; layouts and working\ndirectories come back with new shells. Stop it now? [y/N] ' "$pid" >&2
                 read -r answer </dev/tty || answer=n
                 case $answer in
                     [yY] | [yY][eE][sS]) daemon_action=stop ;;
@@ -212,6 +212,8 @@ if pid=$(daemon_pid); then
         note "A daemon (pid $pid) is still running the previous build, and every
 attached session goes through it. Run this when you are ready to switch:
     tuios kill-server
-Sessions are saved on the way out and restored when the daemon starts again."
+That ends the programs running in your panes. Each session's layout and
+working directories are saved on the way out and come back with new shells
+when the daemon starts again."
     fi
 fi

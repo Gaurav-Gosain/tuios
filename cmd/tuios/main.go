@@ -472,7 +472,8 @@ in the terminal UI. Press Ctrl+P to pause/resume playback.`,
 If no session name is provided, attaches to the most recent session.
 
 If the daemon is not running, it is started and restores every session
-saved on disk. Attach then opens one of those. With nothing saved and no
+saved on disk: the layout and working directories, with new shells. Attach
+then opens one of those. With nothing saved and no
 name given, a new session is opened instead. A name that matches no session
 is an error unless -c is given.
 
