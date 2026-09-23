@@ -753,9 +753,11 @@ whose id came from another process of the same harness.
 
 The id is what brings your conversation back after a daemon restart. A restart
 ends every program in every pane, you included; the restore starts a new shell
-in each pane and, for a pane whose harness has a `[resume]` command in its
-manifest (Claude Code, Codex, opencode, Copilot, Cursor Agent, Qwen and more),
-offers to run it with your id: `claude --resume <id>`, `codex resume <id>`.
+in each pane and, for a pane where you were still running when the state was
+saved and whose harness has a `[resume]` command in its manifest (Claude Code,
+Codex, opencode, Copilot, Cursor Agent, Qwen and more), offers to run it with
+your id: `claude --resume <id>`, `codex resume <id>`. A pane you had already
+exited from gets no offer, though its id stays for `resume-agent`.
 `daemon.resume_agents` decides how: `ask` (the default) puts a Resume row in the
 Inbox that the person answers with `y`, `auto` types the command into the new
 shell, `off` does neither. So report your id early, from the session start

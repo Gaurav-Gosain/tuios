@@ -31,8 +31,10 @@ argv = ["echo", "resumed-{session_id}"]
 }
 
 // savedAgentSession is the state a previous daemon wrote for a session whose
-// panes ran agents: one resumable pane, one whose harness has no resume
-// command, one that ran on another machine, and one with no conversation.
+// panes ran agents: one resumable pane with its agent running, one whose
+// harness has no resume command, one that ran on another machine, one with no
+// conversation, and one whose agent had already exited, which keeps its id and
+// has nothing live to resume.
 func savedAgentSession(name string) *SessionState {
 	return &SessionState{
 		Name:             name,
@@ -41,12 +43,17 @@ func savedAgentSession(name string) *SessionState {
 		Height:           40,
 		Windows: []WindowState{
 			{ID: "win-agent", Title: "agent", Width: 60, Height: 40, Workspace: 1, PTYID: "dead-1",
+				AgentState: AgentStateWorking, AgentHarness: "echoer",
 				AgentSessionID: "5f1c-9a3d", AgentSessionHarness: "echoer"},
 			{ID: "win-aider", Title: "aider", Width: 60, Height: 40, Workspace: 1, PTYID: "dead-2",
+				AgentState: AgentStateIdle, AgentHarness: "aider",
 				AgentSessionID: "a1", AgentSessionHarness: "aider"},
 			{ID: "win-remote", Title: "remote", Width: 60, Height: 40, Workspace: 1, PTYID: "dead-3",
-				Host: "build", AgentSessionID: "r1", AgentSessionHarness: "echoer"},
+				Host: "build", AgentState: AgentStateWorking, AgentHarness: "echoer",
+				AgentSessionID: "r1", AgentSessionHarness: "echoer"},
 			{ID: "win-plain", Title: "plain", Width: 60, Height: 40, Workspace: 1, PTYID: "dead-4"},
+			{ID: "win-ended", Title: "ended", Width: 60, Height: 40, Workspace: 1, PTYID: "dead-5",
+				AgentSessionID: "e1-ended", AgentSessionHarness: "echoer"},
 		},
 	}
 }
@@ -102,6 +109,81 @@ func TestRestoreKeepsTheConversationID(t *testing.T) {
 	if w := got["win-remote"]; w.AgentSessionID != "" || w.AgentSessionHarness != "" {
 		t.Errorf("a pane that ran on another machine kept that machine's conversation %q", w.AgentSessionID)
 	}
+	if w := got["win-ended"]; w.AgentSessionID != "e1-ended" {
+		t.Errorf("a pane whose agent had exited lost its id %q; resume-agent still needs it", w.AgentSessionID)
+	}
+}
+
+// TestRestoreOffersOnlyWhatWasRunning is the pane where the person quit the
+// agent and went back to shell work before the restart. Its id is kept, so it
+// can still be resumed by hand, but the restore does not offer it: no Resume
+// row in ask mode and nothing typed in auto mode.
+func TestRestoreOffersOnlyWhatWasRunning(t *testing.T) {
+	echoHarness(t)
+	d, sp := startTestDaemon(t)
+	c := dialVerb(t, sp)
+
+	if _, err := d.restoreSession(savedAgentSession("ended-ask")); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	waitAttention(t, c, "the running pane's offer", hasKind(AttentionResume, "win-agent"))
+	if hasKind(AttentionResume, "win-ended")(mustList(t, c)) {
+		t.Error("ask mode offered a conversation whose agent had already exited")
+	}
+
+	d.resumeAgents = resumeModeAuto
+	if _, err := d.restoreSession(savedAgentSession("ended-auto")); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	waitPaneHolds(t, c, "ended-auto", "win-agent", "resumed-5f1c-9a3d")
+	// The running pane's command landed, and the ended pane's would have been
+	// typed 100 ms later at most; give it well past that.
+	time.Sleep(time.Second)
+	if text := capturePane(t, c, "ended-auto", "win-ended"); strings.Contains(text, "resumed-") {
+		t.Errorf("auto mode typed into a pane whose agent had exited:\n%s", text)
+	}
+
+	res := result(t, c.call(t, `{"id":1,"verb":"resume-agent","params":{"session":"ended-auto","window":"win-ended","dry_run":true}}`))
+	if res["command"] != "echo resumed-e1-ended" {
+		t.Errorf("resume-agent by hand on the ended pane answered %v", res)
+	}
+}
+
+// TestRestoreOffersOnce is a Resume row nobody answered: the restored pane
+// holds a new shell and no agent, so the state the next save writes makes no
+// offer, and a dismissed row does not come back on every later restart.
+func TestRestoreOffersOnce(t *testing.T) {
+	echoHarness(t)
+	d, sp := startTestDaemon(t)
+	c := dialVerb(t, sp)
+
+	sess, err := d.restoreSession(savedAgentSession("once"))
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	waitAttention(t, c, "the first restore's offer", hasKind(AttentionResume, "win-agent"))
+
+	saved := sess.ResurrectionState()
+	w, ok := findWindowState(saved, "win-agent")
+	if !ok {
+		t.Fatal("the next save lost the pane")
+	}
+	if w.AgentSessionID != "5f1c-9a3d" {
+		t.Errorf("the next save lost the conversation id: %q", w.AgentSessionID)
+	}
+	if agentWasLive(w) {
+		t.Fatalf("the next save says an agent runs in the new shell: state %q harness %q", w.AgentState, w.AgentHarness)
+	}
+	if o, ok := d.resumeOfferFor("once", w); ok {
+		t.Errorf("a second restart would offer %v again", o)
+	}
+}
+
+// mustList is every open Inbox item.
+func mustList(t *testing.T, c *verbConn) []map[string]any {
+	t.Helper()
+	items, _ := listAttention(t, c, "")
+	return items
 }
 
 // TestRestoreAsksToResumeInTheInbox is the default mode: a resume item per
@@ -279,7 +361,9 @@ func TestAutoResumeFallsBackToAsking(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	o, ok := d.resumeOfferFor("fallback", findWindowOrFail(t, sess, "win-agent"))
+	// The offer is made from the window as it was saved, agent running.
+	saved, _ := findWindowState(savedAgentSession("fallback"), "win-agent")
+	o, ok := d.resumeOfferFor("fallback", saved)
 	if !ok {
 		t.Fatal("no offer for the resumable pane")
 	}
@@ -288,15 +372,6 @@ func TestAutoResumeFallsBackToAsking(t *testing.T) {
 	if len(items) != 1 {
 		t.Errorf("the Inbox holds %v", items)
 	}
-}
-
-func findWindowOrFail(t *testing.T, sess *Session, id string) WindowState {
-	t.Helper()
-	w, ok := findWindowState(sess.GetState(), id)
-	if !ok {
-		t.Fatalf("no window %s", id)
-	}
-	return w
 }
 
 // TestResumeItemClosesWhenAnAgentWorks: a resume typed by hand, or a new

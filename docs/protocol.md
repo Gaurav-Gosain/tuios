@@ -214,7 +214,15 @@ now comes back on every restored window that ran on this machine (a window that
 ran on another machine drops it, since the conversation is over there), so
 `get-agent-state` and `list-agents` return it after a restart. With it, the
 restore offers to resume each conversation whose harness has a `[resume]`
-command, as `daemon.resume_agents` says: in the default `ask` mode,
+command and whose pane had an agent running when the state was saved (a saved
+`agent_state` other than none, or an `agent_harness`; a pane whose agent had
+exited keeps its id and gets no offer), as `daemon.resume_agents` says. A
+restored window also comes back with no agent state: `agent_state`,
+`agent_message`, `agent_kind`, `agent_state_at`, `agent_harness`, `agent_meta`
+and `foreground_cmd` are cleared, since its shell is new. They used to come
+back as saved, so a restored pane at a fresh prompt reported the old agent as
+`working` until it closed. Clearing them is also what keeps an offer from
+coming back on every later restart. In the default `ask` mode,
 `list-attention` gains one item of the new kind `resume` per such pane, with
 the command as its summary, and subscribers see an `attention` event opening
 it. `AttentionKindNames`, the order `list-attention` groups by and the

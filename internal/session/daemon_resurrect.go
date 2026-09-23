@@ -12,6 +12,20 @@ func hasWindow(windows []WindowState, id string) bool {
 	return slices.ContainsFunc(windows, func(w WindowState) bool { return w.ID == id })
 }
 
+// clearLiveAgent drops what a saved window says about the agent running in it
+// and the program in its foreground, for a window whose process is gone. The
+// conversation id and its harness are kept: they name a conversation on disk,
+// not a process.
+func clearLiveAgent(w *WindowState) {
+	w.AgentState = AgentStateNone
+	w.AgentMessage = ""
+	w.AgentKind = ""
+	w.AgentStateAt = 0
+	w.AgentHarness = ""
+	w.AgentMeta = nil
+	w.ForegroundCmd = ""
+}
+
 // restoreAllSessions recreates every resurrectable session that is not already
 // live. It is called once on daemon start (unless auto-restore is disabled).
 // Corrupt or incompatible state files are archived and skipped; a failure to
@@ -125,6 +139,7 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// a pane as dead. Closing the window is what the daemon already does whenever
 	// a PTY goes away (see notifyPTYClosed), so the restore does the same.
 	kept := restored.Windows[:0]
+	saved := make(map[string]WindowState, len(restored.Windows))
 	for i := range restored.Windows {
 		w := &restored.Windows[i]
 
@@ -166,6 +181,18 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 			w.AgentSessionHarness = ""
 		}
 
+		// The window as it was saved, for the resume offer, which asks whether
+		// an agent was running in it then.
+		saved[w.ID] = *w
+
+		// The pane gets a new shell and no agent, so it must not keep claiming
+		// the one it had. Left alone, the saved state came back as sent: a pane
+		// at a fresh prompt showed working under the old harness, and nothing
+		// cleared it, because the detector clears only a claim whose process it
+		// saw. It also made the next save say an agent was live, so the resume
+		// offer came back on every restart. The conversation id stays.
+		clearLiveAgent(w)
+
 		pty, err := sess.RestorePTY(w.ID, ptyWidth, ptyHeight, w.Cwd, onExit)
 		if err != nil {
 			LogError("Dropping restored window %s, its shell could not be respawned: %v", shortID(w.ID), err)
@@ -200,7 +227,7 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 			continue
 		}
 		ids[w.ID] = w
-		if o, ok := d.resumeOfferFor(state.Name, w); ok {
+		if o, ok := d.resumeOfferFor(state.Name, saved[w.ID]); ok {
 			offers = append(offers, o)
 		}
 	}

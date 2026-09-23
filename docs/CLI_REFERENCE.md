@@ -1256,6 +1256,8 @@ It types only when the pane's shell is at its prompt, and fails with
 recorded conversation, its harness has no resume command, the recorded id is
 not one plain shell token, or the pane runs on another machine. Nothing is
 typed on a failure. A pane's Resume row in the Inbox closes when it succeeds.
+It works on any pane with a recorded conversation, including one whose agent
+had exited before the restart, which the restore itself does not offer.
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)

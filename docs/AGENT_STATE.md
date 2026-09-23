@@ -1206,10 +1206,10 @@ What it can bring back is the conversation, because every harness with a
 resume command keeps it on disk, and the pane's hook already told the daemon
 its id (`agent_session_id`, see [Session identity](#session-identity)).
 
-So for each restored pane whose harness manifest has a `[resume]` block, the
-restore offers the command that reopens the conversation: `claude --resume
-<id>`, `codex resume <id>`, `opencode --session <id>`. What it does is
-`daemon.resume_agents`:
+So for each restored pane whose agent was still running when the state was
+saved, and whose harness manifest has a `[resume]` block, the restore offers the
+command that reopens the conversation: `claude --resume <id>`, `codex resume
+<id>`, `opencode --session <id>`. What it does is `daemon.resume_agents`:
 
 | Value | What a restore does |
 | --- | --- |
@@ -1217,7 +1217,17 @@ restore offers the command that reopens the conversation: `claude --resume
 | `auto` | Waits for each new shell to draw its prompt, then types the command, 100 ms apart. A pane whose shell is not at its prompt within 10 seconds gets the Resume row instead. |
 | `off` | Nothing. The id stays on the pane. |
 
-`tuios resume-agent -w <pane>` types the same command at any time, and
+A pane counts as running an agent when its saved state has an agent state or
+a harness attribution, both of which clear when the agent leaves the pane. The
+id does not clear, so a pane where you quit the agent and went back to shell
+work keeps its id and gets no offer. A restored pane comes back with no agent
+state, since its shell is new, so the next save records no live agent there
+and a later restart does not offer the same conversation again. An offer is
+made once, for the restart that ended the agent, whether you answer it,
+dismiss it or leave it.
+
+`tuios resume-agent -w <pane>` types the same command at any time, on any
+pane with a recorded id, and
 `--dry-run` prints it. The command is typed only when the pane's shell holds
 the terminal's foreground, so it never lands in an editor or another agent. A
 Resume row closes when the command is typed, when the pane goes to `working` or

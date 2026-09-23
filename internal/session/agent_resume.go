@@ -20,6 +20,11 @@ import (
 // harness again on that conversation, which is the part a person actually
 // lost.
 //
+// Only a pane whose agent was still running when the state was saved gets an
+// offer. The id outlives the agent on purpose, so a pane where the person quit
+// the agent and went back to shell work still has one, and resuming that
+// conversation unasked would be wrong. resume-agent still works on such a pane.
+//
 // Three modes, from daemon.resume_agents:
 //
 //   - ask (the default): each restored pane with a resumable conversation gets
@@ -92,11 +97,25 @@ func resumeHarnessOf(w WindowState) string {
 	return w.AgentHarness
 }
 
-// resumeOfferFor builds the offer for a restored window, or reports that it
-// has nothing to resume: no conversation id, a harness with no resume command,
-// or an id that cannot be typed safely.
+// agentWasLive reports whether a saved window had an agent in it when the state
+// was written: an agent state or a harness attribution. Both are cleared when
+// the agent leaves the pane (see applyAgentDetection) and the conversation id
+// is not, so the id alone says only that the pane ran an agent at some point.
+//
+// A restore does not carry either field onto the new shell, so the state the
+// next save writes for a restored pane says no agent is live. That is what
+// makes an offer happen once: after the restart that ended the agent, and not
+// again on every later restart for a conversation nobody resumed.
+func agentWasLive(w WindowState) bool {
+	return w.AgentHarness != "" || w.AgentState != AgentStateNone
+}
+
+// resumeOfferFor builds the offer for a window as it was saved, or reports
+// that it has nothing to resume: no agent live in the pane when the state was
+// saved, no conversation id, a harness with no resume command, or an id that
+// cannot be typed safely.
 func (d *Daemon) resumeOfferFor(sessionName string, w WindowState) (resumeOffer, bool) {
-	if w.AgentSessionID == "" {
+	if w.AgentSessionID == "" || !agentWasLive(w) {
 		return resumeOffer{}, false
 	}
 	hid := resumeHarnessOf(w)
