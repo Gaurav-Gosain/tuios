@@ -1787,7 +1787,9 @@ in its own TUI, and the pane shows the conversation as a transcript:
   `initialized`, `thread/start`, `turn/start`, `turn/interrupt`, the
   `item/*` and `turn/completed` notifications, and
   `item/commandExecution/requestApproval` and
-  `item/fileChange/requestApproval`. `app-server` is added to the agent's
+  `item/fileChange/requestApproval`. A file change approval is never held
+  for the Inbox, and its `grantRoot`, when set, is shown in the pane.
+  `app-server` is added to the agent's
   words when neither they nor `args` name it, between the two, so `args` are
   the app-server's own.
 

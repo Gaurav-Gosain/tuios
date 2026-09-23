@@ -1791,6 +1791,10 @@ such as ACP's `allow_always` or Codex's `acceptForSession`, are the pane's. The
 first answer wins: a key in the pane ends the hold, and the Inbox's answer is
 written into the pane with who gave it. A digit counts only once the question
 has been on screen for half a second, and a paste or Enter never answers.
+A Codex file change approval is always the pane's, including one for an item
+the pane has not seen, whose files it cannot show. When it carries
+`grantRoot`, a request to allow writes under that directory for the rest of
+the session, the pane says so under the title.
 
 What the agent can do through tuios is nothing it could not do in its own TUI.
 `agent-proto` advertises no file system and no terminal capability, answers

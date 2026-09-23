@@ -364,8 +364,9 @@ func (c *Codex) onRequest(r *Request) {
 		c.emit(perm)
 	case "item/fileChange/requestApproval":
 		var p struct {
-			ItemID string  `json:"itemId"`
-			Reason *string `json:"reason"`
+			ItemID    string  `json:"itemId"`
+			Reason    *string `json:"reason"`
+			GrantRoot *string `json:"grantRoot"`
 		}
 		if json.Unmarshal(r.Params, &p) != nil {
 			r.ReplyError(codeInvalidParams, "could not read the approval request")
@@ -378,6 +379,19 @@ func (c *Codex) onRequest(r *Request) {
 			t = Tool{ID: p.ItemID, Kind: "edit", Title: "edit files"}
 		}
 		t.Status = ToolPending
+		// An edit whose files and content are not known, or one that also
+		// asks for a write root for the rest of the session, is more than one
+		// line can show: the pane asks it and the Inbox does not.
+		if len(t.Diffs) == 0 {
+			t.OtherInput = true
+		}
+		grantRoot := ""
+		if p.GrantRoot != nil {
+			grantRoot = strings.TrimSpace(*p.GrantRoot)
+		}
+		if grantRoot != "" {
+			t.OtherInput = true
+		}
 		perm := codexPermission(r, t, []codexOption{
 			{"allow once", DecisionOnce, "accept"},
 			{"allow for this session", "", "acceptForSession"},
@@ -385,6 +399,9 @@ func (c *Codex) onRequest(r *Request) {
 		})
 		if p.Reason != nil {
 			perm.Reason = *p.Reason
+		}
+		if grantRoot != "" {
+			perm.Detail = "asks to allow writes under " + grantRoot + " for the session"
 		}
 		c.emit(perm)
 	default:

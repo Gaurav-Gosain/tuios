@@ -211,6 +211,48 @@ func TestCodexApprovals(t *testing.T) {
 	}
 }
 
+// TestCodexFileChangeApprovalTheInboxCannotShow: a file change approval for an
+// item tuios has not seen shows no files and no content, and one that carries
+// grantRoot also asks for writes under that root for the rest of the session.
+// Neither fits one Inbox line, so both are the pane's, and the pane says the
+// root.
+func TestCodexFileChangeApprovalTheInboxCannotShow(t *testing.T) {
+	_, p, ev := startCodex(t)
+
+	p.send(map[string]any{"id": 40, "method": "item/fileChange/requestApproval", "params": map[string]any{"threadId": "th-1", "turnId": "tu-1", "itemId": "unknown"}})
+	perm := ev.permission(t)
+	if line := InboxLine(perm); line != "" || !perm.Tool.OtherInput {
+		t.Errorf("unknown item: InboxLine = %q, OtherInput = %v, want the pane only", line, perm.Tool.OtherInput)
+	}
+	perm.Cancel()
+	p.next()
+
+	p.send(map[string]any{"id": 41, "method": "item/fileChange/requestApproval", "params": map[string]any{"threadId": "th-1", "turnId": "tu-1", "itemId": "unknown2", "grantRoot": "/src"}})
+	perm = ev.permission(t)
+	if line := InboxLine(perm); line != "" {
+		t.Errorf("grantRoot: InboxLine = %q, want the pane only", line)
+	}
+	if perm.Detail != "asks to allow writes under /src for the session" {
+		t.Errorf("grantRoot: Detail = %q", perm.Detail)
+	}
+	perm.Cancel()
+	p.next()
+
+	// A known item with its diff and a grantRoot is still the pane's, and the
+	// pane still says the root.
+	notify(p, "item/started", map[string]any{"item": map[string]any{"type": "fileChange", "id": "f2", "status": "inProgress", "changes": []any{
+		map[string]any{"path": "b.go", "diff": "@@ -1 +1 @@\n-a\n+b\n"},
+	}}})
+	ev.next(t)
+	p.send(map[string]any{"id": 42, "method": "item/fileChange/requestApproval", "params": map[string]any{"threadId": "th-1", "turnId": "tu-1", "itemId": "f2", "grantRoot": "/src/api"}})
+	perm = ev.permission(t)
+	if !perm.Tool.OtherInput || InboxLine(perm) != "" || perm.Detail != "asks to allow writes under /src/api for the session" {
+		t.Errorf("known item with grantRoot: OtherInput %v, InboxLine %q, Detail %q", perm.Tool.OtherInput, InboxLine(perm), perm.Detail)
+	}
+	perm.Cancel()
+	p.next()
+}
+
 func TestCodexErrorNotice(t *testing.T) {
 	_, p, ev := startCodex(t)
 	notify(p, "error", map[string]any{"error": map[string]any{"message": "rate limited"}, "willRetry": true})
