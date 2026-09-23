@@ -172,7 +172,8 @@ func runSendKeys(sessionName, keys string, literal bool, raw bool, windowTarget 
 // cwd means the daemon's own directory, and a non-empty command is an argv the
 // window execs as its process instead of a shell. A non-empty host puts the
 // window's process on another machine; the window is still this session's.
-func runNewWindow(sessionName, name string, workspace int, cwd string, focus bool, command []string, host string, jsonOutput bool) error {
+// Non-empty grants are what the window's process may do through tuios.
+func runNewWindow(sessionName, name string, workspace int, cwd string, focus bool, command []string, host string, grants []string, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -191,6 +192,9 @@ func runNewWindow(sessionName, name string, workspace int, cwd string, focus boo
 	}
 	if host != "" {
 		params["host"] = host
+	}
+	if len(grants) > 0 {
+		params["grants"] = grants
 	}
 	raw, err := client.Call("new-window", params)
 	if err != nil {

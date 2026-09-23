@@ -14,7 +14,7 @@ import (
 // newStartAgentCommand builds `tuios start-agent`.
 func newStartAgentCommand() *cobra.Command {
 	var sessionName, name, cwd, repo, prompt, protocol string
-	var env []string
+	var env, grants []string
 	var workspace, readyTimeout int
 	var focus, clone, jsonOutput bool
 	cmd := &cobra.Command{
@@ -45,6 +45,11 @@ the host has none. --cwd or --repo name a directory on the host instead.
 The pane is not focused unless you pass --focus. --name gives it the name
 list-agents shows and -w takes, so you can address it as 'reviewer'.
 
+--grants says what the agent may do through tuios: read, write, fan,
+respond, admin, or none. Without it the pane holds the default of
+[agents.permissions]; started from a pane without admin, it holds that
+pane's own grants. A pane can never give more than it holds.
+
 An agent that stops on a question of its own, such as whether to trust the
 folder, is not ready: the command prints what it waits on and exits non-zero,
 and the pane is kept for the person to answer. So is one that shows nothing
@@ -64,6 +69,9 @@ tuios agent-proto --help.`,
 
   # A codex agent with a first prompt, in another directory
   tuios start-agent 'codex --model o5' --name tests --cwd ~/src/api --prompt 'Run the tests and fix what fails.'
+
+  # A reviewer that may read its session and nothing else
+  tuios start-agent claude --name reviewer --grants read
 
   # Claude Code on host build, in its checkout of this repository
   tuios start-agent -s build:api claude --prompt 'Profile the build.' -- --model opus
@@ -86,6 +94,7 @@ tuios agent-proto --help.`,
 			return runStartAgent(startAgentOptions{
 				session: sessionName, agent: positional[0], args: extra, name: name, cwd: cwd, repo: repo, prompt: prompt, protocol: protocol,
 				env: callerEnv, explicitEnv: len(env) > 0, workspace: workspace, readyTimeout: readyTimeout, focus: focus, clone: clone,
+				grants: grants,
 			}, jsonOutput)
 		},
 	}
@@ -101,8 +110,10 @@ tuios agent-proto --help.`,
 	_ = cmd.RegisterFlagCompletionFunc("protocol", cobra.FixedCompletions([]string{"acp", "codex"}, cobra.ShellCompDirectiveNoFileComp))
 	cmd.Flags().IntVar(&readyTimeout, "ready-timeout", 0, "Milliseconds to wait for the agent to be ready (default 120000)")
 	cmd.Flags().StringArrayVar(&env, "env", nil, "Pass a variable to the agent: NAME for your own value, NAME=VALUE to set one. Repeatable. PATH is sent too, except to a session on another machine")
+	cmd.Flags().StringSliceVar(&grants, "grants", nil, "What the agent may do through tuios, comma separated: read, write, fan, respond, admin, or none (default: [agents.permissions], or the calling pane's own)")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+	_ = cmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
 	return cmd
 }
 
@@ -118,6 +129,8 @@ type startAgentOptions struct {
 	explicitEnv             bool
 	workspace, readyTimeout int
 	focus, clone            bool
+	// grants is --grants, nil when it was not passed.
+	grants []string
 }
 
 // startAgentEnv is the env start-agent sends to a target on host ("" for
@@ -200,6 +213,9 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	}
 	if o.focus {
 		params["focus"] = true
+	}
+	if len(o.grants) > 0 {
+		params["grants"] = o.grants
 	}
 	wait := o.readyTimeout
 	if wait <= 0 {

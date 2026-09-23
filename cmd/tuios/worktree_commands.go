@@ -235,7 +235,7 @@ branch that already exists here is refused, so nothing is overwritten.`,
 
 // newFanCommand builds `tuios fan` and `tuios fan keep`.
 func newFanCommand() *cobra.Command {
-	var fanAgents, fanEnv, fanPrompts []string
+	var fanAgents, fanEnv, fanPrompts, fanGrants []string
 	var fanRepo, fanBase, fanName, fanHost string
 	var fanWait, fanJSON, fanClone bool
 	fanCmd := &cobra.Command{
@@ -267,6 +267,11 @@ ready.
 
 The branches are a stem, then stem-2, stem-3 and so on. The stem is 'fan/'
 and the first words of the prompt, or --name.
+
+--grants says what every agent may do through tuios: read, write, fan,
+respond, admin, or none. Without it they hold the default of
+[agents.permissions]; a fan run from a pane without admin gives them that
+pane's own grants.
 
 When one result is the one you want, 'tuios fan keep <session>' removes the
 others. It refuses to discard their uncommitted work unless you say so.
@@ -320,6 +325,7 @@ pull HOST:SESSION' brings its work here.`,
 			return runFan(fanOptions{
 				host: fanHost, count: count, agents: fanAgents, prompt: prompt, prompts: fanPrompts, env: env,
 				explicitEnv: len(fanEnv) > 0, repo: fanRepo, base: fanBase, name: fanName, clone: fanClone,
+				grants: fanGrants,
 			}, fanWait, fanJSON)
 		},
 	}
@@ -333,7 +339,9 @@ pull HOST:SESSION' brings its work here.`,
 	fanCmd.Flags().BoolVar(&fanJSON, "json", false, "Output result as JSON")
 	fanCmd.Flags().StringVar(&fanHost, "host", "", "Run the fan-out on this machine from the [hosts] table")
 	fanCmd.Flags().BoolVar(&fanClone, "clone", false, "With --host, clone the repository there when the host has no checkout")
+	fanCmd.Flags().StringSliceVar(&fanGrants, "grants", nil, "What every agent may do through tuios, comma separated: read, write, fan, respond, admin, or none (default: [agents.permissions], or the calling pane's own)")
 	_ = fanCmd.RegisterFlagCompletionFunc("host", completeConfiguredHosts)
+	_ = fanCmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
 	_ = fanCmd.MarkFlagRequired("agent")
 
 	var keepStash, keepForce, keepJSON bool
@@ -707,6 +715,8 @@ type fanOptions struct {
 	// env is an error rather than a reason to send without it.
 	explicitEnv      bool
 	repo, base, name string
+	// grants is --grants, nil when it was not passed.
+	grants []string
 }
 
 // fanCallerEnv builds the environment fan sends: PATH always, so the daemon
@@ -776,6 +786,9 @@ func runFan(o fanOptions, wait, jsonOutput bool) error {
 	}
 	if o.name != "" {
 		params["name"] = o.name
+	}
+	if len(o.grants) > 0 {
+		params["grants"] = o.grants
 	}
 	t, err := dialHost(o.host)
 	if err != nil {

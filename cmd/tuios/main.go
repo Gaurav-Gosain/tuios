@@ -1269,6 +1269,7 @@ as typed. End the text with a newline to run it as a command.`,
 	var newWindowCwd string
 	var newWindowNoFocus bool
 	var newWindowHost string
+	var newWindowGrants []string
 	var newWindowJSON bool
 	newWindowCmd := &cobra.Command{
 		Use:   "new-window [name] [command...]",
@@ -1291,7 +1292,11 @@ tuios reads them as its own flags: tuios new-window log -- git log --oneline.
 window still belongs to this session and is drawn and sized here; only the
 process is over there. There is no special mode to turn on: a session holding
 one is an ordinary session with a window that happens to be elsewhere, so it
-lists, scripts and restores like any other.`,
+lists, scripts and restores like any other.
+
+--grants says what the window's process may do through tuios: read, write,
+fan, respond, admin, or none. Without it the window holds the default of
+[agents.permissions]. See 'tuios pane-grants'.`,
 		Example: `  # Open an unnamed window
   tuios new-window
 
@@ -1323,7 +1328,7 @@ lists, scripts and restores like any other.`,
 				command = args[1:]
 			}
 			return runNewWindow(newWindowSession, name, newWindowWorkspace, newWindowCwd,
-				!newWindowNoFocus, command, newWindowHost, newWindowJSON)
+				!newWindowNoFocus, command, newWindowHost, newWindowGrants, newWindowJSON)
 		},
 	}
 	newWindowCmd.Flags().StringVarP(&newWindowSession, "session", "s", "", "Target session (default: most recently active)")
@@ -1331,9 +1336,11 @@ lists, scripts and restores like any other.`,
 	newWindowCmd.Flags().StringVar(&newWindowCwd, "cwd", "", "Directory to start the shell in (default: the daemon's)")
 	newWindowCmd.Flags().BoolVar(&newWindowNoFocus, "no-focus", false, "Leave the focus where it is")
 	newWindowCmd.Flags().StringVar(&newWindowHost, "host", "", "Run the window's process on this machine from the [hosts] table (default: this machine)")
+	newWindowCmd.Flags().StringSliceVar(&newWindowGrants, "grants", nil, "What the window's process may do through tuios, comma separated: read, write, fan, respond, admin, or none (default: [agents.permissions])")
 	newWindowCmd.Flags().BoolVar(&newWindowJSON, "json", false, "Output result as JSON")
 	_ = newWindowCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = newWindowCmd.RegisterFlagCompletionFunc("host", completeHostNames)
+	_ = newWindowCmd.RegisterFlagCompletionFunc("grants", completeGrantNames)
 
 	var popupSession string
 	var popupWidth string
@@ -2778,7 +2785,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(listWindowsCmd, getWindowCmd, sessionInfoCmd, listVerbsCmd, listOptionsCmd, listThemesCmd, listGlyphsCmd, importThemeCmd)
 	rootCmd.AddCommand(listDockComponentsCmd, refreshDockCmd, listHooksCmd)
 	rootCmd.AddCommand(hostsCmd, stdioProxyCmd)
-	rootCmd.AddCommand(newStashCommand())
+	rootCmd.AddCommand(newStashCommand(), newPaneGrantsCommand(), newSetPaneGrantsCommand())
 	rootCmd.AddCommand(newWorktreeCommand(), newFanCommand(), newStartAgentCommand())
 	rootCmd.AddCommand(newAgentHookCommand(), newIntegrationCommand(), newDoctorCommand(), newMCPCommand())
 	rootCmd.AddCommand(newTmuxCommand(), newTmuxShimCommand(), newTmuxPaneCommand())

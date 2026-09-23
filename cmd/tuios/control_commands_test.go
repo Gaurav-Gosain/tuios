@@ -88,8 +88,28 @@ func TestControlCommandsAreRegistered(t *testing.T) {
 		},
 		{
 			command: "new-window",
-			args:    []string{"new-window", "build", "--workspace", "2", "--cwd", "/tmp", "--no-focus", "--json"},
-			flags:   []string{"workspace", "cwd", "no-focus", "json", "session"},
+			args:    []string{"new-window", "build", "--workspace", "2", "--cwd", "/tmp", "--no-focus", "--grants", "read,write", "--json"},
+			flags:   []string{"workspace", "cwd", "no-focus", "grants", "json", "session"},
+		},
+		{
+			command: "pane-grants",
+			args:    []string{"pane-grants", "--json"},
+			flags:   []string{"json"},
+		},
+		{
+			command: "set-pane-grants",
+			args:    []string{"set-pane-grants", "-w", "reviewer", "--grants", "read", "--json"},
+			flags:   []string{"window", "grants", "reset", "json", "session"},
+		},
+		{
+			command: "start-agent",
+			args:    []string{"start-agent", "claude", "--grants", "read,fan"},
+			flags:   []string{"grants"},
+		},
+		{
+			command: "fan",
+			args:    []string{"fan", "2", "--agent", "claude", "--grants", "read,write", "hi"},
+			flags:   []string{"grants"},
 		},
 		{
 			command: "popup",
