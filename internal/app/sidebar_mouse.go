@@ -49,9 +49,13 @@ type sidebarEdgeState struct {
 // keybind both call.
 func (m *OS) ToggleSidebar() {
 	m.Settings.SidebarEnabled = !m.Settings.SidebarEnabled
+	// The [appearance.sidebar] table, not the legacy flat key: the migration
+	// folds the flat key in only when the table leaves enabled unset, and the
+	// table sets it whenever the file came from a first run, so a toggle
+	// written to the flat key was lost on the next save.
 	if m.UserConfig != nil {
 		v := m.Settings.SidebarEnabled
-		m.UserConfig.Appearance.SidebarEnabled = &v
+		m.UserConfig.Appearance.Sidebar.Enabled = &v
 	}
 	m.SidebarScrollS, m.SidebarScrollT, m.SidebarScrollA, m.SidebarScrollF = 0, 0, 0, 0
 	m.sidebarClearPeek()

@@ -34,6 +34,10 @@ type sidebarStateFile struct {
 	// Width is the user's drag-defined full-rail width, overriding the config
 	// default at runtime. Zero means never dragged, so the config width stands.
 	Width int `json:"width,omitempty"`
+	// DragWidth marks a file whose Width is only ever a dragged one. Files
+	// written before v0.8.0 lack it, and wrote the config width into Width
+	// whether or not anybody had dragged; see legacySidebarDefaultWidth.
+	DragWidth bool `json:"drag_width,omitempty"`
 	// Accents is the per-window ANSI slot index, by window ID, and AccentColors
 	// is the per-window picked colour as #rrggbb. Window IDs outlive a detach,
 	// so an accent set today is still on the row tomorrow.
@@ -138,9 +142,22 @@ func (m *OS) loadSidebarState() {
 	// A stored drag width wins over the config default; GetSidebarWidth still
 	// folds it against the breakpoints and pane floor, so an out-of-range value
 	// cannot starve the panes.
-	if st.Width >= config.SidebarGlyphWidth {
+	if st.Width >= config.SidebarGlyphWidth && !legacyUndraggedWidth(st) {
 		m.SidebarWidthPref = st.Width
 	}
+}
+
+// legacySidebarDefaultWidth is the shipped rail width before v0.8.0.
+const legacySidebarDefaultWidth = 28
+
+// legacyUndraggedWidth reports a width that an older release wrote without
+// anyone dragging the rail. Those releases saved the config width whenever
+// any rail state was saved, and the agents section saves state whether the
+// rail is on or not, so most files carry the old default. Read as a drag, it
+// would hold the rail at the old width after the default moved. A person who
+// really dragged to exactly that width loses it once, to the new default.
+func legacyUndraggedWidth(st sidebarStateFile) bool {
+	return !st.DragWidth && st.Width == legacySidebarDefaultWidth
 }
 
 // saveSidebarState writes the sidebar preferences. Best effort: the state is a
@@ -152,9 +169,14 @@ func (m *OS) saveSidebarState() {
 		return
 	}
 	slots, colors := accentsToFile(m.SidebarAccents)
+	// Width is only a width someone dragged to. Writing the config width when
+	// nobody had dragged made it look like a choice on the next load, so a
+	// change to the shipped width never reached a rail that had saved any state
+	// at all.
 	data, err := json.Marshal(sidebarStateFile{
 		Order:            m.SidebarOrder,
-		Width:            m.sidebarWidthPreference(),
+		Width:            m.SidebarWidthPref,
+		DragWidth:        true,
 		Accents:          slots,
 		AccentColors:     colors,
 		AgentSeen:        m.SidebarAgentSeen,
