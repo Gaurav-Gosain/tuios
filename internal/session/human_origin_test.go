@@ -348,6 +348,36 @@ func TestAPaneCannotAskAsHuman(t *testing.T) {
 	}
 }
 
+// TestAPaneCannotDismissAttentionWithACopiedNonce holds dismiss-attention to
+// the same check as a reply from human. The Inbox is the person's list of what
+// waits for them, so emptying it is acting as the person. A pane that got hold
+// of the live nonce of the person's client is still refused, and the item
+// stays open.
+func TestAPaneCannotDismissAttentionWithACopiedNonce(t *testing.T) {
+	skipWithoutPeerPID(t)
+	d, sp := startTestDaemon(t)
+	sess, a, b := twoWindowSession(t, d, "dismissh")
+	c := dialVerb(t, sp)
+	setAgentState(t, c, "dismissh", a, "needs_input", "approval", "approve Bash: rm -rf build")
+	items := waitAttention(t, c, "an approval", hasKind(AttentionApproval, a))
+	id := items[0]["id"].(string)
+
+	tui := attachTUI(t, sp, "dismissh")
+	out := filepath.Join(t.TempDir(), "out")
+	req := `{"id":1,"verb":"dismiss-attention","params":{"id":"` + id + `","human_nonce":"` + tui.HumanNonce() + `"}}`
+	runInPane(t, d, sess, b, helperCommand(t, sp, out, "send", req))
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(waitHelper(t, out)), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if code := errCode(t, resp); code != ErrVerbNotHuman {
+		t.Fatalf("dismiss-attention from a pane with the person's nonce: code %q, want %q", code, ErrVerbNotHuman)
+	}
+	if items, _ := listAttention(t, c, ""); !hasKind(AttentionApproval, a)(items) {
+		t.Errorf("a refused dismiss closed the item: %v", items)
+	}
+}
+
 // TestPaneOriginOfThisProcess: the daemon's own process, which is where an
 // in-process client runs, is not inside a pane, and a pane's shell is.
 func TestPaneOriginOfThisProcess(t *testing.T) {

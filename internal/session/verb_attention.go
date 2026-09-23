@@ -1,7 +1,6 @@
 package session
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"strings"
 )
@@ -63,9 +62,12 @@ func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *
 //
 // Only the person may clear what is waiting for the person, so the call must
 // carry the attach nonce of a TUI client attached right now, over the same kind
-// of connection (see human_sender.go). The Inbox sends its client's nonce. An
-// agent in a pane has no attach and so no nonce, and cannot empty the queue
-// the person reads to find out what the agents want.
+// of connection (see human_sender.go), and the caller must be allowed to act as
+// the person (see human_origin.go): not inside a pane of this daemon, not on an
+// unvouched link, and, where the kernel gave both pids, the process that holds
+// the attach. The Inbox sends its client's nonce. An agent in a pane is issued
+// no nonce and could not use one it copied, so it cannot empty the queue the
+// person reads to find out what the agents want.
 //
 // Dismissing does what reading would have: a finished item marks the pane's
 // turns seen, so finished_unread clears too, and a mail item marks the
@@ -81,8 +83,7 @@ func (d *Daemon) verbDismissAttention(cs *connState, params json.RawMessage) (an
 	if p.ID == "" {
 		return nil, invalidParam("id", "id is required: pass the id list-attention printed")
 	}
-	viaLink := cs != nil && cs.viaLink
-	if !d.verifyAnyHumanNonce(p.HumanNonce, viaLink) {
+	if !d.verifyAnyHumanNonce(p.HumanNonce, cs) {
 		return nil, hintedVerbError(ErrVerbNotHuman, "dismiss-attention is for the person at an attached client", &VerbHint{
 			Param:  "human_nonce",
 			Detail: "Only a client attached right now can clear the Inbox, by passing the nonce its attach reply carried. An agent that wants the person to stop waiting on it should change its own state, or reply to the mail.",
@@ -131,25 +132,4 @@ func (d *Daemon) markHumanThreadRead(sess *Session, thread uint64) {
 		return
 	}
 	_, _ = d.verbReadAgentMessages(nil, raw)
-}
-
-// verifyAnyHumanNonce reports whether nonce belongs to any TUI client attached
-// right now over a connection of the same kind as the caller's. The Inbox spans
-// sessions, so the attach can be to any of them.
-func (d *Daemon) verifyAnyHumanNonce(nonce string, viaLink bool) bool {
-	if nonce == "" {
-		return false
-	}
-	d.clientsMu.RLock()
-	defer d.clientsMu.RUnlock()
-	for _, cs := range d.clients {
-		cs.mu.Lock()
-		match := cs.attached && cs.isTUIClient && cs.viaLink == viaLink && cs.humanNonce != "" &&
-			subtle.ConstantTimeCompare([]byte(cs.humanNonce), []byte(nonce)) == 1
-		cs.mu.Unlock()
-		if match {
-			return true
-		}
-	}
-	return false
 }

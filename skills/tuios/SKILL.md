@@ -921,7 +921,8 @@ What this means for how you report:
   stored, but do not put secrets in a message in the first place.
 - Mail to `human` is a row per thread until the person reads it.
 - You cannot dismiss a row: `dismiss-attention` answers `not_human` to anything
-  but an attached client.
+  but the person's attached client, and to any caller inside a pane, nonce or
+  not.
 
 To watch it change, subscribe to `attention` events. List first and pass the
 listing's `seq` and `boot_id`, and nothing is missed in between:

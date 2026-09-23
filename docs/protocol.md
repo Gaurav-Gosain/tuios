@@ -375,7 +375,9 @@ changes for an existing caller:
   resume with `after_seq` replays them.
 - `EventTypeNames`, and so the accepted set of `subscribe`'s `types` param in
   `list-verbs`, gains `attention`.
-- The error catalog gains `not_human`, raised only by `dismiss-attention`.
+- The error catalog gains `not_human`, raised only by `dismiss-attention`. Its
+  nonce is checked the way a reply from `human` is, so a caller inside a pane
+  is refused even with a live nonce.
 - Dismissing a `finished` item marks the pane's turns seen, so its
   `finished_unread` in `list-agents` goes false, the same as focusing the pane
   in a client. Dismissing a `mail` item marks the person's mail in that thread
@@ -1345,7 +1347,12 @@ reply of a TUI client attached right now, over the same kind of connection as
 this call).
 
 Only the person may clear what is waiting for the person. An agent in a pane
-has no attach and so no nonce, and gets `not_human`. A client attached to any
+has no attach and so no nonce, and gets `not_human`. The nonce is checked the
+way a reply from `human` is (see "A process inside a pane cannot act as the
+person" under [Changes to existing verbs](#changes-to-existing-verbs)): a
+caller inside a pane of this daemon, or on a link stream the hub did not vouch
+for, gets `not_human` even with a live nonce, and where the kernel gives both
+pids the caller must be the process that holds the attach. A client attached to any
 session may dismiss items in any session, since the Inbox spans them. A second
 dismiss of the same item, or an id that is not open, is `invalid_params`.
 

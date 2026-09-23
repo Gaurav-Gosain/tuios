@@ -68,7 +68,23 @@ func newHumanNonce() (string, error) {
 // from the same process that holds the attach, so a nonce copied to another
 // process does not verify. A nil sender is the daemon itself.
 func (d *Daemon) verifyHumanNonce(nonce, sessionID string, sender *connState) bool {
-	if nonce == "" || sessionID == "" {
+	if sessionID == "" {
+		return false
+	}
+	return d.matchHumanNonce(nonce, sessionID, sender)
+}
+
+// verifyAnyHumanNonce is verifyHumanNonce for a call that spans sessions, such
+// as dismiss-attention: the attach the nonce came from may be to any session,
+// and every other condition holds as it does for a reply.
+func (d *Daemon) verifyAnyHumanNonce(nonce string, sender *connState) bool {
+	return d.matchHumanNonce(nonce, "", sender)
+}
+
+// matchHumanNonce is the check behind both: sessionID empty matches an attach
+// to any session.
+func (d *Daemon) matchHumanNonce(nonce, sessionID string, sender *connState) bool {
+	if nonce == "" {
 		return false
 	}
 	viaLink, linkHuman, pid := false, false, 0
@@ -82,7 +98,7 @@ func (d *Daemon) verifyHumanNonce(nonce, sessionID string, sender *connState) bo
 	defer d.clientsMu.RUnlock()
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		match := cs.attached && cs.isTUIClient && cs.sessionID == sessionID &&
+		match := cs.attached && cs.isTUIClient && (sessionID == "" || cs.sessionID == sessionID) &&
 			cs.viaLink == viaLink && cs.linkHuman == linkHuman && cs.humanNonce != "" &&
 			(pid <= 0 || cs.peerPID <= 0 || cs.peerPID == pid) &&
 			subtle.ConstantTimeCompare([]byte(cs.humanNonce), []byte(nonce)) == 1

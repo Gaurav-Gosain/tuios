@@ -938,10 +938,14 @@ the header counts its rows, as it did before.
 
 Who can clear it: `dismiss-attention` needs the nonce the daemon issued in a
 client's attach reply, which the Inbox sends and an agent in a pane does not
-have. An agent cannot empty the list the person reads to find out what the
-agents want. Mail is the exception that was already there: reading the person's
-inbox with `read-agent-messages --to human` marks the mail read, from anywhere,
-and the mail item follows the ring.
+have, and it runs the same check as a reply from `human` (see
+[Who can act as the person](#who-can-act-as-the-person)): a caller inside a
+pane is refused even with a live nonce it copied, and where the kernel gives
+both pids the caller must be the process that attached. An agent cannot empty
+the list the person reads to find out what the agents want. Reading the
+person's inbox with `read-agent-messages --to human` marks the mail read, and
+the mail item follows it, but only from outside every pane: from a pane that
+read is a peek.
 
 What it does not do yet: items on linked hosts are not in this machine's Inbox,
 and a client attached to a session on another machine sees this machine's
@@ -1376,6 +1380,7 @@ proof, as before.
 | `send-keys` or `run-command` driving the person's mail overlay | A reply any routed key opened, edited or sent goes out without the nonce and is stored as `claimed_human`. The reply line reads `automated reply:`. |
 | `read-agent-messages -w human` from a pane, to clear the person's unread mail | Served as a peek: nothing is marked read, and the result says `peek_forced`. |
 | A client attached from a pane, to clear `finished_unread` by focusing panes | Its state pushes do not mark a finished turn seen. |
+| `dismiss-attention` from a pane, to empty the person's Inbox | Refused with `not_human`, even with a live nonce copied from the person's client: the nonce is checked the way a reply's is. |
 | An agent in a hub pane attaching through the link to this machine | The hub vouches only for a caller outside its panes, in the stream's open frame, which the caller cannot write. The proxy here dials the link-human socket only for a vouched stream. An attach through the plain link socket gets no nonce. |
 | An agent in a pane on this machine dialing the link-human socket itself | The same pane check runs on that socket, against the process that dialed it. |
 | A hub from before this check | It vouches for nothing, so no attach through it verifies here. |
@@ -1402,5 +1407,6 @@ proof, as before.
 Everything the person does from a client started outside tuios is unchanged.
 A client started inside a tuios pane of the same daemon, a nested `tuios
 attach`, or `tuios-web` or the SSH server started from a pane, counts as inside
-a pane: its mail replies are refused with `forbidden`, and its reads of the
-mailbox do not mark mail read. Start those from a terminal outside tuios.
+a pane: its mail replies are refused with `forbidden`, its reads of the
+mailbox do not mark mail read, and its Inbox cannot dismiss an item. Start
+those from a terminal outside tuios.
