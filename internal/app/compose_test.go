@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // composeReference is the frame the lipgloss Compositor produces for the same
@@ -293,5 +294,35 @@ func TestComposeLayersDropsAbsentLayers(t *testing.T) {
 	m.composeLayers(canvas, []*lipgloss.Layer{lipgloss.NewLayer("b").ID("b")})
 	if _, ok := m.layerCells["a"]; ok || len(m.layerCells) != 1 {
 		t.Fatalf("an absent layer's cells were kept: %v", m.layerCells)
+	}
+}
+
+// TestComposeFrameKeepsPaneColour holds the composed frame to the colours its
+// panes were drawn in. composeFrame used to pass every frame through
+// lipgloss.Sprint, which downsampled it to the profile detected from this
+// process's stdout. Under go test that is not a TTY, so every frame a test
+// composed was stripped to plain text, and a test reading colour out of a frame
+// could not see the colour it was about.
+//
+// Negative control: wrapping composeFrame's return in lipgloss.Sprint again
+// fails this under go test.
+func TestComposeFrameKeepsPaneColour(t *testing.T) {
+	win := newTestWindow(t, "colour-0001", 60, 12)
+	win.LockIO()
+	_, _ = win.Terminal.Write([]byte("\x1b[38;2;200;100;50mCOLOURED\x1b[0m\r\n"))
+	win.UnlockIO()
+	win.MarkContentDirty()
+	m := newTestOS(win)
+	m.Width, m.Height = 90, 30
+	if _, ok := m.fullscreenFastWindow(); ok {
+		t.Fatal("setup: the pane is on the fullscreen fast path, which is not the compositor")
+	}
+
+	frame := m.composeFrame()
+	if !strings.Contains(ansi.Strip(frame), "COLOURED") {
+		t.Fatalf("setup: the pane text is not in the frame:\n%s", ansi.Strip(frame))
+	}
+	if !strings.Contains(frame, "38;2;200;100;50") {
+		t.Errorf("the frame lost the pane's colour; %d escape bytes in %d", strings.Count(frame, "\x1b"), len(frame))
 	}
 }

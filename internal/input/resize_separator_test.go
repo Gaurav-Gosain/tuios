@@ -8,9 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/colorprofile"
-
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -125,11 +122,6 @@ func unfocusedColumns(rows []map[int]rgb, y int, unfocused rgb) []int {
 // nothing about the drag, so it lands between a motion event and the ratio sync
 // that motion deferred.
 func TestSharedBorderDragKeepsFocusedSeparatorHighlighted(t *testing.T) {
-	// The composed frame is only colored when the writer has a color profile,
-	// and this check reads colors out of it.
-	prevProfile := lipgloss.Writer.Profile
-	lipgloss.Writer.Profile = colorprofile.TrueColor
-	t.Cleanup(func() { lipgloss.Writer.Profile = prevProfile })
 	app.SetInputHandler(HandleInput)
 
 	prev := config.Global.SharedBorders

@@ -609,7 +609,13 @@ func (m *OS) composeFrame() string {
 	if m.spotlight.on && !m.screensaver.active {
 		m.applySpotlight(canvas)
 	}
-	return lipgloss.Sprint(canvas.Render())
+	// The frame goes out as the canvas wrote it. The bubbletea renderer
+	// downsamples it per cell to the profile of the terminal it is drawn on,
+	// the same one lipgloss.Writer would have detected locally and the one
+	// wish or sip sets per connection. Passing it through lipgloss.Sprint as
+	// well copied the whole frame twice on a truecolor terminal and stripped
+	// every colour when this process's stdout was not a TTY.
+	return canvas.Render()
 }
 
 // fullscreenFastWindow returns the single window that fills the content area with

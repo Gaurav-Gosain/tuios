@@ -15,7 +15,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"charm.land/ssh"
 	"charm.land/wish/v2"
 	"charm.land/wish/v2/bubbletea"
@@ -99,25 +98,14 @@ func StartSSHServer(ctx context.Context, cfg *SSHServerConfig) error {
 	// connection, so this replaces the old per-connection global writes that
 	// raced other sessions' render loops.
 	//
-	// The lipgloss profile is in here for exactly that reason and not only for
-	// tidiness: a second StartSSHServer in the same process wrote it again while
-	// the first server's sessions were still composing frames, which the race
-	// detector reported against composeFrame's lipgloss.Sprint.
+	// Frames need no global here: composeFrame hands the canvas to the
+	// bubbletea renderer unchanged, and wish configures that renderer per
+	// connection from the client's own TERM.
 	applyAppearanceOnce.Do(func() {
-		// Compose frames in truecolor. composeFrame downsamples every frame
-		// through lipgloss.Sprint, whose profile is detected from THIS process's
-		// stdout and environment: a server logging to a file or running under a
-		// service manager detects NoTTY and strips every colour from every frame
-		// before the per-client profile ever sees it, for every client at once.
-		// Pinning truecolor here leaves downsampling to the bubbletea renderer,
-		// which wish configures per connection from the client's own TERM.
-		// tuios-web pins the same global for the same reason.
-		lipgloss.Writer.Profile = colorprofile.TrueColor
-
-		// The same reasoning for the panes: an ephemeral pane's TERM is
-		// detected from this process's stdout, and a headless server would
-		// hand every one TERM=dumb. This gives them what daemon panes get. A
-		// server started in a real terminal still detects from it.
+		// An ephemeral pane's TERM is detected from this process's stdout,
+		// and a headless server would hand every one TERM=dumb. This gives
+		// them what daemon panes get. A server started in a real terminal
+		// still detects from it.
 		terminal.SetHeadlessGuestTerm("xterm-256color", "truecolor")
 
 		// The process-wide capability seed. Every SSH session carries its own

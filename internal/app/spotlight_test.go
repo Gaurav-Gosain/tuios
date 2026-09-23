@@ -10,7 +10,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
@@ -21,20 +20,6 @@ import (
 // The beam is a colour transform over a frame that already exists, so every
 // property worth holding is a property of one pass over one canvas: what it
 // leaves alone, what it must not leave alone, and what it must not allocate.
-
-// withTrueColorFrames makes composeFrame emit colour for one test.
-//
-// lipgloss.Sprint downsamples every frame through lipgloss.Writer, whose
-// profile is detected from this process's stdout. Under go test that is not a
-// TTY, so a frame composed in a test is colourless and any assertion about what
-// the pass did to a colour would pass with the pass removed. The SSH server and
-// tuios-web both pin this global at startup for the same reason.
-func withTrueColorFrames(t *testing.T) {
-	t.Helper()
-	prev := lipgloss.Writer.Profile
-	lipgloss.Writer.Profile = colorprofile.TrueColor
-	t.Cleanup(func() { lipgloss.Writer.Profile = prev })
-}
 
 // spotlightTestCanvas is a canvas of coloured text with coloured blanks in it,
 // which is what a composed pane looks like to the pass.
@@ -680,7 +665,6 @@ func TestSpotlightDisqualifiesTheFullscreenFastPath(t *testing.T) {
 // runs, so the two must never draw in one frame.
 func TestSpotlightYieldsToTheScreensaver(t *testing.T) {
 	withTheme(t, "catppuccin_mocha")
-	withTrueColorFrames(t)
 	win := newTestWindow(t, "spotlight-saver", 60, 12)
 	win.WriteOutput([]byte("\x1b[38;2;200;200;200;48;2;40;40;60mhello world\x1b[0m\r\n"))
 	win.MarkContentDirty()

@@ -504,9 +504,17 @@ func TestEffectOpeningBandsSeparateFastFromSlow(t *testing.T) {
 // three then took the screen away for twenty-three, twelve and seven seconds.
 //
 // So this runs every effect flagged keepsScreen to its end and holds it to the
-// whole claim on every frame: every captured glyph legible, in its own place,
-// no share of it missing. Six screen shapes, from a phone-sized terminal to a
-// wide one, because the effects that failed this failed it by size.
+// whole claim on every frame: every captured glyph that is legible on the
+// screen itself stays legible, in its own place, no share of it missing. Six
+// screen shapes, from a phone-sized terminal to a wide one, because the effects
+// that failed this failed it by size.
+//
+// "Legible on the screen itself" is the capture's own contrast, and it matters
+// once the capture has colour. The dock's hairline and the rounded caps of its
+// pills are drawn below the readability floor on purpose, so no effect can make
+// them readable and a claim that counted them failed on the untouched screen.
+// It passed for as long as it did only because test frames were stripped of
+// colour, which made every glyph the default foreground.
 //
 // highlight passes. It sweeps a band of brighter colour over text that never
 // moves.
@@ -541,10 +549,11 @@ func TestEffectsWithNoOpeningNeverHideTheScreen(t *testing.T) {
 			// row or two higher than it was taken; comparing against the
 			// capture's own coordinates would measure that shift rather than
 			// the effect. The end state is what the claim is about anyway.
-			want := effectSettledScreen(t, p, name)
-			if len(want) < 20 {
-				t.Fatalf("setup: %s settles on %d glyph cells at %dx%d, not a screen worth hiding",
-					name, len(want), screen.w, screen.h)
+			settled := effectSettledScreen(t, p, name)
+			want := legibleGlyphs(settled)
+			if len(want) < 20 || len(want) < len(settled)/2 {
+				t.Fatalf("setup: %s settles on %d legible glyph cells of %d at %dx%d, not a screen worth hiding",
+					name, len(want), len(settled), screen.w, screen.h)
 			}
 
 			d, _ := tfx.Lookup(name)
@@ -572,7 +581,7 @@ func TestEffectsWithNoOpeningNeverHideTheScreen(t *testing.T) {
 			// screen, and the claim leaves no room for a part.
 			if worst < len(want) {
 				t.Errorf("%s is told to say the screen stays visible, but at frame %d of %d at %dx%d "+
-					"only %d of %d captured glyphs are readable",
+					"only %d of %d legible captured glyphs are readable",
 					name, worstFrame, frame, screen.w, screen.h, worst, len(want))
 			}
 		}
@@ -631,6 +640,24 @@ func effectSettledScreen(t *testing.T, p *effectPreview, name string) map[measur
 		}
 	}
 	return settled
+}
+
+// legibleGlyphs keeps the cells of a screen that are readable as drawn, by the
+// same contrast rule measureReadable applies to a frame. A cell the screen
+// itself draws below that rule, such as a dim rule line, is not something an
+// effect can hide.
+func legibleGlyphs(screen map[measureCoord]measureLook) map[measureCoord]measureLook {
+	legible := make(map[measureCoord]measureLook, len(screen))
+	for at, look := range screen {
+		bg := tfx.Color{}
+		if look.hasBg {
+			bg = look.bg
+		}
+		if measureContrast(look.fg, bg) >= measureReadableContrast {
+			legible[at] = look
+		}
+	}
+	return legible
 }
 
 // TestEveryEffectBuildsOverACapturedScreen is the fill-character fix.

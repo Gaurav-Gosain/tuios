@@ -5,20 +5,17 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 	"github.com/adrg/xdg"
-	"github.com/charmbracelet/colorprofile"
 )
 
 // hoverOS builds a model with the rail on the left, its footer controls
 // available, and two panes beside it. Hover is a colour change and nothing
-// else, so the writer needs a colour profile or every frame renders identical
-// and the assertions below cannot see the thing they are about.
+// else, so the assertions below read colours out of the composed frame.
 func hoverOS(t *testing.T) *app.OS {
 	t.Helper()
 	app.SetInputHandler(HandleInput)
@@ -33,12 +30,9 @@ func hoverOS(t *testing.T) *app.OS {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	xdg.Reload()
 
-	prevProfile := lipgloss.Writer.Profile
-	lipgloss.Writer.Profile = colorprofile.TrueColor
 	pe, pp, pw := config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth
 	config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth = true, "left", 30
 	t.Cleanup(func() {
-		lipgloss.Writer.Profile = prevProfile
 		config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth = pe, pp, pw
 	})
 

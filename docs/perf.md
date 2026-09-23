@@ -1005,3 +1005,60 @@ extra tokens in the shipped row. The signature folds a pane's metadata only when
 it has some, so a rail with no metadata pays nothing per frame for it, and a
 state sync that leaves a pane's metadata unchanged reuses the pane's list rather
 than allocating a new one.
+
+## 2026-09 second profiling pass: render
+
+Profiled the compositor over a keystroke frame (`BenchmarkKeystrokeFrame`,
+`BenchmarkKeystrokeFrameTiled`), a nine-pane flood (`BenchmarkClientFrame`),
+the dock-row pointer sweep (`BenchmarkPointerSweep`) and a connect toast, and
+took each hotspot as its own commit.
+
+### Measurement conditions
+
+Apple M3 Pro, 11 cores, shared with other agents at a load average of 7 to 10.
+Every figure is process CPU time (user plus sys) per iteration from
+`/usr/bin/time`: one process per run, `-test.cpu 1`, a fixed
+`-test.benchtime Nx`, `nice -n 15`, the old and new test binaries alternating,
+eight rounds a side, compared with `benchstat`. Allocation counts are exact.
+Each change is measured against the commit before it.
+
+Both binaries run with `CLICOLOR_FORCE=1 COLORTERM=truecolor`. Before the first
+change below, a frame composed under `go test` went through `lipgloss.Sprint`,
+which found that stdout was not a TTY and stripped every escape from it. A
+default-environment A/B of that change therefore compares a colourless base
+frame against a coloured new one, and reads as a regression that is not there.
+
+### What moved
+
+**A composed frame is no longer copied through `lipgloss.Sprint`**
+(`render.go`). `composeFrame` ended with `lipgloss.Sprint(canvas.Render())`.
+On a truecolor terminal that is two more copies of a 40 to 50 KB frame. On a
+256-colour one it downsampled the frame that the bubbletea renderer downsamples
+again per cell, from the same `colorprofile.Detect` on the same stdout. On a
+headless server it stripped every colour, which is why `internal/server` and
+`tuios-web` pinned `lipgloss.Writer.Profile` to truecolor. Both pins are gone:
+the only other `lipgloss.Writer` users are `lipgloss.Sprintf` calls over plain
+text, which no profile changes. `TestComposeFrameKeepsPaneColour` holds a
+composed frame to its pane's colour.
+
+With colour in test frames, `TestEffectsWithNoOpeningNeverHideTheScreen`
+failed for `highlight` (98 of 142 glyphs readable at 40x12). The 44 missing
+cells are the dock hairline (`#4d4b4f` on the terminal background) and the
+rounded caps of the dock pills, which the untouched screen already draws below
+the 3:1 contrast the test calls readable. Every glyph that is readable on the
+settled screen stays readable on every frame of the effect, so the effect was
+right and the test now holds only the settled screen's legible glyphs to the
+claim. Flagging `burn` or `rings` as keeping the screen still fails it.
+
+| per op | before | after | |
+|---|---|---|---|
+| `KeystrokeFrame/panes-4` B/op | 124.2 KiB | 84.1 KiB | -32.3% (p=0.000) |
+| `KeystrokeFrameTiled/panes-9` B/op | 208.2 KiB | 172.1 KiB | -17.3% (p=0.000) |
+| `ClientFrame/panes-9/whole` B/op | 2.54 MiB | 2.14 MiB | -15.7% (p=0.000) |
+| allocs/op | | | -5 on each |
+| CPU | | | `~` on all three (p=0.16 to 0.63) |
+
+The copies are large and few, so the CPU they cost is below what this machine
+resolves. The change is kept for the bytes, for the headless colour it no
+longer depends on a global for, and because every test and benchmark that
+composes a frame now sees the frame a terminal gets.

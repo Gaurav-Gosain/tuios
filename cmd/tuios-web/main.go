@@ -16,7 +16,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/Gaurav-Gosain/sip"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
@@ -186,12 +185,10 @@ func runWebServer() error {
 		return err
 	}
 
-	// CRITICAL: Force lipgloss to use TrueColor BEFORE any styles are created.
-	// By default, lipgloss detects color profile from os.Stdout, which isn't a TTY
-	// when running as a web server. This causes all colors to be stripped.
-	lipgloss.Writer.Profile = colorprofile.TrueColor
 	// The accent picker labels colours through its own probe of this process's
-	// stdout; pin it to what the browser terminal renders, the same way.
+	// stdout, which is not a TTY here; pin it to what the browser terminal
+	// renders. Frames need no such pin: composeFrame hands the canvas to the
+	// bubbletea renderer unchanged, and sip sets that renderer's profile.
 	app.SetAccentColorProfile(colorprofile.TrueColor)
 
 	// Install the browser terminal as the process host capabilities. Without
