@@ -211,11 +211,12 @@ func requireDaemon() error {
 // dialVerb connects to the daemon for a JSON verb-protocol call. Every failure
 // it can produce is explained: the daemon being absent, a stale or unreachable
 // socket, and an old daemon left running across an upgrade.
+//
+// It dials first and diagnoses only on failure. explainDialError runs the same
+// DiagnoseDaemon a probe beforehand would, so the message and exit status are
+// the same, and a command against a running daemon no longer pays for a probe
+// connection the daemon has to accept and drop.
 func dialVerb() (*session.VerbClient, error) {
-	if err := requireDaemon(); err != nil {
-		return nil, err
-	}
-
 	client, err := session.DialVerbClientAs(version)
 	if err != nil {
 		return nil, explainDialError(err)

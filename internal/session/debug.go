@@ -85,12 +85,12 @@ type LogBuffer struct {
 	mu      sync.RWMutex
 }
 
-// NewLogBuffer creates a new log buffer with the specified capacity.
+// NewLogBuffer creates a new log buffer with the specified capacity. The
+// entries are allocated by the first Add: every process that links this
+// package makes one buffer at init, and a one-shot CLI command never logs to
+// it. The read methods touch entries only when count is above zero.
 func NewLogBuffer(capacity int) *LogBuffer {
-	return &LogBuffer{
-		entries: make([]LogEntry, capacity),
-		size:    capacity,
-	}
+	return &LogBuffer{size: capacity}
 }
 
 // Add adds a new entry to the buffer.
@@ -104,6 +104,9 @@ func (b *LogBuffer) Add(level, message string) {
 		Message:   message,
 	}
 
+	if b.entries == nil {
+		b.entries = make([]LogEntry, b.size)
+	}
 	b.entries[b.head] = entry
 	b.head = (b.head + 1) % b.size
 	if b.count < b.size {

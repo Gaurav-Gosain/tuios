@@ -3,7 +3,6 @@ package scrollback
 import (
 	"bytes"
 	"encoding/json"
-	"regexp"
 	"strings"
 )
 
@@ -103,7 +102,7 @@ func ExtractJSON(output string) []JSONBlock {
 }
 
 // pathRegex matches filesystem paths and URLs.
-var pathRegex = regexp.MustCompile(
+var pathRegex = lazyRegexp(
 	`(?:` +
 		// URLs
 		`https?://[^\s"'<>]+|` +
@@ -115,11 +114,11 @@ var pathRegex = regexp.MustCompile(
 )
 
 // lineColRegex extracts :line and optional :col from a path suffix.
-var lineColRegex = regexp.MustCompile(`:(\d+)(?::(\d+))?$`)
+var lineColRegex = lazyRegexp(`:(\d+)(?::(\d+))?$`)
 
 // ExtractPaths finds file paths and URLs in the output text.
 func ExtractPaths(output string) []PathBlock {
-	matches := pathRegex.FindAllString(output, -1)
+	matches := pathRegex().FindAllString(output, -1)
 	if len(matches) == 0 {
 		return nil
 	}
@@ -139,7 +138,7 @@ func ExtractPaths(output string) []PathBlock {
 		line, col := 0, 0
 
 		if !isURL {
-			if loc := lineColRegex.FindStringSubmatchIndex(raw); loc != nil {
+			if loc := lineColRegex().FindStringSubmatchIndex(raw); loc != nil {
 				path = raw[:loc[0]]
 				if loc[2] >= 0 {
 					line = parseInt(raw[loc[2]:loc[3]])

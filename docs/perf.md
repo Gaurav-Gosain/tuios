@@ -1690,3 +1690,59 @@ is the in-repo benchmark on the default config.
 | `ValidateConfigDefault` CPU | 545 us | 350 us | -35.8% (p=0.002) |
 | `ValidateConfigDefault` B/op | 960 KiB | 434 KiB | -54.8% |
 | `ValidateConfigDefault` allocs/op | 5,156 | 4,274 | -17.1% |
+
+**Every CLI process does less at init** (`internal/scrollback`, `debug.go`,
+`cmd/tuios/diagnostics.go`). The scrollback browser's five regexps compiled at
+package init in every process, and only the browser uses them; they compile on
+first use now. The daemon log buffer allocated its 1000 entries, about 40 KB, at
+init, and a one-shot command never logs to it; they are allocated by the first
+`Add`. `dialVerb` probed the socket with its own connection before dialing; it
+dials first now and diagnoses only on failure, through `explainDialError`,
+which runs the same `DiagnoseDaemon`, so the message and exit status are
+unchanged and the daemon accepts one connection per verb command instead of
+two. Measured with `GODEBUG=inittrace=1` on `tuios --version`, six alternating
+rounds of 20 runs:
+
+| init, per process | before | after | |
+|---|---|---|---|
+| total clock | 1.84 ms | 1.65 ms | -10.4% (p=0.002, n=120) |
+| total bytes | 883 KiB | 766 KiB | -13.3% |
+| total allocs | 5,893 | 5,279 | -10.4% |
+| `internal/scrollback` plus `internal/session` clock | 245 us | 85 us | -65% |
+
+End to end, `list-sessions --json` against a running daemon measured 9.38 ms
+CPU before and 9.18 ms after (six alternating rounds of 40 runs, p=0.18): the
+gain is about 2% of a command and below what this machine resolves. It is kept
+because the init numbers are exact and the change adds no state. `TestDialVerbExplainsAMissingDaemonLikeTheProbe` holds the
+new dial to the old probe's message and status for an absent daemon and a stale
+socket, `TestLogBufferAllocatesOnFirstAdd` the lazy buffer, and
+`TestExtractPathsUsesBothPatterns` and `TestParseBlocksByPromptPatterns` the
+five patterns, which had no test and would otherwise fail only on first use.
+
+### Measured and deliberately not changed
+
+- **The spawn poll** (`startDaemonBackground`, 50 ms). A cold `tuios new
+  --detach` spends a constant 52.5 ms waiting on it. A 2 ms poll exposed an
+  attach-time size race (`TestAttachStartsTheDaemonAndBringsSessionsBack`
+  failed 3 of 50 runs), so it waits for that race to be fixed on its own.
+- **Flushing bubbletea's first frame at start.** The first frame goes out on
+  the first 60 fps tick, 26 to 34 ms after exec on a 12-pane attach. The fix is
+  an upstream bubbletea change, and the prototype sent the frame ahead of the
+  mode queries `Run` queues, so it is to be filed upstream, not carried.
+- **Caching the config validation result on `UserConfig`.** After the
+  `ValidateKey` change it would save about 0.4 ms per TUI start, and it adds
+  hidden state that goes stale when the settings page edits the config.
+- **CoreFoundation and Security**, loaded by dyld because crypto/x509 is
+  linked: about 0.9 ms per exec. Removing it means a CLI binary without
+  net/http and crypto/tls.
+- **encoding/gob init**, 0.12 ms: the standard library scanning typelinks.
+- **gopsutil/cpu init**, 0.06 ms, which calls host_processor_info twice. On
+  darwin gopsutil/process imports it for `ProcessCwd`.
+- **The cobra tree**, built whole on every invocation: 110 us and 1476
+  allocations.
+- **`outputChan`**, 4096 slots and about 224 KB per pane at attach. The
+  producer drops data when it is full, so shrinking it trades memory for silent
+  loss until backpressure is redesigned.
+- **`RestoreTerminalStates`**, serial `GetTerminalState` round trips at about
+  0.2 ms per pane on top of about 2 ms fixed, and **`ensureAttachTarget`**, an
+  extra verb connection of 0.4 to 0.6 ms at attach.
