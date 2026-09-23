@@ -1712,6 +1712,12 @@ send**, `for build` on the right: `2 messages wait for the link to build`.
 The rail's header for that machine says `2 queued` beside `seen 3m ago`, and
 `tuios hosts` says so below its table. The row closes when everything went.
 
+A send also waits when the link is up but the other machine did not answer in
+time (10 seconds), or had no room for another stream, and when earlier mail for
+that machine still waits, so it cannot overtake it. With the link up the daemon
+tries again at once, then after 1 second, doubling to 30 seconds between tries,
+rather than waiting for the link to drop and come back.
+
 If the other machine refuses a message when it arrives (its session is gone,
 or its link policy does not let this machine mail), the message is dropped and
 the row says so, with the reason, until you dismiss it. `d` on the row also

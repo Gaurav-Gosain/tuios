@@ -42,6 +42,17 @@ import (
 //   - A caller that arrived over a link may not use it, since that would send
 //     as this machine to a machine the caller cannot reach itself. A pane's
 //     report channel drops the param.
+//
+// When a message is kept and when it goes:
+//
+//   - A send while earlier mail for the host waits, or is being delivered, is
+//     queued behind it rather than sent at once, so it cannot overtake it.
+//   - A send that fails without a final answer (the link is down, the call
+//     timed out, the far daemon had no room for another stream) is queued.
+//   - The queue is delivered when the link comes up, at once after a send was
+//     queued with the link up, and, when a delivery fails without a final
+//     answer while the link stays up, again after outboxRetryMin, doubling to
+//     outboxRetryMax. It is not left for the next time the link comes up.
 
 const (
 	// outboxMaxPerHost bounds the mail waiting for one machine.
@@ -53,6 +64,10 @@ const (
 	outboxMaxFailures = 8
 	// outboxDeliverBudget bounds one delivery.
 	outboxDeliverBudget = 10 * time.Second
+	// outboxRetryMin and outboxRetryMax bound the wait before a delivery that
+	// failed with the link still up is tried again.
+	outboxRetryMin = time.Second
+	outboxRetryMax = 30 * time.Second
 )
 
 // outboxEntry is one message waiting for a machine.
@@ -93,10 +108,58 @@ type hostOutbox struct {
 	// flushing marks a host whose queue is being delivered now, so a second
 	// status report does not start a second delivery out of order.
 	flushing map[string]bool
+	// retry is the pending retry of a host whose delivery failed with its link
+	// still up, and backoff is the wait before the next one.
+	retry   map[string]*time.Timer
+	backoff map[string]time.Duration
+	// failCall, set only by tests, runs before every send-agent-message call
+	// on a link. An error it returns is that call's error.
+	failCall func(params json.RawMessage) error
 }
 
 func newHostOutbox(d *Daemon) *hostOutbox {
-	return &hostOutbox{d: d, failures: map[string][]outboxFailure{}, flushing: map[string]bool{}}
+	return &hostOutbox{
+		d:        d,
+		failures: map[string][]outboxFailure{},
+		flushing: map[string]bool{},
+		retry:    map[string]*time.Timer{},
+		backoff:  map[string]time.Duration{},
+	}
+}
+
+// call is send-agent-message on host's link, bounded by outboxDeliverBudget.
+func (o *hostOutbox) call(host string, params json.RawMessage) (json.RawMessage, error) {
+	o.mu.Lock()
+	fail := o.failCall
+	o.mu.Unlock()
+	if fail != nil {
+		if err := fail(params); err != nil {
+			return nil, err
+		}
+	}
+	ctx, cancel := context.WithTimeout(o.d.ctx, outboxDeliverBudget)
+	defer cancel()
+	return o.d.federation.Call(ctx, host, "send-agent-message", params)
+}
+
+// hostUp reports whether host's link is up now.
+func (o *hostOutbox) hostUp(host string) bool {
+	if o.d.federation == nil {
+		return false
+	}
+	r, ok := o.d.federation.Report(host)
+	return ok && r.Status == federation.StatusUp
+}
+
+// busy reports whether mail for host waits or is being delivered, so a new
+// send must go behind it.
+func (o *hostOutbox) busy(host string) bool {
+	if o == nil {
+		return false
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.flushing[host] || o.hasLocked(host)
 }
 
 // outboxPath is where the queue is saved, beside the Inbox.
@@ -237,6 +300,11 @@ func (o *hostOutbox) discard(host string) int {
 	}
 	o.entries = kept
 	delete(o.failures, host)
+	if t := o.retry[host]; t != nil {
+		t.Stop()
+		delete(o.retry, host)
+	}
+	delete(o.backoff, host)
 	o.saveLocked()
 	o.mu.Unlock()
 	if dropped > 0 {
@@ -247,25 +315,18 @@ func (o *hostOutbox) discard(host string) int {
 }
 
 // kick delivers what waits for host, in order, on its own goroutine. It is
-// called when the host's link comes up and after a send was queued while the
-// link looked up.
+// called when the host's link comes up, after a send was queued while the
+// link looked up, and by the retry timer.
 func (o *hostOutbox) kick(host string) {
 	if o == nil {
 		return
 	}
 	o.mu.Lock()
-	if o.flushing[host] {
-		o.mu.Unlock()
-		return
+	if t := o.retry[host]; t != nil {
+		t.Stop()
+		delete(o.retry, host)
 	}
-	has := false
-	for _, e := range o.entries {
-		if e.Host == host {
-			has = true
-			break
-		}
-	}
-	if !has {
+	if o.flushing[host] || !o.hasLocked(host) {
 		o.mu.Unlock()
 		return
 	}
@@ -274,12 +335,22 @@ func (o *hostOutbox) kick(host string) {
 	go o.flush(host)
 }
 
-// flush delivers host's queue until it is empty or the link fails.
+// hasLocked reports whether mail waits for host. The caller holds mu.
+func (o *hostOutbox) hasLocked(host string) bool {
+	for _, e := range o.entries {
+		if e.Host == host {
+			return true
+		}
+	}
+	return false
+}
+
+// flush delivers host's queue until it is empty or a delivery fails without a
+// final answer. It ends the flushing mark under the same lock that finds the
+// queue empty, so a send that queued behind the delivery is never left with
+// nobody to deliver it.
 func (o *hostOutbox) flush(host string) {
 	defer func() {
-		o.mu.Lock()
-		delete(o.flushing, host)
-		o.mu.Unlock()
 		o.noteAttention(host)
 		o.pushHost(host)
 	}()
@@ -293,13 +364,14 @@ func (o *hostOutbox) flush(host string) {
 				break
 			}
 		}
-		o.mu.Unlock()
 		if next == nil || o.d.federation == nil || o.d.ctx.Err() != nil {
+			delete(o.flushing, host)
+			delete(o.backoff, host)
+			o.mu.Unlock()
 			return
 		}
-		ctx, cancel := context.WithTimeout(o.d.ctx, outboxDeliverBudget)
-		_, err := o.d.federation.Call(ctx, host, "send-agent-message", next.Params)
-		cancel()
+		o.mu.Unlock()
+		_, err := o.call(host, next.Params)
 		var remote *federation.RemoteError
 		switch {
 		case err == nil:
@@ -309,8 +381,23 @@ func (o *hostOutbox) flush(host string) {
 			LogBasic("Queued message %d to %s was refused there: %v", next.ID, host, err)
 			o.remove(next.ID, &outboxFailure{Session: next.Session, To: next.To, Reason: err.Error(), At: time.Now().UnixNano()})
 		default:
-			// The link failed under the delivery. What is left waits for the
-			// next time it comes up.
+			// No final answer. With the link down, what is left waits for it
+			// to come up, which kicks the queue. With the link still up (a
+			// timeout, no room for another stream), nothing else would, so
+			// try again after a backoff.
+			up := o.hostUp(host)
+			o.mu.Lock()
+			delete(o.flushing, host)
+			if up && o.retry[host] == nil && o.d.ctx.Err() == nil {
+				wait := o.backoff[host]
+				if wait == 0 {
+					wait = outboxRetryMin
+				}
+				o.backoff[host] = min(2*wait, outboxRetryMax)
+				LogBasic("Delivery of queued message %d to %s failed with the link up, trying again in %s: %v", next.ID, host, wait, err)
+				o.retry[host] = time.AfterFunc(wait, func() { o.kick(host) })
+			}
+			o.mu.Unlock()
 			return
 		}
 	}
@@ -392,9 +479,13 @@ func (d *Daemon) sendAgentMessageToHost(cs *connState, host, sessionName, to, fr
 		return nil, newVerbError(ErrVerbInternal, "could not encode the message")
 	}
 
-	ctx, cancel := context.WithTimeout(d.ctx, outboxDeliverBudget)
-	raw, err := d.federation.Call(ctx, host, "send-agent-message", json.RawMessage(out))
-	cancel()
+	// Earlier mail for the host still waits, or is being delivered: this one
+	// goes behind it, or it would arrive first.
+	if d.outbox.busy(host) {
+		return d.queueForHost(host, sessionName, to, out, "earlier mail waits")
+	}
+
+	raw, err := d.outbox.call(host, json.RawMessage(out))
 	var remote *federation.RemoteError
 	switch {
 	case err == nil:
@@ -411,11 +502,22 @@ func (d *Daemon) sendAgentMessageToHost(cs *connState, host, sessionName, to, fr
 		message, code := federationErrorText(err)
 		return nil, newVerbError(code, message)
 	}
-	e, waiting, verr := d.outbox.enqueue(host, sessionName, to, out)
+	return d.queueForHost(host, sessionName, to, out, err.Error())
+}
+
+// queueForHost keeps a message for host and answers agent_message_queued. When
+// the link is up (the send timed out, or queued behind earlier mail) the queue
+// is kicked now: nothing else would deliver it until the link went down and
+// came back.
+func (d *Daemon) queueForHost(host, sessionName, to string, params []byte, why string) (any, *verbError) {
+	e, waiting, verr := d.outbox.enqueue(host, sessionName, to, params)
 	if verr != nil {
 		return nil, verr
 	}
-	LogBasic("Queued message %d for %s: its link is down", e.ID, host)
+	LogBasic("Queued message %d for %s: %s", e.ID, host, why)
+	if d.outbox.hostUp(host) {
+		d.outbox.kick(host)
+	}
 	return map[string]any{
 		"type":     "agent_message_queued",
 		"host":     host,

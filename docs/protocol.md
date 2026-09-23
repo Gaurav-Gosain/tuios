@@ -215,7 +215,13 @@ and `queued: false`. When the link is down it keeps the message instead, on
 disk, and answers `{"type": "agent_message_queued", "queued": true,
 "queue_id": 3, "waiting": 1, ...}`; the messages go in order when the link is
 back. At most 64 wait per machine and 256 in all; past that the send is
-`rate_limited`. What changes for existing callers:
+`rate_limited`. A send is also queued when the call fails without an answer
+from the far machine while the link stays up (a timeout, no room for another
+stream), and when earlier mail for that machine still waits or is being
+delivered, so it cannot arrive ahead of it. With the link up the queue is
+tried again at once, then after 1 second, doubling to 30 seconds. An error
+the far machine answers is returned as before and is not queued. What changes
+for existing callers:
 
 - `list-attention` has a seventh kind, `outbox`, one item per machine with
   mail waiting or refused. A consumer that switched on the six kinds sees a

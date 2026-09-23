@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -260,4 +261,120 @@ func TestALinkCallerCannotQueueMailOnward(t *testing.T) {
 	link := dialLink(t, sp)
 	mustRefuse(t, callVerb(t, link, "send-agent-message", map[string]any{"host": "build", "session": "far", "text": "relay me"}),
 		ErrVerbForbidden, "a link caller sending onward with host")
+}
+
+// failFirstCalls makes the hub's first n sends of text on a link fail as a
+// timeout does, which leaves the link up. It counts those sends.
+func failFirstCalls(hub *Daemon, n int32, text string) *atomic.Int32 {
+	calls := &atomic.Int32{}
+	hub.outbox.mu.Lock()
+	hub.outbox.failCall = func(params json.RawMessage) error {
+		var p struct {
+			Text string `json:"text"`
+		}
+		_ = json.Unmarshal(params, &p)
+		if p.Text != text {
+			return nil
+		}
+		if calls.Add(1) <= n {
+			return fmt.Errorf("send-agent-message on build: %w", context.DeadlineExceeded)
+		}
+		return nil
+	}
+	hub.outbox.mu.Unlock()
+	return calls
+}
+
+// retryPending reports whether the hub waits to retry host's queue.
+func retryPending(hub *Daemon, host string) bool {
+	hub.outbox.mu.Lock()
+	defer hub.outbox.mu.Unlock()
+	return hub.outbox.retry[host] != nil && !hub.outbox.flushing[host]
+}
+
+// waitForFarTexts blocks until the far session's ring holds want, in order.
+func waitForFarTexts(t *testing.T, far *farSide, want string) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		var got []string
+		for _, m := range farMessages(t, far, "far") {
+			got = append(got, m["text"].(string))
+		}
+		if strings.Join(got, "|") == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("ASSERTION: the far session holds %q, want %q", strings.Join(got, "|"), want)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestMailQueuedWithTheLinkUpIsRetried: a send that times out with the link up
+// is queued, and delivered without waiting for the link to go down and come
+// back. The first retry fails too, so the backoff retry is what delivers it.
+func TestMailQueuedWithTheLinkUpIsRetried(t *testing.T) {
+	hub, far, _ := startHubAndGatedFar(t)
+	_, farWin, _ := twoWindowSession(t, far.daemon, "far")
+	waitForHostUp(t, hub, "build")
+	calls := failFirstCalls(hub, 2, "slow")
+	sp, _ := GetSocketPath()
+	local := dialVerb(t, sp)
+
+	queued := result(t, callVerb(t, local, "send-agent-message", map[string]any{"host": "build", "session": "far", "to": farWin, "from": "planner", "text": "slow"}))
+	if queued["queued"] != true {
+		t.Fatalf("a send that timed out was not queued: %v", queued)
+	}
+	waitForFarTexts(t, far, "slow")
+	if r, ok := hub.federation.Report("build"); !ok || r.Status != federation.StatusUp {
+		t.Fatalf("the link went down during the test, so this proves nothing: %v", r)
+	}
+	if n := calls.Load(); n < 3 {
+		t.Errorf("delivered after %d calls, want the send, the kick and a retry", n)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for hubOutboxItem(t, hub) != nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the outbox item stayed open after the mail was delivered")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestASendWhileMailWaitsGoesBehindIt: with a message queued for a machine, a
+// new send to it is queued behind it rather than sent at once, so the two
+// arrive in the order they were sent.
+func TestASendWhileMailWaitsGoesBehindIt(t *testing.T) {
+	hub, far, _ := startHubAndGatedFar(t)
+	_, farWin, _ := twoWindowSession(t, far.daemon, "far")
+	waitForHostUp(t, hub, "build")
+	// Only the first message fails, three times: the send, the kick after it,
+	// and the first retry, so it still waits however late the second send is.
+	// The second would go through at once if it were sent.
+	failFirstCalls(hub, 3, "first")
+	sp, _ := GetSocketPath()
+	local := dialVerb(t, sp)
+
+	first := result(t, callVerb(t, local, "send-agent-message", map[string]any{"host": "build", "session": "far", "to": farWin, "from": "planner", "text": "first"}))
+	if first["queued"] != true {
+		t.Fatalf("the first send was not queued: %v", first)
+	}
+	// The kick after the first send fails as well, which leaves it waiting
+	// for a backoff retry.
+	deadline := time.Now().Add(5 * time.Second)
+	for !retryPending(hub, "build") {
+		if time.Now().After(deadline) {
+			t.Fatal("the kick after the first send never ended")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if hub.outbox.count("build") != 1 {
+		t.Fatalf("the first message does not wait: %d queued", hub.outbox.count("build"))
+	}
+	second := result(t, callVerb(t, local, "send-agent-message", map[string]any{"host": "build", "session": "far", "to": farWin, "from": "planner", "text": "second"}))
+	if second["queued"] != true {
+		t.Errorf("ASSERTION: a send while mail waits went at once: %v", second)
+	}
+	waitForFarTexts(t, far, "first|second")
 }

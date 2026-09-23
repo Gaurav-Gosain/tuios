@@ -1206,11 +1206,11 @@ func init() {
 				{Name: "reply_to", Type: "int", Description: "The id of the message this one answers. The reply joins that message's thread, and a reply to a reply joins the same one. A reply is the only acknowledgement between agents that means anything."},
 				{Name: "attachments", Type: "[]string", Description: "Absolute paths to existing files on the daemon's host. The ring stores the reference, never the bytes, so the producer keeps the file."},
 				{Name: "human_nonce", Type: "string", Description: "The nonce from an attach reply, which the tuios client sends with a reply from its mail overlay. A message from human is stored as verified_human only when this matches a client attached to the session now, over the same kind of connection, the sender is outside every pane, and, where the kernel gives both pids, the sender is the process that attached. Without it, from human is stored as claimed_human."},
-				{Name: "host", Type: "string", Description: "A machine in the [hosts] table: deliver to session there over this machine's link, and keep the message here while the link is down, to deliver in order when it comes back. The answer is then the far machine's, with host, or queued with queue_id. session is required. from human arrives there as claimed_human. Not taken over a link."},
+				{Name: "host", Type: "string", Description: "A machine in the [hosts] table: deliver to session there over this machine's link, and keep the message here while the link is down or the far machine does not answer, to deliver in order. The answer is then the far machine's, with host, or queued with queue_id. session is required. from human arrives there as claimed_human. Not taken over a link."},
 			},
 			returns: []verbParam{
 				{Name: "message_id", Type: "int", Description: "The id of the stored message."},
-				{Name: "queued", Type: "bool", Description: "With host: true when the link was down and the message waits here for it."},
+				{Name: "queued", Type: "bool", Description: "With host: true when the message waits here: the link was down, the far machine did not answer, or earlier mail for it still waits."},
 				{Name: "queue_id", Type: "int", Description: "With queued: the message's place in this machine's outbox."},
 				{Name: "waiting", Type: "int", Description: "With queued: how many messages now wait for that machine."},
 				{Name: "kind", Type: "string", Description: "message for a directed message, notice for a session-wide one.", Accepted: []string{agentMsgDirect, agentMsgNotice}},

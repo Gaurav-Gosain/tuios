@@ -312,7 +312,9 @@ names, never a guess, because reaching the wrong machine is worse than reaching
 none. A host that is not answering is `host_unreachable`, and `tuios hosts`
 says why. Mail is the one thing that waits for it: `send-agent-message -s
 HOST:SESSION` to a host whose link is down is kept on this machine and sent
-when the link is back, and says so (`queued` in `--json`). Do not send it again. `tuios hosts test NAME` dials the machine again
+when the link is back, and says so (`queued` in `--json`). So is a send that
+timed out with the link up, or that came while earlier mail still waits; the
+daemon keeps trying and keeps the order. Do not send it again. `tuios hosts test NAME` dials the machine again
 and prints what ssh said.
 
 ## Reading another pane
