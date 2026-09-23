@@ -2503,6 +2503,23 @@ func (p *PTY) GetTerminalState(maxScrollback, have int) *TerminalState {
 	return state
 }
 
+// GetTerminalStatePacked is GetTerminalState with the cells packed as they are
+// read, for a client that asked for the packed form. The result is the same as
+// GetTerminalState followed by Pack, without building every cell of the screen
+// and the history as a CellState first: for a screen that was 1.4 MB of
+// garbage per request, allocated under terminalMu.
+func (p *PTY) GetTerminalStatePacked(maxScrollback, have int) *TerminalState {
+	p.terminalMu.RLock()
+	defer p.terminalMu.RUnlock()
+
+	if p.terminal == nil {
+		return nil
+	}
+	state := terminalStateOf(p.terminal, p.terminal.Width(), p.terminal.Height(), maxScrollback, have, true)
+	state.Seq = p.vtSeq
+	return state
+}
+
 // TerminalStateOf serializes everything a client needs to arrive at the picture
 // this emulator holds. It is one half of the wire contract; ApplyTerminalState
 // is the other, and the two are kept in this file so a field added to one is
@@ -2515,6 +2532,12 @@ func (p *PTY) GetTerminalState(maxScrollback, have int) *TerminalState {
 // the rows past it are serialized, because only those can be used. See
 // GetTerminalState.
 func TerminalStateOf(t vt.Terminal, width, height, maxScrollback, have int) *TerminalState {
+	return terminalStateOf(t, width, height, maxScrollback, have, false)
+}
+
+// terminalStateOf is TerminalStateOf, with the cells packed as they are read
+// when packed is set (see GetTerminalStatePacked).
+func terminalStateOf(t vt.Terminal, width, height, maxScrollback, have int, packed bool) *TerminalState {
 	state := &TerminalState{
 		Width:         width,
 		Height:        height,
@@ -2524,8 +2547,6 @@ func TerminalStateOf(t vt.Terminal, width, height, maxScrollback, have int) *Ter
 		IsAltScreen:   t.IsAltScreen(),        // Capture alt screen state for mouse event forwarding
 		Modes:         t.GetModes(),           // Capture terminal modes (mouse tracking, bracketed paste, etc.)
 		KittyKbdStack: t.KittyKeyboardStack(), // Capture kitty keyboard protocol flag stack
-		Screen:        make([][]CellState, height),
-		Scrollback:    make([][]CellState, 0),
 	}
 
 	// None of these is recoverable from the cells. They are what the guest set
@@ -2551,13 +2572,51 @@ func TerminalStateOf(t vt.Terminal, width, height, maxScrollback, have int) *Ter
 	// as a block, because that is what a fresh emulator is.
 	state.CursorShape = decscusrParam(t.CursorStyle())
 
-	// Capture visible screen with full styling. The rows share one backing
-	// array: gob writes each row by its own length, so the shape on the wire
-	// is the same and the allocation count is one instead of one per row.
 	// Colours are encoded through one cache for the whole snapshot: a
 	// truecolor cell's hex string was one allocation per cell, eleven
 	// thousand per screen, for what is usually a few dozen distinct colours.
 	colors := colorWireCache{}
+	first, end := scrollbackWindow(t.ScrollbackLen(), maxScrollback, have)
+	if packed {
+		packStateCells(t, state, colors, first, end)
+	} else {
+		stateCells(t, state, colors, first, end)
+	}
+	return state
+}
+
+// scrollbackWindow returns the scrollback rows [first, end) a snapshot carries.
+// maxScrollback is as GetTerminalState documents it.
+//
+// Rows the caller already holds (have) are rows it will discard on arrival: it
+// keeps its own history and merges only what scrolled off while it was away.
+// Sending them anyway is what made a workspace switch move megabytes per pane
+// to be thrown away at the far end. state.ScrollbackLen is still the true
+// length, which is what the caller subtracts against.
+func scrollbackWindow(scrollbackLen, maxScrollback, have int) (first, end int) {
+	if maxScrollback == 0 {
+		maxScrollback = DefaultStateScrollback
+	}
+	want := max(scrollbackLen-have, 0)
+	if maxScrollback >= 0 && want < maxScrollback {
+		maxScrollback = want
+	}
+	if maxScrollback < 0 {
+		first = scrollbackLen
+	} else if scrollbackLen > maxScrollback {
+		first = scrollbackLen - maxScrollback
+	}
+	return first, scrollbackLen
+}
+
+// stateCells captures the screen, the main screen under an alternate one, and
+// scrollback rows [first, end) as cells.
+func stateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, first, end int) {
+	width, height := state.Width, state.Height
+	// Capture visible screen with full styling. The rows share one backing
+	// array: gob writes each row by its own length, so the shape on the wire
+	// is the same and the allocation count is one instead of one per row.
+	state.Screen = make([][]CellState, height)
 	cells := make([]CellState, width*height)
 	for y := range height {
 		state.Screen[y] = cells[y*width : (y+1)*width : (y+1)*width]
@@ -2582,40 +2641,18 @@ func TerminalStateOf(t vt.Terminal, width, height, maxScrollback, have int) *Ter
 		}
 	}
 
-	if maxScrollback == 0 {
-		maxScrollback = DefaultStateScrollback
-	}
-	scrollbackLen := t.ScrollbackLen()
-	// Rows the caller already holds are rows it will discard on arrival: it
-	// keeps its own history and merges only what scrolled off while it was
-	// away. Sending them anyway is what made a workspace switch move megabytes
-	// per pane to be thrown away at the far end. state.ScrollbackLen below is
-	// still the true length, which is what the caller subtracts against.
-	want := scrollbackLen - have
-	if want < 0 {
-		want = 0
-	}
-	if maxScrollback >= 0 && want < maxScrollback {
-		maxScrollback = want
-	}
-	first := 0
-	if maxScrollback < 0 {
-		first = scrollbackLen
-	} else if scrollbackLen > maxScrollback {
-		first = scrollbackLen - maxScrollback
-	}
-
 	// One backing array for the history too, cut into rows as they are read.
 	// A row wider than the screen, from before a narrowing resize, is rare and
 	// merely starts a new array.
+	state.Scrollback = make([][]CellState, 0)
 	var pool []CellState
-	for i := first; i < scrollbackLen; i++ {
+	for i := first; i < end; i++ {
 		line := t.ScrollbackLine(i)
 		if line == nil {
 			continue
 		}
 		if cap(pool) < len(line) {
-			pool = make([]CellState, max(len(line), width*(scrollbackLen-i)))
+			pool = make([]CellState, max(len(line), width*(end-i)))
 		}
 		row := pool[:len(line):len(line)]
 		pool = pool[len(line):]
@@ -2624,8 +2661,55 @@ func TerminalStateOf(t vt.Terminal, width, height, maxScrollback, have int) *Ter
 		}
 		state.Scrollback = append(state.Scrollback, row)
 	}
+}
 
-	return state
+// packStateCells is stateCells followed by Pack, done a row at a time through
+// one scratch row, so the cells never exist as [][]CellState. The grids are
+// packed in the order Pack packs them (screen, scrollback, main screen), which
+// is what makes the style table, and so every byte, the same as Pack's.
+// TestDirectPackMatchesPack holds it to that.
+func packStateCells(t vt.Terminal, state *TerminalState, colors colorWireCache, first, end int) {
+	width, height := state.Width, state.Height
+	p := newRowPacker()
+	row := make([]CellState, width)
+	grid := func(at func(x, y int) *uv.Cell) []byte {
+		b := newPackedRows(height * 32)
+		for y := range height {
+			for x := range width {
+				if cell := at(x, y); cell != nil {
+					row[x] = colors.cellState(cell)
+				} else {
+					row[x] = CellState{}
+				}
+			}
+			b.add(p, row[:width])
+		}
+		return b.blob()
+	}
+
+	state.PackedScreen = grid(t.CellAt)
+
+	b := newPackedRows((end - first) * 32)
+	for i := first; i < end; i++ {
+		line := t.ScrollbackLine(i)
+		if line == nil {
+			continue
+		}
+		if cap(row) < len(line) {
+			row = make([]CellState, len(line))
+		}
+		r := row[:len(line)]
+		for x := range line {
+			r[x] = colors.cellState(&line[x])
+		}
+		b.add(p, r)
+	}
+	state.PackedScrollback = b.blob()
+
+	if state.IsAltScreen {
+		state.PackedMain = grid(t.MainCellAt)
+	}
+	state.Styles = p.styles
 }
 
 // ApplyTerminalState brings an emulator to the state a snapshot describes. It

@@ -725,9 +725,11 @@ func (d *Daemon) handleGetTerminalState(cs *connState, msg *Message) error {
 	if payload.IncludeScrollback {
 		maxScrollback = payload.MaxScrollbackLines
 	}
-	state := pty.GetTerminalState(maxScrollback, payload.HaveScrollback)
+	var state *TerminalState
 	if payload.Packed {
-		state.Pack()
+		state = pty.GetTerminalStatePacked(maxScrollback, payload.HaveScrollback)
+	} else {
+		state = pty.GetTerminalState(maxScrollback, payload.HaveScrollback)
 	}
 	return d.sendMessage(cs, MsgTerminalState, &TerminalStatePayload{
 		PTYID: payload.PTYID,

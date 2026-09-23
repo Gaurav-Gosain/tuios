@@ -50,7 +50,7 @@ func (st *TerminalState) Pack() {
 	if st == nil || st.isPacked() {
 		return
 	}
-	p := &rowPacker{index: map[StyleState]uint32{{}: 0}, styles: []StyleState{{}}}
+	p := newRowPacker()
 	st.PackedScreen = p.pack(st.Screen)
 	st.PackedScrollback = p.pack(st.Scrollback)
 	st.PackedMain = p.pack(st.MainScreen)
@@ -102,9 +102,18 @@ func (st *TerminalState) checkPacked() error {
 	return nil
 }
 
+// rowPacker builds the style table and the blobs of one snapshot. The table is
+// shared by every grid of the snapshot and grows in the order styles are first
+// seen, so two packers fed the same rows in the same order give the same bytes.
 type rowPacker struct {
 	index  map[StyleState]uint32
 	styles []StyleState
+}
+
+// newRowPacker returns a packer whose style table holds the default style at
+// index zero, which is what a packed snapshot is recognised by.
+func newRowPacker() *rowPacker {
+	return &rowPacker{index: map[StyleState]uint32{{}: 0}, styles: []StyleState{{}}}
 }
 
 func (p *rowPacker) styleIndex(s StyleState) uint32 {
@@ -129,39 +138,71 @@ func (p *rowPacker) pack(rows [][]CellState) []byte {
 	if rows == nil {
 		return nil
 	}
-	buf := make([]byte, 0, 64+len(rows)*32)
-	buf = binary.AppendUvarint(buf, uint64(len(rows)))
+	b := newPackedRows(64 + len(rows)*32)
 	for _, row := range rows {
-		kept := len(row)
-		for kept > 0 && row[kept-1].isBlank() {
-			kept--
+		b.add(p, row)
+	}
+	return b.blob()
+}
+
+// appendRow appends one row to buf in the form pack documents.
+func (p *rowPacker) appendRow(buf []byte, row []CellState) []byte {
+	kept := len(row)
+	for kept > 0 && row[kept-1].isBlank() {
+		kept--
+	}
+	buf = binary.AppendUvarint(buf, uint64(len(row)))
+	buf = binary.AppendUvarint(buf, uint64(kept))
+	for i := 0; i < kept; {
+		style := row[i].StyleState
+		j := i + 1
+		for j < kept && row[j].StyleState == style {
+			j++
 		}
-		buf = binary.AppendUvarint(buf, uint64(len(row)))
-		buf = binary.AppendUvarint(buf, uint64(kept))
-		for i := 0; i < kept; {
-			style := row[i].StyleState
-			j := i + 1
-			for j < kept && row[j].StyleState == style {
-				j++
+		buf = binary.AppendUvarint(buf, uint64(p.styleIndex(style)))
+		buf = binary.AppendUvarint(buf, uint64(j-i))
+		for _, c := range row[i:j] {
+			w := max(c.Width, 0)
+			code := uint64(w)
+			if w > 2 {
+				code = 3
 			}
-			buf = binary.AppendUvarint(buf, uint64(p.styleIndex(style)))
-			buf = binary.AppendUvarint(buf, uint64(j-i))
-			for _, c := range row[i:j] {
-				w := max(c.Width, 0)
-				code := uint64(w)
-				if w > 2 {
-					code = 3
-				}
-				buf = binary.AppendUvarint(buf, uint64(len(c.Content))<<2|code)
-				if code == 3 {
-					buf = binary.AppendUvarint(buf, uint64(w))
-				}
-				buf = append(buf, c.Content...)
+			buf = binary.AppendUvarint(buf, uint64(len(c.Content))<<2|code)
+			if code == 3 {
+				buf = binary.AppendUvarint(buf, uint64(w))
 			}
-			i = j
+			buf = append(buf, c.Content...)
 		}
+		i = j
 	}
 	return buf
+}
+
+// packedRows builds one blob a row at a time, for a writer that does not hold
+// the rows as [][]CellState. The row count leads the blob but is known only at
+// the end, so the buffer starts with room for the longest varint and the count
+// is written right-aligned into it.
+type packedRows struct {
+	rows int
+	buf  []byte
+}
+
+func newPackedRows(capacity int) packedRows {
+	buf := make([]byte, binary.MaxVarintLen64, binary.MaxVarintLen64+capacity)
+	return packedRows{buf: buf}
+}
+
+func (b *packedRows) add(p *rowPacker, row []CellState) {
+	b.rows++
+	b.buf = p.appendRow(b.buf, row)
+}
+
+func (b *packedRows) blob() []byte {
+	var count [binary.MaxVarintLen64]byte
+	n := binary.PutUvarint(count[:], uint64(b.rows))
+	start := binary.MaxVarintLen64 - n
+	copy(b.buf[start:], count[:n])
+	return b.buf[start:]
 }
 
 // packedCell is one cell as the walker hands it out: the content as a
