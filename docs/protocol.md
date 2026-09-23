@@ -662,6 +662,32 @@ changes for everyone:
   `restrict-connection`, and under scope `own` a verb that names no session
   gets the caller's own session, not the most recently active one.
 
+**A shell's commands are facts the daemon reports.** The daemon's emulator
+always recorded a shell's OSC 133 marks for the scrollback browser; it now
+turns them into events and facts (see [run](#run)). A pane whose shell sends
+no marks is unaffected by all of this. What changes for everyone else:
+
+- A subscriber with no `types` filter now also receives the new event types
+  `prompt`, `command-started` and `command-finished`, from every pane whose
+  shell marks its commands. They carry the new fields `cmdline`, `exit_code`,
+  `duration_ms` and `command_seq`. A consumer that switches on `type` and
+  ignores what it does not know is unaffected; one that treats every type it
+  does not know as an error has three more to ignore.
+- `list-windows` entries gain `at_prompt`, `command_seq`, `running_cmdline`,
+  `last_cmdline`, `last_exit_code` and `last_duration_ms`, only for a window
+  whose shell has sent a mark. Other entries keep their shape exactly.
+- `capture-pane` accepts the new source `last-command-output`, so its
+  documented `accepted` set in `list-verbs` has three values. `wait-for`'s
+  `source` was documented with the same list and never took the new value; it
+  is now documented as `visible` and `recent`, which is what it always used.
+- `wait-for` takes the new condition `command-finished` and the new param
+  `command_seq`.
+- The new hook event `after-command-finished` runs on the daemon with
+  `TUIOS_COMMAND`, `TUIOS_EXIT_CODE` and `TUIOS_DURATION_MS`. Every hook now
+  gets those three variables, empty for the other events.
+- The new error codes `no_shell_integration` and `not_at_prompt` come only from
+  the new verb `run` and the new capture source.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -727,6 +753,8 @@ catalog.
 | `timeout` | A wait-for condition did not match before its timeout elapsed. |
 | `not_ready` | The target agent was mid-turn, so the call declined to type at it. `resume-agent` raises it for a pane whose shell is not at its prompt. |
 | `not_resumable` | `resume-agent` found no conversation it can resume in the pane: none recorded, a harness with no `[resume]` command, an id that is not one plain shell token, or a pane on another machine. Nothing was typed. |
+| `no_shell_integration` | The pane's shell has sent no OSC 133 marks, so `run` cannot tell where a command starts and ends, and `capture-pane` with `last-command-output` has no finished command to read. Nothing was typed. |
+| `not_at_prompt` | `run` typed nothing because a command is running in the pane. The message names it; the hint names the `wait-for command-finished` call that waits for it. |
 | `agent_blocked` | ask-agent declined to type at an agent on `needs_input`, because the text would answer its prompt. Nothing was typed. The hint names `capture-pane`. |
 | `prompt_stalled` | ask-agent typed the question and sent Enter, and within `stall_timeout` the pane did not show that it took it. The question was typed; look at the pane before sending it again. The hint names `capture-pane`. |
 | `loop_refused` | The call would loop: a pane addressing itself, or an ask that closes a cycle with one in flight. |
@@ -1146,6 +1174,61 @@ Response:
 {"result": {"type": "ok"}}
 ```
 
+### run
+
+Type one command line at a pane's shell prompt, wait for the shell to report
+that it finished, and return its exit status and what it printed.
+
+It rests on the shell's OSC 133 marks: A where the prompt starts, B where the
+input starts, C when the command runs and `D;<status>` when it finishes. fish
+and zsh send them with prompt integration on, bash with a setup, and every
+shell a terminal like Ghostty, kitty or WezTerm injects its script into. The
+daemon reads them from the pane's own output, so nothing needs installing in
+tuios.
+
+Params:
+
+- `session` (optional), `window` (optional; the focused window when omitted).
+- `command` (required string): one line, with no control characters. It is
+  typed as a bracketed paste when the shell has asked for one, then submitted
+  with Enter. Several commands are joined with `;` or `&&`.
+- `timeout` (optional int): milliseconds to wait for the command. Default
+  30000. The command keeps running after a timeout.
+- `lines` (optional int): keep only the last N lines of the output.
+
+What it refuses, with nothing typed:
+
+- `no_shell_integration`: the shell has sent no mark. A pane that has not
+  sent one yet gets three seconds to draw its first prompt, so a window
+  opened a moment ago is not refused for being slow to start.
+- `not_at_prompt`: a command is running in the pane. The message names it, and
+  the hint is the `wait-for command-finished` call with the pane's
+  `command_seq`.
+- `invalid_params`: the command holds a newline or another control
+  character. A newline at a prompt is Enter, so a second line would run as a
+  second command the result says nothing about.
+
+Response:
+
+```json
+{"result": {"type": "command_result", "session": "work", "window": "4f1c...", "cmdline": "go test ./...", "exit_code": 1, "duration_ms": 8123, "command_seq": 5, "output": "--- FAIL: TestX ...", "truncated": false}}
+```
+
+`exit_code` is omitted when the shell sent no status, which bash integrations
+do for a command ended with ctrl+c. `output` is plain text read out of the
+pane between the C and D marks, at most its last 256 KiB; `truncated` says it
+was cut or its start had already left the scrollback. `cmdline` is the command
+line as the shell showed it, cut to 512 bytes, with likely secrets masked the
+way an Inbox summary is.
+
+A timeout returns `timeout` with a hint naming `wait-for command-finished`
+with the `command_seq` from before the command, which matches as soon as it
+finishes, or at once if it already has.
+
+`run` grants nothing that `send-text` and `capture-pane` do not: a caller that
+can type into a pane and read it back can already do all of it. What it adds is
+the refusal to type into a running program.
+
 ### capture-pane
 
 Capture a pane's content, rendered from the daemon side terminal emulator.
@@ -1153,9 +1236,15 @@ Capture a pane's content, rendered from the daemon side terminal emulator.
 Params:
 
 - `session` (optional), `window` (optional).
-- `source` (optional): `visible` (the viewport, the default) or `recent`
-  (viewport plus scrollback). Any other value is rejected with
-  `invalid_params`; the hint names the accepted set.
+- `source` (optional): `visible` (the viewport, the default), `recent`
+  (viewport plus scrollback) or `last-command-output` (what the last finished
+  command printed, read between its shell's OSC 133 marks; see [run](#run)).
+  Any other value is rejected with `invalid_params`; the hint names the
+  accepted set. `last-command-output` is plain text, so `styled`, `ansi` and
+  `resolved` are refused with it; its result adds `cmdline`, `exit_code`
+  (omitted when the shell sent none), `command_seq` and `truncated`, and it
+  fails with `no_shell_integration` when no command has finished under the
+  marks.
 - `styled` (optional bool): include ANSI styling escape sequences. Default is
   plain text.
 - `scrollback` (optional bool): alias for `source: "recent"`.
@@ -2249,6 +2338,9 @@ Event types:
 | `gap` | Some events were not delivered to this connection. `reason` says why (see below). A gap has no `seq`. | `reason`, `dropped`, `boot_id` |
 | `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `answered`, `window_closed`, `session_closed`, `evicted` or `host_removed`. An `answered` item also carries `answer` and `answered_by`; the close of a linked host's item never reads `answered` here. `session` and `window` are the item's, so the usual filters apply. An item of a linked host also sets `host`, and a subscriber that filters on a session, window or pane does not get it unless it subscribed with `hosts`. | `session`, `window`, `host`, `action`, `attention` |
 | `host-changed` | A linked host's link changed state, or what it holds changed: its sessions, windows or agents. List the hosts again to see what. See [Following linked hosts](#following-linked-hosts). | `host`, `status` |
+| `prompt` | A shell that marks its commands with OSC 133 shows its prompt after anything else: at start, or after a command. A prompt drawn again changes nothing and raises nothing. | `session`, `window`, `pty_id` |
+| `command-started` | A shell with OSC 133 marks started a command. `cmdline` is cut to 512 bytes, with likely secrets masked. | `session`, `window`, `pty_id`, `cmdline` |
+| `command-finished` | That command finished. `exit_code` is absent when the shell sent no status; a prompt with no finish mark ends the command that way. `command_seq` counts the pane's finished commands. | `session`, `window`, `pty_id`, `cmdline`, `exit_code`, `duration_ms`, `command_seq` |
 
 ### What fires when
 
@@ -2412,7 +2504,8 @@ for `window-output`), `idle` (quiet-period milliseconds, for `window-idle`;
 default 500), `until` (agent state names, comma-separated, for `agent-state`),
 `thread` (any message id in a thread, to narrow `agent-message` to that
 thread), `any_session` (bool, for `agent-state` only: watch every session and
-take no `session` or `window`), `timeout` (milliseconds; default 30000).
+take no `session` or `window`), `command_seq` (for `command-finished` with a
+`window`), `timeout` (milliseconds; default 30000).
 
 Conditions:
 
@@ -2439,6 +2532,15 @@ Conditions:
   narrows either form to one thread. The result names the message (`message_id`,
   `kind`, `from`, `subject`) and never carries its body: read it with
   `read-agent-messages`.
+- `command-finished` resolves when a shell that marks its commands with OSC
+  133 finishes one. With `window` it watches that pane: the next command to
+  finish after the wait starts, or with `command_seq` N the first once the
+  pane has finished more than N, which matches at once when that already
+  happened. Read N from `list-windows` before starting the command and the
+  wait cannot miss it. It fails with `pty_not_found` if the pane's shell
+  exits. Without `window` any pane in the session matches, and `command_seq`
+  is `invalid_params`. The result carries `window`, `cmdline`, `exit_code`
+  (omitted when the shell sent none), `duration_ms` and `command_seq`.
 
 Request:
 

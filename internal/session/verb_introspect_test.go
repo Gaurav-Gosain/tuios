@@ -266,6 +266,16 @@ func TestCaptureSourcesMatchTheImplementation(t *testing.T) {
 	// Each documented source must capture rather than be rejected, and must be
 	// echoed back as the source that was actually used.
 	for _, source := range accepted {
+		if source == captureLastCommand {
+			// It reads a finished command, and the fixture's shell marks
+			// none, so here it has to say so rather than return a screen.
+			// It captures in verb_run_test.go.
+			resp := c.call(t, `{"id":2,"verb":"capture-pane","params":{"session":"work","source":"`+source+`"}}`)
+			if code := errCode(t, resp); code != ErrVerbNoShellIntegration {
+				t.Errorf("capture with source %q and no marks: code %q, want %q", source, code, ErrVerbNoShellIntegration)
+			}
+			continue
+		}
 		res := result(t, c.call(t, `{"id":2,"verb":"capture-pane","params":{"session":"work","source":"`+source+`"}}`))
 		if got, _ := res["source"].(string); got != source {
 			t.Errorf("capture with source %q reported source %q", source, got)

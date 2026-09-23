@@ -837,6 +837,7 @@ tuios wait-for <condition> [flags]
 | `window-idle` | The window printed nothing for `--idle` milliseconds |
 | `agent-state` | An agent reached one of the `--until` states; without `--window`, any agent pane in the session matches; with `--any-session`, any agent pane in any session |
 | `agent-message` | A message arrived. With `--window`, the first unread message in that inbox; without it, any message left in the session after the wait began |
+| `command-finished` | A shell that marks its commands with OSC 133 finished one. With `--window`, that pane's next command, or with `--command-seq N` the first once the pane has finished more than N (already true if it happened before the wait). Without a window, any pane in the session. Prints the exit code |
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)
@@ -847,6 +848,7 @@ tuios wait-for <condition> [flags]
 - `--idle <ms>`: Milliseconds of silence that count as idle (default: 500)
 - `--timeout <ms>`: Milliseconds to wait before giving up (default: 30000)
 - `--any-session`: For `agent-state`: watch every session on the daemon, including ones created during the wait. Takes no `--session` or `--window`, and the result names the session that matched
+- `--command-seq <N>`: For `command-finished` with `--window`: match once the pane has finished more than N commands. Read N from `list-windows --json` before starting the command
 - `--json`: Output result as JSON
 
 The `window-output` pattern is matched against the window's scrollback, so
@@ -889,6 +891,51 @@ if tuios wait-for window-output -w build --pattern 'BUILD OK' --timeout 60000; t
 else
     echo "build timed out"
 fi
+
+# Wait for the command after the 4th in the build pane, with its exit code
+tuios wait-for command-finished -w build --command-seq 4 --timeout 600000
+```
+
+### `tuios run`
+
+Type one command line at a pane's shell prompt, wait for it to finish, print
+what it printed, and exit with its exit status.
+
+It reads where the command starts and ends from the shell's own OSC 133 marks,
+so it needs a shell with prompt integration: fish and zsh with it on, bash with
+a setup, or any shell a terminal injects its integration script into. It never
+types into a running program.
+
+**Usage:**
+```bash
+tuios run [flags] -- <command line>
+```
+
+The words after `--` are joined with spaces into one line that the shell
+parses, so quote for the shell as you would when typing it.
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <id-or-name>`: Target window (default: focused)
+- `--timeout <ms>`: Milliseconds to wait for the command (default: 30000). A timeout does not stop the command
+- `--lines <N>`: Keep only the last N lines of the output (0 keeps all)
+- `--json`: Output the whole result as JSON: `exit_code`, `output`, `cmdline`, `duration_ms`, `command_seq`, `truncated`
+
+**Exit status:** the command's own. When the shell sent no status, run says so
+on stderr and exits `0`. A refusal exits `1`: `not_at_prompt` when a command is
+already running in the pane, `no_shell_integration` when its shell sends no
+marks. Nothing is typed in either case.
+
+**Examples:**
+```bash
+# Run the tests in the build pane and branch on the status
+tuios run -w build --timeout 600000 -- go test ./... && echo passed
+
+# Only the last 40 lines of a long build
+tuios run -w build --lines 40 -- make
+
+# The whole result
+tuios run -w build --json -- make lint
 ```
 
 ### `tuios subscribe`
@@ -1866,6 +1913,9 @@ tuios capture-pane [flags]
   defaults.
 - `--palette <#rrggbb,...>`: The 16 hex colours a client's theme paints ANSI
   indices 0-15 with, used by `--resolved`. Must have exactly 16 entries.
+- `--last-command`: Capture only what the last finished command printed, as
+  plain text, read between the shell's OSC 133 marks. Fails with
+  `no_shell_integration` when no command has finished under them.
 
 A `--ansi` capture without `--resolved` keeps the guest's SGR indices (e.g.
 `\x1b[31m`); the consumer resolves them against its own palette. `--resolved`
@@ -1894,6 +1944,9 @@ tuios capture-pane --ansi --resolved --palette "#45475a,#f38ba8,#a6e3a1,#f9e2af,
 
 # Pipe to a file
 tuios capture-pane -w editor --scrollback > pane.txt
+
+# What the last command in the build pane printed, and nothing else
+tuios capture-pane -w build --last-command
 ```
 
 ---
@@ -2014,6 +2067,7 @@ them.
 | `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, and the MCP server entry it wrote, and nothing else |
 | `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id, and for the four harnesses with an MCP registration whether `tuios mcp` is registered (`--json`, with `reports` and `mcp`) |
 | `tuios mcp` | Serve tuios to an agent harness as an MCP server over stdio. Read-only by default and held to the session of the pane it runs in; `--write` adds the tools that type into panes, `--scope all` reaches every session. See [tuios mcp](#tuios-mcp) |
+| `tuios doctor shell` | Per pane: whether its shell marks its commands with OSC 133, which `tuios run`, `wait-for command-finished` and `capture-pane --last-command` need, and, when one does not, the lines that turn the marks on for your `$SHELL` (zsh and bash; fish 4 sends them itself) (`-s`, `--json`) |
 | `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes missing theirs, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
 | `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
 | `tuios stash put <file>` | Copy a file into the session store and print the stored path |
@@ -2105,6 +2159,16 @@ done
 ```
 
 ### Run a Command and Wait for It
+
+When the pane's shell marks its commands with OSC 133, one call does it and
+exits with the build's own status:
+
+```bash
+tuios new-window build
+tuios run -w build --timeout 120000 --lines 40 -- go build ./...
+```
+
+Without shell integration, assemble a marker:
 
 ```bash
 #!/bin/bash

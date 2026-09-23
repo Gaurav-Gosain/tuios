@@ -576,9 +576,42 @@ The echo shows `printf 'tests_done_%s\n' 1786700000`, which the pattern does not
 match; the output shows `tests_done_1786700000`, which it does. The timestamp
 makes the previous run's marker a different string.
 
-There is no verb that runs a command and hands back its exit status: the daemon
-writes bytes to a shell and reads what comes back, and it has no idea where one
-command ends. Put the status in the marker and you get it for free:
+### Running a command and getting its exit code
+
+When the pane's shell marks its commands with OSC 133 (fish, zsh with prompt
+integration, bash with a setup, or any shell a terminal injected its script
+into), the daemon knows where each command starts and ends, and `run` does the
+whole job in one call. It types the line at the prompt, waits for the shell to
+say the command finished, prints exactly what that command printed, and exits
+with its status:
+
+```sh
+tuios run -s work -w build --timeout 600000 -- go test ./...
+echo "tests exited $?"
+tuios run -s work -w build --json -- make lint    # exit_code, output, duration_ms
+```
+
+`run` never types into a running program. A pane that is busy is refused with
+`not_at_prompt`, and a pane whose shell sends no marks with
+`no_shell_integration`; nothing is typed either way. `tuios doctor shell` says
+which panes mark their commands and prints the lines that turn the marks on for
+zsh and bash; fish 4 sends them by itself. `list-windows --json` shows
+`at_prompt`, `command_seq`, `last_exit_code` and `last_cmdline` for every pane
+whose shell marks its commands, and nothing extra for one that does not, so you
+can tell before you try. A timeout does not stop the command: its error names
+the `wait-for command-finished --command-seq N` that picks it up.
+
+The same marks work without `run`. `wait-for command-finished -w build` returns
+when the pane's next command finishes, with its exit code; add
+`--command-seq N`, read from `list-windows`, and it also matches a command that
+finished before you started waiting. `capture-pane -w build --last-command`
+prints only what the last finished command printed. `subscribe` streams
+`command-started`, `command-finished` (with `exit_code`, `duration_ms` and
+`command_seq`) and `prompt` events.
+
+Without shell integration the daemon writes bytes to a shell and reads what
+comes back, and it has no idea where one command ends. Put the status in the
+marker and you get it for free:
 
 ```sh
 n=$(date +%s)
@@ -2403,8 +2436,8 @@ when you are matching rather than reading: `invalid_request`, `unknown_verb`,
 `no_windows`, `pty_not_found`, `needs_client`, `option_not_found`,
 `command_failed`, `timeout`, `not_ready`, `agent_blocked`, `prompt_stalled`,
 `loop_refused`, `rate_limited`, `no_keyboard`, `forbidden`, `not_human`,
-`prompt_changed`, `not_resumable`, `protocol_mismatch`, `unknown_host`,
-`host_unreachable`,
+`prompt_changed`, `not_resumable`, `no_shell_integration`, `not_at_prompt`,
+`protocol_mismatch`, `unknown_host`, `host_unreachable`,
 `host_refused`, `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
 `internal`. The CLI folds the same information into its messages.
 
@@ -2427,6 +2460,11 @@ was pressed.
 
 `not_resumable` comes only from `resume-agent`: the pane has no conversation
 it can bring back. Nothing was typed. Run the harness by hand if you want one.
+
+`no_shell_integration` and `not_at_prompt` come from `run`, and the first also
+from `capture-pane --last-command`. The pane's shell sends no OSC 133 marks, or
+is busy with a command. Nothing was typed. Fall back to `send-text` and a
+marker, or wait for the running command with `wait-for command-finished`.
 
 `not_ready`, `agent_blocked`, `prompt_stalled`, `loop_refused`, `rate_limited`,
 `no_keyboard` and `forbidden` come only from the cross-agent verbs, and each has

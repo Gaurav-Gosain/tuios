@@ -806,6 +806,7 @@ Window targeting (--window):
 	var capturePaneResolved bool
 	var capturePanePalette []string
 	var capturePaneLines int
+	var capturePaneLastCommand bool
 	capturePaneCmd := &cobra.Command{
 		Use:   "capture-pane",
 		Short: "Capture the content of a pane",
@@ -817,7 +818,9 @@ Use --lines to keep only the last N lines, which is how you read the tail of a
 long scrollback without pulling all of it.
 Use --ansi to preserve ANSI escape codes (colors, styles).
 Use --resolved to rewrite ANSI index colours to 24-bit RGB, optionally against
---palette (16 hex colours of your theme, xterm defaults otherwise).`,
+--palette (16 hex colours of your theme, xterm defaults otherwise).
+Use --last-command to read only what the last finished command printed. It
+needs a shell that marks its commands with OSC 133, and it is plain text.`,
 		Example: `  # Capture focused window
   tuios capture-pane
 
@@ -834,11 +837,15 @@ Use --resolved to rewrite ANSI index colours to 24-bit RGB, optionally against
   tuios capture-pane --ansi --resolved --palette "#45475a,#f38ba8,#a6e3a1,#f9e2af,#89b4fa,#f5c2e7,#94e2d5,#bac2de,#585b70,#f38ba8,#a6e3a1,#f9e2af,#89b4fa,#f5c2e7,#94e2d5,#a6adc8"
 
   # Pipe to a file
-  tuios capture-pane -w editor --scrollback > pane.txt`,
+  tuios capture-pane -w editor --scrollback > pane.txt
+
+  # What the last command in the build pane printed, and nothing else
+  tuios capture-pane -w build --last-command`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runCapturePane(capturePaneSession, capturePaneWindow, capturePaneScrollback, capturePaneANSI, capturePaneResolved, capturePanePalette, capturePaneLines)
+			return runCapturePane(capturePaneSession, capturePaneWindow, capturePaneScrollback, capturePaneANSI, capturePaneResolved, capturePanePalette, capturePaneLines, capturePaneLastCommand)
 		},
 	}
+	capturePaneCmd.Flags().BoolVar(&capturePaneLastCommand, "last-command", false, "Capture only what the last finished command printed (needs OSC 133 shell integration)")
 	capturePaneCmd.Flags().StringVarP(&capturePaneSession, "session", "s", "", "Target session")
 	capturePaneCmd.Flags().StringVarP(&capturePaneWindow, "window", "w", "", "Target window by name or ID")
 	capturePaneCmd.Flags().BoolVarP(&capturePaneScrollback, "scrollback", "S", false, "Include full scrollback history")
@@ -1891,6 +1898,7 @@ straight away without a restart.`,
 	var waitForTimeout int
 	var waitForAnySession bool
 	var waitForJSON bool
+	var waitForCommandSeq uint64
 	waitForCmd := &cobra.Command{
 		Use:   "wait-for <condition>",
 		Short: "Block until a condition matches",
@@ -1908,6 +1916,11 @@ Conditions:
                   inbox, including mail queued before the wait started; without
                   one, anything said in the session after it started. --thread
                   narrows either shape to one conversation
+  command-finished  a shell that marks its commands with OSC 133 finished
+                  one. With --window, that pane's next command, or with
+                  --command-seq N, the first after N finished commands, which
+                  matches at once when it already happened. Without a window,
+                  any pane in the session. Prints the exit code
 
 The daemon watches its own events, so there is no need to poll with
 capture-pane and sleep. A condition that does not match before --timeout exits
@@ -1931,14 +1944,22 @@ non-zero with the timeout error.`,
   tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --timeout 600000
 
   # Block until someone answers the message I just sent
-  tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --thread 12`,
+  tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --thread 12
+
+  # Wait for the command after the 4th in the build pane to finish
+  tuios wait-for command-finished -w build --command-seq 4 --timeout 600000`,
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: session.WaitConditionNames,
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var commandSeq *uint64
+			if cmd.Flags().Changed("command-seq") {
+				commandSeq = &waitForCommandSeq
+			}
 			return runWaitFor(waitForSession, waitForWindow, args[0], waitForPattern,
-				waitForUntil, waitForIdle, waitForThread, waitForTimeout, waitForAnySession, waitForJSON)
+				waitForUntil, waitForIdle, waitForThread, waitForTimeout, waitForAnySession, waitForJSON, commandSeq)
 		},
 	}
+	waitForCmd.Flags().Uint64Var(&waitForCommandSeq, "command-seq", 0, "For command-finished: match once the pane has finished more than this many commands")
 	waitForCmd.Flags().StringVarP(&waitForSession, "session", "s", "", "Target session (default: most recently active)")
 	waitForCmd.Flags().StringVarP(&waitForWindow, "window", "w", "", "Target window by name or ID (default: focused; agent-state: any window)")
 	waitForCmd.Flags().StringVar(&waitForPattern, "pattern", "", "Regular expression to match, required by window-output")
@@ -2663,7 +2684,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(setAgentStateCmd, setAgentMetaCmd, setAgentSessionCmd, newResumeAgentCommand(), getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
 	rootCmd.AddCommand(listAgentsCmd, sendAgentMessageCmd, readAgentMessagesCmd, askAgentCmd, newListAttentionCommand(),
 		newPeekPromptCommand(), newRespondCommand())
-	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand())
+	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand(), newRunCommand())
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(splitWindowCmd, popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd)
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)

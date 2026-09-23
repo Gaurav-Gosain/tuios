@@ -33,6 +33,10 @@ const (
 	// config rather than by the raw fact, because it is an alert sink: firing it
 	// on every flip would make it the thing people mute.
 	AfterAgentState Event = "after-agent-state"
+	// AfterCommandFinished fires when a shell with OSC 133 integration reports
+	// that a command finished. It needs the shell to send the marks; a shell
+	// that does not never fires it.
+	AfterCommandFinished Event = "after-command-finished"
 )
 
 // AllEvents returns all valid hook event names.
@@ -41,6 +45,7 @@ func AllEvents() []Event {
 		AfterNewWindow, AfterCloseWindow, AfterFocusChange,
 		AfterWorkspaceSwitch, AfterAttach, AfterDetach,
 		AfterLayoutChange, AfterResize, AfterAgentState,
+		AfterCommandFinished,
 	}
 }
 
@@ -78,6 +83,13 @@ type Context struct {
 	PrevAgentState string
 	AgentHarness   string
 	AgentMessage   string
+	// Command is the command line a finished command ran, ExitCode its exit
+	// status and DurationMS how long it ran, for after-command-finished.
+	// ExitCode is empty when the shell sent no status. All empty for every
+	// other event.
+	Command    string
+	ExitCode   string
+	DurationMS string
 }
 
 // Manager manages hook registrations and execution.
@@ -252,6 +264,9 @@ func executeHook(cmdStr string, ctx Context) hookResult {
 		fmt.Sprintf("TUIOS_AGENT_PREV_STATE=%s", ctx.PrevAgentState),
 		fmt.Sprintf("TUIOS_AGENT_HARNESS=%s", ctx.AgentHarness),
 		fmt.Sprintf("TUIOS_AGENT_MESSAGE=%s", ctx.AgentMessage),
+		fmt.Sprintf("TUIOS_COMMAND=%s", ctx.Command),
+		fmt.Sprintf("TUIOS_EXIT_CODE=%s", ctx.ExitCode),
+		fmt.Sprintf("TUIOS_DURATION_MS=%s", ctx.DurationMS),
 	)
 
 	// Stdout stays discarded: a hook is run for its side effects and nothing

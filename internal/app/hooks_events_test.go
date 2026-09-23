@@ -254,6 +254,9 @@ func TestEveryDeclaredEventIsCovered(t *testing.T) {
 		// Fire site and payload: TestAgentAlertHookCarriesTheDocumentedContract
 		// in agent_alert_test.go, which is where the policy that gates it lives.
 		hooks.AfterAgentState: true,
+		// Daemon only. Fire site: the session event sink, proved with its
+		// payload by TestRunReturnsExitCodeAndOutput in internal/session.
+		hooks.AfterCommandFinished: true,
 	}
 	for _, e := range hooks.AllEvents() {
 		if !covered[e] {

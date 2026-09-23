@@ -2,7 +2,7 @@
 
 The hooks reference lives on the docs site: https://tuios.gaurav.zip/docs/hooks
 
-Nine events, each running a shell command with `TUIOS_*` environment variables carrying the facts; the site page lists every event and every variable. Hooks are read once at startup from the `[hooks]` table; see the [configuration reference](https://tuios.gaurav.zip/docs/configuration) for the table itself.
+Ten events, each running a shell command with `TUIOS_*` environment variables carrying the facts; the site page lists every event and every variable. Hooks are read once at startup from the `[hooks]` table; see the [configuration reference](https://tuios.gaurav.zip/docs/configuration) for the table itself.
 
 ## Which side runs a hook
 
@@ -15,6 +15,7 @@ A hook runs on the side that owns the fact it reports.
 | `after-focus-change` | daemon | yes |
 | `after-workspace-switch` | daemon | yes |
 | `after-agent-state` | daemon | yes |
+| `after-command-finished` | daemon | yes |
 | `after-attach` | client | no |
 | `after-detach` | client | no |
 | `after-resize` | client | no |
@@ -25,6 +26,13 @@ The window set, the focused window, the current workspace and a pane's agent sta
 A client's terminal size, its attach and its detach belong to that one client, and the layout is computed by the attached renderer. Those stay in the client. Three clients attaching is three attaches.
 
 A tuios with no daemon runs every hook itself.
+
+`after-command-finished` fires when a pane's shell reports, through its OSC 133
+prompt marks, that a command finished. A shell without that integration never
+fires it. It gets `TUIOS_COMMAND` (the command line, cut to 512 bytes with
+likely secrets masked), `TUIOS_EXIT_CODE` (empty when the shell sent no status)
+and `TUIOS_DURATION_MS`. Every other event gets those three empty. A tuios with
+no daemon does not fire it, since only the daemon follows the marks.
 
 The daemon reads the `[hooks]` table when it starts. Restart the daemon with `tuios kill-server` after you change a hook the daemon runs. The daemon does not reload hooks when the file changes.
 

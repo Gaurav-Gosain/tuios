@@ -165,6 +165,7 @@ func (d *Daemon) verbListWindows(_ *connState, params json.RawMessage) (any, *ve
 	}
 	data := buildWindowListData(sess.GetState())
 	data["type"] = "window_list"
+	addShellFacts(sess, data)
 	return data, nil
 }
 
@@ -513,6 +514,10 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 	pty, err := d.resolvePTYForTarget(sess, p.Window)
 	if err != nil {
 		return nil, mapResolveErr(err, sess)
+	}
+
+	if p.Source == captureLastCommand {
+		return captureLastCommandOutput(pty, p.Window, p.Styled || p.ANSI || p.Resolved, p.Start, p.End, p.Lines)
 	}
 
 	scrollback := p.Scrollback || p.Source == "recent"

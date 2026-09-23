@@ -236,6 +236,9 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 		Timeout   int    `json:"timeout"`
 		// AnySession widens agent-state to every session on the daemon.
 		AnySession bool `json:"any_session"`
+		// CommandSeq makes command-finished match once the window has
+		// finished more commands than this.
+		CommandSeq *uint64 `json:"command_seq"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -289,6 +292,8 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 		return d.waitAgentState(p.Session, p.Window, p.Until, deadline)
 	case "agent-message":
 		return d.waitAgentMessage(p.Session, p.Window, p.Thread, deadline)
+	case waitCommandFinished:
+		return d.waitCommandFinishedFor(p.Session, p.Window, p.CommandSeq, deadline)
 	default:
 		message := "unknown condition " + p.Condition
 		if p.Condition == "" {

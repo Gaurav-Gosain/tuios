@@ -528,14 +528,14 @@ func runSendText(sessionName, windowTarget, text string) error {
 // runCapturePane captures the content of a pane and prints to stdout. lines
 // keeps only the last N lines when positive, which is what bounds a capture of a
 // long scrollback to something a caller can actually read.
-func runCapturePane(sessionName, windowTarget string, scrollback, ansi, resolved bool, palette []string, lines int) error {
+func runCapturePane(sessionName, windowTarget string, scrollback, ansi, resolved bool, palette []string, lines int, lastCommand bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
 	}
 	defer t.Close()
 
-	raw, err := t.client.Call("capture-pane", t.params(map[string]any{
+	params := map[string]any{
 		"session":    sessionName,
 		"window":     windowTarget,
 		"scrollback": scrollback,
@@ -543,7 +543,13 @@ func runCapturePane(sessionName, windowTarget string, scrollback, ansi, resolved
 		"resolved":   resolved,
 		"palette":    palette,
 		"lines":      lines,
-	}))
+	}
+	// Sent only when asked for, so a capture against an older daemon keeps
+	// working: it would refuse a source it does not know.
+	if lastCommand {
+		params["source"] = "last-command-output"
+	}
+	raw, err := t.client.Call("capture-pane", t.params(params))
 	if err != nil {
 		return t.explain("capture-pane", err)
 	}
@@ -1264,7 +1270,7 @@ func callAndReport(verb string, params map[string]any, report func(map[string]an
 // The read deadline is stretched past the requested timeout because the daemon
 // only answers once the wait resolves: a client deadline shorter than the wait
 // would report a connection failure for a wait that was still perfectly healthy.
-func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, anySession, jsonOutput bool) error {
+func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, anySession, jsonOutput bool, commandSeq *uint64) error {
 	if anySession && (sessionName != "" || windowTarget != "") {
 		return errors.New("--any-session watches every session, so it takes no --session or --window. Drop one or the other")
 	}
@@ -1293,6 +1299,9 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 	if anySession {
 		params["any_session"] = true
 	}
+	if commandSeq != nil {
+		params["command_seq"] = *commandSeq
+	}
 
 	grace := time.Duration(timeout)*time.Millisecond + 10*time.Second
 	raw, err := t.client.CallWithTimeout("wait-for", t.params(params), grace)
@@ -1307,9 +1316,19 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 		Condition string `json:"condition"`
 		Window    string `json:"window"`
 		Session   string `json:"session"`
+		ExitCode  *int   `json:"exit_code"`
+		Cmdline   string `json:"cmdline"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if res.Condition == "command-finished" {
+		status := "no exit status"
+		if res.ExitCode != nil {
+			status = fmt.Sprintf("exit %d", *res.ExitCode)
+		}
+		fmt.Printf("%s matched on %s%s: %s, %s\n", res.Condition, res.Window, t.on(), status, plainLine(res.Cmdline))
+		return nil
 	}
 	if res.Window != "" && anySession && res.Session != "" {
 		fmt.Printf("%s matched on %s in session %s%s\n", res.Condition, res.Window, res.Session, t.on())

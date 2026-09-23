@@ -145,6 +145,13 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"wait-for#0": {blocks: true, why: "no pane prints \"done\""},
 	"wait-for#1": {blocks: true, why: "no pane reports an agent state"},
 	"wait-for#4": {blocks: true, why: "no pane in any session reports an agent state"},
+	"wait-for#5": {blocks: true, why: "no shell in the fixture marks its commands"},
+
+	// The fixture's shells are not the fake integrated shell, so no pane marks
+	// its commands. run waits a moment for a first prompt before it says so.
+	// The verb is proved against a shell that marks them in verb_run_test.go.
+	"run#0": {errCode: ErrVerbNoShellIntegration, slow: true, why: "no shell in the fixture marks its commands"},
+	"run#1": {errCode: ErrVerbNoShellIntegration, slow: true, why: "no shell in the fixture marks its commands"},
 }
 
 // blockBudget is how long a call gets to answer. Every example that answers at

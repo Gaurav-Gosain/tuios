@@ -101,6 +101,15 @@ const (
 	// resume command, the recorded id cannot be typed safely, or the pane is
 	// on another machine. Nothing was typed.
 	ErrVerbNotResumable = "not_resumable"
+	// ErrVerbNoShellIntegration reports a call that needs the pane's shell to
+	// mark its commands with OSC 133, made on a pane whose shell never has:
+	// run, and capture-pane with source last-command-output. Nothing was
+	// typed.
+	ErrVerbNoShellIntegration = "no_shell_integration"
+	// ErrVerbNotAtPrompt reports a run refused because the pane's shell is
+	// not at its prompt: a command is running there, and text typed now would
+	// go to it. Nothing was typed.
+	ErrVerbNotAtPrompt = "not_at_prompt"
 
 	// ErrVerbProtocolMismatch reports that the caller's protocol version is
 	// outside the range this daemon accepts. It is only ever produced by the
@@ -606,7 +615,7 @@ func init() {
 			handler:     (*Daemon).verbSessionInfo,
 		},
 		"list-windows": {
-			description: "List the windows in a session. Each window carries a host when its process runs on another machine, and omits it when the process is on this one.",
+			description: "List the windows in a session. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished.",
 			params:      []verbParam{sessionParam},
 			examples:    []string{`{"id":1,"verb":"list-windows","params":{"session":"work"}}`},
 			handler:     (*Daemon).verbListWindows,
@@ -814,12 +823,37 @@ func init() {
 			examples: []string{`{"id":1,"verb":"send-text","params":{"session":"work","text":"echo hi\n"}}`},
 			handler:  (*Daemon).verbSendText,
 		},
+		"run": {
+			description: "Type one command line at a pane's shell prompt, wait for the shell to report it finished, and return its exit code and output. Needs a shell that marks its commands with OSC 133; refuses with not_at_prompt when a command is already running there.",
+			params: []verbParam{
+				sessionParam,
+				windowParam,
+				{Name: "command", Type: "string", Required: true, Description: "The command line, typed as a paste and submitted with Enter. One line, no control characters: join several commands with ; or &&."},
+				{Name: "timeout", Type: "int", Description: "Milliseconds to wait for the command to finish before failing with the timeout code. The command keeps running after a timeout.", Default: "30000"},
+				{Name: "lines", Type: "int", Description: "Keep only the last N lines of the output."},
+			},
+			returns: []verbParam{
+				{Name: "exit_code", Type: "int", Description: "The status the shell reported. Omitted when the shell sent none, which a bash integration does on ctrl+c."},
+				{Name: "output", Type: "string", Description: "What the command printed, as plain text, read from the pane between the shell's marks. At most the last 256 KiB."},
+				{Name: "truncated", Type: "bool", Description: "True when the output was cut, or its start had already left the scrollback."},
+				{Name: "cmdline", Type: "string", Description: "The command line as the shell showed it, cut to 512 bytes with likely secrets masked."},
+				{Name: "duration_ms", Type: "int", Description: "How long the command ran, from the shell's marks."},
+				{Name: "command_seq", Type: "int", Description: "How many commands the pane has finished, this one included."},
+				{Name: "window", Type: "string", Description: "Id of the pane the command ran in."},
+				{Name: "session", Type: "string", Description: "The session the pane is in."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"run","params":{"session":"work","window":"build","command":"go test ./...","timeout":600000}}`,
+				`{"id":1,"verb":"run","params":{"session":"work","window":"build","command":"make lint","lines":40}}`,
+			},
+			handler: (*Daemon).verbRun,
+		},
 		"capture-pane": {
 			description: "Capture a pane's content.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
-				{Name: "source", Type: "string", Description: "Which buffer to capture.", Accepted: captureSources, Default: "visible"},
+				{Name: "source", Type: "string", Description: "Which buffer to capture. last-command-output is what the pane's last finished command printed, read between its shell's OSC 133 marks; it is plain text, adds cmdline, exit_code, command_seq and truncated to the result, and fails with no_shell_integration when no command has finished under the marks.", Accepted: captureSources, Default: "visible"},
 				{Name: "styled", Type: "bool", Description: "Include ANSI styling in the captured text.", Default: "false"},
 				// scrollback and ansi predate source and styled and are still
 				// accepted; they are declared so a caller reading only list-verbs
@@ -1183,10 +1217,11 @@ func init() {
 				windowParam,
 				{Name: "any_session", Type: "bool", Description: "For agent-state only: watch every session on the daemon, including ones created during the wait. Takes no session or window. The result names the session that matched.", Default: "false"},
 				{Name: "pattern", Type: "string", Description: "Regular expression, required by window-output."},
-				{Name: "source", Type: "string", Description: "Which buffer window-output matches against. The default includes scrollback, so output that has already scrolled past still matches.", Accepted: captureSources, Default: "recent"},
+				{Name: "source", Type: "string", Description: "Which buffer window-output matches against. The default includes scrollback, so output that has already scrolled past still matches.", Accepted: waitOutputSources, Default: "recent"},
 				{Name: "idle", Type: "int", Description: "Milliseconds of silence that count as idle, for window-idle.", Default: "500"},
 				{Name: "until", Type: "string", Description: "Agent state(s) to wait for, comma-separated, required by agent-state. With no window, any window in the session reaching one of them matches.", Accepted: AgentStateNames},
 				{Name: "thread", Type: "int", Description: "Narrow agent-message to one thread. Pass any message id in the thread. A thread the ring holds nothing from never matches."},
+				{Name: "command_seq", Type: "int", Description: "For command-finished with a window: match once the pane has finished more commands than this, which is already true when the command finished before the wait. Read it from list-windows or a run timeout. Without it, the next command to finish after the wait starts matches."},
 				{Name: "timeout", Type: "int", Description: "Milliseconds to wait before failing with the timeout code.", Default: "30000"},
 			},
 			examples: []string{
@@ -1195,6 +1230,7 @@ func init() {
 				`{"id":1,"verb":"wait-for","params":{"condition":"agent-message","session":"work","window":"$TUIOS_PANE_ID"}}`,
 				`{"id":1,"verb":"wait-for","params":{"condition":"agent-message","session":"work","window":"$TUIOS_PANE_ID","thread":12}}`,
 				`{"id":1,"verb":"wait-for","params":{"condition":"agent-state","any_session":true,"until":"needs_input"}}`,
+				`{"id":1,"verb":"wait-for","params":{"condition":"command-finished","session":"work","window":"build","command_seq":4,"timeout":600000}}`,
 			},
 			handler: (*Daemon).verbWaitFor,
 		},

@@ -748,6 +748,9 @@ type PTY struct {
 	// place is where the shell is: its directory from OSC 7 (seeded from the
 	// spawn directory) and the git branch there. See session_place.go.
 	place placeRecord
+	// shell follows the shell's commands through its OSC 133 marks. See
+	// shell_commands.go.
+	shell shellTrack
 }
 
 // Title returns the last title this PTY's application set, or "" if it has set
@@ -1339,6 +1342,9 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 			pty.storeAgentNotify(title, body)
 			pty.emit(SessionEvent{Type: EventNotification, Title: title, Body: body})
 		},
+		// A shell's OSC 133 marks: recorded under the track's own leaf lock
+		// and published at once, like the bell. See shell_commands.go.
+		SemanticMark: pty.noteShellMark,
 	})
 
 	// Handle kitty graphics queries on the daemon side for low-latency

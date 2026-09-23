@@ -684,17 +684,21 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// subscriber sees the transition and then the item it opened.
 		defer d.attention.noteSessionEvent(name, ev)
 		d.events.publish(streamEvent{
-			Type:      ev.Type,
-			Session:   name,
-			Window:    ev.Window,
-			PTYID:     ev.PTYID,
-			Title:     ev.Title,
-			Body:      ev.Body,
-			Bytes:     ev.Bytes,
-			Mode:      ev.Mode,
-			Enabled:   ev.Enabled,
-			State:     ev.State,
-			Workspace: ev.Workspace,
+			Type:       ev.Type,
+			Session:    name,
+			Window:     ev.Window,
+			PTYID:      ev.PTYID,
+			Title:      ev.Title,
+			Body:       ev.Body,
+			Bytes:      ev.Bytes,
+			Mode:       ev.Mode,
+			Enabled:    ev.Enabled,
+			State:      ev.State,
+			Workspace:  ev.Workspace,
+			Cmdline:    ev.Cmdline,
+			ExitCode:   ev.ExitCode,
+			DurationMS: ev.DurationMS,
+			CommandSeq: ev.CommandSeq,
 		})
 	})
 	d.events.publish(streamEvent{Type: EventSessionCreated, Session: name})

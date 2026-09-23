@@ -60,7 +60,16 @@ const (
 	// names it and Status is its link status. It carries nothing else, so a
 	// client that shows hosts lists them again. See host_fleet.go.
 	EventHostChanged = "host-changed"
-	EventSubscribed  = "subscribed" // subscribe ack result type
+	// EventPrompt, EventCommandStarted and EventCommandFinished follow a
+	// shell's commands through its OSC 133 marks (shell_commands.go). A shell
+	// without that integration raises none of them. EventPrompt is the shell
+	// showing a prompt after anything else; EventCommandStarted carries the
+	// command line in Cmdline; EventCommandFinished carries Cmdline, ExitCode
+	// (absent when the shell sent no status), DurationMS and CommandSeq.
+	EventPrompt          = "prompt"
+	EventCommandStarted  = "command-started"
+	EventCommandFinished = "command-finished"
+	EventSubscribed      = "subscribed" // subscribe ack result type
 )
 
 // defaultEventQueue bounds a subscriber's per-connection event queue. When it is
@@ -131,6 +140,15 @@ type streamEvent struct {
 	// status.
 	Host   string `json:"host,omitempty"`
 	Status string `json:"status,omitempty"`
+	// Cmdline is the command line of a command-started or command-finished
+	// event, cut to 512 bytes with likely secrets masked. ExitCode is the
+	// status a command-finished reports, nil when the shell sent none.
+	// DurationMS is how long it ran and CommandSeq how many commands the pane
+	// has finished, this one included.
+	Cmdline    string `json:"cmdline,omitempty"`
+	ExitCode   *int   `json:"exit_code,omitempty"`
+	DurationMS int64  `json:"duration_ms,omitempty"`
+	CommandSeq uint64 `json:"command_seq,omitempty"`
 
 	// relayed marks an event copied from a linked host's own stream. It is
 	// delivered only to a subscriber that asked for other machines' events,
@@ -154,6 +172,11 @@ type SessionEvent struct {
 	Enabled   bool
 	State     string
 	Workspace int
+	// The command fields of the prompt and command events. See streamEvent.
+	Cmdline    string
+	ExitCode   *int
+	DurationMS int64
+	CommandSeq uint64
 
 	// The fields below carry everything the hook dispatcher needs, so it can
 	// build a hook's environment from the event alone. That is not a

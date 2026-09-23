@@ -23,8 +23,14 @@ import (
 // truth for both the list-verbs parameter schema and the "accepted" field on an
 // invalid_params hint, so the two can never drift apart.
 var (
-	// captureSources are the buffers capture-pane can read.
-	captureSources = []string{"visible", "recent"}
+	// captureSources are the buffers capture-pane can read. last-command-output
+	// is what the last finished command printed, read between its OSC 133
+	// marks (shell_commands.go).
+	captureSources = []string{"visible", "recent", captureLastCommand}
+	// waitOutputSources are the buffers wait-for window-output matches
+	// against. last-command-output is not one: a wait for a command to finish
+	// is command-finished.
+	waitOutputSources = []string{"visible", "recent"}
 	// screenshotFormats and screenshotFrames are the screenshot verb's closed
 	// sets. They are the config registry's own lists rather than copies, so a
 	// format added to one place cannot be missing from the other.
@@ -39,7 +45,7 @@ var (
 	// implemented without guessing at row boundaries.
 	// WaitConditionNames are the conditions wait-for understands. It is exported
 	// so the CLI offers exactly this set and cannot drift from the daemon's.
-	WaitConditionNames = []string{"session-exists", "window-output", "window-exit", "window-idle", "agent-state", "agent-message"}
+	WaitConditionNames = []string{"session-exists", "window-output", "window-exit", "window-idle", "agent-state", "agent-message", waitCommandFinished}
 
 	retiredCaptureSources = map[string]string{
 		"recent-unwrapped": "unwrapped capture is not implemented. It returned the same physical rows as \"recent\" without unwrapping them",
@@ -54,7 +60,7 @@ var (
 		EventWorkspaceSwitched, EventAgentState, EventAgentMessage,
 		EventOutput, EventBell, EventNotification, EventModeChanged,
 		EventSessionCreated, EventSessionClosed, EventGap, EventAttention,
-		EventHostChanged,
+		EventHostChanged, EventPrompt, EventCommandStarted, EventCommandFinished,
 	}
 	// knownEventTypes are the event types a subscribe filter can name.
 	knownEventTypes = EventTypeNames
@@ -89,6 +95,8 @@ var errorCodeCatalog = []struct {
 	{ErrVerbPromptChanged, "respond pressed nothing: the pane is not on needs_input, no rule reads its prompt now, the prompt is not the one prompt_id names, or another client already answered it. Read it again with peek-prompt."},
 	{ErrVerbNotResumable, "resume-agent found no conversation it can resume in the pane: none was recorded by a hook, the harness has no resume command, the recorded id is not one plain shell token, or the pane runs on another machine. Nothing was typed."},
 	{ErrVerbNoKeyboard, "The target is the person's inbox, human, which has no pane to type into. Leave a message with send-agent-message -w human and wait for the reply on your own inbox."},
+	{ErrVerbNoShellIntegration, "The pane's shell has not sent the OSC 133 marks that say where a command starts and ends, so the daemon cannot run a command in it and report its exit code, or say what the last command printed. Nothing was typed. Enable the shell's prompt integration, or use send-text and wait-for window-output."},
+	{ErrVerbNotAtPrompt, "run typed nothing because the pane's shell is not at its prompt: a command is running in it. The message names the command. Wait for it with wait-for command-finished, or run in another pane."},
 	{ErrVerbProtocolMismatch, "The caller's protocol version is outside the range this daemon accepts."},
 	{ErrVerbUnknownHost, "No host by that name is configured. The hint lists the hosts that are. A host name is matched exactly, so nothing is guessed."},
 	{ErrVerbHostUnreachable, "The host is configured and is not answering. Nothing was queued. Read the host's status with list-hosts."},

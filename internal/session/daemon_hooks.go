@@ -1,6 +1,7 @@
 package session
 
 import (
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,7 @@ var sessionHookEvents = map[string]hooks.Event{
 	EventWindowFocused:     hooks.AfterFocusChange,
 	EventWorkspaceSwitched: hooks.AfterWorkspaceSwitch,
 	EventAgentState:        hooks.AfterAgentState,
+	EventCommandFinished:   hooks.AfterCommandFinished,
 }
 
 // sessionSideHooks is sessionHookEvents keyed the other way: the hook events the
@@ -222,6 +224,13 @@ func hookContext(sessionName string, ev SessionEvent) hooks.Context {
 		ctx.PrevAgentState = ev.hookPrevState
 		ctx.AgentHarness = ev.hookHarness
 		ctx.AgentMessage = ev.hookMessage
+	}
+	if ev.Type == EventCommandFinished {
+		ctx.Command = ev.Cmdline
+		if ev.ExitCode != nil {
+			ctx.ExitCode = strconv.Itoa(*ev.ExitCode)
+		}
+		ctx.DurationMS = strconv.FormatInt(ev.DurationMS, 10)
 	}
 	return ctx
 }
