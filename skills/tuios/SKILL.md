@@ -562,7 +562,9 @@ under `tuios tmux-shim` sees it. It answers the tmux commands those tools use
 (split-window, send-keys, capture-pane -p, display-message -p, list-panes,
 kill-pane, select-pane, respawn-pane -k, and a few more); a tmux window is a
 workspace (`@N`) and a pane is a tuios window (`%N`). It never reaches another
-session. You can also ask it one question directly:
+session, and it holds you to your pane's grants: opening, closing and
+respawning other panes needs `admin` (`tuios pane-grants` shows what you
+hold). You can also ask it one question directly:
 
 ```sh
 tuios tmux display-message -p '#{pane_id} #{window_id}'

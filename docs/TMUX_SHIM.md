@@ -173,6 +173,20 @@ that could type into the pane with `tuios send-text`. A request names the
 window it is for, and a holder refuses one for any other window, so two panes
 whose numbers collide cannot respawn each other.
 
+Every verb the shim calls is held to the caller's
+[pane grants](AGENT_STATE.md#what-a-pane-may-do) by the daemon, as for the
+CLI. `new-window` and `close-window` need `admin`, so from a pane without
+`admin` `split-window`, `new-window`, `kill-pane` and `kill-window` are
+refused with `forbidden`. A respawn does not go through the daemon, so the
+shim holds it to the same rule itself: it asks the daemon what the caller
+holds (`pane-grants`), and from a pane without `admin` it respawns only the
+caller's own pane. A caller in no pane, and a daemon from before pane grants,
+respawn any pane the shim opened, as before; if `pane-grants` fails any other
+way, the respawn is refused.
+
 It is not a sandbox. A process under the shim can still run the tuios CLI and
-reach every session. For an agent held to its own session, use `tuios mcp`,
-which restricts its connections (see [protocol.md](protocol.md#restrict-connection)).
+reach what its pane's grants allow, and a process that writes to a holder's
+socket itself, rather than through the shim, is not held to them, like any
+process that leaves its pane on purpose. For an agent held to its own session,
+use `tuios mcp`, which restricts its connections (see
+[protocol.md](protocol.md#restrict-connection)), or give its pane fewer grants.

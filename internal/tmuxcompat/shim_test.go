@@ -407,6 +407,47 @@ func TestRespawnNeedsKillAndAHolder(t *testing.T) {
 	}
 }
 
+// TestRespawnIsHeldToPaneGrants checks that a caller in a pane without admin
+// can respawn only its own pane. The holder takes the request over its own
+// socket, not through the daemon, so without this check a pane holding read
+// could run any command in a pane holding admin.
+func TestRespawnIsHeldToPaneGrants(t *testing.T) {
+	cases := []struct {
+		name      string
+		grants    map[string]any
+		grantsErr error
+		target    string
+		wantOK    bool
+	}{
+		{"the person", nil, nil, "new-0001", true},
+		{"a pane holding admin", map[string]any{"pane": true, "window": "leader-0001", "grants": []string{"admin"}}, nil, "new-0001", true},
+		{"a pane without admin, another pane", map[string]any{"pane": true, "window": "leader-0001", "grants": []string{"read", "write", "fan"}}, nil, "new-0001", false},
+		{"a pane without admin, its own pane", map[string]any{"pane": true, "window": "leader-0001", "grants": []string{"read"}}, nil, "leader-0001", true},
+		{"a daemon from before pane grants", nil, codedErr{"unknown_verb"}, "new-0001", true},
+		{"pane-grants failing", nil, codedErr{"internal"}, "new-0001", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.run("split-window", "-d", "--", "cat")
+			h.fake.grants, h.fake.grantsErr = tc.grants, tc.grantsErr
+			code, _ := h.run("respawn-pane", "-k", "-t", PaneID(tc.target), "--", "true")
+			if tc.wantOK {
+				if code != 0 || len(h.respawns) != 1 {
+					t.Fatalf("respawn-pane = %d (%q), respawns %v; want it sent", code, h.err, h.respawns)
+				}
+				return
+			}
+			if code == 0 || len(h.respawns) != 0 {
+				t.Fatalf("respawn-pane = %d, respawns %v; want it refused", code, h.respawns)
+			}
+			if tc.grantsErr == nil && !strings.Contains(h.err.String(), "admin grant") {
+				t.Errorf("refusal %q does not name the admin grant", h.err)
+			}
+		})
+	}
+}
+
 func TestSplitWindowWithoutAHolder(t *testing.T) {
 	h := newHarness(t)
 	h.shim.Exe = ""

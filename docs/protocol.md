@@ -3330,7 +3330,7 @@ shim as well as a new one. The mapping, for a reader of a daemon log:
 | `kill-pane`, `kill-window` | `close-window` |
 | `select-pane`, `select-pane -T` | `focus-window`, `set-window` with `name` |
 | `select-window`, `rename-window` | `select-workspace`, `set-workspace-name` |
-| `respawn-pane -k` | none: a request on the pane holder's unix socket |
+| `respawn-pane -k` | `pane-grants`, then a request on the pane holder's unix socket. From a pane without `admin`, only the caller's own pane is respawned |
 
 Every call names the caller's session, so nothing the shim does reaches
 another. It holds no authority the caller's own tuios CLI does not. See

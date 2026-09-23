@@ -38,7 +38,18 @@ type fakeDaemon struct {
 	nextID   int
 	foreign  []string // sessions named in calls other than "work"
 	failVerb string
+	// grants is the pane-grants answer, nil for a caller in no pane.
+	grants map[string]any
+	// grantsErr, when set, is what pane-grants fails with.
+	grantsErr error
 }
+
+// codedErr is an error carrying a daemon error code, as
+// session.VerbCallError does.
+type codedErr struct{ code string }
+
+func (e codedErr) Error() string     { return "verb failed (" + e.code + ")" }
+func (e codedErr) ErrorCode() string { return e.code }
 
 func newFake(t *testing.T) *fakeDaemon {
 	return &fakeDaemon{
@@ -55,6 +66,16 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 	var p map[string]any
 	_ = json.Unmarshal(raw, &p)
 	f.calls = append(f.calls, call{verb: verb, params: p})
+	if verb == "pane-grants" {
+		// The one verb that names no session: it reads the caller's own pane.
+		if f.grantsErr != nil {
+			return nil, f.grantsErr
+		}
+		if f.grants == nil {
+			return json.Marshal(map[string]any{"pane": false})
+		}
+		return json.Marshal(f.grants)
+	}
 	if s, _ := p["session"].(string); s != "work" {
 		f.foreign = append(f.foreign, s)
 		return nil, fmt.Errorf("session %q not found", s)

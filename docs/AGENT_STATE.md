@@ -2231,6 +2231,8 @@ holds. Its reports travel to the machine that owns the pane as before.
 Grants scope accidents and prompt-injected agents that use tuios the ordinary
 way. They are not a sandbox: a process that leaves its pane on purpose, the
 way [Who can act as the person](#who-can-act-as-the-person) lists, is not
-placed in it and is treated as the person. Grants say what a pane may do
+placed in it and is treated as the person. So is a process that writes a
+respawn request to a [tmux shim](TMUX_SHIM.md) pane holder's socket itself;
+the shim's own `respawn-pane` is held to the caller's grants. Grants say what a pane may do
 through tuios; what its process may do to files and other programs is the
 operating system's business.

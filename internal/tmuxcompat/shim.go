@@ -1003,6 +1003,9 @@ func (s *Shim) respawnPane(name string, args []string) (string, []string, error)
 	if !p.Has('k') {
 		return OutcomeError, nil, fmt.Errorf("respawn pane failed: pane %s still active", PaneID(target.ID))
 	}
+	if err := s.mayRespawn(target.ID); err != nil {
+		return OutcomeError, nil, fmt.Errorf("respawn pane failed: %w", err)
+	}
 	cwd, _ := p.Value('c')
 	req := RespawnRequest{Command: p.Args, Cwd: cwd, Env: p.Values('e')}
 	send := s.respawn
@@ -1013,6 +1016,42 @@ func (s *Shim) respawnPane(name string, args []string) (string, []string, error)
 		return OutcomeError, nil, fmt.Errorf("respawn pane failed: %w", err)
 	}
 	return OutcomeOK, nil, nil
+}
+
+// mayRespawn holds respawn-pane to the caller's pane grants. A respawn does
+// not go through the daemon: the request goes to the target's holder over its
+// socket. It replaces the target's process, which is closing that pane and
+// opening another, and the daemon gives both of those (close-window and
+// new-window) only to a pane holding admin. So a caller in a pane without
+// admin may respawn only its own pane, and the new command there runs with
+// that pane's grants. The daemon answers what the caller holds (pane-grants),
+// so the answer is the daemon's, not the caller's environment.
+//
+// A caller in no pane is the person, and a daemon from before pane grants
+// (unknown_verb) holds no pane to anything, so both may respawn any pane, as
+// before. Any other failure refuses: the check fails closed.
+func (s *Shim) mayRespawn(target string) error {
+	raw, err := s.Caller.Call("pane-grants", map[string]any{})
+	if err != nil {
+		var coded interface{ ErrorCode() string }
+		if errors.As(err, &coded) && coded.ErrorCode() == "unknown_verb" {
+			return nil
+		}
+		return fmt.Errorf("could not read this pane's grants: %w", err)
+	}
+	var pg struct {
+		Pane   bool     `json:"pane"`
+		Window string   `json:"window"`
+		Grants []string `json:"grants"`
+	}
+	if err := json.Unmarshal(raw, &pg); err != nil {
+		return fmt.Errorf("read pane-grants: %w", err)
+	}
+	if !pg.Pane || slices.Contains(pg.Grants, "admin") || pg.Window == target {
+		return nil
+	}
+	return fmt.Errorf("pane %s holds %s, and replacing the process of another pane needs the admin grant (see tuios pane-grants)",
+		PaneID(pg.Window), strings.Join(pg.Grants, ","))
 }
 
 // mergeDetail appends the entries of add that dst does not hold yet.

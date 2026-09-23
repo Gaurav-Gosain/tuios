@@ -37,6 +37,10 @@ type VerbCallError struct {
 	Hint    *VerbHint
 }
 
+// ErrorCode returns the daemon's stable error code, such as unknown_verb, for
+// a caller that tests it through an interface rather than this type.
+func (e *VerbCallError) ErrorCode() string { return e.Code }
+
 func (e *VerbCallError) Error() string {
 	if e.Code == "" {
 		return e.Message
