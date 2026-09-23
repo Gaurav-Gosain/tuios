@@ -107,6 +107,11 @@ func TestNotificationClaimGoesStale(t *testing.T) {
 	reg := bundledRegistry(t)
 	sess, winID, ptyID := agentPaneWithHarness(t, "codex", AgentStateWorking)
 	pty := sess.GetPTY(ptyID)
+	// The pane runs a real shell. Its prompt stamps lastOutput whenever it
+	// arrives, and a prompt that lands after the backdating below makes the
+	// pane look as if it wrote again, which is the case this test checks
+	// second. Wait for the shell to go quiet first.
+	waitPaneQuiet(t, pty)
 	feedVT(t, pty, clearScreen+codexWorkingScreen)
 	pty.lastOutput.Store(time.Now().Add(-time.Second).UnixNano())
 	sess.applyAgentNotify(ptyID, paneNotification{body: "Approval requested: go test"}, reg)
@@ -191,4 +196,20 @@ func windowStateOf(t *testing.T, sess *Session, windowID string) WindowState {
 	}
 	t.Fatalf("window %s not found", windowID)
 	return WindowState{}
+}
+
+// waitPaneQuiet waits until the pane's shell has written nothing for 300 ms,
+// so a test that sets lastOutput by hand is not overtaken by the shell's own
+// startup output.
+func waitPaneQuiet(t *testing.T, p *PTY) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		last := p.lastOutput.Load()
+		if last != 0 && time.Since(time.Unix(0, last)) >= 300*time.Millisecond {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("the pane's shell never went quiet")
 }
