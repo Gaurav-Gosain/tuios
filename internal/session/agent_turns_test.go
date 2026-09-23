@@ -183,7 +183,7 @@ func TestListAgentsReportsFinishedTurns(t *testing.T) {
 	sess, a, b := twoWindowSession(t, d, "turns")
 	report(t, sess, a, AgentStateWorking)
 	report(t, sess, a, AgentStateDone)
-	report(t, sess, b, AgentStateUnknown)
+	reportAs(t, sess, b, AgentStateUnknown, "claude-code")
 
 	c := dialVerb(t, sp)
 	res := result(t, c.call(t, `{"id":1,"verb":"list-agents","params":{"session":"turns"}}`))
@@ -203,8 +203,17 @@ func TestListAgentsReportsFinishedTurns(t *testing.T) {
 	}
 }
 
+// reportAs is report with the harness the report names.
+func reportAs(t *testing.T, sess *Session, windowID string, state AgentState, harness string) {
+	t.Helper()
+	if _, _, err := sess.ApplyAgentReport(windowID, AgentReport{State: state, Harness: harness}); err != nil {
+		t.Fatalf("ApplyAgentReport(%s, %s): %v", state, harness, err)
+	}
+}
+
 // TestUnknownIsNotReady checks ask-agent and fan both refuse to type at a pane
-// whose state is unknown, and that ask says why.
+// whose state is unknown when its harness can show that it is at its prompt,
+// and that ask says why.
 func TestUnknownIsNotReady(t *testing.T) {
 	if agentRestStates[AgentStateUnknown.Name()] {
 		t.Error("ask-agent treats unknown as ready")
@@ -215,7 +224,12 @@ func TestUnknownIsNotReady(t *testing.T) {
 
 	d, sp := startTestDaemon(t)
 	sess, a, b := twoWindowSession(t, d, "quiet")
-	report(t, sess, b, AgentStateUnknown)
+	reportAs(t, sess, b, AgentStateUnknown, "claude-code")
+	st := sess.GetState()
+	i, _ := findWindowStateIndex(st.Windows, b)
+	if d.agentReady(st.Windows[i], fanReadyStates) {
+		t.Error("fan treats an unknown claude-code pane as ready")
+	}
 	c := dialVerb(t, sp)
 	resp := c.call(t, `{"id":1,"verb":"ask-agent","params":{"session":"quiet","window":"`+b+`","from":"`+a+`","text":"hello","ready_timeout":250}}`)
 	if code := errCode(t, resp); code != ErrVerbNotReady {
@@ -224,5 +238,35 @@ func TestUnknownIsNotReady(t *testing.T) {
 	e := resp["error"].(map[string]any)
 	if !strings.Contains(e["message"].(string), "unknown") {
 		t.Errorf("refusal did not say the state was unknown: %v", e["message"])
+	}
+}
+
+// TestUnknownIsReadyWhenTheHarnessCannotProveIdle checks the other side: a
+// harness with no idle rule can never show that it is at its prompt, so for it
+// unknown is ready to fan, ask-agent and list-agents, as it was before idle
+// rules existed. Without this, fan left the prompt unsent for every such
+// harness.
+func TestUnknownIsReadyWhenTheHarnessCannotProveIdle(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	if d.agentMatcher.registry == nil || d.agentMatcher.registry.CanProveIdle("aider") {
+		t.Skip("aider now has an idle rule; pick a harness without one")
+	}
+	if !d.agentMatcher.registry.CanProveIdle("claude-code") {
+		t.Fatal("claude-code has no idle rule, so the other half of this contract is untested")
+	}
+	sess, _, b := twoWindowSession(t, d, "plain")
+	reportAs(t, sess, b, AgentStateUnknown, "aider")
+	st := sess.GetState()
+	i, _ := findWindowStateIndex(st.Windows, b)
+	if !d.agentReady(st.Windows[i], fanReadyStates) {
+		t.Error("fan never types at an unknown aider pane")
+	}
+	c := dialVerb(t, sp)
+	res := result(t, c.call(t, `{"id":1,"verb":"list-agents","params":{"session":"plain"}}`))
+	for _, r := range res["agents"].([]any) {
+		m := r.(map[string]any)
+		if m["window_id"] == b && m["ready"] != true {
+			t.Errorf("an unknown aider pane reads ready = %v, want true", m["ready"])
+		}
 	}
 }

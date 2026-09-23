@@ -19,8 +19,11 @@ import (
 // makes under the test.
 
 // fanFixture is an isolation root, a repository, and a fake claude on PATH.
-// The agent timers are shortened so a quiet fake agent is called ready in
-// seconds rather than the shipped half minute.
+// The fake sets the window title real Claude Code sets at rest ("✳ Claude
+// Code"), which is the evidence the claude-code manifest reads as idle: a
+// quiet pane alone is not ready for a harness that can show it is at its
+// prompt. The agent timers are shortened so detection takes seconds rather
+// than the shipped half minute.
 func fanFixture(t *testing.T) (base, repo string) {
 	t.Helper()
 	base = t.TempDir()
@@ -30,7 +33,7 @@ func fanFixture(t *testing.T) (base, repo string) {
 	if err := os.MkdirAll(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	script := "#!/bin/sh\necho fake claude ready\nwhile IFS= read -r line; do echo \"GOT: $line\"; done\n"
+	script := "#!/bin/sh\nprintf '\\033]0;\\342\\234\\263 Claude Code\\007'\necho fake claude ready\nwhile IFS= read -r line; do echo \"GOT: $line\"; done\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

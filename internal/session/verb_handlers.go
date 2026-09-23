@@ -869,7 +869,7 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 		// ask-agent would type at the pane now, and, for a pane on needs_input,
 		// whether it waits on an approval or a question. blocked_by is also
 		// where the kind a hook reported with set-agent-state reads back.
-		"ready":      agentRestStates[w.AgentState.Name()],
+		"ready":      d.agentReady(w, agentRestStates),
 		"blocked_by": agentBlockedBy(w),
 		// The harness's own conversation id, empty until a hook reports one.
 		"agent_session_id": w.AgentSessionID,

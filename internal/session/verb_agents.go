@@ -54,6 +54,25 @@ var agentRestStates = map[string]bool{
 	// prompt. Neither set holds needs_input or unknown.
 }
 
+// agentReady reports whether a window's agent state is in the given ready set,
+// with one exception for unknown. A harness whose manifest has an idle rule
+// shows positive evidence when it is at its prompt, so for it unknown stays not
+// ready. A harness without one can never reach idle from its screen, and
+// without this its pane would never be ready for fan or ask-agent at all, only
+// after the wait ends. For those, unknown is the best evidence of rest there is,
+// as it was before idle rules existed.
+func (d *Daemon) agentReady(w WindowState, set map[string]bool) bool {
+	name := w.AgentState.Name()
+	if set[name] {
+		return true
+	}
+	if w.AgentState != AgentStateUnknown {
+		return false
+	}
+	reg := d.agentMatcher.registry
+	return reg == nil || !reg.CanProveIdle(w.AgentHarness)
+}
+
 // askDefaults bound the three waits ask-agent performs.
 const (
 	askDefaultReadyTimeout = 30 * time.Second
@@ -130,7 +149,7 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 			"workspace":      w.Workspace,
 			"focused":        w.ID == state.FocusedWindowID,
 			"unread":         unread[w.ID],
-			"ready":          agentRestStates[w.AgentState.Name()],
+			"ready":          d.agentReady(w, agentRestStates),
 			"blocked_by":     agentBlockedBy(w),
 			"needs_you":      w.AgentState.NeedsYou(),
 			"confidence":     claim.identity.confidence(),
@@ -779,7 +798,7 @@ func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Dura
 			blocked = agentBlockedError(w)
 			return name, false
 		}
-		return name, agentRestStates[name]
+		return name, d.agentReady(w, agentRestStates)
 	}
 	if name, ok := check(); ok {
 		return name, nil

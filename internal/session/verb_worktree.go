@@ -53,10 +53,11 @@ const fanMaxCount = 16
 // and done are an agent at its prompt. unknown is not here: it is what the
 // silence timer writes when nothing on the screen said what the agent is
 // doing, and a quiet agent that has not proved it is at its prompt may be
-// mid-startup or mid-call. The harnesses with idle rules (claude-code, codex,
-// gemini-cli, opencode) reach idle from their prompt box; for any other the
-// prompt is left unsent when the wait ends, and the record says to send it
-// with send-text. needs_input is not here either: an agent asking to trust the
+// mid-startup or mid-call. That holds for the harnesses with idle rules
+// (claude-code, codex, gemini-cli, opencode), which reach idle from their
+// prompt box. A harness without one can never show that evidence, so for it
+// agentReady counts unknown as ready, as fan did before idle rules existed.
+// needs_input is not here either: an agent asking to trust the
 // folder must be answered by the person, and the prompt is typed after.
 var fanReadyStates = map[string]bool{
 	AgentStateIdle.Name(): true,
@@ -549,7 +550,7 @@ func (d *Daemon) deliverFanPrompt(sess *Session, windowID, text string, timeout 
 		if err != nil {
 			return false
 		}
-		return fanReadyStates[st.Windows[i].AgentState.Name()]
+		return d.agentReady(st.Windows[i], fanReadyStates)
 	}
 	deadline := time.After(timeout)
 	for !ready() {

@@ -130,6 +130,31 @@ func (r *Registry) Lookup(id string) *Manifest {
 	return nil
 }
 
+// CanProveIdle reports whether the harness has an enabled screen or title rule
+// that reports idle, which is what lets a pane of it show positive evidence that
+// the agent waits at its prompt. A harness without one can never reach idle
+// from its screen, only from a hook or its own report.
+func (r *Registry) CanProveIdle(id string) bool {
+	m := r.Lookup(id)
+	if m == nil {
+		return false
+	}
+	for _, rules := range []struct {
+		enabled bool
+		rules   []ScreenRule
+	}{{m.Screen.Enabled, m.Screen.Rule}, {m.Title.Enabled, m.Title.Rule}} {
+		if !rules.enabled {
+			continue
+		}
+		for _, rule := range rules.rules {
+			if rule.State == "idle" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Identify names the harness a process is, or "" when it is none of them. It is
 // a pure function of its inputs and does no I/O, so it is safe to call on every
 // detection tick.
