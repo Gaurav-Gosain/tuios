@@ -148,6 +148,10 @@ type Daemon struct {
 	// again on the next start. See stash.go.
 	stash *stashStore
 
+	// bundles holds the worktree transfers bundle-worktree has open. Its zero
+	// value is ready. See verb_bundle_worktree.go.
+	bundles bundleStore
+
 	// promptStallOverride replaces promptStallDefault when set. Only tests set
 	// it, to keep a stall test from waiting five seconds. See prompt_gate.go.
 	promptStallOverride time.Duration

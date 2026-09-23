@@ -150,9 +150,11 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// with claude installed does not get one started by this test. Starting
 	// and waiting are proved with fake agents in agent_launch_test.go and
 	// verb_start_agent_test.go.
-	"start-agent#0": {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
-	"start-agent#1": {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
-	"start-agent#2": {errCode: ErrVerbInvalidParams, why: "the fixture's home has no ~/src"},
+	"start-agent#0":     {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
+	"start-agent#1":     {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
+	"start-agent#2":     {errCode: ErrVerbInvalidParams, why: "the fixture's home has no ~/src"},
+	"bundle-worktree#0": {errCode: ErrVerbSessionNotFound, why: "api-fan-add-retry-2 does not exist here"},
+	"bundle-worktree#1": {errCode: ErrVerbInvalidParams, why: "the token is a placeholder, and only the connection that made a transfer can read it"},
 
 	// No hosts are configured in the fixture.
 	"list-host-agents#1":   {errCode: ErrVerbUnknownHost, why: "no hosts are configured here"},
