@@ -136,7 +136,10 @@ func (m *OS) federationRefreshPlan() (after time.Duration, refresh bool) {
 	if !m.federationPolling {
 		return hostRefreshIdle, false
 	}
-	if m.federationPushed {
+	// The push arrives on the attach connection. While the client is attached
+	// to another machine that connection goes to the far daemon, not to the
+	// one that pushes, so the rail keeps its poll.
+	if m.federationPushed && m.AttachedHost == "" {
 		return hostRefreshPushed, true
 	}
 	if m.SidebarActive() || m.ShowSessionSwitcher {

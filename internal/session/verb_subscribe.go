@@ -213,7 +213,7 @@ func (d *Daemon) writeEventLine(cs *connState, ev streamEvent) error {
 // verbWaitFor blocks until a condition matches or a timeout elapses, returning a
 // wait_result on match and a timeout error otherwise. It is sugar over a
 // short-lived internal hub subscription, so a caller need not poll capture-pane.
-func (d *Daemon) verbWaitFor(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Condition string `json:"condition"`
 		Session   string `json:"session"`
@@ -236,6 +236,25 @@ func (d *Daemon) verbWaitFor(_ *connState, params json.RawMessage) (any, *verbEr
 		timeout = time.Duration(p.Timeout) * time.Millisecond
 	}
 	deadline := time.After(timeout)
+	if cs != nil && cs.hostedEnded != nil {
+		// A call from a pane on another machine ends with the report channel
+		// it came on, which is the only way its answer could go back.
+		ends := make(chan time.Time, 1)
+		stop := make(chan struct{})
+		defer close(stop)
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		go func() {
+			select {
+			case now := <-timer.C:
+				ends <- now
+			case <-cs.hostedEnded:
+				ends <- time.Now()
+			case <-stop:
+			}
+		}()
+		deadline = ends
+	}
 
 	if p.AnySession {
 		if p.Condition != "agent-state" {

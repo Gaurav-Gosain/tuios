@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -1190,5 +1191,90 @@ func TestThePaneIsNotAskedOncePerTick(t *testing.T) {
 	waitUntil(t, func() bool { return fed.count() >= 1 }, "the far machine was never asked")
 	if got := fed.count(); got > 1 {
 		t.Errorf("twenty looks asked the far machine %d times, want one", got)
+	}
+}
+
+// TestAFarDaemonFromBeforeReportsStillOpensAPane is the version skew the other
+// way: a far daemon built before reports from hosted panes checks every verb
+// line against its schema, which has no window param for open-pane, and refuses
+// it with invalid_params. The owner asks again on the same stream without the
+// window, the pane opens as it did before, and no report channel is promised.
+//
+// Negative control: without the retry in openPaneReply, the open fails with
+// "verb open-pane has no parameter window".
+func TestAFarDaemonFromBeforeReportsStillOpensAPane(t *testing.T) {
+	old := verbRegistry["open-pane"]
+	old.params = slices.DeleteFunc(slices.Clone(old.params), func(p verbParam) bool { return p.Name == "window" })
+
+	owner, far := net.Pipe()
+	t.Cleanup(func() { _ = owner.Close(); _ = far.Close() })
+	var seen []string
+	farDone := make(chan struct{})
+	go func() {
+		defer close(farDone)
+		br := bufio.NewReader(far)
+		for {
+			line, err := br.ReadBytes('\n')
+			if err != nil {
+				return
+			}
+			var req verbRequest
+			if err := json.Unmarshal(line, &req); err != nil {
+				return
+			}
+			seen = append(seen, string(req.Params))
+			var reply []byte
+			if verr := checkParamNames(req.Verb, old, req.Params); verr != nil {
+				reply, _ = json.Marshal(verbResponse{ID: req.ID, Error: verr})
+			} else {
+				reply = []byte(`{"id":1,"result":{"type":"pane","pane":"p1"}}`)
+			}
+			if _, err := far.Write(append(reply, '\n')); err != nil {
+				return
+			}
+			if verr := checkParamNames(req.Verb, old, req.Params); verr == nil {
+				return
+			}
+		}
+	}()
+
+	opened, _, err := openPaneReply(owner, hostedPaneSpec{Width: 80, Height: 24, Window: "win-1"})
+	if err != nil {
+		t.Fatalf("a far daemon from before reports refused the pane: %v", err)
+	}
+	<-farDone
+	if opened.Pane != "p1" {
+		t.Errorf("pane %q, want p1", opened.Pane)
+	}
+	if opened.CallsToken != "" {
+		t.Errorf("a pane opened without the window has calls token %q", opened.CallsToken)
+	}
+	if len(seen) != 2 || !strings.Contains(seen[0], `"window"`) || strings.Contains(seen[1], `"window"`) {
+		t.Errorf("the requests were %q, want one with the window and a retry without it", seen)
+	}
+}
+
+// TestOnlyARefusalOfTheWindowIsRetried: any other open-pane error is the
+// answer, and a request that sent no window is not sent again.
+func TestOnlyARefusalOfTheWindowIsRetried(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		verr *verbError
+		want bool
+	}{
+		{"window by hint", hintedVerbError(ErrVerbInvalidParams, "verb open-pane has no parameter window", &VerbHint{Param: "window"}), true},
+		{"window by message", newVerbError(ErrVerbInvalidParams, "verb open-pane has no parameter window"), true},
+		{"another param", hintedVerbError(ErrVerbInvalidParams, "verb open-pane has no parameter shell", &VerbHint{Param: "shell"}), false},
+		{"another code", newVerbError(ErrVerbForbidden, "no parameter window"), false},
+		{"no error", nil, false},
+	} {
+		if got := refusesWindowParam(tc.verr); got != tc.want {
+			t.Errorf("%s: refusesWindowParam = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+
+	reply := `{"id":1,"error":{"code":"` + ErrVerbInvalidParams + `","message":"verb open-pane has no parameter window","hint":{"param":"window"}}}` + "\n"
+	if _, _, err := openPaneReply(&scriptedStream{reply: reply}, hostedPaneSpec{Width: 80, Height: 24}); err == nil {
+		t.Error("a request with no window was retried past a refusal of the window")
 	}
 }

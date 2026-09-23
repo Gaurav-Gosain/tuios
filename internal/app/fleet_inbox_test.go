@@ -38,6 +38,13 @@ func TestAPushingDaemonReplacesTheHostPoll(t *testing.T) {
 	if after, refresh := m.federationRefreshPlan(); !refresh || after != hostRefreshPushed {
 		t.Errorf("a pushing daemon is polled every %v (refresh %v), want the %v backstop", after, refresh, hostRefreshPushed)
 	}
+	// Attached to another machine, the push goes to the far daemon's
+	// connection, not this client, so the rail keeps polling.
+	m.AttachedHost = "build"
+	if after, refresh := m.federationRefreshPlan(); !refresh || after != hostRefreshActive {
+		t.Errorf("attached to another machine, the rail is polled every %v (refresh %v), want %v", after, refresh, hostRefreshActive)
+	}
+	m.AttachedHost = ""
 	m.applyFederationSnapshot(FederationHostsMsg{
 		Configured: 1,
 		Snapshot:   FederationSnapshot{Hosts: []FederationHost{{Name: "build", Status: "up"}}},

@@ -549,7 +549,14 @@ machine](#reports-from-a-pane-on-another-machine)). What changes:
   there. They are sent to the owner and its answer is returned. A caller that
   is not in that pane gets `forbidden`, and when the owner is too old to take
   the call, `protocol_mismatch`. Such a call used to fail there with
-  `window_not_found` or `session_not_found`.
+  `window_not_found` or `session_not_found`. A forwarded
+  `send-agent-message` may attach only paths in the owner session's stash,
+  like a message from the link, and a forwarded `wait-for` is capped at one
+  hour on the owner and ends if the report channel drops.
+- The asking daemon may send `open-pane` twice on one connection. A far
+  daemon from before this refuses `window` with `invalid_params`, and the
+  asking daemon then asks again without it, so a window still opens on that
+  machine, with no reports from the pane.
 - The `session` param of `open-pane` was documented as exported as
   `TUIOS_SESSION`. It is exported as `TUIOS_SESSION_REMOTE`, as it has been
   since hosted panes stopped exporting `TUIOS_SESSION`; the description now
@@ -1869,13 +1876,25 @@ How the grant is held to that:
   `send-agent-message` from anyone but the window is `forbidden`, and the call
   runs as a caller inside a pane, so it cannot act as the person. A far daemon
   that writes its own requests gets no more than the pane's process would.
+- `send-agent-message` may attach only paths in the session's stash, as on
+  the link: its process and the far daemon are on the other machine, so a
+  path names a file on the owner they cannot see. Any other path is
+  `invalid_params` before it is looked at, so the answer does not say whether
+  the file exists on the owner.
+- `wait-for` runs on the owner with `timeout` capped at one hour, whatever the
+  request said, and ends when the channel it came on ends. The owner does not
+  wait for calls in flight before it opens the next channel.
 - `pane-calls` needs the token, which only the owner saw. At most 16 calls per
   pane are in flight, and lines are bounded to 1 MiB.
 
 An owner from before this sends no `window`, and the far daemon exports no
 `TUIOS_PANE_ID` and answers a call naming the pane id with
-`protocol_mismatch`. A far daemon from before this returns no `calls_token`,
-and the owner opens no channel.
+`protocol_mismatch`. A far daemon from before this refuses `open-pane` with
+`invalid_params`, because it checks every request against its schema and its
+`open-pane` has no `window`. Nothing is spawned by that refusal and the
+connection still takes requests, so the owner sends `open-pane` again on it
+without `window`. The pane opens as before, with no `calls_token`, and the
+owner opens no channel.
 
 ## Event stream
 

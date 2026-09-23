@@ -306,6 +306,10 @@ type connState struct {
 	// channel (hosted_calls.go). It is a pane by construction, whatever the
 	// pid says, so it can never act as the person.
 	paneOnly bool
+	// hostedEnded, on a paneOnly call, is closed when the report channel the
+	// call came on ends. A wait-for stops on it, so a wait does not outlive
+	// the channel that would carry its answer. nil means it never ends.
+	hostedEnded <-chan struct{}
 
 	// attached says the attach reply has been written to this connection, and
 	// it is what broadcastToSession requires before it will send anything.

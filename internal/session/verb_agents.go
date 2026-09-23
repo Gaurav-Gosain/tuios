@@ -364,8 +364,10 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 		// files another machine may name here are the ones it put in the
 		// stash. Anything else is refused before it is looked at, so a
 		// remote sender cannot use the missing flag to ask whether a file
-		// exists on this machine.
-		if viaLink && !d.stash.owns(sess.ID, path) {
+		// exists on this machine. A hosted pane's call (paneOnly) is held to
+		// the same rule: its process, and the daemon that forwarded it, are
+		// on the other machine too.
+		if (viaLink || (cs != nil && cs.paneOnly)) && !d.stash.owns(sess.ID, path) {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "attachment "+echoName(path)+": a message from another machine can attach only a stashed file", &VerbHint{
 				Param:   "attachments",
 				Command: "tuios stash put",

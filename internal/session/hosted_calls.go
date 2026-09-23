@@ -56,7 +56,15 @@ import (
 //     so it can never speak as the person, verified or claimed. A far machine
 //     that writes its own requests on the channel gets exactly what the pane's
 //     process gets, which is what an agent in a pane of the owner's gets for its
-//     own window.
+//     own window. One thing it gets less of: a message it sends may attach only
+//     a file in the session's stash, the rule a sender on the link is held to,
+//     because a path it names is a file on the owner's machine that its process
+//     cannot see. The path is refused before it is looked at, so the answer
+//     does not say whether a file exists on the owner.
+//   - A forwarded wait-for runs on the owner for at most hostedWaitMax,
+//     whatever the far side asked, and ends when the channel it came on ends.
+//     The owner does not wait for calls in flight before it opens the next
+//     channel, so a long wait never holds off the pane's reports.
 //   - The channel is opened with the token, which the process never sees, so
 //     the process cannot open one of its own. Lines are bounded both ways and
 //     the calls in flight per pane are capped.
@@ -64,8 +72,11 @@ import (
 // Version skew: an owner from before this sends no window id and opens no
 // channel. The process then has no TUIOS_PANE_ID, as before, and a call that
 // names the pane id is answered with protocol_mismatch, which says to update
-// tuios on the owning machine. A far machine from before this returns no
-// token, and the owner opens no channel.
+// tuios on the owning machine. A far machine from before this checks open-pane
+// against a schema with no window param and refuses the request with
+// invalid_params before it spawns anything. The owner then sends open-pane
+// again on the same stream without the window (openPaneReply), gets no token,
+// and opens no channel.
 
 // hostedCallVerbs are the verbs a hosted pane's process may send to its owner,
 // with the parameter that names the pane.
@@ -539,10 +550,15 @@ func (d *Daemon) hostedCallsOnce(s *Session, windowID string, p *remotePane) err
 		return resp.Error
 	}
 
+	// The calls in flight are not waited for when the channel ends. Their
+	// answers would go to a dead stream, and waiting would hold off the next
+	// channel, and every report the pane makes, for as long as the longest
+	// wait-for asked. ended tells them the channel is gone, and a wait-for
+	// stops on it.
 	var writeMu sync.Mutex
 	slots := make(chan struct{}, hostedCallsMaxInFlight)
-	var wg sync.WaitGroup
-	defer wg.Wait()
+	ended := make(chan struct{})
+	defer close(ended)
 	for {
 		line, err := readLimitedLine(br, hostedCallsMaxLine)
 		if err != nil {
@@ -567,11 +583,9 @@ func (d *Daemon) hostedCallsOnce(s *Session, windowID string, p *remotePane) err
 			reply(hostedCallReply{ID: call.ID, Error: newVerbError(ErrVerbRateLimited, "this pane has too many calls waiting")})
 			continue
 		}
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
 			defer func() { <-slots }()
-			result, verr := d.runHostedCall(s, windowID, p.host, call.Verb, call.Params)
+			result, verr := d.runHostedCall(s, windowID, p.host, call.Verb, call.Params, ended)
 			r := hostedCallReply{ID: call.ID, Error: verr}
 			if verr == nil {
 				raw, err := json.Marshal(result)
@@ -589,7 +603,9 @@ func (d *Daemon) hostedCallsOnce(s *Session, windowID string, p *remotePane) err
 // runHostedCall runs one call a pane on another machine sent, as the window the
 // pane is drawn in. Whatever the request said about which session, window,
 // sender or reader it is, the answer is this window's; see the file comment.
-func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params json.RawMessage) (any, *verbError) {
+// ended is closed when the report channel the call came on ends, which stops a
+// wait-for; nil means it never ends.
+func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params json.RawMessage, ended <-chan struct{}) (any, *verbError) {
 	field, ok := hostedCallVerbs[verb]
 	if !ok {
 		return nil, newVerbError(ErrVerbForbidden, "a pane on another machine cannot call "+echoName(verb)+" on the machine that owns it")
@@ -616,6 +632,7 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 		if cond != "agent-message" {
 			return nil, newVerbError(ErrVerbForbidden, "a pane on another machine can wait only for agent-message on its own inbox")
 		}
+		fields["timeout"] = mustJSON(clampHostedWait(fields["timeout"]))
 	}
 	if verb == "send-agent-message" {
 		// The sender is the window. A request that named someone else, the
@@ -636,8 +653,23 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 	if verr := checkParamNames(verb, entry, raw); verr != nil {
 		return nil, verr
 	}
-	cs := &connState{clientID: "hosted:" + host, done: make(chan struct{}), paneOnly: true}
+	cs := &connState{clientID: "hosted:" + host, done: make(chan struct{}), paneOnly: true, hostedEnded: ended}
 	return entry.handler(d, cs, raw)
+}
+
+// clampHostedWait is the timeout, in milliseconds, a forwarded wait-for runs
+// with here: what the far machine asked, capped at hostedWaitMax. The far side
+// caps its own budget the same way, and this side does not take its word for
+// it. A missing, zero or unreadable timeout keeps wait-for's default.
+func clampHostedWait(raw json.RawMessage) int {
+	var ms int64
+	if len(raw) > 0 && json.Unmarshal(raw, &ms) != nil {
+		ms = 0
+	}
+	if ms <= 0 {
+		return 0
+	}
+	return int(min(ms, hostedWaitMax.Milliseconds()))
 }
 
 // windowOnHost reports whether the session still has the window, with its

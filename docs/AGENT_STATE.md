@@ -975,7 +975,10 @@ comes back when that agent changes it.
 
 The rail no longer polls a host the daemon streams. The daemon pushes each
 change to the attached clients, and the rail lists the hosts again on the
-push, with one listing a minute as a backstop. A host whose tuios is too old
+push, with one listing a minute as a backstop. While the client is attached
+to a session on another machine the push goes to that machine's daemon, not
+to this client, so the rail keeps polling every 5 seconds with the rail open
+and 30 without. A host whose tuios is too old
 to stream its agents is polled as before, every 5 seconds with the rail open
 and 30 without, and `tuios hosts` names it with what to update; what waits on
 it is not in the Inbox until it is updated.
@@ -1651,10 +1654,21 @@ What limits it:
   transcript path and harness pid (they name things on the other machine),
   refuses a send from anyone but the window, and treats the caller as inside a
   pane, so it can never speak as the person.
+- A message the pane sends can attach only a file in the session's stash, the
+  rule a sender on the link is held to. A path it names is a file on the
+  machine holding the window, which its process cannot see, so any other path
+  is refused before that machine looks at it. Use `tuios stash put -s
+  HOST:SESSION FILE` and attach the path it prints.
+- A `wait-for agent-message` runs on the machine holding the window for at
+  most an hour, and ends when the link to that machine drops. The pane's
+  reports come back as soon as the link does, whatever waits were running.
 - A machine holding the window from before this sends no window id, the pane
   gets no `TUIOS_PANE_ID`, and a report naming the pane is answered with
   `protocol_mismatch`. The agent is still detected from the side that holds the
   window, as before.
+- A machine running the pane from before this refuses the window id. The
+  machine holding the window then opens the pane without it, so the window
+  still opens there, as before, with no `TUIOS_PANE_ID` and no reports.
 
 ## Alerts
 
@@ -1763,7 +1777,7 @@ proof, as before.
 | An agent in a hub pane attaching through the link to this machine | The hub vouches only for a caller outside its panes, in the stream's open frame, which the caller cannot write. The proxy here dials the link-human socket only for a vouched stream. An attach through the plain link socket gets no nonce. |
 | An agent in a pane on this machine dialing the link-human socket itself | The same pane check runs on that socket, against the process that dialed it. |
 | A hub from before this check | It vouches for nothing, so no attach through it verifies here. |
-| An agent in a pane on another machine reporting through the link | It reaches only its own window: the machine holding the window rewrites every report to that window and runs it as a caller inside a pane, so `from human` is refused and reading the person's mail is a peek. |
+| An agent in a pane on another machine reporting through the link | It reaches only its own window: the machine holding the window rewrites every report to that window and runs it as a caller inside a pane, so `from human` is refused and reading the person's mail is a peek. An attachment outside the session's stash is refused before its path is looked at, so the pane cannot attach, or learn about, a file on the machine holding the window. |
 | A process on the far machine reporting as a hosted pane it is not in | Refused with `forbidden` there, by the pid the kernel gives. The channel the reports travel on needs a token only the machine holding the window saw. |
 | A linked host writing Inbox items into this machine | Items are only displayed. Their text is cleaned and cut, a host holds at most 256 rows apart from this machine's, and nothing it sends runs a command, types into a pane or marks anything here. Dismissing one hides it here only. |
 

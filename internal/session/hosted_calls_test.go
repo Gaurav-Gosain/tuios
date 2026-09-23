@@ -2,11 +2,14 @@ package session
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -243,7 +246,7 @@ func TestTheOwnerRunsAHostedCallAsItsOwnWindow(t *testing.T) {
 
 	otherWin := other.GetState().Windows[0].ID
 	params := fmt.Sprintf(`{"session":"other","window":%q,"state":"errored","transcript_path":"/etc/passwd","harness_pid":1}`, otherWin)
-	if _, verr := d.runHostedCall(sess, mine, "build", "set-agent-state", json.RawMessage(params)); verr != nil {
+	if _, verr := d.runHostedCall(sess, mine, "build", "set-agent-state", json.RawMessage(params), nil); verr != nil {
 		t.Fatalf("the call failed: %v", verr)
 	}
 	if st := other.GetState().Windows[0].AgentState.Name(); st == "errored" {
@@ -253,11 +256,183 @@ func TestTheOwnerRunsAHostedCallAsItsOwnWindow(t *testing.T) {
 		t.Errorf("the pane's own window is %q, want errored", st)
 	}
 
-	if _, verr := d.runHostedCall(sess, mine, "build", "send-keys", json.RawMessage(`{"keys":"x"}`)); verr == nil || verr.Code != ErrVerbForbidden {
+	if _, verr := d.runHostedCall(sess, mine, "build", "send-keys", json.RawMessage(`{"keys":"x"}`), nil); verr == nil || verr.Code != ErrVerbForbidden {
 		t.Errorf("a verb outside the list was run: %v", verr)
 	}
-	if _, verr := d.runHostedCall(sess, mine, "elsewhere", "set-agent-state", json.RawMessage(`{"state":"idle"}`)); verr == nil {
+	if _, verr := d.runHostedCall(sess, mine, "elsewhere", "set-agent-state", json.RawMessage(`{"state":"idle"}`), nil); verr == nil {
 		t.Error("a call from a host the window is not on was run")
+	}
+}
+
+// TestAHostedPaneAttachesOnlyStashedFiles holds a hosted pane's mail to the
+// link's attachment rule. Its process, and the daemon that forwarded the call,
+// are on the other machine, so a path it names is not its file. A path outside
+// the session's stash is refused before it is looked at, so the answer is the
+// same for a file that exists and one that does not, and nothing is stored.
+//
+// Negative control: without the paneOnly half of the stash check in
+// verbSendAgentMessage, /etc/hosts is attached and the missing file is told
+// apart from it by the error.
+func TestAHostedPaneAttachesOnlyStashedFiles(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess, err := d.manager.CreateSession("owner", &SessionConfig{}, 80, 24)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	for _, name := range []string{"mine", "peer"} {
+		if _, err := sess.AddDaemonWindow(name, nil); err != nil {
+			t.Fatalf("window: %v", err)
+		}
+	}
+	var mine, peer string
+	_ = sess.mutateState(func(st *SessionState) error {
+		mine, peer = st.Windows[0].ID, st.Windows[1].ID
+		st.Windows[0].Host = "build"
+		return nil
+	})
+
+	send := func(path string) *verbError {
+		params := fmt.Sprintf(`{"to":%q,"text":"look","attachments":[%q]}`, peer, path)
+		_, verr := d.runHostedCall(sess, mine, "build", "send-agent-message", json.RawMessage(params), nil)
+		return verr
+	}
+	var messages []string
+	for _, path := range []string{"/etc/hosts", "/nonexistent/tuios-hosted-probe"} {
+		verr := send(path)
+		if verr == nil || verr.Code != ErrVerbInvalidParams || !strings.Contains(verr.Message, "only a stashed file") {
+			t.Errorf("a hosted pane attaching %s was answered %v, want the stash refusal", path, verr)
+			continue
+		}
+		messages = append(messages, strings.Replace(verr.Message, path, "PATH", 1))
+	}
+	if len(messages) == 2 && messages[0] != messages[1] {
+		t.Errorf("the refusal tells a file that exists from one that does not: %q vs %q", messages[0], messages[1])
+	}
+	if _, ok := d.agents.firstUnread(sess.Name, peer, 0); ok {
+		t.Error("a refused message was stored")
+	}
+
+	// A file the session stashed is what a hosted pane may attach.
+	src := filepath.Join(t.TempDir(), "report.txt")
+	writeBytes(t, src, 64, 7)
+	c := dialVerb(t, sp)
+	put := result(t, c.call(t, `{"id":1,"verb":"stash-put","params":{"session":"owner","path":`+quote(src)+`}}`))
+	if verr := send(put["path"].(string)); verr != nil {
+		t.Errorf("a hosted pane attaching a stashed file was refused: %v", verr)
+	}
+}
+
+// TestADroppedChannelIsReopenedWhileAWaitIsInFlight: a pane's agent waits for
+// mail, the report channel drops, and the owner opens a new one within
+// hostedCallsRetry, where a report goes through again. The wait does not hold
+// the owner on the dead channel.
+//
+// Negative control: with the owner waiting for its calls in flight before it
+// redials, no channel comes back until the pane's 60 second wait runs out.
+func TestADroppedChannelIsReopenedWhileAWaitIsInFlight(t *testing.T) {
+	hub, far := startHubAndFar(t)
+	waitForHostUp(t, hub, "build")
+	sess, win, _ := hostedHelperWindow(t, hub, far, "global", []hostedHelperCall{
+		{Verb: "wait-for", Params: json.RawMessage(`{"condition":"agent-message","window":"$PANE","timeout":60000}`)},
+	})
+	hp := far.daemon.hostedPaneByAddress(win.ID)
+	if hp == nil {
+		t.Fatal("the far daemon runs no pane for the window")
+	}
+	inFlight := func(ch *hostedCallChannel) bool {
+		ch.mu.Lock()
+		defer ch.mu.Unlock()
+		return ch.inFlight > 0
+	}
+	var first *hostedCallChannel
+	waitUntil(t, func() bool {
+		first = hp.calls.current(0)
+		return first != nil && inFlight(first)
+	}, "the pane's wait never reached the owner")
+
+	_ = first.conn.Close()
+	start := time.Now()
+	var next *hostedCallChannel
+	for next == nil || next == first {
+		if time.Since(start) > hostedCallsRetry+3*time.Second {
+			t.Fatalf("no new report channel %v after the old one dropped", time.Since(start))
+		}
+		time.Sleep(50 * time.Millisecond)
+		next = hp.calls.current(0)
+	}
+	t.Logf("the channel was back after %v", time.Since(start))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, verr := next.call(ctx, "set-agent-state", json.RawMessage(`{"state":"errored"}`)); verr != nil {
+		t.Fatalf("a report on the new channel failed: %v", verr)
+	}
+	for _, w := range sess.GetState().Windows {
+		if w.ID == win.ID && w.AgentState.Name() != "errored" {
+			t.Errorf("the window's state is %q, want errored", w.AgentState.Name())
+		}
+	}
+}
+
+// TestAForwardedWaitEndsWithItsChannel: the owner's wait-for for a hosted pane
+// stops when the report channel it came on ends, rather than holding a slot
+// and a subscription for the rest of the timeout the far side asked for.
+//
+// Negative control: without the hostedEnded case in verbWaitFor the call runs
+// for its full 60 seconds.
+func TestAForwardedWaitEndsWithItsChannel(t *testing.T) {
+	d, _ := startTestDaemon(t)
+	sess, err := d.manager.CreateSession("owner", &SessionConfig{}, 80, 24)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := sess.AddDaemonWindow("mine", nil); err != nil {
+		t.Fatalf("window: %v", err)
+	}
+	var mine string
+	_ = sess.mutateState(func(st *SessionState) error {
+		mine = st.Windows[0].ID
+		st.Windows[0].Host = "build"
+		return nil
+	})
+	ended := make(chan struct{})
+	done := make(chan *verbError, 1)
+	go func() {
+		_, verr := d.runHostedCall(sess, mine, "build", "wait-for", json.RawMessage(`{"condition":"agent-message","timeout":60000}`), ended)
+		done <- verr
+	}()
+	select {
+	case verr := <-done:
+		t.Fatalf("the wait returned before the channel ended: %v", verr)
+	case <-time.After(200 * time.Millisecond):
+	}
+	close(ended)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the wait outlived the channel it came on")
+	}
+}
+
+// TestTheOwnerCapsAForwardedWait: the owner does not take the far machine's
+// word for how long a wait may run.
+func TestTheOwnerCapsAForwardedWait(t *testing.T) {
+	hour := int(hostedWaitMax.Milliseconds())
+	for _, tc := range []struct {
+		raw  string
+		want int
+	}{
+		{"", 0},
+		{"0", 0},
+		{"-5", 0},
+		{`"soon"`, 0},
+		{"30000", 30000},
+		{strconv.Itoa(hour), hour},
+		{"9000000000", hour},
+	} {
+		if got := clampHostedWait(json.RawMessage(tc.raw)); got != tc.want {
+			t.Errorf("clampHostedWait(%q) = %d, want %d", tc.raw, got, tc.want)
+		}
 	}
 }
 

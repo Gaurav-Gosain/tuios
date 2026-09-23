@@ -71,8 +71,11 @@ tuios wait-for agent-message -w "$TUIOS_PANE_ID" --timeout 600000
 Only these cross: `set-agent-state`, `set-agent-meta`, `set-agent-session`,
 `read-agent-messages` and `send-agent-message` naming `$TUIOS_PANE_ID`, and
 `wait-for agent-message` on it. They always act as your own window: another
-window, another session or `human` is refused or ignored. Everything else you
-run talks to the machine you are on. With no `TUIOS_PANE_ID`, the machine that
+window, another session or `human` is refused or ignored. An attachment must
+be a stashed file, as for any message from another machine: `tuios stash put
+-s HOST:SESSION FILE` and attach the path it prints. A wait there runs at most
+an hour and ends if the link drops. Everything else you run talks to the
+machine you are on. With no `TUIOS_PANE_ID`, the machine that
 holds the window is too old for this; your state is then only detected from
 that side.
 

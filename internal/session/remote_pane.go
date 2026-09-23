@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 )
@@ -133,34 +134,30 @@ type paneOpened struct {
 }
 
 // openPaneReply is openPaneOn with the whole reply.
+//
+// A far daemon from before reports from hosted panes refuses the window param
+// with invalid_params, because every verb line is checked against the verb's
+// schema. That refusal comes before anything is spawned and leaves the stream
+// reading verb lines, so the request is sent again on the same stream without
+// the window. The pane then opens as it did before, with no calls token, and
+// the owner opens no report channel for it.
 func openPaneReply(stream io.ReadWriteCloser, spec hostedPaneSpec) (paneOpened, *bufio.Reader, error) {
-	params, err := json.Marshal(spec)
-	if err != nil {
-		return paneOpened{}, nil, err
-	}
-	req, err := json.Marshal(verbRequest{
-		ID:     json.RawMessage(`1`),
-		Verb:   "open-pane",
-		Params: params,
-	})
-	if err != nil {
-		return paneOpened{}, nil, err
-	}
-	if _, err := stream.Write(append(req, '\n')); err != nil {
-		return paneOpened{}, nil, fmt.Errorf("cannot ask for a pane: %w", err)
-	}
-
 	br := bufio.NewReader(stream)
-	line, err := readLimitedLine(br, maxRemotePaneReply)
+	resp, err := sendOpenPane(stream, br, spec)
 	if err != nil {
-		return paneOpened{}, nil, fmt.Errorf("no answer to the pane request: %w", err)
+		return paneOpened{}, nil, err
 	}
-	var resp struct {
-		Result *paneOpened `json:"result"`
-		Error  *verbError  `json:"error"`
-	}
-	if err := json.Unmarshal(line, &resp); err != nil {
-		return paneOpened{}, nil, fmt.Errorf("the reply cannot be read by this build: %w", err)
+	if spec.Window != "" && refusesWindowParam(resp.Error) {
+		spec.Window = ""
+		if resp, err = sendOpenPane(stream, br, spec); err != nil {
+			return paneOpened{}, nil, err
+		}
+		if resp.Result != nil {
+			// A token from a daemon that did not take the window would promise
+			// a channel with no window behind it. Such a daemon sends none,
+			// and one that did is not believed.
+			resp.Result.CallsToken = ""
+		}
 	}
 	if resp.Error != nil {
 		if resp.Error.Code == ErrVerbUnknownVerb {
@@ -172,6 +169,54 @@ func openPaneReply(stream io.ReadWriteCloser, spec hostedPaneSpec) (paneOpened, 
 		return paneOpened{}, nil, fmt.Errorf("the reply named no pane")
 	}
 	return *resp.Result, br, nil
+}
+
+// openPaneResponse is one reply to open-pane.
+type openPaneResponse struct {
+	Result *paneOpened `json:"result"`
+	Error  *verbError  `json:"error"`
+}
+
+// sendOpenPane writes one open-pane request for spec and reads its reply
+// through br, which must be the only reader of stream.
+func sendOpenPane(stream io.Writer, br *bufio.Reader, spec hostedPaneSpec) (openPaneResponse, error) {
+	params, err := json.Marshal(spec)
+	if err != nil {
+		return openPaneResponse{}, err
+	}
+	req, err := json.Marshal(verbRequest{
+		ID:     json.RawMessage(`1`),
+		Verb:   "open-pane",
+		Params: params,
+	})
+	if err != nil {
+		return openPaneResponse{}, err
+	}
+	if _, err := stream.Write(append(req, '\n')); err != nil {
+		return openPaneResponse{}, fmt.Errorf("cannot ask for a pane: %w", err)
+	}
+	line, err := readLimitedLine(br, maxRemotePaneReply)
+	if err != nil {
+		return openPaneResponse{}, fmt.Errorf("no answer to the pane request: %w", err)
+	}
+	var resp openPaneResponse
+	if err := json.Unmarshal(line, &resp); err != nil {
+		return openPaneResponse{}, fmt.Errorf("the reply cannot be read by this build: %w", err)
+	}
+	return resp, nil
+}
+
+// refusesWindowParam reports whether verr is a far daemon's schema check
+// refusing open-pane's window param, which is how a daemon from before reports
+// from hosted panes answers it.
+func refusesWindowParam(verr *verbError) bool {
+	if verr == nil || verr.Code != ErrVerbInvalidParams {
+		return false
+	}
+	if verr.Hint != nil && verr.Hint.Param != "" {
+		return verr.Hint.Param == "window"
+	}
+	return strings.Contains(verr.Message, "no parameter") && strings.Contains(verr.Message, "window")
 }
 
 // Read returns the process's output. It ends when the far side closes the
