@@ -54,6 +54,10 @@ type DaemonHandshake struct {
 	// Sessions is how many sessions the daemon currently holds, which is what a
 	// user wants to know before being told to restart it.
 	Sessions int `json:"sessions"`
+	// PaneGrants says the daemon holds calls from panes to their grants and
+	// takes a pane's token with pane-grants. False for a daemon from before
+	// pane grants.
+	PaneGrants bool `json:"pane_grants"`
 }
 
 // ProtocolMismatchError reports that the running daemon cannot speak the control

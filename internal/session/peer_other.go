@@ -11,6 +11,11 @@ import "net"
 // check existed: the attach nonce is the only proof asked for. See
 // docs/AGENT_STATE.md, "Who can act as the person".
 
+// peerPIDSupported is false here: the daemon cannot place a caller in its
+// pane by pid, so the tuios CLI presents the pane's token instead. See
+// VerbClient.presentPaneToken.
+const peerPIDSupported = false
+
 func peerPID(net.Conn) int { return 0 }
 
 func readProcLineage(int) (int, int64, bool) { return 0, 0, false }

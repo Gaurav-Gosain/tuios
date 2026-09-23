@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"time"
 )
@@ -79,7 +80,25 @@ func DialVerbClientAt(socketPath, clientVersion string) (*VerbClient, error) {
 		return nil, err
 	}
 	c.daemon = hs
+	c.presentPaneToken(peerPIDSupported, os.Getenv)
 	return c, nil
+}
+
+// presentPaneToken places this connection in the caller's pane where the
+// daemon cannot place it by pid, so a call from a pane is held to the pane's
+// grants on every platform. It sends TUIOS_PANE_ID and TUIOS_PANE_TOKEN with
+// pane-grants when both are set and the daemon takes them. Presenting a token
+// can only narrow what the connection may do, so a failure is ignored: the
+// daemon holds the call to what it can prove either way.
+func (c *VerbClient) presentPaneToken(kernelPlaces bool, getenv func(string) string) {
+	if kernelPlaces || c.daemon == nil || !c.daemon.PaneGrants {
+		return
+	}
+	id, tok := getenv("TUIOS_PANE_ID"), getenv("TUIOS_PANE_TOKEN")
+	if id == "" || tok == "" {
+		return
+	}
+	_, _ = c.Call("pane-grants", map[string]any{"pane_id": id, "pane_token": tok})
 }
 
 // DialVerbClientThroughHost connects to the daemon on host by way of the daemon

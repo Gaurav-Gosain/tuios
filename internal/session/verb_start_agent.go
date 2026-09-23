@@ -54,6 +54,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		ReadyTimeout int               `json:"ready_timeout"`
 		Env          map[string]string `json:"env"`
 		Protocol     string            `json:"protocol"`
+		Grants       []string          `json:"grants"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -62,6 +63,12 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		if verr := checkProtocol(p.Protocol); verr != nil {
 			return nil, verr
 		}
+	}
+	// What the new pane may do through tuios, decided before anything is
+	// made. See pane_grants.go.
+	grants, verr := d.launchGrants(cs, p.Grants)
+	if verr != nil {
+		return nil, verr
 	}
 	if strings.TrimSpace(p.Agent) == "" {
 		return nil, invalidParam("agent", "agent is required: the harness or program to start, with its arguments, such as claude or \"codex --model o5\"")
@@ -166,6 +173,7 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 		Focus:   p.Focus,
 		Command: command,
 		Env:     env,
+		Grants:  grants,
 	}, onExit)
 	if err != nil {
 		return nil, newWindowErr(err, sess, p.Workspace)

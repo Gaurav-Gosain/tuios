@@ -66,6 +66,9 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// The daemon holds a harness's approval hook for the Inbox, so it is the
 	// side that has to know which harnesses asked for that.
 	cfg.Approvals = ApprovalPolicyFromConfig(uc.Agents.Approvals)
+	// The daemon checks every call from a pane, so it is the side that has
+	// to know what a pane given no grants of its own may do.
+	cfg.Permissions = PanePermissionsFromConfig(uc.Agents.Permissions)
 	return cfg
 }
 

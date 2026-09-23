@@ -98,6 +98,11 @@ var verbScopes = map[string]scopeKind{
 	"list-verbs":          scopeOpen,
 	"unsubscribe":         scopeOpen,
 	"restrict-connection": scopeOpen,
+	// pane-grants reports the caller's own grants and touches no session.
+	// set-pane-grants changes what a pane may do, which is not for a
+	// restricted caller.
+	"pane-grants":     scopeOpen,
+	"set-pane-grants": scopeDeny,
 
 	"list-sessions":      scopeGlobal,
 	"list-attention":     scopeGlobal,
@@ -326,6 +331,10 @@ func (d *Daemon) callerSession(cs *connState) string {
 	if sc := cs.scope.Load(); sc != nil {
 		return sc.session
 	}
+	// A connection that presented its pane's token is in that pane.
+	if w := cs.paneBound.Load(); w != nil {
+		return d.sessionOfWindow(*w)
+	}
 	if cs.viaLink || cs.paneOnly || cs.peerPID <= 0 {
 		return ""
 	}
@@ -383,9 +392,22 @@ func (d *Daemon) scopeSessionNames(own string) []string {
 // always may. Under scope own an event reaches the stream only when its
 // session is one the connection reaches; an event with no session, such as
 // host-changed, does not.
+//
+// A pane without the admin grant is held the same way to the sessions it may
+// read, as they stood at its last call, which for a stream is its subscribe.
+// See pane_grants.go.
 func (d *Daemon) eventInScope(cs *connState, ev streamEvent) bool {
-	sc := cs.scope.Load()
-	if sc == nil || !sc.own || ev.Type == EventGap {
+	if ev.Type == EventGap {
+		return true
+	}
+	var owners []string
+	if sc := cs.scope.Load(); sc != nil && sc.own {
+		owners = append(owners, sc.session)
+	}
+	if pa := cs.paneView.Load(); pa != nil && !pa.grants.Has(GrantAdmin) {
+		owners = append(owners, pa.session)
+	}
+	if len(owners) == 0 {
 		return true
 	}
 	if ev.Host != "" {
@@ -395,7 +417,12 @@ func (d *Daemon) eventInScope(cs *connState, ev streamEvent) bool {
 	if session == "" && ev.Attention != nil {
 		session = ev.Attention.Session
 	}
-	return d.sessionInScope(sc.session, session)
+	for _, own := range owners {
+		if !d.sessionInScope(own, session) {
+			return false
+		}
+	}
+	return true
 }
 
 // scopeForbidden is the refusal for a verb or target outside a restriction.
@@ -434,7 +461,26 @@ func (d *Daemon) checkScope(cs *connState, verb string, params json.RawMessage) 
 	if sc.session == "" {
 		return nil, scopeForbidden(verb, "the connection is restricted to its own session, and the caller runs in no pane of this daemon")
 	}
+	reach := func(target string) string {
+		if d.sessionInScope(sc.session, target) {
+			return ""
+		}
+		return "session " + echoName(target) + " is not the caller's own session or in its fan group"
+	}
+	deny := func(why string) *verbError { return scopeForbidden(verb, why) }
+	return d.holdToPane(verb, kind, params, sc.session, sc.window, "the connection is restricted to its own", reach, deny)
+}
 
+// holdToPane holds one call from a caller whose pane is window in session own
+// to the sessions reach allows, and fills in what the call left out: the
+// caller's own session where it named none, and its own window where a
+// parameter names the caller (window on a self report, from on mail and
+// typing). reach returns "" for a session the call may touch and the reason
+// it may not otherwise. bound ends the refusals for a parameter that reaches
+// every session, such as "the connection is restricted to its own". It is
+// shared by restrict-connection (checkScope) and pane grants (checkGrants),
+// which differ only in which sessions they reach and how they refuse.
+func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage, own, window, bound string, reach func(target string) string, deny func(why string) *verbError) (json.RawMessage, *verbError) {
 	var m map[string]json.RawMessage
 	if len(strings.TrimSpace(string(params))) > 0 {
 		if err := json.Unmarshal(params, &m); err != nil {
@@ -476,64 +522,69 @@ func (d *Daemon) checkScope(cs *connState, verb string, params json.RawMessage) 
 	session := str("session")
 	switch {
 	case session != "":
-		if !d.sessionInScope(sc.session, session) {
-			return nil, scopeForbidden(verb, "session "+echoName(session)+" is not the caller's own session or in its fan group")
+		if why := reach(session); why != "" {
+			return nil, deny(why)
 		}
 	case verb == "subscribe":
 	case declares("session"):
-		session = sc.session
+		session = own
 		set("session", session)
+		// The caller's own session can still be out of reach, for a pane
+		// that holds no grant for this kind of call there.
+		if why := reach(session); why != "" {
+			return nil, deny(why)
+		}
 	}
 
 	for _, wide := range []string{"all_sessions", "any_session", "hosts"} {
 		if flag(wide) {
-			return nil, scopeForbidden(verb, wide+" reaches every session, and the connection is restricted to its own")
+			return nil, deny(wide + " reaches every session, and " + bound)
 		}
 	}
 	// A selector reaches every session, except on list-agents, where the
 	// session filled in above narrows it to the caller's own.
 	if str("select") != "" && verb != "list-agents" {
-		return nil, scopeForbidden(verb, "select reaches every session, and the connection is restricted to its own")
+		return nil, deny("select reaches every session, and " + bound)
 	}
 	// A session on another machine is never in reach: send-agent-message's
 	// host sends there over this machine's link.
 	if h := str("host"); h != "" && h != "local" {
-		return nil, scopeForbidden(verb, "host "+echoName(h)+" is another machine, and the connection is restricted to its own session")
+		return nil, deny("host " + echoName(h) + " is another machine, and " + bound + " session")
 	}
 
-	own := func(name string) *verbError {
+	mine := func(name string) *verbError {
 		switch v := str(name); v {
 		case "":
-			set(name, sc.window)
-		case sc.window:
+			set(name, window)
+		case window:
 		default:
-			return scopeForbidden(verb, name+" must be the caller's own window "+shortWindowID(sc.window)+", or omitted")
+			return deny(name + " must be the caller's own window " + shortWindowID(window) + ", or omitted")
 		}
 		return nil
 	}
 	switch kind {
 	case scopeSelf:
-		if session != sc.session {
-			return nil, scopeForbidden(verb, "it writes a pane's own record, and the caller's pane is in session "+sc.session)
+		if session != own {
+			return nil, deny("it writes a pane's own record, and the caller's pane is in session " + own)
 		}
-		if verr := own("window"); verr != nil {
+		if verr := mine("window"); verr != nil {
 			return nil, verr
 		}
 	case scopeRead:
-		if verb == "read-agent-messages" && str("to") != "" && str("to") != sc.window {
-			return nil, scopeForbidden(verb, "to must be the caller's own window "+shortWindowID(sc.window)+", or omitted to read the session's ring without marking anything read")
+		if verb == "read-agent-messages" && str("to") != "" && str("to") != window {
+			return nil, deny("to must be the caller's own window " + shortWindowID(window) + ", or omitted to read the session's ring without marking anything read")
 		}
 	case scopeMail, scopeWrite:
 		// from names a window of the target session. It is filled in only
 		// when that is the caller's own session, where the caller's window
 		// resolves; elsewhere a from the caller passes must still be its own.
 		if declares("from") {
-			if session == sc.session {
-				if verr := own("from"); verr != nil {
+			if session == own {
+				if verr := mine("from"); verr != nil {
 					return nil, verr
 				}
-			} else if f := str("from"); f != "" && f != sc.window {
-				return nil, scopeForbidden(verb, "from must be the caller's own window "+shortWindowID(sc.window)+", or omitted")
+			} else if f := str("from"); f != "" && f != window {
+				return nil, deny("from must be the caller's own window " + shortWindowID(window) + ", or omitted")
 			}
 		}
 	}

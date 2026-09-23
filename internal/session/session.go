@@ -244,6 +244,15 @@ type WindowState struct {
 	// The poll is the authority: it corrects the stamp and clears it when the
 	// shell goes.
 	ShellPID int `json:"-"`
+	// Grants is what the pane's process may do through tuios, by grant name,
+	// when it was given grants of its own: at start (start-agent, fan and
+	// new-window take grants) or later with set-pane-grants. Nil means it
+	// holds the default of [agents.permissions]; ["none"] means it holds
+	// nothing. Daemon-owned: the daemon enforces the grants from its
+	// own table (pane_grants.go), a client sync can neither set nor clear
+	// this copy, and it is saved so a restored pane holds what it held.
+	// Older peers and older state read it as absent, which is the default.
+	Grants []string `json:"grants,omitempty"`
 }
 
 // SerializedBSPNode represents a BSP tree node for serialization
@@ -1012,6 +1021,11 @@ type SessionConfig struct {
 	// with, exported as TUIOS_PANE_TOKEN. The manager stamps it with its own.
 	// Nil, or an empty answer, leaves the variable unset. See pane_token.go.
 	PaneToken func(windowID string) string
+	// grants is the manager's pane grant table. Every local pane is entered
+	// in it before its process starts, and TUIOS_PANE_GRANTS is read from
+	// it. Nil for a session made outside a manager, whose panes hold the
+	// default. See pane_grants.go.
+	grants *paneGrantTable
 	// Global creates the session as a global one. See SessionState.Global.
 	Global bool
 }
@@ -1192,7 +1206,7 @@ func (s *Session) forgetBroadcastFingerprint() {
 // non-nil, is invoked with the PTY ID when the process exits; it is set before
 // the monitor goroutine starts so it is always visible to monitorExit.
 func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, "", nil, nil, "", false, onExit, nil)
+	return s.createPTY(windowID, width, height, "", nil, nil, "", false, onExit, nil, nil)
 }
 
 // RestorePTY creates a fresh PTY for a resurrected window. It behaves like
@@ -1201,7 +1215,13 @@ func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyI
 // and a one-line banner is written to the terminal so the user can see the
 // process is a freshly respawned shell, not the original long-lived one.
 func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, cwd, nil, nil, "", true, onExit, nil)
+	return s.createPTY(windowID, width, height, cwd, nil, nil, "", true, onExit, nil, nil)
+}
+
+// restorePTYWithGrants is RestorePTY for a window that was saved with grants
+// of its own, which the new process holds from its first instruction.
+func (s *Session) restorePTYWithGrants(windowID string, width, height int, cwd string, grants *Grants, onExit func(ptyID string)) (*PTY, error) {
+	return s.createPTY(windowID, width, height, cwd, nil, nil, "", true, onExit, nil, grants)
 }
 
 // command, when non-empty, is an argv exec'd as the PTY's process in place of
@@ -1215,12 +1235,43 @@ func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onE
 // a popup's captured output goes to a pipe the daemon reads, while the program
 // still draws on the PTY through stderr or /dev/tty. It is only honoured for a
 // local process.
-func (s *Session) createPTY(windowID string, width, height int, cwd string, command, extraEnv []string, host string, restored bool, onExit func(ptyID string), stdout *os.File) (*PTY, error) {
+//
+// grants is what the pane may do through tuios, nil for the default. A local
+// pane is entered in the grant table before its process starts and leaves it
+// when the process exits, so the process is never placed in a pane the table
+// does not know. See pane_grants.go.
+func (s *Session) createPTY(windowID string, width, height int, cwd string, command, extraEnv []string, host string, restored bool, onExit func(ptyID string), stdout *os.File, grants *Grants) (*PTY, error) {
+	// A window that was given grants and gets a new process with none named
+	// keeps what it was given, even when its last process has already gone
+	// and taken its entry in the grant table with it. Read before ptysMu is
+	// taken, so the two locks are never held together here.
+	if grants == nil && host == "" && windowID != "" {
+		grants = s.recordedGrants(windowID)
+	}
+
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
 
 	id := uuid.New().String()
 	ctx, cancel := context.WithCancel(context.Background())
+
+	if host == "" && windowID != "" && s.config != nil && s.config.grants != nil {
+		table := s.config.grants
+		table.add(windowID, id, s.Name, grants)
+		exit := onExit
+		onExit = func(ptyID string) {
+			table.remove(windowID, ptyID)
+			if exit != nil {
+				exit(ptyID)
+			}
+		}
+		// A spawn that fails leaves no process to exit.
+		defer func() {
+			if _, ok := s.ptys[id]; !ok {
+				table.remove(windowID, id)
+			}
+		}()
+	}
 
 	shell, missingShell := s.resolveShell()
 	if missingShell != "" {
@@ -2216,6 +2267,11 @@ func (s *Session) buildEnvWith(windowID string, restored bool, extra []string) [
 			if tok := s.config.PaneToken(windowID); tok != "" {
 				env = append(env, "TUIOS_PANE_TOKEN="+tok)
 			}
+		}
+		// TUIOS_PANE_GRANTS says what the pane may do through tuios as it
+		// starts. pane-grants gives the current answer. See pane_grants.go.
+		if s.config != nil && s.config.grants != nil {
+			env = append(env, "TUIOS_PANE_GRANTS="+s.config.grants.envValue(windowID))
 		}
 	}
 	// TUIOS_ENV marks a process as running under tuios, and TUIOS_SOCKET tells a

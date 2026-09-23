@@ -68,9 +68,11 @@ func (d *Daemon) stopHostsWatch() {
 }
 
 // onConfigReload runs on the watcher goroutine. It applies the [hosts] table,
-// appearance.preferred_shell and the [agents.approvals] table, and reads
-// nothing else out of the file. A new approval policy applies to the next
-// request; a hold already running keeps the length it started with.
+// appearance.preferred_shell and the [agents.approvals] and
+// [agents.permissions] tables, and reads nothing else out of the file. A new
+// approval policy applies to the next request; a hold already running keeps
+// the length it started with. A new permission default applies to the next
+// call from every pane that holds the default.
 func (d *Daemon) onConfigReload(cfg *config.UserConfig, err error) {
 	if err != nil {
 		log.Printf("[FEDERATION] The config file has an error, so the hosts did not change: %v", err)
@@ -78,6 +80,7 @@ func (d *Daemon) onConfigReload(cfg *config.UserConfig, err error) {
 	}
 	d.manager.SetPreferredShell(cfg.Appearance.PreferredShell)
 	d.SetApprovalPolicy(ApprovalPolicyFromConfig(cfg.Agents.Approvals))
+	d.manager.SetPanePermissions(PanePermissionsFromConfig(cfg.Agents.Permissions))
 	// A policy change applies to the next call on every link, including links
 	// already open, so tightening it does not wait for a reconnect.
 	d.SetLinkPolicies(cfg.Hosts)

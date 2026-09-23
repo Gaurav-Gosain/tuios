@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/agentproto"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
@@ -271,6 +272,51 @@ func init() {
 			},
 			handler: (*Daemon).verbRestrictConnection,
 		},
+		"pane-grants": {
+			description: "Say what the caller may do through tuios: the pane it runs in and the grants that pane holds (read, write, fan, respond, admin), or that it runs in no pane and no pane grants apply. The pane is found from the kernel's record of the caller's pid, and only when that finds none from pane_id and pane_token, which then place this connection in that pane for as long as it is open. Every JSON verb and client protocol message from a pane is held to its grants; a call they do not cover answers forbidden and names the missing grant.",
+			params: []verbParam{
+				{Name: "pane_id", Type: "string", Description: "The caller's pane, normally $TUIOS_PANE_ID. Used only when the kernel places the caller in no pane, and then only with the matching pane_token. When the kernel places the caller, a different pane_id is refused."},
+				{Name: "pane_token", Type: "string", Description: "The pane's $TUIOS_PANE_TOKEN, which proves pane_id. It is good for one pane of one daemon start."},
+			},
+			returns: []verbParam{
+				{Name: "pane", Type: "bool", Description: "Whether the caller runs in a pane of this daemon. When false, no pane grants apply to it: the person's own CLI and client keep full rights."},
+				{Name: "window", Type: "string", Description: "The caller's pane."},
+				{Name: "session", Type: "string", Description: "The session of the caller's pane."},
+				{Name: "via", Type: "string", Description: "How the pane was found: pid from the kernel, env from the process's TUIOS_PANE_ID while the pane was being created, token from pane_token.", Accepted: []string{"pid", "env", "token"}},
+				{Name: "grants", Type: "[]string", Description: "The grants the pane holds now. admin implies read, write and fan; respond is never implied.", Accepted: config.PaneGrantNames},
+				{Name: "explicit", Type: "bool", Description: "True when the pane was given grants of its own, false when it holds the default."},
+				{Name: "mode", Type: "string", Description: "[agents.permissions] mode: open gives a pane started with no grants admin, strict gives it default_grants.", Accepted: config.PaneModes},
+				{Name: "default_grants", Type: "[]string", Description: "What a pane started with no grants of its own holds now."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"pane-grants"}`,
+				`{"id":1,"verb":"pane-grants","params":{"pane_id":"<$TUIOS_PANE_ID>","pane_token":"<$TUIOS_PANE_TOKEN>"}}`,
+			},
+			handler: (*Daemon).verbPaneGrants,
+		},
+		"set-pane-grants": {
+			description: "Give a pane grants, or with reset the default of [agents.permissions]. Grants are read (its own session and fan group), write (type into its own session), fan (write in its fan group and start agents), respond (answer prompts without the person's nonce) and admin (everything else, as before grants existed). From outside every pane anything may be given. A pane may change only its own grants unless it holds admin, and may never give more than it holds, so a pane cannot widen itself. Refused over a link.",
+			params: []verbParam{
+				{Name: "session", Type: "string", Description: "Session of the pane. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."},
+				{Name: "window", Type: "string", Description: "The pane, by window id or name. Omit from a pane to mean the caller's own."},
+				{Name: "grants", Type: "[]string", Description: "The grants to give, or none for no grants at all.", Accepted: grantAccepted},
+				{Name: "reset", Type: "bool", Description: "Give the pane the default of [agents.permissions] instead of grants of its own.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "session", Type: "string", Description: "The pane's session."},
+				{Name: "window", Type: "string", Description: "The pane's window id."},
+				{Name: "grants", Type: "[]string", Description: "What the pane holds now."},
+				{Name: "explicit", Type: "bool", Description: "False after reset: the pane holds the default and follows it when the config changes."},
+				{Name: "previous", Type: "[]string", Description: "What the pane held before."},
+				{Name: "previous_explicit", Type: "bool", Description: "Whether what it held before was its own."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"set-pane-grants","params":{"session":"work","window":"a1b2c3d4","grants":["read","write"]}}`,
+				`{"id":1,"verb":"set-pane-grants","params":{"grants":["read"]}}`,
+				`{"id":1,"verb":"set-pane-grants","params":{"session":"work","window":"a1b2c3d4","reset":true}}`,
+			},
+			handler: (*Daemon).verbSetPaneGrants,
+		},
 		"list-verbs": {
 			description: "List every supported verb with its parameter schema and examples, plus the protocol version and error-code catalog.",
 			params: []verbParam{
@@ -444,6 +490,7 @@ func init() {
 				{Name: "name", Type: "string", Description: "Branch stem. The branches are the stem, then stem-2, stem-3 and so on. Omit for fan/ and the first words of the first prompt."},
 				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for each agent to be ready before giving up on its prompt.", Default: "600000"},
 				{Name: "env", Type: "object", Description: "Environment variables for every agent, name to value, on top of the daemon's. PATH in it is where the programs are looked up, so an agent the caller can run is found. The tuios CLI sends its PATH. TUIOS_ names, TMUX and TMUX_PANE are refused, and a call from another machine may not pass env at all. Not saved: a restored pane starts with the daemon's environment."},
+				grantsParam,
 			}, repoSourceParams...),
 			returns: []verbParam{
 				{Name: "group", Type: "string", Description: "The branch stem, which is the group's name in list-worktrees."},
@@ -511,6 +558,7 @@ func init() {
 				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for the agent to be ready.", Default: "120000"},
 				{Name: "env", Type: "object", Description: "Environment variables for the agent, name to value, on top of the daemon's; PATH in it is where the program is looked up. The rules are fan's."},
 				{Name: "protocol", Type: "string", Description: "Run the agent headless over a structured protocol instead of in its own TUI: acp (the Agent Client Protocol, for an agent command such as \"opencode acp\") or codex (the Codex app-server; app-server is added to the codex command). The pane runs tuios agent-proto, which shows the conversation as a transcript and reports the agent's state itself; the pane is ready on that report alone. Its permission requests are answered in the pane or, for a request one line shows whole, from the Inbox without [agents.approvals]. Omit for the agent's own TUI.", Accepted: agentproto.Protocols},
+				grantsParam,
 			}, repoSourceParams...),
 			returns: []verbParam{
 				{Name: "session", Type: "string", Description: "The session the pane is in."},
@@ -726,7 +774,7 @@ func init() {
 			handler:     (*Daemon).verbSessionInfo,
 		},
 		"list-windows": {
-			description: "List the windows in a session. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, marks_commands (the shell has sent a command-start mark), prompt_marks_only when it ran a command without one, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished.",
+			description: "List the windows in a session. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, marks_commands (the shell has sent a command-start mark), prompt_marks_only when it ran a command without one, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished. A pane given grants of its own carries them as grants; a pane on the default of [agents.permissions] omits it.",
 			params:      []verbParam{sessionParam},
 			examples:    []string{`{"id":1,"verb":"list-windows","params":{"session":"work"}}`},
 			handler:     (*Daemon).verbListWindows,
@@ -741,6 +789,7 @@ func init() {
 				{Name: "focus", Type: "bool", Description: "Focus the new window. Pass false to leave the focus where it is.", Default: "true"},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the window's process instead of a shell. No shell parses it, so nothing needs quoting. The window closes when the program exits."},
 				{Name: "host", Type: "string", Description: "Run the window's process on another machine, named as it is in the [hosts] config table. The window belongs to this session and is drawn and sized here; only the process is there. Omit, or pass \"local\", for this machine."},
+				grantsParam,
 			},
 			returns: []verbParam{
 				{Name: "window_id", Type: "string", Description: "Id of the new window. Use it to address the window in later calls."},
@@ -1512,7 +1561,7 @@ func init() {
 			handler:  (*Daemon).verbPeekPrompt,
 		},
 		"respond": {
-			description: "Answer the prompt an agent is blocked on, with the keys its harness's manifest declares, without attaching. It reads the prompt again first and refuses with prompt_changed when the pane left needs_input, when the prompt is not the one prompt_id names, or when another client already answered it: the first answer wins. It then waits up to timeout for the pane to leave needs_input and returns its state. Only the person may call it: a client attached right now passing its attach nonce, or, when the daemon runs with [daemon] respond_from_shell, a process outside every pane.",
+			description: "Answer the prompt an agent is blocked on, with the keys its harness's manifest declares, without attaching. It reads the prompt again first and refuses with prompt_changed when the pane left needs_input, when the prompt is not the one prompt_id names, or when another client already answered it: the first answer wins. It then waits up to timeout for the pane to leave needs_input and returns its state. Only the person may call it: a client attached right now passing its attach nonce, or, when the daemon runs with [daemon] respond_from_shell, a process outside every pane. A pane the person gave the respond grant may also call it, for a pane in its own session, in its fan group when it also holds fan, and anywhere when it also holds admin.",
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Required: true, Description: "The blocked pane: window id or name."},
@@ -1530,6 +1579,7 @@ func init() {
 				{Name: "settled_by", Type: "string", Description: "How the wait ended: state (the pane left needs_input), prompt (another prompt, or none, is on the screen), gone (the window closed) or timeout.", Accepted: []string{respondSettledState, respondSettledPrompt, respondSettledGone, respondSettledTimeout}},
 				{Name: "state", Type: "string", Description: "The pane's agent state when the wait ended."},
 				{Name: "message", Type: "string", Description: "The pane's agent message when the wait ended."},
+				{Name: "by_pane", Type: "string", Description: "The pane that answered under its respond grant. Absent when the person answered."},
 			},
 			examples: []string{`{"id":1,"verb":"respond","params":{"session":"work","window":"a1b2c3d4","action":"approve","prompt_id":"<from peek-prompt>","human_nonce":"<from the attach reply>"}}`},
 			handler:  (*Daemon).verbRespond,
@@ -1894,9 +1944,15 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 		markLinkServed(cs)
 	}
 
-	// A connection that restricted itself is held to it before anything,
-	// forwarding included, sees the call. See conn_scope.go.
-	scoped, verr := d.checkScope(cs, req.Verb, req.Params)
+	// A call from a pane is held to what the pane holds, and a connection
+	// that restricted itself is held to that too, before anything,
+	// forwarding included, sees the call. See pane_grants.go and
+	// conn_scope.go.
+	granted, verr := d.checkGrants(cs, req.Verb, req.Params)
+	if verr != nil {
+		return d.writeVerbError(cs, req.ID, req.Verb, verr)
+	}
+	scoped, verr := d.checkScope(cs, req.Verb, granted)
 	if verr != nil {
 		return d.writeVerbError(cs, req.ID, req.Verb, verr)
 	}
@@ -2163,5 +2219,9 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		// must reach it on a link socket and never on this one. See
 		// dialForLink in cmd/tuios.
 		"link_policy": true,
+		// pane_grants says this daemon holds calls from panes to their
+		// grants and takes a pane's token with pane-grants, which the CLI
+		// presents where the kernel cannot name the caller's pane.
+		"pane_grants": true,
 	}, nil
 }

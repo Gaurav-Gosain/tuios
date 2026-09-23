@@ -35,6 +35,10 @@ type Manager struct {
 	// is picked at random for each manager and never leaves memory. See
 	// pane_token.go.
 	paneTokenKey []byte
+	// grants holds what every local pane may do through tuios, and the
+	// [agents.permissions] default. It is stamped into every session made
+	// here. See pane_grants.go.
+	grants *paneGrantTable
 
 	// Lifecycle hooks (set by the daemon). onCreate fires after a session is
 	// registered; onDelete fires after it is removed but before it is stopped.
@@ -62,6 +66,7 @@ func NewManager() *Manager {
 		// configured still opens windows where the user is looking.
 		inheritCwd:   true,
 		paneTokenKey: newPaneTokenKey(),
+		grants:       newPaneGrantTable(),
 	}
 }
 
@@ -174,6 +179,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.PaneToken == nil {
 		cfg.PaneToken = m.PaneToken
+	}
+	if cfg.grants == nil {
+		cfg.grants = m.grants
 	}
 
 	// Create the session

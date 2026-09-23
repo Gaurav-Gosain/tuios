@@ -115,7 +115,7 @@ func repoRootParam(dir string) (string, *verbError) {
 // removed on a later failure. It exists on disk and git lists it, and taking
 // it away because a session failed to start would be removing something the
 // caller asked for and can still use.
-func (d *Daemon) createWorktreeSession(root, branch, base, sessionName string, command, env []string, record func(*WorktreeInfo)) (map[string]any, *verbError) {
+func (d *Daemon) createWorktreeSession(root, branch, base, sessionName string, command, env []string, grants *Grants, record func(*WorktreeInfo)) (map[string]any, *verbError) {
 	path := worktree.PathFor(worktree.DefaultDir(), root, branch)
 	if _, err := os.Lstat(path); err == nil {
 		return nil, hintedVerbError(ErrVerbGitFailed, path+" already exists", &VerbHint{
@@ -176,6 +176,7 @@ func (d *Daemon) createWorktreeSession(root, branch, base, sessionName string, c
 		Focus:   true,
 		Command: command,
 		Env:     env,
+		Grants:  grants,
 	}, onExit)
 	if err != nil {
 		return nil, hintedVerbError(ErrVerbInternal, "the worktree and session were created but the first window could not start: "+err.Error(), &VerbHint{
@@ -217,7 +218,7 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 	if verr != nil {
 		return nil, verr
 	}
-	out, verr := d.createWorktreeSession(root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), p.Command, nil, nil)
+	out, verr := d.createWorktreeSession(root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), p.Command, nil, nil, nil)
 	if verr != nil {
 		return nil, verr
 	}
@@ -462,8 +463,15 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		Name         string            `json:"name"`
 		ReadyTimeout int               `json:"ready_timeout"`
 		Env          map[string]string `json:"env"`
+		Grants       []string          `json:"grants"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	// What every new pane may do through tuios, decided before anything is
+	// made. See pane_grants.go.
+	grants, verr := d.launchGrants(cs, p.Grants)
+	if verr != nil {
 		return nil, verr
 	}
 	// One prompt for every session, or one per session: prompts sets the
@@ -558,7 +566,7 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	sessions := make([]map[string]any, 0, p.Count)
 	for i, branch := range branches {
 		launch, prompt := launches[i%len(launches)], promptFor(i)
-		out, verr := d.createWorktreeSession(root, branch, strings.TrimSpace(p.Base), "", launch.argv, env, func(info *WorktreeInfo) {
+		out, verr := d.createWorktreeSession(root, branch, strings.TrimSpace(p.Base), "", launch.argv, env, grants, func(info *WorktreeInfo) {
 			info.Group = stem
 			info.LaunchedFrom = launchedFrom
 			info.Prompt = prompt

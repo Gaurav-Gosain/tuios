@@ -411,11 +411,19 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 	if verr != nil {
 		return nil, verr
 	}
+	// A pane the person gave the respond grant may answer for them in the
+	// sessions it may write to. See pane_grants.go.
+	byPane := ""
 	if !d.mayRespond(cs, p.HumanNonce) {
-		return nil, hintedVerbError(ErrVerbNotHuman, "respond is for the person at an attached client", &VerbHint{
-			Param:  "human_nonce",
-			Detail: "Answering an agent's prompt is acting as the person, so it takes the nonce of a client attached right now, from a process outside every pane: the Inbox's peek sends its own. A shell outside tuios may respond when the daemon runs with [daemon] respond_from_shell = true. An agent that wants a prompt answered should ask the person with send-agent-message -w human.",
-		})
+		if !d.paneMayRespond(cs, sess.Name) {
+			return nil, hintedVerbError(ErrVerbNotHuman, "respond is for the person at an attached client", &VerbHint{
+				Param:  "human_nonce",
+				Detail: "Answering an agent's prompt is acting as the person, so it takes the nonce of a client attached right now, from a process outside every pane: the Inbox's peek sends its own. A shell outside tuios may respond when the daemon runs with [daemon] respond_from_shell = true, and a pane may when the person gave it the respond grant with tuios set-pane-grants. An agent that wants a prompt answered should ask the person with send-agent-message -w human.",
+			})
+		}
+		if pa := d.paneAuthority(cs); pa != nil {
+			byPane = pa.window
+		}
 	}
 	wait := respondDefaultWait
 	if p.Timeout > 0 {
@@ -459,10 +467,14 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 		return nil, newVerbError(ErrVerbInternal, werr.Error())
 	}
 	slot.answered = look.id
-	LogBasic("respond: %s %s on %s/%s (prompt %s)", p.Action, reply.Sent, sess.Name, shortWindowID(w.ID), look.id)
+	if byPane != "" {
+		LogBasic("respond: %s %s on %s/%s (prompt %s), by pane %s under its respond grant", p.Action, reply.Sent, sess.Name, shortWindowID(w.ID), look.id, shortWindowID(byPane))
+	} else {
+		LogBasic("respond: %s %s on %s/%s (prompt %s)", p.Action, reply.Sent, sess.Name, shortWindowID(w.ID), look.id)
+	}
 
 	settledBy, now := d.waitPromptAnswered(sess, w.ID, look.id, wait)
-	return map[string]any{
+	out := map[string]any{
 		"type":       "prompt_response",
 		"session":    sess.Name,
 		"window":     w.ID,
@@ -472,7 +484,12 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 		"settled_by": settledBy,
 		"state":      now.AgentState.Name(),
 		"message":    printableLine(now.AgentMessage),
-	}, nil
+	}
+	// Absent when the person answered, so their result keeps its shape.
+	if byPane != "" {
+		out["by_pane"] = byPane
+	}
+	return out, nil
 }
 
 // Ways respond's wait ends.

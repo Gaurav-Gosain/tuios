@@ -140,6 +140,9 @@ type Daemon struct {
 	// request-approval, restrict-connection and fan's launched_from. Nil uses
 	// peerPaneWindow; a test sets it to stand in for a process table.
 	approvalPeer func(cs *connState) (fromPane bool, window string)
+	// hostedPeer names the hosted pane a caller runs in, for pane grants.
+	// Nil walks the process table (hostedPaneOfPeer); a test sets it.
+	hostedPeer func(cs *connState) string
 
 	// protocolPanes holds the windows start-agent --protocol opened, window
 	// id to protocol. See agent_protocol.go.
@@ -347,6 +350,14 @@ type connState struct {
 	// a connection that never called it. It only ever narrows. See
 	// conn_scope.go.
 	scope atomic.Pointer[connScope]
+	// paneBound is the pane this connection presented the token of with
+	// pane-grants, nil when it presented none. panePlaced caches the pane the
+	// kernel placed the caller in, once it named one. paneView is the pane
+	// and grants the last checked call ran under, which the event stream is
+	// filtered by. See pane_grants.go.
+	paneBound  atomic.Pointer[string]
+	panePlaced atomic.Pointer[string]
+	paneView   atomic.Pointer[paneAuth]
 	// hostedEnded, on a paneOnly call, is closed when the report channel the
 	// call came on ends. A wait-for stops on it, so a wait does not outlive
 	// the channel that would carry its answer. nil means it never ends.
@@ -475,6 +486,11 @@ type DaemonConfig struct {
 	// it: what each machine linked to this one may do here. Nil gives every
 	// link the built-in default. See link_policy.go.
 	LinkPolicies map[string]config.HostConfig
+	// Permissions is [agents.permissions]: what a pane started with no
+	// grants of its own may do through tuios. The zero value is mode open,
+	// under which such a pane holds admin, what every pane held before
+	// grants existed. See pane_grants.go.
+	Permissions config.ResolvedPermissions
 }
 
 // NewDaemon creates a new daemon instance.
@@ -501,6 +517,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
 	d.SetApprovalPolicy(cfg.Approvals)
 	d.SetLinkPolicies(cfg.LinkPolicies)
+	d.manager.SetPanePermissions(cfg.Permissions)
 	d.outbox = newHostOutbox(d)
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.
@@ -1340,6 +1357,12 @@ func (d *Daemon) serveConnection(cs *connState, br *bufio.Reader) {
 			continue
 		}
 		markLinkServed(cs)
+		// A pane that does not hold admin may not use the client protocol.
+		// See pane_grants.go.
+		if verr := d.checkGrantMessage(cs, msg.Type); verr != nil {
+			_ = d.sendError(cs, ErrCodeForbidden, verr.Message+" "+verr.Hint.Detail)
+			continue
+		}
 		if err := d.handleMessage(cs, msg); err != nil {
 			LogError("Error handling message from %s: %v", clientID, err)
 			_ = d.sendError(cs, ErrCodeInternal, err.Error())

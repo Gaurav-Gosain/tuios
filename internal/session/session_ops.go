@@ -198,6 +198,10 @@ type NewWindowOptions struct {
 	// saved: a window a restore brings back starts with the daemon's
 	// environment. A window on another machine ignores it.
 	Env []string
+	// Grants is what the window's process may do through tuios, nil for the
+	// default of [agents.permissions]. It is in force before the process
+	// starts, and it is saved with the window. See pane_grants.go.
+	Grants *Grants
 }
 
 // AddDaemonWindowWith creates a daemon-owned window with explicit placement.
@@ -247,7 +251,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		cwd = s.inheritedCwd()
 	}
 
-	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, cwd, opts.Command, opts.Env, opts.Host, false, onExit, opts.stdout)
+	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, cwd, opts.Command, opts.Env, opts.Host, false, onExit, opts.stdout, opts.Grants)
 	if err != nil {
 		return WindowState{}, err
 	}
@@ -314,6 +318,10 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 			IsFloating:  opts.Popup,
 			PopupWidth:  opts.PopupWidth,
 			PopupHeight: opts.PopupHeight,
+		}
+		// A window on another machine holds what that machine gives it.
+		if opts.Host == "" {
+			win.Grants = grantNamesPtr(opts.Grants)
 		}
 		state.Windows = append(state.Windows, win)
 		// The workspace's own focus points at the new window either way: it is

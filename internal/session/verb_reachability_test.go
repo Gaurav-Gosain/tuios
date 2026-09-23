@@ -135,6 +135,13 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// proved against a real pane running a fake agent in verb_respond_test.go.
 	"peek-prompt#0": {errCode: ErrVerbWindowNotFound, why: "the example's window id is a placeholder"},
 	"respond#0":     {errCode: ErrVerbWindowNotFound, why: "the example's window id is a placeholder"},
+	// Pane grants. The token example needs a real pane's token, the window
+	// ids are placeholders, and the test process runs in no pane, so the
+	// example that means the caller's own pane has no pane to mean.
+	"pane-grants#1":     {errCode: ErrVerbForbidden, why: "the pane id and token are placeholders"},
+	"set-pane-grants#0": {errCode: ErrVerbWindowNotFound, why: "the example's window id is a placeholder"},
+	"set-pane-grants#1": {errCode: ErrVerbInvalidParams, why: "the caller runs in no pane, so it has no own pane to mean"},
+	"set-pane-grants#2": {errCode: ErrVerbWindowNotFound, why: "the example's window id is a placeholder"},
 
 	// /src/api is not a repository here, and no agent is installed in the
 	// fixture. The verbs are proved against throwaway repositories in

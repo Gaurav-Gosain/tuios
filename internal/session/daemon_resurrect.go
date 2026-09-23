@@ -193,7 +193,11 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		// offer came back on every restart. The conversation id stays.
 		clearLiveAgent(w)
 
-		pty, err := sess.RestorePTY(w.ID, ptyWidth, ptyHeight, w.Cwd, onExit)
+		// A pane saved with grants of its own comes back holding them, from
+		// the new shell's first instruction. Without this a pane narrowed on
+		// purpose would come back holding the default, which under open is
+		// admin.
+		pty, err := sess.restorePTYWithGrants(w.ID, ptyWidth, ptyHeight, w.Cwd, savedGrants(w.Grants), onExit)
 		if err != nil {
 			LogError("Dropping restored window %s, its shell could not be respawned: %v", shortID(w.ID), err)
 			continue
@@ -222,7 +226,11 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 	// windows it is handed in place.
 	var offers []resumeOffer
 	ids := make(map[string]WindowState, len(kept))
+	grants := make(map[string][]string)
 	for _, w := range kept {
+		if w.Grants != nil {
+			grants[w.ID] = w.Grants
+		}
 		if w.AgentSessionID == "" {
 			continue
 		}
@@ -247,6 +255,19 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 				if saved, ok := ids[st.Windows[i].ID]; ok {
 					st.Windows[i].AgentSessionID = saved.AgentSessionID
 					st.Windows[i].AgentSessionHarness = saved.AgentSessionHarness
+				}
+			}
+			return nil
+		})
+	}
+	// The grants' copy in the state goes back on for the same reason. The
+	// panes already hold them: the table was given them before each shell
+	// started.
+	if len(grants) > 0 {
+		_ = sess.mutateState(func(st *SessionState) error {
+			for i := range st.Windows {
+				if g, ok := grants[st.Windows[i].ID]; ok {
+					st.Windows[i].Grants = grantNamesPtr(savedGrants(g))
 				}
 			}
 			return nil

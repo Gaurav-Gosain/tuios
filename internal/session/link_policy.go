@@ -63,6 +63,11 @@ var verbCapabilities = map[string][]string{
 	// restrict-connection only gives up authority on the calling
 	// connection, so it needs nothing.
 	"restrict-connection": nil,
+	// pane-grants only reports; over a link it says no pane grants apply.
+	// set-pane-grants is refused over a link by its handler whatever the
+	// policy, and needs every capability here as well.
+	"pane-grants":     nil,
+	"set-pane-grants": {capRelay},
 
 	"list-hooks":           {config.LinkAllowList},
 	"list-dock-components": {config.LinkAllowList},

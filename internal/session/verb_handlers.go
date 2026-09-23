@@ -170,7 +170,7 @@ func (d *Daemon) verbListWindows(_ *connState, params json.RawMessage) (any, *ve
 	return data, nil
 }
 
-func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session   string   `json:"session"`
 		Name      string   `json:"name"`
@@ -179,8 +179,13 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 		Focus     *bool    `json:"focus"`
 		Command   []string `json:"command"`
 		Host      string   `json:"host"`
+		Grants    []string `json:"grants"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	grants, verr := d.launchGrants(cs, p.Grants)
+	if verr != nil {
 		return nil, verr
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
@@ -230,6 +235,7 @@ func (d *Daemon) verbNewWindow(_ *connState, params json.RawMessage) (any, *verb
 		Command:   p.Command,
 		Name:      p.Name,
 		Host:      p.Host,
+		Grants:    grants,
 	}, onExit)
 	if err != nil {
 		return nil, newWindowErr(err, sess, p.Workspace)

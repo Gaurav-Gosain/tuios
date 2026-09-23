@@ -10,6 +10,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// peerPIDSupported says the daemon on this platform reads the peer's pid, so
+// it places a caller in its pane without the pane's token.
+const peerPIDSupported = true
+
 // The Linux half of the peer checks in human_origin.go: SO_PEERCRED for who is
 // on the other end of a socket, and procfs for where that process came from.
 

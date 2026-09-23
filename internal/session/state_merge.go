@@ -186,8 +186,16 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// value it was last sent, which can be behind, and an older client sends
 	// none, so canonical wins whenever it is ahead.
 	completions := make(map[string]uint64, len(canonical.Windows))
+	// A pane's grants are set by the daemon alone, so canonical wins
+	// unconditionally, like the agent meta: a client can neither give a pane
+	// grants nor take them away by syncing. The daemon enforces them from its
+	// own table anyway; this is the copy that is shown and saved.
+	paneGrants := make(map[string][]string)
 	for i := range canonical.Windows {
 		w := &canonical.Windows[i]
+		if w.Grants != nil {
+			paneGrants[w.ID] = w.Grants
+		}
 		if w.CompletionSeq != 0 {
 			completions[w.ID] = w.CompletionSeq
 		}
@@ -252,6 +260,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		// Taken from canonical whatever the client sent: no client sets it, so
 		// a value in a client push is an echo of an older state at best.
 		w.AgentMeta = metas[w.ID]
+		w.Grants = paneGrants[w.ID]
 	}
 }
 
