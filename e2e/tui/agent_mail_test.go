@@ -137,6 +137,7 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 			Text      string `json:"text"`
 			ReplyTo   uint64 `json:"reply_to"`
 			ThreadID  uint64 `json:"thread_id"`
+			Verified  bool   `json:"verified_human"`
 		} `json:"messages"`
 	}
 	if err := json.Unmarshal([]byte(out), &ring); err != nil {
@@ -146,6 +147,11 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 		t.Fatalf("the ring holds %d message(s), want the question and the reply:\n%s", len(ring.Messages), out)
 	}
 	question, reply := ring.Messages[0], ring.Messages[1]
+	// Typed at the keyboard of a client outside every pane, the reply is the
+	// person's, and the daemon says so.
+	if !reply.Verified {
+		t.Errorf("a reply typed at the keyboard is not verified_human:\n%s", out)
+	}
 	if question.To != "human" {
 		t.Errorf("the question is addressed to %q, want human", question.To)
 	}
@@ -177,4 +183,93 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 		t.Errorf("after reading the thread the daemon still counts %d unread for the person", listed.HumanUnread)
 	}
 	alive(t, term, "after replying from the mailbox")
+}
+
+// TestARoutedKeyReplyIsAClaim covers the reply an agent could type through the
+// person's own client. send-keys routes keys to the attached client, whose
+// input handler opens the mailbox and types into the reply line exactly as
+// the keyboard does, and that reply used to leave signed with the client's
+// attach nonce, stored as the person's verified answer. Now the reply line
+// says "automated reply" as soon as a routed key touches it, and the daemon
+// stores the reply as claimed_human.
+//
+// Negative control: with agentMailReplyNonce returning the nonce whatever
+// touched the draft, the reply is verified_human and the last check fails.
+func TestARoutedKeyReplyIsAClaim(t *testing.T) {
+	term, base := attachClientBase(t)
+	renameWindow(t, term, "REVIEWER")
+
+	if out, err := tuiosCLI(t, base, "send-agent-message", "-s", "e2e-ctrlp", "-w", "human",
+		"--from", "REVIEWER", "--subject", "may I delete build/?", "reply yes to approve"); err != nil {
+		t.Fatalf("send-agent-message failed: %v\n%s", err, out)
+	}
+	if err := term.WaitForText("REVIEWER to you: may I delete build/?", uiTimeout); err != nil {
+		t.Fatalf("the dock never announced mail to the person: %v\n%s", err, term.Snapshot())
+	}
+
+	// What an agent in a pane can run: open the mailbox from the command
+	// palette, then the thread and the reply line in the person's client, and
+	// type an answer.
+	if out, err := tuiosCLI(t, base, "run-command", "-s", "e2e-ctrlp", "CommandPalette"); err != nil {
+		t.Fatalf("run-command CommandPalette failed: %v\n%s", err, out)
+	}
+	for _, step := range []struct {
+		keys []string
+		want string
+	}{
+		{[]string{"--raw", "open inbox"}, "Mail: open inbox"},
+		{[]string{"Enter"}, "may I delete build/?"},
+		{[]string{"Enter"}, "reply yes to approve"},
+		{[]string{"r"}, "reply:"},
+		{[]string{"--raw", "yes"}, "automated reply:"},
+	} {
+		args := append([]string{"send-keys", "-s", "e2e-ctrlp"}, step.keys...)
+		if out, err := tuiosCLI(t, base, args...); err != nil {
+			t.Fatalf("send-keys %v failed: %v\n%s", step.keys, err, out)
+		}
+		if err := term.WaitForText(step.want, uiTimeout); err != nil {
+			t.Fatalf("after send-keys %v the screen never showed %q: %v\n%s", step.keys, step.want, err, term.Snapshot())
+		}
+	}
+	if err := term.WaitForText("automated reply:", uiTimeout); err != nil {
+		t.Fatalf("the reply line never said the draft is automated: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "mail-automated-reply")
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "e2e-ctrlp", "Enter"); err != nil {
+		t.Fatalf("send-keys Enter failed: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return !strings.Contains(s.Text(), "automated reply:")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the automated reply never sent: %v\n%s", err, term.Snapshot())
+	}
+
+	out, err := tuiosCLI(t, base, "read-agent-messages", "-s", "e2e-ctrlp", "--peek", "--json")
+	if err != nil {
+		t.Fatalf("read-agent-messages failed: %v\n%s", err, out)
+	}
+	var ring struct {
+		Messages []struct {
+			From     string `json:"from"`
+			Text     string `json:"text"`
+			Verified bool   `json:"verified_human"`
+			Claimed  bool   `json:"claimed_human"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(out), &ring); err != nil {
+		t.Fatalf("read-agent-messages returned no JSON: %v\n%s", err, out)
+	}
+	found := false
+	for _, m := range ring.Messages {
+		if m.From == "human" && m.Text == "yes" {
+			found = true
+			if m.Verified || !m.Claimed {
+				t.Errorf("a reply typed by send-keys is verified %v, claimed %v; want a claim:\n%s", m.Verified, m.Claimed, out)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("the routed reply is not in the ring:\n%s", out)
+	}
+	alive(t, term, "after an automated reply")
 }

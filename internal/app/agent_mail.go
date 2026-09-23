@@ -95,6 +95,14 @@ type AgentMailState struct {
 	// Composing is true while the reply line is open. Draft is its text.
 	Composing bool
 	Draft     string
+	// DraftAutomated is true once anything other than the keyboard touched
+	// the reply line: a key a send-keys or tape script routed to this client
+	// opened it, typed into it or sent it. Such a reply is sent without the
+	// attach nonce, so the daemon stores it as claimed_human, not as the
+	// person's answer. Without this, an agent in a pane could drive this
+	// client's own reply line with send-keys and have tuios sign its answer
+	// as the person. It is cleared when the reply line closes.
+	DraftAutomated bool
 	// Error is the last failure, drawn in the panel until the next action.
 	Error string
 	// Loading is true between a read being asked for and the daemon answering.
@@ -338,6 +346,7 @@ func (m *OS) openAgentMailFor(inbox string) tea.Cmd {
 	st.Scroll = 0
 	st.Composing = false
 	st.Draft = ""
+	st.DraftAutomated = false
 	st.Error = ""
 	st.Sending = false
 	return m.agentMailLoad()
@@ -389,6 +398,7 @@ func (m *OS) OpenAgentMailThread(thread uint64) tea.Cmd {
 	st.Inbox = ""
 	st.Composing = false
 	st.Draft = ""
+	st.DraftAutomated = false
 	st.Error = ""
 	st.Sending = false
 	st.Thread = thread
@@ -408,6 +418,7 @@ func (m *OS) CloseAgentMail() {
 	m.ShowAgentMail = false
 	st.Composing = false
 	st.Draft = ""
+	st.DraftAutomated = false
 	st.Error = ""
 }
 
@@ -623,6 +634,7 @@ func (m *OS) AgentMailBack() {
 	st.Scroll = 0
 	st.Composing = false
 	st.Draft = ""
+	st.DraftAutomated = false
 	st.Error = ""
 }
 
@@ -673,6 +685,7 @@ func (m *OS) AgentMailStartReply() bool {
 	st.Draft = ""
 	st.Error = ""
 	st.Scroll = agentMailBottom
+	st.DraftAutomated = m.ProcessingRemoteKeys
 	return true
 }
 
@@ -680,6 +693,15 @@ func (m *OS) AgentMailStartReply() bool {
 func (m *OS) AgentMailCancelReply() {
 	m.AgentMail.Composing = false
 	m.AgentMail.Draft = ""
+	m.AgentMail.DraftAutomated = false
+}
+
+// noteDraftTouched marks the draft automated when the key that touched it
+// did not come from the keyboard. See DraftAutomated.
+func (m *OS) noteDraftTouched() {
+	if m.ProcessingRemoteKeys {
+		m.AgentMail.DraftAutomated = true
+	}
 }
 
 // AgentMailType appends typed text to the draft.
@@ -687,6 +709,7 @@ func (m *OS) AgentMailType(text string) {
 	if !m.AgentMail.Composing || text == "" {
 		return
 	}
+	m.noteDraftTouched()
 	m.AgentMail.Draft += text
 }
 
@@ -696,15 +719,28 @@ func (m *OS) AgentMailBackspace() {
 	if !st.Composing || st.Draft == "" {
 		return
 	}
+	m.noteDraftTouched()
 	r := []rune(st.Draft)
 	st.Draft = string(r[:len(r)-1])
 }
 
-// AgentMailClearDraft empties the draft and keeps the reply line open.
+// AgentMailClearDraft empties the draft and keeps the reply line open. A draft
+// the person cleared by hand is theirs again from here.
 func (m *OS) AgentMailClearDraft() {
 	if m.AgentMail.Composing {
 		m.AgentMail.Draft = ""
+		m.AgentMail.DraftAutomated = m.ProcessingRemoteKeys
 	}
+}
+
+// agentMailReplyNonce is the attach nonce a reply carries: attach, the nonce
+// of this client's attach, or "" for a reply that anything other than the
+// keyboard touched. See DraftAutomated.
+func (m *OS) agentMailReplyNonce(attach string) string {
+	if m.AgentMail.DraftAutomated || m.ProcessingRemoteKeys {
+		return ""
+	}
+	return attach
 }
 
 // AgentMailSendReply sends the draft as a reply to the open thread, from the
@@ -729,7 +765,7 @@ func (m *OS) AgentMailSendReply() tea.Cmd {
 	}
 	st.Sending = true
 	st.Error = ""
-	return agentMailSendCmd(m.agentMailDialer(), m.AttachedHost != "", name, inbox, replyTo, text, m.DaemonClient.HumanNonce())
+	return agentMailSendCmd(m.agentMailDialer(), m.AttachedHost != "", name, inbox, replyTo, text, m.agentMailReplyNonce(m.DaemonClient.HumanNonce()))
 }
 
 // agentMailSendCmd is the send-agent-message call a reply makes. remote says
@@ -781,6 +817,7 @@ func (m *OS) applyAgentMailSent(msg AgentMailSentMsg) {
 	}
 	st.Composing = false
 	st.Draft = ""
+	st.DraftAutomated = false
 }
 
 // AgentMailFocusPane closes the mailbox and focuses the pane that last spoke in

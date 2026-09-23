@@ -311,6 +311,51 @@ func TestReplyCarriesTheAttachNonce(t *testing.T) {
 	}
 }
 
+// TestARoutedKeyReplyIsNotSignedAsThePerson covers the reply an agent could
+// type through this client: send-keys routes keys to the attached client,
+// whose input handler opens the mail overlay and types into its reply line like
+// the keyboard does, and the reply used to leave with the attach nonce, stored
+// as the person's verified answer. A reply any routed key touched is sent
+// without it, and says so in words on the reply line.
+func TestARoutedKeyReplyIsNotSignedAsThePerson(t *testing.T) {
+	m := &OS{}
+	m.AgentMail.Composing = true
+	m.AgentMail.Draft = "yes, "
+
+	m.AgentMailType("go ahead")
+	if got := m.agentMailReplyNonce("abc123"); got != "abc123" {
+		t.Fatalf("a reply typed at the keyboard carries nonce %q, want abc123", got)
+	}
+
+	// One routed key anywhere in the draft is enough.
+	m.ProcessingRemoteKeys = true
+	m.AgentMailType("!")
+	m.ProcessingRemoteKeys = false
+	if !m.AgentMail.DraftAutomated {
+		t.Fatal("a routed key typed into the draft did not mark it automated")
+	}
+	if got := m.agentMailReplyNonce("abc123"); got != "" {
+		t.Errorf("a reply a routed key touched carries nonce %q, want none", got)
+	}
+
+	// A reply sent by a routed Enter is automated whoever typed the text.
+	m.AgentMailCancelReply()
+	m.AgentMail.Composing = true
+	m.AgentMailType("typed by hand")
+	m.ProcessingRemoteKeys = true
+	if got := m.agentMailReplyNonce("abc123"); got != "" {
+		t.Errorf("a reply sent by a routed key carries nonce %q, want none", got)
+	}
+	m.ProcessingRemoteKeys = false
+
+	// Closing the reply line clears the mark, and a fresh draft is the
+	// keyboard's again.
+	m.AgentMailCancelReply()
+	if m.AgentMail.DraftAutomated {
+		t.Error("the automated mark outlived the reply line")
+	}
+}
+
 // TestUnverifiedHumanMailIsNotDrawnAsThePerson: a message from human that the
 // daemon could not match to an attached client is named as unverified, so the
 // person does not read something else's words as their own reply.

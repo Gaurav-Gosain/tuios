@@ -271,6 +271,11 @@ func (m *OS) renderAgentMailThread() (string, overlay.Geometry, []overlayRowHit)
 		if st.Sending {
 			prompt = "sending: "
 		}
+		// Said in words, not only in colour: a reply that keys routed from
+		// outside touched is sent as a claim, not as the person's answer.
+		if st.DraftAutomated {
+			prompt = "automated " + prompt
+		}
 		body = append(body, overlay.Rule(width, bg, pal),
 			overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())+
 				mute.Render(prompt)+
