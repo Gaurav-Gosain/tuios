@@ -216,6 +216,10 @@ type startOpts struct {
 	// "tuios" attaches to a daemon. Every other test here holds the standalone
 	// TUI still with TUIOS_NO_DAEMON=1; see startIn.
 	daemonDefault bool
+	// shippedLooks runs tuios with the appearance defaults as they ship. Every
+	// other test here runs with the looks from before v0.8.0 pinned in its
+	// config; see pinPreV080Looks.
+	shippedLooks bool
 	// logPath, when set, receives the path of the raw PTY log, for a test
 	// that reads what tuios printed after the TUI gave the screen back.
 	logPath *string
@@ -298,6 +302,21 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	if !o.daemonDefault {
 		env = append(env, "TUIOS_NO_DAEMON=1")
 	}
+	// The same reasoning for the looks v0.8.0 changed: the tests were written
+	// against the dock at the bottom, no rail, full-screen zoom and a click
+	// that starts typing, so that is what they get unless they ask otherwise.
+	if o.shippedLooks {
+		useShippedLooks(base)
+	}
+	// A client given its own config home reads that one, so that is the
+	// one pinned.
+	configHome := xdgDir(base, "XDG_CONFIG_HOME")
+	for _, kv := range o.env {
+		if v, ok := strings.CutPrefix(kv, "XDG_CONFIG_HOME="); ok {
+			configHome = v
+		}
+	}
+	pinPreV080LooksIn(t, base, configHome)
 	// GORACE is forwarded so a tuios built with -race can be driven through this
 	// suite and have its findings survive. tuitest replaces the child's whole
 	// environment, so without this the child runs with GORACE unset and the race
@@ -470,9 +489,21 @@ var dockStatus = regexp.MustCompile(`([0-9]+):([0-9]+)`)
 // merely change, which is what makes create/close assertions trustworthy.
 // It returns -1 when the dock is not on screen, so callers can distinguish
 // "no windows" from "could not tell".
+//
+// The bottom rows are read first, where the suite's pinned dock sits. The top
+// row is read only when the rule a top dock draws under itself is on row 1,
+// for a test on the shipped looks: before the first frame the screen holds
+// the client's log lines, whose timestamps would otherwise read as a count.
 func countWindows(s tuitest.Screen) int {
 	_, rows := s.Size()
+	var order []int
 	for r := rows - 1; r >= max(0, rows-3); r-- {
+		order = append(order, r)
+	}
+	if rows > 1 && strings.HasPrefix(strings.TrimSpace(s.Line(1)), "────") {
+		order = append(order, 0)
+	}
+	for _, r := range order {
 		if m := dockStatus.FindStringSubmatch(s.Line(r)); m != nil {
 			n, err := strconv.Atoi(m[2])
 			if err != nil {
@@ -661,6 +692,11 @@ func waitForAll(t *testing.T, term *tuitest.Terminal, timeout time.Duration, wha
 // living under an isolation root, and returns its combined output.
 func tuiosCLI(t *testing.T, base string, args ...string) (string, error) {
 	t.Helper()
+	// A subcommand that loads the config writes the default file when there
+	// is none, and a file written with the shipped values would read as the
+	// test's own choice when the client starts. So the pins go in first here
+	// too.
+	pinPreV080Looks(t, base)
 	cmd := exec.Command(tuiosBin, args...)
 	cmd.Dir = workDirIn(t, base)
 	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")

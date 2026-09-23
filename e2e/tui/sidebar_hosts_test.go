@@ -183,10 +183,13 @@ func TestRailShowsAHostAddedWhileAttached(t *testing.T) {
 	base := t.TempDir()
 	ssh := writeFakeSSH(t, base)
 	env := []string{"TUIOS_SSH=" + ssh}
+	// The rail comes on from the file rather than the palette: `hosts add`
+	// below rewrites the file from its own load of it, and the reload that
+	// follows applies whatever the file says about the rail.
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\n")
 
 	term := startIn(t, base, startOpts{args: []string{"new", "fed-live"}, env: env})
 	waitBoot(t, term)
-	toggleSidebarViaPalette(t, term)
 	railShows(t, term, "sessions")
 	// The first poll is one local verb call. It has answered, and stopped the
 	// polling, long before this returns; the wait is what keeps the add from

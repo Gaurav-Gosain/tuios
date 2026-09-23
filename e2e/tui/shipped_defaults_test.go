@@ -10,8 +10,9 @@ import (
 
 // This file is the only place in the suite that runs tuios the way it ships.
 // Every other test sets TUIOS_NO_DAEMON=1 in startIn, because the assertions
-// there are about the standalone TUI. Here nothing is set: no config file, no
-// daemon, no state directory, which is the first run of a new install.
+// there are about the standalone TUI, and pins the looks from before v0.8.0
+// (see pinPreV080Looks). Here nothing is set: no config file, no daemon, no
+// state directory, which is the first run of a new install.
 
 // windowDot is the disc the dots style draws each control as, config's
 // WindowButtonDot. Spelled out rather than imported because this module does
@@ -23,7 +24,7 @@ const windowDot = "●"
 // one test because they are one experience: what somebody sees the first time
 // they run tuios.
 func TestAFirstRunIsDaemonBackedAndTiledWithDotsOnTheLeft(t *testing.T) {
-	term, base := start(t, startOpts{cols: 120, rows: 40, daemonDefault: true})
+	term, base := start(t, startOpts{cols: 120, rows: 40, daemonDefault: true, shippedLooks: true})
 	killDaemon(t, base)
 
 	// Daemon-backed. A bare "tuios" started one and attached to it, so the
