@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
 )
@@ -377,6 +378,38 @@ func TestGhosttyDiffModes(t *testing.T) {
 		if pm[num] != gm[num] {
 			t.Errorf("mode %d pure=%v ghostty=%v", num, pm[num], gm[num])
 		}
+	}
+}
+
+// TestGhosttyDiffDECRQM compares DECRQM answers for the modes the pure
+// emulator used to leave out of its mode table and report as not recognised.
+func TestGhosttyDiffDECRQM(t *testing.T) {
+	readReply := func(term Terminal) string {
+		got := make(chan string, 1)
+		go func() {
+			buf := make([]byte, 512)
+			n, _ := term.Read(buf)
+			got <- string(buf[:n])
+		}()
+		select {
+		case s := <-got:
+			return s
+		case <-time.After(2 * time.Second):
+			return ""
+		}
+	}
+	for _, in := range []string{
+		"\x1b[?47$p", "\x1b[?47h\x1b[?47$p",
+		"\x1b[?1016$p", "\x1b[?1016h\x1b[?1016$p",
+		"\x1b[?2048$p",
+	} {
+		t.Run(fmt.Sprintf("%q", in), func(t *testing.T) {
+			p := newDiffPair(t, 20, 5)
+			p.write(t, []byte(in))
+			if a, g := readReply(p.pure), readReply(p.gh); a != g {
+				t.Errorf("reply pure=%q ghostty=%q", a, g)
+			}
+		})
 	}
 }
 

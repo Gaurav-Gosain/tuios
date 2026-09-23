@@ -10,6 +10,11 @@ import "github.com/charmbracelet/x/ansi"
 // map would apply them in a different order on every run, leaving RIS with a
 // terminal state that varies between runs. DECOM goes last so a reset
 // deterministically ends with the cursor homed.
+//
+// A mode the emulator acts on has to be listed here even when its default is
+// reset. DECRQM answers from the mode map, and a mode missing from it is
+// reported as not recognised, so a program that probes before enabling a
+// feature turns off one that works.
 var defaultModes = []struct {
 	mode    ansi.Mode
 	setting ansi.ModeSetting
@@ -27,9 +32,12 @@ var defaultModes = []struct {
 	{ansi.ModeMouseAnyEvent, ansi.ModeReset},       // ?1003
 	{ansi.ModeFocusEvent, ansi.ModeReset},          // ?1004
 	{ansi.ModeMouseExtSgr, ansi.ModeReset},         // ?1006
+	{ansi.ModeMouseExtSgrPixel, ansi.ModeReset},    // ?1016
+	{modeAltScreenLegacy, ansi.ModeReset},          // ?47
 	{ansi.ModeAltScreen, ansi.ModeReset},           // ?1047
 	{ansi.ModeSaveCursor, ansi.ModeReset},          // ?1048
 	{ansi.ModeAltScreenSaveCursor, ansi.ModeReset}, // ?1049
+	{ansi.ModeInBandResize, ansi.ModeReset},        // ?2048
 	{ansi.ModeBracketedPaste, ansi.ModeReset},      // ?2004
 	{ansi.ModeSynchronizedOutput, ansi.ModeReset},  // ?2026
 	{ansi.ModeUnicodeCore, ansi.ModeReset},         // ?2027

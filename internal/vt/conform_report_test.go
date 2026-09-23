@@ -271,6 +271,17 @@ func TestConform_DECRQM(t *testing.T) {
 		{"the alternate screen reports set while in it", "\x1b[?1049h\x1b[?1049$p", "\x1b[?1049;1$y"},
 		{"synchronised output reports set", "\x1b[?2026h\x1b[?2026$p", "\x1b[?2026;1$y"},
 
+		// Modes this emulator acts on, which it used to report as not
+		// recognised because they were missing from its mode table. A guest
+		// that probes before enabling takes the answer at its word.
+		{"mode 47 reports reset by default", "\x1b[?47$p", "\x1b[?47;2$y"},
+		{"mode 47 reports set while in it", "\x1b[?47h\x1b[?47$p", "\x1b[?47;1$y"},
+		{"SGR pixel mouse reports reset by default", "\x1b[?1016$p", "\x1b[?1016;2$y"},
+		{"SGR pixel mouse reports set after ?1016h", "\x1b[?1016h\x1b[?1016$p", "\x1b[?1016;1$y"},
+		{"in-band resize reports reset by default", "\x1b[?2048$p", "\x1b[?2048;2$y"},
+		// Setting 2048 sends the current size at once, ahead of the report.
+		{"in-band resize reports set after ?2048h", "\x1b[?2048h\x1b[?2048$p", "\x1b[48;24;80;0;0t\x1b[?2048;1$y"},
+
 		// A mode nobody defines has to report 0, not 2. Reporting reset says
 		// the terminal knows the mode and has it off, which is a different
 		// claim and one a guest acts on.
