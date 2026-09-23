@@ -6,6 +6,25 @@ import (
 	"time"
 )
 
+// streamFrameInterval and streamFloodBytes gate how often a flooding pane is
+// written to one client. Once a subscription has sent streamFloodBytes inside
+// one streamFrameInterval, the next bytes wait for that interval to end and go
+// out together in one frame.
+//
+// Without the gate a flood went out one frame per PTY read. The stream
+// goroutine drains faster than the reader fills, so the batch loop below
+// rarely found more than one chunk queued, and on macOS a PTY read is about
+// 330 bytes. That was about 2,900 frames per MiB, each one a daemon write, a
+// client read and a handful of goroutine wakeups, for a client that draws at
+// most once every 8 ms anyway. Output below streamFloodBytes per interval is
+// never held, so a keystroke echo into a quiet pane goes out at once.
+//
+// Variables, not constants, so a test can widen the window enough to observe.
+var (
+	streamFrameInterval = time.Millisecond
+	streamFloodBytes    = 4096
+)
+
 // streamPTYOutput streams raw PTY bytes to a subscriber with batching.
 // Multiple channel reads are coalesced into a single connection write to
 // reduce syscall overhead (30K+ reads/sec at 500fps doom fire → one large
@@ -33,6 +52,12 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 		}
 	}
 
+	// The frame window: when it opened and how many bytes went out in it.
+	// hold is the one timer a held stream waits on, made the first time.
+	var windowStart time.Time
+	windowBytes := 0
+	var hold *time.Timer
+
 	for {
 		select {
 		case <-cs.done:
@@ -42,6 +67,25 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 		case chunk, ok := <-outputCh:
 			if !ok {
 				return
+			}
+			// A resize is never held: it carries no bytes and it ends a batch
+			// anyway. Bytes after a full window wait for the window to end, and
+			// whatever queued meanwhile goes out with them below.
+			if !chunk.isResize() && windowBytes >= streamFloodBytes {
+				if wait := streamFrameInterval - time.Since(windowStart); wait > 0 {
+					if hold == nil {
+						hold = time.NewTimer(wait)
+					} else {
+						hold.Reset(wait)
+					}
+					select {
+					case <-hold.C:
+					case <-cs.done:
+						return
+					case <-d.ctx.Done():
+						return
+					}
+				}
 			}
 			took(chunk)
 			// A resize marks the byte the daemon's emulator changed width at,
@@ -77,6 +121,11 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 				_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 				err := WritePTYOutput(cs.conn, pty.ID, batch)
 				cs.sendMu.Unlock()
+				if now := time.Now(); now.Sub(windowStart) >= streamFrameInterval {
+					windowStart, windowBytes = now, len(batch)
+				} else {
+					windowBytes += len(batch)
+				}
 				if err != nil {
 					// The write failed mid-frame (a slow/stuck client hitting the 5s
 					// deadline): the wire now carries a partial frame and every later
