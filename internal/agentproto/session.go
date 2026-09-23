@@ -75,6 +75,9 @@ type Session struct {
 	shownAt time.Time
 	hold    context.CancelFunc
 	holds   chan holdResult
+	// keysHandled, when set, is called after Run has handled the keys of one
+	// read. Tests use it to know a key was handled, not only read.
+	keysHandled func()
 }
 
 // defaultSettle is how long a permission is on screen before a key answers it,
@@ -187,6 +190,9 @@ func (s *Session) Run(ctx context.Context) int {
 			}
 			// One redraw for what one read brought, not one per key.
 			s.redrawInput()
+			if s.keysHandled != nil {
+				s.keysHandled()
+			}
 		case <-gone:
 			gone = nil
 			// Show whatever it said before it went.

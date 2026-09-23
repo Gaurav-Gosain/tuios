@@ -130,6 +130,7 @@ type harness struct {
 	screen   *screen
 	keys     *io.PipeWriter
 	exit     chan int
+	handled  chan struct{}
 	now      time.Time
 	nowMu    sync.Mutex
 }
@@ -138,6 +139,21 @@ func (h *harness) type_(t *testing.T, s string) {
 	t.Helper()
 	if _, err := io.WriteString(h.keys, s); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// typeHandled types s and waits until Run has handled its keys, not only read
+// them. s must be keys that do not quit, written in one read.
+func (h *harness) typeHandled(t *testing.T, s string) {
+	t.Helper()
+	for len(h.handled) > 0 {
+		<-h.handled
+	}
+	h.type_(t, s)
+	select {
+	case <-h.handled:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("the keys %q were not handled", s)
 	}
 }
 
@@ -150,7 +166,7 @@ func (h *harness) advance(d time.Duration) {
 func startSession(t *testing.T, agent *fakeAgent) *harness {
 	t.Helper()
 	in, keys := io.Pipe()
-	h := &harness{agent: agent, reporter: newFakeReporter(), screen: &screen{}, keys: keys, exit: make(chan int, 1), now: time.Unix(1000, 0)}
+	h := &harness{agent: agent, reporter: newFakeReporter(), screen: &screen{}, keys: keys, exit: make(chan int, 1), handled: make(chan struct{}, 64), now: time.Unix(1000, 0)}
 	h.s = &Session{
 		Agent:    agent,
 		Events:   NewEvents(),
@@ -163,6 +179,12 @@ func startSession(t *testing.T, agent *fakeAgent) *harness {
 			h.nowMu.Lock()
 			defer h.nowMu.Unlock()
 			return h.now
+		},
+		keysHandled: func() {
+			select {
+			case h.handled <- struct{}{}:
+			default:
+			}
 		},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -318,8 +340,10 @@ func TestSessionPermissionInThePane(t *testing.T) {
 	h.reporter.next(t)
 	<-h.reporter.holds
 
-	h.type_(t, "1")
-	h.type_(t, pasteStart+"1"+pasteEnd+"\r")
+	// The early keys must be handled before the clock moves, or a "1" still
+	// waiting in Run's queue would count as typed past the settle.
+	h.typeHandled(t, "1")
+	h.typeHandled(t, pasteStart+"1"+pasteEnd+"\r")
 	h.advance(time.Second)
 	h.type_(t, "9x")
 	select {
