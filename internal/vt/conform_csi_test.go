@@ -174,6 +174,52 @@ func TestConform_CursorMotion(t *testing.T) {
 			cursor: "4,0",
 			want:   "   X",
 		},
+		// HPB and VPB are ECMA-48's backward moves, the opposites of HPR
+		// and VPR. They used to be unhandled, so the cursor stayed put.
+		{
+			name:   "HPB moves the cursor left",
+			in:     "\x1b[1;5H\x1b[2jX",
+			cursor: "3,0",
+			want:   "  X",
+		},
+		{
+			name:   "HPB with no parameter moves one column",
+			in:     "\x1b[1;5H\x1b[jX",
+			cursor: "4,0",
+			want:   "   X",
+		},
+		{
+			name:   "HPB stops at the first column",
+			in:     "\x1b[3;3H\x1b[99jX",
+			cursor: "1,2",
+			want:   "\n\nX",
+		},
+		{
+			name:   "VPB moves the cursor up",
+			in:     "\x1b[4;3H\x1b[2kX",
+			cursor: "3,1",
+			want:   "\n  X",
+		},
+		{
+			name:   "VPB with no parameter moves one row",
+			in:     "\x1b[4;3H\x1b[kX",
+			cursor: "3,2",
+			want:   "\n\n  X",
+		},
+		{
+			name:   "VPB stops at the first row",
+			in:     "\x1b[3;3H\x1b[99kX",
+			cursor: "3,0",
+			want:   "  X",
+		},
+		{
+			// Inside a scroll region VPB stops at the top margin, as CUU does
+			// and as ghostty does with VPB.
+			name:   "VPB stops at the top margin",
+			in:     "\x1b[2;4r\x1b[4;3H\x1b[9kX",
+			cursor: "3,1",
+			want:   "\n  X",
+		},
 		{
 			name:   "backspace at the first column stays there",
 			in:     "\b\bX",

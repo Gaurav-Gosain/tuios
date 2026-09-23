@@ -75,6 +75,13 @@ var tmuxDiffers = map[string]string{
 
 	"selective erase in line": "tmux does not implement DECSEL either; same reasoning as " +
 		"DECSED above, with EL in place of ED",
+
+	"position backward": "tmux ignores HPB (CSI j) and leaves the cursor where it was. " +
+		"ECMA-48 defines it as the backward move opposite HPR, and ghostty implements it " +
+		"as CUB, which is what this emulator does. xterm's ctlseqs does not list it",
+
+	"line position backward": "tmux ignores VPB (CSI k); same reasoning as HPB above, " +
+		"with CUU in place of CUB",
 }
 
 func TestDifferential_AgainstTmux(t *testing.T) {
@@ -135,6 +142,8 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"cursor position with omitted parameters", 10, 4, "\x1b[;5HX"},
 		{"cursor back past the first column", 10, 4, "\x1b[1;3H\x1b[99DX"},
 		{"repeat the previous character", 10, 4, "a\x1b[4b"},
+		{"position backward", 10, 4, "abcdef\x1b[3jX"},
+		{"line position backward", 10, 4, "\x1b[4;3H\x1b[2kX"},
 
 		// Tabs. Every one of these fills the screen with the alignment pattern
 		// first, so that no cell is left unset. tmux's capture-pane prints a

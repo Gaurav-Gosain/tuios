@@ -820,6 +820,23 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		return true
 	})
 
+	// Horizontal Position Backward [ansi.HPB] and Vertical Position Backward
+	// [ansi.VPB], "CSI Pn j" and "CSI Pn k". ECMA-48 defines them as the
+	// backward moves opposite HPR and VPR. On a terminal whose data and
+	// presentation positions are the same they are CUB and CUU, which is what
+	// ghostty does with them, so they stop at the margins the same way.
+	e.RegisterCsiHandler('j', func(params ansi.Params) bool {
+		n := csiCount(params, 0)
+		e.moveCursor(-n, 0)
+		return true
+	})
+
+	e.RegisterCsiHandler('k', func(params ansi.Params) bool {
+		n := csiCount(params, 0)
+		e.moveCursor(0, -n)
+		return true
+	})
+
 	e.RegisterCsiHandler('b', func(params ansi.Params) bool {
 		// Repeat Previous Character [ansi.REP]
 		n := csiCount(params, 0)
