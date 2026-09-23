@@ -56,9 +56,31 @@ func TestRGBParamsMatchReadStyleColor(t *testing.T) {
 	}
 }
 
+// sgrReadStyleDiffers reports whether params holds one of the two things
+// handleSgr deliberately reads differently from uv.ReadStyle: SGR 21, which
+// uv.ReadStyle drops and xterm reads as a double underline, and an underline
+// with a subparameter, where uv.ReadStyle reads an unknown style such as "4:7"
+// on as a bare SGR 7. The check is coarse, matching 21 anywhere in the list,
+// which only costs the comparison a few lists.
+func sgrReadStyleDiffers(params ansi.Params) bool {
+	for _, p := range params {
+		if p.Param(0) == 21 || (p.Param(0) == 4 && p.HasMore()) {
+			return true
+		}
+	}
+	return false
+}
+
 // TestHandleSgrMatchesReadStyle drives the unthemed SGR path, which takes a
 // shortcut for a lone truecolor colour, with random parameter lists and
 // compares the pen with what uv.ReadStyle makes of the same list.
+//
+// handleSgr used to hand the unthemed case to uv.ReadStyle, so this test held
+// the two equal on every list. It now sends every SGR through
+// readStyleWithTheme, which differs from uv.ReadStyle on purpose in the two
+// places sgrReadStyleDiffers names, so a list with either is held to
+// readStyleWithTheme instead. Every other list must still agree with
+// uv.ReadStyle, which is what shows the change of reader moved nothing else.
 func TestHandleSgrMatchesReadStyle(t *testing.T) {
 	rng := rand.New(rand.NewPCG(9, 4))
 	e := NewEmulator(4, 2)
@@ -79,11 +101,17 @@ func TestHandleSgrMatchesReadStyle(t *testing.T) {
 			}
 		}
 		want := start
-		uv.ReadStyle(params, &want)
+		reader := "uv.ReadStyle"
+		if sgrReadStyleDiffers(params) {
+			reader = "readStyleWithTheme"
+			e.readStyleWithTheme(params, &want)
+		} else {
+			uv.ReadStyle(params, &want)
+		}
 		e.scr.cur.Pen = start
 		e.handleSgr(params)
 		if got := e.scr.cur.Pen; !got.Equal(&want) {
-			t.Fatalf("%v: pen %#v, uv.ReadStyle %#v", params, got, want)
+			t.Fatalf("%v: pen %#v, %s %#v", params, got, reader, want)
 		}
 	}
 }

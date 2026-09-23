@@ -52,55 +52,64 @@ func rgbParams(params ansi.Params) (r, g, b uint8, ok bool) {
 }
 
 // parseThemedColor parses an indexed or RGB color from SGR params, using theme colors for indices 0-15.
-// Returns the color and the number of extra params consumed (to add to loop index).
-func (e *Emulator) parseThemedColor(params ansi.Params, i int) (color.Color, int) {
+// It returns the color, the number of extra params consumed (to add to the
+// loop index), and whether the params were read as a colour at all.
+//
+// A read can succeed with a nil colour: "38;0" is the implementation defined
+// colour type, which ansi.ReadStyleColor consumes as two parameters and
+// answers with no colour, so the pen goes back to its default. The caller has
+// to skip those parameters anyway. Skipping only when the colour is non-nil
+// read the 0 on as SGR 0 and reset the whole pen, where xterm, tmux and
+// uv.ReadStyle all consume it as the colour type.
+func (e *Emulator) parseThemedColor(params ansi.Params, i int) (color.Color, int, bool) {
 	if r, g, b, ok := rgbParams(params[i:]); ok {
-		return e.rgbColor(r, g, b), 4
+		return e.rgbColor(r, g, b), 4, true
 	}
-	// Check if this is indexed color format (X;5;n) and if n is 0-15
-	if i+2 < len(params) {
-		next, _, _ := params.Param(i+1, -1)
-		if next == 5 {
-			colorIndex, _, _ := params.Param(i+2, -1)
-			if colorIndex >= 0 && colorIndex <= 15 {
-				return e.IndexedColor(colorIndex), 2
-			}
-		}
-	}
-	// For all other cases (indices 16-255, RGB colors, etc), use standard reading
+	// ansi.ReadStyleColor decides which shapes are a colour and how many
+	// parameters each consumes. Deciding that here as well let a malformed
+	// "38:5;7" read as colour 7, where ReadStyleColor, and ghostty, take the
+	// separators disagreeing as no colour and read the 7 on as reverse.
 	var c color.Color
 	n := ansi.ReadStyleColor(params[i:], &c)
-	if n > 0 {
-		return c, n - 1
+	if n == 0 {
+		return nil, 0, false
 	}
-	return nil, 0
+	// An indexed colour 0-15 (X;5;n) resolves through the theme.
+	if _, indexed := c.(ansi.IndexedColor); indexed && n == 3 {
+		if idx := params[i+2].Param(-1); idx >= 0 && idx <= 15 {
+			c = e.IndexedColor(idx)
+		}
+	}
+	return c, n - 1, true
 }
 
-// handleSgr handles SGR escape sequences.
 // handleSgr handles Select Graphic Rendition (SGR) escape sequences.
+//
+// Every SGR goes through readStyleWithTheme, with or without a theme. The
+// unthemed case used to go to uv.ReadStyle, which reads an underline
+// subparameter it cannot name, such as "4:7", on as a bare SGR 7 and turns the
+// cell reverse, and which drops SGR 21. The themed path already handled both,
+// so a pane drew differently depending on whether a theme was set. The colours
+// agree either way: with no palette slot claimed, PaletteColor and
+// IndexedColor give the same plain palette entries uv.ReadStyle does.
 func (e *Emulator) handleSgr(params ansi.Params) {
-	// If theming is disabled or no theme colors are set, use standard ultraviolet handling
-	if !e.hasThemeColors() {
-		// An SGR that is one truecolor colour and nothing else is what a
-		// truecolor repaint sends for every cell. uv.ReadStyle would box a
-		// new colour for it each time.
-		if len(params) == 5 {
-			if r, g, b, ok := rgbParams(params); ok {
-				switch params[0].Param(0) {
-				case 38:
-					e.scr.cur.Pen.Fg = e.rgbColor(r, g, b)
-					return
-				case 48:
-					e.scr.cur.Pen.Bg = e.rgbColor(r, g, b)
-					return
-				case 58:
-					e.scr.cur.Pen.UnderlineColor = e.rgbColor(r, g, b)
-					return
-				}
+	// An SGR that is one truecolor colour and nothing else is what a
+	// truecolor repaint sends for every cell. It is answered here without the
+	// loop in readStyleWithTheme.
+	if len(params) == 5 {
+		if r, g, b, ok := rgbParams(params); ok {
+			switch params[0].Param(0) {
+			case 38:
+				e.scr.cur.Pen.Fg = e.rgbColor(r, g, b)
+				return
+			case 48:
+				e.scr.cur.Pen.Bg = e.rgbColor(r, g, b)
+				return
+			case 58:
+				e.scr.cur.Pen.UnderlineColor = e.rgbColor(r, g, b)
+				return
 			}
 		}
-		uv.ReadStyle(params, &e.scr.cur.Pen)
-		return
 	}
 
 	e.readStyleWithTheme(params, &e.scr.cur.Pen)
@@ -161,6 +170,11 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 			pen.Attrs |= uv.AttrConceal
 		case 9: // Crossed-out/Strikethrough
 			pen.Attrs |= uv.AttrStrikethrough
+		case 21: // Doubly underlined
+			// ECMA-48 and xterm both use 21 for a double underline, and ghostty
+			// and kitty follow them. Some older terminals used it for "bold
+			// off", which is why 22 exists; uv.ReadStyle drops it entirely.
+			pen.Underline = ansi.UnderlineDouble
 		case 22: // Normal Intensity
 			pen.Attrs &^= uv.AttrBold | uv.AttrFaint
 		case 23: // Not italic
@@ -181,7 +195,7 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 			// the user's own palette.
 			pen.Fg = e.PaletteColor(int(param - 30))
 		case 38: // Set foreground 256 or truecolor
-			if c, skip := e.parseThemedColor(params, i); c != nil {
+			if c, skip, ok := e.parseThemedColor(params, i); ok {
 				pen.Fg = c
 				i += skip
 			}
@@ -190,14 +204,14 @@ func (e *Emulator) readStyleWithTheme(params ansi.Params, pen *uv.Style) {
 		case 40, 41, 42, 43, 44, 45, 46, 47: // Set background
 			pen.Bg = e.PaletteColor(int(param - 40))
 		case 48: // Set background 256 or truecolor
-			if c, skip := e.parseThemedColor(params, i); c != nil {
+			if c, skip, ok := e.parseThemedColor(params, i); ok {
 				pen.Bg = c
 				i += skip
 			}
 		case 49: // Default Background
 			pen.Bg = nil
 		case 58: // Set underline color
-			if c, skip := e.parseThemedColor(params, i); c != nil {
+			if c, skip, ok := e.parseThemedColor(params, i); ok {
 				pen.UnderlineColor = c
 				i += skip
 			}

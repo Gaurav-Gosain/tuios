@@ -75,6 +75,55 @@ func TestThemedSGR_UnderlineSubparamNoLeak(t *testing.T) {
 	}
 }
 
+// TestThemedSGR_ColourShapesMatchReadStyle pins the colour forms the themed
+// reader used to decide for itself. Every SGR now goes through it, so a shape
+// it reads differently from uv.ReadStyle and xterm shows up in every pane.
+//
+// "38;0" is the implementation defined colour type: xterm, tmux and
+// uv.ReadStyle consume the 0 as the type and leave the default colour. The
+// themed reader skipped nothing when the colour came back nil, so the 0 was
+// read as SGR 0 and wiped the bold set just before it.
+//
+// "38:5;7" mixes separators, which ansi.ReadStyleColor and ghostty take as no
+// colour at all, so the 7 is SGR 7. The themed reader took any "38 5 n" with n
+// under 16 as a palette colour whatever the separators.
+func TestThemedSGR_ColourShapesMatchReadStyle(t *testing.T) {
+	var pal [16]color.Color
+	for i := range pal {
+		pal[i] = color.RGBA{R: uint8(i * 16), A: 255}
+	}
+	cases := []struct {
+		name  string
+		in    string
+		attrs uint8
+		fg    color.Color
+	}{
+		{"38;0 consumes the colour type", "\x1b[1;38;0mX", uv.AttrBold, nil},
+		{"48;0 consumes the colour type", "\x1b[1;48;0mX", uv.AttrBold, nil},
+		{"mixed separators are not an indexed colour", "\x1b[38:5;7mX", uv.AttrReverse | uv.AttrBlink, nil},
+		{"a palette index still resolves through the theme", "\x1b[38;5;3mX", 0, pal[3]},
+		{"a colon palette index still resolves through the theme", "\x1b[38:5:3mX", 0, pal[3]},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := NewEmulator(8, 2)
+			defer e.Close()
+			e.SetThemeColors(color.White, color.Black, color.White, pal)
+			if !e.hasThemeColors() {
+				t.Fatal("theme colors not active; test would exercise the wrong path")
+			}
+			e.Write([]byte(tc.in))
+			c := e.CellAt(0, 0)
+			if c.Style.Attrs != tc.attrs {
+				t.Errorf("attrs = %08b, want %08b", c.Style.Attrs, tc.attrs)
+			}
+			if c.Style.Fg != tc.fg {
+				t.Errorf("fg = %v, want %v", c.Style.Fg, tc.fg)
+			}
+		})
+	}
+}
+
 func TestOSC4_PaletteQuery(t *testing.T) {
 	e := NewEmulator(80, 24)
 	defer e.Close()

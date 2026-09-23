@@ -253,6 +253,7 @@ func TestGhosttyDiffBasicSequences(t *testing.T) {
 		{"origin-mode", "\x1b[2;4r\x1b[?6h\x1b[Hx\x1b[?6l\x1b[r"},
 		{"rep", "ab\x1b[3b"},
 		{"underline-styles", "\x1b[4:3mcurly\x1b[4:0m \x1b[4:2mdouble\x1b[24m"},
+		{"sgr21-double-underline", "\x1b[21mx\x1b[24my"},
 		{"hidden-cursor", "\x1b[?25labc"},
 		{"osc-title", "\x1b]0;my title\abody"},
 		{"charset-linedraw", "\x1b(0qqqq\x1b(B done"},
@@ -306,16 +307,36 @@ func TestGhosttyDiffCorpus(t *testing.T) {
 // accepted, in the spirit of differential_tmux_test.go's allowlist: each
 // entry states which side is right. If an entry starts agreeing, the pure
 // emulator gained the behavior and the entry should be deleted.
+//
+// SGR 21 was an entry until the pure emulator read it as a double underline;
+// it is now an ordinary case in TestGhosttyDiffBasicSequences.
 func TestGhosttyKnownDivergences(t *testing.T) {
-	t.Run("sgr21-double-underline", func(t *testing.T) {
-		// ECMA-48 SGR 21 is double underline; kitty, xterm and ghostty
-		// honor it, the pure emulator drops it. Ghostty is right.
+	t.Run("sgr-underline-unknown-style", func(t *testing.T) {
+		// No standard defines underline style 7. libghostty falls back to a
+		// single underline; tmux leaves the underline off, and so does the
+		// pure emulator, which consumes the subparameter and changes
+		// nothing. Neither is wrong by any specification. The pure emulator
+		// follows tmux, and TestThemedSGR_UnderlineSubparamNoLeak pins it.
 		p := newDiffPair(t, 20, 5)
-		p.write(t, []byte("\x1b[21mx"))
+		p.write(t, []byte("\x1b[4:7mx"))
 		pc := p.pure.CellAt(0, 0)
 		gc := p.gh.CellAt(0, 0)
 		if pc.Style.Underline == gc.Style.Underline {
-			t.Fatalf("pure now agrees with ghostty on SGR 21 (ul=%d); delete this entry", pc.Style.Underline)
+			t.Fatalf("pure now agrees with ghostty on SGR 4:7 (ul=%d); delete this entry", pc.Style.Underline)
+		}
+	})
+	t.Run("sgr-implementation-defined-colour", func(t *testing.T) {
+		// "38;0" names colour type 0, implementation defined. xterm and tmux
+		// consume the 0 as the colour type, so "1;38;0" leaves the text bold.
+		// libghostty consumes only 38 and then reads the 0 as SGR 0, which
+		// resets the bold. The pure emulator follows xterm and tmux, which
+		// is right: the 0 is a subordinate parameter of 38, not an SGR.
+		p := newDiffPair(t, 20, 5)
+		p.write(t, []byte("\x1b[1;38;0mx"))
+		pc := p.pure.CellAt(0, 0)
+		gc := p.gh.CellAt(0, 0)
+		if pc.Style.Attrs == gc.Style.Attrs {
+			t.Fatalf("pure now agrees with ghostty on SGR 1;38;0 (attrs=%x); delete this entry", pc.Style.Attrs)
 		}
 	})
 }
