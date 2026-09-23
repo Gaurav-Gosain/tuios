@@ -106,6 +106,11 @@ type InboxAlertDueMsg struct {
 // InboxDismissedMsg is the answer to a dismiss.
 type InboxDismissedMsg struct {
 	Err error
+	// Silent marks a dismiss the client sent on its own, such as a finished
+	// turn seen under the person's eyes. Its failure is never shown: the
+	// person did not ask for it, and the next event or listing corrects the
+	// mirror either way.
+	Silent bool
 }
 
 // inboxWatchMsg wraps what the watcher delivers, so Update can re-arm the
@@ -444,7 +449,7 @@ func (m *OS) inboxSeenUnderEyes(it session.AttentionItem) tea.Cmd {
 		return nil
 	}
 	if w := m.GetFocusedWindow(); w != nil && w.ID == it.Window {
-		return m.inboxDismissCmd(it.ID)
+		return m.inboxDismissCmd(it.ID, true)
 	}
 	return nil
 }
@@ -950,38 +955,55 @@ func (m *OS) InboxDismiss() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	return m.inboxDismissCmd(it.ID)
+	return m.inboxDismissCmd(it.ID, false)
 }
 
 // inboxDismissCmd is the dismiss-attention call, with this client's attach
-// nonce, which is what lets the daemon tell the person from an agent.
-func (m *OS) inboxDismissCmd(id string) tea.Cmd {
+// nonce, which is what lets the daemon tell the person from an agent. silent
+// marks a dismiss the client sends on its own, which shows nothing when it
+// cannot be sent or fails.
+func (m *OS) inboxDismissCmd(id string, silent bool) tea.Cmd {
 	if m.DaemonClient == nil || m.AttachedHost != "" {
-		m.ShowNotification("Dismissing needs a client attached to this machine's daemon", "info", m.Settings.NotificationDuration)
+		if !silent {
+			m.ShowNotification("Dismissing needs a client attached to this machine's daemon", "info", m.Settings.NotificationDuration)
+		}
 		return nil
 	}
 	nonce := m.DaemonClient.HumanNonce()
 	if nonce == "" {
-		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		if !silent {
+			m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		}
 		return nil
 	}
 	build := m.DaemonClient.ClientVersion()
 	return func() tea.Msg {
 		client, err := session.DialVerbClientAs(build)
 		if err != nil {
-			return InboxDismissedMsg{Err: err}
+			return InboxDismissedMsg{Err: err, Silent: silent}
 		}
 		defer func() { _ = client.Close() }()
 		_, err = client.CallWithTimeout("dismiss-attention", map[string]any{"id": id, "human_nonce": nonce}, 5*time.Second)
-		return InboxDismissedMsg{Err: err}
+		return InboxDismissedMsg{Err: err, Silent: silent}
 	}
 }
 
-// applyInboxDismissed says what went wrong, when something did.
+// inboxDismissGone reports whether a dismiss failed only because the item was
+// no longer open: another client dismissed it, or the daemon closed it on its
+// own. The item is gone either way, which is what the dismiss asked for.
+func inboxDismissGone(err error) bool {
+	var callErr *session.VerbCallError
+	return errors.As(err, &callErr) && callErr.Code == session.ErrVerbInvalidParams &&
+		callErr.Hint != nil && callErr.Hint.Param == "id"
+}
+
+// applyInboxDismissed says what went wrong, when something did. A dismiss the
+// client sent on its own, and an item that was already closed, say nothing.
 func (m *OS) applyInboxDismissed(msg InboxDismissedMsg) {
-	if msg.Err != nil {
-		m.ShowNotification("The dismiss did not go through: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
+	if msg.Err == nil || msg.Silent || inboxDismissGone(msg.Err) {
+		return
 	}
+	m.ShowNotification("The dismiss did not go through: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 }
 
 // inboxNeedsYou reports whether an item is something a person has to act on,

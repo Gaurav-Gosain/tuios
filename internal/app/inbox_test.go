@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -391,5 +392,63 @@ func TestInboxWatcherFollowsTheDaemon(t *testing.T) {
 	}
 	if strings.Join(got, " ") != "close:errored open:approval" {
 		t.Errorf("events %v, want the errored item closed and the approval opened in one batch", got)
+	}
+}
+
+// A dismiss the person did not ask for, and one that lost a race to another
+// client or to the daemon's own close, show nothing. A dismiss the person
+// asked for that really failed still says so.
+func TestInboxDismissFailuresOnlyShowWhenTheyMatter(t *testing.T) {
+	gone := &session.VerbCallError{
+		Code:    session.ErrVerbInvalidParams,
+		Message: "no open attention item has id 4",
+		Hint:    &session.VerbHint{Param: "id"},
+	}
+	notHuman := &session.VerbCallError{
+		Code:    session.ErrVerbNotHuman,
+		Message: "dismiss-attention is for the person at an attached client",
+		Hint:    &session.VerbHint{Param: "human_nonce"},
+	}
+	transport := errors.New("failed to send request: broken pipe")
+	cases := []struct {
+		name string
+		msg  InboxDismissedMsg
+		want int
+	}{
+		{"silent and already closed", InboxDismissedMsg{Err: gone, Silent: true}, 0},
+		{"silent and broken", InboxDismissedMsg{Err: transport, Silent: true}, 0},
+		{"asked for and already closed", InboxDismissedMsg{Err: gone}, 0},
+		{"asked for and not human", InboxDismissedMsg{Err: notHuman}, 1},
+		{"asked for and broken", InboxDismissedMsg{Err: transport}, 1},
+		{"asked for and done", InboxDismissedMsg{}, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := inboxOS(t, zeroSettle())
+			m.applyInboxDismissed(c.msg)
+			if len(m.Notifications) != c.want {
+				t.Errorf("%d toasts, want %d", len(m.Notifications), c.want)
+			}
+		})
+	}
+}
+
+// The dismiss sent for a finished turn seen under the person's eyes is marked
+// silent, so neither a race with another client nor a client that cannot send
+// it raises a toast.
+func TestInboxSeenUnderEyesDismissIsSilent(t *testing.T) {
+	m := inboxOS(t, zeroSettle())
+	m.FocusedWindow = 0
+	w := m.GetFocusedWindow()
+	if w == nil {
+		t.Fatal("the test OS has no focused pane")
+	}
+	m.DaemonClient = nil
+	cmd := m.inboxSeenUnderEyes(item("5", session.AttentionFinished, m.sidebarCurrentSessionID(), w.ID, "", 1))
+	if cmd != nil {
+		t.Fatal("with no daemon client there is nothing to send")
+	}
+	if len(m.Notifications) != 0 {
+		t.Errorf("an automatic dismiss with no daemon client raised %d toasts", len(m.Notifications))
 	}
 }

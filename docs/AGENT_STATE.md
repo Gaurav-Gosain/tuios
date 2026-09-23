@@ -928,6 +928,10 @@ text, so nothing depends on colour, and the ASCII glyph set covers the marks.
 
 A finished turn that ends in the pane you are looking at is dismissed by your
 client as soon as it arrives, the rule the rail applies to its own unread mark.
+That dismiss is quiet: if it fails, nothing is shown, since you did not ask for
+it. A dismiss you ask for with `d` that finds the item already closed, because
+another client or the daemon closed it first, also shows nothing, since the item
+is gone either way. Any other failure of `d` is shown.
 
 The rail's agents header counts the Inbox while the client is connected to it:
 approvals, questions and errored items are `blocked`, finished items are
