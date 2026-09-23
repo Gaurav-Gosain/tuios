@@ -61,6 +61,9 @@ func (m *OS) RefreshSessionList() []sessiontree.Node {
 // daemon round trip. The cache behind it is refreshed off the UI goroutine, at
 // the faster cadence Update uses while this overlay is open.
 func (m *OS) OpenSessionSwitcher() {
+	if m.learnOff(learnNoteSessions) {
+		return
+	}
 	m.ShowSessionSwitcher = true
 	m.SessionSwitcherQuery = ""
 	m.SessionSwitcherSelected = 0

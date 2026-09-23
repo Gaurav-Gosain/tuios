@@ -267,6 +267,14 @@ func (d *ActionDispatcher) Dispatch(action string, msg tea.KeyPressMsg, o *app.O
 		// through, so one line here covers all three. Names only: see
 		// NoteAction.
 		o.NoteAction(action)
+		// The browser build's guided tour hears every action by name, and
+		// in Learn mode an action the demo cannot do shows a note instead.
+		if o.OnAction != nil {
+			o.OnAction(action)
+		}
+		if o.LearnBlocksAction(action) {
+			return o, nil
+		}
 		return handler(msg, o)
 	}
 	return o, nil

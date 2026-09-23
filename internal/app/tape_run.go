@@ -1,10 +1,14 @@
 package app
 
 import (
+	"errors"
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
@@ -179,6 +183,36 @@ func (m *OS) startTapePlayback(commands []tape.Command, workspace int) {
 	m.ScriptAwaitWindows = 0
 	m.ScriptAwaitDeadline = time.Time{}
 	m.ScriptExecutor = tape.NewCommandExecutor(m)
+}
+
+// PlayTapeMsg asks the Update loop to play a tape script. The browser build
+// sends it when a lesson, or the fake shell's `tuios tape play`, plays one.
+type PlayTapeMsg struct {
+	// Name is what the notification calls the tape.
+	Name string
+	// Script is the tape source.
+	Script string
+}
+
+// PlayTape parses a tape script and plays it in this session through the
+// interactive player, the one `tuios tape play` and the tape manager use. It
+// returns the tick that drives playback.
+func (m *OS) PlayTape(name, script string) (tea.Cmd, error) {
+	if m.ScriptMode {
+		return nil, errors.New("a tape is already playing")
+	}
+	commands, errs := tape.ParseFile(script)
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("tape %s: %s", name, errs[0])
+	}
+	if len(commands) == 0 {
+		return nil, fmt.Errorf("tape %s is empty", name)
+	}
+	m.startTapePlayback(commands, 0)
+	if name != "" {
+		m.ShowNotification("Playing "+name, "info", 2*time.Second)
+	}
+	return TickCmd(&m.Settings), nil
 }
 
 // seedCommands builds the leading commands that give an asynchronously created

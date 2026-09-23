@@ -837,6 +837,26 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// the idle path is the same whether a picker has ever been opened.
 		return m, m.handleEffectPreviewFrame(msg)
 
+	case AgentReportMsg:
+		// An agent in a pane reporting its state in process, with no daemon to
+		// send set-agent-state to. See agent_report.go.
+		if err := m.ReportAgentState(AgentReport(msg)); err != nil {
+			m.LogWarn("agent report: %v", err)
+		}
+		return m, nil
+
+	case PlayTapeMsg:
+		cmd, err := m.PlayTape(msg.Name, msg.Script)
+		if err != nil {
+			m.ShowNotification(err.Error(), "warning", m.Settings.NotificationDuration)
+		}
+		return m, cmd
+
+	case learnQuitMsg:
+		// A quit in Learn mode, which FilterLearnMode caught. See learn_mode.go.
+		m.handleLearnQuit()
+		return m, nil
+
 	case celebrateFrameMsg:
 		// A running celebration asking for its next frame. Like the saver it
 		// drives itself and stops asking once its last particle is gone.

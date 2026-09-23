@@ -35,6 +35,17 @@ type OSOptions struct {
 	// says so. See browser_client.go.
 	BrowserClient bool
 
+	// LearnMode runs the session as the guided tour in the browser build
+	// (cmd/tuios-wasm): quitting shows a note instead of ending the program,
+	// and actions the demo cannot do say so instead of failing. See
+	// learn_mode.go.
+	LearnMode bool
+
+	// GuestApps, when set, is what the launcher offers instead of scanning
+	// $PATH and .desktop files. The browser build has no filesystem to scan,
+	// and lists the fake shell's programs here, which its guest pty runs.
+	GuestApps []applist.Entry
+
 	// ConfigReadOnly makes the settings page apply changes to this session only
 	// and never write the config file. Set it wherever the person driving the
 	// session is not the person whose config file it is: tuios-web serves a
@@ -188,6 +199,7 @@ func NewOS(opts OSOptions) *OS {
 		KeybindRegistry:   opts.KeybindRegistry,
 		ConfigReadOnly:    opts.ConfigReadOnly,
 		BrowserClient:     opts.BrowserClient,
+		LearnMode:         opts.LearnMode,
 		ShowKeys:          opts.ShowKeys,
 		RecentKeys:        []KeyEvent{},
 		KeyHistoryMaxSize: 5,
@@ -237,6 +249,7 @@ func NewOS(opts OSOptions) *OS {
 	// it already ranked.
 	os.pathApps = applist.NewCache()
 	os.desktopApps = newDesktopCache()
+	os.guestApps = opts.GuestApps
 	os.launchHistory = applist.LoadFrecency(applist.DefaultPath())
 
 	// Initialize graphics passthrough. The passthroughs decide for themselves

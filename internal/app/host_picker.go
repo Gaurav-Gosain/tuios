@@ -153,6 +153,9 @@ const (
 // here. A picker with a single row is a dialog that asks a question with one
 // answer, which is the same rule OpenHostPicker follows.
 func (m *OS) OpenNewSessionPicker() {
+	if m.learnOff(learnNoteSessions) {
+		return
+	}
 	if !m.CanCreateSession() {
 		m.ShowNotification("Sessions need the daemon", "info", m.Settings.NotificationDuration)
 		return

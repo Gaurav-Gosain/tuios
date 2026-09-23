@@ -260,6 +260,9 @@ func (m *OS) showNotification(message, notifType string, duration time.Duration,
 	if len(m.Notifications) > maxLiveNotifications {
 		m.Notifications = m.Notifications[len(m.Notifications)-maxLiveNotifications:]
 	}
+	if m.OnNotification != nil {
+		m.OnNotification(message, notifType)
+	}
 }
 
 // NotificationExpired reports whether a message has outlived its duration. A

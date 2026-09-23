@@ -158,7 +158,7 @@ func (m *OS) ScreenshotPreviewOpen() bool { return m.ShotPreview.Open }
 // entry, which decides whether the hint strip offers the drag or the keyboard
 // path; on a mouse-less entry every window is still reachable with tab.
 func (m *OS) BeginCapture(mouse bool) {
-	if m.Capture.Active {
+	if m.Capture.Active || m.learnOff(learnNoteShot) {
 		return
 	}
 	m.CloseScreenshotPreview(false)
@@ -250,6 +250,9 @@ func (m *OS) ScreenshotScreen() tea.Cmd {
 // two panes comes out as one flat picture that keeps the frame between them,
 // because the frame is simply part of the composed cells.
 func (m *OS) ScreenshotRegion(x0, y0, x1, y1 int) tea.Cmd {
+	if m.learnOff(learnNoteShot) {
+		return nil
+	}
 	grid := m.composedGrid(x0, y0, x1, y1)
 	if grid == nil {
 		m.ShowNotification("That selection is too small to capture.", "warning", m.Settings.NotificationDuration)

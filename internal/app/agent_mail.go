@@ -327,6 +327,9 @@ func (m *OS) OpenAgentMailForWindow(windowID string) tea.Cmd {
 }
 
 func (m *OS) openAgentMailFor(inbox string) tea.Cmd {
+	if m.learnOff(learnNoteMail) {
+		return nil
+	}
 	st := &m.AgentMail
 	m.ShowAgentMail = true
 	st.Inbox = inbox

@@ -212,6 +212,9 @@ func (m *OS) clampTapeScroll() {
 
 // ToggleTapeManager toggles the tape manager overlay
 func (m *OS) ToggleTapeManager() {
+	if !m.ShowTapeManager && m.learnOff(learnNoteTapes) {
+		return
+	}
 	m.ShowTapeManager = !m.ShowTapeManager
 	if m.ShowTapeManager {
 		m.RefreshTapeFiles()
@@ -287,6 +290,9 @@ func (m *OS) TapeManagerCancelDelete() {
 
 // TapeManagerStartRecording starts recording a new tape
 func (m *OS) TapeManagerStartRecording() {
+	if m.learnOff(learnNoteRecord) {
+		return
+	}
 	if m.TapeManager == nil {
 		m.InitTapeManager()
 	}

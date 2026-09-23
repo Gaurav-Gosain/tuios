@@ -28,6 +28,9 @@ type PathAppsMsg struct {
 // can afford to wait for on a network mount. Everything already found stays on
 // screen while it runs, so the launcher is typeable from the moment it opens.
 func (m *OS) ScanPathApps() tea.Cmd {
+	if guest := m.guestApps; guest != nil {
+		return func() tea.Msg { return PathAppsMsg{Entries: guest} }
+	}
 	cache := m.pathApps
 	if cache == nil {
 		// An OS built outside NewOS (tests, the fuzz target) has no cache and no

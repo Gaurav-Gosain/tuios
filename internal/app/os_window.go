@@ -419,6 +419,11 @@ func (m *OS) cascadeFrom(homeX, homeY, width, height, leftMargin, contentWidth, 
 //
 // Every deliberate quit path routes through here so they cannot drift apart.
 func (m *OS) QuitSession() {
+	// Learn mode never quits, so it must not tear the panes down either. The
+	// tea.Quit that follows is turned into a note by FilterLearnMode.
+	if m.LearnMode {
+		return
+	}
 	m.QuitRequested = true
 	if m.IsDaemonSession && m.DaemonClient != nil {
 		_ = m.DaemonClient.KillSession()

@@ -695,6 +695,16 @@ type OS struct {
 	// BrowserClient says the far end is a browser tab. See browser_client.go
 	// for what that costs and what tuios says about it.
 	BrowserClient bool
+	// LearnMode is the guided tour in the browser build: nothing quits, and
+	// what the demo cannot do says so. See learn_mode.go.
+	LearnMode bool
+	// OnAction, when set, hears the name of every action the dispatcher runs,
+	// before it runs. The browser build reports it to the page, so a lesson
+	// knows which binding a key reached. Nil everywhere else.
+	OnAction func(action string)
+	// OnNotification, when set, hears every message shown in the dock, with
+	// its level. The browser build reports it to the page. Nil everywhere else.
+	OnNotification func(message, level string)
 	// configReadOnlyTold keeps the "this will not be saved" notice to once per
 	// session, since it would otherwise fire on every keypress in the settings
 	// page.
@@ -842,6 +852,9 @@ type OS struct {
 	// desktopApps caches the .desktop scan across opens, reparsing only the
 	// files whose mtime moved. Nil on a platform that has no such thing.
 	desktopApps *desktopCache
+	// guestApps, when set, is the whole of what the launcher offers, in place
+	// of $PATH and .desktop files. See OSOptions.GuestApps.
+	guestApps []applist.Entry
 	// launcherSource is the two caches merged into the one list the launcher
 	// ranks, refreshed when a scan lands.
 	launcherSource []applist.Entry
