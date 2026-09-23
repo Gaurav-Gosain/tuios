@@ -365,6 +365,9 @@ type OS struct {
 	// shake is the pointer gesture that toggles the beam, when the person
 	// turned it on. Fixed size, no timer, no tick: see shake.go.
 	shake shakeState
+	// celebration is a short confetti burst drawn over the composed frame. It
+	// schedules frames only while particles are alive. See celebrate.go.
+	celebration celebrationState
 	// lastInteractionRender is when a drag/resize motion event last produced a
 	// frame. Motion events arrive faster than a frame can be composed, so this
 	// bounds how often they are allowed to redraw.

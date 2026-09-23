@@ -40,7 +40,6 @@
     border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--text); }
   #log { font: 11px ui-monospace, monospace; color: var(--muted); white-space: pre-wrap; margin: 0;
     max-height: 30vh; overflow: auto; border-top: 1px solid var(--line); padding-top: 10px; }
-  #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
 </style>
 </head>
 <body>
@@ -53,7 +52,6 @@
   <ol id="steps"></ol>
   <pre id="log"></pre>
 </aside>
-<canvas id="confetti"></canvas>
 <script src="webterm.js"></script>
 <script src="wasm_exec.js"></script>
 <script>
@@ -90,32 +88,29 @@ function onEvent(e) {
   if (current < steps.length && steps[current].done(e)) {
     current++;
     renderSteps();
-    confetti();
+    celebrate(current === steps.length);
   }
 }
 
-// Confetti, drawn here so the page needs no network.
-const canvas = document.getElementById('confetti');
-const ctx = canvas.getContext('2d');
-let bits = [];
-function confetti() {
-  canvas.width = innerWidth; canvas.height = innerHeight;
-  const colours = ['#cba6f7', '#f5c2e7', '#89b4fa', '#a6e3a1', '#f9e2af', '#fab387'];
-  for (let i = 0; i < 140; i++) {
-    bits.push({ x: innerWidth - 180, y: 120, vx: (Math.random() - .7) * 14, vy: -Math.random() * 12 - 4,
-      r: Math.random() * 6 + 3, c: colours[i % colours.length], a: Math.random() * 6, life: 90 });
-  }
-  if (bits.length === 140) requestAnimationFrame(tick);
+// The confetti is drawn by tuios itself, in terminal cells over the focused
+// pane, so it uses the session's theme. The last step gets the bigger burst.
+// A reader who asked for reduced motion gets a still sparkle instead.
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function celebrate(final) {
+  if (!window.tuios) return;
+  const args = [];
+  if (final) args.push('big');
+  if (reducedMotion.matches) args.push('still');
+  tuios.command('celebrate', ...args);
 }
-function tick() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  bits = bits.filter((b) => b.life-- > 0);
-  for (const b of bits) {
-    b.vy += .35; b.x += b.vx; b.y += b.vy; b.a += .2;
-    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.a); ctx.fillStyle = b.c;
-    ctx.fillRect(-b.r / 2, -b.r / 4, b.r, b.r / 2); ctx.restore();
-  }
-  if (bits.length) requestAnimationFrame(tick);
+
+// Reload keys always reach the browser, whatever mode tuios is in. A beginner
+// who presses Ctrl+R in a pane expects the page to reload, not a shell history
+// search. Returning false tells the terminal to leave the key alone: it is not
+// sent to tuios and its default action is not prevented.
+function isReloadKey(e) {
+  if (e.key === 'F5') return true;
+  return (e.ctrlKey || e.metaKey) && !e.altKey && (e.code === 'KeyR' || e.key === 'r' || e.key === 'R');
 }
 
 (async function main() {
@@ -129,6 +124,7 @@ function tick() {
     renderer: { prefer: new URLSearchParams(location.search).get('renderer') || 'webgl' },
     theme: { background: '#11111b' },
     mouse: { suppressContextMenu: true },
+    keyboard: { onKeyEvent: (e) => !isReloadKey(e) },
     // Option is the workspace modifier on a Mac; xterm must send it as Alt.
     xterm: { macOptionIsMeta: true },
   });

@@ -4,6 +4,7 @@ package main
 
 import (
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -295,6 +296,8 @@ func (o *observed) runCommand(c commandMsg) tea.Cmd {
 		_ = o.OS.SetMode(arg(0))
 	case "theme":
 		_ = o.OS.SetTheme(arg(0))
+	case "celebrate":
+		return o.celebrate(c.args)
 	case "type":
 		// Types into the focused pane, for a demo that plays itself.
 		if id := o.OS.GetFocusedWindowID(); id != "" {
@@ -302,4 +305,45 @@ func (o *observed) runCommand(c commandMsg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// celebrate runs the in-app confetti burst. Each argument is one of:
+//
+//	"big"    the larger finale burst
+//	"still"  a static sparkle, for a page that honours prefers-reduced-motion
+//	"x,y"    burst from that screen cell
+//	anything else is a window id to burst from
+//
+// With no cell and no window it bursts from the focused pane.
+func (o *observed) celebrate(args []string) tea.Cmd {
+	var opts app.CelebrateOptions
+	windowID := ""
+	cellX, cellY, haveCell := 0, 0, false
+	for _, a := range args {
+		switch a {
+		case "":
+		case "big":
+			opts.Big = true
+		case "still":
+			opts.Still = true
+		default:
+			if xs, ys, ok := strings.Cut(a, ","); ok {
+				x, errX := strconv.Atoi(strings.TrimSpace(xs))
+				y, errY := strconv.Atoi(strings.TrimSpace(ys))
+				if errX == nil && errY == nil {
+					cellX, cellY, haveCell = x, y, true
+					continue
+				}
+			}
+			windowID = a
+		}
+	}
+	switch {
+	case haveCell:
+		return o.OS.CelebrateAt(cellX, cellY, opts)
+	case windowID != "":
+		return o.OS.CelebrateWindow(windowID, opts)
+	default:
+		return o.OS.Celebrate(opts)
+	}
 }

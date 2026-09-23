@@ -837,6 +837,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// the idle path is the same whether a picker has ever been opened.
 		return m, m.handleEffectPreviewFrame(msg)
 
+	case celebrateFrameMsg:
+		// A running celebration asking for its next frame. Like the saver it
+		// drives itself and stops asking once its last particle is gone.
+		return m, m.handleCelebrateFrame(msg.at)
+
 	case screensaverFrameMsg:
 		// The running saver asking for its next frame. It drives itself rather
 		// than riding the maintenance tick, which is what keeps the idle path

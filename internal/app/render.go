@@ -616,6 +616,10 @@ func (m *OS) composeFrame() string {
 	if m.spotlight.on && !m.screensaver.active {
 		m.applySpotlight(canvas)
 	}
+	// The confetti goes after the beam, so a burst is never dimmed by it.
+	if m.celebration.active() {
+		m.celebration.draw(canvas)
+	}
 	// The frame goes out as the canvas wrote it. The bubbletea renderer
 	// downsamples it per cell to the profile of the terminal it is drawn on,
 	// the same one lipgloss.Writer would have detected locally and the one
@@ -664,6 +668,11 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// a recording. The saver needs no mention here: it took the fast path away
 	// several checks above, and it suspends the pass anyway.
 	if m.spotlight.on {
+		return nil, false
+	}
+	// The celebration is a pass over the canvas too, for the second or so it
+	// is on screen.
+	if m.celebration.active() {
 		return nil, false
 	}
 	if m.panesBorderless() {
