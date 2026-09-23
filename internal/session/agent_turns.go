@@ -128,8 +128,20 @@ func (s *Session) markCompletionSeenLocked(windowID string) {
 			s.completionSeen = make(map[string]uint64)
 		}
 		s.completionSeen[w.ID] = w.CompletionSeq
+		// The attention queue closes the pane's finished item on this. It is
+		// emitted under the state lock like every other event, so it lands
+		// after the transition that opened the item.
+		s.emit(SessionEvent{Type: eventCompletionSeen, Window: w.ID, completionSeq: w.CompletionSeq})
 		return
 	}
+}
+
+// MarkCompletionSeen records that the person has seen every turn a window has
+// finished so far, which is what dismissing a finished item in the Inbox says.
+func (s *Session) MarkCompletionSeen(windowID string) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	s.markCompletionSeenLocked(windowID)
 }
 
 // finishedUnread reports the daemon's view of whether a window finished a turn

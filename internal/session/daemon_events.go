@@ -51,7 +51,11 @@ const (
 	EventSessionCreated = "session-created" // a session was created
 	EventSessionClosed  = "session-closed"  // a session was terminated
 	EventGap            = "gap"             // slow-subscriber marker: N events were dropped
-	EventSubscribed     = "subscribed"      // subscribe ack result type
+	// EventAttention is a change to the Inbox, the daemon's attention queue:
+	// an item opened, updated or closed. Action says which, and Attention
+	// carries the item. See attention.go.
+	EventAttention  = "attention"
+	EventSubscribed = "subscribed" // subscribe ack result type
 )
 
 // defaultEventQueue bounds a subscriber's per-connection event queue. When it is
@@ -111,6 +115,10 @@ type streamEvent struct {
 	// and on every gap marker.
 	BootID string `json:"boot_id,omitempty"`
 	Time   int64  `json:"time,omitempty"`
+	// Action is what an attention event did to its item: open, update or
+	// close. Attention is the item, and on close its closed field says why.
+	Action    string         `json:"action,omitempty"`
+	Attention *AttentionItem `json:"attention,omitempty"`
 }
 
 // SessionEvent is the source-side event a Session emits through its event sink.
@@ -144,7 +152,23 @@ type SessionEvent struct {
 	hookPrevWorkspace int
 	hookHarness       string
 	hookMessage       string
+
+	// These feed the attention queue, and like the hook fields they never reach
+	// the wire. hookKind is the blocked_by of a needs_input window.
+	// completionSeq and prevCompletionSeq are the window's completion_seq after
+	// and before the transition, so a finished turn can be told from a pane that
+	// merely came to rest. A completion-seen event carries the count that was
+	// seen in completionSeq.
+	hookKind          string
+	completionSeq     uint64
+	prevCompletionSeq uint64
 }
+
+// eventCompletionSeen is raised when an attached client's state push shows it
+// focused a pane with more finished turns than anybody had seen. It is internal:
+// the daemon's sink hands it to the attention queue and never publishes it, and
+// no hook fires on it.
+const eventCompletionSeen = "completion-seen"
 
 // eventFilter selects which events a subscriber receives. A zero value matches
 // everything. An empty types set matches all event types.

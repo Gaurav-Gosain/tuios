@@ -939,6 +939,57 @@ tuios subscribe --types agent-state --after-seq 118 --boot-id 9f2c41d07a3e8b65
 
 # Wait for the next bell anywhere, then exit
 tuios subscribe --types bell --count 1
+
+# Follow the Inbox: every item that opens, changes or closes
+tuios subscribe --types attention
+```
+
+### `tuios list-attention`
+
+List the Inbox: every approval and question an agent is blocked on, mail to
+you, errored agents, and finished turns nobody has looked at, in every session
+on the daemon. Rows are grouped Approvals, Questions, Mail, Errored, Finished,
+oldest first, with how long each has waited, its id, its session and pane, and
+what it said. The TUI's Inbox (prefix `i`) is the same list.
+
+An item closes by itself when what opened it stops being true. Dismissing one
+is for the person at an attached client and is done from the Inbox; there is
+no command for it, because a command run from a pane is exactly what must not
+be able to clear the person's queue. See
+[protocol.md](protocol.md#list-attention) for the fields and rules.
+
+**Usage:**
+```bash
+tuios list-attention [flags]
+```
+
+**Flags:**
+- `-s, --session <name>`: Only this session (default: every session)
+- `--kind <kind>`: Only these kinds, repeatable or comma-separated: `approval`, `question`, `mail`, `errored`, `finished`
+- `--json`: Output the verb result as JSON
+
+**Examples:**
+```bash
+# What needs me?
+tuios list-attention
+
+# Only what blocks an agent
+tuios list-attention --kind approval --kind question
+
+# The oldest approval's pane, for a script
+tuios list-attention --json --kind approval | jq -r '.items[0].window'
+```
+
+Output:
+
+```
+Approvals
+   12m  #17    fan-3/claude  approve Bash: go test ./...
+
+Finished
+    3h  #9     work/review  all tests pass
+
+2 waiting. Open the Inbox with the prefix key then i, or jump to the oldest with the prefix key then o.
 ```
 
 ### `tuios set-agent-state`
@@ -1808,6 +1859,7 @@ them.
 | Command | What it does |
 |---------|--------------|
 | `tuios list-agents` | List the agent panes in a session and what each is doing |
+| `tuios list-attention` | List the Inbox: what is waiting for you in every session (see below) |
 | `tuios get-agent-state` | Read a pane's reported agent state |
 | `tuios set-agent-meta [key=value ...]` | Record display metadata about a pane's agent (model, context, a summary) for the rail |
 | `tuios set-agent-session <id> --harness <h>` | Record which conversation a pane's agent runs, for a later resume, without changing its state |

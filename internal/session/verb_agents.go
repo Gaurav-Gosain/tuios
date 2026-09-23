@@ -391,6 +391,8 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 		Session: sess.Name,
 		Window:  stored.To,
 	})
+	// Mail to the person waits in the Inbox until it is read.
+	d.attention.noteMail(stored)
 
 	return map[string]any{
 		"type":       "agent_message_sent",
@@ -485,6 +487,21 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 	}
 	if len(marked) > 0 {
 		d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{ReadIDs: marked, ReadAt: readAt}, "")
+	}
+	// A thread of the person's mail with nothing left unread in it is no
+	// longer waiting in the Inbox.
+	if q.inbox == AgentInboxHuman && len(marked) > 0 {
+		threads := map[uint64]bool{}
+		for _, m := range res.Messages {
+			if m.WasUnread && m.ReadAt != 0 {
+				threads[m.ThreadID] = true
+			}
+		}
+		for thread := range threads {
+			if _, unread := d.agents.firstUnread(sess.Name, AgentInboxHuman, thread); !unread {
+				d.attention.noteMailRead(sess.Name, thread)
+			}
+		}
 	}
 
 	return map[string]any{

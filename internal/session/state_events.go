@@ -34,6 +34,10 @@ type lifecycleWindow struct {
 	// agentStateAt rides along for the turn count, which needs to know when a
 	// working phase began if nothing recorded it. See agent_turns.go.
 	agentStateAt int64
+	// agentKind and completionSeq ride along for the attention queue: what a
+	// needs_input window is blocked by, and how many turns it has finished.
+	agentKind     string
+	completionSeq uint64
 }
 
 // lifecycleSnapshot is a copy of the lifecycle-relevant parts of a SessionState.
@@ -60,16 +64,18 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 		w := &state.Windows[i]
 		snap.index[w.ID] = len(snap.windows)
 		snap.windows = append(snap.windows, lifecycleWindow{
-			id:           w.ID,
-			ptyID:        w.PTYID,
-			title:        w.Title,
-			customName:   w.CustomName,
-			workspace:    w.Workspace,
-			minimized:    w.Minimized,
-			agentState:   w.AgentState,
-			agentHarness: w.AgentHarness,
-			agentMessage: w.AgentMessage,
-			agentStateAt: w.AgentStateAt,
+			id:            w.ID,
+			ptyID:         w.PTYID,
+			title:         w.Title,
+			customName:    w.CustomName,
+			workspace:     w.Workspace,
+			minimized:     w.Minimized,
+			agentState:    w.AgentState,
+			agentHarness:  w.AgentHarness,
+			agentMessage:  w.AgentMessage,
+			agentStateAt:  w.AgentStateAt,
+			agentKind:     agentBlockedBy(*w),
+			completionSeq: w.CompletionSeq,
 		})
 	}
 	return snap
@@ -166,6 +172,10 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				hookPrevState: prev.agentState.Name(),
 				hookHarness:   w.agentHarness,
 				hookMessage:   w.agentMessage,
+
+				hookKind:          w.agentKind,
+				completionSeq:     w.completionSeq,
+				prevCompletionSeq: prev.completionSeq,
 			})
 		}
 	}

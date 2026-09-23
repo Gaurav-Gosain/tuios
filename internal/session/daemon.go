@@ -104,6 +104,12 @@ type Daemon struct {
 	// pane whose shell is new. See verb_mailbox.go.
 	agents *agentBus
 
+	// attention is the Inbox: every approval, question, message to the person,
+	// error and unseen finished turn in every session. It is fed from the
+	// session event sinks and the mailbox, and saved beside the session state.
+	// See attention.go.
+	attention *attentionStore
+
 	// stash is the per-session file store the stash verbs write into. It is held
 	// beside agents for the same reason: it must never reach disk as state, and
 	// its lifetime is the session's. Unlike the ring it does put bytes on disk,
@@ -392,6 +398,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		agentStallTimeout:  resolveAgentStallTimeout(cfg.AgentStallTimeout),
 		agentMatcher:       newAgentMatcher(resolveAgentBinaries(cfg.AgentBinaries)),
 	}
+	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
@@ -559,10 +566,19 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				}
 			}
 		}
+		// A pane seen is news for the Inbox only: it is not a stream event and
+		// raises no hook.
+		if ev.Type == eventCompletionSeen {
+			d.attention.noteSessionEvent(name, ev)
+			return
+		}
 		// Hooks run before the fan-out because a hook is a side effect of the
 		// fact and a subscriber is a reader of it. Fire itself only starts
 		// goroutines, so nothing here waits on a command.
 		d.fireSessionHooks(s, ev)
+		// The event goes out before the Inbox change it causes, so a
+		// subscriber sees the transition and then the item it opened.
+		defer d.attention.noteSessionEvent(name, ev)
 		d.events.publish(streamEvent{
 			Type:      ev.Type,
 			Session:   name,
@@ -592,6 +608,8 @@ func (d *Daemon) onSessionDeleted(s *Session) {
 	d.events.publish(streamEvent{Type: EventSessionClosed, Session: s.Name})
 	// A session with no windows has no inboxes, so its ring is dropped with it.
 	d.agents.forget(s.Name)
+	// And nothing in it is waiting for anybody any more.
+	d.attention.closeSession(s.Name)
 	// And its stashed files go with it. This is the lifetime the stash promises,
 	// and it runs on the manager's delete hook, so every path that kills a
 	// session takes the files with it.
@@ -685,6 +703,10 @@ func (d *Daemon) Start() error {
 	if !d.disableAutoRestore {
 		d.restoreAllSessions()
 	}
+
+	// The Inbox comes back after the sessions do, since what it keeps is
+	// decided by which sessions and panes came back.
+	d.attention.load(attentionPath(), d.attentionLive)
 
 	// The links come up in the background. Start returns at once whatever the
 	// remote machines are doing, so a host that is powered off cannot delay the
@@ -789,6 +811,11 @@ func (cs *connState) drop() {
 func (d *Daemon) shutdown() error {
 	d.shutdownOnce.Do(func() {
 		log.Println("Shutting down daemon...")
+
+		// The Inbox is saved first and not again. Everything below closes
+		// panes, and a pane closing on shutdown is not the person dealing
+		// with what was waiting in it.
+		d.attention.saveNowAndFreeze()
 
 		if d.listener != nil {
 			_ = d.listener.Close()

@@ -58,9 +58,12 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"popup#0":                {errCode: ErrVerbNeedsClient, why: "a popup is a client window"},
 	"popup#1":                {errCode: ErrVerbNeedsClient, why: "a popup is a client window"},
 	"resolve-pane#0":         {errCode: ErrVerbWindowNotFound, why: "the example's pids are not the fixture's shells"},
-	"run-command#0":          {errCode: ErrVerbNeedsClient, why: "ToggleZoom is a client command"},
-	"set-layout#0":           {errCode: ErrVerbNeedsClient, why: "tiling is the client's arithmetic"},
-	"split-window#0":         {errCode: ErrVerbNeedsClient, why: "a split is the client's arithmetic"},
+	// The example's nonce is a placeholder, and no client is attached to
+	// issue a real one. The allowed path is proved in verb_attention_test.go.
+	"dismiss-attention#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may dismiss, and none is"},
+	"run-command#0":       {errCode: ErrVerbNeedsClient, why: "ToggleZoom is a client command"},
+	"set-layout#0":        {errCode: ErrVerbNeedsClient, why: "tiling is the client's arithmetic"},
+	"split-window#0":      {errCode: ErrVerbNeedsClient, why: "a split is the client's arithmetic"},
 
 	// The fixture has no [hosts] table, so the one host name an example can
 	// use is not configured. The connection itself is proved with two daemons

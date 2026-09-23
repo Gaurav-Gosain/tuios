@@ -885,6 +885,49 @@ A pane that reports its own state is the only one you can trust to say
 `needs_input`. A pane that does not report has agent state `none` no matter what
 is happening inside it, so fall back to `window-idle` or an exit marker there.
 
+### What the person sees: the Inbox
+
+Everything waiting for the person, in every session, is one list the daemon
+keeps: an approval or a question (a pane on `needs_input`, split by
+`blocked_by`), mail to `human`, a pane on `errored`, and a finished turn nobody
+has looked at. The person opens it with the prefix key then `i`, and jumps to
+the oldest item with the prefix key then `o`. You can read the same list:
+
+```sh
+tuios list-attention
+tuios list-attention --kind approval --kind question
+tuios list-attention --json
+```
+
+```
+Approvals
+   12m  #17    fan-3/claude  approve Bash: go test ./...
+
+1 waiting. Open the Inbox with the prefix key then i, or jump to the oldest with the prefix key then o.
+```
+
+What this means for how you report:
+
+- Your `needs_input` becomes a row with your message as its summary, so make
+  the message the question: `approve Bash: rm -rf build`, not `waiting`. Pass
+  `--kind approval` or `--kind question` so it lands in the right group.
+- The row goes away by itself when you leave `needs_input` or `errored`. Report
+  `working` as soon as you are unblocked and the person is not sent to a prompt
+  that is already answered.
+- A summary is cut to 160 bytes and anything shaped like a credential
+  (`TOKEN=...`, `password: ...`, `Bearer ...`) is masked before it is shown or
+  stored, but do not put secrets in a message in the first place.
+- Mail to `human` is a row per thread until the person reads it.
+- You cannot dismiss a row: `dismiss-attention` answers `not_human` to anything
+  but an attached client.
+
+To watch it change, subscribe to `attention` events. List first and pass the
+listing's `seq` and `boot_id`, and nothing is missed in between:
+
+```sh
+tuios subscribe --types attention
+```
+
 ## Working with the other agents in the session
 
 An agent pane is a window, so everything above already applies to it. This
@@ -2229,8 +2272,8 @@ when you are matching rather than reading: `invalid_request`, `unknown_verb`,
 `invalid_params`, `session_not_found`, `session_exists`, `window_not_found`,
 `no_windows`, `pty_not_found`, `needs_client`, `option_not_found`,
 `command_failed`, `timeout`, `not_ready`, `agent_blocked`, `prompt_stalled`,
-`loop_refused`, `rate_limited`, `no_keyboard`, `forbidden`, `protocol_mismatch`,
-`unknown_host`, `host_unreachable`,
+`loop_refused`, `rate_limited`, `no_keyboard`, `forbidden`, `not_human`,
+`protocol_mismatch`, `unknown_host`, `host_unreachable`,
 `host_refused`, `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
 `internal`. The CLI folds the same information into its messages.
 
@@ -2240,6 +2283,11 @@ carries the closest match; `list-options` describes them all.
 `needs_client` means the operation needs a rendered interface and the session has
 nobody attached. Reading, writing, waiting, creating, moving and everything in
 the agent chapter never need one; splitting, tiling and directional focus do.
+
+`not_human` comes only from `dismiss-attention`: clearing the person's Inbox
+is for the person at an attached client, and a call from a pane cannot. Do not
+look for a way around it. Change your own state, or answer the mail, and the
+item closes by itself.
 
 `not_ready`, `agent_blocked`, `prompt_stalled`, `loop_refused`, `rate_limited`,
 `no_keyboard` and `forbidden` come only from the cross-agent verbs, and each has

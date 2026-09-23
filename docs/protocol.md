@@ -363,6 +363,27 @@ edited or sent the reply line, so the daemon stores it as `claimed_human`. The
 reply line reads `automated reply:` while that is so. Such a reply used to be
 signed like one typed at the keyboard.
 
+**The Inbox.** The daemon keeps one attention queue over every session, read
+with the new verbs `list-attention` and `dismiss-attention` and followed with
+the new event type `attention` (see [list-attention](#list-attention)). What
+changes for an existing caller:
+
+- `subscribe` with no `types` filter now also delivers `attention` events. A
+  consumer that switches on `type` and ignores the ones it does not know is
+  unaffected; one that treats every unknown type as an error should filter.
+- The replay ring holds `attention` events like any other retained event, so a
+  resume with `after_seq` replays them.
+- `EventTypeNames`, and so the accepted set of `subscribe`'s `types` param in
+  `list-verbs`, gains `attention`.
+- The error catalog gains `not_human`, raised only by `dismiss-attention`.
+- Dismissing a `finished` item marks the pane's turns seen, so its
+  `finished_unread` in `list-agents` goes false, the same as focusing the pane
+  in a client. Dismissing a `mail` item marks the person's mail in that thread
+  read, the same as reading it in the mail overlay, and the attached clients get
+  the usual read receipt.
+- The daemon writes the queue to `attention/items.json` under the session state
+  directory, mode 0600, and reads it back on start.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -431,6 +452,7 @@ catalog.
 | `prompt_stalled` | ask-agent typed the question and sent Enter, and within `stall_timeout` the pane did not show that it took it. The question was typed; look at the pane before sending it again. The hint names `capture-pane`. |
 | `loop_refused` | The call would loop: a pane addressing itself, or an ask that closes a cycle with one in flight. |
 | `rate_limited` | The sender is over the cross-agent message rate cap. |
+| `not_human` | Only the person at an attached client may make this call, and it carried no nonce from a live attach. `dismiss-attention` raises it. |
 | `no_keyboard` | The target is the person's inbox, `human`, which has no pane to type into. |
 | `forbidden` | The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as `human`. Nothing was done. |
 | `protocol_mismatch` | The caller's protocol version is outside the range this daemon serves. Only `hello` produces it. |
@@ -1240,6 +1262,88 @@ Wire compatibility: the metadata rides the window state as an additive field
 (`agent_meta`). An older client drops it and draws nothing, and an older daemon
 answers the verb with `unknown_verb`.
 
+### list-attention
+
+List the Inbox: everything waiting for the person, in every session on this
+daemon. Each item is one of five kinds, and the list is grouped in this order,
+oldest first inside each group:
+
+| Kind | Opens when | Closes when |
+| --- | --- | --- |
+| `approval` | A pane goes to `needs_input` with `blocked_by` `approval`. | The pane leaves `needs_input`. |
+| `question` | A pane goes to `needs_input` with any other `blocked_by`, or none. | The pane leaves `needs_input`. |
+| `mail` | A message to `human` lands in a thread. One item per thread; `count` is the unread messages. | The person's mail in the thread is read. |
+| `errored` | A pane goes to `errored`. | The pane leaves `errored`. |
+| `finished` | A pane's `completion_seq` goes up as it comes to rest. | An attached client focuses the pane, the agent starts another turn (`working`), blocks, or errors. |
+
+Every item also closes when its pane closes (mail excepted: the message is
+still unread), when its session ends, and on `dismiss-attention`. A pane has at
+most one blocking item, one errored item and one finished item, so a harness
+repeating itself or a fan of agents moving together updates rows rather than
+adding them, and an update that changes nothing publishes nothing.
+
+Params: `session` (optional; unlike most verbs, omitted means every session),
+`kinds` (optional list, from `approval`, `question`, `mail`, `errored`,
+`finished`).
+
+Response:
+
+```json
+{"result": {"type": "attention_list", "items": [{"id": "17", "kind": "approval", "session": "fan-3", "window": "3f2a9c1e", "workspace": 1, "harness": "claude-code", "name": "claude", "summary": "approve Bash: go test ./...", "since": 1790142942055373000, "seq": 41}], "counts": {"approval": 1, "question": 0, "mail": 0, "errored": 0, "finished": 0}, "total": 1, "seq": 1180, "boot_id": "9f2c41d07a3e8b65"}}
+```
+
+Item fields: `id` (stable, never reused on this machine), `kind`, `host` (empty
+for this machine; a hub will fill it for items from linked hosts), `session`,
+`window`, `workspace`, `harness`, `name`, `summary`, `options` (the answers a
+prompt offers, when a source reported them; nothing fills it yet), `since`
+(unix nanoseconds, when the item started waiting; an update keeps it), `seq`
+(the Inbox revision of the item's last change), `thread` and `count` (mail),
+`completion_seq` (finished).
+
+`summary` is text an agent wrote. The daemon keeps it to one line, removes
+control characters, masks what looks like a credential (`TOKEN=...`,
+`password: ...`, `Bearer ...`) and cuts it to 160 bytes before it is stored,
+sent to a subscriber or written to disk. The masking is a net for the common
+shapes, not a guarantee.
+
+`seq` and `boot_id` are the stream position the answer is current to. To follow
+the Inbox without missing anything, list it and then subscribe with
+`types: ["attention"]`, `after_seq` and `boot_id` from the listing. Every change
+after the listing is replayed; a `gap` means list again.
+
+Persistence: the queue survives a daemon restart. On start the daemon keeps the
+`finished` and `errored` items whose session and pane came back, and `mail`
+items whose session came back. It drops `approval` and `question` items: the
+prompt died with the process that painted it. Mail items outlive the message
+ring, which does not survive a restart; dismiss one to clear it.
+
+Wire compatibility: new verb and new event type. An older daemon answers
+`unknown_verb`, and the tuios client then shows the Inbox as unavailable.
+
+### dismiss-attention
+
+Close one Inbox item for the person.
+
+Params: `id` (required), `human_nonce` (required: the nonce from the attach
+reply of a TUI client attached right now, over the same kind of connection as
+this call).
+
+Only the person may clear what is waiting for the person. An agent in a pane
+has no attach and so no nonce, and gets `not_human`. A client attached to any
+session may dismiss items in any session, since the Inbox spans them. A second
+dismiss of the same item, or an id that is not open, is `invalid_params`.
+
+Dismissing a `finished` item marks the pane's turns seen. Dismissing a `mail`
+item marks the person's unread mail in the thread read. The other kinds only
+leave the list; the pane's agent state is not touched, and a later transition
+opens a new item.
+
+Response:
+
+```json
+{"result": {"type": "attention_dismissed", "id": "17", "kind": "approval", "session": "fan-3", "dismissed": true}}
+```
+
 ## Event stream
 
 The daemon can push events instead of a caller polling. A connection that issues
@@ -1275,6 +1379,7 @@ Event types:
 | `session-created` | A session was created. | `session` |
 | `session-closed` | A session was terminated. | `session` |
 | `gap` | Some events were not delivered to this connection. `reason` says why (see below). A gap has no `seq`. | `reason`, `dropped`, `boot_id` |
+| `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `window_closed`, `session_closed` or `evicted`. `session` and `window` are the item's, so the usual filters apply. | `session`, `window`, `action`, `attention` |
 
 ### What fires when
 
