@@ -1670,3 +1670,23 @@ cell, wide-rune spacers, painted blanks, blanks in links and empty lines.
 by line one. `TestWaitForOutputBackstopSeesUnannouncedChange` changes a pane
 behind the waiter's back, once through applied output and once through a
 resize, and fails if the backstop keys on the stream position alone.
+
+**ValidateKey stops building its tables per call** (`internal/config/keynormalizer.go`).
+It built a 7-entry modifier map and a 37-entry special-key map as literals on
+every call, and it runs for every binding, twice per TUI start: once in
+`LoadUserConfig` and once when `NewOS` asks for config warnings. The key table
+is a package variable now and the modifiers a switch; the accepted set and every
+message are unchanged. `TestValidateKeyModifiersOnEachPlatform` pins both on
+macOS and elsewhere and passes on the old code too, and
+`TestValidateKeyDoesNotAllocateForAPlainBinding` fails on it (5 allocations per
+call). The real config is the maintainer's 548-line one; `ValidateConfigDefault`
+is the in-repo benchmark on the default config.
+
+| Benchmark | before | after | |
+|---|---|---|---|
+| `LoadUserConfigReal` CPU | 800 us | 567 us | -29.2% (p=0.002) |
+| `LoadUserConfigReal` B/op | 1080 KiB | 556 KiB | -48.5% |
+| `LoadUserConfigReal` allocs/op | 6,778 | 5,899 | -13.0% |
+| `ValidateConfigDefault` CPU | 545 us | 350 us | -35.8% (p=0.002) |
+| `ValidateConfigDefault` B/op | 960 KiB | 434 KiB | -54.8% |
+| `ValidateConfigDefault` allocs/op | 5,156 | 4,274 | -17.1% |

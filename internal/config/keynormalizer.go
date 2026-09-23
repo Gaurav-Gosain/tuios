@@ -401,23 +401,9 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 			return false, "key combination incomplete (ends with +)"
 		}
 
-		// Valid modifiers (only those that work reliably in terminals)
-		validModifiers := map[string]bool{
-			"ctrl":  true,
-			"alt":   true,
-			"shift": true,
-			// Super only reaches a terminal that has negotiated the Kitty
-			// keyboard protocol, but the input path has always acted on super+v
-			// and shift+super+v for the host paste. Rejecting it here would make
-			// the working default unwritable the moment it became a binding.
-			"super":  true,
-			"opt":    kn.isMacOS, // opt only valid on macOS
-			"option": kn.isMacOS, // option only valid on macOS
-		}
-
 		// Check each modifier
 		for _, mod := range modifiers {
-			if !validModifiers[mod] {
+			if !validModifier(mod, kn.isMacOS) {
 				if mod == "opt" || mod == "option" {
 					return false, "opt/option modifiers are only valid on macOS"
 				}
@@ -433,25 +419,6 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 			}
 			modSet[mod] = true
 		}
-	}
-
-	// Valid special keys. The left/right modifier names are keys in their own
-	// right only under the Kitty keyboard protocol; they are accepted so a
-	// held-key binding (hold_window_mode) can name one.
-	validSpecialKeys := map[string]bool{
-		"leftalt": true, "rightalt": true, "leftctrl": true, "rightctrl": true,
-		"leftshift": true, "rightshift": true, "leftsuper": true, "rightsuper": true,
-		"leftmeta": true, "rightmeta": true, "lefthyper": true, "righthyper": true,
-		"enter": true, "return": true, "esc": true, "escape": true,
-		"tab": true, "space": true, "backspace": true, "delete": true,
-		"up": true, "down": true, "left": true, "right": true,
-		"home": true, "end": true, "pgup": true, "pageup": true,
-		"pgdown": true, "pagedown": true, "insert": true,
-		// Keys Bubble Tea names that most keyboards have but that a terminal
-		// reports only under the Kitty keyboard protocol. They suit a held-key
-		// binding, which needs that protocol anyway.
-		"capslock": true, "scrolllock": true, "numlock": true,
-		"printscreen": true, "pause": true, "menu": true,
 	}
 
 	// If there are modifiers, check if the actual key is valid
@@ -470,4 +437,40 @@ func (kn *KeyNormalizer) ValidateKey(key string) (bool, string) {
 	}
 
 	return true, ""
+}
+
+// validSpecialKeys are the key names ValidateKey accepts beyond single runes
+// and function keys. It is only read. The left/right modifier names are keys in
+// their own right only under the Kitty keyboard protocol; they are accepted so
+// a held-key binding (hold_window_mode) can name one.
+var validSpecialKeys = map[string]bool{
+	"leftalt": true, "rightalt": true, "leftctrl": true, "rightctrl": true,
+	"leftshift": true, "rightshift": true, "leftsuper": true, "rightsuper": true,
+	"leftmeta": true, "rightmeta": true, "lefthyper": true, "righthyper": true,
+	"enter": true, "return": true, "esc": true, "escape": true,
+	"tab": true, "space": true, "backspace": true, "delete": true,
+	"up": true, "down": true, "left": true, "right": true,
+	"home": true, "end": true, "pgup": true, "pageup": true,
+	"pgdown": true, "pagedown": true, "insert": true,
+	// Keys Bubble Tea names that most keyboards have but that a terminal
+	// reports only under the Kitty keyboard protocol. They suit a held-key
+	// binding, which needs that protocol anyway.
+	"capslock": true, "scrolllock": true, "numlock": true,
+	"printscreen": true, "pause": true, "menu": true,
+}
+
+// validModifier reports whether mod is a modifier that works reliably in
+// terminals. Super only reaches a terminal that has negotiated the Kitty
+// keyboard protocol, but the input path has always acted on super+v and
+// shift+super+v for the host paste, so rejecting it would make the working
+// default unwritable the moment it became a binding. opt and option are valid
+// only on macOS.
+func validModifier(mod string, isMacOS bool) bool {
+	switch mod {
+	case "ctrl", "alt", "shift", "super":
+		return true
+	case "opt", "option":
+		return isMacOS
+	}
+	return false
 }
