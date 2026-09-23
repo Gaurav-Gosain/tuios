@@ -261,6 +261,10 @@ type ScreenRule struct {
 	// no box is on the screen, which is what lets an idle rule prove a prompt
 	// box is there. Notify rules take no region.
 	Region string `toml:"region"`
+	// Answers says which keys answer the prompt a needs_input rule reads, so
+	// a person can answer it without attaching. See answers.go. Empty on
+	// every other rule.
+	Answers Answers `toml:"answers"`
 }
 
 // maxScreenPattern bounds one regex pattern's length. RE2 compiles a pattern
@@ -360,6 +364,9 @@ func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bo
 	}
 	if r.Kind = strings.ToLower(strings.TrimSpace(r.Kind)); r.Kind != "" && !promptKinds[r.Kind] {
 		return fmt.Errorf("unknown kind %q (approval or question)", r.Kind)
+	}
+	if err := r.Answers.check(block, r.State); err != nil {
+		return err
 	}
 	switch block {
 	case "notify":

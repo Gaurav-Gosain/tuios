@@ -40,6 +40,15 @@ message  = "Waits for approval."
 region   = "bottom_non_empty_lines(3)"
 any      = ["press enter to confirm or esc to cancel", "enter to submit answer", "enter to submit all", "allow command?"]
 
+# Codex prints each option's own shortcut after its label, "(y)", "(a)" and
+# "(esc)", and those are the keys pressed here. Each is bound to the label it
+# belongs to, so a question form that shares this footer offers deny and
+# nothing else.
+[screen.rule.answers]
+approve        = { option = "yes", keys = ["y"] }
+approve_always = { option = "yes, and don't ask again", keys = ["a"] }
+deny           = { keys = ["esc"] }
+
 # Trusting a directory, asked once when Codex starts somewhere new.
 #
 #   > You are in /home/u/src/app

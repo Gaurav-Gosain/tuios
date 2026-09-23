@@ -60,6 +60,18 @@ message  = "Waits for approval of a tool call."
 all      = ["Do you want"]
 any      = ["1. Yes", "❯ 1."]
 
+# How the menu is answered without attaching: the menu takes the digit of an
+# option, and esc is its "No, and tell Claude what to do differently". Each
+# answer is bound to a label, so approve_always is offered only while an option
+# starting "Yes, " (don't ask again, allow all edits this session) is on the
+# screen: on a menu with only Yes and No it is not offered at all, rather than
+# pressing 2 for No.
+[screen.rule.answers]
+approve        = { option = "yes" }
+approve_always = { option = "yes, " }
+deny           = { keys = ["esc"] }
+choose         = "digit"
+
 # Trusting a directory, asked once when a session starts somewhere new. It
 # blocks before the agent will do anything at all, and it is the prompt most
 # likely to be sitting unnoticed in a pane the user opened and walked away from.
@@ -69,6 +81,12 @@ priority = 20
 message  = "Asks you to trust the folder."
 all      = ["Do you trust the files in this folder"]
 
+# Yes trusts the folder; No exits Claude Code, which is what denying means here.
+[screen.rule.answers]
+approve = { option = "yes" }
+deny    = { option = "no" }
+choose  = "digit"
+
 # Plan mode, where the agent has stopped and is waiting on approval to act.
 [[screen.rule]]
 state    = "needs_input"
@@ -76,6 +94,14 @@ priority = 10
 message  = "Waits for approval of the plan."
 all      = ["Would you like to proceed"]
 any      = ["1. Yes", "❯ 1."]
+
+# The plan menu offers more than one way to say yes (auto-accept edits, or
+# approve each edit), and which one a bare approve should mean is not ours to
+# pick. So it takes a number, which the peek shows with its label, and no
+# keeps planning.
+[screen.rule.answers]
+deny   = { option = "no" }
+choose = "digit"
 
 # The rules below through the MCP task rule are after herdr's claude manifest
 # (github.com/herdrdev/herdr, src/detect/manifests/claude.toml, manifest version
@@ -110,6 +136,12 @@ any_of   = [
   { all = ["do you want to proceed?"], any_of = [ { regex = ['(?i)^\s*❯?\s*1\.\s*yes\b'] }, { regex = ['(?i)^\s*2\.\s*(?:yes|no)\b'] } ] },
 ]
 
+# The form can be a question with options of any wording, so it is answered by
+# number, and esc cancels it, as its footer says.
+[screen.rule.answers]
+deny   = { keys = ["esc"] }
+choose = "digit"
+
 # A dynamic workflow asking whether to run.
 [[screen.rule]]
 state    = "needs_input"
@@ -117,6 +149,10 @@ priority = 25
 kind     = "approval"
 message  = "Asks whether to run a dynamic workflow."
 all      = ["run a dynamic workflow?", "esc to cancel"]
+
+[screen.rule.answers]
+deny   = { keys = ["esc"] }
+choose = "digit"
 
 # An MCP server asking for input (elicitation): a header naming the server,
 # Accept and Decline controls, and the cancel footer.
