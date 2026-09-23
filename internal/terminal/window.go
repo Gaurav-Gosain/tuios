@@ -325,7 +325,7 @@ type Window struct {
 	BellFunc          func()                   // Callback for guest bell (BEL)
 	CwdFunc           func(cwd string)         // Callback for the shell's working directory changing (OSC 7)
 	outputChan        chan outputChunk         // Channel for serializing daemon PTY output writes
-	outputDone        chan struct{}            // Signal to stop output writer goroutine
+	outputDone        chan struct{}            // Signal to stop the output writer and render coalescer goroutines
 	suppressCallbacks atomic.Bool              // Suppress VT emulator callbacks during state restoration (prevents race conditions)
 	closed            atomic.Bool              // Set by Close() so the external outputChan sender (WriteOutputAsync) stops before teardown
 
@@ -333,8 +333,9 @@ type Window struct {
 	// Used by MarkTerminalsWithNewContent to avoid unconditional dirty-marking.
 	HasNewOutput atomic.Bool
 
-	// coalesceSignal is the daemon renderCoalescer's own render-trigger flag.
-	// outputWriter sets it after each batch; renderCoalescer consumes it at a
+	// coalesceSignal is the renderCoalescer's own render-trigger flag.
+	// outputWriter (daemon panes) or the PTY reader (local panes) sets it after
+	// each write; renderCoalescer consumes it at a
 	// capped rate to fire PTYDataChan. It is separate from HasNewOutput so the
 	// coalescer no longer consumes that flag: HasNewOutput survives for the UI
 	// goroutine's MarkTerminalsWithNewContent, which does the dirty-marking.
@@ -710,6 +711,16 @@ func NewWindow(id, title string, x, y, width, height, z int, exitChan chan strin
 	// passthrough callbacks running on that goroutine always have a snapshot
 	// to read instead of the live fields the update loop mutates.
 	window.PublishGeometry()
+
+	// Output reaches the renderer through the same coalescer a daemon pane
+	// uses, so a flooding local pane asks for at most one frame per interval
+	// instead of one per PTY read. Close closes outputDone, which stops it.
+	// outputChan stays nil: that is what tells the daemon-only paths
+	// (WriteOutputAsync, outputWriter, the drain and resize sentinels) that
+	// this pane has no daemon stream.
+	window.outputDone = make(chan struct{})
+	window.coalesceWake = make(chan struct{}, 1)
+	go window.renderCoalescer()
 
 	// Start I/O handling
 	window.handleIOOperations()

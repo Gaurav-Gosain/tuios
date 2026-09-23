@@ -363,8 +363,8 @@ func (w *Window) ChargeRenderCost(d time.Duration) {
 	w.renderCostNanos.Store(int64(d))
 }
 
-// renderCoalescer runs for daemon mode windows and fires render signals at a
-// capped rate. Multiple VT writes inside one interval coalesce into a single
+// renderCoalescer runs for every PTY-backed window, daemon or local, and fires
+// render signals at a capped rate. Multiple VT writes inside one interval coalesce into a single
 // render that shows the latest complete frame.
 //
 // It emits on the leading edge and rate-limits after it, rather than polling a
@@ -752,15 +752,12 @@ func (w *Window) handleIOOperations() {
 					// invisible until the user types. The daemon path has always
 					// said this after its write (see noteOutput in
 					// outputWriter); this reader had it the other way round.
-					w.HasNewOutput.Store(true)
-
-					// Signal bubbletea that PTY data arrived (non-blocking, coalesces rapid updates)
-					if w.PTYDataChan != nil {
-						select {
-						case w.PTYDataChan <- struct{}{}:
-						default:
-						}
-					}
+					//
+					// The render signal goes through the coalescer, as it does
+					// for a daemon pane. Sent here directly it was one frame
+					// composed per PTY read, about 1 KiB on macOS, during a
+					// flood.
+					w.noteOutput()
 				}
 			}
 		}
