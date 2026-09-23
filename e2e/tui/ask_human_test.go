@@ -24,6 +24,9 @@ func startAskHuman(t *testing.T, base string, args ...string) <-chan askRun {
 // error, for a command that blocks until something happens on the screen.
 func startCLIBackground(t *testing.T, base string, args ...string) <-chan askRun {
 	t.Helper()
+	// A command that runs before any client would write the first-run config
+	// with the shipped looks, which the pins then read as the test's choice.
+	pinPreV080Looks(t, base)
 	cmd := exec.Command(tuiosBin, args...)
 	cmd.Dir = workDirIn(t, base)
 	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")

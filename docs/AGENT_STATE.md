@@ -44,8 +44,9 @@ matches the build.
    tuios doctor agents                      # what is installed, and agent panes missing one
    ```
 
-2. Turn on the rail if it is off, and learn two keys: `ctrl+b i` opens the
-   Inbox and `ctrl+b o` goes to the oldest item.
+2. Learn two keys: `ctrl+b i` opens the Inbox and `ctrl+b o` goes to the
+   oldest item. The rail is on by default from v0.8.0. A config file that sets
+   it off keeps it off; turn it on with:
 
    ```bash
    tuios set-config appearance.sidebar.enabled true
