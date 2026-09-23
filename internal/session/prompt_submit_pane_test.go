@@ -106,7 +106,7 @@ func TestFanPromptPastesAndSubmitsWithCR(t *testing.T) {
 		t.Fatalf("ApplyAgentReport: %v", err)
 	}
 
-	d.deliverFanPrompt(sess, id, "add a retry\nto the client", 5*time.Second)
+	d.deliverFanPrompt(sess, id, "", "add a retry\nto the client", 5*time.Second)
 
 	deadline := time.Now().Add(5 * time.Second)
 	for {

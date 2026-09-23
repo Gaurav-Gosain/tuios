@@ -1192,7 +1192,7 @@ func (s *Session) forgetBroadcastFingerprint() {
 // non-nil, is invoked with the PTY ID when the process exits; it is set before
 // the monitor goroutine starts so it is always visible to monitorExit.
 func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, "", nil, "", false, onExit, nil)
+	return s.createPTY(windowID, width, height, "", nil, nil, "", false, onExit, nil)
 }
 
 // RestorePTY creates a fresh PTY for a resurrected window. It behaves like
@@ -1201,19 +1201,21 @@ func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyI
 // and a one-line banner is written to the terminal so the user can see the
 // process is a freshly respawned shell, not the original long-lived one.
 func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, cwd, nil, "", true, onExit, nil)
+	return s.createPTY(windowID, width, height, cwd, nil, nil, "", true, onExit, nil)
 }
 
 // command, when non-empty, is an argv exec'd as the PTY's process in place of
 // the shell. It is deliberately not persisted: a restored window respawns as a
 // shell, because silently rerunning a program the user ran once is not what
-// restoration promises.
+// restoration promises. extraEnv, KEY=VALUE pairs, goes on top of the daemon's
+// environment and under the TUIOS_ variables; see buildEnvWith. It is not
+// persisted either, and a window on another machine ignores it.
 //
 // stdout, when non-nil, is the process's standard output instead of the PTY:
 // a popup's captured output goes to a pipe the daemon reads, while the program
 // still draws on the PTY through stderr or /dev/tty. It is only honoured for a
 // local process.
-func (s *Session) createPTY(windowID string, width, height int, cwd string, command []string, host string, restored bool, onExit func(ptyID string), stdout *os.File) (*PTY, error) {
+func (s *Session) createPTY(windowID string, width, height int, cwd string, command, extraEnv []string, host string, restored bool, onExit func(ptyID string), stdout *os.File) (*PTY, error) {
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
 
@@ -1259,7 +1261,7 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 			} else {
 				cmd = exec.Command(shell)
 			}
-			cmd.Env = s.buildEnv(windowID, restored)
+			cmd.Env = s.buildEnvWith(windowID, restored, extraEnv)
 			if stdout != nil {
 				cmd.Stdout = stdout
 			}
@@ -2152,10 +2154,34 @@ func (s *Session) resolveShell() (shell, missing string) {
 }
 
 func (s *Session) buildEnv(windowID string, restored bool) []string {
+	return s.buildEnvWith(windowID, restored, nil)
+}
+
+// buildEnvWith is buildEnv with a caller's own variables. They replace the
+// daemon's variables of the same name, and every variable set below them,
+// TERM and the TUIOS_ contract, is set after them and wins. The caller's
+// variables are checked before they get here (callerEnv), which refuses a
+// TUIOS_ name outright.
+func (s *Session) buildEnvWith(windowID string, restored bool, extra []string) []string {
 	// The daemon's environment, less TMUX and TMUX_PANE. A daemon started from
 	// inside tmux would otherwise hand every pane the variables that make a
 	// program believe it is in a tmux pane. See guestenv.WithoutHostMultiplexer.
 	env := guestenv.WithoutHostMultiplexer(os.Environ())
+	if len(extra) > 0 {
+		replaced := make(map[string]bool, len(extra))
+		for _, kv := range extra {
+			if k, _, ok := strings.Cut(kv, "="); ok {
+				replaced[k] = true
+			}
+		}
+		kept := env[:0:0]
+		for _, kv := range env {
+			if k, _, _ := strings.Cut(kv, "="); !replaced[k] {
+				kept = append(kept, kv)
+			}
+		}
+		env = append(kept, extra...)
+	}
 
 	term := "xterm-256color"
 	if s.config != nil && s.config.Term != "" {

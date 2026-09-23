@@ -192,6 +192,12 @@ type NewWindowOptions struct {
 	// stdout, when set, is the process's standard output in place of the PTY.
 	// See createPTY. It is unexported: only the popup verb's capture sets it.
 	stdout *os.File
+	// Env is KEY=VALUE pairs the process gets on top of the daemon's own
+	// environment, from a caller that passed its own (fan, start-agent). The
+	// TUIOS_ variables are set after it, so it cannot change them. It is not
+	// saved: a window a restore brings back starts with the daemon's
+	// environment. A window on another machine ignores it.
+	Env []string
 }
 
 // AddDaemonWindowWith creates a daemon-owned window with explicit placement.
@@ -241,7 +247,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		cwd = s.inheritedCwd()
 	}
 
-	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, cwd, opts.Command, opts.Host, false, onExit, opts.stdout)
+	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, cwd, opts.Command, opts.Env, opts.Host, false, onExit, opts.stdout)
 	if err != nil {
 		return WindowState{}, err
 	}

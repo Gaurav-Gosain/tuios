@@ -27,6 +27,51 @@ func TestRemovedWorktreeSentencesSayWhereTheWorkWent(t *testing.T) {
 	}
 }
 
+// TestFanCallerEnvSendsPathAndWhatWasAskedFor: PATH always goes, NAME takes
+// this process's value, NAME=VALUE sets one, and a NAME this process does not
+// have is refused rather than sent empty.
+func TestFanCallerEnvSendsPathAndWhatWasAskedFor(t *testing.T) {
+	vars := map[string]string{"PATH": "/opt/bin:/usr/bin", "ANTHROPIC_API_KEY": "k", "EMPTY": ""}
+	getenv := func(k string) string { return vars[k] }
+	environ := []string{"PATH=/opt/bin:/usr/bin", "ANTHROPIC_API_KEY=k", "EMPTY="}
+	env, err := fanCallerEnv([]string{"ANTHROPIC_API_KEY", "MODE=fast", "EMPTY"}, getenv, environ)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"PATH": "/opt/bin:/usr/bin", "ANTHROPIC_API_KEY": "k", "MODE": "fast", "EMPTY": ""}
+	if len(env) != len(want) {
+		t.Errorf("env = %v, want %v", env, want)
+	}
+	for k, v := range want {
+		if got, ok := env[k]; !ok || got != v {
+			t.Errorf("env[%s] = %q, want %q", k, got, v)
+		}
+	}
+	if _, err := fanCallerEnv([]string{"NOT_SET_HERE"}, getenv, environ); err == nil {
+		t.Error("an --env name this shell does not have was sent")
+	}
+}
+
+// TestFanTakesSeveralAgentsAndPromptsOnTheCommandLine: --agent splits on
+// commas and repeats, and --prompt replaces the prompt argument.
+func TestFanTakesSeveralAgentsAndPromptsOnTheCommandLine(t *testing.T) {
+	cmd := newFanCommand()
+	if err := cmd.ParseFlags([]string{"--agent", "claude,codex --model o5", "--agent", "gemini", "--prompt", "a", "--prompt", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	agents, _ := cmd.Flags().GetStringSlice("agent")
+	if strings.Join(agents, "|") != "claude|codex --model o5|gemini" {
+		t.Errorf("agents = %q", agents)
+	}
+	prompts, _ := cmd.Flags().GetStringArray("prompt")
+	if strings.Join(prompts, "|") != "a|b" {
+		t.Errorf("prompts = %q", prompts)
+	}
+	if err := cmd.RunE(cmd, []string{"2", "one prompt for all"}); err == nil || !strings.Contains(err.Error(), "takes no prompt argument") {
+		t.Errorf("--prompt with a prompt argument: %v", err)
+	}
+}
+
 // TestWorktreeTableShowsGoneAndPromptStatus pins the two columns a person
 // scans first when watching a fan-out: what became of the prompt, and whether
 // the directory is still there.

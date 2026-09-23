@@ -616,6 +616,53 @@ func (a *attentionStore) openResume(it AttentionItem) {
 	a.upsertLocked(it)
 }
 
+// heldPromptSummary is the summary of the item that says an agent the daemon
+// started is not ready for its first prompt.
+const heldPromptSummary = "waiting at a screen tuios does not recognise: look at the pane and answer it"
+
+// openHeldPrompt opens a question item for a pane the daemon started an agent
+// in, which has not been ready for its first prompt for a while (see
+// waitAgentStart), and returns the summary it carries, which is what
+// closeHeldPrompt closes by. It is a question because the pane needs the person
+// to answer whatever is on its screen, most often a first-run choice. It shares
+// the pane's blocking key, so the pane's next state change closes it like any
+// question, and a needs_input the pane reaches replaces it with the real one.
+func (a *attentionStore) openHeldPrompt(sessionName string, w WindowState) string {
+	if a == nil {
+		return ""
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.upsertLocked(AttentionItem{
+		Kind:      AttentionQuestion,
+		Session:   sessionName,
+		Window:    w.ID,
+		Workspace: w.Workspace,
+		Harness:   w.AgentHarness,
+		Name:      attentionText(windowLabelOf(w), attentionMaxSummary),
+		Summary:   heldPromptSummary,
+	})
+	return heldPromptSummary
+}
+
+// closeHeldPrompt closes the item openHeldPrompt opened, if it still says what
+// it said then. An item on the same key that says something else is the pane's
+// own question, and it is left alone.
+func (a *attentionStore) closeHeldPrompt(sessionName, window, summary string) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	id, ok := a.byKey[attentionKey(AttentionQuestion, sessionName, window, 0)]
+	if !ok {
+		return
+	}
+	if it := a.items[id]; it.Kind == AttentionQuestion && it.Summary == summary {
+		a.closeLocked(id, AttentionClosedResolved)
+	}
+}
+
 // closeResume closes a pane's resume item, if one is open.
 func (a *attentionStore) closeResume(sessionName, window, reason string) {
 	if a == nil {

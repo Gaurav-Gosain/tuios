@@ -46,6 +46,14 @@ type WorktreeInfo struct {
 	PromptNote string `json:"prompt_note,omitempty"`
 	// PromptAt is when the prompt was typed, as Unix nanoseconds.
 	PromptAt int64 `json:"prompt_at,omitempty"`
+	// PromptReadyBy is the evidence the agent was ready when the prompt was
+	// typed: the state it read (idle, done), or quiet for unknown on a
+	// harness that can never show more. Empty until the prompt is typed.
+	PromptReadyBy string `json:"prompt_ready_by,omitempty"`
+	// Agent is the agent a fan-out started in this session, as the caller
+	// named it ("claude", "codex --model o5"). A fan of several agents names
+	// a different one per session. Empty for a worktree made on its own.
+	Agent string `json:"agent,omitempty"`
 	// Gone is set on the listing copy only: the worktree directory no longer
 	// exists. The session is kept, because a shell whose directory was removed
 	// under it still runs and an agent in it may still have something to say.
@@ -61,7 +69,19 @@ const (
 	// agent showed no sign of taking it within the stall window. The text may
 	// still be in the agent's input box. See prompt_gate.go.
 	PromptStalled = "stalled"
+	// PromptHeld is a prompt still waiting after the agent has not been
+	// ready for a while (agentHeldAfter), at a screen tuios does not
+	// recognise. It is typed as soon as the agent is ready, and the Inbox
+	// holds a question for the pane meanwhile. It ends sent, stalled or
+	// not_sent like a pending one.
+	PromptHeld = "held"
 )
+
+// PromptWaiting reports whether a prompt status is one the daemon is still
+// going to act on: pending or held.
+func PromptWaiting(status string) bool {
+	return status == PromptPending || status == PromptHeld
+}
 
 // SetWorktree records the worktree this session is, or clears it with nil. It
 // propagates and persists the way SetDisplayName does.
@@ -92,6 +112,16 @@ func (s *Session) setPromptStatus(status, note string, at int64) {
 		st.Worktree.PromptStatus = status
 		st.Worktree.PromptNote = note
 		st.Worktree.PromptAt = at
+		return nil
+	})
+}
+
+// setPromptReadyBy records the evidence the agent was ready on.
+func (s *Session) setPromptReadyBy(by string) {
+	_ = s.mutateState(func(st *SessionState) error {
+		if st.Worktree != nil {
+			st.Worktree.PromptReadyBy = by
+		}
 		return nil
 	})
 }

@@ -411,7 +411,11 @@ func TestFanGivesUpOnAPromptWhenTheAgentIsNeverReady(t *testing.T) {
 	}
 }
 
-func TestFanRefusesAnAgentNobodyKnowsAndABadCount(t *testing.T) {
+// TestFanRefusesAnAgentThatIsNotInstalledAndABadCount: a name that is neither
+// installed nor a harness is refused, and the refusal lists the harnesses in
+// case it was one spelled wrong. fan starts any installed program since agents
+// took argv, so the list is what exists, not the only accepted values.
+func TestFanRefusesAnAgentThatIsNotInstalledAndABadCount(t *testing.T) {
 	_, sp, repo := worktreeFixture(t)
 	c := dialVerb(t, sp)
 	resp := c.call(t, `{"id":1,"verb":"fan","params":{"count":2,"agent":"not-an-agent","prompt":"x","repo":"`+repo+`"}}`)
@@ -420,7 +424,7 @@ func TestFanRefusesAnAgentNobodyKnowsAndABadCount(t *testing.T) {
 	}
 	e := resp["error"].(map[string]any)
 	hint, _ := e["hint"].(map[string]any)
-	if accepted, _ := hint["accepted"].([]any); len(accepted) < 20 {
+	if available, _ := hint["available"].([]any); len(available) < 20 {
 		t.Errorf("the refusal does not list the harnesses: %v", hint)
 	}
 	for _, count := range []int{0, fanMaxCount + 1} {

@@ -410,35 +410,76 @@ listing and is kept.
 
 ### `tuios fan`
 
-Fan one prompt out across several agents, each in its own worktree.
+Fan a prompt out across several agents, each in its own worktree.
 
 **Usage:**
 ```bash
-tuios fan <count> --agent <cli> [--repo <dir>] [--base <ref>] [--name <stem>] [--wait] <prompt>
+tuios fan <count> --agent <agent>[,<agent>...] [--env NAME[=VALUE]]... [--repo <dir>] [--base <ref>] [--name <stem>] [--wait] <prompt>
+tuios fan [<count>] --agent <agent>[,<agent>...] --prompt <prompt> --prompt <prompt>... [flags]
 tuios fan keep <session> [--stash | --force]
 ```
+
+**Flags:**
+- `--agent <agent>`: The agent as you would type it, arguments included: `claude`, `'codex --model o5'`, or any program. Several, comma-separated or repeated, are cycled across the sessions (required)
+- `--prompt <prompt>`: One session's prompt, repeated once per session, in place of the prompt argument. The count is then how many there are
+- `--env NAME` or `--env NAME=VALUE`: Pass your value of a variable, or set one, for every agent. Repeatable. `PATH` is always sent, so the agents are found where your shell finds them
+- `--repo <dir>`, `--base <ref>`, `--name <stem>`, `--wait`, `--json`
 
 **Examples:**
 ```bash
 tuios fan 3 --agent claude 'Add a retry with backoff to the HTTP client.'
+tuios fan 3 --agent 'claude,codex --model o5,gemini' 'Add a retry with backoff.'
+tuios fan --agent claude --env ANTHROPIC_API_KEY --prompt 'Add a retry.' --prompt 'Add a timeout.'
 tuios worktree ls --group fan/add-retry-backoff-http   # Which prompts were sent, what changed
 tuios worktree diff api-fan-add-retry-backoff-http-2   # What one of them produced
 tuios fan keep api-fan-add-retry-backoff-http-2 --stash
 ```
 
 The branches are a stem, then `stem-2`, `stem-3`. The stem is `fan/` and the
-first words of the prompt, or `--name`. Each prompt is typed once its agent is
-ready to read, as one paste submitted with a carriage return (the Enter key),
-so the command returns at once and `tuios worktree ls` shows
-`pending`, `sent`, `not sent` or `stalled` per session. `stalled` means the
-prompt was typed and the agent showed no sign of taking it within five seconds:
-it did not turn working or needs_input. Look at the pane before sending it
-again, since the text may be in the agent's input box. `--wait` blocks until
-every prompt is sent or given up on.
+first words of the prompt, or `--name`. Each prompt is typed once its agent
+shows it is at its prompt, as one paste submitted with a carriage return (the
+Enter key), so the command returns at once and `tuios worktree ls` shows
+`pending`, `held: look at the pane`, `sent`, `not sent` or `stalled` per
+session. `held` means the agent has not been ready for 30 seconds, most often
+because it shows a first-run choice; the Inbox asks you to look, and the
+prompt is typed once it is ready. A program no harness manifest recognises is
+ready only once it reports a state (`tuios set-agent-state idle`). `stalled`
+means the prompt was typed and the agent showed no sign of taking it within
+five seconds: it did not turn working or needs_input. Look at the pane before
+sending it again, since the text may be in the agent's input box. `--wait`
+blocks until every prompt is sent or given up on.
+
+The agent string is split into words the way a shell splits them and exec'd
+directly: nothing in it is expanded. `TUIOS_` variables, `TMUX` and
+`TMUX_PANE` cannot be passed with `--env`.
 
 `fan keep` removes every sibling of the session you keep, the way `worktree rm`
 does: a sibling with uncommitted changes is left in place unless `--stash` or
 `--force` is passed, and the command exits 1 to say so.
+
+### `tuios start-agent`
+
+Start an agent in a new pane and return once it is ready for a prompt.
+
+**Usage:**
+```bash
+tuios start-agent <agent> [-s <session>] [--name <name>] [--cwd <dir>] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--env NAME[=VALUE]]... [--json]
+```
+
+**Examples:**
+```bash
+tuios start-agent claude --name reviewer
+tuios ask-agent -w reviewer 'review the diff on this branch'
+tuios start-agent 'codex --model o5' --name tests --prompt 'Run the tests and fix what fails.'
+```
+
+`<agent>` is written as for `fan`. The command waits until the agent shows it
+is at its prompt (idle or done), then types `--prompt` if one was given, and
+prints the pane and the evidence. It exits 1 when the agent is not ready: it
+stopped on a question of its own (the pane is kept for you to answer, and the
+Inbox shows it), showed nothing before `--ready-timeout` (default 120000), or
+exited. It also exits 1 when a `--prompt` was not taken. The pane is not
+focused unless `--focus` is passed.
 
 ### `tuios kill-server`
 
@@ -2141,6 +2182,7 @@ them.
 | `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session. `--from human` from inside a pane is refused with `forbidden`: only the person at an attached client can send as `human` (see [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)). With `-s HOST:SESSION` and that host's link down, the message waits on this machine and goes when the link is back; the Inbox shows it under Waiting to send. `--select` sends one message to every agent pane a selector matches, after listing them: it asks at a terminal, and takes `--yes` or `--confirm TOKEN` otherwise |
 | `tuios read-agent-messages` | Read the messages agents have left in this session. Reading `-w human` from inside a pane is always a peek |
 | `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter. `--select` asks every agent pane a selector matches, at most 16 at once, after the same confirmation as `send-agent-message --select`; a pane on `needs_input` is refused in its own row |
+| `tuios start-agent <agent>` | Start an agent in a new pane and return once it shows it is at its prompt, optionally typing a first `--prompt`. See [above](#tuios-start-agent) |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
 | `tuios explain-agent-screen` | Show what a harness's screen and title rules make of a pane: the tail, each rule's region and the text it read there, why each refusal refused (strings, patterns, nested groups), the title and last OSC 9;4 progress report, and which manifest file is in force |
 | `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, gemini-cli, opencode, kilo, amp, kimi and pi report state; antigravity, copilot, crush, cursor-agent, devin, droid, grok, hermes, qoder and qwen report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode; `--mcp-write` registers it with `--write`. See [Agent state](AGENT_STATE.md#harness-integrations) |

@@ -737,6 +737,37 @@ sends none of the new params is answered as before. What changes:
 - A pane on another machine that sends its calls through its owner is refused
   with `forbidden` when a call names `select`.
 
+**fan starts any program, several at once, from the caller's PATH.** `fan`
+takes the new params `agents`, `prompts` and `env`, and the new verb
+`start-agent` starts one agent beside the caller. What changes for a caller of
+`fan`:
+
+- `agent` is an argv string, split the way a shell splits words. `agent`
+  `"claude"` means what it meant. A name no manifest recognises used to be
+  refused with `invalid_params`; it is now started if it is on the `PATH`, and
+  refused as not installed otherwise, with the harness ids in `available`
+  instead of `accepted`, since they are no longer the only values.
+- `count` and `agent` are no longer marked required in `list-verbs`, since
+  `prompts` and `agents` stand in for them. A call with neither is still
+  `invalid_params`.
+- `prompt_status` has the new value `held`, which a caller that waits for
+  `pending` to end should treat the same way. The `tuios fan --wait` of this
+  build does. A CLI from before it stops waiting at `held` and reports the
+  prompt as not sent.
+- A held prompt opens a `question` item in the Inbox for the pane, with the
+  summary "waiting at a screen tuios does not recognise: look at the pane and
+  answer it". It closes when the prompt is typed or given up on, or when the
+  pane's state changes.
+- The harness the daemon started stands in for detection while the wait runs,
+  so `unknown` is not ready for an agent of a harness that can show idle even
+  before the detector has named the pane. It used to be ready until detection
+  ran.
+- `list-worktrees` rows gain `agent`, the agent as it was named, and
+  `prompt_ready_by`. Sessions of `fan_started` gain `agent` and `command`, and
+  the top-level `command` is an absolute path when the caller sent a `PATH`.
+- The `tuios fan` CLI sends its `PATH` in `env`. Against a daemon from before
+  `env` it retries without it, unless `--env` was passed.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -1566,14 +1597,46 @@ harness's submit key, a carriage return for every bundled harness (see Changes
 to existing verbs). The agent then has five seconds to
 show it took the prompt, the same check `ask-agent` makes. The verb returns as
 soon as the sessions exist. `list-worktrees` reports `prompt_status` per
-session: `pending`, `sent`, `not_sent` with a `prompt_note`, or `stalled` with
-a `prompt_note` when the prompt was typed and the agent showed no sign of taking
-it. A stalled prompt may still be in the agent's input box.
+session: `pending`, `held`, `sent`, `not_sent` with a `prompt_note`, or
+`stalled` with a `prompt_note` when the prompt was typed and the agent showed
+no sign of taking it. A stalled prompt may still be in the agent's input box.
+`held` is a prompt whose agent has not been ready for 30 seconds and is not on
+`needs_input`: the Inbox holds a `question` for its pane saying it waits at a
+screen tuios does not recognise, and the prompt is typed as soon as the agent
+is ready. The question closes when the prompt is typed or given up on, or when
+the pane's state changes. Once the prompt is typed, `prompt_ready_by` says on
+what: `idle`, `done`, or `quiet` for `unknown` on a harness that cannot show
+idle. The harness the daemon started counts from the start, before detection
+has named the pane's harness.
 
-Params: `count` (required, 1 to 16), `agent` (required, a harness id or the
-program name: `claude`, `codex`, `gemini`), `prompt` (required), `repo`
+An agent is one string, the way a person types it: a harness id or program
+name, or any program, with its arguments after it (`"codex --model o5"`). It
+is split into words the way a POSIX shell splits them, single and double
+quotes and backslashes included, and exec'd directly; nothing is expanded or
+substituted, and no shell runs. A path must be absolute. A program no manifest
+recognises is ready only once it reports a state of its own.
+
+Params: `count` (1 to 16; required unless `prompts` sets it), `agent` (one
+agent for every session) or `agents` (a list, cycled across the sessions;
+one of the two is required), `prompt` (one for every session) or `prompts`
+(one per session, in order; `count` must equal its length when given), `repo`
 (required), `base`, `name` (branch stem), `ready_timeout` (milliseconds,
-default 600000).
+default 600000), `env` (an object of variable names to values, on top of the
+daemon's environment; `PATH` in it is where the programs are looked up).
+
+`env` rules: at most 64 variables, a value at most 32 KiB and all of them at
+most 256 KiB; a name is `[A-Za-z_][A-Za-z0-9_]*`; `TUIOS_` names, `TMUX` and
+`TMUX_PANE` are refused with `invalid_params`, since tuios sets the first for
+every pane and strips the others on purpose; a call from another machine (over
+a link, or from a hosted pane) that passes `env` is refused with `forbidden`,
+because its variables describe that machine. The variables go to the process
+only: they are not logged, not saved, and a pane a restore brings back starts
+with the daemon's environment. The `TUIOS_` variables and `TERM` are set after
+them, so they cannot be overridden.
+
+Each entry of `sessions` gains `agent` (the harness id, empty for a program no
+manifest knows) and `command` (the argv as one line). The top-level `agent`,
+`command` and `prompt` are the first session's.
 
 Request:
 
@@ -1590,6 +1653,36 @@ Response:
   {"session": "api-fan-add-retry-client-2", "branch": "fan/add-retry-client-2", "path": "...", "window_id": "..."},
   {"session": "api-fan-add-retry-client-3", "branch": "fan/add-retry-client-3", "path": "...", "window_id": "..."}]}}
 ```
+
+### start-agent
+
+Start an agent in a new pane of a session, and answer once it is ready for a
+prompt, on the same evidence `fan` waits for: `idle` or `done`, from a report,
+a hook, the screen or the title, with `unknown` counting only for a harness
+that can never show idle. A pane on `needs_input` ends the wait at once with
+`ready: false`, `outcome: "blocked"` and `blocked_by`, and is kept: whatever it
+asks is the person's to answer, and the Inbox already shows it. A pane that is
+not ready for 30 seconds gets the same Inbox question as a held `fan` prompt.
+With `prompt`, the first prompt is typed once the agent is ready and checked
+the way `fan` checks it.
+
+Params: `session`, `agent` (required, written as for `fan`), `name` (the
+window's name, which `list-agents` shows and `-w` and `name:` take), `cwd`,
+`workspace`, `focus` (default false), `prompt`, `ready_timeout` (milliseconds,
+default 120000), `env` (the rules of `fan`).
+
+Response:
+
+```json
+{"result": {"type": "agent_started", "session": "work", "window_id": "4be1c09a-...", "pty_id": "...",
+ "name": "reviewer", "agent": "claude-code", "command": "claude", "ready": true, "ready_by": "idle",
+ "state": "idle", "outcome": "ready", "prompt_status": "sent"}}
+```
+
+`outcome` is `ready`, `blocked`, `timeout`, `window_closed` (the program
+exited), `session_closed` or `shutdown`, and `reason` says in words why a pane
+is not ready. `prompt_status` is `sent`, `stalled` or `not_sent` with a
+`prompt_note`, and absent without `prompt`.
 
 ### set-option
 

@@ -899,6 +899,14 @@ and shows the new message, so a harness hook that says `approval` after the
 screen tier already set `needs_input` lands in the right group. It keeps its
 place in the order, because the wait did not start again.
 
+An agent `fan` or `start-agent` started that has not shown it is at its
+prompt for 30 seconds, and is not on `needs_input`, gets a question too: "waiting
+at a screen tuios does not recognise: look at the pane and answer it". It is
+most often a first-run choice, such as a theme picker, that no rule reads and
+only you can answer. The question goes when the agent's state changes, or when
+its first prompt is typed or given up on; `fan` types the prompt as soon as
+the agent is ready.
+
 On a daemon restart, finished and errored rows whose pane came back are kept.
 Approvals and questions are dropped, since the prompt died with its process,
 and so is mail, since the messages it points to do not survive a restart.

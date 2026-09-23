@@ -144,6 +144,12 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"remove-worktree#0": {errCode: ErrVerbSessionNotFound, why: "api-feat-retry does not exist here"},
 	"remove-worktree#1": {errCode: ErrVerbSessionNotFound, why: "api-feat-retry does not exist here"},
 	"fan#0":             {errCode: ErrVerbGitFailed, why: "/src/api is not a git repository here"},
+	"fan#1":             {errCode: ErrVerbGitFailed, why: "/src/api is not a git repository here"},
+	// The directory is checked before any agent is started, so a developer
+	// with claude installed does not get one started by this test. Starting
+	// and waiting are proved with fake agents in agent_launch_test.go.
+	"start-agent#0": {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
+	"start-agent#1": {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
 
 	// No hosts are configured in the fixture.
 	"list-host-agents#1":   {errCode: ErrVerbUnknownHost, why: "no hosts are configured here"},

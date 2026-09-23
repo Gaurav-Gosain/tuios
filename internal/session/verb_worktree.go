@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -116,7 +115,7 @@ func repoRootParam(dir string) (string, *verbError) {
 // removed on a later failure. It exists on disk and git lists it, and taking
 // it away because a session failed to start would be removing something the
 // caller asked for and can still use.
-func (d *Daemon) createWorktreeSession(root, branch, base, sessionName string, command []string, record func(*WorktreeInfo)) (map[string]any, *verbError) {
+func (d *Daemon) createWorktreeSession(root, branch, base, sessionName string, command, env []string, record func(*WorktreeInfo)) (map[string]any, *verbError) {
 	path := worktree.PathFor(worktree.DefaultDir(), root, branch)
 	if _, err := os.Lstat(path); err == nil {
 		return nil, hintedVerbError(ErrVerbGitFailed, path+" already exists", &VerbHint{
@@ -176,6 +175,7 @@ func (d *Daemon) createWorktreeSession(root, branch, base, sessionName string, c
 		Cwd:     path,
 		Focus:   true,
 		Command: command,
+		Env:     env,
 	}, onExit)
 	if err != nil {
 		return nil, hintedVerbError(ErrVerbInternal, "the worktree and session were created but the first window could not start: "+err.Error(), &VerbHint{
@@ -217,7 +217,7 @@ func (d *Daemon) verbNewWorktree(_ *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
-	out, verr := d.createWorktreeSession(root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), p.Command, nil)
+	out, verr := d.createWorktreeSession(root, branch, strings.TrimSpace(p.Base), strings.TrimSpace(p.Name), p.Command, nil, nil)
 	if verr != nil {
 		return nil, verr
 	}
@@ -274,6 +274,10 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 			"attached":      s.Attached,
 			"prompt_status": wt.PromptStatus,
 			"prompt_note":   wt.PromptNote,
+			// What the agent showed when its prompt was typed, and the agent
+			// the fan-out started here, as it was named.
+			"prompt_ready_by": wt.PromptReadyBy,
+			"agent":           wt.Agent,
 		}
 		if wt.LaunchedFrom != "" {
 			row["launched_from"] = wt.LaunchedFrom
@@ -445,41 +449,82 @@ func fanBranches(root, stem string, count int) []string {
 
 func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Count        int    `json:"count"`
-		Agent        string `json:"agent"`
-		Prompt       string `json:"prompt"`
-		Repo         string `json:"repo"`
-		Base         string `json:"base"`
-		Name         string `json:"name"`
-		ReadyTimeout int    `json:"ready_timeout"`
+		Count        int               `json:"count"`
+		Agent        string            `json:"agent"`
+		Agents       []string          `json:"agents"`
+		Prompt       string            `json:"prompt"`
+		Prompts      []string          `json:"prompts"`
+		Repo         string            `json:"repo"`
+		Base         string            `json:"base"`
+		Name         string            `json:"name"`
+		ReadyTimeout int               `json:"ready_timeout"`
+		Env          map[string]string `json:"env"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	// One prompt for every session, or one per session: prompts sets the
+	// count when count is left out.
+	if len(p.Prompts) > 0 {
+		if p.Prompt != "" {
+			return nil, invalidParam("prompts", "prompt is the same for every session and prompts is one per session. Pass one or the other")
+		}
+		if p.Count == 0 {
+			p.Count = len(p.Prompts)
+		}
+		if p.Count != len(p.Prompts) {
+			return nil, invalidParam("prompts", fmt.Sprintf("prompts has %d entries and count is %d: there is one prompt per session", len(p.Prompts), p.Count))
+		}
+		for i, pr := range p.Prompts {
+			if strings.TrimSpace(pr) == "" {
+				return nil, invalidParam("prompts", fmt.Sprintf("prompts[%d] is empty", i))
+			}
+		}
+	} else if strings.TrimSpace(p.Prompt) == "" {
+		return nil, invalidParam("prompt", "prompt is required: it is what every agent is asked")
+	}
 	if p.Count < 1 || p.Count > fanMaxCount {
 		return nil, invalidParam("count", fmt.Sprintf("count must be between 1 and %d", fanMaxCount))
 	}
-	if strings.TrimSpace(p.Prompt) == "" {
-		return nil, invalidParam("prompt", "prompt is required: it is what every agent is asked")
+	promptFor := func(i int) string {
+		if len(p.Prompts) > 0 {
+			return p.Prompts[i]
+		}
+		return p.Prompt
+	}
+	// One agent for every session, or several cycled across them.
+	specs := p.Agents
+	switch {
+	case p.Agent != "" && len(p.Agents) > 0:
+		return nil, invalidParam("agents", "agent names one agent for every session and agents several. Pass one or the other")
+	case len(p.Agents) == 0:
+		specs = []string{p.Agent}
+	case len(p.Agents) > fanMaxCount:
+		return nil, invalidParam("agents", fmt.Sprintf("agents names at most %d agents", fanMaxCount))
 	}
 	root, verr := repoRootParam(p.Repo)
 	if verr != nil {
 		return nil, verr
 	}
-	reg := d.agentMatcher.registry
-	manifest, command, ok := reg.Resolve(p.Agent)
-	if !ok {
-		return nil, invalidParam("agent", "agent must name a harness tuios recognises", reg.IDs()...)
+	env, pathList, verr := callerEnv(cs, p.Env)
+	if verr != nil {
+		return nil, verr
 	}
-	if _, err := exec.LookPath(command); err != nil {
-		return nil, hintedVerbError(ErrVerbInvalidParams, manifest.DisplayName+" is not installed: "+command+" is not on PATH", &VerbHint{
-			Param:  "agent",
-			Detail: "Install it, or name a harness that is installed. list-agents shows the ones running now.",
-		})
+	// Every agent is resolved before anything is created, so a missing one
+	// costs no worktree.
+	launches := make([]agentLaunch, len(specs))
+	for i, spec := range specs {
+		param := "agent"
+		if len(p.Agents) > 0 {
+			param = "agents"
+		}
+		if launches[i], verr = d.resolveAgentLaunch(param, spec, pathList); verr != nil {
+			return nil, verr
+		}
 	}
 	stem := strings.TrimSpace(p.Name)
 	if stem == "" {
-		stem = fanStem(p.Prompt)
+		stem = fanStem(promptFor(0))
 	}
 	if err := worktree.ValidBranch(stem); err != nil {
 		return nil, invalidParam("name", err.Error())
@@ -494,12 +539,14 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	launchedFrom := d.callerSession(cs)
 
 	sessions := make([]map[string]any, 0, p.Count)
-	for _, branch := range branches {
-		out, verr := d.createWorktreeSession(root, branch, strings.TrimSpace(p.Base), "", []string{command}, func(info *WorktreeInfo) {
+	for i, branch := range branches {
+		launch, prompt := launches[i%len(launches)], promptFor(i)
+		out, verr := d.createWorktreeSession(root, branch, strings.TrimSpace(p.Base), "", launch.argv, env, func(info *WorktreeInfo) {
 			info.Group = stem
 			info.LaunchedFrom = launchedFrom
-			info.Prompt = p.Prompt
+			info.Prompt = prompt
 			info.PromptStatus = PromptPending
+			info.Agent = launch.spec
 		})
 		if verr != nil {
 			if len(sessions) > 0 {
@@ -517,21 +564,26 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 		}
 		sess := d.manager.GetSession(out["session"].(string))
 		windowID := out["window_id"].(string)
-		go d.deliverFanPrompt(sess, windowID, p.Prompt, readyTimeout)
+		go d.deliverFanPrompt(sess, windowID, launch.harness, prompt, readyTimeout)
 		sessions = append(sessions, map[string]any{
 			"session":   out["session"],
 			"branch":    branch,
 			"path":      out["path"],
 			"window_id": windowID,
+			"agent":     launch.harness,
+			"command":   launch.command(),
 		})
 	}
+	// agent, command and prompt name the first session's, which for a fan of
+	// one agent and one prompt is every session's, as they always were. The
+	// sessions say which agent and command each got.
 	return map[string]any{
 		"type":     "fan_started",
 		"group":    stem,
 		"repo":     filepath.Base(root),
-		"agent":    manifest.ID,
-		"command":  command,
-		"prompt":   p.Prompt,
+		"agent":    launches[0].harness,
+		"command":  launches[0].command(),
+		"prompt":   promptFor(0),
 		"sessions": sessions,
 		"total":    len(sessions),
 	}, nil
@@ -540,69 +592,32 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 // deliverFanPrompt types the prompt into the agent's pane once the agent is
 // ready to read it, and records what happened on the session's record.
 //
-// The wait is the same shape as ask-agent's, with a stricter set of states:
-// see fanReadyStates. It runs detached from the verb, so fan returns as soon
-// as the sessions exist and the person watches the rail rather than a
-// blocked command.
-func (d *Daemon) deliverFanPrompt(sess *Session, windowID, text string, timeout time.Duration) {
-	sub := d.events.subscribe(eventFilter{
-		session: sess.Name,
-		types:   map[string]bool{EventAgentState: true, EventWindowClosed: true, EventSessionClosed: true},
-	}, defaultEventQueue)
-	defer d.events.unsubscribe(sub)
-
-	ready := func() bool {
-		st := sess.GetState()
-		i, err := findWindowStateIndex(st.Windows, windowID)
-		if err != nil {
-			return false
-		}
-		return d.agentReady(st.Windows[i], fanReadyStates)
-	}
-	deadline := time.After(timeout)
-	for !ready() {
-		select {
-		case <-deadline:
-			sess.setPromptStatus(PromptNotSent, "The agent was not ready before the wait ended. Send the prompt with send-text.", 0)
-			return
-		case <-d.ctx.Done():
-			return
-		case ev := <-sub.ch:
-			if ev.Type == EventSessionClosed {
-				return
-			}
-			if ev.Type == EventWindowClosed && ev.Window == windowID {
-				sess.setPromptStatus(PromptNotSent, "The agent's window closed before it was ready.", 0)
-				return
-			}
-		}
-	}
-	pty, err := d.resolvePTYForTarget(sess, windowID)
-	if err != nil {
-		sess.setPromptStatus(PromptNotSent, "The agent's pane is gone.", 0)
+// The wait is waitAgentStart's: positive evidence the agent is at its prompt
+// (fanReadyStates), with a needs_input the person answers first. An agent that
+// has not been ready for a while turns the status to held and puts a question
+// in the Inbox; the prompt is still typed as soon as it is ready. It runs
+// detached from the verb, so fan returns as soon as the sessions exist and the
+// person watches the rail rather than a blocked command.
+func (d *Daemon) deliverFanPrompt(sess *Session, windowID, harness, text string, timeout time.Duration) {
+	w, outcome := d.waitAgentStart(sess, windowID, harness, timeout, false, func(WindowState) {
+		sess.setPromptStatus(PromptHeld, "The agent is not at a prompt tuios recognises. Look at the pane: it may be showing a first-run choice. The prompt is typed as soon as the agent is ready.", 0)
+	})
+	switch outcome {
+	case agentStartReady:
+	case agentStartTimeout:
+		sess.setPromptStatus(PromptNotSent, "The agent was not ready before the wait ended. Send the prompt with send-text.", 0)
 		return
-	}
-	// Pasted and submitted with a carriage return, the way ask-agent types its
-	// question. See prompt_submit.go.
-	gate := d.newPromptGate(sess, windowID)
-	at, err := submitPrompt(d.ctx, pty, text, d.inputProfileFor(sess, windowID))
-	if err != nil {
-		sess.setPromptStatus(PromptNotSent, "Could not write to the agent's pane: "+err.Error(), 0)
+	case agentStartWindowClosed:
+		sess.setPromptStatus(PromptNotSent, "The agent's window closed before it was ready.", 0)
 		return
-	}
-	// The prompt is sent only once the agent shows it took it. See
-	// prompt_gate.go. It stays pending for the few seconds that takes.
-	gate.markSubmitted(at)
-	stall := d.promptStall()
-	taken, gone := d.waitPromptTaken(sess, pty, gate, stall)
-	switch {
-	case gone:
-		sess.setPromptStatus(PromptNotSent, "The agent's window closed as the prompt was typed.", at.UnixNano())
-	case !taken:
-		sess.setPromptStatus(PromptStalled, "The prompt was typed and Enter was sent, and the agent showed no sign of taking it within "+stall.String()+". Look at the pane before sending it again: it may be in the input box, waiting for Enter.", at.UnixNano())
 	default:
-		sess.setPromptStatus(PromptSent, "", at.UnixNano())
+		return
 	}
+	sess.setPromptReadyBy(readyBy(w))
+	// The prompt stays pending for the few seconds the agent takes to show it
+	// took it. See prompt_gate.go.
+	status, note, at := d.typeFirstPrompt(sess, windowID, text)
+	sess.setPromptStatus(status, note, at)
 }
 
 func plural(n int, one, many string) string {

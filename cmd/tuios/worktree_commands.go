@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -39,6 +40,8 @@ type worktreeRow struct {
 	Attached     bool   `json:"attached"`
 	PromptStatus string `json:"prompt_status"`
 	PromptNote   string `json:"prompt_note"`
+	ReadyBy      string `json:"prompt_ready_by"`
+	Agent        string `json:"agent"`
 	Changes      *int   `json:"changes"`
 	Ahead        *int   `json:"ahead"`
 }
@@ -178,19 +181,35 @@ one.`,
 
 // newFanCommand builds `tuios fan` and `tuios fan keep`.
 func newFanCommand() *cobra.Command {
-	var fanAgent, fanRepo, fanBase, fanName string
+	var fanAgents, fanEnv, fanPrompts []string
+	var fanRepo, fanBase, fanName string
 	var fanWait, fanJSON bool
 	fanCmd := &cobra.Command{
 		Use:   "fan <count> <prompt>",
-		Short: "Fan one prompt out across several agents, each in its own worktree",
-		Long: `Start the same prompt in several agents at once, each in a git worktree
-of its own, and watch them side by side.
+		Short: "Fan a prompt out across several agents, each in its own worktree",
+		Long: `Start a prompt in several agents at once, each in a git worktree of its
+own, and watch them side by side.
 
-tuios creates <count> worktrees of the repository you are in, starts the
-agent named by --agent in each, and types the prompt into each agent once
-it is ready to read. The command prints the sessions and returns. The rail
-shows them under the repository. 'tuios worktree ls --group' shows which
-prompts were sent.
+tuios creates <count> worktrees of the repository you are in, starts an agent
+in each, and types the prompt into each agent once the agent shows it is at
+its prompt. The command prints the sessions and returns. The rail shows them
+under the repository. 'tuios worktree ls --group' shows which prompts were
+sent.
+
+--agent names the agent the way you would type it, arguments included:
+claude, "codex --model o5", or any program. Several, separated by commas or
+given as several --agent flags, are cycled across the sessions, so
+--agent claude,codex,gemini with a count of 3 starts one of each. The program
+is looked up on your PATH, which the command sends, and --env passes more of
+your environment (--env NAME for your value, --env NAME=VALUE to set one).
+
+--prompt, given once per session, gives each session its own prompt instead
+of one for all; the count is then how many there are.
+
+An agent that has not shown it is at its prompt after 30 seconds is marked
+held, and the Inbox asks you to look at its pane: most often it shows a
+first-run choice only you can answer. Its prompt is typed as soon as it is
+ready.
 
 The branches are a stem, then stem-2, stem-3 and so on. The stem is 'fan/'
 and the first words of the prompt, or --name.
@@ -200,21 +219,48 @@ others. It refuses to discard their uncommitted work unless you say so.`,
 		Example: `  # Three Claude Code agents on the same task
   tuios fan 3 --agent claude 'Add a retry with backoff to the HTTP client.'
 
+  # One each of three harnesses, one with its own arguments
+  tuios fan 3 --agent 'claude,codex --model o5,gemini' 'Add a retry with backoff.'
+
+  # Two agents, each with its own prompt, and an API key from your shell
+  tuios fan --agent claude --env ANTHROPIC_API_KEY --prompt 'Add a retry.' --prompt 'Add a timeout.'
+
   # From a branch, with a stem you chose, waiting until every prompt is sent
   tuios fan 2 --agent codex --base main --name try/retry --wait 'Add a retry.'
 
   # Keep the second one, and stash what the others did
   tuios fan keep api-fan-add-a-retry-with-2 --stash`,
-		Args: cobra.ExactArgs(2),
+		Args: cobra.RangeArgs(0, 2),
 		RunE: func(_ *cobra.Command, args []string) error {
-			count, err := strconv.Atoi(args[0])
-			if err != nil {
-				return fmt.Errorf("count must be a number, got %q", args[0])
+			count, prompt := 0, ""
+			switch {
+			case len(fanPrompts) > 0 && len(args) == 2:
+				return fmt.Errorf("--prompt gives each session its own prompt, so the command takes no prompt argument")
+			case len(fanPrompts) == 0 && len(args) != 2:
+				return fmt.Errorf("fan takes a count and a prompt, or --prompt once per session")
+			case len(args) == 2:
+				prompt = args[1]
 			}
-			return runFan(count, fanAgent, args[1], fanRepo, fanBase, fanName, fanWait, fanJSON)
+			if len(args) > 0 {
+				n, err := strconv.Atoi(args[0])
+				if err != nil {
+					return fmt.Errorf("count must be a number, got %q", args[0])
+				}
+				count = n
+			}
+			env, err := fanCallerEnv(fanEnv, os.Getenv, os.Environ())
+			if err != nil {
+				return err
+			}
+			return runFan(fanOptions{
+				count: count, agents: fanAgents, prompt: prompt, prompts: fanPrompts, env: env,
+				explicitEnv: len(fanEnv) > 0, repo: fanRepo, base: fanBase, name: fanName,
+			}, fanWait, fanJSON)
 		},
 	}
-	fanCmd.Flags().StringVar(&fanAgent, "agent", "", "The agent CLI to run in every session: claude, codex, gemini (required)")
+	fanCmd.Flags().StringSliceVar(&fanAgents, "agent", nil, "The agent to run, as you would type it, arguments included: claude, \"codex --model o5\". Several, comma-separated or repeated, are cycled across the sessions (required)")
+	fanCmd.Flags().StringArrayVar(&fanEnv, "env", nil, "Pass a variable to every agent: NAME for your own value, NAME=VALUE to set one. Repeatable. PATH is always sent")
+	fanCmd.Flags().StringArrayVar(&fanPrompts, "prompt", nil, "One session's prompt. Repeat it once per session instead of giving one prompt for all")
 	fanCmd.Flags().StringVar(&fanRepo, "repo", "", "A directory inside the repository (default: the current directory)")
 	fanCmd.Flags().StringVar(&fanBase, "base", "", "Ref every branch starts from (default: HEAD)")
 	fanCmd.Flags().StringVar(&fanName, "name", "", "Branch stem (default: fan/ and the first words of the prompt)")
@@ -402,6 +448,8 @@ func renderWorktreeTable(rows []worktreeRow) string {
 			prompt = "not sent"
 		case session.PromptStalled:
 			prompt = "stalled"
+		case session.PromptHeld:
+			prompt = "held: look at the pane"
 		}
 		cells = append(cells, []string{r.Session, r.Repo, r.Branch, orNone(r.State), changes, prompt, status})
 	}
@@ -545,26 +593,93 @@ func runWorktreeDiff(name string, stat bool) error {
 	return nil
 }
 
-func runFan(count int, agent, prompt, repo, base, name string, wait, jsonOutput bool) error {
+// fanOptions is what `tuios fan` sends.
+type fanOptions struct {
+	count   int
+	agents  []string
+	prompt  string
+	prompts []string
+	env     map[string]string
+	// explicitEnv says the person passed --env, so a daemon that cannot take
+	// env is an error rather than a reason to send without it.
+	explicitEnv      bool
+	repo, base, name string
+}
+
+// fanCallerEnv builds the environment fan sends: PATH always, so the daemon
+// finds the agents where this shell does, and each --env: NAME takes this
+// process's value, NAME=VALUE sets one. A NAME this process does not have is
+// an error, not an empty variable.
+func fanCallerEnv(flags []string, getenv func(string) string, environ []string) (map[string]string, error) {
+	env := map[string]string{}
+	if path := getenv("PATH"); path != "" {
+		env["PATH"] = path
+	}
+	have := map[string]bool{}
+	for _, kv := range environ {
+		if k, _, ok := strings.Cut(kv, "="); ok {
+			have[k] = true
+		}
+	}
+	for _, f := range flags {
+		if k, v, ok := strings.Cut(f, "="); ok {
+			env[k] = v
+			continue
+		}
+		if !have[f] {
+			return nil, fmt.Errorf("--env %s: this shell has no variable %s. Pass --env %s=VALUE to set one", f, f, f)
+		}
+		env[f] = getenv(f)
+	}
+	return env, nil
+}
+
+func runFan(o fanOptions, wait, jsonOutput bool) error {
 	if err := ensureDaemon(); err != nil {
 		return err
 	}
-	repo, err := repoArg(repo)
+	repo, err := repoArg(o.repo)
 	if err != nil {
 		return err
 	}
-	params := map[string]any{"count": count, "agent": agent, "prompt": prompt, "repo": repo}
-	if base != "" {
-		params["base"] = base
+	params := map[string]any{"repo": repo}
+	if o.count > 0 {
+		params["count"] = o.count
 	}
-	if name != "" {
-		params["name"] = name
+	// One agent goes as agent, which every daemon takes; several as agents.
+	if len(o.agents) == 1 {
+		params["agent"] = o.agents[0]
+	} else {
+		params["agents"] = o.agents
+	}
+	if len(o.prompts) > 0 {
+		params["prompts"] = o.prompts
+	} else {
+		params["prompt"] = o.prompt
+	}
+	if len(o.env) > 0 {
+		params["env"] = o.env
+	}
+	if o.base != "" {
+		params["base"] = o.base
+	}
+	if o.name != "" {
+		params["name"] = o.name
 	}
 	client, err := dialVerb()
 	if err != nil {
 		return err
 	}
 	raw, err := client.CallWithTimeout("fan", params, 5*time.Minute)
+	// A daemon from before env refuses it. The PATH the CLI sends on its own
+	// is a convenience, so the call is made again without it, as it always
+	// was; an --env the person asked for is not dropped quietly.
+	var callErr *session.VerbCallError
+	if err != nil && !o.explicitEnv && errors.As(err, &callErr) && callErr.Code == session.ErrVerbInvalidParams &&
+		callErr.Hint != nil && callErr.Hint.Param == "env" && params["env"] != nil {
+		delete(params, "env")
+		raw, err = client.CallWithTimeout("fan", params, 5*time.Minute)
+	}
 	_ = client.Close()
 	if err != nil {
 		return reportVerbError(explainVerbError("fan", err), jsonOutput)
@@ -577,6 +692,7 @@ func runFan(count int, agent, prompt, repo, base, name string, wait, jsonOutput 
 			Session string `json:"session"`
 			Branch  string `json:"branch"`
 			Path    string `json:"path"`
+			Command string `json:"command"`
 		} `json:"sessions"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
@@ -585,7 +701,11 @@ func runFan(count int, agent, prompt, repo, base, name string, wait, jsonOutput 
 	if !jsonOutput {
 		fmt.Printf("Started %d %s on %s. Each prompt is sent when its agent is ready.\n", len(res.Sessions), pluralWord(len(res.Sessions), "agent", "agents"), res.Group)
 		for _, s := range res.Sessions {
-			fmt.Printf("  %s  %s  %s\n", s.Session, s.Branch, s.Path)
+			line := fmt.Sprintf("  %s  %s  %s", s.Session, s.Branch, s.Path)
+			if len(o.agents) > 1 && s.Command != "" {
+				line += "  " + s.Command
+			}
+			fmt.Println(line)
 		}
 		fmt.Printf("Watch them with 'tuios worktree ls --group %s'. Keep one with 'tuios fan keep <session>'.\n", res.Group)
 	}
@@ -615,9 +735,9 @@ func runFan(count int, agent, prompt, repo, base, name string, wait, jsonOutput 
 	return nil
 }
 
-// waitFanPrompts polls the group until no prompt is pending. The daemon's own
-// wait bounds it: a pending prompt turns into not_sent when the ready timeout
-// ends, so this loop always finishes.
+// waitFanPrompts polls the group until no prompt is pending or held. The
+// daemon's own wait bounds it: a waiting prompt turns into not_sent when the
+// ready timeout ends, so this loop always finishes.
 func waitFanPrompts(group string) ([]worktreeRow, error) {
 	for {
 		rows, err := listWorktrees("", group, false)
@@ -626,7 +746,7 @@ func waitFanPrompts(group string) ([]worktreeRow, error) {
 		}
 		pending := false
 		for _, r := range rows {
-			if r.PromptStatus == session.PromptPending {
+			if session.PromptWaiting(r.PromptStatus) {
 				pending = true
 			}
 		}

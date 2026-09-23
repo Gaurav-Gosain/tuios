@@ -1741,13 +1741,15 @@ screen. An agent whose manifest has an idle rule (Claude Code, Codex, Gemini
 CLI, opencode, Amp, Cline, Devin, Grok, Hermes, Kiro, Maki, Qwen Code) reaches
 `idle` from its prompt box or title, and one of those that only ever reads
 `unknown` is not typed at: its prompt ends `not_sent`, and you send it with
-`send-text`. For any other agent, `unknown` counts as at its prompt. An agent
+`send-text`. That holds from the moment the agent starts, before the detector
+has named it, because the daemon knows which harness it started. For any other
+agent, `unknown` counts as at its prompt. An agent
 asking to trust the folder is `needs_input`, and the prompt waits for the
 person to answer. After typing it, the daemon gives the agent five seconds to
 show it took the prompt, the check `ask-agent` makes. `list-worktrees` says
-`prompt_status` per session: `pending`, `sent`, `not_sent` with a note, or
-`stalled` with a note when the prompt was typed and the agent showed no sign of
-taking it. A stalled prompt may be sitting in the agent's input box: look at
+`prompt_status` per session: `pending`, `held` (see below), `sent`, `not_sent`
+with a note, or `stalled` with a note when the prompt was typed and the agent
+showed no sign of taking it. A stalled prompt may be sitting in the agent's input box: look at
 the pane before sending it again. `--wait` makes the command block until every
 prompt is sent or given up on.
 
@@ -1756,6 +1758,60 @@ The verb is `fan`, with the same parameters:
 ```json
 {"id":1,"verb":"fan","params":{"count":3,"agent":"claude","prompt":"Add a retry with backoff to the HTTP client.","repo":"/src/api"}}
 ```
+
+`--agent` takes the agent the way you would type it, arguments included, and
+several of them, separated by commas, cycled across the sessions. `--prompt`
+once per session gives each its own prompt, and sets the count:
+
+```sh
+tuios fan 3 --agent 'claude,codex --model o5,gemini' 'Add a retry with backoff.'
+tuios fan --agent claude --env ANTHROPIC_API_KEY --prompt 'Add a retry.' --prompt 'Add a timeout.'
+```
+
+Over the socket that is `agents` (a list of those strings) and `prompts` (one
+per session). The words are split the way a shell splits them, quotes
+included, and the program is exec'd directly: nothing in the string is
+expanded, so `$HOME` stays `$HOME`. Any program works, not only a harness
+tuios knows; one no manifest recognises gets its prompt only once it reports a
+state (`set-agent-state idle`), since nothing else can show it is at its
+prompt. The CLI sends your `PATH`, so an agent you can run is found even when
+the daemon's own `PATH` is older, and `--env NAME` sends one more variable
+(`--env NAME=VALUE` sets one). Over the socket that is `env`, an object of
+names to values; `TUIOS_` names, `TMUX` and `TMUX_PANE` are refused, and a
+call from another machine cannot pass `env` at all.
+
+An agent that has not shown it is at its prompt after 30 seconds turns its
+`prompt_status` to `held`, and the Inbox gets a question for its pane: it is
+most often sitting on a first-run choice only the person can answer. The
+prompt is still typed as soon as it is ready. `list-worktrees` says
+`prompt_ready_by` once it is typed: `idle` or `done`, or `quiet` for an agent
+whose harness can never show more than silence.
+
+### One agent beside you: start-agent
+
+`fan` makes worktrees and returns at once. For one helper in the session you
+are in, `start-agent` opens a pane with the agent in it and returns once the
+agent shows it is at its prompt:
+
+```sh
+tuios start-agent claude --name reviewer
+tuios ask-agent -w reviewer 'review the diff on this branch and list anything risky'
+tuios start-agent 'codex --model o5' --name tests --prompt 'Run the test suite and fix what fails.'
+```
+
+```
+reviewer (4be1c09a) is ready: it reads idle.
+```
+
+The name is how you address it afterwards, with `-w` or `name:` in a
+selector. The pane is not focused unless you pass `--focus`. An agent that
+stops on a question of its own, such as whether to trust the folder, is not
+ready: the command prints what it waits on and exits non-zero, `ready` is
+false and `blocked_by` says approval or question, and the pane is kept for
+the person to answer. With `--prompt` the first prompt is typed once it is
+ready and checked the way `fan` checks it. The verb is `start-agent`, with
+`agent`, `name`, `cwd`, `workspace`, `focus`, `prompt`, `ready_timeout` and
+`env`.
 
 ### Removing a worktree is the sharp edge
 

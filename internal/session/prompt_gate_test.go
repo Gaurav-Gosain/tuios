@@ -177,7 +177,7 @@ func TestFanRecordsAStalledPrompt(t *testing.T) {
 			if _, _, err := sess.ApplyAgentReport(w, AgentReport{State: AgentStateIdle}); err != nil {
 				t.Fatalf("ApplyAgentReport: %v", err)
 			}
-			d.deliverFanPrompt(sess, w, "echo tuios_fan_marker", 5*time.Second)
+			d.deliverFanPrompt(sess, w, "", "echo tuios_fan_marker", 5*time.Second)
 			info := sess.Worktree()
 			if info.PromptStatus != tc.want {
 				t.Fatalf("prompt_status = %q (%s), want %q", info.PromptStatus, info.PromptNote, tc.want)
