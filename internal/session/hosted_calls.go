@@ -93,7 +93,7 @@ var hostedCallVerbs = map[string]string{
 // owner runs it. Each names something on the far machine, a file or a process,
 // which on the owner's machine is a different thing or nothing, or claims to be
 // the person.
-var hostedCallDropped = []string{"transcript_path", "harness_pid", "human_nonce", "from_host", "any_session"}
+var hostedCallDropped = []string{"transcript_path", "harness_pid", "human_nonce", "from_host", "any_session", "host"}
 
 const (
 	// hostedCallsMaxLine bounds one line on a report channel, either way.

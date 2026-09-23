@@ -244,6 +244,10 @@ func (f *hostFleet) onStatus(host string, status federation.Status) {
 		default:
 		}
 	}
+	// Mail kept for the host while its link was down goes now.
+	if status == federation.StatusUp {
+		f.d.outbox.kick(host)
+	}
 	f.publishChanged(host, status)
 }
 

@@ -78,6 +78,7 @@ do there:
 addr = "laptop"                  # optional: without it nothing is dialled
 allow = ["list", "mail", "open", "write", "respond"]
 hold_mail = true
+hosted_grace = "10m"
 
 [hosts."*"]                      # every machine with no table of its own
 allow = ["list", "mail"]
@@ -103,6 +104,12 @@ list; `allow = []` allows nothing but `hello`.
 `hold_mail` holds mail from that machine to any agent here in your Inbox,
 marked `held for NAME`, until you pass it on with `p` there (or
 `release-agent-message`). Mail to you is yours already and is not held.
+
+`hosted_grace` is how long a pane this machine runs for the other one (a
+window opened with `--host` there) outlives a dropped link, still running and
+keeping its last 64 KB of output, waiting to be reattached: a Go duration,
+`"0"` to end it with the link as before, 10 minutes when unset, at most 24
+hours. See [Limits](SESSIONS.md#limits).
 
 Each field inherits from `[hosts."*"]`, which inherits from the default. The
 name is matched without regard to case. It is the one the other machine gives

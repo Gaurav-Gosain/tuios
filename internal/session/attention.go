@@ -65,13 +65,17 @@ const (
 	// AttentionResume is a restored pane whose agent conversation can be
 	// resumed. See agent_resume.go.
 	AttentionResume = "resume"
+	// AttentionOutbox is mail this machine holds for another machine whose
+	// link is down, and deliveries that machine refused, one item per
+	// machine. See host_outbox.go.
+	AttentionOutbox = "outbox"
 )
 
 // AttentionKindNames lists the kinds in the order the Inbox groups them: what
 // blocks an agent first, then what an agent said, then what went wrong, then
-// what a restart left to bring back, then what finished. list-attention sorts
-// by it.
-var AttentionKindNames = []string{AttentionApproval, AttentionQuestion, AttentionMail, AttentionErrored, AttentionResume, AttentionFinished}
+// what a restart left to bring back, then what finished, then mail still
+// waiting to leave. list-attention sorts by it.
+var AttentionKindNames = []string{AttentionApproval, AttentionQuestion, AttentionMail, AttentionErrored, AttentionResume, AttentionFinished, AttentionOutbox}
 
 // Close reasons an attention event carries on its closing action.
 const (
@@ -180,6 +184,10 @@ type AttentionItem struct {
 	// addressed to, empty for a notice to the session.
 	HeldID  uint64 `json:"held_id,omitempty"`
 	HeldFor string `json:"held_for,omitempty"`
+	// ForHost is set on an outbox item: the machine the mail waits for. It is
+	// not Host, which marks an item mirrored from another machine; an outbox
+	// item is this machine's own.
+	ForHost string `json:"for_host,omitempty"`
 	// Count is how many unread messages a mail item stands for, or how many
 	// turns a finished item stands for.
 	Count int `json:"count,omitempty"`
@@ -277,6 +285,44 @@ func attentionKey(kind, session, window string, thread uint64) string {
 	return class + "\x00" + session + "\x00" + window
 }
 
+// attentionItemKey is attentionKey for a whole item. An outbox item is about
+// a machine rather than a pane, so it is keyed by that.
+func attentionItemKey(it *AttentionItem) string {
+	if it.Kind == AttentionOutbox {
+		return "outbox\x00" + it.ForHost
+	}
+	return attentionKey(it.Kind, it.Session, it.Window, it.Thread)
+}
+
+// noteOutbox opens, updates or closes the outbox item for host: how many
+// messages wait for it and what it refused. With neither, the item closes.
+func (a *attentionStore) noteOutbox(host string, waiting int, fails []outboxFailure, since int64) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	key := "outbox\x00" + host
+	if waiting == 0 && len(fails) == 0 {
+		a.closeKeyLocked(key, AttentionClosedResolved)
+		return
+	}
+	it := AttentionItem{
+		Kind:    AttentionOutbox,
+		ForHost: host,
+		Name:    attentionText(host, attentionMaxSummary),
+		Summary: attentionText(outboxSummary(host, waiting, fails), attentionMaxSummary),
+		Count:   waiting,
+	}
+	if since == 0 && len(fails) > 0 {
+		since = fails[0].At
+	}
+	if _, ok := a.byKey[key]; !ok && since != 0 {
+		it.Since = since
+	}
+	a.upsertLocked(it)
+}
+
 // attentionEvent is the stream event for one change. Session and Window are
 // copied to the top level so a subscriber's session and window filters apply
 // to attention events exactly as to every other event.
@@ -298,7 +344,7 @@ func attentionEvent(action string, it AttentionItem) streamEvent {
 // open, and publishes what changed. The caller holds mu. An update keeps the
 // open item's id and Since, so it does not reset the wait.
 func (a *attentionStore) upsertLocked(next AttentionItem) {
-	key := attentionKey(next.Kind, next.Session, next.Window, next.Thread)
+	key := attentionItemKey(&next)
 	if id, ok := a.byKey[key]; ok {
 		cur := a.items[id]
 		next.ID, next.Since = cur.ID, cur.Since
@@ -357,6 +403,7 @@ func attentionSame(a, b AttentionItem) bool {
 		a.Name == b.Name && a.Summary == b.Summary && a.Count == b.Count &&
 		a.CompletionSeq == b.CompletionSeq && a.Window == b.Window &&
 		a.RequestID == b.RequestID && a.Expires == b.Expires && a.Stale == b.Stale &&
+		a.HeldID == b.HeldID && a.HeldFor == b.HeldFor && a.ForHost == b.ForHost &&
 		slices.Equal(a.Options, b.Options) && slices.Equal(a.AlwaysScope, b.AlwaysScope)
 }
 
@@ -378,7 +425,7 @@ func (a *attentionStore) closeWithLocked(id, reason string, fill func(*Attention
 		a.endHoldLocked(it.RequestID, approvalOutcome{Reason: reason}, false)
 	}
 	delete(a.items, id)
-	delete(a.byKey, attentionKey(it.Kind, it.Session, it.Window, it.Thread))
+	delete(a.byKey, attentionItemKey(it))
 	a.rev++
 	closed := *it
 	closed.Seq = a.rev
@@ -881,7 +928,7 @@ func (a *attentionStore) load(path string, live func(session, window string) boo
 		if len(a.items) >= attentionMaxItems {
 			break
 		}
-		key := attentionKey(it.Kind, it.Session, it.Window, it.Thread)
+		key := attentionItemKey(&it)
 		if _, dup := a.byKey[key]; dup {
 			continue
 		}

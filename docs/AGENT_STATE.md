@@ -1703,6 +1703,23 @@ fan of agents produces, is one dock message ("5 agents need you in fan-1,
 fan-2, fan-3 and 2 more"), one notification and one sound. A single item's dock
 message names its session: `fan-3: claude needs approval · approve Bash: go test`.
 
+### Mail waiting for another machine
+
+Mail to a session on a machine whose link is down (`tuios send-agent-message
+-s build:api ...`) waits on this machine and goes when the link is back, in
+the order it was sent. The Inbox has one row per machine under **Waiting to
+send**, `for build` on the right: `2 messages wait for the link to build`.
+The rail's header for that machine says `2 queued` beside `seen 3m ago`, and
+`tuios hosts` says so below its table. The row closes when everything went.
+
+If the other machine refuses a message when it arrives (its session is gone,
+or its link policy does not let this machine mail), the message is dropped and
+the row says so, with the reason, until you dismiss it. `d` on the row also
+discards what still waits. Enter says what will happen; the row is not a pane
+and goes nowhere. It raises no alert and `o` skips it: it waits on a network,
+not on you. The queue is on disk, so a restart of this daemon keeps it, and it
+holds at most 64 messages per machine.
+
 ### Mail held from another machine
 
 With `hold_mail = true` in the `[hosts]` table for a machine (see [What another

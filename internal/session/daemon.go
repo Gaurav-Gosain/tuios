@@ -102,6 +102,10 @@ type Daemon struct {
 	hostedPanes   map[string]*hostedPane
 	hostedPanesMu sync.Mutex
 
+	// outbox holds mail for machines whose link is down, and delivers it when
+	// the link comes back. See host_outbox.go.
+	outbox *hostOutbox
+
 	// linkPolicies is the [hosts] table the policy for a machine linked to
 	// this one is resolved from. Nil means no table: every link gets the
 	// built-in default. See link_policy.go.
@@ -476,6 +480,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
 	d.SetApprovalPolicy(cfg.Approvals)
 	d.SetLinkPolicies(cfg.LinkPolicies)
+	d.outbox = newHostOutbox(d)
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
@@ -802,6 +807,9 @@ func (d *Daemon) Start() error {
 	// The Inbox comes back after the sessions do, since what it keeps is
 	// decided by which sessions and panes came back.
 	d.attention.load(attentionPath(), d.attentionLive)
+	// Mail still waiting for another machine comes back with its Inbox items,
+	// and goes when that machine's link comes up.
+	d.outbox.load(outboxPath())
 
 	// The resume offers the restore found are opened only now, after the saved
 	// Inbox items took their ids, so an offer never shares an id with one.

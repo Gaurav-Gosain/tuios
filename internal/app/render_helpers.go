@@ -233,6 +233,11 @@ func getWindowTitle(window *terminal.Window, position int, maxWidth int, s *conf
 	// It goes on the front because truncation below takes from the end, so a
 	// name too long for the bar gives up its own tail and never the marker.
 	host := window.Host
+	// A pane whose link is lost says so first, in words, so truncation never
+	// takes it and colour is not the only sign its screen has stopped.
+	if host != "" && window.HostLink != "" {
+		host = "[" + window.HostLink + "] " + host
+	}
 	if windowName == "" {
 		if host != "" {
 			return joinTitleParts(indicator, host)

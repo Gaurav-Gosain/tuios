@@ -38,6 +38,12 @@ type attentionRow struct {
 	// from at SeenAt (unix nanoseconds).
 	Stale  bool  `json:"stale"`
 	SeenAt int64 `json:"seen_at"`
+	// HeldFor is set on mail another machine sent an agent here that the
+	// link policy held for the person; HeldID is its message id.
+	HeldFor string `json:"held_for"`
+	HeldID  uint64 `json:"held_id"`
+	// ForHost is the machine an outbox item's mail waits for.
+	ForHost string `json:"for_host"`
 }
 
 // attentionHeldNote ends the row of an approval a hook is holding, so the
@@ -59,6 +65,8 @@ func attentionGroupTitle(kind string) string {
 		return "Resume"
 	case session.AttentionFinished:
 		return "Finished"
+	case session.AttentionOutbox:
+		return "Waiting to send"
 	}
 	return kind
 }
@@ -142,7 +150,13 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		if name != "" {
 			where += "/" + name
 		}
+		if it.Kind == session.AttentionOutbox {
+			where = "for " + plainLine(it.ForHost)
+		}
 		summary := plainLine(it.Summary)
+		if it.HeldID != 0 {
+			summary = fmt.Sprintf("[held for %s, message %d] %s", plainLine(it.HeldFor), it.HeldID, summary)
+		}
 		if it.Count > 1 {
 			summary = strings.TrimSpace(summary + fmt.Sprintf(" (%d)", it.Count))
 		}

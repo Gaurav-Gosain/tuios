@@ -89,6 +89,9 @@ type Node struct {
 	// Host is the machine a node belongs to, empty for anything on this one. It
 	// is set on a KindHost header and on every session node under it.
 	Host string
+	// HostLink, on a window node, is "reconnecting" while the link to the
+	// machine its process runs on is lost. Empty everywhere else.
+	HostLink string
 	// HostStatus is a KindHost header's link state, as the federation package
 	// names it ("up", "unreachable", "no_daemon", "no_tuios", "incompatible",
 	// "connecting"). Empty on every other node.
@@ -97,6 +100,9 @@ type Node struct {
 	HostNote string
 	// HostLastOK is when a host last answered, as Unix seconds, zero for never.
 	HostLastOK int64
+	// HostQueued is how many messages wait on this machine for a KindHost
+	// header's link to come back. Zero on every other node.
+	HostQueued int
 	// Global marks the global session's row. The row sits at machine level in
 	// the rail, above the machines, because the session it stands for is not a
 	// session of any one machine: it holds panes from several. It is drawn
@@ -161,6 +167,9 @@ type WindowInput struct {
 	// A session can hold panes from more than one machine, so a list of its
 	// panes has to be able to say which is which.
 	Host string
+	// HostLink is "reconnecting" while the link to Host is lost, empty
+	// otherwise.
+	HostLink string
 }
 
 // SessionInput is the caller's per-session data. Windows may be nil for a
@@ -301,6 +310,7 @@ func BuildSession(s SessionInput) Node {
 			IsCurrent:  w.Focused,
 			Workspace:  w.Workspace,
 			Host:       w.Host,
+			HostLink:   w.HostLink,
 		})
 		if r := AgentRank(w.AgentState, w.DoneSeen); r > bestRank {
 			node.AgentState, node.DoneSeen, bestRank = w.AgentState, w.DoneSeen, r

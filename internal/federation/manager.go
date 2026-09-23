@@ -140,6 +140,10 @@ type HostReport struct {
 	// why, when it is not live.
 	Events     string `json:"events,omitempty"`
 	EventsNote string `json:"events_note,omitempty"`
+	// Queued is how many messages this daemon holds for the host because its
+	// link was down when they were sent. The daemon fills it; the link layer
+	// knows nothing of mail.
+	Queued int `json:"queued,omitempty"`
 }
 
 // Up reports whether this host can be asked anything right now.

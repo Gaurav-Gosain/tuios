@@ -444,7 +444,7 @@ func TestAReportToAnOwnerTooOldToTakeItSaysSo(t *testing.T) {
 		t.Skip("the caller's pid is not given on this platform")
 	}
 	d, _ := startTestDaemon(t)
-	hp, err := d.registerHostedPane(hostedPaneSpec{Width: 80, Height: 24, Command: []string{"/bin/sh", "-c", "sleep 30"}})
+	hp, err := d.registerHostedPane(hostedPaneSpec{Width: 80, Height: 24, Command: []string{"/bin/sh", "-c", "sleep 30"}}, 0)
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -467,7 +467,7 @@ func TestAReportToAnOwnerTooOldToTakeItSaysSo(t *testing.T) {
 // knows its pane id and window id but never sees the token.
 func TestPaneCallsNeedsTheToken(t *testing.T) {
 	d, sp := startTestDaemon(t)
-	hp, err := d.registerHostedPane(hostedPaneSpec{Width: 80, Height: 24, Window: "win-1", Command: []string{"/bin/sh", "-c", "sleep 30"}})
+	hp, err := d.registerHostedPane(hostedPaneSpec{Width: 80, Height: 24, Window: "win-1", Command: []string{"/bin/sh", "-c", "sleep 30"}}, 0)
 	if err != nil {
 		t.Fatalf("register: %v", err)
 	}

@@ -322,7 +322,9 @@ machine it is running on. `TUIOS_SESSION_REMOTE` carries the name for anything
 that wants to know where the pane came from.
 
 Sending mail between machines is a different thing and it does work: see
-`tuios send-agent-message -s build:api -w 1 'text'`. A reply from the person
+`tuios send-agent-message -s build:api -w 1 'text'`. When `build`'s link is
+down the message waits on this machine and goes when the link is back; see
+[Mail waiting for another machine](AGENT_STATE.md#mail-waiting-for-another-machine). A reply from the person
 over a link is verified on the far machine only when this machine vouched for
 the process that sent it: one outside every pane here. The far daemon hears
 that from the link itself, not from the request, and an agent in a pane here
@@ -359,9 +361,25 @@ may do here](CONFIGURATION.md#what-another-machine-may-do-here) for the table,
 
 ### Limits
 
-- **The window ends when the link does.** The process is reached over the link,
-  so losing the link ends the pane, the same way closing it does. It does not
-  come back on redial.
+- **The window outlives a dropped link for a while.** When the link drops, the
+  other machine keeps the process running for its `hosted_grace` (ten minutes
+  unless its `[hosts]` table says otherwise, see [What another machine may do
+  here](CONFIGURATION.md#what-another-machine-may-do-here)) and keeps its last
+  64 KB of output. The window stays, its title bar reads
+  `[reconnecting] build:name`, the rail row reads `build reconnecting`, and
+  keystrokes are refused rather than queued. When the link comes back the pane
+  is reattached, what the process printed meanwhile is written to it, and it is
+  live again. If more was printed than 64 KB, the whole 64 KB is written and the
+  pane is resized a row and back, so a full screen program draws its screen
+  again. If the grace runs out first, or the process exits meanwhile, the
+  window closes the way it closes when its shell exits. With `hosted_grace =
+  "0"` on the other machine, or a tuios there too old to keep a pane, the
+  window ends when the link does, as it always did.
+- **Closing the window ends the process at once.** A window closed on purpose
+  tells the other machine with `close-pane`, so its process does not wait out
+  the grace. If the link is down when it is closed, the grace ends it.
+- **A restart of this daemon does not reattach.** The panes on the other
+  machine wait out their grace and end.
 - **A resurrected session brings the window back on this machine.** Resurrection
   respawns a shell from saved state, and it does not redial a host to do it.
 - **A resurrected window runs a local shell.** The layout comes back and the

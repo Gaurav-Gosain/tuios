@@ -467,9 +467,22 @@ func (d *Daemon) verbSendText(_ *connState, params json.RawMessage) (any, *verbE
 		return nil, mapResolveErr(err, sess)
 	}
 	if _, err := pty.Write([]byte(p.Text)); err != nil {
-		return nil, newVerbError(ErrVerbInternal, err.Error())
+		return nil, ptyWriteError(err)
 	}
 	return map[string]any{"type": "ok"}, nil
+}
+
+// ptyWriteError is the verb error for a write a pane refused. A pane on
+// another machine whose link is being restored refuses writes, which is
+// host_unreachable: the text was not typed, and waiting is the remedy.
+func ptyWriteError(err error) *verbError {
+	if errors.Is(err, errPaneReconnecting) {
+		return hintedVerbError(ErrVerbHostUnreachable, err.Error(), &VerbHint{
+			Command: "tuios list-windows",
+			Detail:  "Nothing was typed. The window's process is still running on the other machine; host_link and host_link_until in list-windows say until when it waits for the link.",
+		})
+	}
+	return newVerbError(ErrVerbInternal, err.Error())
 }
 
 func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *verbError) {

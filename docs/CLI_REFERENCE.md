@@ -978,7 +978,7 @@ tuios list-attention [flags]
 **Flags:**
 - `-s, --session <name>`: Only this session on this machine, or on `--host` (default: every session)
 - `--host <name>`: Only this machine: `local`, or a linked host by name (default: every machine)
-- `--kind <kind>`: Only these kinds, repeatable or comma-separated: `approval`, `question`, `mail`, `errored`, `resume`, `finished`
+- `--kind <kind>`: Only these kinds, repeatable or comma-separated: `approval`, `question`, `mail`, `errored`, `resume`, `finished`, `outbox`
 - `--json`: Output the verb result as JSON
 
 **Examples:**
@@ -2005,7 +2005,7 @@ them.
 | `tuios set-agent-meta [key=value ...]` | Record display metadata about a pane's agent (model, context, a summary) for the rail |
 | `tuios set-agent-session <id> --harness <h>` | Record which conversation a pane's agent runs, for a later resume, without changing its state |
 | `tuios resume-agent [-w pane] [--dry-run]` | Type the pane's recorded conversation's resume command into its shell, after a daemon restart |
-| `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session. `--from human` from inside a pane is refused with `forbidden`: only the person at an attached client can send as `human` (see [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)) |
+| `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session. `--from human` from inside a pane is refused with `forbidden`: only the person at an attached client can send as `human` (see [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)). With `-s HOST:SESSION` and that host's link down, the message waits on this machine and goes when the link is back; the Inbox shows it under Waiting to send |
 | `tuios read-agent-messages` | Read the messages agents have left in this session. Reading `-w human` from inside a pane is always a peek |
 | `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
@@ -2023,7 +2023,7 @@ them.
 
 | Command | What it does |
 |---------|--------------|
-| `tuios hosts` | List the machines in the `[hosts]` config table and the state of each link. A host whose tuios is too old to stream its agents is named below the table, with what to update: its agents are polled and what waits there is not in the Inbox |
+| `tuios hosts` | List the machines in the `[hosts]` config table and the state of each link. A host whose tuios is too old to stream its agents is named below the table, with what to update: its agents are polled and what waits there is not in the Inbox. A host with mail waiting here for its link says how many |
 | `tuios hosts add <name> <addr>` | Add a machine. `--tailnet` takes the address from your tailnet; `--command`, `--ssh-option` and `--connect-timeout` tune the link |
 | `tuios hosts remove <name>` | Remove a machine |
 | `tuios hosts test <name>` | Open one link to a host and report what happened |

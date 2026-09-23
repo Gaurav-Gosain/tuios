@@ -93,6 +93,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"pane-cwd#0":    {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
 	"pane-agent#0":  {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
 	"pane-calls#0":  {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
+	"close-pane#0":  {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
 
 	// link-peer names the machine a link connection came from, so it is only
 	// taken on a link socket. The allowed path is proved in

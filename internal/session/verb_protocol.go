@@ -406,7 +406,7 @@ func init() {
 		"list-hosts": {
 			description: "List the machines named in the [hosts] config table, with the state of each link.",
 			returns: []verbParam{
-				{Name: "hosts", Type: "[]string", Description: "One entry per configured host, carrying its name, address, status, plain reason, remote daemon version, control protocol range, the last time it answered, and events: live when this daemon streams the host's agents and Inbox, polling when the host's tuios is too old to (events_note says what to update), empty while the link is not up."},
+				{Name: "hosts", Type: "[]string", Description: "One entry per configured host, carrying its name, address, status, plain reason, remote daemon version, control protocol range, the last time it answered, and events: live when this daemon streams the host's agents and Inbox, polling when the host's tuios is too old to (events_note says what to update), empty while the link is not up. queued is how many messages this daemon holds for the host until its link is back."},
 				{Name: "total", Type: "int", Description: "How many hosts are configured."},
 				{Name: "events_push", Type: "bool", Description: "Always true from a daemon that pushes host changes: host-changed on subscribe, and a hosts-changed push to attached clients."},
 				{Name: "config_problems", Type: "[]string", Description: "Config entries that were dropped, with the reason for each. Omitted when there are none."},
@@ -439,13 +439,31 @@ func init() {
 				{Name: "shell", Type: "string", Description: "The shell to run. Omit to use this machine's."},
 				{Name: "session", Type: "string", Description: "The asking session's name, exported as TUIOS_SESSION_REMOTE."},
 				{Name: "window", Type: "string", Description: "The asking daemon's id for the window the pane is drawn in. Exported as TUIOS_PANE_ID, and a promise to open the pane's report channel with pane-calls: a report the process sends naming it is forwarded there."},
+				{Name: "resumable", Type: "bool", Description: "Ask for the pane to outlive a dropped connection for the grace this machine's link policy gives the asking machine (hosted_grace), so it can be reattached with resume. The reply carries resume_token and grace when one was given."},
+				{Name: "resume", Type: "object", Description: "Reattach a pane instead of starting one: {\"pane\": id, \"token\": resume_token, \"offset\": bytes of output already received}. What was missed is written after the reply, from the pane's 64 KB ring, and the pane is live again from there."},
 			},
 			returns: []verbParam{
-				{Name: "pane", Type: "string", Description: "The id that addresses this pane in resize-pane. It lives as long as the connection does."},
+				{Name: "pane", Type: "string", Description: "The id that addresses this pane in resize-pane. It lives as long as the connection does, or with resumable until its grace runs out."},
 				{Name: "calls_token", Type: "string", Description: "The secret pane-calls takes. Present only when window was sent."},
+				{Name: "resume_token", Type: "string", Description: "The secret a reattach takes. Present only when resumable was asked and a grace was given."},
+				{Name: "grace", Type: "int", Description: "How many seconds the pane waits to be reattached after its connection drops."},
+				{Name: "resumed", Type: "bool", Description: "True on a reattach."},
+				{Name: "gap", Type: "bool", Description: "On a reattach, true when more output was missed than the ring holds: the whole ring is written, and the screen may need a redraw."},
 			},
 			examples: []string{`{"id":1,"verb":"open-pane","params":{"width":120,"height":40}}`},
 			handler:  (*Daemon).verbOpenPane,
+		},
+		"close-pane": {
+			description: "End a pane this machine runs for another machine at once: its process is killed and its connection closed. The owning daemon sends it when the window is closed on purpose, so a resumable pane does not wait out its grace.",
+			params: []verbParam{
+				{Name: "pane", Type: "string", Description: "The pane id open-pane returned."},
+			},
+			returns: []verbParam{
+				{Name: "pane", Type: "string", Description: "The pane that was ended."},
+				{Name: "closed", Type: "bool", Description: "Always true."},
+			},
+			examples: []string{`{"id":1,"verb":"close-pane","params":{"pane":"f2c1"}}`},
+			handler:  (*Daemon).verbClosePane,
 		},
 		"link-peer": {
 			description: "Name the machine a link connection came from. tuios stdio-proxy sends it as the first line of every connection it opens for a link, and the daemon resolves that machine's link policy from the name. Accepted once per connection, before anything else, and only on a link socket. After the reply the connection is read from scratch, JSON or binary.",
@@ -1188,9 +1206,13 @@ func init() {
 				{Name: "reply_to", Type: "int", Description: "The id of the message this one answers. The reply joins that message's thread, and a reply to a reply joins the same one. A reply is the only acknowledgement between agents that means anything."},
 				{Name: "attachments", Type: "[]string", Description: "Absolute paths to existing files on the daemon's host. The ring stores the reference, never the bytes, so the producer keeps the file."},
 				{Name: "human_nonce", Type: "string", Description: "The nonce from an attach reply, which the tuios client sends with a reply from its mail overlay. A message from human is stored as verified_human only when this matches a client attached to the session now, over the same kind of connection, the sender is outside every pane, and, where the kernel gives both pids, the sender is the process that attached. Without it, from human is stored as claimed_human."},
+				{Name: "host", Type: "string", Description: "A machine in the [hosts] table: deliver to session there over this machine's link, and keep the message here while the link is down, to deliver in order when it comes back. The answer is then the far machine's, with host, or queued with queue_id. session is required. from human arrives there as claimed_human. Not taken over a link."},
 			},
 			returns: []verbParam{
 				{Name: "message_id", Type: "int", Description: "The id of the stored message."},
+				{Name: "queued", Type: "bool", Description: "With host: true when the link was down and the message waits here for it."},
+				{Name: "queue_id", Type: "int", Description: "With queued: the message's place in this machine's outbox."},
+				{Name: "waiting", Type: "int", Description: "With queued: how many messages now wait for that machine."},
 				{Name: "kind", Type: "string", Description: "message for a directed message, notice for a session-wide one.", Accepted: []string{agentMsgDirect, agentMsgNotice}},
 				{Name: "to", Type: "string", Description: "The resolved recipient window id, empty for a notice."},
 				{Name: "to_name", Type: "string", Description: "The recipient's name at the time of sending."},
@@ -1575,8 +1597,12 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 		}
 		if cs.takeover != nil {
 			// The verb's reply is on the wire, and from here the connection
-			// is not a verb connection. See connState.takeover.
-			cs.takeover(br)
+			// is not a verb connection. See connState.takeover. It is cleared
+			// before it runs, because link-peer's takeover serves the same
+			// connection again, and a stale one would run after every verb.
+			take := cs.takeover
+			cs.takeover = nil
+			take(br)
 			return
 		}
 	}

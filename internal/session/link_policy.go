@@ -103,6 +103,7 @@ var verbCapabilities = map[string][]string{
 	"popup":        {config.LinkAllowOpen},
 	"open-pane":    {config.LinkAllowOpen},
 	"resize-pane":  {config.LinkAllowOpen},
+	"close-pane":   {config.LinkAllowOpen},
 	"pane-cwd":     {config.LinkAllowOpen},
 	"pane-agent":   {config.LinkAllowOpen},
 	"pane-calls":   {config.LinkAllowOpen},

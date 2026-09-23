@@ -438,6 +438,11 @@ type Window struct {
 	// frame says which machine, and it says it whether or not the shell is
 	// cooperating about its prompt.
 	Host string
+	// HostLink is "reconnecting" while the link to Host is lost and the far
+	// machine keeps the process for its grace, and empty otherwise. The frame
+	// says so in words, because a pane whose screen stopped moving looks the
+	// same as one whose process has nothing to say.
+	HostLink string
 
 	KittyPassthroughFunc func(cmd *vt.KittyCommand, rawData []byte)
 	SixelPassthroughFunc func(cmd *vt.SixelCommand, cursorX, cursorY, absLine int)

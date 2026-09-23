@@ -177,6 +177,7 @@ func (d *Daemon) verbListHosts(_ *connState, _ json.RawMessage) (any, *verbError
 	reports := d.federation.Reports(ctx)
 	for i := range reports {
 		reports[i].Events, reports[i].EventsNote = d.fleet.mode(reports[i].Host)
+		reports[i].Queued = d.outbox.count(reports[i].Host)
 	}
 	out["hosts"] = reports
 	out["total"] = len(reports)

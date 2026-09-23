@@ -37,6 +37,22 @@ func TestAPaneOnAnotherMachineSaysSoOnItsFrame(t *testing.T) {
 	}
 }
 
+// TestAPaneWhoseLinkIsLostSaysSoOnItsFrame: while the far machine keeps the
+// process through a dropped link, the frame says reconnecting in words, ahead
+// of the name so truncation keeps it.
+func TestAPaneWhoseLinkIsLostSaysSoOnItsFrame(t *testing.T) {
+	s := hostTitleSettings()
+	w := &terminal.Window{ID: "w1", CustomName: "a-rather-long-window-name", Host: "build", HostLink: "reconnecting"}
+	got := ansi.Strip(getWindowTitle(w, 1, 30, s))
+	if !strings.HasPrefix(strings.TrimSpace(got), "[reconnecting] build") {
+		t.Errorf("a pane whose link is lost does not say so first: %q", got)
+	}
+	w.HostLink = ""
+	if got := getWindowTitle(w, 1, 30, s); strings.Contains(got, "reconnecting") {
+		t.Errorf("a pane whose link is up says reconnecting: %q", got)
+	}
+}
+
 // TestAPaneOnThisMachineIsNotLabelled. The marker means something only because
 // its absence does: every pane carrying one would say nothing.
 func TestAPaneOnThisMachineIsNotLabelled(t *testing.T) {

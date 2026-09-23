@@ -39,6 +39,7 @@ type hostReport struct {
 	Stalls        int    `json:"stalls"`
 	Events        string `json:"events"`
 	EventsNote    string `json:"events_note"`
+	Queued        int    `json:"queued"`
 }
 
 // runListHosts prints the configured hosts and the state of each link.
@@ -168,6 +169,12 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 			note = "Its agents are polled rather than streamed."
 		}
 		fmt.Fprintf(w, "%s: %s\n", h.Host, note)
+	}
+	// Mail kept here for a machine whose link is down goes when it is back.
+	for _, h := range res.Hosts {
+		if h.Queued > 0 {
+			fmt.Fprintf(w, "%s: %d message(s) wait here for the link. The Inbox shows them; dismissing the item there discards them.\n", h.Host, h.Queued)
+		}
 	}
 	printConfigProblems(w, res.ConfigProblems)
 	return nil

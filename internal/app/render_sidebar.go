@@ -1957,6 +1957,10 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 			Host:        win.Host,
 			WindowIndex: -1,
 		}
+		// A pane whose link is lost says so beside its machine, in words.
+		if win.Host != "" && win.HostLink != "" {
+			e.Host = win.Host + " " + win.HostLink
+		}
 		if node.IsCurrent {
 			e.WindowIndex = m.windowIndexByID(win.ID)
 		}

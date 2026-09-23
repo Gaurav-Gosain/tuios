@@ -293,8 +293,13 @@ session here. It is drawn and laid out here, and its title bar reads
 tuios new-window -s work deploy --host build
 ```
 
-The window ends when the link drops, and a resurrected session brings it back
-as a local shell. A global session holds panes from several machines, and every
+When the link drops, the other machine keeps the process running for a grace
+(ten minutes unless its owner set `hosted_grace`), and the window waits:
+`list-windows` shows `host_link: "reconnecting"` and `host_link_until`, and
+`send-text` into it fails until the link is back. What the process printed
+meanwhile arrives when it is. Wait for it rather than opening another window;
+`wait-for window-exit` still fires if the grace runs out. A resurrected session
+brings the window back as a local shell. A global session holds panes from several machines, and every
 way of making a window in it asks which machine to run on. It starts with no
 windows:
 
@@ -304,8 +309,10 @@ tuios new deploy --global
 
 A host name is matched exactly. A miss is `unknown_host` with the configured
 names, never a guess, because reaching the wrong machine is worse than reaching
-none. A host that is not answering is `host_unreachable`, nothing is queued for
-it, and `tuios hosts` says why. `tuios hosts test NAME` dials the machine again
+none. A host that is not answering is `host_unreachable`, and `tuios hosts`
+says why. Mail is the one thing that waits for it: `send-agent-message -s
+HOST:SESSION` to a host whose link is down is kept on this machine and sent
+when the link is back, and says so (`queued` in `--json`). Do not send it again. `tuios hosts test NAME` dials the machine again
 and prints what ssh said.
 
 ## Reading another pane
@@ -2432,7 +2439,10 @@ look for another verb that does the same thing.
 `unknown_host` and `host_unreachable` come only from the host verbs, and both
 are final. A host name is matched exactly against the `[hosts]` config table, so
 a near miss is refused rather than resolved for you: reaching the wrong machine
-is worse than reaching none. Nothing is queued for a host that is not answering.
+is worse than reaching none. Nothing is queued for a host that is not answering,
+except mail, which waits (see Other machines). `send-text` into a window on
+another machine whose link is being restored is `host_unreachable` too, and
+typed nothing: wait for the link rather than retrying in a loop.
 Run `tuios hosts` to see why, or `tuios hosts test NAME` to dial it again.
 `host_refused` means the link is up and cannot take another connection: close
 one rather than fix the link. `unknown_pane` means a pane id on the far machine

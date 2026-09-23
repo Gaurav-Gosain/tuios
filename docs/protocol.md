@@ -188,6 +188,47 @@ see it until the person passes it on with `release-agent-message`. The Inbox
 mail item carries `held_id` and `held_for`. Without `hold_mail` nothing
 changes.
 
+**A pane on another machine can outlive a dropped link.** `open-pane` takes
+`resumable`, and the far daemon then keeps the process for its
+`hosted_grace` for the asking machine after the connection drops, returning
+`resume_token` and `grace` (seconds). `open-pane` with `resume` reattaches it.
+The asking daemon now always sends `resumable`; a far daemon that does not
+know it refuses it with `invalid_params`, and the asking daemon sends the
+request again without it, as it does for `window`. What changes:
+
+- A window on another machine no longer closes when the link drops, for up to
+  the far grace. `list-windows`, `session-info` and the state pushed to clients
+  carry `host_link: "reconnecting"` and `host_link_until` (unix seconds) while
+  it is being reattached. A caller that waited for `window-exit` on a link drop
+  now waits for the grace, or for the process to exit.
+- Keystrokes to such a window while it is reconnecting are refused, not queued.
+- Closing such a window sends `close-pane` to the far daemon, which ends the
+  process at once.
+- On the far machine, a pane opened with `resumable` is still read while no
+  connection is attached, so its process no longer blocks on a full pty while
+  the link is down. A pane opened without it behaves as before.
+
+**Mail for a machine whose link is down can wait for it.** `send-agent-message`
+takes `host`, a machine in the `[hosts]` table: the daemon delivers the message
+to `session` there over its link and returns that machine's answer with `host`
+and `queued: false`. When the link is down it keeps the message instead, on
+disk, and answers `{"type": "agent_message_queued", "queued": true,
+"queue_id": 3, "waiting": 1, ...}`; the messages go in order when the link is
+back. At most 64 wait per machine and 256 in all; past that the send is
+`rate_limited`. What changes for existing callers:
+
+- `list-attention` has a seventh kind, `outbox`, one item per machine with
+  mail waiting or refused. A consumer that switched on the six kinds sees a
+  kind it does not know.
+- `dismiss-attention` on an `outbox` item discards the mail still waiting for
+  that machine, and answers `for_host` and `discarded`.
+- `list-hosts` rows carry `queued`.
+- `tuios send-agent-message -s HOST:SESSION` falls back to this when the host
+  is unreachable, instead of failing with `host_unreachable`.
+- A message queued from `human` arrives on the far machine as `claimed_human`:
+  no nonce the far daemon would honour survives the wait. `host` is refused
+  over a link and dropped from a hosted pane's report channel.
+
 **An agent on `needs_input` or `unknown` is not ready to be asked.** The
 states that count as ready are now `idle`, `done`, `errored` and `none`. They
 used to include `needs_input` and `unknown` as well. `fan` types its first
@@ -672,7 +713,7 @@ catalog.
 | `forbidden` | The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as `human`, and a machine linked to this one cannot call what its link policy does not grant; the hint names the capability and the `[hosts]` table that grants it. Nothing was done. |
 | `protocol_mismatch` | The caller's protocol version is outside the range this daemon serves. Only `hello` produces it. |
 | `unknown_host` | No host by that name is configured. Host names are matched exactly. |
-| `host_unreachable` | The host is configured and is not answering. Nothing was queued. |
+| `host_unreachable` | The host is configured and is not answering. Nothing was queued; only `send-agent-message` with `host` keeps a message for a host that is down, and it answers `queued` instead of this. A write to a window on another machine whose link is being restored also answers it. |
 | `host_refused` | The host's link is up and cannot take another connection. |
 | `unknown_pane` | This daemon is not running a pane with that id. |
 | `internal` | An unexpected server side failure. |
@@ -876,6 +917,11 @@ Response:
   ]
 }}
 ```
+
+A window whose process runs on another machine also has `host`. While the link
+to it is lost and the pane is being reattached, it has `host_link:
+"reconnecting"` and `host_link_until`, the unix time the far machine stops
+keeping the process (see [A pane that outlives its link](#a-pane-that-outlives-its-link)).
 
 ### new-window
 
@@ -1540,7 +1586,7 @@ answers the verb with `unknown_verb`.
 
 List the Inbox: everything waiting for the person, in every session on this
 daemon and on every linked host it follows (see [Following linked
-hosts](#following-linked-hosts)). Each item is one of six kinds, and the list
+hosts](#following-linked-hosts)). Each item is one of seven kinds, and the list
 is grouped in this order, oldest first inside each group:
 
 | Kind | Opens when | Closes when |
@@ -1551,6 +1597,7 @@ is grouped in this order, oldest first inside each group:
 | `errored` | A pane goes to `errored`. | The pane leaves `errored`. |
 | `resume` | A restore brings back a pane with a conversation its harness can resume, with `daemon.resume_agents` on `ask`. The summary is the command. | `resume-agent` types it, or the pane goes to `working` or `needs_input` (an agent is running there again). |
 | `finished` | A pane's `completion_seq` goes up as it comes to rest. | An attached client focuses the pane, the agent starts another turn (`working`), blocks, or errors. |
+| `outbox` | `send-agent-message` with `host` is kept here because that machine's link is down, or a kept message was refused there. One item per machine, with `for_host`; `count` is the messages waiting, and the summary says how many and the last refusal. | Everything waiting was delivered and nothing was refused, or `dismiss-attention`, which also discards what waits. |
 
 Every item also closes when its pane closes (mail excepted: the message is
 still unread), when its session ends, and on `dismiss-attention`. A pane has at
@@ -1570,7 +1617,7 @@ sent.
 
 Params: `session` (optional; unlike most verbs, omitted means every session;
 without `host` it names a session on this machine), `kinds` (optional list,
-from `approval`, `question`, `mail`, `errored`, `resume`, `finished`), `host`
+from `approval`, `question`, `mail`, `errored`, `resume`, `finished`, `outbox`), `host`
 (optional: `local` for this machine or a linked host's name; omitted means
 every machine; an unknown name is `unknown_host`).
 
@@ -1593,7 +1640,10 @@ for this machine, the host's name for an item of a linked host), `session`,
 (the Inbox revision of the item's last change), `thread` and `count` (mail),
 `completion_seq` (finished), `stale` and `seen_at` (an item of a host whose
 link is down: what the host said last, and when this daemon last heard from
-it, in unix nanoseconds).
+it, in unix nanoseconds), `held_id` and `held_for` (mail from another machine
+held for the person by `hold_mail`: the message `release-agent-message` takes
+and the window it was for), `for_host` (outbox: the machine the mail waits
+for).
 
 `summary` is text an agent wrote. The daemon keeps it to one line, removes
 control characters, masks what looks like a credential (`TOKEN=...`,
@@ -1616,7 +1666,9 @@ saved queue is still loading keeps its id and wins over a saved item for the
 same pane and kind. A saved item whose id such an item already holds is kept
 under a fresh id, so no two items ever share one. It drops `resume` items
 too: the restore that runs on start opens them again from each window's
-`agent_session_id`, after the saved items are loaded.
+`agent_session_id`, after the saved items are loaded. `outbox` items are
+opened again from the outbox, which is saved on its own and survives a
+restart whole.
 
 Wire compatibility: new verb and new event type. An older daemon answers
 `unknown_verb`, and the tuios client then shows the Inbox as unavailable.
@@ -1931,6 +1983,45 @@ connection still takes requests, so the owner sends `open-pane` again on it
 without `window`. The pane opens as before, with no `calls_token`, and the
 owner opens no channel.
 
+### A pane that outlives its link
+
+`open-pane` with `"resumable": true` asks the far daemon to keep the pane
+through a dropped connection. The far daemon decides for how long, from its
+own `hosted_grace` for the asking machine (ten minutes by default, `"0"` for
+none, at most a day), and says so in the reply:
+
+```json
+{"id": 1, "result": {"type": "pane", "pane": "f2c1...", "calls_token": "...", "resume_token": "9e0a...", "grace": 600}}
+```
+
+With no grace given there is no `resume_token`, and the pane ends with its
+connection as it always did. With one, the far daemon reads the process's
+output whether or not a connection is attached, keeps the last 64 KB, and
+counts every byte. When the connection drops it waits `grace` seconds. The
+asking daemon reattaches on a new connection:
+
+```json
+{"id": 1, "verb": "open-pane", "params": {"resume": {"pane": "f2c1...", "token": "9e0a...", "offset": 18234}}}
+```
+
+`offset` is how many bytes of output it has received. The reply is
+`{"type":"pane","pane":...,"resumed":true,"gap":false,"grace":600}`, and after
+it the connection carries what was missed from `offset` on, then the live
+stream, exactly as after an open. `gap` is true when more was missed than the
+ring holds; the whole ring is sent then. A wrong token is `forbidden`, and a
+pane whose process exited or whose grace ran out is `unknown_pane`: both are
+final. A reattach closes a connection still attached to the pane.
+
+### close-pane
+
+```json
+{"id": 1, "verb": "close-pane", "params": {"pane": "f2c1..."}}
+```
+
+Ends a hosted pane at once: its process is killed and its connection closed.
+The asking daemon sends it when a window is closed on purpose. Result: `pane`,
+`closed`. An unknown pane is `unknown_pane`. Over a link it needs `open`.
+
 ### What a linked machine may do here
 
 A connection that arrives over a link is accepted on a link socket
@@ -1947,7 +2038,7 @@ the one before. The configuration is in
 | none | `hello`, `list-verbs`, `link-peer` |
 | `list` | `list-*`, `session-info`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
-| `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `open-pane`, `resize-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
+| `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
 | `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `close-window`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `remove-worktree` |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message` |
 | every one | `open-host-connection` |

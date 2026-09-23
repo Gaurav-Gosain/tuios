@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -213,6 +214,12 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo uint64, attachments []string, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, to)
 	if err != nil {
+		// A machine whose link is down cannot be reached now, and mail is the
+		// one thing that can wait for it: this machine's daemon keeps it and
+		// delivers it when the link is back.
+		if host, sess, window, rerr := resolveTarget(sessionName, to); rerr == nil && host != "" && hostUnreachable(err) {
+			return queueAgentMessage(host, sess, window, from, subject, text, replyTo, attachments, jsonOutput)
+		}
 		return err
 	}
 	defer t.Close()
@@ -272,6 +279,71 @@ func runSendAgentMessage(sessionName, to, from, subject, text string, replyTo ui
 	if res.ReplyToMissing {
 		fmt.Println("the message you answered has been dropped from the ring. The reply stands, and it starts the thread from the id you named.")
 	}
+	return nil
+}
+
+// hostUnreachable reports whether a failed connection to a host failed because
+// its link is down, rather than because the name is wrong or the far machine
+// refused.
+func hostUnreachable(err error) bool {
+	var connect *session.HostConnectError
+	if errors.As(err, &connect) {
+		return connect.Code == session.ErrVerbHostUnreachable
+	}
+	var call *session.VerbCallError
+	return errors.As(err, &call) && call.Code == session.ErrVerbHostUnreachable
+}
+
+// queueAgentMessage hands a message for a machine whose link is down to this
+// machine's daemon, which keeps it and delivers it when the link comes back.
+// The session there has to be named: which session is most recent on a
+// machine that cannot be asked is not known here.
+func queueAgentMessage(host, sess, window, from, subject, text string, replyTo uint64, attachments []string, jsonOutput bool) error {
+	if sess == "" {
+		return fmt.Errorf("the link to %s is down, so a message can only wait for it with the session named: -s %s:SESSION", host, host)
+	}
+	client, err := dialVerb()
+	if err != nil {
+		return reportVerbError(err, jsonOutput)
+	}
+	defer func() { _ = client.Close() }()
+	params := map[string]any{"host": host, "session": sess, "text": text}
+	if window != "" {
+		params["to"] = window
+	}
+	if from != "" {
+		params["from"] = from
+	}
+	if subject != "" {
+		params["subject"] = subject
+	}
+	if replyTo > 0 {
+		params["reply_to"] = replyTo
+	}
+	if len(attachments) > 0 {
+		params["attachments"] = attachments
+	}
+	raw, err := client.Call("send-agent-message", params)
+	if err != nil {
+		return reportVerbError(err, jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, true)
+	}
+	var res struct {
+		Queued    bool   `json:"queued"`
+		MessageID uint64 `json:"message_id"`
+		Waiting   int    `json:"waiting"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if !res.Queued {
+		// The link came back between the two calls and the message went.
+		fmt.Printf("message %d sent to %s:%s\n", res.MessageID, host, sess)
+		return nil
+	}
+	fmt.Printf("the link to %s is down: the message waits here and goes when it is back (%d waiting). The Inbox shows it; dismissing it there discards what waits.\n", host, res.Waiting)
 	return nil
 }
 

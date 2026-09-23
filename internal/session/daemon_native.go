@@ -407,6 +407,12 @@ func windowStateToData(state *SessionState, idx int) map[string]any {
 	if w.Host != "" {
 		info["host"] = w.Host
 	}
+	// Set only while the link to that machine is lost and the pane is being
+	// reattached: reconnecting, and when the far machine stops keeping it.
+	if w.HostLink != "" {
+		info["host_link"] = w.HostLink
+		info["host_link_until"] = w.HostLinkUntil
+	}
 	// Always report the agent state (as "none" when unset) so a consumer building
 	// an attention view can read every pane's state in one list-windows call.
 	info["agent_state"] = w.AgentState.Name()

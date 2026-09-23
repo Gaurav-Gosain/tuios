@@ -1057,6 +1057,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.SetTitle(ws.Title)
 	adoptWindowCwd(w, ws.Cwd)
 	adoptWindowHost(w, ws.Host)
+	w.HostLink = ws.HostLink
 	w.CustomName = ws.CustomName
 	if adoptGeometry {
 		w.X = ws.X
@@ -1233,6 +1234,7 @@ func (m *OS) newWindowFromState(ws *session.WindowState) *terminal.Window {
 	)
 	adoptWindowCwd(window, ws.Cwd)
 	adoptWindowHost(window, ws.Host)
+	window.HostLink = ws.HostLink
 
 	caps := m.hostCaps()
 	if caps.CellWidth > 0 && caps.CellHeight > 0 {

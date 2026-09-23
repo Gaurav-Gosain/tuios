@@ -645,6 +645,8 @@ func inboxKindWords(it session.AttentionItem) string {
 		return "wrote to you"
 	case session.AttentionResume:
 		return "can resume its conversation"
+	case session.AttentionOutbox:
+		return "mail waits to be sent"
 	}
 	return it.Kind
 }
@@ -663,6 +665,9 @@ func inboxWho(it session.AttentionItem) string {
 // inboxWhere is the session an item is in, with its machine when it is not
 // this one.
 func inboxWhere(it session.AttentionItem) string {
+	if it.Kind == session.AttentionOutbox {
+		return "for " + printableTitle(it.ForHost)
+	}
 	where := printableTitle(it.Session)
 	if it.Host != "" {
 		where = printableTitle(it.Host) + ":" + where
@@ -778,6 +783,8 @@ func inboxGroupTitle(kind string) string {
 		return "Resume"
 	case session.AttentionFinished:
 		return "Finished"
+	case session.AttentionOutbox:
+		return "Waiting to send"
 	}
 	return kind
 }
@@ -935,6 +942,12 @@ func (m *OS) InboxCycleFilter() {
 func (m *OS) InboxActivate() tea.Cmd {
 	it, ok := m.inboxSelected()
 	if !ok {
+		return nil
+	}
+	if it.Kind == session.AttentionOutbox {
+		// Mail waiting for another machine has no pane to go to. It goes on
+		// its own when the link is back.
+		m.ShowNotification("This mail goes to "+printableTitle(it.ForHost)+" when its link is back. d discards it.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	m.CloseInbox()
@@ -1425,7 +1438,7 @@ func (m *OS) applyInboxDismissed(msg InboxDismissedMsg) {
 // which is what the next-attention key visits. A finished turn is news, not a
 // request, so it is left to the Inbox.
 func inboxNeedsYou(it session.AttentionItem) bool {
-	return it.Kind != session.AttentionFinished && !it.Stale
+	return it.Kind != session.AttentionFinished && it.Kind != session.AttentionOutbox && !it.Stale
 }
 
 // JumpToNextAttention goes to the oldest item that needs the person, in Inbox
@@ -1511,11 +1524,15 @@ func inboxKindGlyph(kind string) string {
 			return "x"
 		case session.AttentionResume:
 			return ">"
+		case session.AttentionOutbox:
+			return "^"
 		default:
 			return "*"
 		}
 	}
 	switch kind {
+	case session.AttentionOutbox:
+		return "↑"
 	case session.AttentionApproval, session.AttentionQuestion:
 		return agentStateIndicator("needs_input")
 	case session.AttentionMail:

@@ -399,6 +399,26 @@ client's history. Counting cannot say more once either side is at its cap;
 doing it right needs the wire to carry how many rows scrolled off since a
 stream position.
 
+## A pane on another machine after a dropped link
+
+A pane whose process runs on another machine has no emulator there, so there
+is no snapshot to fall back to when its link drops: the machine running the
+process keeps a stream, not a screen. It keeps a 64 KB ring of the process's
+output and a count of every byte, the same shape as the PTY ring above, and the
+daemon holding the window counts every byte it has read. On a reattach the
+count goes back, and the ring is replayed from it, so the window's emulator
+takes each byte once and in order. The window's own emulator, scrollback and
+subscribers never see the drop, only a pause.
+
+When more was written during the drop than the ring holds, the whole ring is
+written and the bytes before it are gone. The emulator then applies a stream
+with a hole in it, which is exactly the double-application problem's opposite
+and just as wrong for a screen that was drawn with cursor movement. The daemon
+holding the window resizes the pane a row and back after such a reattach, so a
+program that repaints on SIGWINCH draws its screen whole again. A shell prompt
+is not repainted, and what scrolled by during the hole is not in the
+scrollback. See [SESSIONS.md](SESSIONS.md#limits).
+
 ## What the wire still does not carry
 
 Known and deliberate, so the next person does not have to rediscover them: the

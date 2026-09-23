@@ -117,6 +117,19 @@ func (d *Daemon) verbDismissAttention(cs *connState, params json.RawMessage) (an
 			"dismissed": true,
 		}, nil
 	}
+	// Dismissing a machine's outbox discards what still waits for it: that is
+	// the person deciding the mail should not go.
+	if it.Kind == AttentionOutbox {
+		dropped := d.outbox.discard(it.ForHost)
+		return map[string]any{
+			"type":      "attention_dismissed",
+			"id":        it.ID,
+			"kind":      it.Kind,
+			"for_host":  it.ForHost,
+			"discarded": dropped,
+			"dismissed": true,
+		}, nil
+	}
 	if sess := d.manager.GetSession(it.Session); sess != nil {
 		switch it.Kind {
 		case AttentionFinished:

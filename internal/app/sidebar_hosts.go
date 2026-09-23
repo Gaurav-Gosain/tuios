@@ -72,6 +72,9 @@ type FederationHost struct {
 	Reason   string
 	LastOK   int64
 	Sessions []FederationSession
+	// Queued is how many messages the daemon holds for the machine until its
+	// link is back.
+	Queued int
 }
 
 // FederationSession is one session on another machine, as that machine
@@ -196,10 +199,12 @@ func refreshFederationCmd() tea.Cmd {
 		// state.
 		msg := FederationHostsMsg{}
 		lastOK := map[string]int64{}
+		queued := map[string]int{}
 		reports, pushes := hostStatusReports(client)
 		msg.Pushed = pushes
 		for _, h := range reports {
 			lastOK[h.Host] = h.LastOK
+			queued[h.Host] = h.Queued
 			if h.Status == federation.StatusUp && h.Events != "live" {
 				msg.Pushed = false
 			}
@@ -208,7 +213,7 @@ func refreshFederationCmd() tea.Cmd {
 			if h.Host != federation.LocalHostName {
 				msg.Configured++
 			}
-			fh := FederationHost{Name: h.Host, Status: h.Status, Reason: h.Reason, LastOK: lastOK[h.Host]}
+			fh := FederationHost{Name: h.Host, Status: h.Status, Reason: h.Reason, LastOK: lastOK[h.Host], Queued: queued[h.Host]}
 			for _, s := range h.Sessions {
 				fh.Sessions = append(fh.Sessions, FederationSession{
 					Name:        s.Name,
@@ -295,6 +300,7 @@ func (m *OS) hostGroupNodes() []sessiontree.Node {
 			HostStatus:  h.Status,
 			HostNote:    h.Reason,
 			HostLastOK:  h.LastOK,
+			HostQueued:  h.Queued,
 			WindowCount: len(h.Sessions),
 			// The machine's own glyph is the most urgent thing under it, so a
 			// folded group still says whether anything in there wants a
@@ -883,6 +889,11 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 		// A host that is not up says why, in the slot the add control would take.
 		// An unreachable machine has nothing to add a session to.
 		label := hostDownLabel(node.HostStatus, node.HostLastOK, time.Now())
+		// Mail waiting here for the machine is said first, in words: it is
+		// the one thing on the row that will change when the link is back.
+		if node.HostQueued > 0 {
+			label = strconv.Itoa(node.HostQueued) + " queued, " + label
+		}
 		right = sidebarStyle(rowBg, pal.FgMute).Render(label)
 		rightW = lipgloss.Width(label)
 	case blocked > 0:

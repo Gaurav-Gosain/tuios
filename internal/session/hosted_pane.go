@@ -3,6 +3,7 @@ package session
 import (
 	"bufio"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"sync"
@@ -67,6 +68,37 @@ type hostedPane struct {
 	// calls carries what the process in the pane reports to the owner. See
 	// hosted_calls.go.
 	calls hostedCalls
+
+	// grace is how long the pane outlives its owner's connection, waiting to
+	// be reattached. Zero ends it with the connection, which is what an owner
+	// that did not ask for it, or a policy of "0", gets. resumeToken is the
+	// secret a reattach needs; it is in the open-pane reply and nowhere else,
+	// and empty when grace is zero. See hosted_resume.go.
+	grace       time.Duration
+	resumeToken string
+
+	// startOnce starts the output pump and the reaper on the first attach.
+	startOnce sync.Once
+
+	// out guards the output ring and serialises every write to the attached
+	// connection, so a reattach replays what was missed and goes live at the
+	// same byte. ring holds the last hostedRingSize bytes the process wrote,
+	// and outSeq counts every byte it ever wrote.
+	out    sync.Mutex
+	ring   []byte
+	outSeq int64
+
+	// connMu guards the owner's connection now attached, nil while detached,
+	// the timer that ends a detached pane, and ending, set when the owner
+	// asked for the pane to end. It is never held across I/O.
+	connMu sync.Mutex
+	conn   net.Conn
+	orphan *time.Timer
+	ending bool
+	closed bool
+
+	// onEnd drops the pane from the daemon's registry when it ends.
+	onEnd func()
 }
 
 // hostedPaneSpec is what the owning daemon asks for. The terminal type and the
@@ -88,6 +120,20 @@ type hostedPaneSpec struct {
 	// after the open, so this side exports it as TUIOS_PANE_ID and forwards
 	// the process's own reports to it. An older owner omits it.
 	Window string `json:"window,omitempty"`
+	// Resumable asks for the pane to outlive a dropped connection for this
+	// machine's hosted_grace, so the owner can reattach it with Resume. An
+	// older owner omits it, and the pane ends with the connection as before.
+	Resumable bool `json:"resumable,omitempty"`
+	// Resume reattaches a pane opened with Resumable instead of spawning one.
+	Resume *hostedResume `json:"resume,omitempty"`
+}
+
+// hostedResume is what a reattach names: the pane, its secret, and how many
+// bytes of the process's output the owner has already received.
+type hostedResume struct {
+	Pane   string `json:"pane"`
+	Token  string `json:"token"`
+	Offset int64  `json:"offset"`
 }
 
 // hostedPaneBounds are the sizes a spawn is clamped to. A pane arrives sized by
@@ -103,7 +149,10 @@ const (
 // control stream rather than on the pane's own connection: the pane's
 // connection is raw bytes from the reply onward and has no room left to say
 // anything out of band.
-func (d *Daemon) registerHostedPane(spec hostedPaneSpec) (*hostedPane, error) {
+//
+// grace is how long the pane may outlive its owner's connection; zero ends it
+// with the connection.
+func (d *Daemon) registerHostedPane(spec hostedPaneSpec, grace time.Duration) (*hostedPane, error) {
 	width, height := clampHostedDim(spec.Width), clampHostedDim(spec.Height)
 
 	shell := spec.Shell
@@ -113,6 +162,10 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec) (*hostedPane, error) {
 	// The id and the token exist before the process does, because the
 	// process's environment names the pane.
 	hp := &hostedPane{id: uuid.New().String()}
+	if grace > 0 {
+		hp.grace = grace
+		hp.resumeToken = newHostedCallsToken()
+	}
 	if hostedWindowIDPattern.MatchString(spec.Window) {
 		hp.window = spec.Window
 		hp.callsToken = newHostedCallsToken()
@@ -145,6 +198,14 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec) (*hostedPane, error) {
 	releaseSlave(pty)
 
 	hp.pty, hp.cmd = pty, cmd
+	id := hp.id
+	hp.onEnd = func() {
+		d.hostedPanesMu.Lock()
+		if d.hostedPanes[id] == hp {
+			delete(d.hostedPanes, id)
+		}
+		d.hostedPanesMu.Unlock()
+	}
 
 	d.hostedPanesMu.Lock()
 	if d.hostedPanes == nil {
@@ -307,7 +368,10 @@ func (hp *hostedPane) resize(width, height int) error {
 	return hp.pty.Resize(clampHostedDim(width), clampHostedDim(height))
 }
 
-// close kills the process and releases the pty.
+// close kills the process, releases the pty, ends the owner's connection and
+// drops the pane from the registry. Closing the connection is how the owner is
+// told: its read ends, and it closes the pane the way it closes a local pane
+// whose shell exited.
 func (hp *hostedPane) close() {
 	hp.closeOnce.Do(func() {
 		hp.calls.close()
@@ -315,11 +379,29 @@ func (hp *hostedPane) close() {
 			_ = hp.cmd.Process.Kill()
 		}
 		_ = hp.pty.Close()
+		hp.connMu.Lock()
+		hp.closed = true
+		c := hp.conn
+		hp.conn = nil
+		if hp.orphan != nil {
+			hp.orphan.Stop()
+			hp.orphan = nil
+		}
+		hp.connMu.Unlock()
+		if c != nil {
+			_ = c.Close()
+		}
+		if hp.onEnd != nil {
+			hp.onEnd()
+		}
 	})
 }
 
-// relayHostedPane copies bytes between the owning daemon's connection and the
-// pty until either end stops, then ends the other.
+// relayHostedPane attaches the owning daemon's connection to the pane and
+// copies its keystrokes into the pty until the connection ends. from is how
+// many bytes of the process's output the owner already has: zero for a fresh
+// open, the owner's count for a reattach. The output goes the other way from
+// the pump (hosted_resume.go), which outlives any one connection.
 //
 // Both deadlines are cleared first, for the reason relayHostConnection clears
 // them: the verb reply was written under a write deadline, a deadline on a
@@ -327,61 +409,40 @@ func (hp *hostedPane) close() {
 // inherits one starts failing its writes a fixed number of seconds later. A
 // pane can be silent for hours and that is not a failure, so the relay runs
 // with no deadline in either direction.
-func (d *Daemon) relayHostedPane(cs *connState, br *bufio.Reader, hp *hostedPane) {
+func (d *Daemon) relayHostedPane(cs *connState, br *bufio.Reader, hp *hostedPane, from int64) {
 	conn := cs.conn
 	_ = conn.SetReadDeadline(time.Time{})
 	_ = conn.SetWriteDeadline(time.Time{})
 
-	defer d.forgetHostedPane(hp.id)
-
-	go func() {
-		// Reap the process. Nothing else on this machine waits for a hosted
-		// pane's command: the local path waits in monitorExit, which belongs
-		// to a PTY this daemon owns, and a hosted pane has no PTY here. An
-		// unwaited child is a zombie for as long as the daemon runs, and a
-		// daemon that hosts panes for another machine collects one per pane.
-		//
-		// It doubles as the backstop for the pty going quiet: whichever of the
-		// two notices first ends the pane, and close is idempotent.
-		if hp.cmd != nil {
-			_ = hp.cmd.Wait()
-		}
-		hp.close()
-	}()
+	if !hp.attach(conn, from) {
+		_ = conn.Close()
+		return
+	}
 
 	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		// The owning daemon's keystrokes. br is used rather than the bare
-		// connection so a byte it buffered ahead of the reply is not lost.
-		_, _ = io.Copy(hp.pty, br)
-		// The owning side hung up. The process goes with it: there is no
-		// second reader that could still be served, and a shell left running
-		// on a pty nobody holds is a leak nobody can see.
-		hp.close()
-	}()
 	go func() {
 		// The daemon stopping or the connection dropping ends the relay from
 		// outside; without this the copy below waits for a byte that no longer
 		// has anywhere to go.
 		select {
 		case <-d.ctx.Done():
+			hp.close()
 		case <-cs.done:
 		case <-done:
 			return
 		}
-		hp.close()
 		_ = conn.Close()
 	}()
 
-	// The process's output. This returns when the pty closes, which is what
-	// the process exiting looks like from here, and closing the connection is
-	// how the owning daemon is told: its own read ends, and it closes the pane
-	// the way it closes a local pane whose shell exited.
-	_, _ = io.Copy(conn, hp.pty)
-	hp.close()
-	_ = conn.Close()
-	<-done
+	// The owning daemon's keystrokes. br is used rather than the bare
+	// connection so a byte it buffered ahead of the reply is not lost.
+	_, _ = io.Copy(hp.pty, br)
+	close(done)
+	// The owning side hung up, or the link under it dropped. A pane with no
+	// grace goes with it: there is no second reader that could still be
+	// served, and a shell left running on a pty nobody holds is a leak nobody
+	// can see. A pane with grace waits to be reattached.
+	hp.detach(conn)
 }
 
 // foreground is the process running in the hosted pane's terminal right now.

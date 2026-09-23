@@ -81,6 +81,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 			Focused:    i == m.FocusedWindow,
 			Workspace:  w.Workspace,
 			Host:       w.Host,
+			HostLink:   w.HostLink,
 		})
 	}
 	name := m.SessionName

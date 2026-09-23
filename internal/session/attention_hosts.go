@@ -60,6 +60,12 @@ func sanitizeHostItem(host string, in AttentionItem, now time.Time) (AttentionIt
 	if in.Host != "" || AttentionKindRank(in.Kind) == len(AttentionKindNames) || !hostItemIDPattern.MatchString(in.ID) {
 		return AttentionItem{}, false
 	}
+	// Mail waiting to leave that machine is about its links, not about
+	// anything on it a person here can act on, and dismissing it here would
+	// discard nothing there.
+	if in.Kind == AttentionOutbox {
+		return AttentionItem{}, false
+	}
 	out := AttentionItem{
 		ID:            hostItemID(host, in.ID),
 		Kind:          in.Kind,

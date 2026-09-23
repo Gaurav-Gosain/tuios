@@ -1268,8 +1268,8 @@ func TestOnlyARefusalOfTheWindowIsRetried(t *testing.T) {
 		{"another code", newVerbError(ErrVerbForbidden, "no parameter window"), false},
 		{"no error", nil, false},
 	} {
-		if got := refusesWindowParam(tc.verr); got != tc.want {
-			t.Errorf("%s: refusesWindowParam = %v, want %v", tc.name, got, tc.want)
+		if got := refusesParam(tc.verr, "window"); got != tc.want {
+			t.Errorf("%s: refusesParam(window) = %v, want %v", tc.name, got, tc.want)
 		}
 	}
 

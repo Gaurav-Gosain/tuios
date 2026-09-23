@@ -104,6 +104,13 @@ type WindowState struct {
 	// case. The zero value is a window on this machine, which is what every
 	// older client and every older state file reads as.
 	Host string `json:"host,omitempty"`
+	// HostLink is the state of the link a window on another machine runs
+	// over, empty while it is up: "reconnecting" while the link is lost and
+	// the far machine keeps the process for its grace. HostLinkUntil is when
+	// that grace ends, in unix seconds. Both are live facts, filled into every
+	// snapshot and never stored. See remote_pane.go.
+	HostLink      string `json:"host_link,omitempty"`
+	HostLinkUntil int64  `json:"host_link_until,omitempty"`
 	// Cwd is the working directory of the window's shell process, captured on the
 	// daemon side when saving resurrection state. On cold-start restore a fresh
 	// shell is respawned here. Empty for live state syncs (clients do not set it).
@@ -1504,6 +1511,51 @@ func (s *Session) fillLiveFacts(state *SessionState) {
 			state.Windows[i].Cwd = cwd
 		}
 	}
+
+	// A window on another machine whose link is lost says so, and until
+	// when the far machine keeps its process. Nothing stored holds this: it
+	// is true only while it is true, so whatever a client pushed back is
+	// cleared first.
+	for i := range state.Windows {
+		state.Windows[i].HostLink, state.Windows[i].HostLinkUntil = "", 0
+	}
+	for id, link := range s.liveHostLinks() {
+		for i := range state.Windows {
+			if state.Windows[i].PTYID == id {
+				state.Windows[i].HostLink = link.state
+				state.Windows[i].HostLinkUntil = link.until
+			}
+		}
+	}
+}
+
+// hostLinkFact is one remote pane's link state for a snapshot.
+type hostLinkFact struct {
+	state string
+	until int64
+}
+
+// liveHostLinks is the link state of every window on another machine whose
+// link is not up, by PTY id.
+func (s *Session) liveHostLinks() map[string]hostLinkFact {
+	s.ptysMu.RLock()
+	defer s.ptysMu.RUnlock()
+	var out map[string]hostLinkFact
+	for id, pty := range s.ptys {
+		rp, ok := pty.pty.(*remotePane)
+		if !ok {
+			continue
+		}
+		state, until := rp.linkState()
+		if state == "" {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]hostLinkFact)
+		}
+		out[id] = hostLinkFact{state: state, until: until.Unix()}
+	}
+	return out
 }
 
 // forgetCwdCache drops the cached directory read, so the next snapshot asks

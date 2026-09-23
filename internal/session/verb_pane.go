@@ -2,8 +2,10 @@ package session
 
 import (
 	"bufio"
+	"crypto/subtle"
 	"encoding/json"
 	"path/filepath"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
@@ -33,16 +35,25 @@ func (d *Daemon) verbOpenPane(cs *connState, params json.RawMessage) (any, *verb
 	if verr := decodeParams(params, &spec); verr != nil {
 		return nil, verr
 	}
+	if spec.Resume != nil {
+		return d.resumeHostedPane(cs, spec.Resume)
+	}
 
-	hp, err := d.registerHostedPane(spec)
+	// The grace is this machine's to give, from its policy for the machine
+	// asking. An owner on this machine's own socket gets the default.
+	var grace time.Duration
+	if spec.Resumable {
+		grace = d.linkPolicy(cs).HostedGrace
+	}
+	hp, err := d.registerHostedPane(spec, grace)
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not start a pane on this machine: "+err.Error())
 	}
 
 	LogBasic("Client %s opened pane %s on this machine", cs.clientID, hp.id)
 	cs.takeover = func(br *bufio.Reader) {
-		d.relayHostedPane(cs, br, hp)
-		LogBasic("Pane %s ended", hp.id)
+		d.relayHostedPane(cs, br, hp, 0)
+		LogBasic("Pane %s left its connection", shortID(hp.id))
 	}
 	out := map[string]any{
 		"type": "pane",
@@ -51,7 +62,60 @@ func (d *Daemon) verbOpenPane(cs *connState, params json.RawMessage) (any, *verb
 	if hp.callsToken != "" {
 		out["calls_token"] = hp.callsToken
 	}
+	if hp.resumeToken != "" {
+		out["resume_token"] = hp.resumeToken
+		out["grace"] = int64(hp.grace / time.Second)
+	}
 	return out, nil
+}
+
+// resumeHostedPane reattaches a pane whose connection dropped. See
+// hosted_resume.go.
+func (d *Daemon) resumeHostedPane(cs *connState, r *hostedResume) (any, *verbError) {
+	if r.Pane == "" {
+		return nil, invalidParam("resume", "resume needs the pane id that open-pane returned.")
+	}
+	hp := d.lookupHostedPane(r.Pane)
+	if hp == nil || hp.ended() {
+		return nil, newVerbError(ErrVerbUnknownPane, "this machine is not running a pane called "+echoName(r.Pane)+". Its process exited, or it was not reattached within its grace.")
+	}
+	if hp.resumeToken == "" || subtle.ConstantTimeCompare([]byte(hp.resumeToken), []byte(r.Token)) != 1 {
+		return nil, newVerbError(ErrVerbForbidden, "a reattach needs the resume token the open-pane reply carried, and this is not it")
+	}
+	gap := hp.resumeGap(r.Offset)
+	LogBasic("Client %s reattached pane %s", cs.clientID, shortID(hp.id))
+	cs.takeover = func(br *bufio.Reader) {
+		d.relayHostedPane(cs, br, hp, r.Offset)
+		LogBasic("Pane %s left its connection", shortID(hp.id))
+	}
+	return map[string]any{
+		"type":    "pane",
+		"pane":    hp.id,
+		"resumed": true,
+		"gap":     gap,
+		"grace":   int64(hp.grace / time.Second),
+	}, nil
+}
+
+// verbClosePane ends a pane this machine runs for another machine at once. The
+// owner sends it when its window is closed on purpose, so a pane with a grace
+// does not wait out the grace for an owner that is not coming back.
+func (d *Daemon) verbClosePane(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Pane string `json:"pane"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if p.Pane == "" {
+		return nil, invalidParam("pane", "close-pane needs the pane id that open-pane returned.")
+	}
+	hp := d.lookupHostedPane(p.Pane)
+	if hp == nil {
+		return nil, newVerbError(ErrVerbUnknownPane, "this machine is not running a pane called "+echoName(p.Pane)+".")
+	}
+	hp.end()
+	return map[string]any{"pane": p.Pane, "closed": true}, nil
 }
 
 // verbResizePane changes a hosted pane's size. The size is decided by the

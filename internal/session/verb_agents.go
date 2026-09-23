@@ -263,6 +263,7 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 		ReplyTo     uint64   `json:"reply_to"`
 		Attachments []string `json:"attachments"`
 		HumanNonce  string   `json:"human_nonce"`
+		Host        string   `json:"host"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -282,6 +283,11 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 	}
 	if len(p.Attachments) > agentMsgMaxAttachments {
 		return nil, invalidParam("attachments", "a message carries at most 8 attachments")
+	}
+	// A message for a session on another machine goes over this machine's
+	// link to it, and waits here while the link is down. See host_outbox.go.
+	if p.Host != "" {
+		return d.sendAgentMessageToHost(cs, p.Host, p.Session, p.To, p.From, params)
 	}
 	// An id past the last one issued names a message that has never existed, so
 	// it is a caller mistake rather than the ring having forgotten. The two are
