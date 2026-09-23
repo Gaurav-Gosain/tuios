@@ -424,6 +424,12 @@ func (m *Manager) Call(ctx context.Context, host, verb string, params any) (json
 // final, and none of them waits on a machine that is not there: the only wait
 // is for a host whose first attempt has not settled yet, bounded by ctx.
 func (m *Manager) OpenConnection(ctx context.Context, host string) (io.ReadWriteCloser, error) {
+	return m.OpenConnectionAs(ctx, host, StreamOpen{})
+}
+
+// OpenConnectionAs is OpenConnection with what the hub says about the
+// connection in the stream's open frame. See StreamOpen.
+func (m *Manager) OpenConnectionAs(ctx context.Context, host string, info StreamOpen) (io.ReadWriteCloser, error) {
 	if _, err := m.Table().Lookup(host); err != nil {
 		return nil, err
 	}
@@ -436,7 +442,7 @@ func (m *Manager) OpenConnection(ctx context.Context, host string) (io.ReadWrite
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	return l.openConnection()
+	return l.openConnection(info)
 }
 
 // CallAll runs one read verb on every configured host at once and returns every

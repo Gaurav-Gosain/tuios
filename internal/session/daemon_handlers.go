@@ -99,9 +99,17 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// clientsMu then cs.mu (avoids a re-entrant cs.mu lock).
 	// A fresh nonce per attach, so one handed out for an earlier session on
 	// this connection does not vouch for mail in the new one.
-	humanNonce, err := newHumanNonce()
-	if err != nil {
-		return fmt.Errorf("failed to issue the attach nonce: %w", err)
+	//
+	// A client that may not act as the person gets none: one inside a pane
+	// of this daemon, or one that came over a link its hub did not vouch
+	// for. Its reply from human is then stored as a claim, or refused. See
+	// human_origin.go.
+	humanNonce := ""
+	if d.mayActAsHuman(cs) {
+		var err error
+		if humanNonce, err = newHumanNonce(); err != nil {
+			return fmt.Errorf("failed to issue the attach nonce: %w", err)
+		}
 	}
 	cs.mu.Lock()
 	cs.sessionID = session.ID
@@ -545,7 +553,9 @@ func (d *Daemon) handleUpdateState(cs *connState, msg *Message) error {
 		return fmt.Errorf("invalid state payload: %w", err)
 	}
 
-	accepted := session.UpdateState(&state)
+	// A client running inside a pane is an agent's view, not the person's,
+	// so its focus does not mark a finished turn seen. See human_origin.go.
+	accepted := session.UpdateStateFrom(&state, d.mayActAsHuman(cs))
 
 	// The merged state is a full copy of the session's, retitled from every
 	// live emulator. It is read only by the reconcile reply and the peer

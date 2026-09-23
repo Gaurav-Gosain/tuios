@@ -57,7 +57,12 @@ func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (
 
 	ctx, cancel := context.WithTimeout(d.ctx, federationVerbBudget)
 	defer cancel()
-	conn, err := d.federation.OpenConnection(ctx, p.Host)
+	// The one thing this daemon says about the connection it relays: whether
+	// the process asking for it may act as the person. The far daemon reads
+	// the relayed bytes and not this daemon's view of who sent them, so this
+	// is the only way a check made here reaches it. It rides in the stream's
+	// open frame, which the caller cannot write. See human_origin.go.
+	conn, err := d.federation.OpenConnectionAs(ctx, p.Host, federation.StreamOpen{Human: d.mayActAsHuman(cs)})
 	if err != nil {
 		return nil, hostConnectionError(p.Host, err)
 	}

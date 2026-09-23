@@ -302,7 +302,12 @@ machine it is running on. `TUIOS_SESSION_REMOTE` carries the name for anything
 that wants to know where the pane came from.
 
 Sending mail between machines is a different thing and it does work: see
-`tuios send-agent-message -s build:api -w 1 'text'`.
+`tuios send-agent-message -s build:api -w 1 'text'`. A reply from the person
+over a link is verified on the far machine only when this machine vouched for
+the process that sent it: one outside every pane here. The far daemon hears
+that from the link itself, not from the request, and an agent in a pane here
+that attaches or sends through the link cannot be verified there. See [Who
+can act as the person](AGENT_STATE.md#who-can-act-as-the-person).
 
 ### What crosses, and what does not
 

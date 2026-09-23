@@ -312,9 +312,56 @@ exactly like the person's reply from the mail overlay. Now:
   link got its nonce from this daemon, and its reply verifies against that
   attach; every other `from: "human"` over the link is claimed.
 
-This is an interim check, not an identity. Every process of the same user can
-attach and so hold a nonce. It separates the person's reply from a plain
-`--from human` call, which is what an agent can do by mistake or be told to do.
+The nonce alone is not an identity, since an agent can attach too. The next
+entry closes that.
+
+**A process inside a pane cannot act as the person.** The daemon reads the
+pid of every caller from its socket (`SO_PEERCRED` on Linux, `LOCAL_PEERPID`
+on macOS) and counts the caller as inside a pane when the daemon is one of its
+ancestors, when its controlling terminal is one of the daemon's pane
+terminals, or when its environment names one of the daemon's windows in
+`TUIOS_PANE_ID` or `TUIOS_WINDOW_ID`, or the daemon's socket in
+`TUIOS_SOCKET`. The last two also place the client's hook commands and dock
+components, which are automation and not the person. A process whose
+record cannot be read counts as inside a pane. docs/AGENT_STATE.md, "Who can
+act as the person", has the threat model.
+
+- `send-agent-message` and `ask-agent` with `from: "human"` from such a caller
+  fail with the new code `forbidden` and store nothing. `send-agent-message`
+  used to store the message as `claimed_human`, and `ask-agent` used to record
+  the ask as from human. A caller outside every pane is served as before.
+- The attach reply to such a caller carries no `human_nonce`, so nothing it
+  sends verifies.
+- `verified_human` also needs the sender to be allowed to act as the person,
+  and, where the kernel gave both pids, to be the process that holds the
+  attach. The tuios client sends its reply from the process that attached, so
+  its replies still verify. A nonce copied to another process does not.
+- `read-agent-messages` with `to: "human"` from such a caller is served as a
+  peek: it marks nothing read, and the result carries the new field
+  `peek_forced: true`. It used to mark the person's mail read.
+- A state push from an attached client inside a pane no longer marks the
+  focused window's finished turn seen, so `finished_unread` stays true until
+  the person looks.
+- Over a link, only a stream the hub vouched for can verify. The hub puts
+  `{"human":true}` in the stream's open frame when the process that called
+  `open-host-connection` may act as the person on the hub; the open frame's
+  payload used to be empty, and an empty payload still means not vouched. The
+  proxy on the far machine dials the new link-human socket
+  (`<socket>.link-human`) for a vouched stream and the plain link socket for
+  any other. An attach through the plain link socket gets no nonce, and a
+  `from: "human"` send over it is `claimed_human`. A far daemon from before
+  this change has no link-human socket, so the proxy falls back to the plain
+  one; a hub from before it vouches for nothing, so no attach through it
+  verifies on a far daemon that has the change.
+- Windows and the BSDs do not give this build the peer's pid. There every
+  caller is treated as before, and the nonce is the only proof.
+
+**A reply the person did not type is not signed as theirs.** The tuios client
+sends a reply from its mail overlay without the attach nonce when any key that
+`send-keys`, `run-command` or a tape script routed to the client opened,
+edited or sent the reply line, so the daemon stores it as `claimed_human`. The
+reply line reads `automated reply:` while that is so. Such a reply used to be
+signed like one typed at the keyboard.
 
 ### list-verbs
 
@@ -385,6 +432,7 @@ catalog.
 | `loop_refused` | The call would loop: a pane addressing itself, or an ask that closes a cycle with one in flight. |
 | `rate_limited` | The sender is over the cross-agent message rate cap. |
 | `no_keyboard` | The target is the person's inbox, `human`, which has no pane to type into. |
+| `forbidden` | The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as `human`. Nothing was done. |
 | `protocol_mismatch` | The caller's protocol version is outside the range this daemon serves. Only `hello` produces it. |
 | `unknown_host` | No host by that name is configured. Host names are matched exactly. |
 | `host_unreachable` | The host is configured and is not answering. Nothing was queued. |

@@ -29,8 +29,11 @@ type Daemon struct {
 	// for a connection that arrived over another machine's link. Every
 	// connection accepted on it is marked viaLink; see LinkSocketPath.
 	linkListener net.Listener
-	ctx          context.Context
-	cancel       context.CancelFunc
+	// linkHumanListener is the third socket, the one the proxy dials for a
+	// stream the hub vouched for. See LinkHumanSocketPath.
+	linkHumanListener net.Listener
+	ctx               context.Context
+	cancel            context.CancelFunc
 
 	// Connection tracking
 	clients   map[string]*connState
@@ -247,6 +250,21 @@ type connState struct {
 	// message: whatever arrives on it was written on another machine, and
 	// the mailbox marks what it stores from it as such.
 	viaLink bool
+
+	// linkHuman says this connection was accepted on the link-human socket:
+	// it came over a hub's link, and the hub vouched that the process that
+	// opened it on the hub's machine is not inside one of the hub's panes. It
+	// implies viaLink. See human_origin.go.
+	linkHuman bool
+
+	// peerPID is the pid of the process on the other end, as the kernel
+	// recorded it at connect time, or 0 where the platform does not say. For
+	// a link connection it is the pid of this machine's stdio-proxy.
+	peerPID int
+	// fromPane caches paneOrigin for peerPID, computed the first time a call
+	// needs it. See mayActAsHuman.
+	fromPaneOnce sync.Once
+	fromPane     bool
 
 	// attached says the attach reply has been written to this connection, and
 	// it is what broadcastToSession requires before it will send anything.
@@ -637,22 +655,11 @@ func (d *Daemon) Start() error {
 	// serves, and the proxy falls back to the main socket, at the cost of a
 	// message from another machine not being marked as one. The start lock
 	// is held, so a stale file here is a dead daemon's and is removed.
-	linkPath := LinkSocketPath(socketPath)
-	_ = os.Remove(linkPath)
-	if ll, err := net.Listen("unix", linkPath); err != nil {
-		log.Printf("The link socket %s could not be opened: %v. Mail from other machines is not marked.", linkPath, err)
-	} else {
-		if ul, ok := ll.(*net.UnixListener); ok {
-			ul.SetUnlinkOnClose(false)
-		}
-		if err := os.Chmod(linkPath, 0700); err != nil {
-			_ = ll.Close()
-			_ = os.Remove(linkPath)
-			log.Printf("The link socket %s could not be secured: %v. Mail from other machines is not marked.", linkPath, err)
-		} else {
-			d.linkListener = ll
-		}
-	}
+	d.linkListener = listenLinkSocket(LinkSocketPath(socketPath), "Mail from other machines is not marked.")
+	// The link-human socket is optional in the same way. Without it a proxy
+	// falls back to the plain link socket, and no attach through a link can
+	// verify a reply from human, which is the safe way to lose it.
+	d.linkHumanListener = listenLinkSocket(LinkHumanSocketPath(socketPath), "A reply from human over a link is not verified.")
 
 	if err := d.writePidFile(); err != nil {
 		_ = listener.Close()
@@ -693,6 +700,9 @@ func (d *Daemon) Start() error {
 	go d.acceptLoop()
 	if d.linkListener != nil {
 		go d.acceptLinkLoop()
+	}
+	if d.linkHumanListener != nil {
+		go d.acceptLinkOn(d.linkHumanListener, true)
 	}
 	go d.cleanupLoop()
 	go d.stallMonitor()
@@ -786,6 +796,10 @@ func (d *Daemon) shutdown() error {
 		if d.linkListener != nil {
 			_ = d.linkListener.Close()
 			_ = os.Remove(LinkSocketPath(d.manager.SocketPath()))
+		}
+		if d.linkHumanListener != nil {
+			_ = d.linkHumanListener.Close()
+			_ = os.Remove(LinkHumanSocketPath(d.manager.SocketPath()))
 		}
 
 		// Closing the watcher ends its goroutine and returns every inotify watch
@@ -899,18 +913,24 @@ func (d *Daemon) acceptLoop() {
 // served exactly like any other, with one difference: it is marked as having
 // come over a link before a byte of it is read.
 func (d *Daemon) acceptLinkLoop() {
+	d.acceptLinkOn(d.linkListener, false)
+}
+
+// acceptLinkOn accepts on one of the two link sockets. human marks every
+// connection from it as one the hub vouched for; see LinkHumanSocketPath.
+func (d *Daemon) acceptLinkOn(l net.Listener, human bool) {
 	for {
-		conn, err := d.linkListener.Accept()
+		conn, err := l.Accept()
 		if err != nil {
 			select {
 			case <-d.ctx.Done():
 				return
 			default:
-				log.Printf("Accept error on the link socket: %v", err)
+				log.Printf("Accept error on a link socket: %v", err)
 				continue
 			}
 		}
-		go d.handleConnectionFrom(conn, true)
+		go d.handleConnectionOn(conn, true, human)
 	}
 }
 
@@ -921,6 +941,43 @@ func (d *Daemon) acceptLinkLoop() {
 // two builds still link; the mark is then simply absent.
 func LinkSocketPath(socketPath string) string {
 	return socketPath + ".link"
+}
+
+// LinkHumanSocketPath is the socket the local proxy dials, instead of
+// LinkSocketPath, for a stream the hub opened on behalf of a process it
+// checked was not inside one of its own panes. A client attached through it
+// can be issued the attach nonce that verifies a reply from human; one attached
+// through the plain link socket cannot. The daemon still checks the process on
+// this end, which is the proxy: a process inside one of this machine's panes
+// that dials the socket itself is refused the same way. See human_origin.go.
+//
+// A proxy that finds no such socket dials the plain link socket, which is what
+// a daemon from before it has. That daemon trusts every link attach as it
+// always did.
+func LinkHumanSocketPath(socketPath string) string {
+	return socketPath + ".link-human"
+}
+
+// listenLinkSocket opens one of the optional link sockets, owner only, and
+// returns nil after logging what is lost when it cannot. The start lock is
+// held, so a stale file at path is a dead daemon's and is removed.
+func listenLinkSocket(path, lost string) net.Listener {
+	_ = os.Remove(path)
+	ll, err := net.Listen("unix", path)
+	if err != nil {
+		log.Printf("The link socket %s could not be opened: %v. %s", path, err, lost)
+		return nil
+	}
+	if ul, ok := ll.(*net.UnixListener); ok {
+		ul.SetUnlinkOnClose(false)
+	}
+	if err := os.Chmod(path, 0700); err != nil {
+		_ = ll.Close()
+		_ = os.Remove(path)
+		log.Printf("The link socket %s could not be secured: %v. %s", path, err, lost)
+		return nil
+	}
+	return ll
 }
 
 // shortID returns the first 8 bytes of s, or all of s if it is shorter. IDs
@@ -940,6 +997,11 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 // handleConnectionFrom serves one connection. viaLink marks it as accepted on
 // the link socket.
 func (d *Daemon) handleConnectionFrom(conn net.Conn, viaLink bool) {
+	d.handleConnectionOn(conn, viaLink, false)
+}
+
+// handleConnectionOn is handleConnectionFrom with the link-human mark.
+func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 	// A panic on the untrusted client-parsed message surface must not take down
 	// the daemon and every other session. Recover, log, and drop just this
 	// client. Registered before the cleanup defer below so cleanup (which closes
@@ -961,6 +1023,10 @@ func (d *Daemon) handleConnectionFrom(conn net.Conn, viaLink bool) {
 		ptySubscriptions: make(map[string]struct{}),
 		ptyResume:        make(map[string]int64),
 		viaLink:          viaLink,
+		linkHuman:        viaLink && linkHuman,
+		// Read before a byte is served: the kernel's record of who connected,
+		// which nothing the peer sends can change. See human_origin.go.
+		peerPID: peerPID(conn),
 	}
 
 	if viaLink {

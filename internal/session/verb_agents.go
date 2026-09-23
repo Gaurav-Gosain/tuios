@@ -286,11 +286,18 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 		msg.From, msg.FromLabel = id, label
 	}
 
+	// A process inside a pane of this daemon cannot speak as the person at
+	// all, not even as a claim: whatever it was told, the answer it would be
+	// forging is the one the person gives. See human_origin.go.
+	if msg.From == AgentInboxHuman && !viaLink && !d.mayActAsHuman(cs) {
+		return nil, humanForbiddenError("send-agent-message")
+	}
+
 	// A message from human is verified only when it carries the nonce of a
 	// client attached to this session now; see human_sender.go. The link and
 	// the local socket are checked the same way, each against its own attaches.
 	if msg.From == AgentInboxHuman {
-		msg.VerifiedHuman = d.verifyHumanNonce(p.HumanNonce, sess.ID, viaLink)
+		msg.VerifiedHuman = d.verifyHumanNonce(p.HumanNonce, sess.ID, cs)
 		msg.ClaimedHuman = !msg.VerifiedHuman
 	}
 
@@ -417,7 +424,7 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 // Reading marks a directed message read; it does not consume it. A consumed
 // message would leave nothing behind for a human, or for the next agent trying
 // to work out what happened, and the ring's cap already bounds what is kept.
-func (d *Daemon) verbReadAgentMessages(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		To      string `json:"to"`
@@ -447,6 +454,14 @@ func (d *Daemon) verbReadAgentMessages(_ *connState, params json.RawMessage) (an
 			return nil, mapResolveErr(err, sess)
 		}
 		q.inbox = id
+	}
+	// Marking the person's mail read says the person has seen it, and the
+	// unread count on their rail is how they learn there is mail at all. A
+	// caller that may not act as the person reads it as a peek, so an agent
+	// cannot clear the person's inbox by reading it. See human_origin.go.
+	peekForced := false
+	if q.inbox == AgentInboxHuman && !q.peek && !d.mayActAsHuman(cs) {
+		q.peek, peekForced = true, true
 	}
 	// The person's inbox is always live: it has no window to close.
 	live := map[string]bool{AgentInboxHuman: true}
@@ -489,6 +504,9 @@ func (d *Daemon) verbReadAgentMessages(_ *connState, params json.RawMessage) (an
 		"unread":    res.Unread,
 		"total":     res.Total,
 		"evicted":   res.Evicted,
+		// True when the read asked to mark the person's mail read and was
+		// served as a peek instead, because the caller runs in a pane.
+		"peek_forced": peekForced,
 	}, nil
 }
 
@@ -560,6 +578,11 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 		fid, flabel, ferr := resolveMailParty(state, p.From)
 		if ferr != nil {
 			return nil, mapResolveErr(ferr, sess)
+		}
+		// The record of an ask from human reads as the person asking, so
+		// a pane cannot leave one. See human_origin.go.
+		if fid == AgentInboxHuman && !d.mayActAsHuman(cs) {
+			return nil, humanForbiddenError("ask-agent")
 		}
 		from, fromLabel = fid, flabel
 	}

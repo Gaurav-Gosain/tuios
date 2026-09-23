@@ -388,8 +388,8 @@ func runStdioProxy() error {
 	if err != nil {
 		return err
 	}
-	return federation.ServeProxy(os.Stdin, os.Stdout, func() (net.Conn, error) {
-		return dialForLink(socketPath)
+	return federation.ServeProxyFor(os.Stdin, os.Stdout, func(open federation.StreamOpen) (net.Conn, error) {
+		return dialForLink(socketPath, open.Human)
 	})
 }
 
@@ -399,7 +399,18 @@ func runStdioProxy() error {
 // another machine and marks what arrives on it. A daemon from before the link
 // socket existed has only the main socket, and the proxy falls back to that
 // so an older daemon still links; what is lost then is only the mark.
-func dialForLink(socketPath string) (net.Conn, error) {
+//
+// human is the hub saying the process that opened the stream is not inside one
+// of the hub's panes. Such a stream goes to the link-human socket, where an
+// attach can be issued the nonce that verifies a reply from human. A daemon
+// without that socket gets the plain link socket instead, and no link attach
+// verifies: the safe way to lose the mark.
+func dialForLink(socketPath string, human bool) (net.Conn, error) {
+	if human {
+		if conn, err := net.DialTimeout("unix", session.LinkHumanSocketPath(socketPath), 5*time.Second); err == nil {
+			return conn, nil
+		}
+	}
 	conn, err := net.DialTimeout("unix", session.LinkSocketPath(socketPath), 5*time.Second)
 	if err == nil {
 		return conn, nil

@@ -49,7 +49,8 @@ const (
 type frameType uint8
 
 const (
-	// frameOpen asks the peer to open the named stream. Payload is empty.
+	// frameOpen asks the peer to open the named stream. The payload is empty,
+	// or a StreamOpen as JSON; a peer that predates StreamOpen ignores it.
 	frameOpen frameType = 1
 	// frameData carries stream bytes.
 	frameData frameType = 2

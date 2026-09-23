@@ -614,7 +614,7 @@ func (l *link) controlStreamFailed(failed *caller) {
 // that is up but cannot take another stream fails with RefusedError, which is a
 // different remedy: the machine is fine, this side has too many connections
 // open to it.
-func (l *link) openConnection() (*Stream, error) {
+func (l *link) openConnection(info StreamOpen) (*Stream, error) {
 	l.mu.Lock()
 	m, status, reason := l.mux, l.status, l.reason
 	l.mu.Unlock()
@@ -623,7 +623,7 @@ func (l *link) openConnection() (*Stream, error) {
 	}
 	// What this stream carries is an attached session, not a listing, so it
 	// gets the limit that was chosen for one. See connectionStallLimit.
-	s, err := m.OpenWithStall(l.opts.connStallLimit)
+	s, err := m.open(l.opts.connStallLimit, info)
 	if err == nil {
 		return s, nil
 	}

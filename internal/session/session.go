@@ -1756,6 +1756,14 @@ func (s *Session) ResurrectionState() *SessionState {
 // lifecycle events for those mutations are raised: the state that ends up
 // canonical is diffed against the state it replaces. See state_events.go.
 func (s *Session) UpdateState(state *SessionState) bool {
+	return s.UpdateStateFrom(state, true)
+}
+
+// UpdateStateFrom is UpdateState for a push from a client that may or may not
+// be the person. seen false keeps the push from marking the focused window's
+// finished turn seen: a client running inside a pane is an agent looking, and
+// finished_unread is about whether the person has. See human_origin.go.
+func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
@@ -1778,7 +1786,9 @@ func (s *Session) UpdateState(state *SessionState) bool {
 	s.state = state
 	// A client pushing state with a pane focused has that pane in front of
 	// its user, so whatever it finished has been seen.
-	s.markCompletionSeenLocked(state.FocusedWindowID)
+	if seen {
+		s.markCompletionSeenLocked(state.FocusedWindowID)
+	}
 	s.TouchActive()
 	s.stateDirty.Store(true)
 	s.emitLifecycleLocked(before)

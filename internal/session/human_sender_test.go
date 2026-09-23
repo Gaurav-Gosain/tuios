@@ -105,7 +105,7 @@ func TestHumanMailIsVerifiedOnlyWithALiveAttachNonce(t *testing.T) {
 	// Once the client detaches its nonce stops counting.
 	_ = tui.Close()
 	deadline := time.Now().Add(5 * time.Second)
-	for d.verifyHumanNonce(nonce, d.manager.GetSession("mail").ID, false) {
+	for d.verifyHumanNonce(nonce, d.manager.GetSession("mail").ID, nil) {
 		if time.Now().After(deadline) {
 			t.Fatal("the nonce still verified after its client disconnected")
 		}
@@ -119,16 +119,17 @@ func TestHumanMailIsVerifiedOnlyWithALiveAttachNonce(t *testing.T) {
 // TestHumanMailOverALinkIsVerifiedAgainstALinkAttach covers mail from human
 // that arrived from another machine. The hub relays the stream without reading
 // it, so nothing in the request can vouch for the sender. What can is the
-// nonce this daemon issued to a client attached through the link: that reply
+// nonce this daemon issued to a client attached through the link-human socket,
+// which the proxy dials only for a stream the hub vouched for: that reply
 // verifies, and every other from=human over the link is a claim, including one
 // carrying a nonce issued to a local attach.
 func TestHumanMailOverALinkIsVerifiedAgainstALinkAttach(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	_, a, _ := twoWindowSession(t, d, "work")
-	link := dialLink(t, sp)
+	link := dialVerb(t, LinkHumanSocketPath(sp))
 	local := dialVerb(t, sp)
 
-	remoteTUI := attachTUI(t, LinkSocketPath(sp), "work")
+	remoteTUI := attachTUI(t, LinkHumanSocketPath(sp), "work")
 	localTUI := attachTUI(t, sp, "work")
 
 	if _, m := sendAsHuman(t, link, "work", a, ""); humanMark(m) != "claimed" {
@@ -142,6 +143,30 @@ func TestHumanMailOverALinkIsVerifiedAgainstALinkAttach(t *testing.T) {
 	}
 	if _, m := sendAsHuman(t, local, "work", a, remoteTUI.HumanNonce()); humanMark(m) != "claimed" {
 		t.Errorf("a local reply with the link attach's nonce is %s, want claimed", humanMark(m))
+	}
+}
+
+// TestALinkTheHubDidNotVouchForCannotVerify covers the other half of the link
+// rule. A stream the hub did not vouch for arrives on the plain link socket:
+// its caller runs inside one of the hub's panes, or the hub predates the
+// check. An attach through it is issued no nonce, and a reply sent over it
+// with the nonce of a vouched link attach is still a claim, so an agent on the
+// hub cannot borrow the person's standing on this machine.
+func TestALinkTheHubDidNotVouchForCannotVerify(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	_, a, _ := twoWindowSession(t, d, "work")
+	plain := dialLink(t, sp)
+
+	plainTUI := attachTUI(t, LinkSocketPath(sp), "work")
+	if n := plainTUI.HumanNonce(); n != "" {
+		t.Errorf("an attach over the plain link socket was issued nonce %q", n)
+	}
+	vouchedTUI := attachTUI(t, LinkHumanSocketPath(sp), "work")
+	if vouchedTUI.HumanNonce() == "" {
+		t.Fatal("an attach over the link-human socket was issued no nonce")
+	}
+	if _, m := sendAsHuman(t, plain, "work", a, vouchedTUI.HumanNonce()); humanMark(m) != "claimed" {
+		t.Errorf("a reply over the plain link socket with a vouched attach's nonce is %s, want claimed", humanMark(m))
 	}
 }
 
@@ -160,7 +185,7 @@ func TestReattachIssuesAFreshNonce(t *testing.T) {
 	if second := tui.HumanNonce(); second == "" || second == first {
 		t.Fatalf("a second attach kept nonce %q (first %q)", second, first)
 	}
-	if d.verifyHumanNonce(first, d.manager.GetSession("one").ID, false) {
+	if d.verifyHumanNonce(first, d.manager.GetSession("one").ID, nil) {
 		t.Error("the first attach's nonce still verifies after the client moved on")
 	}
 }

@@ -197,15 +197,17 @@ func (m *mux) Err() error {
 }
 
 // Open starts a new stream and tells the peer to open its end.
-func (m *mux) Open() (*Stream, error) { return m.open(0) }
+func (m *mux) Open() (*Stream, error) { return m.open(0, StreamOpen{}) }
 
 // OpenWithStall is Open for a stream that needs its own limit for a reader
 // that falls behind. The limit is set before the stream can receive anything,
 // which is why it is a parameter rather than a field written afterwards: the
 // read loop may deliver a frame on it the instant the peer answers.
-func (m *mux) OpenWithStall(stall time.Duration) (*Stream, error) { return m.open(stall) }
+func (m *mux) OpenWithStall(stall time.Duration) (*Stream, error) {
+	return m.open(stall, StreamOpen{})
+}
 
-func (m *mux) open(stall time.Duration) (*Stream, error) {
+func (m *mux) open(stall time.Duration, info StreamOpen) (*Stream, error) {
 	m.mu.Lock()
 	if m.closed {
 		err := m.err
@@ -226,7 +228,7 @@ func (m *mux) open(stall time.Duration) (*Stream, error) {
 	m.streams[id] = s
 	m.mu.Unlock()
 
-	if err := m.writeFrame(frameOpen, id, nil); err != nil {
+	if err := m.writeFrame(frameOpen, id, info.encode()); err != nil {
 		m.dropStream(id)
 		return nil, err
 	}
@@ -280,7 +282,7 @@ func (m *mux) run() error {
 		m.lastRead.Store(time.Now().UnixNano())
 		switch f.Type {
 		case frameOpen:
-			m.handleOpen(f.Stream)
+			m.handleOpen(f.Stream, f.Payload)
 		case frameData:
 			m.handleData(f.Stream, f.Payload)
 		case frameClose:
@@ -289,7 +291,7 @@ func (m *mux) run() error {
 	}
 }
 
-func (m *mux) handleOpen(id uint32) {
+func (m *mux) handleOpen(id uint32, payload []byte) {
 	if m.accept == nil {
 		// The hub refuses every inbound open. Answering with a close rather
 		// than killing the link keeps a confused peer from taking the listing
@@ -310,6 +312,7 @@ func (m *mux) handleOpen(id uint32) {
 		return
 	}
 	s := newStream(m, id)
+	s.open = decodeStreamOpen(payload)
 	m.streams[id] = s
 	m.mu.Unlock()
 	m.wg.Add(1)
@@ -373,6 +376,11 @@ type Stream struct {
 	// once, before the stream is registered, so the read loop can read it
 	// without a lock. A relayed connection sets it: see connectionStallLimit.
 	stall time.Duration
+
+	// open is what the side that opened the stream said about it, on the
+	// side that accepted it. It is set before the accept handler runs and not
+	// written again.
+	open StreamOpen
 
 	mu       sync.Mutex
 	buf      []byte

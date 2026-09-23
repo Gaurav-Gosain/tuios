@@ -78,6 +78,11 @@ const (
 	// cannot show working, it printed nothing either. The text was typed, so the
 	// remedy is to look at the pane, not to send it again. See prompt_gate.go.
 	ErrVerbPromptStalled = "prompt_stalled"
+	// ErrVerbForbidden reports a call refused because the caller may not do
+	// what it asked. Today that is a process running inside a pane of this
+	// daemon asking to act as the person: sending from human, or asking from
+	// human. Nothing was done. See human_origin.go.
+	ErrVerbForbidden = "forbidden"
 
 	// ErrVerbProtocolMismatch reports that the caller's protocol version is
 	// outside the range this daemon accepts. It is only ever produced by the
@@ -1107,13 +1112,13 @@ func init() {
 			params: []verbParam{
 				sessionParam,
 				{Name: "to", Type: "string", Description: "Recipient window id or name, or human for the person at the attached client. Omit to post a notice everyone in the session can read."},
-				{Name: "from", Type: "string", Description: "The sending window, normally $TUIOS_PANE_ID. It is a claim the daemon cannot verify, and it is what the rate cap and the loop guards are keyed on. From another machine it is kept as a label and not resolved."},
+				{Name: "from", Type: "string", Description: "The sending window, normally $TUIOS_PANE_ID. It is a claim the daemon cannot verify, and it is what the rate cap and the loop guards are keyed on. From another machine it is kept as a label and not resolved. human from a process inside a pane of this daemon is refused with forbidden."},
 				{Name: "from_host", Type: "string", Description: "The name of the machine the sender is on, normally $TUIOS_HOST. Kept only for a send that arrived over a link, as the sender's own claim."},
 				{Name: "subject", Type: "string", Description: "Optional one-line summary, at most 120 characters."},
 				{Name: "text", Type: "string", Required: true, Description: "The message body, at most 8 KiB."},
 				{Name: "reply_to", Type: "int", Description: "The id of the message this one answers. The reply joins that message's thread, and a reply to a reply joins the same one. A reply is the only acknowledgement between agents that means anything."},
 				{Name: "attachments", Type: "[]string", Description: "Absolute paths to existing files on the daemon's host. The ring stores the reference, never the bytes, so the producer keeps the file."},
-				{Name: "human_nonce", Type: "string", Description: "The nonce from an attach reply, which the tuios client sends with a reply from its mail overlay. A message from human is stored as verified_human only when this matches a client attached to the session now, over the same kind of connection. Without it, from human is stored as claimed_human."},
+				{Name: "human_nonce", Type: "string", Description: "The nonce from an attach reply, which the tuios client sends with a reply from its mail overlay. A message from human is stored as verified_human only when this matches a client attached to the session now, over the same kind of connection, the sender is outside every pane, and, where the kernel gives both pids, the sender is the process that attached. Without it, from human is stored as claimed_human."},
 			},
 			returns: []verbParam{
 				{Name: "message_id", Type: "int", Description: "The id of the stored message."},
@@ -1145,7 +1150,7 @@ func init() {
 				{Name: "to", Type: "string", Description: "Read this window's inbox, normally $TUIOS_PANE_ID. Omit to read everything in the session, which marks nothing read."},
 				{Name: "unread", Type: "bool", Description: "Return only directed messages nobody has read yet.", Default: "false"},
 				{Name: "notices", Type: "bool", Description: "Include session-wide notices in an inbox read. They are always included when no inbox is named.", Default: "false"},
-				{Name: "peek", Type: "bool", Description: "Read without marking anything read.", Default: "false"},
+				{Name: "peek", Type: "bool", Description: "Read without marking anything read. A read of the human inbox from a process inside a pane of this daemon is always a peek.", Default: "false"},
 				{Name: "thread", Type: "int", Description: "Return only the messages in one thread. Pass any message id in the thread; the thread it belongs to is the one read. A thread the ring holds nothing from returns no messages rather than an error."},
 				{Name: "limit", Type: "int", Description: "Return at most this many, newest last.", Default: "20"},
 			},
@@ -1156,6 +1161,7 @@ func init() {
 				{Name: "unread", Type: "int", Description: "How many of the returned messages were unread before this call."},
 				{Name: "total", Type: "int", Description: "How many messages matched before the limit was applied."},
 				{Name: "evicted", Type: "int", Description: "How many messages the ring has dropped from its oldest end because it was full. Non-zero means something was never read."},
+				{Name: "peek_forced", Type: "bool", Description: "True when the read would have marked the person's mail read and was served as a peek, because the caller runs inside a pane of this daemon."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"read-agent-messages","params":{"session":"work","to":"$TUIOS_PANE_ID","unread":true}}`,
@@ -1169,7 +1175,7 @@ func init() {
 			params: []verbParam{
 				sessionParam,
 				{Name: "window", Type: "string", Required: true, Description: "The agent to ask, by window id or name. list-agents is how you find it."},
-				{Name: "from", Type: "string", Description: "The asking window, normally $TUIOS_PANE_ID. It is what the cycle guard is keyed on, so omitting it gives up loop detection."},
+				{Name: "from", Type: "string", Description: "The asking window, normally $TUIOS_PANE_ID. It is what the cycle guard is keyed on, so omitting it gives up loop detection. human from a process inside a pane of this daemon is refused with forbidden."},
 				{Name: "from_host", Type: "string", Description: "The name of the machine the caller is on, normally $TUIOS_HOST. Kept on the record only for an ask that arrived over a link."},
 				{Name: "text", Type: "string", Required: true, Description: "The question. It is typed as one paste (wrapped in bracketed paste when the target has it on) and submitted with a carriage return, the Enter key. Trailing line breaks are dropped, and a question of several lines is submitted once."},
 				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for the target to be ready before giving up with not_ready. Ready is idle, done, errored or none; unknown is not ready. A target on needs_input ends the wait at once with agent_blocked.", Default: "30000"},

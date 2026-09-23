@@ -176,6 +176,31 @@ func TestFinishedUnreadClearsWhenAClientFocusesThePane(t *testing.T) {
 	}
 }
 
+// TestAPushFromAPaneDoesNotMarkATurnSeen: finished_unread is whether the
+// person has looked, so a client running inside a pane, which is an agent
+// looking, does not clear it. handleUpdateState passes mayActAsHuman as seen.
+func TestAPushFromAPaneDoesNotMarkATurnSeen(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	push := sess.GetState()
+	push.FocusedWindowID = ""
+	sess.UpdateState(push)
+	report(t, sess, id, AgentStateWorking)
+	report(t, sess, id, AgentStateDone)
+
+	push = sess.GetState()
+	push.FocusedWindowID = id
+	sess.UpdateStateFrom(push, false)
+	w := windowStateOf(t, sess, id)
+	if !sess.finishedUnread(&w) {
+		t.Fatal("a push that is not the person's marked the finished turn seen")
+	}
+	sess.UpdateStateFrom(push, true)
+	w = windowStateOf(t, sess, id)
+	if sess.finishedUnread(&w) {
+		t.Fatal("the person's push did not mark the finished turn seen")
+	}
+}
+
 // TestListAgentsReportsFinishedTurns checks the verb's new fields, and that
 // ready no longer covers unknown.
 func TestListAgentsReportsFinishedTurns(t *testing.T) {
