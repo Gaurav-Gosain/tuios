@@ -117,6 +117,10 @@ type HostsChangedPayload struct {
 	Added    []string
 	Removed  []string
 	Redialed []string
+	// Changed names hosts whose link, sessions or agents changed, pushed by
+	// the fleet (host_fleet.go). Added after the others: gob drops a field the
+	// reader does not have, so an older client reads the push as before.
+	Changed []string
 }
 
 // Message is the base protocol message structure.

@@ -406,8 +406,9 @@ func init() {
 		"list-hosts": {
 			description: "List the machines named in the [hosts] config table, with the state of each link.",
 			returns: []verbParam{
-				{Name: "hosts", Type: "[]string", Description: "One entry per configured host, carrying its name, address, status, plain reason, remote daemon version, control protocol range, and the last time it answered."},
+				{Name: "hosts", Type: "[]string", Description: "One entry per configured host, carrying its name, address, status, plain reason, remote daemon version, control protocol range, the last time it answered, and events: live when this daemon streams the host's agents and Inbox, polling when the host's tuios is too old to (events_note says what to update), empty while the link is not up."},
 				{Name: "total", Type: "int", Description: "How many hosts are configured."},
+				{Name: "events_push", Type: "bool", Description: "Always true from a daemon that pushes host changes: host-changed on subscribe, and a hosts-changed push to attached clients."},
 				{Name: "config_problems", Type: "[]string", Description: "Config entries that were dropped, with the reason for each. Omitted when there are none."},
 			},
 			examples: []string{`{"id":1,"verb":"list-hosts"}`},
@@ -509,7 +510,7 @@ func init() {
 				{Name: "host", Type: "string", Description: "One host by name, or \"local\" for this machine. Omit for every host."},
 			},
 			returns: []verbParam{
-				{Name: "hosts", Type: "[]string", Description: "One entry per host, local first, carrying that host's status and its sessions. An entry that failed carries an error and a code instead of sessions. Each session carries agent_state, the most urgent agent state among its panes, so a listing can say which sessions want a person without a second call."},
+				{Name: "hosts", Type: "[]string", Description: "One entry per host, local first, carrying that host's status and its sessions. An entry that failed carries an error and a code; when the host answered before, it also carries the sessions it last gave, with stale true and fetched_at in unix seconds. Each session carries agent_state, the most urgent agent state among its panes, so a listing can say which sessions want a person without a second call. events says how this daemon follows the host."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"list-host-sessions"}`,
@@ -518,13 +519,13 @@ func init() {
 			handler: (*Daemon).verbListHostSessions,
 		},
 		"list-host-agents": {
-			description: "List the agent panes on this machine and on every configured host. Each host answers about its own most recently active session.",
+			description: "List the agent panes of every session on this machine and on every configured host. Hosts are asked at once, so a slow one costs only its own entry.",
 			params: []verbParam{
 				{Name: "host", Type: "string", Description: "One host by name, or \"local\" for this machine. Omit for every host."},
 				{Name: "all", Type: "bool", Description: "List every window on each host, not just the panes identified as agents."},
 			},
 			returns: []verbParam{
-				{Name: "hosts", Type: "[]string", Description: "One entry per host, local first, carrying the session it read and the agent rows in it. An entry that failed carries an error and a code instead of agents."},
+				{Name: "hosts", Type: "[]string", Description: "One entry per host, local first, carrying the agent rows of every session on it, each row naming its session. session is set only when every row is in one session. An entry that failed carries an error and a code; when the host answered before, it also carries the rows it last gave, with stale true and fetched_at in unix seconds. events says how this daemon follows the host: live, polling, or empty while the link is down."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"list-host-agents"}`,
@@ -921,6 +922,7 @@ func init() {
 				{Name: "queue", Type: "int", Description: "Buffered events before the stream marks a gap.", Default: "256"},
 				{Name: "after_seq", Type: "int", Description: "Resume: replay the retained events with a seq above this one before streaming live. Pass the seq of the last event received. 0 replays everything the daemon still holds. Output events are not retained."},
 				{Name: "boot_id", Type: "string", Description: "The boot_id the after_seq came with. If the daemon has restarted since, the stream starts with a gap marker with reason boot_changed instead of a replay. Needs after_seq."},
+				{Name: "hosts", Type: "bool", Description: "Also deliver the agent-state, session-created and session-closed events this daemon relays from its linked hosts, each carrying host, and let session and window match events of other machines. Without it an event about another machine reaches only a subscriber that names no session or window, and only an attention or host-changed event.", Default: "false"},
 			},
 			returns: []verbParam{
 				{Name: "seq", Type: "int", Description: "The last seq assigned when the stream went live. Every live event has a higher seq, and every replayed event has this seq or lower."},
@@ -1135,14 +1137,16 @@ func init() {
 			params: []verbParam{
 				sessionParam,
 				{Name: "all", Type: "bool", Description: "Include every window, not only the panes something has identified as an agent.", Default: "false"},
+				{Name: "all_sessions", Type: "bool", Description: "List the agent panes of every session on the daemon, in session name order. Takes no session. human_unread is then the person's unread mail over every session.", Default: "false"},
 			},
 			returns: []verbParam{
-				{Name: "agents", Type: "[]object", Description: "One entry per pane: window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, completion_seq, finished_unread, agent_session_id, meta. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it. meta is the set-agent-meta keys, key to value."},
+				{Name: "agents", Type: "[]object", Description: "One entry per pane: session, window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, completion_seq, finished_unread, agent_session_id, meta. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it. meta is the set-agent-meta keys, key to value."},
 				{Name: "total", Type: "int", Description: "How many panes are listed."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"list-agents","params":{"session":"work"}}`,
 				`{"id":1,"verb":"list-agents","params":{"session":"work","all":true}}`,
+				`{"id":1,"verb":"list-agents","params":{"all_sessions":true}}`,
 			},
 			handler: (*Daemon).verbListAgents,
 		},
@@ -1183,14 +1187,15 @@ func init() {
 			handler: (*Daemon).verbSendAgentMessage,
 		},
 		"list-attention": {
-			description: "List the Inbox: everything in every session waiting for the person. An item is an approval or a question (a pane on needs_input), mail to human, a pane on errored, or a finished turn nobody has looked at. Items are grouped in that order, oldest first inside each group. Every change to the list is an attention event on subscribe.",
+			description: "List the Inbox: everything in every session waiting for the person, on this machine and on every linked host. An item is an approval or a question (a pane on needs_input), mail to human, a pane on errored, or a finished turn nobody has looked at. Items are grouped in that order, oldest first inside each group. Every change to the list is an attention event on subscribe.",
 			params: []verbParam{
-				{Name: "session", Type: "string", Description: "Only list items in this session. Omit for every session. Unlike most verbs, an omitted session does not mean the most recently active one."},
+				{Name: "session", Type: "string", Description: "Only list items in this session. Omit for every session. Unlike most verbs, an omitted session does not mean the most recently active one. Without host it names a session on this machine."},
 				{Name: "kinds", Type: "[]string", Description: "Only list these kinds. Omit for all of them.", Accepted: AttentionKindNames},
+				{Name: "host", Type: "string", Description: "Only list items of this machine: \"local\" for this one, or a linked host by name. Omit for every machine."},
 			},
 			returns: []verbParam{
-				{Name: "items", Type: "[]object", Description: "One entry per item: id, kind, host, session, window, workspace, harness, name, summary, options, since, seq, thread, count, completion_seq. since is when the item started waiting, in unix nanoseconds. seq is the Inbox revision of its last change. summary is one line, with control characters removed, likely secrets masked and at most 160 bytes. thread is the mail thread, and count is the unread messages it stands for (mail) or the turns (finished). host is empty for this machine."},
-				{Name: "counts", Type: "object", Description: "Open items per kind over the whole Inbox, before the session and kinds filters. Every kind is present."},
+				{Name: "items", Type: "[]object", Description: "One entry per item: id, kind, host, session, window, workspace, harness, name, summary, options, since, seq, thread, count, completion_seq, stale, seen_at. since is when the item started waiting, in unix nanoseconds. seq is the Inbox revision of its last change. summary is one line, with control characters removed, likely secrets masked and at most 160 bytes. thread is the mail thread, and count is the unread messages it stands for (mail) or the turns (finished). host is empty for this machine; an item of a linked host has an id of the form host:id. stale is true for an item of a host whose link is down, and seen_at is when that host was last heard from, in unix nanoseconds."},
+				{Name: "counts", Type: "object", Description: "Open items per kind over the whole Inbox, every machine included, before the session, kinds and host filters. Every kind is present."},
 				{Name: "total", Type: "int", Description: "How many items are listed."},
 				{Name: "seq", Type: "int", Description: "The event seq the answer is current to. Subscribe with after_seq set to it and the boot_id below, and every attention event after the listing is replayed."},
 				{Name: "boot_id", Type: "string", Description: "The daemon start the seq belongs to."},
@@ -1199,11 +1204,12 @@ func init() {
 				`{"id":1,"verb":"list-attention"}`,
 				`{"id":1,"verb":"list-attention","params":{"kinds":["approval","question"]}}`,
 				`{"id":1,"verb":"list-attention","params":{"session":"work"}}`,
+				`{"id":1,"verb":"list-attention","params":{"host":"build"}}`,
 			},
 			handler: (*Daemon).verbListAttention,
 		},
 		"dismiss-attention": {
-			description: "Close one Inbox item for the person. Only a client attached right now can do it, with the nonce from its attach reply: an agent cannot clear what is waiting for the person. Dismissing a finished item marks the pane's turns seen, and dismissing mail marks the person's mail in the thread read.",
+			description: "Close one Inbox item for the person. Only a client attached right now can do it, with the nonce from its attach reply: an agent cannot clear what is waiting for the person. Dismissing a finished item marks the pane's turns seen, and dismissing mail marks the person's mail in the thread read. An item of a linked host is hidden on this daemon only, until that host changes it; nothing on that host is marked.",
 			params: []verbParam{
 				{Name: "id", Type: "string", Required: true, Description: "The item id list-attention printed."},
 				{Name: "human_nonce", Type: "string", Required: true, Description: "The nonce the daemon issued in an attach reply, for a client attached now over the same kind of connection. The TUI sends its own."},
@@ -1212,6 +1218,7 @@ func init() {
 				{Name: "id", Type: "string", Description: "The item that was closed."},
 				{Name: "kind", Type: "string", Description: "Its kind.", Accepted: AttentionKindNames},
 				{Name: "session", Type: "string", Description: "Its session."},
+				{Name: "host", Type: "string", Description: "The linked host the item came from. Omitted for this machine."},
 				{Name: "dismissed", Type: "bool", Description: "Always true on success."},
 			},
 			examples: []string{`{"id":1,"verb":"dismiss-attention","params":{"id":"17","human_nonce":"<from the attach reply>"}}`},

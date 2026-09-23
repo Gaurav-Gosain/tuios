@@ -93,6 +93,9 @@ const (
 	// AttentionClosedAnswered: the person answered a held approval from the
 	// Inbox. The closing item carries the answer and who gave it.
 	AttentionClosedAnswered = "answered"
+	// AttentionClosedHostRemoved: the item came from a linked host that was
+	// taken out of the [hosts] table.
+	AttentionClosedHostRemoved = "host_removed"
 )
 
 // Actions an attention event carries.
@@ -180,6 +183,17 @@ type AttentionItem struct {
 	// Closed is the close reason, set only on the item an attention event
 	// with action close carries.
 	Closed string `json:"closed,omitempty"`
+	// Stale is set on an item from another machine whose link is down. The
+	// item is what that machine said last, and nobody here can check it now.
+	// SeenAt is when this daemon last heard from that machine, in unix
+	// nanoseconds. Both are empty for an item of this machine.
+	Stale  bool  `json:"stale,omitempty"`
+	SeenAt int64 `json:"seen_at,omitempty"`
+
+	// remoteSeq is the Seq the machine the item came from gave it, for an
+	// item mirrored from a linked host. It orders that machine's changes,
+	// which can reach this daemon out of order around a relisting.
+	remoteSeq uint64
 }
 
 // attentionStore is the daemon's queue. Its lock is its own and nothing is
@@ -214,12 +228,25 @@ type attentionStore struct {
 	settled map[string]approvalOutcome
 	// settledOrder is settled's ids oldest first, for its bound.
 	settledOrder []string
+
+	// hostItems are the items mirrored from linked hosts, keyed by their id
+	// here, which is the host's name, a colon and the host's own id. They are
+	// kept apart from items so nothing a host sends can evict an item of this
+	// machine, and they are never saved: the host keeps its own queue. See
+	// attention_hosts.go.
+	hostItems map[string]*AttentionItem
+	// hostHidden are host items the person dismissed here, with the host's
+	// revision of the item at the time. The item stays hidden until the host
+	// changes it again.
+	hostHidden map[string]uint64
 }
 
 func newAttentionStore(publish func(streamEvent), currentSeq func() uint64) *attentionStore {
 	return &attentionStore{
 		items:      make(map[string]*AttentionItem),
 		byKey:      make(map[string]string),
+		hostItems:  make(map[string]*AttentionItem),
+		hostHidden: make(map[string]uint64),
 		publish:    publish,
 		currentSeq: currentSeq,
 	}
@@ -249,7 +276,11 @@ func attentionKey(kind, session, window string, thread uint64) string {
 // to attention events exactly as to every other event.
 func attentionEvent(action string, it AttentionItem) streamEvent {
 	return streamEvent{
-		Type:      EventAttention,
+		Type: EventAttention,
+		// Set for an item mirrored from a linked host, so a subscriber that
+		// filters by session does not read the host's session name as one on
+		// this machine.
+		Host:      it.Host,
 		Session:   it.Session,
 		Window:    it.Window,
 		Action:    action,
@@ -319,7 +350,7 @@ func attentionSame(a, b AttentionItem) bool {
 	return a.Kind == b.Kind && a.Workspace == b.Workspace && a.Harness == b.Harness &&
 		a.Name == b.Name && a.Summary == b.Summary && a.Count == b.Count &&
 		a.CompletionSeq == b.CompletionSeq && a.Window == b.Window &&
-		a.RequestID == b.RequestID && a.Expires == b.Expires &&
+		a.RequestID == b.RequestID && a.Expires == b.Expires && a.Stale == b.Stale &&
 		slices.Equal(a.Options, b.Options) && slices.Equal(a.AlwaysScope, b.AlwaysScope)
 }
 
@@ -596,6 +627,11 @@ func (a *attentionStore) noteMailRead(sessionName string, thread uint64) {
 func (a *attentionStore) dismiss(id string) (AttentionItem, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if it, ok := a.hostItems[id]; ok {
+		out := *it
+		a.hideHostLocked(id)
+		return out, true
+	}
 	it, ok := a.items[id]
 	if !ok {
 		return AttentionItem{}, false
@@ -609,7 +645,28 @@ func (a *attentionStore) dismiss(id string) (AttentionItem, bool) {
 type attentionQuery struct {
 	session string
 	kinds   map[string]bool
+	// host is empty for every machine, federation.LocalHostName for this one,
+	// or a linked host's name. A session with no host names a session on this
+	// machine, which is what session meant before items from other machines
+	// were listed.
+	host string
 }
+
+// matchHost reports whether an item's machine is the one the query names.
+func (q attentionQuery) matchHost(itemHost string) bool {
+	switch {
+	case q.host == "":
+		return q.session == "" || itemHost == ""
+	case q.host == localAttentionHost:
+		return itemHost == ""
+	default:
+		return itemHost == q.host
+	}
+}
+
+// localAttentionHost is the host filter that names this machine. It is the
+// name the listings and the rail give it.
+const localAttentionHost = "local"
 
 // list returns the open items in Inbox order, the counts per kind over the
 // whole queue, and the hub seq the listing is current to. The seq is read under
@@ -622,16 +679,25 @@ func (a *attentionStore) list(q attentionQuery) ([]AttentionItem, map[string]int
 	for _, k := range AttentionKindNames {
 		counts[k] = 0
 	}
-	out := make([]AttentionItem, 0, len(a.items))
-	for _, it := range a.items {
+	out := make([]AttentionItem, 0, len(a.items)+len(a.hostItems))
+	add := func(it *AttentionItem) {
 		counts[it.Kind]++
+		if !q.matchHost(it.Host) {
+			return
+		}
 		if q.session != "" && it.Session != q.session {
-			continue
+			return
 		}
 		if len(q.kinds) > 0 && !q.kinds[it.Kind] {
-			continue
+			return
 		}
 		out = append(out, *it)
+	}
+	for _, it := range a.items {
+		add(it)
+	}
+	for _, it := range a.hostItems {
+		add(it)
 	}
 	SortAttention(out)
 	var seq uint64

@@ -54,8 +54,13 @@ const (
 	// EventAttention is a change to the Inbox, the daemon's attention queue:
 	// an item opened, updated or closed. Action says which, and Attention
 	// carries the item. See attention.go.
-	EventAttention  = "attention"
-	EventSubscribed = "subscribed" // subscribe ack result type
+	EventAttention = "attention"
+	// EventHostChanged says what this daemon knows about a linked host moved:
+	// its link came up or went down, or its sessions or agents changed. Host
+	// names it and Status is its link status. It carries nothing else, so a
+	// client that shows hosts lists them again. See host_fleet.go.
+	EventHostChanged = "host-changed"
+	EventSubscribed  = "subscribed" // subscribe ack result type
 )
 
 // defaultEventQueue bounds a subscriber's per-connection event queue. When it is
@@ -119,6 +124,19 @@ type streamEvent struct {
 	// close. Attention is the item, and on close its closed field says why.
 	Action    string         `json:"action,omitempty"`
 	Attention *AttentionItem `json:"attention,omitempty"`
+	// Host names the linked machine an event is about, empty for this one. It
+	// is on the attention events of items mirrored from a host, on
+	// host-changed, and on the events relayed from a host to a subscriber
+	// that asked for them with hosts. Status is a host-changed event's link
+	// status.
+	Host   string `json:"host,omitempty"`
+	Status string `json:"status,omitempty"`
+
+	// relayed marks an event copied from a linked host's own stream. It is
+	// delivered only to a subscriber that asked for other machines' events,
+	// since every other subscriber reads session and window as names on this
+	// machine.
+	relayed bool
 }
 
 // SessionEvent is the source-side event a Session emits through its event sink.
@@ -192,9 +210,21 @@ type eventFilter struct {
 	window  string
 	ptyID   string
 	types   map[string]bool
+	// hosts admits the events relayed from linked hosts, and lets the session
+	// and window filters match events of other machines. Without it an event
+	// about another machine reaches only a subscriber that names no session,
+	// window or pane, and only when this daemon produced it (an Inbox item
+	// mirrored from a host, or host-changed), because every other subscriber
+	// reads session and window as names on this machine.
+	hosts bool
 }
 
 func (f eventFilter) match(ev streamEvent) bool {
+	if ev.Host != "" && !f.hosts {
+		if ev.relayed || f.session != "" || f.window != "" || f.ptyID != "" {
+			return false
+		}
+	}
 	if f.session != "" && ev.Session != f.session {
 		return false
 	}

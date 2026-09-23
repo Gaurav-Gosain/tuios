@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
@@ -45,6 +46,20 @@ type hostSessionsEntry struct {
 	Error  string             `json:"error,omitempty"`
 	Code   string             `json:"code,omitempty"`
 	Result []remoteSessionRow `json:"sessions,omitempty"`
+	hostFreshness
+}
+
+// hostFreshness says how current a host's rows are. It is on the entries of
+// both host listings.
+type hostFreshness struct {
+	// Stale is set when the host did not answer and the rows are the last
+	// ones it gave, from FetchedAt (unix seconds). A host that never answered
+	// has no rows and no stale mark.
+	Stale     bool  `json:"stale,omitempty"`
+	FetchedAt int64 `json:"fetched_at,omitempty"`
+	// Events is how this daemon follows the host: live, polling, or empty
+	// while the link is not up. See list-hosts.
+	Events string `json:"events,omitempty"`
 }
 
 // remoteSessionRow is a session on another machine, as that machine described
@@ -110,22 +125,32 @@ type hostAgentsEntry struct {
 	Reason string            `json:"reason,omitempty"`
 	Error  string            `json:"error,omitempty"`
 	Code   string            `json:"code,omitempty"`
-	// Session is which session on that host the rows came from. The remote
-	// daemon picks its own most recently active one, so saying which it picked
-	// is the difference between a listing and a guess.
+	// Session used to name the one session a host answered about, its most
+	// recently active. Every session is listed now and each row names its
+	// own, so this is set only when the host has exactly one session with
+	// rows in the answer, which keeps the field meaning what it meant.
 	Session string           `json:"session,omitempty"`
 	Agents  []remoteAgentRow `json:"agents,omitempty"`
+	hostFreshness
 }
 
-// remoteAgentRow is one agent pane on another machine.
+// remoteAgentRow is one agent pane on another machine. Only these fields are
+// decoded from the host's answer: the host is untrusted, and a field this
+// build does not carry is dropped rather than passed on.
 type remoteAgentRow struct {
-	WindowID  string `json:"window_id"`
-	Name      string `json:"name"`
-	State     string `json:"state"`
-	Message   string `json:"message,omitempty"`
-	HarnessID string `json:"harness_id,omitempty"`
-	Unread    int    `json:"unread,omitempty"`
-	Ready     bool   `json:"ready,omitempty"`
+	Session        string `json:"session,omitempty"`
+	WindowID       string `json:"window_id"`
+	Name           string `json:"name"`
+	State          string `json:"state"`
+	Message        string `json:"message,omitempty"`
+	HarnessID      string `json:"harness_id,omitempty"`
+	Unread         int    `json:"unread,omitempty"`
+	Ready          bool   `json:"ready,omitempty"`
+	Since          int64  `json:"agent_state_at,omitempty"`
+	Cwd            string `json:"cwd,omitempty"`
+	BlockedBy      string `json:"blocked_by,omitempty"`
+	CompletionSeq  uint64 `json:"completion_seq,omitempty"`
+	FinishedUnread bool   `json:"finished_unread,omitempty"`
 }
 
 // verbListHosts reports every configured host with its status and versions.
@@ -134,7 +159,10 @@ type remoteAgentRow struct {
 // listing has to answer on its own: why is this host not usable, and is it the
 // machine, the daemon, or the version.
 func (d *Daemon) verbListHosts(_ *connState, _ json.RawMessage) (any, *verbError) {
-	out := map[string]any{"type": "host_list"}
+	// events_push says this daemon pushes every change to a host it streams:
+	// host-changed on subscribe, and MsgHostsChanged to attached clients. A
+	// client that sees it polls only the hosts whose events are not live.
+	out := map[string]any{"type": "host_list", "events_push": true}
 	if problems := d.configProblems(); len(problems) > 0 {
 		out["config_problems"] = problems
 	}
@@ -147,6 +175,9 @@ func (d *Daemon) verbListHosts(_ *connState, _ json.RawMessage) (any, *verbError
 	ctx, cancel := context.WithTimeout(d.ctx, federationVerbBudget)
 	defer cancel()
 	reports := d.federation.Reports(ctx)
+	for i := range reports {
+		reports[i].Events, reports[i].EventsNote = d.fleet.mode(reports[i].Host)
+	}
 	out["hosts"] = reports
 	out["total"] = len(reports)
 	return out, nil
@@ -185,33 +216,142 @@ func (d *Daemon) verbListHostSessions(_ *connState, params json.RawMessage) (any
 	defer cancel()
 	for _, a := range d.federationAnswers(ctx, p.Host, "list-sessions", nil) {
 		e := hostSessionsEntry{Host: a.Host, Status: a.Report.Status, Reason: a.Report.Reason, Detail: a.Report.Detail}
-		if a.Err != nil {
-			e.Error, e.Code = federationErrorText(a.Err)
+		e.Events, _ = d.fleet.mode(a.Host)
+		var rows []remoteSessionListRow
+		err := a.Err
+		if err == nil {
+			rows, err = decodeHostSessions(a.Result)
+			if err == nil {
+				d.fleet.storeSessions(a.Host, rows)
+			}
+		}
+		if err != nil {
+			e.Error, e.Code = hostListingErrorText(err, "session list")
+			// A host that did not answer keeps the rows it last gave, marked
+			// stale with when they were taken, so a listing still says what
+			// was waiting there rather than going blank.
+			if cached, at := d.fleet.cachedSessions(a.Host); !at.IsZero() {
+				e.Result, e.Stale, e.FetchedAt = sessionRowsOut(cached), true, at.Unix()
+			}
 			entries = append(entries, e)
 			continue
 		}
-		var decoded struct {
-			Sessions []remoteSessionListRow `json:"sessions"`
-		}
-		if err := json.Unmarshal(a.Result, &decoded); err != nil {
-			e.Error, e.Code = "The host sent a session list this build cannot read.", ErrVerbInternal
-			entries = append(entries, e)
-			continue
-		}
-		rows := make([]remoteSessionRow, 0, len(decoded.Sessions))
-		for _, r := range decoded.Sessions {
-			r.remoteSessionRow.AgentState = rollUpAgentState(r.Windows)
-			rows = append(rows, r.remoteSessionRow)
-		}
-		e.Result = rows
+		e.Result = sessionRowsOut(rows)
 		entries = append(entries, e)
 	}
 	return map[string]any{"type": "host_session_list", "hosts": entries}, nil
 }
 
-// verbListHostAgents is the aggregated `tuios list-agents --all-hosts`. Each
-// remote host answers about its own most recently active session, and the reply
-// says which session that was.
+// errHostAnswerUnreadable is a host's answer this build cannot decode.
+var errHostAnswerUnreadable = errors.New("the host sent a listing this build cannot read")
+
+// decodeHostSessions reads a host's list-sessions answer.
+func decodeHostSessions(raw json.RawMessage) ([]remoteSessionListRow, error) {
+	var decoded struct {
+		Sessions []remoteSessionListRow `json:"sessions"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, errHostAnswerUnreadable
+	}
+	return decoded.Sessions, nil
+}
+
+// sessionRowsOut is a host's rows as a listing sends them, each rolled up to
+// its most urgent agent state.
+func sessionRowsOut(in []remoteSessionListRow) []remoteSessionRow {
+	rows := make([]remoteSessionRow, 0, len(in))
+	for _, r := range in {
+		r.remoteSessionRow.AgentState = rollUpAgentState(r.Windows)
+		rows = append(rows, r.remoteSessionRow)
+	}
+	return rows
+}
+
+// fetchHostSessions asks one host for its sessions.
+func (d *Daemon) fetchHostSessions(ctx context.Context, host string) ([]remoteSessionListRow, error) {
+	raw, err := d.federation.Call(ctx, host, "list-sessions", nil)
+	if err != nil {
+		return nil, err
+	}
+	return decodeHostSessions(raw)
+}
+
+// fetchHostAgents asks one host for the agent panes of every session it holds.
+//
+// A host from before list-agents took all_sessions refuses the param, and is
+// asked the old way instead: its sessions, then each session's agents. That is
+// one round trip per session, which is slower and answers the same question.
+func (d *Daemon) fetchHostAgents(ctx context.Context, host string, all bool) ([]remoteAgentRow, error) {
+	raw, err := d.federation.Call(ctx, host, "list-agents", map[string]any{"all": all, "all_sessions": true})
+	if err == nil {
+		return decodeHostAgents(raw, "")
+	}
+	var rerr *federation.RemoteError
+	if !errors.As(err, &rerr) || rerr.Code != ErrVerbInvalidParams {
+		return nil, err
+	}
+	sessions, err := d.fetchHostSessions(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	var out []remoteAgentRow
+	for _, s := range sessions {
+		raw, err := d.federation.Call(ctx, host, "list-agents", map[string]any{"all": all, "session": s.Name})
+		if err != nil {
+			if errors.As(err, &rerr) && rerr.Code == ErrVerbSessionNotFound {
+				// The session ended between the two calls.
+				continue
+			}
+			return nil, err
+		}
+		rows, err := decodeHostAgents(raw, s.Name)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rows...)
+		if len(out) >= fleetMaxAgents {
+			break
+		}
+	}
+	return out, nil
+}
+
+// decodeHostAgents reads a host's list-agents answer. A row from a host that
+// does not name its session is given the session the answer names.
+func decodeHostAgents(raw json.RawMessage, session string) ([]remoteAgentRow, error) {
+	var decoded struct {
+		Session string           `json:"session"`
+		Agents  []remoteAgentRow `json:"agents"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, errHostAnswerUnreadable
+	}
+	fallback := firstNonEmpty(decoded.Session, session)
+	for i := range decoded.Agents {
+		if decoded.Agents[i].Session == "" {
+			decoded.Agents[i].Session = fallback
+		}
+	}
+	return decoded.Agents, nil
+}
+
+// soleSession is the session every row is in, or empty when they are in
+// several or there are none. It fills the entry's old session field.
+func soleSession(rows []remoteAgentRow) string {
+	if len(rows) == 0 {
+		return ""
+	}
+	s := rows[0].Session
+	for _, r := range rows[1:] {
+		if r.Session != s {
+			return ""
+		}
+	}
+	return s
+}
+
+// verbListHostAgents is the aggregated `tuios list-agents --all-hosts`. Every
+// session on every host is listed, and each row names its session.
 func (d *Daemon) verbListHostAgents(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Host string `json:"host"`
@@ -227,13 +367,14 @@ func (d *Daemon) verbListHostAgents(cs *connState, params json.RawMessage) (any,
 		// Rebuilt rather than forwarded: this verb's params carry a host field
 		// list-agents does not declare, and the local half must be called with
 		// exactly the parameters list-agents takes.
-		localParams, _ := json.Marshal(map[string]any{"all": p.All})
+		localParams, _ := json.Marshal(map[string]any{"all": p.All, "all_sessions": true})
 		result, verr := d.verbListAgents(cs, localParams)
 		switch {
 		case verr != nil:
 			e.Error, e.Code = verr.Message, verr.Code
 		default:
-			e.Session, e.Agents = localAgentRows(result)
+			e.Agents = localAgentRows(result)
+			e.Session = soleSession(e.Agents)
 		}
 		entries = append(entries, e)
 	}
@@ -244,30 +385,69 @@ func (d *Daemon) verbListHostAgents(cs *connState, params json.RawMessage) (any,
 	if verr := d.checkHostParam(p.Host); verr != nil {
 		return nil, verr
 	}
+	if d.federation == nil {
+		return map[string]any{"type": "host_agent_list", "hosts": entries}, nil
+	}
 
 	ctx, cancel := context.WithTimeout(d.ctx, federationVerbBudget)
 	defer cancel()
-	remoteParams := map[string]any{"all": p.All}
-	for _, a := range d.federationAnswers(ctx, p.Host, "list-agents", remoteParams) {
-		e := hostAgentsEntry{Host: a.Host, Status: a.Report.Status, Reason: a.Report.Reason}
-		if a.Err != nil {
-			e.Error, e.Code = federationErrorText(a.Err)
-			entries = append(entries, e)
-			continue
+	// The reports wait, within the budget, for a host whose first dial has
+	// not settled, so a listing right after the daemon starts says up or down
+	// rather than connecting.
+	var reports []federation.HostReport
+	for _, r := range d.federation.Reports(ctx) {
+		if p.Host == "" || r.Host == p.Host {
+			reports = append(reports, r)
 		}
-		var decoded struct {
-			Session string           `json:"session"`
-			Agents  []remoteAgentRow `json:"agents"`
-		}
-		if err := json.Unmarshal(a.Result, &decoded); err != nil {
-			e.Error, e.Code = "The host sent an agent list this build cannot read.", ErrVerbInternal
-			entries = append(entries, e)
-			continue
-		}
-		e.Session, e.Agents = decoded.Session, decoded.Agents
-		entries = append(entries, e)
 	}
+	// Every host is asked at once, so one slow machine costs the listing its
+	// own row and nothing more.
+	remote := make([]hostAgentsEntry, len(reports))
+	var wg sync.WaitGroup
+	for i, r := range reports {
+		wg.Go(func() {
+			remote[i] = d.hostAgentsEntryFor(ctx, r, p.All)
+		})
+	}
+	wg.Wait()
+	entries = append(entries, remote...)
 	return map[string]any{"type": "host_agent_list", "hosts": entries}, nil
+}
+
+// hostAgentsEntryFor is one host's entry of list-host-agents: its rows when it
+// answers, else the rows it last gave, marked stale.
+func (d *Daemon) hostAgentsEntryFor(ctx context.Context, r federation.HostReport, all bool) hostAgentsEntry {
+	host := r.Host
+	e := hostAgentsEntry{Host: host, Status: r.Status, Reason: r.Reason}
+	e.Events, _ = d.fleet.mode(host)
+	var err error
+	var rows []remoteAgentRow
+	if r.Status != federation.StatusUp {
+		err = &federation.UnreachableError{Host: host, Status: r.Status, Reason: r.Reason}
+	} else {
+		rows, err = d.fetchHostAgents(ctx, host, all)
+	}
+	if err != nil {
+		e.Error, e.Code = hostListingErrorText(err, "agent list")
+		if cached, at := d.fleet.cachedAgents(host); !at.IsZero() {
+			e.Agents, e.Stale, e.FetchedAt = cached, true, at.Unix()
+		}
+		return e
+	}
+	if !all {
+		d.fleet.storeAgents(host, rows)
+	}
+	e.Agents, e.Session = rows, soleSession(rows)
+	return e
+}
+
+// hostListingErrorText is federationErrorText for a listing, which can also
+// fail because the host's answer could not be read.
+func hostListingErrorText(err error, what string) (string, string) {
+	if errors.Is(err, errHostAnswerUnreadable) {
+		return "The host sent a " + what + " this build cannot read.", ErrVerbInternal
+	}
+	return federationErrorText(err)
 }
 
 // checkHostParam refuses a named host that is not configured, before anything
@@ -352,17 +532,14 @@ func localSessionRows(infos []SessionInfo) []remoteSessionRow {
 // localAgentRows narrows the local list-agents result the same way. It goes
 // through JSON rather than reaching into the handler's map so the local rows
 // and the remote rows are decoded by one piece of code.
-func localAgentRows(result any) (string, []remoteAgentRow) {
+func localAgentRows(result any) []remoteAgentRow {
 	raw, err := json.Marshal(result)
 	if err != nil {
-		return "", nil
+		return nil
 	}
-	var decoded struct {
-		Session string           `json:"session"`
-		Agents  []remoteAgentRow `json:"agents"`
+	rows, err := decodeHostAgents(raw, "")
+	if err != nil {
+		return nil
 	}
-	if json.Unmarshal(raw, &decoded) != nil {
-		return "", nil
-	}
-	return decoded.Session, decoded.Agents
+	return rows
 }

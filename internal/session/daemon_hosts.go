@@ -103,6 +103,9 @@ func (d *Daemon) ApplyHosts(hosts []federation.Host) {
 		return
 	}
 	change := d.federation.SetTable(table)
+	// A host that left the table takes its Inbox items and its cached rows
+	// with it, and a host that now names another machine starts over.
+	d.fleet.reconcile(table.Names(), change.Redialed)
 	if !change.Changed() && len(problems) == 0 {
 		return
 	}
@@ -111,7 +114,7 @@ func (d *Daemon) ApplyHosts(hosts []federation.Host) {
 	}
 	if change.Changed() {
 		log.Printf("[FEDERATION] The host table changed: %s", describeTableChange(change))
-		d.broadcastHostsChanged(change)
+		d.broadcastHostsChanged(change, nil)
 	}
 }
 
@@ -123,8 +126,13 @@ func (d *Daemon) ApplyHosts(hosts []federation.Host) {
 // command line while a client is attached would otherwise stay invisible in
 // that client until it reattached. The push costs nothing while the table is
 // still: it runs from ApplyHosts and only on a change.
-func (d *Daemon) broadcastHostsChanged(change federation.TableChange) {
-	payload := &HostsChangedPayload{Added: change.Added, Removed: change.Removed, Redialed: change.Redialed}
+//
+// It is also how the fleet (host_fleet.go) tells the clients that what a host
+// holds changed, with the hosts named in changed, which is what lets the rail
+// stop polling a host the daemon streams. An older client reads the push the
+// way it always has, as a reason to list the hosts once.
+func (d *Daemon) broadcastHostsChanged(change federation.TableChange, changed []string) {
+	payload := &HostsChangedPayload{Added: change.Added, Removed: change.Removed, Redialed: change.Redialed, Changed: changed}
 	msg, err := NewMessage(MsgHostsChanged, payload)
 	if err != nil {
 		debugLog("[DEBUG] broadcastHostsChanged: encode: %v", err)

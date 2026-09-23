@@ -29,11 +29,17 @@ func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *
 	var p struct {
 		Session string   `json:"session"`
 		Kinds   []string `json:"kinds"`
+		Host    string   `json:"host"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	q := attentionQuery{session: p.Session}
+	if p.Host != "" && p.Host != localAttentionHost {
+		if verr := d.checkHostParam(p.Host); verr != nil {
+			return nil, verr
+		}
+	}
+	q := attentionQuery{session: p.Session, host: p.Host}
 	for _, k := range p.Kinds {
 		if AttentionKindRank(k) == len(AttentionKindNames) {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "kinds: "+echoName(k)+" is not an attention kind", &VerbHint{
@@ -98,7 +104,19 @@ func (d *Daemon) verbDismissAttention(cs *connState, params json.RawMessage) (an
 			Detail:  "The item may already be closed: its pane moved on, the mail was read, or someone else dismissed it.",
 		})
 	}
-	// Outside the queue's lock, since both take the session's.
+	// Outside the queue's lock, since both take the session's. An item from
+	// another machine was only hidden here: its pane and its mail are on that
+	// machine, and nothing here marks them.
+	if it.Host != "" {
+		return map[string]any{
+			"type":      "attention_dismissed",
+			"id":        it.ID,
+			"kind":      it.Kind,
+			"session":   it.Session,
+			"host":      it.Host,
+			"dismissed": true,
+		}, nil
+	}
 	if sess := d.manager.GetSession(it.Session); sess != nil {
 		switch it.Kind {
 		case AttentionFinished:

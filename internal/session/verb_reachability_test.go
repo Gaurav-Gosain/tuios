@@ -77,6 +77,9 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// use is not configured. The connection itself is proved with two daemons
 	// in host_connection_test.go.
 	"open-host-connection#0": {errCode: ErrVerbUnknownHost, why: "no hosts are configured in the fixture"},
+	// The host filter's example names a host; the fleet is proved with two
+	// daemons in host_fleet_test.go.
+	"list-attention#3": {errCode: ErrVerbUnknownHost, why: "no hosts are configured in the fixture"},
 
 	// Rendering and encoding a picture is real work, unlike every other verb
 	// here, and a budget written for a state read is not a budget for it.
@@ -89,7 +92,6 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"resize-pane#0": {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
 	"pane-cwd#0":    {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
 	"pane-agent#0":  {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
-
 	// An example that names a pane by the environment variable an agent would
 	// have expanded. The literal is not a window id here.
 	"ask-agent#0":           {errCode: ErrVerbWindowNotFound, why: "$TUIOS_PANE_ID is unexpanded"},

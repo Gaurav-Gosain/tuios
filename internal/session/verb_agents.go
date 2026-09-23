@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -104,27 +105,77 @@ func isAgentWindow(w WindowState) bool {
 // tracked per window; the verb exists because an agent that wants to talk to
 // another agent had no way to discover one without listing every window and
 // working out which were agents.
+//
+// With all_sessions it answers for every session on the daemon at once, which is
+// what a hub asks a linked host so its listing covers more than the session that
+// host last touched. Every row names its session either way.
 func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Session string `json:"session"`
-		All     bool   `json:"all"`
+		Session     string `json:"session"`
+		All         bool   `json:"all"`
+		AllSessions bool   `json:"all_sessions"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if p.AllSessions {
+		if p.Session != "" {
+			return nil, invalidParam("all_sessions", "all_sessions lists every session, so it takes no session. Drop one or the other")
+		}
+		return d.listAgentsAllSessions(p.All), nil
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
 		return nil, verr
 	}
 
-	state := sess.GetState()
 	unread := d.agents.unreadCounts(sess.Name)
-	now := time.Now().UnixNano()
+	agents := d.agentRows(sess, p.All, unread, time.Now().UnixNano())
 
+	return map[string]any{
+		"type":    "agent_list",
+		"session": sess.Name,
+		"agents":  agents,
+		"total":   len(agents),
+		// The person's inbox, which is not a row because it is not a pane: it
+		// cannot be asked, focused or captured, and a row would invite all three.
+		// It is addressed as "human" and read from the attached client's mail
+		// overlay.
+		"human_inbox":  AgentInboxHuman,
+		"human_unread": unread[AgentInboxHuman],
+	}, nil
+}
+
+// listAgentsAllSessions is list-agents over every session, in session name
+// order. human_unread is the person's unread mail summed over the sessions.
+func (d *Daemon) listAgentsAllSessions(all bool) map[string]any {
+	sessions := d.manager.AllSessions()
+	slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name, b.Name) })
+	now := time.Now().UnixNano()
+	agents := make([]map[string]any, 0, len(sessions))
+	humanUnread := 0
+	for _, sess := range sessions {
+		unread := d.agents.unreadCounts(sess.Name)
+		humanUnread += unread[AgentInboxHuman]
+		agents = append(agents, d.agentRows(sess, all, unread, now)...)
+	}
+	return map[string]any{
+		"type":         "agent_list",
+		"all_sessions": true,
+		"agents":       agents,
+		"total":        len(agents),
+		"human_inbox":  AgentInboxHuman,
+		"human_unread": humanUnread,
+	}
+}
+
+// agentRows is one session's rows of a list-agents answer.
+func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now int64) []map[string]any {
+	state := sess.GetState()
 	agents := make([]map[string]any, 0, len(state.Windows))
 	for i := range state.Windows {
 		w := state.Windows[i]
-		if !p.All && !isAgentWindow(w) {
+		if !all && !isAgentWindow(w) {
 			continue
 		}
 		claim := sess.agentClaimFor(w.ID)
@@ -137,6 +188,7 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 			source = claim.source.Name()
 		}
 		agents = append(agents, map[string]any{
+			"session":        sess.Name,
 			"window_id":      w.ID,
 			"name":           windowLabelOf(w),
 			"state":          w.AgentState.Name(),
@@ -165,19 +217,7 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 			"meta":             agentMetaMap(w.AgentMeta, now),
 		})
 	}
-
-	return map[string]any{
-		"type":    "agent_list",
-		"session": sess.Name,
-		"agents":  agents,
-		"total":   len(agents),
-		// The person's inbox, which is not a row because it is not a pane: it
-		// cannot be asked, focused or captured, and a row would invite all three.
-		// It is addressed as "human" and read from the attached client's mail
-		// overlay.
-		"human_inbox":  AgentInboxHuman,
-		"human_unread": unread[AgentInboxHuman],
-	}, nil
+	return agents
 }
 
 // resolveMailParty turns a send, read or wait target into an inbox id and the

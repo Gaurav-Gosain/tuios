@@ -50,6 +50,8 @@ func (d *Daemon) verbSubscribe(cs *connState, params json.RawMessage) (any, *ver
 		// started") is distinguishable from not resuming at all.
 		AfterSeq *uint64 `json:"after_seq"`
 		BootID   string  `json:"boot_id"`
+		// Hosts adds the events this daemon relays from its linked hosts.
+		Hosts bool `json:"hosts"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -68,7 +70,7 @@ func (d *Daemon) verbSubscribe(cs *connState, params json.RawMessage) (any, *ver
 	}
 	cs.mu.Unlock()
 
-	filter := eventFilter{session: p.Session, window: p.Window}
+	filter := eventFilter{session: p.Session, window: p.Window, hosts: p.Hosts}
 	if len(p.Types) > 0 {
 		filter.types = make(map[string]bool, len(p.Types))
 		for _, t := range p.Types {

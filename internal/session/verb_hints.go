@@ -54,6 +54,7 @@ var (
 		EventWorkspaceSwitched, EventAgentState, EventAgentMessage,
 		EventOutput, EventBell, EventNotification, EventModeChanged,
 		EventSessionCreated, EventSessionClosed, EventGap, EventAttention,
+		EventHostChanged,
 	}
 	// knownEventTypes are the event types a subscribe filter can name.
 	knownEventTypes = EventTypeNames

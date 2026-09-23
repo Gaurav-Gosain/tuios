@@ -76,6 +76,10 @@ type Daemon struct {
 	federation *federation.Manager
 	// hostDial is DaemonConfig.HostDial, kept for setupFederation.
 	hostDial federation.Dialer
+	// fleet follows the agents and the Inbox of every linked host over the
+	// links, so the Inbox and the host listings cover every machine. See
+	// host_fleet.go.
+	fleet *hostFleet
 	// federationMu guards federationProblems and the hosts watcher, both of
 	// which a config reload rewrites while a verb is reading them.
 	federationMu sync.Mutex
@@ -471,6 +475,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 
 	d.configPath = cfg.ConfigPath
 	d.hostDial = cfg.HostDial
+	d.fleet = newHostFleet(d)
 	d.setupFederation(cfg.Hosts)
 
 	return d
@@ -505,6 +510,7 @@ func (d *Daemon) setupFederation(hosts []federation.Host) {
 		Log: func(format string, args ...any) {
 			log.Printf("[FEDERATION] "+format, args...)
 		},
+		OnStatus: d.fleet.onStatus,
 	})
 }
 
@@ -764,6 +770,8 @@ func (d *Daemon) Start() error {
 	if d.federation != nil {
 		d.federation.Start(d.ctx)
 	}
+	// Each linked host's agents are followed from here on. See host_fleet.go.
+	d.fleet.start(d.ctx)
 	// The config file is followed from here on, so a host added while the daemon
 	// runs reaches the links without a restart.
 	d.startHostsWatch()
@@ -893,6 +901,10 @@ func (d *Daemon) shutdown() error {
 		// that is about to go, so a survivor would be a shell on a pty nobody
 		// can reach.
 		d.closeHostedPanes()
+
+		// The streams that follow the linked hosts end before the links do,
+		// so none of them reads a closing link as a host going away.
+		d.fleet.stop()
 
 		// Every ssh child is killed here. A link left running would outlive the
 		// daemon that owns it.
