@@ -1050,6 +1050,24 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	d.handleConnectionFrom(conn, false)
 }
 
+// lastClientID is the number in the last client id handed out.
+var lastClientID atomic.Int64
+
+// newClientID returns an id no other connection in this process has had. It
+// is the time in nanoseconds, as ids always were, moved past the last one
+// handed out: the clock on macOS only moves in microseconds, so two
+// connections accepted in the same microsecond used to get the same id, and
+// the second replaced the first in the client table.
+func newClientID() string {
+	for {
+		last := lastClientID.Load()
+		next := max(time.Now().UnixNano(), last+1)
+		if lastClientID.CompareAndSwap(last, next) {
+			return fmt.Sprintf("client-%d", next)
+		}
+	}
+}
+
 // handleConnectionFrom serves one connection. viaLink marks it as accepted on
 // the link socket.
 func (d *Daemon) handleConnectionFrom(conn net.Conn, viaLink bool) {
@@ -1070,7 +1088,7 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 		}
 	}()
 
-	clientID := fmt.Sprintf("client-%d", time.Now().UnixNano())
+	clientID := newClientID()
 
 	cs := &connState{
 		conn:             conn,
