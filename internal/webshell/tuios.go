@@ -19,12 +19,18 @@ func cmdTuios(s *shell, args []string, _ string) int {
 		t.Print("  " + green + "tuios tape play demo.tape" + reset + "  watch tuios drive itself\r\n")
 		t.Print("  " + green + "tuios tape list" + reset + "            the tapes here\r\n")
 		t.Print("  " + green + "tuios version" + reset + "\r\n")
+		t.Print("\r\n" + dim + "These show what they print on a real machine:" + reset + "\r\n")
+		t.Print("  " + green + "tuios ls" + reset + ", " + green + "tuios fan" + reset + ", " + green + "tuios worktree" + reset + ", " +
+			green + "tuios list-agents" + reset + ", " + green + "tuios list-verbs" + reset + ", " + green + "tuios list-hooks" + reset + "\r\n")
 		return 0
 	case "version", "--version", "-v":
 		t.Print("tuios (browser demo, the real thing compiled to WebAssembly)\r\n")
 		return 0
 	case "tape":
 		return tuiosTape(s, args[2:])
+	}
+	if printSample(t, sub) {
+		return 0
 	}
 	t.Print(yellow + "tuios " + sub + reset + " needs a real machine. Install tuios to try it: " + bold + "tuios.gaurav.zip" + reset + "\r\n")
 	return 0

@@ -144,6 +144,40 @@ NextWindow
 Sleep 500ms
 TerminalMode
 `,
+	Home + "/party.tape": `# Three programs, a zoom and a trip to workspace 2, all typed by tuios.
+# Run it with: tuios tape play party.tape
+WindowManagementMode
+EnableTiling
+NewWindow
+Sleep 600ms
+TerminalMode
+Type "rain"
+Enter
+Sleep 1200ms
+WindowManagementMode
+NewWindow
+Sleep 600ms
+TerminalMode
+Type "top"
+Enter
+Sleep 1200ms
+WindowManagementMode
+NewWindow
+Sleep 600ms
+TerminalMode
+Type "cowsay tapes type for you"
+Enter
+Sleep 1500ms
+WindowManagementMode
+ToggleZoom
+Sleep 1s
+ToggleZoom
+Sleep 500ms
+SwitchWorkspace 2
+Sleep 700ms
+SwitchWorkspace 1
+Sleep 300ms
+`,
 	ProjectDir + "/go.mod":        helloGoMod,
 	ProjectDir + "/main.go":       helloMain,
 	ProjectDir + "/greet.go":      helloGreetWork,

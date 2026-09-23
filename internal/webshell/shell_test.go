@@ -493,3 +493,47 @@ func TestShellMarksCommands(t *testing.T) {
 		t.Errorf("the emulator took %d marks, want at least 8", n)
 	}
 }
+
+// TestEveryTapeParses keeps the tapes in the demo's filesystem playable.
+func TestEveryTapeParses(t *testing.T) {
+	for _, p := range tapeFiles() {
+		script, _ := readFile(p)
+		if cmds, errs := tape.ParseFile(script); len(errs) > 0 || len(cmds) == 0 {
+			t.Errorf("%s does not parse: %v", p, errs)
+		}
+	}
+}
+
+// TestTuiosSamples checks the subcommands that need a real machine print a
+// sample and succeed, and that every table in a sample lines up.
+func TestTuiosSamples(t *testing.T) {
+	freshFS(t)
+	ev := recordEvents(t)
+	g := startGuest(t, "sh")
+	g.waitFor(markInput)
+	for _, sub := range []string{"ls", "fan", "worktree", "list-agents", "send-agent-message", "list-verbs", "list-hooks", "attach"} {
+		g.send("tuios " + sub + "\r")
+		out := g.waitFor(markInput)
+		if !strings.Contains(out, "On a real machine") || !strings.Contains(out, "tuios.gaurav.zip/docs/") {
+			t.Errorf("tuios %s printed no sample: %q", sub, out)
+		}
+	}
+	for _, e := range ev.of(EventCommand) {
+		if e.Data["exitCode"] != 0 {
+			t.Errorf("%v exited %v", e.Data["line"], e.Data["exitCode"])
+		}
+	}
+	for name, s := range samples {
+		width := -1
+		for _, line := range strings.Split(s.text, "\n") {
+			if !strings.ContainsAny(line, "│╭╰├") {
+				continue
+			}
+			n := len([]rune(line))
+			if width >= 0 && n != width {
+				t.Errorf("sample %q: a table row is %d wide, want %d: %q", name, n, width, line)
+			}
+			width = n
+		}
+	}
+}
