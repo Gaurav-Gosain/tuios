@@ -145,6 +145,9 @@ func startFrameloop(t *testing.T, term *tuitest.Terminal, repaintMS int) (geom s
 // and over inline base64 and the two capture streams compared.
 func startFrameloopOpts(t *testing.T, term *tuitest.Terminal, repaintMS, fps int, transport string) (geom string, cols, rows, xpx, ypx int) {
 	t.Helper()
+	if transport == "shm" {
+		requireDevShm(t)
+	}
 	bin := buildFrameloop(t)
 	geom = filepath.Join(t.TempDir(), "geom")
 	typeLine(t, term, fmt.Sprintf("%s %s %d %d %s", bin, geom, fps, repaintMS, transport))
@@ -158,6 +161,21 @@ func startFrameloopOpts(t *testing.T, term *tuitest.Terminal, repaintMS, fps int
 	}
 	t.Fatalf("the graphics app never reported its geometry\n%s", term.Snapshot())
 	return "", 0, 0, 0, 0
+}
+
+// requireDevShm skips a test whose guest streams frames over shared memory on
+// a host that has no /dev/shm directory to put them in.
+//
+// The frameloop guest writes its frames as files under /dev/shm, the Linux
+// layout, and tuios reads a t=s name from the same place. macOS has no such
+// directory: POSIX shared memory there lives behind shm_open and has no path.
+// Without this the guest prints FRAMELOOP-ERR, nothing is ever drawn, and the
+// test fails as if the passthrough had lost the image.
+func requireDevShm(t *testing.T) {
+	t.Helper()
+	if info, err := os.Stat("/dev/shm"); err != nil || !info.IsDir() {
+		t.Skip("no /dev/shm on this host, so the shared memory guest cannot run")
+	}
 }
 
 // announcedSizes is every size the guest has been told it has, in order, as
