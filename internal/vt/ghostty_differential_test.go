@@ -249,6 +249,8 @@ func TestGhosttyDiffBasicSequences(t *testing.T) {
 		{"region-scroll-over-text", "a\r\nb\r\nc\r\nd\r\ne\x1b[2;4r\x1b[4;1H\n\n\x1b[r"},
 		{"delete-char", "abcdef\x1b[1;2H\x1b[2P"},
 		{"alt-screen", "main\x1b[?1049htop\x1b[?1049l"},
+		{"alt-screen-enter-keeps-cursor", "\x1b[2;3Hmain\x1b[?1049hX"},
+		{"alt-screen-1047-enter-keeps-cursor", "\x1b[2;3Hmain\x1b[?1047hX"},
 		{"scroll-region", "\x1b[2;4rA\r\nB\r\nC\r\nD\r\nE\x1b[r"},
 		{"origin-mode", "\x1b[2;4r\x1b[?6h\x1b[Hx\x1b[?6l\x1b[r"},
 		{"rep", "ab\x1b[3b"},

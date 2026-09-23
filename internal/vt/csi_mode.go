@@ -43,9 +43,13 @@ func (e *Emulator) setAltScreenMode(on bool) {
 	}
 	if on {
 		e.scr = e.altScreen()
+		// The switch carries the cursor across rather than homing it. None
+		// of 1047 and 1049 is defined to move the cursor, and xterm, tmux and
+		// ghostty all leave it where it stood. A program that switches and
+		// then writes without addressing the cursor first lands where a real
+		// terminal puts it.
 		e.scrs[1].cur = e.scrs[0].cur
 		e.scr.Clear()
-		e.setCursor(0, 0)
 	} else {
 		e.scr = &e.scrs[0]
 	}

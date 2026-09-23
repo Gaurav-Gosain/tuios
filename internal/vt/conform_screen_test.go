@@ -9,9 +9,25 @@ import "testing"
 func TestConform_AlternateScreen(t *testing.T) {
 	runConform(t, []conformCase{
 		{
+			// This case used to want "X" in the first column, because the
+			// switch homed the cursor. xterm, tmux and ghostty leave the
+			// cursor where it stood, and so does this emulator now.
 			name: "1049 keeps the main screen while the alternate is up",
 			in:   "main\x1b[?1049hX",
-			want: "X",
+			want: "    X",
+		},
+		{
+			name:   "entering 1049 leaves the cursor where it was",
+			cols:   10,
+			in:     "\x1b[3;4Hmain\x1b[?1049h",
+			want:   "",
+			cursor: "7,2",
+		},
+		{
+			name:   "entering 1047 leaves the cursor where it was",
+			in:     "\x1b[2;3H\x1b[?1047hX",
+			want:   "\n  X",
+			cursor: "3,1",
 		},
 		{
 			name: "leaving 1049 brings the main screen back",

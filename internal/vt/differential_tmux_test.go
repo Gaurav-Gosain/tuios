@@ -145,6 +145,8 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"soft reset leaves the screen", 10, 4, "abc\x1b[2;3r\x1b[!pX"},
 		{"full reset clears the screen", 10, 4, "abc\x1bcX"},
 		{"leaving the alternate screen", 10, 4, "main\x1b[?1049hgone\x1b[?1049l"},
+		{"entering 1049 keeps the cursor", 10, 4, "\x1b[2;3Hmain\x1b[?1049hX"},
+		{"entering 1047 keeps the cursor", 10, 4, "\x1b[2;3Hmain\x1b[?1047hX"},
 		{"save and restore the cursor", 10, 4, "\x1b[2;4H\x1b7\x1b[1;1H\x1b8X"},
 
 		// Text.
