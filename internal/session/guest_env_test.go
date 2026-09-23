@@ -113,7 +113,7 @@ func TestPaneEnvDropsHostTmux(t *testing.T) {
 
 	envs := map[string][]string{
 		"daemon pane": sess.buildEnv("win-1", false),
-		"hosted pane": hostedPaneEnv(&Daemon{}, hostedPaneSpec{}),
+		"hosted pane": hostedPaneEnv(&Daemon{}, hostedPaneSpec{}, nil),
 	}
 	for name, env := range envs {
 		for _, key := range []string{"TMUX", "TMUX_PANE"} {

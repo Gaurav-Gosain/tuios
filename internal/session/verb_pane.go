@@ -44,10 +44,14 @@ func (d *Daemon) verbOpenPane(cs *connState, params json.RawMessage) (any, *verb
 		d.relayHostedPane(cs, br, hp)
 		LogBasic("Pane %s ended", hp.id)
 	}
-	return map[string]any{
+	out := map[string]any{
 		"type": "pane",
 		"pane": hp.id,
-	}, nil
+	}
+	if hp.callsToken != "" {
+		out["calls_token"] = hp.callsToken
+	}
+	return out, nil
 }
 
 // verbResizePane changes a hosted pane's size. The size is decided by the

@@ -945,6 +945,10 @@ type Session struct {
 	// nil unless the daemon installed one, and every reader checks. See
 	// remote_pane.go.
 	fed paneFederation
+	// onRemotePane is told of every window this session opens on another
+	// machine, so the daemon can hold the pane's report channel. Guarded by
+	// ptysMu, like fed. See hosted_calls.go.
+	onRemotePane func(windowID string, p *remotePane)
 }
 
 // SetGraphicsCapabilities records the graphics protocols tuios can forward to
@@ -1216,10 +1220,13 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		err         error
 	)
 	if host != "" {
-		ptyInstance, err = s.openRemotePaneFor(host, width, height, cwd, command)
+		ptyInstance, err = s.openRemotePaneFor(windowID, host, width, height, cwd, command)
 		if err != nil {
 			cancel()
 			return nil, err
+		}
+		if rp, ok := ptyInstance.(*remotePane); ok && s.onRemotePane != nil {
+			s.onRemotePane(windowID, rp)
 		}
 	} else {
 		ptyInstance, cmd, err = ptyspawn.Spawn(width, height, func() *exec.Cmd {

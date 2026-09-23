@@ -382,7 +382,7 @@ func (s *scriptedStream) Close() error                { return nil }
 // table it is missing from rather than failing at the spawn.
 func TestASessionWithNoLinksRefusesAWindowElsewhere(t *testing.T) {
 	s := &Session{Name: "work"}
-	_, err := s.openRemotePaneFor("build", 80, 24, "", nil)
+	_, err := s.openRemotePaneFor("win-1", "build", 80, 24, "", nil)
 	if err == nil {
 		t.Fatal("a daemon with no links opened a window on another machine")
 	}
@@ -666,7 +666,7 @@ func captureOpenPaneSpec(t *testing.T, sess *Session) hostedPaneSpec {
 	t.Helper()
 	rec := &specRecorder{}
 	sess.SetFederation(rec)
-	_, _ = sess.openRemotePaneFor("build", 80, 24, "", nil)
+	_, _ = sess.openRemotePaneFor("win-1", "build", 80, 24, "", nil)
 	if !rec.seen {
 		t.Fatal("ASSERTION: no open-pane request was made, so this proves nothing")
 	}

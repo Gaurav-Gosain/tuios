@@ -152,6 +152,9 @@ func (d *Daemon) holdsWindow(id string) bool {
 // a pane of this daemon, computing it once per connection. A connection whose
 // peer pid is unknown is not: see the file comment.
 func (d *Daemon) connFromPane(cs *connState) bool {
+	if cs != nil && cs.paneOnly {
+		return true
+	}
 	if cs == nil || cs.peerPID <= 0 {
 		return false
 	}

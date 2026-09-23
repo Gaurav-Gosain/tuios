@@ -302,6 +302,10 @@ type connState struct {
 	// needs it. See mayActAsHuman.
 	fromPaneOnce sync.Once
 	fromPane     bool
+	// paneOnly marks a call a pane on another machine sent through its report
+	// channel (hosted_calls.go). It is a pane by construction, whatever the
+	// pid says, so it can never act as the person.
+	paneOnly bool
 
 	// attached says the attach reply has been written to this connection, and
 	// it is what broadcastToSession requires before it will send anything.
@@ -533,6 +537,18 @@ func (d *Daemon) onSessionCreated(s *Session) {
 	if d.federation != nil {
 		s.SetFederation(d.federation)
 	}
+	// A window opened on another machine gets a report channel, so an agent
+	// in it can report its state and read its mail. See hosted_calls.go.
+	s.SetRemotePaneHook(func(windowID string, p *remotePane) {
+		if d.ctx.Err() != nil {
+			return
+		}
+		d.wg.Add(1)
+		go func() {
+			defer d.wg.Done()
+			d.serveHostedCalls(s, windowID, p)
+		}()
+	})
 	s.SetStateSink(func(state *SessionState) {
 		d.broadcastStateSync(sessionID, state, "update", "")
 	})

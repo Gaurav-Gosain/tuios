@@ -80,6 +80,20 @@ type remotePane struct {
 	fgRunning  bool
 	fgAt       time.Time
 	fgInflight bool
+
+	// callsToken opens the pane's report channel on the far machine; see
+	// hosted_calls.go. Empty from a far daemon too old to have one.
+	callsToken string
+	// done is closed when the pane closes. It is nil in a test that builds a
+	// pane by hand.
+	done chan struct{}
+}
+
+// isClosed reports whether Close has run.
+func (p *remotePane) isClosed() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.closed
 }
 
 // openRemotePane starts a process on host and returns the pane it speaks to.
@@ -92,21 +106,37 @@ func openRemotePane(ctx context.Context, fed paneFederation, host string, spec h
 		return nil, err
 	}
 
-	id, br, err := openPaneOn(stream, spec)
+	opened, br, err := openPaneReply(stream, spec)
 	if err != nil {
 		_ = stream.Close()
 		return nil, fmt.Errorf("tuios on %s could not start a pane: %w", host, err)
 	}
-	return &remotePane{host: host, id: id, fed: fed, stream: stream, br: br}, nil
+	return &remotePane{
+		host: host, id: opened.Pane, fed: fed, stream: stream, br: br,
+		callsToken: opened.CallsToken, done: make(chan struct{}),
+	}, nil
 }
 
 // openPaneOn sends open-pane on a fresh connection to the far daemon and reads
 // its reply. On success the connection is the pty from here on, and the reader
 // that is returned is the only one that may read it.
 func openPaneOn(stream io.ReadWriteCloser, spec hostedPaneSpec) (string, *bufio.Reader, error) {
+	opened, br, err := openPaneReply(stream, spec)
+	return opened.Pane, br, err
+}
+
+// paneOpened is the part of the open-pane reply the owner keeps. CallsToken is
+// empty from a far daemon too old to carry reports from the pane.
+type paneOpened struct {
+	Pane       string `json:"pane"`
+	CallsToken string `json:"calls_token"`
+}
+
+// openPaneReply is openPaneOn with the whole reply.
+func openPaneReply(stream io.ReadWriteCloser, spec hostedPaneSpec) (paneOpened, *bufio.Reader, error) {
 	params, err := json.Marshal(spec)
 	if err != nil {
-		return "", nil, err
+		return paneOpened{}, nil, err
 	}
 	req, err := json.Marshal(verbRequest{
 		ID:     json.RawMessage(`1`),
@@ -114,36 +144,34 @@ func openPaneOn(stream io.ReadWriteCloser, spec hostedPaneSpec) (string, *bufio.
 		Params: params,
 	})
 	if err != nil {
-		return "", nil, err
+		return paneOpened{}, nil, err
 	}
 	if _, err := stream.Write(append(req, '\n')); err != nil {
-		return "", nil, fmt.Errorf("cannot ask for a pane: %w", err)
+		return paneOpened{}, nil, fmt.Errorf("cannot ask for a pane: %w", err)
 	}
 
 	br := bufio.NewReader(stream)
 	line, err := readLimitedLine(br, maxRemotePaneReply)
 	if err != nil {
-		return "", nil, fmt.Errorf("no answer to the pane request: %w", err)
+		return paneOpened{}, nil, fmt.Errorf("no answer to the pane request: %w", err)
 	}
 	var resp struct {
-		Result *struct {
-			Pane string `json:"pane"`
-		} `json:"result"`
-		Error *verbError `json:"error"`
+		Result *paneOpened `json:"result"`
+		Error  *verbError  `json:"error"`
 	}
 	if err := json.Unmarshal(line, &resp); err != nil {
-		return "", nil, fmt.Errorf("the reply cannot be read by this build: %w", err)
+		return paneOpened{}, nil, fmt.Errorf("the reply cannot be read by this build: %w", err)
 	}
 	if resp.Error != nil {
 		if resp.Error.Code == ErrVerbUnknownVerb {
-			return "", nil, fmt.Errorf("that machine's tuios is too old to host a pane. Update it, then restart its daemon with 'tuios kill-server'")
+			return paneOpened{}, nil, fmt.Errorf("that machine's tuios is too old to host a pane. Update it, then restart its daemon with 'tuios kill-server'")
 		}
-		return "", nil, resp.Error
+		return paneOpened{}, nil, resp.Error
 	}
 	if resp.Result == nil || resp.Result.Pane == "" {
-		return "", nil, fmt.Errorf("the reply named no pane")
+		return paneOpened{}, nil, fmt.Errorf("the reply named no pane")
 	}
-	return resp.Result.Pane, br, nil
+	return *resp.Result, br, nil
 }
 
 // Read returns the process's output. It ends when the far side closes the
@@ -197,6 +225,9 @@ func (p *remotePane) Close() error {
 		return nil
 	}
 	p.closed = true
+	if p.done != nil {
+		close(p.done)
+	}
 	p.mu.Unlock()
 	return p.stream.Close()
 }
@@ -214,13 +245,21 @@ func (s *Session) SetFederation(fed paneFederation) {
 	s.fed = fed
 }
 
+// SetRemotePaneHook installs what is told of each window this session opens
+// on another machine. The daemon uses it to hold the pane's report channel.
+func (s *Session) SetRemotePaneHook(hook func(windowID string, p *remotePane)) {
+	s.ptysMu.Lock()
+	defer s.ptysMu.Unlock()
+	s.onRemotePane = hook
+}
+
 // openRemotePaneFor starts this session's window on another machine.
 //
 // The terminal type and the colour support travel with the request, because
 // the pane is drawn by this session's emulator and the program at the far end
 // has to be told what it is really talking to. The shell does not travel: see
 // below.
-func (s *Session) openRemotePaneFor(host string, width, height int, cwd string, command []string) (paneIO, error) {
+func (s *Session) openRemotePaneFor(windowID, host string, width, height int, cwd string, command []string) (paneIO, error) {
 	fed := s.fed
 	if fed == nil {
 		return nil, fmt.Errorf("this daemon has no links, so a window cannot be put on %s. Add it to the [hosts] table in the config", host)
@@ -231,6 +270,12 @@ func (s *Session) openRemotePaneFor(host string, width, height int, cwd string, 
 		Cwd:     cwd,
 		Command: command,
 		Session: s.Name,
+	}
+	// The window id goes only when there is a daemon to hold the report
+	// channel it promises: a far machine that gets it exports it and waits for
+	// the channel before answering a report.
+	if s.onRemotePane != nil {
+		spec.Window = windowID
 	}
 	if s.config != nil {
 		// The terminal type travels and the shell does not.

@@ -437,10 +437,12 @@ func init() {
 				{Name: "term", Type: "string", Description: "TERM for the process. It comes from the asking session because that session's emulator is what the process is talking to."},
 				{Name: "color_term", Type: "string", Description: "COLORTERM for the process, for the same reason."},
 				{Name: "shell", Type: "string", Description: "The shell to run. Omit to use this machine's."},
-				{Name: "session", Type: "string", Description: "The asking session's name, exported as TUIOS_SESSION."},
+				{Name: "session", Type: "string", Description: "The asking session's name, exported as TUIOS_SESSION_REMOTE."},
+				{Name: "window", Type: "string", Description: "The asking daemon's id for the window the pane is drawn in. Exported as TUIOS_PANE_ID, and a promise to open the pane's report channel with pane-calls: a report the process sends naming it is forwarded there."},
 			},
 			returns: []verbParam{
 				{Name: "pane", Type: "string", Description: "The id that addresses this pane in resize-pane. It lives as long as the connection does."},
+				{Name: "calls_token", Type: "string", Description: "The secret pane-calls takes. Present only when window was sent."},
 			},
 			examples: []string{`{"id":1,"verb":"open-pane","params":{"width":120,"height":40}}`},
 			handler:  (*Daemon).verbOpenPane,
@@ -488,6 +490,18 @@ func init() {
 			},
 			examples: []string{`{"id":1,"verb":"pane-agent","params":{"pane":"f2c1"}}`},
 			handler:  (*Daemon).verbPaneAgent,
+		},
+		"pane-calls": {
+			description: "Open the report channel of a pane this machine runs for another machine. Only the daemon that owns the window holds the token. After the reply this machine writes one request line per report the pane's process sends naming its pane ({\"id\",\"verb\",\"params\"}: set-agent-state, set-agent-meta, set-agent-session, read-agent-messages, send-agent-message, or wait-for agent-message), and the owner answers each with {\"id\",\"result\"} or {\"id\",\"error\"}. The owner runs every request as its own window, whatever it says.",
+			params: []verbParam{
+				{Name: "pane", Type: "string", Required: true, Description: "The pane id open-pane returned."},
+				{Name: "token", Type: "string", Required: true, Description: "The calls_token open-pane returned."},
+			},
+			returns: []verbParam{
+				{Name: "pane", Type: "string", Description: "The pane whose channel this connection now is."},
+			},
+			examples: []string{`{"id":1,"verb":"pane-calls","params":{"pane":"f2c1","token":"<from the open-pane reply>"}}`},
+			handler:  (*Daemon).verbPaneCalls,
 		},
 		"read-dir": {
 			description: "List a directory on this machine, as the rail's file section reads it. The machine with the process is the machine with the files, so a pane running here is listed here.",
@@ -1572,6 +1586,15 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 
 	if verr := checkParamNames(req.Verb, entry, req.Params); verr != nil {
 		return d.writeVerbError(cs, req.ID, req.Verb, verr)
+	}
+
+	// A report from a pane this machine runs for another machine goes to the
+	// machine that owns the pane's window. See hosted_calls.go.
+	if result, verr, handled := d.forwardHostedCall(cs, req.Verb, req.Params); handled {
+		if verr != nil {
+			return d.writeVerbError(cs, req.ID, req.Verb, verr)
+		}
+		return d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Result: result})
 	}
 
 	result, verr := entry.handler(d, cs, req.Params)

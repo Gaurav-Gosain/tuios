@@ -53,6 +53,20 @@ type hostedPane struct {
 	// pane and any of them can be first: the process exits, the owning daemon
 	// closes the connection, or this daemon shuts down.
 	closeOnce sync.Once
+
+	// window is the id the owning daemon gives the window this pane is drawn
+	// in, when the owner sent one. It is what the pane's process sees as
+	// TUIOS_PANE_ID, so the process names itself the way every tool on the
+	// owning machine names it. Empty for an owner from before reports could
+	// cross, and then the process is given the pane id instead.
+	window string
+	// callsToken is the secret the owner opens the pane's report channel
+	// with. It is in the open-pane reply and nowhere else, so the process in
+	// the pane, which never sees that reply, cannot open the channel itself.
+	callsToken string
+	// calls carries what the process in the pane reports to the owner. See
+	// hosted_calls.go.
+	calls hostedCalls
 }
 
 // hostedPaneSpec is what the owning daemon asks for. The terminal type and the
@@ -69,6 +83,11 @@ type hostedPaneSpec struct {
 	ColorTerm string   `json:"color_term,omitempty"`
 	Shell     string   `json:"shell,omitempty"`
 	Session   string   `json:"session,omitempty"`
+	// Window is the owning daemon's id for the window the pane is drawn in.
+	// An owner that sends it opens the pane's report channel (pane-calls)
+	// after the open, so this side exports it as TUIOS_PANE_ID and forwards
+	// the process's own reports to it. An older owner omits it.
+	Window string `json:"window,omitempty"`
 }
 
 // hostedPaneBounds are the sizes a spawn is clamped to. A pane arrives sized by
@@ -91,7 +110,14 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec) (*hostedPane, error) {
 	if shell == "" {
 		shell = (&Session{config: &SessionConfig{PreferredShell: d.manager.PreferredShell}}).getShell()
 	}
-	env := hostedPaneEnv(d, spec)
+	// The id and the token exist before the process does, because the
+	// process's environment names the pane.
+	hp := &hostedPane{id: uuid.New().String()}
+	if hostedWindowIDPattern.MatchString(spec.Window) {
+		hp.window = spec.Window
+		hp.callsToken = newHostedCallsToken()
+	}
+	env := hostedPaneEnv(d, spec, hp)
 
 	pty, cmd, err := ptyspawn.Spawn(width, height, func() *exec.Cmd {
 		var cmd *exec.Cmd
@@ -118,7 +144,7 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec) (*hostedPane, error) {
 
 	releaseSlave(pty)
 
-	hp := &hostedPane{id: uuid.New().String(), pty: pty, cmd: cmd}
+	hp.pty, hp.cmd = pty, cmd
 
 	d.hostedPanesMu.Lock()
 	if d.hostedPanes == nil {
@@ -177,13 +203,15 @@ func clampHostedDim(v int) int {
 // this machine's, because that is where the process actually is.
 //
 // It is not the same set Session.buildEnv exports, and the difference matters.
-// TUIOS_SOCKET, TUIOS_WINDOW_ID, TUIOS_PANE_ID and TUIOS_ENV are all absent,
-// because each of them addresses something on the machine the session is on
-// and there is no way to reach that from here: the link is dialled one way and
-// the far side cannot open a connection back. An agent in a pane like this
-// therefore cannot report its own state, and is detected instead by the daemon
-// that owns the window asking this one what is running; see pane-agent.
-func hostedPaneEnv(d *Daemon, spec hostedPaneSpec) []string {
+// TUIOS_SOCKET, TUIOS_WINDOW_ID and TUIOS_ENV are absent, because each of them
+// addresses something on the machine the session is on, and the link is
+// dialled one way. TUIOS_PANE_ID is set when the owner will open the pane's
+// report channel: it is the owner's window id, and a report the process sends
+// to this daemon naming it is forwarded to the owner (hosted_calls.go). So an
+// agent here reports its state and reads its mail with the same commands as
+// anywhere, and the daemon that owns the window also still asks this one what
+// is running; see pane-agent.
+func hostedPaneEnv(d *Daemon, spec hostedPaneSpec, hp *hostedPane) []string {
 	env := guestenv.WithoutHostMultiplexer(os.Environ())
 
 	term := spec.Term
@@ -212,14 +240,17 @@ func hostedPaneEnv(d *Daemon, spec hostedPaneSpec) []string {
 		env = append(env, "TUIOS_HOST="+host)
 	}
 	// TUIOS_PANE_HOSTED tells a program in the pane that its terminal is on
-	// another machine, and that the usual per-pane variables are therefore
-	// absent: there is no TUIOS_SOCKET here that reaches the daemon holding
-	// the window, and no window or pane id that means anything on this side.
+	// another machine, and that most of the usual per-pane variables are
+	// therefore absent: there is no TUIOS_SOCKET here that reaches the daemon
+	// holding the window.
 	//
 	// Nothing in tuios reads it. It is for a person who is lost and for a
 	// shell profile that wants to hold back the parts of its setup that only
 	// mean something on the machine the session is on.
 	env = append(env, "TUIOS_PANE_HOSTED=1")
+	if hp != nil && hp.window != "" {
+		env = append(env, "TUIOS_PANE_ID="+hp.window)
+	}
 	return env
 }
 
@@ -279,6 +310,7 @@ func (hp *hostedPane) resize(width, height int) error {
 // close kills the process and releases the pty.
 func (hp *hostedPane) close() {
 	hp.closeOnce.Do(func() {
+		hp.calls.close()
 		if hp.cmd != nil && hp.cmd.Process != nil {
 			_ = hp.cmd.Process.Kill()
 		}
