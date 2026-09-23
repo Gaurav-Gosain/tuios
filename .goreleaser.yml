@@ -197,7 +197,7 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    builds:
+    ids:
       - tuios
     files:
       - README.md
@@ -212,7 +212,7 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    builds:
+    ids:
       - tuios-web
     files:
       - README.md
@@ -225,7 +225,7 @@ archives:
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else }}{{ .Arch }}{{ end }}
-    builds:
+    ids:
       - tuios-ghostty-linux-amd64
       - tuios-ghostty-linux-arm64
       - tuios-ghostty-windows-amd64
@@ -418,6 +418,14 @@ homebrew_casks:
       name: goreleaserbot
       email: bot@goreleaser.com
     commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
+    # The binaries are not signed, so Gatekeeper would refuse to run a
+    # quarantined one.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/tuios"]
+          end
 
   - name: tuios-web
     ids:
@@ -432,6 +440,12 @@ homebrew_casks:
       name: goreleaserbot
       email: bot@goreleaser.com
     commit_msg_template: "Brew cask update for {{ .ProjectName }}-web version {{ .Tag }}"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/tuios-web"]
+          end
 
 # Docker images (optional - uncomment if you want automated Docker builds)
 # dockers:
