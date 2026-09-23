@@ -402,6 +402,13 @@ func (t *GhosttyTerminal) handleSemanticZoneOSC(payload []byte) {
 		}
 	}
 	t.semanticMarkers.Add(marker)
+	// Queued like every other callback of this backend, so it runs in order
+	// with them and never with the lock the scan holds.
+	t.queue(func(cb Callbacks) {
+		if cb.SemanticMark != nil {
+			cb.SemanticMark(marker)
+		}
+	})
 }
 
 // handleKittyAPC runs tuios's kitty pipeline on an intercepted APC. The

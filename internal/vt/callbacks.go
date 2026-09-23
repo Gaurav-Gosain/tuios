@@ -75,4 +75,12 @@ type Callbacks struct {
 	// Progress callback. Called when a guest app reports its progress via the
 	// OSC 9;4 sequence. percent is 0 for the states that carry no percentage.
 	Progress func(state ProgressState, percent int)
+
+	// SemanticMark callback. Called for every OSC 133 mark a shell sends (A
+	// prompt start, B input start, C command executed, D command finished),
+	// after the mark is recorded in SemanticMarkers. A C mark carries the
+	// command line read off the screen and a D mark its exit code, -1 when the
+	// shell sent none. It fires with the emulator's lock held on backends that
+	// have one, so it must only record and never call back into the terminal.
+	SemanticMark func(mark SemanticMarker)
 }

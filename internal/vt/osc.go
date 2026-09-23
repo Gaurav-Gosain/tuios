@@ -188,14 +188,13 @@ func (e *Emulator) handleSemanticZone(data []byte) {
 		}
 	}
 
+	marker := SemanticMarker{
+		Type:     SemanticMarkerType(subCmd),
+		AbsLine:  absLine,
+		Col:      curX,
+		ExitCode: exitCode,
+	}
 	if e.semanticMarkers != nil {
-		marker := SemanticMarker{
-			Type:     SemanticMarkerType(subCmd),
-			AbsLine:  absLine,
-			Col:      curX,
-			ExitCode: exitCode,
-		}
-
 		// On C marker (command executed), capture the command text from the
 		// terminal buffer before the program's output overwrites it.
 		// This is the only reliable time to read the command text.
@@ -206,6 +205,9 @@ func (e *Emulator) handleSemanticZone(data []byte) {
 		}
 
 		e.semanticMarkers.Add(marker)
+	}
+	if e.cb.SemanticMark != nil {
+		e.cb.SemanticMark(marker)
 	}
 }
 
