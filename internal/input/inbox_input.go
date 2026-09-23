@@ -4,13 +4,15 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // handleInboxInput handles keyboard input while the Inbox is open. Every
 // action has a key: j and k move, space reads the prompt of an approval or a
-// question, enter goes to the item's pane (or opens its mail thread), d
-// dismisses, r replies to mail, f steps the kind filter, m opens the whole
-// mailbox, and esc or q closes.
+// question, enter goes to the item's pane (or opens its mail thread), 1, 2
+// and 3 answer an approval the Inbox is holding (allow once, always allow,
+// deny, the order of the harness's own menu), d dismisses, r replies to mail,
+// f steps the kind filter, m opens the whole mailbox, and esc or q closes.
 func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.InboxPeeking() {
 		return handleInboxPeekInput(msg, o)
@@ -22,6 +24,12 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.InboxPeek()
 	case "enter":
 		return o, o.InboxActivate()
+	case "1":
+		return o, o.InboxReplyApproval(session.ApprovalOnce)
+	case "2":
+		return o, o.InboxReplyApproval(session.ApprovalAlways)
+	case "3":
+		return o, o.InboxReplyApproval(session.ApprovalDeny)
 	case "d", "delete":
 		return o, o.InboxDismiss()
 	case "r":

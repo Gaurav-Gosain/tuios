@@ -1740,6 +1740,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case InboxRespondedMsg:
 		return m, m.applyInboxResponded(msg)
 
+	case InboxApprovalRepliedMsg:
+		m.applyInboxApprovalReplied(msg)
+		return m, nil
+
 	case AgentMailSentMsg:
 		m.applyAgentMailSent(msg)
 		return m, nil

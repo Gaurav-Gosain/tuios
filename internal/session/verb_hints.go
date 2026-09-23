@@ -84,7 +84,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbRateLimited, "The sender is over the cross-agent message rate cap."},
 	{ErrVerbPromptStalled, "The prompt was pasted and Enter was sent, and within the stall window the pane did not turn working or needs_input, or, for an agent that cannot show working, print anything. The text was typed. Look at the pane with capture-pane before doing anything else: if the prompt sits in the input box, press Enter there with send-keys; if the agent is still starting, wait for it and ask again. Sending the prompt again without looking can type it twice."},
 	{ErrVerbForbidden, "The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as human, because only the person at an attached client can. Nothing was done. Send as your own pane instead, and ask the person with send-agent-message -w human."},
-	{ErrVerbNotHuman, "Only the person at an attached client may make this call, and it carried no nonce from a live attach. dismiss-attention and respond raise it."},
+	{ErrVerbNotHuman, "Only the person at an attached client may make this call, and it carried no nonce from a live attach. dismiss-attention, respond and reply-approval raise it."},
 	{ErrVerbPromptChanged, "respond pressed nothing: the pane is not on needs_input, no rule reads its prompt now, the prompt is not the one prompt_id names, or another client already answered it. Read it again with peek-prompt."},
 	{ErrVerbNoKeyboard, "The target is the person's inbox, human, which has no pane to type into. Leave a message with send-agent-message -w human and wait for the reply on your own inbox."},
 	{ErrVerbProtocolMismatch, "The caller's protocol version is outside the range this daemon accepts."},

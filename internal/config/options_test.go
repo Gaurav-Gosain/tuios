@@ -24,6 +24,7 @@ var optionWalkSkips = map[string]string{
 	"hosts":                        "a map of host name to its address, which no single settable path can spell",
 	"tailscale":                    "file-plane config for what the hosts table suggests, read from the file by the two callers that use it, like [hosts] above",
 	"appearance.sidebar.agent_row": "a table of tokens, each with a look and an ordered rule list, which no single settable path can spell",
+	"agents":                       "file-plane config the daemon reads from the file, like [hosts]: which harnesses hold their prompts for the Inbox is not for a pane to change over the control protocol",
 }
 
 // TestOptionRegistryCoversEveryScalarField is the guard that keeps the

@@ -277,3 +277,22 @@ func TestInboxPeekIsForPrompts(t *testing.T) {
 		t.Error("space peeked at a finished turn")
 	}
 }
+
+// TestInboxPeekLeavesAHeldApprovalToItsKeys: a hook holds this approval off
+// the screen, so space does not read the pane: it names the keys that answer
+// it and calls nothing.
+func TestInboxPeekLeavesAHeldApprovalToItsKeys(t *testing.T) {
+	f := &fakeDaemon{}
+	m := inboxOS(t, zeroSettle())
+	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{
+		heldApproval("1", "r1", session.ApprovalOnce, session.ApprovalDeny),
+	}})
+	m.OpenInbox("")
+	m.SetInboxVerbCaller(f.call, func() string { return "nonce-1" })
+	if cmd := m.InboxPeek(); cmd != nil || m.InboxPeeking() || len(f.calls) != 0 {
+		t.Fatal("space peeked at a held approval")
+	}
+	if n := len(m.Notifications); n != 1 || !strings.Contains(m.Notifications[0].Message, "answer it with 1/3") {
+		t.Errorf("notifications %+v", m.Notifications)
+	}
+}

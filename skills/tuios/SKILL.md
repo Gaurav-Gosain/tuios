@@ -940,6 +940,33 @@ inside a pane, with or without a nonce, because approving a tool call is the
 person's decision. Ask the person with `send-agent-message -w human` instead,
 and say which pane is waiting and on what.
 
+#### Approvals the Inbox answers
+
+When the person names a harness in `[agents.approvals]`, that harness's
+permission prompts (Claude Code's `PermissionRequest`, opencode's and Kilo's
+`permission.asked`) are held for the Inbox: `tuios agent-hook` reports
+`needs_input`, then calls `request-approval` and waits for the person to press
+`1` (allow once), `2` (always) or `3` (deny) on the row. The row ends with
+`(held: answer in the Inbox)` in `list-attention`, and its JSON carries
+`request_id`, `options` and `expires`. The installed integration does all of
+this; there is nothing for you to call.
+
+What it means for you:
+
+- A held pane shows no prompt on its screen. Do not type at it and do not wait
+  on its screen: `wait-for agent-state` on the pane, and it moves to `working`
+  the moment the person answers.
+- You cannot answer it. `reply-approval` takes only the person's attach nonce
+  and answers `not_human` to any caller in a pane, and nothing you send
+  (`send-keys`, `send-text`, `ask-agent`, mail) reaches the hold.
+- `request-approval` from a pane may hold only that pane's own prompt, and is
+  refused over a link. If you are a harness wrapper with a decision channel of
+  your own, you may call it for your own pane; an empty `decision` means ask in
+  your pane as you would without tuios.
+- Every way a hold ends without an answer (timeout, the person going to the
+  pane, a dismiss, a daemon restart, any error) gives no decision, and the
+  harness shows its own prompt.
+
 To watch it change, subscribe to `attention` events. List first and pass the
 listing's `seq` and `boot_id`, and nothing is missed in between:
 
@@ -2303,11 +2330,11 @@ carries the closest match; `list-options` describes them all.
 nobody attached. Reading, writing, waiting, creating, moving and everything in
 the agent chapter never need one; splitting, tiling and directional focus do.
 
-`not_human` comes only from `dismiss-attention` and `respond`: clearing the
-person's Inbox and answering an agent's prompt are for the person at an
-attached client, and a call from a pane cannot. Do not look for a way around
-it. Change your own state, or answer the mail, and the item closes by itself;
-for another agent's prompt, ask the person.
+`not_human` comes only from `dismiss-attention`, `respond` and
+`reply-approval`: clearing the person's Inbox and answering an agent's prompt
+are for the person at an attached client, and a call from a pane cannot. Do
+not look for a way around it. Change your own state, or answer the mail, and
+the item closes by itself; for another agent's prompt, ask the person.
 
 `prompt_changed` comes only from `respond`, which the person's client makes: the
 prompt moved, or was already answered, before the answer landed, and nothing

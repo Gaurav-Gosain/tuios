@@ -46,6 +46,10 @@ type UserConfig struct {
 	// offered as addresses when adding a host. It changes suggestions only;
 	// nothing is added on its own. See tailscale.go.
 	Tailscale TailscaleConfig `toml:"tailscale,omitempty"`
+	// Agents is the [agents] table: how tuios treats the coding agents in its
+	// panes. Outside the option registry for the same reason as the tables
+	// above. See agents.go.
+	Agents AgentsConfig `toml:"agents,omitempty"`
 }
 
 // NotificationsConfig holds how long a dock message stays up.

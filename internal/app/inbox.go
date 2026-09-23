@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -82,6 +83,9 @@ type InboxState struct {
 	// call and nonce replace the daemon and the attach nonce in tests.
 	call  inboxVerbCall
 	nonce func() string
+	// replied holds the approval requests this client answered, so the close
+	// event for one is not announced as answered elsewhere.
+	replied map[string]bool
 }
 
 // InboxSnapshotMsg is a fresh listing from the watcher.
@@ -397,6 +401,7 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 		switch ev.Action {
 		case session.AttentionClosed:
 			if idx >= 0 {
+				m.noteAnsweredElsewhere(st.Items[idx], *it)
 				st.Items = append(st.Items[:idx], st.Items[idx+1:]...)
 			}
 		case session.AttentionOpened, session.AttentionUpdated:
@@ -854,8 +859,130 @@ func (m *OS) InboxActivate() tea.Cmd {
 	if it.Kind == session.AttentionMail {
 		return m.inboxOpenMail(it, false)
 	}
+	var cmd tea.Cmd
+	if it.RequestID != "" {
+		// A held prompt shows nothing in its pane. Going there is choosing to
+		// answer it there, so the hold ends first and the harness shows it.
+		cmd = m.inboxReplyCmd(it, session.ApprovalAsk)
+	}
 	m.inboxJump(it)
-	return nil
+	return cmd
+}
+
+// InboxApprovalRepliedMsg is the answer to a reply-approval.
+type InboxApprovalRepliedMsg struct {
+	Name     string
+	Decision string
+	// Standing is the decision that stands, which is an earlier reply's
+	// when Applied is false.
+	Standing string
+	Applied  bool
+	Err      error
+}
+
+// InboxReplyApproval answers the selected held approval with decision: once,
+// always or deny. Anything that is not a held approval, or a decision its
+// harness does not take, is refused here with a word, before anything is sent.
+// The peek's InboxAnswer is the other way to answer: it presses the keys of a
+// prompt the pane shows, where this answers one a hook holds off the screen.
+func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
+	it, ok := m.inboxSelected()
+	if !ok {
+		return nil
+	}
+	if it.Kind != session.AttentionApproval || it.RequestID == "" {
+		m.ShowNotification("1, 2 and 3 answer an approval the Inbox is holding. Enter goes to the pane.", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	if !slices.Contains(it.Options, decision) {
+		m.ShowNotification("This prompt does not offer "+inboxDecisionWords(decision), "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	return m.inboxReplyCmd(it, decision)
+}
+
+// inboxReplyCmd is the reply-approval call, with this client's attach nonce,
+// which is what lets the daemon take the answer as the person's.
+func (m *OS) inboxReplyCmd(it session.AttentionItem, decision string) tea.Cmd {
+	if m.DaemonClient == nil || m.AttachedHost != "" {
+		m.ShowNotification("Answering needs a client attached to this machine's daemon", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	nonce := m.DaemonClient.HumanNonce()
+	if nonce == "" {
+		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		return nil
+	}
+	if m.Inbox.replied == nil {
+		m.Inbox.replied = make(map[string]bool)
+	}
+	m.Inbox.replied[it.RequestID] = true
+	build := m.DaemonClient.ClientVersion()
+	name := inboxWho(it)
+	return func() tea.Msg {
+		client, err := session.DialVerbClientAs(build)
+		if err != nil {
+			return InboxApprovalRepliedMsg{Name: name, Decision: decision, Err: err}
+		}
+		defer func() { _ = client.Close() }()
+		raw, err := client.CallWithTimeout("reply-approval", map[string]any{
+			"request_id":  it.RequestID,
+			"decision":    decision,
+			"human_nonce": nonce,
+		}, 5*time.Second)
+		if err != nil {
+			return InboxApprovalRepliedMsg{Name: name, Decision: decision, Err: err}
+		}
+		var res struct {
+			Decision string `json:"decision"`
+			Applied  bool   `json:"applied"`
+		}
+		if err := json.Unmarshal(raw, &res); err != nil {
+			return InboxApprovalRepliedMsg{Name: name, Decision: decision, Err: err}
+		}
+		return InboxApprovalRepliedMsg{Name: name, Decision: decision, Standing: res.Decision, Applied: res.Applied}
+	}
+}
+
+// applyInboxApprovalReplied says what became of an answer. A hand back from
+// enter says nothing when it worked: the pane in front of the person is the
+// answer.
+func (m *OS) applyInboxApprovalReplied(msg InboxApprovalRepliedMsg) {
+	switch {
+	case msg.Err != nil:
+		if msg.Decision == session.ApprovalAsk {
+			return
+		}
+		m.ShowNotification("The answer did not go through: "+msg.Err.Error()+". Answer in the pane", "error", m.Settings.NotificationDuration*2)
+	case !msg.Applied:
+		m.ShowNotification(msg.Name+" was already answered: "+inboxDecisionWords(msg.Standing), "info", m.Settings.NotificationDuration)
+	case msg.Decision != session.ApprovalAsk:
+		m.ShowNotification(msg.Name+": "+inboxDecisionWords(msg.Decision), "success", m.Settings.NotificationDuration)
+	}
+}
+
+// noteAnsweredElsewhere tells this client that an approval it was showing was
+// answered from another client, so two people at two screens know.
+func (m *OS) noteAnsweredElsewhere(was, closed session.AttentionItem) {
+	if closed.Closed != session.AttentionClosedAnswered || was.RequestID == "" || m.Inbox.replied[was.RequestID] {
+		return
+	}
+	m.ShowNotification(inboxWho(was)+" was answered from another client: "+inboxDecisionWords(closed.Answer), "info", m.Settings.NotificationDuration)
+}
+
+// inboxDecisionWords is a decision as the person reads it.
+func inboxDecisionWords(decision string) string {
+	switch decision {
+	case session.ApprovalOnce:
+		return "allowed once"
+	case session.ApprovalAlways:
+		return "always allowed"
+	case session.ApprovalDeny:
+		return "denied"
+	case session.ApprovalAsk:
+		return "handed back to the pane"
+	}
+	return decision
 }
 
 // inboxJump lands on an item's pane.

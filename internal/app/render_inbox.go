@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -48,6 +49,9 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		{Key: "f", Label: "filter"},
 		{Key: "m", Label: "mailbox"},
 		{Key: "esc", Label: "close"},
+	}
+	if it, ok := m.inboxSelected(); ok && it.RequestID != "" {
+		hints = inboxApprovalHints(it)
 	}
 	rows := m.inboxRows()
 	if len(rows) == 0 {
@@ -107,6 +111,11 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 	summary := printableTitle(it.Summary)
 	if summary == "" {
 		summary = inboxKindWords(it)
+	}
+	if keys := inboxAnswerKeys(it); keys != "" {
+		// Said in text, so a held approval reads as answerable here without
+		// colour: the keys that answer it, in front of what it asks.
+		summary = "[" + keys + "] " + summary
 	}
 
 	avail := max(width-lipgloss.Width(right)-lipgloss.Width(glyph)-4, 1)
@@ -280,6 +289,45 @@ func inboxPeekHints(pk *session.PromptPeek) []overlay.Hint {
 		hints = append(hints, overlay.Hint{Key: "tab", Label: "type"})
 	}
 	return hints
+}
+
+// inboxAnswerOrder is each decision's key, in the order of the harness's own
+// menu: yes, yes and do not ask again, no.
+var inboxAnswerOrder = []struct{ key, decision, label string }{
+	{"1", session.ApprovalOnce, "allow"},
+	{"2", session.ApprovalAlways, "always"},
+	{"3", session.ApprovalDeny, "deny"},
+}
+
+// inboxAnswerKeys is the keys that answer a held approval, such as "1/2/3",
+// or empty for an item the Inbox is not holding.
+func inboxAnswerKeys(it session.AttentionItem) string {
+	if it.RequestID == "" {
+		return ""
+	}
+	var keys []string
+	for _, a := range inboxAnswerOrder {
+		if slices.Contains(it.Options, a.decision) {
+			keys = append(keys, a.key)
+		}
+	}
+	return strings.Join(keys, "/")
+}
+
+// inboxApprovalHints are the hints for a held approval under the cursor: its
+// answers first, then going to the pane, which hands the prompt back there.
+func inboxApprovalHints(it session.AttentionItem) []overlay.Hint {
+	var hints []overlay.Hint
+	for _, a := range inboxAnswerOrder {
+		if slices.Contains(it.Options, a.decision) {
+			hints = append(hints, overlay.Hint{Key: a.key, Label: a.label})
+		}
+	}
+	return append(hints,
+		overlay.Hint{Key: overlay.EnterKey(), Label: "answer in pane"},
+		overlay.Hint{Key: "d", Label: "dismiss"},
+		overlay.Hint{Key: "esc", Label: "close"},
+	)
 }
 
 // inboxKindColor is the ink of a kind's mark, the same the rail gives the

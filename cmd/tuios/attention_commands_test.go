@@ -36,6 +36,28 @@ func TestPrintAttentionListGroupsAndCleans(t *testing.T) {
 	}
 }
 
+// TestPrintAttentionListSaysAnApprovalIsHeld: a held approval's pane shows no
+// prompt, so the row says where to answer it, and an approval nothing holds
+// says nothing more.
+func TestPrintAttentionListSaysAnApprovalIsHeld(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	raw, _ := json.Marshal(map[string]any{"items": []map[string]any{
+		{"id": "3", "kind": "approval", "session": "fan-1", "name": "claude", "summary": "approve Bash: go test", "since": now.UnixNano(), "request_id": "9f86d081884c7d65"},
+		{"id": "5", "kind": "approval", "session": "fan-2", "name": "codex", "summary": "approve Bash: rm", "since": now.UnixNano()},
+	}})
+	var out bytes.Buffer
+	if err := printAttentionList(&out, raw, now); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "fan-1/claude  approve Bash: go test  (held: answer in the Inbox)\n") {
+		t.Errorf("the held approval does not say so:\n%s", got)
+	}
+	if !strings.Contains(got, "fan-2/codex  approve Bash: rm\n") {
+		t.Errorf("an approval nothing holds says more than its summary:\n%s", got)
+	}
+}
+
 func TestPrintAttentionListEmpty(t *testing.T) {
 	var out bytes.Buffer
 	if err := printAttentionList(&out, json.RawMessage(`{"items":[]}`), time.Now()); err != nil {

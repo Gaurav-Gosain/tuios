@@ -408,6 +408,37 @@ without attaching. What changes for an existing caller:
 - The bundled Claude Code and Codex manifests declare answers. Their rules
   match exactly what they matched before; only the block is new.
 
+**Approvals answered from the Inbox.** The new verbs `request-approval` and
+`reply-approval` let a harness hook hold a permission prompt until the person
+answers it in the Inbox (see [request-approval](#request-approval)). It is off
+unless `[agents.approvals]` in the config names the harness. What changes for
+an existing caller:
+
+- An `approval` item gains `request_id` and `expires` while a hook holds it,
+  and `options` is now filled then: the decisions `reply-approval` takes for
+  it. All three are absent when nothing holds the item, which is every item
+  when approvals are off.
+- The `attention` event's `closed` gains the reason `answered`. The closing
+  item then carries `answer` (`once`, `always` or `deny`) and `answered_by`
+  (the id of the client that answered).
+- A decision from `reply-approval` moves the pane from `needs_input` to
+  `working` straight away, with an ordinary `agent-state` event, instead of
+  waiting for the harness's next report.
+- When an attached client of the person moves the session's focus to a pane
+  whose approval is held, the hold ends with no decision and the harness asks
+  in its pane. Nothing else about focusing a pane changed.
+- The error catalog's `not_human` is also raised by `reply-approval`.
+- The Claude Code integration is now version 2: its `PermissionRequest` hook
+  entry gets a 310 second timeout instead of 5, so a hold can run. With
+  approvals off the hook still returns within 500 ms. `tuios integration
+  status` reports a version 1 install as out of date until it is installed
+  again. The opencode and Kilo plugins are version 2 as well: a
+  `permission.asked` event runs the hook and waits for what it prints, and
+  sends a reply to opencode only when the hook printed one.
+- In the Inbox, `space` on a held approval does not open the peek of
+  [respond](#respond): the hook keeps the prompt off the pane, so there is
+  nothing to read. The TUI says to answer with `1`, `2` or `3` instead.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -476,7 +507,7 @@ catalog.
 | `prompt_stalled` | ask-agent typed the question and sent Enter, and within `stall_timeout` the pane did not show that it took it. The question was typed; look at the pane before sending it again. The hint names `capture-pane`. |
 | `loop_refused` | The call would loop: a pane addressing itself, or an ask that closes a cycle with one in flight. |
 | `rate_limited` | The sender is over the cross-agent message rate cap. |
-| `not_human` | Only the person at an attached client may make this call, and it carried no nonce from a live attach. `dismiss-attention` and `respond` raise it. |
+| `not_human` | Only the person at an attached client may make this call, and it carried no nonce from a live attach. `dismiss-attention`, `respond` and `reply-approval` raise it. |
 | `prompt_changed` | `respond` pressed nothing: the pane is not on `needs_input`, no rule reads its prompt now, the prompt is not the one `prompt_id` names, or another client already answered it. Read it again with `peek-prompt`. |
 | `no_keyboard` | The target is the person's inbox, `human`, which has no pane to type into. |
 | `forbidden` | The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as `human`. Nothing was done. |
@@ -1329,8 +1360,10 @@ Response:
 
 Item fields: `id` (stable, never reused on this machine), `kind`, `host` (empty
 for this machine; a hub will fill it for items from linked hosts), `session`,
-`window`, `workspace`, `harness`, `name`, `summary`, `options` (the answers a
-prompt offers, when a source reported them; nothing fills it yet), `since`
+`window`, `workspace`, `harness`, `name`, `summary`, `options` (the decisions
+`reply-approval` takes, set only while a hook holds the item), `request_id` and
+`expires` (the held request and when its hold ends, in unix nanoseconds; see
+[request-approval](#request-approval)), `since`
 (unix nanoseconds, when the item started waiting; an update keeps it), `seq`
 (the Inbox revision of the item's last change), `thread` and `count` (mail),
 `completion_seq` (finished).
@@ -1456,6 +1489,98 @@ gone but the state has not followed yet), `gone` (the window closed) or
 
 Wire compatibility: new verbs. An older daemon answers `unknown_verb`.
 
+### request-approval
+
+Hold a pane's permission prompt until the person answers it in the Inbox.
+`tuios agent-hook` calls it; a script has little reason to. It is for a harness
+that takes a decision back from its hook: Claude Code's `PermissionRequest`
+hook, and opencode or Kilo through the plugin tuios installs. The call does not
+answer until the person answers with `reply-approval` or the hold ends, and it
+is opt in: nothing is held unless `[agents.approvals]` in the config names the
+harness.
+
+```toml
+[agents.approvals]
+enabled = ["claude-code", "opencode"]
+hold_seconds = 120
+```
+
+Params: `session` (optional), `window` (required), `harness` (required, an id
+or alias), `options` (optional list of the decisions the harness can take, from
+`once`, `always`, `deny`; omitted means `once` and `deny`).
+
+The pane must already be on `needs_input` with an `approval` item open, which
+the hook's own report sets up just before. The item then carries `request_id`,
+`options` and `expires`, and the Inbox shows the keys that answer it.
+
+Response, when the person answered:
+
+```json
+{"result": {"type": "approval_result", "request_id": "9f86d081884c7d65", "decision": "once", "reason": "answered", "answered_by": "client-1790155072046345000"}}
+```
+
+`decision` is `once`, `always` or `deny`, or empty when there is none. An empty
+decision means the harness should ask in its pane, as it would have without
+tuios, and `reason` says why:
+
+| `reason` | Meaning |
+| --- | --- |
+| `answered` | The person answered. `decision` is set, and `message` too when they gave a reason for a deny. |
+| `disabled` | `[agents.approvals]` does not name the harness. Answered at once. |
+| `not_blocked` | The pane is not on `needs_input` with an `approval` item. Answered at once. |
+| `viewed` | A client of the person has the pane focused, or focused it during the hold. The prompt is quickest to answer in the pane. |
+| `timeout` | `hold_seconds` passed (120 by default, kept between 10 and 300). |
+| `handed_back` | The person pressed enter on the item to go to the pane, or sent `reply-approval` with `ask`. |
+| `superseded` | A newer `request-approval` for the same pane replaced this one. |
+| `caller_gone` | The caller closed its connection, which is how a harness that gave up on its hook shows. |
+| `shutdown` | The daemon is stopping. |
+| `resolved`, `dismissed`, `window_closed`, `session_closed`, `evicted` | The Inbox item closed for that reason: the pane moved on, the person dismissed it, and so on. |
+
+Who may call it: it is refused with `forbidden` over a link, and a caller inside
+a pane of this daemon may only hold its own pane's prompt (the daemon places the
+caller by its process ancestry, then its controlling terminal, then its
+`TUIOS_PANE_ID`; a caller it cannot place is refused). What the caller gets back
+is the answer to the prompt it asked about, nothing more.
+
+Send nothing else on the connection while the call waits. The daemon reads it
+only to notice the caller going away, and a byte that arrives is discarded.
+
+Robustness: a daemon that is gone, restarts during the hold, or predates the
+verb (`unknown_verb`) gives the hook an error, and the hook prints nothing. A
+hold is not saved across a restart. The hook only ever prints a decision the
+daemon returned and the harness was offered.
+
+### reply-approval
+
+Answer a held approval for the person.
+
+Params: `request_id` (the item's; or name the pane with `session` and `window`
+instead), `decision` (required: `once`, `always`, `deny`, or `ask` to give the
+prompt back to the pane with no decision), `message` (optional, the reason for
+a deny, passed to the model; one line, at most 500 bytes), `human_nonce`
+(required, as for `dismiss-attention`).
+
+Only a client attached right now can answer, with the nonce its attach reply
+carried, checked exactly as `dismiss-attention` checks it: a caller inside a
+pane, or on a link the hub did not vouch for, gets `not_human` even with a live
+nonce. No mail, `ask-agent`, `send-keys` or `send-text` reaches a hold, so an
+agent cannot approve its own call or another agent's.
+
+A decision the item's `options` do not offer is `invalid_params`, and so is a
+request that is not held. The first reply wins: a later reply for the same
+request answers with the decision that stands and `applied: false`, and changes
+nothing. A decision closes the Inbox item with reason `answered` and moves the
+pane to `working`. `ask` ends the hold and leaves the item open.
+
+Response:
+
+```json
+{"result": {"type": "approval_replied", "request_id": "9f86d081884c7d65", "decision": "once", "applied": true, "reason": "answered", "answered_by": "client-1790155072046345000", "session": "fan-3", "window": "3f2a9c1e"}}
+```
+
+Wire compatibility: both verbs are new, and the item fields are additive. An
+older daemon answers `unknown_verb`, which the hook reads as no decision.
+
 ## Event stream
 
 The daemon can push events instead of a caller polling. A connection that issues
@@ -1491,7 +1616,7 @@ Event types:
 | `session-created` | A session was created. | `session` |
 | `session-closed` | A session was terminated. | `session` |
 | `gap` | Some events were not delivered to this connection. `reason` says why (see below). A gap has no `seq`. | `reason`, `dropped`, `boot_id` |
-| `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `window_closed`, `session_closed` or `evicted`. `session` and `window` are the item's, so the usual filters apply. | `session`, `window`, `action`, `attention` |
+| `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `answered`, `window_closed`, `session_closed` or `evicted`. An `answered` item also carries `answer` and `answered_by`. `session` and `window` are the item's, so the usual filters apply. | `session`, `window`, `action`, `attention` |
 
 ### What fires when
 

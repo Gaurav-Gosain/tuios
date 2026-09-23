@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -117,6 +118,15 @@ type Daemon struct {
 	// respondFromShell is the [daemon] respond_from_shell grant: a caller
 	// outside every pane may call respond without an attach nonce.
 	respondFromShell bool
+
+	// approvals is the [agents.approvals] policy: which harnesses may hold a
+	// permission prompt for an answer from the Inbox, and for how long. It is
+	// swapped whole when the config file changes. See approvals.go.
+	approvals atomic.Pointer[ApprovalPolicy]
+	// approvalPeer places the process on a connection in a pane, for
+	// request-approval. Nil uses peerPaneWindow; a test sets it to stand in for
+	// a process table.
+	approvalPeer func(cs *connState) (fromPane bool, window string)
 
 	// stash is the per-session file store the stash verbs write into. It is held
 	// beside agents for the same reason: it must never reach disk as state, and
@@ -390,6 +400,9 @@ type DaemonConfig struct {
 	// prompt with respond without an attach nonce. False, the default, leaves
 	// respond to a client attached right now. See verb_respond.go.
 	RespondFromShell bool
+	// Approvals is the [agents.approvals] table. The zero value is the
+	// default: no harness holds a prompt for the Inbox.
+	Approvals ApprovalPolicy
 }
 
 // NewDaemon creates a new daemon instance.
@@ -413,6 +426,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		respondFromShell:   cfg.RespondFromShell,
 	}
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
+	d.SetApprovalPolicy(cfg.Approvals)
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
@@ -583,7 +597,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// A pane seen, or a new kind or message on a pane whose state did not
 		// change, is news for the Inbox only: it is not a stream event and
 		// raises no hook.
-		if ev.Type == eventCompletionSeen || ev.Type == eventAttentionDetail {
+		if ev.Type == eventCompletionSeen || ev.Type == eventAttentionDetail || ev.Type == eventPaneFocused {
 			d.attention.noteSessionEvent(name, ev)
 			return
 		}

@@ -81,6 +81,9 @@ const (
 	AttentionClosedSession = "session_closed"
 	// AttentionClosedEvicted: the queue was over its cap and this was the oldest.
 	AttentionClosedEvicted = "evicted"
+	// AttentionClosedAnswered: the person answered a held approval from the
+	// Inbox. The closing item carries the answer and who gave it.
+	AttentionClosedAnswered = "answered"
 )
 
 // Actions an attention event carries.
@@ -131,10 +134,22 @@ type AttentionItem struct {
 	// note a finished turn carried, or the mail's subject. Control characters
 	// are removed, likely secrets are masked and it is cut to 160 bytes.
 	Summary string `json:"summary,omitempty"`
-	// Options are the answers a prompt offers, when a source reported them.
-	// Nothing fills it yet; it is part of the model so an approval reply can
-	// be added without changing the item's shape.
+	// Options are the answers reply-approval takes for this item, set only
+	// while RequestID is: once, always and deny, or the subset the harness can
+	// honour. See approvals.go.
 	Options []string `json:"options,omitempty"`
+	// RequestID is set while a harness hook is holding its permission prompt
+	// for an answer from the Inbox, and names that request to reply-approval.
+	// It is cleared when the hold ends, whatever ended it, and the item then
+	// stays open as long as the pane is still blocked.
+	RequestID string `json:"request_id,omitempty"`
+	// Expires is when the hold ends, in unix nanoseconds, set with RequestID.
+	Expires int64 `json:"expires,omitempty"`
+	// Answer and AnsweredBy are set only on the item a close event with reason
+	// answered carries: the decision the person made and the client they made
+	// it from, so every other client can say it was answered elsewhere.
+	Answer     string `json:"answer,omitempty"`
+	AnsweredBy string `json:"answered_by,omitempty"`
 	// Since is when the item started waiting, in unix nanoseconds. An update
 	// keeps it, so the wait time an Inbox row shows is the whole wait.
 	Since int64 `json:"since"`
@@ -177,6 +192,15 @@ type attentionStore struct {
 	// final save is taken. Shutdown closes panes after it, and those closes must
 	// not reach the file as if the person had dealt with the items.
 	frozen bool
+
+	// holds are the approval requests a hook is waiting on, by request id, and
+	// settled remembers how the most recent ones ended so a second reply is
+	// answered with the first one's result. Both live under mu with the items
+	// they point at, so an item and its hold never disagree. See approvals.go.
+	holds   map[string]*approvalHold
+	settled map[string]approvalOutcome
+	// settledOrder is settled's ids oldest first, for its bound.
+	settledOrder []string
 }
 
 func newAttentionStore(publish func(streamEvent), currentSeq func() uint64) *attentionStore {
@@ -229,6 +253,17 @@ func (a *attentionStore) upsertLocked(next AttentionItem) {
 		cur := a.items[id]
 		next.ID, next.Since = cur.ID, cur.Since
 		next.Seq = cur.Seq
+		// A hold belongs to the approval it was asked for. A new message or
+		// title on the same approval keeps it; the block turning into a
+		// question means the prompt the hook holds is not the one on the
+		// screen any more, so the hold ends.
+		if cur.RequestID != "" && next.RequestID == "" {
+			if next.Kind == AttentionApproval {
+				next.RequestID, next.Options, next.Expires = cur.RequestID, cur.Options, cur.Expires
+			} else {
+				a.endHoldLocked(cur.RequestID, approvalOutcome{Reason: approvalEndResolved}, false)
+			}
+		}
 		if attentionSame(*cur, next) {
 			return
 		}
@@ -262,14 +297,26 @@ func attentionSame(a, b AttentionItem) bool {
 	return a.Kind == b.Kind && a.Workspace == b.Workspace && a.Harness == b.Harness &&
 		a.Name == b.Name && a.Summary == b.Summary && a.Count == b.Count &&
 		a.CompletionSeq == b.CompletionSeq && a.Window == b.Window &&
+		a.RequestID == b.RequestID && a.Expires == b.Expires &&
 		slices.Equal(a.Options, b.Options)
 }
 
 // closeLocked closes the item with this id, if it is open. The caller holds mu.
 func (a *attentionStore) closeLocked(id, reason string) bool {
+	return a.closeWithLocked(id, reason, nil)
+}
+
+// closeWithLocked is closeLocked with a chance to fill in the closing copy of
+// the item before it is published: an answered approval names its answer. An
+// item a hook was holding ends the hold, with the close reason as the reason
+// the hook gets no answer.
+func (a *attentionStore) closeWithLocked(id, reason string, fill func(*AttentionItem)) bool {
 	it, ok := a.items[id]
 	if !ok {
 		return false
+	}
+	if it.RequestID != "" && reason != AttentionClosedAnswered {
+		a.endHoldLocked(it.RequestID, approvalOutcome{Reason: reason}, false)
 	}
 	delete(a.items, id)
 	delete(a.byKey, attentionKey(it.Kind, it.Session, it.Window, it.Thread))
@@ -277,6 +324,9 @@ func (a *attentionStore) closeLocked(id, reason string) bool {
 	closed := *it
 	closed.Seq = a.rev
 	closed.Closed = reason
+	if fill != nil {
+		fill(&closed)
+	}
 	a.publish(attentionEvent(AttentionClosed, closed))
 	a.changedLocked()
 	return true
@@ -324,6 +374,8 @@ func (a *attentionStore) noteSessionEvent(sessionName string, ev SessionEvent) {
 		a.closeWindow(sessionName, ev.Window)
 	case eventCompletionSeen:
 		a.noteCompletionSeen(sessionName, ev.Window, ev.completionSeq)
+	case eventPaneFocused:
+		a.noteFocused(sessionName, ev.Window)
 	}
 }
 

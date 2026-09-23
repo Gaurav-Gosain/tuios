@@ -84,15 +84,22 @@ func (d *Daemon) verifyAnyHumanNonce(nonce string, sender *connState) bool {
 // matchHumanNonce is the check behind both: sessionID empty matches an attach
 // to any session.
 func (d *Daemon) matchHumanNonce(nonce, sessionID string, sender *connState) bool {
+	_, ok := d.matchHumanNonceClient(nonce, sessionID, sender)
+	return ok
+}
+
+// matchHumanNonceClient is matchHumanNonce that also returns the id of the
+// attached client the nonce belongs to.
+func (d *Daemon) matchHumanNonceClient(nonce, sessionID string, sender *connState) (string, bool) {
 	if nonce == "" {
-		return false
+		return "", false
 	}
 	viaLink, linkHuman, pid := false, false, 0
 	if sender != nil {
 		viaLink, linkHuman, pid = sender.viaLink, sender.linkHuman, sender.peerPID
 	}
 	if !d.mayActAsHuman(sender) {
-		return false
+		return "", false
 	}
 	d.clientsMu.RLock()
 	defer d.clientsMu.RUnlock()
@@ -104,8 +111,8 @@ func (d *Daemon) matchHumanNonce(nonce, sessionID string, sender *connState) boo
 			subtle.ConstantTimeCompare([]byte(cs.humanNonce), []byte(nonce)) == 1
 		cs.mu.Unlock()
 		if match {
-			return true
+			return cs.clientID, true
 		}
 	}
-	return false
+	return "", false
 }

@@ -147,6 +147,13 @@ func (m *OS) InboxPeek() tea.Cmd {
 		m.ShowNotification("Space reads the prompt of an approval or a question. Enter goes to the pane.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
+	if it.RequestID != "" {
+		// A hook holds this approval off the screen until the Inbox answers
+		// it, so the pane shows no prompt for the peek to read or press
+		// keys into. The Inbox answers it with reply-approval instead.
+		m.ShowNotification("The Inbox is holding this approval: answer it with "+inboxAnswerKeys(it)+", or enter to answer in the pane", "info", m.Settings.NotificationDuration)
+		return nil
+	}
 	if it.Host != "" || m.AttachedHost != "" {
 		m.ShowNotification("That prompt is on another machine: tuios peek-prompt -w HOST:SESSION:WINDOW reads it", "info", m.Settings.NotificationDuration)
 		return nil

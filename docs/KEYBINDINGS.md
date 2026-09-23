@@ -27,6 +27,12 @@ approves and does not ask again, `d` denies, `tab` types an answer, `r` reads
 the prompt again, `enter` goes to the pane, `esc` goes back to the list. See
 [Answering a prompt without attaching](AGENT_STATE.md#answering-a-prompt-without-attaching).
 
+On an approval the Inbox is holding (`[agents.approvals]`, see
+[AGENT_STATE.md](AGENT_STATE.md#approvals-from-the-inbox)), `1` allows it
+once, `2` always allows it and `3` denies it; `enter` gives the prompt back to
+the pane. `space` does not open a held approval: the hook keeps its prompt off
+the pane until the Inbox answers, so there is nothing on the screen to read.
+
 ## macOS
 
 Option is a compose key on macOS unless the terminal is told otherwise, so an

@@ -59,6 +59,9 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// nobody attached still runs them. The client keeps the hooks that need a
 	// terminal.
 	cfg.ApplyUserHooks(uc)
+	// The daemon holds a harness's approval hook for the Inbox, so it is the
+	// side that has to know which harnesses asked for that.
+	cfg.Approvals = ApprovalPolicyFromConfig(uc.Agents.Approvals)
 	return cfg
 }
 

@@ -191,14 +191,18 @@ func powershellCommand(cmd string) string {
 
 var targets = []*Target{
 	{
-		ID: ClaudeCode, Name: "Claude Code", Binary: "claude", Version: 1, Reports: ReportsState,
+		// Version 2 gives PermissionRequest room to hold its prompt for the
+		// Inbox ([agents.approvals]): 310 seconds, past the daemon's longest
+		// hold of 300. With approvals off the hook still returns in well under
+		// a second, so the longer limit costs nothing.
+		ID: ClaudeCode, Name: "Claude Code", Binary: "claude", Version: 2, Reports: ReportsState,
 		Source:    "https://code.claude.com/docs/en/hooks (settings.json hooks: event, matcher group, command hook, timeout in seconds)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("CLAUDE_CONFIG_DIR", ".claude") },
 		File:      "settings.json",
 		format:    nestedHooks{},
 		Events: []HookEvent{
 			{"SessionStart", 5}, {"UserPromptSubmit", 5}, {"PreToolUse", 5},
-			{"PermissionRequest", 5}, {"PostToolUse", 5}, {"PostToolUseFailure", 5},
+			{"PermissionRequest", ApprovalHookTimeout}, {"PostToolUse", 5}, {"PostToolUseFailure", 5},
 			{"PermissionDenied", 5}, {"ElicitationResult", 5}, {"Notification", 5},
 			{"Stop", 5}, {"StopFailure", 5}, {"SessionEnd", 5},
 		},
@@ -228,7 +232,9 @@ var targets = []*Target{
 		},
 	},
 	{
-		ID: OpenCode, Name: "opencode", Binary: "opencode", Version: 1, Reports: ReportsState,
+		// Version 2 offers permission requests to the Inbox and sends the
+		// person's reply back to opencode.
+		ID: OpenCode, Name: "opencode", Binary: "opencode", Version: 2, Reports: ReportsState,
 		Source:    "https://opencode.ai/docs/plugins/ (global plugins load from ~/.config/opencode/plugins)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("opencode") },
 		File:      filepath.Join("plugins", "tuios-agent-state.js"),
@@ -335,7 +341,9 @@ var targets = []*Target{
 		ownedDir: filepath.Join("plugins", "tuios-agent-state"),
 	},
 	{
-		ID: Kilo, Name: "Kilo", Binary: "kilo", Version: 1, Reports: ReportsState,
+		// Version 2: the opencode plugin it shares offers permission requests
+		// to the Inbox.
+		ID: Kilo, Name: "Kilo", Binary: "kilo", Version: 2, Reports: ReportsState,
 		Source:    "herdr src/integration/assets/kilo (Kilo Code CLI is an opencode fork; plugins load from ~/.config/kilo/plugin)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("kilo") },
 		File:      filepath.Join("plugin", "tuios-agent-state.js"),

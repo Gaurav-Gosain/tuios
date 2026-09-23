@@ -31,7 +31,14 @@ type attentionRow struct {
 	Since     int64  `json:"since"`
 	Thread    uint64 `json:"thread"`
 	Count     int    `json:"count"`
+	// RequestID is set while a harness hook holds the approval for an answer
+	// from the Inbox.
+	RequestID string `json:"request_id"`
 }
+
+// attentionHeldNote ends the row of an approval a hook is holding, so the
+// person knows the pane shows no prompt and where to answer it.
+const attentionHeldNote = "held: answer in the Inbox"
 
 // attentionGroupTitle is the heading a kind's rows sit under.
 func attentionGroupTitle(kind string) string {
@@ -133,6 +140,9 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		fmt.Fprintf(w, "  %4s  %-6s %s", waitedFor(it.Since, now), "#"+it.ID, where)
 		if summary != "" {
 			fmt.Fprintf(w, "  %s", summary)
+		}
+		if it.RequestID != "" {
+			fmt.Fprintf(w, "  (%s)", attentionHeldNote)
 		}
 		fmt.Fprintln(w)
 	}

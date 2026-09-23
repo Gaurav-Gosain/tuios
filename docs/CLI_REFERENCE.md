@@ -955,8 +955,12 @@ what it said. The TUI's Inbox (prefix `i`) is the same list.
 An item closes by itself when what opened it stops being true. Dismissing one
 is for the person at an attached client and is done from the Inbox; there is
 no command for it, because a command run from a pane is exactly what must not
-be able to clear the person's queue. See
-[protocol.md](protocol.md#list-attention) for the fields and rules.
+be able to clear the person's queue. Answering a held approval (`1`, `2`, `3`
+in the Inbox) has no command for the same reason. The row of an approval a
+hook is holding ends with `(held: answer in the Inbox)`, since its pane shows
+no prompt while it is held. See
+[protocol.md](protocol.md#list-attention) for the fields and rules, and
+[Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox).
 
 **Usage:**
 ```bash
@@ -1943,7 +1947,7 @@ them.
 | `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, and nothing else |
 | `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id (`--json`, with `reports`) |
 | `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes missing theirs, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
-| `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). `--explain` prints the decision to stderr. See [Agent state](AGENT_STATE.md#harness-integrations) |
+| `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
 | `tuios stash put <file>` | Copy a file into the session store and print the stored path |
 | `tuios stash get <stored-path> [file]` | Copy a stashed file out of the session store, across a link |
 | `tuios stash list` | List the files in the session store |

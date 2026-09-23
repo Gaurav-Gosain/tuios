@@ -1788,6 +1788,12 @@ func (s *Session) UpdateStateFrom(state *SessionState, seen bool) bool {
 	// its user, so whatever it finished has been seen.
 	if seen {
 		s.markCompletionSeenLocked(state.FocusedWindowID)
+		// A move of the focus is the person turning to a pane, which ends an
+		// approval hold on it (see approvals.go). Only a move: a push that
+		// keeps the focus says nothing new.
+		if state.FocusedWindowID != "" && (prev == nil || prev.FocusedWindowID != state.FocusedWindowID) {
+			s.emit(SessionEvent{Type: eventPaneFocused, Window: state.FocusedWindowID})
+		}
 	}
 	s.TouchActive()
 	s.stateDirty.Store(true)

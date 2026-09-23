@@ -64,7 +64,9 @@ func translateClaude(in Input, p fields) Decision {
 		return send(ClaudeCode, event, identity(Report{State: "working"}, p))
 	case "PermissionRequest":
 		msg := "approve " + ToolSummary(p.str("tool_name"), p.obj("tool_input"))
-		return send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: msg}, p))
+		d := send(ClaudeCode, event, identity(Report{State: "needs_input", Kind: "approval", Message: msg}, p))
+		d.Approval = claudeApproval(p)
+		return d
 	case "PostToolUse", "PostToolUseFailure", "PermissionDenied", "ElicitationResult":
 		return send(ClaudeCode, event, identity(Report{State: "working", IfState: claudeClearsBlock}, p))
 	case "Notification":

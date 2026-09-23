@@ -1,0 +1,660 @@
+package session
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"net"
+	"os"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/integration"
+)
+
+// Approvals answered from the Inbox.
+//
+// A harness with a structured decision channel, Claude Code's PermissionRequest
+// hook or opencode's permission reply, can be told the answer to its permission
+// prompt by the hook instead of asking in its pane. With [agents.approvals]
+// naming the harness, `tuios agent-hook` does that: after reporting the pane as
+// needs_input it calls request-approval, and the call does not answer until the
+// person answers the Inbox item with reply-approval, or the hold ends. The hook
+// then prints the harness's own decision, or nothing, and a harness that gets
+// nothing shows its own prompt as it always did. That fallback is the whole
+// safety story, so every way a hold can end without an answer ends it with no
+// decision:
+//
+//   - the hold times out ([agents.approvals] hold_seconds, 120 by default);
+//   - the pane leaves needs_input, closes, or its block turns into a question;
+//   - the person dismisses the item, presses enter on it, or focuses the pane;
+//   - the hook goes away, which is how a harness that gave up on it shows;
+//   - a second request for the same pane arrives;
+//   - the daemon shuts down.
+//
+// Who may do what:
+//
+//   - Only reply-approval can put a decision in a hold, and it takes the same
+//     proof dismiss-attention does: the nonce of a client attached right now,
+//     from a process that is not inside a pane of this daemon (human_sender.go
+//     and human_origin.go). An agent cannot answer its own prompt or another
+//     agent's, and no mail, ask or send-keys reaches a hold.
+//   - request-approval is refused over a link, and a caller inside a pane may
+//     only hold the prompt of the pane it runs in. All it gets back is what the
+//     person answered about the item it opened, which says nothing it did not
+//     ask.
+//   - A hold is only opened on a pane already on needs_input with kind
+//     approval, which the hook's own report establishes, so a stray call
+//     cannot put an approval in the Inbox for a pane that is not blocked.
+//
+// The holds live in the attention store under its lock, beside the items they
+// belong to, so an item and its hold cannot disagree: closing the item ends the
+// hold, and ending the hold clears the item's request.
+
+// Approval decisions. They are wire values: the decision reply-approval takes
+// and request-approval returns.
+const (
+	// ApprovalOnce allows this one call.
+	ApprovalOnce = "once"
+	// ApprovalAlways allows it and tells the harness to stop asking for calls
+	// like it, in whatever way the harness does that.
+	ApprovalAlways = "always"
+	// ApprovalDeny refuses the call.
+	ApprovalDeny = "deny"
+	// ApprovalAsk is not a decision: it ends the hold with none, so the
+	// harness asks in its pane. It is what going to the pane means.
+	ApprovalAsk = "ask"
+)
+
+// approvalDecisions are the decisions a hold can end with.
+var approvalDecisions = []string{ApprovalOnce, ApprovalAlways, ApprovalDeny}
+
+// approvalReplies are what reply-approval takes.
+var approvalReplies = []string{ApprovalOnce, ApprovalAlways, ApprovalDeny, ApprovalAsk}
+
+// Reasons a hold ended, as request-approval reports them. The attention close
+// reasons (resolved, dismissed, window_closed, session_closed, evicted) are
+// reported as they are.
+const (
+	approvalEndAnswered   = AttentionClosedAnswered
+	approvalEndTimeout    = "timeout"
+	approvalEndDisabled   = "disabled"
+	approvalEndNotBlocked = "not_blocked"
+	approvalEndSuperseded = "superseded"
+	approvalEndHandedBack = "handed_back"
+	approvalEndViewed     = "viewed"
+	approvalEndCallerGone = "caller_gone"
+	approvalEndShutdown   = "shutdown"
+	approvalEndResolved   = AttentionClosedResolved
+)
+
+// DefaultApprovalHold is how long a hold lasts when the config names none.
+const DefaultApprovalHold = 120 * time.Second
+
+// minApprovalHold and maxApprovalHold bound hold_seconds. The top is below the
+// 310 second timeout the Claude Code integration installs for its
+// PermissionRequest hook, so the daemon always ends a hold before the harness
+// kills the hook. They are variables so a test can hold for milliseconds.
+var (
+	minApprovalHold = 10 * time.Second
+	maxApprovalHold = 300 * time.Second
+)
+
+// approvalSettledMax bounds how many ended holds are remembered for a late or
+// repeated reply.
+const approvalSettledMax = 256
+
+// approvalMaxMessage bounds a deny message, which goes to the model.
+const approvalMaxMessage = 500
+
+// ApprovalPolicy is the [agents.approvals] table as the daemon uses it.
+type ApprovalPolicy struct {
+	// Enabled holds the harness ids whose approvals may be held, canonical.
+	Enabled map[string]bool
+	// Hold is how long a hold lasts, already bounded.
+	Hold time.Duration
+}
+
+// ApprovalPolicyFromConfig reads the table. Harness names are resolved to the
+// ids hooks report under, so claude and claude-code are the same harness.
+func ApprovalPolicyFromConfig(c config.ApprovalsConfig) ApprovalPolicy {
+	p := ApprovalPolicy{Hold: time.Duration(c.HoldSeconds) * time.Second}
+	for _, name := range c.Enabled {
+		id := canonicalHarness(name)
+		if id == "" {
+			continue
+		}
+		if p.Enabled == nil {
+			p.Enabled = make(map[string]bool)
+		}
+		p.Enabled[id] = true
+	}
+	return p
+}
+
+// canonicalHarness resolves a harness name to the id hooks report under, or
+// lower-cases a name nothing knows.
+func canonicalHarness(name string) string {
+	if id, ok := integration.Canonical(name); ok {
+		return id
+	}
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+// holdFor is the bounded hold length.
+func (p ApprovalPolicy) holdFor() time.Duration {
+	switch {
+	case p.Hold <= 0:
+		return DefaultApprovalHold
+	case p.Hold < minApprovalHold:
+		return minApprovalHold
+	case p.Hold > maxApprovalHold:
+		return maxApprovalHold
+	}
+	return p.Hold
+}
+
+// SetApprovalPolicy replaces the approval policy. Holds already running keep
+// the length they started with.
+func (d *Daemon) SetApprovalPolicy(p ApprovalPolicy) {
+	d.approvals.Store(&p)
+}
+
+// approvalPolicy is the current policy, never nil.
+func (d *Daemon) approvalPolicy() ApprovalPolicy {
+	if p := d.approvals.Load(); p != nil {
+		return *p
+	}
+	return ApprovalPolicy{}
+}
+
+// approvalOutcome is how a hold ended: a decision, or none with the reason.
+type approvalOutcome struct {
+	Decision string
+	Message  string
+	Reason   string
+	By       string
+}
+
+// approvalHold is one hook waiting for the person.
+type approvalHold struct {
+	id      string
+	itemID  string
+	session string
+	window  string
+	options []string
+	// done receives the outcome exactly once. It is buffered, so whatever
+	// ends the hold never waits on the hook.
+	done chan approvalOutcome
+}
+
+// newApprovalID returns a fresh request id.
+func newApprovalID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return strings.ReplaceAll(time.Now().Format("150405.000000000"), ".", "")
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// startHold opens a hold on a pane's approval item. It returns the reason
+// when there is nothing to hold: the pane has no open approval. A hold already
+// on the item ends as superseded, since one pane shows one prompt at a time.
+func (a *attentionStore) startHold(session, window string, options []string, expires time.Time) (*approvalHold, string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	id, ok := a.byKey[attentionKey(AttentionApproval, session, window, 0)]
+	if !ok || a.items[id].Kind != AttentionApproval {
+		return nil, approvalEndNotBlocked
+	}
+	it := a.items[id]
+	if it.RequestID != "" {
+		a.endHoldLocked(it.RequestID, approvalOutcome{Reason: approvalEndSuperseded}, false)
+	}
+	if a.holds == nil {
+		a.holds = make(map[string]*approvalHold)
+	}
+	h := &approvalHold{
+		id:      newApprovalID(),
+		itemID:  id,
+		session: session,
+		window:  window,
+		options: slices.Clone(options),
+		done:    make(chan approvalOutcome, 1),
+	}
+	a.holds[h.id] = h
+	a.rev++
+	it.RequestID, it.Options, it.Expires = h.id, h.options, expires.UnixNano()
+	it.Seq = a.rev
+	a.publish(attentionEvent(AttentionUpdated, *it))
+	a.changedLocked()
+	return h, ""
+}
+
+// endHold ends a hold with out, if it is still running, and reports whether
+// it was. The item stays open with its request cleared.
+func (a *attentionStore) endHold(requestID string, out approvalOutcome) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.endHoldLocked(requestID, out, true)
+}
+
+// endHoldLocked ends a hold. clearItem publishes the item without its request;
+// a caller about to close or rewrite the item passes false. The caller holds mu.
+func (a *attentionStore) endHoldLocked(requestID string, out approvalOutcome, clearItem bool) bool {
+	h, ok := a.holds[requestID]
+	if !ok {
+		return false
+	}
+	delete(a.holds, requestID)
+	a.rememberLocked(requestID, out)
+	h.done <- out
+	if !clearItem {
+		return true
+	}
+	if it, ok := a.items[h.itemID]; ok && it.RequestID == requestID {
+		a.rev++
+		it.RequestID, it.Options, it.Expires = "", nil, 0
+		it.Seq = a.rev
+		a.publish(attentionEvent(AttentionUpdated, *it))
+		a.changedLocked()
+	}
+	return true
+}
+
+// rememberLocked keeps how a hold ended, for a reply that comes after it.
+func (a *attentionStore) rememberLocked(requestID string, out approvalOutcome) {
+	if a.settled == nil {
+		a.settled = make(map[string]approvalOutcome)
+	}
+	if _, ok := a.settled[requestID]; !ok {
+		a.settledOrder = append(a.settledOrder, requestID)
+	}
+	a.settled[requestID] = out
+	for len(a.settledOrder) > approvalSettledMax {
+		delete(a.settled, a.settledOrder[0])
+		a.settledOrder = a.settledOrder[1:]
+	}
+}
+
+// holdFor finds the running hold on a pane, if there is one.
+func (a *attentionStore) holdOn(session, window string) (string, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for id, h := range a.holds {
+		if h.session == session && h.window == window {
+			return id, true
+		}
+	}
+	return "", false
+}
+
+// errNoHold is a reply to a request no hold is waiting on.
+var errNoHold = errors.New("no hold")
+
+// answer ends a hold with the person's reply. A decision closes the item as
+// answered; ask hands the prompt back to the pane and leaves the item open.
+// A reply to a hold that already ended returns how it ended with applied
+// false, so the first reply wins and a repeat is harmless.
+func (a *attentionStore) answer(requestID, decision, message, by string) (out approvalOutcome, h approvalHold, applied bool, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	hold, ok := a.holds[requestID]
+	if !ok {
+		if prev, ok := a.settled[requestID]; ok {
+			return prev, approvalHold{id: requestID}, false, nil
+		}
+		return approvalOutcome{}, approvalHold{}, false, errNoHold
+	}
+	if decision == ApprovalAsk {
+		out = approvalOutcome{Reason: approvalEndHandedBack, By: by}
+		a.endHoldLocked(requestID, out, true)
+		return out, *hold, true, nil
+	}
+	if !slices.Contains(hold.options, decision) {
+		return approvalOutcome{}, *hold, false, errBadDecision
+	}
+	out = approvalOutcome{Decision: decision, Message: message, Reason: approvalEndAnswered, By: by}
+	a.endHoldLocked(requestID, out, false)
+	a.closeWithLocked(hold.itemID, AttentionClosedAnswered, func(it *AttentionItem) {
+		it.Answer, it.AnsweredBy = decision, by
+	})
+	return out, *hold, true, nil
+}
+
+// errBadDecision is a decision the hold's harness does not offer.
+var errBadDecision = errors.New("decision not offered")
+
+// noteFocused ends the hold on a pane the person just brought in front of
+// them: the harness's own prompt is the quickest thing to answer there, and a
+// held prompt shows nothing in the pane at all.
+func (a *attentionStore) noteFocused(session, window string) {
+	if a == nil || window == "" {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	id, ok := a.byKey[attentionKey(AttentionApproval, session, window, 0)]
+	if !ok || a.items[id].RequestID == "" {
+		return
+	}
+	a.endHoldLocked(a.items[id].RequestID, approvalOutcome{Reason: approvalEndViewed}, true)
+}
+
+// approvalResult is request-approval's answer.
+func approvalResult(requestID string, out approvalOutcome) map[string]any {
+	res := map[string]any{
+		"type":       "approval_result",
+		"request_id": requestID,
+		"decision":   out.Decision,
+		"reason":     out.Reason,
+	}
+	if out.Message != "" {
+		res["message"] = out.Message
+	}
+	if out.By != "" {
+		res["answered_by"] = out.By
+	}
+	return res
+}
+
+// verbRequestApproval holds a pane's permission prompt for an answer from the
+// Inbox. See the file comment for who may call it and every way it ends.
+func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Session string   `json:"session"`
+		Window  string   `json:"window"`
+		Harness string   `json:"harness"`
+		Options []string `json:"options"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if cs != nil && cs.viaLink {
+		return nil, hintedVerbError(ErrVerbForbidden, "request-approval is refused over a link: an approval is held by the hook of a pane on this machine", &VerbHint{
+			Detail: "Nothing was held. Run the hook on the machine the pane is on.",
+		})
+	}
+	harnessID := canonicalHarness(p.Harness)
+	if harnessID == "" {
+		return nil, invalidParam("harness", "harness is required: the id of the harness whose prompt this is, e.g. claude-code")
+	}
+	if p.Window == "" {
+		return nil, invalidParam("window", "window is required: the pane whose prompt is held, normally $TUIOS_PANE_ID")
+	}
+	options := p.Options
+	if len(options) == 0 {
+		options = []string{ApprovalOnce, ApprovalDeny}
+	}
+	for _, o := range options {
+		if !slices.Contains(approvalDecisions, o) {
+			return nil, invalidParam("options", "options: "+echoName(o)+" is not a decision", approvalDecisions...)
+		}
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+	st := sess.GetState()
+	idx, err := findWindowStateIndex(st.Windows, p.Window)
+	if err != nil {
+		return nil, mapResolveErr(err, sess)
+	}
+	w := st.Windows[idx]
+
+	policy := d.approvalPolicy()
+	if !policy.Enabled[harnessID] {
+		return approvalResult("", approvalOutcome{Reason: approvalEndDisabled}), nil
+	}
+	if fromPane, own := d.peerPane(cs); fromPane && own != w.ID {
+		return nil, hintedVerbError(ErrVerbForbidden, "request-approval from inside a pane may only hold that pane's own prompt", &VerbHint{
+			Param:  "window",
+			Detail: "Nothing was held. The hook finds its pane from TUIOS_PANE_ID; a process in one pane cannot open an approval for another.",
+		})
+	}
+	if w.AgentState != AgentStateNeedsInput {
+		return approvalResult("", approvalOutcome{Reason: approvalEndNotBlocked}), nil
+	}
+	if d.paneInFrontOfPerson(sess, w.ID) {
+		return approvalResult("", approvalOutcome{Reason: approvalEndViewed}), nil
+	}
+
+	holdFor := policy.holdFor()
+	hold, reason := d.attention.startHold(sess.Name, w.ID, options, time.Now().Add(holdFor))
+	if hold == nil {
+		return approvalResult("", approvalOutcome{Reason: reason}), nil
+	}
+	LogBasic("Approval %s held for %s in %s (%s) for up to %s", hold.id, w.ID, sess.Name, harnessID, holdFor)
+
+	var gone <-chan struct{}
+	if cs != nil && cs.conn != nil {
+		var stop func()
+		gone, stop = watchPeerGone(cs.conn)
+		defer stop()
+	}
+	timer := time.NewTimer(holdFor)
+	defer timer.Stop()
+	select {
+	case out := <-hold.done:
+		return approvalResult(hold.id, out), nil
+	case <-timer.C:
+		d.attention.endHold(hold.id, approvalOutcome{Reason: approvalEndTimeout})
+	case <-gone:
+		d.attention.endHold(hold.id, approvalOutcome{Reason: approvalEndCallerGone})
+	case <-d.ctx.Done():
+		d.attention.endHold(hold.id, approvalOutcome{Reason: approvalEndShutdown})
+	}
+	// Whatever ended it, the outcome is in done now: endHold put it there, or
+	// an answer that won the race did.
+	out := <-hold.done
+	LogBasic("Approval %s ended: %s", hold.id, out.Reason)
+	return approvalResult(hold.id, out), nil
+}
+
+// verbReplyApproval answers a held approval for the person.
+func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		RequestID  string `json:"request_id"`
+		Session    string `json:"session"`
+		Window     string `json:"window"`
+		Decision   string `json:"decision"`
+		Message    string `json:"message"`
+		HumanNonce string `json:"human_nonce"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if !slices.Contains(approvalReplies, p.Decision) {
+		msg := "decision is required"
+		if p.Decision != "" {
+			msg = "decision: " + echoName(p.Decision) + " is not a decision"
+		}
+		return nil, invalidParam("decision", msg, approvalReplies...)
+	}
+	by, ok := d.humanNonceClient(p.HumanNonce, cs)
+	if !ok {
+		return nil, hintedVerbError(ErrVerbNotHuman, "reply-approval is for the person at an attached client", &VerbHint{
+			Param:  "human_nonce",
+			Detail: "Nothing was answered. Only a client attached right now can answer an approval, by passing the nonce its attach reply carried. An agent never can.",
+		})
+	}
+	requestID := p.RequestID
+	if requestID == "" {
+		if p.Window == "" {
+			return nil, invalidParam("request_id", "request_id is required, or session and window to answer the pane's held prompt")
+		}
+		sess, verr := d.resolveVerbSession(p.Session)
+		if verr != nil {
+			return nil, verr
+		}
+		st := sess.GetState()
+		idx, err := findWindowStateIndex(st.Windows, p.Window)
+		if err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+		id, ok := d.attention.holdOn(sess.Name, st.Windows[idx].ID)
+		if !ok {
+			return nil, noHoldError("no approval is held for window " + echoName(p.Window))
+		}
+		requestID = id
+	}
+	message := attentionText(p.Message, approvalMaxMessage)
+	out, hold, applied, err := d.attention.answer(requestID, p.Decision, message, by)
+	switch {
+	case errors.Is(err, errNoHold):
+		return nil, noHoldError("no approval is held under request " + echoName(requestID))
+	case errors.Is(err, errBadDecision):
+		return nil, invalidParam("decision", "this prompt does not offer "+echoName(p.Decision), append(slices.Clone(hold.options), ApprovalAsk)...)
+	}
+	if !applied && out.Decision == "" && p.Decision != ApprovalAsk {
+		return nil, noHoldError("the hold on request " + echoName(requestID) + " ended (" + out.Reason + ") before this reply")
+	}
+	if applied && out.Decision != "" {
+		LogBasic("Approval %s answered %s by %s", requestID, out.Decision, by)
+		// The hook is on its way back to the harness with the answer, and
+		// the next report it would send is working. Saying it now closes the
+		// block for every client at once, and only if the pane is still on it.
+		if sess := d.manager.GetSession(hold.session); sess != nil {
+			_, _, _, _ = sess.applyAgentReport(hold.window, AgentReport{
+				State:   AgentStateWorking,
+				IfState: []AgentState{AgentStateNeedsInput},
+			})
+		}
+	}
+	decision := out.Decision
+	if applied && p.Decision == ApprovalAsk {
+		decision = ApprovalAsk
+	}
+	res := map[string]any{
+		"type":       "approval_replied",
+		"request_id": requestID,
+		"decision":   decision,
+		"applied":    applied,
+		"reason":     out.Reason,
+	}
+	if out.By != "" {
+		res["answered_by"] = out.By
+	}
+	if hold.session != "" {
+		res["session"], res["window"] = hold.session, hold.window
+	}
+	return res, nil
+}
+
+// noHoldError is the refusal for a reply nothing is waiting on.
+func noHoldError(msg string) *verbError {
+	return hintedVerbError(ErrVerbInvalidParams, msg, &VerbHint{
+		Param:   "request_id",
+		Verb:    "list-attention",
+		Command: "tuios list-attention",
+		Detail:  "A hold ends when it times out, when the pane moves on, when someone answers it, or when the prompt is handed back to the pane. The harness then asks in its pane, so answer it there.",
+	})
+}
+
+// humanNonceClient is verifyAnyHumanNonce that also names the client whose
+// attach the nonce came from, for the record of who answered.
+func (d *Daemon) humanNonceClient(nonce string, sender *connState) (string, bool) {
+	id, ok := d.matchHumanNonceClient(nonce, "", sender)
+	return id, ok
+}
+
+// paneInFrontOfPerson reports whether a client the person holds is attached
+// to the session with the pane focused. Holding that pane's prompt would hide
+// it from someone already looking at it.
+func (d *Daemon) paneInFrontOfPerson(sess *Session, window string) bool {
+	if sess.GetState().FocusedWindowID != window {
+		return false
+	}
+	var attached []*connState
+	d.clientsMu.RLock()
+	for _, cs := range d.clients {
+		cs.mu.Lock()
+		if cs.attached && cs.isTUIClient && cs.sessionID == sess.ID {
+			attached = append(attached, cs)
+		}
+		cs.mu.Unlock()
+	}
+	d.clientsMu.RUnlock()
+	for _, cs := range attached {
+		if d.mayActAsHuman(cs) {
+			return true
+		}
+	}
+	return false
+}
+
+// peerPane says whether the process on cs runs inside a pane of this daemon,
+// and which pane when that can be told. See peerPaneWindow.
+func (d *Daemon) peerPane(cs *connState) (bool, string) {
+	if d.approvalPeer != nil {
+		return d.approvalPeer(cs)
+	}
+	return d.peerPaneWindow(cs)
+}
+
+// peerPaneWindow places the process on cs: outside every pane, or in one pane,
+// found the way resolve-pane finds one (an ancestor that is a pane's shell,
+// then the controlling terminal) and last by the TUIOS_PANE_ID in its
+// environment. A process inside a pane that none of these place gets an empty
+// window, which matches no target, so request-approval fails closed on it.
+func (d *Daemon) peerPaneWindow(cs *connState) (bool, string) {
+	if !d.connFromPane(cs) {
+		return false, ""
+	}
+	pid := cs.peerPID
+	shells := d.localPaneShells()
+	chain := []int{pid}
+	for cur, depth := pid, 0; depth < paneOriginMaxDepth; depth++ {
+		ppid, _, ok := readProcLineage(cur)
+		if !ok || ppid <= 1 {
+			break
+		}
+		chain = append(chain, ppid)
+		cur = ppid
+	}
+	if m, ok := matchPaneByProcess(shells, 0, chain); ok {
+		return true, m.pane.windowID
+	}
+	if _, tty, ok := readProcLineage(pid); ok && tty != 0 {
+		for _, sh := range shells {
+			if _, shTTY, ok := readProcLineage(sh.shellPID); ok && shTTY == tty {
+				return true, sh.windowID
+			}
+		}
+	}
+	if id, ok := readProcEnvVar(pid, "TUIOS_PANE_ID"); ok && id != "" && d.holdsWindow(id) {
+		return true, id
+	}
+	return true, ""
+}
+
+// watchPeerGone reports when the process on the other end of conn goes away
+// while a verb blocks on it. The connection is the hook's own and it sends
+// nothing more while it waits, so a read that returns means the peer closed
+// it. A byte that does arrive is discarded, which the verb's documentation
+// says. stop ends the watch and leaves the connection readable again.
+func watchPeerGone(conn net.Conn) (<-chan struct{}, func()) {
+	gone := make(chan struct{})
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		var b [1]byte
+		_, err := conn.Read(b[:])
+		if err == nil || errors.Is(err, os.ErrDeadlineExceeded) {
+			return
+		}
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			return
+		}
+		close(gone)
+	}()
+	return gone, func() {
+		_ = conn.SetReadDeadline(time.Now())
+		<-finished
+		_ = conn.SetReadDeadline(time.Time{})
+	}
+}

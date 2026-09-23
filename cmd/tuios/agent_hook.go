@@ -26,6 +26,17 @@ const agentHookDeadline = 500 * time.Millisecond
 // kilobytes; the cap only guards against a harness piping something else.
 const agentHookMaxPayload = 4 << 20
 
+// agentHookHoldMax bounds the wait for an answer from the Inbox. The daemon
+// ends every hold within 300 seconds; this only guards against a daemon that
+// stops answering, and stays under the 310 second limit the Claude Code
+// integration gives the hook, so the hook still exits on its own.
+const agentHookHoldMax = 305 * time.Second
+
+// timedCaller is a verbCaller whose call can wait longer than the default.
+type timedCaller interface {
+	CallWithTimeout(verb string, params any, timeout time.Duration) (json.RawMessage, error)
+}
+
 // verbCaller is the one method the hook needs from a verb client, so a test
 // can stand in for the daemon.
 type verbCaller interface {
@@ -54,6 +65,9 @@ type agentHookIO struct {
 	self     func() (sid int, ancestors []int)
 	// harnessPID names the harness process among the ancestors self reports.
 	harnessPID func(ancestors []int) int
+	// holdMax bounds the wait for an answer from the Inbox. Zero means
+	// agentHookHoldMax.
+	holdMax time.Duration
 }
 
 func newAgentHookCommand() *cobra.Command {
@@ -85,7 +99,17 @@ condition, since that daemon would apply it unconditionally.
 
 It always exits 0, prints nothing a harness would read as an answer (Gemini
 CLI gets an empty JSON object), and gives up after 500ms when the daemon is
-slow or gone. Use --explain to see on stderr what it decided and why.`,
+slow or gone. Use --explain to see on stderr what it decided and why.
+
+The one exception is a permission prompt the Inbox may answer. When
+[agents.approvals] in the config names the harness (claude-code, opencode or
+kilo), the hook for Claude Code's PermissionRequest, or for opencode's
+permission.asked, waits after its report for the person to answer the Inbox
+item, for up to hold_seconds (120 by default). It then prints the harness's
+own decision. It prints nothing, and the harness asks in its pane as before,
+when the wait ends without an answer, when approvals are off, when the daemon
+is gone or restarts, and on any error. It never prints an approval it was not
+given.`,
 		Example: `  # What a Claude Code hook runs
   tuios agent-hook claude-code --integration 1
 
@@ -133,6 +157,19 @@ type agentHookOutcome struct {
 	State       string   `json:"state,omitempty"`
 	Reason      string   `json:"reason,omitempty"`
 	Error       string   `json:"error,omitempty"`
+	// Hold is what happened to a prompt the Inbox could answer, when the
+	// hook asked for one.
+	Hold *approvalTrace `json:"hold,omitempty"`
+}
+
+// approvalTrace is the Inbox half of a hook run, for --explain.
+type approvalTrace struct {
+	RequestID string `json:"request_id,omitempty"`
+	Decision  string `json:"decision,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+	// Printed says the hook printed the harness's decision.
+	Printed bool   `json:"printed"`
+	Error   string `json:"error,omitempty"`
 }
 
 // runAgentHook runs one hook event under the deadline. It returns nothing,
@@ -157,10 +194,109 @@ func runAgentHook(o agentHookOptions, args []string, hio agentHookIO) {
 	case <-time.After(timeout):
 		out = agentHookOutcome{Decision: integration.Decision{Harness: harness}, Error: "gave up after " + timeout.String()}
 	}
+	if holdable(out) {
+		out.Hold = holdForAnswer(out, hio)
+	}
 	if o.explain {
 		line, _ := json.Marshal(out)
 		fmt.Fprintln(hio.stderr, string(line))
 	}
+}
+
+// holdable reports whether a hook run may wait for an answer from the Inbox:
+// the event is a prompt the harness takes a decision for, and the pane is now
+// on needs_input by this hook's own report. A report that failed or was
+// refused, a nested harness's for one, holds nothing.
+func holdable(out agentHookOutcome) bool {
+	return out.Approval != nil && out.Error == "" && out.Report != nil &&
+		out.State == "needs_input" && out.Window != ""
+}
+
+// holdForAnswer asks the daemon to hold the pane's prompt for the person and
+// prints the harness's decision when one comes back. Whatever goes wrong, it
+// prints nothing: a harness that gets no answer asks in its own pane, so
+// silence is always safe and an approval can only come from the person.
+func holdForAnswer(out agentHookOutcome, hio agentHookIO) *approvalTrace {
+	limit := hio.holdMax
+	if limit <= 0 {
+		limit = agentHookHoldMax
+	}
+	type answer struct {
+		trace    approvalTrace
+		decision string
+		message  string
+	}
+	done := make(chan answer, 1)
+	go func() {
+		var a answer
+		a.decision, a.message, a.trace = requestAnswer(out, hio, limit)
+		done <- a
+	}()
+	var a answer
+	select {
+	case a = <-done:
+	case <-time.After(limit):
+		// The call may still come back; nothing reads it, so nothing it says
+		// is printed.
+		return &approvalTrace{Error: "gave up after " + limit.String()}
+	}
+	if a.decision == "" {
+		return &a.trace
+	}
+	text, ok := out.Approval.Answer(out.Harness, a.decision, a.message)
+	if !ok {
+		a.trace.Error = "the harness was not offered " + a.decision + ", so nothing was printed"
+		return &a.trace
+	}
+	if _, err := io.WriteString(hio.stdout, text); err != nil {
+		a.trace.Error = "writing the decision: " + err.Error()
+		return &a.trace
+	}
+	a.trace.Printed = true
+	return &a.trace
+}
+
+// requestAnswer is the request-approval call. It returns the decision, empty
+// for none, and what happened.
+func requestAnswer(out agentHookOutcome, hio agentHookIO, limit time.Duration) (string, string, approvalTrace) {
+	var trace approvalTrace
+	client, err := hio.dial()
+	if err != nil {
+		trace.Error = err.Error()
+		return "", "", trace
+	}
+	if c, ok := client.(io.Closer); ok {
+		defer func() { _ = c.Close() }()
+	}
+	params := map[string]any{
+		"session": out.Session,
+		"window":  out.Window,
+		"harness": out.Harness,
+		"options": out.Approval.Options,
+	}
+	var raw json.RawMessage
+	if tc, ok := client.(timedCaller); ok {
+		raw, err = tc.CallWithTimeout("request-approval", params, limit)
+	} else {
+		raw, err = client.Call("request-approval", params)
+	}
+	if err != nil {
+		// unknown_verb from a daemon older than approvals lands here too.
+		trace.Error = err.Error()
+		return "", "", trace
+	}
+	var res struct {
+		RequestID string `json:"request_id"`
+		Decision  string `json:"decision"`
+		Message   string `json:"message"`
+		Reason    string `json:"reason"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		trace.Error = "reading the answer: " + err.Error()
+		return "", "", trace
+	}
+	trace.RequestID, trace.Decision, trace.Reason = res.RequestID, res.Decision, res.Reason
+	return res.Decision, res.Message, trace
 }
 
 // agentHook reads, decides, resolves and reports.

@@ -391,14 +391,16 @@ func TestHermesRefusesAnInlineList(t *testing.T) {
 }
 
 // TestOpenCodePluginIsUnchanged pins the opencode plugin tuios writes to the
-// bytes the first release of it wrote. Kilo now shares its template, and an
-// install that renders differently would read as out of date and be rewritten
-// for every user although nothing about it changed.
+// bytes the version 2 release of it wrote, the one that offers permission
+// requests to the Inbox. Kilo shares its template, and an install that
+// renders differently would read as out of date and be rewritten for every
+// user although nothing about it changed. A change here goes with a version
+// bump for both.
 func TestOpenCodePluginIsUnchanged(t *testing.T) {
 	tg := mustTarget(t, OpenCode)
 	for cmd, want := range map[string]string{
-		"tuios":               "b067e71fc69cd67601df7051adf12ed2217693d24783434394270cfaf58d61f2",
-		"/opt/my tuios/tuios": "d39b144bcd8905109d4e67c0707a26a7fdb8355a5fa630e39a33790ab1c890a4",
+		"tuios":               "5cc5d9ba7b42e7ed243b4085459cae7e0c1760301defd92eb626451ace29621c",
+		"/opt/my tuios/tuios": "d11438b9120c5e885674d7db56f8494ce10404ef4ab3a3313f3b734225c07cc1",
 	} {
 		sum := sha256.Sum256(tg.format.(ownedFile).render(tg, cmd))
 		if got := hex.EncodeToString(sum[:]); got != want {
@@ -406,7 +408,7 @@ func TestOpenCodePluginIsUnchanged(t *testing.T) {
 		}
 	}
 	kilo := string(mustTarget(t, Kilo).format.(ownedFile).render(mustTarget(t, Kilo), "tuios"))
-	for _, want := range []string{`["agent-hook", "kilo", "--integration", "1"]`, "TUIOS_INTEGRATION_ID=kilo", "Reports Kilo's session state"} {
+	for _, want := range []string{`["agent-hook", "kilo", "--integration", "2"]`, "TUIOS_INTEGRATION_ID=kilo", "Reports Kilo's session state"} {
 		if !strings.Contains(kilo, want) {
 			t.Errorf("the Kilo plugin does not say %q", want)
 		}

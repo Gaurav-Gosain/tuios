@@ -146,6 +146,10 @@ type Decision struct {
 	Event   string  `json:"event"`
 	Report  *Report `json:"report,omitempty"`
 	Skip    string  `json:"skip,omitempty"`
+	// Approval is set, beside a needs_input report, for an event whose
+	// harness takes a decision back from the hook. The hook may then hold the
+	// prompt for an answer from the Inbox. See approval.go.
+	Approval *Approval `json:"approval,omitempty"`
 }
 
 func skip(harness, event, why string) Decision {

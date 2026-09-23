@@ -179,6 +179,12 @@ const eventCompletionSeen = "completion-seen"
 // state did not change.
 const eventAttentionDetail = "attention-detail"
 
+// eventPaneFocused is raised when a push from a client the person holds moves
+// the session's focus to another pane. It is internal on the same terms as
+// eventCompletionSeen: the Inbox ends an approval hold on the pane, so the
+// harness shows its own prompt to the person now looking at it.
+const eventPaneFocused = "pane-focused"
+
 // eventFilter selects which events a subscriber receives. A zero value matches
 // everything. An empty types set matches all event types.
 type eventFilter struct {

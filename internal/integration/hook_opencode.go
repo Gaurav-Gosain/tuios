@@ -63,5 +63,9 @@ func translateOpenCode(id string, in Input, p fields) Decision {
 	default:
 		return skip(id, event, "event not mapped")
 	}
-	return send(id, event, r)
+	d := send(id, event, r)
+	if r.Kind == "approval" {
+		d.Approval = openCodeApproval(p)
+	}
+	return d
 }

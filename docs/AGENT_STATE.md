@@ -914,8 +914,9 @@ Inside the Inbox:
 | --- | --- |
 | `j` / `k`, arrows | Move. Group headings are skipped. |
 | `g` / `G` | First and last item. |
-| `enter` | Go to the item's pane, switching session and workspace. On mail, open the thread. |
-| `space` | On an approval or a question, read the prompt without leaving the Inbox, and answer it from there. See [Answering a prompt without attaching](#answering-a-prompt-without-attaching). |
+| `enter` | Go to the item's pane, switching session and workspace. On mail, open the thread. On a held approval, give the prompt back to the pane first, so the harness shows it there. |
+| `space` | On an approval or a question, read the prompt without leaving the Inbox, and answer it from there. See [Answering a prompt without attaching](#answering-a-prompt-without-attaching). Not on a held approval, which has no prompt on the screen: answer that one with `1`, `2` or `3`. |
+| `1` / `2` / `3` | Answer a held approval: allow once, always allow, deny. The same order as the harness's own menu. Only the keys the prompt offers work. See [Approvals from the Inbox](#approvals-from-the-inbox). |
 | `r` | Reply to mail: the thread opens with its reply line. |
 | `d` | Dismiss the item. |
 | `f` | Show one kind, then the next, then all of them. |
@@ -1091,6 +1092,75 @@ session on that machine, through the hub, answers with the nonce that daemon
 issued, over a stream the hub vouched for. The far daemon's own
 `respond_from_shell` governs a shell caller there.
 
+### Approvals from the Inbox
+
+The peek above presses keys into a prompt the pane shows. An approval can
+also be held off the pane by the harness's own hook, for the Inbox to answer
+with `1`, `2` or `3`. Such an item carries a `request_id`, and `space` does not
+open it, because there is no prompt on the screen to read.
+
+For a harness that takes a decision back from its hook, the Inbox can answer a
+permission prompt without you going to the pane. It is off by default, because
+while a prompt is held the harness shows nothing in its pane. Turn it on per
+harness in the config:
+
+```toml
+[agents.approvals]
+enabled = ["claude-code", "opencode"]   # ids or aliases: claude, claude-code, opencode, kilo
+hold_seconds = 120                      # kept between 10 and 300
+```
+
+The config file is watched, so a change applies to the next prompt. Then
+install the integration again (`tuios integration install claude-code`), since
+version 2 of it is the one that gives the hook time to wait.
+
+What happens on a prompt:
+
+1. The harness runs `tuios agent-hook` for the prompt: Claude Code's
+   `PermissionRequest`, or `permission.asked` through the opencode and Kilo
+   plugin. The hook reports the pane as `needs_input`, kind `approval`, as it
+   always did.
+2. With the harness enabled, the hook then calls `request-approval` and waits.
+   The Approvals row gets the keys that answer it in text, such as
+   `[1/3] approve Bash: go test ./...`, and the hint line says what each key
+   does.
+3. You press `1` (allow once), `2` (always allow, offered when the harness can
+   remember the rule) or `3` (deny). The hook prints the harness's own decision
+   and exits, the pane moves to `working`, and the item closes as answered.
+   Every other client that was showing it says it was answered elsewhere.
+
+A hold ends with no decision, and the harness then shows its own prompt as if
+tuios were not there, when any of these happens first: `hold_seconds` passes;
+you press enter on the item (going to the pane is choosing to answer there);
+you focus the pane, or already have it focused when the prompt arrives; you
+dismiss the item; the pane leaves `needs_input` or its block turns into a
+question; the pane or session closes; a newer prompt from the same pane
+arrives; the harness gives up on its hook; the daemon stops or restarts.
+
+What is supported:
+
+| Harness | Decision channel | Offers |
+| --- | --- | --- |
+| Claude Code | `PermissionRequest` hook output (`hookSpecificOutput.decision`) | once and deny, and always when Claude Code sent `permission_suggestions` |
+| opencode, Kilo | The plugin posts the reply to opencode's permission route | once, always, deny |
+
+Claude Code's `AskUserQuestion` and `ExitPlanMode` are not held: their answer
+is a choice or a plan, not yes or no, and stays in Claude Code's own dialog.
+Codex is not held either: its `PermissionRequest` hook runs before its own
+reviewer decides whether to ask at all, so holding it would ask you about calls
+Codex would have settled itself.
+
+Safety: the hook prints a decision only when the daemon returned one that the
+person made and the harness was offered. Every error prints nothing: no daemon,
+a daemon that restarts during the hold or predates approvals, a reply it cannot
+read, its own 305 second limit. Printing nothing is how every harness here
+says "ask the user", so a failure can only fall back to the harness's own
+prompt, never approve. Only a client attached right now can answer, with its
+attach nonce, checked the way `dismiss-attention` is (see
+[Who can act as the person](#who-can-act-as-the-person)); no agent, mail,
+`ask-agent` or keystroke routed through the protocol can. The hold itself may
+be requested only for the caller's own pane, and never over a link.
+
 ## Harness integrations
 
 A harness with a hooks system reports its own state, which outranks everything
@@ -1183,7 +1253,7 @@ arrives as the last argument) and sends one `set-agent-state`, or nothing.
 | ----------------- | ------- |
 | `SessionStart` | `idle`, with the session id and transcript path. `source: compact` reports nothing |
 | `UserPromptSubmit`, `PreToolUse` | `working` |
-| `PermissionRequest` | `needs_input`, kind `approval`, message `approve <tool>: <command or path>` |
+| `PermissionRequest` | `needs_input`, kind `approval`, message `approve <tool>: <command or path>`. With approvals on, then waits for an answer from the Inbox (see [Approvals from the Inbox](#approvals-from-the-inbox)) |
 | `PostToolUse`, `PostToolUseFailure`, `PermissionDenied`, `ElicitationResult` | `working`, only if the pane is `needs_input` |
 | `Notification` `permission_prompt` | `needs_input`, kind `approval` |
 | `Notification` `elicitation_dialog`, `elicitation_url_dialog`, `agent_needs_input` | `needs_input`, kind `question` |
@@ -1343,6 +1413,12 @@ would do what the condition rules out: Claude Code's `idle_prompt` would turn
 turn `done` back into `working`. `--explain` lists the fields it left out as
 `unsupported`. `tuios set-agent-state --if-state` makes the same check and
 fails rather than send the report without its condition.
+
+The one hook that may wait is a permission prompt with approvals on (see
+[Approvals from the Inbox](#approvals-from-the-inbox)). The 500 ms limit still
+covers its report; the wait after it is bounded by the daemon's hold and by the
+hook's own 305 second limit, below the 310 seconds the Claude Code integration
+gives that hook. With approvals off it returns as fast as any other hook.
 
 ### The old shim
 
@@ -1522,6 +1598,7 @@ proof, as before.
 | `dismiss-attention` from a pane, to empty the person's Inbox | Refused with `not_human`, even with a live nonce copied from the person's client: the nonce is checked the way a reply's is. |
 | `respond` from a pane, to approve its own tool call or another agent's | Refused with `not_human`, with or without a copied nonce, and with or without `respond_from_shell`, which only grants callers outside every pane. Nothing is pressed. |
 | `send-keys` or `run-command` driving the person's Inbox peek, to press `a` | The peek sends no answer for a routed key and says why. |
+| `reply-approval` from a pane, to approve its own or another agent's call | Refused with `not_human` on the same check. `request-approval` from a pane may hold only that pane's prompt, and returns only what the person answered about it. |
 | An agent in a hub pane attaching through the link to this machine | The hub vouches only for a caller outside its panes, in the stream's open frame, which the caller cannot write. The proxy here dials the link-human socket only for a vouched stream. An attach through the plain link socket gets no nonce. |
 | An agent in a pane on this machine dialing the link-human socket itself | The same pane check runs on that socket, against the process that dialed it. |
 | A hub from before this check | It vouches for nothing, so no attach through it verifies here. |
