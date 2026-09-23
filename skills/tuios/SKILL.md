@@ -784,9 +784,12 @@ and you do not see why.
 
 `explain-agent-screen` does the same for screen rules. It prints the pane's
 screen tail as the rules read it, what each rule made of it, and which one
-fired. For a rule that did not match, it names the strings that were the
-reason. `--harness` tries another harness's rules, and `--lines` reads more or
-fewer lines than the manifest does:
+fired. For a rule that did not match, it names the strings, patterns or nested
+groups that were the reason, and a rule reading part of the screen (the prompt
+box, the bottom lines, what is under the last rule) shows the text it read
+there. The title rules follow, with the pane's title and last progress report.
+`--harness` tries another harness's rules, and `--lines` reads more or fewer
+lines than the manifest does:
 
 ```sh
 tuios explain-agent-screen -w build --harness codex --lines 20
@@ -797,6 +800,14 @@ the state a human actually acts on, and it cannot tell a busy agent from one
 sitting at its prompt. Your own report always outranks it, and it is the only
 report that is certain: a process name is strong evidence, a screen rule is a
 guess, and `confidence` in `get-agent-state` says which one named the pane.
+
+The rules live in manifest files. A file in `~/.config/tuios/harnesses` (or
+`$TUIOS_HARNESS_DIR`) with a bundled harness's id replaces that manifest whole,
+with no merge, so start from a copy of the bundled one. `tuios doctor agents`
+lists the files in force and the ones that failed to load. A manifest's
+`[input]` block says how a prompt is typed into that harness: `submit = "cr"`
+or `"lf"`, `bracketed_paste`, and `focus_before_submit`. `ask-agent` and `fan`
+follow it, and every bundled harness submits on a carriage return.
 
 ### Who wins when reports disagree
 
@@ -1360,9 +1371,11 @@ The branches are a stem and then `stem-2`, `stem-3`. The stem is `fan/` and
 the first words of the prompt, or `--name`. The prompt is not typed the moment
 the agent starts. The daemon waits for the agent to be at its prompt (`idle`
 or `done`) and types it then, so it is never interleaved with a start-up
-screen. Claude Code, Codex, Gemini CLI and opencode reach `idle` from their
-prompt box. Another agent that only ever reads `unknown` is not typed at, its
-prompt ends `not_sent`, and you send it with `send-text`. An agent
+screen. An agent whose manifest has an idle rule (Claude Code, Codex, Gemini
+CLI, opencode, Amp, Cline, Devin, Grok, Hermes, Kiro, Maki, Qwen Code) reaches
+`idle` from its prompt box or title, and one of those that only ever reads
+`unknown` is not typed at: its prompt ends `not_sent`, and you send it with
+`send-text`. For any other agent, `unknown` counts as at its prompt. An agent
 asking to trust the folder is `needs_input`, and the prompt waits for the
 person to answer. `list-worktrees` says `prompt_status` per session: `pending`,
 `sent`, or `not_sent` with a note. `--wait` makes the command block until

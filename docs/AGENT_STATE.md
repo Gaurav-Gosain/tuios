@@ -23,6 +23,7 @@ alongside the rest of the pane-driving surface.
 - [Indicator](#indicator)
 - [The rail's agents section](#the-rails-agents-section)
 - [Harness integrations](#harness-integrations)
+- [Typing a prompt](#typing-a-prompt)
 - [Environment](#environment)
 - [Alerts](#alerts)
 
@@ -392,10 +393,21 @@ itself and an escape sequence it emitted (except when one of them has gone stale
 with a prompt on the pane, see [the one exception](#the-one-exception-a-visible-blocker)),
 and a rule that stops matching returns
 no opinion rather than falling back to a state. `needs_input` rules ship for
-every harness that has a stable prompt. `working` and `idle` rules ship for
-Claude Code, Codex, Gemini CLI and opencode, after herdr's manifests, so an
-unhooked pane of one of those can say it is back at its prompt rather than
-drifting to `unknown` on the silence timer.
+every harness that has a stable prompt, and `working` rules for every harness
+whose chrome shows a turn in progress. `idle` rules ship where the idle screen
+was measured here (Claude Code, opencode) or where herdr ships an idle rule
+from its own live pane reads (Codex, Gemini CLI, Cline, Devin, Grok, Kiro,
+Maki, Qwen Code), so an unhooked pane of one of those can say it is back at its
+prompt rather than drifting to `unknown` on the silence timer. Most bundled
+rules are ported from herdr's manifests (Apache-2.0, see
+`internal/harness/manifests/LICENSE-herdr`), and each manifest names the herdr
+version it follows. Aider and Crush have no screen rules: herdr has no manifest
+for them and none has been written against a live session.
+
+Every bundled screen rule decides at least one captured or derived screen under
+`internal/harness/testdata/screens`, and the test suite fails for a rule that
+decides none. Each screen says in its header whether it was measured on a live
+pane or derived from herdr's manifest and the chrome it quotes.
 
 Rules run when a pane writes, throttled, plus once more shortly after it goes
 quiet, because the prompt is painted by the last chunk before the silence. A pane
@@ -403,30 +415,99 @@ that stays silent costs nothing: there is no ticker.
 
 ### Regions
 
-A rule reads the pane's tail by default. It may name a `region` instead:
+A rule reads the pane's tail by default. It may name a `region` instead. The
+names are herdr's where the meaning is the same, so a ported rule keeps its
+region:
 
-| Region             | What the rule reads                                        |
-| ------------------ | ---------------------------------------------------------- |
-| `tail` (default)   | The bottom `lines` non-empty lines                         |
-| `prompt_box`       | The lines between the last two border lines of the tail    |
-| `above_prompt_box` | Everything in the tail above that box                      |
+| Region                            | What the rule reads                                     |
+| --------------------------------- | ------------------------------------------------------- |
+| `tail` (default, or `whole_recent`) | The bottom `lines` non-empty lines                    |
+| `bottom_non_empty_lines(N)`       | The last N lines of the tail                            |
+| `prompt_box` (or `prompt_box_body`) | The lines between the last two border lines of the tail |
+| `above_prompt_box`                | Everything in the tail above that box                   |
+| `last_non_empty_above_prompt_box` | The one non-empty line just above that box              |
+| `after_last_horizontal_rule`      | Everything in the tail under the last border line       |
 
 A border line is a run of at least three box-drawing dashes (`─` or `━`),
 optionally opened by a corner (`╭`, `╰`, `┌`, `└` and the like). Claude Code
 draws its prompt between two bare dash rules and Gemini CLI inside a rounded
 box, and both are found. A box region on a screen with fewer than two border
-lines is empty, and a rule reading it matches nothing. `explain-agent-screen`
-reports each rule's region, and `no_region` for a rule whose region is not on
-the screen.
+lines is empty, and a rule reading it matches nothing.
+`after_last_horizontal_rule` on a screen with no border line is the whole tail,
+as it is in herdr. It is the region that keeps an answered prompt still in the
+tail from holding `needs_input`: Claude Code draws a live form under a rule, and
+once the form is answered the rule and the form scroll up together.
+
+N in `bottom_non_empty_lines(N)` is a plain number from 1 to 200 and must not be
+more than the manifest's `lines`: the loader refuses a rule that asks to read
+further up than the manifest reads, rather than widening what every other rule
+of the manifest sees. `explain-agent-screen` reports each rule's region, the text
+a rule reading a narrower region saw there, and `no_region` for a rule whose
+region is not on the screen.
+
+### Predicates
+
+A rule names what must be on its region, and every predicate must hold:
+
+| Field       | Holds when                                          |
+| ----------- | --------------------------------------------------- |
+| `all`       | every string is present                             |
+| `any`       | at least one string is present                      |
+| `not`       | no string is present                                |
+| `regex`     | every pattern matches                               |
+| `not_regex` | no pattern matches                                  |
+| `all_of`    | every nested group matches                          |
+| `any_of`    | at least one nested group matches                   |
+| `none_of`   | no nested group matches                             |
+
+A nested group has the same fields as a rule's own, so it nests the same way,
+and it is written as an inline table:
+
+```toml
+[[screen.rule]]
+state    = "needs_input"
+priority = 25
+region   = "after_last_horizontal_rule"
+all      = ["esc to cancel"]
+any_of   = [
+  { all = ["enter to confirm"] },
+  { all = ["enter to select"], any = ["↑/↓ to navigate", "arrow keys to navigate"] },
+]
+none_of  = [ { all = ["auto-approved", "yes"] } ]
+```
+
+This is how herdr writes its rules, and it is what a flat rule could not say:
+"this footer, and one of these three layouts", or "unless these two words appear
+together". A group inside `all_of` or `any_of` must name something that has to be
+present; a group inside `none_of` may be vetoes only, but not empty. Groups nest
+at most eight deep, and one manifest carries at most 512 groups and 1024 strings
+and patterns, so the scan the daemon runs on every settle stays priced.
+
+Substrings are matched plainly, lowercased when the manifest sets `fold_case`.
+Patterns are RE2 with `^` and `$` anchoring lines, and choose their own case
+handling with `(?i)`. A folded substring is a plain search, while a `(?i)`
+pattern over a screen of box drawing costs microseconds, so a bundled rule writes
+case-insensitive text as a substring. A rule is tried only if it could still
+win: rules run highest priority first, and the first match decides.
 
 ### Idle rules
 
 No evidence is not rest, so an `idle` rule has to prove the agent is at its
 prompt. The loader refuses an idle screen rule unless it reads
-`region = "prompt_box"` or carries a `regex` that pins the input box's own
-structure (opencode's closing edge, Codex's `›` composer at column zero). Every
-bundled idle rule is also outranked by every `working` and `needs_input` rule of
-its manifest, because the prompt box stays on the screen during a turn.
+`region = "prompt_box"` or carries a pattern on every path to a match that pins
+the input box's own structure (opencode's closing edge, Codex's `›` composer at
+column zero, Maki's mode label alone on the status bar). A pattern in the rule's
+own `regex`, or in any `all_of` group, counts; one in an `any_of` group counts
+only when every group of that `any_of` has one. Every bundled idle rule is also
+outranked by every `working` and `needs_input` rule of its manifest, because the
+prompt box stays on the screen during a turn. herdr ranks some idle rules first
+(Kiro's composer placeholder); here they rank last.
+
+A harness with an idle rule, on the screen or in the title, is one whose
+`unknown` panes are not ready to be asked: it can show it is at its prompt, so a
+quiet pane that has not shown it may be mid-call. Amp, Cline, Devin, Grok,
+Hermes, Kiro, Maki and Qwen Code joined that set with these rules; see the
+protocol changes in [protocol.md](protocol.md).
 
 An idle reading is then held before it is published:
 
@@ -473,9 +554,38 @@ tuios explain-agent-screen --lines 20 --json            # look further up
 
 It prints the pane's tail exactly as the classifier reads it, then every rule of
 the harness, which one fired, and for each rule that refused, which of its
-strings was the reason. `--harness` runs a harness's rules against a pane nothing
-has claimed, which is the case when the rule being written is the one that would
-attribute it.
+strings, patterns or nested groups was the reason. A rule reading a region
+narrower than the tail also prints the text it read there. `--harness` runs a
+harness's rules against a pane nothing has claimed, which is the case when the
+rule being written is the one that would attribute it. The title rules follow,
+with the pane's title and its last OSC 9;4 progress report.
+
+### Your own manifests
+
+A manifest dropped in `$XDG_CONFIG_HOME/tuios/harnesses` (`~/.config/tuios/harnesses`
+when the variable is unset), or in the directory `TUIOS_HARNESS_DIR` names, is
+loaded when the daemon starts. A new id adds a harness. An id a bundled manifest
+already has replaces that manifest whole: its detect, screen, title, notify,
+transcript and input blocks alike, and a block the user file leaves out is gone
+rather than inherited. There is no merge, because a rule has no name to merge
+by and its priority means something only next to the rules around it. To change
+one rule, copy the bundled file from `internal/harness/manifests` and edit the
+copy.
+
+`tuios doctor agents` lists the manifests loaded from that directory, says which
+replace a bundled one, and names every file there that failed to load and why.
+`explain-agent-screen` reports `manifest_source` and `replaces_bundled` for the
+pane's harness.
+
+To draft a manifest from one of herdr's, run
+`go run ./internal/harness/herdrconv path/to/herdr/agent.toml`. It carries
+herdr's nested gates and regions as they are, sends title and progress rules to
+the `[title]` block, and names every rule it drops and why: an `unknown` rule
+(tuios has no "leave the state alone" rule), a region tuios has no equivalent
+for (`top_non_empty_lines(N)`, Codex's prompt-marker regions), or an idle rule
+without the proof the loader asks for. Over herdr's 22 manifests it carries 128
+of 141 rules; before nested gates it carried 100, several of them only
+approximated by flattening.
 
 ## Title rules
 
@@ -520,10 +630,19 @@ Title rules report as `source: osc`, because that is what they are: an escape
 sequence the program emitted about itself, alongside the progress sequence
 already read there.
 
-Three ship enabled. Codex writes `Action Required` when it blocks and a braille
+Eight ship enabled. Codex writes `Action Required` when it blocks and a braille
 spinner while a turn runs. Claude Code writes a spinner while a turn runs and a
 `✳` at rest (`✳ Claude Code`, measured on 2.1.280). Gemini CLI writes its status
-after a glyph: `Action Required`, `Working` and `Ready`. A spinner proves
+after a glyph (`packages/cli/src/utils/windowTitle.ts`): `✋  Action Required`,
+`⏲  Working…`, `✦  ` and the model's current thought, and `◇  Ready`, each
+followed by the folder. Its rules key on the glyph, so a thought that begins
+with "Action required" or "Ready" reads as the turn it is. After herdr's
+manifests: Amp writes a spinner during a turn, `Plugin confirmation needed`
+when a plugin waits and `<thread> - amp - <dir>` at rest; Grok writes `grok` or
+`<session> - grok` at rest, a spinner during a turn and `Action Required` when
+a permission prompt waits; Hermes puts `⚠`, `⏳` or `✓` in front; Kiro writes a
+spinner and `kiro:` during a turn; and Qwen Code, with `ui.showStatusInTitle`
+on, writes `✳` when a confirmation waits and `◐` during a turn. A spinner proves
 animation, not work, which is why a title rule only moves a pane some other tier
 attributed, and why the silence timer still demotes a pane that stops drawing:
 the timer's own last look ignores a `working` title, because a spinner that has
@@ -531,6 +650,23 @@ not turned for the whole stall window is a frame left behind, not an answer.
 An idle title rule goes through the same confirmation gate as an idle screen
 rule. `tuios explain-agent-screen` prints the pane's title and what the title
 rules made of it beside the screen half, which is the way to write one.
+
+### Progress rules
+
+A title rule may set `region = "osc_progress"` to read the pane's last OSC 9;4
+progress report instead of its title, written as herdr keeps it: `4;<state>` for
+the states whose percentage means nothing (0 remove, 3 indeterminate) and
+`4;<state>;<percent>` for the others (1 set, 2 error, 4 paused). Every pane
+already gets the sequence's published meaning (a bar is working, clearing it is
+idle, the error state is errored, paused is needs_input). A harness that uses
+the sequence its own way, say indeterminate progress for "waiting on you", gets
+its own reading: when a report arrives from a pane whose manifest has
+`osc_progress` rules and one of them matches the report, the pane's title block
+is read through the ordinary look and the published meaning is not applied.
+When none matches, the published meaning applies, so a manifest names only the
+reports it reads differently. No bundled manifest has one: herdr's progress
+rules for Grok, Kiro, Qwen Code and Claude Code agree with the published
+meaning.
 
 ## Notification rules
 
@@ -901,6 +1037,53 @@ fails rather than send the report without its condition.
 Wired alongside an installed integration it reports every event twice;
 `status` and `doctor` say so. See
 [integrations/claude-code](../integrations/claude-code/README.md).
+
+## Typing a prompt
+
+`ask-agent` and `fan` type a prompt the same way: the text as one paste,
+bracketed (`ESC[200~` ... `ESC[201~`) when the pane has DECSET 2004 on, a short
+wait, then the submit key. What differs by harness is data in its manifest's
+`[input]` block:
+
+```toml
+[input]
+submit              = "cr"    # or "lf"; the key that submits
+bracketed_paste     = true    # false: never bracket, even with DECSET 2004 on
+focus_before_submit = false   # true: send a focus-in report (CSI I) first
+source              = "measured on ... / documented in ... / not measured"
+```
+
+A manifest without the block, and a pane no harness claimed, get the defaults:
+carriage return, and a bracketed paste when the pane asks for one. That is what
+every prompt got before the block existed. `focus_before_submit` is only acted
+on when the pane has focus reporting (DECSET 1004) on, so an application that
+never asked for focus events never sees the bytes. Nothing in the block can do
+more than choose among these bytes: the text is the caller's, and the verbs
+that type it keep their own checks (`ask-agent` still refuses a pane on
+`needs_input`).
+
+The answer to "CR or LF" is CR for every bundled harness. Enter in a raw-mode
+terminal sends a carriage return, and every input library these harnesses use
+reads a line feed as a different key: Ink (Claude Code, Gemini CLI, Qwen Code)
+reads it as another key than return, crossterm (Codex) as Ctrl+J, Bubble Tea
+(Crush) as Ctrl+J, prompt_toolkit (Aider) as c-j. Claude Code's docs list
+Ctrl+J as the way to insert a newline. Each manifest's `source` says where its
+values come from:
+
+| Harness | Submit | Bracketed paste | Source |
+| --- | --- | --- | --- |
+| claude-code | CR | yes | measured on 2.1.280: DECSET 2004 and 1004 on, kitty keyboard flags 5 |
+| opencode | CR | yes | measured on 1.18.30: DECSET 2004 on |
+| crush | CR | yes | measured on v0.96.1: DECSET 2004 on, kitty keyboard flags 1 |
+| codex | CR | yes | crossterm key handling; paste-burst behaviour per herdr; not measured |
+| gemini-cli, qwen | CR | yes | Ink key handling; not measured |
+| aider | CR | yes | prompt_toolkit key handling; not measured |
+| copilot | CR | yes, plus a focus-in report first | herdr: Copilot ignores a synthetic Enter after focus loss until it is told it has focus; not measured |
+| the others | CR | yes | the default; not measured |
+
+Kitty keyboard flags 1 and 5 (disambiguate, and report alternate keys) leave
+Enter as a carriage return, which is why the two measured harnesses that push
+them still take one.
 
 ## Environment
 

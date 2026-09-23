@@ -1781,11 +1781,11 @@ them.
 | `tuios read-agent-messages` | Read the messages agents have left in this session |
 | `tuios ask-agent <text>` | Ask another agent a question and wait for its answer |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
-| `tuios explain-agent-screen` | Show what a harness's screen rules make of a pane |
+| `tuios explain-agent-screen` | Show what a harness's screen and title rules make of a pane: the tail, each rule's region and the text it read there, why each refusal refused (strings, patterns, nested groups), the title and last OSC 9;4 progress report, and which manifest file is in force |
 | `tuios integration install [harness...]` | Write tuios's managed hook entries into Claude Code, Codex, Gemini CLI or opencode's configuration (`--all` for every harness that has run here, `--command` for a tuios not on PATH) |
 | `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, and nothing else |
 | `tuios integration status [harness...]` | Say whether each integration is installed and current (`--json`) |
-| `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, and the running agent panes missing theirs (`--json`) |
+| `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, the running agent panes missing theirs, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
 | `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state. `--explain` prints the decision to stderr. See [Agent state](AGENT_STATE.md#harness-integrations) |
 | `tuios stash put <file>` | Copy a file into the session store and print the stored path |
 | `tuios stash get <stored-path> [file]` | Copy a stashed file out of the session store, across a link |

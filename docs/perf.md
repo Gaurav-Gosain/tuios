@@ -1006,6 +1006,38 @@ it has some, so a rail with no metadata pays nothing per frame for it, and a
 state sync that leaves a pane's metadata unchanged reuses the pane's list rather
 than allocating a new one.
 
+## 2026-09 manifest engine
+
+The screen scan runs in the daemon on every settle of every agent pane, at most
+once per 250 ms while a pane writes plus once when it goes quiet, so its cost
+times the number of agent panes is what the manifest engine spends. The engine
+gained nested groups, more regions and many more bundled rules, and was measured
+with `BenchmarkClassify` (`internal/harness/classify_bench_test.go`) on a Claude
+Code working turn and idle prompt, the bundled manifest before and after,
+through the new engine (`TUIOS_BENCH_MANIFESTS` points the benchmark at an old
+manifest). Five runs of 20000 iterations each, medians, Apple M3 Pro:
+
+| Screen | Old claude-code manifest | New claude-code manifest |
+| --- | --- | --- |
+| working turn | 4.9 µs, 4 allocs | 10.4 µs, 13 allocs |
+| idle prompt | 8.2 µs, 5 allocs | 13.1 µs, 13 allocs |
+
+The first draft of the new manifest cost 116 µs on the working screen. Three
+changes brought it down, and they are the rules for anyone writing a manifest:
+
+- **Rules run highest priority first and the first match decides.** A rule that
+  could no longer win is never read. It used to run every rule.
+- **Substrings before patterns.** Within a rule the plain searches run first, so
+  a rule whose words are absent refuses before any pattern runs.
+- **Case-insensitive text as a folded substring, not a `(?i)` pattern.** A
+  `(?i)` pattern over a screen of box drawing cost 4 to 33 µs each; the same
+  words as a substring under `fold_case` cost nanoseconds. Folding itself is
+  paid once per line per scan, and only for lines that have an upper case
+  letter, which a frame of rules and borders mostly does not.
+
+At twenty agent panes settling four times a second the new manifest costs about
+1 ms of daemon CPU per second, against about 0.4 ms before.
+
 ## 2026-09 second profiling pass: render
 
 Profiled the compositor over a keystroke frame (`BenchmarkKeystrokeFrame`,

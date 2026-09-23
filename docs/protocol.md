@@ -172,9 +172,11 @@ agent in the middle of a long tool call looks the same.
 - `ask-agent` waits on a pane on `unknown` like one that is `working`, and
   fails with `not_ready` when `ready_timeout` runs out, with a message that
   says the state was unknown. `force` sends anyway.
-- `fan` does not type into an agent on `unknown`. Claude Code, Codex, Gemini
-  CLI and opencode reach `idle` from their prompt box; for another agent the
-  prompt is left `not_sent` when the wait ends.
+- `fan` does not type into an agent on `unknown` when its harness can show
+  that it is at its prompt, which is a harness whose manifest has an idle rule
+  on the screen or the title (see below for the list); such an agent reaches
+  `idle` from its prompt box or title. For another agent `unknown` counts as
+  ready, since nothing could ever show more.
 - `ask-agent` against a pane on `needs_input` fails with the new code
   `agent_blocked` and writes nothing. It used to type the question. It also
   stops waiting with `agent_blocked` when a pane it is waiting on reaches
@@ -203,6 +205,55 @@ quiet, then write one carriage return. Line endings inside the text become line
 feeds, and the paste delimiters are removed from it so the text cannot end the
 paste early. A pane without bracketed paste still reads each line feed in the
 text as the application decides, which for a shell is one command per line.
+
+**The submit key and paste come from the harness's manifest.** `ask-agent` and
+`fan` read the `[input]` block of the target pane's harness (see
+[AGENT_STATE.md](AGENT_STATE.md#typing-a-prompt)). Every bundled harness keeps
+the carriage return and the bracketed paste described above, so for them
+nothing changes on the wire, with one exception: for GitHub Copilot, a pane
+with focus reporting (DECSET 1004) on is sent a focus-in report (`ESC[I`)
+before the paste, because Copilot ignores a synthetic Enter after it lost focus.
+A user manifest can set `submit = "lf"` or `bracketed_paste = false` for its
+harness.
+
+**More harnesses read their screen and title for `working` and `idle`.** The
+bundled manifests now carry herdr's working rules for every harness that has
+them, and idle rules for Cline, Devin, Grok, Kiro, Maki and Qwen Code on the
+screen and Amp, Grok and Hermes in the title, beside the four that had them.
+What a caller sees:
+
+- `list-agents` and `get-agent-state` report `working` and `idle` from
+  `source: screen` or `source: osc` for these harnesses where they used to
+  report nothing from those tiers.
+- `ready` is `false`, and `ask-agent` and `fan` wait, for a pane of Amp,
+  Cline, Devin, Grok, Hermes, Kiro, Maki or Qwen Code on `unknown`. It used to
+  be `true`, because these harnesses had no rule that could show they were at
+  their prompt. `force` on `ask-agent` still types at once, and a user manifest
+  without the idle rules gives the old answer back.
+- Codex reports `needs_input` from its screen for an approval form, the
+  directory trust prompt and the update offer. It used to report it only from
+  its title and notifications.
+- Claude Code reports `needs_input` for a live form under the last rule, a
+  dynamic workflow question and an MCP elicitation dialog, and `working` for
+  the `/btw` overlay and for background agents and MCP tasks still running.
+  Its screen rules now match substrings case-folded.
+- Gemini CLI's title rules key on the glyph Gemini CLI writes. A title whose
+  text starts with "Action required" after the working glyph `✦` reads as
+  `working`, where it used to read as `needs_input`.
+- Grok's footer-hint rules read the last two lines only, as herdr's do.
+
+**`explain-agent-screen` says more.** The result gains `manifest_source`
+(`bundled` or the path of the user file in force), `replaces_bundled`, and
+`progress`, the pane's last OSC 9;4 report. Each entry of `rules` and
+`title_rules` may carry `groups`, naming each nested group that refused, and
+`text`, what a rule reading a region narrower than the tail read there. The
+title rules are explained against the progress report too.
+
+**An OSC 9;4 report can be read by the harness's own rules.** A report from a
+pane whose manifest has a title rule with `region = "osc_progress"` that
+matches the report is read by those rules instead of mapped by the sequence's
+published meaning. No bundled manifest has such a rule, so nothing changes for
+a bundled harness.
 
 **A message from `human` says whether it is verified.** Any caller can send
 `send-agent-message` with `from: "human"`, and such a message used to be stored
@@ -869,12 +920,13 @@ Response:
 Fan one prompt out across several agents. Creates `count` worktrees and
 sessions, starts the agent in each, and types the prompt into each agent once
 it is ready to read: `idle` or `done`. An agent in `needs_input` is left for
-the person to answer, and the prompt is typed after. `unknown` is not ready
-(see Changes to existing verbs). Claude Code, Codex, Gemini CLI and opencode
-reach `idle` from their prompt box; for another agent the prompt is left
-`not_sent` when the wait ends, and `prompt_note` says to send it with
-`send-text`. The prompt goes in as one paste and is submitted with a carriage
-return (see Changes to existing verbs). The verb returns as soon as the
+the person to answer, and the prompt is typed after. `unknown` is not ready for
+a harness whose manifest has an idle rule, which reaches `idle` from its prompt
+box or title (see Changes to existing verbs); if it never does, the prompt is
+left `not_sent` when the wait ends, and `prompt_note` says to send it with
+`send-text`. The prompt goes in as one paste and is submitted with the
+harness's submit key, a carriage return for every bundled harness (see Changes
+to existing verbs). The verb returns as soon as the
 sessions exist. `list-worktrees` reports `prompt_status` per session:
 `pending`, `sent`, or `not_sent` with a `prompt_note`.
 
