@@ -61,7 +61,7 @@ func TestStallTimerLooksAtTheScreenBeforeCallingAPaneIdle(t *testing.T) {
 
 	t.Run("without a look the blocked pane is called idle", func(t *testing.T) {
 		sess, winID, ptyID := agentPaneWithHarness(t, "claude-code", AgentStateWorking)
-		feedVT(t, sess.GetPTY(ptyID), claudePermissionPrompt)
+		feedVT(t, sess.GetPTY(ptyID), clearScreen+claudePermissionPrompt)
 
 		if n := sess.applyStallHeuristic(past, stall, quiet, nil); n != 1 {
 			t.Fatalf("demoted %d panes, want 1", n)
@@ -73,7 +73,7 @@ func TestStallTimerLooksAtTheScreenBeforeCallingAPaneIdle(t *testing.T) {
 
 	t.Run("with a look it stays blocked", func(t *testing.T) {
 		sess, winID, ptyID := agentPaneWithHarness(t, "claude-code", AgentStateWorking)
-		feedVT(t, sess.GetPTY(ptyID), claudePermissionPrompt)
+		feedVT(t, sess.GetPTY(ptyID), clearScreen+claudePermissionPrompt)
 
 		look := func(id string) bool { return sess.scanScreenForAgent(id, reg) }
 		if n := sess.applyStallHeuristic(past, stall, quiet, look); n != 0 {
@@ -439,7 +439,7 @@ func TestExplainAgentScreenVerbShowsWhatTheClassifierSaw(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	sess := makeSessionWithWindow(t, d, "work")
 	ids := sess.ListPTYIDs()
-	feedVT(t, sess.GetPTY(ids[0]), claudePermissionPrompt)
+	feedVT(t, sess.GetPTY(ids[0]), clearScreen+claudePermissionPrompt)
 
 	c := dialVerb(t, sp)
 	res := result(t, c.call(t,

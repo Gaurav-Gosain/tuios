@@ -88,13 +88,20 @@ func TestProgressRulesOutrankThePublishedMeaning(t *testing.T) {
 // TestPortedWorkingRuleMovesAnUnhookedPane: a harness that shipped only
 // blocking rules before now carries working rules too, and the daemon's screen
 // look applies them to a pane the detector attributed.
+//
+// The status line is written over a cleared screen because the pane runs a real
+// shell. When the shell's prompt arrives first, the line lands after it on the
+// same row ("$ ⠧ Waiting on subagent…") and the spinner rule, which is anchored
+// at the start of the line, does not match. That is right for grok, which owns
+// its whole screen and never shares a row with a shell prompt, so the test
+// clears the screen rather than loosening the rule.
 func TestPortedWorkingRuleMovesAnUnhookedPane(t *testing.T) {
 	reg, errs := harness.Load()
 	if len(errs) != 0 {
 		t.Fatalf("load: %v", errs)
 	}
 	sess, winID, ptyID := agentPaneWithHarness(t, "grok", AgentStateUnknown)
-	feedVT(t, sess.GetPTY(ptyID), "\xe2\xa0\xa7 Waiting on subagent\xe2\x80\xa6 2.8s   13s [stop]\r\n")
+	feedVT(t, sess.GetPTY(ptyID), clearScreen+"\xe2\xa0\xa7 Waiting on subagent\xe2\x80\xa6 2.8s   13s [stop]\r\n")
 	if !sess.scanScreenForAgent(ptyID, reg) {
 		t.Fatal("no rule matched the grok status line")
 	}
