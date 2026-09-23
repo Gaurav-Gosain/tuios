@@ -538,7 +538,7 @@ func init() {
 				`{"id":1,"verb":"start-agent","params":{"session":"work","agent":"claude","name":"reviewer","cwd":"/src/api"}}`,
 				`{"id":1,"verb":"start-agent","params":{"session":"work","agent":"codex --model o5","name":"tests","cwd":"/src/api","prompt":"Run the test suite and fix what fails.","ready_timeout":300000}}`,
 				`{"id":1,"verb":"start-agent","params":{"session":"api","agent":"codex","repo_url":"git@github.com:acme/api.git","repos_root":"~/src","args":["--model","o4"],"prompt":"Fix the flaky test."}}`,
-				`{"id":1,"verb":"start-agent","params":{"session":"work","agent":"opencode acp","protocol":"acp","name":"helper","prompt":"Summarise the open TODOs."}}`,
+				`{"id":1,"verb":"start-agent","params":{"session":"work","agent":"opencode acp","protocol":"acp","name":"helper","cwd":"/src/api","prompt":"Summarise the open TODOs."}}`,
 			},
 			handler: (*Daemon).verbStartAgent,
 		},
