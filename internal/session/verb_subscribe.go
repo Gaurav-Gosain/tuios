@@ -100,7 +100,7 @@ func (d *Daemon) verbSubscribe(cs *connState, params json.RawMessage) (any, *ver
 	if from != nil {
 		replayed := 0
 		for _, ev := range sub.preface {
-			if ev.Type != EventGap {
+			if ev.Type != EventGap && d.eventInScope(cs, ev) {
 				replayed++
 			}
 		}
@@ -164,6 +164,9 @@ func (d *Daemon) streamEvents(cs *connState, sub *eventSub) {
 	// arrive meanwhile wait in sub.ch, and all of them are newer than anything
 	// in the preface.
 	for _, ev := range sub.preface {
+		if !d.eventInScope(cs, ev) {
+			continue
+		}
 		if err := d.writeEventLine(cs, ev); err != nil {
 			cs.drop()
 			return
@@ -180,6 +183,13 @@ func (d *Daemon) streamEvents(cs *connState, sub *eventSub) {
 		case <-sub.stop:
 			return
 		case ev := <-sub.ch:
+			// A restricted connection's stream carries only the sessions it
+			// reaches. The check runs here, on the streamer's goroutine, and
+			// not in the hub's filter, because the hub publishes with a
+			// session's state lock held and the check reads session state.
+			if !d.eventInScope(cs, ev) {
+				continue
+			}
 			if dropped := sub.dropped.Swap(0); dropped > 0 {
 				if err := d.writeEventLine(cs, streamEvent{Type: EventGap, Dropped: dropped, Reason: GapOverflow, BootID: d.events.bootIdentity()}); err != nil {
 					cs.drop()

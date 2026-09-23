@@ -644,6 +644,24 @@ machine](#reports-from-a-pane-on-another-machine)). What changes:
   since hosted panes stopped exporting `TUIOS_SESSION`; the description now
   says so.
 
+**A connection can restrict itself.** The new verb `restrict-connection` (see
+[restrict-connection](#restrict-connection)) narrows what one connection may
+do for as long as it is open, and `tuios mcp` restricts every connection it
+opens. A connection that never calls it is served exactly as before. What
+changes for everyone:
+
+- Every pane is started with `TUIOS_PANE_TOKEN` beside `TUIOS_PANE_ID`. It is
+  new, and nothing reads it but `restrict-connection`.
+- `fan` records on each session it starts the session of the pane that ran
+  it, when a pane of this daemon ran it, and `list-worktrees` rows gain
+  `launched_from` for such a session. Rows of any other session are unchanged.
+  The field is additive on the saved session record, so an older daemon reads
+  a newer record and drops it.
+- On a restricted connection, every verb outside the table in
+  `internal/session/conn_scope.go` answers `forbidden` with a hint naming
+  `restrict-connection`, and under scope `own` a verb that names no session
+  gets the caller's own session, not the most recently active one.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -826,6 +844,88 @@ validator uses.
 
 Handshake: report the protocol range this daemon serves. Params: `client`,
 `version`, `protocol`. Result type: `hello`. See the versioning section above.
+
+### restrict-connection
+
+Give up authority on this connection for as long as it is open. It is how a
+caller that drives tuios for an agent, `tuios mcp` above all, makes the daemon
+hold every later call on the connection to what the agent was granted, so a
+prompt-injected agent cannot reach further through that caller than the grant.
+
+Params:
+
+- `scope`: `own` (the default) or `all`. Under `own` the connection reaches
+  only the caller's own session, the sessions in its fan group (sessions a
+  single `fan` started together, in the same repository) and the sessions a
+  `fan` run from its session started. `all` leaves the sessions alone, for
+  `read_only` by itself.
+- `read_only`: refuse `send-text`, `send-keys`, `ask-agent`, `respond` and
+  `fan`. The caller may still read, report its own pane's state and meta, and
+  leave mail.
+- `pane_id`, `pane_token`: the caller's `$TUIOS_PANE_ID` and
+  `$TUIOS_PANE_TOKEN`, for when the kernel cannot place the caller.
+
+The caller's pane is found first from the kernel's record of the process that
+connected (`SO_PEERCRED` on Linux, `LOCAL_PEERPID` on macOS), walked up to a
+pane's shell or matched by its controlling terminal, the same way
+`request-approval` places its caller. Only when that places the caller in no
+pane is `pane_id` checked against `pane_token`, an HMAC of the window id under
+a key the daemon picks at start and never writes down. A `pane_id` that
+disagrees with the kernel's answer is refused with `forbidden`, and so is a
+token that does not match. A caller placed in no pane gets an empty `window`
+and no error; under `own` it then reaches no session at all. Over a link the
+kernel's answer is the local proxy's, and tokens are never good there, so a
+restricted link connection reaches nothing under `own`.
+
+A later call may narrow further (turn on `read_only`, or go from `all` to
+`own`) and never widen: lifting `read_only`, going back to `all`, or naming
+another pane is refused with `forbidden`, and the connection keeps the
+restriction it had.
+
+Result:
+
+```json
+{"result": {"type": "connection_restricted", "scope": "own", "read_only": true,
+ "window": "7f3c...", "session": "work", "via": "pid", "sessions": ["work", "work-fan-retry"]}}
+```
+
+`via` is `pid`, `token`, or empty when no pane was found. `sessions` is
+present under `own` and lists what the connection reaches now; sessions a
+`fan` starts later join it.
+
+What a restricted connection may call:
+
+| Class | Verbs | Under `own` | Under `read_only` |
+|---|---|---|---|
+| open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
+| across sessions | `list-sessions`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
+| read one session | `session-info`, `list-windows`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get` | session in reach | allowed |
+| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session` | own pane only | allowed |
+| mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
+| type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond` | session in reach | `forbidden` |
+| start sessions | `fan` | needs a pane | `forbidden` |
+| everything else | | `forbidden` | `forbidden` |
+
+Under `own`:
+
+- A verb that takes `session` and names none gets the caller's own session.
+  `subscribe` with no session streams every session in reach, and each event
+  is checked as it is written, so a session that joins the reach later is
+  streamed from then on. Events that name no session, and events relayed
+  from linked hosts, are not written.
+- `all_sessions` on `list-agents`, `any_session` on `wait-for` and `hosts` on
+  `subscribe` are refused.
+- `set-agent-state`, `set-agent-meta` and `set-agent-session` with no
+  `window` land on the caller's own pane, and naming another pane is refused.
+- `send-agent-message` and `ask-agent` in the caller's own session get `from`
+  set to the caller's pane, and a different `from` is refused.
+  `read-agent-messages` may name only the caller's own inbox in `to`.
+
+This scopes what goes through a restricted connection. A process in a pane can
+still open a connection of its own with the tuios CLI and not restrict it; a
+harness's shell tool can do that. What the restriction bounds is the MCP
+surface, which is what an agent reaches without writing a shell command, and
+the one a harness can offer without a shell tool at all.
 
 ### list-verbs
 

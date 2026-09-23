@@ -28,6 +28,11 @@ type WorktreeInfo struct {
 	// Group names the fan-out this session belongs to: the branch stem the
 	// siblings share. Empty for a worktree made on its own.
 	Group string `json:"group,omitempty"`
+	// LaunchedFrom names the session whose pane ran the fan that made this
+	// one, when a pane of this daemon ran it. A connection restricted to its
+	// own session reaches the sessions its session launched. Empty when the
+	// fan came from outside every pane, and on a record from before the field.
+	LaunchedFrom string `json:"launched_from,omitempty"`
 	// Managed marks a worktree tuios created under its own directory.
 	Managed bool `json:"managed,omitempty"`
 	// Prompt is the text a fan-out delivers to the agent in this session.

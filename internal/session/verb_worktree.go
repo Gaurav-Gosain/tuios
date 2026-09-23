@@ -275,6 +275,9 @@ func (d *Daemon) verbListWorktrees(_ *connState, params json.RawMessage) (any, *
 			"prompt_status": wt.PromptStatus,
 			"prompt_note":   wt.PromptNote,
 		}
+		if wt.LaunchedFrom != "" {
+			row["launched_from"] = wt.LaunchedFrom
+		}
 		if p.Changes && !wt.Gone {
 			// A git status per worktree, only when asked for: the rail never
 			// asks, and a listing an agent polls should not run git it did not
@@ -440,7 +443,7 @@ func fanBranches(root, stem string, count int) []string {
 	return names
 }
 
-func (d *Daemon) verbFan(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Count        int    `json:"count"`
 		Agent        string `json:"agent"`
@@ -486,11 +489,15 @@ func (d *Daemon) verbFan(_ *connState, params json.RawMessage) (any, *verbError)
 		return nil, invalidParam("name", "could not find "+strconv.Itoa(p.Count)+" free branch names from "+stem)
 	}
 	readyTimeout := durationOr(p.ReadyTimeout, fanDefaultReadyTimeout)
+	// The session of the pane that asked, so a connection restricted to that
+	// session reaches the agents it started. See conn_scope.go.
+	launchedFrom := d.callerSession(cs)
 
 	sessions := make([]map[string]any, 0, p.Count)
 	for _, branch := range branches {
 		out, verr := d.createWorktreeSession(root, branch, strings.TrimSpace(p.Base), "", []string{command}, func(info *WorktreeInfo) {
 			info.Group = stem
+			info.LaunchedFrom = launchedFrom
 			info.Prompt = p.Prompt
 			info.PromptStatus = PromptPending
 		})

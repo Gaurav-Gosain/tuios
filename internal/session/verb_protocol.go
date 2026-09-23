@@ -222,6 +222,28 @@ func init() {
 			examples: []string{`{"id":1,"verb":"hello","params":{"client":"tuios","version":"1.2.3","protocol":1}}`},
 			handler:  (*Daemon).verbHello,
 		},
+		"restrict-connection": {
+			description: "Give up authority on this connection for as long as it is open. scope own reaches only the caller's own session, its fan group and the sessions a fan from it started; read_only refuses every verb that types into a pane. The caller's pane is found from the kernel's record of its pid, and only when that finds none from pane_id and pane_token. A later call may narrow further and never widen. Every verb a restricted connection may not call answers forbidden.",
+			params: []verbParam{
+				{Name: "scope", Type: "string", Description: "own restricts every call to the caller's own session and fan group. all leaves the sessions alone, for read_only by itself.", Accepted: scopeNames, Default: ScopeOwn},
+				{Name: "read_only", Type: "bool", Description: "Refuse send-text, send-keys, ask-agent, respond and fan. The caller may still report its own pane's state and meta and leave mail.", Default: "false"},
+				{Name: "pane_id", Type: "string", Description: "The caller's pane, normally $TUIOS_PANE_ID. Used only when the kernel places the caller in no pane, and then only with the matching pane_token. When the kernel places the caller, a different pane_id is refused."},
+				{Name: "pane_token", Type: "string", Description: "The pane's $TUIOS_PANE_TOKEN, which proves pane_id. It is good for one pane of one daemon start."},
+			},
+			returns: []verbParam{
+				{Name: "scope", Type: "string", Description: "own or all, as the connection now stands.", Accepted: scopeNames},
+				{Name: "read_only", Type: "bool", Description: "Whether the connection is now read-only."},
+				{Name: "window", Type: "string", Description: "The caller's pane, empty when it runs in no pane of this daemon. Under scope own such a connection reaches no session."},
+				{Name: "session", Type: "string", Description: "The session of the caller's pane."},
+				{Name: "via", Type: "string", Description: "How the pane was found: pid from the kernel, token from pane_token, empty when it was not.", Accepted: []string{"pid", "token"}},
+				{Name: "sessions", Type: "[]string", Description: "Under scope own, the sessions the connection reaches now. Sessions a fan starts later join it."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"restrict-connection","params":{"scope":"own","read_only":true}}`,
+				`{"id":1,"verb":"restrict-connection","params":{"scope":"all","read_only":true}}`,
+			},
+			handler: (*Daemon).verbRestrictConnection,
+		},
 		"list-verbs": {
 			description: "List every supported verb with its parameter schema and examples, plus the protocol version and error-code catalog.",
 			params: []verbParam{
@@ -345,7 +367,7 @@ func init() {
 				{Name: "changes", Type: "bool", Description: "Run git status in every worktree and report the count of uncommitted changes, and the commits ahead of base. Off by default because it runs git.", Default: "false"},
 			},
 			returns: []verbParam{
-				{Name: "worktrees", Type: "[]object", Description: "One entry per worktree session: session, repo, repo_root, branch, path, base, group, managed, gone, state, harness, windows, attached, prompt_status, prompt_note, and with changes: changes and ahead."},
+				{Name: "worktrees", Type: "[]object", Description: "One entry per worktree session: session, repo, repo_root, branch, path, base, group, managed, gone, state, harness, windows, attached, prompt_status, prompt_note, launched_from (the session whose pane ran the fan, only when a pane did), and with changes: changes and ahead."},
 				{Name: "total", Type: "int", Description: "How many entries."},
 			},
 			examples: []string{
@@ -1654,6 +1676,14 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 		markLinkServed(cs)
 	}
 
+	// A connection that restricted itself is held to it before anything,
+	// forwarding included, sees the call. See conn_scope.go.
+	scoped, verr := d.checkScope(cs, req.Verb, req.Params)
+	if verr != nil {
+		return d.writeVerbError(cs, req.ID, req.Verb, verr)
+	}
+	req.Params = scoped
+
 	// A report from a pane this machine runs for another machine goes to the
 	// machine that owns the pane's window. See hosted_calls.go.
 	if result, verr, handled := d.forwardHostedCall(cs, req.Verb, req.Params); handled {
@@ -1825,6 +1855,25 @@ var verbEnvelopeDoc = map[string]any{
 	"success":   `{"id":<echoed>,"result":{"type":"<result type>",...}}`,
 	"failure":   `{"id":<echoed>,"error":{"code":"<stable code>","message":"...","hint":{...}}}`,
 	"hint":      "Present on most failures. Names the verb or CLI command that fixes it, the bad parameter and its accepted values, the closest matching name, and the values that do exist.",
+}
+
+// VerbDoc is one verb as list-verbs describes it.
+type VerbDoc = verbDoc
+
+// VerbParamDoc is one parameter or result field of a VerbDoc.
+type VerbParamDoc = verbParam
+
+// VerbDocs returns every verb as list-verbs describes it, sorted by name. It
+// is read from the table the daemon dispatches from, so a program in this
+// binary that builds a schema from it (tuios mcp) describes the same verbs,
+// with the same parameters, as the daemon of the same build serves.
+func VerbDocs() []VerbDoc {
+	names := knownVerbNames()
+	out := make([]VerbDoc, 0, len(names))
+	for _, name := range names {
+		out = append(out, describeVerb(name, verbRegistry[name]))
+	}
+	return out
 }
 
 // describeVerb renders one registry entry as its documented form.

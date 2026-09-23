@@ -1001,6 +1001,10 @@ type SessionConfig struct {
 	// reaches the next pane. Nil, or an empty answer, means $SHELL and then
 	// the platform default.
 	PreferredShell func() string
+	// PaneToken returns the token a pane with the given window id is started
+	// with, exported as TUIOS_PANE_TOKEN. The manager stamps it with its own.
+	// Nil, or an empty answer, leaves the variable unset. See pane_token.go.
+	PaneToken func(windowID string) string
 	// Global creates the session as a global one. See SessionState.Global.
 	Global bool
 }
@@ -2162,6 +2166,13 @@ func (s *Session) buildEnv(windowID string, restored bool) []string {
 		// TUIOS_PANE_ID is an alias a state-reporting shim guards on, mirroring
 		// the pane-id contract other multiplexers' agent integrations use.
 		env = append(env, "TUIOS_PANE_ID="+windowID)
+		// TUIOS_PANE_TOKEN proves the pane id to restrict-connection where
+		// the kernel cannot name the caller's pane. See pane_token.go.
+		if s.config != nil && s.config.PaneToken != nil {
+			if tok := s.config.PaneToken(windowID); tok != "" {
+				env = append(env, "TUIOS_PANE_TOKEN="+tok)
+			}
+		}
 	}
 	// TUIOS_ENV marks a process as running under tuios, and TUIOS_SOCKET tells a
 	// shim which daemon socket to report to. Together with the pane id above they

@@ -137,8 +137,8 @@ type Daemon struct {
 	// swapped whole when the config file changes. See approvals.go.
 	approvals atomic.Pointer[ApprovalPolicy]
 	// approvalPeer places the process on a connection in a pane, for
-	// request-approval. Nil uses peerPaneWindow; a test sets it to stand in for
-	// a process table.
+	// request-approval, restrict-connection and fan's launched_from. Nil uses
+	// peerPaneWindow; a test sets it to stand in for a process table.
 	approvalPeer func(cs *connState) (fromPane bool, window string)
 
 	// stash is the per-session file store the stash verbs write into. It is held
@@ -326,6 +326,10 @@ type connState struct {
 	// channel (hosted_calls.go). It is a pane by construction, whatever the
 	// pid says, so it can never act as the person.
 	paneOnly bool
+	// scope is what restrict-connection narrowed this connection to, nil for
+	// a connection that never called it. It only ever narrows. See
+	// conn_scope.go.
+	scope atomic.Pointer[connScope]
 	// hostedEnded, on a paneOnly call, is closed when the report channel the
 	// call came on ends. A wait-for stops on it, so a wait does not outlive
 	// the channel that would carry its answer. nil means it never ends.

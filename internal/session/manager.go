@@ -31,6 +31,10 @@ type Manager struct {
 	// reaches the next pane of a session that already exists. It is atomic so
 	// a spawn never needs m.mu.
 	preferredShell atomic.Pointer[string]
+	// paneTokenKey signs the TUIOS_PANE_TOKEN every pane is started with. It
+	// is picked at random for each manager and never leaves memory. See
+	// pane_token.go.
+	paneTokenKey []byte
 
 	// Lifecycle hooks (set by the daemon). onCreate fires after a session is
 	// registered; onDelete fires after it is removed but before it is stopped.
@@ -56,7 +60,8 @@ func NewManager() *Manager {
 		byID:     make(map[string]*Session),
 		// The default matches config.DefaultSettings: a daemon nobody
 		// configured still opens windows where the user is looking.
-		inheritCwd: true,
+		inheritCwd:   true,
+		paneTokenKey: newPaneTokenKey(),
 	}
 }
 
@@ -166,6 +171,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	cfg.InheritCwd = m.inheritCwd
 	if cfg.PreferredShell == nil {
 		cfg.PreferredShell = m.PreferredShell
+	}
+	if cfg.PaneToken == nil {
+		cfg.PaneToken = m.PaneToken
 	}
 
 	// Create the session
