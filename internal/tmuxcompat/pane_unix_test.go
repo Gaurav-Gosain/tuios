@@ -23,7 +23,9 @@ import (
 // children and signals, as it is in a pane.
 const holderEnvKey = "TMUXCOMPAT_TEST_HOLDER"
 
-func TestMain(m *testing.M) {
+// runHolderIfAsked runs the holder and exits when this binary was started as
+// one. TestMain calls it before anything else.
+func runHolderIfAsked() {
 	if os.Getenv(holderEnvKey) == "1" {
 		var cmd []string
 		if c := os.Getenv("TMUXCOMPAT_TEST_CMD"); c != "" {
@@ -37,7 +39,6 @@ func TestMain(m *testing.M) {
 			Shell:   "/bin/sh",
 		}))
 	}
-	os.Exit(m.Run())
 }
 
 // shortDir is a temporary directory with a short path: a unix socket path is
