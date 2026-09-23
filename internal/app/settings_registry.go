@@ -222,7 +222,7 @@ func (m *OS) optionEffective(path string) string {
 			if o.Default != "" {
 				return o.Default
 			}
-			// Registry Default is what DefaultConfig writes, which for four
+			// Registry Default is what DefaultConfig writes, which for a few
 			// enums is empty meaning "the built-in". The built-in is the value
 			// the option accepts first, which is the order the registry lists
 			// them in and what TestEnumDefaultIsTheFirstAccepted pins. Without

@@ -10,6 +10,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
+// railFixtureWidth is the rail width the rail's row tests were measured at,
+// the shipped width before v0.8.0. The shipped width is now 24, where an
+// agent row's second line and the files section's read-only mark are cut
+// short; these fixtures test what a row says, so they keep the room to say it.
+const railFixtureWidth = 28
+
 // sidebarTestOS builds an OS with a few local windows and the sidebar enabled.
 func sidebarTestOS(t *testing.T, w, h int, pos string) *OS {
 	t.Helper()
@@ -22,7 +28,7 @@ func sidebarTestOS(t *testing.T, w, h int, pos string) *OS {
 		{ID: "cccccccc3333", CustomName: "logs", Width: 40, Height: 20, Workspace: 1},
 	}
 	m.FocusedWindow = 0
-	withSidebar(t, true, pos, config.SidebarDefaultWidth)
+	withSidebar(t, true, pos, railFixtureWidth)
 	m.Settings = config.Global
 	// NewOS ran before withSidebar redirected the state dir, so it read the
 	// tree the whole binary shares, where an earlier test may have saved an
@@ -52,7 +58,7 @@ func TestSidebarFitsNarrowScreens(t *testing.T) {
 		w, h  int
 		wantW int // 0 means auto-hidden
 	}{
-		{"desktop", 120, 40, config.SidebarDefaultWidth},
+		{"desktop", 120, 40, railFixtureWidth},
 		{"narrow-rail", 80, 24, config.SidebarNarrowWidth},
 		{"glyph-rail", 51, 37, config.SidebarGlyphWidth},
 		{"auto-hidden", 30, 24, 0},

@@ -202,15 +202,15 @@ type AppearanceConfig struct {
 	KittyPlaceholders        string                  `toml:"kitty_placeholders"`           // Draw kitty Unicode placeholder images: auto, on, off (default: auto)
 	NewWindowInheritCwd      *bool                   `toml:"new_window_inherit_cwd"`       // A new window starts in the focused pane's working directory (default: true)
 	AutoEnterTerminalOnFocus AutoEnterTerminalPolicy `toml:"auto_enter_terminal_on_focus"` // When a keyboard focus command should start typing in that pane: off, targeted, all (default: off)
-	ClickToType              string                  `toml:"click_to_type"`                // What a click on a pane's content does in window-management mode: single, double, off (default: single)
+	ClickToType              string                  `toml:"click_to_type"`                // What a click on a pane's content does in window-management mode: single, double, off (default: double)
 	WordCharacters           *string                 `toml:"word_characters"`              // Punctuation that counts as part of a word for double-click selection (default: "@-./_~?&=%+#")
-	DockbarPosition          string                  `toml:"dockbar_position"`             // Dockbar position: bottom, top, hidden
+	DockbarPosition          string                  `toml:"dockbar_position"`             // Dockbar position: bottom, top, hidden (default: top)
 	PreferredShell           string                  `toml:"preferred_shell"`              // Preferred shell: if empty, auto-detect based on platform.
 	AnimationsEnabled        *bool                   `toml:"animations_enabled"`           // Enable UI animations (default: true). Set to false for instant transitions.
 	ConfirmQuit              *bool                   `toml:"confirm_quit"`                 // Always show quit confirmation dialog (default: false). When false, only shown if foreground processes are running.
 	WhichKeyEnabled          *bool                   `toml:"whichkey_enabled"`             // Show which-key popup after pressing leader key (default: true)
 	WhichKeyPosition         string                  `toml:"whichkey_position"`            // Which-key popup position: bottom-right, bottom-left, top-right, top-left, center (default: bottom-right)
-	WindowTitlePosition      string                  `toml:"window_title_position"`        // Window title position: bottom, top, hidden (default: bottom). Shows CustomName if set, else terminal title.
+	WindowTitlePosition      string                  `toml:"window_title_position"`        // Window title position: bottom, top, hidden (default: top). Shows CustomName if set, else terminal title.
 	HideClock                bool                    `toml:"hide_clock"`                   // Hide the clock overlay (deprecated, use show_clock)
 	ShowClock                bool                    `toml:"show_clock"`                   // Show the clock overlay (default: false)
 	ShowCPU                  bool                    `toml:"show_cpu"`                     // Show CPU graph in dock (default: false)
@@ -251,7 +251,7 @@ type AppearanceConfig struct {
 	MasterRatio       int    `toml:"master_ratio"`        // Master pane width in the master-stack layout, percent of the screen (default: 50)
 	ScrollColumnWidth int    `toml:"scroll_column_width"` // New column width in the scrolling layout, percent of the screen (default: 55)
 	ScrollColumnMax   int    `toml:"scroll_column_max"`   // Highest that width may be set to, percent of the screen (default: 90, up to 100)
-	ZoomSize          int    `toml:"zoom_size"`           // How much of the screen a zoomed pane takes, percent (default: 100)
+	ZoomSize          int    `toml:"zoom_size"`           // How much of the screen a zoomed pane takes, percent (default: 95)
 	PanelPadding      int    `toml:"panel_padding"`       // Columns of surface padding inside every overlay panel (default: 2)
 	ClockFormat       string `toml:"clock_format"`        // Go time layout the clock overlay is drawn with (default: 15:04:05)
 	DimUnfocused      int    `toml:"dim_unfocused"`       // Percent an unfocused pane's content is carried toward its own ground (default: 0)
@@ -433,7 +433,7 @@ const ScrollbarTrackNone = "none"
 // optional and an absent one takes the style's own default, so a file written
 // before the table grew renders exactly what the release documents.
 type ScrollbarConfig struct {
-	Style string `toml:"style"` // thin, track (default: thin)
+	Style string `toml:"style"` // thin, track (default: track)
 	Thumb string `toml:"thumb"` // one-cell glyph (default: thin ▐, track █, ASCII |)
 	Track string `toml:"track"` // one-cell glyph or none (default: thin ▕, track the surface fill, ASCII none)
 	Tint  string `toml:"tint"`  // border, muted, #RRGGBB (default: border)
@@ -485,9 +485,9 @@ type SelectionConfig struct {
 // vertical session rail. Each toggle is a pointer so nil can mean "unset, use
 // the default" and an explicit false survives a reload.
 type SidebarConfig struct {
-	Enabled     *bool  `toml:"enabled"`      // Show the rail (default: false)
-	Position    string `toml:"position"`     // Edge: left, right, hidden (default: left)
-	Width       int    `toml:"width"`        // Preferred width in columns for a wide screen (default: 28)
+	Enabled     *bool  `toml:"enabled"`      // Show the rail (default: true)
+	Position    string `toml:"position"`     // Edge: left, right, hidden (default: right)
+	Width       int    `toml:"width"`        // Preferred width in columns for a wide screen (default: 24)
 	ShowWindows *bool  `toml:"show_windows"` // The terminals section (default: true)
 	ShowGlyphs  *bool  `toml:"show_glyphs"`  // Agent-state glyph on each row (default: true)
 	ShowCounts  *bool  `toml:"show_counts"`  // Window count on each session row (default: true)
@@ -596,9 +596,10 @@ func DefaultConfig() *UserConfig {
 			WindowButtonPosition:     WindowButtonPositionLeft,
 			ScrollbackLines:          10000,
 			ScrollLines:              3,
-			DockbarPosition:          "bottom",
+			DockbarPosition:          DefaultDockbarPosition,
+			WindowTitlePosition:      DefaultWindowTitlePosition,
 			PreferredShell:           "",
-			ClickToType:              ClickToTypeSingle,
+			ClickToType:              ClickToTypeDouble,
 			KittyPlaceholders:        KittyPlaceholdersAuto,
 			AutoEnterTerminalOnFocus: AutoEnterTerminalOff,
 			Glyphs:                   theme.GlyphSetNone,
@@ -610,7 +611,7 @@ func DefaultConfig() *UserConfig {
 			ZoomSize:                 ZoomSizeDefault,
 			NiriScrollCells:          NiriScrollCellsDefault,
 			PrefixRepeatTime:         &defaultPrefixRepeatTime,
-			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleThin, Tint: ScrollbarTintQuiet},
+			Scrollbar:                ScrollbarConfig{Style: ScrollbarStyleTrack, Tint: ScrollbarTintQuiet},
 			Selection: SelectionConfig{
 				Bg: DefaultSelectionBg, Fg: DefaultSelectionFg,
 				SearchBg: DefaultSearchBg, SearchFg: DefaultSearchFg,
@@ -620,7 +621,10 @@ func DefaultConfig() *UserConfig {
 				FlashColor: DefaultCopyFlashColor, FlashStyle: DefaultCopyFlashStyle,
 			},
 			Sidebar: SidebarConfig{
-				Position:    "left",
+				// A fresh pointer per call, so a caller that flips it in place
+				// cannot change the next DefaultConfig.
+				Enabled:     new(true),
+				Position:    DefaultSidebarPosition,
 				Width:       SidebarDefaultWidth,
 				Sections:    SidebarDefaultSections,
 				FolderClick: SidebarFolderClickNavigate,
@@ -1438,9 +1442,13 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.Links = LinksAll
 	}
 
-	// DockbarPosition defaults to bottom.
-	if cfg.Appearance.DockbarPosition != "" {
+	// DockbarPosition defaults to top. A typo lands on that default, which is
+	// what the validator says it falls back to; left as written, the renderer
+	// would treat it as bottom.
+	if slices.Contains(DockbarPositions, cfg.Appearance.DockbarPosition) {
 		s.DockbarPosition = cfg.Appearance.DockbarPosition
+	} else if cfg.Appearance.DockbarPosition != "" {
+		s.DockbarPosition = DefaultDockbarPosition
 	}
 
 	// Sidebar. Also runs for a config that never went through LoadUserConfig (the
@@ -1455,8 +1463,10 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if sb.Enabled != nil {
 		s.SidebarEnabled = *sb.Enabled
 	}
-	if sb.Position != "" {
+	if slices.Contains(SidebarPositions, sb.Position) {
 		s.SidebarPosition = sb.Position
+	} else if sb.Position != "" {
+		s.SidebarPosition = DefaultSidebarPosition
 	}
 	if sb.Width > 0 {
 		s.SidebarWidth = sb.Width
@@ -1541,8 +1551,12 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if cfg.Appearance.WindowButtonZoom != nil {
 		s.WindowButtonZoom = *cfg.Appearance.WindowButtonZoom
 	}
-	if cfg.Appearance.Scrollbar.Style != "" {
+	// A typo lands on the default, as the validator says; left as written, the
+	// renderer would draw it as thin.
+	if slices.Contains(ScrollbarStyles, cfg.Appearance.Scrollbar.Style) {
 		s.ScrollbarStyle = cfg.Appearance.Scrollbar.Style
+	} else if cfg.Appearance.Scrollbar.Style != "" {
+		s.ScrollbarStyle = ScrollbarStyleTrack
 	}
 	// The glyph and tint keys are assigned as written, empty included: empty is
 	// the "use the style's default" state, and the getters below resolve it. A
@@ -1669,9 +1683,12 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.WhichKeyPosition = cfg.Appearance.WhichKeyPosition
 	}
 
-	// WindowTitlePosition defaults to bottom
-	if cfg.Appearance.WindowTitlePosition != "" {
+	// WindowTitlePosition defaults to top, and a typo lands there too; left as
+	// written, the renderer would draw it at the bottom.
+	if slices.Contains(WindowTitlePositions, cfg.Appearance.WindowTitlePosition) {
 		s.WindowTitlePosition = cfg.Appearance.WindowTitlePosition
+	} else if cfg.Appearance.WindowTitlePosition != "" {
+		s.WindowTitlePosition = DefaultWindowTitlePosition
 	}
 
 	// HideClock defaults to false
@@ -1738,7 +1755,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if slices.Contains(ClickToTypeModes, cfg.Appearance.ClickToType) {
 		s.ClickToType = cfg.Appearance.ClickToType
 	} else if cfg.Appearance.ClickToType != "" {
-		s.ClickToType = ClickToTypeSingle
+		s.ClickToType = ClickToTypeDouble
 	}
 
 	// WordCharacters is a pointer so an explicitly empty string can mean "no

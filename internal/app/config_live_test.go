@@ -52,7 +52,7 @@ func TestSettingsRowsApplyLive(t *testing.T) {
 		{"appearance.border_style", "double", func(m *OS) string {
 			return m.Settings.BorderStyle
 		}},
-		{"appearance.dockbar_position", "top", func(m *OS) string {
+		{"appearance.dockbar_position", "bottom", func(m *OS) string {
 			return m.Settings.DockbarPosition
 		}},
 		{"appearance.sidebar.width", "31", func(m *OS) string {

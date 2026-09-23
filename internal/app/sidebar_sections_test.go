@@ -25,7 +25,7 @@ func sectionsTestOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	m.FocusedWindow = 0
 	m.DaemonClient = &session.TUIClient{}
 	m.IsDaemonSession = true
-	withSidebar(t, true, "left", config.SidebarDefaultWidth)
+	withSidebar(t, true, "left", railFixtureWidth)
 	m.Settings = config.Global
 	m.SidebarOrder = nil
 

@@ -113,11 +113,9 @@ func main() {
 		cols, rows = v.Index(0).Int(), v.Index(1).Int()
 	}
 
-	cfg := config.DefaultConfig()
-	// A browser tab has no desktop notifications. Left on, the default warns
-	// about it at startup, which is noise in a tutorial.
-	noNotify := false
-	cfg.Notifications.Agent.Notify = &noNotify
+	// The shipped defaults with the tour's own looks pinned, so a change to a
+	// default does not move the screen the lessons describe.
+	cfg := learn.Config()
 	app.SetInputHandler(input.HandleInput)
 	config.ApplyAppearanceConfig(cfg, &config.Global)
 	seed := config.AppearanceFrom(cfg, config.Overrides{})

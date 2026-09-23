@@ -102,8 +102,8 @@ and prints the right command rather than overwriting it.
 - **Modal Interface**: Vim-inspired Window Management and Terminal modes
 - **Command Palette**: Fuzzy-searchable action launcher (<kbd>Ctrl</kbd>+<kbd>P</kbd>)
 - **Launcher**: Fuzzy search everything on `$PATH` plus your installed desktop apps (<kbd>Alt</kbd>+<kbd>Space</kbd>), ranked by what you actually run. <kbd>Enter</kbd> starts it; <kbd>Tab</kbd> opens a shell with the command typed but not entered, so you can add arguments. App icons are drawn where the terminal supports kitty graphics.
-- **Pane Zoom**: Fullscreen any pane with <kbd>z</kbd> (WM mode) or <kbd>Prefix</kbd>+<kbd>z</kbd>. Shared borders hidden when zoomed, dockbar shows **Z** indicator.
-- **Session Rail**: A sidebar with sessions, terminals, files, git state and agents (`appearance.sidebar.enabled`)
+- **Pane Zoom**: Zoom any pane with <kbd>z</kbd> (WM mode) or <kbd>Prefix</kbd>+<kbd>z</kbd>. It takes 95% of the screen by default; set `appearance.zoom_size = 100` for fullscreen. A fullscreen zoom hides the shared borders, and the dockbar shows a **Z** indicator.
+- **Session Rail**: A sidebar with sessions, terminals, files, git state and agents, on by default on the right (`appearance.sidebar.enabled`)
 - **Settings Page**: Change options in the app with <kbd>Prefix</kbd>+<kbd>,</kbd>
 - **Popups**: `tuios popup -- fzf` runs a command in a floating pane that closes when it exits
 
@@ -210,7 +210,7 @@ terminal window it started in. New panes are tiled. See
 | <kbd>i</kbd> / <kbd>Enter</kbd> | Enter Terminal mode |
 | <kbd>Prefix</kbd>+<kbd>Esc</kbd> or <kbd>Alt</kbd>+<kbd>Esc</kbd> | Back to Window Management mode (a bare <kbd>Esc</kbd> goes to the shell) |
 | <kbd>Prefix</kbd>+<kbd>d</kbd> | Detach in a daemon session, otherwise back to Window Management mode |
-| <kbd>z</kbd> (WM) or <kbd>Prefix</kbd>+<kbd>z</kbd> | Toggle pane zoom (fullscreen) |
+| <kbd>z</kbd> (WM) or <kbd>Prefix</kbd>+<kbd>z</kbd> | Toggle pane zoom |
 | <kbd>Prefix</kbd>+<kbd>Space</kbd> | Toggle BSP tiling |
 | <kbd>Prefix</kbd>+<kbd>[</kbd> | Enter copy mode (vim scrollback) |
 | <kbd>Prefix</kbd>+<kbd>S</kbd> | Session switcher |

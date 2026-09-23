@@ -438,11 +438,19 @@ func TestApplyOverrides_DockbarPosition(t *testing.T) {
 	// User config fallback
 	config.Global.DockbarPosition = "bottom"
 	userCfg := config.DefaultConfig()
-	userCfg.Appearance.DockbarPosition = "left"
+	userCfg.Appearance.DockbarPosition = "hidden"
 	config.ApplyAppearanceConfig(userCfg, &config.Global)
 	config.ApplyOverrides(config.Overrides{}, &config.Global)
-	if config.Global.DockbarPosition != "left" {
-		t.Errorf("Expected user config 'left', got %q", config.Global.DockbarPosition)
+	if config.Global.DockbarPosition != "hidden" {
+		t.Errorf("Expected user config 'hidden', got %q", config.Global.DockbarPosition)
+	}
+
+	// A value outside the set lands on the default, as the validator says.
+	config.Global.DockbarPosition = "bottom"
+	userCfg.Appearance.DockbarPosition = "left"
+	config.ApplyAppearanceConfig(userCfg, &config.Global)
+	if config.Global.DockbarPosition != config.DefaultDockbarPosition {
+		t.Errorf("Expected the default %q for an unknown value, got %q", config.DefaultDockbarPosition, config.Global.DockbarPosition)
 	}
 }
 

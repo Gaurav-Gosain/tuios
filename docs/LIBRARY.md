@@ -124,12 +124,12 @@ tuios.WithBorderStyle("thick")
 ### WithDockbarPosition(position string)
 
 Set the dockbar position. Valid values:
-- `"bottom"` (default)
-- `"top"`
+- `"top"` (default)
+- `"bottom"`
 - `"hidden"`
 
 ```go
-tuios.WithDockbarPosition("top")
+tuios.WithDockbarPosition("bottom")
 ```
 
 ### WithHideWindowButtons(hide bool)

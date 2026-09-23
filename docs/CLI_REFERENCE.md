@@ -117,11 +117,11 @@ tuios --standalone
 - `--ascii-only`: Use ASCII characters instead of Nerd Font icons
 - `--show-keys`: Enable showkeys overlay (screencaster-style key display)
 - `--border-style <style>`: Window border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block (default: from config or rounded)
-- `--dockbar-position <pos>`: Dockbar position: bottom, top, hidden
+- `--dockbar-position <pos>`: Dockbar position: bottom, top, hidden (default: from config or top)
 - `--hide-window-buttons`: Hide window control buttons (minimize, maximize, close)
 - `--window-button-style <style>`: How the window controls are drawn: `dots` (default, macOS traffic lights) or `pill`
 - `--window-button-position <position>`: Which end of the title bar the window controls sit on: `left` (default, macOS) or `right`
-- `--window-title-position <pos>`: Window title position: bottom, top, hidden
+- `--window-title-position <pos>`: Window title position: bottom, top, hidden (default: from config or top)
 - `--scrollback-lines <num>`: Number of lines in scrollback buffer (default: from config or 10000, 100 to 1000000)
 - `--hide-scrollbar`: Hide the window scrollbar thumb on the border
 - `--zoom-max-width <cells>`: Max width in cells for zoom mode (0 is fullscreen)
@@ -1037,7 +1037,7 @@ tuios set-config <path> <value> [flags]
 **Available Paths:**
 | Path | Values | Description |
 |------|--------|-------------|
-| `dockbar_position` | `bottom`, `top`, `hidden` | Dockbar position |
+| `dockbar_position` | `bottom`, `top`, `hidden` | Dockbar position (default `top`) |
 | `border_style` | `rounded`, `normal`, `thick`, `double`, `block`, `outer-half-block`, `inner-half-block`, `ascii`, `hidden`, `glyphs` | Border style |
 | `animations_enabled` | `true`, `false` | Enable/disable animations |
 | `hide_window_buttons` | `true`, `false` | Hide window buttons |
@@ -1047,7 +1047,7 @@ tuios set-config <path> <value> [flags]
 **Examples:**
 ```bash
 # Change dockbar position
-tuios set-config dockbar_position top
+tuios set-config dockbar_position bottom
 
 # Change border style
 tuios set-config border_style rounded
@@ -1061,7 +1061,7 @@ tuios set-config window_button_style dots
 tuios set-config window_button_position left
 
 # Target a specific session
-tuios set-config -s mysession dockbar_position bottom
+tuios set-config -s mysession dockbar_position hidden
 ```
 
 ### `tuios wait-for`

@@ -46,24 +46,25 @@ test.describe('the config file reaches a browser session', () => {
     expect(joined).not.toContain('╭');
   });
 
-  test('dock: dockbar_position puts the dock at the top', async ({ page }) => {
+  test('dock: dockbar_position puts the dock at the bottom', async ({ page }) => {
     const s = await boot(page);
-    // The dock is the row carrying the workspace strip, and the rule under it.
-    const dock = s.findIndex((l) => /\s1\s/.test(l) && l.includes('+'));
+    // The dock is the row carrying the workspace strip. The top is where it
+    // ships since v0.8.0, so the file asks for the bottom.
+    const dock = s.findLastIndex((l) => /\s1\s/.test(l) && l.includes('+'));
     expect(dock, 'no dock row found').toBeGreaterThanOrEqual(0);
-    expect(dock, 'the dock is not at the top of the screen').toBeLessThan(3);
-    expect(s[s.length - 1]).not.toMatch(/^─{20,}/);
+    expect(dock, 'the dock is not at the bottom of the screen').toBeGreaterThanOrEqual(s.length - 3);
+    expect(s[1]).not.toMatch(/^─{20,}/);
   });
 
   test('sidebar: the rail is drawn, on the configured edge, at the configured width', async ({ page }) => {
     const s = await boot(page);
     const rail = s.find((l) => l.includes('sessions'));
     expect(rail, 'the sidebar was not drawn').toBeTruthy();
-    // position = "left": the rail's own right-hand edge sits at width 24, and
+    // position = "left": the rail's own right-hand edge sits at width 30, and
     // there is nothing to its left.
     const edge = rail.indexOf('║');
-    expect(edge).toBeGreaterThan(0);
-    expect(edge).toBeLessThanOrEqual(24);
+    expect(edge).toBeGreaterThan(24);
+    expect(edge).toBeLessThanOrEqual(30);
     expect(rail.indexOf('sessions'), 'the rail is not on the left edge').toBeLessThan(3);
     // show_agents = false: the section the rail draws by default is gone.
     expect(s.join('\n')).not.toContain('agents');

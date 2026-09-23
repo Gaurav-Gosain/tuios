@@ -88,6 +88,7 @@ func TestScrollbarGlyphMustMeasureOneCell(t *testing.T) {
 	config.Global.ScrollbarStyle = config.ScrollbarStyleThin
 
 	cfg := config.DefaultConfig()
+	cfg.Appearance.Scrollbar.Style = config.ScrollbarStyleThin
 	cfg.Appearance.Scrollbar.Thumb = "▐▐"
 	cfg.Appearance.Scrollbar.Track = "ab"
 	cfg.Appearance.Scrollbar.Tint = "chartreuse"

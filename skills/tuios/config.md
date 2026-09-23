@@ -15,13 +15,13 @@ Each option gives its path, type, default, what it does, and the accepted values
 when the set is closed. Then set it and read it back:
 
 ```sh
-tuios set-config appearance.sidebar.enabled true
-tuios set-config appearance.sidebar.position right
-tuios get-config appearance.sidebar.position --json
+tuios set-config appearance.sidebar.width 30
+tuios set-config appearance.sidebar.position left
+tuios get-config appearance.dockbar_position --json
 ```
 
 ```json
-{"key":"appearance.sidebar.position","value":"left","source":"default","default":"left","option_type":"string"}
+{"key":"appearance.dockbar_position","value":"top","source":"default","default":"top","option_type":"string"}
 ```
 
 The path and the value are both checked, so a typo fails and says what it
@@ -136,9 +136,9 @@ done
 - **There is no preview and no undo.** Each call lands as it is made.
 - **Recording the old value and putting it back does not always work.** An
   option whose default is the empty string while its accepted set has no empty
-  value cannot be written back to that default. 4 options are in that state today:
-  `appearance.sidebar_position`, `appearance.whichkey_position`,
-  `appearance.window_title_position` and `notifications.agent.sound_mode`. A
+  value cannot be written back to that default. 3 options are in that state today:
+  `appearance.sidebar_position`, `appearance.whichkey_position` and
+  `notifications.agent.sound_mode`. A
   `value` of `""` with `source` `default` means you cannot set it back; tell
   the person which options you changed and cannot restore.
 - **There is no verb for keybindings, and hooks are read only.** Both are edited

@@ -205,7 +205,7 @@ func TestNew_OptionsReachTheAppearanceGlobals(t *testing.T) {
 	_ = tuios.New(
 		tuios.WithASCIIOnly(true),
 		tuios.WithBorderStyle("double"),
-		tuios.WithDockbarPosition("top"),
+		tuios.WithDockbarPosition("bottom"),
 		tuios.WithHideWindowButtons(true),
 		tuios.WithWindowButtonStyle("pill"),
 		tuios.WithWindowButtonPosition("right"),
@@ -214,7 +214,7 @@ func TestNew_OptionsReachTheAppearanceGlobals(t *testing.T) {
 	)
 
 	g := config.Global
-	if !g.UseASCIIOnly || g.BorderStyle != "double" || g.DockbarPosition != "top" ||
+	if !g.UseASCIIOnly || g.BorderStyle != "double" || g.DockbarPosition != "bottom" ||
 		!g.HideWindowButtons || g.WindowButtonStyle != "pill" || g.WindowButtonPosition != "right" ||
 		g.ScrollbackLines != 500 || g.AnimationsEnabled {
 		t.Errorf("the options did not all reach the globals: ascii=%v border=%q dock=%q hideButtons=%v style=%q position=%q scrollback=%d animations=%v",

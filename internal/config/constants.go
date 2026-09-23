@@ -98,7 +98,8 @@ const (
 	DockHeight = 2
 
 	// SidebarDefaultWidth is the preferred sidebar width on a wide screen.
-	SidebarDefaultWidth = 28
+	// Before v0.8.0 it was 28.
+	SidebarDefaultWidth = 24
 
 	// SidebarNarrowWidth is the width of the narrow rail (glyph + short name)
 	// used on mid-width screens.
@@ -382,20 +383,21 @@ const (
 
 // The zoom box's size as a percent of the content region, and its range.
 //
-// 100 is the whole region, which is what zoom has always been. Below it the
+// 100 is the whole region, which is what zoom was before v0.8.0. Below it the
 // pane keeps the middle and the layout around it stays on screen at the edges,
 // the way the scrolling layout leaves the next column peeking in, except in
-// both directions at once: you can see what you are not looking at.
+// both directions at once: you can see what you are not looking at. The
+// default leaves a thin band of that layout showing.
 const (
 	ZoomSizeMin     = 50
 	ZoomSizeMax     = 100
-	ZoomSizeDefault = 100
+	ZoomSizeDefault = 95
 )
 
 // GetZoomSize is the zoom box's size as a percent of the content region.
 //
 // A value outside the range, including the zero a Settings built by hand
-// carries, reads as the full region. Nothing that computes the box may read the
+// carries, reads as the default. Nothing that computes the box may read the
 // field directly, or a hand-built model would zoom to half a screen.
 func (s *Settings) GetZoomSize() int {
 	if s.ZoomSize < ZoomSizeMin || s.ZoomSize > ZoomSizeMax {

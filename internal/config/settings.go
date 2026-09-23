@@ -95,7 +95,7 @@ type Settings struct {
 	// Set via --dockbar-position flag or appearance.dockbar_position config
 	DockbarPosition string
 
-	// SidebarEnabled turns the sidebar on. Default off (opt-in).
+	// SidebarEnabled turns the sidebar on. Default on since v0.8.0.
 	SidebarEnabled bool
 
 	// SidebarPosition is which edge the sidebar reserves: "left", "right", or
@@ -358,11 +358,11 @@ type Settings struct {
 
 	// ClickToType decides what a left click on a pane's content does while the
 	// keyboard is driving the window manager. "single" enters terminal mode on the
-	// release, which is what a newcomer expects a click to do and so the default.
-	// "double" focuses on one click and enters on two, for a user who arranges
-	// panes with the mouse and does not want a stray click to take the window
-	// manager's keys away. "off" never changes mode from a click: the way in stays
-	// the enter_terminal_mode binding.
+	// release, which is what a newcomer expects a click to do (the default before
+	// v0.8.0). "double" focuses on one click and enters on two, so arranging panes
+	// with the mouse does not let a stray click take the window manager's keys
+	// away; it is the default. "off" never changes mode from a click: the way in
+	// stays the enter_terminal_mode binding.
 	//
 	// The mode decides who owns the mouse, here as everywhere else: a pane whose
 	// app asked for mouse tracking is only forwarded to in terminal mode, so under
@@ -584,9 +584,9 @@ func DefaultSettings() Settings {
 		BorderStyle:                 "rounded",
 		ZenMode:                     ZenModeDisabled,
 		Links:                       LinksAll,
-		DockbarPosition:             "bottom",
-		SidebarEnabled:              false,
-		SidebarPosition:             "left",
+		DockbarPosition:             DefaultDockbarPosition,
+		SidebarEnabled:              true,
+		SidebarPosition:             DefaultSidebarPosition,
 		SidebarWidth:                SidebarDefaultWidth,
 		SidebarShowGlyphs:           true,
 		SidebarShowCounts:           true,
@@ -612,7 +612,7 @@ func DefaultSettings() Settings {
 		HideWindowButtons:           false,
 		WindowButtonStyle:           WindowButtonStyleDots,
 		WindowButtonPosition:        WindowButtonPositionLeft,
-		ScrollbarStyle:              ScrollbarStyleThin,
+		ScrollbarStyle:              ScrollbarStyleTrack,
 		ScrollbarThumb:              "",
 		ScrollbarTrack:              "",
 		ScrollbarTint:               ScrollbarTintQuiet,
@@ -630,7 +630,7 @@ func DefaultSettings() Settings {
 		CopyFlashColor:              DefaultCopyFlashColor,
 		CopyFlashStyle:              DefaultCopyFlashStyle,
 		HideScrollbar:               false,
-		WindowTitlePosition:         "bottom",
+		WindowTitlePosition:         DefaultWindowTitlePosition,
 		WindowTitleFormat:           "",
 		HideClock:                   false,
 		ShowClock:                   false,
@@ -641,7 +641,7 @@ func DefaultSettings() Settings {
 		CopyOnSelect:                true,
 		FocusFollowsMouse:           false,
 		AltDrag:                     true,
-		ClickToType:                 ClickToTypeSingle,
+		ClickToType:                 ClickToTypeDouble,
 		NewWindowInheritCwd:         true,
 		KittyPlaceholders:           KittyPlaceholdersAuto,
 		RightClickOpensMenu:         false,

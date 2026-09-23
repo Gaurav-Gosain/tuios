@@ -83,6 +83,16 @@ var (
 	daemonLogLevels      = []string{"off", "errors", "basic", "messages", "verbose", "trace"}
 )
 
+// The shipped edges for the dock, the rail and the window title. Named because
+// DefaultConfig, DefaultSettings, the registry and the typo fallback in
+// ApplyAppearanceConfig all have to agree on them. v0.8.0 moved all three: the
+// dock and the title were at the bottom and the rail on the left before it.
+const (
+	DefaultDockbarPosition     = "top"
+	DefaultSidebarPosition     = "right"
+	DefaultWindowTitlePosition = "top"
+)
+
 // optionSpecs is the registry, hand-written so each entry can say what the
 // setting is for in the words the struct already uses.
 //
@@ -173,7 +183,7 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.click_to_type", Type: OptionString, Section: "appearance",
 		Description: "What a click on a pane's content does in window-management mode",
-		Accepted:    ClickToTypeModes, Default: ClickToTypeSingle,
+		Accepted:    ClickToTypeModes, Default: ClickToTypeDouble,
 	},
 	{
 		Path: "appearance.auto_enter_terminal_on_focus", Type: OptionString, Section: "appearance",
@@ -212,8 +222,8 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.window_title_position", Type: OptionString, Section: "appearance",
-		Description: "Edge of the pane the title is drawn on (empty: bottom)",
-		Accepted:    WindowTitlePositions, Default: "",
+		Description: "Edge of the pane the title is drawn on",
+		Accepted:    WindowTitlePositions, Default: DefaultWindowTitlePosition,
 	},
 	{
 		Path: "appearance.theme", Type: OptionString, Section: "appearance",
@@ -409,7 +419,7 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.dockbar_position", Type: OptionString, Section: "dock",
 		Description: "Edge the dock sits on, or hidden",
-		Accepted:    DockbarPositions, Default: "bottom",
+		Accepted:    DockbarPositions, Default: DefaultDockbarPosition,
 	},
 	{
 		Path: "appearance.dock_workspace_tabs", Type: OptionBool, Section: "dock",
@@ -458,7 +468,7 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.scrollbar.style", Type: OptionString, Section: "scrollbar",
 		Description: "Hairline thumb over the content column, or a full-height track",
-		Accepted:    ScrollbarStyles, Default: ScrollbarStyleThin,
+		Accepted:    ScrollbarStyles, Default: ScrollbarStyleTrack,
 	},
 	{
 		Path: "appearance.scrollbar.thumb", Type: OptionString, Section: "scrollbar",
@@ -552,12 +562,12 @@ var optionSpecs = []Option{
 	{
 		Path: "appearance.sidebar.enabled", Type: OptionBool, Section: "sidebar",
 		Description: "Show the session rail",
-		Default:     "false",
+		Default:     "true",
 	},
 	{
 		Path: "appearance.sidebar.position", Type: OptionString, Section: "sidebar",
 		Description: "Edge the rail sits on, or hidden",
-		Accepted:    SidebarPositions, Default: "left",
+		Accepted:    SidebarPositions, Default: DefaultSidebarPosition,
 	},
 	{
 		Path: "appearance.sidebar.width", Type: OptionInt, Section: "sidebar",

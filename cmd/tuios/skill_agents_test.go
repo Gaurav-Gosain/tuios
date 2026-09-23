@@ -100,11 +100,11 @@ func TestSkillListsEveryErrorCode(t *testing.T) {
 
 // TestSkillIsHonestAboutRestoringConfig is the self-verifying one, and the
 // reason it exists is worth stating: the skill told agents to record a config
-// value and put it back, and for four options that is impossible, because their
+// value and put it back, and for a few options that is impossible, because their
 // declared default is the empty string while their accepted set has no empty in
 // it. Reading the default and writing it back is refused as invalid.
 //
-// So the skill names those four. If someone gives one of them a usable default,
+// So the skill names them. If someone gives one of them a usable default,
 // this fails and points at the sentence to delete, rather than leaving the skill
 // warning about a problem that no longer exists.
 func TestSkillIsHonestAboutRestoringConfig(t *testing.T) {

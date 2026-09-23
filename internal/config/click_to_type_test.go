@@ -14,11 +14,14 @@ func withClickToType(t *testing.T) {
 	t.Cleanup(func() { config.Global.ClickToType = prev })
 }
 
-// The default is what tuios has always done, and the setting exists to be able
-// to leave it rather than to change it.
-func TestClickToTypeDefaultsToSingle(t *testing.T) {
-	if got := config.DefaultConfig().Appearance.ClickToType; got != config.ClickToTypeSingle {
-		t.Errorf("default click_to_type = %q, want %q", got, config.ClickToTypeSingle)
+// The default has been double since v0.8.0: one click focuses, and a second
+// one starts typing. It was single before.
+func TestClickToTypeDefaultsToDouble(t *testing.T) {
+	if got := config.DefaultConfig().Appearance.ClickToType; got != config.ClickToTypeDouble {
+		t.Errorf("default click_to_type = %q, want %q", got, config.ClickToTypeDouble)
+	}
+	if got := config.DefaultSettings().ClickToType; got != config.ClickToTypeDouble {
+		t.Errorf("default settings click_to_type = %q, want %q", got, config.ClickToTypeDouble)
 	}
 }
 
@@ -38,8 +41,8 @@ func TestClickToTypeReachesTheGlobal(t *testing.T) {
 
 	// An older config: the key is absent, and the load path backfills it.
 	cfg := writeConfig(t, "[appearance]\nborder_style = \"rounded\"\n")
-	if got := cfg.Appearance.ClickToType; got != config.ClickToTypeSingle {
-		t.Errorf("click_to_type = %q for a config written before the key existed, want %q", got, config.ClickToTypeSingle)
+	if got := cfg.Appearance.ClickToType; got != config.ClickToTypeDouble {
+		t.Errorf("click_to_type = %q for a config written before the key existed, want %q", got, config.ClickToTypeDouble)
 	}
 }
 
@@ -47,7 +50,7 @@ func TestClickToTypeReachesTheGlobal(t *testing.T) {
 // the mouse doing nothing recognisable.
 func TestClickToTypeRejectsAnUnknownValue(t *testing.T) {
 	withClickToType(t)
-	config.Global.ClickToType = config.ClickToTypeDouble
+	config.Global.ClickToType = config.ClickToTypeOff
 
 	cfg := config.DefaultConfig()
 	cfg.Appearance.ClickToType = "sometimes"
@@ -61,7 +64,7 @@ func TestClickToTypeRejectsAnUnknownValue(t *testing.T) {
 	}
 
 	config.ApplyAppearanceConfig(cfg, &config.Global)
-	if config.Global.ClickToType != config.ClickToTypeSingle {
-		t.Errorf("ClickToType = %q after an unknown value, want the default %q", config.Global.ClickToType, config.ClickToTypeSingle)
+	if config.Global.ClickToType != config.ClickToTypeDouble {
+		t.Errorf("ClickToType = %q after an unknown value, want the default %q", config.Global.ClickToType, config.ClickToTypeDouble)
 	}
 }

@@ -82,14 +82,14 @@ const appearance = isolatedTree('TUIOS_CT_APPEARANCE_HOME');
 // of text down one side, a clock.
 export const SEEDED_CONFIG = `[appearance]
 border_style = "double"
-dockbar_position = "top"
+dockbar_position = "bottom"
 show_clock = true
 window_title_format = "seeded {title}"
 
 [appearance.sidebar]
 enabled = true
 position = "left"
-width = 24
+width = 30
 show_agents = false
 
 [startup]

@@ -42,9 +42,7 @@ type tour struct {
 
 func newTour(t *testing.T) *tour {
 	t.Helper()
-	cfg := config.DefaultConfig()
-	noNotify := false
-	cfg.Notifications.Agent.Notify = &noNotify
+	cfg := Config()
 	seed := config.AppearanceFrom(cfg, config.Overrides{})
 	seed.AnimationsEnabled = false
 	o := app.NewOS(app.OSOptions{
