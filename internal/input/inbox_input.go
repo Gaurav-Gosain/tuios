@@ -16,6 +16,11 @@ import (
 // sent an agent here that the link policy held, f steps the kind filter, m opens
 // the whole mailbox, and esc or q closes.
 func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// A question that opened the Inbox by itself a moment ago: the key was
+	// most likely typed for the pane, so it does nothing here.
+	if o.InboxPopSettling() {
+		return o, nil
+	}
 	if o.InboxPeeking() {
 		return handleInboxPeekInput(msg, o)
 	}

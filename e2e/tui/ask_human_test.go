@@ -102,6 +102,101 @@ func TestAskHumanPopsUpOnThePaneInFront(t *testing.T) {
 	alive(t, term, "after answering a question")
 }
 
+// TestAskHumanPopIgnoresKeysTypedForThePane presses d the moment the question
+// pops, as a person typing to the agent would. The key does not dismiss the
+// question: it stays on screen and the waiting command keeps waiting. Once the
+// question has been on screen for a moment, a digit answers it.
+//
+// Negative control: without the settle check in handleInboxInput, d dismisses
+// the question and ask-human exits 1 at once.
+func TestAskHumanPopIgnoresKeysTypedForThePane(t *testing.T) {
+	term, base := attachClientBase(t)
+
+	asked := startAskHuman(t, base, "-s", "e2e-ctrlp", "-w", "0", "--timeout", "60000",
+		"Squash the commits?", "-o", "yes", "-o", "no")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHas(s, "Asked you 1", "[1-2] Squash the commits?")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the question never came up on the client showing the pane: %v\n%s", err, term.Snapshot())
+	}
+	if err := term.SendKeys("d"); err != nil {
+		t.Fatalf("press d: %v", err)
+	}
+	time.Sleep(answerSettle)
+	if !strings.Contains(term.Snapshot(), "Squash the commits?") {
+		t.Fatalf("d pressed as the question appeared dismissed it\n%s", term.Snapshot())
+	}
+	select {
+	case run := <-asked:
+		t.Fatalf("ask-human returned after a key typed as the question appeared: %q, %v", run.out, run.err)
+	default:
+	}
+
+	if err := term.SendKeys("1"); err != nil {
+		t.Fatalf("answer: %v", err)
+	}
+	select {
+	case run := <-asked:
+		if run.err != nil || strings.TrimSpace(run.out) != "yes" {
+			t.Fatalf("ask-human printed %q and ended with %v, want the answer yes and exit 0", run.out, run.err)
+		}
+	case <-time.After(uiTimeout):
+		t.Fatalf("ask-human never returned after the answer\n%s", term.Snapshot())
+	}
+	alive(t, term, "after a key typed as a question popped")
+}
+
+// TestAskHumanAnswerReachesAKilledCaller kills the waiting ask-human, as a
+// harness does to a command past its time limit, and then answers from the
+// Inbox. The answer is mailed to the asking pane from human, verified.
+//
+// Negative control: without the replyFailed hook the answer goes to the dead
+// call and the pane's inbox stays empty.
+func TestAskHumanAnswerReachesAKilledCaller(t *testing.T) {
+	term, base := attachClientBase(t)
+	if out, err := tuiosCLI(t, base, "new", "e2e-killed", "--detach"); err != nil {
+		t.Fatalf("create the agent's session: %v\n%s", err, out)
+	}
+	cmd := exec.Command(tuiosBin, "ask-human", "-s", "e2e-killed", "-w", "0", "--timeout", "60000", "Tag the release?", "-o", "tag", "-o", "skip")
+	cmd.Dir = workDirIn(t, base)
+	cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start ask-human: %v", err)
+	}
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
+		t.Fatalf("open the Inbox: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return screenHas(s, "Asked you 1", "Tag the release?")
+	}, uiTimeout); err != nil {
+		_ = cmd.Process.Kill()
+		t.Fatalf("the Inbox never listed the question: %v\n%s", err, term.Snapshot())
+	}
+	_ = cmd.Process.Kill()
+	_ = cmd.Wait()
+
+	time.Sleep(answerSettle)
+	if err := term.SendKeys("1"); err != nil {
+		t.Fatalf("answer: %v", err)
+	}
+	deadline := time.Now().Add(uiTimeout)
+	for {
+		mail, err := tuiosCLI(t, base, "read-agent-messages", "-s", "e2e-killed", "-w", "0", "--json")
+		if err == nil && strings.Contains(mail, `"text": "tag"`) && strings.Contains(mail, `"verified_human": true`) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the killed caller's pane inbox = %q (%v), want the answer tag from human, verified\n%s", mail, err, term.Snapshot())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	alive(t, term, "after answering a killed caller's question")
+}
+
 // TestPopupWaitReturnsWhatThePickerPrinted is popup --capture-stdout on a real
 // client: the picker draws its prompt in the popup, the person types the
 // answer there, and the command that opened the popup prints the answer and

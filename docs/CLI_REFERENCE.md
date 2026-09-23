@@ -743,8 +743,9 @@ tuios ask-human --request-id <id>
 ```
 
 The question goes in the Inbox as an Asked you row. A client that shows the
-asking pane opens the Inbox on it at once, and the digits 1 to 9 pick an
-answer; from any other pane it waits there with the usual alert, and with
+asking pane opens the Inbox on it at once, unless the person is typing into
+the pane or has an overlay open, and the digits 1 to 9 pick an answer once it
+has been on screen for a moment; from any other pane it waits there with the usual alert, and with
 nobody attached it waits for the next attach. Only the person at an attached
 client can answer; an agent cannot.
 

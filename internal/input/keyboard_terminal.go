@@ -252,6 +252,7 @@ func HandleTerminalModeKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// overlay, and copy-mode routing) captured keys that never reach the
 			// shell, so tapes replayed prefix chords and stray characters.
 			recordTerminalKey(o, msg)
+			o.NotePaneKey()
 			if err := focusedWindow.SendInput(rawInput); err != nil {
 				// Terminal unavailable, switch back to window mode
 				o.Mode = app.WindowManagementMode

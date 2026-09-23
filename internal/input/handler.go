@@ -84,6 +84,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		// paste markers. Forward it to the focused window's PTY without touching the
 		// stored clipboard and without a "Pasted" notification (matching tmux/VTM).
 		if o.Mode == app.TerminalMode {
+			o.NotePaneKey()
 			forwardPasteToFocused(o, msg.Content)
 		}
 		return o, nil

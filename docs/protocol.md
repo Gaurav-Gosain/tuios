@@ -2143,9 +2143,10 @@ line.
 
 Put a question with a fixed set of answers to the person, and wait for the
 answer. The question is an `ask` item in the Inbox. A client the person holds
-that shows the asking pane opens the Inbox on it at once; anywhere else it
-waits there with the usual alert, and with nobody attached it waits for the
-next attach.
+that shows the asking pane opens the Inbox on it at once, unless the person
+typed into the pane in the last 600 ms or an overlay is open there, and then
+drops every key for 400 ms; anywhere else it waits there with the usual
+alert, and with nobody attached it waits for the next attach.
 
 Params:
 

@@ -963,7 +963,11 @@ The question is an Asked you row in the Inbox, and the call waits for you:
 
 - When your client shows the pane that asked, the Inbox opens on the question
   by itself. This is the popup: you are looking at the agent, so its question
-  comes to you. Press the answer's digit.
+  comes to you. Press the answer's digit. For a moment after it opens, every
+  key is dropped with a word, so a key you were typing to the agent does not
+  dismiss, close or answer the question. It does not pop, and alerts instead,
+  while you are typing into the pane, or while an overlay is open, the Inbox
+  included: an open Inbox keeps its cursor, peek and text line.
 - When the question comes from any other pane, nothing takes the keyboard. It
   raises the usual alert (dock message, notification, sound, under
   `[notifications.agent]` like a `needs_input`), and waits in the Inbox.

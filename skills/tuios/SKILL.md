@@ -1225,8 +1225,8 @@ case $? in
 esac
 ```
 
-The question goes in the Inbox. If the person's client is showing your pane,
-the Inbox opens on it and a digit answers; otherwise it waits there with an
+The question goes in the Inbox. If the person's client is showing your pane
+and they are not typing into it, the Inbox opens on it and a digit answers; otherwise it waits there with an
 alert, and with nobody attached it waits for the next attach. The answer is
 always one of your `-o` options, it comes only from the person (no agent can
 answer, including you), and the JSON result says `"verified_human": true`.

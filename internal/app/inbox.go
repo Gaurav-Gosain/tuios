@@ -75,6 +75,12 @@ type InboxState struct {
 	// when it was first drawn as it is. 1, 2 and 3 answer only that item as
 	// drawn, once it has been on screen for inboxAnswerSettle.
 	shown inboxShown
+	// poppedAt is when a question opened the Inbox by itself, zero when the
+	// person opened it. No key acts for inboxAnswerSettle after a pop.
+	poppedAt time.Time
+	// paneKeyAt is when the person last typed into a pane. A question does
+	// not pop within inboxPopQuiet of it.
+	paneKeyAt time.Time
 
 	// lastJumpID and lastJumpAt let the next-attention key cycle.
 	lastJumpID string
@@ -525,25 +531,58 @@ func (m *OS) inboxSeenUnderEyes(it session.AttentionItem) tea.Cmd {
 	return nil
 }
 
+// inboxPopQuiet is how long the person must not have typed into a pane before
+// a question may open the Inbox by itself. Someone typing to the agent that
+// just asked would otherwise have the rest of their keys read as Inbox keys.
+const inboxPopQuiet = 600 * time.Millisecond
+
 // inboxPopAsk opens the Inbox on a question ask-human put to the person, when
 // it is about the pane this client shows. That is the popup: the person is
-// looking at the agent that asked, so the question comes to them. A question
-// about any other pane waits in the Inbox with an alert instead, so nobody
-// typing elsewhere has the keyboard taken away. The answer keys only work once
-// the question has been on screen for a moment (inboxAnswerSettle), so a key
-// already on its way to the pane does not answer it.
+// looking at the agent that asked, so the question comes to them. It returns
+// false, and the question alerts and waits in the Inbox instead, whenever the
+// popup could take keys meant for something else:
+//
+//   - the question is about any other pane;
+//   - an overlay is open, the Inbox included: its cursor, a peek or a text
+//     line the person is typing in stays where it is;
+//   - the person typed into a pane within inboxPopQuiet.
+//
+// After a pop no key acts for inboxAnswerSettle (InboxPopSettling), so a key
+// already on its way to the pane does not dismiss, answer or close the
+// question.
 func (m *OS) inboxPopAsk(it session.AttentionItem) bool {
 	if it.Kind != session.AttentionAsk || it.Window == "" || !m.inboxAttached(it) {
 		return false
 	}
 	w := m.GetFocusedWindow()
-	if w == nil || w.ID != it.Window {
+	if w == nil || w.ID != it.Window || m.AnyOverlayOpen() {
 		return false
 	}
-	if !m.ShowInbox || m.Inbox.Peek != nil {
-		m.OpenInbox(session.AttentionAsk)
+	now := time.Now()
+	if !m.Inbox.paneKeyAt.IsZero() && now.Sub(m.Inbox.paneKeyAt) < inboxPopQuiet {
+		return false
 	}
+	m.OpenInbox(session.AttentionAsk)
 	m.Inbox.SelectedID = it.ID
+	m.Inbox.poppedAt = now
+	return true
+}
+
+// NotePaneKey records that the person typed into a pane just now, so a
+// question does not pop under their hands.
+func (m *OS) NotePaneKey() {
+	m.Inbox.paneKeyAt = time.Now()
+}
+
+// InboxPopSettling reports whether the Inbox opened by itself on a question
+// less than inboxAnswerSettle ago. Every key is then dropped with a word,
+// because it was most likely typed for the pane before the question showed.
+func (m *OS) InboxPopSettling() bool {
+	st := &m.Inbox
+	if !m.ShowInbox || st.poppedAt.IsZero() || time.Since(st.poppedAt) >= inboxAnswerSettle {
+		return false
+	}
+	m.ShowNotification("A question just appeared. Read it, then answer", "info", m.Settings.NotificationDuration)
 	return true
 }
 
@@ -905,6 +944,7 @@ func (m *OS) OpenInbox(filter string) {
 	st.Peek = nil
 	// Nothing has been on screen yet, so nothing can be answered until it is.
 	st.shown = inboxShown{}
+	st.poppedAt = time.Time{}
 	m.clampInboxSelection()
 }
 
