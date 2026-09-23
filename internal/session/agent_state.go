@@ -319,6 +319,12 @@ func (s *Session) applyAgentReport(target string, r AgentReport) (AgentState, bo
 		w.AgentStateAt = time.Now().UnixNano()
 		if r.SessionID != "" {
 			w.AgentSessionID = r.SessionID
+			// The harness the id belongs to: the one the report named, else
+			// the one the pane is attributed to after it.
+			w.AgentSessionHarness = r.Harness
+			if w.AgentSessionHarness == "" {
+				w.AgentSessionHarness = next.harness
+			}
 			if s.agentHarnessPIDs == nil {
 				s.agentHarnessPIDs = make(map[string]int)
 			}

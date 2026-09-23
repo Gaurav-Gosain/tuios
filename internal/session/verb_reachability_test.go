@@ -68,6 +68,11 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"set-layout#0":     {errCode: ErrVerbNeedsClient, why: "tiling is the client's arithmetic"},
 	"split-window#0":   {errCode: ErrVerbNeedsClient, why: "a split is the client's arithmetic"},
 
+	// The fixture has no agent panes, so no hook ever recorded a conversation
+	// to resume. Typing and dry runs are proved in agent_resume_test.go.
+	"resume-agent#0": {errCode: ErrVerbNotResumable, why: "no conversation is recorded in the fixture"},
+	"resume-agent#1": {errCode: ErrVerbNotResumable, why: "no conversation is recorded in the fixture"},
+
 	// The fixture has no [hosts] table, so the one host name an example can
 	// use is not configured. The connection itself is proved with two daemons
 	// in host_connection_test.go.

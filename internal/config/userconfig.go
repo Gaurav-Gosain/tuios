@@ -166,7 +166,23 @@ type DaemonConfig struct {
 	// respond is then for the person at the Inbox of an attached client. A
 	// caller inside a pane is refused either way.
 	RespondFromShell bool `toml:"respond_from_shell"`
+	// ResumeAgents is what a daemon restart does with the agent conversations
+	// the restored panes were running: "ask" (the default) puts one Inbox item
+	// per pane that the person answers, "auto" types each harness's resume
+	// command into its restored shell, and "off" does neither. The processes
+	// themselves never survive a restart; this brings back the conversation.
+	ResumeAgents string `toml:"resume_agents"`
 }
+
+// Resume modes. See DaemonConfig.ResumeAgents.
+const (
+	ResumeAgentsOff  = "off"
+	ResumeAgentsAsk  = "ask"
+	ResumeAgentsAuto = "auto"
+)
+
+// ResumeAgentsModes lists the valid values for daemon.resume_agents.
+var ResumeAgentsModes = []string{ResumeAgentsAsk, ResumeAgentsAuto, ResumeAgentsOff}
 
 // AppearanceConfig holds appearance-related settings
 type AppearanceConfig struct {
@@ -612,7 +628,8 @@ func DefaultConfig() *UserConfig {
 			},
 		},
 		Daemon: DaemonConfig{
-			LogLevel: "off",
+			LogLevel:     "off",
+			ResumeAgents: ResumeAgentsAsk,
 		},
 		Startup: StartupConfig{
 			OpenDefaultWindow:   false,
@@ -1800,6 +1817,11 @@ func fillMissingTape(cfg, defaultCfg *UserConfig) {
 func fillMissingDaemon(cfg, defaultCfg *UserConfig) {
 	if cfg.Daemon.LogLevel == "" {
 		cfg.Daemon.LogLevel = defaultCfg.Daemon.LogLevel
+	}
+	// An unset or unknown mode falls back to ask, which types nothing without
+	// the person; validation reports an unknown value as a warning.
+	if !slices.Contains(ResumeAgentsModes, cfg.Daemon.ResumeAgents) {
+		cfg.Daemon.ResumeAgents = defaultCfg.Daemon.ResumeAgents
 	}
 }
 

@@ -34,6 +34,9 @@ import (
 //     finished_unread), when the agent starts another turn, or on dismiss.
 //   - mail: a message to human in one thread. It closes when the ring says the
 //     person's mail in that thread is read.
+//   - resume: a pane a restore brought back with an agent conversation that
+//     can be resumed (agent_resume.go). It closes when the conversation is
+//     resumed, when an agent starts working in the pane, or on dismiss.
 //
 // Every item is keyed by what it is about (session, window and class, or
 // session and thread for mail), so a pane flapping, a harness repeating itself
@@ -47,7 +50,9 @@ import (
 // load rather than shown as a question nobody is asking any more. mail is
 // dropped too: it points into the message ring, which does not survive, and
 // thread ids start again from 1, so a saved item would be merged into whatever
-// unrelated thread next took its id.
+// unrelated thread next took its id. resume is dropped on load as well, because
+// the restore that follows every start opens it again from the window's
+// recorded conversation, which is where the fact lives.
 
 // Attention kinds. They are wire values: the kind field of an item and the
 // kind filter of list-attention.
@@ -57,12 +62,16 @@ const (
 	AttentionMail     = "mail"
 	AttentionErrored  = "errored"
 	AttentionFinished = "finished"
+	// AttentionResume is a restored pane whose agent conversation can be
+	// resumed. See agent_resume.go.
+	AttentionResume = "resume"
 )
 
 // AttentionKindNames lists the kinds in the order the Inbox groups them: what
 // blocks an agent first, then what an agent said, then what went wrong, then
-// what finished. list-attention sorts by it.
-var AttentionKindNames = []string{AttentionApproval, AttentionQuestion, AttentionMail, AttentionErrored, AttentionFinished}
+// what a restart left to bring back, then what finished. list-attention sorts
+// by it.
+var AttentionKindNames = []string{AttentionApproval, AttentionQuestion, AttentionMail, AttentionErrored, AttentionResume, AttentionFinished}
 
 // Close reasons an attention event carries on its closing action.
 const (
@@ -420,6 +429,13 @@ func (a *attentionStore) noteAgentState(sessionName string, ev SessionEvent) {
 	case AgentStateWorking.Name(), AgentStateNeedsInput.Name(), AgentStateErrored.Name():
 		a.closeKeyLocked(attentionKey(AttentionFinished, sessionName, ev.Window, 0), AttentionClosedResolved)
 	}
+	// An agent at work in a restored pane is the pane in use again, by a
+	// resume typed some other way or by a new agent, so the offer to resume
+	// is spent. A pane settling to idle or none says nothing either way.
+	switch state {
+	case AgentStateWorking.Name(), AgentStateNeedsInput.Name():
+		a.closeKeyLocked(attentionKey(AttentionResume, sessionName, ev.Window, 0), AttentionClosedResolved)
+	}
 
 	switch state {
 	case AgentStateNeedsInput.Name():
@@ -470,9 +486,31 @@ func (a *attentionStore) closeWindow(sessionName, window string) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for _, kind := range []string{AttentionApproval, AttentionErrored, AttentionFinished} {
+	for _, kind := range []string{AttentionApproval, AttentionErrored, AttentionFinished, AttentionResume} {
 		a.closeKeyLocked(attentionKey(kind, sessionName, window, 0), AttentionClosedWindow)
 	}
+}
+
+// openResume opens the resume item for a restored pane, or updates the one
+// already open for it.
+func (a *attentionStore) openResume(it AttentionItem) {
+	if a == nil {
+		return
+	}
+	it.Kind = AttentionResume
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.upsertLocked(it)
+}
+
+// closeResume closes a pane's resume item, if one is open.
+func (a *attentionStore) closeResume(sessionName, window, reason string) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.closeKeyLocked(attentionKey(AttentionResume, sessionName, window, 0), reason)
 }
 
 // closeSession closes every item in a session that ended.

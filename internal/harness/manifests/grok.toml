@@ -152,3 +152,7 @@ not_regex = ['[\x{2800}-\x{28FF}]']
 submit          = "cr"
 bracketed_paste = true
 source          = "default: Enter sends CR in raw mode; not measured"
+
+[resume]
+argv   = ["grok", "--resume", "{session_id}"]
+source = "herdr src/agent_resume.rs; not measured"

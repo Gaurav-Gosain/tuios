@@ -40,10 +40,13 @@ func (d *Daemon) restoreAllSessions() {
 			RemoveResurrectionState(name)
 			continue
 		}
-		if _, err := d.restoreSession(state); err != nil {
+		_, offers, err := d.restoreSessionOffers(state)
+		if err != nil {
 			LogError("Failed to restore session %q: %v", name, err)
 			continue
 		}
+		// Opened by the caller once the Inbox has loaded; see Daemon.Run.
+		d.pendingResumes = append(d.pendingResumes, offers...)
 		log.Printf("Restored session %q (%d windows)", name, len(state.Windows))
 	}
 }
@@ -53,13 +56,28 @@ func (d *Daemon) restoreAllSessions() {
 // restored) and remaps each window to its new PTY, since the PTY IDs from the
 // previous daemon are dead. If the session is already live it is returned
 // unchanged.
+//
+// It also offers to resume the agent conversations the restored panes held,
+// as daemon.resume_agents says. See agent_resume.go.
 func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
+	sess, offers, err := d.restoreSessionOffers(state)
+	if err != nil {
+		return nil, err
+	}
+	d.applyResumeOffers(offers)
+	return sess, nil
+}
+
+// restoreSessionOffers is restoreSession without acting on the resume offers:
+// it returns them, one for each restored pane with a conversation that can be
+// resumed. A session that was already live has none.
+func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOffer, error) {
 	if state == nil || state.Name == "" {
-		return nil, fmt.Errorf("cannot restore session from empty state")
+		return nil, nil, fmt.Errorf("cannot restore session from empty state")
 	}
 
 	if existing := d.manager.GetSession(state.Name); existing != nil {
-		return existing, nil
+		return existing, nil, nil
 	}
 
 	// A session whose windows were all closed leaves a state file behind, and
@@ -69,7 +87,7 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 	// 'tuios resurrect' alike. Checked after the live lookup above, which is
 	// about the session that already exists rather than about what was saved.
 	if len(state.Windows) == 0 {
-		return nil, fmt.Errorf("saved state for session %q has no windows, there is nothing to restore", state.Name)
+		return nil, nil, fmt.Errorf("saved state for session %q has no windows, there is nothing to restore", state.Name)
 	}
 
 	width, height := state.Width, state.Height
@@ -84,7 +102,7 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 	// back to daemon defaults (getShell uses $SHELL).
 	sess, err := d.manager.CreateSession(state.Name, &SessionConfig{}, width, height)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	sessionID := sess.ID
@@ -142,6 +160,10 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 			debugLog("[DEBUG] restored window %s ran on %s; it comes back on this machine", shortID(w.ID), w.Host)
 			w.Host = ""
 			w.Cwd = ""
+			// The conversation was on that machine too, and a resume here
+			// would name one this machine does not have.
+			w.AgentSessionID = ""
+			w.AgentSessionHarness = ""
 		}
 
 		pty, err := sess.RestorePTY(w.ID, ptyWidth, ptyHeight, w.Cwd, onExit)
@@ -169,9 +191,39 @@ func (d *Daemon) restoreSession(state *SessionState) (*Session, error) {
 		}
 	}
 
+	// Read before UpdateState, which rewrites the daemon-owned fields of the
+	// windows it is handed in place.
+	var offers []resumeOffer
+	ids := make(map[string]WindowState, len(kept))
+	for _, w := range kept {
+		if w.AgentSessionID == "" {
+			continue
+		}
+		ids[w.ID] = w
+		if o, ok := d.resumeOfferFor(state.Name, w); ok {
+			offers = append(offers, o)
+		}
+	}
+
 	sess.UpdateState(&restored)
 	// After UpdateState, which takes this field from canonical state and would
 	// undo it if the restore wrote it into the pushed snapshot instead.
 	sess.MarkRestored()
-	return sess, nil
+
+	// The conversation ids go back on after UpdateState for the same reason:
+	// they are daemon-owned, UpdateState takes them from canonical state, and
+	// the session was created empty. Without this every restore dropped the
+	// ids the state file had kept for exactly this moment.
+	if len(ids) > 0 {
+		_ = sess.mutateState(func(st *SessionState) error {
+			for i := range st.Windows {
+				if saved, ok := ids[st.Windows[i].ID]; ok {
+					st.Windows[i].AgentSessionID = saved.AgentSessionID
+					st.Windows[i].AgentSessionHarness = saved.AgentSessionHarness
+				}
+			}
+			return nil
+		})
+	}
+	return sess, offers, nil
 }

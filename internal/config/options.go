@@ -679,6 +679,11 @@ var optionSpecs = []Option{
 		Description: "Seconds between checks. 0 uses 2. A negative number turns checks off.",
 		Default:     "0",
 	},
+	{
+		Path: "daemon.resume_agents", Type: OptionString, Section: "daemon",
+		Description: "After a daemon restart, ask to resume each pane's agent conversation, resume it, or do neither",
+		Accepted:    ResumeAgentsModes, Default: ResumeAgentsAsk,
+	},
 
 	// [notifications]
 	{

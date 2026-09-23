@@ -184,6 +184,15 @@ type Daemon struct {
 	// daemon one, in which case every join reads on its pane's own output
 	// instead and nothing else changes.
 	transcriptWatcher *TranscriptWatcher
+
+	// resumeAgents is the resolved daemon.resume_agents mode: one of the
+	// resumeMode values. See agent_resume.go.
+	resumeAgents string
+
+	// pendingResumes holds the resume offers the start-up restore found, until
+	// the Inbox has loaded its saved items and they can be opened without
+	// taking ids the saved items already hold. See agent_resume.go.
+	pendingResumes []resumeOffer
 }
 
 // defaultAgentStallTimeout is the conservative default silence window before a
@@ -374,6 +383,12 @@ type DaemonConfig struct {
 	// built-in defaults. It also picks up the TUIOS_AGENT_BINARIES environment
 	// override (comma-separated).
 	AgentBinaries []string
+	// ResumeAgents is daemon.resume_agents: what a restore does with the agent
+	// conversations its panes were running. "ask" and anything unrecognised,
+	// including empty, opens a resume item in the Inbox for each; "auto" types
+	// the resume command into each restored shell; "off" does neither. See
+	// agent_resume.go.
+	ResumeAgents string
 	// Hosts are the federated peers from the [hosts] config table. Empty, the
 	// default, means the daemon holds no links and every federation verb reports
 	// an empty table.
@@ -424,6 +439,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		agentStallTimeout:  resolveAgentStallTimeout(cfg.AgentStallTimeout),
 		agentMatcher:       newAgentMatcher(resolveAgentBinaries(cfg.AgentBinaries)),
 		respondFromShell:   cfg.RespondFromShell,
+		resumeAgents:       resolveResumeMode(cfg.ResumeAgents),
 	}
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
 	d.SetApprovalPolicy(cfg.Approvals)
@@ -736,6 +752,11 @@ func (d *Daemon) Start() error {
 	// The Inbox comes back after the sessions do, since what it keeps is
 	// decided by which sessions and panes came back.
 	d.attention.load(attentionPath(), d.attentionLive)
+
+	// The resume offers the restore found are opened only now, after the saved
+	// Inbox items took their ids, so an offer never shares an id with one.
+	d.applyResumeOffers(d.pendingResumes)
+	d.pendingResumes = nil
 
 	// The links come up in the background. Start returns at once whatever the
 	// remote machines are doing, so a host that is powered off cannot delay the

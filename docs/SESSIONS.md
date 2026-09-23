@@ -158,6 +158,7 @@ BSP tree and the layout mode.
 | Screen contents | Yes | No | No | No |
 | Scrollback | Yes | No | No | No |
 | Running programs (vim, tail, a build) | Yes | No | No | No |
+| Agent conversations (resumable harnesses) | Yes, the agent keeps running | The conversation, not the process: see below | Same | Same |
 | Copy-mode position, selection | No, per-client | No | No | No |
 | Input mode (window vs terminal) | No, per-client | No | No | No |
 
@@ -219,6 +220,18 @@ What this means in practice: your layout comes back and each pane is sitting in
 the right directory, but whatever was running in those panes is not. A `vim` you
 had open is closed, a build you had running is dead, and the scrollback above the
 prompt is empty.
+
+Agents are the exception worth knowing about. An agent's process ends like any
+other, and whatever turn it was running does not finish. But a coding agent
+keeps its conversation on disk, and a pane whose harness reported the
+conversation id (the hooks `tuios integration install` sets up do) keeps that
+id in the state file. For such a pane, when its harness has a resume command
+(Claude Code, Codex, opencode and more), the restore offers to start the
+harness again on the same conversation, as `daemon.resume_agents` says: `ask`
+(the default) puts a Resume row in the Inbox that you answer with `y`, `auto`
+types `claude --resume <id>` (or the harness's own form) into the new shell,
+and `off` does neither. `tuios resume-agent -w <pane>` does it by hand. See
+[Agent state](AGENT_STATE.md#resuming-after-a-restart).
 
 Start the daemon with `--no-restore` to skip automatic restoration; saved state
 is left on disk and can still be restored on demand with `tuios resurrect`.

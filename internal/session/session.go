@@ -161,6 +161,14 @@ type WindowState struct {
 	// and it is replaced when another session reports into the pane. It is
 	// daemon-owned and never set by a client.
 	AgentSessionID string `json:"agent_session_id,omitempty"`
+	// AgentSessionHarness is the harness AgentSessionID belongs to, as the
+	// report that set the id named it. It is kept with the id rather than read
+	// from AgentHarness, because the harness attribution is cleared when the
+	// agent leaves the pane and the id is not: a resume after a restart needs
+	// both, and by then the agent is long gone. Daemon-owned like
+	// AgentSessionID. Empty in state written before it existed, and a resume
+	// then falls back to AgentHarness.
+	AgentSessionHarness string `json:"agent_session_harness,omitempty"`
 	// AgentMeta is what the pane reported about its agent through
 	// set-agent-meta (model, context, cost, a summary), in the order the keys
 	// first arrived. Daemon-owned like AgentState, display only, and cleared

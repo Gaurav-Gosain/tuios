@@ -751,6 +751,28 @@ hook you trust to name the conversation but not to say when a turn ends. It is
 refused for a pane attributed to another harness, and for a pane mid-turn
 whose id came from another process of the same harness.
 
+The id is what brings your conversation back after a daemon restart. A restart
+ends every program in every pane, you included; the restore starts a new shell
+in each pane and, for a pane whose harness has a `[resume]` command in its
+manifest (Claude Code, Codex, opencode, Copilot, Cursor Agent, Qwen and more),
+offers to run it with your id: `claude --resume <id>`, `codex resume <id>`.
+`daemon.resume_agents` decides how: `ask` (the default) puts a Resume row in the
+Inbox that the person answers with `y`, `auto` types the command into the new
+shell, `off` does neither. So report your id early, from the session start
+hook, and a restart costs the person one key rather than your whole context.
+What comes back is the conversation, not the turn that was running.
+
+```sh
+tuios resume-agent -w build --dry-run   # print the command
+tuios resume-agent -w build             # type it into that pane's shell
+```
+
+`resume-agent` types only into a pane whose shell is at its prompt (`not_ready`
+otherwise), and answers `not_resumable` for a pane with no recorded id, a
+harness with no `[resume]` block, an id that is not one plain shell token, or a
+pane on another machine. The command comes from the manifest and the stored id
+only, so there is nothing in it you can choose.
+
 `--if-state` applies the report only when the pane is in one of the states
 named, so a "tool finished" event clears a block without turning a finished
 pane back to `working`. A report that carries `--agent-session-id` is refused
@@ -889,8 +911,9 @@ is happening inside it, so fall back to `window-idle` or an exit marker there.
 
 Everything waiting for the person, in every session, is one list the daemon
 keeps: an approval or a question (a pane on `needs_input`, split by
-`blocked_by`), mail to `human`, a pane on `errored`, and a finished turn nobody
-has looked at. The person opens it with the prefix key then `i`, and jumps to
+`blocked_by`), mail to `human`, a pane on `errored`, a conversation a daemon
+restart left to resume (kind `resume`, its summary the exact command), and a
+finished turn nobody has looked at. The person opens it with the prefix key then `i`, and jumps to
 the oldest item with the prefix key then `o`. You can read the same list:
 
 ```sh
@@ -1690,7 +1713,7 @@ like "make it look like X" usually means some of each:
 | **Spacing** | ground between panes, padding inside overlay panels | `appearance.gap`, `appearance.panel_padding` |
 | **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
 
-The 156 options above are scalars, and spacing and composition are set with them
+The 157 options above are scalars, and spacing and composition are set with them
 like any other. Colour and shape are not: each is a name from an open set
 standing for a document kept in a directory rather than a value in the config
 file, which is why both have a verb of their own rather than a row in
@@ -2326,7 +2349,8 @@ when you are matching rather than reading: `invalid_request`, `unknown_verb`,
 `no_windows`, `pty_not_found`, `needs_client`, `option_not_found`,
 `command_failed`, `timeout`, `not_ready`, `agent_blocked`, `prompt_stalled`,
 `loop_refused`, `rate_limited`, `no_keyboard`, `forbidden`, `not_human`,
-`prompt_changed`, `protocol_mismatch`, `unknown_host`, `host_unreachable`,
+`prompt_changed`, `not_resumable`, `protocol_mismatch`, `unknown_host`,
+`host_unreachable`,
 `host_refused`, `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
 `internal`. The CLI folds the same information into its messages.
 
@@ -2346,6 +2370,9 @@ the item closes by itself; for another agent's prompt, ask the person.
 `prompt_changed` comes only from `respond`, which the person's client makes: the
 prompt moved, or was already answered, before the answer landed, and nothing
 was pressed.
+
+`not_resumable` comes only from `resume-agent`: the pane has no conversation
+it can bring back. Nothing was typed. Run the harness by hand if you want one.
 
 `not_ready`, `agent_blocked`, `prompt_stalled`, `loop_refused`, `rate_limited`,
 `no_keyboard` and `forbidden` come only from the cross-agent verbs, and each has

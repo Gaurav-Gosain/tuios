@@ -23,8 +23,9 @@ const inboxWidth = 72
 // says what would appear here.
 var inboxEmptyLines = []string{
 	"Nothing is waiting for you.",
-	"Agents that block on an approval or a question, write to you, error or",
-	"finish a turn you have not looked at show up here, from every session.",
+	"Agents that block on an approval or a question, write to you, error,",
+	"finish a turn you have not looked at, or can resume after a restart",
+	"show up here, from every session.",
 }
 
 // renderInbox renders the Inbox overlay: each kind under a heading in words,
@@ -42,11 +43,17 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 	if !st.Live {
 		title += " (not connected)"
 	}
+	// The key after dismiss is what answers the selected item: y resumes a
+	// conversation, r replies to mail and to anything else.
+	answer := overlay.Hint{Key: "r", Label: "reply"}
+	if it, ok := m.inboxSelected(); ok && it.Kind == session.AttentionResume {
+		answer = overlay.Hint{Key: "y", Label: "resume"}
+	}
 	hints := []overlay.Hint{
 		{Key: overlay.EnterKey(), Label: "go"},
 		{Key: "space", Label: "peek"},
 		{Key: "d", Label: "dismiss"},
-		{Key: "r", Label: "reply"},
+		answer,
 		{Key: "f", Label: "filter"},
 		{Key: "m", Label: "mailbox"},
 		{Key: "esc", Label: "close"},
@@ -383,7 +390,7 @@ func inboxApprovalHints(it session.AttentionItem) []overlay.Hint {
 // state behind it.
 func inboxKindColor(kind string, pal overlay.Palette) color.Color {
 	switch kind {
-	case session.AttentionMail:
+	case session.AttentionMail, session.AttentionResume:
 		return pal.AccentBright
 	case session.AttentionFinished:
 		return pal.Success

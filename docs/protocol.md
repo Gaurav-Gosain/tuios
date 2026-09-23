@@ -206,6 +206,26 @@ reported with when the detector sees the agent leave the pane. `set-agent-state`
 reads that pid only while a report holds the pane mid-turn, which the agent
 leaving has already ended, so its answers are unchanged.
 
+**A restore keeps each pane's `agent_session_id`, and the Inbox has a
+`resume` kind.** A daemon restart used to bring every window back with its
+`agent_session_id` empty, although the state file held it: the restore's state
+push took daemon-owned fields from the empty session it had just made. The id
+now comes back on every restored window that ran on this machine (a window that
+ran on another machine drops it, since the conversation is over there), so
+`get-agent-state` and `list-agents` return it after a restart. With it, the
+restore offers to resume each conversation whose harness has a `[resume]`
+command, as `daemon.resume_agents` says: in the default `ask` mode,
+`list-attention` gains one item of the new kind `resume` per such pane, with
+the command as its summary, and subscribers see an `attention` event opening
+it. `AttentionKindNames`, the order `list-attention` groups by and the
+`counts` object gain `resume`, between `errored` and `finished`. A client that
+groups by kind and does not know `resume` should treat it like any unknown
+kind. Windows also carry a new field, `agent_session_harness`, the harness
+the id belongs to; `set-agent-state` with `agent_session_id` and
+`set-agent-session` write it with the id, and a `set-agent-session` report that
+names the stored id under a different harness is now applied (it updates the
+harness) rather than answered as unchanged.
+
 **A prompt is pasted and submitted with a carriage return.** `ask-agent` and
 `fan` used to write the text followed by a line feed. Claude Code and Codex
 submit on a carriage return, which is what the Enter key sends, and several
@@ -513,7 +533,8 @@ catalog.
 | `option_not_found` | No option by that path exists. The hint carries the closest match. |
 | `command_failed` | A verb routed to the attached client came back failed or timed out. |
 | `timeout` | A wait-for condition did not match before its timeout elapsed. |
-| `not_ready` | The target agent was mid-turn, so the call declined to type at it. |
+| `not_ready` | The target agent was mid-turn, so the call declined to type at it. `resume-agent` raises it for a pane whose shell is not at its prompt. |
+| `not_resumable` | `resume-agent` found no conversation it can resume in the pane: none recorded, a harness with no `[resume]` command, an id that is not one plain shell token, or a pane on another machine. Nothing was typed. |
 | `agent_blocked` | ask-agent declined to type at an agent on `needs_input`, because the text would answer its prompt. Nothing was typed. The hint names `capture-pane`. |
 | `prompt_stalled` | ask-agent typed the question and sent Enter, and within `stall_timeout` the pane did not show that it took it. The question was typed; look at the pane before sending it again. The hint names `capture-pane`. |
 | `loop_refused` | The call would loop: a pane addressing itself, or an ask that closes a cycle with one in flight. |
@@ -1265,6 +1286,65 @@ Wire compatibility: a new verb. An older daemon answers `unknown_verb`, and
 `tuios agent-hook` asks `list-verbs` first and sends nothing to a daemon
 without it.
 
+### resume-agent
+
+Resume the agent conversation recorded for a pane: type the harness's resume
+command into the pane's shell. A daemon restart ends every program in every
+pane, and the restore starts a new shell in each; this is how a pane gets its
+conversation back. It brings back the conversation, not the process: the turn
+that was running when the daemon stopped did not finish.
+
+Params: `session`, `window` (default: the focused window), `dry_run` (return
+the command without typing it).
+
+```json
+{"verb": "resume-agent", "params": {"session": "work", "window": "build"}}
+```
+
+```json
+{"result": {"type": "agent_resumed", "window_id": "3f2a9c1e", "harness": "claude-code", "agent_session_id": "5f1c", "argv": ["claude", "--resume", "5f1c"], "command": "claude --resume 5f1c", "typed": true}}
+```
+
+The command is the harness manifest's `[resume] argv` with `{session_id}`
+replaced by the window's `agent_session_id`. The harness is the window's
+`agent_session_harness`, else its `harness_id` for state written before that
+field existed. The command is typed followed by a carriage return, and the
+pane's `resume` Inbox item, if one is open, closes with reason `resolved`.
+
+Failures, each with nothing typed:
+
+- `not_resumable`: no `agent_session_id` on the window; a harness with no
+  `[resume]` block; an id that is empty, over 256 bytes, starts with `-`, or
+  holds anything but letters, digits and `_ . / : -`; or a window whose
+  process runs on another machine.
+- `not_ready`: the pane's shell does not hold its terminal's foreground, so a
+  program is running there. Where the kernel does not report the foreground
+  process group (Windows, the BSDs), the daemon falls back to the detector's
+  last reading: no foreground program and agent state `none`.
+
+Security: what a caller can make it type is fixed by the manifest and by an id
+already stored on the window, and the manifest loader and the id check hold
+every token to characters every supported shell (sh, bash, zsh, fish,
+PowerShell, cmd) reads as one unquoted argument, so a pane that reported a
+hostile id cannot turn it into a second command. It types only into a pane at
+its shell prompt. That is strictly less than `send-text`, which every caller of
+the socket, a pane or a link included, already has, so it is not gated on the
+person. User manifests (under the user harness directory) can set any
+program as the first token; that directory is the user's own configuration.
+
+Restore behaviour, from `daemon.resume_agents`:
+
+- `ask` (default, and any unrecognised value): one `resume` Inbox item per
+  restored pane with a resumable conversation. The Inbox answers it with `y`,
+  which calls this verb.
+- `auto`: the daemon waits for each restored shell to draw its prompt (up to
+  10 seconds, then 300 ms of quiet), and types the command, 100 ms apart
+  between panes. A pane that does not get there, or whose shell is not in the
+  foreground, gets the `ask` item instead.
+- `off`: nothing. The id stays on the window, so this verb still works.
+
+Wire compatibility: a new verb. An older daemon answers `unknown_verb`.
+
 ### resolve-pane
 
 Name the pane a process runs in, for a hook reporter whose environment lost
@@ -1332,7 +1412,7 @@ answers the verb with `unknown_verb`.
 ### list-attention
 
 List the Inbox: everything waiting for the person, in every session on this
-daemon. Each item is one of five kinds, and the list is grouped in this order,
+daemon. Each item is one of six kinds, and the list is grouped in this order,
 oldest first inside each group:
 
 | Kind | Opens when | Closes when |
@@ -1341,6 +1421,7 @@ oldest first inside each group:
 | `question` | A pane goes to `needs_input` with any other `blocked_by`, or none. | The pane leaves `needs_input`. |
 | `mail` | A message to `human` lands in a thread. One item per thread; `count` is the unread messages. | The person's mail in the thread is read. |
 | `errored` | A pane goes to `errored`. | The pane leaves `errored`. |
+| `resume` | A restore brings back a pane with a conversation its harness can resume, with `daemon.resume_agents` on `ask`. The summary is the command. | `resume-agent` types it, or the pane goes to `working` or `needs_input` (an agent is running there again). |
 | `finished` | A pane's `completion_seq` goes up as it comes to rest. | An attached client focuses the pane, the agent starts another turn (`working`), blocks, or errors. |
 
 Every item also closes when its pane closes (mail excepted: the message is
@@ -1361,12 +1442,12 @@ sent.
 
 Params: `session` (optional; unlike most verbs, omitted means every session),
 `kinds` (optional list, from `approval`, `question`, `mail`, `errored`,
-`finished`).
+`resume`, `finished`).
 
 Response:
 
 ```json
-{"result": {"type": "attention_list", "items": [{"id": "17", "kind": "approval", "session": "fan-3", "window": "3f2a9c1e", "workspace": 1, "harness": "claude-code", "name": "claude", "summary": "approve Bash: go test ./...", "since": 1790142942055373000, "seq": 41}], "counts": {"approval": 1, "question": 0, "mail": 0, "errored": 0, "finished": 0}, "total": 1, "seq": 1180, "boot_id": "9f2c41d07a3e8b65"}}
+{"result": {"type": "attention_list", "items": [{"id": "17", "kind": "approval", "session": "fan-3", "window": "3f2a9c1e", "workspace": 1, "harness": "claude-code", "name": "claude", "summary": "approve Bash: go test ./...", "since": 1790142942055373000, "seq": 41}], "counts": {"approval": 1, "question": 0, "mail": 0, "errored": 0, "resume": 0, "finished": 0}, "total": 1, "seq": 1180, "boot_id": "9f2c41d07a3e8b65"}}
 ```
 
 Item fields: `id` (stable, never reused on this machine), `kind`, `host` (empty
@@ -1400,7 +1481,9 @@ does not survive a restart and thread ids start again from 1, so a saved item
 could only be merged into an unrelated new thread. An item opened while the
 saved queue is still loading keeps its id and wins over a saved item for the
 same pane and kind. A saved item whose id such an item already holds is kept
-under a fresh id, so no two items ever share one.
+under a fresh id, so no two items ever share one. It drops `resume` items
+too: the restore that runs on start opens them again from each window's
+`agent_session_id`, after the saved items are loaded.
 
 Wire compatibility: new verb and new event type. An older daemon answers
 `unknown_verb`, and the tuios client then shows the Inbox as unavailable.

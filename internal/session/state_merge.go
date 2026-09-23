@@ -152,8 +152,9 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 	// fields whenever any of them is set, so riding along there would lose them
 	// on every sync from an older client.
 	type agentIdentity struct {
-		kind      string
-		sessionID string
+		kind           string
+		sessionID      string
+		sessionHarness string
 	}
 	agentIDs := make(map[string]agentIdentity, len(canonical.Windows))
 	// Agent metadata is daemon-owned for the same reason, and carried on its
@@ -208,8 +209,8 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		if w.AgentState != AgentStateNone || w.AgentMessage != "" || w.AgentHarness != "" || w.AgentStateAt != 0 {
 			agents[w.ID] = agent{w.AgentState, w.AgentMessage, w.AgentHarness, w.AgentStateAt}
 		}
-		if w.AgentKind != "" || w.AgentSessionID != "" {
-			agentIDs[w.ID] = agentIdentity{w.AgentKind, w.AgentSessionID}
+		if w.AgentKind != "" || w.AgentSessionID != "" || w.AgentSessionHarness != "" {
+			agentIDs[w.ID] = agentIdentity{w.AgentKind, w.AgentSessionID, w.AgentSessionHarness}
 		}
 		if len(w.AgentMeta) > 0 {
 			metas[w.ID] = w.AgentMeta
@@ -241,6 +242,7 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		ids := agentIDs[w.ID]
 		w.AgentKind = ids.kind
 		w.AgentSessionID = ids.sessionID
+		w.AgentSessionHarness = ids.sessionHarness
 		if a, ok := agents[w.ID]; ok && w.AgentState == AgentStateNone && w.AgentMessage == "" && w.AgentHarness == "" && w.AgentStateAt == 0 {
 			w.AgentState = a.state
 			w.AgentMessage = a.message

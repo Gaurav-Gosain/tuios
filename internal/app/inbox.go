@@ -95,6 +95,10 @@ type InboxState struct {
 	// replied holds the approval requests this client answered, so the close
 	// event for one is not announced as answered elsewhere.
 	replied map[string]bool
+	// announcedResume holds the resume items this client has already told
+	// its user about, so a restore is announced once and not on every
+	// fresh listing.
+	announcedResume map[string]bool
 }
 
 // InboxSnapshotMsg is a fresh listing from the watcher.
@@ -133,6 +137,12 @@ type InboxDismissedMsg struct {
 	// person did not ask for it, and the next event or listing corrects the
 	// mirror either way.
 	Silent bool
+}
+
+// InboxResumedMsg is the answer to a resume: the command typed, or why not.
+type InboxResumedMsg struct {
+	Command string
+	Err     error
 }
 
 // inboxWatchMsg wraps what the watcher delivers, so Update can re-arm the
@@ -384,6 +394,37 @@ func (m *OS) applyInboxSnapshot(msg InboxSnapshotMsg) {
 	st.Live = true
 	st.Unsupported = false
 	m.inboxChanged()
+	m.announceResumes(st.Items)
+}
+
+// announceResumes says once, in the dock, that a restart left conversations
+// to resume, and how to answer. A restore happens with nobody attached, so the
+// items are usually already in the first listing a client gets, where no event
+// would announce them. The alert policy does not govern it: it is not an agent
+// changing state but the one time the person can bring the agents back.
+func (m *OS) announceResumes(items []session.AttentionItem) {
+	st := &m.Inbox
+	var fresh []session.AttentionItem
+	for _, it := range items {
+		if it.Kind != session.AttentionResume || it.Host != "" || st.announcedResume[it.ID] {
+			continue
+		}
+		if st.announcedResume == nil {
+			st.announcedResume = make(map[string]bool)
+		}
+		st.announcedResume[it.ID] = true
+		fresh = append(fresh, it)
+	}
+	if len(fresh) == 0 {
+		return
+	}
+	text := inboxWhere(fresh[0]) + ": " + inboxWho(fresh[0]) + " " + inboxKindWords(fresh[0])
+	if len(fresh) > 1 {
+		text = strconv.Itoa(len(fresh)) + " agent conversations can be resumed"
+	}
+	text += agentAlertSep() + "open the Inbox with the prefix key then i, and press y"
+	m.ShowNotificationFrom(text, "info", m.Settings.NotificationDuration,
+		NotifTarget{SessionID: fresh[0].Session, WindowID: fresh[0].Window})
 }
 
 // applyInboxDown marks the mirror stale. The items are kept for the overlay,
@@ -429,6 +470,7 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 	}
 	session.SortAttention(st.Items)
 	m.inboxChanged()
+	m.announceResumes(st.Items)
 	return tea.Batch(append(cmds, m.scheduleInboxAlerts(alert))...)
 }
 
@@ -600,6 +642,8 @@ func inboxKindWords(it session.AttentionItem) string {
 		return "finished"
 	case session.AttentionMail:
 		return "wrote to you"
+	case session.AttentionResume:
+		return "can resume its conversation"
 	}
 	return it.Kind
 }
@@ -726,6 +770,8 @@ func inboxGroupTitle(kind string) string {
 		return "Mail"
 	case session.AttentionErrored:
 		return "Errored"
+	case session.AttentionResume:
+		return "Resume"
 	case session.AttentionFinished:
 		return "Finished"
 	}
@@ -1221,6 +1267,54 @@ func (m *OS) inboxDismissCmd(id string, silent bool) tea.Cmd {
 	}
 }
 
+// InboxResume answers the selected resume item: it goes to the pane and has
+// the daemon type the conversation's resume command there, so the person
+// watches the agent come back. The item closes when the daemon says the
+// command was typed.
+func (m *OS) InboxResume() tea.Cmd {
+	it, ok := m.inboxSelected()
+	if !ok {
+		return nil
+	}
+	if it.Kind != session.AttentionResume {
+		m.ShowNotification("y resumes a conversation a restart left. Enter goes to the pane.", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	if it.Host != "" || m.AttachedHost != "" || m.DaemonClient == nil {
+		m.ShowNotification("That pane is on another machine; attach there to resume it", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	m.CloseInbox()
+	m.inboxJump(it)
+	build := m.DaemonClient.ClientVersion()
+	sessionName, window := it.Session, it.Window
+	return func() tea.Msg {
+		client, err := session.DialVerbClientAs(build)
+		if err != nil {
+			return InboxResumedMsg{Err: err}
+		}
+		defer func() { _ = client.Close() }()
+		raw, err := client.CallWithTimeout("resume-agent", map[string]any{"session": sessionName, "window": window}, 5*time.Second)
+		if err != nil {
+			return InboxResumedMsg{Err: err}
+		}
+		var res struct {
+			Command string `json:"command"`
+		}
+		_ = json.Unmarshal(raw, &res)
+		return InboxResumedMsg{Command: res.Command}
+	}
+}
+
+// applyInboxResumed says what was typed, or why nothing was.
+func (m *OS) applyInboxResumed(msg InboxResumedMsg) {
+	if msg.Err != nil {
+		m.ShowNotification("The resume did not go through: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
+		return
+	}
+	m.ShowNotification("Resumed: "+printableTitle(msg.Command), "success", m.Settings.NotificationDuration)
+}
+
 // inboxDismissGone reports whether a dismiss failed only because the item was
 // no longer open: another client dismissed it, or the daemon closed it on its
 // own. The item is gone either way, which is what the dismiss asked for.
@@ -1318,6 +1412,8 @@ func inboxKindGlyph(kind string) string {
 			return "@"
 		case session.AttentionErrored:
 			return "x"
+		case session.AttentionResume:
+			return ">"
 		default:
 			return "*"
 		}
@@ -1329,6 +1425,8 @@ func inboxKindGlyph(kind string) string {
 		return sidebarMailGlyph()
 	case session.AttentionErrored:
 		return agentStateIndicator("errored")
+	case session.AttentionResume:
+		return "↻"
 	default:
 		return agentStateIndicator("done")
 	}

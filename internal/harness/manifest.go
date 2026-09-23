@@ -40,6 +40,8 @@ type Manifest struct {
 	Transcript Transcript `toml:"transcript"`
 	// Input is how a prompt is typed into the harness. See Input.
 	Input Input `toml:"input"`
+	// Resume is how a conversation of the harness is reopened. See Resume.
+	Resume Resume `toml:"resume"`
 
 	// source is where the manifest was loaded from: "bundled" or the path of
 	// a user file. replacedBundled is true for a user file that took the
@@ -342,6 +344,9 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 	m.Notify.order = priorityOrder(m.Notify.Rule)
 	if err := m.Input.normalize(); err != nil {
 		return nil, fmt.Errorf("%s: manifest %q input: %w", name, m.ID, err)
+	}
+	if err := m.Resume.normalize(); err != nil {
+		return nil, fmt.Errorf("%s: manifest %q resume: %w", name, m.ID, err)
 	}
 	if err := checkTranscript(name, m.ID, &m.Transcript); err != nil {
 		return nil, err

@@ -947,10 +947,10 @@ tuios subscribe --types attention
 ### `tuios list-attention`
 
 List the Inbox: every approval and question an agent is blocked on, mail to
-you, errored agents, and finished turns nobody has looked at, in every session
-on the daemon. Rows are grouped Approvals, Questions, Mail, Errored, Finished,
-oldest first, with how long each has waited, its id, its session and pane, and
-what it said. The TUI's Inbox (prefix `i`) is the same list.
+you, errored agents, conversations a daemon restart left to resume, and
+finished turns nobody has looked at, in every session on the daemon. Rows are
+grouped Approvals, Questions, Mail, Errored, Resume, Finished, oldest first,
+with how long each has waited, its id, its session and pane, and what it said. The TUI's Inbox (prefix `i`) is the same list.
 
 An item closes by itself when what opened it stops being true. Dismissing one
 is for the person at an attached client and is done from the Inbox; there is
@@ -969,7 +969,7 @@ tuios list-attention [flags]
 
 **Flags:**
 - `-s, --session <name>`: Only this session (default: every session)
-- `--kind <kind>`: Only these kinds, repeatable or comma-separated: `approval`, `question`, `mail`, `errored`, `finished`
+- `--kind <kind>`: Only these kinds, repeatable or comma-separated: `approval`, `question`, `mail`, `errored`, `resume`, `finished`
 - `--json`: Output the verb result as JSON
 
 **Examples:**
@@ -1237,6 +1237,58 @@ bytes.
 # From a SessionStart hook
 tuios set-agent-session --harness qwen -w "$TUIOS_PANE_ID" "$SESSION_ID"
 ```
+
+### `tuios resume-agent`
+
+Resume the agent conversation a pane ran before a daemon restart: type the
+harness's resume command, from its manifest's `[resume]` block, with the id a
+hook recorded for the pane (`claude --resume <id>`, `codex resume <id>`). It
+brings back the conversation, not the process. See
+[Agent state](AGENT_STATE.md#resuming-after-a-restart).
+
+**Usage:**
+```bash
+tuios resume-agent [flags]
+```
+
+It types only when the pane's shell is at its prompt, and fails with
+`not_ready` otherwise. It fails with `not_resumable` when the pane has no
+recorded conversation, its harness has no resume command, the recorded id is
+not one plain shell token, or the pane runs on another machine. Nothing is
+typed on a failure. A pane's Resume row in the Inbox closes when it succeeds.
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <id-or-name>`: Target window (default: focused)
+- `--dry-run`: Print the command without typing it
+- `--json`: Output result as JSON
+
+**Example:**
+```bash
+tuios resume-agent -w build --dry-run
+# claude --resume 5f1c2b7e-9a3d-4c1e-8f00-1234567890ab
+
+tuios resume-agent -w build
+# Resumed claude-code conversation 5f1c2b7e-... in 3f2a9c1e: claude --resume 5f1c2b7e-...
+```
+
+```json
+{
+  "success": true,
+  "message": "command executed",
+  "window_id": "3f2a9c1e-0000-4000-8000-000000000000",
+  "harness": "claude-code",
+  "agent_session_id": "5f1c2b7e",
+  "argv": ["claude", "--resume", "5f1c2b7e"],
+  "command": "claude --resume 5f1c2b7e",
+  "typed": true
+}
+```
+
+What a daemon restart does with these conversations is
+`daemon.resume_agents`: `ask` (default) opens a Resume row per pane in the
+Inbox, answered with `y`; `auto` types the command into each restored shell;
+`off` does neither.
 
 ### `tuios set-session-name`
 
@@ -1938,6 +1990,7 @@ them.
 | `tuios get-agent-state` | Read a pane's reported agent state |
 | `tuios set-agent-meta [key=value ...]` | Record display metadata about a pane's agent (model, context, a summary) for the rail |
 | `tuios set-agent-session <id> --harness <h>` | Record which conversation a pane's agent runs, for a later resume, without changing its state |
+| `tuios resume-agent [-w pane] [--dry-run]` | Type the pane's recorded conversation's resume command into its shell, after a daemon restart |
 | `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session. `--from human` from inside a pane is refused with `forbidden`: only the person at an attached client can send as `human` (see [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)) |
 | `tuios read-agent-messages` | Read the messages agents have left in this session. Reading `-w human` from inside a pane is always a peek |
 | `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter |

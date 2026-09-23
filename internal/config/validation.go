@@ -112,6 +112,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 
 	// Validate the tape section (warn on an unknown autorun mode)
 	validateTapeConfig(cfg, result)
+	validateResumeAgents(cfg, result)
 
 	// Validate the notifications section (warn on a duration that would put a
 	// message back under the accessibility floor)
@@ -206,6 +207,21 @@ func validateTapeConfig(cfg *UserConfig, result *ValidationResult) {
 		Field:   "tape",
 		Key:     "autorun",
 		Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s); falling back to default", value, strings.Join(TapeAutorunModes, ", ")),
+	})
+}
+
+// validateResumeAgents warns when daemon.resume_agents holds a value outside
+// its allowed set. An unknown value falls back to "ask", so a typo of "auto"
+// would otherwise go unnoticed until a restart asked instead of resuming.
+func validateResumeAgents(cfg *UserConfig, result *ValidationResult) {
+	value := cfg.Daemon.ResumeAgents
+	if value == "" || slices.Contains(ResumeAgentsModes, value) {
+		return
+	}
+	result.Warnings = append(result.Warnings, ValidationError{
+		Field:   "daemon",
+		Key:     "resume_agents",
+		Message: fmt.Sprintf("'%s' is not a valid value (allowed: %s); falling back to ask", value, strings.Join(ResumeAgentsModes, ", ")),
 	})
 }
 

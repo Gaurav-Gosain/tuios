@@ -65,3 +65,7 @@ not      = ["interrupt"]
 submit          = "cr"
 bracketed_paste = true
 source          = "measured on opencode 1.18.30 (DECSET 2004 on, no kitty keyboard flags)"
+
+[resume]
+argv   = ["opencode", "--session", "{session_id}"]
+source = "opencode --help: -s, --session continues a session by id; herdr src/agent_resume.rs"

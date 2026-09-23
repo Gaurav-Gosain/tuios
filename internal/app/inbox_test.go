@@ -182,7 +182,7 @@ func TestInboxRowsGroupAndSkipHeadings(t *testing.T) {
 		t.Errorf("moving to the top landed on %s", it.ID)
 	}
 
-	for _, want := range []string{session.AttentionApproval, session.AttentionQuestion, session.AttentionMail, session.AttentionErrored, session.AttentionFinished, ""} {
+	for _, want := range []string{session.AttentionApproval, session.AttentionQuestion, session.AttentionMail, session.AttentionErrored, session.AttentionResume, session.AttentionFinished, ""} {
 		m.InboxCycleFilter()
 		if m.Inbox.Filter != want {
 			t.Fatalf("filter %q, want %q", m.Inbox.Filter, want)

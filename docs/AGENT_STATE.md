@@ -882,7 +882,8 @@ harness feeds it yet; a hook or a statusline command is where a feed goes. See
 
 The Inbox is one list of everything waiting for you, in every session on the
 daemon: approvals and questions an agent is blocked on, mail an agent wrote to
-you, agents that errored, and finished turns you have not looked at. The daemon
+you, agents that errored, conversations a daemon restart left to resume, and
+finished turns you have not looked at. The daemon
 keeps it, so it is the same list in every client, in `tuios list-attention`,
 and in the `attention` events of `tuios subscribe`. See
 [list-attention](protocol.md#list-attention) for the fields and the rules for
@@ -899,13 +900,15 @@ place in the order, because the wait did not start again.
 On a daemon restart, finished and errored rows whose pane came back are kept.
 Approvals and questions are dropped, since the prompt died with its process,
 and so is mail, since the messages it points to do not survive a restart.
+Resume rows are opened by the restore itself; see
+[Resuming after a restart](#resuming-after-a-restart).
 
 Keys, after the prefix (`ctrl+b` by default):
 
 | Key | What it does |
 | --- | --- |
 | `i` | Open the Inbox. |
-| `o` | Go to the oldest item that needs you (approval, question, mail, errored), switching session and workspace. The prefix stays armed, so `o` again goes to the next one, and past the last it starts over. Finished turns are left to the Inbox. |
+| `o` | Go to the oldest item that needs you (approval, question, mail, errored, resume), switching session and workspace. The prefix stays armed, so `o` again goes to the next one, and past the last it starts over. Finished turns are left to the Inbox. |
 | `M` | Open the Inbox on its mail. It used to open the mailbox; `m` in the Inbox does that now. |
 
 Inside the Inbox:
@@ -918,13 +921,14 @@ Inside the Inbox:
 | `space` | On an approval or a question, read the prompt without leaving the Inbox, and answer it from there. See [Answering a prompt without attaching](#answering-a-prompt-without-attaching). Not on a held approval, which has no prompt on the screen: answer that one with `1`, `2` or `3`. |
 | `1` / `2` / `3` | Answer the held approval under the cursor: allow once, always allow, deny. The same order as the harness's own menu. Only the keys the prompt offers work, and only once the prompt has been on screen as it is for 0.4 seconds. The whole prompt, and what `2` adds, is shown under the list. See [Approvals from the Inbox](#approvals-from-the-inbox). |
 | `r` | Reply to mail: the thread opens with its reply line. |
+| `y` | On a resume row: go to the pane and type the conversation's resume command there. |
 | `d` | Dismiss the item. |
 | `f` | Show one kind, then the next, then all of them. |
 | `m` | Open the mailbox, with every thread including the ones between agents. |
 | `esc` / `q` | Close. |
 
 Rows are grouped under headings in words, Approvals, Questions, Mail, Errored,
-Finished, each with its count, and oldest first inside a group. A row carries
+Resume, Finished, each with its count, and oldest first inside a group. A row carries
 its kind's glyph, the pane's name, what it said, and on the right its session
 and how long it has waited (`12m`, `3h`). The heading, the name and the wait are
 text, so nothing depends on colour, and the ASCII glyph set covers the marks.
@@ -1193,6 +1197,55 @@ attach nonce, checked the way `dismiss-attention` is (see
 `ask-agent` or keystroke routed through the protocol can. The hold itself may
 be requested only for the caller's own pane, and never over a link.
 
+### Resuming after a restart
+
+A daemon restart ends every program in every pane, agents included. The
+restore brings back the layout with a new shell in each pane. It does not bring
+back the process, and nothing can: whatever turn was running did not finish.
+What it can bring back is the conversation, because every harness with a
+resume command keeps it on disk, and the pane's hook already told the daemon
+its id (`agent_session_id`, see [Session identity](#session-identity)).
+
+So for each restored pane whose harness manifest has a `[resume]` block, the
+restore offers the command that reopens the conversation: `claude --resume
+<id>`, `codex resume <id>`, `opencode --session <id>`. What it does is
+`daemon.resume_agents`:
+
+| Value | What a restore does |
+| --- | --- |
+| `ask` (default) | A Resume row in the Inbox per pane, its summary the exact command. Your client says once, in the dock, that there are conversations to resume. `y` on the row goes to the pane and types the command; `d` dismisses it. |
+| `auto` | Waits for each new shell to draw its prompt, then types the command, 100 ms apart. A pane whose shell is not at its prompt within 10 seconds gets the Resume row instead. |
+| `off` | Nothing. The id stays on the pane. |
+
+`tuios resume-agent -w <pane>` types the same command at any time, and
+`--dry-run` prints it. The command is typed only when the pane's shell holds
+the terminal's foreground, so it never lands in an editor or another agent. A
+Resume row closes when the command is typed, when the pane goes to `working` or
+`needs_input` (you ran the agent yourself), or when the pane closes.
+
+The bundled manifests carry `[resume]` for Claude Code, Codex, opencode,
+Copilot, Cursor Agent, Devin, Droid, Grok, Hermes, Kilo, Kimi, Qoder, Qwen and
+Antigravity, after herdr's resume table. A harness has to report its session id
+for any of this to apply, which the integrations from `tuios integration
+install` do. Add one to your own manifest:
+
+```toml
+[resume]
+argv   = ["myagent", "--resume", "{session_id}"]
+source = "myagent --help"
+```
+
+Every token has to be letters, digits and `_ . / : = + -`, with
+`{session_id}` somewhere after the program, and a manifest that breaks this
+fails to load by name. The id has to be letters, digits and `_ . / : -`, not
+starting with `-`, at most 256 bytes, or it is never typed. That is what keeps
+an id a pane reported from being read by any shell as anything but one
+argument: the command is built from the manifest and the stored id only, and
+nothing from the old command line, its prompt or its environment is replayed.
+
+A pane that ran on another machine comes back on this one without its id,
+since the conversation is on that machine.
+
 ## Harness integrations
 
 A harness with a hooks system reports its own state, which outranks everything
@@ -1403,8 +1456,11 @@ the one that owns the pane. These filters keep those events off the pane:
 The session id a hook reports is stored on the pane as `agent_session_id`,
 returned by `get-agent-state` and `list-agents`, and persisted with the
 session, so the conversation a pane last ran can be resumed after the agent,
-or the daemon, restarts. It is kept when the agent exits and replaced when
-another session reports into the pane.
+or the daemon, restarts (see [Resuming after a restart](#resuming-after-a-restart)).
+It is kept when the agent exits and replaced when another session reports
+into the pane. The harness it belongs to is stored with it
+(`agent_session_harness`), since the pane's harness attribution is cleared when
+the agent exits and a resume needs both.
 
 A harness whose hooks can name the conversation but cannot be trusted with the
 pane's state sends the id alone, with the `set-agent-session` verb (`tuios

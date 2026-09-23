@@ -64,7 +64,7 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 			return errAgentReportRefused(reason)
 		}
 		owner := s.agentHarnessPIDs[w.ID]
-		if w.AgentSessionID == r.SessionID {
+		if w.AgentSessionID == r.SessionID && w.AgentSessionHarness == r.Harness {
 			if r.HarnessPID > 1 && owner != r.HarnessPID {
 				s.setAgentHarnessPID(w.ID, r.HarnessPID)
 			}
@@ -76,6 +76,7 @@ func (s *Session) applyAgentSession(target string, r AgentSessionReport) (string
 			return errAgentReportRefused(reason)
 		}
 		w.AgentSessionID = r.SessionID
+		w.AgentSessionHarness = r.Harness
 		stored = r.SessionID
 		s.setAgentHarnessPID(w.ID, r.HarnessPID)
 		return nil

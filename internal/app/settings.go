@@ -519,6 +519,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("daemon.log_level"),
 			opt("daemon.agent_autodetect"),
 			opt("daemon.agent_detect_seconds"),
+			opt("daemon.resume_agents"),
 		}),
 	}
 

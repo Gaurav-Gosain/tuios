@@ -96,6 +96,11 @@ const (
 	// the prompt_id the caller read, or another client answered it first. The
 	// remedy is to read the prompt again.
 	ErrVerbPromptChanged = "prompt_changed"
+	// ErrVerbNotResumable reports a resume-agent call for a pane with no
+	// conversation it can resume: none was recorded, the harness has no
+	// resume command, the recorded id cannot be typed safely, or the pane is
+	// on another machine. Nothing was typed.
+	ErrVerbNotResumable = "not_resumable"
 
 	// ErrVerbProtocolMismatch reports that the caller's protocol version is
 	// outside the range this daemon accepts. It is only ever produced by the
@@ -1015,6 +1020,27 @@ func init() {
 				`{"id":1,"verb":"set-agent-session","params":{"session":"work","window":"build","harness":"qwen","agent_session_id":"5f1c","harness_pid":4100}}`,
 			},
 			handler: (*Daemon).verbSetAgentSession,
+		},
+		"resume-agent": {
+			description: "Resume the agent conversation recorded for a window's pane: type the harness's resume command, built from its manifest's [resume] template and the window's agent_session_id, into the pane's shell. It is how a pane restored after a daemon restart gets its conversation back; the old process does not survive a restart, so this starts a new one on the same conversation. It types only when the pane's own shell holds the terminal's foreground, so the command never lands in a running program, and it closes the pane's resume item in the Inbox. The command is fixed by the manifest and the id is one plain shell token, so the call can type nothing a caller chose.",
+			params: []verbParam{
+				sessionParam,
+				windowParam,
+				{Name: "dry_run", Type: "bool", Description: "Return the command without typing it."},
+			},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "The window resumed."},
+				{Name: "harness", Type: "string", Description: "The harness the conversation belongs to."},
+				{Name: "agent_session_id", Type: "string", Description: "The conversation resumed."},
+				{Name: "argv", Type: "[]string", Description: "The command, one token per element."},
+				{Name: "command", Type: "string", Description: "The command as typed."},
+				{Name: "typed", Type: "bool", Description: "Whether it was typed: false for dry_run."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"resume-agent","params":{"session":"work","window":"build"}}`,
+				`{"id":1,"verb":"resume-agent","params":{"session":"work","window":"build","dry_run":true}}`,
+			},
+			handler: (*Daemon).verbResumeAgent,
 		},
 		"get-agent-state": {
 			description: "Read the agent state a window's pane last reported, with its optional message, the time it was set, which source and harness it came from, how confident the harness attribution is, whether the pane needs a person, whether ask-agent would type at it now (ready), and for a pane on needs_input whether it waits on an approval or a question (blocked_by).",

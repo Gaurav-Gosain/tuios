@@ -51,6 +51,8 @@ func attentionGroupTitle(kind string) string {
 		return "Mail"
 	case session.AttentionErrored:
 		return "Errored"
+	case session.AttentionResume:
+		return "Resume"
 	case session.AttentionFinished:
 		return "Finished"
 	}
@@ -159,14 +161,15 @@ func newListAttentionCommand() *cobra.Command {
 		Use:   "list-attention",
 		Short: "List what is waiting for you in every session: the Inbox",
 		Long: `List the Inbox: every approval and question an agent is blocked on, mail to
-you, errored agents, and finished turns nobody has looked at, in every session.
-Rows are grouped Approvals, Questions, Mail, Errored, Finished, oldest first,
-with how long each has waited.
+you, errored agents, conversations a restart left to resume, and finished turns
+nobody has looked at, in every session. Rows are grouped Approvals, Questions,
+Mail, Errored, Resume, Finished, oldest first, with how long each has waited.
 
 An item closes by itself when what opened it stops being true: the agent
-leaves needs_input or errored, the mail is read, or a client focuses the pane
-that finished. Dismissing one is for the person at an attached client, from the
-Inbox (prefix i). 'tuios subscribe --types attention' streams every change.`,
+leaves needs_input or errored, the mail is read, a client focuses the pane
+that finished, or the conversation is resumed ('tuios resume-agent').
+Dismissing one is for the person at an attached client, from the Inbox
+(prefix i). 'tuios subscribe --types attention' streams every change.`,
 		Example: `  # What needs me?
   tuios list-attention
 

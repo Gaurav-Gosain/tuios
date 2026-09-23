@@ -116,3 +116,7 @@ regex    = ['^✓[\x{FE0E}\x{FE0F}]?(?:\s|$)']
 submit          = "cr"
 bracketed_paste = true
 source          = "default: Enter sends CR in raw mode; not measured"
+
+[resume]
+argv   = ["hermes", "--resume", "{session_id}"]
+source = "herdr src/agent_resume.rs; not measured"

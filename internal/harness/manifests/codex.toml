@@ -154,3 +154,7 @@ regex    = ['\S']
 submit          = "cr"
 bracketed_paste = true
 source          = "crossterm reads CR as Enter and LF as Ctrl+J in raw mode; paste-burst handling per herdr src/app/api/agents.rs; not measured"
+
+[resume]
+argv   = ["codex", "resume", "{session_id}"]
+source = "codex resume <SESSION_ID>; herdr src/agent_resume.rs"

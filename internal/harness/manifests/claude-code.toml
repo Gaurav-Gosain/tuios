@@ -315,3 +315,10 @@ verify = ["cwd", "version"]
 submit          = "cr"
 bracketed_paste = true
 source          = "measured on Claude Code 2.1.280 (DECSET 2004 and 1004 on, kitty flags 5); Ctrl+J inserts a newline per code.claude.com/docs/en/interactive-mode"
+
+# How a conversation comes back after a daemon restart. The hook reports
+# session_id, and claude --resume takes it. The process does not survive the
+# restart; this starts a new one on the same conversation.
+[resume]
+argv   = ["claude", "--resume", "{session_id}"]
+source = "claude --help: -r, --resume [value] resumes a conversation by session id; herdr src/agent_resume.rs"

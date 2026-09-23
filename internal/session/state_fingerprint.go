@@ -107,6 +107,7 @@ func StateFingerprint(s *SessionState) uint64 {
 		num(int(w.CompletionSeq))
 		str(w.AgentKind)
 		str(w.AgentSessionID)
+		str(w.AgentSessionHarness)
 		num(len(w.AgentMeta))
 		for _, t := range w.AgentMeta {
 			str(t.Key)
