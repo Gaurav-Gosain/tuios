@@ -1416,3 +1416,21 @@ push, pop and set at zero allocations.
 | `claude` B/op | 1068 KiB | 379 KiB | -64% |
 | `nvim` allocs/op | 600 | 125 | -79%, CPU `~` |
 | `nvimcfg` allocs/op | 15.93k | 15.10k | -5%, CPU `~` |
+
+**An erase stores its cells instead of setting each one** (`grid.go`). On the
+`claude` replay `grid.FillArea` was 33% of CPU: ED 2 from `Screen.Clear` and
+EL on every frame went through `grid.SetCell` and `uv.Line.Set` once per cell,
+blank tail included. A fill with a one-column cell now calls `Set` on the two
+end cells of each row's span only, because only their wide-character repair can
+reach outside the span, and stores the fill cell into every cell between. A
+blank fill also stops at the row's extent, past which every cell is blank
+already, and pulls the extent in to where it started when it reaches it. A wide
+fill cell keeps the old loop. `TestGridFillAreaMatchesUVBuffer` holds the grid
+to `uv.Buffer.FillArea` with fill cells of width 0 to 3, rows seeded with wide
+characters, and areas that start left of the grid and end past it.
+
+| CPU per op | before | after | |
+|---|---|---|---|
+| `claude` | 15.96 ms | 9.87 ms | -38.2% (p<0.001) |
+| `nvim` | 6.84 ms | 5.37 ms | -21.5% (p<0.001) |
+| `nvimcfg`, `btop`, `BackendTUI` | | | `~`, allocations unchanged |

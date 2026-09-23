@@ -134,6 +134,51 @@ func TestGridMatchesUVBufferUnderRandomOperations(t *testing.T) {
 	}
 }
 
+// TestGridFillAreaMatchesUVBuffer drives FillArea harder than the mixed
+// sweep above, because FillArea only calls Set on the two end cells of each
+// row's span and stores the rest directly. The claim that this matches a Set
+// on every cell rests on uv's wide-character repair, so rows are seeded with
+// characters of width 2 and 3, and fills use cells of width 0 to 3 and areas
+// that start left of the grid and end past it.
+func TestGridFillAreaMatchesUVBuffer(t *testing.T) {
+	cellOfWidth := func(rng *rand.Rand) *uv.Cell {
+		switch rng.Intn(6) {
+		case 0:
+			return &uv.Cell{Content: "​", Width: 0}
+		case 1:
+			return &uv.Cell{Content: "漢", Width: 2, Style: uv.Style{Attrs: 1}}
+		case 2:
+			return &uv.Cell{Content: "\U0001F468‍\U0001F469‍\U0001F467", Width: 3}
+		default:
+			return randomGridCell(rng)
+		}
+	}
+	for seed := int64(0); seed < 400; seed++ {
+		rng := rand.New(rand.NewSource(seed))
+		w, h := 1+rng.Intn(14), 1+rng.Intn(4)
+		g := newGrid(w, h)
+		b := uv.NewBuffer(w, h)
+		for i := range 60 {
+			if rng.Intn(2) == 0 {
+				x, y, c := rng.Intn(w+2)-1, rng.Intn(h), cellOfWidth(rng)
+				g.SetCell(x, y, c)
+				b.SetCell(x, y, c)
+				gridsAgree(t, g, b, fmt.Sprintf("seed %d op %d SetCell(%d,%d,%v)", seed, i, x, y, c))
+				continue
+			}
+			c := cellOfWidth(rng)
+			x0, x1 := rng.Intn(w+4)-2, rng.Intn(w+4)-2
+			if x0 > x1 {
+				x0, x1 = x1, x0
+			}
+			area := uv.Rect(x0, rng.Intn(h+1)-1, x1-x0+1, 1+rng.Intn(h+1))
+			g.FillArea(c, area)
+			b.FillArea(c, area)
+			gridsAgree(t, g, b, fmt.Sprintf("seed %d op %d FillArea(%v,%v)", seed, i, c, area))
+		}
+	}
+}
+
 // TestGridRowsStayUnwrittenUntilWritten pins the reason the grid exists: a
 // row nothing has printed on costs nothing, and a write that would leave it
 // blank does not allocate it.

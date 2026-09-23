@@ -209,18 +209,59 @@ func (g *grid) ClearArea(area uv.Rectangle) {
 
 // FillArea writes c to every cell in area, stepping by c's width as
 // uv.Buffer.FillArea does.
+//
+// The result is that of a uv.Line.Set on every cell of the span in turn, but
+// only the two end cells go through Set. Set's wide-character repair is the
+// only thing that reaches outside the cell it writes, and for a cell inside
+// the span whatever it does lands inside the span, which the fill overwrites.
+// So Set on the first cell (for a wide character the span cuts on the left)
+// and on the last (for one it cuts on the right), then a plain store of every
+// cell of the span, leaves the row as the sequence of Sets does. A blank fill
+// also stops at the row's extent, past which every cell is blank already.
+// ED and EL reach here for every frame most full-screen programs draw.
 func (g *grid) FillArea(c *uv.Cell, area uv.Rectangle) {
-	cellWidth := 1
-	if c != nil && c.Width > 1 {
-		cellWidth = c.Width
-	}
 	blank := isBlankFill(c)
+	if c != nil && c.Width > 1 {
+		// A wide fill steps by its width. No emulator path fills with one.
+		for y := max(area.Min.Y, 0); y < area.Max.Y && y < len(g.rows); y++ {
+			if g.rows[y] == nil && blank {
+				continue
+			}
+			for x := area.Min.X; x < area.Max.X; x += c.Width {
+				g.SetCell(x, y, c)
+			}
+		}
+		return
+	}
+	fill := uv.EmptyCell
+	if c != nil {
+		fill = *c
+	}
+	x0 := max(area.Min.X, 0)
 	for y := max(area.Min.Y, 0); y < area.Max.Y && y < len(g.rows); y++ {
-		if blank && g.rows[y] == nil {
+		x1 := min(area.Max.X, g.width)
+		if blank {
+			x1 = min(x1, g.ext[y])
+		}
+		if x0 >= x1 {
 			continue
 		}
-		for x := area.Min.X; x < area.Max.X; x += cellWidth {
-			g.SetCell(x, y, c)
+		if g.rows[y] == nil {
+			g.rows[y] = newBlankLine(g.width)
+		}
+		row := g.rows[y]
+		row.Set(x0, c)
+		row.Set(x1-1, c)
+		for x := x0; x < x1; x++ {
+			row[x] = fill
+		}
+		switch {
+		case !blank:
+			g.raiseExt(y, x1)
+		case x1 == g.ext[y]:
+			// The row is blank from x0 on. A wide character the first Set
+			// cut is left of x0, so it does not move the extent.
+			g.ext[y] = x0
 		}
 	}
 }
