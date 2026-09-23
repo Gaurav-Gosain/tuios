@@ -2,7 +2,7 @@ module github.com/Gaurav-Gosain/tuios/e2e/tui
 
 go 1.26.6
 
-require github.com/Gaurav-Gosain/tuitest v0.0.0-20260923052331-bcbcfb3185f0
+require github.com/Gaurav-Gosain/tuitest v0.0.0-20260923071412-3a3274ede1b1
 
 require (
 	github.com/adrg/xdg v0.5.3 // indirect
