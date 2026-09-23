@@ -1579,3 +1579,94 @@ allocations against 199.
 - **The ASCII run's row store.** `printASCIIRun`'s store into the row is 20% of
   `nvimcfg`, and it is memory bandwidth: a 112-byte `uv.Cell` per character, as
   the `BlankFill` entry above already found.
+
+## 2026-09 second profiling pass: startup
+
+What a CLI process and an attach cost before any work is done, and the daemon
+work behind the verbs an agent calls in a loop. A one-shot command such as
+`list-windows` takes about 6 ms, and the daemon round trip is 0.02 to 0.15 ms of
+that: 1.8 ms is the Go process floor, about 0.9 ms is dyld loading
+CoreFoundation and Security for crypto/x509, and about 1.2 ms is package init.
+The largest cost found was not in the CLI at all but in how the daemon reads a
+pane's scrollback for `capture-pane` and `wait-for window-output`.
+
+### Measurement conditions
+
+Two test binaries, one built from the base commit with the new benchmark file
+copied in and one from the change, run alternately, six rounds, each run
+`-test.cpu 1 -test.benchtime Nx -test.benchmem` under `nice -n 10`, compared
+with `benchstat`. The CPU column is user plus system time of the process over
+N, so it includes the benchmark's setup: for the capture benchmarks that setup
+is writing 12,000 lines into the emulator, the same on both sides, and it puts
+a floor of about 1.3 ms under the new path's CPU column. The machine was shared,
+so timings carry the spread benchstat prints; allocation counts are exact.
+
+### What changed
+
+**Plain capture reads the scrollback ring as text** (`internal/vt/scrollback_text.go`,
+`session.go`). `capture-pane` with scrollback, `wait-for window-output` and
+`ask-agent` all took the plain text of a pane through
+`ScrollbackLine(i).String()` for every line of history. That decodes each
+packed line into a fresh `uv.Line` of 112-byte cells, caches it in a map that
+thrashes past its cap, and walks the cells back to text: about 100 MB and
+462k allocations per capture of a full 10,000-line ring at 80 columns.
+`Emulator.AppendScrollbackText` walks the packed records and writes the text
+directly, ASCII bytes copied straight from the record. It follows exactly the
+two rules of `uv.Line.String`: a cell equal to the zero `Cell` is skipped, a
+cell equal to `EmptyCell` is a pending space dropped at the end of the line,
+and anything else releases the pending spaces and writes its content. Both
+rules need the style and link in force to be zero, so a painted blank, a blank
+inside a link and a styled wide-rune spacer all count as text. The daemon uses
+it through an optional interface, so the ghostty backend keeps the line by
+line loop. The ANSI capture is unchanged.
+
+`BenchmarkCaptureScrollback` is one waiter check: capture a full ring plus the
+screen, run a regexp that does not match.
+
+| Benchmark | before | after | |
+|---|---|---|---|
+| `CaptureScrollback/w80` time | 29.9 ms | 1.25 ms | -95.8% (p=0.002) |
+| `CaptureScrollback/w80` B/op | 95.5 MiB | 1.90 MiB | -98.0% |
+| `CaptureScrollback/w80` allocs/op | 462,137 | 156 | -99.97% |
+| `CaptureScrollback/w207` time | 72.4 ms | 1.33 ms | -98.2% (p=0.002) |
+| `CaptureScrollback/w207` B/op | 243 MiB | 1.91 MiB | -99.2% |
+| `CaptureScrollback/w207` allocs/op | 482,184 | 203 | -99.96% |
+
+**A cell of one ASCII byte no longer allocates** (`Scrollback.readContent`).
+It returned `string(rune(r))` for ASCII, which allocates, against its own
+comment. `string(data[i:i+1])` is served from the runtime's table of one-byte
+strings. This is the part the client's scrollback browser and the ANSI capture
+still go through:
+
+| `ScrollbackLineString` | before | after | |
+|---|---|---|---|
+| w80 time | 30.0 ms | 27.0 ms | -10.1% (p=0.009) |
+| w80 allocs/op | 461,980 | 60,000 | -87.0% |
+| w207 time | 71.8 ms | 69.5 ms | `~` (p=0.24) |
+| w207 allocs/op | 481,980 | 80,000 | -83.4% |
+
+**The wait-for backstop skips a check that cannot change** (`verb_subscribe.go`).
+A `wait-for window-output` waiter re-ran the full capture and match every
+200 ms even on an idle pane, to catch an output event the slow-subscriber
+policy dropped. Each check now records the pane's `captureState`, the stream
+position the emulator has applied plus its width and height, read under the
+same lock as the capture. The backstop re-checks only when that state has
+moved. Output and resizes are the only things that change a pane's content,
+and a resize does not advance the stream position, which is why the size is
+part of the key. The profiling pass measured one idle waiter on a pane with a
+full ring at 31% of a core on the daemon before, and none after; with about
+200 output events a second the waiter's daemon CPU went from 1033 cs to 34 cs
+per 5.2 s, the two changes above together.
+
+Guards: `TestScrollbackTextOfRandomLines` holds the text path to the cell path
+on random lines of every cell kind, whole and cut at every byte, in a ring
+that wraps. It found one divergence while this was written, a styled cell of
+width 0 after pending blanks, which `uv.Line.String` flushes and a first draft
+skipped; `TestScrollbackTextOfHandBuiltLines` pins that case with the zero
+cell, wide-rune spacers, painted blanks, blanks in links and empty lines.
+`TestScrollbackTextFollowsTheRing` wraps a seven-line ring forty times,
+`TestScrollbackTextUnderGeneratedInput` runs vtgen scripts with resizes, and
+`TestPlainCaptureMatchesLineByLine` compares the daemon's capture with the line
+by line one. `TestWaitForOutputBackstopSeesUnannouncedChange` changes a pane
+behind the waiter's back, once through applied output and once through a
+resize, and fails if the backstop keys on the stream position alone.

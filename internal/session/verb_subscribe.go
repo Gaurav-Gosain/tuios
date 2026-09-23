@@ -588,7 +588,16 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 	// already scrolled off the visible screen still matches; source "visible"
 	// restricts to the current screen.
 	scrollback := source != "visible"
-	matches := func() bool { return re.MatchString(pty.CaptureContent(scrollback, false)) }
+	// checked is the captureState of the last capture matched against. The
+	// backstop re-checks only when the pane has moved past it: with no new
+	// output and no resize the capture would read the same, and on a pane with
+	// a full scrollback one capture costs milliseconds.
+	var checked captureState
+	matches := func() bool {
+		var content string
+		content, checked = pty.capturePlainAt(scrollback)
+		return re.MatchString(content)
+	}
 
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name,
@@ -618,6 +627,9 @@ func (d *Daemon) waitWindowOutput(sessionName, window, pattern, source string, d
 				return waitMatched("window-output", map[string]any{"window": window, "pattern": pattern}), nil
 			}
 		case <-backstop.C:
+			if pty.currentCaptureState() == checked {
+				continue
+			}
 			if matches() {
 				return waitMatched("window-output", map[string]any{"window": window, "pattern": pattern}), nil
 			}

@@ -644,10 +644,9 @@ func (sb *Scrollback) readContent(data []byte, i int) (string, int, bool) {
 	if r == utf8.RuneError && size <= 1 {
 		return "", i, false
 	}
-	if r < utf8.RuneSelf {
-		// A one-byte string is served from the runtime's table.
-		return string(rune(r)), i + size, true
-	}
+	// A one-byte string converted from a byte slice comes from the runtime's
+	// table of single-byte strings and does not allocate. string(rune(r))
+	// does not use that table and allocated once per ASCII cell.
 	return string(data[i : i+size]), i + size, true
 }
 

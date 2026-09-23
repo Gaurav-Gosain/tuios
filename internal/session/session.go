@@ -2946,6 +2946,11 @@ func (p *PTY) captureContent(scrollback, ansi bool) string {
 		scrollbackLen := p.terminal.ScrollbackLen()
 		if scrollbackLen > 0 {
 			var sb strings.Builder
+			if texter, ok := p.terminal.(scrollbackTexter); ok && !ansi {
+				texter.AppendScrollbackText(&sb)
+				sb.WriteString(content)
+				return sb.String()
+			}
 			for i := range scrollbackLen {
 				line := p.terminal.ScrollbackLine(i)
 				if ansi {
@@ -2961,6 +2966,48 @@ func (p *PTY) captureContent(scrollback, ansi bool) string {
 	}
 
 	return content
+}
+
+// scrollbackTexter is an emulator that writes its scrollback as plain text
+// without decoding every line into cells. The pure Go emulator is one. The
+// plain capture uses it when it is there and reads line by line otherwise, and
+// the two give the same bytes.
+type scrollbackTexter interface {
+	AppendScrollbackText(*strings.Builder)
+}
+
+// captureState identifies what the emulator has been given: the stream
+// position it has applied and the size it has. Output and resizes are the
+// only things that change a pane's content, and each moves one of these, so a
+// capture taken at one captureState reads the same as any later capture at an
+// equal one.
+type captureState struct {
+	seq           int64
+	width, height int
+}
+
+// captureStateLocked is the pane's captureState. Callers hold terminalMu.
+func (p *PTY) captureStateLocked() captureState {
+	st := captureState{seq: p.vtSeq}
+	if p.terminal != nil {
+		st.width, st.height = p.terminal.Width(), p.terminal.Height()
+	}
+	return st
+}
+
+// currentCaptureState is the pane's captureState now.
+func (p *PTY) currentCaptureState() captureState {
+	p.terminalMu.RLock()
+	defer p.terminalMu.RUnlock()
+	return p.captureStateLocked()
+}
+
+// capturePlainAt is CaptureContent without styling, plus the captureState the
+// capture was taken at, read under the same lock.
+func (p *PTY) capturePlainAt(scrollback bool) (string, captureState) {
+	p.terminalMu.RLock()
+	defer p.terminalMu.RUnlock()
+	return p.captureContent(scrollback, false), p.captureStateLocked()
 }
 
 // decscusrParam encodes a cursor shape as the DECSCUSR parameter a guest would
