@@ -1,0 +1,53 @@
+# Builds tuios for the browser, the files behind tuios.gaurav.zip/learn, and
+# uploads them as the learn-web artifact. It runs on pull requests too, so the
+# js/wasm build cannot quietly stop compiling.
+name: learn-web
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # build.sh names the version with git describe.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Tools for compressing the wasm and the fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y brotli
+          pipx install fonttools
+          pipx inject fonttools brotli
+
+      - name: Tests of the browser build's Go side
+        run: go test -count=1 ./internal/webshell/ ./internal/learn/
+
+      - name: Build
+        run: cmd/tuios-wasm/build.sh learn-web
+
+      - name: Smoke test in headless Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pw" playwright-core
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright-core" install --with-deps chromium
+          PLAYWRIGHT_CORE="$RUNNER_TEMP/pw/node_modules/playwright-core/index.mjs" \
+            node cmd/tuios-wasm/smoke.mjs learn-web "$RUNNER_TEMP/smoke.png"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: learn-web
+          path: learn-web/
+          if-no-files-found: error
