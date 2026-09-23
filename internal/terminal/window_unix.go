@@ -3,9 +3,7 @@
 package terminal
 
 import (
-	"fmt"
 	"os"
-	"strings"
 	"syscall"
 	"unsafe"
 
@@ -82,10 +80,9 @@ func (w *Window) HasForegroundProcess() bool {
 //
 // This is the one thing tuios can observe about what is running inside a pane
 // rather than infer. The pane's program is asked nothing: the kernel is asked
-// which process group owns the terminal, and /proc is asked what that group is
-// called. It is read from /proc, so it is Linux (and some BSDs) and empty
-// elsewhere, and callers must treat "" as "not known" rather than as "nothing
-// is running".
+// which process group owns the terminal, and then what that group is called
+// (procComm: /proc on Linux, a sysctl on macOS). Callers must treat "" as "not
+// known" rather than as "nothing is running".
 //
 // Uncached on purpose, unlike CWD. Nothing on the render path calls this: it is
 // read when the keybind overlay opens and when a key is recorded, which is a
@@ -99,9 +96,5 @@ func (w *Window) ForegroundCommand() string {
 	if !ok {
 		return ""
 	}
-	comm, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", fgpgrp))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(comm))
+	return procComm(fgpgrp)
 }

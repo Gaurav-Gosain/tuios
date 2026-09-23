@@ -3,6 +3,8 @@
 package terminal
 
 import (
+	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"unsafe"
@@ -82,6 +84,36 @@ func TestForegroundPgrpIsTheIdleShell(t *testing.T) {
 	}
 	if window.HasForegroundProcess() {
 		t.Error("HasForegroundProcess is true for a pane running only its shell")
+	}
+}
+
+// TestForegroundCommandNamesTheIdleShell checks that a fresh pane names its
+// shell. The keybind manager's observed tier and the rail row both read this,
+// and an empty answer makes them say nothing about the pane. It used to come
+// only from /proc, so on macOS, which has none, it was always empty.
+func TestForegroundCommandNamesTheIdleShell(t *testing.T) {
+	exitChan := make(chan string, 1)
+	window, err := NewWindow("test-id-fgcomm01", "Test", 0, 0, 80, 24, 0, exitChan, nil, config.DefaultScrollbackLines)
+	if err != nil {
+		t.Skipf("Failed to create window with PTY: %v", err)
+	}
+	defer window.Close()
+	if window.Pty == nil || window.Cmd == nil || window.Cmd.Process == nil {
+		t.Skip("No PTY or shell process available")
+	}
+	if _, ok := foregroundPgrp(window.Pty.Fd()); !ok {
+		t.Skip("the kernel gave no foreground process group for this pane")
+	}
+
+	got := window.ForegroundCommand()
+	if got == "" {
+		t.Fatal("ForegroundCommand is empty for a pane running its shell")
+	}
+	// The kernel truncates the name, so the shell's file name is compared by
+	// prefix rather than for equality.
+	shell := filepath.Base(window.Cmd.Path)
+	if !strings.HasPrefix(shell, strings.TrimPrefix(got, "-")) {
+		t.Errorf("ForegroundCommand = %q, want the shell %q", got, shell)
 	}
 }
 
