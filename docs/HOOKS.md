@@ -1,8 +1,8 @@
 # Hooks
 
-The hooks reference lives on the docs site: https://tuios.gaurav.zip/docs/hooks
+The docs site has the same reference: https://tuios.gaurav.zip/docs/hooks
 
-Ten events, each running a shell command with `TUIOS_*` environment variables carrying the facts; the site page lists every event and every variable. Hooks are read once at startup from the `[hooks]` table; see the [configuration reference](https://tuios.gaurav.zip/docs/configuration) for the table itself.
+Ten events, each running a shell command with `TUIOS_*` environment variables carrying the facts. This page lists every event and every variable. Hooks are read once at startup from the `[hooks]` table.
 
 ## Which side runs a hook
 
@@ -26,6 +26,39 @@ The window set, the focused window, the current workspace and a pane's agent sta
 A client's terminal size, its attach and its detach belong to that one client, and the layout is computed by the attached renderer. Those stay in the client. Three clients attaching is three attaches.
 
 A tuios with no daemon runs every hook itself.
+
+## The table and what a hook gets
+
+Each event takes one command or a list of them, run with `sh -c`:
+
+```toml
+[hooks]
+after-new-window  = "notify-send 'tuios' \"new window $TUIOS_WINDOW_NAME\""
+after-agent-state = ["sh ~/.config/tuios/hooks/phone.sh"]
+```
+
+Every command gets these variables. A variable that does not describe the event
+is empty, or 0 for a number, so a script can read all of them:
+
+| Variable | What it holds |
+|---|---|
+| `TUIOS_EVENT` | The event name |
+| `TUIOS_SESSION_ID` | The session's name |
+| `TUIOS_WINDOW_ID`, `TUIOS_WINDOW_NAME` | The window the event is about |
+| `TUIOS_WORKSPACE`, `TUIOS_PREV_WORKSPACE` | The workspace, and the one before an `after-workspace-switch` |
+| `TUIOS_LAYOUT` | The layout after an `after-layout-change` |
+| `TUIOS_WIDTH`, `TUIOS_HEIGHT` | The size after an `after-resize` |
+| `TUIOS_AGENT_STATE`, `TUIOS_AGENT_PREV_STATE` | For `after-agent-state`: the state the pane moved to and from |
+| `TUIOS_AGENT_HARNESS`, `TUIOS_AGENT_MESSAGE` | For `after-agent-state`: the harness and the message that came with the state |
+| `TUIOS_COMMAND`, `TUIOS_EXIT_CODE`, `TUIOS_DURATION_MS` | For `after-command-finished`, below |
+
+`after-agent-state` fires only for the transitions `[notifications.agent]`
+alerts on (`needs_input`, `errored` and `done` by default), after its
+`settle_seconds`, outside its `quiet_hours`, and not for the pane an attached
+client is showing when `suppress_focused` is on. Because the daemon runs it, it
+fires with nobody attached, which is how to reach a phone: `tuios --skill
+recipes` has a working ntfy hook. `TUIOS_AGENT_MESSAGE` is the agent's own text,
+so think before a hook sends it off the machine.
 
 `after-command-finished` fires when a pane's shell reports, through its OSC 133
 prompt marks, that a command finished. A shell without that integration never

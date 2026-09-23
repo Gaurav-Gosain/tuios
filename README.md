@@ -30,7 +30,8 @@ Full documentation is available at **[tuios-docs](https://tuios.gaurav.zip)** (h
 - **[CLI Reference](docs/CLI_REFERENCE.md)**: All command-line options
 - **[Tape Scripting](docs/TAPE_SCRIPTING.md)**: Automate workflows
 - **[Sessions](docs/SESSIONS.md)**: Daemon mode, attach/detach, other machines, and what survives
-- **[Agent State](docs/AGENT_STATE.md)**: How panes running coding agents report and show their state
+- **[Agents](docs/AGENT_STATE.md)**: Running coding agents in tuios: state, the Inbox, approvals, fleets, other machines, grants and MCP
+- **[tmux Shim](docs/TMUX_SHIM.md)**: Run tools that drive tmux, such as Claude Code agent teams
 - **[Control Protocol](docs/protocol.md)**: JSON verb protocol for driving the daemon
 - **[Architecture](docs/ARCHITECTURE.md)**: Technical design
 
@@ -107,18 +108,24 @@ and prints the right command rather than overwriting it.
 - **Popups**: `tuios popup -- fzf` runs a command in a floating pane that closes when it exits
 
 ### Agents
-- **Agent State**: Panes running a coding agent show whether it is working, idle or waiting for you. Agents report it with `tuios set-agent-state`, or tuios detects 22 agent CLIs by their process and screen ([docs](docs/AGENT_STATE.md))
-- **Agent List**: `tuios list-agents` shows every agent pane and what it is doing
-- **Messages**: `tuios send-agent-message` leaves a message in another agent's inbox, `tuios ask-agent` asks and waits for the answer, and the person watching has an inbox of their own
-- **Worktrees**: `tuios worktree new` opens a session in a new git worktree, and `tuios fan` starts one prompt in several agents, each in its own worktree
+The guide is [docs/AGENT_STATE.md](docs/AGENT_STATE.md).
+- **Agent State**: Panes running a coding agent show whether it is working, waiting for you, done or errored, as a shape in the title and a row on the rail. `tuios integration install` wires 18 harnesses (Claude Code, Codex, Gemini CLI, opencode and more) to report it, and tuios detects 22 agent CLIs by their process and screen
+- **Inbox**: <kbd>Prefix</kbd>+<kbd>i</kbd> lists everything waiting for you in every session and on every machine: approvals, questions, mail, errors, finished turns. <kbd>Prefix</kbd>+<kbd>o</kbd> jumps to the oldest. Answer a prompt from there without going to the pane, and with `[agents.approvals]` answer Claude Code, opencode and Kilo permission requests with one key
+- **Questions and Messages**: `tuios ask-human` puts a question with fixed answers in your Inbox. Agents mail each other with `tuios send-agent-message`, and `tuios ask-agent` asks one and waits for its answer. It never types into a pane waiting on a prompt, and replies from you are marked verified
+- **Fleets**: `tuios fan` starts one prompt in several agents, mixed harnesses allowed, each in its own git worktree. `tuios start-agent` starts one helper beside you, in its TUI or headless over ACP or the Codex app-server. Selectors such as `group:fan/retry needs:you` address a whole group
+- **Resume**: After a daemon restart, the Inbox offers to resume each agent conversation that was running
+- **Pane Grants**: Say what an agent's pane may do through tuios (`read`, `write`, `fan`, `respond`, `admin`), and give a helper less with `--grants`
+- **MCP Server**: `tuios mcp` serves the same surface as MCP tools, read-only and held to the agent's own session unless you say otherwise
+- **tmux Shim**: `tuios tmux-shim` runs tools that drive tmux, such as Claude Code agent teams, with their panes opened as tuios panes
 - **Session Stash**: `tuios stash put` keeps a file for the session, so another agent can still open it
-- **Agent Skill**: `tuios --skill` prints the guide an agent in a pane reads to drive tuios
+- **Agent Skill**: `tuios --skill` prints the short guide an agent in a pane reads to drive tuios, and `tuios --skill TOPIC` the rest, recipes included
 
 ### Machines
 - **Hosts**: `tuios hosts add` names another machine, reached over ssh. `tuios hosts tailnet` lists the machines on a Tailscale tailnet
 - **Remote Sessions**: `tuios attach --host build api` draws a session on another machine in this client, and `-s HOST:SESSION` sends any command there
 - **Hosted Panes**: `tuios new-window NAME --host build` runs one pane's process on another machine, in a session here
 - **Global Sessions**: `tuios new NAME --global` holds panes from several machines ([docs](docs/SESSIONS.md))
+- **Agents on Other Machines**: `tuios fan --host build` and `tuios start-agent -s build:api` run agents there, their Inbox items show here, and `tuios worktree pull` brings their work back. Each machine's `[hosts]` policy says what the others may do
 
 ### Tiling
 - **BSP Tiling**: Binary Space Partitioning with spiral layout

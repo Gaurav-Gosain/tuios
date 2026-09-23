@@ -1,15 +1,149 @@
-# Agent state
+# Agents in tuios
 
-tuios tracks a semantic state for each window's pane so a session can show which
-panes need attention. A pane running a coding agent reports what it is doing;
-tuios stores that state per window, syncs it to every attached client, and draws
-an indicator for it.
+This is the guide to running coding agents in tuios, and to agents that drive
+tuios. It starts with what you get and how to set it up, then maps every agent
+feature to where it is described, then gives the reference.
 
-This page is the reference for the feature. An agent that wants to use it from
-inside a pane should run `tuios --skill`, which prints the reporting recipes
-alongside the rest of the pane-driving surface.
+An agent reading this from inside a pane wants `tuios --skill` instead: a short
+core, and `tuios --skill TOPIC` for the rest. It ships in the binary, so it
+matches the build.
 
-## Table of Contents
+## What you get
+
+- **One state per pane.** Every pane running an agent shows `working`,
+  `needs_input`, `idle`, `done` or `errored`, as a shape in its title and as a
+  row on the rail, so no state rests on colour alone. The
+  agent reports it through a hook tuios installs, and tuios falls back to
+  reading the process, the screen and the title when nothing reports.
+- **One place to look.** The Inbox (`ctrl+b i`) lists everything waiting for
+  you in every session on every machine: approvals, questions, mail, errors,
+  finished turns and conversations to resume. `ctrl+b o` jumps to the oldest.
+  You answer from there: a digit, `a` or `d` on a prompt, `1`, `2` or `3` on an
+  approval the Inbox holds, `r` on mail.
+- **Agents that talk safely.** Agents mail each other and ask each other
+  questions. Everything one agent reads from another is fenced as data. Only
+  you can answer a prompt or speak as `human`, and a reply from you is marked
+  verified.
+- **Fleets.** `tuios fan` starts one prompt in several agents, each in its own
+  git worktree. `tuios start-agent` starts one helper beside you. Selectors
+  address a whole group.
+- **Other machines.** Agents, worktrees and the Inbox work across `tuios hosts`,
+  and `tuios worktree pull` brings the work back.
+- **Limits you set.** Pane grants say what an agent's pane may do through
+  tuios. Link policy says what another machine may do here.
+- **Other ways in.** `tuios mcp` serves the same surface as MCP tools, the tmux
+  shim runs tools that only know tmux (such as Claude Code agent teams), and
+  `tuios subscribe` streams every change.
+
+## Set it up
+
+1. Wire each harness you use to report its state and its conversation id:
+
+   ```bash
+   tuios integration install claude-code    # or codex, gemini-cli, opencode, ..., or --all
+   tuios doctor agents                      # what is installed, and agent panes missing one
+   ```
+
+2. Turn on the rail if it is off, and learn two keys: `ctrl+b i` opens the
+   Inbox and `ctrl+b o` goes to the oldest item.
+
+   ```bash
+   tuios set-config appearance.sidebar.enabled true
+   ```
+
+3. Optional: let the Inbox answer permission prompts, so you do not have to go
+   to the pane. In config.toml:
+
+   ```toml
+   [agents.approvals]
+   enabled = ["claude-code"]
+   ```
+
+4. Optional: start every pane with less than `admin`, and give more where it is
+   needed:
+
+   ```toml
+   [agents.permissions]
+   mode = "strict"
+   grants = ["read", "write", "fan"]
+   ```
+
+5. Optional: give your agents the tools. Either the skill, which an agent reads
+   with `tuios --skill`, or MCP:
+
+   ```bash
+   tuios integration install claude-code --mcp
+   ```
+
+6. Optional: an alert on your phone when an agent needs you, with nobody
+   attached: an `after-agent-state` hook ([HOOKS.md](HOOKS.md); `tuios --skill
+   recipes` has a working one).
+
+## Where to find what
+
+| To | Read |
+| --- | --- |
+| Understand the states and who decides them | [States](#states), [Sources and precedence](#sources-and-precedence) |
+| Make a harness report, or see why a pane is or is not an agent | [Harness integrations](#harness-integrations), [Recognising a harness](#recognising-a-harness), [Screen rules](#screen-rules) |
+| Use the Inbox and answer prompts | [The Inbox](#the-inbox), [Answering a prompt without attaching](#answering-a-prompt-without-attaching), [Approvals from the Inbox](#approvals-from-the-inbox), [KEYBINDINGS.md](KEYBINDINGS.md#the-inbox) |
+| Let agents ask you something | [Questions an agent asks you](#questions-an-agent-asks-you) |
+| Let agents talk to each other | [Agents talking to agents](#agents-talking-to-agents) |
+| Run a fleet of agents | [Fleets](#fleets), [Selectors](#selectors), [Headless agents over a protocol](#headless-agents-over-a-protocol) |
+| Bring a conversation back after a restart | [Resuming after a restart](#resuming-after-a-restart) |
+| Run agents on other machines | [Other machines](#other-machines), [SESSIONS.md](SESSIONS.md#agents-and-worktrees-on-another-machine) |
+| Limit what an agent may do | [What a pane may do](#what-a-pane-may-do), [Who can act as the person](#who-can-act-as-the-person), [CONFIGURATION.md](CONFIGURATION.md#what-another-machine-may-do-here) |
+| Get alerts, or reach a phone | [Alerts](#alerts), [HOOKS.md](HOOKS.md) |
+| Drive tuios from an agent | `tuios --skill`, [The MCP server](#the-mcp-server), [TMUX_SHIM.md](TMUX_SHIM.md), [protocol.md](protocol.md) |
+| Look up a command | [CLI_REFERENCE.md](CLI_REFERENCE.md) |
+
+## Agents talking to agents
+
+An agent pane is a window, addressed with `-w` by id or name like any other.
+Four verbs carry everything between agents and the person:
+
+| Verb | What it does |
+| --- | --- |
+| `tuios send-agent-message` | Leaves a message in a pane's inbox, or `human`'s, without touching its keyboard. Threads with `--reply-to`, files with `--attach` or the session stash |
+| `tuios read-agent-messages`, `tuios wait-for agent-message` | Read the inbox, or block until mail arrives |
+| `tuios ask-agent` | Types a question at an agent that is at its prompt, submits it, and returns what the pane printed. Refuses a pane on `needs_input` (`agent_blocked`), since the text would answer its prompt |
+| `tuios ask-human` | Puts a question with fixed answers in the Inbox and returns your answer |
+
+What keeps it safe: every body an agent reads is fenced as untrusted data and
+`--from` is a claim; a pane cannot send as `human`, and your replies carry
+`verified_human`; a pane cannot address itself, a cycle of asks is refused, and
+a sender is rate limited. Mail lives in memory, 256 messages per session, and
+dies with the daemon. `tuios --skill mail` has the whole contract.
+
+## Fleets
+
+| Command | What it does |
+| --- | --- |
+| `tuios worktree new BRANCH --agent claude` | A git worktree and a session in it, with an agent. The rail groups these by repository |
+| `tuios fan N --agent claude 'PROMPT'` | N worktrees, an agent in each, and the prompt typed into each once it is at its prompt. `--agent 'claude,codex'` mixes agents, `--prompt` repeated gives each its own |
+| `tuios start-agent claude --name reviewer` | One agent in a new pane beside you, returning once it is ready. `--protocol acp` or `codex` runs it headless |
+| `tuios worktree ls`, `tuios worktree diff`, `tuios fan keep SESSION` | Watch them, read what one changed, keep one and remove the rest without losing uncommitted work |
+| `--select 'group:fan/retry needs:you'` | Address every agent pane a selector matches, on `list-agents`, `list-attention`, `wait-for`, `send-agent-message` and `ask-agent` |
+| `--grants read,write` | On `fan`, `start-agent` and `new-window`: what the new panes may do |
+
+A prompt that cannot be typed because the agent is stuck on a first-run choice
+turns into an Inbox question after 30 seconds. See
+[CLI_REFERENCE.md](CLI_REFERENCE.md#tuios-fan) for the flags and
+`tuios --skill fleet` for the agent's view.
+
+## Other machines
+
+With `tuios hosts add NAME ADDR`, the daemon keeps an ssh link to that machine.
+Its agents appear on the rail and in `list-agents --all-hosts`, what waits there
+is in your Inbox, `-s HOST:SESSION` and `-w HOST:SESSION:WINDOW` reach it from
+any command, and `fan`, `worktree` and `start-agent` take `--host`.
+`tuios worktree pull HOST:SESSION` brings a worktree's commits and uncommitted
+work into a new worktree here. Mail to a machine whose link is down waits and is
+sent when it is back. Each machine's `[hosts]` table decides what the others
+may do there; answering prompts is off by default. See
+[SESSIONS.md](SESSIONS.md#windows-on-another-machine) and
+[A pane on another machine](#a-pane-on-another-machine).
+
+## Reference
 
 - [States](#states)
 - [Reporting state](#reporting-state)
