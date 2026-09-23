@@ -22,10 +22,27 @@ const maxClusterBytes = 64
 // instead of allocating string(r) (which escapes to the heap) for every char.
 var asciiStr [128]string
 
+// symbolStr holds the UTF-8 of every rune from symbolFirst up to symbolEnd
+// back to back, three bytes each, so graphemeString can hand any of them out
+// as a substring. The range is general punctuation, arrows, maths, box
+// drawing, blocks, shapes, dingbats and braille: what a TUI draws its borders,
+// meters and graphs with, often one styled cell at a time.
+var symbolStr string
+
+const (
+	symbolFirst = 0x2000
+	symbolEnd   = 0x2C00
+)
+
 func init() {
 	for i := range asciiStr {
 		asciiStr[i] = string(rune(i))
 	}
+	b := make([]byte, 0, (symbolEnd-symbolFirst)*3)
+	for r := rune(symbolFirst); r < symbolEnd; r++ {
+		b = utf8.AppendRune(b, r)
+	}
+	symbolStr = string(b)
 }
 
 // openGrapheme records a cluster that has been drawn while more of it may still
@@ -126,9 +143,9 @@ func (e *Emulator) handlePrint(r rune) {
 		}
 	} else {
 		if e.openGrapheme.active && len(e.grapheme) == 0 {
-			e.grapheme = append(e.grapheme[:0], []rune(e.openGrapheme.baseCluster())...)
+			e.grapheme = append(e.grapheme[:0], e.openGrapheme.baseCluster()...)
 		}
-		e.grapheme = append(e.grapheme, r)
+		e.grapheme = utf8.AppendRune(e.grapheme, r)
 		if e.openGrapheme.active {
 			e.extendOpenGrapheme()
 		}
@@ -161,12 +178,25 @@ func (e *Emulator) renderGraphemeBuffer() {
 	// and it's up to the caller to decide how to handle Unicode vs non-Unicode
 	// modes.
 	method := ansi.GraphemeWidth
-	graphemes := string(e.grapheme)
+	graphemes := e.graphemeString()
 	for len(graphemes) > 0 {
 		cluster, width := ansi.FirstGraphemeCluster(graphemes, method)
 		e.handleGrapheme(cluster, width)
 		graphemes = graphemes[len(cluster):]
 	}
+}
+
+// graphemeString returns the grapheme buffer as a string, which the cells
+// drawn from it keep. When a style change follows every character, as in a
+// TUI's borders, meters and graphs, the buffer holds a single rune each time,
+// and a symbol then comes from symbolStr instead of costing an allocation
+// per cell.
+func (e *Emulator) graphemeString() string {
+	if r, n := utf8.DecodeRune(e.grapheme); n == len(e.grapheme) && r >= symbolFirst && r < symbolEnd {
+		i := int(r-symbolFirst) * 3
+		return symbolStr[i : i+3]
+	}
+	return string(e.grapheme)
 }
 
 // flushGraphemeAtWriteEnd draws the buffered clusters when a Write runs out of
@@ -185,7 +215,7 @@ func (e *Emulator) flushGraphemeAtWriteEnd() {
 	}
 
 	method := ansi.GraphemeWidth
-	graphemes := string(e.grapheme)
+	graphemes := e.graphemeString()
 	var open string
 	for len(graphemes) > 0 {
 		cluster, width := ansi.FirstGraphemeCluster(graphemes, method)
@@ -218,7 +248,7 @@ func (e *Emulator) flushGraphemeAtWriteEnd() {
 		}
 	}
 	// Keep only the open cluster so a continuation extends it and nothing else.
-	e.grapheme = append(e.grapheme[:0], []rune(open)...)
+	e.grapheme = append(e.grapheme[:0], open...)
 }
 
 // extendOpenGrapheme re-renders the cluster left open by a previous Write, now
@@ -228,38 +258,28 @@ func (e *Emulator) extendOpenGrapheme() {
 	method := ansi.GraphemeWidth
 	// Most arrivals do not extend the cluster: after a styled non-ASCII
 	// character the cluster stays open across the SGR, so every next
-	// character is tested against it. The test runs on a reused byte
-	// buffer, and only a rune that does extend it pays for a string.
-	scratch := e.graphemeScratch[:0]
-	for _, r := range e.grapheme {
-		scratch = utf8.AppendRune(scratch, r)
-	}
-	e.graphemeScratch = scratch
-	first, width := ansi.FirstGraphemeCluster(scratch, method)
-	if len(first) != len(scratch) {
+	// character is tested against it. The test runs on the byte buffer
+	// itself, and only a rune that does extend it pays for a string.
+	first, width := ansi.FirstGraphemeCluster(e.grapheme, method)
+	if len(first) != len(e.grapheme) {
 		// The new rune began a fresh cluster instead of extending the open one.
 		// Close the open cluster and leave the remainder buffered for the
 		// normal path.
 		e.openGrapheme.disarm()
-		rest := scratch[len(first):]
-		e.grapheme = e.grapheme[:0]
-		for len(rest) > 0 {
-			r, n := utf8.DecodeRune(rest)
-			e.grapheme = append(e.grapheme, r)
-			rest = rest[n:]
-		}
+		e.grapheme = append(e.grapheme[:0], e.grapheme[len(first):]...)
 		return
 	}
-	s := string(scratch)
-	cluster := s
 
-	if len(s) > maxClusterBytes {
+	if len(e.grapheme) > maxClusterBytes {
 		// A continuation past the cap is dropped, the way every growth path
 		// drops it; the buffer stays capped, so this re-reads a bounded
 		// cluster per rune instead of an ever-growing one.
-		e.grapheme = e.grapheme[:len(e.grapheme)-1]
+		_, n := utf8.DecodeLastRune(e.grapheme)
+		e.grapheme = e.grapheme[:len(e.grapheme)-n]
 		return
 	}
+	s := string(e.grapheme)
+	cluster := s
 
 	// A continuation can widen the cluster, and the cell it is already sitting
 	// in may not have room: a presentation selector arriving after its base
@@ -286,7 +306,7 @@ func (e *Emulator) extendOpenGrapheme() {
 		// No wrap to move to. The base keeps its cell and the continuation
 		// runes fall back to the zero-width attach rules, which is what the
 		// unsplit write does with a wide cluster it cannot place.
-		e.grapheme = append(e.grapheme[:0], []rune(s[len(drawn):])...)
+		e.grapheme = append(e.grapheme[:0], s[len(drawn):]...)
 		return
 	}
 

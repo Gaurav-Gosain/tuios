@@ -100,12 +100,10 @@ type Emulator struct {
 	// only an ASCII rune dropped them.
 	lastCluster      string
 	lastClusterWidth int
-	// A slice of runes to compose a grapheme.
-	grapheme []rune
-	// graphemeScratch is where extendOpenGrapheme encodes the buffer to test
-	// whether a new rune extends the open cluster, so the test allocates
-	// nothing when it does not.
-	graphemeScratch []byte
+	// grapheme holds, as UTF-8, the non-ASCII text waiting to be split into
+	// clusters and drawn. It only ever holds utf8.AppendRune output, so it is
+	// always valid UTF-8.
+	grapheme []byte
 	// rgbCache holds recently used truecolor SGR colours, made on the first
 	// one. See rgbColor.
 	rgbCache *[256]rgbSlot

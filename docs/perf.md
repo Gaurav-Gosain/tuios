@@ -1434,3 +1434,34 @@ characters, and areas that start left of the grid and end past it.
 | `claude` | 15.96 ms | 9.87 ms | -38.2% (p<0.001) |
 | `nvim` | 6.84 ms | 5.37 ms | -21.5% (p<0.001) |
 | `nvimcfg`, `btop`, `BackendTUI` | | | `~`, allocations unchanged |
+
+**A lone symbol's cell comes from a static string** (`utf8.go`,
+`emulator.go`). This is the fourth truecolor allocation the vt parse and scroll
+pass left for "a profile of a real workload": `string(e.grapheme)` in
+`flushGraphemeAtWriteEnd` and `renderGraphemeBuffer`. The real captures ask
+for it. It was 70% of the bytes allocated on `btop` and 36% on `nvimcfg`, and
+in both about 99% of those cells were a single U+25xx character between two
+SGRs. The grapheme buffer is now UTF-8 bytes rather than runes, which removes
+the scratch buffer and the re-encode and decode loops around it, and a buffer
+holding one rune in U+2000 to U+2BFF (punctuation, arrows, maths, box drawing,
+blocks, shapes, dingbats, braille) is served as a substring of a 9 KB string
+built once at init. Anything else still allocates its string. A per-emulator
+cache keyed by rune was tried first and thrashed on `uni`, doubling its
+allocations. `TestStyledSymbolCellsAllocateNothing` pins styled symbol cells
+at zero allocations, `TestGraphemeStringServesEverySymbolWhole` checks the
+table over the whole range and its edges, and
+`TestSymbolClusterExtendsAcrossWrites` checks that a symbol served from the
+table still takes a combining mark from the next write.
+
+| | before | after | |
+|---|---|---|---|
+| `BackendDoomFire158x40` CPU per op | 77.3 ms | 71.9 ms | -7.1% (p<0.001) |
+| `BackendDoomFire158x40` allocs/op | 189,604 | 4 | B/op -96% |
+| `btop` CPU per op | 21.2 ms | 20.2 ms | -5.0% (p=0.010), inside slot noise |
+| `btop` allocs/op | 30.86k | 12.44k | -60%, B/op -41% |
+| `nvimcfg` allocs/op | 15,104 | 309 | -98%, B/op -63%, CPU `~` |
+| `uni` allocs/op | 84.03k | 73.81k | -12%, B/op -20%, CPU `~` |
+
+On the real streams the gain is allocation and GC work rather than measured
+CPU: this benchmark process has a small heap, and the collector's share grows
+with the heap of a real client.
