@@ -991,8 +991,9 @@ parses, so quote for the shell as you would when typing it.
 
 **Exit status:** the command's own. When the shell sent no status, run says so
 on stderr and exits `0`. A refusal exits `1`: `not_at_prompt` when a command is
-already running in the pane, `no_shell_integration` when its shell sends no
-marks. Nothing is typed in either case.
+already running in the pane or another `run` there has not ended,
+`no_shell_integration` when its shell sends no marks. Nothing is typed in
+either case.
 
 **Examples:**
 ```bash

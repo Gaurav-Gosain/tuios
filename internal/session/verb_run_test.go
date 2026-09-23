@@ -121,6 +121,60 @@ func TestRunRefusesARunningPane(t *testing.T) {
 	}
 }
 
+// TestRunOneAtATimeInAPane starts two runs in one pane at once. Both would
+// pass the prompt check before either command starts, and the shell would read
+// one line made of both. One run holds the pane, and the other is refused
+// with not_at_prompt and types nothing.
+func TestRunOneAtATimeInAPane(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	makeSessionWithWindow(t, d, "work")
+	c := dialVerb(t, sp)
+	openFakeShell(t, c, "build")
+
+	commands := []string{"echo first", "echo second"}
+	resps := make(chan map[string]any, len(commands))
+	start := make(chan struct{})
+	for _, cmd := range commands {
+		conn := dialVerb(t, sp)
+		go func() {
+			<-start
+			_ = conn.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			_, _ = fmt.Fprintf(conn.conn, `{"id":1,"verb":"run","params":{"session":"work","window":"build","command":%q,"timeout":8000}}`+"\n", cmd)
+			_ = conn.conn.SetReadDeadline(time.Now().Add(15 * time.Second))
+			line, err := conn.r.ReadBytes('\n')
+			if err != nil {
+				resps <- map[string]any{"read_error": err.Error()}
+				return
+			}
+			var resp map[string]any
+			_ = json.Unmarshal(line, &resp)
+			resps <- resp
+		}()
+	}
+	close(start)
+
+	var ok, refused []map[string]any
+	for range commands {
+		resp := <-resps
+		if e, _ := resp["error"].(map[string]any); e != nil {
+			if e["code"] != ErrVerbNotAtPrompt {
+				t.Fatalf("the refused run: %v, want %q", resp, ErrVerbNotAtPrompt)
+			}
+			refused = append(refused, resp)
+			continue
+		}
+		ok = append(ok, result(t, resp))
+	}
+	if len(ok) != 1 || len(refused) != 1 {
+		t.Fatalf("two runs at once: %d ran and %d were refused, want one each (ran %v)", len(ok), len(refused), ok)
+	}
+	res := ok[0]
+	want := map[string]string{"echo first": "first", "echo second": "second"}[res["cmdline"].(string)]
+	if want == "" || res["output"] != want || res["command_seq"] != float64(1) {
+		t.Fatalf("the run that held the pane = %v, want one command with its own output", res)
+	}
+}
+
 // TestRunRefusesAPaneWithoutIntegration checks the pane that never marks a
 // command: run cannot tell where one starts or ends there, so it types
 // nothing and says why.

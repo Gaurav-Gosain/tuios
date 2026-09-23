@@ -274,6 +274,17 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 	if !facts.Seen {
 		return nil, noShellIntegration(windowLabelFor(w))
 	}
+	// One run at a time in a pane. Without the claim two calls both pass the
+	// prompt check, both paste, and the shell reads one line made of both
+	// commands. The claim is held until this call ends.
+	if !pty.runClaim.CompareAndSwap(false, true) {
+		return nil, hintedVerbError(ErrVerbNotAtPrompt, "another run is typing or running in window "+echoName(windowLabelFor(w)), &VerbHint{
+			Command: "tuios wait-for command-finished -s " + sess.Name + " -w " + w.ID + " --command-seq " + strconv.FormatUint(facts.CommandSeq, 10),
+			Detail:  "Nothing was typed. Wait for that command to finish, then run again, or run in another pane.",
+		})
+	}
+	defer pty.runClaim.Store(false)
+	facts = pty.ShellFacts()
 	if !facts.AtPrompt {
 		msg := "the shell in window " + echoName(windowLabelFor(w)) + " is not at its prompt"
 		if facts.Running != "" {

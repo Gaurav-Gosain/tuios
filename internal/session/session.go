@@ -751,6 +751,10 @@ type PTY struct {
 	// shell follows the shell's commands through its OSC 133 marks. See
 	// shell_commands.go.
 	shell shellTrack
+	// runClaim is held by one run call from its prompt check until the call
+	// ends, so two runs cannot both pass the check and type into one line.
+	// See verb_run.go.
+	runClaim atomic.Bool
 }
 
 // Title returns the last title this PTY's application set, or "" if it has set

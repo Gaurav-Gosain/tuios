@@ -1235,7 +1235,10 @@ What it refuses, with nothing typed:
   opened a moment ago is not refused for being slow to start.
 - `not_at_prompt`: a command is running in the pane. The message names it, and
   the hint is the `wait-for command-finished` call with the pane's
-  `command_seq`.
+  `command_seq`. Another `run` in the same pane that has not ended yet is
+  refused the same way, with the message "another run is typing or running",
+  so two callers sharing a pane never type into one line: a pane runs one
+  `run` at a time.
 - `invalid_params`: the command holds a newline or another control
   character. A newline at a prompt is Enter, so a second line would run as a
   second command the result says nothing about.

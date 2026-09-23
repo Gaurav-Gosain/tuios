@@ -591,7 +591,8 @@ echo "tests exited $?"
 tuios run -s work -w build --json -- make lint    # exit_code, output, duration_ms
 ```
 
-`run` never types into a running program. A pane that is busy is refused with
+`run` never types into a running program. A pane that is busy, including one
+where another agent's `run` has not ended yet, is refused with
 `not_at_prompt`, and a pane whose shell sends no marks with
 `no_shell_integration`; nothing is typed either way. `tuios doctor shell` says
 which panes mark their commands and prints the lines that turn the marks on for
