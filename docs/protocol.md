@@ -3005,6 +3005,28 @@ Response on timeout:
 {"id": 1, "error": {"code": "timeout", "message": "timed out waiting for output matching build succeeded"}}
 ```
 
+## A client built on these verbs: the tmux shim
+
+`tuios tmux` and the `tmux` link `tuios tmux-shim` installs answer tmux
+commands by calling the verbs above on the caller's own session. They add no
+verb and change none, and the wire is unchanged: an older daemon serves the
+shim as well as a new one. The mapping, for a reader of a daemon log:
+
+| tmux | verbs |
+|------|-------|
+| any target | `list-windows`, `list-workspaces` (a pane `%N` is a window, N derived from its id; a window `@N` is workspace N) |
+| `split-window`, `new-window` | `new-window` with `workspace`, `focus`, `cwd`, and `command` running `tuios tmux-pane`; `new-window -n` adds `set-workspace-name` |
+| `send-keys` | `send-text`, with tmux key names turned into bytes by the shim |
+| `capture-pane -p` | `capture-pane`, `source` visible, and recent when `-S` reaches into history |
+| `kill-pane`, `kill-window` | `close-window` |
+| `select-pane`, `select-pane -T` | `focus-window`, `set-window` with `name` |
+| `select-window`, `rename-window` | `select-workspace`, `set-workspace-name` |
+| `respawn-pane -k` | none: a request on the pane holder's unix socket |
+
+Every call names the caller's session, so nothing the shim does reaches
+another. It holds no authority the caller's own tuios CLI does not. See
+[TMUX_SHIM.md](TMUX_SHIM.md).
+
 ## Examples from a shell
 
 Create a detached session, drive it, and read it back:

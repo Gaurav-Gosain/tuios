@@ -509,6 +509,32 @@ On a detached session, a window whose shell has exited stays in the list until
 something closes it, and `capture-pane` still reads its final screen. Close what
 you open, or a loop that opens a window per run quietly accumulates dead ones.
 
+### A tool that drives tmux
+
+There is no tmux in a tuios pane (tuios clears `TMUX`), so a tool that opens
+its workers in tmux panes, such as Claude Code agent teams, cannot. Run it
+under the tmux shim and its `tmux` calls answer in this session instead:
+
+```sh
+tuios tmux-shim -- env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude
+```
+
+Each teammate then opens as a tuios pane on your workspace, named after it,
+with its agent state on the rail. The shim is opt-in: only what you start
+under `tuios tmux-shim` sees it. It answers the tmux commands those tools use
+(split-window, send-keys, capture-pane -p, display-message -p, list-panes,
+kill-pane, select-pane, respawn-pane -k, and a few more); a tmux window is a
+workspace (`@N`) and a pane is a tuios window (`%N`). It never reaches another
+session. You can also ask it one question directly:
+
+```sh
+tuios tmux display-message -p '#{pane_id} #{window_id}'
+```
+
+A command it does not answer fails, and is recorded in
+`$XDG_STATE_HOME/tuios/tmux-shim.log`. Prefer the tuios verbs above for your
+own work; the shim is for tools that only know tmux.
+
 ## Waiting instead of polling
 
 Do not capture in a loop with a sleep. The daemon watches its own events and will

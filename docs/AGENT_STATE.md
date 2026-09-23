@@ -308,6 +308,16 @@ Only this one variable is read. `explain-agent-detect` reports the match as
 "named by TUIOS_AGENT=<id> on pid N". Set it per command, not in the pane's
 shell profile, or every program the pane runs is taken for that agent.
 
+### Teammates opened through the tmux shim
+
+A pane that [the tmux shim](TMUX_SHIM.md) opens, a Claude Code teammate say,
+runs `tuios tmux-pane` as its process, and the holder runs the teammate. The
+holder gives its command a process group of its own and makes it the
+terminal's foreground group, so the detector reads the teammate (or the
+`sh -c` running it, which it walks as a wrapper) exactly as it reads an agent
+started at a shell prompt. Its state, the Inbox and the rail work unchanged.
+`explain-agent-detect` shows the teammate's process, not the holder.
+
 ### Losing an agent
 
 A held claim clears at once when the pane's own shell is back in the
