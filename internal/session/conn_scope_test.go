@@ -114,7 +114,17 @@ func TestRestrictConnectionOwnScopeReachesOnlyTheCallersSession(t *testing.T) {
 	wantForbidden(t, "run in b", callP(c, t, "run", map[string]any{"session": "b", "window": b1, "command": "true"}))
 	wantForbidden(t, "ask-human as another pane", callP(c, t, "ask-human", map[string]any{"window": a2, "question": "ok?", "options": []string{"yes"}, "wait": false}))
 	wantForbidden(t, "answer-ask", callP(c, t, "answer-ask", map[string]any{"request_id": "x", "answer": "yes", "human_nonce": "n"}))
-	wantForbidden(t, "release-agent-message",callP(c, t, "release-agent-message", map[string]any{"session": "a", "id": 1}))
+	wantForbidden(t, "release-agent-message", callP(c, t, "release-agent-message", map[string]any{"session": "a", "id": 1}))
+	// A selector reaches every session, so a write or wait by one is refused.
+	// list-agents takes one, narrowed to the caller's own session.
+	wantForbidden(t, "send-agent-message by selector", callP(c, t, "send-agent-message", map[string]any{"select": "session:b", "text": "x"}))
+	wantForbidden(t, "ask-agent by selector", callP(c, t, "ask-agent", map[string]any{"select": "session:b", "text": "x"}))
+	wantForbidden(t, "wait-for by selector", callP(c, t, "wait-for", map[string]any{"condition": "agent-state", "select": "session:b", "until": "idle", "timeout": 10}))
+	if sel := result(t, callP(c, t, "list-agents", map[string]any{"select": "harness:*"})); sel["session"] != "a" {
+		t.Errorf("list-agents by selector listed %v, want the caller's session a", sel["session"])
+	}
+	// start-agent opens its pane in the caller's own session, never another.
+	wantForbidden(t, "start-agent in b", callP(c, t, "start-agent", map[string]any{"session": "b", "agent": "true"}))
 
 	// An unrestricted connection is untouched.
 	plain := dialVerb(t, sp)

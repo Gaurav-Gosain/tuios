@@ -195,6 +195,9 @@ func TestSendBySelectorRefusesMixedAddressing(t *testing.T) {
 		{"to": f.apiCodex},
 		{"session": "web"},
 		{"reply_to": 1},
+		// host sends to one session on another machine; a selector names
+		// its own hosts with a host: term.
+		{"host": "build"},
 	} {
 		params := map[string]any{"select": "harness:codex", "text": "x"}
 		for k, v := range extra {

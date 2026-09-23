@@ -137,7 +137,8 @@ var verbScopes = map[string]scopeKind{
 	"ask-agent": scopeWrite,
 	"respond":   scopeWrite,
 
-	"fan": scopeLaunch,
+	"fan":         scopeLaunch,
+	"start-agent": scopeLaunch,
 
 	"list-dock-components": scopeDeny,
 	"refresh-dock":         scopeDeny,
@@ -484,6 +485,11 @@ func (d *Daemon) checkScope(cs *connState, verb string, params json.RawMessage) 
 		if flag(wide) {
 			return nil, scopeForbidden(verb, wide+" reaches every session, and the connection is restricted to its own")
 		}
+	}
+	// A selector reaches every session, except on list-agents, where the
+	// session filled in above narrows it to the caller's own.
+	if str("select") != "" && verb != "list-agents" {
+		return nil, scopeForbidden(verb, "select reaches every session, and the connection is restricted to its own")
 	}
 	// A session on another machine is never in reach: send-agent-message's
 	// host sends there over this machine's link.

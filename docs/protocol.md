@@ -1014,7 +1014,7 @@ What a restricted connection may call:
 | own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `ask-human` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
 | type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run` | session in reach | `forbidden` |
-| start sessions | `fan` | needs a pane | `forbidden` |
+| start sessions | `fan`, `start-agent` | needs a pane; `start-agent` opens its pane in a session in reach | `forbidden` |
 | everything else | | `forbidden` | `forbidden` |
 
 Under `own`:
@@ -1026,6 +1026,8 @@ Under `own`:
   from linked hosts, are not written.
 - `all_sessions` on `list-agents`, `any_session` on `wait-for` and `hosts` on
   `subscribe` are refused.
+- `select` is refused on every verb but `list-agents`, where it reads only the
+  caller's own session: a selector reaches every session.
 - A `host` naming another machine, such as `send-agent-message`'s outbox
   delivery, is refused: no session on another machine is in reach.
 - `set-agent-state`, `set-agent-meta` and `set-agent-session` with no
@@ -2546,7 +2548,7 @@ the one before. The configuration is in
 | none | `hello`, `list-verbs`, `link-peer`, `restrict-connection` |
 | `list` | `list-*`, `session-info`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
-| `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
+| `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
 | `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `close-window`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `remove-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway) |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask` |
 | every one | `open-host-connection` |

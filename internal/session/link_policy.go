@@ -101,6 +101,7 @@ var verbCapabilities = map[string][]string{
 	"new-session":  {config.LinkAllowOpen},
 	"new-worktree": {config.LinkAllowOpen},
 	"fan":          {config.LinkAllowOpen},
+	"start-agent":  {config.LinkAllowOpen},
 	"new-window":   {config.LinkAllowOpen},
 	"split-window": {config.LinkAllowOpen},
 	"popup":        {config.LinkAllowOpen},
