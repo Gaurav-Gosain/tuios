@@ -35,6 +35,7 @@ type hostAddFlags struct {
 	timeout    int
 	sshOptions []string
 	tailnet    bool
+	reposRoot  string
 }
 
 // newHostsSubcommands builds add, remove and test.
@@ -88,6 +89,7 @@ To open a session on the host in this client, run
 	addCmd.Flags().IntVar(&add.timeout, "connect-timeout", 0, "Seconds one dial may take before the host is called unreachable (default 10)")
 	addCmd.Flags().StringArrayVar(&add.sshOptions, "ssh-option", nil, "One extra argument for ssh. Repeat the flag for each one")
 	addCmd.Flags().BoolVar(&add.tailnet, "tailnet", false, "Take the address from the machine of that name on your tailnet")
+	addCmd.Flags().StringVar(&add.reposRoot, "repos-root", "", "Where the host keeps its checkouts, as the host reads it (e.g. ~/src). fan --host and worktree new --host look there")
 
 	removeCmd := &cobra.Command{
 		Use:     "remove <name>",
@@ -170,11 +172,17 @@ func runHostAdd(name, addr string, flags hostAddFlags) error {
 		Command:        flags.command,
 		ConnectTimeout: flags.timeout,
 		SSHOptions:     flags.sshOptions,
+		ReposRoot:      flags.reposRoot,
 		// What that machine may do here is not what this command sets, so a
 		// new address keeps it.
 		Allow:       prev.Allow,
 		HoldMail:    prev.HoldMail,
 		HostedGrace: prev.HostedGrace,
+	}
+	// repos_root says where the host's checkouts are, not how to reach it,
+	// so pointing a host at a new address keeps it unless a new one is given.
+	if entry.ReposRoot == "" {
+		entry.ReposRoot = prev.ReposRoot
 	}
 	if err := config.SetHostInFile(path, name, entry); err != nil {
 		return err

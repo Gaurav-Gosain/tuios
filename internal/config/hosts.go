@@ -43,6 +43,14 @@ type HostConfig struct {
 	// SSHOptions are extra arguments passed to ssh before the address, for a
 	// host that needs a flag ssh_config cannot carry.
 	SSHOptions []string `toml:"ssh_options,omitempty"`
+	// ReposRoot is the directory on the host where its checkouts live. When
+	// a command on this machine names a repository on the host by its origin
+	// URL (fan --host, worktree new --host, start-agent -s HOST:SESSION), the
+	// host looks for the checkout under it, and clones into it with --clone.
+	// Empty lets the host look under its usual source directories. It is a
+	// path on the host, written the way the host reads it: absolute, or
+	// starting with ~/ for the host's home.
+	ReposRoot string `toml:"repos_root,omitempty"`
 
 	// The three fields below are the other direction: what the machine of
 	// this name may do here when it links in. They are read on the machine

@@ -283,6 +283,9 @@ func renderHostBlock(name string, h HostConfig) string {
 		}
 		b.WriteString("ssh_options = [" + strings.Join(parts, ", ") + "]\n")
 	}
+	if h.ReposRoot != "" {
+		b.WriteString("repos_root = " + tomlString(h.ReposRoot) + "\n")
+	}
 	// The policy for the machine linking in is carried through a rewrite of
 	// the address, so `tuios hosts add` on a known name does not drop it.
 	if h.Allow != nil {

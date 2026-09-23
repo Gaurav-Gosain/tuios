@@ -1809,9 +1809,10 @@ stops on a question of its own, such as whether to trust the folder, is not
 ready: the command prints what it waits on and exits non-zero, `ready` is
 false and `blocked_by` says approval or question, and the pane is kept for
 the person to answer. With `--prompt` the first prompt is typed once it is
-ready and checked the way `fan` checks it. The verb is `start-agent`, with
-`agent`, `name`, `cwd`, `workspace`, `focus`, `prompt`, `ready_timeout` and
-`env`. On a session on another machine (`-s host:session`) the CLI sends no
+ready and checked the way `fan` checks it. `--repo` starts it in a
+repository's main checkout, and a session `-s` names that does not exist is
+created. The verb is `start-agent`, with `agent`, `args`, `name`, `cwd`,
+`repo`, `workspace`, `focus`, `prompt`, `ready_timeout` and `env`. On a session on another machine (`-s host:session`) the CLI sends no
 `PATH`, so the agent comes from that machine's `PATH`, and `env` is refused
 there.
 
@@ -1836,6 +1837,57 @@ same rule to every sibling of the session you keep, and leaves a dirty sibling
 in place rather than guess. Nothing here ever runs `git worktree prune`. When a
 directory was removed under a session, `remove-worktree` says so and names the
 prune as the person's step.
+
+### Agents on another machine, and their work brought back
+
+`fan` and `worktree new` take `--host`, `worktree ls` takes `--host`, and
+`worktree rm`, `fan keep` and `worktree pull` take `HOST:SESSION`. Run them
+from inside your checkout. A path means nothing on the other machine, so the
+repository is sent by its origin URL, and that machine finds its own checkout
+of it under `[hosts.NAME] repos_root` (set it with `tuios hosts add NAME ADDR
+--repos-root ~/src`), or else under `~/src`, `~/dev`, `~/code`, `~/projects`,
+`~/repos`, `~/git`, `~/work` and `~/go/src` there. `--clone` clones it there
+when there is none. With `--host`, `--repo` names a directory on the host.
+
+```sh
+tuios fan 3 --host build --agent claude 'Add a retry with backoff.'
+tuios worktree ls --host build --group fan/add-retry-backoff
+tuios worktree pull build:api-fan-add-retry-backoff-2
+tuios fan keep build:api-fan-add-retry-backoff-2 --stash
+```
+
+`worktree pull` brings a worktree session's work from the other machine into a
+new worktree session here: the commits as a git bundle, fetched into a new
+branch of the repository you are in, and the uncommitted work, untracked files
+included, applied uncommitted in the new worktree. Only the commits past the
+worktree's base cross when this repository has the base commit. A branch that
+already exists here is refused, so nothing is overwritten, and nothing on the
+other machine changes. `--branch` names the branch here.
+
+`start-agent` works there too, with `-s HOST:SESSION`. The session is created
+when it does not exist, and arguments after `--` go to the agent. On another
+machine it starts in that machine's checkout of the repository you are in,
+and `--clone` clones it there when there is none:
+
+```sh
+tuios start-agent -s build:api codex --prompt 'Fix the flaky test.' -- --model o4
+```
+
+It returns once the agent is ready, as it does here, and exits 1 when the
+agent is not ready or the prompt is not `sent`.
+
+The verbs are `start-agent`, and `repo_url`, `repos_root` and `clone` on
+`new-worktree`, `fan` and `start-agent`:
+
+```json
+{"id":1,"verb":"start-agent","params":{"session":"api","agent":"claude","repo_url":"git@github.com:acme/api.git","prompt":"Add a retry."}}
+```
+
+A `repo_url` with no checkout is `repo_not_found`, and two checkouts of one
+origin are refused with both listed, never picked between. `clone` fetches only
+https, ssh and git URLs, never a local path. `bundle-worktree` is the verb
+`worktree pull` reads the work with, in chunks, and you will not need it by
+hand.
 
 ## Naming things for the human watching
 
@@ -2615,7 +2667,8 @@ when you are matching rather than reading: `invalid_request`, `unknown_verb`,
 `prompt_changed`, `not_resumable`, `no_shell_integration`, `not_at_prompt`,
 `confirm_required`, `protocol_mismatch`, `unknown_host`, `host_unreachable`,
 `host_refused`, `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
-`internal`. The CLI folds the same information into its messages.
+`repo_not_found`, `internal`. The CLI folds the same information into its
+messages.
 
 `option_not_found` means the path names no option in this build, and its hint
 carries the closest match; `list-options` describes them all.
@@ -2672,10 +2725,13 @@ Run `tuios hosts` to see why, or `tuios hosts test NAME` to dial it again.
 one rather than fix the link. `unknown_pane` means a pane id on the far machine
 is gone, so drop it rather than correct it.
 
-`not_worktree`, `worktree_dirty` and `git_failed` come only from the worktree
-verbs. A session outside a git worktree has nothing to remove or diff. A dirty
-worktree is left as it was until you pass `--stash` or `--force`. A git failure
-carries git's own message, and the repository is as it was.
+`not_worktree`, `worktree_dirty`, `git_failed` and `repo_not_found` come only
+from the worktree verbs and `start-agent`. A session outside a git worktree has
+nothing to remove or diff. A dirty worktree is left as it was until you pass
+`--stash` or `--force`. A git failure carries git's own message, and the
+repository is as it was. `repo_not_found` means the machine has no checkout
+whose origin is the `repo_url` you sent: pass `clone`, a `repos_root`, or
+`repo` with the directory there.
 
 A parameter the verb does not take is refused rather than ignored, and the
 failure lists what the verb does take. This matters more than it sounds: a call

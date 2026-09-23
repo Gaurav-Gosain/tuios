@@ -172,6 +172,7 @@ func TestAddedHostRoundTripsThroughTheParser(t *testing.T) {
 		Command:        "/home/gaurav/.local/bin/tuios",
 		ConnectTimeout: 7,
 		SSHOptions:     []string{"-J", "bastion", "-o", "StrictHostKeyChecking=yes"},
+		ReposRoot:      "~/src",
 	}
 	if err := SetHostInFile(path, "build", entry); err != nil {
 		t.Fatalf("add a host: %v", err)
@@ -181,7 +182,7 @@ func TestAddedHostRoundTripsThroughTheParser(t *testing.T) {
 		t.Fatalf("ASSERTION: the file does not parse: %v", err)
 	}
 	got := cfg.Hosts["build"]
-	if got.Addr != entry.Addr || got.Command != entry.Command || got.ConnectTimeout != entry.ConnectTimeout {
+	if got.Addr != entry.Addr || got.Command != entry.Command || got.ConnectTimeout != entry.ConnectTimeout || got.ReposRoot != entry.ReposRoot {
 		t.Errorf("ASSERTION: the host did not survive the round trip, got %+v want %+v", got, entry)
 	}
 	if strings.Join(got.SSHOptions, " ") != strings.Join(entry.SSHOptions, " ") {
