@@ -203,7 +203,10 @@ func (m *OS) persistSettings() tea.Cmd {
 		return nil
 	}
 	if m.ConfigReadOnly {
-		if !m.configReadOnlyTold {
+		// The Learn tour has no config file to save to, and its settings
+		// panel already says "this session only". A warning on the first
+		// change would read as something going wrong.
+		if !m.configReadOnlyTold && !m.LearnMode {
 			m.configReadOnlyTold = true
 			m.ShowNotification("Settings apply to this session only. The config file is not changed.", "warning", 0)
 		}
