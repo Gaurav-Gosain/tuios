@@ -481,6 +481,12 @@ Inbox shows it), showed nothing before `--ready-timeout` (default 120000), or
 exited. It also exits 1 when a `--prompt` was not taken. The pane is not
 focused unless `--focus` is passed.
 
+The command sends your `PATH` with any `--env`, as `fan` does, when the
+session is on this machine. For a session on another machine
+(`-s host:session`) it sends no `PATH`, and the agent is looked up on that
+machine's `PATH`. `--env` there is refused with `forbidden`, because
+variables do not cross machines.
+
 ### `tuios kill-server`
 
 Stop the TUIOS daemon process. This stops all sessions.

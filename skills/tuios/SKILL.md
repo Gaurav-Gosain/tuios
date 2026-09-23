@@ -1811,7 +1811,9 @@ false and `blocked_by` says approval or question, and the pane is kept for
 the person to answer. With `--prompt` the first prompt is typed once it is
 ready and checked the way `fan` checks it. The verb is `start-agent`, with
 `agent`, `name`, `cwd`, `workspace`, `focus`, `prompt`, `ready_timeout` and
-`env`.
+`env`. On a session on another machine (`-s host:session`) the CLI sends no
+`PATH`, so the agent comes from that machine's `PATH`, and `env` is refused
+there.
 
 ### Removing a worktree is the sharp edge
 

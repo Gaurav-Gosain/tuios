@@ -1671,7 +1671,11 @@ the way `fan` checks it.
 Params: `session`, `agent` (required, written as for `fan`), `name` (the
 window's name, which `list-agents` shows and `-w` and `name:` take), `cwd`,
 `workspace`, `focus` (default false), `prompt`, `ready_timeout` (milliseconds,
-default 120000), `env` (the rules of `fan`).
+default 120000), `env` (the rules of `fan`). A call that reaches the daemon
+over a host link is refused with `forbidden` when it carries `env`, since the
+variables describe the caller's machine. `tuios start-agent -s host:session`
+therefore sends no `env` unless `--env` was passed, and the agent is looked up
+on the far machine's `PATH`.
 
 Response:
 

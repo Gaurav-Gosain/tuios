@@ -26,7 +26,10 @@ it.
 
 <agent> is the agent as you would type it, arguments included: claude,
 "codex --model o5", or any program. It is looked up on your PATH, which the
-command sends, and --env passes more of your environment. A program no
+command sends, and --env passes more of your environment. On a session on
+another machine (-s host:session) PATH is not sent and the agent is looked up
+on that machine's PATH; --env there is refused, since env does not cross
+machines. A program no
 harness manifest recognises is ready only once it reports a state itself.
 
 The pane is not focused unless you pass --focus. --name gives it the name
@@ -50,7 +53,7 @@ before --ready-timeout.`,
 			}
 			return runStartAgent(startAgentOptions{
 				session: sessionName, agent: args[0], name: name, cwd: cwd, prompt: prompt,
-				env: callerEnv, workspace: workspace, readyTimeout: readyTimeout, focus: focus,
+				env: callerEnv, explicitEnv: len(env) > 0, workspace: workspace, readyTimeout: readyTimeout, focus: focus,
 			}, jsonOutput)
 		},
 	}
@@ -61,7 +64,7 @@ before --ready-timeout.`,
 	cmd.Flags().BoolVar(&focus, "focus", false, "Focus the new pane")
 	cmd.Flags().StringVar(&prompt, "prompt", "", "A first prompt, typed once the agent is ready")
 	cmd.Flags().IntVar(&readyTimeout, "ready-timeout", 0, "Milliseconds to wait for the agent to be ready (default 120000)")
-	cmd.Flags().StringArrayVar(&env, "env", nil, "Pass a variable to the agent: NAME for your own value, NAME=VALUE to set one. Repeatable. PATH is always sent")
+	cmd.Flags().StringArrayVar(&env, "env", nil, "Pass a variable to the agent: NAME for your own value, NAME=VALUE to set one. Repeatable. PATH is sent too, except to a session on another machine")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	return cmd
@@ -71,8 +74,24 @@ before --ready-timeout.`,
 type startAgentOptions struct {
 	session, agent, name, cwd, prompt string
 	env                               map[string]string
-	workspace, readyTimeout           int
-	focus                             bool
+	// explicitEnv says the person passed --env. Without it the env holds
+	// only the PATH the CLI adds on its own.
+	explicitEnv             bool
+	workspace, readyTimeout int
+	focus                   bool
+}
+
+// startAgentEnv is the env start-agent sends to a target on host ("" for
+// this machine). The PATH the CLI adds on its own is this machine's, so it is
+// not sent to another machine: the far daemon refuses env over a link, and
+// the agent is found on that machine's own PATH. An --env the person asked
+// for is always sent, so a remote target refuses it plainly rather than the
+// CLI dropping it quietly.
+func startAgentEnv(o startAgentOptions, host string) map[string]string {
+	if host != "" && !o.explicitEnv {
+		return nil
+	}
+	return o.env
 }
 
 func runStartAgent(o startAgentOptions, jsonOutput bool) error {
@@ -99,8 +118,8 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 			params[k] = v
 		}
 	}
-	if len(o.env) > 0 {
-		params["env"] = o.env
+	if env := startAgentEnv(o, t.host); len(env) > 0 {
+		params["env"] = env
 	}
 	if o.workspace > 0 {
 		params["workspace"] = o.workspace
