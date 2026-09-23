@@ -94,7 +94,7 @@ func waitedFor(since int64, now time.Time) string {
 	}
 }
 
-func runListAttention(sessionName, host string, kinds []string, jsonOutput bool) error {
+func runListAttention(sessionName, host string, kinds []string, selector string, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
@@ -109,6 +109,9 @@ func runListAttention(sessionName, host string, kinds []string, jsonOutput bool)
 	}
 	if len(kinds) > 0 {
 		params["kinds"] = kinds
+	}
+	if selector != "" {
+		params["select"] = selector
 	}
 	raw, err := client.Call("list-attention", params)
 	if err != nil {
@@ -195,7 +198,7 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 
 // newListAttentionCommand is `tuios list-attention`.
 func newListAttentionCommand() *cobra.Command {
-	var sessionName, host string
+	var sessionName, host, selector string
 	var kinds []string
 	var jsonOutput bool
 	cmd := &cobra.Command{
@@ -223,13 +226,17 @@ Dismissing one is for the person at an attached client, from the Inbox
   # Only what waits on the build host
   tuios list-attention --host build
 
+  # Only the codex agents of one fan-out
+  tuios list-attention --select 'harness:codex group:fan/add-retry'
+
   # The oldest approval's pane, for a script
   tuios list-attention --json --kind approval | jq -r '.items[0].window'`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runListAttention(sessionName, host, kinds, jsonOutput)
+			return runListAttention(sessionName, host, kinds, selector, jsonOutput)
 		},
 	}
+	cmd.Flags().StringVar(&selector, "select", "", "Only the items a selector matches: space-separated key:value terms, such as 'harness:codex needs:you'")
 	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Only this session on this machine, or on --host (default: every session)")
 	cmd.Flags().StringVar(&host, "host", "", "Only this machine: local, or a linked host by name (default: every machine)")
 	cmd.Flags().StringSliceVar(&kinds, "kind", nil, "Only these kinds: "+strings.Join(session.AttentionKindNames, ", "))

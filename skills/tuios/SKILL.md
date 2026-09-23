@@ -1611,6 +1611,67 @@ tuios read-agent-messages -s work -w "$TUIOS_PANE_ID" --unread
 The second shape only works if the reviewer reads its inbox. The first works
 against any agent, and is what to reach for when you do not know.
 
+### Many panes at once: selectors
+
+A window id names one pane. A selector names every agent pane that fits a
+description, in every session on this machine:
+
+```sh
+tuios list-agents --select 'harness:codex state:idle,done'
+tuios list-agents --select 'group:fan/add-retry needs:you'
+tuios list-attention --select 'harness:claude'
+tuios wait-for agent-state --select 'group:fan/add-retry' --until idle,done --every --timeout 3600000
+```
+
+A selector is terms separated by spaces, and every term must match. A term is
+`key:value`, and a comma gives alternatives: `state:idle,done`. The keys:
+
+| Key | Matches |
+| --- | --- |
+| `harness:` | the harness id, or the program name that starts it (`claude` is `claude-code`) |
+| `state:` | the agent state |
+| `needs:you` | a pane on `needs_input` or `errored` |
+| `session:` | the session name, a glob |
+| `group:` | the fan-out group, the branch stem `fan` used, a glob |
+| `host:` | the machine: `local`, or a host name, a glob |
+| `name:` | the window's name, a glob |
+| `cwd:` | the directory or anything under it; `~` is the home directory |
+
+A glob's `*` does not cross a slash, so `group:fan/*` is every group under
+`fan/`. A term the pane cannot answer does not match: a pane outside a fan-out
+has no group, so `group:*/*` leaves it out. `list-agents --all-hosts --select`
+reads every machine, and there `host:` picks the machine.
+
+`wait-for agent-state --select` watches every pane the selector matches,
+including panes that open during the wait, and ends on the first to reach an
+`--until` state. With `--every` it ends only when at least one pane matches and
+all of them are there, which is "wait until the whole fan-out is done". Put the
+state you wait for in `--until`, not in the selector.
+
+Writing to a selection never happens by accident. `send-agent-message
+--select` and `ask-agent --select` first list the panes and send nothing; over
+the socket that is the error `confirm_required`, whose hint lists the panes in
+`available` and carries a token in `confirm`. Look at the list, then send
+again with that token. The token is a hash of exactly that set of panes: if a
+pane joined or left in between, the second call is refused again with the new
+set. `list-agents --select` prints the same token for the same selector, so
+the look and the write can be two separate steps:
+
+```sh
+tuios list-agents --select 'group:fan/add-retry'
+tuios send-agent-message --select 'group:fan/add-retry' --confirm 3f9a0c2b7d41e865 'main moved, rebase before you push'
+tuios ask-agent --select 'group:fan/add-retry state:idle,done' --yes 'summarise your change in one line'
+```
+
+At a terminal the CLI asks before it sends; `--yes` skips the question and
+sends to whatever the selector matches at that moment, so use it only when any
+match is fine. A message by selector is one directed message per pane, each in
+its own session's ring, each through the rate cap. An ask by selector asks at
+most 16 panes at once, each the way a single ask is: a pane on `needs_input`
+is refused with `agent_blocked` in its own row, and the others still answer.
+A write reaches at most 32 panes. A pane on another machine that runs its
+calls through its owner cannot use a selector at all.
+
 ## A worktree as a session, and one prompt across several
 
 A git worktree is the unit of isolation for one agent: its own checkout, its
@@ -2494,7 +2555,7 @@ when you are matching rather than reading: `invalid_request`, `unknown_verb`,
 `command_failed`, `timeout`, `not_ready`, `agent_blocked`, `prompt_stalled`,
 `loop_refused`, `rate_limited`, `no_keyboard`, `forbidden`, `not_human`,
 `prompt_changed`, `not_resumable`, `no_shell_integration`, `not_at_prompt`,
-`protocol_mismatch`, `unknown_host`, `host_unreachable`,
+`confirm_required`, `protocol_mismatch`, `unknown_host`, `host_unreachable`,
 `host_refused`, `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
 `internal`. The CLI folds the same information into its messages.
 
@@ -2522,6 +2583,10 @@ it can bring back. Nothing was typed. Run the harness by hand if you want one.
 from `capture-pane --last-command`. The pane's shell sends no OSC 133 marks, or
 is busy with a command. Nothing was typed. Fall back to `send-text` and a
 marker, or wait for the running command with `wait-for command-finished`.
+
+`confirm_required` comes only from a write by selector: nothing was sent, and
+the hint lists the panes the selector matches and carries the token for them.
+Check the list, then call again with that token as `confirm`.
 
 `not_ready`, `agent_blocked`, `prompt_stalled`, `loop_refused`, `rate_limited`,
 `no_keyboard` and `forbidden` come only from the cross-agent verbs, and each has

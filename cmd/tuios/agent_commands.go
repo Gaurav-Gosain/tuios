@@ -103,7 +103,7 @@ type agentRow struct {
 
 // runListAgents prints the agent panes in a session: the board an orchestrating
 // agent reads before it addresses anyone.
-func runListAgents(sessionName string, all, allSessions, jsonOutput bool) error {
+func runListAgents(sessionName string, all, allSessions bool, selector string, jsonOutput bool) error {
 	t, err := dialSessionTarget(sessionName)
 	if err != nil {
 		return err
@@ -111,9 +111,16 @@ func runListAgents(sessionName string, all, allSessions, jsonOutput bool) error 
 	defer t.Close()
 
 	params := t.params(map[string]any{"all": all})
-	if allSessions {
+	if allSessions || (selector != "" && sessionName == "") {
 		// Every session, so no session is named, whatever TUIOS_SESSION says.
-		params = map[string]any{"all": all, "all_sessions": true}
+		// A selector reaches every session unless --session narrows it.
+		params = map[string]any{"all": all}
+		if selector == "" {
+			params["all_sessions"] = true
+		}
+	}
+	if selector != "" {
+		params["select"] = selector
 	}
 	raw, err := t.client.Call("list-agents", params)
 	if err != nil {
@@ -130,9 +137,15 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 		Agents      []agentRow `json:"agents"`
 		Total       int        `json:"total"`
 		AllSessions bool       `json:"all_sessions"`
+		Select      string     `json:"select"`
+		Confirm     string     `json:"confirm"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if len(res.Agents) == 0 && res.Select != "" {
+		fmt.Fprintf(w, "No pane matches the selector %q.\n", plainLine(res.Select))
+		return nil
 	}
 	if len(res.Agents) == 0 {
 		if all && res.AllSessions {
@@ -207,6 +220,9 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 		noun = "window(s), agent or not"
 	}
 	fmt.Fprintf(w, "\n%d %s%s. * marks the focused one. Address one with -w and its ID or NAME.\n", res.Total, noun, on)
+	if res.Confirm != "" {
+		fmt.Fprintf(w, "To message or ask exactly these, pass --select %q --confirm %s.\n", plainLine(res.Select), plainLine(res.Confirm))
+	}
 	return nil
 }
 

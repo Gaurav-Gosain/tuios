@@ -715,6 +715,28 @@ existing callers:
   On everything else, 1, 2 and 3 do what they did, and 4 to 9 do nothing, as
   before.
 
+**Selectors address many panes.** A new param `select` takes a selector (see
+[Selectors](#selectors)) on `list-agents`, `list-host-agents`,
+`list-attention`, `wait-for`, `send-agent-message` and `ask-agent`. A call that
+sends none of the new params is answered as before. What changes:
+
+- Every `list-agents` row gains `group`, the fan-out group of the pane's
+  session, empty outside one. `list-host-agents` rows carry it from a host that
+  sends it.
+- `list-agents` with `select` and no `session` lists every session, as
+  `all_sessions` does, and answers with `select` and, without `all`, `confirm`.
+- `send-agent-message` and `ask-agent` with `select` answer with a new result
+  shape, `agent_messages_sent` with `results`, or `agent_replies` with
+  `replies`. Without `confirm`, or with a `confirm` for a different set of
+  panes, they send nothing and fail with the new code `confirm_required`, whose
+  hint carries the new field `confirm`. `ask-agent` no longer marks `window` as
+  required in `list-verbs`, since `select` replaces it; a call with neither is
+  still `invalid_params`.
+- `wait-for` takes `select` and `every` for `agent-state`. With `every` the
+  result carries `panes` and `total` instead of one `window`.
+- A pane on another machine that sends its calls through its owner is refused
+  with `forbidden` when a call names `select`.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -789,6 +811,7 @@ catalog.
 | `not_human` | Only the person at an attached client may make this call, and it carried no nonce from a live attach. `dismiss-attention`, `respond` and `reply-approval` raise it. |
 | `prompt_changed` | `respond` pressed nothing: the pane is not on `needs_input`, no rule reads its prompt now, the prompt is not the one `prompt_id` names, or another client already answered it. Read it again with `peek-prompt`. |
 | `no_keyboard` | The target is the person's inbox, `human`, which has no pane to type into. |
+| `confirm_required` | A write by `select` sent nothing: it carried no `confirm` token, or a token for a different set of panes than the selector matches now. The hint lists the panes in `available` and carries their token in `confirm`. |
 | `forbidden` | The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as `human`, and a machine linked to this one cannot call what its link policy does not grant; the hint names the capability and the `[hosts]` table that grants it. Nothing was done. |
 | `protocol_mismatch` | The caller's protocol version is outside the range this daemon serves. Only `hello` produces it. |
 | `unknown_host` | No host by that name is configured. Host names are matched exactly. |
@@ -1866,7 +1889,10 @@ Params: `session` (optional; unlike most verbs, omitted means every session;
 without `host` it names a session on this machine), `kinds` (optional list,
 from `approval`, `ask`, `question`, `mail`, `errored`, `resume`, `finished`, `outbox`), `host`
 (optional: `local` for this machine or a linked host's name; omitted means
-every machine; an unknown name is `unknown_host`).
+every machine; an unknown name is `unknown_host`), `select` (optional, a
+[selector](#selectors): keeps the items it matches, reading an item's state
+from its kind, `needs_input` for an approval or a question, `errored`, `done`
+for finished; `group` and `cwd` are known for items of this machine only).
 
 Response:
 
@@ -1919,6 +1945,64 @@ restart whole.
 
 Wire compatibility: new verb and new event type. An older daemon answers
 `unknown_verb`, and the tuios client then shows the Inbox as unavailable.
+
+### Selectors
+
+A selector addresses every agent pane that fits a description. It is one
+string of terms separated by spaces, all of which must match; a term is
+`key:value`, and commas in the value are alternatives. The keys are `harness`
+(the harness id, or a program name a manifest detects), `state`, `needs`
+(only `needs:you`: `needs_input` or `errored`), `session` (glob), `group` (the
+fan-out group, glob), `host` (`local` or a host name, glob), `name` (window
+name, glob) and `cwd` (the directory or under it; a leading `~` is the
+daemon's home). Globs are `path.Match`: `*` does not cross a slash. A term a
+pane cannot answer does not match. A selector that does not parse is
+`invalid_params` naming `select`, with the keys in `accepted`.
+
+Reads: `list-agents`, `list-host-agents`, `list-attention` and `wait-for`
+(`agent-state`) keep what the selector matches. Writes: `send-agent-message`
+and `ask-agent` send to every agent pane on this machine the selector matches,
+in every session, and take no `session`, no `window` or `to`, and for a message
+no `reply_to`. A write reaches at most 32 panes, an ask at most 16; more is
+`invalid_params`, and none is `window_not_found`.
+
+A write is confirmed before anything is sent. Without `confirm` the call fails
+with `confirm_required`:
+
+```json
+{"id": 1, "error": {"code": "confirm_required", "message": "the selector matches 2 panes; nothing was sent",
+ "hint": {"param": "confirm", "available": ["api-fan-retry/codex (3f2a9c1e)", "web/codex (91bd07aa)"],
+  "confirm": "5c1f0e9ad2b37744", "detail": "..."}}}
+```
+
+The token is a hash of the set of panes (each by window id). The call again
+with `"confirm": "5c1f0e9ad2b37744"` goes ahead only if the selector still
+matches exactly that set; otherwise it fails with `confirm_required` again and
+the new set. `list-agents` with the same `select` answers with the same token
+in `confirm`. The token is not a secret and grants nothing: it only says the
+caller saw the set.
+
+A confirmed message answers `agent_messages_sent`:
+
+```json
+{"result": {"type": "agent_messages_sent", "select": "harness:codex", "sent": 2, "failed": 0, "total": 2,
+ "results": [{"session": "api-fan-retry", "window": "3f2a9c1e-...", "name": "codex", "ok": true, "message_id": 14, "thread_id": 14},
+             {"session": "web", "window": "91bd07aa-...", "name": "codex", "ok": true, "message_id": 3, "thread_id": 3}]}}
+```
+
+A confirmed ask answers `agent_replies`, with `replies` holding one row per
+pane: `ok`, and either the fields of a single ask's answer (`reply`,
+`settled_by`, `state`, `lines`, `truncated`, `waited_for`) or `error` with the
+code, message and hint the single ask would have failed with. `answered` and
+`failed` count them, and `untrusted` is always true.
+
+Each pane of a write goes through the checks of a single call: the rate cap
+per pane, the `human` rules, `agent_blocked` for a pane on `needs_input`
+unless `allow_blocked`, the wait for a working pane unless `force`, and the
+loop guard. `from` may name the sender's pane in another session by its exact
+window id. A call that names `select` from a pane on another machine running
+its calls through its owner is refused with `forbidden`, since such a call
+acts only as the window it is drawn in.
 
 ### dismiss-attention
 
@@ -2633,7 +2717,12 @@ default 500), `until` (agent state names, comma-separated, for `agent-state`),
 `thread` (any message id in a thread, to narrow `agent-message` to that
 thread), `any_session` (bool, for `agent-state` only: watch every session and
 take no `session` or `window`), `command_seq` (for `command-finished` with a
-`window`), `timeout` (milliseconds; default 30000).
+`window`), `select` (a selector, for `agent-state` only:
+watch the agent panes it matches in every session, including panes that open
+during the wait; takes no `session`, `window` or `any_session`), `every` (bool,
+with `select`: match only when at least one pane matches and all of them are in
+an `until` state, and answer with them in `panes`), `timeout` (milliseconds;
+default 30000).
 
 Conditions:
 

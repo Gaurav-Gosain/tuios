@@ -2,9 +2,11 @@ package session
 
 import (
 	"encoding/json"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -114,15 +116,23 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 		Session     string `json:"session"`
 		All         bool   `json:"all"`
 		AllSessions bool   `json:"all_sessions"`
+		Select      string `json:"select"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	if p.AllSessions {
+	var sel *Selector
+	if p.Select != "" {
+		var verr *verbError
+		if sel, verr = d.parseVerbSelector(p.Select); verr != nil {
+			return nil, verr
+		}
+	}
+	if p.AllSessions || (sel != nil && p.Session == "") {
 		if p.Session != "" {
 			return nil, invalidParam("all_sessions", "all_sessions lists every session, so it takes no session. Drop one or the other")
 		}
-		return d.listAgentsAllSessions(p.All), nil
+		return d.listAgentsAllSessions(p.All, sel), nil
 	}
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
@@ -130,9 +140,9 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 	}
 
 	unread := d.agents.unreadCounts(sess.Name)
-	agents := d.agentRows(sess, p.All, unread, time.Now().UnixNano())
+	agents := d.agentRows(sess, p.All, unread, time.Now().UnixNano(), sel)
 
-	return map[string]any{
+	out := map[string]any{
 		"type":    "agent_list",
 		"session": sess.Name,
 		"agents":  agents,
@@ -143,12 +153,35 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 		// overlay.
 		"human_inbox":  AgentInboxHuman,
 		"human_unread": unread[AgentInboxHuman],
-	}, nil
+	}
+	addSelection(out, sel, agents, p.All)
+	return out, nil
+}
+
+// addSelection puts the selector and its confirm token on a list-agents
+// answer. The token is the one a write addressed by the same selector takes,
+// so a caller can look here and write with it. It is left out with all, since
+// a write reaches agent panes only and the rows then include other windows.
+func addSelection(out map[string]any, sel *Selector, rows []map[string]any, all bool) {
+	if sel == nil {
+		return
+	}
+	out["select"] = sel.String()
+	if all {
+		return
+	}
+	keys := make([]string, 0, len(rows))
+	for _, r := range rows {
+		id, _ := r["window_id"].(string)
+		keys = append(keys, localAttentionHost+"/"+id)
+	}
+	out["confirm"] = SelectionToken(keys)
 }
 
 // listAgentsAllSessions is list-agents over every session, in session name
 // order. human_unread is the person's unread mail summed over the sessions.
-func (d *Daemon) listAgentsAllSessions(all bool) map[string]any {
+// sel, when not nil, keeps only the rows it matches.
+func (d *Daemon) listAgentsAllSessions(all bool, sel *Selector) map[string]any {
 	sessions := d.manager.AllSessions()
 	slices.SortFunc(sessions, func(a, b *Session) int { return strings.Compare(a.Name, b.Name) })
 	now := time.Now().UnixNano()
@@ -157,9 +190,9 @@ func (d *Daemon) listAgentsAllSessions(all bool) map[string]any {
 	for _, sess := range sessions {
 		unread := d.agents.unreadCounts(sess.Name)
 		humanUnread += unread[AgentInboxHuman]
-		agents = append(agents, d.agentRows(sess, all, unread, now)...)
+		agents = append(agents, d.agentRows(sess, all, unread, now, sel)...)
 	}
-	return map[string]any{
+	out := map[string]any{
 		"type":         "agent_list",
 		"all_sessions": true,
 		"agents":       agents,
@@ -167,15 +200,25 @@ func (d *Daemon) listAgentsAllSessions(all bool) map[string]any {
 		"human_inbox":  AgentInboxHuman,
 		"human_unread": humanUnread,
 	}
+	addSelection(out, sel, agents, all)
+	return out
 }
 
-// agentRows is one session's rows of a list-agents answer.
-func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now int64) []map[string]any {
+// agentRows is one session's rows of a list-agents answer. sel, when not nil,
+// keeps only the rows it matches.
+func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now int64, sel *Selector) []map[string]any {
 	state := sess.GetState()
+	group := ""
+	if state.Worktree != nil {
+		group = state.Worktree.Group
+	}
 	agents := make([]map[string]any, 0, len(state.Windows))
 	for i := range state.Windows {
 		w := state.Windows[i]
 		if !all && !isAgentWindow(w) {
+			continue
+		}
+		if sel != nil && !sel.Match(d.paneSelectorTarget(sess, w, group)) {
 			continue
 		}
 		claim := sess.agentClaimFor(w.ID)
@@ -215,6 +258,9 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			// one. It is what a resume names.
 			"agent_session_id": w.AgentSessionID,
 			"meta":             agentMetaMap(w.AgentMeta, now),
+			// The fan-out group of the pane's session, empty outside one. It
+			// is what a group: selector term reads.
+			"group": group,
 		})
 	}
 	return agents
@@ -236,6 +282,23 @@ func resolveMailParty(state *SessionState, target string) (id, label string, err
 	return state.Windows[idx].ID, windowLabelOf(state.Windows[idx]), nil
 }
 
+// resolveSender is resolveMailParty for a sender. With anySession, a sender
+// that is not in the session is looked for by its exact window id in every
+// session, and labelled with the session it is in. Only the exact id is taken
+// there: a name or a prefix means different panes in different sessions.
+func (d *Daemon) resolveSender(state *SessionState, from string, anySession bool) (string, string, error) {
+	id, label, err := resolveMailParty(state, from)
+	if err == nil || !anySession {
+		return id, label, err
+	}
+	for _, sess := range d.manager.AllSessions() {
+		if w, ok := findWindowState(sess.GetState(), from); ok {
+			return w.ID, windowLabelOf(w) + " in " + sess.Name, nil
+		}
+	}
+	return "", "", err
+}
+
 // firstNonEmpty returns the first argument that is not empty.
 func firstNonEmpty(vals ...string) string {
 	for _, v := range vals {
@@ -253,21 +316,99 @@ func firstNonEmpty(vals ...string) string {
 // a queue: a message can be left for an agent that is mid-turn, which is exactly
 // when typing at it would be wrong.
 func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (any, *verbError) {
-	var p struct {
-		Session     string   `json:"session"`
-		To          string   `json:"to"`
-		From        string   `json:"from"`
-		FromHost    string   `json:"from_host"`
-		Subject     string   `json:"subject"`
-		Text        string   `json:"text"`
-		ReplyTo     uint64   `json:"reply_to"`
-		Attachments []string `json:"attachments"`
-		HumanNonce  string   `json:"human_nonce"`
-		Host        string   `json:"host"`
-	}
+	var p sendAgentMessageParams
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
+	p.raw = params
+	if p.Select != "" {
+		return d.sendAgentMessageSelect(cs, p)
+	}
+	if p.Confirm != "" {
+		return nil, invalidParam("confirm", "confirm goes with select: it is the token for the panes a selector matched")
+	}
+	return d.sendAgentMessage(cs, p, false)
+}
+
+// sendAgentMessageParams are send-agent-message's parameters.
+type sendAgentMessageParams struct {
+	Session     string   `json:"session"`
+	To          string   `json:"to"`
+	From        string   `json:"from"`
+	FromHost    string   `json:"from_host"`
+	Subject     string   `json:"subject"`
+	Text        string   `json:"text"`
+	ReplyTo     uint64   `json:"reply_to"`
+	Attachments []string `json:"attachments"`
+	HumanNonce  string   `json:"human_nonce"`
+	Host        string   `json:"host"`
+	Select      string   `json:"select"`
+	Confirm     string   `json:"confirm"`
+	// raw is the call's params as sent, which a send with host forwards to
+	// the far machine as they are, so an older daemon there sees only the
+	// names the caller used.
+	raw json.RawMessage
+}
+
+// sendAgentMessageSelect sends one message to every pane a selector matches,
+// once the caller has confirmed the set (resolveSelection). Each pane gets its
+// own directed message in its own session's ring, through the same checks a
+// single send makes, rate cap included, so a broadcast costs the sender one
+// message per pane. A pane that refuses (the sender itself, a closed window,
+// the cap) is reported in its row and does not stop the others.
+func (d *Daemon) sendAgentMessageSelect(cs *connState, p sendAgentMessageParams) (any, *verbError) {
+	if p.To != "" {
+		return nil, invalidParam("to", "select names the recipients, so it takes no to. Drop one or the other")
+	}
+	if p.Host != "" {
+		return nil, invalidParam("host", "select reaches the panes of this machine and its linked hosts by its host: term, so it takes no host. Put a host: term in the selector instead")
+	}
+	if p.Session != "" {
+		return nil, invalidParam("session", "select reaches every session, so it takes no session. Put a session: term in the selector instead")
+	}
+	if p.ReplyTo != 0 {
+		return nil, invalidParam("reply_to", "a reply belongs to one thread in one session's ring, so it cannot be sent by selector")
+	}
+	if strings.TrimSpace(p.Text) == "" {
+		return nil, invalidParam("text", "text is required: a message with no body tells the reader nothing")
+	}
+	panes, verr := d.resolveSelection(cs, p.Select, p.Confirm, selectWriteMax)
+	if verr != nil {
+		return nil, verr
+	}
+	results := make([]map[string]any, 0, len(panes))
+	sent := 0
+	for _, pane := range panes {
+		q := p
+		q.Select, q.Confirm = "", ""
+		q.Session, q.To = pane.sess.Name, pane.window.ID
+		row := map[string]any{"session": pane.sess.Name, "window": pane.window.ID, "name": windowLabelOf(pane.window)}
+		res, verr := d.sendAgentMessage(cs, q, true)
+		if verr != nil {
+			row["ok"] = false
+			row["error"] = verr
+		} else {
+			sent++
+			row["ok"] = true
+			row["message_id"] = res["message_id"]
+			row["thread_id"] = res["thread_id"]
+		}
+		results = append(results, row)
+	}
+	return map[string]any{
+		"type":    "agent_messages_sent",
+		"select":  p.Select,
+		"results": results,
+		"sent":    sent,
+		"failed":  len(results) - sent,
+		"total":   len(results),
+	}, nil
+}
+
+// sendAgentMessage is one send. fromAnySession lets from name a window of
+// another session by its exact id, for a send by selector, where the sender's
+// pane is in one session and the recipients are in many.
+func (d *Daemon) sendAgentMessage(cs *connState, p sendAgentMessageParams, fromAnySession bool) (map[string]any, *verbError) {
 	viaLink := cs != nil && cs.viaLink
 	if strings.TrimSpace(p.Text) == "" {
 		return nil, invalidParam("text", "text is required: a message with no body tells the reader nothing")
@@ -287,7 +428,12 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 	// A message for a session on another machine goes over this machine's
 	// link to it, and waits here while the link is down. See host_outbox.go.
 	if p.Host != "" {
-		return d.sendAgentMessageToHost(cs, p.Host, p.Session, p.To, p.From, params)
+		res, verr := d.sendAgentMessageToHost(cs, p.Host, p.Session, p.To, p.From, p.raw)
+		if verr != nil {
+			return nil, verr
+		}
+		out, _ := res.(map[string]any)
+		return out, nil
 	}
 	// An id past the last one issued names a message that has never existed, so
 	// it is a caller mistake rather than the ring having forgotten. The two are
@@ -325,7 +471,7 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 			msg.FromLabel = printableClaim(p.From, agentMsgMaxSubject)
 		}
 	case p.From != "":
-		id, label, err := resolveMailParty(state, p.From)
+		id, label, err := d.resolveSender(state, p.From, fromAnySession)
 		if err != nil {
 			return nil, mapResolveErr(err, sess)
 		}
@@ -684,25 +830,18 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 // It is also the only half of this feature that works with the agents that exist
 // today. None of them read a tuios mailbox; all of them read their keyboard.
 func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verbError) {
-	var p struct {
-		Session      string `json:"session"`
-		Window       string `json:"window"`
-		From         string `json:"from"`
-		FromHost     string `json:"from_host"`
-		Text         string `json:"text"`
-		ReadyTimeout int    `json:"ready_timeout"`
-		Settle       int    `json:"settle"`
-		Timeout      int    `json:"timeout"`
-		Lines        int    `json:"lines"`
-		Force        bool   `json:"force"`
-		AllowBlocked bool   `json:"allow_blocked"`
-		StallTimeout int    `json:"stall_timeout"`
-	}
+	var p askAgentParams
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
 	if strings.TrimSpace(p.Text) == "" {
 		return nil, invalidParam("text", "text is required: there is no question to ask")
+	}
+	if p.Select != "" {
+		return d.askAgentSelect(cs, p)
+	}
+	if p.Confirm != "" {
+		return nil, invalidParam("confirm", "confirm goes with select: it is the token for the panes a selector matched")
 	}
 	if p.Window == "" {
 		return nil, invalidParam("window", "window is required: name the agent to ask")
@@ -726,7 +865,97 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 		return nil, mapResolveErr(err, sess)
 	}
 	target := state.Windows[idx]
+	res, verr := d.askAgent(cs, sess, state, target, p, false)
+	if verr != nil {
+		return nil, verr
+	}
+	return res, nil
+}
 
+// askAgentParams are ask-agent's parameters.
+type askAgentParams struct {
+	Session      string `json:"session"`
+	Window       string `json:"window"`
+	From         string `json:"from"`
+	FromHost     string `json:"from_host"`
+	Text         string `json:"text"`
+	ReadyTimeout int    `json:"ready_timeout"`
+	Settle       int    `json:"settle"`
+	Timeout      int    `json:"timeout"`
+	Lines        int    `json:"lines"`
+	Force        bool   `json:"force"`
+	AllowBlocked bool   `json:"allow_blocked"`
+	StallTimeout int    `json:"stall_timeout"`
+	Select       string `json:"select"`
+	Confirm      string `json:"confirm"`
+}
+
+// askAgentSelect asks every pane a selector matches the same question, once
+// the caller has confirmed the set (resolveSelection), and answers with each
+// pane's reply. The asks run at once, each the whole single ask: it refuses a
+// pane on needs_input with agent_blocked unless allow_blocked, waits for the
+// pane to come to rest unless force, and records the exchange in that pane's
+// session. A pane that refuses or fails is reported in its row and does not
+// stop the others, so one blocked agent does not cost the caller every reply.
+func (d *Daemon) askAgentSelect(cs *connState, p askAgentParams) (any, *verbError) {
+	if p.Window != "" {
+		return nil, invalidParam("window", "select names the agents to ask, so it takes no window. Drop one or the other")
+	}
+	if p.Session != "" {
+		return nil, invalidParam("session", "select reaches every session, so it takes no session. Put a session: term in the selector instead")
+	}
+	panes, verr := d.resolveSelection(cs, p.Select, p.Confirm, selectAskMax)
+	if verr != nil {
+		return nil, verr
+	}
+	results := make([]map[string]any, len(panes))
+	var wg sync.WaitGroup
+	for i, pane := range panes {
+		wg.Go(func() {
+			row := map[string]any{"session": pane.sess.Name, "window": pane.window.ID, "name": windowLabelOf(pane.window)}
+			// The pane is read again: the set was resolved a moment ago, and
+			// a single ask reads its target at the time of the call too.
+			state := pane.sess.GetState()
+			target, ok := findWindowState(state, pane.window.ID)
+			if !ok {
+				row["ok"] = false
+				row["error"] = newVerbError(ErrVerbWindowNotFound, "the pane closed before it was asked")
+				results[i] = row
+				return
+			}
+			res, verr := d.askAgent(cs, pane.sess, state, target, p, true)
+			if verr != nil {
+				row["ok"] = false
+				row["error"] = verr
+			} else {
+				row["ok"] = true
+				maps.Copy(row, res)
+				delete(row, "type")
+			}
+			results[i] = row
+		})
+	}
+	wg.Wait()
+	answered := 0
+	for _, r := range results {
+		if r["ok"] == true {
+			answered++
+		}
+	}
+	return map[string]any{
+		"type":     "agent_replies",
+		"select":   p.Select,
+		"replies":  results,
+		"answered": answered,
+		"failed":   len(results) - answered,
+		"total":    len(results),
+		// As in a single ask: every reply is another program's output.
+		"untrusted": true,
+	}, nil
+}
+
+// askAgent is one ask of target in sess. fromAnySession is resolveSender's.
+func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, target WindowState, p askAgentParams, fromAnySession bool) (map[string]any, *verbError) {
 	from, fromLabel := "", ""
 	viaLink := cs != nil && cs.viaLink
 	switch {
@@ -735,7 +964,7 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 		// window here, so its name is a label and never resolved.
 		fromLabel = printableClaim(p.From, agentMsgMaxSubject)
 	case p.From != "":
-		fid, flabel, ferr := resolveMailParty(state, p.From)
+		fid, flabel, ferr := d.resolveSender(state, p.From, fromAnySession)
 		if ferr != nil {
 			return nil, mapResolveErr(ferr, sess)
 		}

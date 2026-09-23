@@ -119,6 +119,11 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"wait-for#2":            {errCode: ErrVerbWindowNotFound, why: "$TUIOS_PANE_ID is unexpanded"},
 	"wait-for#3":            {errCode: ErrVerbWindowNotFound, why: "$TUIOS_PANE_ID is unexpanded"},
 
+	// A write by selector reaches agent panes, and the fixture has none. The
+	// confirm step and the writes are proved in verb_select_test.go.
+	"send-agent-message#4": {errCode: ErrVerbWindowNotFound, why: "no agent pane matches the selector in the fixture"},
+	"ask-agent#1":          {errCode: ErrVerbWindowNotFound, why: "no agent pane matches the selector in the fixture"},
+
 	// Paths and ids the example invents for the reader.
 	"new-session#1":        {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
 	"new-window#1":         {errCode: ErrVerbInvalidParams, why: "/src/api does not exist here"},
@@ -153,6 +158,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"wait-for#1": {blocks: true, why: "no pane reports an agent state"},
 	"wait-for#4": {blocks: true, why: "no pane in any session reports an agent state"},
 	"wait-for#5": {blocks: true, why: "no shell in the fixture marks its commands"},
+	"wait-for#6": {blocks: true, why: "no pane matches the selector, so every pane matching can never hold"},
 
 	// The fixture's shells are not the fake integrated shell, so no pane marks
 	// its commands. run waits a moment for a first prompt before it says so.

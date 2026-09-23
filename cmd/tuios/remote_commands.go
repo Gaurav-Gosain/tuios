@@ -1270,9 +1270,18 @@ func callAndReport(verb string, params map[string]any, report func(map[string]an
 // The read deadline is stretched past the requested timeout because the daemon
 // only answers once the wait resolves: a client deadline shorter than the wait
 // would report a connection failure for a wait that was still perfectly healthy.
-func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, anySession, jsonOutput bool, commandSeq *uint64) error {
+func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, anySession bool, selector string, every, jsonOutput bool, commandSeq *uint64) error {
 	if anySession && (sessionName != "" || windowTarget != "") {
 		return errors.New("--any-session watches every session, so it takes no --session or --window. Drop one or the other")
+	}
+	if selector != "" {
+		if sessionName != "" || windowTarget != "" || anySession {
+			return errors.New("--select watches the panes it matches in every session, so it takes no --session, --window or --any-session. Put a session: term in the selector instead")
+		}
+		return runWaitForSelect(condition, until, selector, every, timeout, jsonOutput)
+	}
+	if every {
+		return errors.New("--every goes with --select")
 	}
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
@@ -1339,6 +1348,51 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 		return nil
 	}
 	fmt.Printf("%s matched%s\n", res.Condition, t.on())
+	return nil
+}
+
+// runWaitForSelect is wait-for agent-state over the panes a selector matches,
+// on this machine. The call names no session, whatever TUIOS_SESSION says: a
+// selector reaches every session.
+func runWaitForSelect(condition, until, selector string, every bool, timeout int, jsonOutput bool) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+	params := map[string]any{"condition": condition, "until": until, "select": selector, "timeout": timeout}
+	if every {
+		params["every"] = true
+	}
+	grace := time.Duration(timeout)*time.Millisecond + 10*time.Second
+	raw, err := client.CallWithTimeout("wait-for", params, grace)
+	if err != nil {
+		return reportVerbError(explainVerbError("wait-for", err), jsonOutput)
+	}
+	if jsonOutput {
+		return printVerbResult(raw, true)
+	}
+	var res struct {
+		Window  string `json:"window"`
+		Session string `json:"session"`
+		State   string `json:"state"`
+		Panes   []struct {
+			Session string `json:"session"`
+			Window  string `json:"window"`
+			State   string `json:"state"`
+		} `json:"panes"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if every {
+		fmt.Printf("all %d panes matching %q reached %s\n", len(res.Panes), selector, until)
+		for _, p := range res.Panes {
+			fmt.Printf("  %s in session %s: %s\n", shortWindowID(p.Window), p.Session, p.State)
+		}
+		return nil
+	}
+	fmt.Printf("agent-state matched on %s in session %s: %s\n", shortWindowID(res.Window), res.Session, res.State)
 	return nil
 }
 

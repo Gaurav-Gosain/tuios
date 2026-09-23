@@ -61,6 +61,15 @@ type InboxState struct {
 	Gen uint64
 	// Filter narrows the overlay to one kind, empty for every kind.
 	Filter string
+	// Select narrows the overlay to the items a selector matches, empty for
+	// every item. See inbox_select.go.
+	Select   string
+	selector *session.Selector
+	// selectEditing, selectDraft and selectErr are the selector line: open,
+	// what is typed on it, and why it did not parse.
+	selectEditing bool
+	selectDraft   string
+	selectErr     string
 	// Selected is the overlay's cursor, an index into its rows. It is always
 	// on an item row, never on a group heading, unless there are no items.
 	Selected int
@@ -879,9 +888,15 @@ func (m *OS) inboxRows() []inboxRow {
 			j++
 		}
 		if st.Filter == "" || st.Filter == kind {
-			rows = append(rows, inboxRow{heading: inboxGroupTitle(kind), count: j - i})
+			var items []inboxRow
 			for k := i; k < j; k++ {
-				rows = append(rows, inboxRow{item: &st.Items[k]})
+				if m.inboxItemSelected(st.Items[k]) {
+					items = append(items, inboxRow{item: &st.Items[k]})
+				}
+			}
+			if len(items) > 0 {
+				rows = append(rows, inboxRow{heading: inboxGroupTitle(kind), count: len(items)})
+				rows = append(rows, items...)
 			}
 		}
 		i = j

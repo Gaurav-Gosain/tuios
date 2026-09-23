@@ -94,6 +94,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbNotHuman, "Only the person at an attached client may make this call, and it carried no nonce from a live attach. dismiss-attention, respond and reply-approval raise it."},
 	{ErrVerbPromptChanged, "respond pressed nothing: the pane is not on needs_input, no rule reads its prompt now, the prompt is not the one prompt_id names, or another client already answered it. Read it again with peek-prompt."},
 	{ErrVerbNotResumable, "resume-agent found no conversation it can resume in the pane: none was recorded by a hook, the harness has no resume command, the recorded id is not one plain shell token, or the pane runs on another machine. Nothing was typed."},
+	{ErrVerbConfirmRequired, "A write addressed by selector was not sent, because it carried no confirm token or the token names a different set of panes than the selector matches now. Nothing was sent. The hint lists the panes the selector matches and carries the token for them in confirm: check the list, then call again with that token."},
 	{ErrVerbNoKeyboard, "The target is the person's inbox, human, which has no pane to type into. Leave a message with send-agent-message -w human and wait for the reply on your own inbox."},
 	{ErrVerbNoShellIntegration, "The pane's shell has not sent the OSC 133 marks that say where a command starts and ends, so the daemon cannot run a command in it and report its exit code, or say what the last command printed. Nothing was typed. Enable the shell's prompt integration, or use send-text and wait-for window-output."},
 	{ErrVerbNotAtPrompt, "run typed nothing because the pane's shell is not at its prompt: a command is running in it. The message names the command. Wait for it with wait-for command-finished, or run in another pane."},
@@ -130,12 +131,17 @@ type VerbHint struct {
 	// Detail is one sentence of extra context that does not fit the fields
 	// above, such as why a wait-for timed out.
 	Detail string `json:"detail,omitempty"`
+	// Confirm is the token a selector write takes to go ahead, on a
+	// confirm_required error. It is the hash of the set Available lists: pass
+	// it back as confirm and the write goes to that set, or is refused again
+	// if the set changed. See selector.go.
+	Confirm string `json:"confirm,omitempty"`
 }
 
 // empty reports whether the hint carries nothing worth serializing.
 func (h *VerbHint) empty() bool {
 	return h == nil || (h.Verb == "" && h.Command == "" && h.Param == "" &&
-		len(h.Accepted) == 0 && h.DidYouMean == "" && len(h.Available) == 0 && h.Detail == "")
+		len(h.Accepted) == 0 && h.DidYouMean == "" && len(h.Available) == 0 && h.Detail == "" && h.Confirm == "")
 }
 
 // hintedVerbError builds a *verbError carrying a hint. A hint with no populated

@@ -239,9 +239,27 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 		// CommandSeq makes command-finished match once the window has
 		// finished more commands than this.
 		CommandSeq *uint64 `json:"command_seq"`
+		// Select narrows agent-state to the panes a selector matches, in
+		// every session. Every waits for all of them rather than any one.
+		Select string `json:"select"`
+		Every  bool   `json:"every"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if p.Every && p.Select == "" {
+		return nil, invalidParam("every", "every applies to a wait with select: it waits for every pane the selector matches")
+	}
+	if p.Select != "" {
+		if verr := refuseSelectFromHostedPane(cs); verr != nil {
+			return nil, verr
+		}
+		if p.Condition != "agent-state" {
+			return nil, invalidParam("select", "select only applies to the agent-state condition")
+		}
+		if p.Session != "" || p.Window != "" || p.AnySession {
+			return nil, invalidParam("select", "select watches the panes it matches in every session, so it takes no session, window or any_session. Put a session: term in the selector instead")
+		}
 	}
 
 	timeout := defaultWaitTimeout
@@ -267,6 +285,14 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 			}
 		}()
 		deadline = ends
+	}
+
+	if p.Select != "" {
+		sel, verr := d.parseVerbSelector(p.Select)
+		if verr != nil {
+			return nil, verr
+		}
+		return d.waitAgentStateSelect(sel, p.Until, p.Every, deadline)
 	}
 
 	if p.AnySession {
@@ -560,6 +586,75 @@ func (d *Daemon) waitAgentStateAnySession(until string, deadline <-chan time.Tim
 		select {
 		case <-deadline:
 			return nil, agentStateTimeout(until)
+		case <-d.ctx.Done():
+			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
+		case <-sub.ch:
+			if res, ok := check(); ok {
+				return res, nil
+			}
+		}
+	}
+}
+
+// waitAgentStateSelect is the agent-state wait over the panes a selector
+// matches, in every session. Without every it ends when any matched pane is
+// in one of the until states. With every it ends when at least one pane
+// matches and all of them are, which is "wait until the whole fan-out is done".
+//
+// The selector is resolved again on every event, so a pane that opens during
+// the wait and matches is watched, and one that closes stops counting. A state
+// term in the selector narrows which panes are watched at the moment of each
+// check, so the state to wait for belongs in until, not in the selector.
+func (d *Daemon) waitAgentStateSelect(sel *Selector, until string, every bool, deadline <-chan time.Time) (any, *verbError) {
+	states, verr := parseUntilStates(until)
+	if verr != nil {
+		return nil, verr
+	}
+	sub := d.events.subscribe(eventFilter{types: map[string]bool{
+		EventAgentState: true, EventWindowCreated: true, EventWindowClosed: true,
+		EventSessionCreated: true, EventSessionClosed: true,
+	}}, defaultEventQueue)
+	defer d.events.unsubscribe(sub)
+
+	check := func() (map[string]any, bool) {
+		panes := d.selectPanes(sel, false)
+		if every {
+			if len(panes) == 0 {
+				return nil, false
+			}
+			matched := make([]map[string]any, 0, len(panes))
+			for _, p := range panes {
+				name := p.window.AgentState.Name()
+				if !states[name] {
+					return nil, false
+				}
+				matched = append(matched, map[string]any{"session": p.sess.Name, "window": p.window.ID, "state": name})
+			}
+			return waitMatched("agent-state", map[string]any{"select": sel.String(), "every": true, "panes": matched, "total": len(matched)}), true
+		}
+		for _, p := range panes {
+			if name := p.window.AgentState.Name(); states[name] {
+				return waitMatched("agent-state", map[string]any{
+					"select": sel.String(), "session": p.sess.Name, "window": p.window.ID, "state": name,
+				}), true
+			}
+		}
+		return nil, false
+	}
+
+	if res, ok := check(); ok {
+		return res, nil
+	}
+	for {
+		select {
+		case <-deadline:
+			verr := agentStateTimeout(until)
+			verr.Hint.Command = "tuios list-agents --select '" + sel.String() + "'"
+			verr.Hint.Detail = "No pane the selector matches reached the named state before the timeout. list-agents with the same selector shows what it matches and where each pane is now."
+			if every {
+				verr.Hint.Detail = "Not every pane the selector matches reached the named state before the timeout. list-agents with the same selector shows which have not."
+			}
+			return nil, verr
 		case <-d.ctx.Done():
 			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
 		case <-sub.ch:

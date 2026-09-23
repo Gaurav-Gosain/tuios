@@ -30,9 +30,17 @@ func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *
 		Session string   `json:"session"`
 		Kinds   []string `json:"kinds"`
 		Host    string   `json:"host"`
+		Select  string   `json:"select"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	var sel *Selector
+	if p.Select != "" {
+		var verr *verbError
+		if sel, verr = d.parseVerbSelector(p.Select); verr != nil {
+			return nil, verr
+		}
 	}
 	if p.Host != "" && p.Host != localAttentionHost {
 		if verr := d.checkHostParam(p.Host); verr != nil {
@@ -54,14 +62,68 @@ func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *
 		q.kinds[k] = true
 	}
 	items, counts, seq := d.attention.list(q)
-	return map[string]any{
+	if sel != nil {
+		items = d.selectAttention(items, sel)
+	}
+	out := map[string]any{
 		"type":    "attention_list",
 		"items":   items,
 		"counts":  counts,
 		"total":   len(items),
 		"seq":     seq,
 		"boot_id": d.events.bootIdentity(),
-	}, nil
+	}
+	if sel != nil {
+		out["select"] = sel.String()
+	}
+	return out, nil
+}
+
+// AttentionSelectorTarget is what a selector reads from an Inbox item on its
+// own. The state is the one the kind stands for: an approval or a question is a
+// pane on needs_input, errored is errored and finished is done. Mail and
+// resume stand for no state. group and cwd are not on an item, and the caller
+// fills them in when it knows the pane.
+func AttentionSelectorTarget(it AttentionItem) SelectorTarget {
+	t := SelectorTarget{
+		Host:    it.Host,
+		Session: it.Session,
+		Name:    it.Name,
+		Harness: it.Harness,
+	}
+	switch it.Kind {
+	case AttentionApproval, AttentionQuestion:
+		t.State, t.NeedsYou = AgentStateNeedsInput.Name(), true
+	case AttentionErrored:
+		t.State, t.NeedsYou = AgentStateErrored.Name(), true
+	case AttentionFinished:
+		t.State = AgentStateDone.Name()
+	}
+	return t
+}
+
+// selectAttention keeps the items sel matches. An item of this machine also
+// answers group and cwd from its session and pane.
+func (d *Daemon) selectAttention(items []AttentionItem, sel *Selector) []AttentionItem {
+	kept := make([]AttentionItem, 0, len(items))
+	for _, it := range items {
+		t := AttentionSelectorTarget(it)
+		if it.Host == "" {
+			if sess := d.manager.GetSession(it.Session); sess != nil {
+				st := sess.GetState()
+				if st.Worktree != nil {
+					t.Group = st.Worktree.Group
+				}
+				if w, ok := findWindowState(st, it.Window); ok {
+					t.Cwd = w.Cwd
+				}
+			}
+		}
+		if sel.Match(t) {
+			kept = append(kept, it)
+		}
+	}
+	return kept
 }
 
 // verbDismissAttention closes one item for the person.

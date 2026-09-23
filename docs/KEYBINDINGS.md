@@ -19,7 +19,9 @@ Everything waiting for you in every session is one list, the Inbox. See
 
 Inside it: `j` and `k` move, `enter` goes to the pane, `space` reads an
 approval's or a question's prompt, `r` replies to mail, `d` dismisses, `f` steps
-through the kinds, `m` opens the mailbox, `esc` closes. `ctrl+b o` is `o`
+through the kinds, `/` types a selector that narrows the list (such as
+`harness:codex needs:you`; `enter` applies it, an empty line clears it), `m`
+opens the mailbox, `esc` closes. `ctrl+b o` is `o`
 because `ctrl+b a` is the launcher's.
 
 In the prompt `space` opens: a digit chooses that option, `a` approves, `A`

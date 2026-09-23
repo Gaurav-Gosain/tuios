@@ -904,7 +904,7 @@ tuios wait-for <condition> [flags]
 | `window-output` | The window's content matches `--pattern` |
 | `window-exit` | The window's shell exited |
 | `window-idle` | The window printed nothing for `--idle` milliseconds |
-| `agent-state` | An agent reached one of the `--until` states; without `--window`, any agent pane in the session matches; with `--any-session`, any agent pane in any session |
+| `agent-state` | An agent reached one of the `--until` states; without `--window`, any agent pane in the session matches; with `--any-session`, any agent pane in any session; with `--select`, any agent pane the selector matches, or with `--every` all of them |
 | `agent-message` | A message arrived. With `--window`, the first unread message in that inbox; without it, any message left in the session after the wait began |
 | `command-finished` | A shell that marks its commands with OSC 133 finished one. With `--window`, that pane's next command, or with `--command-seq N` the first once the pane has finished more than N (already true if it happened before the wait). Without a window, any pane in the session. Prints the exit code |
 
@@ -918,6 +918,8 @@ tuios wait-for <condition> [flags]
 - `--timeout <ms>`: Milliseconds to wait before giving up (default: 30000)
 - `--any-session`: For `agent-state`: watch every session on the daemon, including ones created during the wait. Takes no `--session` or `--window`, and the result names the session that matched
 - `--command-seq <N>`: For `command-finished` with `--window`: match once the pane has finished more than N commands. Read N from `list-windows --json` before starting the command
+- `--select <selector>`: For `agent-state`: watch the agent panes a [selector](AGENT_STATE.md#selectors) matches, in every session, including panes that open during the wait. Takes no `--session`, `--window` or `--any-session`
+- `--every`: With `--select`: wait until at least one pane matches and every matched pane is in one of the `--until` states
 - `--json`: Output result as JSON
 
 The `window-output` pattern is matched against the window's scrollback, so
@@ -950,6 +952,9 @@ tuios wait-for agent-state -s work --until needs_input
 
 # Wait until an agent in any session is waiting on a human
 tuios wait-for agent-state --any-session --until needs_input
+
+# Wait until every agent of a fan-out has finished its turn
+tuios wait-for agent-state --select 'group:fan/add-retry' --until idle,done --every --timeout 3600000
 
 # Wait for mail in your own inbox
 tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --timeout 600000
@@ -1099,7 +1104,8 @@ tuios list-attention [flags]
 **Flags:**
 - `-s, --session <name>`: Only this session on this machine, or on `--host` (default: every session)
 - `--host <name>`: Only this machine: `local`, or a linked host by name (default: every machine)
-- `--kind <kind>`: Only these kinds, repeatable or comma-separated: `approval`, `question`, `mail`, `errored`, `resume`, `finished`, `outbox`
+- `--kind <kind>`: Only these kinds, repeatable or comma-separated: `approval`, `ask`, `question`, `mail`, `errored`, `resume`, `finished`, `outbox`
+- `--select <selector>`: Only the items a [selector](AGENT_STATE.md#selectors) matches, such as `harness:codex needs:you`
 - `--json`: Output the verb result as JSON
 
 **Examples:**
@@ -2124,17 +2130,17 @@ them.
 
 | Command | What it does |
 |---------|--------------|
-| `tuios list-agents` | List the agent panes in a session and what each is doing. `--all-sessions` lists every session on this machine, each row named `session/name`; `--all-hosts` lists every session on every host, with a SESSION column, and a host that is down shows the rows it last gave |
-| `tuios list-attention` | List the Inbox: what is waiting for you in every session, on this machine and on every linked host (see below). `--host` narrows it to one machine |
+| `tuios list-agents` | List the agent panes in a session and what each is doing. `--all-sessions` lists every session on this machine, each row named `session/name`; `--all-hosts` lists every session on every host, with a SESSION column, and a host that is down shows the rows it last gave. `--select` lists the panes a [selector](AGENT_STATE.md#selectors) matches, in every session, and prints the `--confirm` token for them |
+| `tuios list-attention` | List the Inbox: what is waiting for you in every session, on this machine and on every linked host (see below). `--host` narrows it to one machine, `--select` to what a selector matches |
 | `tuios peek-prompt` | Show the prompt an agent is blocked on, its options and the answers it takes, without attaching |
 | `tuios respond <action> [value]` | Answer the prompt an agent is blocked on. Only from the person: an attached client's Inbox, or a shell outside every pane with `[daemon] respond_from_shell` |
 | `tuios get-agent-state` | Read a pane's reported agent state |
 | `tuios set-agent-meta [key=value ...]` | Record display metadata about a pane's agent (model, context, a summary) for the rail |
 | `tuios set-agent-session <id> --harness <h>` | Record which conversation a pane's agent runs, for a later resume, without changing its state |
 | `tuios resume-agent [-w pane] [--dry-run]` | Type the pane's recorded conversation's resume command into its shell, after a daemon restart |
-| `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session. `--from human` from inside a pane is refused with `forbidden`: only the person at an attached client can send as `human` (see [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)). With `-s HOST:SESSION` and that host's link down, the message waits on this machine and goes when the link is back; the Inbox shows it under Waiting to send |
+| `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session. `--from human` from inside a pane is refused with `forbidden`: only the person at an attached client can send as `human` (see [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)). With `-s HOST:SESSION` and that host's link down, the message waits on this machine and goes when the link is back; the Inbox shows it under Waiting to send. `--select` sends one message to every agent pane a selector matches, after listing them: it asks at a terminal, and takes `--yes` or `--confirm TOKEN` otherwise |
 | `tuios read-agent-messages` | Read the messages agents have left in this session. Reading `-w human` from inside a pane is always a peek |
-| `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter |
+| `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter. `--select` asks every agent pane a selector matches, at most 16 at once, after the same confirmation as `send-agent-message --select`; a pane on `needs_input` is refused in its own row |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
 | `tuios explain-agent-screen` | Show what a harness's screen and title rules make of a pane: the tail, each rule's region and the text it read there, why each refusal refused (strings, patterns, nested groups), the title and last OSC 9;4 progress report, and which manifest file is in force |
 | `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, gemini-cli, opencode, kilo, amp, kimi and pi report state; antigravity, copilot, crush, cursor-agent, devin, droid, grok, hermes, qoder and qwen report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode; `--mcp-write` registers it with `--write`. See [Agent state](AGENT_STATE.md#harness-integrations) |

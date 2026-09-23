@@ -40,6 +40,11 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 	if st.Filter != "" {
 		title += ": " + inboxGroupTitle(st.Filter)
 	}
+	if st.Select != "" {
+		// In words in the title, so a narrowed Inbox never reads as an empty
+		// one.
+		title += " [select " + st.Select + "]"
+	}
 	if !st.Live {
 		title += " (not connected)"
 	}
@@ -57,10 +62,14 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		{Key: "d", Label: "dismiss"},
 		answer,
 		{Key: "f", Label: "filter"},
+		{Key: "/", Label: "select"},
 		{Key: "m", Label: "mailbox"},
 		{Key: "esc", Label: "close"},
 	}
 	var detailFor func(int) []string
+	if st.selectEditing {
+		return m.renderInboxSelecting(title)
+	}
 	selected, ok := m.inboxSelected()
 	held := ok && selected.Kind == session.AttentionApproval && selected.RequestID != ""
 	if held {
@@ -86,12 +95,14 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 			lines = []string{"This daemon has no Inbox.", "Restart it with a newer tuios: tuios kill-server"}
 		case st.Filter == session.AttentionMail:
 			lines = []string{"No unread mail for you.", "m opens the mailbox, with every thread between agents too."}
+		case st.Select != "" && len(st.Items) > 0:
+			lines = []string{"Nothing matches select " + st.Select + ".", "/ changes the selector. Clear the line and press enter to show everything."}
 		case st.Filter != "":
 			lines = []string{"Nothing under " + inboxGroupTitle(st.Filter) + ".", "f shows the next kind, and then all of them."}
 		case !m.IsDaemonSession:
 			lines = []string{"The Inbox needs the daemon.", "", "Start a daemon session with: tuios new"}
 		}
-		return m.simpleOverlayPanel("", title, lines, []overlay.Hint{{Key: "f", Label: "filter"}, {Key: "m", Label: "mailbox"}, {Key: "esc", Label: "close"}})
+		return m.simpleOverlayPanel("", title, lines, []overlay.Hint{{Key: "f", Label: "filter"}, {Key: "/", Label: "select"}, {Key: "m", Label: "mailbox"}, {Key: "esc", Label: "close"}})
 	}
 	now := time.Now()
 	return m.renderListOverlay(listOverlay{
@@ -103,6 +114,43 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		Scroll:     &st.Scroll,
 		Hints:      hints,
 		DetailFor:  detailFor,
+		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
+			r := rows[i]
+			if r.item == nil {
+				return m.inboxHeadingRow(r, rowBg, pal, width)
+			}
+			return m.inboxItemRow(*r.item, selected, rowBg, pal, width, now)
+		},
+	})
+}
+
+// renderInboxSelecting draws the Inbox with the selector line open over the
+// list. The list below it is narrowed by the selector in force, not by what is
+// being typed, so what enter will do is shown only once it is done.
+func (m *OS) renderInboxSelecting(title string) (string, overlay.Geometry, []overlayRowHit) {
+	st := &m.Inbox
+	rows := m.inboxRows()
+	now := time.Now()
+	return m.renderListOverlay(listOverlay{
+		Title:      title,
+		Width:      inboxWidth,
+		MaxVisible: 14,
+		Search:     true,
+		Query:      "select " + st.selectDraft,
+		Count:      len(rows),
+		Selected:   st.Selected,
+		Scroll:     &st.Scroll,
+		EmptyMsg:   "Nothing is shown under the selector in force.",
+		Hints: []overlay.Hint{
+			{Key: overlay.EnterKey(), Label: "apply"},
+			{Key: "esc", Label: "cancel"},
+		},
+		DetailFor: func(width int) []string {
+			if st.selectErr != "" {
+				return []string{overlay.Truncate("Not a selector: "+st.selectErr, width)}
+			}
+			return []string{overlay.Truncate("Terms: harness state needs:you session group host name, as key:value. Example: harness:codex needs:you", width)}
+		},
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 			r := rows[i]
 			if r.item == nil {

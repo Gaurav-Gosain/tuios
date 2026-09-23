@@ -23,6 +23,7 @@ alongside the rest of the pane-driving surface.
 - [Indicator](#indicator)
 - [The rail's agents section](#the-rails-agents-section)
 - [The Inbox](#the-inbox)
+- [Selectors](#selectors)
 - [Answering a prompt without attaching](#answering-a-prompt-without-attaching)
 - [Harness integrations](#harness-integrations)
 - [Typing a prompt](#typing-a-prompt)
@@ -927,6 +928,7 @@ Inside the Inbox:
 | `p` | On a row that says `held for NAME`: pass the mail another machine sent that agent on to it. See [Mail held from another machine](#mail-held-from-another-machine). |
 | `d` | Dismiss the item. |
 | `f` | Show one kind, then the next, then all of them. |
+| `/` | Type a selector that narrows the list, such as `harness:codex needs:you` or `session:api-fan-*`: the syntax of [Selectors](#selectors). `enter` applies it and an empty line clears it; `esc` closes the line and keeps what was in force. While the line is open every key is text. The selector stays until you change it, and the title says it in words, `[select harness:codex]`, so a narrowed Inbox never reads as an empty one. It works with `f`. |
 | `m` | Open the mailbox, with every thread including the ones between agents. |
 | `esc` / `q` | Close. |
 
@@ -1044,6 +1046,70 @@ sees this machine's Inbox and cannot dismiss or answer from it, and the Inbox
 does not answer an item of a linked host, with the peek or with `1`, `2` and
 `3`. `tuios peek-prompt` and `tuios respond` reach a pane on another machine
 by `HOST:SESSION:WINDOW`.
+
+## Selectors
+
+A selector addresses every agent pane that fits a description, where a window
+id addresses one. It is one line of terms, read the same way by every place
+that takes one:
+
+```
+harness:codex state:idle,done session:api-fan-*
+```
+
+Terms are separated by spaces and all of them must match. A term is
+`key:value`, and a comma inside the value gives alternatives, any of which may
+match.
+
+| Key | Matches |
+| --- | --- |
+| `harness:` | The harness id, or a program name a manifest detects: `claude` is `claude-code`. A bare word also matches the id it starts (`gemini` is `gemini-cli`). |
+| `state:` | The agent state, one of the states above. |
+| `needs:you` | A pane a person has to act on: `needs_input` or `errored`. |
+| `session:` | The session name, a glob. |
+| `group:` | The fan-out group of the pane's session, the branch stem `fan` used, a glob. A session outside a fan-out has none. |
+| `host:` | The machine: `local` (or this machine's own name), or a host from `[hosts]`, a glob. |
+| `name:` | The window's name, a glob. |
+| `cwd:` | The pane's directory, or any directory under it. `~` is the home directory. |
+
+A glob is `*`, `?` and `[...]`, and `*` does not cross a slash, so `group:fan/*`
+is every group under `fan/`. A term the pane cannot answer does not match, so
+a selector never includes a pane by accident: a pane with no group fails every
+`group:` term, and a row from a host too old to send its group fails one too.
+
+Where a selector is read:
+
+| Where | What it does |
+| --- | --- |
+| `list-agents --select` | Lists the agent panes it matches in every session, or in `--session`. The answer carries `confirm`, the token for exactly those panes. |
+| `list-agents --all-hosts --select` | The same over every machine. `host:` picks the machine. |
+| `list-attention --select` | Keeps the Inbox items it matches. An item's state is the one its kind stands for: `needs_input` for an approval or a question, `errored`, `done` for finished. |
+| `wait-for agent-state --select` | Waits for the first matching pane to reach an `--until` state, or with `--every` for all of them. Panes that open during the wait are watched too. |
+| `send-agent-message --select` | One directed message to each matching pane, after confirmation. At most 32. |
+| `ask-agent --select` | Asks each matching pane at once, after confirmation. At most 16. |
+| The Inbox, `/` | Narrows the list. `cwd:` is not known there and matches no item. |
+
+A write by selector is never silent. Without a `confirm` token it sends nothing
+and fails with `confirm_required`, whose hint lists the panes in `available`
+and carries the token in `confirm`. The token is a hash of the set of panes, so
+the second call goes ahead only if the selector still matches exactly the panes
+the caller looked at; a pane that joined or left in between gets the call
+refused again, with the new set. `list-agents --select` gives the same token
+for the same set. The CLI prints the set and asks at a terminal, and takes
+`--yes` or `--confirm TOKEN` otherwise.
+
+Each pane of a write goes through every check a single call makes. A message
+is charged to the sender's rate cap per pane, and `from` may name the sender's
+own pane in another session by its exact id. An ask refuses a pane on
+`needs_input` with `agent_blocked` in that pane's row, waits for a working pane
+unless `force`, and records the exchange in the pane's own session; one pane
+that refuses does not stop the others.
+
+A selector reaches panes on this machine and nothing else for a write, and a
+pane on another machine whose calls run through its owner (see
+[A pane on another machine](#a-pane-on-another-machine)) cannot use one at
+all: its calls act as the window it is drawn in, and a selector would reach
+every session of the owner. That call is refused with `forbidden`.
 
 ## Answering a prompt without attaching
 

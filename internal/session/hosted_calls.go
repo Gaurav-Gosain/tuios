@@ -626,6 +626,12 @@ func (d *Daemon) runHostedCall(s *Session, windowID, host, verb string, params j
 	for _, name := range hostedCallDropped {
 		delete(fields, name)
 	}
+	// A selector reaches past the window into every session here. It is
+	// refused rather than dropped, since dropping it would turn a message
+	// meant for many panes into a notice nobody asked for.
+	if _, ok := fields["select"]; ok {
+		return nil, refuseSelectFromHostedPane(&connState{paneOnly: true})
+	}
 	if verb == "wait-for" {
 		var cond string
 		_ = json.Unmarshal(fields["condition"], &cond)

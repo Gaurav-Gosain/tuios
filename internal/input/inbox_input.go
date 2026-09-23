@@ -13,8 +13,9 @@ import (
 // deny, the order of the harness's own menu), 1 to 9 pick the answer to a
 // question ask-human put to the person, d dismisses, r replies to mail,
 // y resumes a conversation a restart left, p passes on mail another machine
-// sent an agent here that the link policy held, f steps the kind filter, m opens
-// the whole mailbox, and esc or q closes.
+// sent an agent here that the link policy held, f steps the kind filter, /
+// types a selector that narrows the list, m opens the whole mailbox, and esc
+// or q closes.
 func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// A question that opened the Inbox by itself a moment ago: the key was
 	// most likely typed for the pane, so it does nothing here.
@@ -24,7 +25,12 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.InboxPeeking() {
 		return handleInboxPeekInput(msg, o)
 	}
+	if o.InboxSelecting() {
+		return handleInboxSelectInput(msg, o)
+	}
 	switch msg.String() {
+	case "/":
+		o.InboxStartSelect()
 	case "esc", "q":
 		o.CloseInbox()
 	case "space":
@@ -57,6 +63,26 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.InboxMove(-1 << 20)
 	case "end", "G":
 		o.InboxMove(1 << 20)
+	}
+	return o, nil
+}
+
+// handleInboxSelectInput handles keyboard input while the selector line is
+// open: every printable key is text, enter applies the selector (an empty line
+// clears it), backspace deletes, and esc closes the line and keeps the
+// selector in force.
+func handleInboxSelectInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	switch key := msg.String(); key {
+	case "esc":
+		o.InboxSelectCancel()
+	case "enter":
+		o.InboxSelectApply()
+	case "backspace":
+		o.InboxSelectBackspace()
+	case "space":
+		o.InboxSelectType(" ")
+	default:
+		o.InboxSelectType(msg.Text)
 	}
 	return o, nil
 }

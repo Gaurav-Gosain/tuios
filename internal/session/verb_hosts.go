@@ -151,6 +151,41 @@ type remoteAgentRow struct {
 	BlockedBy      string `json:"blocked_by,omitempty"`
 	CompletionSeq  uint64 `json:"completion_seq,omitempty"`
 	FinishedUnread bool   `json:"finished_unread,omitempty"`
+	// Group is the fan-out group of the pane's session. A host from before
+	// selectors sends none, so a group: term matches none of its rows.
+	Group string `json:"group,omitempty"`
+}
+
+// selectorTarget is what a selector reads from a row of host.
+func (r remoteAgentRow) selectorTarget(host string) SelectorTarget {
+	state := AgentState(r.State)
+	return SelectorTarget{
+		Host:     host,
+		Session:  r.Session,
+		Name:     r.Name,
+		State:    r.State,
+		Harness:  r.HarnessID,
+		Cwd:      r.Cwd,
+		Group:    r.Group,
+		NeedsYou: state.NeedsYou(),
+	}
+}
+
+// filterHostAgents keeps the rows of every entry that sel matches.
+func filterHostAgents(entries []hostAgentsEntry, sel *Selector) {
+	if sel == nil {
+		return
+	}
+	for i := range entries {
+		kept := entries[i].Agents[:0:0]
+		for _, r := range entries[i].Agents {
+			if sel.Match(r.selectorTarget(entries[i].Host)) {
+				kept = append(kept, r)
+			}
+		}
+		entries[i].Agents = kept
+		entries[i].Session = soleSession(kept)
+	}
 }
 
 // verbListHosts reports every configured host with its status and versions.
@@ -355,11 +390,31 @@ func soleSession(rows []remoteAgentRow) string {
 // session on every host is listed, and each row names its session.
 func (d *Daemon) verbListHostAgents(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Host string `json:"host"`
-		All  bool   `json:"all"`
+		Host   string `json:"host"`
+		All    bool   `json:"all"`
+		Select string `json:"select"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	var sel *Selector
+	if p.Select != "" {
+		var verr *verbError
+		if sel, verr = d.parseVerbSelector(p.Select); verr != nil {
+			return nil, verr
+		}
+	}
+	// The selector is applied here, to every host's rows alike, rather than
+	// sent on: a host from before selectors would refuse the param, and the
+	// host term is about which machine a row came from, which only this side
+	// knows.
+	answer := func(entries []hostAgentsEntry) (any, *verbError) {
+		filterHostAgents(entries, sel)
+		out := map[string]any{"type": "host_agent_list", "hosts": entries}
+		if sel != nil {
+			out["select"] = sel.String()
+		}
+		return out, nil
 	}
 
 	entries := make([]hostAgentsEntry, 0, 4)
@@ -380,14 +435,14 @@ func (d *Daemon) verbListHostAgents(cs *connState, params json.RawMessage) (any,
 		entries = append(entries, e)
 	}
 	if p.Host == federation.LocalHostName {
-		return map[string]any{"type": "host_agent_list", "hosts": entries}, nil
+		return answer(entries)
 	}
 
 	if verr := d.checkHostParam(p.Host); verr != nil {
 		return nil, verr
 	}
 	if d.federation == nil {
-		return map[string]any{"type": "host_agent_list", "hosts": entries}, nil
+		return answer(entries)
 	}
 
 	ctx, cancel := context.WithTimeout(d.ctx, federationVerbBudget)
@@ -412,7 +467,7 @@ func (d *Daemon) verbListHostAgents(cs *connState, params json.RawMessage) (any,
 	}
 	wg.Wait()
 	entries = append(entries, remote...)
-	return map[string]any{"type": "host_agent_list", "hosts": entries}, nil
+	return answer(entries)
 }
 
 // hostAgentsEntryFor is one host's entry of list-host-agents: its rows when it

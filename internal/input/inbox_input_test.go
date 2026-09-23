@@ -128,3 +128,44 @@ func TestLeaderOWalksWhatIsWaiting(t *testing.T) {
 		t.Errorf("a second o focused %v, want a", w)
 	}
 }
+
+// TestInboxSlashTypesASelector: / opens the selector line, where the list's
+// keys are text (j does not move, d does not dismiss), enter applies it, and
+// the list then holds only what it matches.
+func TestInboxSlashTypesASelector(t *testing.T) {
+	o := inboxInputOS(t)
+	o.Inbox.Items[0].Harness = "claude-code"
+	o.Inbox.Items[1].Harness = "codex"
+	var calls []string
+	o.SetInboxVerbCaller(func(verb string, _ map[string]any, _ time.Duration) (json.RawMessage, error) {
+		calls = append(calls, verb)
+		return json.RawMessage(`{}`), nil
+	}, func() string { return "nonce" })
+	o = leader(o, press("i"))
+	o, _ = HandleKeyPress(press("/"), o)
+	if !o.InboxSelecting() {
+		t.Fatal("/ did not open the selector line")
+	}
+	for _, r := range "harness:codex dj" {
+		key := string(r)
+		if key == " " {
+			key = "space"
+		}
+		o, _ = HandleKeyPress(press(key), o)
+	}
+	o, _ = HandleKeyPress(press("backspace"), o)
+	o, _ = HandleKeyPress(press("backspace"), o)
+	o, _ = HandleKeyPress(press("backspace"), o)
+	if len(calls) != 0 {
+		t.Fatalf("typing on the selector line called %v", calls)
+	}
+	o, _ = HandleKeyPress(press("enter"), o)
+	if o.InboxSelecting() || o.Inbox.Select != "harness:codex" {
+		t.Fatalf("enter did not apply the selector (open=%v select=%q)", o.InboxSelecting(), o.Inbox.Select)
+	}
+	// The only row left is the question for pane a, so enter goes there.
+	o, _ = HandleKeyPress(press("enter"), o)
+	if w := o.GetFocusedWindow(); w == nil || w.ID != "a" {
+		t.Errorf("enter on the one selected item did not focus pane a")
+	}
+}

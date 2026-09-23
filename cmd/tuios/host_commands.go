@@ -323,7 +323,7 @@ type hostAgentsEntry struct {
 }
 
 // runListAgentsAllHosts is `tuios list-agents --all-hosts`.
-func runListAgentsAllHosts(host string, all, jsonOutput bool) error {
+func runListAgentsAllHosts(host string, all bool, selector string, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return err
@@ -333,6 +333,9 @@ func runListAgentsAllHosts(host string, all, jsonOutput bool) error {
 	params := map[string]any{"all": all}
 	if host != "" {
 		params["host"] = host
+	}
+	if selector != "" {
+		params["select"] = selector
 	}
 	raw, err := client.Call("list-host-agents", params)
 	if err != nil {
