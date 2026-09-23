@@ -391,6 +391,10 @@ type Window struct {
 	AgentState string
 	// AgentMessage is the optional short note reported with AgentState.
 	AgentMessage string
+	// AgentKind is what sort of block a needs_input state is ("approval",
+	// "question"), as the daemon recorded it, empty when the source did not
+	// say. The rail draws it as the row's need word.
+	AgentKind string
 	// AgentHarness is the harness id the reporting source named, empty when the
 	// state came from something that named none. Alert sinks pass it on.
 	AgentHarness string

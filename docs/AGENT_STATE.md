@@ -686,8 +686,11 @@ unread bit to show.
 
 The row's second line carries a word for what the row needs, the `need` token:
 `approval` or `question` when a screen rule read the prompt (the kind is taken
-off the front of the message so it is said once), `needs input`, `errored` or
-`finished` when the pane reported no message of its own. A row that needs you
+off the front of the message so it is said once) or when a hook reported the
+kind with a message that does not name it (`approval · claude · approve Bash:
+make`), `needs input`, `errored` or `finished` when the pane reported no
+message of its own. On a narrow rail a row that needs you drops the harness
+and metadata before it cuts what the pane is asking. A row that needs you
 also shows how long it has waited: at the right edge of the first line when the
 rail is wide enough for the elapsed column, and after the need word otherwise
 (`approval 12m`, or `waiting 12m` when the message stands in for the word).

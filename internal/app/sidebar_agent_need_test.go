@@ -105,7 +105,7 @@ func TestAgentRowNeedWords(t *testing.T) {
 		{"working", "", false, ""},
 		{"idle", "", false, ""},
 	} {
-		if got, _ := sidebarAgentNeed(c.state, c.seen, c.message); got != c.want {
+		if got, _ := sidebarAgentNeed(c.state, c.seen, "", c.message); got != c.want {
 			t.Errorf("need(%q, %q, seen=%v) = %q, want %q", c.state, c.message, c.seen, got, c.want)
 		}
 	}
@@ -217,7 +217,7 @@ func TestRailStatesAreNotColourAlone(t *testing.T) {
 	} {
 		l := look{
 			glyph: stripANSIForTrace(sidebarGlyph(c.state, c.read, nil, pal, &s)),
-			word:  func() string { w, _ := sidebarAgentNeed(c.state, c.read, ""); return w }(),
+			word:  func() string { w, _ := sidebarAgentNeed(c.state, c.read, "", ""); return w }(),
 		}
 		if other, dup := seen[l]; dup {
 			t.Errorf("%s and %s look the same without colour: %+v", c.name, other, l)

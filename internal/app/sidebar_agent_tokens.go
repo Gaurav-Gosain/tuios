@@ -159,7 +159,7 @@ func (m *OS) sidebarAgentTokensFor(e sidebarAgentEntry, variant int, tall bool, 
 	// A screen rule's message is "approval: <the prompt>", and the need token
 	// already said approval, so the message keeps only the prompt.
 	if needAt >= 0 && messageAt >= 0 {
-		if _, kind := sidebarAgentNeed(e.State, e.DoneSeen, e.Message); kind {
+		if _, kind := sidebarAgentNeed(e.State, e.DoneSeen, e.AgentKind, e.Message); kind {
 			rest := sidebarAgentMessageRest(plan.Note[messageAt].Text)
 			if rest == "" {
 				plan.Note = append(plan.Note[:messageAt], plan.Note[messageAt+1:]...)
@@ -176,7 +176,7 @@ func (m *OS) sidebarAgentTokensFor(e sidebarAgentEntry, variant int, tall bool, 
 // no elapsed token. How long a pane has been waiting on you is the one figure
 // a row that needs you must not lose.
 func (m *OS) sidebarAgentNeedText(e sidebarAgentEntry, variant int, now time.Time) string {
-	word, _ := sidebarAgentNeed(e.State, e.DoneSeen, e.Message)
+	word, _ := sidebarAgentNeed(e.State, e.DoneSeen, e.AgentKind, e.Message)
 	if sidebarAgentGroup(e.State, e.DoneSeen) != sidebarGroupNeedsYou {
 		return word
 	}
@@ -212,16 +212,23 @@ func sidebarNoteToken(name string) bool {
 // the word is what still says it on a rail drawn without colour or glyphs.
 // Working and resting rows need nothing and get no word.
 //
-// The word gives way to a message that says it better. "approval" or
-// "question" is lifted off the front of the message, so it costs nothing. A
-// row that needs you and reported its own message ("awaiting approval") keeps
-// the message and gets no word: on a 28-column rail the two would not both
-// fit, and the message is the one that says what to do.
-func sidebarAgentNeed(state string, doneSeen bool, message string) (string, bool) {
+// kind is the block the daemon recorded for a needs_input pane (approval or
+// question), empty when the source did not say.
+//
+// The word is said once. "approval" or "question" in front of a screen rule's
+// message is lifted off it, so it costs nothing. A hook's message ("approve
+// Bash: make") does not say its kind, so the recorded kind is the word and the
+// message stays whole. A message that already names its kind ("awaiting
+// approval") gets no word, and neither does one of no known kind: the message
+// is the one that says what to do.
+func sidebarAgentNeed(state string, doneSeen bool, kind, message string) (string, bool) {
 	switch state {
 	case "needs_input":
-		if kind, _, ok := strings.Cut(message, ": "); ok && (kind == harness.PromptKindApproval || kind == harness.PromptKindQuestion) {
-			return kind, true
+		if lead, _, ok := strings.Cut(message, ": "); ok && sidebarPromptKind(lead) {
+			return lead, true
+		}
+		if sidebarPromptKind(kind) && !strings.Contains(strings.ToLower(message), kind) {
+			return kind, false
 		}
 		if message == "" {
 			return "needs input", false
@@ -236,6 +243,12 @@ func sidebarAgentNeed(state string, doneSeen bool, message string) (string, bool
 		}
 	}
 	return "", false
+}
+
+// sidebarPromptKind reports whether kind is one of the prompt kinds a need
+// word can name.
+func sidebarPromptKind(kind string) bool {
+	return kind == harness.PromptKindApproval || kind == harness.PromptKindQuestion
 }
 
 // sidebarAgentMessageRest is a message with the prompt kind in front of it

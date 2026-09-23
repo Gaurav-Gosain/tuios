@@ -59,6 +59,10 @@ type Node struct {
 	// files"), empty when it reported none. Never rolled up, for the same
 	// reason Harness is not.
 	Message string
+	// AgentKind is what sort of block a needs_input pane is on: "approval",
+	// "question", or empty when the source did not say. Meaningless in any
+	// other state, and never rolled up.
+	AgentKind string
 	// Meta is the pane's agent metadata (model, context, a summary), in the
 	// order the pane holds it. Display only, never rolled up.
 	Meta []MetaToken
@@ -141,6 +145,9 @@ type WindowInput struct {
 	Harness string
 	// Message is the note the pane reported with its state, empty for none.
 	Message string
+	// AgentKind is what sort of block a needs_input pane is on ("approval",
+	// "question"), empty when the source did not say.
+	AgentKind string
 	// Meta is what the pane reported about its agent through set-agent-meta,
 	// in the order the pane holds it. Nil for none.
 	Meta []MetaToken
@@ -289,6 +296,7 @@ func BuildSession(s SessionInput) Node {
 			StateAt:    w.StateAt,
 			Harness:    w.Harness,
 			Message:    w.Message,
+			AgentKind:  w.AgentKind,
 			Meta:       w.Meta,
 			IsCurrent:  w.Focused,
 			Workspace:  w.Workspace,

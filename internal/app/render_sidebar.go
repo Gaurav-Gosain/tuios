@@ -402,6 +402,9 @@ type sidebarAgentEntry struct {
 	// Message is the note the pane reported with its state ("editing files"),
 	// empty when it reported none.
 	Message string
+	// AgentKind is what sort of block a needs_input pane is on ("approval",
+	// "question"), empty when the source did not say. The need token draws it.
+	AgentKind string
 	// Meta is what the pane reported about its agent through set-agent-meta,
 	// in the order the pane holds it. The meta and $key row tokens draw it.
 	Meta []sessiontree.MetaToken
@@ -2011,6 +2014,7 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 				StateAt:      win.StateAt,
 				Harness:      win.Harness,
 				Message:      win.Message,
+				AgentKind:    win.AgentKind,
 				Meta:         win.Meta,
 				WindowIndex:  idx,
 				Foreign:      !s.IsCurrent,
@@ -2510,8 +2514,51 @@ func (m *OS) sidebarAgentNoteRow(e sidebarAgentEntry, variant, cw int, pal overl
 	avail := sidebarNameAvail(cw, 0) - 1
 	plan := m.sidebarAgentTokensFor(e, variant, true, time.Now())
 	quiet := sidebarStyle(rowBg, pal.FgMute)
-	text := m.sidebarAgentNoteText(plan.Note, quiet, avail, pal)
+	note := plan.Note
+	if sidebarAgentGroup(e.State, e.DoneSeen) == sidebarGroupNeedsYou {
+		note = sidebarNoteKeepAsk(note, avail)
+	}
+	text := m.sidebarAgentNoteText(note, quiet, avail, pal)
 	return sidebarFit(sidebarStyle(rowBg, nil).Render(strings.Repeat(" ", indent))+text, cw, rowBg)
+}
+
+// sidebarNoteAskFloor is how many cells of its message a row that needs you
+// keeps before the tokens between the need word and the message give way.
+const sidebarNoteAskFloor = 12
+
+// sidebarNoteKeepAsk is the note line of a row that needs you, cut so the
+// message keeps room. On every other row the message is the first thing to go,
+// because which agent a row is stays true at any width. On a row that needs
+// you the message is what the pane is asking, which is the reason to look at
+// the row at all, so the harness and metadata between the need word and the
+// message go first, nearest the message first.
+func sidebarNoteKeepAsk(tokens []sidebarAgentToken, avail int) []sidebarAgentToken {
+	if len(tokens) < 2 || tokens[len(tokens)-1].Name != "message" {
+		return tokens
+	}
+	sepW := lipgloss.Width(sidebarAgentSep())
+	for {
+		headW := 0
+		for _, tk := range tokens[:len(tokens)-1] {
+			headW += lipgloss.Width(tk.Text) + sepW
+		}
+		last := tokens[len(tokens)-1]
+		if avail-headW >= min(lipgloss.Width(last.Text), sidebarNoteAskFloor) {
+			return tokens
+		}
+		// The token nearest the message that is not the need word.
+		drop := -1
+		for i := len(tokens) - 2; i >= 0; i-- {
+			if tokens[i].Name != "need" {
+				drop = i
+				break
+			}
+		}
+		if drop < 0 {
+			return tokens
+		}
+		tokens = append(tokens[:drop:drop], tokens[drop+1:]...)
+	}
 }
 
 // sidebarAgentNoteText draws the note line's tokens in avail cells. The last

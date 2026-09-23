@@ -272,6 +272,11 @@ type WindowSummary struct {
 	// Additive and omitted when empty, which is what an older peer sends and
 	// what every client reads as "the agent did not say".
 	AgentMessage string `json:"agent_message,omitempty"`
+	// AgentKind is what sort of block a needs_input pane is on ("approval",
+	// "question"), so a rail watching another session can say what the pane
+	// wants from you. Empty in any other state. Additive and omitted when
+	// empty, which is what an older peer sends and reads as "not said".
+	AgentKind string `json:"agent_kind,omitempty"`
 	// CompletionSeq is the pane's count of finished turns (see
 	// WindowState.CompletionSeq), so a rail can mark a finished turn in a
 	// session it is not attached to. Additive and omitted when zero, which is

@@ -54,7 +54,8 @@ func railConfig(width int) string {
 // TestBlockedAgentAlertCarriesTheQuestion (issue 165): a pane attributed to
 // Claude Code paints a permission prompt and goes quiet. The screen rule reads
 // the prompt line, and the toast and the rail's agent row both say what was
-// asked, fronted by "approval:".
+// asked. The toast fronts it with "approval:". The row says approval once, as
+// its need word, and puts the question after the harness.
 //
 // Negative control: with the RulePrompt call in screenRuleMessage cut, the
 // message is the manifest's fixed sentence and the first wait fails.
@@ -83,8 +84,9 @@ func TestBlockedAgentAlertCarriesTheQuestion(t *testing.T) {
 		t.Fatalf("the toast never carried the question the agent asked: %v\n%s", err, term.Snapshot())
 	}
 	// The rail's two-line agent row carries it too, under the pane's name.
+	const note = "approval · claude · Do you want to make this edit"
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "claude · "+question)
+		return strings.Contains(s.Text(), note)
 	}, uiTimeout); err != nil {
 		t.Fatalf("the agent row's note never carried the question: %v\n%s", err, term.Snapshot())
 	}

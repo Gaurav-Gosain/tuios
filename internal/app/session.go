@@ -1088,6 +1088,7 @@ func (m *OS) updateWindowFromState(w *terminal.Window, ws *session.WindowState) 
 	w.PreMinimizeHeight = ws.PreMinimizeH
 	w.SetAltScreen(ws.IsAltScreen)
 	w.AgentMessage = ws.AgentMessage
+	w.AgentKind = ws.AgentKind
 	w.AgentHarness = ws.AgentHarness
 	w.AgentMeta = agentMetaFromWire(w.AgentMeta, ws.AgentMeta)
 	w.AgentStateAt = ws.AgentStateAt
@@ -1198,6 +1199,7 @@ func adoptWindowState(window *terminal.Window, ws session.WindowState) {
 	window.SetAltScreen(ws.IsAltScreen) // also drives mouse event forwarding
 	window.AgentState = string(ws.AgentState)
 	window.AgentMessage = ws.AgentMessage
+	window.AgentKind = ws.AgentKind
 	window.AgentHarness = ws.AgentHarness
 	window.AgentMeta = agentMetaFromWire(nil, ws.AgentMeta)
 	window.AgentStateAt = ws.AgentStateAt

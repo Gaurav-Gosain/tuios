@@ -360,6 +360,8 @@ func (m *OS) sidebarSignature() uint64 {
 		// even when its state and title hold still.
 		mixS(w.AgentHarness)
 		mixS(w.AgentMessage)
+		// The kind is the need word on the same line.
+		mixS(w.AgentKind)
 		// The metadata a pane reported is drawn on its row's second line. The
 		// count goes first so two lists that concatenate the same do not fold
 		// the same. A pane with none folds nothing, so the common case costs

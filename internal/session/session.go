@@ -2002,6 +2002,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			AgentStateAt:  w.AgentStateAt,
 			AgentHarness:  w.AgentHarness,
 			AgentMessage:  w.AgentMessage,
+			AgentKind:     agentBlockedBy(*w),
 			CompletionSeq: w.CompletionSeq,
 			AgentMeta:     w.AgentMeta,
 			ForegroundCmd: fg,
