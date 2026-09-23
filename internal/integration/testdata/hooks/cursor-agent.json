@@ -1,0 +1,17 @@
+[
+  {
+    "name": "sessionStart",
+    "payload": {"hook_event_name": "sessionStart", "session_id": "cu-1", "cursor_version": "1.7.0", "workspace_roots": ["/src"]},
+    "want": {"session_only": true, "agent_session_id": "cu-1"}
+  },
+  {
+    "name": "sessionStart with a conversation id",
+    "payload": {"hook_event_name": "sessionStart", "conversation_id": "cu-2"},
+    "want": {"session_only": true, "agent_session_id": "cu-2"}
+  },
+  {
+    "name": "stop is not registered",
+    "payload": {"hook_event_name": "stop", "conversation_id": "cu-2", "status": "completed"},
+    "skip": "event not mapped"
+  }
+]

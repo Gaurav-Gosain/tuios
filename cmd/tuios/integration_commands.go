@@ -56,16 +56,29 @@ func newIntegrationCommand() *cobra.Command {
 		Long: `Install, remove and check the hook entries that report a harness's state to
 the tuios pane it runs in.
 
-Each harness is wired through its own configuration: Claude Code's
-settings.json hooks, Codex's hooks.json, Gemini CLI's settings.json hooks,
-and an opencode plugin. Every entry tuios writes runs "tuios agent-hook" and
-carries a version marker, so install replaces an older one, uninstall
-removes exactly what tuios wrote, and status says whether what is there is
-current. The user's own settings and hooks are kept in place and as written,
-and the file is replaced atomically. A settings file that is a symlink stays
-one: the file it points to is rewritten. The first rewrite keeps the file as
-it was beside it with a .tuios.bak suffix, and later rewrites leave that copy
-alone.`,
+Each harness is wired through its own configuration: hook entries in
+Claude Code, Gemini CLI, Qwen Code, Qoder CLI, Droid and Devin CLI's
+settings, Codex's hooks.json, Crush's crush.json, Cursor's hooks.json,
+a named block in Antigravity CLI's hooks.json, [[hooks]] tables in Kimi
+Code CLI's config.toml, a hook file of tuios's own in GitHub Copilot CLI and
+Grok CLI's hooks directories, and a plugin for opencode, Kilo, Amp, Pi and
+Hermes Agent (which is also turned on in its config.yaml).
+
+Claude Code, Codex, Gemini CLI, opencode, Kilo, Amp, Kimi and Pi report the
+pane's state. The rest report only the conversation id, so a pane can be
+resumed, and leave the state to the pane's screen rules: their hooks miss
+events a state needs, and a state from a hook outranks every screen rule.
+
+Every entry tuios writes runs "tuios agent-hook" and carries a version
+marker, so install replaces an older one, uninstall removes exactly what
+tuios wrote, and status says whether what is there is current. A file tuios
+owns whole carries the marker in its text, and a file of the same name that
+tuios did not write is never overwritten or removed. The user's own settings
+and hooks are kept in place and as written, and every file is replaced
+atomically, after all of them were worked out, so a file tuios cannot read
+leaves every file unchanged. A settings file that is a symlink stays one: the
+file it points to is rewritten. The first rewrite keeps the file as it was
+beside it with a .tuios.bak suffix, and later rewrites leave that copy alone.`,
 	}
 	cmd.AddCommand(newIntegrationInstallCommand(), newIntegrationUninstallCommand(), newIntegrationStatusCommand())
 	return cmd
@@ -103,6 +116,7 @@ func newIntegrationInstallCommand() *cobra.Command {
 						fmt.Printf(" (previous copy in %s)", res.Backup)
 					}
 					fmt.Println()
+					printOtherPaths(res)
 				default:
 					fmt.Printf("%s: already installed and current in %s\n", t.Name, res.Path)
 				}
@@ -143,6 +157,7 @@ func newIntegrationUninstallCommand() *cobra.Command {
 					failed = append(failed, t.ID)
 				case res.Changed:
 					fmt.Printf("%s: removed from %s\n", t.Name, res.Path)
+					printOtherPaths(res)
 				default:
 					fmt.Printf("%s: nothing of tuios's installed\n", t.Name)
 				}
@@ -183,8 +198,25 @@ func newIntegrationStatusCommand() *cobra.Command {
 	return cmd
 }
 
+// printOtherPaths names the files an integration changed besides its main one.
+func printOtherPaths(res integration.Result) {
+	for _, p := range res.Paths {
+		if p != res.Path {
+			fmt.Printf("  also changed %s\n", p)
+		}
+	}
+}
+
 // integrationVerdict is a status in a few words.
 func integrationVerdict(s integration.Status) string {
+	v := integrationVerdictOnly(s)
+	if s.Reports == integration.ReportsSession {
+		v += " [reports the session id; state from screen rules]"
+	}
+	return v
+}
+
+func integrationVerdictOnly(s integration.Status) string {
 	switch {
 	case s.Installed && s.Current:
 		return fmt.Sprintf("installed, current (v%d)", s.Version)

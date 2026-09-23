@@ -1,0 +1,22 @@
+[
+  {
+    "name": "SessionStart",
+    "payload": {"hook_event_name": "SessionStart", "session_id": "dv-1", "source": "resume"},
+    "want": {"session_only": true, "agent_session_id": "dv-1"}
+  },
+  {
+    "name": "UserPromptSubmit",
+    "payload": {"hook_event_name": "UserPromptSubmit", "sessionId": "dv-2", "prompt": "go"},
+    "want": {"session_only": true, "agent_session_id": "dv-2"}
+  },
+  {
+    "name": "SessionStart before the session has an id",
+    "payload": {"hook_event_name": "SessionStart", "source": "startup"},
+    "skip": "names no session"
+  },
+  {
+    "name": "Stop is not a state this integration reports",
+    "payload": {"hook_event_name": "Stop", "session_id": "dv-1"},
+    "skip": "event not mapped"
+  }
+]

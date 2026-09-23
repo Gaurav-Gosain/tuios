@@ -1,12 +1,12 @@
 // installed by tuios
-// managed by tuios; `tuios integration install opencode` overwrites this file
-// and `tuios integration uninstall opencode` removes it. Put your own plugins
+// managed by tuios; `tuios integration install __TUIOS_HARNESS__` overwrites this file
+// and `tuios integration uninstall __TUIOS_HARNESS__` removes it. Put your own plugins
 // beside it instead of editing it.
-// TUIOS_INTEGRATION_ID=opencode
+// TUIOS_INTEGRATION_ID=__TUIOS_HARNESS__
 // TUIOS_INTEGRATION_VERSION=__TUIOS_VERSION__
 //
-// Reports opencode's session state to the tuios pane it runs in, through
-// `tuios agent-hook opencode`. The event names are opencode's bus events
+// Reports __TUIOS_NAME__'s session state to the tuios pane it runs in, through
+// `tuios agent-hook __TUIOS_HARNESS__`. The event names are opencode's bus events
 // (https://opencode.ai/docs/plugins/), handled the way herdr's plugin handles
 // them. Events from child sessions, the subagents opencode starts, are dropped
 // so a subagent finishing cannot mark the pane done mid-turn.
@@ -23,7 +23,7 @@ function report(event, sessionID, extra) {
     ...extra,
   });
   try {
-    const child = spawn(TUIOS, ["agent-hook", "opencode", "--integration", "__TUIOS_VERSION__"], {
+    const child = spawn(TUIOS, ["agent-hook", "__TUIOS_HARNESS__", "--integration", "__TUIOS_VERSION__"], {
       stdio: ["pipe", "ignore", "ignore"],
       windowsHide: true,
     });

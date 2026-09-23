@@ -1,0 +1,27 @@
+[
+  {
+    "name": "session_start",
+    "payload": {"hook_event_name": "session_start", "session_id": "pi-1", "transcript_path": "/home/u/.pi/agent/sessions/pi-1.jsonl", "busy": false},
+    "want": {"state": "idle", "agent_session_id": "pi-1", "transcript_path": "/home/u/.pi/agent/sessions/pi-1.jsonl"}
+  },
+  {
+    "name": "session_start mid-turn after a reload",
+    "payload": {"hook_event_name": "session_start", "session_id": "pi-1", "busy": true},
+    "want": {"state": "working", "agent_session_id": "pi-1"}
+  },
+  {
+    "name": "agent_start",
+    "payload": {"hook_event_name": "agent_start", "session_id": "pi-1"},
+    "want": {"state": "working", "agent_session_id": "pi-1"}
+  },
+  {
+    "name": "agent_settled",
+    "payload": {"hook_event_name": "agent_settled", "session_id": "pi-1"},
+    "want": {"state": "done", "agent_session_id": "pi-1"}
+  },
+  {
+    "name": "unknown event",
+    "payload": {"hook_event_name": "tool_call", "session_id": "pi-1"},
+    "skip": "event not mapped"
+  }
+]

@@ -1,0 +1,67 @@
+[
+  {
+    "name": "SessionStart",
+    "payload": {"hook_event_name": "SessionStart", "session_id": "km-1", "session_title": "t", "client_type": "kimi_code_cli", "cwd": "/src", "source": "startup"},
+    "want": {"state": "idle", "agent_session_id": "km-1"}
+  },
+  {
+    "name": "UserPromptSubmit",
+    "payload": {"hook_event_name": "UserPromptSubmit", "session_id": "km-1", "prompt": "go"},
+    "want": {"state": "working", "agent_session_id": "km-1"}
+  },
+  {
+    "name": "PreToolUse",
+    "payload": {"hook_event_name": "PreToolUse", "session_id": "km-1", "tool_name": "Shell", "tool_input": {"command": "ls"}},
+    "want": {"state": "working", "agent_session_id": "km-1"}
+  },
+  {
+    "name": "PreToolUse AskUserQuestion",
+    "payload": {"hook_event_name": "PreToolUse", "session_id": "km-1", "tool_name": "AskUserQuestion", "tool_input": {"question": "Which branch?"}},
+    "want": {"state": "needs_input", "kind": "question", "message": "Which branch?", "agent_session_id": "km-1"}
+  },
+  {
+    "name": "PermissionRequest",
+    "payload": {"hook_event_name": "PermissionRequest", "session_id": "km-1", "tool_name": "Shell", "tool_input": {"command": "rm -rf build"}},
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve Shell: rm -rf build", "agent_session_id": "km-1"}
+  },
+  {
+    "name": "PermissionResult",
+    "payload": {"hook_event_name": "PermissionResult", "session_id": "km-1", "tool_name": "Shell"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "km-1"}
+  },
+  {
+    "name": "PostToolUse",
+    "payload": {"hook_event_name": "PostToolUse", "session_id": "km-1", "tool_name": "AskUserQuestion"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "km-1"}
+  },
+  {
+    "name": "PostToolUseFailure",
+    "payload": {"hook_event_name": "PostToolUseFailure", "session_id": "km-1", "tool_name": "Shell"},
+    "want": {"state": "working", "if_state": "needs_input", "agent_session_id": "km-1"}
+  },
+  {
+    "name": "Stop",
+    "payload": {"hook_event_name": "Stop", "session_id": "km-1"},
+    "want": {"state": "done", "agent_session_id": "km-1"}
+  },
+  {
+    "name": "StopFailure",
+    "payload": {"hook_event_name": "StopFailure", "session_id": "km-1", "error_type": "rate_limit"},
+    "want": {"state": "errored", "message": "stopped on rate_limit", "agent_session_id": "km-1"}
+  },
+  {
+    "name": "Interrupt",
+    "payload": {"hook_event_name": "Interrupt", "session_id": "km-1", "reason": "esc"},
+    "want": {"state": "idle", "agent_session_id": "km-1"}
+  },
+  {
+    "name": "SessionEnd",
+    "payload": {"hook_event_name": "SessionEnd", "session_id": "km-1"},
+    "want": {"state": "none", "agent_session_id": "km-1"}
+  },
+  {
+    "name": "SubagentStop",
+    "payload": {"hook_event_name": "SubagentStop", "session_id": "km-1"},
+    "skip": "event not mapped"
+  }
+]

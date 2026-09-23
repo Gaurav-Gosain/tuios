@@ -1,8 +1,9 @@
 // Package integration connects coding-agent harnesses to tuios agent state.
 //
 // It has two halves. The hook half translates the payload a harness hands its
-// lifecycle hooks into one set-agent-state report, or into a reason to report
-// nothing: `tuios agent-hook <harness>` reads the payload and sends what
+// lifecycle hooks into one set-agent-state report, one set-agent-session
+// report for a harness trusted with the conversation id alone, or a reason to
+// report nothing: `tuios agent-hook <harness>` reads the payload and sends what
 // Translate decides. The install half writes managed hook entries into each
 // harness's own configuration, removes only what it wrote, and says whether
 // what is installed is current: `tuios integration install|uninstall|status`
@@ -19,21 +20,64 @@ import (
 
 // Harness ids, as the manifests in internal/harness name them.
 const (
-	ClaudeCode = "claude-code"
-	Codex      = "codex"
-	GeminiCLI  = "gemini-cli"
-	OpenCode   = "opencode"
+	ClaudeCode  = "claude-code"
+	Codex       = "codex"
+	GeminiCLI   = "gemini-cli"
+	OpenCode    = "opencode"
+	Amp         = "amp"
+	Antigravity = "antigravity"
+	Copilot     = "copilot"
+	Crush       = "crush"
+	CursorAgent = "cursor-agent"
+	Devin       = "devin"
+	Droid       = "droid"
+	Grok        = "grok"
+	Hermes      = "hermes"
+	Kilo        = "kilo"
+	Kimi        = "kimi"
+	Pi          = "pi"
+	Qoder       = "qoder"
+	Qwen        = "qwen"
 )
 
 // harnessAliases maps the names a person or a config types to a harness id.
+// Every id maps to itself; the rest are the program names and the names
+// other tools use for the same harness.
 var harnessAliases = map[string]string{
-	"claude":      ClaudeCode,
-	"claude-code": ClaudeCode,
-	"claudecode":  ClaudeCode,
-	"codex":       Codex,
-	"gemini":      GeminiCLI,
-	"gemini-cli":  GeminiCLI,
-	"opencode":    OpenCode,
+	"claude":          ClaudeCode,
+	"claude-code":     ClaudeCode,
+	"claudecode":      ClaudeCode,
+	"codex":           Codex,
+	"gemini":          GeminiCLI,
+	"gemini-cli":      GeminiCLI,
+	"opencode":        OpenCode,
+	"amp":             Amp,
+	"antigravity":     Antigravity,
+	"antigravity-cli": Antigravity,
+	"agy":             Antigravity,
+	"copilot":         Copilot,
+	"copilot-cli":     Copilot,
+	"crush":           Crush,
+	"cursor-agent":    CursorAgent,
+	"cursor":          CursorAgent,
+	"devin":           Devin,
+	"droid":           Droid,
+	"factory":         Droid,
+	"grok":            Grok,
+	"grok-cli":        Grok,
+	"hermes":          Hermes,
+	"hermes-agent":    Hermes,
+	"kilo":            Kilo,
+	"kilo-code":       Kilo,
+	"kilocode":        Kilo,
+	"kimi":            Kimi,
+	"kimi-cli":        Kimi,
+	"kimi-code":       Kimi,
+	"pi":              Pi,
+	"qoder":           Qoder,
+	"qodercli":        Qoder,
+	"qwen":            Qwen,
+	"qwen-code":       Qwen,
 }
 
 // Canonical resolves a harness name to the id this package knows it by,
@@ -44,12 +88,48 @@ func Canonical(name string) (string, bool) {
 }
 
 // HarnessIDs lists the harnesses with a hook mapping, in a stable order.
-func HarnessIDs() []string { return []string{ClaudeCode, Codex, GeminiCLI, OpenCode} }
+func HarnessIDs() []string {
+	return []string{
+		ClaudeCode, Codex, GeminiCLI, OpenCode,
+		Amp, Antigravity, Copilot, Crush, CursorAgent, Devin, Droid, Grok,
+		Hermes, Kilo, Kimi, Pi, Qoder, Qwen,
+	}
+}
 
-// Report is one set-agent-state call, in the verb's own field names. Empty
-// fields are left out of the call.
+// ManifestIDs lists every harness the bundled manifests describe, with or
+// without a hook mapping. A TUIOS_AGENT naming one of them names the pane's
+// owner even when that owner has no integration, so a hook from any other
+// harness in the pane is foreign. A test holds this to the manifests.
+var ManifestIDs = []string{
+	"aider", "amp", "antigravity", "claude-code", "cline", "codex", "copilot",
+	"crush", "cursor-agent", "devin", "droid", "gemini-cli", "grok", "hermes",
+	"kilo", "kimi", "kiro", "maki", "opencode", "pi", "qoder", "qwen",
+}
+
+// hintOwner resolves a TUIOS_AGENT value to a harness id: an alias this
+// package knows, else a bundled manifest id. It reports false for a name
+// neither knows, which says nothing about who owns the pane.
+func hintOwner(hint string) (string, bool) {
+	if id, ok := Canonical(hint); ok {
+		return id, true
+	}
+	hint = strings.ToLower(strings.TrimSpace(hint))
+	for _, id := range ManifestIDs {
+		if id == hint {
+			return id, true
+		}
+	}
+	return "", false
+}
+
+// Report is one set-agent-state call, in the verb's own field names, or with
+// SessionOnly one set-agent-session call. Empty fields are left out of the
+// call.
 type Report struct {
-	State          string `json:"state"`
+	// SessionOnly makes the report a set-agent-session call: it names the
+	// conversation and says nothing about the pane's state. State is empty.
+	SessionOnly    bool   `json:"session_only,omitempty"`
+	State          string `json:"state,omitempty"`
 	Kind           string `json:"kind,omitempty"`
 	Message        string `json:"message,omitempty"`
 	SessionID      string `json:"agent_session_id,omitempty"`
@@ -113,7 +193,7 @@ func Translate(harnessName string, in Input) Decision {
 		return skip(harnessName, in.Event, "no hook mapping for harness "+harnessName)
 	}
 	if hint := strings.TrimSpace(in.env(AgentHintEnv)); hint != "" {
-		if owner, known := Canonical(hint); known && owner != id {
+		if owner, known := hintOwner(hint); known && owner != id {
 			return skip(id, in.Event, "foreign harness: "+AgentHintEnv+" names "+owner)
 		}
 	}
@@ -140,9 +220,30 @@ func Translate(harnessName string, in Input) Decision {
 		return translateCodex(in, p)
 	case GeminiCLI:
 		return translateGemini(in, p)
+	case OpenCode, Kilo:
+		return translateOpenCode(id, in, p)
+	case Amp:
+		return translateAmp(in, p)
+	case Kimi:
+		return translateKimi(in, p)
+	case Pi:
+		return translatePi(in, p)
 	default:
-		return translateOpenCode(in, p)
+		return translateIdentity(id, in, p)
 	}
+}
+
+// StdoutAnswer is what a hook for harness must print on stdout whatever it
+// decides: the answer that changes nothing, for a harness that parses a
+// hook's stdout as JSON. It is empty for the rest, which read an empty stdout
+// as no opinion.
+func StdoutAnswer(harness string) string {
+	id, _ := Canonical(harness)
+	switch id {
+	case GeminiCLI, Antigravity:
+		return "{}\n"
+	}
+	return ""
 }
 
 // fields reads a decoded payload without panicking on a field of the wrong
@@ -164,12 +265,23 @@ func (f fields) obj(key string) fields {
 }
 
 // eventName is the event the command line named, else the payload's
-// hook_event_name.
+// hook_event_name, else the spellings other harnesses use for it: Copilot's
+// camelCase payloads say hookEventName and Crush's say event.
 func eventName(in Input, p fields) string {
 	if in.Event != "" {
 		return in.Event
 	}
-	return p.str("hook_event_name")
+	return p.first("hook_event_name", "hookEventName", "event")
+}
+
+// first is the first of keys holding a non-empty string.
+func (f fields) first(keys ...string) string {
+	for _, k := range keys {
+		if v := f.str(k); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // identity copies the session id and transcript path every Claude-shaped

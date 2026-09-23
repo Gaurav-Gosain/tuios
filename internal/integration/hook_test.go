@@ -75,17 +75,16 @@ func TestTranslateFixtures(t *testing.T) {
 // something, or the installer is wiring an event nothing reads.
 func TestEveryInstalledEventHasAFixture(t *testing.T) {
 	for _, target := range Targets() {
-		if target.plugin() {
-			continue
-		}
 		reported := map[string]bool{}
 		for _, tc := range loadHookCases(t, target.ID) {
-			var p struct {
-				Event string `json:"hook_event_name"`
-			}
+			var p map[string]any
 			_ = json.Unmarshal(tc.Payload, &p)
+			event := tc.Event
+			if event == "" {
+				event = fields(p).first("hook_event_name", "hookEventName", "event")
+			}
 			if tc.Want != nil {
-				reported[p.Event] = true
+				reported[event] = true
 			}
 		}
 		for _, ev := range target.Events {

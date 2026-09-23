@@ -1,0 +1,37 @@
+[
+  {
+    "name": "session.start",
+    "payload": {"hook_event_name": "session.start", "session_id": "T-abc"},
+    "want": {"session_only": true, "agent_session_id": "T-abc"}
+  },
+  {
+    "name": "agent.start",
+    "payload": {"hook_event_name": "agent.start", "session_id": "T-abc"},
+    "want": {"state": "working", "agent_session_id": "T-abc"}
+  },
+  {
+    "name": "agent.end done",
+    "payload": {"hook_event_name": "agent.end", "session_id": "T-abc", "status": "done"},
+    "want": {"state": "done", "agent_session_id": "T-abc"}
+  },
+  {
+    "name": "agent.end error",
+    "payload": {"hook_event_name": "agent.end", "session_id": "T-abc", "status": "error"},
+    "want": {"state": "errored", "message": "the turn ended on an error", "agent_session_id": "T-abc"}
+  },
+  {
+    "name": "agent.end cancelled",
+    "payload": {"hook_event_name": "agent.end", "session_id": "T-abc", "status": "cancelled"},
+    "want": {"state": "idle", "agent_session_id": "T-abc"}
+  },
+  {
+    "name": "agent.end with a status tuios does not know",
+    "payload": {"hook_event_name": "agent.end", "session_id": "T-abc", "status": "paused"},
+    "skip": "not a state change"
+  },
+  {
+    "name": "session.start with no thread",
+    "payload": {"hook_event_name": "session.start", "session_id": ""},
+    "skip": "names no session"
+  }
+]

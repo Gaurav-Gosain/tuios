@@ -1,0 +1,17 @@
+[
+  {
+    "name": "SessionStart",
+    "payload": {"hook_event_name": "SessionStart", "session_id": "fd-1", "transcript_path": "/home/u/.factory/sessions/fd-1.jsonl", "source": "startup"},
+    "want": {"session_only": true, "agent_session_id": "fd-1"}
+  },
+  {
+    "name": "a subagent",
+    "payload": {"hook_event_name": "SessionStart", "session_id": "fd-9", "agent_id": "sub"},
+    "skip": "subagent"
+  },
+  {
+    "name": "Stop is left to the screen rules",
+    "payload": {"hook_event_name": "Stop", "session_id": "fd-1"},
+    "skip": "event not mapped"
+  }
+]

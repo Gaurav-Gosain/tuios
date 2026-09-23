@@ -1,0 +1,6 @@
+# installed by tuios; `tuios integration uninstall hermes` removes it.
+# TUIOS_INTEGRATION_ID=hermes
+# TUIOS_INTEGRATION_VERSION=__TUIOS_VERSION__
+name: tuios-agent-state
+version: "__TUIOS_VERSION__"
+description: Report the Hermes session a tuios pane runs, so it can be resumed

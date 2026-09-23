@@ -1,0 +1,18 @@
+[
+  {
+    "name": "SessionStart takes GROK_SESSION_ID first",
+    "env": {"GROK_SESSION_ID": "gk-env"},
+    "payload": {"hook_event_name": "SessionStart", "session_id": "gk-payload", "source": "new"},
+    "want": {"session_only": true, "agent_session_id": "gk-env"}
+  },
+  {
+    "name": "session_start from the payload",
+    "payload": {"hook_event_name": "session_start", "session_id": "gk-1"},
+    "want": {"session_only": true, "agent_session_id": "gk-1"}
+  },
+  {
+    "name": "sessionStart spelling",
+    "payload": {"hook_event_name": "sessionStart", "sessionId": "gk-2"},
+    "want": {"session_only": true, "agent_session_id": "gk-2"}
+  }
+]

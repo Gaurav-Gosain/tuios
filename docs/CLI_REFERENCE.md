@@ -1813,11 +1813,11 @@ them.
 | `tuios ask-agent <text>` | Ask another agent a question and wait for its answer |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
 | `tuios explain-agent-screen` | Show what a harness's screen and title rules make of a pane: the tail, each rule's region and the text it read there, why each refusal refused (strings, patterns, nested groups), the title and last OSC 9;4 progress report, and which manifest file is in force |
-| `tuios integration install [harness...]` | Write tuios's managed hook entries into Claude Code, Codex, Gemini CLI or opencode's configuration (`--all` for every harness that has run here, `--command` for a tuios not on PATH) |
+| `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, gemini-cli, opencode, kilo, amp, kimi and pi report state; antigravity, copilot, crush, cursor-agent, devin, droid, grok, hermes, qoder and qwen report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). See [Agent state](AGENT_STATE.md#harness-integrations) |
 | `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, and nothing else |
-| `tuios integration status [harness...]` | Say whether each integration is installed and current (`--json`) |
-| `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, the running agent panes missing theirs, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
-| `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state. `--explain` prints the decision to stderr. See [Agent state](AGENT_STATE.md#harness-integrations) |
+| `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id (`--json`, with `reports`) |
+| `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes missing theirs, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
+| `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). `--explain` prints the decision to stderr. See [Agent state](AGENT_STATE.md#harness-integrations) |
 | `tuios stash put <file>` | Copy a file into the session store and print the stored path |
 | `tuios stash get <stored-path> [file]` | Copy a stashed file out of the session store, across a link |
 | `tuios stash list` | List the files in the session store |
@@ -2689,7 +2689,9 @@ Set on a wrapper that runs an agent tuios cannot see, such as one in a
 container or a VM, to name its harness. The daemon reads it from the pane's
 foreground process when nothing else identifies the process, and attributes
 the pane to that harness, so its screen and title rules run. `tuios agent-hook`
-ignores a hook from a different harness than the one it names.
+ignores a hook from a different harness than the one it names, which may be any
+harness tuios recognises, one with no integration included. The plugins tuios
+installs report only when `TUIOS_ENV` or `TUIOS_AGENT` is set.
 
 ```bash
 TUIOS_AGENT=claude-code docker run -it sandbox claude

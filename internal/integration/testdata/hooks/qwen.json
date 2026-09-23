@@ -1,0 +1,18 @@
+[
+  {
+    "name": "SessionStart",
+    "payload": {"hook_event_name": "SessionStart", "session_id": "qw-1", "source": "startup", "cwd": "/src"},
+    "want": {"session_only": true, "agent_session_id": "qw-1"}
+  },
+  {
+    "name": "SessionStart on resume",
+    "payload": {"hook_event_name": "SessionStart", "session_id": "qw-2", "source": "resume"},
+    "want": {"session_only": true, "agent_session_id": "qw-2"}
+  },
+  {
+    "name": "a Gemini CLI hook in the same pane is foreign",
+    "env": {"TUIOS_AGENT": "gemini-cli"},
+    "payload": {"hook_event_name": "SessionStart", "session_id": "qw-1"},
+    "skip": "foreign harness"
+  }
+]

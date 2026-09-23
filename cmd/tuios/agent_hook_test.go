@@ -46,6 +46,12 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 		out, _ := json.Marshal(f.resolved)
 		return out, nil
 	case "list-verbs":
+		if p["verb"] == "set-agent-session" {
+			if f.old {
+				return json.RawMessage(`{"verbs":[]}`), nil
+			}
+			return json.RawMessage(`{"verbs":[{"verb":"set-agent-session"}]}`), nil
+		}
 		names := oldSetAgentStateParams
 		if !f.old {
 			names = append(append([]string(nil), names...), hookFields...)
@@ -60,6 +66,11 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 		// Both kinds of daemon apply the report. The old one never looks at
 		// the hook fields, so if_state does not stop it.
 		return json.RawMessage(`{"applied":true,"state":"` + p["state"].(string) + `"}`), nil
+	case "set-agent-session":
+		if f.old {
+			break
+		}
+		return json.RawMessage(`{"applied":true,"agent_session_id":"` + p["agent_session_id"].(string) + `"}`), nil
 	}
 	return nil, &session.VerbCallError{Code: session.ErrVerbUnknownVerb, Message: verb}
 }
@@ -257,6 +268,57 @@ func TestAgentHookReadsTheCodexNotifyArgument(t *testing.T) {
 	}
 }
 
+// TestAgentHookSendsASessionOnlyReport checks an identity integration's event
+// goes to set-agent-session, with the harness pid, and never to
+// set-agent-state, so the pane's state is left to its screen rules.
+func TestAgentHookSendsASessionOnlyReport(t *testing.T) {
+	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1", "TUIOS_SESSION": "work"}}
+	h.run(t, agentHookOptions{}, `{"hook_event_name":"SessionStart","session_id":"qw-1","source":"startup"}`, "qwen")
+	if r := h.daemon.reports(); len(r) != 0 {
+		t.Fatalf("an identity event reported a state: %v", r)
+	}
+	var sent map[string]any
+	for _, c := range h.daemon.calls {
+		if c.verb == "set-agent-session" {
+			sent = c.params
+		}
+	}
+	want := map[string]any{"session": "work", "window": "w1", "harness": "qwen", "agent_session_id": "qw-1", "harness_pid": float64(4250)}
+	for k, v := range want {
+		if sent[k] != v {
+			t.Errorf("%s = %v, want %v (calls %v)", k, sent[k], v, h.daemon.calls)
+		}
+	}
+	if h.stdout.Len() != 0 {
+		t.Errorf("printed %q on stdout", h.stdout.String())
+	}
+	if !strings.Contains(h.stderr.String(), `"applied":true`) {
+		t.Errorf("explain: %s", h.stderr.String())
+	}
+
+	// A daemon without the verb gets nothing, and --explain says why.
+	h = &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}, daemon: &fakeDaemon{old: true}}
+	h.run(t, agentHookOptions{}, `{"hook_event_name":"SessionStart","session_id":"qw-1"}`, "qwen")
+	for _, c := range h.daemon.calls {
+		if c.verb == "set-agent-session" || c.verb == "set-agent-state" {
+			t.Fatalf("reported to a daemon without set-agent-session: %v", h.daemon.calls)
+		}
+	}
+	if !strings.Contains(h.stderr.String(), "predates set-agent-session") {
+		t.Fatalf("explain: %s", h.stderr.String())
+	}
+}
+
+// TestAgentHookAnswersAntigravityWithAnObject checks the one other harness
+// that parses a hook's stdout gets the empty object, even when it reports.
+func TestAgentHookAnswersAntigravityWithAnObject(t *testing.T) {
+	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1"}}
+	h.run(t, agentHookOptions{}, `{"hook_event_name":"PreInvocation","conversationId":"ag-1"}`, "antigravity")
+	if h.stdout.String() != "{}\n" {
+		t.Fatalf("stdout = %q, want an empty object", h.stdout.String())
+	}
+}
+
 func TestAgentHookCommandIsWired(t *testing.T) {
 	root := newRootCommand()
 	cmd, _, err := root.Find([]string{"agent-hook"})
@@ -296,7 +358,7 @@ func TestDoctorAgentsListsPanesWithoutTheirIntegration(t *testing.T) {
 	if err := printDoctorAgents(&out, r, false); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"claude-code", "not installed", "work:w1"} {
+	for _, want := range []string{"claude-code", "not installed", "work:w1", "aider        no integration: ", "qwen", "[reports the session id; state from screen rules]"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("doctor output lacks %q:\n%s", want, out.String())
 		}

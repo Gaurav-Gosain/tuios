@@ -710,14 +710,21 @@ tuios set-agent-meta -w "$TUIOS_PANE_ID" summary=
 ### Wire it to your harness once
 
 If your harness has a hooks system, map its lifecycle events to these calls once
-instead of remembering to call them by hand. For Claude Code, Codex, Gemini CLI
-and opencode, tuios does the wiring:
+instead of remembering to call them by hand. For eighteen harnesses tuios does
+the wiring:
 
 ```sh
-tuios integration install claude-code    # or codex, gemini-cli, opencode, --all
-tuios integration status                 # installed and current, per harness
+tuios integration install claude-code    # or any other harness, or --all
+tuios integration status                 # installed, current, and what it reports
 tuios doctor agents                      # also lists agent panes missing theirs
 ```
+
+Claude Code, Codex, Gemini CLI, opencode, Kilo, Amp, Kimi and Pi report the
+pane's state. Antigravity, Copilot, Crush, Cursor Agent, Devin, Droid, Grok,
+Hermes, Qoder and Qwen report only the conversation id, so the pane can be
+resumed, and their state keeps coming from screen rules: their hooks miss
+events a state needs. `tuios doctor agents` names the recognised harnesses
+with no integration and why.
 
 Each installed hook runs `tuios agent-hook <harness>`, which reads the hook
 payload on stdin and reports for the pane it runs in. A prompt or a tool call
@@ -736,7 +743,13 @@ To report the same things by hand from another harness's hooks:
 ```sh
 tuios set-agent-state needs_input -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --kind approval --agent-session-id "$SID" -m "approve Bash: make"
 tuios set-agent-state working -s "$TUIOS_SESSION" -w "$TUIOS_PANE_ID" --if-state needs_input
+tuios set-agent-session --harness qwen -w "$TUIOS_PANE_ID" "$SID"
 ```
+
+`set-agent-session` stores the conversation id and changes nothing else, for a
+hook you trust to name the conversation but not to say when a turn ends. It is
+refused for a pane attributed to another harness, and for a pane mid-turn
+whose id came from another process of the same harness.
 
 `--if-state` applies the report only when the pane is in one of the states
 named, so a "tool finished" event clears a block without turning a finished
@@ -751,7 +764,8 @@ daemon older than it, since that daemon would apply the report unconditionally.
 An agent in a container or a VM is invisible to process detection. Set
 `TUIOS_AGENT` to its harness id on the wrapper you run, for example
 `TUIOS_AGENT=claude-code docker run -it box claude`, and the pane is attributed
-to that harness. A hook for a different harness than the one `TUIOS_AGENT` names
+to that harness. A hook for a different harness than the one `TUIOS_AGENT` names,
+any recognised harness, one with no integration included,
 is ignored.
 
 A harness that emits OSC 9;4 progress reports needs no wiring at all: tuios

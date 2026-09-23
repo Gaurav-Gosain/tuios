@@ -44,6 +44,13 @@ func translateClaude(in Input, p fields) Decision {
 	if in.env("CURSOR_VERSION") != "" || p.str("cursor_version") != "" {
 		return skip(ClaudeCode, event, "foreign harness: the event comes from Cursor")
 	}
+	// Grok CLI imports Claude Code's hooks as well, and sets GROK_SESSION_ID
+	// in every hook process it starts. herdr's Claude asset narrowed its
+	// SessionStart matcher for the same reason (Grok sends source new and
+	// load, herdr docs, integrations.mdx).
+	if in.env("GROK_SESSION_ID") != "" {
+		return skip(ClaudeCode, event, "foreign harness: the event comes from Grok")
+	}
 	if p.str("agent_id") != "" {
 		return skip(ClaudeCode, event, "subagent event")
 	}

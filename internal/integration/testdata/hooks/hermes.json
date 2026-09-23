@@ -1,0 +1,17 @@
+[
+  {
+    "name": "on_session_start",
+    "payload": {"hook_event_name": "on_session_start", "session_id": "hm-1"},
+    "want": {"session_only": true, "agent_session_id": "hm-1"}
+  },
+  {
+    "name": "on_session_reset",
+    "payload": {"hook_event_name": "on_session_reset", "session_id": "hm-2"},
+    "want": {"session_only": true, "agent_session_id": "hm-2"}
+  },
+  {
+    "name": "unknown hook",
+    "payload": {"hook_event_name": "pre_llm_call", "session_id": "hm-1"},
+    "skip": "event not mapped"
+  }
+]

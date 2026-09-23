@@ -9,6 +9,11 @@ package integration
 // The plugin drops events from child sessions, the subagents opencode starts,
 // before they get here.
 //
+// Kilo Code CLI is a fork of opencode with the same plugin API and bus events,
+// loading plugins from its own plugin directory. herdr's Kilo plugin
+// (src/integration/assets/kilo/herdr-agent-state.js) handles the same event
+// names, so Kilo gets the same plugin and this same map under its own id.
+//
 //	session.created                 idle, and the session id
 //	chat.message, tool.execute.before,
 //	session.status busy or retry    working
@@ -21,7 +26,7 @@ package integration
 //	session.error                   errored
 //	session.deleted                 none
 
-func translateOpenCode(in Input, p fields) Decision {
+func translateOpenCode(id string, in Input, p fields) Decision {
 	event := eventName(in, p)
 	r := Report{SessionID: p.str("session_id")}
 	switch event {
@@ -34,7 +39,7 @@ func translateOpenCode(in Input, p fields) Decision {
 		case "busy", "retry", "running", "working", "pending":
 			r.State = "working"
 		default:
-			return skip(OpenCode, event, "status "+p.str("status")+" is left to session.idle")
+			return skip(id, event, "status "+p.str("status")+" is left to session.idle")
 		}
 	case "permission.asked", "permission.updated":
 		r.State, r.Kind = "needs_input", "approval"
@@ -54,9 +59,9 @@ func translateOpenCode(in Input, p fields) Decision {
 	case "session.deleted":
 		r.State = "none"
 	case "":
-		return skip(OpenCode, event, "the payload names no event")
+		return skip(id, event, "the payload names no event")
 	default:
-		return skip(OpenCode, event, "event not mapped")
+		return skip(id, event, "event not mapped")
 	}
-	return send(OpenCode, event, r)
+	return send(id, event, r)
 }

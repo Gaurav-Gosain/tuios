@@ -1,0 +1,29 @@
+[
+  {
+    "name": "SessionStart",
+    "payload": {"hook_event_name": "SessionStart", "session_id": "cp-1", "timestamp": "2026-09-01T10:00:00Z", "cwd": "/src", "source": "startup"},
+    "want": {"session_only": true, "agent_session_id": "cp-1"}
+  },
+  {
+    "name": "sessionStart camelCase",
+    "payload": {"sessionId": "cp-2", "timestamp": 1788000000000, "cwd": "/src", "source": "resume"},
+    "event": "sessionStart",
+    "want": {"session_only": true, "agent_session_id": "cp-2"}
+  },
+  {
+    "name": "no session id",
+    "payload": {"hook_event_name": "SessionStart", "cwd": "/src"},
+    "skip": "names no session"
+  },
+  {
+    "name": "an event tuios does not register",
+    "payload": {"hook_event_name": "PreToolUse", "session_id": "cp-1", "tool_name": "bash"},
+    "skip": "event not mapped"
+  },
+  {
+    "name": "foreign harness named by TUIOS_AGENT",
+    "env": {"TUIOS_AGENT": "aider"},
+    "payload": {"hook_event_name": "SessionStart", "session_id": "cp-1"},
+    "skip": "foreign harness"
+  }
+]

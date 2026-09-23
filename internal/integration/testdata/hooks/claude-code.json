@@ -194,5 +194,23 @@
     "name": "a payload that names no event",
     "payload": {"session_id": "sess-1"},
     "skip": "names no event"
+  },
+  {
+    "name": "Grok runs Claude Code's hooks too",
+    "env": {"GROK_SESSION_ID": "gk-1"},
+    "payload": {"hook_event_name": "Stop", "session_id": "sess-1"},
+    "skip": "comes from Grok"
+  },
+  {
+    "name": "TUIOS_AGENT names a harness with no integration",
+    "env": {"TUIOS_AGENT": "aider"},
+    "payload": {"hook_event_name": "Stop", "session_id": "sess-1"},
+    "skip": "foreign harness: TUIOS_AGENT names aider"
+  },
+  {
+    "name": "TUIOS_AGENT names a harness tuios does not know",
+    "env": {"TUIOS_AGENT": "my-own-agent"},
+    "payload": {"hook_event_name": "Stop", "session_id": "sess-1"},
+    "want": {"state": "done", "agent_session_id": "sess-1"}
   }
 ]

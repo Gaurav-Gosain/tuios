@@ -42,6 +42,9 @@ type doctorAgentsReport struct {
 	// no daemon runs, and DaemonRunning says which.
 	DaemonRunning bool           `json:"daemon_running"`
 	Panes         []agentPaneGap `json:"panes_without_integration"`
+	// Unsupported lists the harnesses tuios recognises and has no
+	// integration for, with the reason, so none is silently left out.
+	Unsupported []integration.Unsupported `json:"without_integration"`
 	// ManifestDir is the user manifest directory, UserManifests the files in
 	// it that loaded, and ManifestErrors the ones that did not. A user file
 	// with a bundled id replaces the bundled manifest whole, which is worth
@@ -85,12 +88,15 @@ func newDoctorAgentsCommand() *cobra.Command {
 		Use:   "agents",
 		Short: "Report, per harness, whether its integration is installed and current",
 		Long: `Report, for every harness tuios can integrate with, whether the harness is on
-PATH, whether tuios is on PATH for its hooks to run, and whether the
-integration is installed and current. With a daemon running it also lists
-the agent panes whose harness has an integration that is not installed,
-since their state then rests on screen rules and the silence timer. Last, it
-lists the harness manifests loaded from the user manifest directory, saying
-which replace a bundled manifest, and the files there that failed to load.`,
+PATH, whether tuios is on PATH for its hooks to run, whether the integration
+is installed and current, and what it reports: the pane's state, or only the
+conversation id, with the state left to the screen rules. Harnesses tuios
+recognises and has no integration for are listed with the reason. With a
+daemon running it also lists the agent panes whose harness has an
+integration that is not installed, since their state then rests on screen
+rules and the silence timer. Last, it lists the harness manifests loaded
+from the user manifest directory, saying which replace a bundled manifest,
+and the files there that failed to load.`,
 		Example: `  tuios doctor agents
   tuios doctor agents --json`,
 		Args: cobra.NoArgs,
@@ -164,7 +170,7 @@ func livePanes() ([]agentPane, bool) {
 // doctorAgents builds the report. panes is injected so the report can be
 // tested without a daemon.
 func doctorAgents(env integration.Env, command string, panes func() ([]agentPane, bool)) doctorAgentsReport {
-	var r doctorAgentsReport
+	r := doctorAgentsReport{Unsupported: integration.UnsupportedHarnesses()}
 	installed := map[string]bool{}
 	for _, t := range integration.Targets() {
 		st := t.Status(env, command)
@@ -209,6 +215,9 @@ func printDoctorAgents(w io.Writer, r doctorAgentsReport, asJSON bool) error {
 		for _, n := range s.Notes {
 			fmt.Fprintf(w, "%-12s note: %s\n", "", n)
 		}
+	}
+	for _, u := range r.Unsupported {
+		fmt.Fprintf(w, "%-12s no integration: %s\n", u.Harness, u.Reason)
 	}
 	switch {
 	case !r.DaemonRunning:

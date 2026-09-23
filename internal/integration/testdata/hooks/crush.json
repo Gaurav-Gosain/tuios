@@ -1,0 +1,18 @@
+[
+  {
+    "name": "PreToolUse",
+    "payload": {"event": "PreToolUse", "session_id": "cr-1", "cwd": "/src", "tool_name": "bash", "tool_input": {"command": "ls"}},
+    "want": {"session_only": true, "agent_session_id": "cr-1"}
+  },
+  {
+    "name": "PreToolUse takes CRUSH_SESSION_ID first",
+    "env": {"CRUSH_SESSION_ID": "cr-env"},
+    "payload": {"event": "PreToolUse", "session_id": "cr-payload", "tool_name": "view"},
+    "want": {"session_only": true, "agent_session_id": "cr-env"}
+  },
+  {
+    "name": "the snake case spelling",
+    "payload": {"event": "pre_tool_use", "session_id": "cr-2"},
+    "want": {"session_only": true, "agent_session_id": "cr-2"}
+  }
+]

@@ -868,21 +868,64 @@ harness feeds it yet; a hook or a statusline command is where a feed goes. See
 ## Harness integrations
 
 A harness with a hooks system reports its own state, which outranks everything
-tuios can work out by looking. tuios wires four of them itself:
+tuios can work out by looking. tuios wires eighteen of them itself:
 
 ```sh
-tuios integration install claude-code   # or codex, gemini-cli, opencode, or --all
+tuios integration install claude-code   # any harness below, or --all
 tuios integration status                # installed and current, per harness
 tuios integration uninstall codex
 tuios doctor agents                     # PATH, install state, and panes missing theirs
 ```
 
-| Harness     | What is written                                     | Format source |
-| ----------- | --------------------------------------------------- | ------------- |
-| Claude Code | `hooks` in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`) | [hooks reference](https://code.claude.com/docs/en/hooks) |
-| Codex       | `~/.codex/hooks.json` (or `$CODEX_HOME`)            | [Codex hooks](https://developers.openai.com/codex/hooks) |
-| Gemini CLI  | `hooks` in `~/.gemini/settings.json`                | [hooks reference](https://geminicli.com/docs/hooks/reference/) |
-| opencode    | `plugins/tuios-agent-state.js` in `~/.config/opencode` (or `$XDG_CONFIG_HOME/opencode`) | [plugins](https://opencode.ai/docs/plugins/) |
+An integration reports one of two things. Eight report the pane's **state**:
+their hooks cover the whole turn, from the prompt through approvals to the end.
+The other ten report only the **session**: the harness's own id for the
+conversation, stored on the pane with `set-agent-session` so it can be resumed,
+while the pane's state keeps coming from the manifest's screen and title rules.
+Their hooks miss events a state needs, an interrupt, a cancelled approval or the
+end of a turn, and a state reported by a hook outranks every screen rule, so one
+missed event would hold the pane on `working` until the harness exits. herdr
+drew the same line for the same harnesses after running them. `tuios integration
+status` and `tuios doctor agents` say which each one is.
+
+| Harness | Reports | What is written | Format source |
+| ------- | ------- | --------------- | ------------- |
+| Claude Code | state | `hooks` in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`) | [hooks reference](https://code.claude.com/docs/en/hooks) |
+| Codex | state | `~/.codex/hooks.json` (or `$CODEX_HOME`) | [Codex hooks](https://developers.openai.com/codex/hooks) |
+| Gemini CLI | state | `hooks` in `~/.gemini/settings.json` | [hooks reference](https://geminicli.com/docs/hooks/reference/) |
+| opencode | state | `plugins/tuios-agent-state.js` in `~/.config/opencode` (or `$XDG_CONFIG_HOME/opencode`) | [plugins](https://opencode.ai/docs/plugins/) |
+| Kilo | state | `plugin/tuios-agent-state.js` in `~/.config/kilo` (or `$XDG_CONFIG_HOME/kilo`), the opencode plugin under Kilo's id | opencode's plugin API, which Kilo forks |
+| Amp | state | `plugins/tuios-agent-state.ts` in `~/.config/amp` (or `$XDG_CONFIG_HOME/amp`) | [plugin API](https://ampcode.com/manual/plugin-api) |
+| Kimi Code CLI | state | `[[hooks]]` tables between two marker comments at the end of `~/.kimi-code/config.toml` (or `$KIMI_CODE_HOME`); needs 0.14.0 or newer | [hooks](https://www.kimi.com/code/docs/en/kimi-code-cli/customization/hooks.html) |
+| Pi | state | `extensions/tuios-agent-state.ts` in `~/.pi/agent` (or `$PI_CODING_AGENT_DIR`) | herdr's Pi extension |
+| Antigravity CLI | session | a `tuios` block in `~/.gemini/config/hooks.json` (or `$ANTIGRAVITY_CLI_CONFIG_DIR`) | herdr's Antigravity installer |
+| GitHub Copilot CLI | session | `hooks/tuios.json` in `~/.copilot` (or `$COPILOT_HOME`), a file of its own | [hooks configuration](https://docs.github.com/en/copilot/reference/hooks-configuration) |
+| Crush | session | a `PreToolUse` hook in `~/.config/crush/crush.json` (or `$XDG_CONFIG_HOME/crush`) | [hooks](https://github.com/charmbracelet/crush/blob/main/docs/hooks/README.md) |
+| Cursor Agent | session | a `sessionStart` hook in `~/.cursor/hooks.json` (or `$CURSOR_CONFIG_DIR`) | [hooks](https://cursor.com/docs/hooks) |
+| Devin CLI | session | `hooks` in `config.json` in `$XDG_CONFIG_HOME/devin`, `~/.config/devin` or `%APPDATA%\devin` | herdr's Devin installer |
+| Droid | session | `hooks` in `~/.factory/settings.json` | herdr's Droid installer |
+| Grok CLI | session | `hooks/tuios.json` in `~/.grok` (or `$GROK_HOME`), a file of its own | herdr's Grok installer |
+| Hermes Agent | session | a plugin in `plugins/tuios-agent-state/` under `~/.hermes` (or `$HERMES_HOME`), and `tuios-agent-state` in `plugins.enabled` in its `config.yaml` | herdr's Hermes plugin |
+| Qoder CLI | session | `hooks` in `~/.qoder/settings.json` (or `$QODER_CONFIG_DIR`) | [hooks](https://docs.qoder.com/zh/cli/hooks) |
+| Qwen Code | session | `hooks` in `~/.qwen/settings.json` (or `$QWEN_HOME`) | herdr's Qwen installer |
+
+Four recognised harnesses have no integration, and `tuios doctor agents` names
+them with the reason: aider (its one hook, `notifications-command`, replaces the
+user's own and carries nothing), Cline (one executable per event in a directory
+that has moved between releases, behind a setting), Kiro (no documented
+user-wide hook location or payload) and maki (Lua plugins loaded from the user's
+own `init.lua`). Their state comes from their manifests.
+
+A plugin, an extension, and the hook file of its own tuios writes for Copilot
+and Grok are files tuios owns whole. Each carries the version marker in its
+text; a file at that path that tuios did not write is refused, never
+overwritten, and never removed. Every other integration edits a file the user
+owns, as below. Hermes touches three files, and every file an integration
+touches is worked out before any is written, so a file tuios cannot read leaves
+all of them unchanged. Its `config.yaml` is edited line by line, keeping
+comments and order; a `plugins.enabled` written as an inline list with items in
+it is refused, with the line to add by hand. Uninstall leaves an emptied list as
+`enabled: []`.
 
 Every hook entry runs `tuios agent-hook <harness> --integration <version>`. The
 version marker is how a later install replaces an older entry, how uninstall
@@ -933,7 +976,30 @@ above. The opencode plugin maps `session.status` busy and `chat.message` to
 `working`, `permission.asked` to `needs_input` kind `approval`,
 `question.asked` to kind `question`, the replies to `working` from
 `needs_input`, `session.idle` to `done`, `session.error` to `errored`, and
-drops every event from a child session.
+drops every event from a child session. Kilo, a fork of opencode, runs the same
+plugin under its own id and gets the same map.
+
+Kimi Code CLI maps like Claude Code: `SessionStart` to `idle`,
+`UserPromptSubmit` and `PreToolUse` to `working`, `PermissionRequest` to
+`needs_input` kind `approval`, `PostToolUse`, `PostToolUseFailure` and
+`PermissionResult` to `working` only from `needs_input`, `Stop` to `done`,
+`StopFailure` to `errored`, `Interrupt` (which Kimi sends instead of `Stop`) to
+`idle`, and `SessionEnd` to `none`. A `PreToolUse` for its `AskUserQuestion`
+tool is `needs_input` kind `question` with the question as the message. The Amp
+plugin maps `agent.start` to `working` and `agent.end` to `done`, `errored` or
+`idle` by its status (`done`, `error`, `cancelled`), and sends the thread id on
+`session.start` as a session report. It subscribes to nothing that decides
+anything, `tool.call` above all, so it cannot change what Amp permits; Amp's
+approval prompts come from its screen rules. The Pi extension maps
+`agent_start` to `working`, `agent_settled` to `done`, and `session_start` to
+`idle` (`working` after a reload mid-turn), only in Pi's TUI mode.
+
+The session integrations report the conversation id from these events and
+nothing else: Copilot, Droid, Qoder, Qwen and Grok `SessionStart` (Grok's id
+from `GROK_SESSION_ID` first), Cursor `sessionStart`, Devin `SessionStart` and
+`UserPromptSubmit`, Antigravity `PreInvocation` (`conversationId`), Crush
+`PreToolUse` (`CRUSH_SESSION_ID` first; it is the only event Crush has), and
+Hermes `on_session_start` and `on_session_reset` for an interactive session.
 
 `idle_prompt` does not report `done`: `Stop` already did, and `done` has to stay
 so the person still sees that the turn finished. It only corrects a pane still
@@ -971,14 +1037,22 @@ reported for. Only panes on the daemon's own machine are matched.
 ### Nested and foreign events
 
 Hooks are configured per user, so they fire for every harness process, not only
-the one that owns the pane. Three filters keep those events off the pane:
+the one that owns the pane. These filters keep those events off the pane:
 
 - A subagent's events (`agent_id` set, `SubagentStop`, opencode child sessions)
   are dropped by the reporter.
 - An event from a harness other than the one `TUIOS_AGENT` names is dropped by
-  the reporter. So is a Claude Code hook that Cursor runs (it reads the same
-  hook configuration), and a Codex hook whose session is not the
-  `CODEX_THREAD_ID` it inherited.
+  the reporter. `TUIOS_AGENT` may name any harness tuios recognises, one with
+  no integration included, so a Claude Code hook in a pane given to aider is
+  dropped too; a name tuios does not know says nothing either way. A Claude
+  Code hook that Cursor or Grok runs is dropped (both read Claude Code's hook
+  configuration; Grok marks its hook processes with `GROK_SESSION_ID`), and so
+  is a Codex hook whose session is not the `CODEX_THREAD_ID` it inherited.
+  Every plugin tuios installs does nothing unless `TUIOS_ENV` or `TUIOS_AGENT`
+  is set, so outside tuios it costs nothing.
+- A session report (`set-agent-session`) is refused for a pane attributed to
+  another harness, and for a pane mid-turn whose id came from another process
+  of the same harness. See [Session identity](#session-identity).
 - The daemon refuses a report whose `agent_session_id` differs from the pane's
   while the pane's own harness is `working` or `needs_input` by its own report,
   and one from a different harness in the same case. That is the `claude -p` a
@@ -1024,9 +1098,13 @@ pane's.
 
 Harnesses run some hooks synchronously, `PreToolUse` and `PermissionRequest`
 among them. `tuios agent-hook` exits 0 whatever happens, prints nothing a
-harness could read as an answer (Gemini CLI, which parses stdout, gets `{}`),
-and gives up after 500 ms (`--timeout`) when the daemon is slow, restarting or
-gone.
+harness could read as an answer (Gemini CLI and Antigravity CLI, which parse
+stdout, get `{}`), and gives up after 500 ms (`--timeout`) when the daemon is
+slow, restarting or gone. The opencode, Kilo, Amp and Pi plugins run it in a
+child process they do not wait on, so they never hold their harness up; the
+Hermes plugin waits for it, on session start only, for at most two seconds. A session report goes only
+to a daemon whose `list-verbs` has `set-agent-session`; an older daemon gets
+nothing, and `--explain` says so.
 
 A daemon keeps running across a tuios upgrade, so a new hook talking to an
 older daemon is the ordinary case right after one. Such a daemon does not

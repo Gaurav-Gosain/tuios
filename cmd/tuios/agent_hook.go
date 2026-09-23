@@ -67,7 +67,10 @@ This is what the hooks tuios integration install writes run. The harness
 hands its hook payload on stdin (or, for the Codex notify command, as the last
 argument). The event comes from the payload, or from the event argument when
 the payload does not name it. Supported harnesses: claude-code, codex,
-gemini-cli, opencode.
+gemini-cli, opencode, amp, kilo, kimi and pi, which report the pane's state;
+and antigravity, copilot, crush, cursor-agent, devin, droid, grok, hermes,
+qoder and qwen, which report only the conversation id (set-agent-session) and
+leave the state to the pane's screen rules.
 
 The pane is found from --window, then TUIOS_PANE_ID, then the process's
 controlling terminal, then its parent processes, so a harness or sandbox
@@ -136,11 +139,11 @@ type agentHookOutcome struct {
 // because nothing it could return may reach the harness as a failure.
 func runAgentHook(o agentHookOptions, args []string, hio agentHookIO) {
 	harness := args[0]
-	if id, ok := integration.Canonical(harness); ok && id == integration.GeminiCLI {
-		// Gemini CLI parses a hook's stdout as JSON. An empty object is the
-		// answer that changes nothing, and it goes out first so a deadline
-		// cannot leave the hook with no answer at all.
-		_, _ = io.WriteString(hio.stdout, "{}\n")
+	if answer := integration.StdoutAnswer(harness); answer != "" {
+		// Gemini CLI and Antigravity CLI parse a hook's stdout as JSON. An
+		// empty object is the answer that changes nothing, and it goes out
+		// first so a deadline cannot leave the hook with no answer at all.
+		_, _ = io.WriteString(hio.stdout, answer)
 	}
 	timeout := o.timeout
 	if timeout <= 0 {
@@ -203,6 +206,15 @@ func agentHook(o agentHookOptions, args []string, hio agentHookIO) agentHookOutc
 	out.Session, out.Window, out.PaneBy, err = resolveHookPane(o, hio, client, sid, ancestors)
 	if err != nil {
 		out.Error = err.Error()
+		return out
+	}
+	if out.Report.SessionOnly {
+		res, err := reportHookSession(client, out.Session, out.Window, out.Harness, out.HarnessPID, out.Report.SessionID)
+		if err != nil {
+			out.Error = err.Error()
+			return out
+		}
+		out.Applied, out.Reason = &res.Applied, res.Reason
 		return out
 	}
 	res, dropped, err := reportHook(client, out.Session, out.Window, out.Harness, out.HarnessPID, *out.Report)
@@ -363,6 +375,50 @@ func reportHook(client verbCaller, sess, window, harness string, harnessPID int,
 		return hookReportResult{}, dropped, err
 	}
 	return res, dropped, nil
+}
+
+// reportHookSession sends an identity-only report with set-agent-session. A
+// daemon older than the verb would answer unknown_verb, which costs nothing,
+// but the hook asks list-verbs first anyway so --explain can say why nothing
+// was stored.
+func reportHookSession(client verbCaller, sess, window, harness string, harnessPID int, sessionID string) (hookReportResult, error) {
+	raw, err := client.Call("list-verbs", map[string]any{"verb": "set-agent-session"})
+	if err != nil {
+		return hookReportResult{}, fmt.Errorf("could not ask the daemon whether it has set-agent-session: %w", err)
+	}
+	var verbs struct {
+		Verbs []struct {
+			Verb string `json:"verb"`
+		} `json:"verbs"`
+	}
+	if err := json.Unmarshal(raw, &verbs); err != nil {
+		return hookReportResult{}, err
+	}
+	known := false
+	for _, v := range verbs.Verbs {
+		known = known || v.Verb == "set-agent-session"
+	}
+	if !known {
+		return hookReportResult{}, errors.New("the running daemon predates set-agent-session, so the session was not reported. It works once the daemon restarts")
+	}
+	params := map[string]any{
+		"session":          sess,
+		"window":           window,
+		"harness":          harness,
+		"agent_session_id": sessionID,
+	}
+	if harnessPID > 1 {
+		params["harness_pid"] = harnessPID
+	}
+	raw, err = client.Call("set-agent-session", params)
+	if err != nil {
+		return hookReportResult{}, err
+	}
+	var res hookReportResult
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return hookReportResult{}, err
+	}
+	return res, nil
 }
 
 func firstNonEmptyString(vals ...string) string {

@@ -1,0 +1,28 @@
+[
+  {
+    "name": "session.created",
+    "payload": {"hook_event_name": "session.created", "session_id": "ses_k1"},
+    "want": {"state": "idle", "agent_session_id": "ses_k1"}
+  },
+  {
+    "name": "chat.message",
+    "payload": {"hook_event_name": "chat.message", "session_id": "ses_k1"},
+    "want": {"state": "working", "agent_session_id": "ses_k1"}
+  },
+  {
+    "name": "permission.asked",
+    "payload": {"hook_event_name": "permission.asked", "session_id": "ses_k1", "title": "bash: make"},
+    "want": {"state": "needs_input", "kind": "approval", "message": "approve bash: make", "agent_session_id": "ses_k1"}
+  },
+  {
+    "name": "session.idle",
+    "payload": {"hook_event_name": "session.idle", "session_id": "ses_k1"},
+    "want": {"state": "done", "agent_session_id": "ses_k1"}
+  },
+  {
+    "name": "TUIOS_AGENT naming Kilo itself",
+    "env": {"TUIOS_AGENT": "kilo"},
+    "payload": {"hook_event_name": "session.idle", "session_id": "ses_k1"},
+    "want": {"state": "done", "agent_session_id": "ses_k1"}
+  }
+]

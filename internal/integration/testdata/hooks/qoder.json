@@ -1,0 +1,12 @@
+[
+  {
+    "name": "SessionStart",
+    "payload": {"hook_event_name": "SessionStart", "session_id": "qd-1", "cwd": "/src"},
+    "want": {"session_only": true, "agent_session_id": "qd-1"}
+  },
+  {
+    "name": "Notification is left to the screen rules",
+    "payload": {"hook_event_name": "Notification", "session_id": "qd-1", "message": "needs approval"},
+    "skip": "event not mapped"
+  }
+]

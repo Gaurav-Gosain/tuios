@@ -1,0 +1,17 @@
+[
+  {
+    "name": "PreInvocation",
+    "payload": {"hook_event_name": "PreInvocation", "conversationId": "ag-1", "transcriptPath": "/home/u/.gemini/antigravity-cli/ag-1.jsonl"},
+    "want": {"session_only": true, "agent_session_id": "ag-1"}
+  },
+  {
+    "name": "PreInvocation with no event name",
+    "payload": {"conversationId": "ag-2"},
+    "want": {"session_only": true, "agent_session_id": "ag-2"}
+  },
+  {
+    "name": "no conversation",
+    "payload": {"hook_event_name": "PreInvocation"},
+    "skip": "names no session"
+  }
+]

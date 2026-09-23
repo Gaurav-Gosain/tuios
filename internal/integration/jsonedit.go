@@ -278,7 +278,11 @@ func joinArray(elems []json.RawMessage) json.RawMessage {
 //
 // It returns the new document and whether it differs from the old one, so a
 // caller writes nothing when nothing changed: installing twice is a no-op.
-func editHooks(doc []byte, events []HookEvent, command string, install bool) ([]byte, bool, error) {
+//
+// matcher, when not empty, is written on each managed group. Qwen Code and
+// Qoder CLI match every tool with "*"; the other harnesses take a group with
+// no matcher as matching everything.
+func editHooks(doc []byte, events []HookEvent, command string, install bool, matcher string) ([]byte, bool, error) {
 	root, err := parseObject(doc)
 	if err != nil {
 		return nil, false, err
@@ -321,9 +325,13 @@ func editHooks(doc []byte, events []HookEvent, command string, install bool) ([]
 	}
 	if install {
 		for _, ev := range events {
-			group, err := marshalPlain(map[string]any{
+			g := map[string]any{
 				"hooks": []map[string]any{{"type": "command", "command": command, "timeout": ev.Timeout}},
-			})
+			}
+			if matcher != "" {
+				g["matcher"] = matcher
+			}
+			group, err := marshalPlain(g)
 			if err != nil {
 				return nil, false, err
 			}

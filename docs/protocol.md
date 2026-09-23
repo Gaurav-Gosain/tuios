@@ -193,6 +193,19 @@ agent in the middle of a long tool call looks the same.
   kind is. `get-agent-state` also gains `ready`, with the same
   meaning as in `list-agents`.
 
+**`agent_session_id` can change without a state report.** The new
+`set-agent-session` verb writes the window's `agent_session_id`, which
+`get-agent-state` and `list-agents` return, without touching the state, its
+source or `harness_id`. Before it, the field changed only with a
+`set-agent-state` report. A consumer that read a new id as a sign of a new
+state report should read the state fields instead. The ten session-only
+integrations (see [Agent state](AGENT_STATE.md#harness-integrations)) send it,
+so a pane running one of them now carries an id while its state comes from
+screen rules. Separately, the daemon forgets the harness pid a window's id was
+reported with when the detector sees the agent leave the pane. `set-agent-state`
+reads that pid only while a report holds the pane mid-turn, which the agent
+leaving has already ended, so its answers are unchanged.
+
 **A prompt is pasted and submitted with a carriage return.** `ask-agent` and
 `fan` used to write the text followed by a line feed. Claude Code and Codex
 submit on a carriage return, which is what the Enter key sends, and several
