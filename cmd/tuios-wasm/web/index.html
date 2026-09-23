@@ -62,12 +62,22 @@ window.tuiosTimings = {};
 const mark = (name) => { if (!(name in tuiosTimings)) tuiosTimings[name] = Math.round(performance.now() - t0); };
 
 // A tiny track to prove step detection. Each step names the event that
-// completes it; the real site would load tracks from data.
+// completes it; the real site would load tracks from data. Every step has to
+// change the screen visibly, so a step whose key would otherwise change
+// nothing sets the scene first in start, which runs when the step becomes
+// current.
 const steps = [
   { html: 'Press <kbd>n</kbd> to open a terminal window', done: (e) => e.type === 'window.open' },
   { html: 'Press <kbd>i</kbd> to type in it, then run <kbd>ls</kbd>', done: (e) => e.type === 'shell.command' && e.data.command === 'ls' },
   { html: 'Open another: <kbd>Ctrl+B</kbd> then <kbd>c</kbd>', done: (e) => e.type === 'window.open' && e.state.totalWindows >= 2 },
-  { html: 'Float or tile them: <kbd>Ctrl+B</kbd> then <kbd>Space</kbd>', done: (e) => e.type === 'tiling' },
+  {
+    // tuios starts tiled, so the page turns tiling off and spreads the
+    // windows into an overlapping cascade. Tiling them again then snaps them
+    // into a layout. The wait lets the new window finish opening first.
+    html: 'Tile them: <kbd>Ctrl+B</kbd> then <kbd>Space</kbd>',
+    start: () => setTimeout(() => tuios.command('cascade'), 900),
+    done: (e) => e.type === 'tiling' && e.data.to === true,
+  },
   { html: 'Workspace 2: <kbd>Ctrl+B</kbd> <kbd>w</kbd> <kbd>2</kbd>', done: (e) => e.type === 'workspace' && e.data.to === 2 },
 ];
 let current = 0;
@@ -75,6 +85,10 @@ const list = document.getElementById('steps');
 function renderSteps() {
   list.innerHTML = steps.map((s, i) =>
     `<li class="${i < current ? 'done' : i === current ? 'current' : ''}">${s.html}</li>`).join('');
+}
+function startStep() {
+  const s = steps[current];
+  if (s && s.start && window.tuios) s.start();
 }
 renderSteps();
 
@@ -89,6 +103,7 @@ function onEvent(e) {
     current++;
     renderSteps();
     celebrate(current === steps.length);
+    startStep();
   }
 }
 

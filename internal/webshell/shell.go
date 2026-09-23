@@ -141,7 +141,7 @@ func (s *shell) highlighted() string {
 		return text
 	}
 	colour := red
-	if _, ok := programs[word]; ok || builtins[word] {
+	if runnable(word) {
 		colour = green
 	}
 	if rest != "" || strings.HasSuffix(text, " ") {
@@ -149,8 +149,6 @@ func (s *shell) highlighted() string {
 	}
 	return colour + word + reset
 }
-
-var builtins = map[string]bool{"cd": true, "pwd": true, "ls": true, "cat": true, "clear": true, "exit": true, "history": true, "touch": true, "mkdir": true, "rm": true}
 
 // feed handles one chunk of input and reports whether the shell should exit.
 func (s *shell) feed(chunk []byte) bool {
@@ -329,12 +327,7 @@ func (s *shell) complete() {
 	word := text[space+1:]
 	var candidates []string
 	if space < 0 {
-		for name := range programs {
-			candidates = append(candidates, name)
-		}
-		for name := range builtins {
-			candidates = append(candidates, name)
-		}
+		candidates = commandNames()
 	} else {
 		dir, prefix := s.cwd, word
 		if k := strings.LastIndexByte(word, '/'); k >= 0 {
@@ -410,87 +403,160 @@ func (s *shell) run(line string) bool {
 	name := args[0]
 	s.t.Emit("shell.command", map[string]string{"command": name, "line": line, "cwd": s.cwd})
 	s.status = 0
-	switch name {
-	case "exit", "logout":
-		return true
-	case "cd":
-		target := resolve(s.cwd, argOr(args, 1, "~"))
-		if !isDir(target) {
-			s.fail("cd: no such directory: " + argOr(args, 1, ""))
-			return false
-		}
-		s.cwd = target
-		s.t.Emit("shell.cwd", map[string]string{"cwd": s.cwd})
-		// OSC 7 tells tuios the directory, the way a configured real shell does.
-		s.t.Print("\x1b]7;file://tuios" + s.cwd + "\x1b\\")
-	case "pwd":
-		s.t.Print(s.cwd + "\r\n")
-	case "ls", "ll", "la":
-		s.ls(args[1:], name != "ls")
-	case "cat", "less", "more", "bat":
-		if len(args) < 2 {
-			s.fail(name + ": which file? Try " + bold + "cat README.md" + reset)
-			return false
-		}
-		for _, a := range args[1:] {
-			p := resolve(s.cwd, a)
-			content, ok := readFile(p)
-			if !ok {
-				if isDir(p) {
-					s.fail(name + ": " + a + ": is a directory")
-				} else {
-					s.fail(name + ": " + a + ": no such file")
-				}
-				continue
-			}
-			s.t.Print(strings.ReplaceAll(content, "\n", "\r\n"))
-		}
-	case "clear":
-		s.t.Print("\x1b[H\x1b[2J\x1b[3J")
-	case "history":
-		for i, h := range s.history {
-			s.t.Printf("%s%4d%s  %s\r\n", dim, i+1, reset, h)
-		}
-	case "touch":
-		for _, a := range args[1:] {
-			p := resolve(s.cwd, a)
-			if _, ok := readFile(p); !ok && !writeFile(p, "", false) {
-				s.fail("touch: cannot create " + a)
-			}
-		}
-	case "mkdir":
-		for _, a := range args[1:] {
-			if !mkdir(resolve(s.cwd, a)) {
-				s.fail("mkdir: cannot create " + a)
-			}
-		}
-	case "rm":
-		for _, a := range args[1:] {
-			if !remove(resolve(s.cwd, a)) {
-				s.fail("rm: cannot remove " + a)
-			}
-		}
-	case "echo":
-		// Redirection is the one piece of shell syntax worth faking.
-		if k := strings.Index(line, ">"); k >= 0 {
-			appendTo := strings.HasPrefix(line[k:], ">>")
-			target := strings.TrimSpace(strings.TrimLeft(line[k:], ">"))
-			text := strings.Join(splitArgs(line[:k])[1:], " ") + "\n"
-			if target == "" || !writeFile(resolve(s.cwd, target), text, appendTo) {
-				s.fail("echo: cannot write " + target)
-			}
-			return false
-		}
-		s.status = cmdEcho(s.t, args[1:])
-	default:
-		prog, ok := programs[name]
-		if !ok || name == "sh" {
-			s.fail(name + ": command not found. Type " + bold + "help" + reset + " to see what is here.")
-			s.status = 127
-			return false
-		}
-		s.status = prog(s.t, args[1:])
+	if b, ok := builtins[name]; ok {
+		return b(s, args, line)
 	}
+	prog, ok := programs[name]
+	if !ok || !runnable(name) {
+		s.fail(name + ": command not found. Type " + bold + "help" + reset + " to see what is here.")
+		s.status = 127
+		return false
+	}
+	s.status = prog(s.t, args[1:])
+	return false
+}
+
+// builtin is a command that needs the shell's own state, such as the current
+// directory or the history. args[0] is the name it was called by. It reports
+// whether the shell should exit.
+type builtin func(s *shell, args []string, line string) bool
+
+// builtins are the commands run handles itself, aliases included. Together
+// with programs they are the one table of what the shell runs: run dispatches
+// from it, and the highlighter and completion read it through runnable, so a
+// command that runs is never drawn as unknown.
+var builtins map[string]builtin
+
+func init() {
+	exit := func(*shell, []string, string) bool { return true }
+	ls := func(s *shell, args []string, _ string) bool {
+		s.ls(args[1:], args[0] != "ls")
+		return false
+	}
+	cat := func(s *shell, args []string, _ string) bool {
+		s.cat(args[0], args[1:])
+		return false
+	}
+	builtins = map[string]builtin{
+		"exit":   exit,
+		"logout": exit,
+		"cd":     (*shell).cd,
+		"pwd": func(s *shell, _ []string, _ string) bool {
+			s.t.Print(s.cwd + "\r\n")
+			return false
+		},
+		"ls": ls, "ll": ls, "la": ls,
+		"cat": cat, "less": cat, "more": cat, "bat": cat,
+		"clear": func(s *shell, _ []string, _ string) bool {
+			s.t.Print("\x1b[H\x1b[2J\x1b[3J")
+			return false
+		},
+		"history": func(s *shell, _ []string, _ string) bool {
+			for i, h := range s.history {
+				s.t.Printf("%s%4d%s  %s\r\n", dim, i+1, reset, h)
+			}
+			return false
+		},
+		"touch": func(s *shell, args []string, _ string) bool {
+			for _, a := range args[1:] {
+				p := resolve(s.cwd, a)
+				if _, ok := readFile(p); !ok && !writeFile(p, "", false) {
+					s.fail("touch: cannot create " + a)
+				}
+			}
+			return false
+		},
+		"mkdir": func(s *shell, args []string, _ string) bool {
+			for _, a := range args[1:] {
+				if !mkdir(resolve(s.cwd, a)) {
+					s.fail("mkdir: cannot create " + a)
+				}
+			}
+			return false
+		},
+		"rm": func(s *shell, args []string, _ string) bool {
+			for _, a := range args[1:] {
+				if !remove(resolve(s.cwd, a)) {
+					s.fail("rm: cannot remove " + a)
+				}
+			}
+			return false
+		},
+		"echo": (*shell).echo,
+	}
+}
+
+// runnable reports whether the shell runs name at the prompt. sh is in
+// programs so a pane can run it as its process, but typing it at the prompt is
+// not supported, so it is not runnable here.
+func runnable(name string) bool {
+	if _, ok := builtins[name]; ok {
+		return true
+	}
+	_, ok := programs[name]
+	return ok && name != "sh"
+}
+
+// commandNames lists every name runnable accepts.
+func commandNames() []string {
+	var names []string
+	for name := range builtins {
+		names = append(names, name)
+	}
+	for name := range programs {
+		if runnable(name) {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+func (s *shell) cd(args []string, _ string) bool {
+	target := resolve(s.cwd, argOr(args, 1, "~"))
+	if !isDir(target) {
+		s.fail("cd: no such directory: " + argOr(args, 1, ""))
+		return false
+	}
+	s.cwd = target
+	s.t.Emit("shell.cwd", map[string]string{"cwd": s.cwd})
+	// OSC 7 tells tuios the directory, the way a configured real shell does.
+	s.t.Print("\x1b]7;file://tuios" + s.cwd + "\x1b\\")
+	return false
+}
+
+func (s *shell) cat(name string, files []string) {
+	if len(files) == 0 {
+		s.fail(name + ": which file? Try " + bold + "cat README.md" + reset)
+		return
+	}
+	for _, a := range files {
+		p := resolve(s.cwd, a)
+		content, ok := readFile(p)
+		if !ok {
+			if isDir(p) {
+				s.fail(name + ": " + a + ": is a directory")
+			} else {
+				s.fail(name + ": " + a + ": no such file")
+			}
+			continue
+		}
+		s.t.Print(strings.ReplaceAll(content, "\n", "\r\n"))
+	}
+}
+
+func (s *shell) echo(args []string, line string) bool {
+	// Redirection is the one piece of shell syntax worth faking.
+	if k := strings.Index(line, ">"); k >= 0 {
+		appendTo := strings.HasPrefix(line[k:], ">>")
+		target := strings.TrimSpace(strings.TrimLeft(line[k:], ">"))
+		text := strings.Join(splitArgs(line[:k])[1:], " ") + "\n"
+		if target == "" || !writeFile(resolve(s.cwd, target), text, appendTo) {
+			s.fail("echo: cannot write " + target)
+		}
+		return false
+	}
+	s.status = cmdEcho(s.t, args[1:])
 	return false
 }
 

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -11,7 +12,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
+	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
 // snapshot is the slice of app state a guided tour checks steps against. It
@@ -288,6 +291,8 @@ func (o *observed) runCommand(c commandMsg) tea.Cmd {
 		} else {
 			_ = o.OS.DisableTiling()
 		}
+	case "cascade":
+		o.cascade()
 	case "workspace":
 		if n, err := strconv.Atoi(arg(0)); err == nil {
 			_ = o.OS.SwitchWorkspace(n)
@@ -305,6 +310,48 @@ func (o *observed) runCommand(c commandMsg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// cascade turns tiling off and slides the windows on the current workspace
+// into an overlapping diagonal, back to front in their stacking order, so the
+// focused window ends on top at the bottom right. It sets the scene for the
+// tiling step: turning tiling off alone leaves every window where the tiler
+// put it, and turning it on again would then change nothing on screen.
+func (o *observed) cascade() {
+	m := o.OS
+	_ = m.DisableTiling()
+
+	var wins []*terminal.Window
+	for _, w := range m.Windows {
+		if w != nil && w.Workspace == m.CurrentWorkspace && !w.Minimized {
+			wins = append(wins, w)
+		}
+	}
+	if len(wins) == 0 {
+		return
+	}
+	sort.SliceStable(wins, func(i, j int) bool { return wins[i].Z < wins[j].Z })
+
+	left, top := m.GetLeftMargin(), m.GetTopMargin()
+	areaW, areaH := m.GetContentWidth(), m.GetUsableHeight()
+	width, height := areaW*3/5, areaH*3/5
+	// Spread the windows over the free space, with a small margin, so each
+	// one shows its title bar and a corner of the window under it.
+	stepX, stepY := 0, 0
+	if n := len(wins) - 1; n > 0 {
+		stepX = (areaW - width - 4) / n
+		stepY = (areaH - height - 2) / n
+	}
+	dur := m.Settings.GetAnimationDuration()
+	for i, w := range wins {
+		m.CancelSnapAnimation(w)
+		x, y := left+2+i*stepX, top+1+i*stepY
+		if anim := ui.NewSnapAnimation(w, x, y, width, height, dur); anim != nil {
+			m.Animations = append(m.Animations, anim)
+		}
+		w.InvalidateCache()
+	}
+	m.MarkAllDirty()
 }
 
 // celebrate runs the in-app confetti burst. Each argument is one of:

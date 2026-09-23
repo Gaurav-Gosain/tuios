@@ -98,3 +98,59 @@ func TestTopQuits(t *testing.T) {
 	readUntil(t, p, "\x1b[?1049l")
 	_ = p.Close()
 }
+
+// TestRunnableCommandsHighlightAsValid checks that the highlighter agrees with
+// the executor: every name the shell runs, aliases included, is drawn green,
+// and a name it does not run is drawn red.
+func TestRunnableCommandsHighlightAsValid(t *testing.T) {
+	names := commandNames()
+	// The aliases that were once drawn red although they ran. They are listed
+	// by hand so a change that drops one from the table fails here too.
+	for _, alias := range []string{"ll", "la", "logout", "less", "more", "bat", "htop", "btop", "cmatrix", "claude", "vi"} {
+		if !runnable(alias) {
+			t.Errorf("%s is not runnable", alias)
+		}
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			for _, line := range []string{name, name + " ", name + " arg"} {
+				s := &shell{line: []rune(line)}
+				if got := s.highlighted(); !strings.HasPrefix(got, green+name+reset) {
+					t.Errorf("highlighted(%q) = %q, want the command in green", line, got)
+				}
+			}
+		})
+	}
+	for _, name := range []string{"nope", "sh", "l"} {
+		s := &shell{line: []rune(name)}
+		if got := s.highlighted(); !strings.HasPrefix(got, red+name+reset) {
+			t.Errorf("highlighted(%q) = %q, want the command in red", name, got)
+		}
+	}
+}
+
+// TestRunnableCommandsAreFound checks the other direction: nothing the
+// highlighter draws green gets "command not found" when it runs. The
+// fullscreen programs are left out because they wait for a key.
+func TestRunnableCommandsAreFound(t *testing.T) {
+	skip := map[string]bool{"top": true, "htop": true, "btop": true, "rain": true, "cmatrix": true, "agent": true, "claude": true, "exit": true, "logout": true}
+	for _, name := range commandNames() {
+		if skip[name] {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			p := NewPty(80, 24)
+			if err := p.Start(exec.Command("sh")); err != nil {
+				t.Fatal(err)
+			}
+			defer p.Close()
+			readUntil(t, p, "❯")
+			// echo collapses the double space, so the marker only matches
+			// the command's output and never the echoed input line.
+			_, _ = p.Write([]byte(name + "\recho end  mark\r"))
+			if out := readUntil(t, p, "end mark\r\n"); strings.Contains(out, "command not found") {
+				t.Errorf("%s: %q", name, out)
+			}
+		})
+	}
+}
