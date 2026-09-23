@@ -892,7 +892,15 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 		// Mail waiting here for the machine is said first, in words: it is
 		// the one thing on the row that will change when the link is back.
 		if node.HostQueued > 0 {
-			label = strconv.Itoa(node.HostQueued) + " queued, " + label
+			queued := strconv.Itoa(node.HostQueued) + " queued"
+			label = queued + ", " + label
+			// On a narrow rail, the shipped 24 columns among them, the count
+			// goes on alone rather than taking the machine's name: a header
+			// that names no machine heads nothing.
+			nameW := min(lipgloss.Width(printableTitle(node.Title)), sidebarHostTagFloor)
+			if sidebarNameAvail(cw, lipgloss.Width(label)) < nameW {
+				label = queued
+			}
 		}
 		right = sidebarStyle(rowBg, pal.FgMute).Render(label)
 		rightW = lipgloss.Width(label)

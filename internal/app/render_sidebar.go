@@ -436,6 +436,9 @@ type sidebarTerminalEntry struct {
 	// session can hold panes from several machines, and which one a pane is on
 	// decides what a command typed into it does, so the row says it.
 	Host string
+	// HostLink is the state of the link to Host when it is not up, such as
+	// "reconnecting", and empty otherwise. See sidebarTerminalHostLabel.
+	HostLink string
 	// WindowIndex is the index into m.Windows, or -1 for a pane of a session
 	// this client is not attached to.
 	WindowIndex int
@@ -1958,8 +1961,8 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 			WindowIndex: -1,
 		}
 		// A pane whose link is lost says so beside its machine, in words.
-		if win.Host != "" && win.HostLink != "" {
-			e.Host = win.Host + " " + win.HostLink
+		if win.Host != "" {
+			e.HostLink = win.HostLink
 		}
 		if node.IsCurrent {
 			e.WindowIndex = m.windowIndexByID(win.ID)
@@ -2397,15 +2400,16 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 	// command typed into it does, so when only one of them fits it is this one.
 	// They are shown together when there is room for both.
 	right, rightW := "", 0
+	host := sidebarTerminalHostLabel(e, cw)
 	switch {
-	case e.Host != "" && e.Tag != "" && sidebarNameAvail(cw, lipgloss.Width(e.Host+" "+e.Tag)) >= sidebarHostTagFloor:
-		label := e.Host + " " + e.Tag
-		right = sidebarStyle(rowBg, pal.AccentBright).Render(e.Host) +
+	case host != "" && e.Tag != "" && sidebarNameAvail(cw, lipgloss.Width(host+" "+e.Tag)) >= sidebarHostTagFloor:
+		label := host + " " + e.Tag
+		right = sidebarStyle(rowBg, pal.AccentBright).Render(host) +
 			sidebarStyle(rowBg, pal.FgMute).Render(" "+e.Tag)
 		rightW = lipgloss.Width(label)
-	case e.Host != "":
-		right = sidebarStyle(rowBg, pal.AccentBright).Render(e.Host)
-		rightW = lipgloss.Width(e.Host)
+	case host != "":
+		right = sidebarStyle(rowBg, pal.AccentBright).Render(host)
+		rightW = lipgloss.Width(host)
 	case e.Tag != "":
 		right = sidebarStyle(rowBg, pal.FgMute).Render(e.Tag)
 		rightW = lipgloss.Width(e.Tag)
@@ -2428,6 +2432,23 @@ func (m *OS) sidebarTerminalRow(e sidebarTerminalEntry, cw int, pal overlay.Pale
 	name := sidebarStyle(rowBg, fg).Bold(sidebarAttention(e.State)).
 		Render(m.sidebarMarquee("t:"+e.WindowID, title, sidebarNameAvail(cw, rightW), st.lit()))
 	return sidebarComposeRow(gutter, sidebarGlyph(e.State, e.DoneSeen, rowBg, pal, &m.Settings), name, right, cw, rowBg)
+}
+
+// sidebarTerminalHostLabel is what a pane row says about its machine: the
+// machine, and beside it the link's state while the link is not up. When both
+// do not fit with sidebarHostTagFloor cells of the pane's own name, as on the
+// shipped 24 column rail, the link's state goes on alone: it says the screen
+// has stopped, which matters more than which machine it stopped on, and the
+// pane's frame still names the machine.
+func sidebarTerminalHostLabel(e sidebarTerminalEntry, cw int) string {
+	if e.Host == "" || e.HostLink == "" {
+		return e.Host
+	}
+	full := e.Host + " " + e.HostLink
+	if sidebarNameAvail(cw, lipgloss.Width(full)) >= sidebarHostTagFloor {
+		return full
+	}
+	return e.HostLink
 }
 
 // sidebarHostTagFloor is how much of a pane's own name has to survive before
