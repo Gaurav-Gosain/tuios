@@ -223,6 +223,13 @@ func TestAFloatingPaneStaysUnderTheWhichKeyOverlay(t *testing.T) {
 	if err := term.WaitForText("Toggle tiling", uiTimeout); err != nil {
 		t.Fatalf("the which-key overlay never opened: %v\n%s", err, term.Snapshot())
 	}
+	// "Toggle tiling" is half way down the overlay, so seeing it says the frame
+	// has started to arrive, not that it has finished. On macOS the rows below
+	// it were read before they were written, and the float showed through a
+	// frame that had not yet covered it. The frame is let settle first.
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled after the which-key overlay opened: %v\n%s", err, term.Snapshot())
+	}
 	// The overlay is taller than the float, so its rows run through the
 	// float's box. None of those rows may still show the float's paint.
 	s := term.Screen()

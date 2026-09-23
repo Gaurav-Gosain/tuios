@@ -135,14 +135,19 @@ func TestKeybindManagerShowsTheGuestClash(t *testing.T) {
 		t.Fatalf("guests tab never named tmux: %v\n%s", err, term.Snapshot())
 	}
 
-	screen := term.Screen().Text()
-	t.Logf("keybind manager, Guests tab:\n%s", term.Snapshot())
-
 	// The evidence tier has to be on screen. A curated list presented as
 	// detection is the one failure mode this surface must not have.
-	if !strings.Contains(strings.ToLower(screen), "program list") {
-		t.Errorf("the guests tab must say its findings come from the program list, not detection\n%s", term.Snapshot())
+	//
+	// Waited for rather than read once: the rows naming tmux are drawn above
+	// the detail block that carries this sentence, and a read taken the moment
+	// tmux appears can land before the rest of the frame. On macOS it did, half
+	// the time, on a panel that was correct a moment later.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(strings.ToLower(s.Text()), "program list")
+	}, uiTimeout); err != nil {
+		t.Errorf("the guests tab must say its findings come from the program list, not detection: %v\n%s", err, term.Snapshot())
 	}
+	t.Logf("keybind manager, Guests tab:\n%s", term.Snapshot())
 }
 
 // The recorder swallows the key it is armed for, including keys that would
