@@ -167,7 +167,9 @@ func (w *Window) outputWriter() {
 		return
 	}
 
-	batch := make([]byte, 0, maxBatch)
+	// Grown by the first output and kept after that. Made up front it was
+	// 256 KiB for every pane, including the ones that never print.
+	var batch []byte
 
 	for {
 		var epoch uint64

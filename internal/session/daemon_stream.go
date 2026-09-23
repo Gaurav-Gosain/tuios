@@ -42,7 +42,10 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 	}()
 
 	const maxBatch = 256 * 1024
-	batch := make([]byte, 0, maxBatch)
+	// Grown by the first output and kept after that. Made up front it was
+	// 256 KiB for every client and pane pair, including panes that never
+	// print.
+	var batch []byte
 	sub := pty.subscriberFor(cs.clientID)
 	// took accounts for a chunk taken off the stream, so broadcast can tell
 	// how much this client still holds.
