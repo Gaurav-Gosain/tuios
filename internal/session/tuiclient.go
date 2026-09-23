@@ -646,7 +646,9 @@ func (c *TUIClient) ClosePTY(ptyID string) error {
 }
 
 // SubscribePTY subscribes to PTY output and registers a handler.
-// The handler receives raw byte streams (MsgPTYOutput). fromSeq is the stream
+// The handler receives raw byte streams (MsgPTYOutput), each call in a slice
+// of its own that the client never touches again, so the handler may keep it
+// without copying (terminal.Window.WriteOutputAsync does). fromSeq is the stream
 // position the caller's emulator has been restored to, so the daemon replays
 // only what came after it; zero leaves the resume position to the daemon.
 // fromSnapshot tells the daemon the emulator was just laid down from an

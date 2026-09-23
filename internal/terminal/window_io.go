@@ -521,6 +521,9 @@ func (w *Window) WriteOutput(data []byte) {
 // WriteOutputAsync writes output data to the terminal emulator without blocking.
 // Used in daemon mode to process PTY output received from the daemon.
 // Data is queued to a channel and written in order by the outputWriter goroutine.
+//
+// The window takes ownership of data: the caller must not write to it after
+// the call, because the bytes are read later on the writer goroutine.
 func (w *Window) WriteOutputAsync(data []byte) {
 	// outputChan is set once at construction and never nilled, so reading it
 	// here is safe. w.Terminal must NOT be read: Close() nils it under ioMu,
@@ -537,12 +540,12 @@ func (w *Window) WriteOutputAsync(data []byte) {
 	if w.closed.Load() {
 		return
 	}
-	// Copy data since the caller's buffer may be reused
-	dataCopy := make([]byte, len(data))
-	copy(dataCopy, data)
-	chunk := outputChunk{data: dataCopy, epoch: w.outputEpoch.Load()}
+	// data is queued as it is, not copied. The daemon client hands each frame
+	// its own freshly read payload and never writes to it again, and a copy
+	// here was about 30% of all bytes the client allocated during a flood.
+	chunk := outputChunk{data: data, epoch: w.outputEpoch.Load()}
 
-	if !w.waitForQueueRoom(int64(len(dataCopy))) {
+	if !w.waitForQueueRoom(int64(len(data))) {
 		return
 	}
 	// Queue to channel, non-blocking with buffered channel
@@ -550,7 +553,7 @@ func (w *Window) WriteOutputAsync(data []byte) {
 	case <-w.outputDone:
 		// Writer goroutine has stopped, drop data
 	case w.outputChan <- chunk:
-		w.queuedBytes.Add(int64(len(dataCopy)))
+		w.queuedBytes.Add(int64(len(data)))
 	default:
 		// Channel full: drop data (shouldn't happen with large buffer)
 	}

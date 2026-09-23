@@ -92,9 +92,12 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 			// so it ends the batch in front of it and is sent on its own.
 			// Coalescing it into the bytes either side would put the client's
 			// emulator at the wrong width for one of them.
-			var resize *ptyChunk
+			//
+			// resize is a value, not a pointer: taking the address of the
+			// receive variables made them escape, one allocation per chunk.
+			var resize ptyChunk
 			if chunk.isResize() {
-				resize = &chunk
+				resize = chunk
 				batch = batch[:0]
 			} else {
 				batch = append(batch[:0], chunk.data...)
@@ -106,7 +109,7 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 						}
 						took(more)
 						if more.isResize() {
-							resize = &more
+							resize = more
 							goto send
 						}
 						batch = append(batch, more.data...)
@@ -135,7 +138,7 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, outputCh <-chan ptyChu
 					return
 				}
 			}
-			if resize != nil {
+			if resize.isResize() {
 				if err := d.sendMessage(cs, MsgPTYResized, &PTYResizedPayload{
 					PTYID:  pty.ID,
 					Width:  resize.width,
