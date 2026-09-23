@@ -4,7 +4,7 @@ package ptyspawn
 
 import "github.com/charmbracelet/x/xpty"
 
-// newPty allocates a real pseudo-terminal from the kernel.
-func newPty(width, height int) (xpty.Pty, error) {
+// hostPty allocates a real pseudo-terminal from the kernel.
+func hostPty(width, height int) (xpty.Pty, error) {
 	return xpty.NewPty(width, height)
 }

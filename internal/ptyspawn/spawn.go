@@ -45,6 +45,22 @@ var StartProcess = func(p xpty.Pty, cmd *exec.Cmd) error {
 	return p.Start(cmd)
 }
 
+// NewGuestPty, when set, replaces the kernel pty with an in-memory one whose
+// Start runs a Go program in place of the command. The browser build sets it,
+// because there is no kernel pty and no process to exec there, and so do the
+// tests of that build, which run natively. Production code on a real machine
+// leaves it nil.
+var NewGuestPty func(width, height int) (xpty.Pty, error)
+
+// newPty allocates the pty a pane runs on: a guest one when NewGuestPty is
+// set, the kernel's otherwise.
+func newPty(width, height int) (xpty.Pty, error) {
+	if NewGuestPty != nil {
+		return NewGuestPty(width, height)
+	}
+	return hostPty(width, height)
+}
+
 // Spawn allocates a PTY of the given size, builds the command with build,
 // configures it to take that PTY as its controlling terminal, and starts it.
 //

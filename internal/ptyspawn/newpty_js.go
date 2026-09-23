@@ -9,17 +9,11 @@ import (
 	"github.com/charmbracelet/x/xpty"
 )
 
-// NewGuestPty makes the in-memory terminal a pane runs on in the browser
-// build, where there is no kernel pty and no process to exec. The pty it
-// returns runs a Go program in place of cmd when Spawn calls Start. The wasm
-// entry point sets it before the first pane opens.
-var NewGuestPty func(width, height int) (xpty.Pty, error)
-
-func newPty(width, height int) (xpty.Pty, error) {
-	if NewGuestPty == nil {
-		return nil, errors.New("no guest pty in this build")
-	}
-	return NewGuestPty(width, height)
+// hostPty has no kernel to ask in the browser build. Every pane there runs on
+// a guest pty, which the wasm entry point installs through NewGuestPty before
+// the first pane opens.
+func hostPty(_, _ int) (xpty.Pty, error) {
+	return nil, errors.New("no guest pty in this build")
 }
 
 // configureCommand is a no-op: the guest is not a process, so there is no
