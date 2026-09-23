@@ -116,6 +116,7 @@ var verbScopes = map[string]scopeKind{
 
 	"session-info":         scopeRead,
 	"list-windows":         scopeRead,
+	"get-window":           scopeRead,
 	"list-workspaces":      scopeRead,
 	"capture-pane":         scopeRead,
 	"get-agent-state":      scopeRead,

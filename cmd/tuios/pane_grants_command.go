@@ -25,9 +25,13 @@ Every pane holds grants:
   write    type into the panes of its own session, and leave mail there
   fan      write in its fan group, and start agents with fan and start-agent
   respond  answer another pane's prompt without the person
-  admin    everything else, as every pane could before grants existed
+  admin    everything else, as every pane could before grants existed, such
+           as run-command and attach
 
-admin implies read, write and fan, and never respond. A pane holds the grants
+admin implies read, write and fan, and never respond. A pane without admin
+types only into panes that hold nothing it does not, since what it types runs
+with the target's grants, and into a pane waiting on a prompt only with
+respond. A pane holds the grants
 it was started with (start-agent, fan and new-window take --grants), or else
 the default of [agents.permissions] in config.toml: admin under mode open,
 which is the default, and the grants list under mode strict.
@@ -63,7 +67,9 @@ default of [agents.permissions] again, which then follows the config.
 From outside every pane anything may be given. From inside a pane, a pane may
 change only its own grants unless it holds admin, and never give more than it
 holds, so a script can drop its own pane's grants before it starts an agent,
-and no agent can raise its own. The change applies to the pane's next call; the
+and no agent can raise its own. Nor can it by typing into a pane that holds
+more: a pane without admin types only into panes that hold nothing it does
+not. The change applies to the pane's next call; the
 TUIOS_PANE_GRANTS its process started with is not rewritten.`,
 		Example: `  # Let the reviewer pane only read
   tuios set-pane-grants -w reviewer --grants read

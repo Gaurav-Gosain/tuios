@@ -853,13 +853,32 @@ every call is answered exactly as before. What changes:
   config key; a verb that names no session gets the pane's own session, not
   the most recently active one; a subscription carries only the sessions the
   pane may read; and every client protocol message except the hello answers
-  an error, so such a pane cannot attach.
+  an error, so such a pane cannot attach or use `run-command`. The error for
+  the command message names `run-command` and points at `get-window`.
+- For a pane without `admin`, `send-text`, `send-keys`, `run` and
+  `ask-agent` on another pane answer `forbidden` when the target holds a
+  grant the caller does not, or when the target is on `needs_input` and the
+  caller does not hold `respond` (see [pane-grants](#pane-grants)). A call
+  with no window is pinned to the pane focused when it is checked.
+  `send-keys` from such a pane is written to the target's terminal even when
+  a client is attached, so its keys never reach the window manager. Calls
+  from outside every pane, and from a pane holding `admin`, are answered as
+  before.
+- `tuios get-window` reads with the new verb `get-window` instead of the
+  client protocol's `GetWindow` command, so a pane holding `read` may run it
+  on its own session. The verb answers as `GetWindow` did, from the attached
+  client when there is one, so the `--json` output keeps its shape; with no
+  client attached it gains the shell fields `list-windows` gives a window. A
+  window that matches nothing is now reported the way `list-windows` reports
+  it, with the available windows. Against a daemon from before the verb the
+  command falls back to `GetWindow`.
 - `restrict-connection` and pane grants share the code that fills in and
   checks a caller's session and window. A restricted connection is answered
   as it was; a refusal of a parameter that reaches every session now reads
   "and the connection is restricted to its own", the words it used before.
 
-The new verbs `pane-grants` and `set-pane-grants` change no old one.
+The new verbs `pane-grants`, `set-pane-grants` and `get-window` change no
+old one.
 
 ### list-verbs
 
@@ -1102,7 +1121,7 @@ What a restricted connection may call:
 |---|---|---|---|
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
 | across sessions | `list-sessions`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
-| read one session | `session-info`, `list-windows`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get` | session in reach | allowed |
+| read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get` | session in reach | allowed |
 | own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `ask-human` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
 | type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run` | session in reach | `forbidden` |
@@ -1147,10 +1166,10 @@ person configured) is held to nothing new.
 | Grant | Allows |
 |---|---|
 | `read` | Read the pane's own session and the sessions of its fan group (the reach `restrict-connection` calls `own`): listings, captures, agent state, waits, the event stream, mail and stash reads |
-| `write` | Type into the panes of its own session (`send-text`, `send-keys`, `ask-agent`, `run`) and leave mail and stashed files there |
+| `write` | Type into the panes of its own session (`send-text`, `send-keys`, `ask-agent`, `run`) that hold nothing it does not, and leave mail and stashed files there |
 | `fan` | What `write` allows, in the sessions of its fan group and the sessions it launched, and start agents with `fan` and `start-agent` |
-| `respond` | Answer an on-screen prompt with `respond`, without the person's `human_nonce`, on a pane it may write to |
-| `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, and the client protocol (attach). Implies `read`, `write` and `fan`, never `respond` |
+| `respond` | Answer an on-screen prompt with `respond`, without the person's `human_nonce`, on a pane in its reach, and type into a pane on `needs_input` |
+| `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, and the client protocol (attach, and `run-command`, which sends a client protocol message). Implies `read`, `write` and `fan`, never `respond` |
 
 Whatever it holds, a pane may call `hello`, `list-verbs`, `unsubscribe`,
 `restrict-connection`, `pane-grants` and `resolve-pane`, and report about
@@ -1168,6 +1187,26 @@ A pane can never hand out more than it holds. From a pane that does not hold
 `admin`, a launch that names no `grants` gives the new pane the caller's own,
 and a `grants` the caller does not hold is `forbidden`. `admin` cannot give
 `respond`. A link or a pane run for another machine cannot give `respond`.
+
+A pane cannot gain grants by typing either. What is typed into a pane runs
+with that pane's grants, so a pane without `admin` that calls `send-text`,
+`send-keys`, `run` or `ask-agent` on any pane but its own is also held to the
+target pane:
+
+- The target must hold nothing the caller does not, counting what `admin`
+  implies. Otherwise the call is `forbidden`, and the message names what the
+  target holds.
+- A target on `needs_input` is `forbidden` unless the caller holds `respond`,
+  since keys typed there answer its prompt. `ask-agent` without
+  `allow_blocked` answers `agent_blocked` first, as before.
+- A call that names no window is pinned to the pane focused when it is
+  checked, and both checks run again right before anything is written.
+- `send-keys` from such a pane is written to the target's terminal, never
+  routed through an attached client, where the prefix key drives the window
+  manager.
+
+`respond` is not held to the first rule: the `respond` grant is the person's
+consent to answer prompts on the panes in the pane's reach.
 
 How a connection is placed in a pane, strongest first:
 
@@ -1355,6 +1394,36 @@ A window whose process runs on another machine also has `host`. While the link
 to it is lost and the pane is being reattached, it has `host_link:
 "reconnecting"` and `host_link_until`, the unix time the far machine stops
 keeping the process (see [A pane that outlives its link](#a-pane-that-outlives-its-link)).
+
+### get-window
+
+Describe one window, as the client protocol's `GetWindow` command does. With
+a client attached the client answers, with its cursor and process fields;
+with none, the daemon answers with the window's `list-windows` entry. The
+window is resolved by the daemon either way, so a target that matches nothing
+is `window_not_found`. A client that does not answer in time is not waited on
+twice: the daemon's entry follows.
+
+Params: `session` and `window` (both optional; `window` omitted means the
+focused window).
+
+It is a read, like `list-windows`: a pane holding `read` may call it on its
+own session and its fan group, and a restricted connection on a session in
+reach. `tuios get-window` uses it.
+
+Request:
+
+```json
+{"verb": "get-window", "params": {"session": "work", "window": "build"}}
+```
+
+Response:
+
+```json
+{"result": {"type": "window", "window_id": "7e02...", "index": 1, "title": "zsh",
+ "display_name": "build", "workspace": 1, "focused": false, "minimized": false,
+ "agent_state": "idle", "width": 80, "height": 24, "pty_id": "4bff..."}}
+```
 
 ### new-window
 
@@ -2913,7 +2982,7 @@ the one before. The configuration is in
 | Capability | Verbs |
 | --- | --- |
 | none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
-| `list` | `list-*`, `session-info`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir` |
+| `list` | `list-*`, `session-info`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
 | `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `close-window`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway) |

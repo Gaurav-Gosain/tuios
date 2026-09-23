@@ -298,6 +298,9 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 		})
 	}
 	defer pty.runClaim.Store(false)
+	if verr := d.recheckTyping(cs, "run", sess, w.ID); verr != nil {
+		return nil, verr
+	}
 	facts = pty.ShellFacts()
 	if facts.PromptOnly {
 		return nil, promptMarksOnly(windowLabelFor(w), "Nothing was typed.")

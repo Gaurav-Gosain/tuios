@@ -931,7 +931,11 @@ says so. Use --theme to render in a palette by name instead.`,
 
 This allows you to control TUIOS remotely by executing tape commands.
 Use --list to see all available commands.
-Use --json to get machine-readable output for scripting.`,
+Use --json to get machine-readable output for scripting.
+
+From inside a pane this needs the admin grant (see 'tuios pane-grants'),
+which every pane holds under the default mode open. Prefer a verb where one
+exists: get-window and list-windows read windows with the read grant.`,
 		Example: `  # Create a new window
   tuios run-command NewWindow
 
@@ -2212,7 +2216,10 @@ Use --json for machine-readable output that can be used for scripting.`,
 		Long: `Get detailed information about a specific window.
 
 If no ID or name is provided, returns info about the focused window.
-Use --json for machine-readable output.`,
+Use --json for machine-readable output.
+
+It is a read: from inside a pane it needs only the read grant, on the pane's
+own session and its fan group.`,
 		Example: `  # Get focused window info
   tuios get-window
 
@@ -2226,7 +2233,7 @@ Use --json for machine-readable output.`,
   tuios get-window --json`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runCommandRendered(getWindowSession, "GetWindow", args, getWindowJSON, printWindowDetail)
+			return queryWindow(getWindowSession, args, getWindowJSON)
 		},
 	}
 	getWindowCmd.Flags().StringVarP(&getWindowSession, "session", "s", "", "Target session (default: most recently active)")

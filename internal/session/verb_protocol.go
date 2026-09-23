@@ -779,6 +779,17 @@ func init() {
 			examples:    []string{`{"id":1,"verb":"list-windows","params":{"session":"work"}}`},
 			handler:     (*Daemon).verbListWindows,
 		},
+		"get-window": {
+			description: "Describe one window, as the client protocol's GetWindow does: an attached client answers with its cursor and process fields, and with none attached the daemon answers with the window's list-windows entry. It is a read, which a pane holding read may call on its own session.",
+			params:      []verbParam{sessionParam, windowParam},
+			returns: []verbParam{
+				{Name: "window_id", Type: "string", Description: "Id of the window."},
+				{Name: "display_name", Type: "string", Description: "Its name as shown: the custom name, or the shell's title."},
+				{Name: "agent_state", Type: "string", Description: "Its agent state."},
+			},
+			examples: []string{`{"id":1,"verb":"get-window","params":{"session":"work"}}`},
+			handler:  (*Daemon).verbGetWindow,
+		},
 		"new-window": {
 			description: "Create a new window, optionally on a named workspace and in a named directory.",
 			params: []verbParam{

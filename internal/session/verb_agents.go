@@ -1055,6 +1055,11 @@ func (d *Daemon) askAgent(cs *connState, sess *Session, state *SessionState, tar
 			return nil, verr
 		}
 	}
+	// A pane without admin is checked against the target once more too. See
+	// holdTypingTarget.
+	if verr := d.recheckTyping(cs, "ask-agent", sess, target.ID); verr != nil {
+		return nil, verr
+	}
 	// Pasted and submitted with a carriage return, the way fan types its
 	// prompt. See prompt_submit.go. The gate reads the pane first, so it can
 	// tell afterwards whether the pane took the question. See prompt_gate.go.

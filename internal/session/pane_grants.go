@@ -24,12 +24,15 @@ import (
 //     (sessionInScope): listings, captures, agent state, waits, the event
 //     stream, mail and stash reads.
 //   - write: type into the panes of its own session and leave mail and
-//     stashed files there.
+//     stashed files there. A pane types only into panes that hold nothing it
+//     does not, since what it types runs with the target's grants, and not
+//     into a pane waiting on a prompt unless it holds respond
+//     (holdTypingTarget).
 //   - fan: what write does, in the sessions of its fan group and the ones it
 //     launched, and start agents with fan and start-agent.
 //   - respond: answer an on-screen prompt with respond, without the person's
-//     attach nonce, on a pane it may write to. Nothing gives it by default,
-//     and admin does not imply it.
+//     attach nonce, on a pane in its reach, and type into a pane waiting on a
+//     prompt. Nothing gives it by default, and admin does not imply it.
 //   - admin: everything else a pane could do before grants existed, which is
 //     every verb on every session, the listings across sessions, and the
 //     binary protocol (attach, input). It implies read, write and fan.
@@ -633,7 +636,143 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 	if pa.session == "" {
 		return nil, deny("the pane's session could not be found")
 	}
-	return d.holdToPane(verb, kind, params, pa.session, pa.window, "without the admin grant a pane reaches only its own", reach, deny)
+	out, verr := d.holdToPane(verb, kind, params, pa.session, pa.window, "without the admin grant a pane reaches only its own", reach, deny)
+	if verr != nil || !typingVerbs[verb] {
+		return out, verr
+	}
+	return d.holdTypingTarget(verb, pa, out, deny)
+}
+
+// typingVerbs are the verbs that type into one pane: what they type runs with
+// whatever the process in that pane may do, so the target pane is checked as
+// well as its session (holdTypingTarget). respond is not here: it answers a
+// prompt the target shows, and the respond grant is the person's consent to
+// that. fan and start-agent type only into the panes they start, which never
+// hold more than their caller (launchGrants).
+var typingVerbs = map[string]bool{
+	"send-text": true,
+	"send-keys": true,
+	"ask-agent": true,
+	"run":       true,
+}
+
+// holdTypingTarget holds a typing call from a pane without admin to the pane
+// it types into. The session check lets a pane type into its own session, but
+// a sibling pane there can hold more than the caller: a shell on the open
+// default holds admin, and text typed into it runs with admin. So the target
+// must hold nothing the caller does not (typingRefusal).
+//
+// The call's window is pinned to the id it resolves to now, so a focus change
+// between this check and the handler cannot send the text somewhere else. A
+// target that does not resolve is left for the handler to report.
+func (d *Daemon) holdTypingTarget(verb string, pa *paneAuth, params json.RawMessage, deny func(string) *verbError) (json.RawMessage, *verbError) {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(params, &m); err != nil || m == nil {
+		return params, nil
+	}
+	str := func(name string) string {
+		var s string
+		if raw, ok := m[name]; ok {
+			_ = json.Unmarshal(raw, &s)
+		}
+		return s
+	}
+	sess := d.findTargetSession(str("session"))
+	if sess == nil {
+		return params, nil
+	}
+	window := str("window")
+	if verb == "ask-agent" && (window == "" || window == AgentInboxHuman) {
+		// ask-agent needs a window, and human is an inbox, not a pane. The
+		// handler answers both without typing.
+		return params, nil
+	}
+	state := sess.GetState()
+	if window == "" {
+		id, err := focusedWindowID(state)
+		if err != nil {
+			return params, nil
+		}
+		window = id
+	}
+	idx, err := findWindowStateIndex(state.Windows, window)
+	if err != nil {
+		return params, nil
+	}
+	target := state.Windows[idx]
+	var allowBlocked bool
+	if raw, ok := m["allow_blocked"]; ok {
+		_ = json.Unmarshal(raw, &allowBlocked)
+	}
+	// ask-agent refuses a pane on needs_input itself, with agent_blocked, and
+	// checks again right before it types. Only allow_blocked takes it past.
+	blockedChecked := verb == "ask-agent" && !allowBlocked
+	if why := d.typingRefusal(pa, target, blockedChecked); why != "" {
+		return nil, deny(why)
+	}
+	raw, _ := json.Marshal(target.ID)
+	m["window"] = raw
+	out, err := json.Marshal(m)
+	if err != nil {
+		return nil, newVerbError(ErrVerbInternal, "could not encode params")
+	}
+	return out, nil
+}
+
+// typingRefusal says why the pane pa may not type into target, or "" when it
+// may. A pane may always type into itself: it could write to its own terminal
+// anyway. Into any other pane it may type only when that pane holds nothing
+// pa does not, and, unless blockedChecked says the verb checks this itself,
+// only when that pane is not waiting on a prompt or pa holds respond, since
+// keys typed into a prompt answer it.
+func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked bool) string {
+	if target.ID == pa.window {
+		return ""
+	}
+	held, _ := d.manager.grants.effective(target.ID)
+	if !pa.grants.Covers(held) {
+		return "window " + shortWindowID(target.ID) + " holds " + held.String() + ", more than this pane holds, and what is typed there runs with that. " +
+			"A pane types only into panes that hold nothing it does not"
+	}
+	if !blockedChecked && target.AgentState == AgentStateNeedsInput && !pa.grants.Has(GrantRespond) {
+		return "window " + shortWindowID(target.ID) + " is waiting on a prompt, and what is typed now would answer it, which needs the respond grant"
+	}
+	return ""
+}
+
+// recheckTyping repeats the target check right before a typing verb writes,
+// for the caller whose checked call this is: the target may have come to a
+// prompt, or been given more, since checkGrants ran. It returns nil for a
+// caller held to nothing new and for a pane holding admin.
+func (d *Daemon) recheckTyping(cs *connState, verb string, sess *Session, windowID string) *verbError {
+	if cs == nil {
+		return nil
+	}
+	pa := cs.paneView.Load()
+	if pa == nil || pa.grants.Has(GrantAdmin) {
+		return nil
+	}
+	target, ok := findWindowState(sess.GetState(), windowID)
+	if !ok {
+		return nil
+	}
+	if why := d.typingRefusal(pa, target, false); why != "" {
+		LogBasic("Pane %s (%s) refused %s: %s", shortWindowID(pa.window), pa.grants.String(), verb, why)
+		return grantForbidden(verb, pa, why)
+	}
+	return nil
+}
+
+// paneTypesRaw reports whether a send-keys from the caller on cs must go to
+// the target's terminal as bytes rather than through the attached client. The
+// client reads keys as the person's, so the prefix key there drives the window
+// manager: it opens, closes and focuses panes, which only admin may do.
+func paneTypesRaw(cs *connState) bool {
+	if cs == nil {
+		return false
+	}
+	pa := cs.paneView.Load()
+	return pa != nil && !pa.grants.Has(GrantAdmin)
 }
 
 // checkGrantMessage holds a binary protocol message from a pane to its
@@ -652,6 +791,12 @@ func (d *Daemon) checkGrantMessage(cs *connState, t MessageType) *verbError {
 		return nil
 	}
 	LogBasic("Pane %s (%s) refused binary message %d", shortWindowID(pa.window), pa.grants.String(), t)
+	if t == MsgExecuteCommand {
+		// tuios run-command sends this, and so did tuios get-window before
+		// the get-window verb. Name what the caller ran, not attach.
+		return grantForbidden("run-command", pa, "run-command runs a window-manager command through the client protocol, which needs the admin grant. "+
+			"To read one window, use tuios get-window or list-windows, which need read")
+	}
 	return grantForbidden("attach", pa, "the client protocol (attach, input, windows) needs the admin grant")
 }
 

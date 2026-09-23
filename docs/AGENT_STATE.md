@@ -2064,6 +2064,8 @@ proof, as before.
 | `dismiss-attention` from a pane, to empty the person's Inbox | Refused with `not_human`, even with a live nonce copied from the person's client: the nonce is checked the way a reply's is. |
 | `respond` from a pane, to approve its own tool call or another agent's | Refused with `not_human`, with or without a copied nonce, and with or without `respond_from_shell`, which only grants callers outside every pane. Nothing is pressed. Only a pane the person gave the `respond` grant may answer, and no pane can give itself that grant. |
 | `set-pane-grants` from a pane, to widen itself or another pane | Refused with `forbidden`: a pane may change only its own grants unless it holds `admin`, and never give more than it holds. `admin` cannot give `respond`. |
+| `send-text`, `send-keys`, `run` or `ask-agent` into a sibling pane that holds more, to have its shell run `tuios set-pane-grants` | Refused with `forbidden` for a pane without `admin`: a pane types only into panes that hold nothing it does not, since what it types runs with the target's grants. |
+| `send-keys` or `send-text` into another pane's approval menu, to answer it | Refused with `forbidden` for a pane without `admin` unless it holds `respond`: typing into a pane on `needs_input` answers its prompt. |
 | `send-keys` or `run-command` driving the person's Inbox peek, to press `a` | The peek sends no answer for a routed key and says why. |
 | `reply-approval` from a pane, to approve its own or another agent's call | Refused with `not_human` on the same check. `request-approval` from a pane may hold only that pane's prompt, and returns only what the person answered about it. |
 | An agent in a hub pane attaching through the link to this machine | The hub vouches only for a caller outside its panes, in the stream's open frame, which the caller cannot write. The proxy here dials the link-human socket only for a vouched stream. An attach through the plain link socket gets no nonce. |
@@ -2083,11 +2085,15 @@ proof, as before.
   possible only with `--write` and only inside the agent's own session and fan
   group (see [The MCP server](#the-mcp-server)). Through the CLI both still
   are under the default `mode = "open"`, where every pane holds `admin`. Pane
-  grants close that: under `mode = "strict"`, or for a pane started with
-  narrower grants, every call from the pane is held to them, however it was
-  made (see [What a pane may do](#what-a-pane-may-do)). `ask-agent` refuses a
-  pane on `needs_input` (`agent_blocked`), which covers the accident but not
-  an agent set on it.
+  grants close both for a pane without `admin`, under `mode = "strict"` or for
+  a pane started with narrower grants: every call from the pane is held to
+  them, however it was made, and typing into a pane on `needs_input` needs
+  `respond` (see [What a pane may do](#what-a-pane-may-do)). The check is made
+  when the call is checked and again right before the text is written, so
+  what is left is a prompt that comes up after the write. A pane holding
+  `admin` is not held to it, and `ask-agent` still refuses a pane on
+  `needs_input` (`agent_blocked`) for every caller unless it passes
+  `allow_blocked`.
 - **The person's screen.** `popup` and a program in a pane can draw anything,
   including a fake question. Read what a prompt asks before answering it.
 - **Leaving the pane on purpose.** See above.
@@ -2117,15 +2123,39 @@ every pane, are held to nothing new.
 | Grant | What the pane may do |
 | --- | --- |
 | `read` | Read its own session and its fan group: list, capture, agent state, waits, the event stream, mail |
-| `write` | Type into the panes of its own session (`send-text`, `send-keys`, `ask-agent`, `run`) and leave mail and stashed files there |
+| `write` | Type into the panes of its own session (`send-text`, `send-keys`, `ask-agent`, `run`) that hold nothing it does not, and leave mail and stashed files there |
 | `fan` | Do what `write` does in its fan group and the sessions it launched, and start agents with `fan` and `start-agent` |
-| `respond` | Answer another pane's prompt with `respond`, without the person (see [Who may answer](#who-may-answer)) |
-| `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, attach. Includes `read`, `write` and `fan`, never `respond` |
+| `respond` | Answer another pane's prompt with `respond`, without the person (see [Who may answer](#who-may-answer)), and type into a pane waiting on a prompt |
+| `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, `run-command`, attach. Includes `read`, `write` and `fan`, never `respond` |
 
 Whatever it holds, a pane can always report about itself (`set-agent-state`,
 `set-agent-meta`, `set-agent-session`, `ask-human`, `request-approval`, on its
 own pane only), and ask what it holds with `tuios pane-grants`. So
 `tuios agent-hook` works in every pane, whatever the pane holds.
+
+### Typing into another pane
+
+What a pane types into another pane runs with whatever that pane may do. A
+shell on the open default holds `admin`, so text typed into it could run
+`tuios set-pane-grants` and widen the pane that typed it. So a pane without
+`admin` is held to two more rules when it types into any pane but its own,
+with `send-text`, `send-keys`, `run` or `ask-agent`:
+
+- The target must hold nothing the caller does not. A pane holding `read` and
+  `write` types into a sibling that holds `read` and `write` too, or less, and
+  not into one on the open default. Under `mode = "strict"`, where every pane
+  holds the same default, this changes nothing.
+- The target must not be waiting on a prompt (`needs_input`), unless the
+  caller holds `respond`: keys typed there answer the prompt, which is what
+  `respond` is for. `ask-agent` without `allow_blocked` keeps its own refusal,
+  `agent_blocked`.
+
+A call with no window means the focused pane, and it is pinned to that pane
+when it is checked, so a focus change cannot send it elsewhere. Both rules are
+checked again right before the text is written. A pane's own pane is always
+its own to type into. A pane without `admin` that sends keys always has them
+written to the target's terminal, never through an attached client, where
+the prefix key would drive the window manager.
 
 ### Where a pane's grants come from
 
@@ -2152,7 +2182,8 @@ A pane can never give more than it holds. A pane without `admin` that starts
 an agent without `--grants` gives it its own grants, a pane can change only
 its own grants unless it holds `admin`, and `admin` cannot give `respond`. A
 script can therefore drop its pane's grants before it starts an agent, and no
-agent can raise its own:
+agent can raise its own, neither by asking nor by typing into a pane that
+holds more (see [Typing into another pane](#typing-into-another-pane)):
 
 ```bash
 tuios set-pane-grants --grants read,write && exec claude

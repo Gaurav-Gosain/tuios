@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"runtime"
 	"strings"
@@ -167,6 +168,57 @@ func (d *Daemon) verbListWindows(_ *connState, params json.RawMessage) (any, *ve
 	data := buildWindowListData(sess.GetState())
 	data["type"] = "window_list"
 	addShellFacts(sess, data)
+	return data, nil
+}
+
+// verbGetWindow describes one window. It is what tuios get-window calls, so
+// the command is a read like list-windows rather than a message of the client
+// protocol, which only admin may send. It answers the way the client
+// protocol's GetWindow did: an attached client describes the window, with its
+// cursor and process fields, and with none attached the daemon gives the
+// window's list-windows entry. The window is resolved here either way, so a
+// target that matches nothing is the same error attached or not.
+func (d *Daemon) verbGetWindow(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p commonParams
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+	state := sess.GetState()
+	target := p.Window
+	if target == "" {
+		id, err := focusedWindowID(state)
+		if err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+		target = id
+	}
+	idx, err := findWindowStateIndex(state.Windows, target)
+	if err != nil {
+		return nil, mapResolveErr(err, sess)
+	}
+	if tui := d.findTUIClient(sess.ID); tui != nil {
+		res, err := d.routeToTUISync(tui, uuid.New().String(), &RemoteCommandPayload{
+			CommandType: "tape_command",
+			TapeCommand: "GetWindow",
+			TapeArgs:    []string{state.Windows[idx].ID},
+		}, routedVerbTimeout)
+		if err == nil && res.Success && res.Data != nil {
+			data := maps.Clone(res.Data)
+			data["type"] = "window"
+			return data, nil
+		}
+		// A client that does not answer does not stop the read: the
+		// daemon's own record of the window follows.
+	}
+	data := windowStateToData(state, idx)
+	if pty := sess.GetPTY(state.Windows[idx].PTYID); pty != nil {
+		maps.Copy(data, shellFactsData(pty.ShellFacts()))
+	}
+	data["type"] = "window"
 	return data, nil
 }
 
@@ -461,7 +513,7 @@ func (d *Daemon) verbCloseWindow(_ *connState, params json.RawMessage) (any, *ve
 	return map[string]any{"type": "ok"}, nil
 }
 
-func (d *Daemon) verbSendKeys(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSendKeys(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Window  string `json:"window"`
@@ -480,9 +532,15 @@ func (d *Daemon) verbSendKeys(_ *connState, params json.RawMessage) (any, *verbE
 		return nil, verr
 	}
 
+	if verr := d.recheckTyping(cs, "send-keys", sess, p.Window); verr != nil {
+		return nil, verr
+	}
+
 	// Route to the TUI when attached so window-manager keys (the prefix) are
-	// honored; otherwise write the parsed bytes straight to the target PTY.
-	if tui := d.findTUIClient(sess.ID); tui != nil {
+	// honored; otherwise write the parsed bytes straight to the target PTY. A
+	// pane without admin always gets the second: window-manager keys would let
+	// it do what only admin may (paneTypesRaw).
+	if tui := d.findTUIClient(sess.ID); tui != nil && !paneTypesRaw(cs) {
 		res, err := d.routeToTUISync(tui, uuid.New().String(), &RemoteCommandPayload{
 			CommandType:  "send_keys",
 			Keys:         p.Keys,
@@ -505,7 +563,7 @@ func (d *Daemon) verbSendKeys(_ *connState, params json.RawMessage) (any, *verbE
 	return map[string]any{"type": "ok"}, nil
 }
 
-func (d *Daemon) verbSendText(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbSendText(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
 		Window  string `json:"window"`
@@ -525,6 +583,9 @@ func (d *Daemon) verbSendText(_ *connState, params json.RawMessage) (any, *verbE
 	pty, err := d.resolvePTYForTarget(sess, p.Window)
 	if err != nil {
 		return nil, mapResolveErr(err, sess)
+	}
+	if verr := d.recheckTyping(cs, "send-text", sess, p.Window); verr != nil {
+		return nil, verr
 	}
 	if _, err := pty.Write([]byte(p.Text)); err != nil {
 		return nil, ptyWriteError(err)

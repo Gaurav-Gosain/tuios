@@ -60,11 +60,17 @@ Pane 98db8226 in session work holds read, write, fan (the default of [agents.per
 
 | Grant | What it lets you do |
 | --- | --- |
-| `read` | Read your own session and your fan group: list, capture, agent state, waits, the event stream, mail |
-| `write` | Type into the panes of your own session and leave mail there |
+| `read` | Read your own session and your fan group: list, `get-window`, capture, agent state, waits, the event stream, mail |
+| `write` | Type into the panes of your own session that hold nothing you do not, and leave mail there |
 | `fan` | Write in your fan group and start agents with `fan` and `start-agent` |
-| `respond` | Answer another pane's prompt with `respond`, for the person |
-| `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options |
+| `respond` | Answer another pane's prompt with `respond`, for the person, and type into a pane waiting on a prompt |
+| `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options, `run-command` |
+
+Without `admin`, typing into another pane (`send-text`, `send-keys`, `run`,
+`ask-agent`) is refused when that pane holds a grant you do not, because what
+you type runs with its grants, and when it is waiting on a prompt
+(`needs_input`) unless you hold `respond`, because what you type answers it.
+Your keys go to that pane's terminal, never to the window manager.
 
 Whatever you hold, you can report your own state and meta, ask the person
 with `ask-human`, and read your grants. A call your grants do not cover fails
@@ -819,7 +825,7 @@ tuios run-command --list
 A name that is not a command is an error. It does not report success.
 
 Prefer a verb where one exists. `run-command` reports that the command ran and
-nothing about what it changed.
+nothing about what it changed, and from a pane it needs the `admin` grant.
 
 ## Reporting your own state
 

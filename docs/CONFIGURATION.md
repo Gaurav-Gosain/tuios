@@ -70,9 +70,10 @@ a prompt is held, answered and handed back.
 ## What a pane may do
 
 Every pane holds grants that say what a process in it may do through tuios:
-`read` (its own session and fan group), `write` (type into its own session),
-`fan` (write in its fan group and start agents), `respond` (answer prompts
-without you) and `admin` (everything else, as before grants). A pane started
+`read` (its own session and fan group), `write` (type into its own session,
+into panes that hold nothing it does not), `fan` (write in its fan group and
+start agents), `respond` (answer prompts without you, and type into a pane
+waiting on one) and `admin` (everything else, as before grants). A pane started
 with `--grants` (`tuios start-agent`, `fan`, `new-window`) or given grants
 with `tuios set-pane-grants` holds those. Every other pane holds the default
 this table sets:

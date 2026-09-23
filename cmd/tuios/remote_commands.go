@@ -628,6 +628,46 @@ func queryWindows(sessionName string, jsonOutput bool) error {
 	return printWindowList(raw, t.on())
 }
 
+// queryWindow describes one window with the get-window verb, so tuios
+// get-window is a read that a pane holding the read grant may make, like
+// list-windows. It used to send the client protocol's GetWindow, which only a
+// pane holding admin may send. A daemon older than the verb answers
+// unknown_verb, and the command then falls back to GetWindow as before. The
+// JSON keeps the shape GetWindow gave it: success and message, then the
+// window's fields.
+func queryWindow(sessionName string, args []string, jsonOutput bool) error {
+	window := ""
+	if len(args) > 0 {
+		window = args[0]
+	}
+	t, err := dialTarget(sessionName, window)
+	if err != nil {
+		return err
+	}
+	defer t.Close()
+
+	raw, err := t.client.Call("get-window", t.params(map[string]any{"session": sessionName, "window": window}))
+	if err != nil {
+		var call *session.VerbCallError
+		if t.host == "" && errors.As(err, &call) && call.Code == session.ErrVerbUnknownVerb {
+			return runCommandRendered(sessionName, "GetWindow", args, jsonOutput, printWindowDetail)
+		}
+		return reportVerbError(t.explain("get-window", err), jsonOutput)
+	}
+	var data map[string]any
+	if err := json.Unmarshal(t.result(raw), &data); err != nil {
+		return reportVerbError(fmt.Errorf("failed to parse response: %w", err), jsonOutput)
+	}
+	delete(data, "type")
+	if jsonOutput {
+		out := map[string]any{"success": true, "message": "command executed"}
+		maps.Copy(out, data)
+		outputJSON(out)
+		return nil
+	}
+	return printWindowDetail(data)
+}
+
 // windowRow is the subset of a listed window both the table and the single
 // window view render.
 type windowRow struct {

@@ -963,6 +963,11 @@ tuios run-command <command> [args...] [flags]
 - `--json`: Output result as JSON (useful for scripting)
 - `--list`: List all available commands
 
+`run-command` sends a client protocol message, so from inside a pane it needs
+the `admin` grant (see [`tuios pane-grants`](#tuios-pane-grants)). Under the
+default `mode = "open"` every pane holds `admin`. Prefer a verb where one
+exists: `tuios get-window` and `tuios list-windows` read windows with `read`.
+
 **Available Commands:**
 | Command | Arguments | Description |
 |---------|-----------|-------------|
@@ -1978,8 +1983,14 @@ tuios get-window [id-or-name] [flags]
 - `id-or-name`: Window ID or custom name. If omitted, returns the focused window.
 
 **Flags:**
-- `-s, --session <name>`: Target session (default: most recently active)
+- `-s, --session <name>`: Target session (default: most recently active).
+  `host:session` reads a session on another machine.
 - `--json`: Output as JSON (default is human-readable)
+
+It reads with the `get-window` verb, so from inside a pane it needs only the
+`read` grant, on the pane's own session and its fan group. Against a daemon
+from before that verb it sends the client protocol's `GetWindow` command, as
+it used to.
 
 **Examples:**
 ```bash
@@ -2379,11 +2390,17 @@ them, however it was made:
 
 | Grant | What the pane may do |
 |-------|----------------------|
-| `read` | Read its own session and its fan group |
-| `write` | Type into the panes of its own session and leave mail there |
+| `read` | Read its own session and its fan group, with `list-windows`, `get-window`, `capture-pane` and the rest |
+| `write` | Type into the panes of its own session that hold nothing it does not, and leave mail there |
 | `fan` | Write in its fan group and start agents with `fan` and `start-agent` |
-| `respond` | Answer another pane's prompt with `respond`, without the person |
-| `admin` | Everything else, as every pane could before grants. Includes `read`, `write` and `fan`, never `respond` |
+| `respond` | Answer another pane's prompt with `respond`, without the person, and type into a pane waiting on a prompt |
+| `admin` | Everything else, as every pane could before grants, such as `run-command` and `attach`. Includes `read`, `write` and `fan`, never `respond` |
+
+A pane without `admin` types (`send-text`, `send-keys`, `run`, `ask-agent`)
+into another pane only when that pane holds nothing it does not, since what
+it types runs with the target's grants, and into a pane on `needs_input` only
+when it holds `respond`. Its `send-keys` go to the target's terminal, never
+through an attached client, so they cannot drive the window manager.
 
 A pane holds the grants it was started with (`--grants` on `start-agent`,
 `fan` and `new-window`), the ones `set-pane-grants` gave it, or else the
@@ -2395,7 +2412,8 @@ the grant it needed.
 
 `set-pane-grants` from outside every pane may give anything. From a pane it
 may change only that pane's own grants unless the pane holds `admin`, and
-never give more than the pane holds, so an agent cannot widen itself.
+never give more than the pane holds, so an agent cannot widen itself, and it
+cannot type into a pane that holds more to have that pane do it.
 
 **Output:**
 ```
