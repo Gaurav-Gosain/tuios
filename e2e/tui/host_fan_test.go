@@ -188,9 +188,9 @@ func TestFanOnAHostAndPullTheWorkBack(t *testing.T) {
 		t.Errorf("ASSERTION: a second pull onto an existing branch was not refused: %v\n%s", err, out)
 	}
 
-	// One more agent on build, in its checkout of this repository, waiting
-	// until the prompt is taken.
-	out, err = tuiosCLIInDir(t, base, here, env, "start-agent", "-s", "build:agents", "--agent", "claude", "--wait", "--json", "Look at the retry.")
+	// One more agent on build, in its checkout of this repository. The
+	// command returns once the agent is ready and the prompt is taken.
+	out, err = tuiosCLIInDir(t, base, here, env, "start-agent", "-s", "build:agents", "claude", "--prompt", "Look at the retry.", "--json")
 	if err != nil {
 		t.Fatalf("ASSERTION: start-agent on build failed: %v\n%s", err, out)
 	}
