@@ -161,8 +161,8 @@ func (p *Pty) Start(cmd *exec.Cmd) error {
 		defer close(p.done)
 		defer func() { _ = p.Close() }()
 		defer t.stop()
-		if prog, ok := programs[name]; ok && name != "sh" {
-			p.exitErr = exitError(prog(t, args))
+		if _, ok := commands[name]; ok && !shellNames[name] {
+			p.exitErr = exitError(runProgram(t, name, args))
 			return
 		}
 		p.exitErr = exitError(runShell(t))

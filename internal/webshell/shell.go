@@ -21,61 +21,181 @@ const (
 	cyan   = "\x1b[36m"
 )
 
-// program is a command the shell can run. It returns an exit status.
-type program func(t *TTY, args []string) int
+// command is one thing the shell runs, at the prompt or as a pane's own
+// process. args[0] is the name it was called by and line is the whole command
+// line. It returns the exit status.
+type command func(s *shell, args []string, line string) int
 
-// programs are the commands a pane can run, at the prompt or as the pane's own
-// process. Filled in init so the table can refer to itself (help lists it).
-var programs map[string]program
+// commands is the one table of what the shell runs, aliases included. run
+// dispatches from it, and the highlighter and completion read it through
+// runnable, so a command that runs is never drawn as unknown. Filled in init
+// so entries can refer to the table (help lists it).
+var commands map[string]command
+
+// shellNames are the names a pane asks for when it wants a shell. Typed at the
+// prompt they say you already have one.
+var shellNames = map[string]bool{"sh": true, "bash": true, "zsh": true, "fish": true}
 
 // summaries are the lines help prints, in the order it prints them.
 var summaries = [][2]string{
-	{"help", "this list"},
-	{"ls", "list files"},
-	{"cd", "change directory"},
-	{"pwd", "print the current directory"},
-	{"cat", "print a file"},
-	{"echo", "print text (echo hi > file.txt writes a file)"},
-	{"touch / mkdir / rm", "make and remove files"},
-	{"clear", "clear the screen (or Ctrl+L)"},
+	{"ls, cd, pwd", "look around"},
+	{"cat, less, vim", "read a file (q or :q to quit)"},
+	{"echo hi > f.txt", "write a file"},
+	{"touch, mkdir, rm", "make and remove files"},
+	{"git", "status, log and diff in ~/projects/hello"},
+	{"go run .", "run the tiny Go project"},
+	{"claude", "a pretend coding agent that asks first"},
+	{"top", "a live process monitor (q quits)"},
+	{"rain", "digital rain (any key stops it)"},
 	{"neofetch", "system info, the pretty way"},
-	{"top", "live process monitor (q to quit)"},
-	{"rain", "digital rain (any key to stop)"},
+	{"tuios tape play demo.tape", "watch tuios drive itself"},
+	{"fortune, cowsay", "wisdom, delivered"},
 	{"colors", "the terminal palette"},
-	{"agent", "a pretend coding agent"},
-	{"history", "what you typed"},
+	{"tree", "the files as a tree"},
+	{"history, clear", "the usual"},
 	{"exit", "close this window"},
 }
 
+// fromTTY adapts a program that needs only the terminal.
+func fromTTY(f func(t *TTY, args []string) int) command {
+	return func(s *shell, args []string, _ string) int { return f(s.t, args[1:]) }
+}
+
+func say(text string) command {
+	return func(s *shell, _ []string, _ string) int {
+		s.t.Print(text + "\r\n")
+		return 0
+	}
+}
+
 func init() {
-	programs = map[string]program{
-		"sh":       func(t *TTY, _ []string) int { return runShell(t) },
-		"help":     cmdHelp,
-		"echo":     cmdEcho,
-		"whoami":   func(t *TTY, _ []string) int { t.Print("guest\r\n"); return 0 },
-		"hostname": func(t *TTY, _ []string) int { t.Print("tuios\r\n"); return 0 },
-		"uname":    func(t *TTY, _ []string) int { t.Print("tuios wasm js/wasm\r\n"); return 0 },
-		"date":     func(t *TTY, _ []string) int { t.Print(time.Now().Format(time.UnixDate) + "\r\n"); return 0 },
-		"neofetch": cmdNeofetch,
-		"top":      cmdTop,
-		"htop":     cmdTop,
-		"btop":     cmdTop,
-		"rain":     cmdRain,
-		"cmatrix":  cmdRain,
-		"colors":   cmdColors,
-		"agent":    cmdAgent,
-		"claude":   cmdAgent,
-		"true":     func(*TTY, []string) int { return 0 },
-		"false":    func(*TTY, []string) int { return 1 },
-		"tuios": func(t *TTY, _ []string) int {
-			t.Print("You are already in it. Press " + bold + "Ctrl+B" + reset + " then " + bold + "?" + reset + " for help.\r\n")
+	ls := func(s *shell, args []string, _ string) int { return s.ls(args[1:], args[0] != "ls") }
+	cat := func(s *shell, args []string, _ string) int { return s.cat(args[0], args[1:]) }
+	view := func(s *shell, args []string, _ string) int { return cmdView(s, args) }
+	shellNote := func(s *shell, args []string, _ string) int {
+		s.t.Print("You are already in a shell: " + bold + "webshell" + reset + ", made for the tuios tour.\r\n")
+		return 0
+	}
+	editorNote := func(s *shell, args []string, _ string) int {
+		if len(args) > 1 {
+			return cmdView(s, append([]string{"view"}, args[1:]...))
+		}
+		s.t.Print(yellow + args[0] + " is not in the demo." + reset + " Try " + bold + "vim README.md" + reset + " for a read-only look.\r\n")
+		return 0
+	}
+	commands = map[string]command{
+		"help":  func(s *shell, _ []string, _ string) int { return cmdHelp(s.t) },
+		"exit":  func(s *shell, _ []string, _ string) int { s.exiting = true; return s.status },
+		"cd":    (*shell).cd,
+		"pwd":   func(s *shell, _ []string, _ string) int { s.t.Print(s.cwd + "\r\n"); return 0 },
+		"ls":    ls,
+		"ll":    ls,
+		"la":    ls,
+		"cat":   cat,
+		"bat":   cat,
+		"less":  view,
+		"more":  view,
+		"view":  view,
+		"vim":   view,
+		"vi":    view,
+		"nvim":  view,
+		"nano":  editorNote,
+		"emacs": editorNote,
+		"code":  editorNote,
+		"echo":  (*shell).echo,
+		"clear": func(s *shell, _ []string, _ string) int {
+			s.t.Print("\x1b[H\x1b[2J\x1b[3J")
 			return 0
 		},
-		"vim": cmdNoEditor, "vi": cmdNoEditor, "nvim": cmdNoEditor, "nano": cmdNoEditor, "emacs": cmdNoEditor,
-		"sudo": func(t *TTY, _ []string) int {
-			t.Print("guest is not in the sudoers file. This incident will be reported to nobody.\r\n")
-			return 1
+		"history": func(s *shell, _ []string, _ string) int {
+			for i, h := range s.history {
+				s.t.Printf("%s%4d%s  %s\r\n", dim, i+1, reset, h)
+			}
+			return 0
 		},
+		"touch": func(s *shell, args []string, _ string) int {
+			for _, a := range args[1:] {
+				p := resolve(s.cwd, a)
+				if _, ok := readFile(p); !ok && !writeFile(p, "", false) {
+					return s.fail("touch: cannot create " + a)
+				}
+			}
+			return 0
+		},
+		"mkdir": func(s *shell, args []string, _ string) int {
+			for _, a := range args[1:] {
+				if a == "-p" {
+					continue
+				}
+				if !mkdir(resolve(s.cwd, a)) {
+					return s.fail("mkdir: cannot create " + a)
+				}
+			}
+			return 0
+		},
+		"rm": func(s *shell, args []string, _ string) int {
+			for _, a := range args[1:] {
+				if strings.HasPrefix(a, "-") {
+					continue
+				}
+				if !remove(resolve(s.cwd, a)) {
+					return s.fail("rm: cannot remove " + a)
+				}
+			}
+			return 0
+		},
+		"tree":      cmdTree,
+		"git":       func(s *shell, args []string, _ string) int { return cmdGit(s, args[1:]) },
+		"go":        cmdGo,
+		"tuios":     cmdTuios,
+		"claude":    cmdAgent,
+		"agent":     cmdAgent,
+		"neofetch":  fromTTY(cmdNeofetch),
+		"fastfetch": fromTTY(cmdNeofetch),
+		"top":       fromTTY(cmdTop),
+		"htop":      fromTTY(cmdTop),
+		"btop":      fromTTY(cmdTop),
+		"rain":      fromTTY(cmdRain),
+		"cmatrix":   fromTTY(cmdRain),
+		"colors":    fromTTY(cmdColors),
+		"fortune":   fromTTY(cmdFortune),
+		"cowsay":    fromTTY(cmdCowsay),
+		"whoami":    say("guest"),
+		"hostname":  say("tuios"),
+		"uname":     say("tuios js/wasm"),
+		"date": func(s *shell, _ []string, _ string) int {
+			s.t.Print(time.Now().Format(time.UnixDate) + "\r\n")
+			return 0
+		},
+		"true":  func(*shell, []string, string) int { return 0 },
+		"false": func(*shell, []string, string) int { return 1 },
+		"sudo":  say("guest is not in the sudoers file. This incident will be reported to nobody."),
+		"sh":    shellNote,
+		"bash":  shellNote,
+		"zsh":   shellNote,
+		"fish":  shellNote,
+	}
+	commands["logout"] = commands["exit"]
+}
+
+// Program is one command the shell runs, for a launcher to list.
+type Program struct {
+	Name    string
+	Summary string
+}
+
+// Programs lists the commands worth starting as a pane of their own: the
+// full-screen and long-running ones. The browser build offers them in the
+// tuios launcher in place of $PATH.
+func Programs() []Program {
+	return []Program{
+		{"top", "Live process monitor"},
+		{"claude", "A pretend coding agent"},
+		{"rain", "Digital rain"},
+		{"neofetch", "System info, the pretty way"},
+		{"vim", "Read-only file viewer"},
+		{"fortune", "A little wisdom"},
+		{"sh", "The web shell"},
 	}
 }
 
@@ -88,6 +208,7 @@ type shell struct {
 	history []string
 	histPos int
 	status  int
+	exiting bool
 	pending []byte // an escape sequence split across reads
 	paste   bool   // inside a bracketed paste
 }
@@ -104,12 +225,23 @@ func runShell(t *TTY) int {
 	return 0
 }
 
+// runProgram runs one command as a pane's own process, the way a real
+// terminal runs a program it was asked for instead of a shell.
+func runProgram(t *TTY, name string, args []string) int {
+	s := &shell{t: t, cwd: Home}
+	return commands[name](s, append([]string{name}, args...), strings.Join(append([]string{name}, args...), " "))
+}
+
 func (s *shell) promptText() string {
 	mark := green + "❯" + reset
 	if s.status != 0 {
 		mark = red + "❯" + reset
 	}
-	return cyan + bold + prettyPath(s.cwd) + reset + " " + mark + " "
+	branch := ""
+	if inRepo(s.cwd) {
+		branch = " " + purple + "main" + reset
+	}
+	return cyan + bold + prettyPath(s.cwd) + reset + branch + " " + mark + " "
 }
 
 func (s *shell) prompt() {
@@ -132,22 +264,34 @@ func (s *shell) redraw() {
 	s.t.Print(b.String())
 }
 
-// highlighted colours the first word green when it is a command the shell
-// knows and red when it is not, the way fish does.
+// highlighted colours each command word green when the shell runs it and red
+// when it does not, the way fish does. A line of several commands joined with
+// && has each command word coloured.
 func (s *shell) highlighted() string {
 	text := string(s.line)
-	word, rest, _ := strings.Cut(text, " ")
-	if word == "" {
-		return text
+	var b strings.Builder
+	for i, part := range strings.Split(text, "&&") {
+		if i > 0 {
+			b.WriteString("&&")
+		}
+		lead := len(part) - len(strings.TrimLeft(part, " "))
+		b.WriteString(part[:lead])
+		rest := part[lead:]
+		word, tail, found := strings.Cut(rest, " ")
+		if word == "" {
+			b.WriteString(rest)
+			continue
+		}
+		colour := red
+		if runnable(word) {
+			colour = green
+		}
+		b.WriteString(colour + word + reset)
+		if found {
+			b.WriteString(" " + tail)
+		}
 	}
-	colour := red
-	if runnable(word) {
-		colour = green
-	}
-	if rest != "" || strings.HasSuffix(text, " ") {
-		return colour + word + reset + " " + rest
-	}
-	return colour + word + reset
+	return b.String()
 }
 
 // feed handles one chunk of input and reports whether the shell should exit.
@@ -329,10 +473,9 @@ func (s *shell) complete() {
 	if space < 0 {
 		candidates = commandNames()
 	} else {
-		dir, prefix := s.cwd, word
+		dir := s.cwd
 		if k := strings.LastIndexByte(word, '/'); k >= 0 {
-			dir, prefix = resolve(s.cwd, word[:k+1]), word[k+1:]
-			_ = prefix
+			dir = resolve(s.cwd, word[:k+1])
 		}
 		base := word[:strings.LastIndexByte(word, '/')+1]
 		for _, e := range list(dir) {
@@ -394,178 +537,100 @@ func (s *shell) enter() bool {
 	return false
 }
 
-// run runs one command and reports whether the shell should exit.
+// run runs one command and reports whether the shell should exit. It tells
+// the page when the command starts and when it finishes, with its status.
 func (s *shell) run(line string) bool {
 	args := splitArgs(line)
 	if len(args) == 0 {
 		return false
 	}
 	name := args[0]
-	s.t.Emit("shell.command", map[string]string{"command": name, "line": line, "cwd": s.cwd})
-	s.status = 0
-	if b, ok := builtins[name]; ok {
-		return b(s, args, line)
-	}
-	prog, ok := programs[name]
-	if !ok || !runnable(name) {
+	s.t.Emit(EventCommandStart, map[string]any{"command": name, "line": line, "cwd": s.cwd})
+	cmd, ok := commands[name]
+	if ok {
+		s.status = cmd(s, args, line)
+	} else {
 		s.fail(name + ": command not found. Type " + bold + "help" + reset + " to see what is here.")
 		s.status = 127
-		return false
 	}
-	s.status = prog(s.t, args[1:])
-	return false
+	s.t.Emit(EventCommand, map[string]any{"command": name, "line": line, "cwd": s.cwd, "exitCode": s.status})
+	return s.exiting
 }
 
-// builtin is a command that needs the shell's own state, such as the current
-// directory or the history. args[0] is the name it was called by. It reports
-// whether the shell should exit.
-type builtin func(s *shell, args []string, line string) bool
-
-// builtins are the commands run handles itself, aliases included. Together
-// with programs they are the one table of what the shell runs: run dispatches
-// from it, and the highlighter and completion read it through runnable, so a
-// command that runs is never drawn as unknown.
-var builtins map[string]builtin
-
-func init() {
-	exit := func(*shell, []string, string) bool { return true }
-	ls := func(s *shell, args []string, _ string) bool {
-		s.ls(args[1:], args[0] != "ls")
-		return false
-	}
-	cat := func(s *shell, args []string, _ string) bool {
-		s.cat(args[0], args[1:])
-		return false
-	}
-	builtins = map[string]builtin{
-		"exit":   exit,
-		"logout": exit,
-		"cd":     (*shell).cd,
-		"pwd": func(s *shell, _ []string, _ string) bool {
-			s.t.Print(s.cwd + "\r\n")
-			return false
-		},
-		"ls": ls, "ll": ls, "la": ls,
-		"cat": cat, "less": cat, "more": cat, "bat": cat,
-		"clear": func(s *shell, _ []string, _ string) bool {
-			s.t.Print("\x1b[H\x1b[2J\x1b[3J")
-			return false
-		},
-		"history": func(s *shell, _ []string, _ string) bool {
-			for i, h := range s.history {
-				s.t.Printf("%s%4d%s  %s\r\n", dim, i+1, reset, h)
-			}
-			return false
-		},
-		"touch": func(s *shell, args []string, _ string) bool {
-			for _, a := range args[1:] {
-				p := resolve(s.cwd, a)
-				if _, ok := readFile(p); !ok && !writeFile(p, "", false) {
-					s.fail("touch: cannot create " + a)
-				}
-			}
-			return false
-		},
-		"mkdir": func(s *shell, args []string, _ string) bool {
-			for _, a := range args[1:] {
-				if !mkdir(resolve(s.cwd, a)) {
-					s.fail("mkdir: cannot create " + a)
-				}
-			}
-			return false
-		},
-		"rm": func(s *shell, args []string, _ string) bool {
-			for _, a := range args[1:] {
-				if !remove(resolve(s.cwd, a)) {
-					s.fail("rm: cannot remove " + a)
-				}
-			}
-			return false
-		},
-		"echo": (*shell).echo,
-	}
-}
-
-// runnable reports whether the shell runs name at the prompt. sh is in
-// programs so a pane can run it as its process, but typing it at the prompt is
-// not supported, so it is not runnable here.
+// runnable reports whether the shell runs name at the prompt.
 func runnable(name string) bool {
-	if _, ok := builtins[name]; ok {
-		return true
-	}
-	_, ok := programs[name]
-	return ok && name != "sh"
+	_, ok := commands[name]
+	return ok
 }
 
 // commandNames lists every name runnable accepts.
 func commandNames() []string {
-	var names []string
-	for name := range builtins {
+	names := make([]string, 0, len(commands))
+	for name := range commands {
 		names = append(names, name)
-	}
-	for name := range programs {
-		if runnable(name) {
-			names = append(names, name)
-		}
 	}
 	sort.Strings(names)
 	return names
 }
 
-func (s *shell) cd(args []string, _ string) bool {
+func (s *shell) cd(args []string, _ string) int {
 	target := resolve(s.cwd, argOr(args, 1, "~"))
+	if argOr(args, 1, "") == "-" {
+		target = Home
+	}
 	if !isDir(target) {
-		s.fail("cd: no such directory: " + argOr(args, 1, ""))
-		return false
+		return s.fail("cd: no such directory: " + argOr(args, 1, ""))
 	}
 	s.cwd = target
-	s.t.Emit("shell.cwd", map[string]string{"cwd": s.cwd})
+	s.t.Emit(EventCwd, map[string]any{"cwd": s.cwd})
 	// OSC 7 tells tuios the directory, the way a configured real shell does.
 	s.t.Print("\x1b]7;file://tuios" + s.cwd + "\x1b\\")
-	return false
+	return 0
 }
 
-func (s *shell) cat(name string, files []string) {
-	if len(files) == 0 {
-		s.fail(name + ": which file? Try " + bold + "cat README.md" + reset)
-		return
+func (s *shell) cat(name string, paths []string) int {
+	if len(paths) == 0 {
+		return s.fail(name + ": which file? Try " + bold + "cat README.md" + reset)
 	}
-	for _, a := range files {
+	status := 0
+	for _, a := range paths {
 		p := resolve(s.cwd, a)
 		content, ok := readFile(p)
 		if !ok {
 			if isDir(p) {
-				s.fail(name + ": " + a + ": is a directory")
+				status = s.fail(name + ": " + a + ": is a directory")
 			} else {
-				s.fail(name + ": " + a + ": no such file")
+				status = s.fail(name + ": " + a + ": no such file")
 			}
 			continue
 		}
 		s.t.Print(strings.ReplaceAll(content, "\n", "\r\n"))
 	}
+	return status
 }
 
-func (s *shell) echo(args []string, line string) bool {
+func (s *shell) echo(args []string, line string) int {
 	// Redirection is the one piece of shell syntax worth faking.
 	if k := strings.Index(line, ">"); k >= 0 {
 		appendTo := strings.HasPrefix(line[k:], ">>")
 		target := strings.TrimSpace(strings.TrimLeft(line[k:], ">"))
 		text := strings.Join(splitArgs(line[:k])[1:], " ") + "\n"
 		if target == "" || !writeFile(resolve(s.cwd, target), text, appendTo) {
-			s.fail("echo: cannot write " + target)
+			return s.fail("echo: cannot write " + target)
 		}
-		return false
+		return 0
 	}
-	s.status = cmdEcho(s.t, args[1:])
-	return false
+	s.t.Print(strings.Join(args[1:], " ") + "\r\n")
+	return 0
 }
 
-func (s *shell) fail(msg string) {
+// fail prints msg in red and returns status 1, for a command to return.
+func (s *shell) fail(msg string) int {
 	s.t.Print(red + msg + reset + "\r\n")
-	s.status = 1
+	return 1
 }
 
-func (s *shell) ls(args []string, long bool) {
+func (s *shell) ls(args []string, long bool) int {
 	target := s.cwd
 	showAll := long
 	for _, a := range args {
@@ -583,10 +648,9 @@ func (s *shell) ls(args []string, long bool) {
 	if !isDir(target) {
 		if _, ok := readFile(target); ok {
 			s.t.Print(target + "\r\n")
-			return
+			return 0
 		}
-		s.fail("ls: no such file or directory")
-		return
+		return s.fail("ls: no such file or directory")
 	}
 	var parts []string
 	for _, e := range list(target) {
@@ -612,16 +676,19 @@ func (s *shell) ls(args []string, long bool) {
 	if !long && len(parts) > 0 {
 		s.t.Print(strings.Join(parts, "  ") + "\r\n")
 	}
+	return 0
 }
 
 func colourName(e entry) string {
 	switch {
 	case e.dir:
 		return blue + bold + e.name + "/" + reset
-	case strings.HasSuffix(e.name, ".go"):
+	case strings.HasSuffix(e.name, ".go"), strings.HasSuffix(e.name, ".mod"):
 		return cyan + e.name + reset
 	case strings.HasSuffix(e.name, ".md"):
 		return yellow + e.name + reset
+	case strings.HasSuffix(e.name, ".tape"):
+		return green + e.name + reset
 	case strings.HasSuffix(e.name, ".html"), strings.HasSuffix(e.name, ".css"):
 		return purple + e.name + reset
 	}
@@ -667,20 +734,10 @@ func splitArgs(line string) []string {
 	return out
 }
 
-func cmdEcho(t *TTY, args []string) int {
-	t.Print(strings.Join(args, " ") + "\r\n")
-	return 0
-}
-
-func cmdNoEditor(t *TTY, _ []string) int {
-	t.Print(yellow + "No editor in the browser demo." + reset + " Try " + bold + "cat notes.txt" + reset + " instead.\r\n")
-	return 1
-}
-
-func cmdHelp(t *TTY, _ []string) int {
-	t.Print(bold + "Commands" + reset + "\r\n")
+func cmdHelp(t *TTY) int {
+	t.Print(bold + "Things to try" + reset + "\r\n")
 	for _, s := range summaries {
-		t.Printf("  %s%-20s%s %s\r\n", green, s[0], reset, s[1])
+		t.Printf("  %s%-26s%s %s\r\n", green, s[0], reset, s[1])
 	}
 	t.Print("\r\n" + dim + "tuios keys: Ctrl+B then ? shows every keybinding." + reset + "\r\n")
 	return 0

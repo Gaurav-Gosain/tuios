@@ -7,53 +7,144 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/tape"
+	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
-// readUntil collects the guest's output until it contains want.
-func readUntil(t *testing.T, p *Pty, want string) string {
+// freshFS gives a test its own copy of the shared filesystem and repository,
+// and puts the original back afterwards, so one test's edits never leak into
+// the next.
+func freshFS(t *testing.T) {
 	t.Helper()
-	var mu sync.Mutex
-	var got bytes.Buffer
-	done := make(chan struct{})
+	fsMu.Lock()
+	savedFiles := make(map[string]string, len(files))
+	for k, v := range files {
+		savedFiles[k] = v
+	}
+	savedDirs := make(map[string]bool, len(fsDirs))
+	for k, v := range fsDirs {
+		savedDirs[k] = v
+	}
+	savedHead := make(map[string]string, len(repo.head))
+	for k, v := range repo.head {
+		savedHead[k] = v
+	}
+	savedCommits := append([]gitCommit(nil), repo.commits...)
+	fsMu.Unlock()
+	t.Cleanup(func() {
+		fsMu.Lock()
+		defer fsMu.Unlock()
+		files, fsDirs = savedFiles, savedDirs
+		repo.head, repo.commits, repo.staged = savedHead, savedCommits, map[string]bool{}
+	})
+}
+
+// events records what the guests emit while a test runs.
+type events struct {
+	mu  sync.Mutex
+	all []Event
+}
+
+func recordEvents(t *testing.T) *events {
+	t.Helper()
+	ev := &events{}
+	SetEventSink(func(e Event) { ev.mu.Lock(); ev.all = append(ev.all, e); ev.mu.Unlock() })
+	t.Cleanup(func() { SetEventSink(nil) })
+	return ev
+}
+
+func (ev *events) of(typ string) []Event {
+	ev.mu.Lock()
+	defer ev.mu.Unlock()
+	var out []Event
+	for _, e := range ev.all {
+		if e.Type == typ {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// guest is a pty running the shell, with its output collected.
+type guest struct {
+	t   *testing.T
+	p   *Pty
+	mu  sync.Mutex
+	out bytes.Buffer
+	emu *vt.Emulator
+}
+
+func startGuest(t *testing.T, name string) *guest {
+	t.Helper()
+	g := &guest{t: t, p: NewPty(80, 24), emu: vt.NewEmulator(80, 24)}
+	cmd := exec.Command(name)
+	cmd.Env = []string{"TUIOS_WINDOW_ID=w1"}
+	if err := g.p.Start(cmd); err != nil {
+		t.Fatal(err)
+	}
 	go func() {
-		buf := make([]byte, 1024)
+		buf := make([]byte, 4096)
 		for {
-			n, err := p.Read(buf)
-			mu.Lock()
-			got.Write(buf[:n])
-			hit := strings.Contains(got.String(), want)
-			mu.Unlock()
-			if hit || err != nil {
-				close(done)
+			n, err := g.p.Read(buf)
+			g.mu.Lock()
+			g.out.Write(buf[:n])
+			_, _ = g.emu.Write(buf[:n])
+			g.mu.Unlock()
+			if err != nil {
 				return
 			}
 		}
 	}()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		mu.Lock()
-		defer mu.Unlock()
-		t.Fatalf("timed out waiting for %q, got %q", want, got.String())
+	t.Cleanup(func() { _ = g.p.Close() })
+	return g
+}
+
+func (g *guest) send(s string) { _, _ = g.p.Write([]byte(s)) }
+
+// waitFor waits until the output since the last call contains want, and
+// returns that output.
+func (g *guest) waitFor(want string) string {
+	g.t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		g.mu.Lock()
+		got := g.out.String()
+		if i := strings.Index(got, want); i >= 0 {
+			g.out.Reset()
+			g.out.WriteString(got[i+len(want):])
+			g.mu.Unlock()
+			return got[:i+len(want)]
+		}
+		g.mu.Unlock()
+		time.Sleep(5 * time.Millisecond)
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	return got.String()
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.t.Fatalf("timed out waiting for %q, got %q", want, g.out.String())
+	return ""
+}
+
+// screenTail is the last n lines of the emulated screen, as the harness
+// classifier reads them.
+func (g *guest) screenTail(n int) []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	lines := strings.Split(g.emu.String(), "\n")
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return lines
 }
 
 func TestShellRunsCommands(t *testing.T) {
-	var events []Event
-	var mu sync.Mutex
-	SetEventSink(func(e Event) { mu.Lock(); events = append(events, e); mu.Unlock() })
-	defer SetEventSink(nil)
-
-	p := NewPty(80, 24)
-	cmd := exec.Command("/bin/zsh")
-	cmd.Env = []string{"TUIOS_WINDOW_ID=w1"}
-	if err := p.Start(cmd); err != nil {
-		t.Fatal(err)
-	}
-	readUntil(t, p, "❯")
+	freshFS(t)
+	g := startGuest(t, "/bin/zsh")
+	g.waitFor("❯")
 
 	tests := []struct {
 		name  string
@@ -61,57 +152,248 @@ func TestShellRunsCommands(t *testing.T) {
 		want  string
 	}{
 		{"ls lists home", "ls\r", "projects/"},
-		{"cd then pwd", "cd projects && pwd\r", "/home/guest/projects"},
-		{"cat a file", "cat hello.go\r", "hello from tuios"},
+		{"cd then pwd", "cd projects/hello && pwd\r", "/home/guest/projects/hello"},
+		{"cat a file", "cat main.go\r", "func main()"},
 		{"echo writes a file", "echo hi there > note.txt\r", "❯"},
 		{"the file reads back", "cat note.txt\r", "hi there"},
 		{"unknown command", "nope\r", "command not found"},
-		{"tab completes", "ca\t hel\t\r", "hello from tuios"},
+		{"tab completes", "ca\t go.\t\r", "module example.com/hello"},
+		{"go run reads greet.go", "go run . tuios\r", "hello, tuios!"},
+		{"tree draws", "tree\r", "files"},
+		{"cowsay", "cowsay moo\r", "(oo)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _ = p.Write([]byte(tt.input))
-			readUntil(t, p, tt.want)
+			g.t = t
+			g.send(tt.input)
+			g.waitFor(tt.want)
 		})
 	}
-
-	_, _ = p.Write([]byte("exit\r"))
-	if err := p.Wait(); err != nil {
+	g.t = t
+	g.send("exit\r")
+	if err := g.p.Wait(); err != nil {
 		t.Fatalf("exit status: %v", err)
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if len(events) == 0 || events[0].Type != "shell.command" || events[0].WindowID != "w1" {
-		t.Fatalf("first event = %+v", events)
 	}
 }
 
-func TestTopQuits(t *testing.T) {
-	p := NewPty(80, 24)
-	if err := p.Start(exec.Command("sh")); err != nil {
-		t.Fatal(err)
+// TestShellReportsCommandsAndExitCodes is the contract a lesson reads: a start
+// event when a command begins, and a finish event with its exit code.
+func TestShellReportsCommandsAndExitCodes(t *testing.T) {
+	freshFS(t)
+	ev := recordEvents(t)
+	g := startGuest(t, "sh")
+	g.waitFor("❯")
+	g.send("ls\r")
+	g.waitFor("projects/")
+	g.send("nope\r")
+	g.waitFor("command not found")
+	g.send("cd projects\r")
+	g.waitFor("❯")
+	time.Sleep(20 * time.Millisecond)
+
+	starts, done := ev.of(EventCommandStart), ev.of(EventCommand)
+	if len(starts) != 3 || len(done) != 3 {
+		t.Fatalf("got %d starts and %d finishes, want 3 each: %+v", len(starts), len(done), ev.all)
 	}
-	readUntil(t, p, "❯")
-	_, _ = p.Write([]byte("top\r"))
-	readUntil(t, p, "q to quit")
-	_, _ = p.Write([]byte("q"))
-	readUntil(t, p, "\x1b[?1049l")
-	_ = p.Close()
+	want := []struct {
+		command string
+		code    int
+	}{{"ls", 0}, {"nope", 127}, {"cd", 0}}
+	for i, w := range want {
+		e := done[i]
+		if e.WindowID != "w1" || e.Data["command"] != w.command || e.Data["exitCode"] != w.code {
+			t.Errorf("finish %d = %+v, want command %s exit %d in w1", i, e, w.command, w.code)
+		}
+	}
+	if cwd := ev.of(EventCwd); len(cwd) != 1 || cwd[0].Data["cwd"] != Home+"/projects" {
+		t.Errorf("cwd events = %+v", cwd)
+	}
+}
+
+func TestFullscreenProgramsQuit(t *testing.T) {
+	for _, tt := range []struct{ run, ready, quit string }{
+		{"top\r", "q to quit", "q"},
+		{"less README.md\r", "(END)", "q"},
+		{"vim README.md\r", "[readonly]", ":q\r"},
+		{"vim\r", "VIM - Vi IMproved", ":wq\r"},
+	} {
+		t.Run(strings.TrimSpace(tt.run), func(t *testing.T) {
+			g := startGuest(t, "sh")
+			g.waitFor("❯")
+			g.send(tt.run)
+			g.waitFor(tt.ready)
+			g.send(tt.quit)
+			g.waitFor("\x1b[?1049l")
+			g.waitFor("❯")
+		})
+	}
+}
+
+func TestViewerIsReadOnlyAndSearches(t *testing.T) {
+	g := startGuest(t, "sh")
+	g.waitFor("❯")
+	g.send("vim README.md\r")
+	g.waitFor("[readonly]")
+	g.send("i")
+	g.waitFor("read-only view")
+	g.send(":w\r")
+	g.waitFor("nothing to save")
+	g.send("/tape\r")
+	g.waitFor("\x1b[7mtape\x1b[27m")
+	g.send(":q\r")
+	g.waitFor("\x1b[?1049l")
+}
+
+func TestGitShowsTheWorkingChange(t *testing.T) {
+	freshFS(t)
+	g := startGuest(t, "sh")
+	g.waitFor("❯")
+	g.send("git status\r")
+	g.waitFor("not a git repository")
+
+	g.send("cd projects/hello\r")
+	g.waitFor("main")
+	g.send("git status\r")
+	out := g.waitFor("TODO.md")
+	if !strings.Contains(out, "modified:  greet.go") {
+		t.Errorf("git status did not list greet.go as modified: %q", out)
+	}
+	g.send("git diff\r")
+	out = g.waitFor(`+	return "hello, " + name + "!"`)
+	if !strings.Contains(out, `-	return "hello, " + name`) {
+		t.Errorf("git diff did not show the removed line: %q", out)
+	}
+	g.send("go test\r")
+	g.waitFor("FAIL")
+
+	g.send("git log --oneline\r")
+	g.waitFor("Initial commit")
+
+	g.send("git add . && git commit -m \"Shout when asked\"\r")
+	g.waitFor("2 files changed")
+	g.send("git status\r")
+	g.waitFor("working tree clean")
+	g.send("git log --oneline -1\r")
+	g.waitFor("Shout when asked")
+
+	g.send("git restore greet.go\r")
+	g.waitFor("❯")
+	g.send("echo more >> README.md && git diff\r")
+	g.waitFor("+more")
+	g.send("git restore README.md && git status -s\r")
+	g.waitFor("❯")
+}
+
+// TestAgentReportsItsStates runs the fake agent to the approval and answers
+// it, and checks what it tells tuios on the way: working, then needs_input as
+// an approval, then done.
+func TestAgentReportsItsStates(t *testing.T) {
+	freshFS(t)
+	ev := recordEvents(t)
+	g := startGuest(t, "sh")
+	g.waitFor("❯")
+	g.send("claude\r")
+	g.waitFor("Do you want to make this edit to style.css?")
+	g.waitFor("\a")
+
+	g.send("\x1b[B") // arrow down moves the choice
+	g.waitFor("❯ 2. Yes, and don't ask again")
+	g.send("y")
+	g.waitFor("dark mode toggle now")
+	g.waitFor("❯")
+
+	var states []string
+	for _, e := range ev.of(EventAgentReport) {
+		states = append(states, e.Data["state"].(string))
+		if e.Data["harness"] != AgentHarness || e.WindowID != "w1" {
+			t.Errorf("report %+v lacks the harness or the window", e)
+		}
+		if e.Data["state"] == "needs_input" && e.Data["kind"] != "approval" {
+			t.Errorf("needs_input report %+v is not an approval", e)
+		}
+	}
+	if got := strings.Join(states, ","); got != "working,working,needs_input,working,done" {
+		t.Errorf("states = %s", got)
+	}
+	if css, _ := readFile(Home + "/projects/website/style.css"); !strings.Contains(css, "data-theme=dark") {
+		t.Errorf("the approved edit was not applied: %q", css)
+	}
+}
+
+func TestAgentCanBeTurnedDown(t *testing.T) {
+	freshFS(t)
+	ev := recordEvents(t)
+	g := startGuest(t, "claude")
+	g.waitFor("Do you want")
+	g.send("n")
+	g.waitFor("No changes made")
+	if err := g.p.Wait(); err == nil {
+		t.Error("turning the agent down should exit non-zero")
+	}
+	reports := ev.of(EventAgentReport)
+	if last := reports[len(reports)-1]; last.Data["state"] != "done" {
+		t.Errorf("last report = %+v, want done", last)
+	}
+	if css, _ := readFile(Home + "/projects/website/style.css"); strings.Contains(css, "data-theme") {
+		t.Error("a turned down edit was applied")
+	}
+}
+
+// TestAgentScreenMatchesTheHarness reads the fake agent's screen through
+// tuios's own emulator and the claude-code harness manifest, so the demo shows
+// what tuios would detect on a real Claude Code pane.
+func TestAgentScreenMatchesTheHarness(t *testing.T) {
+	freshFS(t)
+	reg, errs := harness.Load()
+	if len(errs) > 0 {
+		t.Fatalf("load manifests: %v", errs)
+	}
+	lines := reg.ScreenLines(AgentHarness)
+	g := startGuest(t, "claude")
+	g.waitFor("Thinking…")
+	time.Sleep(30 * time.Millisecond)
+	if state, _, ok := reg.Classify(AgentHarness, g.screenTail(lines)); !ok || state != "working" {
+		t.Errorf("thinking screen classified %q (%v), want working:\n%s", state, ok, strings.Join(g.screenTail(lines), "\n"))
+	}
+	g.waitFor("\a")
+	time.Sleep(30 * time.Millisecond)
+	if state, _, ok := reg.Classify(AgentHarness, g.screenTail(lines)); !ok || state != "needs_input" {
+		t.Errorf("approval screen classified %q (%v), want needs_input:\n%s", state, ok, strings.Join(g.screenTail(lines), "\n"))
+	}
+	g.send("\x03")
+}
+
+func TestTapePlayHandsTheTapeToTuios(t *testing.T) {
+	freshFS(t)
+	ev := recordEvents(t)
+	g := startGuest(t, "sh")
+	g.waitFor("❯")
+	g.send("tuios tape list\r")
+	g.waitFor("demo.tape")
+	g.send("tuios tape play demo.tape\r")
+	g.waitFor("Playing")
+	g.waitFor("❯")
+	plays := ev.of(EventTapePlay)
+	if len(plays) != 1 || plays[0].Data["name"] != "demo.tape" {
+		t.Fatalf("tape.play events = %+v", plays)
+	}
+	script := plays[0].Data["script"].(string)
+	cmds, perrs := tape.ParseFile(script)
+	if len(perrs) > 0 || len(cmds) == 0 {
+		t.Fatalf("demo.tape does not parse: %v", perrs)
+	}
 }
 
 // TestRunnableCommandsHighlightAsValid checks that the highlighter agrees with
 // the executor: every name the shell runs, aliases included, is drawn green,
 // and a name it does not run is drawn red.
 func TestRunnableCommandsHighlightAsValid(t *testing.T) {
-	names := commandNames()
-	// The aliases that were once drawn red although they ran. They are listed
-	// by hand so a change that drops one from the table fails here too.
-	for _, alias := range []string{"ll", "la", "logout", "less", "more", "bat", "htop", "btop", "cmatrix", "claude", "vi"} {
+	for _, alias := range []string{"ll", "la", "logout", "less", "more", "bat", "htop", "btop", "cmatrix", "claude", "vi", "sh", "bash", "git", "go", "tuios", "fortune"} {
 		if !runnable(alias) {
 			t.Errorf("%s is not runnable", alias)
 		}
 	}
-	for _, name := range names {
+	for _, name := range commandNames() {
 		t.Run(name, func(t *testing.T) {
 			for _, line := range []string{name, name + " ", name + " arg"} {
 				s := &shell{line: []rune(line)}
@@ -119,9 +401,13 @@ func TestRunnableCommandsHighlightAsValid(t *testing.T) {
 					t.Errorf("highlighted(%q) = %q, want the command in green", line, got)
 				}
 			}
+			s := &shell{line: []rune("cd x && " + name)}
+			if got := s.highlighted(); !strings.Contains(got, green+name+reset) {
+				t.Errorf("highlighted(%q) = %q, want the second command in green", string(s.line), got)
+			}
 		})
 	}
-	for _, name := range []string{"nope", "sh", "l"} {
+	for _, name := range []string{"nope", "l"} {
 		s := &shell{line: []rune(name)}
 		if got := s.highlighted(); !strings.HasPrefix(got, red+name+reset) {
 			t.Errorf("highlighted(%q) = %q, want the command in red", name, got)
@@ -131,26 +417,53 @@ func TestRunnableCommandsHighlightAsValid(t *testing.T) {
 
 // TestRunnableCommandsAreFound checks the other direction: nothing the
 // highlighter draws green gets "command not found" when it runs. The
-// fullscreen programs are left out because they wait for a key.
+// full-screen programs wait for a key and are covered above.
 func TestRunnableCommandsAreFound(t *testing.T) {
-	skip := map[string]bool{"top": true, "htop": true, "btop": true, "rain": true, "cmatrix": true, "agent": true, "claude": true, "exit": true, "logout": true}
+	freshFS(t)
+	skip := map[string]bool{
+		"top": true, "htop": true, "btop": true, "rain": true, "cmatrix": true,
+		"agent": true, "claude": true, "exit": true, "logout": true,
+		"less": true, "more": true, "view": true, "vim": true, "vi": true, "nvim": true,
+	}
 	for _, name := range commandNames() {
 		if skip[name] {
 			continue
 		}
 		t.Run(name, func(t *testing.T) {
-			p := NewPty(80, 24)
-			if err := p.Start(exec.Command("sh")); err != nil {
-				t.Fatal(err)
-			}
-			defer p.Close()
-			readUntil(t, p, "❯")
+			g := startGuest(t, "sh")
+			g.waitFor("❯")
 			// echo collapses the double space, so the marker only matches
 			// the command's output and never the echoed input line.
-			_, _ = p.Write([]byte(name + "\recho end  mark\r"))
-			if out := readUntil(t, p, "end mark\r\n"); strings.Contains(out, "command not found") {
+			g.send(name + "\recho end  mark\r")
+			if out := g.waitFor("end mark\r\n"); strings.Contains(out, "command not found") {
 				t.Errorf("%s: %q", name, out)
 			}
 		})
+	}
+}
+
+func TestProgramsRunAsAPaneProcess(t *testing.T) {
+	for _, p := range Programs() {
+		if !runnable(p.Name) {
+			t.Errorf("launcher program %s is not a command", p.Name)
+		}
+	}
+	g := startGuest(t, "fortune")
+	if err := g.p.Wait(); err != nil {
+		t.Fatalf("fortune as a pane process: %v", err)
+	}
+}
+
+func TestLineDiff(t *testing.T) {
+	a := "one\ntwo\nthree\nfour\n"
+	b := "one\n2\nthree\nfour\nfive\n"
+	got := unifiedHunks(lineDiff(a, b))
+	for _, want := range []string{"-two", "+2", "+five", "@@ -1,4 +1,5 @@"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("diff lacks %q:\n%s", want, got)
+		}
+	}
+	if unifiedHunks(lineDiff(a, a)) != "" {
+		t.Error("a diff of equal texts is not empty")
 	}
 }

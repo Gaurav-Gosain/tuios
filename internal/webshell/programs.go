@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 var logo = []string{
@@ -114,7 +115,6 @@ type fakeProc struct {
 }
 
 func cmdTop(t *TTY, _ []string) int {
-	t.Emit("program.start", map[string]string{"program": "top"})
 	procs := []fakeProc{
 		{1, "init", 0.1, 0.2}, {42, "tuios", 3.5, 2.1}, {101, "webshell", 0.4, 0.3},
 		{137, "top", 1.2, 0.2}, {256, "gopls", 8.0, 6.3}, {512, "node", 12.0, 9.8},
@@ -183,7 +183,6 @@ func padRight(s string, w int) string {
 }
 
 func cmdRain(t *TTY, _ []string) int {
-	t.Emit("program.start", map[string]string{"program": "rain"})
 	glyphs := []rune("ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄ0123456789$+-*/=<>")
 	var drops []float64
 	var speeds []float64
@@ -227,78 +226,126 @@ func cmdRain(t *TTY, _ []string) int {
 	}, 60*time.Millisecond, true)
 }
 
-// cmdAgent pretends to be a coding agent: it reads, thinks with a spinner,
-// streams a plan, and then waits for an answer. A track about agents uses it
-// to show what a pane needing attention looks like.
-func cmdAgent(t *TTY, args []string) int {
-	task := strings.Join(args, " ")
-	if task == "" {
-		task = "add a dark mode toggle"
+var fortunes = []string{
+	"A window manager in a browser tab. What a time to be alive.",
+	"Ctrl+B is not a bookmark here. It is a way of life.",
+	"The best terminal is the one you have open.",
+	"You will tile many windows. Some of them on purpose.",
+	"There is no place like ~.",
+	"Real programmers read the docs. After trying everything else.",
+	"Today is a good day to split a pane.",
+	"An agent that asks first is an agent worth keeping.",
+}
+
+func cmdFortune(t *TTY, _ []string) int {
+	t.Print(fortunes[rand.IntN(len(fortunes))] + "\r\n")
+	return 0
+}
+
+func cmdCowsay(t *TTY, args []string) int {
+	text := strings.Join(args, " ")
+	if text == "" {
+		text = "moo. try cowsay hello"
 	}
-	t.Emit("agent.state", map[string]string{"state": "working", "task": task})
-	t.Print(purple + bold + "✻ agent" + reset + dim + "  task: " + task + reset + "\r\n\r\n")
-	steps := []string{"Reading README.md", "Reading projects/website/index.html", "Reading projects/website/style.css"}
-	for _, s := range steps {
-		t.Print(green + "● " + reset + s + "\r\n")
-		if !sleepOrInterrupt(t, 350*time.Millisecond) {
-			return 130
-		}
-	}
-	spinner := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-	for i := 0; i < 24; i++ {
-		t.Print("\r" + purple + spinner[i%len(spinner)] + reset + dim + " thinking" + strings.Repeat(".", i/6%4) + "   " + reset)
-		if !sleepOrInterrupt(t, 80*time.Millisecond) {
-			t.Print("\r\n")
-			return 130
-		}
-	}
-	t.Print("\r\x1b[K")
-	plan := "I will add a toggle button to index.html, a [data-theme=dark] block to style.css, and ten lines of script to remember the choice."
-	for _, w := range strings.Fields(plan) {
-		t.Print(w + " ")
-		if !sleepOrInterrupt(t, 40*time.Millisecond) {
-			return 130
-		}
-	}
-	t.Print("\r\n\r\n" + yellow + bold + "? " + reset + "Apply these changes? " + dim + "[y/n]" + reset + " ")
-	t.Emit("agent.state", map[string]string{"state": "waiting", "task": task})
-	// A bell is how a real agent asks for attention, and tuios shows it.
-	t.Print("\a")
-	for b := range t.In {
-		for _, c := range b {
-			switch c {
-			case 'y', 'Y':
-				t.Print("y\r\n" + green + "✓ " + reset + "Edited 2 files. Done.\r\n")
-				t.Emit("agent.state", map[string]string{"state": "done", "task": task})
-				return 0
-			case 'n', 'N', 0x03:
-				t.Print("n\r\n" + dim + "Left everything as it was." + reset + "\r\n")
-				t.Emit("agent.state", map[string]string{"state": "done", "task": task})
-				return 1
-			}
-		}
+	n := utf8.RuneCountInString(text)
+	t.Print(" " + strings.Repeat("_", n+2) + "\r\n")
+	t.Print("< " + text + " >\r\n")
+	t.Print(" " + strings.Repeat("-", n+2) + "\r\n")
+	for _, l := range []string{
+		`        \   ^__^`,
+		`         \  (oo)\_______`,
+		`            (__)\       )\/\`,
+		`                ||----w |`,
+		`                ||     ||`,
+	} {
+		t.Print(l + "\r\n")
 	}
 	return 0
 }
 
-// sleepOrInterrupt waits, and reports false when Ctrl+C arrived instead.
-func sleepOrInterrupt(t *TTY, d time.Duration) bool {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	for {
-		select {
-		case <-timer.C:
-			return true
-		case b, ok := <-t.In:
-			if !ok {
-				return false
+func cmdTree(s *shell, args []string, _ string) int {
+	root := s.cwd
+	if len(args) > 1 {
+		root = resolve(s.cwd, args[1])
+	}
+	if !isDir(root) {
+		return s.fail("tree: " + argOr(args, 1, "") + " is not a directory")
+	}
+	s.t.Print(blue + bold + prettyPath(root) + reset + "\r\n")
+	dirs, nfiles := 0, 0
+	var walk func(dir, indent string)
+	walk = func(dir, indent string) {
+		entries := list(dir)
+		var shown []entry
+		for _, e := range entries {
+			if !strings.HasPrefix(e.name, ".") {
+				shown = append(shown, e)
 			}
-			for _, c := range b {
-				if c == 0x03 {
-					t.Print("^C\r\n")
-					return false
-				}
+		}
+		for i, e := range shown {
+			branch, next := "├── ", "│   "
+			if i == len(shown)-1 {
+				branch, next = "└── ", "    "
+			}
+			s.t.Print(dim + indent + branch + reset + colourName(e) + "\r\n")
+			if e.dir {
+				dirs++
+				walk(dir+"/"+e.name, indent+next)
+			} else {
+				nfiles++
 			}
 		}
 	}
+	walk(strings.TrimSuffix(root, "/"), "")
+	s.t.Printf("\r\n%d directories, %d files\r\n", dirs, nfiles)
+	return 0
+}
+
+// cmdGo runs the tiny Go project the only ways worth faking: run, test,
+// build and version. It reads greet.go, so a change there shows up here.
+func cmdGo(s *shell, args []string, _ string) int {
+	sub := argOr(args, 1, "")
+	if sub == "version" {
+		s.t.Print("go version go1.25 js/wasm\r\n")
+		return 0
+	}
+	if sub == "" || sub == "help" {
+		s.t.Print("Try " + bold + "go run ." + reset + ", " + bold + "go test" + reset + " or " + bold + "go build" + reset + " in ~/projects/hello.\r\n")
+		return 0
+	}
+	if !inRepo(s.cwd) {
+		return s.fail("go: no go.mod here. The Go project is in " + bold + "~/projects/hello" + reset)
+	}
+	greet, _ := readFile(ProjectDir + "/greet.go")
+	bang := strings.Contains(greet, `+ "!"`)
+	switch sub {
+	case "run":
+		name := "world"
+		for _, a := range args[2:] {
+			if a != "." && !strings.HasSuffix(a, ".go") {
+				name = a
+				break
+			}
+		}
+		out := "hello, " + name
+		if bang {
+			out += "!"
+		}
+		s.t.Print(out + "\r\n")
+		return 0
+	case "build", "vet":
+		return 0
+	case "test":
+		if bang {
+			s.t.Print("--- FAIL: TestGreet (0.00s)\r\n")
+			s.t.Print(`    greet_test.go:7: greet = "hello, tuios!"` + "\r\n")
+			s.t.Print(red + "FAIL" + reset + "\r\n")
+			s.t.Print("FAIL\texample.com/hello\t0.004s\r\n")
+			s.t.Print(dim + "(the change in greet.go broke the test. git diff shows it, git restore greet.go undoes it)" + reset + "\r\n")
+			return 1
+		}
+		s.t.Print(green + "ok" + reset + "  \texample.com/hello\t0.004s\r\n")
+		return 0
+	}
+	return s.fail("go " + sub + ": not in the demo. Try go run . or go test")
 }

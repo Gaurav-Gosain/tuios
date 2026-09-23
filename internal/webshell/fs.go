@@ -7,54 +7,159 @@ import (
 	"sync"
 )
 
-// fsMu guards files and fsDirs. Every pane shares the one filesystem.
+// fsMu guards files, fsDirs and the fake git repository. Every pane shares
+// the one filesystem.
 var fsMu sync.RWMutex
 
 // Home is the fake user's home directory.
 const Home = "/home/guest"
+
+// ProjectDir is the tiny Go project, which is also the fake git repository.
+const ProjectDir = Home + "/projects/hello"
+
+// The files of the Go project as the last commit left them. The working tree
+// starts with a change on top, so git status and git diff have something to
+// show straight away.
+const (
+	helloGoMod = `module example.com/hello
+
+go 1.25
+`
+	helloMain = `package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	name := "world"
+	if len(os.Args) > 1 {
+		name = os.Args[1]
+	}
+	fmt.Println(greet(name))
+}
+`
+	helloGreetHead = `package main
+
+// greet says hello to name.
+func greet(name string) string {
+	return "hello, " + name
+}
+`
+	helloGreetWork = `package main
+
+import "strings"
+
+// greet says hello to name.
+func greet(name string) string {
+	return "hello, " + name + "!"
+}
+
+// shout says hello, loudly.
+func shout(name string) string {
+	return strings.ToUpper(greet(name))
+}
+`
+	helloTest = `package main
+
+import "testing"
+
+func TestGreet(t *testing.T) {
+	if got := greet("tuios"); got != "hello, tuios" {
+		t.Fatalf("greet = %q", got)
+	}
+}
+`
+	helloReadme = `# hello
+
+A tiny Go program for the tuios tour.
+
+    go run .          # hello, world
+    go run . tuios    # hello, tuios
+    go test           # runs greet_test.go
+
+Things to try here:
+  git log     the history
+  git status  what changed
+  git diff    the change itself
+  less greet.go
+`
+)
 
 // files is the whole fake filesystem. Directories are implied by the paths.
 // Every pane shares it, so a file one pane creates is visible in the others.
 var files = map[string]string{
 	Home + "/README.md": `# Welcome to tuios
 
-tuios is a terminal window manager. Everything you see here is
-running in your browser: the window manager, this shell, all of it.
+Everything here runs in your browser: the window manager, this
+shell, all of it. Nothing to install, nothing sent anywhere.
 
-Try these:
-  ls, cd projects, cat notes.txt
-  top      a live process monitor
-  rain     digital rain
-  neofetch system info, the pretty way
-  help     everything this shell knows
+Things to try:
+  ls                   look around
+  cd projects/hello    a tiny Go project with git history
+  less README.md       read a file (q to quit)
+  claude               a pretend coding agent
+  top                  a live process monitor
+  tuios tape play demo.tape
+                       watch tuios drive itself
+  help                 everything this shell knows
 `,
 	Home + "/notes.txt": `Things to remember
 - Ctrl+B is the prefix key. Press it, let go, then press the next key.
-- Esc leaves terminal mode so you can move windows around.
-- i goes back into terminal mode.
+- Ctrl+B then Esc leaves typing mode, so you can move windows around.
+- i goes back to typing in the window.
+- Ctrl+B then ? shows every key.
 `,
 	Home + "/todo.md": `- [x] open tuios
 - [ ] open a second window
 - [ ] tile them
 - [ ] switch to workspace 2
+- [ ] let the agent ask for something
 `,
-	Home + "/projects/hello.go": `package main
-
-import "fmt"
-
-func main() {
-	fmt.Println("hello from tuios")
-}
+	Home + "/demo.tape": `# A short tour that tuios plays by itself.
+# Run it with: tuios tape play demo.tape
+Sleep 600ms
+WindowManagementMode
+EnableTiling
+NewWindow
+Sleep 700ms
+TerminalMode
+Type "neofetch"
+Enter
+Sleep 1500ms
+WindowManagementMode
+NewWindow
+Sleep 700ms
+TerminalMode
+Type "cd projects/hello && git log --oneline"
+Enter
+Sleep 1500ms
+WindowManagementMode
+ToggleZoom
+Sleep 1s
+ToggleZoom
+Sleep 500ms
+NextWindow
+Sleep 500ms
+TerminalMode
 `,
+	ProjectDir + "/go.mod":        helloGoMod,
+	ProjectDir + "/main.go":       helloMain,
+	ProjectDir + "/greet.go":      helloGreetWork,
+	ProjectDir + "/greet_test.go": helloTest,
+	ProjectDir + "/README.md":     helloReadme,
+	ProjectDir + "/TODO.md":       "- shout at people, but kindly\n",
 	Home + "/projects/website/index.html": `<!doctype html>
 <title>hi</title>
+<link rel="stylesheet" href="style.css">
 <h1>it works</h1>
 `,
 	Home + "/projects/website/style.css": `h1 { color: hotpink; }
 `,
 	Home + "/.config/tuios/config.toml": `[appearance]
 border_style = "rounded"
-theme = "catppuccin-mocha"
+theme = "catppuccin_mocha"
 
 [keybindings]
 leader_key = "ctrl+b"
