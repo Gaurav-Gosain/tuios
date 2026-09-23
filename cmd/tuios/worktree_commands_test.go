@@ -35,8 +35,9 @@ func TestWorktreeTableShowsGoneAndPromptStatus(t *testing.T) {
 	out := renderWorktreeTable([]worktreeRow{
 		{Session: "api-a", Repo: "api", Branch: "fan/a", State: "working", PromptStatus: "sent", Changes: &two},
 		{Session: "api-b", Repo: "api", Branch: "fan/b", State: "none", PromptStatus: "not_sent", Gone: true},
+		{Session: "api-c", Repo: "api", Branch: "fan/c", State: "idle", PromptStatus: "stalled"},
 	})
-	for _, want := range []string{"api-a", "fan/a", "working", "sent", "gone", "not sent"} {
+	for _, want := range []string{"api-a", "fan/a", "working", "sent", "gone", "not sent", "stalled"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("table lacks %q:\n%s", want, out)
 		}

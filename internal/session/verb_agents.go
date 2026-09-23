@@ -518,6 +518,7 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 		Lines        int    `json:"lines"`
 		Force        bool   `json:"force"`
 		AllowBlocked bool   `json:"allow_blocked"`
+		StallTimeout int    `json:"stall_timeout"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -637,14 +638,18 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 		}
 	}
 	// Pasted and submitted with a carriage return, the way fan types its
-	// prompt. See prompt_submit.go.
-	if werr := submitPrompt(d.ctx, pty, p.Text, d.inputProfileFor(sess, target.ID)); werr != nil {
+	// prompt. See prompt_submit.go. The gate reads the pane first, so it can
+	// tell afterwards whether the pane took the question. See prompt_gate.go.
+	gate := d.newPromptGate(sess, target.ID)
+	submittedAt, werr := submitPrompt(d.ctx, pty, p.Text, d.inputProfileFor(sess, target.ID))
+	if werr != nil {
 		return nil, newVerbError(ErrVerbInternal, werr.Error())
 	}
-	sentAt := time.Now().UnixNano()
+	gate.markSubmitted(submittedAt)
 
 	// Step four: wait for the target to have dealt with it.
-	settledBy, endState := d.waitAgentSettled(sess, target.ID, pty, sentAt, settle, timeout)
+	stall := durationOr(p.StallTimeout, d.promptStall())
+	settledBy, endState := d.waitAgentSettled(sess, target.ID, pty, gate, settle, timeout, stall)
 
 	after := pty.CaptureContent(true, false)
 	reply, truncated := tailLines(after, before, lines)
@@ -653,8 +658,18 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 	// client can see what one agent asked another and what came back. It is
 	// a record and not a delivery: nothing waits on it, nothing is unread
 	// because of it, and the rate cap does not count it because the waits
-	// above already bound how often an ask can run.
+	// above already bound how often an ask can run. A stalled ask is recorded
+	// too, since the question was typed into the pane either way.
 	d.recordAsk(sess, from, fromLabel, origin, target, p.Text, reply, settledBy)
+
+	if settledBy == askSettledStalled {
+		return nil, hintedVerbError(ErrVerbPromptStalled, gate.stalledMessage(stall)+"; its state is "+endState, &VerbHint{
+			Param:   "stall_timeout",
+			Verb:    "capture-pane",
+			Command: "tuios capture-pane -w " + shortWindowID(target.ID),
+			Detail:  "The question was typed and Enter was sent, so do not send it again without looking. Read the pane with capture-pane. If the question sits in the agent's input box, press Enter there with send-keys. If the agent is still starting, wait for it with wait-for agent-state and ask again. An agent that is slow to show it is working can be given more time with stall_timeout.",
+		})
+	}
 
 	return map[string]any{
 		"type":       "agent_reply",
@@ -849,7 +864,13 @@ func (d *Daemon) waitAgentRest(sess *Session, windowID string, timeout time.Dura
 // answer; but most panes report nothing, and for those the only evidence is the
 // pane going quiet. Quiet alone is wrong for a reporting agent, which is silent
 // while it thinks. So: whichever arrives first, and the answer says which.
-func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, sentAt int64, settle, timeout time.Duration) (string, string) {
+//
+// Neither ends the wait before the stall gate has seen the pane take the
+// question, because a pane that never took it is also quiet and also at rest.
+// If the gate has seen nothing when stall runs out, the wait ends with
+// askSettledStalled. See prompt_gate.go.
+func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, gate *promptGate, settle, timeout, stall time.Duration) (string, string) {
+	sentAt := gate.submittedAt
 	sub := d.events.subscribe(eventFilter{
 		session: sess.Name,
 		ptyID:   pty.ID,
@@ -875,6 +896,23 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, sent
 	deadline := time.After(timeout)
 	timer := time.NewTimer(settle)
 	defer timer.Stop()
+	resetSettle := func() {
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(settle)
+	}
+
+	// The gate is polled until it has seen the question taken, and then not at
+	// all. taken latches, so the checks below are cheap once it has.
+	taken := gate.check(sess, pty.LastOutput)
+	stallTimer := time.NewTimer(stall)
+	defer stallTimer.Stop()
+	poll := time.NewTicker(promptGatePoll)
+	defer poll.Stop()
 
 	for {
 		select {
@@ -883,13 +921,19 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, sent
 		case <-d.ctx.Done():
 			return "shutdown", currentState()
 		case <-sub.ch:
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
+			resetSettle()
+		case <-poll.C:
+			if !taken && gate.check(sess, pty.LastOutput) {
+				taken = true
+				// The quiet clock starts when the pane took the question, so
+				// the silence before it does not count toward settling.
+				resetSettle()
 			}
-			timer.Reset(settle)
+		case <-stallTimer.C:
+			if !taken && !gate.check(sess, pty.LastOutput) {
+				return askSettledStalled, currentState()
+			}
+			taken = true
 		case ev := <-stateSub.ch:
 			if ev.Type == EventSessionClosed {
 				return "session-closed", AgentStateNone.Name()
@@ -897,10 +941,14 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, sent
 			if ev.Type == EventWindowClosed && ev.Window == windowID {
 				return "window-closed", AgentStateNone.Name()
 			}
+			gate.observe(ev)
+			if !taken && gate.check(sess, pty.LastOutput) {
+				taken = true
+			}
 			// Only a report stamped after the question was sent says anything
 			// about this question. A stale rest state is the pane not having
 			// noticed yet, and returning on it is the bug this guards.
-			if ev.Time <= sentAt {
+			if ev.Time <= sentAt || !taken {
 				continue
 			}
 			// needs_input ends the wait too, though it is not a rest state: an
@@ -910,10 +958,21 @@ func (d *Daemon) waitAgentSettled(sess *Session, windowID string, pty *PTY, sent
 				return "agent-state", name
 			}
 		case <-timer.C:
+			if !taken {
+				// Quiet before the pane took the question says nothing: a
+				// pane that never took it is quiet too. The stall timer
+				// decides that case, and the poll restarts this clock.
+				continue
+			}
 			return "idle", currentState()
 		}
 	}
 }
+
+// askSettledStalled is the settled_by an ask ends with when the stall gate saw
+// nothing. It never reaches a caller as a result: ask-agent turns it into
+// prompt_stalled.
+const askSettledStalled = "stalled"
 
 // contentLines counts a capture up to its last line with anything on it.
 //

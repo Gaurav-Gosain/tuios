@@ -1174,7 +1174,7 @@ settled by agent-state; review (c7be946f) now reports needs_input
 
 This works with any agent, because it types at the target's keyboard rather
 than expecting it to check a mailbox. It refuses one kind of target outright,
-then does three things in order:
+then does four things in order:
 
 0. **Refuses a target on `needs_input`.** Such an agent is waiting on a prompt,
    most often a permission menu, and your question would be read as the answer
@@ -1197,10 +1197,18 @@ then does three things in order:
    which several agent TUIs read as "insert a newline". A question of several
    lines is therefore one message, submitted once. Trailing line breaks are
    dropped. `fan` types its prompt the same way.
-3. **Waits until the target has actually dealt with it**, then returns what the
+3. **Checks that the target took it.** Within five seconds of Enter
+   (`--stall-timeout`) the target has to turn `working` or `needs_input`, or
+   finish a turn, or, for an agent whose harness has no rule that shows
+   `working`, print something. A TUI still starting drops keys, and one that
+   reads Enter as a newline leaves the question in its input box. If none of
+   that happens the call fails with `prompt_stalled`. The question was typed, so
+   do not send it again: read the pane with `capture-pane`, and if the text sits
+   in the input box, press Enter there with `send-keys`.
+4. **Waits until the target has actually dealt with it**, then returns what the
    pane printed in between.
 
-Step 3 is the part worth understanding, because the obvious version of it is
+Step 4 is the part worth understanding, because the obvious version of it is
 wrong: a pane going quiet is not an agent having answered, since a reporting
 agent is silent while it thinks. Two signals are watched, and `settled_by` says
 which ended the wait.
@@ -1391,9 +1399,13 @@ CLI, opencode, Amp, Cline, Devin, Grok, Hermes, Kiro, Maki, Qwen Code) reaches
 `unknown` is not typed at: its prompt ends `not_sent`, and you send it with
 `send-text`. For any other agent, `unknown` counts as at its prompt. An agent
 asking to trust the folder is `needs_input`, and the prompt waits for the
-person to answer. `list-worktrees` says `prompt_status` per session: `pending`,
-`sent`, or `not_sent` with a note. `--wait` makes the command block until
-every prompt is sent or given up on.
+person to answer. After typing it, the daemon gives the agent five seconds to
+show it took the prompt, the check `ask-agent` makes. `list-worktrees` says
+`prompt_status` per session: `pending`, `sent`, `not_sent` with a note, or
+`stalled` with a note when the prompt was typed and the agent showed no sign of
+taking it. A stalled prompt may be sitting in the agent's input box: look at
+the pane before sending it again. `--wait` makes the command block until every
+prompt is sent or given up on.
 
 The verb is `fan`, with the same parameters:
 
@@ -2196,8 +2208,9 @@ Over the socket, every failure carries a stable code in the error envelope, for
 when you are matching rather than reading: `invalid_request`, `unknown_verb`,
 `invalid_params`, `session_not_found`, `session_exists`, `window_not_found`,
 `no_windows`, `pty_not_found`, `needs_client`, `option_not_found`,
-`command_failed`, `timeout`, `not_ready`, `agent_blocked`, `loop_refused`,
-`rate_limited`, `no_keyboard`, `protocol_mismatch`, `unknown_host`, `host_unreachable`,
+`command_failed`, `timeout`, `not_ready`, `agent_blocked`, `prompt_stalled`,
+`loop_refused`, `rate_limited`, `no_keyboard`, `protocol_mismatch`,
+`unknown_host`, `host_unreachable`,
 `host_refused`, `unknown_pane`, `not_worktree`, `worktree_dirty`, `git_failed`,
 `internal`. The CLI folds the same information into its messages.
 
@@ -2208,9 +2221,10 @@ carries the closest match; `list-options` describes them all.
 nobody attached. Reading, writing, waiting, creating, moving and everything in
 the agent chapter never need one; splitting, tiling and directional focus do.
 
-`not_ready`, `agent_blocked`, `loop_refused`, `rate_limited` and `no_keyboard`
-come only from the cross-agent verbs, and each has a different remedy: wait for
-the target, read the target's prompt and answer it or ask the person,
+`not_ready`, `agent_blocked`, `prompt_stalled`, `loop_refused`, `rate_limited`
+and `no_keyboard` come only from the cross-agent verbs, and each has a
+different remedy: wait for the target, read the target's prompt and answer it
+or ask the person, look at the target's pane before typing the question again,
 restructure what you were doing, stop sending, or send a message to `human`
 instead of asking it. They are not timeouts, and retrying them unchanged will
 fail the same way.

@@ -400,6 +400,8 @@ func renderWorktreeTable(rows []worktreeRow) string {
 			prompt = "sent"
 		case session.PromptNotSent:
 			prompt = "not sent"
+		case session.PromptStalled:
+			prompt = "stalled"
 		}
 		cells = append(cells, []string{r.Session, r.Repo, r.Branch, orNone(r.State), changes, prompt, status})
 	}
@@ -604,6 +606,8 @@ func runFan(count int, agent, prompt, repo, base, name string, wait, jsonOutput 
 		switch r.PromptStatus {
 		case session.PromptSent:
 			fmt.Printf("%s: prompt sent.\n", r.Session)
+		case session.PromptStalled:
+			fmt.Printf("%s: prompt typed, not taken. %s\n", r.Session, r.PromptNote)
 		default:
 			fmt.Printf("%s: prompt not sent. %s\n", r.Session, r.PromptNote)
 		}

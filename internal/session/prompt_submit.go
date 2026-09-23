@@ -124,18 +124,30 @@ func (d *Daemon) inputProfileFor(sess *Session, windowID string) harness.InputPr
 // harness's submit key. It returns once the submit key is written, or with the
 // first write error, or with ctx's error if ctx ends during the wait, in which
 // case the paste was written and the submit key was not.
-func submitPrompt(ctx context.Context, pane promptPane, text string, in harness.InputProfile) error {
-	return submitPromptTimed(ctx, pane, text, in, promptSubmitQuiet, promptSubmitMaxWait)
+//
+// The time it returns is taken just before the submit key is written. It is
+// the line the stall gate draws: output from before it is the application
+// drawing the paste, and output after it is the application acting on Enter.
+// See prompt_gate.go.
+func submitPrompt(ctx context.Context, pane promptPane, text string, in harness.InputProfile) (time.Time, error) {
+	return submitPromptStamped(ctx, pane, text, in, promptSubmitQuiet, promptSubmitMaxWait)
 }
 
 // submitPromptTimed is submitPrompt with the waits as parameters.
 func submitPromptTimed(ctx context.Context, pane promptPane, text string, in harness.InputProfile, quiet, maxWait time.Duration) error {
+	_, err := submitPromptStamped(ctx, pane, text, in, quiet, maxWait)
+	return err
+}
+
+// submitPromptStamped is submitPromptTimed that also returns when the submit
+// key was sent.
+func submitPromptStamped(ctx context.Context, pane promptPane, text string, in harness.InputProfile, quiet, maxWait time.Duration) (time.Time, error) {
 	if in.SubmitKey == "" {
 		in.SubmitKey = "\r"
 	}
 	if in.FocusBeforeSubmit && pane.FocusReportingOn() {
 		if _, err := pane.Write([]byte(focusInReport)); err != nil {
-			return fmt.Errorf("failed to report focus: %w", err)
+			return time.Time{}, fmt.Errorf("failed to report focus: %w", err)
 		}
 	}
 	body := promptBody(text)
@@ -147,16 +159,17 @@ func submitPromptTimed(ctx context.Context, pane promptPane, text string, in har
 	pastedAt := time.Now()
 	if body != "" {
 		if _, err := pane.Write([]byte(body)); err != nil {
-			return fmt.Errorf("failed to write the prompt: %w", err)
+			return time.Time{}, fmt.Errorf("failed to write the prompt: %w", err)
 		}
 	}
 	if err := waitPasteTaken(ctx, pane, pastedAt, quiet, maxWait); err != nil {
-		return err
+		return time.Time{}, err
 	}
+	submittedAt := time.Now()
 	if _, err := pane.Write([]byte(in.SubmitKey)); err != nil {
-		return fmt.Errorf("failed to submit the prompt: %w", err)
+		return time.Time{}, fmt.Errorf("failed to submit the prompt: %w", err)
 	}
-	return nil
+	return submittedAt, nil
 }
 
 // promptBody is the text as it is pasted. Line endings are made line feeds,

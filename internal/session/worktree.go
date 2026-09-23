@@ -33,10 +33,11 @@ type WorktreeInfo struct {
 	// Prompt is the text a fan-out delivers to the agent in this session.
 	Prompt string `json:"prompt,omitempty"`
 	// PromptStatus says what became of Prompt: "pending" while the daemon waits
-	// for the agent to be ready, "sent" once typed, "not_sent" when the wait
-	// ended without an agent to type at. Empty when there was no prompt.
+	// for the agent to be ready, "sent" once typed and taken, "not_sent" when
+	// the wait ended without an agent to type at, "stalled" when it was typed
+	// and the agent showed no sign of taking it. Empty when there was no prompt.
 	PromptStatus string `json:"prompt_status,omitempty"`
-	// PromptNote is one sentence explaining a not_sent status.
+	// PromptNote is one sentence explaining a not_sent or stalled status.
 	PromptNote string `json:"prompt_note,omitempty"`
 	// PromptAt is when the prompt was typed, as Unix nanoseconds.
 	PromptAt int64 `json:"prompt_at,omitempty"`
@@ -51,6 +52,10 @@ const (
 	PromptPending = "pending"
 	PromptSent    = "sent"
 	PromptNotSent = "not_sent"
+	// PromptStalled is a prompt that was typed and submitted, after which the
+	// agent showed no sign of taking it within the stall window. The text may
+	// still be in the agent's input box. See prompt_gate.go.
+	PromptStalled = "stalled"
 )
 
 // SetWorktree records the worktree this session is, or clears it with nil. It

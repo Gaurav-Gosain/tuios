@@ -430,8 +430,11 @@ The branches are a stem, then `stem-2`, `stem-3`. The stem is `fan/` and the
 first words of the prompt, or `--name`. Each prompt is typed once its agent is
 ready to read, as one paste submitted with a carriage return (the Enter key),
 so the command returns at once and `tuios worktree ls` shows
-`pending`, `sent` or `not sent` per session. `--wait` blocks until every prompt
-is sent or given up on.
+`pending`, `sent`, `not sent` or `stalled` per session. `stalled` means the
+prompt was typed and the agent showed no sign of taking it within five seconds:
+it did not turn working or needs_input. Look at the pane before sending it
+again, since the text may be in the agent's input box. `--wait` blocks until
+every prompt is sent or given up on.
 
 `fan keep` removes every sibling of the session you keep, the way `worktree rm`
 does: a sibling with uncommitted changes is left in place unless `--stash` or
@@ -1810,7 +1813,7 @@ them.
 | `tuios set-agent-session <id> --harness <h>` | Record which conversation a pane's agent runs, for a later resume, without changing its state |
 | `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session |
 | `tuios read-agent-messages` | Read the messages agents have left in this session |
-| `tuios ask-agent <text>` | Ask another agent a question and wait for its answer |
+| `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
 | `tuios explain-agent-screen` | Show what a harness's screen and title rules make of a pane: the tail, each rule's region and the text it read there, why each refusal refused (strings, patterns, nested groups), the title and last OSC 9;4 progress report, and which manifest file is in force |
 | `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, gemini-cli, opencode, kilo, amp, kimi and pi report state; antigravity, copilot, crush, cursor-agent, devin, droid, grok, hermes, qoder and qwen report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). See [Agent state](AGENT_STATE.md#harness-integrations) |

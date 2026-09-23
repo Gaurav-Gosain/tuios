@@ -268,6 +268,29 @@ matches the report is read by those rules instead of mapped by the sequence's
 published meaning. No bundled manifest has such a rule, so nothing changes for
 a bundled harness.
 
+**A submitted prompt has to be taken.** After Enter, `ask-agent` and `fan` give
+the pane five seconds to show that it took the prompt, the check herdr calls
+`agent_prompt_stalled`. The pane shows it by turning `working`, by turning
+`needs_input` when it was not on `needs_input` before, by turning `done` or
+finishing a turn (`completion_seq` goes up), or by printing something after
+Enter. Output counts only for a pane whose harness has no screen or title rule
+that reports `working`, which today leaves out Claude Code, Codex, Gemini CLI,
+opencode and every other harness with such a rule: a TUI that read Enter as a
+newline redraws its input box, so output from it proves nothing.
+
+- `ask-agent` fails with the new code `prompt_stalled` when the pane showed none
+  of that. It used to wait out `settle` and return an empty reply with
+  `settled_by: idle`. The question was typed either way, and the ask is still
+  recorded in the ring. The new param `stall_timeout` (milliseconds, default
+  5000) sets the window.
+- The `settle` clock of `ask-agent` starts when the pane took the question,
+  not when Enter was sent, so a pane that is quiet before it reacts is not
+  counted as having answered.
+- `fan` records the new `prompt_status` value `stalled`, with a `prompt_note`,
+  where it used to record `sent`. A prompt stays `pending` for the few seconds
+  the check takes. A client that does not know `stalled` should treat it like
+  `not_sent`, which is what `tuios fan --wait` from an older build prints.
+
 **A message from `human` says whether it is verified.** Any caller can send
 `send-agent-message` with `from: "human"`, and such a message used to be stored
 exactly like the person's reply from the mail overlay. Now:
@@ -358,6 +381,7 @@ catalog.
 | `timeout` | A wait-for condition did not match before its timeout elapsed. |
 | `not_ready` | The target agent was mid-turn, so the call declined to type at it. |
 | `agent_blocked` | ask-agent declined to type at an agent on `needs_input`, because the text would answer its prompt. Nothing was typed. The hint names `capture-pane`. |
+| `prompt_stalled` | ask-agent typed the question and sent Enter, and within `stall_timeout` the pane did not show that it took it. The question was typed; look at the pane before sending it again. The hint names `capture-pane`. |
 | `loop_refused` | The call would loop: a pane addressing itself, or an ask that closes a cycle with one in flight. |
 | `rate_limited` | The sender is over the cross-agent message rate cap. |
 | `no_keyboard` | The target is the person's inbox, `human`, which has no pane to type into. |
@@ -939,9 +963,12 @@ box or title (see Changes to existing verbs); if it never does, the prompt is
 left `not_sent` when the wait ends, and `prompt_note` says to send it with
 `send-text`. The prompt goes in as one paste and is submitted with the
 harness's submit key, a carriage return for every bundled harness (see Changes
-to existing verbs). The verb returns as soon as the
-sessions exist. `list-worktrees` reports `prompt_status` per session:
-`pending`, `sent`, or `not_sent` with a `prompt_note`.
+to existing verbs). The agent then has five seconds to
+show it took the prompt, the same check `ask-agent` makes. The verb returns as
+soon as the sessions exist. `list-worktrees` reports `prompt_status` per
+session: `pending`, `sent`, `not_sent` with a `prompt_note`, or `stalled` with
+a `prompt_note` when the prompt was typed and the agent showed no sign of taking
+it. A stalled prompt may still be in the agent's input box.
 
 Params: `count` (required, 1 to 16), `agent` (required, a harness id or the
 program name: `claude`, `codex`, `gemini`), `prompt` (required), `repo`

@@ -77,6 +77,16 @@ middle of a long tool call. A harness whose manifest reads its prompt box
 reaches `idle` instead (see [Screen rules](#screen-rules)); for any other, pass `force` to `ask-agent`, or
 send a fan prompt with `send-text` once the pane is at its prompt.
 
+Once `ask-agent` or `fan` has typed a prompt and sent Enter, the state is also
+how tuios knows the prompt was taken. The pane has five seconds to turn
+`working` or `needs_input`, or to finish a turn (`completion_seq` goes up). A
+pane whose harness has no screen or title rule that reports `working` can show
+it by printing anything instead. For a harness that has one, output is not
+enough, because a TUI that read Enter as a newline redraws its input box too. A
+pane that shows none of this is stalled: `ask-agent` fails with
+`prompt_stalled` and `fan` records `prompt_status: stalled`. See
+[protocol.md](protocol.md).
+
 State is daemon-owned per-window state. It rides the same versioned state sync
 every other window property uses, so it survives detach/reattach and reaches all
 clients. `none` is the zero value and is never persisted, so older sessions and

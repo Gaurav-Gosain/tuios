@@ -108,6 +108,10 @@ type Daemon struct {
 	// again on the next start. See stash.go.
 	stash *stashStore
 
+	// promptStallOverride replaces promptStallDefault when set. Only tests set
+	// it, to keep a stall test from waiting five seconds. See prompt_gate.go.
+	promptStallOverride time.Duration
+
 	// Goroutine tracking for clean shutdown
 	wg sync.WaitGroup
 

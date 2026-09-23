@@ -146,6 +146,21 @@ func (r *Registry) Lookup(id string) *Manifest {
 // the agent waits at its prompt. A harness without one can never reach idle
 // from its screen, only from a hook or its own report.
 func (r *Registry) CanProveIdle(id string) bool {
+	return r.canShow(id, "idle")
+}
+
+// CanProveWorking reports whether the harness has an enabled screen or title
+// rule that reports working. A pane of such a harness shows that it took a
+// prompt by turning working, so for it new output alone is not evidence that a
+// prompt was submitted: a TUI that read the carriage return as a newline also
+// redraws.
+func (r *Registry) CanProveWorking(id string) bool {
+	return r.canShow(id, "working")
+}
+
+// canShow reports whether the harness has an enabled screen or title rule that
+// reports state.
+func (r *Registry) canShow(id, state string) bool {
 	m := r.Lookup(id)
 	if m == nil {
 		return false
@@ -158,7 +173,7 @@ func (r *Registry) CanProveIdle(id string) bool {
 			continue
 		}
 		for _, rule := range rules.rules {
-			if rule.State == "idle" {
+			if rule.State == state {
 				return true
 			}
 		}

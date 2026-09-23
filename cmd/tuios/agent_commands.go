@@ -425,7 +425,7 @@ func agoOf(nanos int64) string {
 // reason runWaitFor stretches its own: the daemon answers only when the ask
 // resolves, so a shorter client deadline would report a connection failure for
 // an ask that was still perfectly healthy.
-func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, settle, timeout, lines int, force, allowBlocked, jsonOutput bool) error {
+func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, settle, timeout, lines, stallTimeout int, force, allowBlocked, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
 		return err
@@ -442,6 +442,9 @@ func runAskAgent(sessionName, windowTarget, from, text string, readyTimeout, set
 	// for it.
 	if allowBlocked {
 		params["allow_blocked"] = true
+	}
+	if stallTimeout > 0 {
+		params["stall_timeout"] = stallTimeout
 	}
 	if from != "" {
 		params["from"] = from

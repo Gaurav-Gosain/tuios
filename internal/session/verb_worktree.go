@@ -577,11 +577,25 @@ func (d *Daemon) deliverFanPrompt(sess *Session, windowID, text string, timeout 
 	}
 	// Pasted and submitted with a carriage return, the way ask-agent types its
 	// question. See prompt_submit.go.
-	if err := submitPrompt(d.ctx, pty, text, d.inputProfileFor(sess, windowID)); err != nil {
+	gate := d.newPromptGate(sess, windowID)
+	at, err := submitPrompt(d.ctx, pty, text, d.inputProfileFor(sess, windowID))
+	if err != nil {
 		sess.setPromptStatus(PromptNotSent, "Could not write to the agent's pane: "+err.Error(), 0)
 		return
 	}
-	sess.setPromptStatus(PromptSent, "", time.Now().UnixNano())
+	// The prompt is sent only once the agent shows it took it. See
+	// prompt_gate.go. It stays pending for the few seconds that takes.
+	gate.markSubmitted(at)
+	stall := d.promptStall()
+	taken, gone := d.waitPromptTaken(sess, pty, gate, stall)
+	switch {
+	case gone:
+		sess.setPromptStatus(PromptNotSent, "The agent's window closed as the prompt was typed.", at.UnixNano())
+	case !taken:
+		sess.setPromptStatus(PromptStalled, "The prompt was typed and Enter was sent, and the agent showed no sign of taking it within "+stall.String()+". Look at the pane before sending it again: it may be in the input box, waiting for Enter.", at.UnixNano())
+	default:
+		sess.setPromptStatus(PromptSent, "", at.UnixNano())
+	}
 }
 
 func plural(n int, one, many string) string {
