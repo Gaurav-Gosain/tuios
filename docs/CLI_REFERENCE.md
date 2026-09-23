@@ -2184,6 +2184,10 @@ daemon verb, and its input schema is generated from the verb table, so it takes
 the verb's own parameters. `tuios_events` follows the event stream: it returns
 what happened since `after_seq`, or waits up to `wait_ms` for the next events,
 and answers with the `last_seq` and `boot_id` to pass to the next call.
+`last_seq` is where the daemon's stream stood when the call returned, even when
+none of the events since were ones the call may see, so a server held to a
+quiet session still moves forward. Only when `max_events` cuts the replay
+short is it the seq of the last event returned.
 
 **How it is held to its grant:** every tool call opens its own connection to
 the daemon and calls `restrict-connection` on it first, so the daemon refuses

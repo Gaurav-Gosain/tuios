@@ -299,6 +299,53 @@ func TestMCPServerOverStdioIsHeldToItsPane(t *testing.T) {
 	if !sawMine {
 		t.Errorf("no event of its own session: %s", text)
 	}
+
+	// Its own session goes quiet while the other one is busy. The replay
+	// after last_seq is empty for this caller, and the next call must still
+	// resume from where the daemon is, not hand the same seq back forever.
+	var point struct {
+		LastSeq float64 `json:"last_seq"`
+		BootID  string  `json:"boot_id"`
+	}
+	_ = json.Unmarshal([]byte(text), &point)
+	raw, err = c.Call("new-window", map[string]any{"session": "theirs", "name": "busy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var busy struct {
+		WindowID string `json:"window_id"`
+	}
+	_ = json.Unmarshal(raw, &busy)
+	for _, state := range []string{"working", "idle", "working"} {
+		if _, err := c.Call("set-agent-state", map[string]any{"session": "theirs", "window": busy.WindowID, "state": state}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	att, err := c.Call("list-attention", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var now struct {
+		Seq float64 `json:"seq"`
+	}
+	_ = json.Unmarshal(att, &now)
+	if now.Seq <= point.LastSeq {
+		t.Fatalf("the daemon's seq %v did not move past %v", now.Seq, point.LastSeq)
+	}
+	_, text = srv.tool("tuios_events", map[string]any{"after_seq": point.LastSeq, "boot_id": point.BootID, "wait_ms": 300})
+	var resumed struct {
+		LastSeq float64          `json:"last_seq"`
+		Events  []map[string]any `json:"events"`
+	}
+	if err := json.Unmarshal([]byte(text), &resumed); err != nil {
+		t.Fatalf("events = %s: %v", text, err)
+	}
+	if len(resumed.Events) != 0 {
+		t.Errorf("a quiet session's resume returned %v", resumed.Events)
+	}
+	if resumed.LastSeq < now.Seq {
+		t.Errorf("resumed last_seq = %v, want at least %v, the seq the daemon had reached", resumed.LastSeq, now.Seq)
+	}
 }
 
 // TestMCPServerWithoutAPaneReachesNothing: a server restricted to its own

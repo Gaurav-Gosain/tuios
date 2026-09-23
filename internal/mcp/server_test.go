@@ -539,6 +539,90 @@ func TestEventsReturnWhatArrivedAndWhereToResume(t *testing.T) {
 	}
 }
 
+// TestEventsResumeFromTheBaselineWhenTheReplayIsFiltered: a restricted caller
+// whose own session is quiet while others are busy gets a replay with nothing
+// in it, only a gap marker once its seq is evicted. The next call must resume
+// from the subscribe baseline, or it hands back the same after_seq forever and
+// every call replays the same gap at once.
+func TestEventsResumeFromTheBaselineWhenTheReplayIsFiltered(t *testing.T) {
+	gap := `{"type":"gap","reason":"evicted","boot_id":"b1"}`
+	cases := []struct {
+		name   string
+		ack    string
+		events []string
+		args   map[string]any
+		want   float64
+	}{
+		{
+			name:   "only a gap",
+			ack:    `{"type":"subscribed","seq":40,"boot_id":"b1","replayed":0}`,
+			events: []string{gap},
+			args:   map[string]any{"after_seq": 3, "boot_id": "b1"},
+			want:   40,
+		},
+		{
+			name: "nothing at all",
+			ack:  `{"type":"subscribed","seq":40,"boot_id":"b1","replayed":0}`,
+			args: map[string]any{"after_seq": 3, "boot_id": "b1"},
+			want: 40,
+		},
+		{
+			name:   "a daemon that does not count the replay",
+			ack:    `{"type":"subscribed","seq":40,"boot_id":"b1"}`,
+			events: []string{gap},
+			args:   map[string]any{"after_seq": 3, "boot_id": "b1"},
+			want:   40,
+		},
+		{
+			name: "max_events cuts the replay short",
+			ack:  `{"type":"subscribed","seq":40,"boot_id":"b1","replayed":3}`,
+			events: []string{
+				`{"seq":10,"type":"agent-state","boot_id":"b1"}`,
+				`{"seq":11,"type":"agent-state","boot_id":"b1"}`,
+				`{"seq":12,"type":"agent-state","boot_id":"b1"}`,
+			},
+			args: map[string]any{"after_seq": 3, "boot_id": "b1", "max_events": 2},
+			want: 11,
+		},
+		{
+			name:   "a live event past the baseline",
+			ack:    `{"type":"subscribed","seq":40,"boot_id":"b1","replayed":1}`,
+			events: []string{`{"seq":10,"type":"agent-state","boot_id":"b1"}`, `{"seq":41,"type":"agent-state","boot_id":"b1"}`},
+			args:   map[string]any{"after_seq": 3, "boot_id": "b1"},
+			want:   41,
+		},
+		{
+			name:   "the daemon restarted",
+			ack:    `{"type":"subscribed","seq":10,"boot_id":"b2","replayed":0}`,
+			events: []string{`{"type":"gap","reason":"boot_changed","boot_id":"b2"}`},
+			args:   map[string]any{"after_seq": 500, "boot_id": "b1"},
+			want:   10,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &fakeDaemon{
+				answer: func(string, map[string]any) (json.RawMessage, error) {
+					return json.RawMessage(tc.ack), nil
+				},
+				events: tc.events,
+			}
+			c := startServer(t, Options{Dial: f.dial})
+			args := map[string]any{"wait_ms": 100}
+			for k, v := range tc.args {
+				args[k] = v
+			}
+			var body map[string]any
+			if err := json.Unmarshal([]byte(lastText(c.toolCall(1, "tuios_events", args))), &body); err != nil {
+				t.Fatal(err)
+			}
+			if body["last_seq"] != tc.want {
+				t.Errorf("last_seq = %v, want %v (answer %v)", body["last_seq"], tc.want, body)
+			}
+		})
+	}
+}
+
 func TestACancelledCallClosesItsConnectionAndAnswersNothing(t *testing.T) {
 	f := &fakeDaemon{block: make(chan struct{})}
 	c := startServer(t, Options{Dial: f.dial})

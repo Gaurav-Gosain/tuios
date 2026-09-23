@@ -407,13 +407,28 @@ func runEvents(s *Server, c Conn, in map[string]any) map[string]any {
 	var ack struct {
 		Seq    uint64 `json:"seq"`
 		BootID string `json:"boot_id"`
+		// Replayed is how many events the daemon writes before the live
+		// stream on a resume, after its scope and type filters. Nil when the
+		// daemon did not say.
+		Replayed *int `json:"replayed"`
 	}
 	_ = json.Unmarshal(raw, &ack)
-	last := ack.Seq
-	if resuming && uint64(after) < last {
-		last = uint64(after)
-	}
 	boot := ack.BootID
+
+	// The stream is at the ack's baseline once the replay is drained. The
+	// replay is filtered by type and, on a restricted connection, by scope, so
+	// it can be empty even when the daemon moved far past after_seq: resuming
+	// from the highest seq delivered would then hand the same after_seq back on
+	// every call. seen is the highest seq delivered, which is where to resume
+	// only when max_events cut the replay short. An after_seq from another
+	// daemon start numbers nothing here, so it does not count as seen.
+	var seen uint64
+	if resuming && uint64(after) <= ack.Seq {
+		if b, _ := in["boot_id"].(string); b == "" || b == ack.BootID {
+			seen = uint64(after)
+		}
+	}
+	replayedSeen := 0
 
 	wait := time.Duration(intArg(in, "wait_ms", int(eventsDefaultWait/time.Millisecond), int(eventsMaxWait/time.Millisecond))) * time.Millisecond
 	limit := intArg(in, "max_events", eventsDefaultMax, eventsMaxMax)
@@ -441,13 +456,26 @@ func runEvents(s *Server, c Conn, in map[string]any) map[string]any {
 		if json.Unmarshal(line, &ev) != nil {
 			continue
 		}
-		if ev.Seq > last {
-			last = ev.Seq
+		if ev.Seq > seen {
+			seen = ev.Seq
+		}
+		// A gap marker carries no seq, and every live event is above the
+		// baseline, so a seq at or below it is a replayed event.
+		if ev.Seq != 0 && ev.Seq <= ack.Seq {
+			replayedSeen++
 		}
 		if ev.BootID != "" {
 			boot = ev.BootID
 		}
 		events = append(events, append(json.RawMessage(nil), line...))
+	}
+	drained := len(events) < limit
+	if ack.Replayed != nil {
+		drained = replayedSeen >= *ack.Replayed
+	}
+	last := seen
+	if drained {
+		last = max(ack.Seq, seen)
 	}
 	out, _ := json.Marshal(map[string]any{
 		"type":      "events",
