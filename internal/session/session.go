@@ -964,6 +964,11 @@ type Session struct {
 	graphicsMu    sync.RWMutex
 	kittyGraphics bool
 	sixelGraphics bool
+	// linkedViewer says a client attached over a link, from another machine,
+	// is drawing this session. Read from the VT callback, so it is atomic
+	// rather than behind a lock that callback could wait on. See
+	// kittyQueryResponse.
+	linkedViewer atomic.Bool
 	// fed is the link manager a window on another machine is opened over. It is
 	// nil unless the daemon installed one, and every reader checks. See
 	// remote_pane.go.
@@ -1414,10 +1419,12 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 
 	// Handle kitty graphics queries on the daemon side for low-latency
 	// responses. All other commands flow through the raw PTY broadcast.
+	remotePane := host != ""
 	terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		if cmd.Action == vt.KittyActionQuery {
-			response := vt.BuildKittyResponse(true, cmd.ImageID, "")
-			terminal.WriteResponse(response)
+			if response := s.kittyQueryResponse(cmd, remotePane); response != nil {
+				terminal.WriteResponse(response)
+			}
 			return
 		}
 	})

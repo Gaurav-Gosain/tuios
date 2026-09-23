@@ -97,6 +97,32 @@ func (kp *KittyPassthrough) ForwardCommand(
 		return nil
 	}
 
+	// A payload that is not base64 is no image. The emulator has already
+	// answered the guest with EINVAL; what is left here is to forget the
+	// transmission this chunk belonged to, so the chunks before it are not
+	// drawn as a truncated image and the next transmission does not start
+	// with them. Nothing reaches the host.
+	isTransmit := cmd.Action == vt.KittyActionTransmit || cmd.Action == vt.KittyActionTransmitPlace
+	if cmd.PayloadErr != nil {
+		kittyPassthroughLog("ForwardCommand: dropping action=%c with an undecodable payload: %v", cmd.Action, cmd.PayloadErr)
+		delete(kp.pendingDirectData, windowID)
+		delete(kp.directFrames, windowID)
+		if isTransmit && cmd.More {
+			if kp.discardingChunks == nil {
+				kp.discardingChunks = make(map[string]bool)
+			}
+			kp.discardingChunks[windowID] = true
+		}
+		return nil
+	}
+	if isTransmit && kp.discardingChunks[windowID] {
+		if !cmd.More {
+			delete(kp.discardingChunks, windowID)
+		}
+		kittyPassthroughLog("ForwardCommand: dropping a chunk of a transmission that already failed")
+		return nil
+	}
+
 	// Remember what size the guest says this image is, on whichever path the
 	// bytes take. Only the first chunk of a chunked transmission carries s= and
 	// v=, and a continuation must not overwrite them with zero, so this records
@@ -200,7 +226,7 @@ func (kp *KittyPassthrough) forwardQuery(cmd *vt.KittyCommand, _ []byte, ptyInpu
 
 	ok := true
 	errMsg := ""
-	if isFileMedium(cmd.Medium) && !kp.hostReadsFiles() {
+	if cmd.Medium.IsFile() && !kp.hostReadsFiles() {
 		ok = false
 		errMsg = "ENOTSUPPORTED:host terminal cannot read files from this machine"
 	}
@@ -216,14 +242,6 @@ func (kp *KittyPassthrough) forwardQuery(cmd *vt.KittyCommand, _ []byte, ptyInpu
 	response := vt.BuildKittyResponse(ok, cmd.ImageID, errMsg)
 	kittyPassthroughLog("forwardQuery: imageID=%d medium=%c ok=%v response=%q", cmd.ImageID, cmd.Medium, ok, response)
 	ptyInput(response)
-}
-
-// isFileMedium reports whether a transmission medium names a path on this
-// machine rather than carrying the image bytes inline.
-func isFileMedium(medium vt.KittyGraphicsMedium) bool {
-	return medium == vt.KittyMediumFile ||
-		medium == vt.KittyMediumTempFile ||
-		medium == vt.KittyMediumSharedMemory
 }
 
 // hostReadsFiles reports whether a file path forwarded to the host terminal

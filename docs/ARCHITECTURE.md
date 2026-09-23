@@ -744,6 +744,45 @@ carries no placement, so the teardown that walks `placements` cannot see it.
 clear takes the cells with it and a pager walked through a directory of pictures
 would otherwise leave every one of them resident in the host.
 
+### Kitty image payloads and transmission media
+
+A kitty graphics payload is base64, and the protocol leaves padding to the
+sender. kitten icat sends none (its encoder is Go's `RawStdEncoding`); chafa,
+timg and mpv pad. `vt.DecodeKittyPayload` accepts both, per chunk, since only a
+chunk that is not the last has to be a multiple of four characters. A payload
+that is not base64 at all is never passed on as image bytes: the command comes
+out of the parser with `PayloadErr` set, the emulator answers the guest
+`EINVAL` when kitty would (an id was given and `q` is not 2), and the
+passthrough drops the rest of that chunked transmission.
+
+A guest can also send a path instead of bytes: a file (`t=f`), a temporary
+file (`t=t`) or a shared memory object (`t=s`). A path means something only on
+the machine it was written on, so where it gets read decides whether it works.
+
+- **Standalone.** The pane and tuios are on one machine. When the host
+  terminal can read files there (the capability probe's `i=2` answer), tuios
+  hands it the path. When it cannot (a browser, an SSH client), tuios reads the
+  file itself and sends the bytes inline. The `a=q` answer says which: file
+  media are refused when the host cannot read files, so a guest that asks,
+  such as icat, streams the bytes instead.
+- **Daemon.** The daemon answers `a=q` itself, before any client sees the
+  query, so it answers for the one thing it knows: whether the path will be
+  read on the machine it names a file on. File media are refused for a pane
+  whose process runs on another machine over a link, and while any client
+  attached over a link is drawing the session. Everywhere else they are
+  accepted, and each client handles the path as in standalone. Direct
+  transmission is always accepted.
+
+Reading a guest's file is not a new privilege. The pane's process and tuios
+run as the same user on the same machine, so tuios reads nothing the guest
+could not read and send itself. What the read guards against is the file
+itself: only a regular file is read, up to the transmit cap, so `/dev/zero`, a
+FIFO or a device cannot hang or exhaust the process. A guest on another
+machine that asks is told not to send a path at all. One that sends a path
+without asking has it read on the wrong machine, where it names nothing or
+names one of the user's own files, and at worst that file is drawn, badly, on
+the user's own screen.
+
 ## Performance Characteristics
 
 **Memory Management:**

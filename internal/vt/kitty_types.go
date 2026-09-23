@@ -37,6 +37,13 @@ const (
 	KittyMediumSharedMemory KittyGraphicsMedium = 's'
 )
 
+// IsFile reports whether the medium names something on the machine the
+// terminal runs on (a file, a temporary file or a shared memory object)
+// instead of carrying the image bytes in the payload.
+func (m KittyGraphicsMedium) IsFile() bool {
+	return m == KittyMediumFile || m == KittyMediumTempFile || m == KittyMediumSharedMemory
+}
+
 type KittyDeleteTarget byte
 
 const (
@@ -87,6 +94,10 @@ type KittyCommand struct {
 	Data         []byte
 	RawPayload   string // Original base64 payload (preserved for passthrough without re-encoding)
 	FilePath     string
+
+	// PayloadErr is set when the payload could not be decoded as base64. Data
+	// and FilePath are then empty: the undecoded text is never image data.
+	PayloadErr error
 
 	// BackgroundColor is the Y key read as a 32-bit RGBA colour, which is what
 	// a=f means by it. YOffset holds the same key read as a placement offset;

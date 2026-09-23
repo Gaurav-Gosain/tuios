@@ -24,42 +24,11 @@ func kittyPassthroughLog(format string, args ...any) {
 }
 
 // isKittyResponse checks if a graphics payload looks like an echoed kitty
-// protocol response rather than real image data.
-//
-// It is matched against the RAW wire payload (the base64 text between ';' and
-// the APC terminator), NOT the base64-decoded bytes. A real transmit payload
-// is a long base64 string that decodes cleanly; an echoed response is a short
-// status token: "OK", or a POSIX error name optionally followed by a ":message"
-// (e.g. "ENOENT", "EINVAL:bad params"). Matching the decoded bytes instead let
-// arbitrary binary chunks (a chafa/mpv direct stream) collide with the 'E'+A-Z
-// shape ~0.04% of the time and silently drop a chunk, corrupting the image.
-//
-// The shape required is ^(OK|E[A-Z]+(:.*)?)$ with a hard length cap so that a
-// legitimate (necessarily longer, mixed-case) base64 payload cannot match.
+// protocol response rather than real image data. The rule lives in the vt
+// package, which needs it too: it must not answer an echoed error with
+// another error. See vt.IsKittyResponsePayload.
 func isKittyResponse(payload string) bool {
-	if len(payload) == 0 || len(payload) > 256 {
-		return false
-	}
-	if payload == "OK" {
-		return true
-	}
-	// POSIX error name: 'E' followed by one or more uppercase letters, then an
-	// optional ":<message>". A base64 image payload is not all-uppercase.
-	if payload[0] != 'E' {
-		return false
-	}
-	i := 1
-	for i < len(payload) && payload[i] >= 'A' && payload[i] <= 'Z' {
-		i++
-	}
-	if i < 2 {
-		// Need at least one uppercase letter after the leading 'E'.
-		return false
-	}
-	if i == len(payload) {
-		return true
-	}
-	return payload[i] == ':'
+	return vt.IsKittyResponsePayload(payload)
 }
 
 type KittyPassthrough struct {
@@ -178,6 +147,12 @@ type KittyPassthrough struct {
 
 	// Pending direct transmission data (for chunked transfers)
 	pendingDirectData map[string]*pendingDirectTransmit // key: windowID
+
+	// discardingChunks marks a window whose chunked transmission had a chunk
+	// that was not base64. The chunks still to come belong to an image that
+	// will never be whole, so they are dropped up to and including the final
+	// one (m=0), rather than each reaching the host as the start of an image.
+	discardingChunks map[string]bool // key: windowID
 
 	// lastBitmap and directFrames back the damage path: the bitmap the host
 	// currently holds for each image, and the transmission being assembled

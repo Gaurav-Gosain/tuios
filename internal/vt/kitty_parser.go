@@ -3,10 +3,15 @@ package vt
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"strconv"
 	"strings"
 )
 
+// ParseKittyCommand parses the body of a kitty graphics APC, the bytes after
+// the leading 'G'. A payload that is not valid base64 is not an error here:
+// the command is returned with PayloadErr set and no Data or FilePath, so the
+// caller can still answer the guest and drop the transmission it was part of.
 func ParseKittyCommand(data []byte) (*KittyCommand, error) {
 	if len(data) == 0 {
 		return nil, nil
@@ -28,28 +33,135 @@ func ParseKittyCommand(data []byte) (*KittyCommand, error) {
 		// Always preserve raw payload for passthrough (avoids decode→re-encode cycle)
 		cmd.RawPayload = string(dataPart)
 
-		switch cmd.Medium {
-		case KittyMediumFile, KittyMediumTempFile:
-			decoded, err := base64.StdEncoding.DecodeString(string(dataPart))
-			if err == nil {
+		decoded, err := DecodeKittyPayload(dataPart)
+		if err != nil {
+			// Undecodable text is never handed on as image data: a guest that
+			// sent it gets EINVAL (see KittyPayloadErrorResponse) and the
+			// passthrough drops the transmission it belonged to.
+			cmd.PayloadErr = err
+		} else {
+			switch cmd.Medium {
+			case KittyMediumFile, KittyMediumTempFile, KittyMediumSharedMemory:
 				cmd.FilePath = string(decoded)
-			}
-		case KittyMediumSharedMemory:
-			decoded, err := base64.StdEncoding.DecodeString(string(dataPart))
-			if err == nil {
-				cmd.FilePath = string(decoded)
-			}
-		default:
-			decoded, err := base64.StdEncoding.DecodeString(string(dataPart))
-			if err == nil {
+			default:
 				cmd.Data = decoded
-			} else {
-				cmd.Data = dataPart
 			}
 		}
 	}
 
 	return cmd, nil
+}
+
+// DecodeKittyPayload decodes a kitty graphics payload, padded or not.
+//
+// The protocol says the payload is base64 and leaves padding to the sender.
+// kitten icat sends none: its Go encoder is RawStdEncoding, so the final chunk
+// of a stream, and any file path whose length is not a multiple of three, has
+// no '=' at the end. Only a chunk that is not the last has to be a multiple of
+// four characters. Other senders (chafa, timg, mpv) pad. Both are accepted, and
+// so is a payload built by joining padded groups, which is what a sender that
+// pads every chunk produces if two chunks are ever sent as one.
+//
+// Each run of '=' ends one group. The text before it is decoded without
+// padding, which accepts a group with its padding stripped and rejects one
+// that was cut short (a single character left over), and the rest of the
+// payload is decoded the same way.
+func DecodeKittyPayload(payload []byte) ([]byte, error) {
+	out := make([]byte, 0, base64.RawStdEncoding.DecodedLen(len(payload)))
+	rest := payload
+	for len(rest) > 0 {
+		end := bytes.IndexByte(rest, '=')
+		if end < 0 {
+			end = len(rest)
+		}
+		group := rest[:end]
+		rest = rest[end:]
+		pad := 0
+		for pad < len(rest) && rest[pad] == '=' {
+			pad++
+		}
+		rest = rest[pad:]
+		// Padding only ever completes a group of four, with one or two '='.
+		// Anything else is not base64.
+		if pad > 0 && (pad > 2 || (len(group)+pad)%4 != 0) {
+			return nil, errKittyPadding
+		}
+		// Decoded in place: out was sized for the whole payload, padding
+		// included, so the groups always fit and a frame is copied once.
+		n, err := base64.RawStdEncoding.Decode(out[len(out):cap(out)], group)
+		if err != nil {
+			return nil, err
+		}
+		out = out[:len(out)+n]
+	}
+	return out, nil
+}
+
+// errKittyPadding is a payload whose '=' padding cannot end a base64 group.
+var errKittyPadding = errors.New("misplaced base64 padding")
+
+// KittyPayloadErrorResponse is the reply owed to a guest whose command carried
+// a payload that could not be decoded, or nil when none is owed.
+//
+// kitty answers an error unless the guest asked for silence with q=2, and only
+// when the command names its image with i= or I=, because a reply without an
+// id cannot be matched to anything. A query is the exception: it is answered
+// with or without an id, the way tuios has always answered it, because a
+// probing guest waits for that reply.
+//
+// A payload shaped like a reply ("EINVAL:...") is a guest echoing one back,
+// usually a shell that received it as input. Answering that would echo again,
+// forever, so it gets nothing.
+func KittyPayloadErrorResponse(cmd *KittyCommand) []byte {
+	if cmd == nil || cmd.PayloadErr == nil || cmd.Quiet >= 2 {
+		return nil
+	}
+	if IsKittyResponsePayload(cmd.RawPayload) {
+		return nil
+	}
+	if cmd.Action != KittyActionQuery && cmd.ImageID == 0 && cmd.ImageNumber == 0 {
+		return nil
+	}
+	return BuildKittyResponse(false, cmd.ImageID, "EINVAL:payload is not valid base64")
+}
+
+// IsKittyResponsePayload reports whether a graphics payload looks like an
+// echoed kitty protocol response rather than image data.
+//
+// It is matched against the raw wire payload (the base64 text between ';' and
+// the APC terminator), not the decoded bytes. A real transmit payload is a
+// base64 string; an echoed response is a short status token: "OK", or a POSIX
+// error name optionally followed by a ":message" (e.g. "ENOENT", "EINVAL:bad
+// params"). Matching the decoded bytes instead let arbitrary binary chunks (a
+// chafa or mpv direct stream) collide with the 'E'+A-Z shape about 0.04% of
+// the time and silently drop a chunk, corrupting the image.
+//
+// The shape required is ^(OK|E[A-Z]+(:.*)?)$ with a hard length cap so that a
+// legitimate (necessarily longer, mixed-case) base64 payload cannot match.
+func IsKittyResponsePayload(payload string) bool {
+	if len(payload) == 0 || len(payload) > 256 {
+		return false
+	}
+	if payload == "OK" {
+		return true
+	}
+	// POSIX error name: 'E' followed by one or more uppercase letters, then an
+	// optional ":<message>". A base64 image payload is not all-uppercase.
+	if payload[0] != 'E' {
+		return false
+	}
+	i := 1
+	for i < len(payload) && payload[i] >= 'A' && payload[i] <= 'Z' {
+		i++
+	}
+	if i < 2 {
+		// Need at least one uppercase letter after the leading 'E'.
+		return false
+	}
+	if i == len(payload) {
+		return true
+	}
+	return payload[i] == ':'
 }
 
 func parseKittyControlParams(control string, cmd *KittyCommand) {

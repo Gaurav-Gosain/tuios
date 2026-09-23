@@ -120,6 +120,10 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	cs.humanNonce = humanNonce
 	cs.mu.Unlock()
 
+	// Before the reply, so a pane that probes the moment this client can see
+	// it is already answered for this client's machine.
+	d.refreshLinkedViewer(session.ID)
+
 	clientCount := d.getSessionClientCount(session.ID)
 	log.Printf("Client %s attached to session %s (TUI client, %d clients total, size=%dx%d)",
 		cs.clientID, session.Name, clientCount, payload.Width, payload.Height)

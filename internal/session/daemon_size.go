@@ -101,8 +101,33 @@ func (d *Daemon) notifyClientJoined(sessionID string, joiningClient *connState) 
 	_, _, _ = d.recalculateAndBroadcastSize(sessionID, joiningClient.clientID)
 }
 
+// refreshLinkedViewer records on a session whether any TUI client drawing it
+// arrived over a link, from another machine. It runs whenever a client joins
+// or leaves, so the answer the session's panes give a kitty graphics query
+// follows the clients actually attached. See Session.kittyQueryResponse.
+func (d *Daemon) refreshLinkedViewer(sessionID string) {
+	session := d.manager.GetSessionByID(sessionID)
+	if session == nil {
+		return
+	}
+	linked := false
+	d.clientsMu.RLock()
+	for _, cs := range d.clients {
+		cs.mu.Lock()
+		match := cs.sessionID == sessionID && cs.isTUIClient && cs.viaLink
+		cs.mu.Unlock()
+		if match {
+			linked = true
+			break
+		}
+	}
+	d.clientsMu.RUnlock()
+	session.SetLinkedViewer(linked)
+}
+
 // notifyClientLeft broadcasts a client leave event to all other clients in the session.
 func (d *Daemon) notifyClientLeft(sessionID string, leavingClientID string) {
+	d.refreshLinkedViewer(sessionID)
 	clientCount := d.getSessionClientCount(sessionID)
 
 	payload := &ClientLeftPayload{

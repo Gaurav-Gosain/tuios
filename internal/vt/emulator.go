@@ -1491,6 +1491,20 @@ func (e *Emulator) registerKittyGraphicsHandler() {
 		rawData[len(rawData)-2] = '\x1b'
 		rawData[len(rawData)-1] = '\\'
 
+		// An undecodable payload is answered here, once, whoever renders the
+		// pane: the emulator's responses reach the guest in every mode (and a
+		// daemon client's are drained, so there is no second copy). A query
+		// is finished by that answer; anything else still goes to the
+		// passthrough, which has to drop the transmission it belonged to.
+		if cmd.PayloadErr != nil {
+			if resp := KittyPayloadErrorResponse(cmd); resp != nil {
+				_, _ = e.pipe.Write(resp)
+			}
+			if cmd.Action == KittyActionQuery {
+				return true
+			}
+		}
+
 		if e.kittyPassthroughFunc != nil {
 			e.kittyPassthroughFunc(cmd, rawData)
 			return true

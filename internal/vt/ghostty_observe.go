@@ -426,6 +426,17 @@ func (t *GhosttyTerminal) handleKittyAPC(payload []byte) {
 	rawData[len(rawData)-2] = '\x1b'
 	rawData[len(rawData)-1] = '\\'
 
+	// The same rule as the pure emulator: an undecodable payload is answered
+	// here, and a query is finished by that answer.
+	if cmd.PayloadErr != nil {
+		if resp := KittyPayloadErrorResponse(cmd); resp != nil {
+			_, _ = t.pipe.Write(resp)
+		}
+		if cmd.Action == KittyActionQuery {
+			return
+		}
+	}
+
 	if fn := t.kittyPassthroughFunc; fn != nil {
 		t.callUnlocked(func() { fn(cmd, rawData) })
 		return
