@@ -942,8 +942,22 @@ func TestAgentsTalkToEachOtherHeadless(t *testing.T) {
 	}
 
 	// Asking a question types at the pane and comes back with what it printed.
-	// The pane is a plain shell, so the settle timer is the only signal, which
-	// is the case the fallback exists for.
+	// The pane is a plain shell that reported itself as claude-code, and a
+	// harness that can show working has to show it: output alone does not
+	// prove the question was taken (see prompt_gate.go), and without this the
+	// ask fails with prompt_stalled. So the pane reports working and then idle
+	// the way Claude Code's hook would, from a connection of its own.
+	hook := e.dial()
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		hook.call(20, "set-agent-state", map[string]any{
+			"session": "crew", "window": review, "state": "working", "harness": "claude-code",
+		}, 5*time.Second)
+		time.Sleep(300 * time.Millisecond)
+		hook.call(21, "set-agent-state", map[string]any{
+			"session": "crew", "window": review, "state": "idle", "harness": "claude-code",
+		}, 5*time.Second)
+	}()
 	res = c.result(11, "ask-agent", map[string]any{
 		"session": "crew", "window": review, "from": orch,
 		"text": "echo e2e_ask_reply", "settle": 900, "timeout": 20000,
