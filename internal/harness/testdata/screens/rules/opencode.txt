@@ -1,0 +1,10 @@
+# harness: opencode
+# want: working
+# how: derived. The footer showing the moving block bar during a turn, from
+# herdr's opencode manifest (progress_bar_working).
+---
+┃  fix the flaky test
+┃
+┃  Build · Muse Spark 1.3 Free OpenCode Zen
+╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   ■■■■⬝⬝⬝⬝                    tab agents  ctrl+p commands

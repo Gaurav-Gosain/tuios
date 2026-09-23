@@ -1,0 +1,46 @@
+# harness: kimi
+# want: needs_input
+# how: derived. The approval panel, from herdr's kimi manifest
+# (current_approval_panel).
+---
+Run this command?  go build ./...
+  Approve  Reject  Revise
+  1/2/3 choose · ↵ confirm
+=====
+# harness: kimi
+# want: needs_input
+# how: derived. The question panel, herdr's question_panel.
+---
+question
+? Which package manager?
+  ↑↓ select · ↵ choose · esc cancel
+=====
+# harness: kimi
+# want: needs_input
+# how: derived. The legacy approval panel, herdr's legacy_approval_panel.
+---
+  Requesting approval: shell
+  Approve once   Approve for this session   Reject
+  1/2/3/4 choose
+=====
+# harness: kimi
+# want: working
+# how: derived. The status line with agents running, herdr's
+# background_agent_status_working.
+---
+  Started the review.
+  kimi-k2 thinking… [2 agents running]
+=====
+# harness: kimi
+# want: working
+# how: derived. A moon phase alone on its line, herdr's moon_spinner_working.
+---
+  Reading src/main.go
+🌕
+=====
+# harness: kimi
+# want: working
+# how: derived. A braille spinner with its word, herdr's
+# braille_spinner_working.
+---
+  ⠹ Thinking...

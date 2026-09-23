@@ -1,6 +1,9 @@
 package harness
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // The pane's window title as evidence, and the one rule that makes it safe to
 // read.
@@ -76,54 +79,105 @@ func containsToken(hay, needle string) bool {
 // rule written against one release of an agent's TUI has to degrade to no
 // opinion rather than to a confident wrong one.
 func (r *Registry) ClassifyTitle(id, title string) (state string, rule int, ok bool) {
+	return r.ClassifyOSC(id, title, "")
+}
+
+// ClassifyOSC is ClassifyTitle with the pane's last OSC 9;4 progress report as
+// well, for the title-block rules that read osc_progress. progress is written
+// as ProgressText writes it, and empty when the pane has sent none.
+func (r *Registry) ClassifyOSC(id, title, progress string) (state string, rule int, ok bool) {
 	m := r.Lookup(id)
-	if m == nil || !m.Title.Enabled || len(m.Title.Rule) == 0 || title == "" {
+	if m == nil || !m.Title.Enabled || len(m.Title.Rule) == 0 || (title == "" && progress == "") {
 		return "", -1, false
 	}
+	text := newOSCText(title, progress, m.Title.FoldCase)
+	return firstMatch(m.Title.order, m.Title.Rule, func(rl *ScreenRule) bool {
+		hay, folded := text.get(rl.Region)
+		return hay != "" && checkRule(rl, hay, folded, nil, containsToken)
+	})
+}
 
-	folded := title
-	if m.Title.FoldCase {
-		folded = strings.ToLower(title)
+// oscText holds the two strings title rules read, each folded once when the
+// block folds case.
+type oscText struct {
+	title, titleFolded       string
+	progress, progressFolded string
+}
+
+func newOSCText(title, progress string, foldCase bool) oscText {
+	t := oscText{title: title, titleFolded: title, progress: progress, progressFolded: progress}
+	if foldCase {
+		t.titleFolded = strings.ToLower(title)
+		t.progressFolded = strings.ToLower(progress)
 	}
+	return t
+}
 
-	best, bestIdx := "", -1
-	bestPri := 0
+func (t oscText) get(region string) (hay, folded string) {
+	if region == RegionOSCProgress {
+		return t.progress, t.progressFolded
+	}
+	return t.title, t.titleFolded
+}
+
+// HasProgressRules reports whether the harness has an enabled title-block rule
+// reading osc_progress. The daemon asks before it maps a progress report onto
+// a state by the sequence's published meaning, so a harness that uses the
+// sequence its own way is read by its own rules instead.
+func (r *Registry) HasProgressRules(id string) bool {
+	m := r.Lookup(id)
+	if m == nil || !m.Title.Enabled {
+		return false
+	}
 	for i := range m.Title.Rule {
-		rl := &m.Title.Rule[i]
-		if !checkRule(rl, title, folded, nil, containsToken) {
-			continue
-		}
-		if bestIdx == -1 || rl.Priority > bestPri {
-			best, bestIdx, bestPri = rl.State, i, rl.Priority
+		if m.Title.Rule[i].Region == RegionOSCProgress {
+			return true
 		}
 	}
-	if bestIdx == -1 {
-		return "", -1, false
+	return false
+}
+
+// ProgressText writes an OSC 9;4 progress report the way osc_progress rules
+// read it, which is the payload after "9;" as herdr keeps it: "4;<state>" for
+// the states whose percentage means nothing (0 remove, 3 indeterminate) and
+// "4;<state>;<percent>" for the others (1 set, 2 error, 4 paused).
+func ProgressText(state, percent int) string {
+	if state == 3 || state == 0 {
+		return "4;" + strconv.Itoa(state)
 	}
-	return best, bestIdx, true
+	return "4;" + strconv.Itoa(state) + ";" + strconv.Itoa(percent)
 }
 
 // ExplainTitle is ClassifyTitle with the working shown, for the same reason
 // Explain exists: a rule is matched inside a daemon against a string nobody
 // can see, and writing one was otherwise guesswork.
 func (r *Registry) ExplainTitle(id, title string) (state string, rule int, reports []RuleReport) {
+	return r.ExplainOSC(id, title, "")
+}
+
+// ExplainOSC is ClassifyOSC with the working shown.
+func (r *Registry) ExplainOSC(id, title, progress string) (state string, rule int, reports []RuleReport) {
 	m := r.Lookup(id)
 	if m == nil || len(m.Title.Rule) == 0 {
 		return "", -1, nil
 	}
-	folded := title
-	if m.Title.FoldCase {
-		folded = strings.ToLower(title)
-	}
-
+	text := newOSCText(title, progress, m.Title.FoldCase)
 	reports = make([]RuleReport, 0, len(m.Title.Rule))
 	bestIdx, bestPri := -1, 0
 	for i := range m.Title.Rule {
 		rl := &m.Title.Rule[i]
-		rep := RuleReport{Index: i, State: rl.State, Priority: rl.Priority}
-		rep.Matched = checkRule(rl, title, folded, &rep, containsToken)
+		rep := RuleReport{Index: i, State: rl.State, Priority: rl.Priority, Region: rl.Region}
+		hay, folded := text.get(rl.Region)
+		if hay == "" {
+			rep.NoRegion = true
+		} else {
+			rep.Matched = checkRule(rl, hay, folded, &rep, containsToken)
+		}
+		if rl.Region != "" {
+			rep.Text = reportText(hay)
+		}
 		reports = append(reports, rep)
-		if !rep.Matched || !m.Title.Enabled || title == "" {
+		if !rep.Matched || !m.Title.Enabled {
 			continue
 		}
 		if bestIdx == -1 || rl.Priority > bestPri {

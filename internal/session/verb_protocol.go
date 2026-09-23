@@ -1025,7 +1025,7 @@ func init() {
 			handler: (*Daemon).verbExplainAgentDetect,
 		},
 		"explain-agent-screen": {
-			description: "Show a pane's screen tail exactly as the harness screen rules read it, what every rule made of it, and which one fired. Use it to write or debug a rule: for each rule that did not match, it names the strings that were the reason. The pane's window title and what the title rules made of it are reported alongside, since a title is gone from the screen by the time anyone asks why a pane reads the way it does.",
+			description: "Show a pane's screen tail exactly as the harness screen rules read it, what every rule made of it, and which one fired. Use it to write or debug a rule: for each rule that did not match, it names the strings and nested groups that were the reason, and a rule reading a region narrower than the tail carries the text it read there. The pane's window title, its last OSC 9;4 progress report and what the title rules made of them are reported alongside, since a title is gone from the screen by the time anyone asks why a pane reads the way it does. manifest_source names the manifest file in force, and replaces_bundled says a user file took a bundled manifest's place.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,

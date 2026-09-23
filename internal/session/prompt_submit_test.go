@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
 // recordingPane is a promptPane that keeps every write, in order, with the time
@@ -17,9 +19,12 @@ type recordingPane struct {
 	writes    []string
 	at        []time.Time
 	bracketed bool
+	focus     bool
 	echo      bool
 	last      atomic.Int64
 }
+
+func (r *recordingPane) FocusReportingOn() bool { return r.focus }
 
 func (r *recordingPane) Write(b []byte) (int, error) {
 	r.mu.Lock()
@@ -60,7 +65,7 @@ func TestSubmitPromptWritesExactBytes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pane := &recordingPane{bracketed: tc.bracketed}
-			if err := submitPromptTimed(context.Background(), pane, tc.text, 5*time.Millisecond, 20*time.Millisecond); err != nil {
+			if err := submitPromptTimed(context.Background(), pane, tc.text, harness.DefaultInputProfile(), 5*time.Millisecond, 20*time.Millisecond); err != nil {
 				t.Fatalf("submitPrompt: %v", err)
 			}
 			got, _ := pane.recorded()
@@ -83,7 +88,7 @@ func TestSubmitPromptWritesExactBytes(t *testing.T) {
 func TestSubmitPromptSubmitsMultiLineTextOnce(t *testing.T) {
 	pane := &recordingPane{bracketed: true}
 	text := "review this diff\r\nfocus on the retry path\nand the timeout\n\n"
-	if err := submitPromptTimed(context.Background(), pane, text, 5*time.Millisecond, 20*time.Millisecond); err != nil {
+	if err := submitPromptTimed(context.Background(), pane, text, harness.DefaultInputProfile(), 5*time.Millisecond, 20*time.Millisecond); err != nil {
 		t.Fatalf("submitPrompt: %v", err)
 	}
 	got, _ := pane.recorded()
@@ -108,7 +113,7 @@ func TestSubmitPromptWaitsBeforeTheCarriageReturn(t *testing.T) {
 	const quiet, maxWait = 20 * time.Millisecond, 250 * time.Millisecond
 
 	silent := &recordingPane{bracketed: true}
-	if err := submitPromptTimed(context.Background(), silent, "hi", quiet, maxWait); err != nil {
+	if err := submitPromptTimed(context.Background(), silent, "hi", harness.DefaultInputProfile(), quiet, maxWait); err != nil {
 		t.Fatal(err)
 	}
 	_, at := silent.recorded()
@@ -117,7 +122,7 @@ func TestSubmitPromptWaitsBeforeTheCarriageReturn(t *testing.T) {
 	}
 
 	echoing := &recordingPane{bracketed: true, echo: true}
-	if err := submitPromptTimed(context.Background(), echoing, "hi", quiet, maxWait); err != nil {
+	if err := submitPromptTimed(context.Background(), echoing, "hi", harness.DefaultInputProfile(), quiet, maxWait); err != nil {
 		t.Fatal(err)
 	}
 	_, at = echoing.recorded()
@@ -132,10 +137,47 @@ func TestSubmitPromptStopsWithTheDaemon(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	pane := &recordingPane{}
-	if err := submitPromptTimed(ctx, pane, "hi", time.Second, time.Second); err == nil {
+	if err := submitPromptTimed(ctx, pane, "hi", harness.DefaultInputProfile(), time.Second, time.Second); err == nil {
 		t.Fatal("a cancelled submit reported success")
 	}
 	if got, _ := pane.recorded(); len(got) != 1 {
 		t.Errorf("writes = %q, want only the paste", got)
+	}
+}
+
+// TestSubmitPromptFollowsTheInputProfile pins what a harness's [input] block
+// changes: the submit key, whether a paste may be bracketed, and a focus-in
+// report ahead of the prompt, sent only to a pane that asked for focus events.
+func TestSubmitPromptFollowsTheInputProfile(t *testing.T) {
+	def := harness.DefaultInputProfile()
+	lf := def
+	lf.SubmitKey = "\n"
+	noPaste := def
+	noPaste.BracketedPaste = false
+	focus := def
+	focus.FocusBeforeSubmit = true
+	for _, tc := range []struct {
+		name      string
+		in        harness.InputProfile
+		bracketed bool
+		focusOn   bool
+		want      []string
+	}{
+		{"line feed submit", lf, true, false, []string{"\x1b[200~hi\x1b[201~", "\n"}},
+		{"paste refused although the mode is on", noPaste, true, false, []string{"hi", "\r"}},
+		{"focus report first", focus, true, true, []string{"\x1b[I", "\x1b[200~hi\x1b[201~", "\r"}},
+		{"no focus report to a pane that did not ask", focus, true, false, []string{"\x1b[200~hi\x1b[201~", "\r"}},
+		{"zero profile submits with a carriage return", harness.InputProfile{}, false, false, []string{"hi", "\r"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pane := &recordingPane{bracketed: tc.bracketed, focus: tc.focusOn}
+			if err := submitPromptTimed(context.Background(), pane, "hi", tc.in, time.Millisecond, 5*time.Millisecond); err != nil {
+				t.Fatal(err)
+			}
+			got, _ := pane.recorded()
+			if strings.Join(got, "|") != strings.Join(tc.want, "|") {
+				t.Errorf("writes = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

@@ -1,0 +1,103 @@
+# harness: claude-code
+# want: needs_input
+# how: derived. The folder trust prompt at the start of a session somewhere
+# new.
+---
+ Do you trust the files in this folder?
+
+ /home/u/src/new-project
+
+ ❯ 1. Yes, proceed
+   2. No, exit
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. Plan mode stopped for approval.
+---
+ Would you like to proceed?
+
+ ❯ 1. Yes, and auto-accept edits
+   2. Yes, and manually approve edits
+   3. No, keep planning
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. A select form under the last rule, with its navigate hint,
+# from herdr's claude manifest (live_blocked_form).
+---
+⏺ I need to pick a base branch.
+────────────────────────────────────────────
+ Which branch should the PR target?
+ ❯ main
+   release/2.1
+ Enter to select · ↑/↓ to navigate · Esc to cancel
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. The dynamic workflow question, herdr's
+# dynamic_workflow_prompt.
+---
+ Run a dynamic workflow?
+ This runs 12 agents across the repo.
+ ❯ Yes   No
+ Esc to cancel
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. An MCP elicitation dialog, herdr's mcp_elicitation_prompt.
+---
+ MCP server "linear" requests your input
+ Which team should the issue go to?
+ ❯ Accept
+   Decline
+ Esc to cancel
+=====
+# harness: claude-code
+# want: needs_input
+# how: derived. An older prompt that only says it waits for permission,
+# herdr's legacy_no_prompt_blocker.
+---
+⏺ Bash(rm -rf build)
+  ⎿  Waiting for permission…
+=====
+# harness: claude-code
+# want: none
+# how: derived. The same phrase above an empty prompt line: the prompt was
+# answered and the agent is back at rest, which the not_regex says.
+---
+⏺ Bash(rm -rf build)
+  ⎿  Waiting for permission…
+  ⎿  Done
+❯
+=====
+# harness: claude-code
+# want: working
+# how: derived. The /btw side-question overlay, herdr's btw_overlay_working.
+---
+ /btw what does the retry flag do?
+ It retries a failed request once after 200ms.
+ Esc to close
+=====
+# harness: claude-code
+# want: working
+# how: derived. Background agents still running, on the line just above the
+# prompt box, herdr's background_agents_working.
+---
+⏺ Started 2 agents.
+✻ Waiting for 2 background agents to finish
+────────────────────────────────────────────
+❯
+────────────────────────────────────────────
+  ? for shortcuts
+=====
+# harness: claude-code
+# want: working
+# how: derived. MCP tasks still running in the activity summary, herdr's
+# background_mcp_task_working.
+---
+⏺ Filed the issue.
+✻ Churned for 3m 12s · 2 MCP tasks still running
+────────────────────────────────────────────
+❯
+────────────────────────────────────────────
+  ? for shortcuts

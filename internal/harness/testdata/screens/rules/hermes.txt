@@ -1,0 +1,48 @@
+# harness: hermes
+# want: needs_input
+# how: derived. A dangerous command approval, from herdr's hermes manifest
+# (dangerous_command_approval).
+---
+This command is dangerous:  rm -rf build/
+▸ 1. Allow once
+  2. Deny
+↑/↓ to select · Enter confirm
+=====
+# harness: hermes
+# want: needs_input
+# how: derived. Hermes asking a question, herdr's clarification_prompt.
+---
+Hermes needs your input
+Which database should the migration target?
+  Other (type your answer)
+↑/↓ select · Enter send
+=====
+# harness: hermes
+# want: needs_input
+# how: derived. A password prompt, herdr's credential_prompt.
+---
+  Running: sudo apt install ripgrep
+  sudo password:
+=====
+# harness: hermes
+# want: needs_input
+# how: derived. A session-level confirmation, herdr's confirmation_prompt.
+---
+  Context is nearly full.
+  Start a new session   Keep going
+  Enter to confirm · y/n quick
+=====
+# harness: hermes
+# want: working
+# how: derived. The status bar's interrupt hint, herdr's
+# interrupt_status_working.
+---
+  Reading src/main.go
+  ⏳ working · ctrl+c to interrupt
+=====
+# harness: hermes
+# want: working
+# how: derived. The classic UI's cancel hint, herdr's classic_cancel_working.
+---
+  Reading src/main.go
+  (ctrl+c cancel)

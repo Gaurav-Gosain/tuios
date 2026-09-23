@@ -1,0 +1,40 @@
+# harness: cursor-agent
+# want: needs_input
+# how: derived. Asking to write a file, from herdr's cursor manifest
+# (write_file_approval).
+---
+  Write to this file?  src/main.go
+  → Proceed (y)
+    Reject & propose changes (esc or n or p)
+=====
+# harness: cursor-agent
+# want: needs_input
+# how: derived. A command approval, herdr's approval_prompt.
+---
+  Waiting for approval...
+  Run this command?  go test ./...
+  → Run (once) (y)
+    Skip (esc or n)
+=====
+# harness: cursor-agent
+# want: working
+# how: derived. The stop hint in the footer, herdr's stop_hint_working.
+---
+  Reading src/main.go
+  ctrl+c to stop
+=====
+# harness: cursor-agent
+# want: working
+# how: derived. The background task count, herdr's
+# background_task_status_working.
+---
+  → fix the flaky test
+  2 background tasks
+=====
+# harness: cursor-agent
+# want: working
+# how: derived. A hexagon spinner in front of an -ing word, herdr's
+# spinner_working.
+---
+  → fix the flaky test
+  ⬢ Generating

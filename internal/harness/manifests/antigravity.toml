@@ -1,10 +1,10 @@
-# Screen rules converted from herdr's agent-detection manifest for antigravity
-# (github.com/herdrdev/herdr, website/agent-detection/antigravity.toml, herdr id
-# "agy", manifest version 2026.06.24.1, Apache-2.0). Regenerate a draft with
+# Rules after herdr's agent-detection manifest for antigravity
+# (github.com/herdrdev/herdr, src/detect/manifests/antigravity.toml, herdr id
+# "agy", manifest version 2026.06.24.1, Apache-2.0; see LICENSE-herdr).
+# Regenerate a draft with
 #   go run ./internal/harness/herdrconv
-# Only the blocked-prompt rules ship, per the bundled policy in
-# registry_test.go; herdr's two working rules read spinner lines, which output
-# already covers here.
+# herdr has no idle rule for it, so none ships: an idle Antigravity pane is
+# left to the other tiers.
 
 schema_version = 1
 id             = "antigravity"
@@ -29,16 +29,38 @@ enabled   = true
 fold_case = true
 lines     = 8
 
-# herdr rule: permission_prompt. The proceed question under the permission
-# banner. herdr accepts the question as one of two forms; each form is its own
-# rule so both stay several-strings-together.
+# herdr rule: permission_prompt. The permission banner with the proceed
+# question, or with the amend-command hints.
 [[screen.rule]]
 state    = "needs_input"
 priority = 300
-all      = ["requesting permission for:", "do you want to proceed?"]
+kind     = "approval"
+message  = "Waits for permission."
+all      = ["requesting permission for:"]
+any_of   = [ { all = ["do you want to proceed?"] }, { all = ["tab amend", "edit command"] } ]
 
-# herdr rule: permission_prompt, the amend-command form.
+# herdr rule: spinner_working. A braille spinner in front of a verb ending in
+# -ing.
+#
+#   ⠹ Thinking
 [[screen.rule]]
-state    = "needs_input"
-priority = 300
-all      = ["requesting permission for:", "tab amend", "edit command"]
+state    = "working"
+priority = 100
+message  = "Works on a turn."
+regex    = ['^\s*[\x{2800}-\x{28FF}]+[ \t]+\pL+\w*ing\b']
+
+# herdr rule: background_tasks_working. The status line counting tasks still
+# running.
+[[screen.rule]]
+state    = "working"
+priority = 90
+message  = "Runs background tasks."
+region   = "bottom_non_empty_lines(5)"
+regex    = ['(?i)·[ \t]*[1-9][0-9]*[ \t]+task']
+
+# How a prompt is typed in. Not measured: Antigravity is not installed on the
+# machine these values were written on.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

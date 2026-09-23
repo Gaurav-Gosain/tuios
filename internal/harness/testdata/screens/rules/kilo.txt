@@ -1,0 +1,23 @@
+# harness: kilo
+# want: needs_input
+# how: derived. The permission banner Kilo shares with opencode, from herdr's
+# kilo manifest (opencode_permission).
+---
+△ Permission required
+  bash: npm install
+=====
+# harness: kilo
+# want: needs_input
+# how: derived. The dialog-hints form of herdr's opencode_permission: dismiss
+# and confirm hints with a selection hint.
+---
+  Allow bash: npm install?
+  ↑↓ select  enter confirm  esc dismiss
+=====
+# harness: kilo
+# want: working
+# how: derived. The interrupt hint in the footer, herdr's
+# esc_interrupt_working.
+---
+  Reading src/main.go
+  ■■■⬝⬝⬝  esc interrupt

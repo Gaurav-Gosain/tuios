@@ -1,0 +1,62 @@
+# harness: cline
+# want: needs_input
+# how: derived. An act-mode command confirmation, from herdr's cline
+# manifest (tool_permission).
+---
+[ACT MODE]
+Execute command?
+  go test ./...
+  > Yes
+    No
+=====
+# harness: cline
+# want: needs_input
+# how: derived. The explicit ask, the first form of herdr's tool_permission.
+---
+  Let Cline use this tool?
+  read_file src/main.go
+  > Yes   No
+=====
+# harness: cline
+# want: needs_input
+# how: derived. The inline approval card, herdr's inline_tool_permission.
+---
+  Cline needs permission
+  Approve tool call?  write_to_file src/main.go
+  [y] Approve   [n] Deny
+=====
+# harness: cline
+# want: needs_input
+# how: derived. Cline asking a question with its options and the composer
+# hints, herdr's inline_question.
+---
+  Cline is asking a question
+  Which test runner should I use?
+  > go test
+    gotestsum
+  Plan/Act (Tab) · Shift+Tab auto-approve
+=====
+# harness: cline
+# want: working
+# how: derived. A braille spinner line during a turn, herdr's active_turn.
+---
+  > fix the flaky test
+  ⠼ Reading src/main.go
+=====
+# harness: cline
+# want: idle
+# how: derived. The composer at rest between its rules with the mode hints
+# under it, herdr's composer_idle.
+---
+  The test now allocates its buffer per case.
+────────────────────────────────────────────
+❯
+────────────────────────────────────────────
+  Plan/Act (Tab) · Shift+Tab auto-approve
+=====
+# harness: cline
+# want: none
+# how: derived. A plain ">" prompt with no hints is not the composer.
+---
+cline is ready
+>

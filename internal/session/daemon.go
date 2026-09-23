@@ -469,7 +469,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				// only arrives when the harness has something to say, and it is a
 				// better answer than anything the probe can work out.
 				if state, ok := pty.takeAgentProgress(); ok {
-					s.applyAgentProgress(ev.Window, state)
+					s.applyPaneProgress(ev.PTYID, ev.Window, state, d.agentMatcher.registry)
 				}
 				// A desktop notification the emulator parked while writing these
 				// bytes, on the same terms: the harness speaking about itself.

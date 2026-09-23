@@ -88,3 +88,46 @@ func TestScreenExplanationSaysWhenNothingMatched(t *testing.T) {
 		t.Errorf("output does not say the tier reports nothing:\n%s", got)
 	}
 }
+
+// TestScreenExplanationShowsRegionsGroupsTitlesAndTheFileInForce covers what
+// the manifest engine added: a narrowed rule's region and the text it read, a
+// nested group that refused, the title block with the progress report, and a
+// user file that replaced the bundled manifest.
+func TestScreenExplanationShowsRegionsGroupsTitlesAndTheFileInForce(t *testing.T) {
+	var b strings.Builder
+	printScreenExplanation(&b, screenExplanation{
+		WindowID:        "w-1",
+		HarnessID:       "claude-code",
+		Enabled:         true,
+		Lines:           8,
+		Tail:            []string{"──────", "Esc to cancel"},
+		Rule:            -1,
+		ManifestSource:  "/home/u/.config/tuios/harnesses/claude-code.toml",
+		ReplacesBundled: true,
+		Rules: []harness.RuleReport{
+			{Index: 0, State: "needs_input", Region: "after_last_horizontal_rule", Text: "Esc to cancel", Groups: []string{"no any_of group matched"}},
+			{Index: 1, State: "idle", Region: "prompt_box", NoRegion: true},
+		},
+		Title:          "✳ Claude Code",
+		Progress:       "4;0",
+		TitleMatched:   true,
+		TitleRule:      0,
+		TitleRuleState: "idle",
+		TitleRules:     []harness.RuleReport{{Index: 0, State: "idle", Matched: true}},
+	})
+	got := b.String()
+	for _, want := range []string{
+		"replaces the bundled one",
+		"region after_last_horizontal_rule",
+		"| Esc to cancel",
+		"no any_of group matched",
+		"region prompt_box is not on the screen",
+		`title "✳ Claude Code"`,
+		"progress 4;0",
+		"title rule 0 would report idle",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output does not say %q:\n%s", want, got)
+		}
+	}
+}

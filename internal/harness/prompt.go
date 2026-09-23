@@ -77,11 +77,9 @@ func ruleKind(rl *ScreenRule) string {
 	}
 	var b strings.Builder
 	b.WriteString(strings.ToLower(rl.Message))
-	for _, list := range [][]string{rl.All, rl.Any} {
-		for _, s := range list {
-			b.WriteByte(' ')
-			b.WriteString(strings.ToLower(s))
-		}
+	for _, s := range rl.positiveStrings(nil) {
+		b.WriteByte(' ')
+		b.WriteString(strings.ToLower(s))
 	}
 	return kindOfWords(b.String())
 }
@@ -98,9 +96,10 @@ func kindOfWords(words string) string {
 }
 
 // RulePrompt is the line of tail the matched rule read as the prompt, cleaned
-// with CleanPromptLine: the first line carrying one of the rule's all[] strings,
-// else the first carrying one of its any[] strings. Empty when the rule matched
-// on a regex alone, or when the line is chrome all the way through.
+// with CleanPromptLine: the first line carrying one of the rule's all[]
+// strings, else one of its any[] strings, else one its nested groups need
+// present. Empty when the rule matched on patterns alone, or when the line is
+// chrome all the way through.
 func (r *Registry) RulePrompt(id string, rule int, tail []string) string {
 	m := r.Lookup(id)
 	if m == nil || rule < 0 || rule >= len(m.Screen.Rule) {
@@ -108,7 +107,7 @@ func (r *Registry) RulePrompt(id string, rule int, tail []string) string {
 	}
 	rl := &m.Screen.Rule[rule]
 	lines := regionLines(tail, rl.Region)
-	for _, list := range [][]string{rl.All, rl.Any} {
+	for _, list := range [][]string{rl.All, rl.Any, rl.nestedPositiveStrings()} {
 		for _, line := range lines {
 			hay := line
 			if m.Screen.FoldCase {

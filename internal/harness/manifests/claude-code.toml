@@ -33,9 +33,14 @@ exe_glob  = ["**/share/claude/versions/*", "**/claude"]
 # the pane behaves exactly as it did before this block existed. A rule that
 # matches something it should not is the expensive direction, which is why these
 # require several strings together rather than any one of them.
+#
+# Substrings are matched case-folded, as herdr matches them. The rules below
+# name several strings together, so folding only lets a prompt through whose
+# casing changed between releases.
 [screen]
-enabled = true
-lines   = 8
+enabled   = true
+fold_case = true
+lines     = 8
 
 # The permission prompt. Claude Code asks with a question line and then a
 # numbered list whose first entry is Yes, so the two together are the signature:
@@ -71,6 +76,101 @@ priority = 10
 message  = "Waits for approval of the plan."
 all      = ["Would you like to proceed"]
 any      = ["1. Yes", "❯ 1."]
+
+# The rules below through the MCP task rule are after herdr's claude manifest
+# (github.com/herdrdev/herdr, src/detect/manifests/claude.toml, manifest version
+# 2026.09.11.1, Apache-2.0; see LICENSE-herdr). Case-insensitive text is
+# written as substrings rather than (?i) patterns: a folded substring is a plain
+# search, and a (?i) pattern over a screen of box drawing costs microseconds a
+# scan.
+#
+# A live form under the last horizontal rule: a cancel hint with a confirm
+# hint, a select hint with a navigate hint, or the proceed question with its
+# numbered options. herdr's live_blocked_form and generic_permission_prompt,
+# as one rule. Reading only what is under the last rule is what keeps an
+# answered form in the transcript from matching.
+#
+#   ────────────────────────────────
+#    Bash command
+#      rm -rf build
+#    Do you want to proceed?
+#    ❯ 1. Yes
+#      2. No
+#    Esc to cancel · Tab to amend · ctrl+e to explain
+[[screen.rule]]
+state    = "needs_input"
+priority = 25
+kind     = "approval"
+message  = "Waits for an answer on a form."
+region   = "after_last_horizontal_rule"
+all      = ["esc to cancel"]
+any_of   = [
+  { all = ["enter to confirm"] },
+  { all = ["enter to select"], any = ["tab/arrow keys to navigate", "arrow keys to navigate", "arrows to navigate", "↑/↓ to navigate", "↑↓ to navigate"] },
+  { all = ["do you want to proceed?"], any_of = [ { regex = ['(?i)^\s*❯?\s*1\.\s*yes\b'] }, { regex = ['(?i)^\s*2\.\s*(?:yes|no)\b'] } ] },
+]
+
+# A dynamic workflow asking whether to run.
+[[screen.rule]]
+state    = "needs_input"
+priority = 25
+kind     = "approval"
+message  = "Asks whether to run a dynamic workflow."
+all      = ["run a dynamic workflow?", "esc to cancel"]
+
+# An MCP server asking for input (elicitation): a header naming the server,
+# Accept and Decline controls, and the cancel footer.
+[[screen.rule]]
+state    = "needs_input"
+priority = 25
+kind     = "question"
+message  = "An MCP server asks for your input."
+all      = ["esc to cancel", "requests your input"]
+regex    = ['^\s*MCP server ["\x{201C}].+["\x{201D}] requests your input\s*$']
+any_of   = [ { regex = ['^\s*\x{276F}?\s*Accept\b'] }, { regex = ['^\s*\x{276F}?\s*Decline\b'] } ]
+
+# Older blocking prompts that carry one of these phrases. An empty prompt line
+# at the bottom means the prompt was answered and the agent is back at rest.
+# Below the working rules, as in herdr, so a live turn that quotes one of the
+# phrases reads as working.
+[[screen.rule]]
+state     = "needs_input"
+priority  = 7
+message   = "Waits for your answer on the screen."
+any       = ["waiting for permission", "do you want to allow this connection?", "tab to amend", "ctrl+e to explain", "review your answers", "skip interview and plan immediately"]
+not_regex = ['^\s*❯\s*$']
+
+# /btw, the side-question overlay: it runs a turn of its own until closed.
+[[screen.rule]]
+state    = "working"
+priority = 9
+message  = "Answers a side question."
+region   = "bottom_non_empty_lines(5)"
+all      = ["/btw", "esc to close"]
+regex    = ['^\s*/btw(?:\s|$)', '(?i)esc to close\s*$']
+
+# Background agents still running, on the line just above the prompt box.
+#
+#   ✻ Waiting for 2 background agents to finish
+[[screen.rule]]
+state    = "working"
+priority = 8
+message  = "Waits for background agents."
+region   = "last_non_empty_above_prompt_box"
+regex    = ['^\s*[*·✢✶✻✽]\s+Waiting for [1-9]\d* background agents? to finish\s*$']
+
+# MCP tasks still running, in the activity summary at column zero. Claude
+# indents wrapped continuations, which keeps typed prompt text from posing as
+# this line.
+#
+#   ✻ Churned for 3m 12s · 2 MCP tasks still running
+[[screen.rule]]
+state    = "working"
+priority = 8
+message  = "Waits for MCP tasks."
+all      = ["mcp", "still"]
+regex    = ['(?m)^[*·✢✶✻✽][ \t]+\S[^\n]*?(?:\n[ \t]+[^\n]*?){0,3}·(?:[ \t]+|\n[ \t]*)[1-9]\d*(?:[ \t]+|\n[ \t]*)MCP(?:[ \t]+|\n[ \t]*)tasks?(?:[ \t]+|\n[ \t]*)still(?:[ \t]+|\n[ \t]*)running[ \t]*$']
+not      = ["do you want to proceed?", "esc to cancel", "waiting for permission", "tab to amend", "ctrl+e to explain"]
 
 # A turn in progress. Claude Code draws a footer under the prompt box that ends
 # in "esc to interrupt" while a turn runs:
@@ -167,3 +267,15 @@ reader = "claude-code-jsonl"
 dir    = "{home}/.claude/projects/{cwd:dashes}"
 glob   = "*.jsonl"
 verify = ["cwd", "version"]
+
+# How a prompt is typed in. Measured on Claude Code 2.1.280: it turns on
+# bracketed paste (DECSET 2004) and focus reporting (1004) at start, and pushes
+# kitty keyboard flags 5, under which Enter is still a carriage return. It is an
+# Ink program, and Ink reads a carriage return as return and a line feed as a
+# different key; Claude Code's docs list Ctrl+J (a line feed) as the way to
+# insert a newline in the prompt. So a carriage return submits and a line feed
+# does not.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "measured on Claude Code 2.1.280 (DECSET 2004 and 1004 on, kitty flags 5); Ctrl+J inserts a newline per code.claude.com/docs/en/interactive-mode"

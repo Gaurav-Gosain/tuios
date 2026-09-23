@@ -41,20 +41,9 @@ func (r *Registry) ClassifyNotify(id, text string) (state string, rule int, ok b
 	if m.Notify.FoldCase {
 		folded = strings.ToLower(text)
 	}
-	best, bestIdx, bestPri := "", -1, 0
-	for i := range m.Notify.Rule {
-		rl := &m.Notify.Rule[i]
-		if !checkRule(rl, text, folded, nil, strings.Contains) {
-			continue
-		}
-		if bestIdx == -1 || rl.Priority > bestPri {
-			best, bestIdx, bestPri = rl.State, i, rl.Priority
-		}
-	}
-	if bestIdx == -1 {
-		return "", -1, false
-	}
-	return best, bestIdx, true
+	return firstMatch(m.Notify.order, m.Notify.Rule, func(rl *ScreenRule) bool {
+		return checkRule(rl, text, folded, nil, strings.Contains)
+	})
 }
 
 // NotifyRuleMessage is what a notify claim says about itself: the

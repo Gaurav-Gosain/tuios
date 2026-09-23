@@ -1,10 +1,12 @@
-# Screen rules converted from herdr's agent-detection manifest for kiro
-# (github.com/herdrdev/herdr, website/agent-detection/kiro.toml, manifest
-# version 2026.08.01.1, Apache-2.0). Regenerate a draft with
+# Rules after herdr's agent-detection manifest for kiro
+# (github.com/herdrdev/herdr, src/detect/manifests/kiro.toml, manifest version
+# 2026.09.19.1, Apache-2.0; see LICENSE-herdr), plus the two blocking rules
+# converted from its 2026.08.01.1 version, kept for the releases that drew
+# those prompts. Regenerate a draft with
 #   go run ./internal/harness/herdrconv
-# Only the blocked-prompt rules ship, per the bundled policy in
-# registry_test.go; herdr's working and idle rules read the marker line and
-# prompt chrome, which output and the stall timer already cover here.
+# Not verified against a live pane. herdr's osc_progress working rule reads
+# OSC 9;4 state 3 the way its published meaning already does, so the daemon's
+# own progress mapping covers it.
 
 schema_version = 1
 id             = "kiro"
@@ -23,19 +25,119 @@ enabled   = true
 fold_case = true
 lines     = 8
 
-# herdr rule: tool_approval. The approval banner plus one of its options.
+# herdr rule: tool_approval. The approval menu: its footer on the last lines,
+# and one of its three option layouts with every option present.
+#
+#   > Allow
+#     Always allow
+#     Deny
+#     Always deny
+#   esc to close · ↑↓ to navigate · enter to select · tab to edit
 [[screen.rule]]
 state    = "needs_input"
-priority = 300
+priority = 1050
+kind     = "approval"
+message  = "Waits for approval of a tool call."
+region   = "bottom_non_empty_lines(8)"
+regex    = ['(?is)(?:^|\n)\s*esc\s+to\s+close\b(?:[^\n]*\bto\s+navigate\b[^\n]*|.*\bto\s+navigate\b.*\bto\s+select\b.*\btab\s+to\s+edit|[^\n]*\benter\s+to\s+see\s+more\s+options)\s*\z']
+any_of   = [
+  { regex = [
+    '(?i)^\s*[>❯]\s*(?:allow|always allow|deny|always deny)\s*$',
+    '(?i)^\s*(?:[>❯]\s*)?allow\s*$',
+    '(?i)^\s*(?:[>❯]\s*)?always allow\s*$',
+    '(?i)^\s*(?:[>❯]\s*)?deny\s*$',
+    '(?i)^\s*(?:[>❯]\s*)?always deny\s*$',
+  ] },
+  { regex = [
+    '(?i)^\s*[>❯]\s*(?:yes, single permission|trust, always allow in this session|no \(tab to edit\))\s*$',
+    '(?i)^\s*(?:[>❯]\s*)?yes, single permission\s*$',
+    '(?i)^\s*(?:[>❯]\s*)?trust, always allow in this session\s*$',
+    '(?i)^\s*(?:[>❯]\s*)?no \(tab to edit\)\s*$',
+  ] },
+  { regex = [
+    '(?i)^\s*[>❯]\s*(?:trust\b.*|entire tool)\s*$',
+    '(?i)^\s*(?:[>❯]\s*)?(?:trust )?entire tool(?:\s+\([^\n]*\))?(?:\s+(?:session|workspace|always))?\s*$',
+  ] },
+]
+
+# herdr rule: tool_approval_edit. The approval with a modify-request box,
+# closed by the esc hint on the last line.
+[[screen.rule]]
+state    = "needs_input"
+priority = 1045
+kind     = "approval"
+message  = "Waits for approval of a tool call."
+regex    = ['(?im)(?:^|\n)[ \t]*[-─]+[ \t]*\n[^\n]*requires\s+approval\s*[·.]\s*modify\s+request[ \t]*\n(?:[ \t]*\n|[^\n]*[^\s─-][^\n]*\n)*?[ \t]*[>›][ \t]*[^\n]*\n(?:[ \t]*\n|[^\n]*[^\s─-][^\n]*\n)*[ \t]*[-─]+[ \t]*\n[ \t]*esc[ \t]+to[ \t]+close[ \t]*\n?\z']
+
+# herdr rule: crew_approval. Approvals queued by subagents.
+[[screen.rule]]
+state    = "needs_input"
+priority = 1040
+kind     = "approval"
+message  = "Subagents wait for approval."
+region   = "bottom_non_empty_lines(8)"
+all      = ["tool approval", "approve all pending", "configure individually (agent monitor)", "exit (cancel subagents)"]
+
+# herdr rule: question_panel.
+[[screen.rule]]
+state    = "needs_input"
+priority = 1030
+kind     = "question"
+message  = "Asks you a question."
+region   = "bottom_non_empty_lines(8)"
+all      = ["to navigate", "to submit", "esc to cancel"]
+
+# From herdr 2026.08.01.1: the approval banner plus one of its options.
+[[screen.rule]]
+state    = "needs_input"
+priority = 1020
+kind     = "approval"
+message  = "Waits for approval of a tool call."
 all      = ["requires approval"]
 any      = ["yes, single permission", "trust, always allow", "no (tab to edit)", "esc to close"]
 
-# herdr rule: subagent_approval. Approvals queued by subagents. The heading
-# wordings are one pattern because a rule carries one any-of set; (?i) keeps
-# the folding the substrings get.
+# From herdr 2026.08.01.1: approvals queued by subagents, older wording.
 [[screen.rule]]
 state    = "needs_input"
-priority = 290
+priority = 1010
+kind     = "approval"
+message  = "Subagents wait for approval."
 all      = ["pending from subagents"]
 any      = ["approve all pending", "configure individually", "exit (cancel subagents)"]
-regex    = ["(?i)tool approvals?"]
+regex    = ['(?i)tool approvals?']
+
+# herdr rule: live_working_footer.
+[[screen.rule]]
+state    = "working"
+priority = 950
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(4)"
+all      = ["kiro is working", "type to steer", "ctrl+s to queue"]
+
+# herdr rule: live_prompt_idle. The empty composer with its placeholder. herdr
+# ranks it first; here it ranks last, as every idle rule does, so a prompt or
+# a live turn on the same screen wins.
+#
+#   > Ask a question or describe a task ↵
+[[screen.rule]]
+state    = "idle"
+priority = 100
+message  = "Waits at its prompt."
+region   = "bottom_non_empty_lines(4)"
+regex    = ['(?i)^\s*[>›]\s*ask a question or describe a task(?:\s+(?:enter|↵))?\s*$']
+
+# The window title: a spinner and "kiro:" while a turn runs.
+[title]
+enabled = true
+
+[[title.rule]]
+state    = "working"
+priority = 5
+message  = "Works on a turn."
+regex    = ['(?i)^[◐◓◑◒/|\\-]\s+kiro:']
+
+# How a prompt is typed in. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

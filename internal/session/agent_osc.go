@@ -3,6 +3,7 @@ package session
 import (
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/vt"
 )
 
@@ -31,6 +32,37 @@ func agentStateForProgress(state vt.ProgressState) (AgentState, bool) {
 	default:
 		return AgentStateNone, false
 	}
+}
+
+// ProgressText is the pane's last OSC 9;4 report as osc_progress rules read
+// it, or "" when the pane has sent none. See harness.ProgressText.
+func (p *PTY) ProgressText() string {
+	v := p.lastProgress.Load()
+	if v == 0 {
+		return ""
+	}
+	return harness.ProgressText(int(v>>32)-1, int(int32(uint32(v))))
+}
+
+// applyPaneProgress applies an OSC 9;4 report that arrived from a pane. A
+// harness whose manifest reads osc_progress, and whose rules have an answer
+// for this report, is read by those rules through the ordinary title look,
+// since the harness uses the sequence its own way; every other pane gets the
+// sequence's published meaning from applyAgentProgress. A rule that has no
+// answer for the report leaves it to the published meaning, so a manifest can
+// name only the reports it reads differently.
+func (s *Session) applyPaneProgress(ptyID, windowID string, state vt.ProgressState, reg *harness.Registry) {
+	if reg != nil {
+		if _, hid := s.agentHarnessOf(ptyID); hid != "" && reg.HasProgressRules(hid) {
+			if pty := s.GetPTY(ptyID); pty != nil {
+				if _, _, ok := reg.ClassifyOSC(hid, "", pty.ProgressText()); ok {
+					s.scanTitleForAgent(ptyID, reg)
+					return
+				}
+			}
+		}
+	}
+	s.applyAgentProgress(windowID, state)
 }
 
 // applyAgentProgress records an OSC 9;4 progress report against a window as an

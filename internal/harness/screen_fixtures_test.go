@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,8 +9,13 @@ import (
 )
 
 // screenFixture is one pane screen and what the harness's rules must make of
-// it. Each file under testdata/screens says in its header how the screen was
-// obtained, so a derived screen is never passed off as a measured one.
+// it. Each fixture says in its header how the screen was obtained, so a
+// derived screen is never passed off as a measured one.
+//
+// A file holds one fixture, or several separated by a line of five equals
+// signs, each with its own header. The per-harness files under
+// testdata/screens/rules keep one fixture for every rule of a manifest
+// together, which is where someone changing that manifest will look.
 type screenFixture struct {
 	file    string
 	harness string
@@ -17,11 +23,21 @@ type screenFixture struct {
 	screen  []string
 }
 
+// fixtureSeparator splits the fixtures of one file.
+const fixtureSeparator = "\n=====\n"
+
 func loadScreenFixtures(t *testing.T) []screenFixture {
 	t.Helper()
-	paths, err := filepath.Glob(filepath.Join("testdata", "screens", "*.txt"))
-	if err != nil || len(paths) == 0 {
-		t.Fatalf("no screen fixtures: %v", err)
+	var paths []string
+	for _, pattern := range []string{"*.txt", filepath.Join("rules", "*.txt")} {
+		found, err := filepath.Glob(filepath.Join("testdata", "screens", pattern))
+		if err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, found...)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no screen fixtures")
 	}
 	var out []screenFixture
 	for _, p := range paths {
@@ -29,30 +45,41 @@ func loadScreenFixtures(t *testing.T) []screenFixture {
 		if err != nil {
 			t.Fatal(err)
 		}
-		head, body, ok := strings.Cut(string(data), "\n---\n")
-		if !ok {
-			t.Fatalf("%s: no --- line between header and screen", p)
-		}
-		fx := screenFixture{file: filepath.Base(p), screen: strings.Split(body, "\n")}
-		for _, line := range strings.Split(head, "\n") {
-			key, val, _ := strings.Cut(strings.TrimPrefix(line, "# "), ":")
-			switch key {
-			case "harness":
-				fx.harness = strings.TrimSpace(val)
-			case "want":
-				fx.want = strings.TrimSpace(val)
-			case "how":
-				if !strings.HasPrefix(strings.TrimSpace(val), "measured") && !strings.HasPrefix(strings.TrimSpace(val), "derived") {
-					t.Errorf("%s: how must start with measured or derived", p)
-				}
+		for n, chunk := range strings.Split(string(data), fixtureSeparator) {
+			name := filepath.Base(p)
+			if strings.Contains(string(data), fixtureSeparator) {
+				name = fmt.Sprintf("%s#%d", name, n+1)
 			}
+			out = append(out, parseScreenFixture(t, name, chunk))
 		}
-		if fx.harness == "" || fx.want == "" {
-			t.Fatalf("%s: header must name a harness and a want", p)
-		}
-		out = append(out, fx)
 	}
 	return out
+}
+
+func parseScreenFixture(t *testing.T, name, chunk string) screenFixture {
+	t.Helper()
+	head, body, ok := strings.Cut(chunk, "\n---\n")
+	if !ok {
+		t.Fatalf("%s: no --- line between header and screen", name)
+	}
+	fx := screenFixture{file: name, screen: strings.Split(body, "\n")}
+	for _, line := range strings.Split(head, "\n") {
+		key, val, _ := strings.Cut(strings.TrimPrefix(line, "# "), ":")
+		switch key {
+		case "harness":
+			fx.harness = strings.TrimSpace(val)
+		case "want":
+			fx.want = strings.TrimSpace(val)
+		case "how":
+			if !strings.HasPrefix(strings.TrimSpace(val), "measured") && !strings.HasPrefix(strings.TrimSpace(val), "derived") {
+				t.Errorf("%s: how must start with measured or derived", name)
+			}
+		}
+	}
+	if fx.harness == "" || fx.want == "" {
+		t.Fatalf("%s: header must name a harness and a want", name)
+	}
+	return fx
 }
 
 // fixtureTail reads a screen the way the emulator's TailText does: the bottom n
@@ -89,6 +116,39 @@ func TestScreenFixtures(t *testing.T) {
 				t.Errorf("classified as %s (rule %d), want %s\ntail:\n%s", got, rule, fx.want, strings.Join(tail, "\n"))
 			}
 		})
+	}
+}
+
+// TestEveryScreenRuleHasAFixture holds every bundled screen rule to at least
+// one fixture it decides. A rule nothing exercises is a rule nobody can tell is
+// still right, and a rule that some louder rule always shadows is dead weight
+// that a reader would still have to reason about.
+func TestEveryScreenRuleHasAFixture(t *testing.T) {
+	r := testRegistry(t)
+	decided := map[string]map[int]bool{}
+	for _, fx := range loadScreenFixtures(t) {
+		if r.Lookup(fx.harness) == nil {
+			continue
+		}
+		tail := fixtureTail(fx.screen, r.ScreenLines(fx.harness))
+		if state, rule, ok := r.Classify(fx.harness, tail); ok && state == fx.want {
+			if decided[fx.harness] == nil {
+				decided[fx.harness] = map[int]bool{}
+			}
+			decided[fx.harness][rule] = true
+		}
+	}
+	for _, id := range r.IDs() {
+		m := r.Lookup(id)
+		if !m.Screen.Enabled {
+			continue
+		}
+		for i, rule := range m.Screen.Rule {
+			if !decided[id][i] {
+				t.Errorf("%s screen rule %d (%s, priority %d) decides no fixture under testdata/screens",
+					id, i, rule.State, rule.Priority)
+			}
+		}
 	}
 }
 

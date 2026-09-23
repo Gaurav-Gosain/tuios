@@ -32,9 +32,15 @@ func (e LoadError) Error() string { return e.Err.Error() }
 // Load builds the registry from the manifests compiled into the binary, then
 // lets any manifest in dirs replace a bundled one with the same id.
 //
-// Replacement is whole-file rather than a merge. Merging nested rule lists is a
-// bug farm, and a user who wants to start from the bundled rules can copy the
-// file. Later directories win over earlier ones.
+// Replacement is whole-file rather than a merge: a user file with a bundled id
+// takes the bundled manifest's place entirely, its detect, screen, title,
+// notify, transcript and input blocks alike, and a block the user file leaves
+// out is absent rather than inherited. Merging nested rule lists is a bug
+// farm, because a rule has no name to merge by and its priority is relative to
+// the rules around it, and a user who wants to start from the bundled rules
+// can copy the file (the bundled copies live in internal/harness/manifests).
+// Manifest.Source reports the replacement, so a diagnostic can say which file
+// is in force. Later directories win over earlier ones.
 func Load(dirs ...string) (*Registry, []LoadError) {
 	byID := map[string]*Manifest{}
 	var errs []LoadError
@@ -52,6 +58,7 @@ func Load(dirs ...string) (*Registry, []LoadError) {
 			errs = append(errs, LoadError{Source: name, Err: err})
 			continue
 		}
+		m.source = "bundled"
 		byID[m.ID] = m
 	}
 
@@ -74,6 +81,10 @@ func Load(dirs ...string) (*Registry, []LoadError) {
 			if err != nil {
 				errs = append(errs, LoadError{Source: f, Err: err})
 				continue
+			}
+			m.source = f
+			if prev := byID[m.ID]; prev != nil {
+				m.replacedBundled = prev.replacedBundled || prev.source == "bundled"
 			}
 			byID[m.ID] = m
 		}

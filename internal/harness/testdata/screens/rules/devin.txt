@@ -1,0 +1,64 @@
+# harness: devin
+# want: needs_input
+# how: derived. The directory trust prompt, from herdr's devin manifest
+# (workspace_trust_prompt).
+---
+Do you trust the authors of this directory?
+Devin may read files in this directory, even with untrusted content.
+  1. Yes, trust this directory
+  2. No
+=====
+# harness: devin
+# want: needs_input
+# how: derived. The tool-approval footer, herdr's permission_prompt.
+---
+  exec go test ./...
+  Approve once   Select   Confirm   Esc cancel
+=====
+# harness: devin
+# want: working
+# how: derived. The running-tools footer, herdr's running_tools_footer.
+---
+  exec go test ./...
+  Running tools   Esc to interrupt
+=====
+# harness: devin
+# want: working
+# how: derived. The composer placeholder during a turn, herdr's
+# guide_while_working.
+---
+  Reading src/main.go
+❭ Guide Devin while it works
+=====
+# harness: devin
+# want: working
+# how: derived. A shell command being read with its timeout, herdr's
+# tool_reading_timeout.
+---
+  Reading shell output (timeout: 120s)
+=====
+# harness: devin
+# want: idle
+# how: derived. The first prompt of a session, herdr's
+# welcome_prompt_footer.
+---
+  Devin CLI
+❭ Ask Devin to build features, fix bugs, or explain your code
+=====
+# harness: devin
+# want: idle
+# how: derived. The prompt mark with the context meter, herdr's
+# live_prompt_footer.
+---
+  The test now allocates its buffer per case.
+❭
+  context: 12% · opus
+=====
+# harness: devin
+# want: needs_input
+# how: derived. The approval footer with the prompt mark on screen: the
+# prompt outranks every idle rule, and the idle rules' none_of refuses too.
+---
+❭
+  context: 12% · opus
+  Approve once   Select   Confirm   Esc cancel

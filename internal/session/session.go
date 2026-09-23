@@ -715,6 +715,11 @@ type PTY struct {
 	// session state would re-enter that lock, so it only stores here and the PTY
 	// read goroutine applies it on the output event that carried the sequence.
 	agentProgress atomic.Int64
+	// lastProgress is the most recent OSC 9;4 report, kept after it is
+	// applied so a manifest's osc_progress rules can read it on any look. It
+	// packs the state plus one into the high half and the percentage into the
+	// low half, so zero means the pane has sent none.
+	lastProgress atomic.Int64
 	// agentNotify parks the most recent desktop notification (OSC 9, 777 or
 	// 99) for the read goroutine, for the reason agentProgress does. See
 	// agent_notify.go.
@@ -766,8 +771,9 @@ func (p *PTY) probeAgentExitDue(now int64) bool {
 // storeAgentProgress parks an OSC 9;4 progress state for the read goroutine to
 // apply. Called from the VT callback under the terminal lock, so it must stay a
 // single atomic store and nothing more.
-func (p *PTY) storeAgentProgress(state vt.ProgressState) {
+func (p *PTY) storeAgentProgress(state vt.ProgressState, percent int) {
 	p.agentProgress.Store(int64(state) + 1)
+	p.lastProgress.Store((int64(state)+1)<<32 | int64(uint32(int32(percent))))
 }
 
 // takeAgentProgress returns the parked OSC 9;4 progress state and clears it,
@@ -1294,8 +1300,8 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		// Parked rather than applied: this fires with the terminal lock held, and
 		// applying it mutates session state. The read goroutine picks it up on the
 		// output event carrying these same bytes.
-		Progress: func(state vt.ProgressState, _ int) {
-			pty.storeAgentProgress(state)
+		Progress: func(state vt.ProgressState, percent int) {
+			pty.storeAgentProgress(state, percent)
 		},
 		// A desktop notification: published at once, like the bell, and parked
 		// for the read goroutine to match against the harness's rules, like the

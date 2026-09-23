@@ -8,5 +8,15 @@ comm      = ["aider"]
 argv0     = ["aider"]
 argv_path = ["/aider/"]
 
+# No screen rules: herdr has no manifest for Aider, and none has been written
+# against a live Aider session yet.
 [screen]
 enabled = false
+
+# How a prompt is typed in. Aider reads its prompt with prompt_toolkit, which
+# reads a carriage return as Enter (c-m) and a line feed as c-j, and accepts a
+# bracketed paste as one paste. Not measured here.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "prompt_toolkit reads CR as Enter and LF as c-j; not measured"

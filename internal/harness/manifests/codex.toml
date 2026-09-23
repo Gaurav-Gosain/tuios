@@ -9,12 +9,61 @@ argv0     = ["codex"]
 argv_path = ["@openai/codex"]
 exe_glob  = ["**/vendor/*/bin/codex", "**/codex"]
 
-# The screen carries working and idle, after herdr's codex manifest. Codex has
-# no stable blocking prompt to key on, so its blocked state comes from the title
-# and from notifications below, never from the screen.
+# The screen carries working and idle, and the blocking prompts below, after
+# herdr's codex manifest (github.com/herdrdev/herdr,
+# src/detect/manifests/codex.toml, manifest version 2026.09.22.1, Apache-2.0;
+# see LICENSE-herdr). The title and notifications below still carry most of
+# Codex's blocked state; these rules catch the prompts that paint and go quiet.
+#
+# Not ported: herdr's weak_blocker and its screen working fallback, which read
+# regions cut at Codex's own prompt marker (after_last_prompt_marker and
+# friends); the rules here read the bottom lines instead. herdr's
+# transcript_viewer rule, which holds the state while the transcript pager is
+# open, has no equivalent: tuios has no "leave the state alone" rule.
 [screen]
-enabled = true
-lines   = 8
+enabled   = true
+fold_case = true
+lines     = 8
+
+# A live approval or question form. Its footer is the bottom line.
+#
+#   Would you like to run the following command?
+#   $ go test ./...
+#   › 1. Yes, proceed (y)
+#     2. No, and tell Codex what to do differently (esc)
+#   Press enter to confirm or esc to cancel
+[[screen.rule]]
+state    = "needs_input"
+priority = 30
+kind     = "approval"
+message  = "Waits for approval."
+region   = "bottom_non_empty_lines(3)"
+any      = ["press enter to confirm or esc to cancel", "enter to submit answer", "enter to submit all", "allow command?"]
+
+# Trusting a directory, asked once when Codex starts somewhere new.
+#
+#   > You are in /home/u/src/app
+#     Do you trust the contents of this directory? Working with untrusted
+#     contents comes with higher risk of prompt injection.
+#   › 1. Yes, continue
+#     2. No, quit
+#     Press enter to continue
+[[screen.rule]]
+state    = "needs_input"
+priority = 30
+kind     = "approval"
+message  = "Asks you to trust the directory."
+regex    = ['(?i)do\s+you\s+trust\s+the\s+contents\s+of\s+this\s+directory\?']
+any      = ["press enter to continue", "1. yes"]
+
+# The update offer at start, which waits for a key before Codex runs.
+[[screen.rule]]
+state    = "needs_input"
+priority = 30
+kind     = "question"
+message  = "Offers an update and waits."
+all      = ["update available!", "update now"]
+regex    = ['Skip\s+until\s+next\s+version', 'Press enter to continue\s*\z']
 
 # A turn in progress: the status line above the composer carries an elapsed
 # timer and the interrupt hint.
@@ -85,3 +134,14 @@ state    = "done"
 priority = 0
 message  = "Finished its turn."
 regex    = ['\S']
+
+# How a prompt is typed in. Codex's TUI reads keys through crossterm, which in
+# raw mode reads a carriage return as Enter and a line feed as Ctrl+J, and Codex
+# turns bracketed paste on. It also detects an unbracketed paste by timing and
+# turns an Enter inside the burst into a newline, which is why the submitter
+# waits between the paste and the Enter. Not measured here: Codex is not
+# installed on the machine these values were written on.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "crossterm reads CR as Enter and LF as Ctrl+J in raw mode; paste-burst handling per herdr src/app/api/agents.rs; not measured"

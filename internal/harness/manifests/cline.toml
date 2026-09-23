@@ -1,12 +1,11 @@
-# Screen rules converted from herdr's agent-detection manifest for cline
-# (github.com/herdrdev/herdr, website/agent-detection/cline.toml, manifest
-# version 2026.06.10.1, Apache-2.0). Regenerate a draft with
+# Rules after herdr's agent-detection manifest for cline
+# (github.com/herdrdev/herdr, src/detect/manifests/cline.toml, manifest version
+# 2026.09.11.1, Apache-2.0; see LICENSE-herdr). Regenerate a draft with
 #   go run ./internal/harness/herdrconv
-# Only the blocked-prompt rules ship, per the bundled policy in
-# registry_test.go. Deliberately not carried even for opt-in: herdr's fallback
-# rule that calls any non-empty cline screen "working" (regex `(?s).+` at
-# priority -10). Here that would be a rule that can never decline to answer,
-# and no opinion is the honest answer for a screen no rule recognises.
+# Deliberately not carried: herdr's fallback rule that calls any non-empty
+# cline screen "working" (regex `(?s).+` at priority -10). Here that would be a
+# rule that can never decline to answer, and no opinion is the honest answer
+# for a screen no rule recognises.
 
 schema_version = 1
 id             = "cline"
@@ -25,32 +24,66 @@ argv_path = ["cline/bin/cline", "@cline/cli"]
 [screen]
 enabled   = true
 fold_case = true
-lines     = 8
+lines     = 24
 
-# herdr rule: tool_permission. The explicit ask.
+# herdr rule: tool_permission. The explicit ask, or a mode-tagged
+# confirmation with its question and a yes.
 [[screen.rule]]
 state    = "needs_input"
 priority = 300
-all      = ["let cline use this tool"]
+kind     = "approval"
+message  = "Waits for permission to use a tool."
+any_of   = [
+  { all = ["let cline use this tool"] },
+  { all = ["yes"], any = ["[act mode]", "[plan mode]"], all_of = [ { any = ["execute command?", "use this tool?"] } ] },
+]
 
-# herdr rule: tool_permission, the mode-tagged confirmations. Each pairing is
-# its own rule because herdr requires the mode tag and the question together.
+# herdr rule: inline_tool_permission. The inline approval card.
 [[screen.rule]]
 state    = "needs_input"
 priority = 300
-all      = ["[act mode]", "execute command?", "yes"]
+kind     = "approval"
+message  = "Waits for approval of a tool call."
+region   = "bottom_non_empty_lines(16)"
+all      = ["cline needs permission", "approve tool call?", "[y] approve", "[n] deny"]
 
+# herdr rule: inline_question. Cline asking a question, with its options and
+# the composer hints.
 [[screen.rule]]
 state    = "needs_input"
 priority = 300
-all      = ["[act mode]", "use this tool?", "yes"]
+kind     = "question"
+message  = "Asks you a question."
+region   = "bottom_non_empty_lines(24)"
+regex    = ['^\s*Cline is asking a question\s*$', '^\s*>\s+\S']
+all      = ["(tab)", "shift+tab"]
 
+# herdr rule: active_turn. A braille spinner line, or the thinking hint.
 [[screen.rule]]
-state    = "needs_input"
-priority = 300
-all      = ["[plan mode]", "execute command?", "yes"]
+state    = "working"
+priority = 200
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(20)"
+any_of   = [ { regex = ['^\s*[\x{2801}-\x{28FF}]\s+\S'] }, { all = ["thinking... (esc to cancel)"] } ]
 
+# herdr rule: composer_idle. The composer's prompt mark with its rule and the
+# mode hints under it.
+#
+#   ───────────────────────────────
+#   ❯
+#   ───────────────────────────────
+#   Plan/Act (Tab) · Shift+Tab auto-approve
 [[screen.rule]]
-state    = "needs_input"
-priority = 300
-all      = ["[plan mode]", "use this tool?", "yes"]
+state    = "idle"
+priority = 100
+message  = "Waits at its prompt."
+region   = "bottom_non_empty_lines(12)"
+regex    = ['^\s*❯(?:\s.*)?$']
+all      = ["─", "(tab)", "shift+tab"]
+
+# How a prompt is typed in. Not measured: the prompt sits behind a signed-in
+# session on the machine these values were written on.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

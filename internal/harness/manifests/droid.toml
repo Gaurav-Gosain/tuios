@@ -1,3 +1,12 @@
+# Rules after herdr's agent-detection manifest for droid
+# (github.com/herdrdev/herdr, src/detect/manifests/droid.toml, manifest version
+# 2026.06.10.1, Apache-2.0; see LICENSE-herdr). Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Not verified against a live pane: Droid is not installed on the machine
+# these rules were written on. herdr has no idle rule for it. herdr's two
+# working rules both need "esc to stop" and one adds a spinner; the stricter one
+# never changes the answer, so only the plain one ships.
+
 schema_version = 1
 id             = "droid"
 display_name   = "Droid"
@@ -9,4 +18,40 @@ argv0     = ["droid"]
 argv_path = ["@factory/cli"]
 
 [screen]
-enabled = false
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: execute_selection_blocker. The execute dialog with its allow or
+# cancel options and navigation hints.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+kind     = "approval"
+message  = "Waits for approval to run a command."
+all      = ["enter to select", "esc to cancel"]
+any      = ["↑↓ to navigate", "use ↑↓ to navigate"]
+all_of   = [ { any = ["> yes, allow", "> no, cancel"] } ]
+
+# herdr rule: selection_menu_blocker. A selection menu's hint line.
+[[screen.rule]]
+state    = "needs_input"
+priority = 290
+kind     = "question"
+message  = "Waits for a choice."
+region   = "bottom_non_empty_lines(8)"
+all      = ["enter select", "esc cancel"]
+any      = ["↑/↓ navigate", "↑↓ navigate"]
+
+# herdr rule: stop_hint_working. The stop hint shown while a turn runs.
+[[screen.rule]]
+state    = "working"
+priority = 100
+message  = "Works on a turn."
+all      = ["esc to stop"]
+
+# How a prompt is typed in. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

@@ -1,11 +1,9 @@
-# Screen rules converted from herdr's agent-detection manifest for qoder
-# (github.com/herdrdev/herdr, website/agent-detection/qodercli.toml, herdr id
-# "qodercli", manifest version 2026.06.10.1, Apache-2.0). Regenerate a draft
-# with
+# Rules after herdr's agent-detection manifest for qoder
+# (github.com/herdrdev/herdr, src/detect/manifests/qodercli.toml, herdr id
+# "qodercli", manifest version 2026.06.10.1, Apache-2.0; see LICENSE-herdr).
+# Regenerate a draft with
 #   go run ./internal/harness/herdrconv
-# Only the blocked-prompt rules ship, per the bundled policy in
-# registry_test.go; herdr's working rules read cancel hints and spinner lines,
-# which output already covers here.
+# Not verified against a live pane. herdr has no idle rule for it.
 
 schema_version = 1
 id             = "qoder"
@@ -24,21 +22,36 @@ enabled   = true
 fold_case = true
 lines     = 8
 
-# herdr rule: confirmation_or_input_blocker. The single-wording forms share one
-# any-of; the anchored forms are their own rules so each stays an AND.
+# herdr rule: confirmation_or_input_blocker. A confirmation with its answers,
+# or one of the phrases that only a waiting prompt shows.
 [[screen.rule]]
 state    = "needs_input"
 priority = 300
-any      = ["permission required", "allow once or always?", "asking user", "enter your response", "review your answers:", "shell awaiting input"]
+message  = "Waits for your answer on the screen."
+any_of   = [
+  { all = ["waiting for user confirmation"], any = ["yes", "no", "allow", "reject"] },
+  { all = ["awaiting approval"], any = ["allow", "reject"] },
+  { any = ["permission required", "allow once or always?", "asking user", "enter your response", "review your answers:", "shell awaiting input"] },
+]
 
+# herdr rule: cancel_hint_working. The cancel hint with its timer.
+#
+#   ⠹ Reading files (esc to cancel, 4s)
 [[screen.rule]]
-state    = "needs_input"
-priority = 300
-all      = ["waiting for user confirmation"]
-any      = ["yes", "no", "allow", "reject"]
+state    = "working"
+priority = 100
+message  = "Works on a turn."
+all      = ["(esc to cancel,"]
 
+# herdr rule: spinner_working. A braille spinner in front of words.
 [[screen.rule]]
-state    = "needs_input"
-priority = 300
-all      = ["awaiting approval"]
-any      = ["allow", "reject"]
+state    = "working"
+priority = 90
+message  = "Works on a turn."
+regex    = ['^\s*[\x{2800}-\x{28FF}][ \t]+.*\pL']
+
+# How a prompt is typed in. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

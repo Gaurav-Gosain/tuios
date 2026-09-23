@@ -1,0 +1,63 @@
+# harness: qwen
+# want: needs_input
+# how: derived. The paused spinner line with the waiting message, from
+# herdr's qwen manifest (waiting_for_confirmation).
+---
+  Shell go vet ./...
+⠏ Waiting for user confirmation...
+=====
+# harness: qwen
+# want: needs_input
+# how: derived. The tool confirmation dialog, herdr's tool_confirmation.
+---
+Shell Command Execution
+  go vet ./...
+Allow execution of: 'go'?
+● 1. Yes, allow once
+  2. Yes, allow always
+=====
+# harness: qwen
+# want: needs_input
+# how: derived. A selection dialog by shape, locale-independent, herdr's
+# question_dialog.
+---
+  Which package should I start with?
+› 1. internal/session
+  2. internal/harness
+↑/↓: move · Enter: select
+=====
+# harness: qwen
+# want: needs_input
+# how: derived. The folder trust dialog, herdr's folder_trust_dialog.
+---
+Do you trust this folder?
+  1. Trust folder (enter)
+  2. Don't trust (esc)
+=====
+# harness: qwen
+# want: working
+# how: derived. The spinner line with its timer and cancel hint, herdr's
+# cancel_hint_working. The composer stays on screen during the turn, which
+# is why the working rules outrank the idle one.
+---
+⠹ Reading files (12s · esc to cancel)
+╭──────────────────────────────────────────╮
+│ >   Type your message or @path/to/file   │
+╰──────────────────────────────────────────╯
+=====
+# harness: qwen
+# want: working
+# how: derived. The same hint wrapped onto its own line on a narrow pane,
+# herdr's narrow_cancel_hint_working.
+---
+⠹ Reading files
+(12s · esc to cancel)
+> Type your message
+=====
+# harness: qwen
+# want: idle
+# how: derived. The composer with its placeholder and no working hint,
+# herdr's composer_idle.
+---
+  The build is green.
+> Type your message or @path/to/file

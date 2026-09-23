@@ -38,6 +38,20 @@ type Manifest struct {
 	// sent with OSC 9, OSC 777 or OSC 99. It has the shape of Title.
 	Notify     Title      `toml:"notify"`
 	Transcript Transcript `toml:"transcript"`
+	// Input is how a prompt is typed into the harness. See Input.
+	Input Input `toml:"input"`
+
+	// source is where the manifest was loaded from: "bundled" or the path of
+	// a user file. replacedBundled is true for a user file that took the
+	// place of a bundled manifest with the same id. Both are set by Load.
+	source          string
+	replacedBundled bool
+}
+
+// Source says where the manifest was loaded from, "bundled" or a file path,
+// and whether that file replaced a bundled manifest with the same id.
+func (m *Manifest) Source() (source string, replacedBundled bool) {
+	return m.source, m.replacedBundled
 }
 
 // Title is the rules matched against the pane's window title, the string the
@@ -68,6 +82,9 @@ type Title struct {
 	// matching, exactly as Screen.FoldCase does for the screen.
 	FoldCase bool         `toml:"fold_case"`
 	Rule     []ScreenRule `toml:"rule"`
+
+	// order is as Screen.order.
+	order []int
 }
 
 // Detect is how a process is recognised as this harness. Any one predicate
@@ -170,15 +187,54 @@ type Screen struct {
 	// silently change what its character classes mean. Manifests converted from
 	// herdr need this on, because herdr always matches substrings case-folded.
 	FoldCase bool `toml:"fold_case"`
-	// Lines is how many lines from the bottom of the pane a rule sees.
+	// Lines is how many non-empty lines from the bottom of the pane a rule
+	// sees. A rule reading bottom_non_empty_lines(N) must fit inside it; the
+	// loader refuses one that asks for more rather than widening what every
+	// other rule reads.
 	Lines int          `toml:"lines"`
 	Rule  []ScreenRule `toml:"rule"`
+
+	// order is the rule indices highest priority first, ties in declaration
+	// order, so a scan can stop at the first rule that matches. Filled by
+	// parseManifest.
+	order []int
 }
 
-// ScreenRule is one screen-text rule. The predicates combine as: every string in
-// All must be present, at least one in Any must be present, none in Not may be,
-// every pattern in Regex must match, and no pattern in NotRegex may match. An
-// empty list is satisfied, so a rule with only Any is an "any of these".
+// scanOrder returns order when it was built for rules, and builds it when it
+// was not, for a manifest assembled in code rather than parsed.
+func scanOrder(order []int, rules []ScreenRule) []int {
+	if len(order) == len(rules) {
+		return order
+	}
+	return priorityOrder(rules)
+}
+
+// firstMatch walks rules in scan order and returns the first one match
+// accepts: the best rule, since the order is highest priority first with ties
+// in declaration order.
+func firstMatch(order []int, rules []ScreenRule, match func(*ScreenRule) bool) (state string, rule int, ok bool) {
+	for _, i := range scanOrder(order, rules) {
+		if match(&rules[i]) {
+			return rules[i].State, i, true
+		}
+	}
+	return "", -1, false
+}
+
+// priorityOrder returns the indices of rules, highest priority first and ties
+// in declaration order, which is the order a scan considers them in.
+func priorityOrder(rules []ScreenRule) []int {
+	order := make([]int, len(rules))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(a, b int) int { return rules[b].Priority - rules[a].Priority })
+	return order
+}
+
+// ScreenRule is one rule: a state, and the gate that says when the rule's
+// region shows it. The same shape serves screen, title and notify rules. See
+// Gate for how the predicates combine.
 type ScreenRule struct {
 	State    string `toml:"state"`
 	Priority int    `toml:"priority"`
@@ -191,31 +247,20 @@ type ScreenRule struct {
 	// "question" for one that wants an answer in words. It fronts the prompt
 	// line in the pane's message ("approval: Do you want to ..."). Empty means
 	// guess from the rule's own words; see RuleKind.
-	Kind string   `toml:"kind"`
-	All  []string `toml:"all"`
-	Any  []string `toml:"any"`
-	Not  []string `toml:"not"`
-	// Regex and NotRegex hold RE2 patterns, compiled once at load and matched
-	// with ^ and $ anchoring lines rather than the whole tail, because the tail
-	// is lines and a rule almost always means "some line looks like this".
-	// RE2 guarantees matching linear in the text, so a pathological pattern can
-	// cost a load error but never a stalled screen scan.
-	Regex    []string `toml:"regex"`
-	NotRegex []string `toml:"not_regex"`
-	// Region is the part of the screen tail the rule reads. Empty and "tail"
-	// mean the whole tail. "prompt_box" is the body of the input box at the
-	// bottom of the tail: the lines between the last two border lines, a border
-	// being a run of at least three box-drawing dashes, optionally opened by a
-	// corner. "above_prompt_box" is everything above that box. A rule reading a
-	// box region matches nothing when no box is on the screen, which is what
-	// lets an idle rule prove a prompt box is there. Only screen rules take a
-	// region.
+	Kind string `toml:"kind"`
+	// Gate holds the predicates, flat and nested. Regex and NotRegex hold RE2
+	// patterns, compiled once at load and matched with ^ and $ anchoring lines
+	// rather than the whole region, because a region is lines and a rule
+	// almost always means "some line looks like this". RE2 guarantees
+	// matching linear in the text, so a pathological pattern can cost a load
+	// error but never a stalled screen scan.
+	Gate
+	// Region is the part of what the pane shows that the rule reads; see
+	// region.go for the names. A screen rule reads the whole tail by default,
+	// a title rule the title. A rule reading a box region matches nothing when
+	// no box is on the screen, which is what lets an idle rule prove a prompt
+	// box is there. Notify rules take no region.
 	Region string `toml:"region"`
-
-	// Compiled forms of Regex and NotRegex, index-aligned so a report can name
-	// the pattern as the manifest spells it. Filled by parseManifest.
-	regex    []*regexp.Regexp
-	notRegex []*regexp.Regexp
 }
 
 // maxScreenPattern bounds one regex pattern's length. RE2 compiles a pattern
@@ -263,26 +308,36 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 	if err := m.Detect.checkGenericNames(name, m.ID); err != nil {
 		return nil, err
 	}
+	if m.Screen.Lines <= 0 {
+		m.Screen.Lines = defaultScreenLines
+	}
+	if m.Screen.Lines > maxRegionLines {
+		return nil, fmt.Errorf("%s: manifest %q screen lines %d, limit %d", name, m.ID, m.Screen.Lines, maxRegionLines)
+	}
 	// Title and notify rules are the same shape as screen rules and are checked
 	// the same way, so a mistake in one is reported in the same words as a
-	// mistake in the other.
+	// mistake in the other. One budget covers the whole file.
+	var budget gateBudget
 	for i := range m.Screen.Rule {
-		if err := m.Screen.Rule[i].check("screen", screenStates, m.Screen.FoldCase); err != nil {
+		if err := m.Screen.Rule[i].check("screen", screenStates, m.Screen.FoldCase, m.Screen.Lines, &budget); err != nil {
 			return nil, fmt.Errorf("%s: manifest %q screen rule %d: %w", name, m.ID, i, err)
 		}
 	}
 	for i := range m.Title.Rule {
-		if err := m.Title.Rule[i].check("title", screenStates, m.Title.FoldCase); err != nil {
+		if err := m.Title.Rule[i].check("title", screenStates, m.Title.FoldCase, 0, &budget); err != nil {
 			return nil, fmt.Errorf("%s: manifest %q title rule %d: %w", name, m.ID, i, err)
 		}
 	}
 	for i := range m.Notify.Rule {
-		if err := m.Notify.Rule[i].check("notify", notifyStates, m.Notify.FoldCase); err != nil {
+		if err := m.Notify.Rule[i].check("notify", notifyStates, m.Notify.FoldCase, 0, &budget); err != nil {
 			return nil, fmt.Errorf("%s: manifest %q notify rule %d: %w", name, m.ID, i, err)
 		}
 	}
-	if m.Screen.Lines <= 0 {
-		m.Screen.Lines = defaultScreenLines
+	m.Screen.order = priorityOrder(m.Screen.Rule)
+	m.Title.order = priorityOrder(m.Title.Rule)
+	m.Notify.order = priorityOrder(m.Notify.Rule)
+	if err := m.Input.normalize(); err != nil {
+		return nil, fmt.Errorf("%s: manifest %q input: %w", name, m.ID, err)
 	}
 	if err := checkTranscript(name, m.ID, &m.Transcript); err != nil {
 		return nil, err
@@ -294,54 +349,55 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 }
 
 // check validates one rule of the given block and compiles it. block is
-// "screen", "title" or "notify", and states is what that block may assert.
-func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bool) error {
+// "screen", "title" or "notify", states is what that block may assert, lines
+// is how far up a screen rule may read, and b counts the file's predicates.
+func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bool, lines int, b *gateBudget) error {
 	if _, ok := states[r.State]; !ok {
 		return fmt.Errorf("unknown state %q", r.State)
 	}
-	if err := r.compile(foldCase); err != nil {
+	if err := r.Gate.compile(foldCase, 0, b); err != nil {
 		return err
 	}
 	if r.Kind = strings.ToLower(strings.TrimSpace(r.Kind)); r.Kind != "" && !promptKinds[r.Kind] {
 		return fmt.Errorf("unknown kind %q (approval or question)", r.Kind)
 	}
-	r.Region = strings.ToLower(strings.TrimSpace(r.Region))
-	if block != "screen" {
-		if r.Region != "" {
-			return fmt.Errorf("region %q: only screen rules read a region", r.Region)
+	switch block {
+	case "notify":
+		if strings.TrimSpace(r.Region) != "" {
+			return fmt.Errorf("region %q: a notify rule reads the notification and takes no region", r.Region)
 		}
 		return nil
+	case "title":
+		region, err := normalizeTitleRegion(r.Region)
+		if err != nil {
+			return err
+		}
+		r.Region = region
+		return nil
 	}
-	if !screenRegions[r.Region] {
-		return fmt.Errorf("unknown region %q (tail, prompt_box or above_prompt_box)", r.Region)
+	region, bottom, err := normalizeScreenRegion(r.Region)
+	if err != nil {
+		return err
 	}
+	if bottom > lines {
+		return fmt.Errorf("region %s reads past the %d lines the manifest reads; raise [screen] lines", region, lines)
+	}
+	r.Region = region
 	// An idle rule has to prove the agent is at rest, and the proof is an input
-	// box on the screen. Reading the box region is that proof; a regex can be,
-	// when it pins the box's own structure. A rule resting on a loose substring
-	// would call a pane idle because a word appeared in its output.
-	if r.State == "idle" && r.Region != RegionPromptBox && len(r.Regex) == 0 {
+	// box on the screen. Reading the box region is that proof; a pattern on
+	// every path to a match can be, when it pins the box's own structure. A
+	// rule resting on a loose substring would call a pane idle because a word
+	// appeared in its output.
+	if r.State == "idle" && r.Region != RegionPromptBox && !r.provesShape() {
 		return fmt.Errorf("an idle rule must read region = %q or carry a regex that pins the input box", RegionPromptBox)
 	}
 	return nil
 }
 
-// compile turns a rule's regex predicates into matchers and, when the manifest
-// folds case, lowercases its substring predicates so matching stays a plain
-// Contains against a haystack lowercased once per scan.
+// compile compiles a rule on its own, the way parseManifest does, for a rule
+// built in code rather than read from a file.
 func (r *ScreenRule) compile(foldCase bool) error {
-	if foldCase {
-		for _, list := range [][]string{r.All, r.Any, r.Not} {
-			for i, s := range list {
-				list[i] = strings.ToLower(s)
-			}
-		}
-	}
-	var err error
-	if r.regex, err = compilePatterns(r.Regex); err != nil {
-		return err
-	}
-	r.notRegex, err = compilePatterns(r.NotRegex)
-	return err
+	return r.Gate.compile(foldCase, 0, &gateBudget{})
 }
 
 // compilePatterns compiles each pattern with (?m), so ^ and $ mean lines: the
@@ -383,20 +439,6 @@ var notifyStates = map[string]struct{}{
 	"needs_input": {},
 	"idle":        {},
 	"done":        {},
-}
-
-// Screen regions a rule may read. See ScreenRule.Region.
-const (
-	RegionTail           = "tail"
-	RegionPromptBox      = "prompt_box"
-	RegionAbovePromptBox = "above_prompt_box"
-)
-
-var screenRegions = map[string]bool{
-	"":                   true,
-	RegionTail:           true,
-	RegionPromptBox:      true,
-	RegionAbovePromptBox: true,
 }
 
 // normalize lowercases and trims every predicate so matching can be a plain

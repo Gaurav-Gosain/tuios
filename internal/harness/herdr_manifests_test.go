@@ -124,43 +124,48 @@ func TestHerdrManifestsSpotTheirBlockers(t *testing.T) {
 	}
 }
 
-// The working and idle chrome herdr also has rules for does not ship for these
-// harnesses (only claude-code, codex, gemini-cli and opencode carry working and
-// idle rules; see screen_fixtures_test.go), so a busy or resting pane must
-// classify as nothing rather than as a blocker. Silence is the contract.
-func TestHerdrManifestsStayQuietOffTheirBlockers(t *testing.T) {
+// The working and idle chrome herdr has rules for now ships for these harnesses
+// too, so a busy pane reads as working and a resting one as idle where herdr
+// ships an idle rule, never as a blocker. A screen no rule knows stays silent.
+// Every rule also has a fixture under testdata/screens/rules.
+func TestHerdrManifestsReadWorkAndRest(t *testing.T) {
 	r := testRegistry(t)
 	for _, tc := range []struct {
 		harness string
 		name    string
 		tail    []string
+		want    string
 	}{
 		{"devin", "working footer", []string{
 			"Running tools   Esc to interrupt",
-		}},
+		}, "working"},
 		{"grok", "working status line", []string{
 			"⠧ Waiting on subagent… 2.8s   13s ⇣29.7k [stop]",
-		}},
+		}, "working"},
 		{"grok", "idle footer", []string{
 			"Ctrl+.:shortcuts",
-		}},
+		}, "idle"},
 		{"qwen", "working cancel hint", []string{
 			"⠹ Reading files (12s · esc to cancel)",
-		}},
+		}, "working"},
 		{"kimi", "moon spinner", []string{
 			"🌕",
-		}},
-		{"cline", "resting prompt", []string{
+		}, "working"},
+		{"cline", "resting prompt without the composer's hints", []string{
 			"cline is ready",
 			"> ",
-		}},
+		}, "none"},
 		{"amp", "streaming footer", []string{
 			"╰ ⠧ streaming ─ esc to cancel",
-		}},
+		}, "working"},
 	} {
 		t.Run(tc.harness+" "+tc.name, func(t *testing.T) {
+			got := "none"
 			if state, _, ok := r.Classify(tc.harness, tc.tail); ok {
-				t.Errorf("classified %s chrome as %q; the rules for it were deliberately not shipped", tc.name, state)
+				got = state
+			}
+			if got != tc.want {
+				t.Errorf("classified %s as %s, want %s", tc.name, got, tc.want)
 			}
 		})
 	}

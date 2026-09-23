@@ -1173,7 +1173,11 @@ did not match, what it compared against.`,
 what every rule made of it and which one fired.
 
 Use it to write or debug a screen rule: for each rule that did not match, it
-names the strings that were the reason.`,
+names the strings, patterns and nested groups that were the reason, and a rule
+reading a region narrower than the tail shows the text it read there. The
+title rules follow, with the pane's title and last OSC 9;4 progress report.
+When a user manifest is in force, it says which file, and whether it replaces
+a bundled one.`,
 		Example: `  # What do claude-code's rules make of the focused pane right now?
   tuios explain-agent-screen
 

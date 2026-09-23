@@ -1,10 +1,8 @@
-# Screen rules converted from herdr's agent-detection manifest for kimi
-# (github.com/herdrdev/herdr, website/agent-detection/kimi.toml, manifest
-# version 2026.06.10.1, Apache-2.0). Regenerate a draft with
+# Rules after herdr's agent-detection manifest for kimi
+# (github.com/herdrdev/herdr, src/detect/manifests/kimi.toml, manifest version
+# 2026.06.10.1, Apache-2.0; see LICENSE-herdr). Regenerate a draft with
 #   go run ./internal/harness/herdrconv
-# Only the blocked-prompt rules ship, per the bundled policy in
-# registry_test.go; herdr's working rules read spinner lines, which output
-# already covers here.
+# Not verified against a live pane. herdr has no idle rule for it.
 
 schema_version = 1
 id             = "kimi"
@@ -33,37 +31,67 @@ fold_case = true
 lines     = 8
 
 # herdr rule: current_approval_panel. The approval panel: confirm and choose
-# hints, an approve/reject/revise option, and one of the question wordings.
-# The questions are one pattern because a rule carries one any-of set; (?i)
-# keeps the folding the substrings get.
+# hints, an approve, reject or revise option, and one of the question
+# wordings or a free-form approve question.
 [[screen.rule]]
 state    = "needs_input"
 priority = 400
+kind     = "approval"
+message  = "Waits for approval."
 all      = ["↵ confirm", " choose"]
 any      = ["approve", "reject", "revise"]
-regex    = ["(?i)run this command\\?|write this file\\?|apply these edits\\?|stop this task\\?|ready to build with this plan\\?"]
-
-# herdr rule: current_approval_panel, the free-form approve question.
-[[screen.rule]]
-state    = "needs_input"
-priority = 400
-all      = ["↵ confirm", " choose"]
-any      = ["approve", "reject", "revise"]
-regex    = ["(?i)^\\s*▶?\\s*approve .*\\?$"]
+any_of   = [
+  { any = ["run this command?", "write this file?", "apply these edits?", "stop this task?", "ready to build with this plan?"] },
+  { regex = ['(?i)^\s*▶?\s*approve .*\?$'] },
+]
 
 # herdr rule: question_panel. Kimi asking the user a question: both the panel
 # heading and a question line must be on screen.
 [[screen.rule]]
 state    = "needs_input"
 priority = 390
+kind     = "question"
+message  = "Asks you a question."
 all      = ["↑↓ select", "esc cancel"]
 any      = ["↵ choose", "↵ toggle", "↵ save"]
-regex    = ["^\\s*question\\s*$", "^\\s*\\? "]
+regex    = ['^\s*question\s*$', '^\s*\? ']
 
 # herdr rule: legacy_approval_panel, kept for older Kimi releases.
 [[screen.rule]]
 state    = "needs_input"
 priority = 300
+kind     = "approval"
+message  = "Waits for approval."
 all      = ["requesting approval", "reject"]
-any      = ["1/2/3/4 choose", "↵ confirm"]
-regex    = ["(?i)approve once|approve for this session"]
+any      = ["approve once", "approve for this session"]
+all_of   = [ { any = ["1/2/3/4 choose", "↵ confirm"] } ]
+
+# herdr rule: background_agent_status_working.
+#
+#   kimi-k2 thinking… [2 agents running]
+[[screen.rule]]
+state    = "working"
+priority = 120
+message  = "Waits for background agents."
+region   = "bottom_non_empty_lines(3)"
+regex    = ['(?i)\bkimi[-\w.]*\s+thinking\b.*\[[1-9][0-9]*\s+agents?\s+running\]']
+
+# herdr rule: moon_spinner_working. A moon phase alone on its line.
+[[screen.rule]]
+state    = "working"
+priority = 100
+message  = "Works on a turn."
+regex    = ['^\s*(?:🌕|🌖|🌗|🌘|🌑|🌒|🌓|🌔)\s*$']
+
+# herdr rule: braille_spinner_working.
+[[screen.rule]]
+state    = "working"
+priority = 90
+message  = "Works on a turn."
+regex    = ['(?i)^\s*[\x{2800}-\x{28FF}]+\s*(?:thinking\.\.\.|working\.\.\.|using )']
+
+# How a prompt is typed in. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

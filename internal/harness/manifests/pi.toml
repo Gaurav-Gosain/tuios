@@ -23,6 +23,38 @@ argv_path = ["@mariozechner/pi-coding-agent", "@earendil-works/pi-coding-agent",
 exe_base = ["node", "nodejs", "bun", "deno"]
 exe_glob = ["**/pi-coding-agent/**"]
 
+# Working rules after herdr's agent-detection manifest for pi
+# (github.com/herdrdev/herdr, src/detect/manifests/pi.toml, manifest version
+# 2026.09.14.1, Apache-2.0; see LICENSE-herdr). Pi has no blocking prompt and
+# herdr no idle rule for it. Not verified against a live turn.
 [screen]
-enabled = false
-lines   = 8
+enabled   = true
+fold_case = true
+lines     = 12
+
+# herdr rule: working_border. The rule pi draws over its output during a
+# turn, with a spinner in it.
+#
+#   ── ⠹ Working ──────────────────────────
+[[screen.rule]]
+state    = "working"
+priority = 100
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(12)"
+regex    = ['^── [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Working ─+$']
+
+# herdr rule: working_literal. The status word alone, for a layout without the
+# border. herdr reads the whole screen; here it reads the bottom four lines,
+# so the word left in the transcript cannot hold the pane at working.
+[[screen.rule]]
+state    = "working"
+priority = 90
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(4)"
+all      = ["working..."]
+
+# How a prompt is typed in. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

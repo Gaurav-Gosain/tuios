@@ -1,8 +1,9 @@
 # harness: codex
-# want: none
+# want: needs_input
 # how: derived. The Codex command approval, whose choices sit behind the same
-# "›" the composer uses. Codex's blocked state comes from its title and its
-# notifications, so the screen must say nothing here, and above all not idle.
+# "›" the composer uses. The footer on the last line is what herdr's
+# live_strong_blocker keys on, and it must win over the idle rule, which the
+# numbered "›" line refuses anyway.
 ---
   Would you like to run the following command?
 

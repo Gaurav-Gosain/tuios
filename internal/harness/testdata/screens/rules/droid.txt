@@ -1,0 +1,26 @@
+# harness: droid
+# want: needs_input
+# how: derived. The execute dialog, from herdr's droid manifest
+# (execute_selection_blocker).
+---
+  Execute go test ./...
+  > Yes, allow
+    No, cancel
+  Use ↑↓ to navigate, Enter to select, Esc to cancel
+=====
+# harness: droid
+# want: needs_input
+# how: derived. A selection menu's hint line, herdr's
+# selection_menu_blocker.
+---
+  Choose a model
+  > sonnet
+    opus
+  ↑/↓ navigate · enter select · esc cancel
+=====
+# harness: droid
+# want: working
+# how: derived. The stop hint during a turn, herdr's stop_hint_working.
+---
+  Reading src/main.go
+  ⠹ Thinking… (esc to stop)

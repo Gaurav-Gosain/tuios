@@ -24,99 +24,13 @@ func (r *Registry) Classify(id string, tail []string) (state string, rule int, o
 	// strings and every one of them would otherwise walk the slice again. The
 	// folded copy is likewise made once per scan, not per rule, and only when
 	// the manifest asks.
+	// Rules are tried highest priority first, so the first match is the answer
+	// and no rule that could not win is read at all.
 	text := newRegionText(tail, m.Screen.FoldCase)
-
-	best, bestIdx := "", -1
-	bestPri := 0
-	for i := range m.Screen.Rule {
-		rl := &m.Screen.Rule[i]
-		hay, folded, ok := text.get(rl.Region)
-		if !ok || !checkRule(rl, hay, folded, nil, strings.Contains) {
-			continue
-		}
-		if bestIdx == -1 || rl.Priority > bestPri {
-			best, bestIdx, bestPri = rl.State, i, rl.Priority
-		}
-	}
-	if bestIdx == -1 {
-		return "", -1, false
-	}
-	return best, bestIdx, true
-}
-
-// checkRule applies the predicates: every string in All present, at least one
-// in Any present, none in Not present, every Regex matching, no NotRegex
-// matching. An empty list is satisfied, so a rule carrying only Any is an "any
-// of these". Substrings check the folded haystack, which is the plain one
-// unless the manifest folds case; regexes always read the plain haystack,
-// because a pattern chooses its own case handling with (?i).
-//
-// A non-nil rep collects why each predicate refused, which is what a person
-// writing a rule needs and what classification does not. Passing nil skips every
-// allocation, so the diagnostic costs the hot path nothing and neither of them
-// carries a second copy of the predicates.
-func checkRule(rl *ScreenRule, hay, folded string, rep *RuleReport, contains func(hay, needle string) bool) bool {
-	// A rule naming no positive predicate would match every screen the harness
-	// ever paints, which is a rule that says the pane is always in its state.
-	if len(rl.All) == 0 && len(rl.Any) == 0 && len(rl.Regex) == 0 {
-		if rep != nil {
-			rep.Empty = true
-		}
-		return false
-	}
-	ok := true
-	for _, s := range rl.All {
-		if contains(folded, s) {
-			continue
-		}
-		ok = false
-		if rep == nil {
-			return false
-		}
-		rep.Missing = append(rep.Missing, s)
-	}
-	for i, re := range rl.regex {
-		if re.MatchString(hay) {
-			continue
-		}
-		ok = false
-		if rep == nil {
-			return false
-		}
-		rep.MissingRegex = append(rep.MissingRegex, rl.Regex[i])
-	}
-	for _, s := range rl.Not {
-		if !contains(folded, s) {
-			continue
-		}
-		ok = false
-		if rep == nil {
-			return false
-		}
-		rep.Blocked = append(rep.Blocked, s)
-	}
-	for i, re := range rl.notRegex {
-		if !re.MatchString(hay) {
-			continue
-		}
-		ok = false
-		if rep == nil {
-			return false
-		}
-		rep.BlockedRegex = append(rep.BlockedRegex, rl.NotRegex[i])
-	}
-	if len(rl.Any) == 0 {
-		return ok
-	}
-	for _, s := range rl.Any {
-		if contains(folded, s) {
-			return ok
-		}
-	}
-	if rep != nil {
-		rep.NoneOf = rl.Any
-	}
-	return false
+	return firstMatch(m.Screen.order, m.Screen.Rule, func(rl *ScreenRule) bool {
+		hay, folded, ok := text.get(rl.Region, rl.substrings)
+		return ok && checkRule(rl, hay, folded, nil, strings.Contains)
+	})
 }
 
 // RuleReport says what one rule made of a pane's screen, and when it refused,
@@ -138,6 +52,10 @@ type RuleReport struct {
 	Blocked []string `json:"blocked,omitempty"`
 	// BlockedRegex lists the not_regex[] patterns that matched.
 	BlockedRegex []string `json:"blocked_regex,omitempty"`
+	// Groups names each nested group that refused, by its path in the rule:
+	// "all_of[1] did not match", "no any_of group matched", "none_of[0]
+	// matched".
+	Groups []string `json:"groups,omitempty"`
 	// Empty marks a rule that names no strings at all, which would otherwise
 	// match every pane the harness runs in and is refused for that reason.
 	Empty bool `json:"empty,omitempty"`
@@ -147,6 +65,26 @@ type RuleReport struct {
 	// NoRegion marks a rule whose region is not on the screen at all, such as
 	// a prompt_box rule on a screen with no input box.
 	NoRegion bool `json:"no_region,omitempty"`
+	// Text is what the rule read: its region's lines joined with newlines, cut
+	// to maxReportText bytes. Omitted for a rule reading the whole tail, which
+	// the caller already has.
+	Text string `json:"text,omitempty"`
+}
+
+// maxReportText bounds the region text one report carries, so an explanation of
+// a manifest with many narrow rules stays a readable size.
+const maxReportText = 2048
+
+// reportText is region text cut for a report.
+func reportText(s string) string {
+	if len(s) <= maxReportText {
+		return s
+	}
+	cut := maxReportText
+	for cut > 0 && s[cut]&0xC0 == 0x80 {
+		cut--
+	}
+	return s[:cut] + "..."
 }
 
 // Explain classifies tail and reports what every rule made of it.
@@ -167,9 +105,12 @@ func (r *Registry) Explain(id string, tail []string) (state string, rule int, re
 	for i := range m.Screen.Rule {
 		rl := &m.Screen.Rule[i]
 		rep := RuleReport{Index: i, State: rl.State, Priority: rl.Priority, Region: rl.Region}
-		hay, folded, ok := text.get(rl.Region)
+		hay, folded, ok := text.get(rl.Region, true)
 		if ok {
 			rep.Matched = checkRule(rl, hay, folded, &rep, strings.Contains)
+			if rl.Region != "" {
+				rep.Text = reportText(hay)
+			}
 		} else {
 			rep.NoRegion = true
 		}

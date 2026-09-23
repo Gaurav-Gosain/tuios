@@ -1,0 +1,42 @@
+# harness: antigravity
+# want: needs_input
+# how: derived. The permission banner with the proceed question, from
+# herdr's antigravity manifest (permission_prompt).
+---
+Requesting permission for: run_command
+  go build ./...
+Do you want to proceed?
+  [y] yes   [n] no
+=====
+# harness: antigravity
+# want: needs_input
+# how: derived. The permission banner with the amend-command hints, the
+# second form of herdr's permission_prompt.
+---
+Requesting permission for: run_command
+  rm -rf build
+  enter run · tab amend · e edit command
+=====
+# harness: antigravity
+# want: working
+# how: derived. A braille spinner in front of an -ing word, herdr's
+# spinner_working.
+---
+> fix the flaky test
+⠹ Thinking
+=====
+# harness: antigravity
+# want: working
+# how: derived. The status line counting background tasks, herdr's
+# background_tasks_working.
+---
+> fix the flaky test
+  gemini-3-pro · 2 tasks running
+=====
+# harness: antigravity
+# want: none
+# how: derived. A finished answer: no spinner line, no task count.
+---
+> fix the flaky test
+The test now allocates its buffer per case.
+>

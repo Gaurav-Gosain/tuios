@@ -1,12 +1,14 @@
-# Screen rules converted from herdr's agent-detection manifest for grok
-# (github.com/herdrdev/herdr, website/agent-detection/grok.toml, manifest
-# version 2026.07.16.1, Apache-2.0). Regenerate a draft with
+# Rules after herdr's agent-detection manifest for grok
+# (github.com/herdrdev/herdr, src/detect/manifests/grok.toml, manifest version
+# 2026.09.18.2, Apache-2.0; see LICENSE-herdr). Regenerate a draft with
 #   go run ./internal/harness/herdrconv
-# Only the blocked-prompt rules ship, per the bundled policy in
-# registry_test.go. herdr leans on the OSC title and OSC 9;4 progress as grok's
-# primary signals; the title region is one the screen tier does not see, and
-# 9;4 already reaches the daemon through its own tier, so what ships is herdr's
-# screen fallback for the dialogs.
+# herdr's evidence is Grok Build 0.2.101 source and 1.0.34 live pane reads.
+#
+# Not ported: herdr's background_work_chip_working, which reads the top line
+# of the screen, and the tuios tail is read from the bottom. herdr's two
+# osc_progress rules read OSC 9;4 the way its published meaning already does
+# ("4;1;-1" busy, "4;0;0" idle), so the daemon's own progress mapping covers
+# them.
 
 schema_version = 1
 id             = "grok"
@@ -29,25 +31,33 @@ exe_glob = ["**/.grok/**", "**/@xai-official/**"]
 [screen]
 enabled   = true
 fold_case = true
-lines     = 8
+lines     = 12
 
 # herdr rule: option_dialog_blocked. The "┃"-guttered option list a permission
 # or question dialog draws, e.g. `┃  2 (○) Yes, proceed`.
 [[screen.rule]]
 state    = "needs_input"
 priority = 1200
-regex    = ["^\\s*┃\\s+[0-9a-z]+\\s+\\([●○]\\)\\s"]
+message  = "Waits for a choice."
+regex    = ['^\s*┃\s+[0-9a-z]+\s+\([●○]\)\s']
 
-# herdr rule: permission_hints_blocked. The permission dialog's footer hints.
+# herdr rule: permission_hints_blocked. The permission dialog's footer hints,
+# on the last two lines.
 [[screen.rule]]
 state    = "needs_input"
 priority = 1190
+kind     = "approval"
+message  = "Waits for permission."
+region   = "bottom_non_empty_lines(2)"
 all      = [":select", "ctrl+o:yolo", "ctrl+c:cancel"]
 
 # herdr rule: question_dialog_hints_blocked. The ask-user-question footer.
 [[screen.rule]]
 state    = "needs_input"
 priority = 1185
+kind     = "question"
+message  = "Asks you a question."
+region   = "bottom_non_empty_lines(2)"
 all      = ["tab:scrollback", "shift+x:dismiss"]
 
 # herdr rule: permission_scope_selector. The pre-0.2.x permission UI, kept for
@@ -55,5 +65,90 @@ all      = ["tab:scrollback", "shift+x:dismiss"]
 [[screen.rule]]
 state    = "needs_input"
 priority = 1180
+kind     = "approval"
+message  = "Waits for permission."
 all      = ["yes, proceed", "no, reject"]
 any      = ["use ← → to choose permission whitelist scope", "←/→:scope"]
+
+# herdr rule: background_status_working. Background work counted above the
+# composer.
+#
+#   ○ 2 commands · 1 subagent still running
+[[screen.rule]]
+state    = "working"
+priority = 1165
+message  = "Runs background work."
+region   = "bottom_non_empty_lines(12)"
+regex    = ['^\s*[○◎◉]\s+[1-9][0-9]*\s+(?:commands?|monitors?|loops?|subagents?)(?:\s+·\s+[1-9][0-9]*\s+(?:commands?|monitors?|loops?|subagents?))*\s+still running(?:\s+·\s+send a message to interrupt)?\s*$']
+
+# herdr rule: spinner_status_working. The live status line: a braille spinner
+# and the [stop] chip. The startup splash draws its logo in braille, which is
+# why the chip is required.
+#
+#   ⠧ Waiting on subagent… 2.8s   13s ⇣29.7k [stop]
+[[screen.rule]]
+state    = "working"
+priority = 1160
+message  = "Works on a turn."
+regex    = ['^\s*[\x{2801}-\x{28FF}]\s.*\[stop\]\s*$']
+
+# herdr rule: esc_cancel_hints_working. The footer with a cancel hint.
+[[screen.rule]]
+state    = "working"
+priority = 1155
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(2)"
+all      = ["ctrl+.:shortcuts"]
+any      = ["esc:cancel", "ctrl+c:cancel"]
+
+# herdr rule: waiting_tool_working. The pre-0.2.x working chrome.
+[[screen.rule]]
+state    = "working"
+priority = 1140
+message  = "Works on a turn."
+any_of   = [
+  { all = ["ctrl+c:cancel", "ctrl+enter:interject", "waiting"] },
+  { regex = ['^\s*[\x{2801}-\x{28FF}]\s+(Run|Read|Search|List)\b'] },
+]
+
+# herdr rule: prompt_hints_idle. The idle footer ends with the shortcuts hint
+# and offers nothing to cancel. The pattern pins the hint to the end of the
+# footer line.
+[[screen.rule]]
+state    = "idle"
+priority = 100
+message  = "Waits at its prompt."
+region   = "bottom_non_empty_lines(2)"
+regex    = ['(?i)ctrl\+\.:shortcuts\s*$']
+not      = ["esc:cancel", "ctrl+c:cancel"]
+
+# The window title: "grok" or "<session> - grok" at rest, a braille spinner
+# during a turn, and "Action Required" in front when a permission prompt waits.
+[title]
+enabled = true
+
+[[title.rule]]
+state    = "needs_input"
+priority = 10
+kind     = "approval"
+message  = "Grok says an action is required"
+all      = ["Action Required"]
+
+[[title.rule]]
+state    = "working"
+priority = 5
+message  = "Works on a turn."
+regex    = ['(?:^|\s)[\x{2801}-\x{28FF}](?:\s|$)']
+
+[[title.rule]]
+state    = "idle"
+priority = 1
+message  = "Waits at its prompt."
+regex    = ['(?:^| - )grok$']
+not_regex = ['[\x{2800}-\x{28FF}]']
+
+# How a prompt is typed in. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

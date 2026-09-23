@@ -1,0 +1,69 @@
+# harness: grok
+# want: needs_input
+# how: derived. The guttered option list of a permission dialog, quoted in
+# herdr's grok manifest (option_dialog_blocked).
+---
+◆ Run go test ./...?
+┃  1 (●) Yes, proceed
+┃  2 (○) No, reject
+=====
+# harness: grok
+# want: needs_input
+# how: derived. The permission footer hints on the last line, quoted in
+# herdr's grok manifest (permission_hints_blocked).
+---
+◆ Run go test ./...?
+1/3:select │ Ctrl+o:yolo │ Ctrl+c:cancel
+=====
+# harness: grok
+# want: needs_input
+# how: derived. The question dialog footer, quoted in herdr's grok manifest
+# (question_dialog_hints_blocked).
+---
+◆ Which branch?
+Esc:unselect │ Tab:scrollback │ Shift+x:dismiss
+=====
+# harness: grok
+# want: needs_input
+# how: derived. The pre-0.2.x permission scope selector, herdr's
+# permission_scope_selector.
+---
+  Yes, proceed    No, reject
+  Use ← → to choose permission whitelist scope
+=====
+# harness: grok
+# want: working
+# how: derived. Background work counted above the composer, herdr's
+# background_status_working.
+---
+  Started the build in the background.
+○ 2 commands · 1 subagent still running
+=====
+# harness: grok
+# want: working
+# how: derived. The live status line with the [stop] chip, quoted in herdr's
+# grok manifest (spinner_status_working).
+---
+⠧ Waiting on subagent… 2.8s   13s ⇣29.7k [stop]
+=====
+# harness: grok
+# want: working
+# how: derived. The footer with the cancel hint, herdr's
+# esc_cancel_hints_working.
+---
+  Reading src/main.go
+Esc:cancel │ Ctrl+.:shortcuts
+=====
+# harness: grok
+# want: working
+# how: derived. The pre-0.2.x working chrome, herdr's waiting_tool_working.
+---
+⠼ Run go test ./...
+=====
+# harness: grok
+# want: idle
+# how: derived. The idle footer, which ends with the shortcuts hint and
+# offers nothing to cancel, herdr's prompt_hints_idle.
+---
+  The build is green.
+Ctrl+.:shortcuts

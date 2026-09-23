@@ -1,0 +1,26 @@
+# harness: codex
+# want: needs_input
+# how: derived. The directory trust prompt at start, from herdr's codex
+# manifest (trust_directory).
+---
+> You are in /home/u/src/app
+
+  Do you trust the contents of this directory? Working with untrusted
+  contents comes with higher risk of prompt injection.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue
+=====
+# harness: codex
+# want: needs_input
+# how: derived. The update offer at start, herdr's startup_update.
+---
+  Update available! 0.51.0 -> 0.52.0
+
+› 1. Update now (runs `npm install -g @openai/codex`)
+  2. Skip
+  3. Skip until next version
+
+  Press enter to continue

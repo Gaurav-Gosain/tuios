@@ -40,16 +40,20 @@ func TestBundledManifestsLoad(t *testing.T) {
 // rule matching something it should not, so bundled rules carry several strings
 // together rather than any one of them.
 //
-// Working and idle ship for the harnesses listed in screenRestHarnesses, so an
-// unhooked pane can say it finished rather than drifting to unknown on the
-// silence timer. Two things keep that honest. An idle rule has to prove an
-// input box is on the screen (the loader refuses one that does not), and every
-// idle rule is outranked by every working and needs_input rule of its manifest,
-// so a screen showing the box and a live turn at once reads as the louder
-// state. The daemon then holds an idle verdict through a confirmation window.
+// Working rules ship for every harness that has chrome to key on, so an
+// unhooked pane can say it is busy rather than drifting to unknown on the
+// silence timer. Idle ships only for the harnesses in screenIdleHarnesses:
+// the ones whose idle screen was measured here, or for which herdr ships an
+// idle rule from its own live pane reads. Three things keep that honest. An
+// idle rule has to prove an input box is on the screen (the loader refuses one
+// that does not), every idle rule is outranked by every working and
+// needs_input rule of its manifest, so a screen showing the box and a live
+// turn at once reads as the louder state, and the daemon holds an idle
+// verdict through a confirmation window before it publishes it.
 func TestBundledScreenRulesPolicy(t *testing.T) {
-	screenRestHarnesses := map[string]bool{
+	screenIdleHarnesses := map[string]bool{
 		"claude-code": true, "codex": true, "gemini-cli": true, "opencode": true,
+		"cline": true, "devin": true, "grok": true, "kiro": true, "maki": true, "qwen": true,
 	}
 	r, _ := Load()
 	for _, id := range r.IDs() {
@@ -64,23 +68,46 @@ func TestBundledScreenRulesPolicy(t *testing.T) {
 			}
 		}
 		for i, rule := range m.Screen.Rule {
-			if rule.State != "needs_input" && !screenRestHarnesses[id] {
-				t.Errorf("bundled manifest %q ships rule %d enabled for state %q; only needs_input may ship on here",
-					id, i, rule.State)
+			if rule.State == "idle" && !screenIdleHarnesses[id] {
+				t.Errorf("bundled manifest %q ships idle rule %d; idle ships only where it was measured or herdr ships it",
+					id, i)
 			}
 			if rule.State == "idle" && rule.Priority >= minLoud {
 				t.Errorf("bundled manifest %q idle rule %d has priority %d, not below every louder rule (%d)",
 					id, i, rule.Priority, minLoud)
 			}
-			// A regex counts as corroboration on its own: a pattern pins the
-			// structure of a rendered line, which is harder to meet by accident
-			// than any one substring.
-			if len(rule.All) == 0 && len(rule.Any) < 2 && len(rule.Regex) == 0 {
+			if !corroborated(&rule.Gate) {
 				t.Errorf("bundled manifest %q rule %d rests on a single string; a bundled rule needs corroboration",
 					id, i)
 			}
 		}
 	}
+}
+
+// corroborated reports whether a gate needs more than one loose substring to
+// match. A pattern counts on its own: it pins the structure of a rendered line,
+// which is harder to meet by accident than any one substring. An all[] string
+// counts, as it always has, because it is a named phrase the screen must carry
+// rather than one of several accepted. A nested group counts when every path
+// through it does.
+func corroborated(g *Gate) bool {
+	if len(g.Regex) > 0 || len(g.All) > 0 || len(g.Any) >= 2 {
+		return true
+	}
+	for i := range g.AllOf {
+		if corroborated(&g.AllOf[i]) {
+			return true
+		}
+	}
+	if len(g.AnyOf) == 0 {
+		return false
+	}
+	for i := range g.AnyOf {
+		if !corroborated(&g.AnyOf[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // TestIdentify checks the shapes a harness launches in resolve to the right id,

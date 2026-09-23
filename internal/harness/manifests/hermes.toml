@@ -1,12 +1,11 @@
-# Screen rules converted from herdr's agent-detection manifest for hermes
-# (github.com/herdrdev/herdr, website/agent-detection/hermes.toml, manifest
-# version 2026.07.24.1, Apache-2.0). Regenerate a draft with
+# Rules after herdr's agent-detection manifest for hermes
+# (github.com/herdrdev/herdr, src/detect/manifests/hermes.toml, manifest version
+# 2026.07.24.1, Apache-2.0; see LICENSE-herdr). Regenerate a draft with
 #   go run ./internal/harness/herdrconv
-# Only the blocked-prompt rules ship, per the bundled policy in
-# registry_test.go; herdr's working and idle rules rest on the OSC title and
-# interrupt hints, which the other tiers already carry here. herdr's compound
-# groups become one rule per alternative, so the several-strings-together
-# requirement each alternative carried survives the flattening.
+# Not verified against a live pane. One deliberate difference: herdr ranks the
+# interrupt hint above the prompts; here every prompt outranks every working
+# rule, so a pane showing a question and a status bar at once reads as the
+# question.
 
 schema_version = 1
 id             = "hermes"
@@ -26,57 +25,94 @@ enabled   = true
 fold_case = true
 lines     = 14
 
-# herdr rule: dangerous_command_approval. An approval panel: one of the danger
-# wordings together with one of the dialog hints. The hint set is one pattern
-# because a rule carries one any-of set; (?i) keeps the folding the substrings
-# get.
+# herdr rule: dangerous_command_approval. A danger wording, an allow option or
+# the numbered allow line, together with one of the dialog hints.
 [[screen.rule]]
 state    = "needs_input"
 priority = 900
-regex    = ["(?i)dangerous|approval", "(?i)enter confirm|enter to confirm|↑/↓ to select|show full command"]
-
-[[screen.rule]]
-state    = "needs_input"
-priority = 900
-all      = ["allow once", "deny"]
-regex    = ["(?i)enter confirm|enter to confirm|↑/↓ to select|show full command"]
-
-[[screen.rule]]
-state    = "needs_input"
-priority = 900
-regex    = ["(?i)^\\s*[▸>]?\\s*1\\.\\s*allow", "(?i)enter confirm|enter to confirm|↑/↓ to select|show full command"]
+kind     = "approval"
+message  = "Waits for approval of a command."
+region   = "bottom_non_empty_lines(14)"
+any_of   = [
+  { any = ["dangerous", "approval"] },
+  { all = ["allow once", "deny"] },
+  { regex = ['(?i)^\s*[▸>]?\s*1\.\s*allow'] },
+]
+all_of   = [ { any = ["enter confirm", "enter to confirm", "↑/↓ to select", "show full command"] } ]
 
 # herdr rule: clarification_prompt. Hermes asking the user a question.
 [[screen.rule]]
 state    = "needs_input"
 priority = 900
-regex    = ["(?i)hermes needs your|type your answer", "(?i)enter confirm|enter to confirm|enter send|press enter|↑/↓ select|↑/↓ to select|other \\(type"]
-
-[[screen.rule]]
-state    = "needs_input"
-priority = 900
-regex    = ["^\\s*ask\\s+\\S", "(?i)enter confirm|enter to confirm|enter send|press enter|↑/↓ select|↑/↓ to select|other \\(type"]
+kind     = "question"
+message  = "Asks you a question."
+region   = "bottom_non_empty_lines(14)"
+any_of   = [
+  { any = ["hermes needs your", "type your answer"] },
+  { regex = ['^\s*ask\s+\S'] },
+]
+all_of   = [ { any = ["enter confirm", "enter to confirm", "enter send", "press enter", "↑/↓ select", "↑/↓ to select", "other (type"] } ]
 
 # herdr rule: credential_prompt. A password or key being asked for.
 [[screen.rule]]
 state    = "needs_input"
 priority = 900
-any      = ["sudo password", "skill setup"]
-
-[[screen.rule]]
-state    = "needs_input"
-priority = 900
-all      = ["🔑", "for "]
+kind     = "question"
+message  = "Asks for a credential."
+region   = "bottom_non_empty_lines(14)"
+any_of   = [ { any = ["sudo password", "skill setup"] }, { all = ["🔑", "for "] } ]
 
 # herdr rule: confirmation_prompt. Session-level confirmations.
 [[screen.rule]]
 state    = "needs_input"
 priority = 900
-all      = ["approve once", "cancel"]
-any      = ["enter to confirm", "enter confirm", "type 1/2/3", "y/n quick"]
+kind     = "approval"
+message  = "Waits for a confirmation."
+region   = "bottom_non_empty_lines(14)"
+any_of   = [ { all = ["approve once", "cancel"] }, { all = ["start a new session", "keep going"] } ]
+all_of   = [ { any = ["enter to confirm", "enter confirm", "type 1/2/3", "y/n quick"] } ]
 
+# herdr rule: interrupt_status_working. The status bar's interrupt hint.
 [[screen.rule]]
+state    = "working"
+priority = 800
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(5)"
+any      = ["msg=interrupt", "ctrl+c to interrupt"]
+
+# herdr rule: classic_cancel_working. The classic UI's cancel hint.
+[[screen.rule]]
+state    = "working"
+priority = 500
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(5)"
+all      = ["ctrl+c cancel"]
+
+# The window title: a warning sign when blocked, an hourglass during a turn,
+# and a check mark at rest.
+[title]
+enabled = true
+
+[[title.rule]]
 state    = "needs_input"
-priority = 900
-all      = ["start a new session", "keep going"]
-any      = ["enter to confirm", "enter confirm", "type 1/2/3", "y/n quick"]
+priority = 10
+message  = "Hermes waits for you."
+regex    = ['^⚠[\x{FE0E}\x{FE0F}]?(?:\s|$)']
+
+[[title.rule]]
+state    = "working"
+priority = 5
+message  = "Works on a turn."
+regex    = ['^⏳[\x{FE0E}\x{FE0F}]?(?:\s|$)']
+
+[[title.rule]]
+state    = "idle"
+priority = 1
+message  = "Waits at its prompt."
+regex    = ['^✓[\x{FE0E}\x{FE0F}]?(?:\s|$)']
+
+# How a prompt is typed in. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

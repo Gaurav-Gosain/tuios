@@ -1502,6 +1502,18 @@ type screenExplanation struct {
 	Rule      int                  `json:"rule"`
 	RuleState string               `json:"rule_state"`
 	Rules     []harness.RuleReport `json:"rules"`
+	// ManifestSource is "bundled" or the user file in force, and
+	// ReplacesBundled says that file took a bundled manifest's place.
+	ManifestSource  string `json:"manifest_source"`
+	ReplacesBundled bool   `json:"replaces_bundled"`
+	// The title block: the pane's title, its last progress report, and what
+	// each title rule made of them.
+	Title          string               `json:"title"`
+	Progress       string               `json:"progress"`
+	TitleMatched   bool                 `json:"title_matched"`
+	TitleRule      int                  `json:"title_rule"`
+	TitleRuleState string               `json:"title_rule_state"`
+	TitleRules     []harness.RuleReport `json:"title_rules"`
 }
 
 // runExplainAgentScreen prints what a harness's screen rules make of a pane.
@@ -1548,6 +1560,13 @@ func printScreenExplanation(w io.Writer, res screenExplanation) {
 		}
 	}
 	fmt.Fprintln(w)
+	if res.ManifestSource != "" && res.ManifestSource != "bundled" {
+		if res.ReplacesBundled {
+			fmt.Fprintf(w, "manifest %s, which replaces the bundled one\n", res.ManifestSource)
+		} else {
+			fmt.Fprintf(w, "manifest %s\n", res.ManifestSource)
+		}
+	}
 
 	fmt.Fprintln(w, "\ntail, as the classifier sees it:")
 	if len(res.Tail) == 0 {
@@ -1567,25 +1586,58 @@ func printScreenExplanation(w io.Writer, res screenExplanation) {
 		return
 	}
 	fmt.Fprintln(w, "\nrules:")
-	for _, r := range res.Rules {
-		mark := " "
-		if r.Matched {
-			mark = "*"
-			if r.Index == res.Rule {
-				mark = ">"
-			}
-		}
-		fmt.Fprintf(w, " %s rule %d  %s  priority %d\n", mark, r.Index, r.State, r.Priority)
-		for _, why := range ruleRefusals(r) {
-			fmt.Fprintf(w, "     %s\n", why)
-		}
-	}
+	printRuleReports(w, res.Rules, res.Rule, "tail")
 	// The leading mark is only readable next to what it means.
 	fmt.Fprintln(w, "\n  > the rule that decided, * matched but outranked")
 	if res.Matched {
 		fmt.Fprintf(w, "  rule %d would report %s\n", res.Rule, res.RuleState)
 	} else {
 		fmt.Fprintln(w, "  no rule matched, so the screen rules report nothing")
+	}
+
+	if len(res.TitleRules) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\ntitle %s\n", strconv.Quote(res.Title))
+	if res.Progress != "" {
+		fmt.Fprintf(w, "progress %s\n", res.Progress)
+	}
+	fmt.Fprintln(w, "title rules:")
+	printRuleReports(w, res.TitleRules, res.TitleRule, "osc_title")
+	if res.TitleMatched {
+		fmt.Fprintf(w, "  title rule %d would report %s\n", res.TitleRule, res.TitleRuleState)
+	} else {
+		fmt.Fprintln(w, "  no title rule matched")
+	}
+}
+
+// printRuleReports writes one block per rule: its mark, state and priority,
+// the region it reads when that is not the block's default, the text it read
+// there, and why it refused.
+func printRuleReports(w io.Writer, reports []harness.RuleReport, decided int, defaultRegion string) {
+	for _, r := range reports {
+		mark := " "
+		if r.Matched {
+			mark = "*"
+			if r.Index == decided {
+				mark = ">"
+			}
+		}
+		region := ""
+		if r.Region != "" && r.Region != defaultRegion {
+			region = "  region " + r.Region
+		}
+		fmt.Fprintf(w, " %s rule %d  %s  priority %d%s\n", mark, r.Index, r.State, r.Priority, region)
+		if r.NoRegion {
+			fmt.Fprintf(w, "     region %s is not on the screen\n", orNone(r.Region))
+		} else if r.Text != "" {
+			for _, line := range strings.Split(r.Text, "\n") {
+				fmt.Fprintf(w, "     | %s\n", line)
+			}
+		}
+		for _, why := range ruleRefusals(r) {
+			fmt.Fprintf(w, "     %s\n", why)
+		}
 	}
 }
 
@@ -1614,6 +1666,7 @@ func ruleRefusals(r harness.RuleReport) []string {
 	for _, s := range r.BlockedRegex {
 		out = append(out, "not_regex: "+strconv.Quote(s)+" matches the screen and vetoes the rule")
 	}
+	out = append(out, r.Groups...)
 	return out
 }
 

@@ -224,13 +224,28 @@ func TestTheShippedCodexTitleRuleReadsItsPhrase(t *testing.T) {
 //   - claude-code writes a spinner while a turn runs and a ✳ at rest, and the
 //     rest glyph was measured on a live pane.
 //   - gemini-cli writes its status word after a glyph: Action Required,
-//     Working, Ready.
+//     Working, Ready (packages/cli/src/utils/windowTitle.ts).
+//   - amp writes a braille spinner during a turn, "Plugin confirmation
+//     needed" when a plugin waits, and "<thread> - amp - <dir>" at rest,
+//     after herdr's amp manifest.
+//   - grok writes "grok" at rest, a spinner during a turn and "Action
+//     Required" when a permission prompt waits, from Grok Build's source and
+//     live pane reads quoted in herdr's grok manifest.
+//   - hermes writes a warning sign, an hourglass or a check mark in front,
+//     after herdr's hermes manifest.
+//   - kiro writes a spinner and "kiro:" during a turn, after herdr's kiro
+//     manifest.
+//   - qwen writes a ✳ when a confirmation waits and a half circle during a
+//     turn, when ui.showStatusInTitle is on, after herdr's qwen manifest.
 //
 // A spinner proves animation, not work, which is why a title rule only moves a
 // pane some other tier already attributed to the harness, and why the silence
 // timer still demotes a pane that stops drawing.
 func TestOnlyReviewedManifestsReadTitles(t *testing.T) {
-	reviewed := map[string]bool{"codex": true, "claude-code": true, "gemini-cli": true}
+	reviewed := map[string]bool{
+		"codex": true, "claude-code": true, "gemini-cli": true,
+		"amp": true, "grok": true, "hermes": true, "kiro": true, "qwen": true,
+	}
 	r := testRegistry(t)
 	for _, id := range r.IDs() {
 		if reviewed[id] {

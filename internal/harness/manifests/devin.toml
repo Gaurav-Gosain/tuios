@@ -1,10 +1,9 @@
-# Screen rules converted from herdr's agent-detection manifest for devin
-# (github.com/herdrdev/herdr, website/agent-detection/devin.toml, manifest
-# version 2026.06.15.1, Apache-2.0). Regenerate a draft with
+# Rules after herdr's agent-detection manifest for devin
+# (github.com/herdrdev/herdr, src/detect/manifests/devin.toml, manifest version
+# 2026.06.15.1, Apache-2.0; see LICENSE-herdr). Regenerate a draft with
 #   go run ./internal/harness/herdrconv
-# Only the blocked-prompt rules ship, per the bundled policy in
-# registry_test.go; herdr's working and idle rules read the footer chrome,
-# which output and the stall timer already cover here.
+# Not verified against a live pane: Devin is not installed on the machine these
+# rules were written on.
 
 schema_version = 1
 id             = "devin"
@@ -27,10 +26,79 @@ lines     = 8
 [[screen.rule]]
 state    = "needs_input"
 priority = 300
+kind     = "approval"
+message  = "Asks you to trust the directory."
+region   = "bottom_non_empty_lines(8)"
 all      = ["do you trust the authors of this directory?", "with untrusted content.", "yes, trust "]
 
 # herdr rule: permission_prompt. The tool-approval footer.
 [[screen.rule]]
 state    = "needs_input"
 priority = 290
+kind     = "approval"
+message  = "Waits for approval of a tool call."
+region   = "bottom_non_empty_lines(8)"
 all      = ["approve once", "select", "confirm", "esc cancel"]
+
+# herdr rule: running_tools_footer.
+[[screen.rule]]
+state    = "working"
+priority = 200
+message  = "Runs tools."
+region   = "bottom_non_empty_lines(8)"
+all      = ["running tools", "esc to interrupt"]
+none_of  = [ { all = ["approve once", "esc cancel"] } ]
+
+# herdr rule: guide_while_working. The composer placeholder during a turn.
+[[screen.rule]]
+state    = "working"
+priority = 190
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(6)"
+all      = ["guide devin while it works"]
+none_of  = [ { all = ["approve once", "esc cancel"] } ]
+
+# herdr rule: tool_reading_timeout. A shell tool being read with its timeout.
+[[screen.rule]]
+state    = "working"
+priority = 180
+message  = "Runs a shell command."
+region   = "bottom_non_empty_lines(8)"
+all      = ["reading shell ", "timeout:"]
+none_of  = [ { all = ["approve once", "esc cancel"] } ]
+
+# herdr rule: welcome_prompt_footer. The first prompt of a session.
+#
+#   ❭ Ask Devin to build features, fix bugs, or explain your code
+[[screen.rule]]
+state    = "idle"
+priority = 20
+message  = "Waits at its prompt."
+region   = "bottom_non_empty_lines(8)"
+all      = ["ask devin to build", "features, fix bugs", "your code"]
+regex    = ['^\s*❭ Ask Devin to build']
+none_of  = [
+  { all = ["approve once", "esc cancel"] },
+  { all = ["running tools", "esc to interrupt"] },
+  { all = ["guide devin while it works"] },
+]
+
+# herdr rule: live_prompt_footer. The prompt mark with the context meter.
+[[screen.rule]]
+state    = "idle"
+priority = 10
+message  = "Waits at its prompt."
+region   = "bottom_non_empty_lines(6)"
+all      = ["context:"]
+regex    = ['^\s*❭']
+none_of  = [
+  { all = ["approve once", "esc cancel"] },
+  { all = ["running tools", "esc to interrupt"] },
+  { all = ["guide devin while it works"] },
+]
+
+# How a prompt is typed in. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

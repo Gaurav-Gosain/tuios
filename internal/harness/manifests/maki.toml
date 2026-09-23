@@ -1,10 +1,14 @@
-# Screen rules converted from herdr's agent-detection manifest for maki
-# (github.com/herdrdev/herdr, website/agent-detection/maki.toml, manifest
-# version 2026.07.09.2, Apache-2.0). Regenerate a draft with
+# Rules after herdr's agent-detection manifest for maki
+# (github.com/herdrdev/herdr, src/detect/manifests/maki.toml, manifest version
+# 2026.07.09.2, Apache-2.0; see LICENSE-herdr). Regenerate a draft with
 #   go run ./internal/harness/herdrconv
-# Only the blocked-prompt rules ship, per the bundled policy in
-# registry_test.go; herdr's working and idle rules read the status-bar spinner
-# and prompt chevron, which output and the stall timer already cover here.
+# Not verified against a live pane.
+#
+# Maki renders a persistent one-line status bar on the bottom row. It starts
+# with the mode label "[BUILD]", "[PLAN]" or "[BASH]" when idle and gets a
+# leading braille spinner cell while the agent is streaming. Permission
+# requests and the plan-complete form replace the input box above the status
+# bar. Maki sets neither an OSC title nor OSC 9;4 progress.
 
 schema_version = 1
 id             = "maki"
@@ -27,27 +31,63 @@ enabled   = true
 fold_case = true
 lines     = 8
 
-# herdr rule: permission_prompt. The banner plus one of the answer-hint forms;
-# the multi-string forms are their own rules so each stays an AND.
+# herdr rule: permission_prompt. The banner plus one of the answer-hint forms.
 [[screen.rule]]
 state    = "needs_input"
 priority = 980
+kind     = "approval"
+message  = "Waits for permission."
 all      = ["permission required"]
-any      = ["confirm allow", "confirm deny"]
-
-[[screen.rule]]
-state    = "needs_input"
-priority = 980
-all      = ["permission required", "y allow", "n deny"]
-
-[[screen.rule]]
-state    = "needs_input"
-priority = 980
-all      = ["permission required", "enter deny", "esc cancel"]
+any_of   = [
+  { all = ["y allow", "n deny"] },
+  { any = ["confirm allow", "confirm deny"] },
+  { all = ["enter deny", "esc cancel"] },
+]
 
 # herdr rule: plan_complete_form. The plan sits finished, waiting on approval.
 [[screen.rule]]
 state    = "needs_input"
 priority = 970
+kind     = "approval"
+message  = "Waits for approval of the plan."
 all      = ["plan complete", "enter confirm"]
 any      = ["space toggle parallel", "edit plan"]
+
+# herdr rule: status_bar_spinner_working. The spinner in front of the mode.
+#
+#    ⠧ [BUILD] claude-sonnet · 12k
+[[screen.rule]]
+state    = "working"
+priority = 900
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(1)"
+regex    = ['^( [\x{2800}-\x{28FF}]){1,2} \[(BUILD|PLAN|BASH)\]']
+
+# herdr rule: status_bar_idle. The mode label with no spinner.
+#
+#    [BUILD] claude-sonnet · 12k
+[[screen.rule]]
+state    = "idle"
+priority = 20
+message  = "Waits at its prompt."
+region   = "bottom_non_empty_lines(1)"
+regex    = ['^ \[(BUILD|PLAN|BASH)\]']
+
+# herdr rule: prompt_box_idle. On a narrow pane the status bar overwrites the
+# mode label, so the prompt chevron above the box border is the fallback.
+# herdr's pattern wants a space after the chevron; a pane's lines are read
+# with trailing space trimmed, so an empty prompt ends at the chevron here.
+[[screen.rule]]
+state     = "idle"
+priority  = 10
+message   = "Waits at its prompt."
+region    = "bottom_non_empty_lines(3)"
+regex     = ['^❯(?:\s|$)']
+not       = ["queue another prompt"]
+not_regex = ['^( [\x{2800}-\x{28FF}]){1,2} ']
+
+# How a prompt is typed in. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

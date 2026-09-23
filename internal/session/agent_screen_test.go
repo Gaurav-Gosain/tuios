@@ -478,12 +478,20 @@ func TestExplainAgentScreenVerbShowsWhatTheClassifierSaw(t *testing.T) {
 		}
 		refused++
 		if m["missing"] == nil && m["none_of"] == nil && m["blocked"] == nil && m["empty"] == nil &&
-			m["missing_regex"] == nil && m["blocked_regex"] == nil && m["no_region"] == nil {
+			m["missing_regex"] == nil && m["blocked_regex"] == nil && m["no_region"] == nil && m["groups"] == nil {
 			t.Errorf("rule %v refused without saying why: %v", m["index"], m)
 		}
 	}
 	if refused == 0 {
 		t.Fatal("no rule refused, so the reason-reporting half is untested")
+	}
+
+	// The file in force and the progress report are part of the answer.
+	if res["manifest_source"] != "bundled" || res["replaces_bundled"] != false {
+		t.Errorf("manifest_source %v replaces_bundled %v, want bundled and false", res["manifest_source"], res["replaces_bundled"])
+	}
+	if _, ok := res["progress"]; !ok {
+		t.Error("the result has no progress field")
 	}
 }
 

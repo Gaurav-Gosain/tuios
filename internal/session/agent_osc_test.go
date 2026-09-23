@@ -99,7 +99,7 @@ func TestPTYProgressParking(t *testing.T) {
 	}
 
 	// Clear is state 0, so it has to survive the "nothing parked" encoding.
-	p.storeAgentProgress(vt.ProgressClear)
+	p.storeAgentProgress(vt.ProgressClear, 0)
 	if state, ok := p.takeAgentProgress(); !ok || state != vt.ProgressClear {
 		t.Fatalf("parked clear came back as (%d, %v), want (0, true)", state, ok)
 	}
@@ -107,9 +107,35 @@ func TestPTYProgressParking(t *testing.T) {
 		t.Fatal("a taken state was returned twice")
 	}
 
-	p.storeAgentProgress(vt.ProgressNormal)
-	p.storeAgentProgress(vt.ProgressError)
+	p.storeAgentProgress(vt.ProgressNormal, 40)
+	p.storeAgentProgress(vt.ProgressError, 55)
 	if state, ok := p.takeAgentProgress(); !ok || state != vt.ProgressError {
 		t.Fatalf("a burst came back as (%d, %v), want the newest (error, true)", state, ok)
+	}
+}
+
+// The last report stays readable after it is taken, written the way an
+// osc_progress rule reads it.
+func TestPTYProgressText(t *testing.T) {
+	p := &PTY{}
+	if got := p.ProgressText(); got != "" {
+		t.Fatalf("a pane that sent no report has progress text %q", got)
+	}
+	for _, tc := range []struct {
+		state   vt.ProgressState
+		percent int
+		want    string
+	}{
+		{vt.ProgressClear, 0, "4;0"},
+		{vt.ProgressNormal, 40, "4;1;40"},
+		{vt.ProgressError, 55, "4;2;55"},
+		{vt.ProgressIndeterminate, 0, "4;3"},
+		{vt.ProgressWarning, 7, "4;4;7"},
+	} {
+		p.storeAgentProgress(tc.state, tc.percent)
+		p.takeAgentProgress()
+		if got := p.ProgressText(); got != tc.want {
+			t.Errorf("state %d percent %d: progress text %q, want %q", tc.state, tc.percent, got, tc.want)
+		}
 	}
 }

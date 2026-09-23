@@ -1,12 +1,16 @@
-# Screen rules converted from herdr's agent-detection manifest for qwen
-# (github.com/herdrdev/herdr, website/agent-detection/qwen.toml, manifest
-# version 2026.08.14.1, Apache-2.0). Regenerate a draft with
+# Rules after herdr's agent-detection manifest for qwen
+# (github.com/herdrdev/herdr, src/detect/manifests/qwen.toml, manifest version
+# 2026.08.14.1, Apache-2.0; see LICENSE-herdr). Regenerate a draft with
 #   go run ./internal/harness/herdrconv
-# Only the blocked-prompt rules ship, per the bundled policy in
-# registry_test.go. herdr's OSC-title rules read a region the screen tier does
-# not see, and its working/idle rules read spinner and composer chrome that
-# output and the stall timer already cover here. The confirmation wordings are
-# herdr's locale table; Qwen Code renders its dialogs in the configured locale.
+# The confirmation wordings are herdr's locale table; Qwen Code renders its
+# dialogs in the configured locale.
+#
+# Qwen Code keeps its composer on screen while it responds, so the composer is
+# only idle evidence when no working rule matches; every working rule outranks
+# it, and the daemon holds an idle reading through a confirmation window
+# before it publishes it. herdr's osc_progress working rule reads OSC 9;4
+# state 3 the way its published meaning already does, so the daemon's own
+# progress mapping covers it.
 
 schema_version = 1
 id             = "qwen"
@@ -30,21 +34,27 @@ exe_base = ["node", "nodejs", "bun", "deno"]
 [screen]
 enabled   = true
 fold_case = true
-lines     = 20
+lines     = 30
 
 # herdr rule: waiting_for_confirmation. The paused spinner line plus the
 # waiting message in one of Qwen's locales.
 [[screen.rule]]
 state    = "needs_input"
 priority = 1000
+kind     = "approval"
+message  = "Waits for confirmation."
+region   = "bottom_non_empty_lines(20)"
 any      = ["waiting for user confirmation...", "等待用户确认...", "等待用戶確認...", "warten auf benutzerbestätigung...", "en attente de la confirmation de l'utilisateur...", "ユーザーの確認を待っています...", "aguardando confirmação do usuário...", "ожидание подтверждения от пользователя...", "esperant la confirmació de l'usuari..."]
-regex    = ["^\\s*⠏\\s+.*\\.\\.\\.\\s*$"]
+regex    = ['^\s*⠏\s+.*\.\.\.\s*$']
 
 # herdr rule: tool_confirmation. The tool dialog: its first option plus one of
 # the question headings.
 [[screen.rule]]
 state    = "needs_input"
 priority = 990
+kind     = "approval"
+message  = "Waits for approval of a tool call."
+region   = "bottom_non_empty_lines(20)"
 all      = ["yes, allow once"]
 any      = ["apply this change?", "allow execution of:", "allow execution of mcp tool", "do you want to proceed?", "shell command execution"]
 
@@ -54,10 +64,77 @@ any      = ["apply this change?", "allow execution of:", "allow execution of mcp
 [[screen.rule]]
 state    = "needs_input"
 priority = 980
-regex    = ["^\\s*[❯›]\\s*(?:\\[(?: |✓)\\]\\s*)?\\d+\\.\\s+", "^\\s*↑/↓\\s*:.*(?:Enter|Return)\\s*:"]
+kind     = "question"
+message  = "Waits for a choice."
+region   = "bottom_non_empty_lines(20)"
+regex    = ['^\s*[❯›]\s*(?:\[(?: |✓)\]\s*)?\d+\.\s+', '^\s*↑/↓\s*:.*(?:Enter|Return)\s*:']
 
 # herdr rule: folder_trust_dialog. Asked before Qwen will work in a new folder.
 [[screen.rule]]
 state    = "needs_input"
 priority = 970
+kind     = "approval"
+message  = "Asks you to trust the folder."
+region   = "bottom_non_empty_lines(20)"
 all      = ["do you trust this folder?", "trust folder (", "don't trust (esc)"]
+
+# herdr rule: cancel_hint_working. The spinner line with its timer and the
+# cancel hint.
+#
+#   ⠹ Reading files (12s · esc to cancel)
+[[screen.rule]]
+state    = "working"
+priority = 900
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(8)"
+regex    = ['^\s*(?:[⠁-⣿]|\.{1,2})\s+.*\(\d+(?:m(?:\s+\d+s)?|s).*\s·\sesc to cancel\)\s*$']
+
+# herdr rule: narrow_cancel_hint_working. The same hint wrapped onto its own
+# line on a narrow pane.
+[[screen.rule]]
+state    = "working"
+priority = 890
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(8)"
+regex    = ['^\s*\(\d+(?:m(?:\s+\d+s)?|s)\s·\sesc to cancel\)\s*$']
+
+# herdr rule: composer_idle. The composer's prompt with its placeholder,
+# whole or wrapped on a narrow pane.
+#
+#   > Type your message or @path/to/file
+[[screen.rule]]
+state    = "idle"
+priority = 100
+message  = "Waits at its prompt."
+region   = "bottom_non_empty_lines(30)"
+regex    = ['^\s*>\s*(?:type\s*)?.*$']
+any_of   = [
+  { any = ["type your message", "your message or @path/to/file", "@path/to/file"] },
+  { all = ["type", "mes", "sage", "@pat", "h/to", "/fil"] },
+]
+
+# The window title, when ui.showStatusInTitle is on: a ✳ in front when a
+# confirmation waits, and a half circle during a turn.
+[title]
+enabled = true
+
+[[title.rule]]
+state    = "needs_input"
+priority = 10
+kind     = "approval"
+message  = "Qwen Code waits for confirmation."
+regex    = ['^\x{2733}\x{FE0E}? ']
+
+[[title.rule]]
+state    = "working"
+priority = 5
+message  = "Works on a turn."
+regex    = ['^\x{25D0}\x{FE0E}? ']
+
+# How a prompt is typed in. Qwen Code is a Gemini CLI fork and an Ink program:
+# Ink reads a carriage return as return and a line feed as a different key.
+# Not measured here.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "Ink parse-keypress reads CR as return, LF as another key; not measured"

@@ -1,12 +1,10 @@
-# Screen rules converted from herdr's agent-detection manifest for amp
-# (github.com/herdrdev/herdr, website/agent-detection/amp.toml, manifest version
-# 2026.07.09.1, Apache-2.0). Regenerate a draft with
+# Rules after herdr's agent-detection manifest for amp
+# (github.com/herdrdev/herdr, src/detect/manifests/amp.toml, manifest version
+# 2026.07.09.1, Apache-2.0; see LICENSE-herdr). Regenerate a draft with
 #   go run ./internal/harness/herdrconv
-# Only the blocked-prompt rules ship, per the bundled policy in registry_test.go:
-# herdr's working/idle rules for amp read a spinner footer and the OSC title,
-# and working/idle already reach the daemon through output and the stall timer.
-# Not carried at all: herdr's "Plugin confirmation needed" blocker, which exists
-# only in the OSC title, a region the screen tier does not see.
+# The blocking prompts, the working footers and the title rules ship. The
+# screen rules were not verified against a live amp turn, because the prompts
+# sit behind a signed-in session; the login prompt below was.
 
 schema_version = 1
 id             = "amp"
@@ -32,19 +30,18 @@ enabled   = true
 fold_case = true
 lines     = 8
 
-# herdr rule: approval_footer. The tool-approval prompt in its several wordings.
+# herdr rule: approval_footer. The tool-approval prompt in its several
+# wordings, or the wording that leads with "approve" and offers the scope
+# options.
 [[screen.rule]]
 state    = "needs_input"
 priority = 300
-any      = ["waiting for approval", "invoke tool", "run this command?", "allow editing file:", "allow creating file:", "confirm tool call"]
-
-# herdr rule: approval_footer, the variant whose wording leads with "approve"
-# and offers the scope options.
-[[screen.rule]]
-state    = "needs_input"
-priority = 300
-all      = ["approve"]
-any      = ["allow all for this session", "allow all for every session", "allow file for every session", "deny with feedback"]
+kind     = "approval"
+message  = "Waits for approval of a tool call."
+any_of   = [
+  { any = ["waiting for approval", "invoke tool", "run this command?", "allow editing file:", "allow creating file:", "confirm tool call"] },
+  { all = ["approve"], any = ["allow all for this session", "allow all for every session", "allow file for every session", "deny with feedback"] },
+]
 
 # tuios-authored, from a live pane: an unauthenticated amp stops on
 #   Would you like to log in to Amp? [(y)es, (n)o]:
@@ -54,3 +51,59 @@ any      = ["allow all for this session", "allow all for every session", "allow 
 state    = "needs_input"
 priority = 100
 all      = ["would you like to log in to amp?", "(y)es"]
+
+# herdr rule: status_footer_working. The status footer under the input names
+# what the turn is doing.
+#
+#   ╰ ⠧ streaming ─ esc to cancel
+[[screen.rule]]
+state    = "working"
+priority = 90
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(5)"
+regex    = ['(?i)^\s*╰\s+\S+\s+(thinking|streaming|running tools|waiting)\s+─']
+
+# herdr rule: esc_cancel_working. The cancel hint alone. herdr reads the whole
+# screen for it; here it reads the bottom four lines, so a hint left in the
+# transcript cannot hold the pane at working.
+[[screen.rule]]
+state    = "working"
+priority = 80
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(4)"
+all      = ["esc to cancel"]
+
+# The window title: a braille spinner while a turn runs, "Plugin confirmation
+# needed" when a plugin waits on the user, and "<thread> - amp - <dir>" at
+# rest.
+[title]
+enabled   = true
+fold_case = true
+
+[[title.rule]]
+state    = "needs_input"
+priority = 10
+kind     = "approval"
+message  = "A plugin waits for confirmation."
+all      = ["plugin confirmation needed"]
+
+[[title.rule]]
+state    = "working"
+priority = 5
+message  = "Works on a turn."
+regex    = ['^[\x{2800}-\x{28FF}] ']
+
+[[title.rule]]
+state    = "idle"
+priority = 1
+message  = "Waits at its prompt."
+all      = [" - amp - "]
+none_of  = [ { regex = ['^[\x{2800}-\x{28FF}] '] }, { all = ["plugin confirmation needed"] } ]
+
+# How a prompt is typed in. Not measured: Amp is not installed on the machine
+# these values were written on. Enter in a raw-mode terminal sends a carriage
+# return, and the paste is bracketed only when Amp turns DECSET 2004 on.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

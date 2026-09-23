@@ -36,6 +36,18 @@ priority = 10
 message  = "Works on a turn."
 any      = ["esc interrupt", "esc to interrupt", "ctrl+c to interrupt"]
 
+# A turn in progress, when the footer shows the moving block bar rather than
+# the hint. After herdr's opencode manifest (manifest version 2026.06.10.1,
+# Apache-2.0; see LICENSE-herdr).
+#
+#   ■■■■⬝⬝⬝⬝  esc interrupt
+[[screen.rule]]
+state    = "working"
+priority = 10
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(4)"
+regex    = ['(?:■|⬝){4,}']
+
 # The input box at rest: its bottom edge and the key hints under it, with no
 # interrupt offered.
 [[screen.rule]]
@@ -45,3 +57,11 @@ message  = "Waits at its prompt."
 regex    = ['^\s*╹▀{8,}\s*$']
 any      = ["ctrl+p commands", "tab agents"]
 not      = ["interrupt"]
+
+# How a prompt is typed in. Measured on opencode 1.18.30: it turns on bracketed
+# paste (DECSET 2004) at start and pushes no kitty keyboard flags, so Enter
+# arrives as a carriage return.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "measured on opencode 1.18.30 (DECSET 2004 on, no kitty keyboard flags)"

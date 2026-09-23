@@ -72,14 +72,14 @@ func TestRuleWithNoPredicatesMatchesNothing(t *testing.T) {
 		t.Fatal("a rule with no predicates matched; it would claim every pane")
 	}
 	// Not alone is a veto with nothing to veto for, not a positive claim.
-	rl = &ScreenRule{State: "needs_input", Not: []string{"quiet"}}
+	rl = &ScreenRule{State: "needs_input", Gate: Gate{Not: []string{"quiet"}}}
 	if checkRule(rl, "anything at all", "anything at all", nil, strings.Contains) {
 		t.Fatal("a rule with only a veto matched; it would claim every pane not naming its veto")
 	}
 }
 
 func TestNotPredicateVetoesAMatch(t *testing.T) {
-	rl := &ScreenRule{State: "needs_input", Any: []string{"Do you want"}, Not: []string{"(auto-approved)"}}
+	rl := &ScreenRule{State: "needs_input", Gate: Gate{Any: []string{"Do you want"}, Not: []string{"(auto-approved)"}}}
 	if !checkRule(rl, "Do you want to proceed?", "Do you want to proceed?", nil, strings.Contains) {
 		t.Fatal("the any predicate did not match on its own")
 	}
@@ -99,7 +99,7 @@ func mustRule(t *testing.T, rl ScreenRule, foldCase bool) *ScreenRule {
 }
 
 func TestRegexPredicateAnchorsLines(t *testing.T) {
-	rl := mustRule(t, ScreenRule{State: "working", Regex: []string{`^\s*⠋ Thinking`}}, false)
+	rl := mustRule(t, ScreenRule{State: "working", Gate: Gate{Regex: []string{`^\s*⠋ Thinking`}}}, false)
 	hay := "some earlier output\n  ⠋ Thinking hard\n"
 	if !checkRule(rl, hay, hay, nil, strings.Contains) {
 		t.Fatal("a line-anchored pattern did not match its line; ^ must mean line start in a joined tail")
@@ -111,7 +111,7 @@ func TestRegexPredicateAnchorsLines(t *testing.T) {
 }
 
 func TestRegexAloneIsAPositivePredicate(t *testing.T) {
-	rl := mustRule(t, ScreenRule{State: "working", Regex: []string{`\[stop\]`}}, false)
+	rl := mustRule(t, ScreenRule{State: "working", Gate: Gate{Regex: []string{`\[stop\]`}}}, false)
 	if !checkRule(rl, "⠧ Waiting 2.8s [stop]", "⠧ waiting 2.8s [stop]", nil, strings.Contains) {
 		t.Fatal("a regex-only rule did not match")
 	}
@@ -122,9 +122,11 @@ func TestRegexAloneIsAPositivePredicate(t *testing.T) {
 
 func TestNotRegexVetoesAMatch(t *testing.T) {
 	rl := mustRule(t, ScreenRule{
-		State:    "idle",
-		Regex:    []string{`^❯ `},
-		NotRegex: []string{`^( [\x{2800}-\x{28FF}]){1,2} `},
+		State: "idle",
+		Gate: Gate{
+			Regex:    []string{`^❯ `},
+			NotRegex: []string{`^( [\x{2800}-\x{28FF}]){1,2} `},
+		},
 	}, false)
 	if !checkRule(rl, "❯ ready", "❯ ready", nil, strings.Contains) {
 		t.Fatal("the positive regex did not match on its own")
@@ -191,7 +193,7 @@ regex = ['(unclosed']
 }
 
 func TestOversizedPatternIsRefused(t *testing.T) {
-	rl := ScreenRule{State: "working", Regex: []string{strings.Repeat("a", maxScreenPattern+1)}}
+	rl := ScreenRule{State: "working", Gate: Gate{Regex: []string{strings.Repeat("a", maxScreenPattern+1)}}}
 	if err := rl.compile(false); err == nil {
 		t.Fatal("a pattern past the size cap compiled; the cap exists so the screen scan's cost stays readable")
 	}

@@ -1128,11 +1128,12 @@ func (d *Daemon) verbExplainAgentScreen(_ *connState, params json.RawMessage) (a
 	// explanation and the classification below run against one reading rather
 	// than two of a value that moves.
 	var tail []string
-	var paneTitle string
+	var paneTitle, paneProgress string
 	if w.PTYID != "" {
 		if pty := sess.GetPTY(w.PTYID); pty != nil {
 			tail = pty.tailText(lines)
 			paneTitle = pty.Title()
+			paneProgress = pty.ProgressText()
 		}
 	}
 
@@ -1155,6 +1156,11 @@ func (d *Daemon) verbExplainAgentScreen(_ *connState, params json.RawMessage) (a
 		return out, nil
 	}
 	out["enabled"] = m.Screen.Enabled
+	// Which file is in force, so a user override that shadows a bundled
+	// manifest is visible where its rules are being read.
+	source, replaced := m.Source()
+	out["manifest_source"] = source
+	out["replaces_bundled"] = replaced
 
 	matchedState, rule, reports := reg.Explain(hid, tail)
 	out["rules"] = reports
@@ -1169,7 +1175,8 @@ func (d *Daemon) verbExplainAgentScreen(_ *connState, params json.RawMessage) (a
 	// is gone from the screen by the time anyone looks.
 	out["title"] = paneTitle
 	out["title_enabled"] = m.Title.Enabled
-	titleState, titleRule, titleReports := reg.ExplainTitle(hid, paneTitle)
+	out["progress"] = paneProgress
+	titleState, titleRule, titleReports := reg.ExplainOSC(hid, paneTitle, paneProgress)
 	out["title_rules"] = titleReports
 	out["title_rule"] = titleRule
 	out["title_matched"] = titleRule >= 0

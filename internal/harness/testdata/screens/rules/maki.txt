@@ -1,0 +1,45 @@
+# harness: maki
+# want: needs_input
+# how: derived. A permission request, from herdr's maki manifest
+# (permission_prompt).
+---
+Permission required: write src/main.rs
+  y allow · n deny
+ [BUILD] claude-sonnet · 12k
+=====
+# harness: maki
+# want: needs_input
+# how: derived. The finished plan waiting on approval, herdr's
+# plan_complete_form.
+---
+Plan complete
+  space toggle parallel · enter confirm
+ [PLAN] claude-sonnet · 12k
+=====
+# harness: maki
+# want: working
+# how: derived. The status bar with the spinner in front of the mode, herdr's
+# status_bar_spinner_working.
+---
+❯ queue another prompt
+ ⠧ [BUILD] claude-sonnet · 12k
+=====
+# harness: maki
+# want: idle
+# how: derived. The status bar with the mode label and no spinner, herdr's
+# status_bar_idle.
+---
+❯
+ [BUILD] claude-sonnet · 12k
+=====
+# harness: maki
+# want: idle
+# how: derived. A narrow pane where the right side of the status bar covers
+# the mode label, so only the prompt chevron is left, herdr's
+# prompt_box_idle. The empty prompt line is read with its trailing space
+# trimmed.
+---
+The test passes now.
+❯
+────────────────
+ 12k · sonnet

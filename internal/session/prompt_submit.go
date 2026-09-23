@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 )
 
 // This file is the one way the daemon types a prompt into an agent's pane and
@@ -27,13 +29,29 @@ import (
 //  2. A short wait, so the application has taken the paste in before the key
 //     that submits it arrives. TUIs that detect a paste by timing (Codex does)
 //     turn an Enter that arrives inside the burst into a newline.
-//  3. A carriage return.
+//  3. The submit key: a carriage return, unless the harness's manifest says
+//     it submits on a line feed.
+//
+// The harness's [input] block can change three things, and only these: the
+// submit key, whether a bracketed paste is allowed at all (a harness that
+// turns DECSET 2004 on and mishandles a paste can refuse it), and whether a
+// focus-in report (CSI I) goes first, for a harness that ignores a submit while
+// it believes it is unfocused. The focus report is only sent when the pane has
+// focus reporting (DECSET 1004) on, so an application that never asked for
+// focus events never sees the bytes. See harness.Input.
 
 // Bracketed paste delimiters, DECSET 2004.
 const (
 	bracketedPasteStart = "\x1b[200~"
 	bracketedPasteEnd   = "\x1b[201~"
 )
+
+// focusInReport is what a terminal sends when its window gains focus and the
+// application has DECSET 1004 on.
+const focusInReport = "\x1b[I"
+
+// modeFocusEvents is DECSET 1004, focus event reporting.
+const modeFocusEvents = 1004
 
 // promptSubmitMaxWait bounds the wait between the paste and the carriage
 // return. herdr waits this long unconditionally; see promptSubmitQuiet for when
@@ -60,6 +78,9 @@ type promptPane interface {
 	BracketedPasteOn() bool
 	// LastOutput is the unix-nano time the pane last printed anything.
 	LastOutput() int64
+	// FocusReportingOn reports whether the application in the pane has focus
+	// event reporting (DECSET 1004) on.
+	FocusReportingOn() bool
 }
 
 // BracketedPasteOn reports whether the application in the pane has turned on
@@ -70,18 +91,55 @@ func (p *PTY) BracketedPasteOn() bool {
 	return p.terminal != nil && p.terminal.BracketedPasteEnabled()
 }
 
-// submitPrompt types text into the pane as one paste and submits it with a
-// carriage return. It returns once the carriage return is written, or with the
+// FocusReportingOn reports whether the application in the pane has turned on
+// focus event reporting (DECSET 1004), as the daemon's emulator last read it.
+func (p *PTY) FocusReportingOn() bool {
+	p.terminalMu.RLock()
+	defer p.terminalMu.RUnlock()
+	return p.terminal != nil && p.terminal.GetModes()[modeFocusEvents]
+}
+
+// inputProfileFor is the input profile of the harness running in a window as
+// the session last recorded it, or the default when there is none: a pane no
+// harness has claimed still gets a prompt pasted and submitted with a carriage
+// return, as it always did.
+func (d *Daemon) inputProfileFor(sess *Session, windowID string) harness.InputProfile {
+	reg := d.agentMatcher.registry
+	if reg == nil || sess == nil {
+		return harness.DefaultInputProfile()
+	}
+	sess.stateMu.RLock()
+	hid := ""
+	for i := range sess.state.Windows {
+		if sess.state.Windows[i].ID == windowID {
+			hid = sess.state.Windows[i].AgentHarness
+			break
+		}
+	}
+	sess.stateMu.RUnlock()
+	return reg.InputProfile(hid)
+}
+
+// submitPrompt types text into the pane as one paste and submits it with the
+// harness's submit key. It returns once the submit key is written, or with the
 // first write error, or with ctx's error if ctx ends during the wait, in which
-// case the paste was written and the carriage return was not.
-func submitPrompt(ctx context.Context, pane promptPane, text string) error {
-	return submitPromptTimed(ctx, pane, text, promptSubmitQuiet, promptSubmitMaxWait)
+// case the paste was written and the submit key was not.
+func submitPrompt(ctx context.Context, pane promptPane, text string, in harness.InputProfile) error {
+	return submitPromptTimed(ctx, pane, text, in, promptSubmitQuiet, promptSubmitMaxWait)
 }
 
 // submitPromptTimed is submitPrompt with the waits as parameters.
-func submitPromptTimed(ctx context.Context, pane promptPane, text string, quiet, maxWait time.Duration) error {
+func submitPromptTimed(ctx context.Context, pane promptPane, text string, in harness.InputProfile, quiet, maxWait time.Duration) error {
+	if in.SubmitKey == "" {
+		in.SubmitKey = "\r"
+	}
+	if in.FocusBeforeSubmit && pane.FocusReportingOn() {
+		if _, err := pane.Write([]byte(focusInReport)); err != nil {
+			return fmt.Errorf("failed to report focus: %w", err)
+		}
+	}
 	body := promptBody(text)
-	if pane.BracketedPasteOn() {
+	if in.BracketedPaste && pane.BracketedPasteOn() {
 		body = bracketedPasteStart + body + bracketedPasteEnd
 	}
 	// Taken before the write, so output the paste caused counts however soon
@@ -95,7 +153,7 @@ func submitPromptTimed(ctx context.Context, pane promptPane, text string, quiet,
 	if err := waitPasteTaken(ctx, pane, pastedAt, quiet, maxWait); err != nil {
 		return err
 	}
-	if _, err := pane.Write([]byte("\r")); err != nil {
+	if _, err := pane.Write([]byte(in.SubmitKey)); err != nil {
 		return fmt.Errorf("failed to submit the prompt: %w", err)
 	}
 	return nil

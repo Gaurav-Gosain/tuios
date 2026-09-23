@@ -37,13 +37,18 @@ type agentVerdict struct {
 	source  AgentSource
 }
 
-// titleVerdict matches the harness's title rules against the pane's title.
+// titleVerdict matches the harness's title rules against the pane's title and,
+// for the rules that read osc_progress, its last progress report.
 func titleVerdict(pty *PTY, hid string, reg *harness.Registry) agentVerdict {
 	title := pty.Title()
-	if title == "" {
+	progress := ""
+	if reg.HasProgressRules(hid) {
+		progress = pty.ProgressText()
+	}
+	if title == "" && progress == "" {
 		return agentVerdict{}
 	}
-	state, rule, ok := reg.ClassifyTitle(hid, title)
+	state, rule, ok := reg.ClassifyOSC(hid, title, progress)
 	if !ok {
 		return agentVerdict{}
 	}

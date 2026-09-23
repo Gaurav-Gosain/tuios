@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -295,6 +297,36 @@ func TestDoctorAgentsListsPanesWithoutTheirIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"claude-code", "not installed", "work:w1"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("doctor output lacks %q:\n%s", want, out.String())
+		}
+	}
+}
+
+// TestDoctorAgentsSaysWhichUserManifestsAreInForce: a user file with a bundled
+// id replaces the bundled manifest whole, a new one is loaded beside them, and
+// a broken one is named rather than skipped in silence.
+func TestDoctorAgentsSaysWhichUserManifestsAreInForce(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("codex.toml", "schema_version = 1\nid = \"codex\"\n[detect]\ncomm = [\"codex\"]\n")
+	write("mine.toml", "schema_version = 1\nid = \"my-agent\"\n[detect]\ncomm = [\"my-agent\"]\n")
+	write("broken.toml", "schema_version = 1\nid = \"broken\"\n")
+	manifests, errs := userManifests(dir)
+	if len(manifests) != 2 || len(errs) != 1 {
+		t.Fatalf("manifests %+v errors %v, want two loaded and one error", manifests, errs)
+	}
+	r := doctorAgentsReport{ManifestDir: dir, UserManifests: manifests, ManifestErrors: errs}
+	var out bytes.Buffer
+	if err := printDoctorAgents(&out, r, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Manifest codex replaces the bundled one", "Manifest my-agent is loaded from", "Manifest not loaded", "broken.toml"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("doctor output lacks %q:\n%s", want, out.String())
 		}

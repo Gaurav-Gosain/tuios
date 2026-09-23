@@ -8,5 +8,16 @@ comm      = ["crush"]
 argv0     = ["crush"]
 argv_path = ["@charmland/crush", "/crush/"]
 
+# No screen rules: herdr has no manifest for Crush, and none has been written
+# against a live Crush turn yet.
 [screen]
 enabled = false
+
+# How a prompt is typed in. Measured on crush v0.96.1: it turns on bracketed
+# paste (DECSET 2004) at start and pushes kitty keyboard flags 1, under which
+# Enter is still a carriage return. It is a Bubble Tea program, which reads a
+# carriage return as Enter and a line feed as Ctrl+J.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "measured on crush v0.96.1 (DECSET 2004 on, kitty flags 1)"

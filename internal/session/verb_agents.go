@@ -638,7 +638,7 @@ func (d *Daemon) verbAskAgent(cs *connState, params json.RawMessage) (any, *verb
 	}
 	// Pasted and submitted with a carriage return, the way fan types its
 	// prompt. See prompt_submit.go.
-	if werr := submitPrompt(d.ctx, pty, p.Text); werr != nil {
+	if werr := submitPrompt(d.ctx, pty, p.Text, d.inputProfileFor(sess, target.ID)); werr != nil {
 		return nil, newVerbError(ErrVerbInternal, werr.Error())
 	}
 	sentAt := time.Now().UnixNano()

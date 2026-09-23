@@ -1,3 +1,11 @@
+# Rules after herdr's agent-detection manifest for cursor
+# (github.com/herdrdev/herdr, src/detect/manifests/cursor.toml, herdr id
+# "cursor", manifest version 2026.08.03.1, Apache-2.0; see LICENSE-herdr).
+# Regenerate a draft with
+#   go run ./internal/harness/herdrconv
+# Not verified against a live pane: Cursor Agent is not installed on the
+# machine these rules were written on. herdr has no idle rule for it.
+
 schema_version = 1
 id             = "cursor-agent"
 display_name   = "Cursor Agent"
@@ -11,4 +19,60 @@ argv0 = ["cursor-agent"]
 exe_glob = ["**/.cursor/**/agent", "**/cursor-agent"]
 
 [screen]
-enabled = false
+enabled   = true
+fold_case = true
+lines     = 8
+
+# herdr rule: write_file_approval. Asking to write a file.
+[[screen.rule]]
+state    = "needs_input"
+priority = 320
+kind     = "approval"
+message  = "Waits for approval to write a file."
+all      = ["write to this file?", "proceed (y)"]
+any      = ["reject & propose changes", "esc or n or p", "add write("]
+
+# herdr rule: approval_prompt. A command or tool approval in its several
+# layouts.
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+kind     = "approval"
+message  = "Waits for approval."
+any_of   = [
+  { all = ["waiting for approval", "run this command?"], any = ["run (once) (y)", "skip (esc or n)"] },
+  { any = ["(y) (enter)", "keep (n)", "skip (esc or n)"] },
+  { regex = ['(?i)^\s*allow .*\(y\)'] },
+  { regex = ['(?i)^\s*(?:→\s*)?run .*\(y\)'] },
+]
+
+# herdr rule: stop_hint_working. The stop hint in the footer.
+[[screen.rule]]
+state    = "working"
+priority = 100
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(6)"
+all      = ["ctrl+c to stop"]
+
+# herdr rule: background_task_status_working.
+[[screen.rule]]
+state    = "working"
+priority = 95
+message  = "Runs background tasks."
+region   = "bottom_non_empty_lines(5)"
+regex    = ['(?i)\b[1-9][0-9]*[ \t]+background[ \t]+tasks?\b']
+
+# herdr rule: spinner_working. A hexagon or braille spinner in front of a verb
+# ending in -ing.
+[[screen.rule]]
+state    = "working"
+priority = 90
+message  = "Works on a turn."
+region   = "bottom_non_empty_lines(8)"
+regex    = ['^\s*(?:⬡|⬢|[\x{2800}-\x{28FF}]+)[ \t]+\pL+\w*ing\b']
+
+# How a prompt is typed in. Not measured.
+[input]
+submit          = "cr"
+bracketed_paste = true
+source          = "default: Enter sends CR in raw mode; not measured"

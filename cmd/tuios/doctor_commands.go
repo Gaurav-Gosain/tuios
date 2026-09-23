@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
@@ -41,6 +42,40 @@ type doctorAgentsReport struct {
 	// no daemon runs, and DaemonRunning says which.
 	DaemonRunning bool           `json:"daemon_running"`
 	Panes         []agentPaneGap `json:"panes_without_integration"`
+	// ManifestDir is the user manifest directory, UserManifests the files in
+	// it that loaded, and ManifestErrors the ones that did not. A user file
+	// with a bundled id replaces the bundled manifest whole, which is worth
+	// seeing in the one place that says what is set up.
+	ManifestDir    string         `json:"manifest_dir"`
+	UserManifests  []userManifest `json:"user_manifests"`
+	ManifestErrors []string       `json:"manifest_errors"`
+}
+
+// userManifest is one harness manifest loaded from the user directory.
+type userManifest struct {
+	ID              string `json:"id"`
+	Path            string `json:"path"`
+	ReplacesBundled bool   `json:"replaces_bundled"`
+}
+
+// userManifests loads the registry the daemon would load from dir and
+// reports what came from dir: each manifest in force and each file that
+// failed to load.
+func userManifests(dir string) ([]userManifest, []string) {
+	reg, errs := harness.Load(dir)
+	var out []userManifest
+	for _, id := range reg.IDs() {
+		src, replaced := reg.Lookup(id).Source()
+		if src == "bundled" {
+			continue
+		}
+		out = append(out, userManifest{ID: id, Path: src, ReplacesBundled: replaced})
+	}
+	var failed []string
+	for _, e := range errs {
+		failed = append(failed, e.Error())
+	}
+	return out, failed
 }
 
 func newDoctorAgentsCommand() *cobra.Command {
@@ -53,13 +88,17 @@ func newDoctorAgentsCommand() *cobra.Command {
 PATH, whether tuios is on PATH for its hooks to run, and whether the
 integration is installed and current. With a daemon running it also lists
 the agent panes whose harness has an integration that is not installed,
-since their state then rests on screen rules and the silence timer.`,
+since their state then rests on screen rules and the silence timer. Last, it
+lists the harness manifests loaded from the user manifest directory, saying
+which replace a bundled manifest, and the files there that failed to load.`,
 		Example: `  tuios doctor agents
   tuios doctor agents --json`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			env := integration.SystemEnv()
 			report := doctorAgents(env, command, livePanes)
+			report.ManifestDir = harness.UserDir()
+			report.UserManifests, report.ManifestErrors = userManifests(report.ManifestDir)
 			return printDoctorAgents(os.Stdout, report, asJSON)
 		},
 	}
@@ -181,6 +220,16 @@ func printDoctorAgents(w io.Writer, r doctorAgentsReport, asJSON bool) error {
 		for _, p := range r.Panes {
 			fmt.Fprintf(w, "  %s:%s (%s) runs %s\n", p.Session, p.Window, p.Name, p.Harness)
 		}
+	}
+	for _, m := range r.UserManifests {
+		if m.ReplacesBundled {
+			fmt.Fprintf(w, "Manifest %s replaces the bundled one: %s\n", m.ID, m.Path)
+		} else {
+			fmt.Fprintf(w, "Manifest %s is loaded from %s\n", m.ID, m.Path)
+		}
+	}
+	for _, e := range r.ManifestErrors {
+		fmt.Fprintf(w, "Manifest not loaded: %s\n", e)
 	}
 	return nil
 }
