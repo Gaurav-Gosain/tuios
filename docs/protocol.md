@@ -1046,6 +1046,48 @@ the report without them. A client that depends on one, `if_state` above all,
 has to ask `list-verbs` for `set-agent-state` first and check the field is
 listed. `tuios agent-hook` and `tuios set-agent-state --if-state` do.
 
+### set-agent-session
+
+Store the conversation id a harness reports for a pane, without changing the
+pane's agent state, the source that holds it, or its harness attribution. It is
+what `tuios agent-hook` sends for a harness whose hooks can name the
+conversation but cannot be trusted with its state, so the pane's screen rules
+keep deciding the state. Params: `session`, `window`, `harness` (required),
+`agent_session_id` (required, at most 256 bytes), `harness_pid`.
+
+```json
+{"verb": "set-agent-session", "params": {"session": "work", "window": "build", "harness": "qwen", "agent_session_id": "5f1c", "harness_pid": 4100}}
+```
+
+```json
+{"result": {"type": "agent_session_set", "agent_session_id": "5f1c", "applied": true}}
+```
+
+The id is stored as the window's `agent_session_id`, the field
+`set-agent-state` writes, persisted and read back by `get-agent-state` and
+`list-agents`. `agent_session_id` in the result is the id the window holds after
+the call. A report naming the id the window already holds is applied and changes
+nothing. Two refusals keep a nested run off the pane, with `applied: false`:
+
+- `foreign_harness`: the window is attributed to a different harness.
+- `foreign_session`: the window is `working` or `needs_input`, holds a different
+  id, and that id was reported by a known harness process other than the
+  report's `harness_pid`. The same process may replace its own id, and a report
+  with no pid, or onto a window at rest, is applied. The daemon forgets the pid
+  when the detector sees the agent leave the pane, so a harness restarted in
+  the pane is not refused.
+
+A report never attributes the window: a pane nothing has named stores the id
+and stays a non-agent pane until the detector or a `set-agent-state` names its
+harness.
+
+Security: it grants a subset of what `set-agent-state` with `agent_session_id`
+already grants any socket caller, the one field and no state.
+
+Wire compatibility: a new verb. An older daemon answers `unknown_verb`, and
+`tuios agent-hook` asks `list-verbs` first and sends nothing to a daemon
+without it.
+
 ### resolve-pane
 
 Name the pane a process runs in, for a hook reporter whose environment lost

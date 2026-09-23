@@ -1004,6 +1004,16 @@ session, so the conversation a pane last ran can be resumed after the agent,
 or the daemon, restarts. It is kept when the agent exits and replaced when
 another session reports into the pane.
 
+A harness whose hooks can name the conversation but cannot be trusted with the
+pane's state sends the id alone, with the `set-agent-session` verb (`tuios
+set-agent-session` by hand). It stores the id and changes nothing else: not the
+state, not the source that holds it, not the harness the pane is attributed to.
+A state reported by a hook outranks every screen rule, so a hook that misses an
+interrupt or the end of a turn would pin the pane on `working`; an id cannot do
+that. The same nested-run guards apply: a pane attributed to another harness
+refuses the id, and so does a pane mid-turn whose id came from a different
+process of the same harness.
+
 The transcript path is not stored anywhere a client can read. It goes straight
 to the transcript source: for a harness whose manifest has a transcript reader
 (Claude Code today), the pane is joined to exactly that file, which replaces the

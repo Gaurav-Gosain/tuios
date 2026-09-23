@@ -1056,6 +1056,37 @@ func runSetAgentState(sessionName, windowTarget, state, message, source, harness
 	return nil
 }
 
+// runSetAgentSession stores a pane's conversation id without touching its
+// state. A refused report is said on stderr, as set-agent-state does.
+func runSetAgentSession(sessionName, windowTarget, harness, sessionID string) error {
+	client, err := dialVerb()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+	raw, err := client.Call("set-agent-session", map[string]any{
+		"session":          sessionName,
+		"window":           windowTarget,
+		"harness":          harness,
+		"agent_session_id": sessionID,
+	})
+	if err != nil {
+		return explainVerbError("set-agent-session", err)
+	}
+	var res struct {
+		Applied bool   `json:"applied"`
+		ID      string `json:"agent_session_id"`
+		Reason  string `json:"reason"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	if !res.Applied {
+		fmt.Fprintf(os.Stderr, "Not applied: %s The pane keeps %q.\n", agentRefusalText(res.Reason), res.ID)
+	}
+	return nil
+}
+
 // setAgentStateExtras are the set-agent-state fields a hook reporter adds.
 type setAgentStateExtras struct {
 	kind           string

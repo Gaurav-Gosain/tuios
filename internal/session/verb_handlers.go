@@ -792,6 +792,66 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 	return out, nil
 }
 
+// verbSetAgentSession stores the conversation id a harness reports for a pane
+// without touching the pane's state. See applyAgentSession.
+func (d *Daemon) verbSetAgentSession(_ *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Session        string `json:"session"`
+		Window         string `json:"window"`
+		Harness        string `json:"harness"`
+		AgentSessionID string `json:"agent_session_id"`
+		HarnessPID     int    `json:"harness_pid"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	harnessID := strings.TrimSpace(p.Harness)
+	if harnessID == "" {
+		return nil, invalidParam("harness", "harness is required: the id of the harness the conversation belongs to, e.g. qwen")
+	}
+	sid := strings.TrimSpace(p.AgentSessionID)
+	if sid == "" {
+		return nil, invalidParam("agent_session_id", "agent_session_id is required: the harness's own id for the conversation")
+	}
+	if len(sid) > maxAgentSessionIDLen {
+		return nil, invalidParam("agent_session_id", fmt.Sprintf("agent_session_id is %d bytes; the limit is %d", len(sid), maxAgentSessionIDLen))
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+	target := p.Window
+	if target == "" {
+		id, err := focusedWindowID(sess.GetState())
+		if err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+		target = id
+	}
+	stored, applied, reason, err := sess.applyAgentSession(target, AgentSessionReport{
+		Harness:    harnessID,
+		SessionID:  sid,
+		HarnessPID: p.HarnessPID,
+	})
+	if err != nil {
+		return nil, mapResolveErr(err, sess)
+	}
+	out := map[string]any{
+		"type":             "agent_session_set",
+		"agent_session_id": stored,
+		"applied":          applied,
+	}
+	if reason != "" {
+		out["reason"] = reason
+	}
+	return out, nil
+}
+
+// maxAgentSessionIDLen bounds a reported conversation id. Every harness uses a
+// uuid or a short token; the cap only stops a caller parking a blob on the
+// window, which is synced to every client and persisted.
+const maxAgentSessionIDLen = 256
+
 // agentKindNames are the values set-agent-state accepts for kind. They are
 // the manifest rule kinds, so a hook and a screen rule describe a block in the
 // same words.

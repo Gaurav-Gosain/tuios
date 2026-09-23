@@ -884,9 +884,11 @@ type Session struct {
 	// whose hook last set the window's AgentSessionID, as the hook reported it.
 	// sessionGuard reads it to tell a new conversation in the same harness
 	// process (/clear or /resume after an interrupted turn) from a nested run
-	// in another process. It is kept apart from agentClaims because other
-	// sources replace the claim, and the pid must outlive that. Daemon memory
-	// only, and read and written under stateMu.
+	// in another process, and applyAgentSession reads it for the same reason.
+	// It is kept apart from agentClaims because other sources replace the
+	// claim, and the pid must outlive that. The detector forgets it when it sees
+	// the agent leave the pane. Daemon memory only, and read and written under
+	// stateMu.
 	agentHarnessPIDs map[string]int
 
 	// transcripts binds windows to the record files their harnesses write. It is

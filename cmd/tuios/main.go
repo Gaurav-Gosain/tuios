@@ -1112,6 +1112,34 @@ The metadata clears when the agent leaves the pane.`,
 	setAgentMetaCmd.Flags().BoolVar(&setAgentMetaJSON, "json", false, "Print the result as JSON")
 	_ = setAgentMetaCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 
+	var setAgentSessionSession string
+	var setAgentSessionWindow string
+	var setAgentSessionHarness string
+	setAgentSessionCmd := &cobra.Command{
+		Use:   "set-agent-session <agent-session-id>",
+		Short: "Record which conversation a pane's agent runs, without changing its state",
+		Long: `Store a harness's own id for the conversation running in a pane, so it can be
+resumed later. Unlike set-agent-state with --agent-session-id, it never changes
+the pane's agent state, so the pane's screen rules keep deciding it. The
+integrations for harnesses whose hooks can name the conversation but cannot be
+trusted with its state send this.
+
+A pane attributed to a different harness refuses it, and so does a pane that
+is mid-turn in another conversation of the same harness, since both are a
+nested run.`,
+		Example: `  # From a SessionStart hook
+  tuios set-agent-session --harness qwen -w "$TUIOS_PANE_ID" "$SESSION_ID"`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runSetAgentSession(setAgentSessionSession, setAgentSessionWindow, setAgentSessionHarness, args[0])
+		},
+	}
+	setAgentSessionCmd.Flags().StringVarP(&setAgentSessionSession, "session", "s", "", "Target session (default: most recently active)")
+	setAgentSessionCmd.Flags().StringVarP(&setAgentSessionWindow, "window", "w", "", "Target window by name or ID (default: focused)")
+	setAgentSessionCmd.Flags().StringVar(&setAgentSessionHarness, "harness", "", "Id of the harness the conversation belongs to, e.g. qwen (required)")
+	_ = setAgentSessionCmd.MarkFlagRequired("harness")
+	_ = setAgentSessionCmd.RegisterFlagCompletionFunc("session", completeSessionNames)
+
 	var getAgentStateSession string
 	var getAgentStateWindow string
 	var getAgentStateJSON bool
@@ -2606,7 +2634,7 @@ It does not start a daemon. If no daemon runs here, the caller is told so.`,
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd)
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)
-	rootCmd.AddCommand(setAgentStateCmd, setAgentMetaCmd, getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
+	rootCmd.AddCommand(setAgentStateCmd, setAgentMetaCmd, setAgentSessionCmd, getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
 	rootCmd.AddCommand(listAgentsCmd, sendAgentMessageCmd, readAgentMessagesCmd, askAgentCmd)
 	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand())
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)

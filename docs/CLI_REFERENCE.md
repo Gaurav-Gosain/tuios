@@ -1081,6 +1081,36 @@ With `--json`:
 }
 ```
 
+### `tuios set-agent-session`
+
+Record which conversation the agent in a pane runs, so it can be resumed
+later, without changing the pane's agent state. The integrations for harnesses
+whose hooks can name the conversation but cannot be trusted with its state
+send this (see [Agent state](AGENT_STATE.md#session-identity)).
+
+**Usage:**
+```bash
+tuios set-agent-session <agent-session-id> --harness <id> [flags]
+```
+
+The id is stored as the pane's `agent_session_id`, the same field
+`set-agent-state --agent-session-id` writes, and read back by `get-agent-state`
+and `list-agents`. It is refused, with the reason on stderr, when the pane is
+attributed to a different harness, or when the pane is mid-turn in another
+conversation of the same harness: both are a nested run. The id is at most 256
+bytes.
+
+**Flags:**
+- `--harness <id>`: Id of the harness the conversation belongs to (required)
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <id-or-name>`: Target window (default: focused)
+
+**Example:**
+```bash
+# From a SessionStart hook
+tuios set-agent-session --harness qwen -w "$TUIOS_PANE_ID" "$SESSION_ID"
+```
+
 ### `tuios set-session-name`
 
 Set the label a session shows in the sidebar and the dock.
@@ -1777,6 +1807,7 @@ them.
 | `tuios list-agents` | List the agent panes in a session and what each is doing |
 | `tuios get-agent-state` | Read a pane's reported agent state |
 | `tuios set-agent-meta [key=value ...]` | Record display metadata about a pane's agent (model, context, a summary) for the rail |
+| `tuios set-agent-session <id> --harness <h>` | Record which conversation a pane's agent runs, for a later resume, without changing its state |
 | `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session |
 | `tuios read-agent-messages` | Read the messages agents have left in this session |
 | `tuios ask-agent <text>` | Ask another agent a question and wait for its answer |

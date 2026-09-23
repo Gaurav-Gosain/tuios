@@ -973,6 +973,25 @@ func init() {
 			},
 			handler: (*Daemon).verbSetAgentState,
 		},
+		"set-agent-session": {
+			description: "Store the conversation id a harness reports for a window's pane, without changing the pane's agent state, its source or its harness attribution. It is what a hook sends for a harness whose hooks are trusted to name the conversation but not to report its state. The id is stored and persisted as the window's agent_session_id, the same field set-agent-state's agent_session_id writes.",
+			params: []verbParam{
+				sessionParam,
+				windowParam,
+				{Name: "harness", Type: "string", Required: true, Description: "Id of the harness the conversation belongs to. A window attributed to a different harness refuses the report with reason foreign_harness."},
+				{Name: "agent_session_id", Type: "string", Required: true, Description: "The harness's own id for the conversation, at most 256 bytes."},
+				{Name: "harness_pid", Type: "int", Description: "The pid of the harness process that ran the hook. While the window is working or needs_input, a different id from a different process than the one that reported the stored id is a nested run and is refused with reason foreign_session. Kept in daemon memory only."},
+			},
+			returns: []verbParam{
+				{Name: "agent_session_id", Type: "string", Description: "The id the window holds after the call."},
+				{Name: "applied", Type: "bool", Description: "Whether the report was taken. A report naming the id the window already holds is taken and changes nothing."},
+				{Name: "reason", Type: "string", Description: "Why the report was not taken. Absent when it was.", Accepted: []string{agentRefusedForeignSession, agentRefusedForeignHarness}},
+			},
+			examples: []string{
+				`{"id":1,"verb":"set-agent-session","params":{"session":"work","window":"build","harness":"qwen","agent_session_id":"5f1c","harness_pid":4100}}`,
+			},
+			handler: (*Daemon).verbSetAgentSession,
+		},
 		"get-agent-state": {
 			description: "Read the agent state a window's pane last reported, with its optional message, the time it was set, which source and harness it came from, how confident the harness attribution is, whether the pane needs a person, whether ask-agent would type at it now (ready), and for a pane on needs_input whether it waits on an approval or a question (blocked_by).",
 			params:      []verbParam{sessionParam, windowParam},

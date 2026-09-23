@@ -627,8 +627,11 @@ func (s *Session) applyAgentDetection(
 					s.setAgentClaim(w.ID, claim)
 					continue
 				}
-				// Agent gone from the foreground: relinquish and clear.
+				// Agent gone from the foreground: relinquish and clear. The
+				// harness pid goes too: the process it named has exited, so a
+				// harness started next in this pane is not a nested run of it.
 				delete(s.agentClaims, w.ID)
+				delete(s.agentHarnessPIDs, w.ID)
 				w.AgentState = AgentStateNone
 				clearAgentNote(w)
 				w.AgentHarness = ""
@@ -665,6 +668,7 @@ func (s *Session) applyAgentDetection(
 				// exercised.
 				if running && info.atShell() && claim.sawProcess && claim.source != AgentSourceReport {
 					delete(s.agentClaims, w.ID)
+					delete(s.agentHarnessPIDs, w.ID)
 					w.AgentState = AgentStateNone
 					clearAgentNote(w)
 					w.AgentHarness = ""
@@ -780,6 +784,7 @@ func (s *Session) reconcileAgentOnOutput(
 				return errNoAgentDetectChange
 			}
 			delete(s.agentClaims, w.ID)
+			delete(s.agentHarnessPIDs, w.ID)
 			w.AgentState = AgentStateNone
 			clearAgentNote(w)
 			w.AgentHarness = ""
