@@ -129,7 +129,7 @@ func sendKeysText(args []string, literal, hex bool) (string, error) {
 		case hex:
 			n, err := strconv.ParseUint(strings.TrimPrefix(strings.ToLower(a), "0x"), 16, 8)
 			if err != nil {
-				return "", fmt.Errorf("send-keys: invalid hex key %q", a)
+				return "", logAs{err: fmt.Errorf("send-keys: invalid hex key %q", a), log: "send-keys: invalid hex key"}
 			}
 			b.WriteByte(byte(n))
 		case literal:

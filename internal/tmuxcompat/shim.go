@@ -100,15 +100,28 @@ var specs = map[string]spec{
 // said, since they can hold secrets.
 var textCommands = []string{"send-keys", "split-window", "new-window", "respawn-pane"}
 
-// redact returns argv (starting "tmux") as the log records it: the positional
-// arguments of text commands, and every VAR=value, replaced by a marker.
+// redact returns argv (starting "tmux") as the log records it. Only what the
+// shim can name is kept: the global flags, the name of a known tmux command,
+// and the flags of a command it parses. The positional arguments of text
+// commands, the arguments of every command it does not answer, a word it
+// could not place and every VAR=value are replaced by a marker, since any of
+// them can hold something typed or run.
 func redact(argv []string) []string {
 	if len(argv) == 0 {
 		return argv
 	}
 	_, words, err := ParseGlobal(argv[1:])
 	if err != nil {
-		return argv
+		// The globals did not parse, so which word is a flag value, a
+		// command or text is unknown. Keep only the words that are flags.
+		out := []string{argv[0]}
+		for _, w := range argv[1:] {
+			if !strings.HasPrefix(w, "-") || strings.Contains(w, "=") {
+				w = "<redacted>"
+			}
+			out = append(out, w)
+		}
+		return out
 	}
 	out := append([]string{}, argv[:len(argv)-len(words)]...)
 	for i, cmd := range SplitCommands(words) {
@@ -119,7 +132,23 @@ func redact(argv []string) []string {
 		if full, ok := aliases[name]; ok {
 			name = full
 		}
-		if !slices.Contains(textCommands, name) {
+		_, answered := commands[name]
+		switch {
+		case !knownCommand(name):
+			out = append(out, "<unknown command>")
+			if len(cmd) > 1 {
+				out = append(out, fmt.Sprintf("<%d redacted>", len(cmd)-1))
+			}
+			continue
+		case !answered:
+			// Ignored and refused commands, and tmux commands the shim does
+			// not answer: the name says what the call was.
+			out = append(out, cmd[0])
+			if len(cmd) > 1 {
+				out = append(out, fmt.Sprintf("<%d redacted>", len(cmd)-1))
+			}
+			continue
+		case !slices.Contains(textCommands, name):
 			out = append(out, cmd...)
 			continue
 		}
@@ -140,6 +169,25 @@ func redact(argv []string) []string {
 		}
 	}
 	return out
+}
+
+// knownCommand reports whether name (an alias already resolved) is a tmux
+// command the shim knows of: one it answers, ignores or refuses, or the full
+// name behind one of tmux's aliases. Only such a name reaches the log, since
+// any other word in command position may be text a split left there.
+func knownCommand(name string) bool {
+	if _, ok := commands[name]; ok {
+		return true
+	}
+	if slices.Contains(ignoredCommands, name) || slices.Contains(refusedCommands, name) {
+		return true
+	}
+	for _, full := range aliases {
+		if full == name {
+			return true
+		}
+	}
+	return false
 }
 
 // ignoredCommands are known and do nothing here, by design: tuios owns the
@@ -261,7 +309,7 @@ func (s *Shim) Run(args []string) int {
 // fail prints err the way tmux does, records the call and returns status 1.
 func (s *Shim) fail(argv []string, outcome string, detail []string, err error) int {
 	fmt.Fprintln(s.Stderr, err)
-	s.Log.Record(argv, outcome, append(detail, err.Error()))
+	s.Log.Record(argv, outcome, append(detail, logText(err)))
 	return 1
 }
 
@@ -293,7 +341,32 @@ func (s *Shim) runOne(name string, args []string) (string, []string, error) {
 	if slices.Contains(refusedCommands, name) {
 		return OutcomeUnsupported, nil, fmt.Errorf("%s: refused, the tuios tmux shim does not start, attach or end sessions", name)
 	}
-	return OutcomeUnsupported, nil, fmt.Errorf("unknown command: %s", name)
+	err := fmt.Errorf("unknown command: %s", name)
+	if !knownCommand(name) {
+		// The word may be text a split left in command position: stderr
+		// names it, the log does not.
+		err = logAs{err: err, log: "unknown command"}
+	}
+	return OutcomeUnsupported, nil, err
+}
+
+// logAs is an error printed as err and logged as log, for an error whose
+// message holds words the log must not keep.
+type logAs struct {
+	err error
+	log string
+}
+
+func (e logAs) Error() string { return e.err.Error() }
+func (e logAs) Unwrap() error { return e.err }
+
+// logText is err as the log records it.
+func logText(err error) string {
+	var la logAs
+	if errors.As(err, &la) {
+		return la.log
+	}
+	return err.Error()
 }
 
 func (s *Shim) println(line string) { fmt.Fprintln(s.Stdout, line) }

@@ -237,6 +237,57 @@ func TestLogRedactsText(t *testing.T) {
 	}
 }
 
+// TestLogRedactsFailedCalls checks the calls the default log records, the
+// ones that fail, keep nothing typed or run either: a global flag that does
+// not parse, a word a ';' split into command position, a command the shim
+// does not answer, and an argument quoted in an error.
+func TestLogRedactsFailedCalls(t *testing.T) {
+	h := newHarness(t)
+	calls := []struct {
+		args   []string
+		argv   []string
+		detail string
+	}{
+		{[]string{"-c", "export TOKEN=hunter2"}, []string{"tmux", "-c", "<redacted>"}, "-c is not supported"},
+		{[]string{"-x", "send-keys", "hunter2"}, []string{"tmux", "-x", "<redacted>", "<redacted>"}, "unknown option: -x"},
+		{[]string{"-S"}, []string{"tmux", "-S"}, "option requires an argument"},
+		{[]string{"send-keys", "-t", PaneID("leader-0001"), "a;", "hunter2", "x"},
+			[]string{"tmux", "send-keys", "-t", PaneID("leader-0001"), "<1 redacted>", ";", "<unknown command>", "<1 redacted>"}, "unknown command"},
+		{[]string{"wait-for", "-S", "hunter2"}, []string{"tmux", "wait-for", "<2 redacted>"}, "unknown command: wait-for"},
+		{[]string{"kill-server", "hunter2"}, []string{"tmux", "kill-server", "<1 redacted>"}, "kill-server: refused"},
+		{[]string{"send-keys", "-H", "-t", PaneID("leader-0001"), "hunter2"},
+			[]string{"tmux", "send-keys", "-H", "-t", PaneID("leader-0001"), "<1 redacted>"}, "invalid hex key"},
+	}
+	for i, c := range calls {
+		if code, _ := h.run(c.args...); code != 1 {
+			t.Errorf("%q succeeded", c.args)
+		}
+		// stderr is the caller's own, and still names the unknown word.
+		if i == 3 && !strings.Contains(h.err.String(), "unknown command: hunter2") {
+			t.Errorf("stderr = %q, want it to name the unknown command", h.err)
+		}
+	}
+	data, err := os.ReadFile(h.logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "hunter2") {
+		t.Errorf("the log holds typed text:\n%s", data)
+	}
+	got := h.logEntries(t)
+	if len(got) != len(calls) {
+		t.Fatalf("log = %+v, want %d entries", got, len(calls))
+	}
+	for i, c := range calls {
+		if !reflect.DeepEqual(got[i].Argv, c.argv) {
+			t.Errorf("entry %d argv = %q, want %q", i, got[i].Argv, c.argv)
+		}
+		if !strings.Contains(strings.Join(got[i].Detail, ";"), c.detail) {
+			t.Errorf("entry %d detail = %q, want it to mention %q", i, got[i].Detail, c.detail)
+		}
+	}
+}
+
 func TestSendKeys(t *testing.T) {
 	cases := []struct {
 		args []string

@@ -135,14 +135,24 @@ refused command. That file is the list of what to add next. `--log-all`
 records every call.
 
 ```json
-{"time":"2026-09-23T16:19:27Z","argv":["tmux","wait-for","x"],"outcome":"unsupported","detail":["unknown command: wait-for"]}
+{"time":"2026-09-23T16:19:27Z","argv":["tmux","wait-for","<1 redacted>"],"outcome":"unsupported","detail":["unknown command: wait-for"]}
 ```
 
 `outcome` is `ok`, `ignored` (a command that does nothing here), `partial`
 (it succeeded, and `detail` says what was not honoured), `unsupported` or
-`error`. The log never records what was typed or run: the text arguments of
-`send-keys`, `split-window`, `new-window` and `respawn-pane`, and every
-`VAR=value`, are replaced by a count. The file is created mode 0600 and is
+`error`. The log never records what was typed or run. It keeps the global
+flags, the name of a known tmux command and the flags of a command the shim
+parses, and replaces the rest with a marker or a count:
+
+- the text arguments of `send-keys`, `split-window`, `new-window` and
+  `respawn-pane`, and every `VAR=value`;
+- the arguments of every command the shim does not answer, including the
+  ignored and refused ones;
+- a word in command position that is not a known tmux command, logged as
+  `<unknown command>` (a word ending in `;` ends a command, so text can land
+  there). The error on stderr still names it; the log does not;
+- every word that is not a flag, when the global flags do not parse (for
+  example `tmux -c 'shell command'`). The file is created mode 0600 and is
 moved to `tmux-shim.log.1` past 1 MiB.
 
 ## What it can reach
