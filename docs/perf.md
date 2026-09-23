@@ -1519,3 +1519,36 @@ CPU per op is `~` on a replay of 30,000 linked lines, `uni`, the plain and
 colored log floods, the short-line and long-line scrolls and `RealResize`, and
 the linked replay allocates 14% fewer bytes. The cells of one link still
 decode sharing its strings.
+
+**A palette colour change skips uv's style diff** (`emulator.go`). Every
+unfocused dirty pane is drawn by `Emulator.Render`, which called
+`uv.Style.Diff` at every pen change. The diff builds an `ansi.Style` and
+allocates its string each time, and in a nine-pane flood compose it was 21% of
+CPU. `penDiff` answers the common case, a change of a basic or indexed
+foreground or background and nothing else, from two 272-entry tables built at
+init with the same `ansi.Style` call uv makes, and hands everything else to
+uv. A per-render memo keyed by the style pair was tried first: allocations
+fell 54% but CPU rose 5.8% (p=0.002), because hashing six interfaces costs more
+than the diff. `TestPenDiffMatchesStyleDiff` holds `penDiff` to uv byte for
+byte over two million random pairs of nil, basic, indexed, RGBA, theme-resolved
+and truecolor colours with random attributes, and
+`TestPaletteSGRChangesAllocateNothing` pins the fast path at zero allocations.
+Themed ANSI 0 to 15 resolve to RGBA and truecolor is RGB, so both still go to
+uv, and the ghostty backend renders through `uv.Line.Render` and gets nothing
+from this.
+
+`TestCompositorSkipsCleanWindows` compared one dirty pane against half of all
+nine dirty. With a pane this cheap to render the frame's fixed cost dominated
+both totals and the ratio failed with damage tracking intact, so it now
+dirties an unfocused pane, not the focused one, which is drawn by a different
+path, and compares what each case adds over a frame with nothing dirty: 12
+allocations against 199.
+
+| | before | after | |
+|---|---|---|---|
+| `RenderWindowBoxFlood/unfocused` CPU per op | 1448 us | 799 us | -44.9% (p<0.001) |
+| `RenderWindowBoxFlood/unfocused` allocs/op | 29,028 | 6,409 | -78%, B/op -34% |
+| `ClientFrame/panes-9/compose` CPU per op | 5.10 ms | 4.37 ms | -14.4% (p=0.005) |
+| `ClientFrame/panes-9/compose` allocs/op | 42.49k | 11.78k | -72%, B/op -17% |
+| `RenderTerminalUnfocused` allocs/op | 127 | 13 | CPU `~` |
+| `KeystrokeFrame/panes-4` | | | `~` |

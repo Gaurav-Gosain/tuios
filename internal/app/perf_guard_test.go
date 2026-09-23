@@ -174,7 +174,11 @@ func TestRenderTerminalAllocationsDoNotScaleWithCells(t *testing.T) {
 //
 // It does limit it, at window granularity. Composing nine windows with one
 // dirty costs 137 allocations against 745 with all nine dirty, so the eight
-// idle panes are genuinely not re-rendered.
+// idle panes are genuinely not re-rendered. (Those figures are from when the
+// test was written, with the focused window as the dirty one. It now dirties
+// an unfocused window and compares what each case adds over a clean frame:
+// 12 against 199 once vt's palette SGR fast path landed, 60 against 583
+// before it.)
 //
 // What this test catches, and what it does not, was established by injection
 // rather than assumed, and the answer is worth writing down because it is not
@@ -212,23 +216,34 @@ func TestCompositorSkipsCleanWindows(t *testing.T) {
 		w.MarkContentDirty()
 	}
 	_ = oneDirty.GetCanvas(false)
+	// The last window, not the first: benchOS focuses window 0, and the
+	// focused pane is drawn by a different and costlier path than the other
+	// eight, so it would compare one kind of pane against a mix.
 	dirtyOne := testing.AllocsPerRun(10, func() {
-		oneDirty.Windows[0].MarkContentDirty()
+		oneDirty.Windows[windows-1].MarkContentDirty()
+		_ = oneDirty.GetCanvas(false)
+	})
+	dirtyNone := testing.AllocsPerRun(10, func() {
 		_ = oneDirty.GetCanvas(false)
 	})
 
-	t.Logf("compose %d windows: all dirty %.0f allocs, one dirty %.0f allocs", windows, dirtyAll, dirtyOne)
+	t.Logf("compose %d windows: all dirty %.0f allocs, one dirty %.0f allocs, none dirty %.0f allocs",
+		windows, dirtyAll, dirtyOne, dirtyNone)
 
 	if dirtyOne >= dirtyAll {
 		t.Fatalf("composing with one dirty window (%.0f allocs) costs no less than with all %d dirty (%.0f allocs): clean windows are being re-rendered",
 			dirtyOne, windows, dirtyAll)
 	}
 
-	// A single dirty pane out of nine should cost well under half of a full
-	// redraw. Anything approaching the full cost means the cache is being
-	// missed for reasons other than damage.
-	if dirtyOne > dirtyAll/2 {
-		t.Errorf("one dirty window costs %.0f allocs against %.0f for all %d: damage tracking is not limiting work as expected",
-			dirtyOne, dirtyAll, windows)
+	// A single dirty pane out of nine should add well under half of what a
+	// full redraw adds. Anything approaching the full cost means the cache
+	// is being missed for reasons other than damage. The comparison is of
+	// what each adds over a compose with nothing dirty, because the frame
+	// has a fixed cost that damage tracking does not touch: once a dirty
+	// pane got cheap to render, that floor was most of both totals and a
+	// ratio of totals no longer said anything about skipped windows.
+	if dirtyOne-dirtyNone > (dirtyAll-dirtyNone)/2 {
+		t.Errorf("one dirty window adds %.0f allocs over a clean frame against %.0f for all %d: damage tracking is not limiting work as expected",
+			dirtyOne-dirtyNone, dirtyAll-dirtyNone, windows)
 	}
 }

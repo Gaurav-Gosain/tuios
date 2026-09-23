@@ -380,7 +380,7 @@ func renderRowBreakingClusters(b *strings.Builder, line uv.Line) {
 			pen = uv.Style{}
 		}
 		if !penStyleEqual(&c.Style, &pen) {
-			b.WriteString(c.Style.Diff(&pen))
+			b.WriteString(penDiff(&pen, &c.Style))
 			pen = c.Style
 		}
 		if c.Link != link && link.URL != "" {
@@ -403,6 +403,65 @@ func renderRowBreakingClusters(b *strings.Builder, line uv.Line) {
 	if !pen.IsZero() {
 		b.WriteString(ansi.ResetStyle)
 	}
+}
+
+// penDiff returns to.Diff(from), the SGR that changes the pen from one style
+// to the other. On a coloured screen nearly every change is a palette
+// foreground or background and nothing else, and uv's diff builds an
+// ansi.Style and allocates its string for each one. Those changes come from
+// a table built with the same ansi.Style call uv makes, so the bytes are the
+// same. Anything else goes to uv.
+func penDiff(from, to *uv.Style) string {
+	if from.Attrs == to.Attrs && from.Underline == to.Underline &&
+		penColorEqual(from.UnderlineColor, to.UnderlineColor) {
+		fgSame, bgSame := penColorEqual(from.Fg, to.Fg), penColorEqual(from.Bg, to.Bg)
+		switch {
+		case fgSame && bgSame:
+			return ""
+		case bgSame:
+			if s, ok := paletteSGR(to.Fg, fgSGR); ok {
+				return s
+			}
+		case fgSame:
+			if s, ok := paletteSGR(to.Bg, bgSGR); ok {
+				return s
+			}
+		}
+	}
+	return to.Diff(from)
+}
+
+// fgSGR and bgSGR hold the SGR that sets each palette colour as the
+// foreground or the background: the sixteen basic colours first, then the
+// 256 indexed ones.
+var (
+	fgSGR = paletteSGRTable(ansi.Style.ForegroundColor)
+	bgSGR = paletteSGRTable(ansi.Style.BackgroundColor)
+)
+
+func paletteSGRTable(set func(ansi.Style, ansi.Color) ansi.Style) *[16 + 256]string {
+	var t [16 + 256]string
+	for i := range 16 {
+		t[i] = set(ansi.Style{}, ansi.BasicColor(i)).String()
+	}
+	for i := range 256 {
+		t[16+i] = set(ansi.Style{}, ansi.IndexedColor(i)).String()
+	}
+	return &t
+}
+
+// paletteSGR looks c up in table, reporting false for a colour that is not a
+// palette colour.
+func paletteSGR(c color.Color, table *[16 + 256]string) (string, bool) {
+	switch v := c.(type) {
+	case ansi.BasicColor:
+		if v < 16 {
+			return table[v], true
+		}
+	case ansi.IndexedColor:
+		return table[16+int(v)], true
+	}
+	return "", false
 }
 
 // penStyleEqual reports whether a and b are equal in the sense of
