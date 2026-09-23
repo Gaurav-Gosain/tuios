@@ -99,6 +99,11 @@ func TestListAgentsSelectCoversEverySession(t *testing.T) {
 	if got := windowsOf(res); !sameSet(got, []string{f.webCodex}) {
 		t.Errorf("session web, harness:codex listed %v, want web's codex pane", got)
 	}
+	// A write by the selector reaches every session, so a listing of one
+	// session hands out no token for it.
+	if _, ok := res["confirm"]; ok {
+		t.Errorf("a listing narrowed to one session carried a confirm token: %v", res["confirm"])
+	}
 
 	resp := callVerb(t, f.c, "list-agents", map[string]any{"select": "colour:red"})
 	if code := errCode(t, resp); code != ErrVerbInvalidParams {

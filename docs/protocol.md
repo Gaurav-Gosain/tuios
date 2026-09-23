@@ -725,6 +725,8 @@ sends none of the new params is answered as before. What changes:
   sends it.
 - `list-agents` with `select` and no `session` lists every session, as
   `all_sessions` does, and answers with `select` and, without `all`, `confirm`.
+  With `session` it narrows that session and carries no `confirm`, since a
+  write by the same selector reaches every session.
 - `send-agent-message` and `ask-agent` with `select` answer with a new result
   shape, `agent_messages_sent` with `results`, or `agent_replies` with
   `replies`. Without `confirm`, or with a `confirm` for a different set of

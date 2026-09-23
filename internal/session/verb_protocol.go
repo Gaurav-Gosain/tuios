@@ -1315,7 +1315,7 @@ func init() {
 				{Name: "agents", Type: "[]object", Description: "One entry per pane: session, window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, completion_seq, finished_unread, agent_session_id, meta, group. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it. meta is the set-agent-meta keys, key to value. group is the fan-out group of the pane's session, empty outside one."},
 				{Name: "total", Type: "int", Description: "How many panes are listed."},
 				{Name: "select", Type: "string", Description: "The selector as parsed, when one was given."},
-				{Name: "confirm", Type: "string", Description: "With select and without all: the token for exactly the listed panes, which send-agent-message and ask-agent take as confirm to write to them."},
+				{Name: "confirm", Type: "string", Description: "With select, and without all or session: the token for exactly the listed panes, which send-agent-message and ask-agent take as confirm to write to them."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"list-agents","params":{"session":"work"}}`,

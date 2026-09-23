@@ -154,20 +154,23 @@ func (d *Daemon) verbListAgents(_ *connState, params json.RawMessage) (any, *ver
 		"human_inbox":  AgentInboxHuman,
 		"human_unread": unread[AgentInboxHuman],
 	}
-	addSelection(out, sel, agents, p.All)
+	// Narrowed to one session, the rows are not what a write by the same
+	// selector reaches, which is every session, so no token is handed out.
+	addSelection(out, sel, agents, true)
 	return out, nil
 }
 
 // addSelection puts the selector and its confirm token on a list-agents
 // answer. The token is the one a write addressed by the same selector takes,
-// so a caller can look here and write with it. It is left out with all, since
-// a write reaches agent panes only and the rows then include other windows.
-func addSelection(out map[string]any, sel *Selector, rows []map[string]any, all bool) {
+// so a caller can look here and write with it. noToken leaves it out: with
+// all, since a write reaches agent panes only and the rows then include other
+// windows, and for a listing narrowed to one session.
+func addSelection(out map[string]any, sel *Selector, rows []map[string]any, noToken bool) {
 	if sel == nil {
 		return
 	}
 	out["select"] = sel.String()
-	if all {
+	if noToken {
 		return
 	}
 	keys := make([]string, 0, len(rows))

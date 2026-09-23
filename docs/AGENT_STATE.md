@@ -1089,7 +1089,7 @@ Where a selector is read:
 
 | Where | What it does |
 | --- | --- |
-| `list-agents --select` | Lists the agent panes it matches in every session, or in `--session`. The answer carries `confirm`, the token for exactly those panes. |
+| `list-agents --select` | Lists the agent panes it matches in every session, or in `--session`. Over every session, the answer carries `confirm`, the token for exactly those panes. |
 | `list-agents --all-hosts --select` | The same over every machine. `host:` picks the machine. |
 | `list-attention --select` | Keeps the Inbox items it matches. An item's state is the one its kind stands for: `needs_input` for an approval or a question, `errored`, `done` for finished. |
 | `wait-for agent-state --select` | Waits for the first matching pane to reach an `--until` state, or with `--every` for all of them. Panes that open during the wait are watched too. |
