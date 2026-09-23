@@ -1552,3 +1552,30 @@ allocations against 199.
 | `ClientFrame/panes-9/compose` allocs/op | 42.49k | 11.78k | -72%, B/op -17% |
 | `RenderTerminalUnfocused` allocs/op | 127 | 13 | CPU `~` |
 | `KeystrokeFrame/panes-4` | | | `~` |
+
+### Measured and deliberately not changed
+
+- **Storing each scrollback line at its exact size.** A styled line grows
+  past the `len(cells)+16` bytes `push` gives it and keeps the spare half of
+  an append doubling, 56% slack on a colored log. Encoding into a scratch
+  buffer and copying to an exact-size slice cut a colored-log pane from 3.53 to
+  2.93 MiB, but reusing the evicted line's storage then needs a size window,
+  and on a colored log whose line lengths vary most evicted lines miss it: a
+  200-line write into a full ring went from 3 allocations and 1 KB to 154 and
+  21.6 KB, and the push microbenchmark from `~` to +9.2% CPU (p=0.028). The
+  inline links and clusters above were kept without it.
+- **Keeping the mode-change debug lines behind a level check.** No production
+  code sets a logger on the emulator, so a check would guard output nobody can
+  receive; deleting the calls is the same saving with less code. The
+  "unhandled sequence" lines, which the conformance corpus reads, stay.
+- **Rekeying the modes map to avoid boxing.** `handleMode` boxes
+  `ansi.DECMode(param)` into an `ansi.Mode` for the map, one small allocation
+  per mode set (29 MB over the `claude` replay). After the logf removal it is
+  the only allocation left on that path, and removing it means changing the
+  map's key type everywhere modes are read.
+- **A direct-indexed table for CSI finals.** The handler map lookup is about
+  3.6% of `nvimcfg`, inside the slot noise, for a second dispatch table to keep
+  in step with the map.
+- **The ASCII run's row store.** `printASCIIRun`'s store into the row is 20% of
+  `nvimcfg`, and it is memory bandwidth: a 112-byte `uv.Cell` per character, as
+  the `BlankFill` entry above already found.
