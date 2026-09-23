@@ -412,6 +412,35 @@ func TestDiffLifecycleIgnoresNoise(t *testing.T) {
 	}
 }
 
+// TestDiffLifecycleAttentionDetail verifies a needs_input window that keeps its
+// state but changes kind or message raises the internal attention-detail event,
+// never an agent-state event, and that a window in another state raises
+// nothing for the same change.
+func TestDiffLifecycleAttentionDetail(t *testing.T) {
+	win := func(state AgentState, kind, msg string) lifecycleSnapshot {
+		return snapshotLifecycle(&SessionState{Windows: []WindowState{{
+			ID: "w", PTYID: "p", Workspace: 1, AgentState: state, AgentKind: kind, AgentMessage: msg, CompletionSeq: 2,
+		}}})
+	}
+	events := diffLifecycle(win(AgentStateNeedsInput, "question", "which branch?"), win(AgentStateNeedsInput, "approval", "which branch?"))
+	if len(events) != 1 || events[0].Type != eventAttentionDetail || events[0].hookKind != "approval" {
+		t.Fatalf("a kind change raised %+v", events)
+	}
+	if events[0].prevCompletionSeq != events[0].completionSeq {
+		t.Errorf("the detail event could read as a finished turn: %+v", events[0])
+	}
+	events = diffLifecycle(win(AgentStateNeedsInput, "approval", "a"), win(AgentStateNeedsInput, "approval", "b"))
+	if len(events) != 1 || events[0].Type != eventAttentionDetail || events[0].hookMessage != "b" {
+		t.Fatalf("a message change raised %+v", events)
+	}
+	if events := diffLifecycle(win(AgentStateWorking, "", "a"), win(AgentStateWorking, "", "b")); len(events) != 0 {
+		t.Fatalf("a message change while working raised %+v", events)
+	}
+	if events := diffLifecycle(win(AgentStateNeedsInput, "approval", "a"), win(AgentStateNeedsInput, "approval", "a")); len(events) != 0 {
+		t.Fatalf("an unchanged report raised %+v", events)
+	}
+}
+
 // TestDiffLifecycleIgnoresShellTitle verifies a shell-driven Title change raises
 // nothing from the diff. The per-PTY emitter already reports OSC title changes,
 // so deriving them here as well would report the same change twice.

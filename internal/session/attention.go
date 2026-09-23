@@ -40,11 +40,14 @@ import (
 // or sixteen agents in a fan finishing together update one row each rather
 // than adding rows, and an update that changes nothing publishes nothing.
 //
-// Items survive a daemon restart, within reason. finished, errored and mail
-// describe something that happened and has not been looked at, and that is
-// still true after a restart. approval and question describe a prompt on a
-// screen, and the process that painted it does not survive the restart, so they
-// are dropped on load rather than shown as a question nobody is asking any more.
+// Items survive a daemon restart, within reason. finished and errored describe
+// something that happened and has not been looked at, and that is still true
+// after a restart. approval and question describe a prompt on a screen, and the
+// process that painted it does not survive the restart, so they are dropped on
+// load rather than shown as a question nobody is asking any more. mail is
+// dropped too: it points into the message ring, which does not survive, and
+// thread ids start again from 1, so a saved item would be merged into whatever
+// unrelated thread next took its id.
 
 // Attention kinds. They are wire values: the kind field of an item and the
 // kind filter of list-attention.
@@ -315,7 +318,7 @@ func (a *attentionStore) noteSessionEvent(sessionName string, ev SessionEvent) {
 		return
 	}
 	switch ev.Type {
-	case EventAgentState:
+	case EventAgentState, eventAttentionDetail:
 		a.noteAgentState(sessionName, ev)
 	case EventWindowClosed:
 		a.closeWindow(sessionName, ev.Window)
@@ -644,7 +647,8 @@ func (a *attentionStore) saveNowAndFreeze() {
 // load reads the queue a previous daemon saved and keeps what is still true:
 // items in a session that came back, about a pane that came back, and never
 // an approval or a question, since the prompt died with the process that
-// painted it. live reports whether a session is live, and whether a window is
+// painted it, nor mail, since its thread id means nothing to the new ring.
+// live reports whether a session is live, and whether a window is
 // in it when window is not empty. The ids and revision carry on from the file,
 // so an id is never reused on this machine.
 func (a *attentionStore) load(path string, live func(session, window string) bool) {
@@ -664,12 +668,8 @@ func (a *attentionStore) load(path string, live func(session, window string) boo
 	a.rev = max(a.rev, f.Rev)
 	for _, it := range f.Items {
 		switch it.Kind {
-		case AttentionApproval, AttentionQuestion:
+		case AttentionApproval, AttentionQuestion, AttentionMail:
 			continue
-		case AttentionMail:
-			if !live(it.Session, "") {
-				continue
-			}
 		case AttentionErrored, AttentionFinished:
 			if !live(it.Session, it.Window) {
 				continue

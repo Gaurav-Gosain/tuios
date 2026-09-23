@@ -911,6 +911,8 @@ What this means for how you report:
 - Your `needs_input` becomes a row with your message as its summary, so make
   the message the question: `approve Bash: rm -rf build`, not `waiting`. Pass
   `--kind approval` or `--kind question` so it lands in the right group.
+  Reporting `needs_input` again with a new kind or message updates the row, so
+  a later, better report replaces an early vague one.
 - The row goes away by itself when you leave `needs_input` or `errored`. Report
   `working` as soon as you are unblocked and the person is not sent to a prompt
   that is already answered.

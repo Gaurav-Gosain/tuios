@@ -566,9 +566,10 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				}
 			}
 		}
-		// A pane seen is news for the Inbox only: it is not a stream event and
+		// A pane seen, or a new kind or message on a pane whose state did not
+		// change, is news for the Inbox only: it is not a stream event and
 		// raises no hook.
-		if ev.Type == eventCompletionSeen {
+		if ev.Type == eventCompletionSeen || ev.Type == eventAttentionDetail {
 			d.attention.noteSessionEvent(name, ev)
 			return
 		}

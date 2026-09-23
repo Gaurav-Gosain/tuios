@@ -177,6 +177,25 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 				completionSeq:     w.completionSeq,
 				prevCompletionSeq: prev.completionSeq,
 			})
+		} else if attentionDetailChanged(w, prev) {
+			// The same state with a new kind, message or name. Only the Inbox
+			// hears it; prevCompletionSeq is the current count so it can
+			// never be taken for a finished turn.
+			events = append(events, SessionEvent{
+				Type:          eventAttentionDetail,
+				Window:        w.id,
+				PTYID:         w.ptyID,
+				State:         w.agentState.Name(),
+				hookTitle:     w.displayTitle(),
+				hookWorkspace: w.workspace,
+				hookPrevState: prev.agentState.Name(),
+				hookHarness:   w.agentHarness,
+				hookMessage:   w.agentMessage,
+
+				hookKind:          w.agentKind,
+				completionSeq:     w.completionSeq,
+				prevCompletionSeq: w.completionSeq,
+			})
 		}
 	}
 
@@ -202,6 +221,19 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 	}
 
 	return events
+}
+
+// attentionDetailChanged reports whether a window that kept its agent state
+// changed something its Inbox item shows. Only needs_input and errored windows
+// have an item that follows the current report; a finished item describes the
+// turn that finished and is left as it was.
+func attentionDetailChanged(w, prev *lifecycleWindow) bool {
+	if w.agentState != AgentStateNeedsInput && w.agentState != AgentStateErrored {
+		return false
+	}
+	return w.agentKind != prev.agentKind || w.agentMessage != prev.agentMessage ||
+		w.agentHarness != prev.agentHarness || w.workspace != prev.workspace ||
+		w.displayTitle() != prev.displayTitle()
 }
 
 // displayTitle is the title reported for a window in a lifecycle event: the

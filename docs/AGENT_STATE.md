@@ -889,6 +889,16 @@ when an item opens and closes. In short, an item closes by itself when what
 opened it stops being true: the agent leaves `needs_input` or `errored`, the
 mail is read, or a client focuses the pane that finished.
 
+A row follows the pane's latest report. A pane that stays on `needs_input` and
+reports again with a new kind or message moves between Questions and Approvals
+and shows the new message, so a harness hook that says `approval` after the
+screen tier already set `needs_input` lands in the right group. It keeps its
+place in the order, because the wait did not start again.
+
+On a daemon restart, finished and errored rows whose pane came back are kept.
+Approvals and questions are dropped, since the prompt died with its process,
+and so is mail, since the messages it points to do not survive a restart.
+
 Keys, after the prefix (`ctrl+b` by default):
 
 | Key | What it does |

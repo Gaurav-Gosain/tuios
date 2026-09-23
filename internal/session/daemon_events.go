@@ -170,6 +170,15 @@ type SessionEvent struct {
 // no hook fires on it.
 const eventCompletionSeen = "completion-seen"
 
+// eventAttentionDetail is raised when a needs_input or errored window keeps its
+// state but what the Inbox shows about it changes: the blocked_by kind, the
+// message, the display title, the harness or the workspace. A hook reporting
+// kind=approval after the screen tier already set needs_input is the common
+// case. It is internal on the same terms as eventCompletionSeen: the Inbox
+// updates its item, nothing is published and no hook fires, because the agent
+// state did not change.
+const eventAttentionDetail = "attention-detail"
+
 // eventFilter selects which events a subscriber receives. A zero value matches
 // everything. An empty types set matches all event types.
 type eventFilter struct {

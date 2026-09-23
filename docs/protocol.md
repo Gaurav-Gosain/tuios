@@ -382,7 +382,12 @@ changes for an existing caller:
   read, the same as reading it in the mail overlay, and the attached clients get
   the usual read receipt.
 - The daemon writes the queue to `attention/items.json` under the session state
-  directory, mode 0600, and reads it back on start.
+  directory, mode 0600, and reads it back on start. Only `finished` and
+  `errored` items are kept across a restart; see
+  [list-attention](#list-attention).
+- A pane that stays on `needs_input` or `errored` and reports a new kind,
+  message or name updates its Inbox item. No `agent-state` event is sent for
+  it and no hook fires, the same as before: the state did not change.
 
 ### list-verbs
 
@@ -1282,6 +1287,16 @@ most one blocking item, one errored item and one finished item, so a harness
 repeating itself or a fan of agents moving together updates rows rather than
 adding them, and an update that changes nothing publishes nothing.
 
+A blocking or errored item follows the pane's latest report, not only its state
+changes. A pane that stays on `needs_input` and reports a new `blocked_by` or
+message (a harness hook that says `approval` after the screen tier already set
+`needs_input`, say) updates its item: it moves between `question` and
+`approval`, and its summary is the new message. The item keeps its id and its
+`since`. A change of the pane's name, harness or workspace updates it the same
+way. None of this is an `agent-state` event, since the state did not change,
+and no hook fires for it; only the `attention` event with action `updated` is
+sent.
+
 Params: `session` (optional; unlike most verbs, omitted means every session),
 `kinds` (optional list, from `approval`, `question`, `mail`, `errored`,
 `finished`).
@@ -1311,11 +1326,12 @@ the Inbox without missing anything, list it and then subscribe with
 `types: ["attention"]`, `after_seq` and `boot_id` from the listing. Every change
 after the listing is replayed; a `gap` means list again.
 
-Persistence: the queue survives a daemon restart. On start the daemon keeps the
-`finished` and `errored` items whose session and pane came back, and `mail`
-items whose session came back. It drops `approval` and `question` items: the
-prompt died with the process that painted it. Mail items outlive the message
-ring, which does not survive a restart; dismiss one to clear it.
+Persistence: part of the queue survives a daemon restart. On start the daemon
+keeps the `finished` and `errored` items whose session and pane came back. It
+drops `approval` and `question` items, because the prompt died with the process
+that painted it, and `mail` items, because the message ring they point into
+does not survive a restart and thread ids start again from 1, so a saved item
+could only be merged into an unrelated new thread.
 
 Wire compatibility: new verb and new event type. An older daemon answers
 `unknown_verb`, and the tuios client then shows the Inbox as unavailable.

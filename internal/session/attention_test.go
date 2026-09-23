@@ -268,7 +268,9 @@ func TestAttentionSurvivesARestartWithinReason(t *testing.T) {
 	for _, it := range openItems(t, b) {
 		got[it.Kind+"/"+it.Window] = true
 	}
-	want := map[string]bool{"finished/w1": true, "errored/w2": true, "mail/w1": true}
+	// Mail is dropped: its thread id points into a ring that did not survive
+	// and would be reused by the next thread.
+	want := map[string]bool{"finished/w1": true, "errored/w2": true}
 	if len(got) != len(want) {
 		t.Errorf("after a restart the queue holds %v, want %v", got, want)
 	}
