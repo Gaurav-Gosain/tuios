@@ -244,11 +244,23 @@ func (s *shell) promptText() string {
 	return cyan + bold + prettyPath(s.cwd) + reset + branch + " " + mark + " "
 }
 
+// OSC 133 marks, the ones a configured real shell prints: where a prompt
+// starts, where the typed command starts, where its output starts, and where
+// it ended with which status. tuios's scrollback browser splits the history
+// into commands on them.
+const (
+	markPrompt = "\x1b]133;A\x07"
+	markInput  = "\x1b]133;B\x07"
+	markOutput = "\x1b]133;C\x07"
+)
+
+func markDone(status int) string { return "\x1b]133;D;" + strconv.Itoa(status) + "\x07" }
+
 func (s *shell) prompt() {
 	s.line = s.line[:0]
 	s.cursor = 0
 	s.histPos = len(s.history)
-	s.t.Print(s.promptText())
+	s.t.Print(markPrompt + s.promptText() + markInput)
 }
 
 // redraw repaints the line from the prompt. Lines longer than the pane wrap
@@ -525,14 +537,17 @@ func (s *shell) enter() bool {
 	if len(s.history) == 0 || s.history[len(s.history)-1] != line {
 		s.history = append(s.history, line)
 	}
+	s.t.Print(markOutput)
 	for _, part := range strings.Split(line, "&&") {
 		if s.run(strings.TrimSpace(part)) {
+			s.t.Print(markDone(s.status))
 			return true
 		}
 		if s.status != 0 {
 			break
 		}
 	}
+	s.t.Print(markDone(s.status))
 	s.prompt()
 	return false
 }

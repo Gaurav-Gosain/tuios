@@ -467,3 +467,29 @@ func TestLineDiff(t *testing.T) {
 		t.Error("a diff of equal texts is not empty")
 	}
 }
+
+// TestShellMarksCommands checks the OSC 133 marks tuios's scrollback browser
+// splits the history on: a prompt, the typed command, its output and its end
+// with the exit status.
+func TestShellMarksCommands(t *testing.T) {
+	freshFS(t)
+	g := startGuest(t, "sh")
+	g.waitFor(markInput)
+	g.send("ls\r")
+	out := g.waitFor(markInput)
+	for _, want := range []string{markOutput, "projects/", markDone(0), markPrompt} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output of ls lacks %q: %q", want, out)
+		}
+	}
+	g.send("nope\r")
+	if out := g.waitFor(markInput); !strings.Contains(out, markDone(127)) {
+		t.Errorf("an unknown command did not end with status 127: %q", out)
+	}
+	g.mu.Lock()
+	n := g.emu.SemanticMarkers().Len()
+	g.mu.Unlock()
+	if n < 8 {
+		t.Errorf("the emulator took %d marks, want at least 8", n)
+	}
+}
