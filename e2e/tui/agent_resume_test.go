@@ -47,7 +47,9 @@ argv = ["echo", "resumed-{session_id}"]
 	if out, err := tuiosCLI(t, base, "new", "e2e-resume", "--detach"); err != nil {
 		t.Fatalf("create the session: %v\n%s", err, out)
 	}
-	if out, err := tuiosCLI(t, base, "set-agent-session", "-s", "e2e-resume", "--harness", "echoer", "5f1c-9a3d"); err != nil {
+	// The agent is live when the state is saved, as a hook reports it: a
+	// restore offers a resume only for an agent that was running then.
+	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-resume", "working", "--harness", "echoer", "--agent-session-id", "5f1c-9a3d"); err != nil {
 		t.Fatalf("record the conversation: %v\n%s", err, out)
 	}
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
