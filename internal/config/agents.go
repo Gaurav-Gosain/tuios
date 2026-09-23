@@ -6,6 +6,10 @@ package config
 //	enabled = ["claude-code", "opencode"]
 //	hold_seconds = 120
 //
+//	[agents.permissions]
+//	mode = "strict"
+//	grants = ["read", "write", "fan"]
+//
 // It is file-plane config, outside the option registry, for the same reason
 // [hosts] is: a list of harness names is not a scalar with one settable path.
 // The daemon reads it at start and again whenever the file changes.
@@ -14,6 +18,9 @@ package config
 type AgentsConfig struct {
 	// Approvals is the [agents.approvals] table. See ApprovalsConfig.
 	Approvals ApprovalsConfig `toml:"approvals,omitempty"`
+	// Permissions is the [agents.permissions] table: what a process in a
+	// pane may do through tuios. See pane_grants.go.
+	Permissions PermissionsConfig `toml:"permissions,omitempty"`
 }
 
 // ApprovalsConfig is the [agents.approvals] table: which harnesses hand their
