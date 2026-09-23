@@ -1084,3 +1084,22 @@ the reused overlay to match a fresh draw after each.
 | `KeystrokeFrameTiled/panes-4` CPU | 2.01 ms | 1.90 ms | -5.2% (p=0.001) |
 | `KeystrokeFrameTiled/panes-4` allocs | 2082 | 1540 | -26.0% |
 | `KeystrokeFrame/panes-4` (floating, no dividers) | | | `~` |
+
+**A window inside the viewport is not clipped** (`render.go`). For every
+redrawn pane, `clipWindowContent` split the box, measured every row by grapheme
+and joined it back, and `lipgloss.NewLayer` then measured it again. `GetCanvas`
+already knows when a window lies wholly inside the viewport, and the box is
+drawn to the window's own rectangle, so there it now goes to the layer as it is.
+`TestFullyVisibleWindowBoxFitsItsRectangle` holds `renderWindowBox` to that
+rectangle over plain, overlong and malformed-UTF-8 titles and bodies, on both
+body paths and with zen mode on and off.
+
+| per op | before | after | |
+|---|---|---|---|
+| `ClientFrame/panes-9/compose` CPU | 4.95 ms | 4.33 ms | -12.6% (p=0.008) |
+| `ClientFrame/panes-9/compose` B/op | 1.49 MiB | 1.39 MiB | -6.7% |
+| `KeystrokeFrameTiled/panes-4` B/op | 85.0 KiB | 77.7 KiB | -8.5% |
+| `ClientFrame/panes-2/compose`, `KeystrokeFrameTiled/panes-4` CPU | | | `~` |
+
+The profiler's -6.7% for `ClientFrame/panes-2/compose` did not reproduce: two
+panes redraw too little per frame for the measurement to matter.

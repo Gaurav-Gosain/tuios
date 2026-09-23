@@ -222,11 +222,18 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 
 		boxContent := m.renderWindowBox(window, i, isFocused, borderColorObj)
 
-		clippedContent, finalX, finalY := clipWindowContent(
-			boxContent,
-			window.X, window.Y,
-			rightClip, viewportHeight+topMargin,
-		)
+		// A window inside the viewport has nothing to clip: its box is drawn to
+		// its own rectangle (fitToContentBox), so clipWindowContent would split
+		// and measure every row of it by grapheme only to hand it back as it
+		// was. TestFullyVisibleWindowBoxFitsItsRectangle holds the box to that.
+		clippedContent, finalX, finalY := boxContent, window.X, window.Y
+		if !isFullyVisible {
+			clippedContent, finalX, finalY = clipWindowContent(
+				boxContent,
+				window.X, window.Y,
+				rightClip, viewportHeight+topMargin,
+			)
+		}
 
 		if renderTraceEnabled {
 			traceLayerBuild(window, isFocused, boxContent, clippedContent,
