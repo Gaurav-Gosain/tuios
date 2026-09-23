@@ -846,40 +846,49 @@ func TestGhosttyDivergence_ControlCodePointsPrinted(t *testing.T) {
 	})
 }
 
-// TestGhosttyDivergence_SelectiveErase records a gap the pure emulator has
-// always had, which the second backend has now turned into a divergence.
+// TestGhosttyDivergence_SelectiveErase records where the two backends stand
+// on DECSCA, DECSED and DECSEL.
 //
-// TestConform_SelectiveErase documents the pure emulator not implementing
-// DECSCA, DECSED or DECSEL, on the grounds that tmux does not either. The
-// library does implement them. So a guest that sends CSI ? 2 J gets its
-// screen cleared on one backend and nothing at all on the other, which is the
-// case that comment anticipated when it said a future implementation would
-// have something to aim at.
+// The pure emulator used to leave DECSED and DECSEL unhandled, so CSI ? 2 J
+// cleared the screen on the library backend and did nothing on the pure one.
+// It now erases as ED and EL do, which agrees with the library wherever no
+// cell is protected, and the first two cases hold the backends together
+// there.
+//
+// DECSCA is still unimplemented on the pure emulator, so a selective erase
+// clears cells a guest marked protected. The library keeps them, as xterm
+// does, and the library is the right one. The third case pins that
+// divergence on a protected cell.
 func TestGhosttyDivergence_SelectiveErase(t *testing.T) {
-	cases := []struct {
+	agree := []struct {
 		name, in string
-		// at is a column holding an UNPROTECTED character, which selective
-		// erase must clear. In the mixed case the first two columns are
-		// protected and the library is right to keep them, so pointing the
-		// probe at column 0 there would test nothing.
-		at int
+		at       int
 	}{
-		{"DECSED erases nothing on the pure emulator", "ABCD\x1b[H\x1b[?2J", 0},
-		{"DECSEL erases nothing on the pure emulator", "abcdef\x1b[H\x1b[?0K", 0},
-		{"DECSCA does not protect on the pure emulator", "\x1b[1\"qAB\x1b[2\"qCD\x1b[H\x1b[?2J", 2},
+		{"DECSED erases on both when nothing is protected", "ABCD\x1b[H\x1b[?2J", 0},
+		{"DECSEL erases on both when nothing is protected", "abcdef\x1b[H\x1b[?0K", 0},
+		// Column 2 holds an unprotected character, which both must clear.
+		{"DECSED clears an unprotected cell next to protected ones", "\x1b[1\"qAB\x1b[2\"qCD\x1b[H\x1b[?2J", 2},
 	}
-	for _, tc := range cases {
+	for _, tc := range agree {
 		t.Run(tc.name, func(t *testing.T) {
 			p := probeBoth(t, tc.in, tc.at, 0)
-			if p.pureCell == " " {
-				t.Fatalf("the pure emulator now acts on selective erase for %q; "+
-					"TestConform_SelectiveErase needs updating and so does this entry", tc.in)
-			}
-			if p.ghCell != " " {
-				t.Errorf("ghostty no longer erases for %q (cell %q); update this entry", tc.in, p.ghCell)
+			if p.pureCell != " " || p.ghCell != " " {
+				t.Errorf("%q: cell (%d,0) pure=%q ghostty=%q, want both erased", tc.in, tc.at, p.pureCell, p.ghCell)
 			}
 		})
 	}
+
+	t.Run("DECSCA does not protect on the pure emulator", func(t *testing.T) {
+		// Column 0 holds a character written under DECSCA 1.
+		p := probeBoth(t, "\x1b[1\"qAB\x1b[2\"qCD\x1b[H\x1b[?2J", 0, 0)
+		if p.pureCell != " " {
+			t.Fatalf("the pure emulator now keeps a protected cell (%q); DECSCA works, "+
+				"so TestConform_SelectiveErase needs updating and so does this entry", p.pureCell)
+		}
+		if p.ghCell != "A" {
+			t.Errorf("ghostty no longer keeps the protected cell (cell %q); update this entry", p.ghCell)
+		}
+	})
 }
 
 // TestGhosttyDivergence_BackgroundColourErase pins which operations carry the

@@ -115,13 +115,14 @@ func TestConform_EraseSavedLines(t *testing.T) {
 
 // TestConform_SelectiveErase covers DECSCA, DECSED and DECSEL.
 //
-// Nothing here implements character protection, so all three are logged as
-// sequences the emulator did not act on. That is a defensible place to be:
-// tmux does not implement them either, and this emulator sits where tmux sits.
-// It is not a free choice, though. A guest that sends CSI ? 2 J expecting the
-// screen cleared gets nothing at all, and the two cases below record which half
-// of the divergence each sequence falls on so that a future implementation has
-// something to aim at.
+// Nothing here implements character protection, so DECSCA is logged as a
+// sequence the emulator did not act on. tmux does not implement it either.
+//
+// DECSED and DECSEL used to be unhandled as well, and a guest that sent
+// CSI ? 2 J expecting the screen cleared got nothing at all. A selective erase
+// erases every cell DECSCA has not protected, and with DECSCA unimplemented no
+// cell is protected, so they now erase exactly as ED and EL do. That is what
+// xterm and ghostty do on a screen with nothing protected.
 func TestConform_SelectiveErase(t *testing.T) {
 	runConform(t, []conformCase{
 		{
@@ -130,15 +131,31 @@ func TestConform_SelectiveErase(t *testing.T) {
 			want:      "AB",
 			unhandled: true,
 		}, {
-			name:      "DECSED is not implemented, so a selective erase erases nothing",
-			in:        "ABC\x1b[1;1H\x1b[?2J",
-			want:      "ABC",
-			unhandled: true,
+			// These two cases used to want "ABC" and an unhandled sequence:
+			// the selective erase erased nothing.
+			name: "DECSED erases like ED when nothing is protected",
+			in:   "ABC\x1b[1;1H\x1b[?2J",
+			want: "",
 		}, {
-			name:      "DECSEL is not implemented, so a selective erase erases nothing",
-			in:        "ABC\x1b[1;2H\x1b[?0K",
-			want:      "ABC",
-			unhandled: true,
+			name: "DECSEL erases like EL when nothing is protected",
+			in:   "ABC\x1b[1;2H\x1b[?0K",
+			want: "A",
+		}, {
+			name: "DECSED below the cursor",
+			in:   "ABC\r\nDEF\r\nGHI\x1b[2;2H\x1b[?J",
+			want: "ABC\nD",
+		}, {
+			name: "DECSED above the cursor",
+			in:   "ABC\r\nDEF\r\nGHI\x1b[2;2H\x1b[?1J",
+			want: "\n  F\nGHI",
+		}, {
+			name: "DECSEL to the left of the cursor",
+			in:   "ABCD\x1b[1;2H\x1b[?1K",
+			want: "  CD",
+		}, {
+			name: "DECSEL of the whole line",
+			in:   "ABC\r\nDEF\x1b[1;2H\x1b[?2K",
+			want: "\nDEF",
 		}, {
 			// The unprotected forms do work, and DA1 claims selective erase
 			// (parameter 6), so a guest is entitled to try. It gets the plain

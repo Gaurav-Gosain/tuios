@@ -638,7 +638,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 		return true
 	})
 
-	e.RegisterCsiHandler('J', func(params ansi.Params) bool {
+	eraseDisplay := func(params ansi.Params) bool {
 		// Erase in Display [ansi.ED]
 		n, _, _ := params.Param(0, 0)
 		width, height := e.Width(), e.Height()
@@ -693,9 +693,17 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			return false
 		}
 		return true
-	})
+	}
+	e.RegisterCsiHandler('J', eraseDisplay)
+	// Selective Erase in Display [ansi.DECSED], "CSI ? Ps J". It erases only
+	// the cells DECSCA has not protected. Nothing here implements DECSCA, so
+	// no cell is ever protected and DECSED is ED, which is what xterm and
+	// ghostty do on a screen with nothing protected. Leaving it unregistered
+	// made it erase nothing, the one answer that is wrong for every program
+	// that sends it.
+	e.RegisterCsiHandler(ansi.Command('?', 0, 'J'), eraseDisplay)
 
-	e.RegisterCsiHandler('K', func(params ansi.Params) bool {
+	eraseLine := func(params ansi.Params) bool {
 		// Erase in Line [ansi.EL]
 		n, _, _ := params.Param(0, 0)
 		// NOTE: Erase Line (EL) erases all character attributes but not cell
@@ -716,7 +724,11 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 			return false
 		}
 		return true
-	})
+	}
+	e.RegisterCsiHandler('K', eraseLine)
+	// Selective Erase in Line [ansi.DECSEL], "CSI ? Ps K". With no cell ever
+	// protected it is EL, for the reason given at DECSED above.
+	e.RegisterCsiHandler(ansi.Command('?', 0, 'K'), eraseLine)
 
 	e.RegisterCsiHandler('L', func(params ansi.Params) bool {
 		// Insert Line [ansi.IL]

@@ -68,6 +68,13 @@ var tmuxDiffers = map[string]string{
 	"delete splitting a wide character": "tmux leaves the row untouched rather than delete " +
 		"inside a double-width character, so the program's delete silently does nothing. " +
 		"Same reasoning as the insert above",
+
+	"selective erase below": "tmux does not implement DECSED and erases nothing. xterm and " +
+		"ghostty erase every cell DECSCA has not protected, and on a screen with nothing " +
+		"protected that is exactly what ED erases, which is what this emulator does",
+
+	"selective erase in line": "tmux does not implement DECSEL either; same reasoning as " +
+		"DECSED above, with EL in place of ED",
 }
 
 func TestDifferential_AgainstTmux(t *testing.T) {
@@ -119,6 +126,8 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"erase to the end of the screen", 10, 4, "a\r\nb\r\nc\x1b[2;1H\x1b[J"},
 		{"erase to the start of the screen", 10, 4, "abc\r\ndef\r\nghi\x1b[2;2H\x1b[1J"},
 		{"erase the whole screen", 10, 4, "a\r\nb\r\nc\x1b[2J"},
+		{"selective erase below", 10, 4, "abc\r\ndef\r\nghi\x1b[2;2H\x1b[?J"},
+		{"selective erase in line", 10, 4, "abcdef\x1b[1;3H\x1b[?K"},
 
 		// Cursor motion with awkward parameters.
 		{"cursor forward with a zero parameter", 10, 4, "\x1b[0CX"},
