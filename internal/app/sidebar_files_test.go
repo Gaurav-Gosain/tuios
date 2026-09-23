@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -208,6 +209,53 @@ func TestPaneBusyReasonRefusesWhenSomethingIsRunning(t *testing.T) {
 		t.Error("a pane running nvim passed the guard")
 	}
 	if !strings.Contains(why, "nvim") {
+		t.Errorf("the refusal does not name the program: %q", why)
+	}
+}
+
+// TestPaneBusyReasonLetsALocalIdleShellThrough runs the guard against a real
+// PTY with only its shell in it.
+//
+// A local pane's ForegroundCommand names whatever owns the terminal, and at a
+// prompt that is the shell itself. Read as "something is running", it refused
+// every local pane at its prompt: on Linux always, and on macOS once the name
+// could be read there too.
+func TestPaneBusyReasonLetsALocalIdleShellThrough(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no process group to read on windows")
+	}
+	exit := make(chan string, 1)
+	win, err := terminal.NewWindow("idle-shell-01", "Test", 0, 0, 80, 24, 0, exit, nil, config.DefaultScrollbackLines)
+	if err != nil {
+		t.Skipf("no PTY: %v", err)
+	}
+	defer win.Close()
+	if win.Pty == nil || win.ShellPgid <= 0 {
+		t.Skip("no PTY or shell process group")
+	}
+	if win.ForegroundCommand() == "" {
+		t.Skip("this platform cannot name the foreground process, so the case does not arise")
+	}
+	if why, ok := paneBusyReason(win); !ok {
+		t.Errorf("a pane at its shell prompt was refused: %s", why)
+	}
+
+	// And a program run from that prompt is still refused, by name.
+	if err := win.SendInput([]byte("sleep 30\r")); err != nil {
+		t.Fatalf("type into the pane: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for !win.HasForegroundProcess() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !win.HasForegroundProcess() {
+		t.Skip("sleep never became the foreground process")
+	}
+	why, ok := paneBusyReason(win)
+	if ok {
+		t.Fatal("a pane running sleep passed the guard")
+	}
+	if !strings.Contains(why, "sleep") {
 		t.Errorf("the refusal does not name the program: %q", why)
 	}
 }

@@ -876,7 +876,9 @@ func (m *OS) fileViewOriginWindow() *terminal.Window {
 // The foreground command is the real answer. tuios already has it twice over:
 // a local pane's own PTY reports its foreground process group, and a daemon
 // pane gets the same observation on the wire, at most one poll interval stale.
-// Empty means the foreground process is the login shell, which is the prompt.
+// The wire's ForegroundCmd is empty when the foreground process is the login
+// shell, which is the prompt. A local PTY names the shell there instead, so
+// its name is used only when the foreground group is not the shell's.
 //
 // And a platform that cannot answer refuses. On Windows neither reader is
 // implemented, so an empty command means "nobody looked" rather than "nothing
@@ -890,14 +892,16 @@ func paneBusyReason(window *terminal.Window) (string, bool) {
 	if runtime.GOOS == "windows" {
 		return "tuios can not see what runs in that pane on this system.", false
 	}
-	if cmd := window.ForegroundCommand(); cmd != "" {
-		return fmt.Sprintf("%s is running in that pane.", cmd), false
+	// A local PTY's foreground command is the shell's own name at a prompt, so
+	// it is only a reason once the foreground group is not the shell's.
+	if window.HasForegroundProcess() {
+		if cmd := window.ForegroundCommand(); cmd != "" {
+			return fmt.Sprintf("%s is running in that pane.", cmd), false
+		}
+		return "Something is running in that pane.", false
 	}
 	if window.ForegroundCmd != "" {
 		return fmt.Sprintf("%s is running in that pane.", window.ForegroundCmd), false
-	}
-	if window.HasForegroundProcess() {
-		return "Something is running in that pane.", false
 	}
 	return "", true
 }
