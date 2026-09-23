@@ -1103,3 +1103,22 @@ body paths and with zen mode on and off.
 
 The profiler's -6.7% for `ClientFrame/panes-2/compose` did not reproduce: two
 panes redraw too little per frame for the measurement to matter.
+
+**The dock hairline is cached styled** (`render_dock.go`). The dock cached the
+repeated glyph of its hairline and then styled it again on every frame with
+`lipgloss.NewStyle().Width(w).Foreground(...)`, and the width makes lipgloss
+wrap the whole row by grapheme: 43% of the dock's time in a tiled keystroke
+frame. The cache now holds the styled row, keyed on width, glyph and the rule
+colour. `TestDockSeparatorFollowsTheTheme` switches theme and requires the
+hairline to take the new rule colour.
+
+| per op | before | after | |
+|---|---|---|---|
+| `KeystrokeFrameTiled/panes-4` allocs | 1538 | 891 | -42.1% |
+| `KeystrokeFrameTiled/panes-4` B/op | 77.7 KiB | 68.4 KiB | -12.0% |
+| `KeystrokeFrame/panes-2` allocs | 1968 | 1321 | -32.9% |
+| `KeystrokeFrame/panes-2` B/op | 104.6 KiB | 95.3 KiB | -8.9% |
+| CPU on both | | | `~` (p=0.17 and 0.24) |
+
+The CPU this saves is about 3% of a frame, below what this machine resolves;
+the allocations are exact.

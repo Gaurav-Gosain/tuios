@@ -478,19 +478,23 @@ func (m *OS) renderDockString() (string, int) {
 	}
 	dockBar += sessionStrip
 
+	// The styled hairline is kept until its width, glyph or colour changes.
 	// Keyed on the glyph as well as the width: the separator character follows
 	// the border style, which is switchable from the settings menu, and a
-	// width-only key served the old hairline until the next resize.
-	if sepChar := m.Settings.GetWindowSeparatorChar(); m.cachedSeparatorWidth != renderWidth || m.cachedSeparatorChar != sepChar {
-		m.cachedSeparator = strings.Repeat(sepChar, renderWidth)
+	// width-only key served the old hairline until the next resize. The colour
+	// follows the theme. Styling with a width wraps the whole row by grapheme,
+	// which was close to half of what the dock cost per frame.
+	sepChar, ruleColor := m.Settings.GetWindowSeparatorChar(), theme.RailRule()
+	if m.cachedSeparatorWidth != renderWidth || m.cachedSeparatorChar != sepChar || m.cachedSeparatorColor != ruleColor {
+		m.cachedSeparator = lipgloss.NewStyle().
+			Width(renderWidth).
+			Foreground(ruleColor).
+			Render(strings.Repeat(sepChar, renderWidth))
 		m.cachedSeparatorWidth = renderWidth
 		m.cachedSeparatorChar = sepChar
+		m.cachedSeparatorColor = ruleColor
 	}
-
-	separator := lipgloss.NewStyle().
-		Width(renderWidth).
-		Foreground(theme.RailRule()).
-		Render(m.cachedSeparator)
+	separator := m.cachedSeparator
 
 	// The message burns down over the hairline directly above it, across the
 	// block's own columns. The lit run replaces that stretch of the separator
@@ -505,8 +509,7 @@ func (m *OS) renderDockString() (string, int) {
 		if room := renderWidth - notifX0; ruleWidth > room {
 			notifRule, ruleWidth = truncateToWidth(notifRule, room), room
 		}
-		hairline := lipgloss.NewStyle().Foreground(theme.RailRule())
-		sepChar := m.Settings.GetWindowSeparatorChar()
+		hairline := lipgloss.NewStyle().Foreground(ruleColor)
 		separator = hairline.Render(strings.Repeat(sepChar, notifX0)) + notifRule +
 			hairline.Render(strings.Repeat(sepChar, renderWidth-notifX0-ruleWidth))
 	}

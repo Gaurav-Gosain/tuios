@@ -4,6 +4,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"image/color"
 	"os"
 	"regexp"
 	"sync"
@@ -342,11 +343,12 @@ type OS struct {
 	pasteSeq     uint64
 
 	// Performance optimization caches
-	cachedSeparator      string // Cached dock separator string
-	cachedSeparatorWidth int    // Width of cached separator
-	cachedSeparatorChar  string // Glyph the cached separator was built from
-	cachedViewContent    string // Cached full View() output to skip rendering on idle ticks
-	renderSkipped        bool   // True when frame-skip fired; View() returns cached content
+	cachedSeparator      string      // Cached dock separator, styled
+	cachedSeparatorWidth int         // Width of cached separator
+	cachedSeparatorChar  string      // Glyph the cached separator was built from
+	cachedSeparatorColor color.Color // Rule colour the cached separator was styled in
+	cachedViewContent    string      // Cached full View() output to skip rendering on idle ticks
+	renderSkipped        bool        // True when frame-skip fired; View() returns cached content
 	// tickStats records how the maintenance tick spent itself so the idle
 	// benchmark and idle e2e can prove ticks stay cheap when nothing moves.
 	tickStats tickStats
