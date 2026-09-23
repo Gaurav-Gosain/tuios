@@ -195,9 +195,9 @@ func (d *Daemon) createWorktreeSession(root, branch, base, sessionName string, c
 	}, nil
 }
 
-func (d *Daemon) verbNewWorktree(_ *connState, params json.RawMessage) (any, *verbError) {
+func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Repo    string   `json:"repo"`
+		repoSource
 		Branch  string   `json:"branch"`
 		Base    string   `json:"base"`
 		Name    string   `json:"name"`
@@ -213,7 +213,7 @@ func (d *Daemon) verbNewWorktree(_ *connState, params json.RawMessage) (any, *ve
 	if len(p.Command) > 0 && p.Command[0] == "" {
 		return nil, invalidParam("command", "command[0] is the program to exec and cannot be empty")
 	}
-	root, verr := repoRootParam(p.Repo)
+	root, cloned, verr := d.resolveRepoSource(cs, "new-worktree", p.repoSource)
 	if verr != nil {
 		return nil, verr
 	}
@@ -222,6 +222,9 @@ func (d *Daemon) verbNewWorktree(_ *connState, params json.RawMessage) (any, *ve
 		return nil, verr
 	}
 	out["type"] = "worktree_created"
+	if cloned {
+		out["cloned"] = true
+	}
 	return out, nil
 }
 
@@ -449,12 +452,12 @@ func fanBranches(root, stem string, count int) []string {
 
 func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
+		repoSource
 		Count        int               `json:"count"`
 		Agent        string            `json:"agent"`
 		Agents       []string          `json:"agents"`
 		Prompt       string            `json:"prompt"`
 		Prompts      []string          `json:"prompts"`
-		Repo         string            `json:"repo"`
 		Base         string            `json:"base"`
 		Name         string            `json:"name"`
 		ReadyTimeout int               `json:"ready_timeout"`
@@ -502,23 +505,42 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	case len(p.Agents) > fanMaxCount:
 		return nil, invalidParam("agents", fmt.Sprintf("agents names at most %d agents", fanMaxCount))
 	}
-	root, verr := repoRootParam(p.Repo)
-	if verr != nil {
-		return nil, verr
-	}
-	env, pathList, verr := callerEnv(cs, p.Env)
-	if verr != nil {
-		return nil, verr
-	}
 	// Every agent is resolved before anything is created, so a missing one
 	// costs no worktree.
-	launches := make([]agentLaunch, len(specs))
-	for i, spec := range specs {
-		param := "agent"
-		if len(p.Agents) > 0 {
-			param = "agents"
+	var env []string
+	var launches []agentLaunch
+	resolveAgents := func() *verbError {
+		var pathList string
+		var verr *verbError
+		if env, pathList, verr = callerEnv(cs, p.Env); verr != nil {
+			return verr
 		}
-		if launches[i], verr = d.resolveAgentLaunch(param, spec, pathList); verr != nil {
+		launches = make([]agentLaunch, len(specs))
+		for i, spec := range specs {
+			param := "agent"
+			if len(p.Agents) > 0 {
+				param = "agents"
+			}
+			if launches[i], verr = d.resolveAgentLaunch(param, spec, pathList); verr != nil {
+				return verr
+			}
+		}
+		return nil
+	}
+	// The repository is checked first, as it always was, except that a fan
+	// that would clone checks its agents first, so a missing agent does not
+	// cost a clone.
+	if p.Clone {
+		if verr := resolveAgents(); verr != nil {
+			return nil, verr
+		}
+	}
+	root, cloned, verr := d.resolveRepoSource(cs, "fan", p.repoSource)
+	if verr != nil {
+		return nil, verr
+	}
+	if !p.Clone {
+		if verr := resolveAgents(); verr != nil {
 			return nil, verr
 		}
 	}
@@ -577,16 +599,21 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	// agent, command and prompt name the first session's, which for a fan of
 	// one agent and one prompt is every session's, as they always were. The
 	// sessions say which agent and command each got.
-	return map[string]any{
-		"type":     "fan_started",
-		"group":    stem,
-		"repo":     filepath.Base(root),
-		"agent":    launches[0].harness,
-		"command":  launches[0].command(),
-		"prompt":   promptFor(0),
-		"sessions": sessions,
-		"total":    len(sessions),
-	}, nil
+	out := map[string]any{
+		"type":      "fan_started",
+		"group":     stem,
+		"repo":      filepath.Base(root),
+		"repo_root": root,
+		"agent":     launches[0].harness,
+		"command":   launches[0].command(),
+		"prompt":    promptFor(0),
+		"sessions":  sessions,
+		"total":     len(sessions),
+	}
+	if cloned {
+		out["cloned"] = true
+	}
+	return out, nil
 }
 
 // deliverFanPrompt types the prompt into the agent's pane once the agent is

@@ -361,13 +361,13 @@ func init() {
 		},
 		"new-worktree": {
 			description: "Create a git worktree of a repository and a session in it. The worktree goes under tuios's worktree directory, named by repository and branch. The branch is created from base when it does not exist.",
-			params: []verbParam{
-				{Name: "repo", Type: "string", Required: true, Description: "A directory inside the repository: its main checkout or any of its worktrees."},
+			params: append([]verbParam{
+				{Name: "repo", Type: "string", Description: "A directory inside the repository: its main checkout or any of its worktrees. Required unless repo_url is passed."},
 				{Name: "branch", Type: "string", Required: true, Description: "Branch to check out in the worktree. Created from base when it does not exist."},
 				{Name: "base", Type: "string", Description: "Ref a new branch starts from. Omit for HEAD of the main checkout."},
 				{Name: "name", Type: "string", Description: "Name for the session. Omit for <repo>-<branch>, with every slash in the branch turned into a hyphen."},
 				{Name: "command", Type: "[]string", Description: "Argv to exec as the first window's process instead of a shell. No shell parses it, so nothing needs quoting."},
-			},
+			}, repoSourceParams...),
 			returns: []verbParam{
 				{Name: "session", Type: "string", Description: "Name of the new session."},
 				{Name: "session_id", Type: "string", Description: "Id of the new session."},
@@ -378,10 +378,12 @@ func init() {
 				{Name: "path", Type: "string", Description: "The worktree's directory."},
 				{Name: "window_id", Type: "string", Description: "Id of the first window."},
 				{Name: "pty_id", Type: "string", Description: "Id of the first window's PTY."},
+				{Name: "cloned", Type: "bool", Description: "True when the repository was cloned by this call. Absent otherwise."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry"}}`,
 				`{"id":1,"verb":"new-worktree","params":{"repo":"/src/api","branch":"feat/retry","base":"main","command":["claude"]}}`,
+				`{"id":1,"verb":"new-worktree","params":{"repo_url":"git@github.com:acme/api.git","repos_root":"~/src","branch":"feat/retry"}}`,
 			},
 			handler: (*Daemon).verbNewWorktree,
 		},
@@ -428,7 +430,7 @@ func init() {
 		},
 		"fan": {
 			description: "Fan a prompt out across several agents. Creates count worktrees and sessions, starts an agent in each, and types each session's prompt into its agent once the agent shows it is at its prompt. Returns as soon as the sessions exist. An agent that is not ready for 30 seconds turns its prompt_status to held and raises a question in the Inbox; the prompt is still typed when it is ready.",
-			params: []verbParam{
+			params: append([]verbParam{
 				{Name: "count", Type: "int", Description: "How many worktrees and agents, 1 to 16. Required unless prompts is given, which sets it."},
 				// agent is documented without Required on purpose: agents
 				// stands in for it. See Changes to existing verbs.
@@ -436,15 +438,17 @@ func init() {
 				{Name: "agents", Type: "[]string", Description: "Several agents, each written as agent is, cycled across the sessions: [\"claude\",\"codex\"] with count 4 is claude, codex, claude, codex. Takes no agent."},
 				{Name: "prompt", Type: "string", Description: "The prompt every agent gets. It is typed as one paste (wrapped in bracketed paste when the agent has it on) and submitted with a carriage return, the way ask-agent types a question. Required unless prompts is given."},
 				{Name: "prompts", Type: "[]string", Description: "One prompt per session, in order. count defaults to how many there are and must equal it when given. Takes no prompt."},
-				{Name: "repo", Type: "string", Required: true, Description: "A directory inside the repository."},
+				{Name: "repo", Type: "string", Description: "A directory inside the repository. Required unless repo_url is passed."},
 				{Name: "base", Type: "string", Description: "Ref every branch starts from. Omit for HEAD of the main checkout."},
 				{Name: "name", Type: "string", Description: "Branch stem. The branches are the stem, then stem-2, stem-3 and so on. Omit for fan/ and the first words of the first prompt."},
 				{Name: "ready_timeout", Type: "int", Description: "Milliseconds to wait for each agent to be ready before giving up on its prompt.", Default: "600000"},
 				{Name: "env", Type: "object", Description: "Environment variables for every agent, name to value, on top of the daemon's. PATH in it is where the programs are looked up, so an agent the caller can run is found. The tuios CLI sends its PATH. TUIOS_ names, TMUX and TMUX_PANE are refused, and a call from another machine may not pass env at all. Not saved: a restored pane starts with the daemon's environment."},
-			},
+			}, repoSourceParams...),
 			returns: []verbParam{
 				{Name: "group", Type: "string", Description: "The branch stem, which is the group's name in list-worktrees."},
 				{Name: "repo", Type: "string", Description: "The repository's name."},
+				{Name: "repo_root", Type: "string", Description: "The repository's main checkout on this machine."},
+				{Name: "cloned", Type: "bool", Description: "True when the repository was cloned by this call. Absent otherwise."},
 				{Name: "agent", Type: "string", Description: "The harness id started in the first session, empty for a program no manifest recognises."},
 				{Name: "command", Type: "string", Description: "The command started in the first session."},
 				{Name: "prompt", Type: "string", Description: "The first session's prompt, as given."},

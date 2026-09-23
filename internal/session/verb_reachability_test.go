@@ -141,6 +141,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// verb_worktree_test.go.
 	"new-worktree#0":    {errCode: ErrVerbGitFailed, why: "/src/api is not a git repository here"},
 	"new-worktree#1":    {errCode: ErrVerbGitFailed, why: "/src/api is not a git repository here"},
+	"new-worktree#2":    {errCode: ErrVerbInvalidParams, why: "the fixture's home has no ~/src"},
 	"remove-worktree#0": {errCode: ErrVerbSessionNotFound, why: "api-feat-retry does not exist here"},
 	"remove-worktree#1": {errCode: ErrVerbSessionNotFound, why: "api-feat-retry does not exist here"},
 	"fan#0":             {errCode: ErrVerbGitFailed, why: "/src/api is not a git repository here"},
