@@ -15,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 )
 
@@ -23,7 +24,8 @@ func TestMain(m *testing.M) {
 	// in-memory pty, and keys go through the real input handler.
 	ptyspawn.NewGuestPty = func(w, h int) (xpty.Pty, error) { return webshell.NewPty(w, h), nil }
 	app.SetInputHandler(input.HandleInput)
-	os.Exit(m.Run())
+	// The tour loads the real config, so it must not read the developer's.
+	os.Exit(testutil.RunIsolated(m))
 }
 
 // tour is a Model driven the way the program drives it, with the events it
@@ -553,4 +555,28 @@ func TestLooksAreEvents(t *testing.T) {
 
 	tr.press(key("S"))
 	tr.waitFor(EventOverlayOpen, func(e Event) bool { return data(e, "name") == OverlayScreensaver })
+}
+
+// TestConfigFileFollowsLooks checks that the fake config.toml shows the theme,
+// border style and glyph set on screen, so the lesson that ends with cat
+// config.toml shows what the reader picked.
+func TestConfigFileFollowsLooks(t *testing.T) {
+	tr := newTour(t)
+	tr.m.RunCommand("theme", "gruvbox_dark")
+	tr.update(nil)
+	tr.waitFor(EventTheme, nil)
+	tr.m.OS.Settings.BorderStyle = "glyphs"
+	tr.m.OS.Settings.GlyphSet = "heavy"
+	tr.update(nil)
+	tr.waitFor(EventSetting, func(e Event) bool { return data(e, "name") == SettingBorderStyle })
+
+	text, ok := webshell.ReadFile(webshell.ConfigPath)
+	if !ok {
+		t.Fatal("no config.toml")
+	}
+	for _, want := range []string{`theme = "gruvbox_dark"`, `border_style = "glyphs"`, `glyphs = "heavy"`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("config.toml has no %s:\n%s", want, text)
+		}
+	}
 }

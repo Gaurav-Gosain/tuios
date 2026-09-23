@@ -384,6 +384,29 @@ func TestTapePlayHandsTheTapeToTuios(t *testing.T) {
 	}
 }
 
+// TestSampleTapesParse checks every tape in the home directory is one tuios
+// can play, and that party.tape ends on workspace 2, the trip it promises.
+func TestSampleTapesParse(t *testing.T) {
+	freshFS(t)
+	for _, name := range []string{"demo.tape", "party.tape"} {
+		t.Run(name, func(t *testing.T) {
+			text, ok := ReadFile(Home + "/" + name)
+			if !ok {
+				t.Fatalf("no %s", name)
+			}
+			cmds, perrs := tape.ParseFile(text)
+			if len(perrs) > 0 || len(cmds) == 0 {
+				t.Fatalf("%s does not parse: %v", name, perrs)
+			}
+		})
+	}
+	party, _ := ReadFile(Home + "/party.tape")
+	last := strings.LastIndex(party, "SwitchWorkspace ")
+	if last < 0 || !strings.HasPrefix(party[last:], "SwitchWorkspace 2") {
+		t.Errorf("party.tape does not end on workspace 2:\n%s", party)
+	}
+}
+
 // TestRunnableCommandsHighlightAsValid checks that the highlighter agrees with
 // the executor: every name the shell runs, aliases included, is drawn green,
 // and a name it does not run is drawn red.

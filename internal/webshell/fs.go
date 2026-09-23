@@ -124,11 +124,15 @@ WindowManagementMode
 EnableTiling
 NewWindow
 Sleep 700ms
+ToggleZoom
+Sleep 400ms
 TerminalMode
 Type "neofetch"
 Enter
-Sleep 1500ms
+Sleep 1800ms
 WindowManagementMode
+ToggleZoom
+Sleep 400ms
 NewWindow
 Sleep 700ms
 TerminalMode
@@ -175,7 +179,11 @@ ToggleZoom
 Sleep 500ms
 SwitchWorkspace 2
 Sleep 700ms
-SwitchWorkspace 1
+NewWindow
+Sleep 600ms
+TerminalMode
+Type "neofetch"
+Enter
 Sleep 300ms
 `,
 	ProjectDir + "/go.mod":        helloGoMod,
@@ -191,13 +199,7 @@ Sleep 300ms
 `,
 	Home + "/projects/website/style.css": `h1 { color: hotpink; }
 `,
-	Home + "/.config/tuios/config.toml": `[appearance]
-border_style = "rounded"
-theme = "catppuccin_mocha"
-
-[keybindings]
-leader_key = "ctrl+b"
-`,
+	ConfigPath:  configText("", "rounded", "default"),
 	"/etc/motd": "Be kind to your terminal.\n",
 }
 
@@ -244,6 +246,41 @@ func writeFile(p, content string, appendTo bool) bool {
 	files[p] = content
 	return true
 }
+
+// ConfigPath is the fake tuios config file.
+const ConfigPath = Home + "/.config/tuios/config.toml"
+
+// configText is the config file for these looks. An empty theme is tuios's
+// own colours, and "default" glyphs are the shipped set, so neither is
+// written.
+func configText(theme, border, glyphs string) string {
+	var b strings.Builder
+	b.WriteString("[appearance]\n")
+	if theme != "" {
+		b.WriteString(`theme = "` + theme + "\"\n")
+	}
+	b.WriteString(`border_style = "` + border + "\"\n")
+	if glyphs != "" && glyphs != "default" {
+		b.WriteString(`glyphs = "` + glyphs + "\"\n")
+	}
+	b.WriteString("\n[keybindings]\nleader_key = \"ctrl+b\"\n")
+	return b.String()
+}
+
+// WriteConfig rewrites the config file to match the looks the tour is
+// showing, so cat config.toml shows what the reader picked.
+func WriteConfig(theme, border, glyphs string) {
+	if border == "" {
+		border = "rounded"
+	}
+	fsMu.Lock()
+	defer fsMu.Unlock()
+	files[ConfigPath] = configText(theme, border, glyphs)
+}
+
+// ReadFile returns a file of the fake filesystem, for tests outside the
+// package.
+func ReadFile(p string) (string, bool) { return readFile(p) }
 
 func mkdir(p string) bool {
 	fsMu.Lock()

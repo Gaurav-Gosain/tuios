@@ -114,6 +114,7 @@ func New(o *app.OS, emit func(Event), send func(tea.Msg)) *Model {
 	m.last = take(o)
 	m.rest = m.last
 	m.theme = m.last.Theme
+	writeConfig(m.last)
 	return m
 }
 
@@ -202,6 +203,9 @@ func (m *Model) report() {
 	prev := m.last
 	m.last = now
 	m.mu.Unlock()
+	if prev.Theme != now.Theme || prev.Border != now.Border || prev.Glyphs != now.Glyphs {
+		writeConfig(now)
+	}
 	events := diff(prev, now)
 	// A move is reported once it has settled, not once per animation frame.
 	if !now.Moving {
@@ -219,6 +223,13 @@ func (m *Model) report() {
 		e.State = state
 		m.emit(e)
 	}
+}
+
+// writeConfig keeps the fake shell's config.toml in step with the looks on
+// screen. The real app writes nothing in Learn mode, so without this the file
+// would show the defaults after the reader changed them.
+func writeConfig(s Snapshot) {
+	webshell.WriteConfig(s.Theme, s.Border, s.Glyphs)
 }
 
 // Filter is the program's event filter: Learn mode's quit guard, then the
