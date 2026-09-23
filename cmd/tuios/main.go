@@ -2310,6 +2310,7 @@ Name a verb to describe only that verb.`,
 	var listAgentsAll bool
 	var listAgentsJSON bool
 	var listAgentsAllHosts bool
+	var listAgentsAllSessions bool
 	var listAgentsHost string
 	listAgentsCmd := &cobra.Command{
 		Use:   "list-agents",
@@ -2327,19 +2328,29 @@ would accept a question right now.`,
   # Every window, including the ones nothing has claimed as an agent
   tuios list-agents --all
 
+  # Every agent in every session on this machine
+  tuios list-agents --all-sessions
+
+  # Every agent in every session on every machine
+  tuios list-agents --all-hosts
+
   # Just the ids of the agents waiting for a human
   tuios list-agents --json | jq -r '.agents[] | select(.state=="needs_input") | .window_id'`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if listAgentsAllHosts || listAgentsHost != "" {
 				if listAgentsSession != "" {
-					return fmt.Errorf("--session names one machine's session, so it cannot be used with --all-hosts or --host. Each host answers about its own most recent session")
+					return fmt.Errorf("--session names one machine's session, so it cannot be used with --all-hosts or --host. Every session on each host is listed, and each row names its session")
 				}
 				return runListAgentsAllHosts(listAgentsHost, listAgentsAll, listAgentsJSON)
 			}
-			return runListAgents(listAgentsSession, listAgentsAll, listAgentsJSON)
+			if listAgentsAllSessions && listAgentsSession != "" {
+				return fmt.Errorf("--all-sessions lists every session, so it takes no --session")
+			}
+			return runListAgents(listAgentsSession, listAgentsAll, listAgentsAllSessions, listAgentsJSON)
 		},
 	}
+	listAgentsCmd.Flags().BoolVar(&listAgentsAllSessions, "all-sessions", false, "List the agents of every session on this machine")
 	listAgentsCmd.Flags().StringVarP(&listAgentsSession, "session", "s", "", "Target session (default: most recently active)")
 	listAgentsCmd.Flags().BoolVar(&listAgentsAll, "all", false, "List every window, not just the panes identified as agents")
 	listAgentsCmd.Flags().BoolVar(&listAgentsJSON, "json", false, "Output result as JSON")

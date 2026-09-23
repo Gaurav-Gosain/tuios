@@ -38,6 +38,8 @@ type hostReport struct {
 	Drops         int    `json:"drops"`
 	DropReason    string `json:"drop_reason"`
 	Stalls        int    `json:"stalls"`
+	Events        string `json:"events"`
+	EventsNote    string `json:"events_note"`
 }
 
 // runListHosts prints the configured hosts and the state of each link.
@@ -155,6 +157,19 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 			fmt.Fprintf(w, "%s: a stream stopped being read %s. The link stayed up.\n", h.Host, timesWord(h.Stalls))
 		}
 	}
+
+	// A host the daemon cannot stream is polled, and what waits there is not
+	// in the Inbox. That is version skew, and the note says what to update.
+	for _, h := range res.Hosts {
+		if h.Events != "polling" {
+			continue
+		}
+		note := h.EventsNote
+		if note == "" {
+			note = "Its agents are polled rather than streamed."
+		}
+		fmt.Fprintf(w, "%s: %s\n", h.Host, note)
+	}
 	printConfigProblems(w, res.ConfigProblems)
 	return nil
 }
@@ -180,11 +195,15 @@ func hostStatusColor(status string) lipgloss.Color {
 
 // hostSessionsEntry is one host's slice of an aggregated session listing.
 type hostSessionsEntry struct {
-	Host     string `json:"host"`
-	Status   string `json:"status"`
-	Reason   string `json:"reason"`
-	Error    string `json:"error"`
-	Sessions []struct {
+	Host   string `json:"host"`
+	Status string `json:"status"`
+	Reason string `json:"reason"`
+	Error  string `json:"error"`
+	// Stale says the host did not answer and the sessions are the last ones
+	// it gave, at FetchedAt (unix seconds).
+	Stale     bool  `json:"stale"`
+	FetchedAt int64 `json:"fetched_at"`
+	Sessions  []struct {
 		Name        string `json:"name"`
 		DisplayName string `json:"display_name"`
 		WindowCount int    `json:"window_count"`
@@ -227,11 +246,16 @@ func runListSessionsAllHosts(host string, jsonOutput bool) error {
 	for _, h := range res.Hosts {
 		if h.Error != "" {
 			fmt.Printf("%s: %s\n", h.Host, hostTrouble(h.Status, h.Reason))
-			fmt.Println()
-			continue
+			if !h.Stale || len(h.Sessions) == 0 {
+				fmt.Println()
+				continue
+			}
+			// The rows it gave last, said as such: nobody can check them now.
+			fmt.Printf("  As of %s, when it last answered:\n", formatTimeAgo(h.FetchedAt))
+		} else {
+			reachable++
+			fmt.Printf("%s\n", h.Host)
 		}
-		reachable++
-		fmt.Printf("%s\n", h.Host)
 		if len(h.Sessions) == 0 {
 			fmt.Println("  No sessions.")
 			fmt.Println()
@@ -239,7 +263,9 @@ func runListSessionsAllHosts(host string, jsonOutput bool) error {
 		}
 		rows := make([][]string, 0, len(h.Sessions))
 		for _, s := range h.Sessions {
-			total++
+			if !h.Stale {
+				total++
+			}
 			status := "detached"
 			if s.Attached {
 				status = "attached"
@@ -273,7 +299,14 @@ type hostAgentsEntry struct {
 	Reason  string `json:"reason"`
 	Error   string `json:"error"`
 	Session string `json:"session"`
-	Agents  []struct {
+	// Stale says the host did not answer and the rows are the last ones it
+	// gave, at FetchedAt (unix seconds).
+	Stale     bool  `json:"stale"`
+	FetchedAt int64 `json:"fetched_at"`
+	Agents    []struct {
+		// Session is the row's own session. Every session on a host is
+		// listed, so a row says which one it is in.
+		Session   string `json:"session"`
 		WindowID  string `json:"window_id"`
 		Name      string `json:"name"`
 		State     string `json:"state"`
@@ -313,14 +346,16 @@ func runListAgentsAllHosts(host string, all, jsonOutput bool) error {
 	total := 0
 	for _, h := range res.Hosts {
 		if h.Error != "" {
-			fmt.Printf("%s: %s\n\n", h.Host, hostTrouble(h.Status, h.Reason))
-			continue
+			fmt.Printf("%s: %s\n", h.Host, hostTrouble(h.Status, h.Reason))
+			if !h.Stale || len(h.Agents) == 0 {
+				fmt.Println()
+				continue
+			}
+			// The rows it gave last, said as such: nobody can check them now.
+			fmt.Printf("  As of %s, when it last answered:\n", formatTimeAgo(h.FetchedAt))
+		} else {
+			fmt.Println(h.Host)
 		}
-		header := h.Host
-		if h.Session != "" {
-			header += "  session " + h.Session
-		}
-		fmt.Println(header)
 		if len(h.Agents) == 0 {
 			fmt.Println("  No agent panes.")
 			fmt.Println()
@@ -328,24 +363,28 @@ func runListAgentsAllHosts(host string, all, jsonOutput bool) error {
 		}
 		rows := make([][]string, 0, len(h.Agents))
 		for _, a := range h.Agents {
-			total++
+			if !h.Stale {
+				total++
+			}
 			unread := ""
 			if a.Unread > 0 {
 				unread = strconv.Itoa(a.Unread)
 			}
+			// Every name here was written on another machine.
 			rows = append(rows, []string{
+				plainLine(firstNonEmptyString(a.Session, h.Session)),
 				shortWindowID(a.WindowID),
-				a.Name,
-				a.State,
-				orNone(a.HarnessID),
+				plainLine(a.Name),
+				plainLine(a.State),
+				orNone(plainLine(a.HarnessID)),
 				unread,
-				a.Message,
+				plainLine(a.Message),
 			})
 		}
 		t := table.New().
 			Border(lipgloss.RoundedBorder()).
 			BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))).
-			Headers("ID", "NAME", "STATE", "HARNESS", "MAIL", "NOTE").
+			Headers("SESSION", "ID", "NAME", "STATE", "HARNESS", "MAIL", "NOTE").
 			Rows(rows...).
 			StyleFunc(func(row, _ int) lipgloss.Style {
 				base := lipgloss.NewStyle().Padding(0, 1)

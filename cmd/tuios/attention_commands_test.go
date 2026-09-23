@@ -58,6 +58,31 @@ func TestPrintAttentionListSaysAnApprovalIsHeld(t *testing.T) {
 	}
 }
 
+// TestPrintAttentionListNamesTheMachine: an item of a linked host is named
+// host:session, and one of a host whose link is down says so, with when it was
+// last heard from.
+//
+// Negative control: without the stale branch in printAttentionList the row
+// reads like a live one.
+func TestPrintAttentionListNamesTheMachine(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	at := func(ago time.Duration) int64 { return now.Add(-ago).UnixNano() }
+	raw, _ := json.Marshal(map[string]any{"items": []map[string]any{
+		{"id": "build:3", "kind": "approval", "host": "build", "session": "api", "name": "claude", "summary": "approve Bash", "since": at(time.Minute)},
+		{"id": "pi:1", "kind": "errored", "host": "pi", "session": "lab", "name": "codex", "since": at(time.Hour), "stale": true, "seen_at": at(5 * time.Minute)},
+	}})
+	var out bytes.Buffer
+	if err := printAttentionList(&out, raw, now); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	for _, want := range []string{"build:api/claude  approve Bash\n", "pi:lab/codex  [unreachable, seen 5m ago]\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output lacks %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestPrintAttentionListEmpty(t *testing.T) {
 	var out bytes.Buffer
 	if err := printAttentionList(&out, json.RawMessage(`{"items":[]}`), time.Now()); err != nil {

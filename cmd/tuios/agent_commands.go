@@ -84,6 +84,7 @@ func senderOf(m agentMessageRow, on string) string {
 
 // agentRow is one entry of the list-agents result.
 type agentRow struct {
+	Session    string `json:"session"`
 	WindowID   string `json:"window_id"`
 	Name       string `json:"name"`
 	State      string `json:"state"`
@@ -101,14 +102,19 @@ type agentRow struct {
 
 // runListAgents prints the agent panes in a session: the board an orchestrating
 // agent reads before it addresses anyone.
-func runListAgents(sessionName string, all, jsonOutput bool) error {
+func runListAgents(sessionName string, all, allSessions, jsonOutput bool) error {
 	t, err := dialSessionTarget(sessionName)
 	if err != nil {
 		return err
 	}
 	defer t.Close()
 
-	raw, err := t.client.Call("list-agents", t.params(map[string]any{"all": all}))
+	params := t.params(map[string]any{"all": all})
+	if allSessions {
+		// Every session, so no session is named, whatever TUIOS_SESSION says.
+		params = map[string]any{"all": all, "all_sessions": true}
+	}
+	raw, err := t.client.Call("list-agents", params)
 	if err != nil {
 		return reportVerbError(t.explain("list-agents", err), jsonOutput)
 	}
@@ -120,13 +126,18 @@ func runListAgents(sessionName string, all, jsonOutput bool) error {
 
 func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error {
 	var res struct {
-		Agents []agentRow `json:"agents"`
-		Total  int        `json:"total"`
+		Agents      []agentRow `json:"agents"`
+		Total       int        `json:"total"`
+		AllSessions bool       `json:"all_sessions"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 	if len(res.Agents) == 0 {
+		if all && res.AllSessions {
+			fmt.Fprintln(w, "No windows in any session.")
+			return nil
+		}
 		if all {
 			fmt.Fprintln(w, "No windows in this session.")
 			return nil
@@ -150,9 +161,15 @@ func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error
 		if a.BlockedBy != "" {
 			state += " (" + plainLine(a.BlockedBy) + ")"
 		}
+		name := plainLine(a.Name)
+		if res.AllSessions {
+			// Rows from every session: the name says which one, in the
+			// session/window form -w and -s take.
+			name = plainLine(a.Session) + "/" + name
+		}
 		rows = append(rows, []string{
 			marker + shortWindowID(a.WindowID),
-			plainLine(a.Name),
+			name,
 			state,
 			orNone(plainLine(a.HarnessID)),
 			orNone(a.Source),

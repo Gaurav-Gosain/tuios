@@ -34,6 +34,10 @@ type attentionRow struct {
 	// RequestID is set while a harness hook holds the approval for an answer
 	// from the Inbox.
 	RequestID string `json:"request_id"`
+	// Stale marks an item of a linked host whose link is down, last heard
+	// from at SeenAt (unix nanoseconds).
+	Stale  bool  `json:"stale"`
+	SeenAt int64 `json:"seen_at"`
 }
 
 // attentionHeldNote ends the row of an approval a hook is holding, so the
@@ -78,7 +82,7 @@ func waitedFor(since int64, now time.Time) string {
 	}
 }
 
-func runListAttention(sessionName string, kinds []string, jsonOutput bool) error {
+func runListAttention(sessionName, host string, kinds []string, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
 		return reportVerbError(err, jsonOutput)
@@ -87,6 +91,9 @@ func runListAttention(sessionName string, kinds []string, jsonOutput bool) error
 	params := map[string]any{}
 	if sessionName != "" {
 		params["session"] = sessionName
+	}
+	if host != "" {
+		params["host"] = host
 	}
 	if len(kinds) > 0 {
 		params["kinds"] = kinds
@@ -146,6 +153,14 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		if it.RequestID != "" {
 			fmt.Fprintf(w, "  (%s)", attentionHeldNote)
 		}
+		if it.Stale {
+			// What that machine said last. Nobody can check it now.
+			seen := "never"
+			if it.SeenAt > 0 {
+				seen = waitedFor(it.SeenAt, now) + " ago"
+			}
+			fmt.Fprintf(w, "  [unreachable, seen %s]", seen)
+		}
 		fmt.Fprintln(w)
 	}
 	fmt.Fprintf(w, "\n%d waiting. Open the Inbox with the prefix key then i, or jump to the oldest with the prefix key then o.\n", len(res.Items))
@@ -154,7 +169,7 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 
 // newListAttentionCommand is `tuios list-attention`.
 func newListAttentionCommand() *cobra.Command {
-	var sessionName string
+	var sessionName, host string
 	var kinds []string
 	var jsonOutput bool
 	cmd := &cobra.Command{
@@ -162,8 +177,11 @@ func newListAttentionCommand() *cobra.Command {
 		Short: "List what is waiting for you in every session: the Inbox",
 		Long: `List the Inbox: every approval and question an agent is blocked on, mail to
 you, errored agents, conversations a restart left to resume, and finished turns
-nobody has looked at, in every session. Rows are grouped Approvals, Questions,
-Mail, Errored, Resume, Finished, oldest first, with how long each has waited.
+nobody has looked at, in every session on this machine and on every linked
+host. Rows are grouped Approvals, Questions, Mail, Errored, Resume, Finished,
+oldest first, with how long each has waited. A row of another machine is named
+host:session, and a row of a machine whose link is down says when it was last
+heard from.
 
 An item closes by itself when what opened it stops being true: the agent
 leaves needs_input or errored, the mail is read, a client focuses the pane
@@ -176,14 +194,18 @@ Dismissing one is for the person at an attached client, from the Inbox
   # Only what blocks an agent
   tuios list-attention --kind approval --kind question
 
+  # Only what waits on the build host
+  tuios list-attention --host build
+
   # The oldest approval's pane, for a script
   tuios list-attention --json --kind approval | jq -r '.items[0].window'`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runListAttention(sessionName, kinds, jsonOutput)
+			return runListAttention(sessionName, host, kinds, jsonOutput)
 		},
 	}
-	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Only this session (default: every session)")
+	cmd.Flags().StringVarP(&sessionName, "session", "s", "", "Only this session on this machine, or on --host (default: every session)")
+	cmd.Flags().StringVar(&host, "host", "", "Only this machine: local, or a linked host by name (default: every machine)")
 	cmd.Flags().StringSliceVar(&kinds, "kind", nil, "Only these kinds: "+strings.Join(session.AttentionKindNames, ", "))
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output result as JSON")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)

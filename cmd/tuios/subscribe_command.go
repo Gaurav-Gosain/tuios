@@ -20,6 +20,7 @@ type subscribeOptions struct {
 	resume   bool
 	bootID   string
 	count    int
+	hosts    bool
 }
 
 // newSubscribeCommand builds tuios subscribe, the command-line end of the
@@ -62,7 +63,10 @@ trusting that you saw every change.`,
   tuios subscribe --types agent-state --after-seq 118 --boot-id 9f2c41d07a3e8b65
 
   # Wait for the next bell anywhere, then exit
-  tuios subscribe --types bell --count 1`,
+  tuios subscribe --types bell --count 1
+
+  # Every agent on every machine, and every host coming or going
+  tuios subscribe --hosts --types agent-state,host-changed`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			opts.resume = cmd.Flags().Changed("after-seq")
@@ -77,6 +81,7 @@ trusting that you saw every change.`,
 	cmd.Flags().StringSliceVar(&opts.types, "types", nil, "Only these event types, comma-separated (default: all)")
 	cmd.Flags().Uint64Var(&opts.afterSeq, "after-seq", 0, "Replay the retained events after this seq before streaming live")
 	cmd.Flags().StringVar(&opts.bootID, "boot-id", "", "The boot_id the --after-seq came with, so a daemon restart shows as a gap")
+	cmd.Flags().BoolVar(&opts.hosts, "hosts", false, "Also print the agent-state and session events of every linked host, each with host set")
 	cmd.Flags().IntVar(&opts.count, "count", 0, "Exit after printing this many events, gap lines included (default: run until the stream ends)")
 	_ = cmd.RegisterFlagCompletionFunc("session", completeSessionNames)
 	_ = cmd.RegisterFlagCompletionFunc("types", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
@@ -103,6 +108,9 @@ func runSubscribe(opts subscribeOptions, out io.Writer) error {
 		if opts.bootID != "" {
 			params["boot_id"] = opts.bootID
 		}
+	}
+	if opts.hosts {
+		params["hosts"] = true
 	}
 	raw, err := t.client.Call("subscribe", t.params(params))
 	if err != nil {
