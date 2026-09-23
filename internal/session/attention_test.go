@@ -315,3 +315,78 @@ func TestAttentionSaveIsDebounced(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// savedAttention writes a queue with an errored item on w1 and a finished
+// item on w2, in session work, and returns its path.
+func savedAttention(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "attention", "items.json")
+	a, _ := recordingAttention()
+	a.load(path, func(string, string) bool { return true })
+	a.noteSessionEvent("work", agentEvent("w1", "working", "errored", "", "boom", 0, 0))
+	a.noteSessionEvent("work", agentEvent("w2", "working", "idle", "", "done", 0, 1))
+	a.saveNowAndFreeze()
+	return path
+}
+
+// A restored pane can exit while the Inbox loads. Its exit reaches the store
+// through the event sink while the sink's caller holds the session's state
+// lock, and live takes that same lock. load must not hold mu across live.
+func TestAttentionLoadDoesNotHoldTheLockAcrossLive(t *testing.T) {
+	path := savedAttention(t)
+	b, _ := recordingAttention()
+	var blocked bool
+	live := func(string, string) bool {
+		done := make(chan struct{})
+		go func() {
+			b.noteSessionEvent("work", SessionEvent{Type: EventWindowClosed, Window: "other"})
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			blocked = true
+		}
+		return true
+	}
+	b.load(path, live)
+	if blocked {
+		t.Fatal("an event during load waited on the store lock that load held across live")
+	}
+}
+
+// An item opened before load keeps its id, and a saved item with the same id
+// gets a fresh one, so the two never share an id and byKey stays right.
+func TestAttentionLoadGivesACollidingSavedItemAFreshID(t *testing.T) {
+	path := savedAttention(t)
+	b, _ := recordingAttention()
+	b.noteSessionEvent("work", agentEvent("w9", "working", "errored", "", "early", 0, 0))
+	early := openItems(t, b)
+	if len(early) != 1 {
+		t.Fatalf("before load the queue holds %d items, want 1", len(early))
+	}
+	b.load(path, func(string, string) bool { return true })
+
+	items := openItems(t, b)
+	if len(items) != 3 {
+		t.Fatalf("after load the queue holds %d items, want 3", len(items))
+	}
+	ids := map[string]bool{}
+	for _, it := range items {
+		if ids[it.ID] {
+			t.Errorf("id %s is held by two items", it.ID)
+		}
+		ids[it.ID] = true
+		if it.Window == "w9" && it.ID != early[0].ID {
+			t.Errorf("the item opened before load changed id from %s to %s", early[0].ID, it.ID)
+		}
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for key, id := range b.byKey {
+		it, ok := b.items[id]
+		if !ok || attentionKey(it.Kind, it.Session, it.Window, it.Thread) != key {
+			t.Errorf("byKey[%q] = %s, which is not the item with that key", key, id)
+		}
+	}
+}

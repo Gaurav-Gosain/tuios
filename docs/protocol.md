@@ -1333,7 +1333,10 @@ keeps the `finished` and `errored` items whose session and pane came back. It
 drops `approval` and `question` items, because the prompt died with the process
 that painted it, and `mail` items, because the message ring they point into
 does not survive a restart and thread ids start again from 1, so a saved item
-could only be merged into an unrelated new thread.
+could only be merged into an unrelated new thread. An item opened while the
+saved queue is still loading keeps its id and wins over a saved item for the
+same pane and kind. A saved item whose id such an item already holds is kept
+under a fresh id, so no two items ever share one.
 
 Wire compatibility: new verb and new event type. An older daemon answers
 `unknown_verb`, and the tuios client then shows the Inbox as unavailable.

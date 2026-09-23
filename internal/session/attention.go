@@ -651,43 +651,64 @@ func (a *attentionStore) saveNowAndFreeze() {
 // live reports whether a session is live, and whether a window is
 // in it when window is not empty. The ids and revision carry on from the file,
 // so an id is never reused on this machine.
+//
+// The file read and the live checks run with no lock held. live reads session
+// state under the session's stateMu, and the event sink takes the locks the
+// other way round (stateMu, then mu), so holding mu across live could
+// deadlock with a restored pane that exits while the Inbox loads. mu is taken
+// only to merge the survivors in.
+//
+// Items opened before load keep their ids and win over a saved item with the
+// same key. A saved item whose id one of them already holds gets a fresh id,
+// so byKey and items always agree.
 func (a *attentionStore) load(path string, live func(session, window string) bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.path = path
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return
-	}
 	var f attentionFile
-	if err := json.Unmarshal(data, &f); err != nil || f.Version != 1 {
-		LogError("Discarding the saved attention queue, it could not be read: %v", err)
-		return
+	data, err := os.ReadFile(path)
+	if err == nil {
+		if err := json.Unmarshal(data, &f); err != nil || f.Version != 1 {
+			LogError("Discarding the saved attention queue, it could not be read: %v", err)
+			f = attentionFile{}
+		}
 	}
-	a.nextID = max(a.nextID, f.NextID)
-	a.rev = max(a.rev, f.Rev)
+	kept := make([]AttentionItem, 0, len(f.Items))
 	for _, it := range f.Items {
 		switch it.Kind {
-		case AttentionApproval, AttentionQuestion, AttentionMail:
-			continue
 		case AttentionErrored, AttentionFinished:
-			if !live(it.Session, it.Window) {
+			if it.ID == "" || !live(it.Session, it.Window) {
 				continue
 			}
 		default:
 			continue
 		}
-		if it.ID == "" || len(a.items) >= attentionMaxItems {
-			continue
+		it.Closed = ""
+		kept = append(kept, it)
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.path = path
+	opened := len(a.items) > 0
+	a.nextID = max(a.nextID, f.NextID)
+	a.rev = max(a.rev, f.Rev)
+	for _, it := range kept {
+		if len(a.items) >= attentionMaxItems {
+			break
 		}
 		key := attentionKey(it.Kind, it.Session, it.Window, it.Thread)
 		if _, dup := a.byKey[key]; dup {
 			continue
 		}
 		item := it
-		item.Closed = ""
+		if _, taken := a.items[item.ID]; taken {
+			a.nextID++
+			item.ID = strconv.FormatUint(a.nextID, 10)
+		}
 		a.items[item.ID] = &item
 		a.byKey[key] = item.ID
+	}
+	// An item opened before load had no path to be saved to.
+	if opened {
+		a.changedLocked()
 	}
 }
 
