@@ -285,11 +285,17 @@ func Log(path, base string) (string, error) {
 // run executes git in dir and returns its stdout. A failure carries git's own
 // stderr, which is the message a person needs.
 func run(dir string, args ...string) (string, error) {
+	return runEnv(dir, nil, args...)
+}
+
+// runEnv is run with extra environment entries.
+func runEnv(dir string, env []string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	// Nothing here is interactive, and a git that waits on a terminal for a
 	// credential or an editor would hang the daemon.
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true")
+	cmd.Env = append(cmd.Env, env...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
