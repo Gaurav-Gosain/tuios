@@ -1151,3 +1151,30 @@ benchmark's own ns/op over the same alternating rounds. The profiling pass
 measured the served end of it, an in-process SSH and web server with a client
 sweeping the dock row, at 256 us to 52 us of server CPU per event over SSH and
 276 us to 102 us over the web.
+
+**A live message composes a frame only when its burn moves a cell**
+(`render_dock_notification.go`, `update.go`). While a message is up the tick
+runs at the frame rate, and it composed on every tick, although the only part
+of the message block that moves on its own is the rule, which burns down one
+cell at a time: about as many changes over the message's life as the block is
+wide. A web client in its first three seconds, with the connect toast up,
+composed 171 frames to put 18 on the wire. The dock now records what it drew
+of the message (its id, the queue count, the lit cells and the span), and the
+tick composes when `notifBurnMoved` finds any of them would draw differently.
+The tick rate, expiry and the frame a new message brings are unchanged. A
+message the dock did not draw leaves the record behind, so the tick composes
+every time, as it did before. `TestNotificationTickComposesOnlyWhenTheBurnMoves`
+ages a message by fractions of a cell and requires a frame exactly on the
+tick that moves the rule and after a new message.
+
+`BenchmarkNotificationTick` is new: one op is one 60 Hz tick with a live info
+message, aged by one frame per op, with the View a composing tick is followed
+by.
+
+| per op | before | after | |
+|---|---|---|---|
+| `NotificationTick` render/tick | 1.000 | 0.086 | -91.4% |
+| `NotificationTick` CPU | 224 us | 23 us | -89.7% (p=0.000) |
+| `NotificationTick` allocs | 340 | 38 | -88.8% |
+| `NotificationTick` B/op | 16.7 KiB | 2.1 KiB | -87.5% |
+| `IdleTick` | 0 render/tick, 0 work/tick, 296 B, 5 allocs | the same | `~` |

@@ -365,6 +365,8 @@ func (m *OS) renderDockString() (string, int) {
 	inCopyMode := focusedWindow.CopyModeVisible() && m.dockPlan.Has(config.DockComponentCopyHelp)
 	switch {
 	case hasNotif:
+		// What the tick compares against to tell whether the burn has moved.
+		m.notifDrawn = notif.drawn
 		// The message outranks the help line for its duration. Copy mode is a
 		// mode the user is holding and can read the keys for again in a moment;
 		// a message is a thing that just happened and will not be repeated.

@@ -55,6 +55,43 @@ type notifBlock struct {
 	// bare columns past it. Everything to its left is the message itself,
 	// which is what a click follows.
 	DismissW int
+	// drawn is what this block shows that can change without a message
+	// arriving: see notifBurnMoved.
+	drawn notifDrawn
+}
+
+// notifDrawn is what the last composed frame showed of the live message: which
+// message, how many waited behind it, and how many cells of its rule were lit
+// across how wide a span.
+type notifDrawn struct {
+	id        string
+	queued    int
+	lit, span int
+}
+
+// notifBurnMoved reports whether the live message would draw differently now
+// from the frame that last drew it, which is what the tick asks before it
+// composes for a message.
+//
+// The tick runs at the frame rate while a message is up, because the rule
+// burns down as it ages. But the rule moves one cell at a time, so over a
+// message's life it changes about as many times as the block is wide, and a
+// compose on every tick drew the same frame dozens of times per visible
+// change. Nothing else in the block moves on its own: the text, the mark and
+// the meta are fixed per message and queue, and a message arriving, leaving or
+// being dismissed changes the top message or the count.
+//
+// A message the dock did not draw (the dock hidden, the component off, or no
+// room for it) leaves notifDrawn behind, so this stays true on every tick,
+// which is what the tick did before it asked.
+func (m *OS) notifBurnMoved() bool {
+	s, ok := m.notifStatus()
+	if !ok {
+		return false
+	}
+	d := m.notifDrawn
+	return s.msg.ID != d.id || s.queued != d.queued ||
+		notifLitSpan(s.frac, d.span) != d.lit
 }
 
 // notifStatus is the reading of the live queue that the block is drawn from:
@@ -297,6 +334,12 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 		Rule:     notifBurnRule(s, width, &m.Settings),
 		Width:    width,
 		DismissW: lipgloss.Width(meta) + 2, // meta and the bar columns after it
+		drawn: notifDrawn{
+			id:     s.msg.ID,
+			queued: s.queued,
+			lit:    notifLitSpan(s.frac, width),
+			span:   width,
+		},
 	}, true
 }
 

@@ -301,6 +301,7 @@ type OS struct {
 	dockItemHits           []dockItemHit           // where the dock's minimized entries were drawn last frame
 	dockOverflowHit        dockOverflowHit         // where the entries' overflow marker was drawn last frame
 	dockSessionHits        []dockSessionHit        // where the dock's session controls were drawn last frame
+	notifDrawn             notifDrawn              // what the last frame showed of the live message
 	dockSessionHover       DockSessionAction       // which session control the pointer is on, DockSessionNone for neither
 	dockCustomHits         []dockCustomHit         // where the custom components were drawn last frame
 	dockPlan               dockPlan                // which components are on which side, in draw order

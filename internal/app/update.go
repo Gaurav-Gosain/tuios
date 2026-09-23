@@ -1007,8 +1007,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		//
 		// The tick that retires something draws one more frame so the message
 		// actually leaves the screen, which is what notifExpired carries. A live
-		// message is a reason to keep drawing regardless, because the hairline
-		// under it is burning down and that is a per-frame change.
+		// message keeps the tick at the frame rate, because the hairline under
+		// it is burning down, but a tick composes for it only when the burn has
+		// moved a cell since the frame that last drew it (notifBurnMoved).
 		notifExpired := m.CleanupNotifications()
 		hasNotifications := len(m.Notifications) > 0
 		needsScriptFrame := m.ScriptMode || leftScriptMode
@@ -1050,7 +1051,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		// Render on tick if something periodic needs visual updates OR background windows changed
 		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
-			hasBackgroundChanges || hasNotifications || notifExpired || leftScriptMode ||
+			hasBackgroundChanges || m.notifBurnMoved() || notifExpired || leftScriptMode ||
 			m.SidebarMarqueeActive() || m.TooltipPending() || railTitleChanged || zenCrossed ||
 			m.spotlightMotionPending
 		if !needsRender {
