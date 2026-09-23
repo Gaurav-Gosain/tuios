@@ -81,6 +81,14 @@ func TestEveryProgramTakesTheSharedOptions(t *testing.T) {
 			if name == "WithOutput" {
 				return true
 			}
+			// The browser build is its own transport, with no sip or wish
+			// to supply the input and size, and it runs a wrapper model the
+			// shared filter does not recognise, so it installs one that
+			// unwraps and calls FilterMouseMotion.
+			if path == "cmd/tuios-wasm/main_js.go" &&
+				(name == "WithInput" || name == "WithWindowSize" || name == "WithFilter") {
+				return true
+			}
 			t.Errorf("%s:%d: tea.%s set outside ProgramOptions; the other clients do not get it",
 				path, fset.Position(call.Pos()).Line, name)
 			return true

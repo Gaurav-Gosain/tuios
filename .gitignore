@@ -36,3 +36,4 @@ zz_*_test.go
 
 # Test binaries left behind by go test -cpuprofile
 *.test
+.wasm-build/

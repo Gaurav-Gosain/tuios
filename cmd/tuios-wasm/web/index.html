@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learn tuios</title>
+<link rel="stylesheet" href="xterm.css">
+<link rel="stylesheet" href="webterm.css">
+<style>
+  :root {
+    --bg: #0b0b12;
+    --panel: #14141f;
+    --line: #262638;
+    --text: #e6e6f0;
+    --muted: #8a8aa3;
+    --accent: #cba6f7;
+    --ok: #a6e3a1;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 15px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { display: grid; grid-template-columns: 1fr 320px; gap: 16px; padding: 16px; height: 100vh; }
+  #stage { position: relative; border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+    background: #11111b; box-shadow: 0 20px 60px rgba(203, 166, 247, .08); }
+  /* webterm.css sizes .webterm to 100%; the inset has to win over that. */
+  #terminal { position: absolute; inset: 8px; width: auto; height: auto; }
+  #boot { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted);
+    font: 14px ui-monospace, monospace; background: #11111b; z-index: 2; transition: opacity .3s; }
+  #boot.gone { opacity: 0; pointer-events: none; }
+  aside { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px;
+    display: flex; flex-direction: column; gap: 14px; overflow: auto; }
+  h1 { font-size: 18px; margin: 0; }
+  h1 span { color: var(--accent); }
+  ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); }
+  li.current { color: var(--text); border-color: var(--accent); }
+  li.done { color: var(--ok); border-color: #2c4a2c; }
+  li.done::before { content: "\2713  "; }
+  kbd { font: 12px ui-monospace, monospace; background: #232336; border: 1px solid #36364f;
+    border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--text); }
+  #log { font: 11px ui-monospace, monospace; color: var(--muted); white-space: pre-wrap; margin: 0;
+    max-height: 30vh; overflow: auto; border-top: 1px solid var(--line); padding-top: 10px; }
+  #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+</style>
+</head>
+<body>
+<main id="stage">
+  <div id="terminal" class="webterm"></div>
+  <div id="boot">loading tuios...</div>
+</main>
+<aside>
+  <h1>Learn <span>tuios</span></h1>
+  <ol id="steps"></ol>
+  <pre id="log"></pre>
+</aside>
+<canvas id="confetti"></canvas>
+<script src="webterm.js"></script>
+<script src="wasm_exec.js"></script>
+<script>
+'use strict';
+// Timings the headless probe reads back.
+const t0 = performance.now();
+window.tuiosTimings = {};
+const mark = (name) => { if (!(name in tuiosTimings)) tuiosTimings[name] = Math.round(performance.now() - t0); };
+
+// A tiny track to prove step detection. Each step names the event that
+// completes it; the real site would load tracks from data.
+const steps = [
+  { html: 'Press <kbd>n</kbd> to open a terminal window', done: (e) => e.type === 'window.open' },
+  { html: 'Press <kbd>i</kbd> to type in it, then run <kbd>ls</kbd>', done: (e) => e.type === 'shell.command' && e.data.command === 'ls' },
+  { html: 'Open another: <kbd>Ctrl+B</kbd> then <kbd>c</kbd>', done: (e) => e.type === 'window.open' && e.state.totalWindows >= 2 },
+  { html: 'Float or tile them: <kbd>Ctrl+B</kbd> then <kbd>Space</kbd>', done: (e) => e.type === 'tiling' },
+  { html: 'Workspace 2: <kbd>Ctrl+B</kbd> <kbd>w</kbd> <kbd>2</kbd>', done: (e) => e.type === 'workspace' && e.data.to === 2 },
+];
+let current = 0;
+const list = document.getElementById('steps');
+function renderSteps() {
+  list.innerHTML = steps.map((s, i) =>
+    `<li class="${i < current ? 'done' : i === current ? 'current' : ''}">${s.html}</li>`).join('');
+}
+renderSteps();
+
+const log = document.getElementById('log');
+window.tuiosEvents = [];
+function onEvent(e) {
+  tuiosEvents.push(e);
+  if (e.type !== 'key') {
+    log.textContent = `${e.type} ${JSON.stringify(e.data || {})}\n` + log.textContent.slice(0, 4000);
+  }
+  if (current < steps.length && steps[current].done(e)) {
+    current++;
+    renderSteps();
+    confetti();
+  }
+}
+
+// Confetti, drawn here so the page needs no network.
+const canvas = document.getElementById('confetti');
+const ctx = canvas.getContext('2d');
+let bits = [];
+function confetti() {
+  canvas.width = innerWidth; canvas.height = innerHeight;
+  const colours = ['#cba6f7', '#f5c2e7', '#89b4fa', '#a6e3a1', '#f9e2af', '#fab387'];
+  for (let i = 0; i < 140; i++) {
+    bits.push({ x: innerWidth - 180, y: 120, vx: (Math.random() - .7) * 14, vy: -Math.random() * 12 - 4,
+      r: Math.random() * 6 + 3, c: colours[i % colours.length], a: Math.random() * 6, life: 90 });
+  }
+  if (bits.length === 140) requestAnimationFrame(tick);
+}
+function tick() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  bits = bits.filter((b) => b.life-- > 0);
+  for (const b of bits) {
+    b.vy += .35; b.x += b.vx; b.y += b.vy; b.a += .2;
+    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.a); ctx.fillStyle = b.c;
+    ctx.fillRect(-b.r / 2, -b.r / 4, b.r, b.r / 2); ctx.restore();
+  }
+  if (bits.length) requestAnimationFrame(tick);
+}
+
+(async function main() {
+  const term = new WebTerm.WebTerm({
+    fontFamily: 'JetBrainsMono Nerd Font Mono',
+    fontSize: 14,
+    fonts: [
+      { source: 'url(fonts/JetBrainsMonoNerdFontMono-Regular.ttf)', weight: '400', style: 'normal' },
+      { source: 'url(fonts/JetBrainsMonoNerdFontMono-Bold.ttf)', weight: '700', style: 'normal' },
+    ],
+    renderer: { prefer: new URLSearchParams(location.search).get('renderer') || 'webgl' },
+    theme: { background: '#11111b' },
+    mouse: { suppressContextMenu: true },
+    // Option is the workspace modifier on a Mac; xterm must send it as Alt.
+    xterm: { macOptionIsMeta: true },
+  });
+
+  // Start the wasm download while the fonts load.
+  const go = new Go();
+  const wasm = WebAssembly.instantiateStreaming(fetch('tuios.wasm'), go.importObject)
+    .then((r) => { mark('wasmCompiled'); return r; });
+
+  await term.open(document.getElementById('terminal'));
+  mark('terminalOpen');
+  window.webterm = term;
+
+  // Size the model to the renderer before it starts.
+  window.tuiosInitialSize = [term.cols, term.rows];
+  // ?tap keeps the raw output for debugging from the console.
+  const tap = new URLSearchParams(location.search).has('tap') ? (window.tuiosTap = []) : null;
+  window.onTuiosReady = (api) => {
+    mark('goReady');
+    let first = true;
+    api.onOutput((bytes) => {
+      if (first) {
+        first = false;
+        mark('firstOutput');
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          mark('firstFrame');
+          document.getElementById('boot').classList.add('gone');
+        }));
+      }
+      if (tap) tap.push(bytes);
+      term.write(bytes);
+    });
+    api.onEvent(onEvent);
+    // webterm hands keyboard and mouse bytes to the attached transport.
+    term.attach({ name: 'wasm', start() {}, send(bytes) { api.input(bytes); }, close() {} });
+    term.on('resize', ({ cols, rows }) => api.resize(cols, rows));
+    // The fit may have run between reading the initial size and now.
+    api.resize(term.cols, term.rows);
+    term.focus();
+  };
+
+  const result = await wasm;
+  mark('goStart');
+  go.run(result.instance);
+})().catch((err) => {
+  document.getElementById('boot').textContent = 'failed: ' + err;
+  console.error(err);
+});
+</script>
+</body>
+</html>
