@@ -56,6 +56,9 @@ func (sb *Scrollback) appendLineText(buf *strings.Builder, data []byte) {
 	plain := true
 	var style uv.Style
 	var link uv.Link
+	// The links this line has written so far, which a later link token can
+	// refer back to. See readLink.
+	var links []uv.Link
 	pending := 0
 	flush := func() {
 		for ; pending > 0; pending-- {
@@ -75,12 +78,11 @@ func (sb *Scrollback) appendLineText(buf *strings.Builder, data []byte) {
 			style = sb.unpackStyle(st)
 			plain = style == (uv.Style{}) && link == (uv.Link{})
 		case sbLink:
-			v, m := binary.Uvarint(data[i+1:])
-			if m <= 0 {
+			var ok bool
+			link, links, i, ok = readLink(data, i+1, links)
+			if !ok {
 				return
 			}
-			i += 1 + m
-			link = sb.unpackLink(v)
 			plain = style == (uv.Style{}) && link == (uv.Link{})
 		case sbCell:
 			if i+1 >= len(data) {
