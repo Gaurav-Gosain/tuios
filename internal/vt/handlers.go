@@ -1022,7 +1022,7 @@ func (e *Emulator) registerDefaultCsiHandlers() {
 
 		// Debug logging
 		debugLog := func(msg string) {
-			if os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+			if debugInternal() {
 				if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 					_, _ = fmt.Fprintf(f, "[%s] VT-XTWINOPS: %s\n", time.Now().Format("15:04:05.000"), msg)
 					_ = f.Close()

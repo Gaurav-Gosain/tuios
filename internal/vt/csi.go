@@ -5,10 +5,19 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
 )
+
+// debugInternal reports whether TUIOS_DEBUG_INTERNAL=1 is set, read once on
+// first use. The switch is set at startup, before any emulator exists. It was
+// read with os.Getenv on every CSI t, and again for each line the XTWINOPS
+// handler went to log, for a log that is off in every normal run.
+var debugInternal = sync.OnceValue(func() bool {
+	return os.Getenv("TUIOS_DEBUG_INTERNAL") == "1"
+})
 
 func (e *Emulator) handleCsi(cmd ansi.Cmd, params ansi.Params) {
 	switch cmd.Final() {
@@ -22,7 +31,7 @@ func (e *Emulator) handleCsi(cmd ansi.Cmd, params ansi.Params) {
 	}
 
 	// Debug logging for CSI 't' sequences (XTWINOPS)
-	if cmd.Final() == 't' && os.Getenv("TUIOS_DEBUG_INTERNAL") == "1" {
+	if cmd.Final() == 't' && debugInternal() {
 		if f, err := os.OpenFile("/tmp/tuios-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 			_, _ = fmt.Fprintf(f, "[%s] VT-CSI: received CSI %q (cmd=%d, final=%c)\n",
 				time.Now().Format("15:04:05.000"), paramsString(cmd, params), int(cmd), cmd.Final())

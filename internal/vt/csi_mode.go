@@ -132,7 +132,7 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 		} else {
 			e.restoreCursor()
 		}
-	case ansi.ModeAltScreenSaveCursor: // Alternate Screen Save Cursor (1047 & 1048)
+	case ansi.ModeAltScreenSaveCursor: // 1049, the effects of 1047 and 1048 combined
 		// Save primary screen cursor position
 		// Switch to alternate screen
 		// Doesn't support scrollback
