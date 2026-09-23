@@ -111,8 +111,8 @@ is then mailed to the asking pane from human, marked verified_human, so
 From inside a pane the question is asked as that pane. It exits 0 with the
 answer on stdout, 2 when there is no answer yet, and 1 when the question ended
 without one (dismissed, superseded, or its pane closed).`,
-		Example: `  # Ask, and branch on the answer
-  if [ "$(tuios ask-human 'Deploy to staging?' -o yes -o no)" = yes ]; then ./deploy.sh; fi
+		Example: `  # Ask, and keep the answer
+  answer=$(tuios ask-human 'Deploy to staging?' -o yes -o no) && echo "$answer"
 
   # Ask and move on; the answer arrives as mail
   tuios ask-human 'Which region?' -o us -o eu --no-wait
