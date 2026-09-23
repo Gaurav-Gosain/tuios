@@ -447,6 +447,18 @@ func init() {
 			examples: []string{`{"id":1,"verb":"open-pane","params":{"width":120,"height":40}}`},
 			handler:  (*Daemon).verbOpenPane,
 		},
+		"link-peer": {
+			description: "Name the machine a link connection came from. tuios stdio-proxy sends it as the first line of every connection it opens for a link, and the daemon resolves that machine's link policy from the name. Accepted once per connection, before anything else, and only on a link socket. After the reply the connection is read from scratch, JSON or binary.",
+			params: []verbParam{
+				{Name: "peer", Type: "string", Description: "The machine's name: the one the hub gave for itself, or the one the proxy was pinned to with --as. Empty for none."},
+				{Name: "pinned", Type: "bool", Description: "The name came from stdio-proxy --as on this machine, not from the hub."},
+			},
+			returns: []verbParam{
+				{Name: "peer", Type: "string", Description: "The name the connection is held to."},
+			},
+			examples: []string{`{"id":1,"verb":"link-peer","params":{"peer":"laptop"}}`},
+			handler:  (*Daemon).verbLinkPeer,
+		},
 		"resize-pane": {
 			description: "Resize a pane this machine is running for another machine. It arrives on its own connection because the pane's connection carries raw bytes and has no room to say anything out of band.",
 			params: []verbParam{
@@ -1191,6 +1203,8 @@ func init() {
 				{Name: "origin_host", Type: "string", Description: "The machine name the sender claimed, for a send from another machine."},
 				{Name: "verified_human", Type: "bool", Description: "True for a message from human that carried the nonce of a client attached to the session now."},
 				{Name: "claimed_human", Type: "bool", Description: "True for a message from human that carried no such nonce. It is a claim anything with the socket can make."},
+				{Name: "held", Type: "bool", Description: "True when this machine's link policy (hold_mail) put a message from another machine in the person's Inbox instead of the recipient's. The person passes it on with release-agent-message."},
+				{Name: "held_for", Type: "string", Description: "With held, the window the message was addressed to, empty for a notice."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"send-agent-message","params":{"session":"work","to":"build","from":"$TUIOS_PANE_ID","subject":"tests green","text":"the suite passes on my branch"}}`,
@@ -1199,6 +1213,23 @@ func init() {
 				`{"id":1,"verb":"send-agent-message","params":{"session":"work","to":"build","from":"$TUIOS_PANE_ID","reply_to":12,"text":"retested, still green"}}`,
 			},
 			handler: (*Daemon).verbSendAgentMessage,
+		},
+		"release-agent-message": {
+			description: "Pass a message from another machine that this machine held for the person (hold_mail in its link policy) on to the window it was for. Only the person at a client attached right now can, with the nonce from its attach reply. The message is delivered as a new message with its original sender and origin, and the held copy is marked read. A message is released once.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "id", Type: "int", Required: true, Description: "The message_id of the held message, as read-agent-messages -w human shows it, or held_id on its Inbox item."},
+				{Name: "human_nonce", Type: "string", Required: true, Description: "The nonce the daemon issued in an attach reply, for a client attached now. The TUI sends its own."},
+			},
+			returns: []verbParam{
+				{Name: "held_id", Type: "int", Description: "The held message."},
+				{Name: "message_id", Type: "int", Description: "The message that was delivered."},
+				{Name: "to", Type: "string", Description: "The window it was delivered to, empty for a notice."},
+				{Name: "to_name", Type: "string", Description: "That window's name."},
+				{Name: "thread_id", Type: "int", Description: "The delivered message's thread."},
+			},
+			examples: []string{`{"id":1,"verb":"release-agent-message","params":{"session":"work","id":12,"human_nonce":"<from the attach reply>"}}`},
+			handler:  (*Daemon).verbReleaseAgentMessage,
 		},
 		"list-attention": {
 			description: "List the Inbox: everything in every session waiting for the person, on this machine and on every linked host. An item is an approval or a question (a pane on needs_input), mail to human, a pane on errored, or a finished turn nobody has looked at. Items are grouped in that order, oldest first inside each group. Every change to the list is an attention event on subscribe.",
@@ -1588,6 +1619,15 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 		return d.writeVerbError(cs, req.ID, req.Verb, verr)
 	}
 
+	// A call from another machine is held to that machine's link policy
+	// before its handler runs. See link_policy.go.
+	if verr := d.checkLinkVerb(cs, req.Verb); verr != nil {
+		return d.writeVerbError(cs, req.ID, req.Verb, verr)
+	}
+	if req.Verb != linkPolicyVerb {
+		markLinkServed(cs)
+	}
+
 	// A report from a pane this machine runs for another machine goes to the
 	// machine that owns the pane's window. See hosted_calls.go.
 	if result, verr, handled := d.forwardHostedCall(cs, req.Verb, req.Params); handled {
@@ -1821,5 +1861,9 @@ func (d *Daemon) verbHello(cs *connState, params json.RawMessage) (any, *verbErr
 		"daemon_version": d.version,
 		"pid":            os.Getpid(),
 		"sessions":       len(d.manager.ListSessions()),
+		// link_policy says this daemon holds links to a policy, so a proxy
+		// must reach it on a link socket and never on this one. See
+		// dialForLink in cmd/tuios.
+		"link_policy": true,
 	}, nil
 }

@@ -12,7 +12,8 @@ import (
 // question, enter goes to the item's pane (or opens its mail thread), 1, 2
 // and 3 answer an approval the Inbox is holding (allow once, always allow,
 // deny, the order of the harness's own menu), d dismisses, r replies to mail,
-// y resumes a conversation a restart left, f steps the kind filter, m opens
+// y resumes a conversation a restart left, p passes on mail another machine
+// sent an agent here that the link policy held, f steps the kind filter, m opens
 // the whole mailbox, and esc or q closes.
 func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.InboxPeeking() {
@@ -37,6 +38,8 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.InboxReply()
 	case "y":
 		return o, o.InboxResume()
+	case "p":
+		return o, o.InboxRelease()
 	case "f":
 		o.InboxCycleFilter()
 	case "m":

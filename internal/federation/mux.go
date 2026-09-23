@@ -129,6 +129,11 @@ type mux struct {
 	closed  bool
 	err     error
 
+	// self is put in the From of every stream this side opens that does not
+	// name one, so the far machine knows which machine's policy applies.
+	// Set before the mux is used and never changed.
+	self string
+
 	done chan struct{}
 	once sync.Once
 
@@ -228,6 +233,9 @@ func (m *mux) open(stall time.Duration, info StreamOpen) (*Stream, error) {
 	m.streams[id] = s
 	m.mu.Unlock()
 
+	if info.From == "" {
+		info.From = m.self
+	}
 	if err := m.writeFrame(frameOpen, id, info.encode()); err != nil {
 		m.dropStream(id)
 		return nil, err

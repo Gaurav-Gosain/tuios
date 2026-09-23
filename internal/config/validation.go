@@ -113,6 +113,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	// Validate the tape section (warn on an unknown autorun mode)
 	validateTapeConfig(cfg, result)
 	validateResumeAgents(cfg, result)
+	validateLinkPolicies(cfg, result)
 
 	// Validate the notifications section (warn on a duration that would put a
 	// message back under the accessibility floor)

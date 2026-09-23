@@ -359,6 +359,18 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 		})
 	}
 
+	// Mail from a machine whose link policy holds it goes to the person
+	// instead, marked with who it was for, and reaches the agent only when
+	// the person passes it on with release-agent-message. The recipient was
+	// resolved above, so a send to a window that does not exist is still
+	// refused rather than held.
+	if viaLink && msg.To != AgentInboxHuman && d.linkPolicy(cs).HoldMail {
+		msg.HeldFor, msg.HeldForLabel = msg.To, msg.ToLabel
+		msg.Held = true
+		msg.Kind = agentMsgDirect
+		msg.To, msg.ToLabel = AgentInboxHuman, AgentInboxHuman
+	}
+
 	for _, path := range p.Attachments {
 		// A path from another machine names a file on this one, and the only
 		// files another machine may name here are the ones it put in the
@@ -460,6 +472,89 @@ func (d *Daemon) verbSendAgentMessage(cs *connState, params json.RawMessage) (an
 		// attached client, or stored it as a claim.
 		"verified_human": stored.VerifiedHuman,
 		"claimed_human":  stored.ClaimedHuman,
+		// held is true when this machine's link policy put the message in
+		// the person's Inbox instead of the recipient's. held_for is the
+		// window it was for.
+		"held":     stored.Held,
+		"held_for": stored.HeldFor,
+	}, nil
+}
+
+// verbReleaseAgentMessage passes a held message on to the agent it was for.
+//
+// Only the person may: the call needs the nonce of a client attached right
+// now, as dismiss-attention does, and a process in a pane of this daemon is
+// never issued one. Over a link it also needs respond. The message is sent
+// again as a new message to the window it was held for, with the sender and
+// the origin it arrived with, and the held copy is marked read so its Inbox
+// item closes. A message is released once.
+func (d *Daemon) verbReleaseAgentMessage(cs *connState, params json.RawMessage) (any, *verbError) {
+	var p struct {
+		Session    string `json:"session"`
+		ID         uint64 `json:"id"`
+		HumanNonce string `json:"human_nonce"`
+	}
+	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if p.ID == 0 {
+		return nil, invalidParam("id", "id is required: the message_id of the held message")
+	}
+	if !d.verifyAnyHumanNonce(p.HumanNonce, cs) {
+		return nil, hintedVerbError(ErrVerbNotHuman, "release-agent-message is for the person at an attached client", &VerbHint{
+			Param:  "human_nonce",
+			Detail: "Mail from another machine is held so the person decides whether an agent sees it. Only a client attached right now can pass it on, with the nonce its attach reply carried.",
+		})
+	}
+	sess, verr := d.resolveVerbSession(p.Session)
+	if verr != nil {
+		return nil, verr
+	}
+	held, ok := d.agents.takeHeld(sess.Name, p.ID)
+	if !ok {
+		return nil, hintedVerbError(ErrVerbInvalidParams, "no held message has id "+strconv.FormatUint(p.ID, 10)+" in this session", &VerbHint{
+			Param:   "id",
+			Command: "tuios read-agent-messages -w human",
+			Detail:  "The message may already have been passed on, or dropped from the ring. Only a message marked held can be released.",
+		})
+	}
+	// The window it was for may have closed while it was held.
+	if held.HeldFor != "" {
+		if _, _, err := resolveMailParty(sess.GetState(), held.HeldFor); err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+	}
+	out := AgentMessage{
+		Kind: agentMsgNotice, From: held.From, FromLabel: held.FromLabel,
+		To: held.HeldFor, ToLabel: held.HeldForLabel,
+		Subject: held.Subject, Text: held.Text, ReplyTo: held.ReplyTo,
+		Attachments: held.Attachments, Origin: held.Origin, OriginHost: held.OriginHost,
+		VerifiedHuman: held.VerifiedHuman, ClaimedHuman: held.ClaimedHuman,
+		ReleasedFrom: held.ID,
+	}
+	if out.To != "" {
+		out.Kind = agentMsgDirect
+	}
+	if out.ReplyTo > d.agents.highestID() {
+		out.ReplyTo = 0
+	}
+	stored := d.agents.send(sess.Name, out)
+	d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{Message: stored}, "")
+	d.events.publish(streamEvent{Type: EventAgentMessage, Session: sess.Name, Window: stored.To})
+	// The held copy was marked read when it was taken. Only it: other mail to
+	// the person in the same thread stays as it was.
+	d.broadcastToSession(sess.ID, MsgAgentMail, &AgentMailPayload{ReadIDs: []uint64{held.ID}, ReadAt: held.ReadAt}, "")
+	if _, unread := d.agents.firstUnread(sess.Name, AgentInboxHuman, held.ThreadID); !unread {
+		d.attention.noteMailRead(sess.Name, held.ThreadID)
+	}
+	return map[string]any{
+		"type":       "agent_message_released",
+		"session":    sess.Name,
+		"held_id":    held.ID,
+		"message_id": stored.ID,
+		"to":         stored.To,
+		"to_name":    stored.ToLabel,
+		"thread_id":  stored.ThreadID,
 	}, nil
 }
 

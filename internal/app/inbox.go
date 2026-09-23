@@ -1304,6 +1304,57 @@ func (m *OS) inboxDismissCmd(id string, silent bool) tea.Cmd {
 	}
 }
 
+// InboxRelease passes the selected held mail on to the agent it was for:
+// mail from another machine whose link policy holds it waits in the Inbox
+// until the person reads it and decides. It sends release-agent-message with
+// this client's attach nonce, which is what lets the daemon tell the person
+// from an agent.
+func (m *OS) InboxRelease() tea.Cmd {
+	it, ok := m.inboxSelected()
+	if !ok {
+		return nil
+	}
+	if it.HeldID == 0 {
+		m.ShowNotification("p passes on mail another machine sent an agent here, held for you. This item holds none.", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	if it.Host != "" || m.AttachedHost != "" || m.DaemonClient == nil {
+		m.ShowNotification("That mail is held on another machine; attach there to pass it on", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	nonce := m.DaemonClient.HumanNonce()
+	if nonce == "" {
+		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		return nil
+	}
+	build := m.DaemonClient.ClientVersion()
+	sessionName, id, heldFor := it.Session, it.HeldID, it.HeldFor
+	return func() tea.Msg {
+		client, err := session.DialVerbClientAs(build)
+		if err != nil {
+			return InboxReleasedMsg{Err: err}
+		}
+		defer func() { _ = client.Close() }()
+		_, err = client.CallWithTimeout("release-agent-message", map[string]any{"session": sessionName, "id": id, "human_nonce": nonce}, 5*time.Second)
+		return InboxReleasedMsg{To: heldFor, Err: err}
+	}
+}
+
+// InboxReleasedMsg is the answer to a release.
+type InboxReleasedMsg struct {
+	To  string
+	Err error
+}
+
+// applyInboxReleased says where the mail went, or why it did not.
+func (m *OS) applyInboxReleased(msg InboxReleasedMsg) {
+	if msg.Err != nil {
+		m.ShowNotification("The mail was not passed on: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
+		return
+	}
+	m.ShowNotification("Passed on to "+printableTitle(msg.To), "success", m.Settings.NotificationDuration)
+}
+
 // InboxResume answers the selected resume item: it goes to the pane and has
 // the daemon type the conversation's resume command there, so the person
 // watches the agent come back. The item closes when the daemon says the

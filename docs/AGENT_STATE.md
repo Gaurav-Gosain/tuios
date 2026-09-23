@@ -922,6 +922,7 @@ Inside the Inbox:
 | `1` / `2` / `3` | Answer the held approval under the cursor: allow once, always allow, deny. The same order as the harness's own menu. Only the keys the prompt offers work, and only once the prompt has been on screen as it is for 0.4 seconds. The whole prompt, and what `2` adds, is shown under the list. See [Approvals from the Inbox](#approvals-from-the-inbox). |
 | `r` | Reply to mail: the thread opens with its reply line. |
 | `y` | On a resume row: go to the pane and type the conversation's resume command there. |
+| `p` | On a row that says `held for NAME`: pass the mail another machine sent that agent on to it. See [Mail held from another machine](#mail-held-from-another-machine). |
 | `d` | Dismiss the item. |
 | `f` | Show one kind, then the next, then all of them. |
 | `m` | Open the mailbox, with every thread including the ones between agents. |
@@ -1701,6 +1702,23 @@ cooldown apply as usual. A burst of items arriving together, which is what a
 fan of agents produces, is one dock message ("5 agents need you in fan-1,
 fan-2, fan-3 and 2 more"), one notification and one sound. A single item's dock
 message names its session: `fan-3: claude needs approval · approve Bash: go test`.
+
+### Mail held from another machine
+
+With `hold_mail = true` in the `[hosts]` table for a machine (see [What another
+machine may do here](CONFIGURATION.md#what-another-machine-may-do-here)), mail
+that machine sends to an agent here does not reach the agent. It lands in your
+Inbox as mail to you, and the row says so in words: `[held for api, p passes
+on]`, then the subject. Read it with enter. `p` passes it on: the agent gets it
+as a new message with the sender and the machine it came from, marked
+`released_from`, and the row closes. Reading it and doing nothing drops it: the
+agent never sees it.
+
+Only you can pass it on. `release-agent-message` needs the nonce of a client
+attached right now, like dismissing, and over a link it needs `respond` too.
+The sender is told `held: true` and `held_for`, so an agent on the other machine
+knows the answer will wait on a person. Mail to you from that machine is yours
+already and is not held.
 
 ## Who can act as the person
 

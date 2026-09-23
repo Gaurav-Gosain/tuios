@@ -174,6 +174,12 @@ type AttentionItem struct {
 	Seq uint64 `json:"seq"`
 	// Thread is the mail thread, for a mail item.
 	Thread uint64 `json:"thread,omitempty"`
+	// HeldID is set on a mail item whose newest message is mail from another
+	// machine held for the person (hold_mail): the message id
+	// release-agent-message takes. HeldFor is the name of the window it was
+	// addressed to, empty for a notice to the session.
+	HeldID  uint64 `json:"held_id,omitempty"`
+	HeldFor string `json:"held_for,omitempty"`
 	// Count is how many unread messages a mail item stands for, or how many
 	// turns a finished item stands for.
 	Count int `json:"count,omitempty"`
@@ -600,6 +606,13 @@ func (a *attentionStore) noteMail(msg AgentMessage) {
 		Thread:  msg.ThreadID,
 		Count:   1,
 	}
+	if msg.Held {
+		it.HeldID = msg.ID
+		it.HeldFor = attentionText(msg.HeldForLabel, attentionMaxSummary)
+		if it.HeldFor == "" {
+			it.HeldFor = "the session"
+		}
+	}
 	if id, ok := a.byKey[attentionKey(AttentionMail, msg.Session, "", msg.ThreadID)]; ok {
 		cur := a.items[id]
 		it.Count = cur.Count + 1
@@ -607,6 +620,11 @@ func (a *attentionStore) noteMail(msg AgentMessage) {
 		// still the thread the person has not read.
 		if it.Window == "" {
 			it.Window = cur.Window
+		}
+		// A held message stays offered for release until it is released,
+		// whatever arrives after it in the thread.
+		if it.HeldID == 0 {
+			it.HeldID, it.HeldFor = cur.HeldID, cur.HeldFor
 		}
 	}
 	a.upsertLocked(it)

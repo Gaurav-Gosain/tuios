@@ -64,6 +64,11 @@ func (m *OS) configuredHostNames() []string {
 	}
 	names := make([]string, 0, len(m.UserConfig.Hosts))
 	for name := range m.UserConfig.Hosts {
+		// [hosts."*"] is the policy for every machine linking in, not a
+		// machine, so it has no address to edit here.
+		if name == config.LinkPolicyDefaultName {
+			continue
+		}
 		names = append(names, name)
 	}
 	sort.Strings(names)

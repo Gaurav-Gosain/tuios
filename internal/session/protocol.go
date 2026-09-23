@@ -600,6 +600,9 @@ const (
 	ErrCodePTYNotFound     = 7
 	ErrCodeNoTUIAttached   = 8 // No TUI client attached to handle the command
 	ErrCodeCommandFailed   = 9 // Command execution failed
+	// ErrCodeForbidden refuses a message a machine linked to this one may not
+	// send under its link policy. Nothing was done. See link_policy.go.
+	ErrCodeForbidden = 10
 )
 
 // WriteMessage writes one framed message.

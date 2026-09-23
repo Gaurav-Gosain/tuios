@@ -283,6 +283,21 @@ func renderHostBlock(name string, h HostConfig) string {
 		}
 		b.WriteString("ssh_options = [" + strings.Join(parts, ", ") + "]\n")
 	}
+	// The policy for the machine linking in is carried through a rewrite of
+	// the address, so `tuios hosts add` on a known name does not drop it.
+	if h.Allow != nil {
+		parts := make([]string, 0, len(h.Allow))
+		for _, c := range h.Allow {
+			parts = append(parts, tomlString(c))
+		}
+		b.WriteString("allow = [" + strings.Join(parts, ", ") + "]\n")
+	}
+	if h.HoldMail != nil {
+		b.WriteString("hold_mail = " + strconv.FormatBool(*h.HoldMail) + "\n")
+	}
+	if h.HostedGrace != "" {
+		b.WriteString("hosted_grace = " + tomlString(h.HostedGrace) + "\n")
+	}
 	return b.String()
 }
 

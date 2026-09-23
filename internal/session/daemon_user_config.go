@@ -1,6 +1,7 @@
 package session
 
 import (
+	"strings"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -37,6 +38,8 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.RespondFromShell = uc.Daemon.RespondFromShell
 	cfg.ResumeAgents = uc.Daemon.ResumeAgents
 	cfg.Hosts = HostsFromConfig(uc)
+	// The same table says what each machine linked to this one may do here.
+	cfg.LinkPolicies = uc.Hosts
 	// The path, not the table, is what lets the daemon follow later edits to
 	// [hosts]. Every real starter goes through here, so every real daemon
 	// watches the file; a daemon built from a hand-made config in a test does
@@ -75,6 +78,12 @@ func HostsFromConfig(cfg *config.UserConfig) []federation.Host {
 	}
 	out := make([]federation.Host, 0, len(cfg.Hosts))
 	for name, h := range cfg.Hosts {
+		// [hosts."*"] and an entry with a policy and no address say what a
+		// machine linking in may do here. Neither is a machine to dial, so
+		// neither is reported as a host with no addr.
+		if name == config.LinkPolicyDefaultName || (strings.TrimSpace(h.Addr) == "" && h.HasLinkPolicy()) {
+			continue
+		}
 		out = append(out, federation.Host{
 			Name:           name,
 			Addr:           h.Addr,

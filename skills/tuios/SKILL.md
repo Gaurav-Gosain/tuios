@@ -255,6 +255,13 @@ windows. A reply to you is a notice in that ring, so read the thread back with
 `read-agent-messages -s HOST:SESSION --thread ID` or wait on it with
 `wait-for agent-message -s HOST:SESSION --thread ID`.
 
+Each machine decides what other machines may do to it: read, mail, open,
+write and answer prompts. By default a machine may do all of that but answer
+prompts. A call the far machine does not allow fails with `forbidden`, naming
+what is missing; nothing was done. A machine can also hold mail from you for
+its person: the send answers `held: true` and `held_for`, and the agent you
+wrote to sees it only if the person passes it on. Do not resend it.
+
 A host bounds what other machines can leave in a ring: 32 unread messages and
 32 notices from links per session. Past that a send answers `rate_limited`
 until someone there reads. A message from another machine can attach only a
@@ -2415,6 +2422,12 @@ or ask the person, look at the target's pane before typing the question again,
 restructure what you were doing, stop sending, send a message to `human`
 instead of asking it, or send as your own pane rather than as `human`. They are
 not timeouts, and retrying them unchanged will fail the same way.
+
+`forbidden` also comes from any verb addressed to another machine
+(`HOST:...`) that the far machine's link policy does not let this machine do.
+The hint names the capability and the `[hosts]` table there that grants it.
+That is the other machine's owner's decision: report it to the person, do not
+look for another verb that does the same thing.
 
 `unknown_host` and `host_unreachable` come only from the host verbs, and both
 are final. A host name is matched exactly against the `[hosts]` config table, so

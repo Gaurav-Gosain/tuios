@@ -1748,6 +1748,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyInboxResumed(msg)
 		return m, nil
 
+	case InboxReleasedMsg:
+		m.applyInboxReleased(msg)
+		return m, nil
+
 	case AgentMailSentMsg:
 		m.applyAgentMailSent(msg)
 		return m, nil

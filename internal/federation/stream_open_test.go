@@ -84,6 +84,50 @@ func TestStreamOpenReachesTheProxy(t *testing.T) {
 	_ = conn.Close()
 }
 
+// TestEveryStreamNamesTheHub: with Self set, every stream the hub opens says
+// which machine it is, so the far machine can resolve its link policy.
+func TestEveryStreamNamesTheHub(t *testing.T) {
+	stub := startStubDaemon(t, helloOK("far-1", 0))
+	froms := make(chan string, 16)
+	dialer := func(_ context.Context, _ Host) (Transport, error) {
+		hub, remote := duplexPipe(t)
+		go func() {
+			_ = ServeProxyFor(remote, remote, func(open StreamOpen) (net.Conn, error) {
+				froms <- open.From
+				return stub.dial()
+			})
+		}()
+		return hub, nil
+	}
+	opts := testOptions(dialer)
+	opts.Self = "laptop"
+	m := managerFor(t, opts, Host{Name: "build", Addr: "unused"})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
+		t.Fatalf("status is %q (%s), want up", r.Status, r.Reason)
+	}
+	conn, err := m.OpenConnectionAs(ctx, "build", StreamOpen{Human: true})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case from := <-froms:
+			if from != "laptop" {
+				t.Fatalf("a stream reached the proxy from %q, want laptop", from)
+			}
+			if len(froms) == 0 {
+				return
+			}
+		case <-deadline:
+			t.Fatal("the proxy never dialed for a stream")
+		}
+	}
+}
+
 // TestStreamOpenPayload pins the wire form: the zero value is the empty
 // payload every older peer sends, and anything unreadable decodes to it.
 func TestStreamOpenPayload(t *testing.T) {

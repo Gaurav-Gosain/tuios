@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
 // fakeAgentScript is a stand-in for an agent blocked on a prompt, run in a
@@ -308,6 +310,13 @@ func TestRespondFromShellIsAGrant(t *testing.T) {
 	}
 	d.respondFromShell = true
 	link := dialLink(t, sp)
+	// A link may not respond at all under the default policy.
+	if code := errCode(t, callVerb(t, link, "respond", params)); code != ErrVerbForbidden {
+		t.Fatalf("on the plain link socket with the default link policy: %s, want %s", code, ErrVerbForbidden)
+	}
+	// With respond allowed, the plain link socket still carries no one the
+	// grant covers.
+	d.SetLinkPolicies(map[string]config.HostConfig{"*": {Allow: config.LinkCapabilities}})
 	if code := errCode(t, callVerb(t, link, "respond", params)); code != ErrVerbNotHuman {
 		t.Fatalf("on the plain link socket with the grant: %s, want %s", code, ErrVerbNotHuman)
 	}
@@ -369,6 +378,11 @@ func TestRespondOverTheLink(t *testing.T) {
 	}
 
 	params := map[string]any{"session": "far", "window": ag.window, "action": "approve", "prompt_id": pk["prompt_id"]}
+	// Answering for the person is not in the default link policy.
+	if _, err := vc.Call("respond", params); err == nil || !strings.Contains(err.Error(), ErrVerbForbidden) {
+		t.Fatalf("respond over a link with the default policy: %v, want %s", err, ErrVerbForbidden)
+	}
+	far.daemon.SetLinkPolicies(map[string]config.HostConfig{"*": {Allow: config.LinkCapabilities}})
 	if _, err := vc.Call("respond", params); err == nil || !strings.Contains(err.Error(), ErrVerbNotHuman) {
 		t.Fatalf("respond over the link with no nonce: %v, want %s", err, ErrVerbNotHuman)
 	}

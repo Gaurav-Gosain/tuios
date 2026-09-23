@@ -78,6 +78,9 @@ func (d *Daemon) onConfigReload(cfg *config.UserConfig, err error) {
 	}
 	d.manager.SetPreferredShell(cfg.Appearance.PreferredShell)
 	d.SetApprovalPolicy(ApprovalPolicyFromConfig(cfg.Agents.Approvals))
+	// A policy change applies to the next call on every link, including links
+	// already open, so tightening it does not wait for a reconnect.
+	d.SetLinkPolicies(cfg.Hosts)
 	d.ApplyHosts(HostsFromConfig(cfg))
 }
 

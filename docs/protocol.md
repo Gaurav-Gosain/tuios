@@ -128,9 +128,15 @@ Result:
   "min_protocol": 1,
   "daemon_version": "1.4.0",
   "pid": 4242,
-  "sessions": 2
+  "sessions": 2,
+  "link_policy": true
 }}
 ```
+
+`link_policy` says the daemon holds calls from other machines to a link
+policy (see [What a linked machine may do here](#what-a-linked-machine-may-do-here)).
+`tuios stdio-proxy` reads it before it would reach the daemon on its own socket
+for a link, and refuses when it is set. It is absent from an older daemon.
 
 The handshake is optional, not a gate: a daemon serves every other verb whether
 or not `hello` was called, and a daemon older than the handshake answers
@@ -152,6 +158,35 @@ Changes that alter what an existing verb does, for a caller that relied on the
 old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
+
+**A call from another machine is held to a link policy.** Every verb and
+every binary message that arrives over a link is checked against what the
+`[hosts]` table on the receiving machine lets the calling machine do, before
+it runs (see [What a linked machine may do here](#what-a-linked-machine-may-do-here)).
+A refused call does nothing and fails with `forbidden`, and a hint naming the
+capability and the table that grants it. The default lets a link do what it
+could before, with these exceptions:
+
+- `respond`, `reply-approval`, `dismiss-attention` and the new
+  `release-agent-message` need the `respond` capability, which the default
+  does not grant. Over a link they used to be refused only for want of a
+  verified nonce (`not_human`); with the default policy they are now
+  `forbidden` first. `tuios respond -w HOST:SESSION:WINDOW` needs
+  `allow = [..., "respond"]` on that host for this machine.
+- `open-host-connection` over a link, which relays on to the far machine's own
+  hosts, needs every capability, so the default refuses it.
+- A binary message a policy refuses is answered with `MsgError` code 10
+  (`ErrCodeForbidden`), and the connection stays open.
+- Calls on the daemon's own socket are unchanged.
+
+**Mail from another machine can be held for the person.** With
+`hold_mail = true` for the sending machine, `send-agent-message` over a link
+to anyone but `human` stores the message addressed to `human`, with `held`,
+`held_for` and `held_for_label` naming the window it was for. The reply
+carries `held: true` and `held_for`, and `to` is `human`. The agent does not
+see it until the person passes it on with `release-agent-message`. The Inbox
+mail item carries `held_id` and `held_for`. Without `hold_mail` nothing
+changes.
 
 **An agent on `needs_input` or `unknown` is not ready to be asked.** The
 states that count as ready are now `idle`, `done`, `errored` and `none`. They
@@ -634,7 +669,7 @@ catalog.
 | `not_human` | Only the person at an attached client may make this call, and it carried no nonce from a live attach. `dismiss-attention`, `respond` and `reply-approval` raise it. |
 | `prompt_changed` | `respond` pressed nothing: the pane is not on `needs_input`, no rule reads its prompt now, the prompt is not the one `prompt_id` names, or another client already answered it. Read it again with `peek-prompt`. |
 | `no_keyboard` | The target is the person's inbox, `human`, which has no pane to type into. |
-| `forbidden` | The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as `human`. Nothing was done. |
+| `forbidden` | The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as `human`, and a machine linked to this one cannot call what its link policy does not grant; the hint names the capability and the `[hosts]` table that grants it. Nothing was done. |
 | `protocol_mismatch` | The caller's protocol version is outside the range this daemon serves. Only `hello` produces it. |
 | `unknown_host` | No host by that name is configured. Host names are matched exactly. |
 | `host_unreachable` | The host is configured and is not answering. Nothing was queued. |
@@ -1895,6 +1930,88 @@ An owner from before this sends no `window`, and the far daemon exports no
 connection still takes requests, so the owner sends `open-pane` again on it
 without `window`. The pane opens as before, with no `calls_token`, and the
 owner opens no channel.
+
+### What a linked machine may do here
+
+A connection that arrives over a link is accepted on a link socket
+(`<socket>.link` or `<socket>.link-human`), which only `tuios stdio-proxy` on
+this machine dials. The daemon marks it before a byte is read, and holds every
+verb and every binary message on it to the policy for the machine it came from.
+The policy is read from the `[hosts]` table on this machine: the built-in
+default, then `[hosts."*"]`, then `[hosts.NAME]`, each field inheriting from
+the one before. The configuration is in
+[CONFIGURATION.md](CONFIGURATION.md#what-another-machine-may-do-here).
+
+| Capability | Verbs |
+| --- | --- |
+| none | `hello`, `list-verbs`, `link-peer` |
+| `list` | `list-*`, `session-info`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir` |
+| `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
+| `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `open-pane`, `resize-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `close-window`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `remove-worktree` |
+| `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message` |
+| every one | `open-host-connection` |
+
+Binary messages: `MsgList`, the PTY subscribe messages, `MsgGetTerminalState`,
+`MsgReadDir` and `MsgGetLogs` need `list`; `MsgAttach` needs `list` and
+`write`; `MsgInput`, `MsgResize`, `MsgClosePTY`, `MsgUpdateState`,
+`MsgExecuteCommand`, `MsgCommandResult` and `MsgKill` need `write`;
+`MsgCreatePTY` and `MsgResurrect` need `open`; `MsgNew` needs `open`, `list`
+and `write`. A refused message is answered with `MsgError` code 10.
+
+The default grants `list`, `mail`, `open` and `write`.
+
+A verb or message with no entry in the table is refused over a link. A test
+holds the table to the verb registry, so a new verb cannot ship without one.
+
+**Naming the machine.** `tuios stdio-proxy` sends `link-peer` as the first
+line of every connection it opens:
+
+```json
+{"id": 0, "verb": "link-peer", "params": {"peer": "laptop", "pinned": false}}
+```
+
+The name is the one the hub gave for itself in the stream's open frame (its
+host name up to the first dot, lowered), or the one the proxy was started with
+by `--as`, which wins and sets `pinned`. The daemon takes `link-peer` only on a
+link socket, once, and before anything else on the connection; after its reply
+the connection is read from scratch, so an attach can follow it. A link from a
+proxy too old to send it has no name and gets `[hosts."*"]`. A daemon too old
+to know `link-peer` answers `unknown_verb`, and the proxy dials again without
+it. If the link sockets cannot be reached, the proxy asks `hello` on the main
+socket and refuses the stream when the daemon reports `link_policy`, so a
+daemon that failed to open its link sockets is not reached on a socket with no
+policy.
+
+Only a pinned name is a boundary. A hub whose ssh key may run any command can
+run a shell, and can claim any name. Pin it in `authorized_keys` on this
+machine:
+
+```
+command="tuios stdio-proxy --as laptop",restrict ssh-ed25519 AAAA...
+```
+
+**Holding mail.** With `hold_mail`, `send-agent-message` over the link to
+anyone but `human` is stored for `human` instead, with `held`, `held_for` and
+`held_for_label`, and opens a mail item in the Inbox with `held_id` and
+`held_for`. The person passes it on:
+
+### release-agent-message
+
+```json
+{"id": 1, "verb": "release-agent-message", "params": {"session": "work", "id": 12, "human_nonce": "<from the attach reply>"}}
+```
+
+Delivers the held message as a new message to the window it was for, with its
+original sender, `origin` and `origin_host`, and `released_from` set to the
+held id. The held copy is marked `released` and read, and its Inbox item closes
+when nothing else in the thread is unread. Only a client attached right now can
+call it, with its nonce (`not_human` otherwise), and over a link it needs
+`respond`. A message is released once; a second call, or an id that is not a
+held message the ring still holds, is `invalid_params`. A window that closed
+while the message was held is `window_not_found`.
+
+Result: `held_id`, `message_id`, `to`, `to_name`, `thread_id`.
 
 ## Event stream
 

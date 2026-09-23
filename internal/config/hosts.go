@@ -43,4 +43,27 @@ type HostConfig struct {
 	// SSHOptions are extra arguments passed to ssh before the address, for a
 	// host that needs a flag ssh_config cannot carry.
 	SSHOptions []string `toml:"ssh_options,omitempty"`
+
+	// The three fields below are the other direction: what the machine of
+	// this name may do here when it links in. They are read on the machine
+	// the link arrives at, and an entry that sets only them, with no addr, is
+	// a policy and nothing is dialled for it. See link_policy.go.
+
+	// Allow is the capabilities the machine gets, from LinkCapabilities. Nil
+	// inherits [hosts."*"] and then DefaultLinkAllow; an empty list allows
+	// nothing.
+	Allow []string `toml:"allow,omitempty"`
+	// HoldMail, when true, holds mail from the machine in the Inbox until the
+	// person passes it on. Nil inherits.
+	HoldMail *bool `toml:"hold_mail,omitempty"`
+	// HostedGrace is how long a pane this machine runs for the other one
+	// outlives a dropped link, waiting to be reattached, as a Go duration
+	// such as "10m". "0" ends it with the link. Empty inherits.
+	HostedGrace string `toml:"hosted_grace,omitempty"`
+}
+
+// HasLinkPolicy reports whether the entry says anything about what the
+// machine of its name may do here.
+func (h HostConfig) HasLinkPolicy() bool {
+	return h.Allow != nil || h.HoldMail != nil || h.HostedGrace != ""
 }

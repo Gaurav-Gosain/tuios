@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -408,6 +407,9 @@ func hostTrouble(status, reason string) string {
 	return status + ". " + reason
 }
 
+// stdioProxyAs is stdio-proxy's --as flag.
+var stdioProxyAs string
+
 // runStdioProxy is the far side of a link.
 //
 // It connects the link framing on stdin and stdout to this machine's daemon
@@ -418,43 +420,28 @@ func hostTrouble(status, reason string) string {
 // It does not start a daemon. Starting one restores that machine's saved
 // sessions, which is a change to remote state, and stage 1 of federation reads
 // only. A machine with no daemon running is reported as such by 'tuios hosts'.
-func runStdioProxy() error {
+//
+// pinnedPeer is the --as flag: the name this machine's link policy is resolved
+// for, whatever the hub says it is called. Set in a forced command in
+// authorized_keys, it is the one name the hub cannot choose. See
+// session.DialForLink.
+func runStdioProxy(pinnedPeer string) error {
 	if term.IsTerminal(int(os.Stdin.Fd())) {
 		return fmt.Errorf("stdio-proxy is not meant to be run by hand. " +
 			"The tuios daemon runs it over ssh to read another machine's listings")
+	}
+	if pinnedPeer != "" {
+		if err := session.ValidLinkPeerName(pinnedPeer); err != nil {
+			return err
+		}
 	}
 	socketPath, err := session.GetSocketPath()
 	if err != nil {
 		return err
 	}
 	return federation.ServeProxyFor(os.Stdin, os.Stdout, func(open federation.StreamOpen) (net.Conn, error) {
-		return dialForLink(socketPath, open.Human)
+		return session.DialForLink(socketPath, open, pinnedPeer)
 	})
-}
-
-// dialForLink connects a link stream to this machine's daemon.
-//
-// It dials the link socket, so the daemon knows the connection came from
-// another machine and marks what arrives on it. A daemon from before the link
-// socket existed has only the main socket, and the proxy falls back to that
-// so an older daemon still links; what is lost then is only the mark.
-//
-// human is the hub saying the process that opened the stream is not inside one
-// of the hub's panes. Such a stream goes to the link-human socket, where an
-// attach can be issued the nonce that verifies a reply from human. A daemon
-// without that socket gets the plain link socket instead, and no link attach
-// verifies: the safe way to lose the mark.
-func dialForLink(socketPath string, human bool) (net.Conn, error) {
-	if human {
-		if conn, err := net.DialTimeout("unix", session.LinkHumanSocketPath(socketPath), 5*time.Second); err == nil {
-			return conn, nil
-		}
-	}
-	conn, err := net.DialTimeout("unix", session.LinkSocketPath(socketPath), 5*time.Second)
-	if err == nil {
-		return conn, nil
-	}
-	return net.DialTimeout("unix", socketPath, 5*time.Second)
 }
 
 // timesWord counts events in words, so a report reads as a sentence.

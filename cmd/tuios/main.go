@@ -2642,12 +2642,19 @@ it found. Add --command to 'tuios hosts add' to run a given binary instead.`,
 A tuios daemon on another machine runs this over ssh to read this machine's
 listings. Do not run it by hand.
 
-It does not start a daemon. If no daemon runs here, the caller is told so.`,
+It does not start a daemon. If no daemon runs here, the caller is told so.
+
+--as pins the name the daemon here resolves the link policy for, from the
+[hosts] table, whatever the other machine calls itself. Put it in a forced
+command in authorized_keys to make the policy a boundary:
+
+  command="tuios stdio-proxy --as laptop",restrict ssh-ed25519 AAAA...`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runStdioProxy()
+			return runStdioProxy(stdioProxyAs)
 		},
 	}
+	stdioProxyCmd.Flags().StringVar(&stdioProxyAs, "as", "", "Name of the machine the link comes from, for its link policy. Overrides the name that machine gives")
 
 	rootCmd.AddCommand(sshCmd, configCmd, keybindsCmd, tapeCmd, layoutCmd, updateCmd)
 	rootCmd.AddCommand(attachCmd, newCmd, lsCmd, killSessionCmd, resurrectCmd)

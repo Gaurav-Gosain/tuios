@@ -18,6 +18,13 @@ type StreamOpen struct {
 	// is false for everything else: a caller in a pane, a connection the hub
 	// daemon opens for itself, and every stream from a hub that predates it.
 	Human bool `json:"human,omitempty"`
+	// From is the name the hub gives for itself. The machine the stream
+	// arrives at resolves its link policy for the hub from it, unless the
+	// proxy there was pinned to a name with --as, which wins. It is the
+	// hub's claim and nothing more: a hub whose ssh key runs any command can
+	// claim any name, which is why only a pinned name is a boundary. Empty
+	// from a hub that predates it.
+	From string `json:"from,omitempty"`
 }
 
 // maxStreamOpenPayload bounds what the accepting side decodes. The frame cap

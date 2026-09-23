@@ -206,6 +206,40 @@ type AgentMessage struct {
 	// back looks read, and a reader could not tell the one that just arrived
 	// from the twenty it had already seen.
 	WasUnread bool `json:"was_unread,omitempty"`
+
+	// Held is set on mail from another machine that this machine's link
+	// policy (hold_mail) put in the person's inbox instead of the recipient's.
+	// HeldFor and HeldForLabel are the window it was addressed to, empty for
+	// a notice to the session. Released is set once the person passed it on
+	// with release-agent-message, and ReleasedFrom on the copy that was
+	// delivered, naming the held message. All are set by the daemon and
+	// never taken from a request.
+	Held         bool   `json:"held,omitempty"`
+	HeldFor      string `json:"held_for,omitempty"`
+	HeldForLabel string `json:"held_for_label,omitempty"`
+	Released     bool   `json:"released,omitempty"`
+	ReleasedFrom uint64 `json:"released_from,omitempty"`
+}
+
+// takeHeld marks a held message released and read, and returns it. It
+// reports false for an id that is not a held message the ring still holds, or
+// one already released.
+func (b *agentBus) takeHeld(session string, id uint64) (AgentMessage, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	mb, ok := b.boxes[session]
+	if !ok {
+		return AgentMessage{}, false
+	}
+	m := mb.find(id)
+	if m == nil || !m.Held || m.Released {
+		return AgentMessage{}, false
+	}
+	m.Released = true
+	if m.ReadAt == 0 {
+		m.ReadAt = time.Now().UnixNano()
+	}
+	return *m, true
 }
 
 // agentBus is the daemon's whole cross-agent surface: the per-session rings and

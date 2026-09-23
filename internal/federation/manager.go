@@ -16,6 +16,10 @@ type Options struct {
 	// log and in its handshake.
 	ClientName    string
 	ClientVersion string
+	// Self is the name this machine gives for itself on every stream it
+	// opens, in StreamOpen.From. The machine at the other end resolves its
+	// link policy for this one from it. Empty sends none.
+	Self string
 	// VerbProtocol and MinVerbProtocol are the control protocol range this
 	// build serves. A remote outside the range is reported as incompatible
 	// rather than used.

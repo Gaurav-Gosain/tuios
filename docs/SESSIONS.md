@@ -346,6 +346,17 @@ never shrink a session someone is working in there.
 Both machines need a tuios new enough to speak `open-pane`. An older one
 refuses by name and says to update it.
 
+### What the other machine may do here
+
+The machine a link arrives at decides what the machine at the other end may
+do there, from its own `[hosts]` table: read listings, send mail, open
+sessions, windows and panes, write into panes, and answer prompts. By default
+it may do everything but answer prompts for you. Opening a window on a host
+needs `open` there; what is typed into that window travels on the pane's own
+connection and needs nothing more. See [What another machine
+may do here](CONFIGURATION.md#what-another-machine-may-do-here) for the table,
+`hold_mail`, and pinning the name with a forced command.
+
 ### Limits
 
 - **The window ends when the link does.** The process is reached over the link,

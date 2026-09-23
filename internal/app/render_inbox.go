@@ -48,6 +48,8 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 	answer := overlay.Hint{Key: "r", Label: "reply"}
 	if it, ok := m.inboxSelected(); ok && it.Kind == session.AttentionResume {
 		answer = overlay.Hint{Key: "y", Label: "resume"}
+	} else if ok && it.HeldID != 0 {
+		answer = overlay.Hint{Key: "p", Label: "pass on"}
 	}
 	hints := []overlay.Hint{
 		{Key: overlay.EnterKey(), Label: "go"},
@@ -141,6 +143,11 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 		// Said in text, so a held approval reads as answerable here without
 		// colour: the keys that answer it, in front of what it asks.
 		summary = "[" + keys + "] " + summary
+	}
+	if it.HeldID != 0 {
+		// Mail another machine sent an agent here, held for the person by
+		// the link policy. Said in words: who it was for, and the key.
+		summary = "[held for " + printableTitle(it.HeldFor) + ", p passes on] " + summary
 	}
 
 	avail := max(width-lipgloss.Width(right)-lipgloss.Width(glyph)-4, 1)

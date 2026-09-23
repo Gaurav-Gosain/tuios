@@ -2028,6 +2028,13 @@ them.
 | `tuios hosts remove <name>` | Remove a machine |
 | `tuios hosts test <name>` | Open one link to a host and report what happened |
 | `tuios hosts tailnet` | List the machines on your tailnet and which are offered as addresses |
+| `tuios stdio-proxy [--as NAME]` | Hidden. What the other machine's daemon runs over ssh for a link. `--as` pins the name this machine's link policy is resolved for, whatever the other machine calls itself: put it in a forced command in `authorized_keys` (`command="tuios stdio-proxy --as laptop",restrict ...`) to make the policy a boundary. See [What another machine may do here](CONFIGURATION.md#what-another-machine-may-do-here) |
+
+A call over a link that the far machine's policy does not allow fails with
+`forbidden`, and the message names the capability and the `[hosts]` table on
+that machine that grants it. By default a linked machine may not answer
+prompts: `tuios respond -w HOST:SESSION:WINDOW` needs `"respond"` in `allow`
+there.
 
 **Configuration and appearance:**
 

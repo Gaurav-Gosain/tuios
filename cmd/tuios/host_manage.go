@@ -163,13 +163,18 @@ func runHostAdd(name, addr string, flags hostAddFlags) error {
 	if err != nil {
 		return err
 	}
-	_, replaced := existing[name]
+	prev, replaced := existing[name]
 
 	entry := config.HostConfig{
 		Addr:           addr,
 		Command:        flags.command,
 		ConnectTimeout: flags.timeout,
 		SSHOptions:     flags.sshOptions,
+		// What that machine may do here is not what this command sets, so a
+		// new address keeps it.
+		Allow:       prev.Allow,
+		HoldMail:    prev.HoldMail,
+		HostedGrace: prev.HostedGrace,
 	}
 	if err := config.SetHostInFile(path, name, entry); err != nil {
 		return err

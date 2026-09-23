@@ -102,6 +102,11 @@ type Daemon struct {
 	hostedPanes   map[string]*hostedPane
 	hostedPanesMu sync.Mutex
 
+	// linkPolicies is the [hosts] table the policy for a machine linked to
+	// this one is resolved from. Nil means no table: every link gets the
+	// built-in default. See link_policy.go.
+	linkPolicies linkPolicyPointer
+
 	// agents is the cross-agent mailbox: the bounded per-session message rings
 	// and the in-flight ask graph. It is held here rather than on a Session
 	// because it must never reach disk: SessionState is what resurrection
@@ -294,6 +299,17 @@ type connState struct {
 	// implies viaLink. See human_origin.go.
 	linkHuman bool
 
+	// linkPeer is the machine a link connection came from, as the link-peer
+	// handshake named it; empty when it named none. linkPeerSet says the
+	// handshake ran, linkPinned that the name was pinned on this machine with
+	// stdio-proxy --as, and linkServed that something other than the
+	// handshake has run, after which the peer can no longer be named. All
+	// four are guarded by mu. See link_policy.go.
+	linkPeer    string
+	linkPeerSet bool
+	linkPinned  bool
+	linkServed  bool
+
 	// peerPID is the pid of the process on the other end, as the kernel
 	// recorded it at connect time, or 0 where the platform does not say. For
 	// a link connection it is the pid of this machine's stdio-proxy.
@@ -430,6 +446,10 @@ type DaemonConfig struct {
 	// Approvals is the [agents.approvals] table. The zero value is the
 	// default: no harness holds a prompt for the Inbox.
 	Approvals ApprovalPolicy
+	// LinkPolicies is the [hosts] table as the machine a link arrives at reads
+	// it: what each machine linked to this one may do here. Nil gives every
+	// link the built-in default. See link_policy.go.
+	LinkPolicies map[string]config.HostConfig
 }
 
 // NewDaemon creates a new daemon instance.
@@ -455,6 +475,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	}
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
 	d.SetApprovalPolicy(cfg.Approvals)
+	d.SetLinkPolicies(cfg.LinkPolicies)
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.
 	d.stash = newStashStore(func() string { return d.manager.SocketPath() })
@@ -515,6 +536,9 @@ func (d *Daemon) setupFederation(hosts []federation.Host) {
 		ClientVersion:   d.version,
 		VerbProtocol:    VerbProtocolVersion,
 		MinVerbProtocol: MinVerbProtocolVersion,
+		// The name every host this one links to resolves its policy for this
+		// machine from. See link_policy.go.
+		Self: linkSelfName(d.hostedPaneHostName()),
 		Log: func(format string, args ...any) {
 			log.Printf("[FEDERATION] "+format, args...)
 		},
@@ -1234,6 +1258,14 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 	// the high byte of a big-endian length prefix, which is 0x00 or 0x01 for any
 	// frame under the 16MB cap and so never collides with '{' or whitespace.
 	br := bufio.NewReaderSize(conn, 64*1024)
+	d.serveConnection(cs, br)
+}
+
+// serveConnection reads a connection from its next byte as JSON or binary and
+// serves it until it ends. The link-peer handshake calls it again after its
+// reply, so a connection that named its peer is served from scratch.
+func (d *Daemon) serveConnection(cs *connState, br *bufio.Reader) {
+	conn, clientID := cs.conn, cs.clientID
 	if d.detectJSONClient(cs, br) {
 		d.handleJSONConnection(cs, br)
 		return
@@ -1268,6 +1300,13 @@ func (d *Daemon) handleConnectionOn(conn net.Conn, viaLink, linkHuman bool) {
 			return
 		}
 
+		// A binary message on a link connection is held to the peer's policy
+		// like a verb is. See link_policy.go.
+		if verr := d.checkLinkMessage(cs, msg.Type); verr != nil {
+			_ = d.sendError(cs, ErrCodeForbidden, verr.Message+" "+verr.Hint.Detail)
+			continue
+		}
+		markLinkServed(cs)
 		if err := d.handleMessage(cs, msg); err != nil {
 			LogError("Error handling message from %s: %v", clientID, err)
 			_ = d.sendError(cs, ErrCodeInternal, err.Error())

@@ -94,6 +94,15 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"pane-agent#0":  {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
 	"pane-calls#0":  {errCode: ErrVerbUnknownPane, why: "the example's pane id is a literal, not one this daemon handed out"},
 
+	// link-peer names the machine a link connection came from, so it is only
+	// taken on a link socket. The allowed path is proved in
+	// link_policy_test.go.
+	"link-peer#0": {errCode: ErrVerbForbidden, why: "the fixture calls on the daemon's own socket, not a link socket"},
+	// release-agent-message passes on a held message for the person, and
+	// needs a nonce no client here was issued. The allowed path is proved in
+	// link_mail_test.go.
+	"release-agent-message#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may release, and none is"},
+
 	// An example that names a pane by the environment variable an agent would
 	// have expanded. The literal is not a window id here.
 	"ask-agent#0":           {errCode: ErrVerbWindowNotFound, why: "$TUIOS_PANE_ID is unexpanded"},

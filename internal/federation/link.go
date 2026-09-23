@@ -302,6 +302,7 @@ func (l *link) attempt(ctx context.Context) bool {
 	// a peer a stream. Section 1, invariant 1 of the design document.
 	m := newMuxRW(br, tr, tr, nil, dialerFirstID)
 	m.stallLimit = l.opts.stallLimit
+	m.self = l.opts.Self
 	m.onStall = func(id uint32) {
 		l.mu.Lock()
 		l.stalls++
