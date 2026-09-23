@@ -73,10 +73,13 @@ Events come in a fixed order for one key press: `key` first, then any
 | `window.rename` | `{id, from, to}` | a window's title changed |
 | `window.minimize` | `{id, minimized}` | minimized or restored |
 | `window.zoom` | `{id, zoomed}` | zoomed or unzoomed |
+| `window.move` | `{id, x, y, width, height, from}` | a window's place or size changed, in cells. `from` is `{x, y, width, height}` before. Sent once any animation has finished, so a snap or a retile is one event per window, not one per frame. A window that opened or closed is left out |
+| `window.float` | `{id, floating}` | the window floats above the tiling, or went back into it |
 | `workspace` | `{from, to}` | the current workspace, 1 to 9 |
 | `tiling` | `{from, to}` | tiling on (`true`) or off |
 | `layout` | `{from, to}` | the layout mode: `"bsp"`, `"master-stack"` or `"scrolling"` |
 | `theme` | `{from, to}` | the theme id, such as `"catppuccin_mocha"` |
+| `setting` | `{name, from, to}` | a look changed. `name` is `"glyphs"` (the glyph set, `"default"` for the shipped one) or `"borderStyle"` (such as `"rounded"`) |
 | `overlay.open` | `{name}` | an overlay opened. Names below |
 | `overlay.close` | `{name}` | an overlay closed |
 | `notification` | `{message, level}` | a message in the dock. `level` is `"info"`, `"success"`, `"warning"` or `"error"`. Learn mode's notes are `"info"` |
@@ -91,7 +94,7 @@ Events come in a fixed order for one key press: `key` first, then any
 Overlay names: `help`, `whichkey`, `commandPalette`, `launcher`, `settings`,
 `themePicker`, `keybinds`, `copyMode`, `search` (copy mode or scrollback
 search), `scrollback`, `quitMenu`, `workspaceSwitcher`, `layoutPicker`,
-`sidebar`, `logs`.
+`sidebar`, `logs`, `screensaver`.
 
 ## State
 
@@ -114,9 +117,11 @@ search), `scrollback`, `quitMenu`, `workspaceSwitcher`, `layoutPicker`,
   minimized: 0,              // on the current workspace
   totalWindows: 3,           // on every workspace
   windowList: [              // every window, in tuios's order
-    { id, title, workspace, x, y, width, height, minimized, zoomed, agent, agentMessage }
+    { id, title, workspace, x, y, width, height, minimized, zoomed, floating, agent, agentMessage }
   ],                         // x, y, width, height are in cells
   tape: false,               // a tape is playing
+  glyphs: "default",         // the glyph set
+  borderStyle: "rounded",
   cols: 120, rows: 36
 }
 ```

@@ -407,3 +407,6 @@ func (m *OS) stopScreensaver() {
 	m.screensaver.canvasWidth = 0
 	m.screensaver.canvasHeight = 0
 }
+
+// ScreensaverActive reports whether the screen saver is on screen.
+func (m *OS) ScreensaverActive() bool { return m.screensaver.active }

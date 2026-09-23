@@ -29,7 +29,22 @@ const (
 	OverlayLayoutPicker      = "layoutPicker"
 	OverlaySidebar           = "sidebar"
 	OverlayLogs              = "logs"
+	OverlayScreensaver       = "screensaver"
 )
+
+// Setting names in the setting event: the looks the settings page changes
+// that a lesson checks.
+const (
+	SettingGlyphs      = "glyphs"
+	SettingBorderStyle = "borderStyle"
+)
+
+// rect is a window's place and size in cells.
+type rect struct{ X, Y, W, H int }
+
+func (r rect) toMap() map[string]any {
+	return map[string]any{"x": r.X, "y": r.Y, "width": r.W, "height": r.H}
+}
 
 // windowSnap is one window as the page sees it.
 type windowSnap struct {
@@ -40,6 +55,7 @@ type windowSnap struct {
 	W, H      int
 	Minimized bool
 	Zoomed    bool
+	Floating  bool
 	Agent     string
 	AgentNote string
 	AgentKind string
@@ -62,6 +78,11 @@ type Snapshot struct {
 	Tape       bool
 	Cols, Rows int
 	Windows    []windowSnap // every workspace, in the app's order
+	Glyphs     string       // the glyph set, "default" for the shipped one
+	Border     string       // the border style, such as "rounded"
+	// Moving is true while an animation is running, when window rects are
+	// still on their way. Moves are reported once it is false again.
+	Moving bool
 }
 
 func take(o *app.OS) Snapshot {
@@ -76,6 +97,12 @@ func take(o *app.OS) Snapshot {
 		Cols:      o.Width,
 		Rows:      o.Height,
 		Overlays:  map[string]bool{},
+		Glyphs:    o.Settings.GlyphSet,
+		Border:    o.Settings.BorderStyle,
+		Moving:    len(o.Animations) > 0,
+	}
+	if s.Glyphs == "" {
+		s.Glyphs = "default"
 	}
 	if o.Mode == app.TerminalMode {
 		s.Mode = "terminal"
@@ -112,10 +139,12 @@ func take(o *app.OS) Snapshot {
 	ov[OverlaySidebar] = o.SidebarActive()
 	ov[OverlayLogs] = o.ShowLogs
 	ov[OverlayScrollback] = o.ShowScrollbackBrowser
+	ov[OverlayScreensaver] = o.ScreensaverActive()
 	if b, ok := o.ScrollbackBrowser.(*scrollback.Browser); ok && o.ShowScrollbackBrowser && b != nil && b.SearchActive {
 		ov[OverlaySearch] = true
 	}
-	if f := o.GetFocusedWindow(); f != nil && f.CopyMode != nil {
+	// Leaving copy mode keeps the CopyMode struct and clears Active.
+	if f := o.GetFocusedWindow(); f != nil && f.CopyMode != nil && f.CopyMode.Active {
 		ov[OverlayCopyMode] = true
 		if f.CopyMode.State == terminal.CopyModeSearch {
 			ov[OverlaySearch] = true
@@ -133,7 +162,7 @@ func take(o *app.OS) Snapshot {
 		s.Windows = append(s.Windows, windowSnap{
 			ID: w.ID, Title: title, Workspace: w.Workspace,
 			X: w.X, Y: w.Y, W: w.Width, H: w.Height,
-			Minimized: w.Minimized, Zoomed: w.Zoomed,
+			Minimized: w.Minimized, Zoomed: w.Zoomed, Floating: w.IsFloating,
 			Agent: w.AgentState, AgentNote: w.AgentMessage, AgentKind: w.AgentKind, Harness: w.AgentHarness,
 		})
 	}
@@ -181,7 +210,7 @@ func (s Snapshot) ToMap() map[string]any {
 		wins = append(wins, map[string]any{
 			"id": w.ID, "title": w.Title, "workspace": w.Workspace,
 			"x": w.X, "y": w.Y, "width": w.W, "height": w.H,
-			"minimized": w.Minimized, "zoomed": w.Zoomed,
+			"minimized": w.Minimized, "zoomed": w.Zoomed, "floating": w.Floating,
 			"agent": w.Agent, "agentMessage": w.AgentNote,
 		})
 	}
@@ -208,6 +237,8 @@ func (s Snapshot) ToMap() map[string]any {
 		"totalWindows":   len(s.Windows),
 		"windowList":     wins,
 		"tape":           s.Tape,
+		"glyphs":         s.Glyphs,
+		"borderStyle":    s.Border,
 		"cols":           s.Cols,
 		"rows":           s.Rows,
 	}
@@ -254,6 +285,9 @@ func diff(prev, now Snapshot) []Event {
 		if p.Zoomed != w.Zoomed {
 			add(EventWindowZoom, w.ID, map[string]any{"id": w.ID, "zoomed": w.Zoomed})
 		}
+		if p.Floating != w.Floating {
+			add(EventWindowFloat, w.ID, map[string]any{"id": w.ID, "floating": w.Floating})
+		}
 		if p.Agent != w.Agent {
 			add(EventAgent, w.ID, map[string]any{
 				"id": w.ID, "from": p.Agent, "to": w.Agent,
@@ -273,6 +307,12 @@ func diff(prev, now Snapshot) []Event {
 	}
 	if prev.Theme != now.Theme {
 		add(EventTheme, "", map[string]any{"from": prev.Theme, "to": now.Theme})
+	}
+	if prev.Glyphs != now.Glyphs {
+		add(EventSetting, "", map[string]any{"name": SettingGlyphs, "from": prev.Glyphs, "to": now.Glyphs})
+	}
+	if prev.Border != now.Border {
+		add(EventSetting, "", map[string]any{"name": SettingBorderStyle, "from": prev.Border, "to": now.Border})
 	}
 
 	names := make([]string, 0, len(now.Overlays))
@@ -301,6 +341,28 @@ func diff(prev, now Snapshot) []Event {
 		} else {
 			add(EventTapeFinish, "", map[string]any{})
 		}
+	}
+	return out
+}
+
+// moves lists a window.move event for every window whose place or size
+// changed between two settled snapshots. A window that opened or closed in
+// between is left out: window.open and window.close already cover it.
+func moves(rest, now Snapshot) []Event {
+	var out []Event
+	for _, w := range now.Windows {
+		p, ok := rest.window(w.ID)
+		if !ok {
+			continue
+		}
+		from, to := rect{p.X, p.Y, p.W, p.H}, rect{w.X, w.Y, w.W, w.H}
+		if from == to {
+			continue
+		}
+		data := to.toMap()
+		data["id"] = w.ID
+		data["from"] = from.toMap()
+		out = append(out, Event{Type: EventWindowMove, WindowID: w.ID, Data: data})
 	}
 	return out
 }

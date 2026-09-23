@@ -483,9 +483,74 @@ func TestCommandsListMatchesRunCommand(t *testing.T) {
 		EventWindowFocus, EventWindowRename, EventWindowMinimize, EventWindowZoom, EventWorkspace,
 		EventTiling, EventLayout, EventTheme, EventOverlayOpen, EventOverlayClose, EventNotification,
 		EventAgent, EventTapeStart, EventTapeFinish, EventShellStart, EventShellCommand, EventShellCwd,
+		EventWindowMove, EventWindowFloat, EventSetting,
 	} {
 		if !strings.Contains(string(readme), "`"+typ+"`") {
 			t.Errorf("README does not document the %q event", typ)
 		}
 	}
+}
+
+// TestCopyModeClosesWhenLeft checks that leaving copy mode closes the
+// copyMode overlay. Leaving keeps the pane's CopyMode struct and clears
+// Active, so a check on the struct alone never saw it close.
+func TestCopyModeClosesWhenLeft(t *testing.T) {
+	tr := newTour(t)
+	tr.press(key("n"))
+	tr.waitFor(EventWindowOpen, nil)
+	tr.press(key("ctrl+b"), key("["))
+	tr.waitFor(EventOverlayOpen, func(e Event) bool { return data(e, "name") == OverlayCopyMode })
+	tr.press(key("esc"))
+	tr.waitFor(EventOverlayClose, func(e Event) bool { return data(e, "name") == OverlayCopyMode })
+}
+
+// TestWindowMoveReportsLayoutChanges checks that a change that only moves or
+// resizes panes, such as growing the master, is an event.
+func TestWindowMoveReportsLayoutChanges(t *testing.T) {
+	tr := newTour(t)
+	tr.press(key("n"), key("n"))
+	second := tr.waitFor(EventWindowOpen, func(e Event) bool { return data(e, "count") == 2 }).WindowID
+	tr.m.RunCommand("layout", "master-stack")
+	tr.update(nil)
+	tr.waitFor(EventLayout, nil)
+
+	tr.press(key(">"))
+	mv := tr.waitFor(EventWindowMove, nil)
+	from, _ := mv.Data["from"].(map[string]any)
+	if from == nil || mv.Data["width"] == from["width"] || mv.State == nil {
+		t.Fatalf("window.move = %+v", mv)
+	}
+
+	// Floating a pane is its own event.
+	tr.m.RunCommand("action", "toggle_zoom")
+	tr.update(nil)
+	tr.m.RunCommand("action", "toggle_zoom")
+	tr.update(nil)
+	tr.m.OS.ToggleFloating()
+	tr.update(nil)
+	fl := tr.waitFor(EventWindowFloat, nil)
+	if fl.WindowID != second || data(fl, "floating") != true {
+		t.Fatalf("window.float = %+v", fl)
+	}
+}
+
+// TestLooksAreEvents covers the settings a lesson about looks checks: the
+// border style, the glyph set and the screen saver.
+func TestLooksAreEvents(t *testing.T) {
+	tr := newTour(t)
+	tr.press(key("n"))
+	tr.waitFor(EventWindowOpen, nil)
+
+	tr.m.OS.Settings.BorderStyle = "double"
+	tr.update(nil)
+	ev := tr.waitFor(EventSetting, func(e Event) bool { return data(e, "name") == SettingBorderStyle })
+	if data(ev, "to") != "double" || ev.State["borderStyle"] != "double" {
+		t.Fatalf("setting = %+v", ev)
+	}
+	tr.m.OS.Settings.GlyphSet = "ascii"
+	tr.update(nil)
+	tr.waitFor(EventSetting, func(e Event) bool { return data(e, "name") == SettingGlyphs && data(e, "to") == "ascii" })
+
+	tr.press(key("S"))
+	tr.waitFor(EventOverlayOpen, func(e Event) bool { return data(e, "name") == OverlayScreensaver })
 }

@@ -31,6 +31,9 @@ const (
 	EventWindowRename   = "window.rename"
 	EventWindowMinimize = "window.minimize"
 	EventWindowZoom     = "window.zoom"
+	EventWindowMove     = "window.move"
+	EventWindowFloat    = "window.float"
+	EventSetting        = "setting"
 	EventWorkspace      = "workspace"
 	EventTiling         = "tiling"
 	EventLayout         = "layout"
@@ -79,8 +82,11 @@ type Model struct {
 	emit func(Event)
 	send func(tea.Msg)
 
-	mu       sync.Mutex
-	last     Snapshot
+	mu   sync.Mutex
+	last Snapshot
+	// rest is the last snapshot taken with no animation running, which
+	// window.move events are measured from.
+	rest     Snapshot
 	theme    string // the theme the tour started with, for reset
 	tapeName string
 }
@@ -106,6 +112,7 @@ func New(o *app.OS, emit func(Event), send func(tea.Msg)) *Model {
 	}
 	webshell.SetEventSink(m.fromGuest)
 	m.last = take(o)
+	m.rest = m.last
 	m.theme = m.last.Theme
 	return m
 }
@@ -196,6 +203,11 @@ func (m *Model) report() {
 	m.last = now
 	m.mu.Unlock()
 	events := diff(prev, now)
+	// A move is reported once it has settled, not once per animation frame.
+	if !now.Moving {
+		events = append(events, moves(m.rest, now)...)
+		m.rest = now
+	}
 	if len(events) == 0 {
 		return
 	}
