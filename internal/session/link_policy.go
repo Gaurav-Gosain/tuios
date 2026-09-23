@@ -135,11 +135,15 @@ var verbCapabilities = map[string][]string{
 	"set-agent-meta":      {config.LinkAllowWrite},
 	"resume-agent":        {config.LinkAllowWrite},
 	"request-approval":    {config.LinkAllowWrite},
+	"run":                 {config.LinkAllowWrite},
+	// ask-human's own handler refuses every link caller as well.
+	"ask-human": {config.LinkAllowWrite},
 
 	"respond":               {config.LinkAllowRespond},
 	"reply-approval":        {config.LinkAllowRespond},
 	"dismiss-attention":     {config.LinkAllowRespond},
 	"release-agent-message": {config.LinkAllowRespond},
+	"answer-ask":            {config.LinkAllowRespond},
 
 	"open-host-connection": {capRelay},
 }

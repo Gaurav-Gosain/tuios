@@ -955,9 +955,9 @@ What a restricted connection may call:
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection` | allowed | allowed |
 | across sessions | `list-sessions`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks` | `forbidden` | allowed |
 | read one session | `session-info`, `list-windows`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get` | session in reach | allowed |
-| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session` | own pane only | allowed |
+| own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `ask-human` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
-| type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond` | session in reach | `forbidden` |
+| type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run` | session in reach | `forbidden` |
 | start sessions | `fan` | needs a pane | `forbidden` |
 | everything else | | `forbidden` | `forbidden` |
 
@@ -2364,8 +2364,8 @@ the one before. The configuration is in
 | `list` | `list-*`, `session-info`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `close-window`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `remove-worktree` |
-| `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `close-window`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `remove-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway) |
+| `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask` |
 | every one | `open-host-connection` |
 
 Binary messages: `MsgList`, the PTY subscribe messages, `MsgGetTerminalState`,

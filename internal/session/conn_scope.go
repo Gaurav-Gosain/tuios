@@ -182,6 +182,14 @@ var verbScopes = map[string]scopeKind{
 	"link-peer":             scopeDeny,
 	"close-pane":            scopeDeny,
 	"release-agent-message": scopeDeny,
+
+	// From the shell command and ask-human work. run types a line at a
+	// prompt. ask-human asks the person as the caller's own pane, which
+	// is a report about that pane, like set-agent-state. answer-ask
+	// answers for the person, which no restricted caller does.
+	"run":        scopeWrite,
+	"ask-human":  scopeSelf,
+	"answer-ask": scopeDeny,
 }
 
 // verbRestrictConnection narrows what this connection may do from now on.
