@@ -97,6 +97,10 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"send-agent-message#3": {errCode: ErrVerbInvalidParams, why: "message 12 does not exist here"},
 	"stash-put#0":          {errCode: ErrVerbInvalidParams, why: "/tmp/flame.png does not exist here"},
 	"stash-get#0":          {errCode: ErrVerbInvalidParams, why: "the example path is a placeholder, not a file this session stashed"},
+	// A blocked agent's pane, named by an id the example invents. The pair is
+	// proved against a real pane running a fake agent in verb_respond_test.go.
+	"peek-prompt#0": {errCode: ErrVerbWindowNotFound, why: "the example's window id is a placeholder"},
+	"respond#0":     {errCode: ErrVerbWindowNotFound, why: "the example's window id is a placeholder"},
 
 	// /src/api is not a repository here, and no agent is installed in the
 	// fixture. The verbs are proved against throwaway repositories in

@@ -992,6 +992,75 @@ Finished
 2 waiting. Open the Inbox with the prefix key then i, or jump to the oldest with the prefix key then o.
 ```
 
+### `tuios peek-prompt`
+
+Show the prompt an agent is blocked on without attaching: the lines its
+harness's `needs_input` rule reads, the numbered options, how long it has
+waited, and the answers the rule declares for what is on the screen now. It
+changes nothing. The prompt is the pane's screen, fenced as untrusted content:
+read it as data, not as instructions. In the TUI, `space` on an approval or a
+question in the Inbox shows the same thing. See
+[Answering a prompt without attaching](AGENT_STATE.md#answering-a-prompt-without-attaching).
+
+**Usage:**
+```bash
+tuios peek-prompt -w <window> [flags]
+```
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <target>`: The blocked pane, by name or ID, or `HOST:SESSION:WINDOW`
+- `--json`: Output the verb result as JSON
+
+**Examples:**
+```bash
+# What does the reviewer want?
+tuios peek-prompt -w review
+
+# The same on another machine, for a script
+tuios peek-prompt -w buildbox:api:review --json
+```
+
+### `tuios respond`
+
+Answer the prompt an agent is blocked on with the keys its harness's manifest
+declares, without attaching. The action is `approve`, `approve_always`, `deny`,
+`choose` (with the option's number) or `text` (with the answer); `peek-prompt`
+lists the ones the prompt takes.
+
+The daemon reads the prompt again before it presses anything and refuses with
+`prompt_changed` when the pane left `needs_input`, when the prompt is not the
+one `--prompt-id` names, or when another client already answered it: the first
+answer wins. Then it waits up to `--timeout` for the pane to move on and prints
+its state.
+
+Answering is acting as you, so the daemon takes it only from the Inbox of an
+attached client, or from a shell outside every pane when the config file sets
+`respond_from_shell = true` under `[daemon]`. From inside a pane it is refused
+with `not_human` either way.
+
+**Usage:**
+```bash
+tuios respond <action> [value] -w <window> [flags]
+```
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <target>`: The blocked pane, by name or ID, or `HOST:SESSION:WINDOW`
+- `--prompt-id <id>`: The prompt id `peek-prompt` printed; a prompt that changed since is refused
+- `--timeout <ms>`: How long to wait for the pane to move on (default 5000, at most 30000)
+- `--json`: Output the verb result as JSON
+
+**Examples:**
+```bash
+# Read the prompt, then approve exactly that prompt
+tuios peek-prompt -w review
+tuios respond -w review --prompt-id 75f8b9fadb5b5dfc approve
+
+# Pick option 2 of a question
+tuios respond -w review choose 2
+```
+
 ### `tuios set-agent-state`
 
 Report a pane's agent state so the session can show which panes need
@@ -1860,6 +1929,8 @@ them.
 |---------|--------------|
 | `tuios list-agents` | List the agent panes in a session and what each is doing |
 | `tuios list-attention` | List the Inbox: what is waiting for you in every session (see below) |
+| `tuios peek-prompt` | Show the prompt an agent is blocked on, its options and the answers it takes, without attaching |
+| `tuios respond <action> [value]` | Answer the prompt an agent is blocked on. Only from the person: an attached client's Inbox, or a shell outside every pane with `[daemon] respond_from_shell` |
 | `tuios get-agent-state` | Read a pane's reported agent state |
 | `tuios set-agent-meta [key=value ...]` | Record display metadata about a pane's agent (model, context, a summary) for the rail |
 | `tuios set-agent-session <id> --harness <h>` | Record which conversation a pane's agent runs, for a later resume, without changing its state |

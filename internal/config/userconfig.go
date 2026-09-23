@@ -157,6 +157,11 @@ type DaemonConfig struct {
 	// AgentBinaries lists extra binary names to treat as agents, merged with the
 	// built-in defaults (not replacing them).
 	AgentBinaries []string `toml:"agent_binaries"`
+	// RespondFromShell lets `tuios respond`, run from a shell outside every
+	// pane, answer an agent's prompt without an attached client. Off by default:
+	// respond is then for the person at the Inbox of an attached client. A
+	// caller inside a pane is refused either way.
+	RespondFromShell bool `toml:"respond_from_shell"`
 }
 
 // AppearanceConfig holds appearance-related settings

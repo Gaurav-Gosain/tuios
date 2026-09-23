@@ -661,7 +661,9 @@ var optionSpecs = []Option{
 	},
 
 	// [daemon]. agent_binaries is absent: it is a list, and a value that arrives
-	// as one string has no unambiguous spelling for a list.
+	// as one string has no unambiguous spelling for a list. respond_from_shell
+	// is absent too: it grants acting as the person, and set-option is a verb
+	// any pane can call, so it is set in the file and nowhere else.
 	{
 		Path: "daemon.log_level", Type: OptionString, Section: "daemon",
 		Description: "How much the daemon logs",

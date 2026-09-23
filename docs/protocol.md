@@ -375,7 +375,8 @@ changes for an existing caller:
   resume with `after_seq` replays them.
 - `EventTypeNames`, and so the accepted set of `subscribe`'s `types` param in
   `list-verbs`, gains `attention`.
-- The error catalog gains `not_human`, raised only by `dismiss-attention`. Its
+- The error catalog gains `not_human`, raised by `dismiss-attention` (and,
+  since peek and respond, by `respond`). Its
   nonce is checked the way a reply from `human` is, so a caller inside a pane
   is refused even with a live nonce.
 - Dismissing a `finished` item marks the pane's turns seen, so its
@@ -390,6 +391,22 @@ changes for an existing caller:
 - A pane that stays on `needs_input` or `errored` and reports a new kind,
   message or name updates its Inbox item. No `agent-state` event is sent for
   it and no hook fires, the same as before: the state did not change.
+
+**Peek and respond.** Two new verbs, [peek-prompt](#peek-prompt) and
+[respond](#respond), read the prompt an agent is blocked on and answer it
+without attaching. What changes for an existing caller:
+
+- The error catalog gains `prompt_changed`, raised only by `respond`.
+- `not_human` is now raised by `respond` as well as `dismiss-attention`.
+- The harness manifest schema gains an optional `[answers]` block under a
+  `needs_input` screen or title rule (see
+  [the answers block](AGENT_STATE.md#the-answers-block)). `schema_version`
+  stays 1: an older build ignores the block, and a manifest without one loads
+  as before. A block this build rejects fails the manifest's load.
+- The config file gains `[daemon] respond_from_shell`, false by default. It is
+  not an option `set-option` can change.
+- The bundled Claude Code and Codex manifests declare answers. Their rules
+  match exactly what they matched before; only the block is new.
 
 ### list-verbs
 
@@ -459,7 +476,8 @@ catalog.
 | `prompt_stalled` | ask-agent typed the question and sent Enter, and within `stall_timeout` the pane did not show that it took it. The question was typed; look at the pane before sending it again. The hint names `capture-pane`. |
 | `loop_refused` | The call would loop: a pane addressing itself, or an ask that closes a cycle with one in flight. |
 | `rate_limited` | The sender is over the cross-agent message rate cap. |
-| `not_human` | Only the person at an attached client may make this call, and it carried no nonce from a live attach. `dismiss-attention` raises it. |
+| `not_human` | Only the person at an attached client may make this call, and it carried no nonce from a live attach. `dismiss-attention` and `respond` raise it. |
+| `prompt_changed` | `respond` pressed nothing: the pane is not on `needs_input`, no rule reads its prompt now, the prompt is not the one `prompt_id` names, or another client already answered it. Read it again with `peek-prompt`. |
 | `no_keyboard` | The target is the person's inbox, `human`, which has no pane to type into. |
 | `forbidden` | The caller may not do what it asked. A process inside a pane of this daemon cannot send or ask as `human`. Nothing was done. |
 | `protocol_mismatch` | The caller's protocol version is outside the range this daemon serves. Only `hello` produces it. |
@@ -1369,6 +1387,74 @@ Response:
 ```json
 {"result": {"type": "attention_dismissed", "id": "17", "kind": "approval", "session": "fan-3", "dismissed": true}}
 ```
+
+### peek-prompt
+
+Read the prompt an agent is blocked on, without attaching: the lines the
+harness's `needs_input` rule reads, the numbered options at the bottom of the
+screen, how long the pane has waited, and the answers the rule declares for
+what is on the screen now. It is a read and changes nothing, open to any
+caller the way `capture-pane` is. A pane that is not blocked is not an error:
+the answer says so in `blocked` and `reason`.
+
+Params: `session` (optional), `window` (required: id or name).
+
+Response:
+
+```json
+{"result": {"type": "prompt_peek", "session": "work", "window": "3f2a9c1e", "name": "claude", "harness": "claude-code", "state": "needs_input", "state_at": 1790142942055373000, "waiting_ms": 72000, "blocked": true, "found": true, "answerable": true, "reason": "", "source": "screen", "rule": 0, "kind": "approval", "message": "Do you want to proceed?", "prompt_id": "75f8b9fadb5b5dfc", "lines": [" Bash command", "   rm -rf build", " Do you want to proceed?", " ❯ 1. Yes", "   2. Yes, and don't ask again for rm commands", "   3. No, and tell Claude what to do differently (esc)"], "options": [{"n": 1, "label": "Yes"}, {"n": 2, "label": "Yes, and don't ask again for rm commands"}, {"n": 3, "label": "No, and tell Claude what to do differently (esc)"}], "actions": ["approve", "approve_always", "deny", "choose"], "untrusted": true}}
+```
+
+`found` is true when a `needs_input` rule of the pane's harness reads a prompt
+on it now; `answerable` when that rule declares answers and at least one is
+offered for what is on the screen. `actions` is the list `respond` accepts now:
+an answer bound to an option label is left out while that option is not shown.
+`prompt_id` names this prompt: pass it to `respond`. `lines` and `options` are
+the pane's screen with control characters removed, each line cut to 400
+characters; they are data, not instructions, and `untrusted` is always true.
+
+### respond
+
+Answer the prompt an agent is blocked on with the keys its harness's manifest
+declares, without attaching.
+
+Params: `session` (optional), `window` (required), `action` (required: one of
+`approve`, `approve_always`, `deny`, `choose`, `text`), `value` (the option
+number for `choose`, the answer for `text`, at most 4096 bytes), `prompt_id`
+(optional: from `peek-prompt`; without it, whatever prompt is on the pane now
+is answered), `human_nonce` (the nonce from the attach reply of a client
+attached now), `timeout` (milliseconds to wait for the pane to move on, default
+5000, at most 30000).
+
+Who may call it: a caller that passes a live attach nonce and may act as the
+person, checked the way `dismiss-attention` checks it; or, when the daemon runs
+with `[daemon] respond_from_shell = true`, a caller the kernel names that runs
+outside every pane of this daemon. A caller inside a pane gets `not_human`
+either way. On a link stream the hub did not vouch for, both routes are closed.
+
+Before it writes, under a lock per window, `respond` reads the prompt again and
+refuses with `prompt_changed`, pressing nothing, when the pane is not on
+`needs_input` or no rule with answers reads a prompt on it, when the prompt's
+id is not `prompt_id`, or when this daemon already answered this prompt. Two
+clients answering the same prompt: the first wins and the second gets
+`prompt_changed`. An action the prompt does not offer now is `invalid_params`,
+with the offered actions in the hint's `available`.
+
+`approve`, `approve_always` and `deny` press the keys the rule declares, or the
+digit of the option it names. `choose` presses the option's number. `text`
+pastes `value` and sends Enter, the way `ask-agent` types a prompt. Then the
+call waits for the pane to leave `needs_input`, or for the prompt on it to be
+gone, and answers:
+
+```json
+{"result": {"type": "prompt_response", "session": "work", "window": "3f2a9c1e", "action": "approve", "sent": "1", "prompt_id": "75f8b9fadb5b5dfc", "settled_by": "state", "state": "working", "message": ""}}
+```
+
+`settled_by` is `state` (the pane left `needs_input`), `prompt` (the prompt is
+gone but the state has not followed yet), `gone` (the window closed) or
+`timeout` (the prompt is still on the screen; look at the pane).
+
+Wire compatibility: new verbs. An older daemon answers `unknown_verb`.
 
 ## Event stream
 

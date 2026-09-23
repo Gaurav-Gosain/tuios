@@ -110,6 +110,14 @@ type Daemon struct {
 	// See attention.go.
 	attention *attentionStore
 
+	// responds serialises the respond verb per window and remembers the last
+	// prompt each window was answered on, so two clients answering the same
+	// prompt get one answer through and the other refused. See verb_respond.go.
+	responds respondSlots
+	// respondFromShell is the [daemon] respond_from_shell grant: a caller
+	// outside every pane may call respond without an attach nonce.
+	respondFromShell bool
+
 	// stash is the per-session file store the stash verbs write into. It is held
 	// beside agents for the same reason: it must never reach disk as state, and
 	// its lifetime is the session's. Unlike the ring it does put bytes on disk,
@@ -377,6 +385,11 @@ type DaemonConfig struct {
 	// test sets it to reach a second daemon in the same process without an ssh
 	// server.
 	HostDial federation.Dialer
+	// RespondFromShell is [daemon] respond_from_shell: let a caller whose
+	// process the kernel names, and which runs outside every pane, answer a
+	// prompt with respond without an attach nonce. False, the default, leaves
+	// respond to a client attached right now. See verb_respond.go.
+	RespondFromShell bool
 }
 
 // NewDaemon creates a new daemon instance.
@@ -397,6 +410,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		logFile:            cfg.LogFile,
 		agentStallTimeout:  resolveAgentStallTimeout(cfg.AgentStallTimeout),
 		agentMatcher:       newAgentMatcher(resolveAgentBinaries(cfg.AgentBinaries)),
+		respondFromShell:   cfg.RespondFromShell,
 	}
 	d.attention = newAttentionStore(d.events.publish, d.events.currentSeq)
 	// The socket path is read through a closure rather than copied, because the

@@ -34,6 +34,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.AgentAutoDetect = uc.Daemon.AgentAutoDetect
 	cfg.AgentDetectInterval = time.Duration(uc.Daemon.AgentDetectSeconds) * time.Second
 	cfg.AgentBinaries = uc.Daemon.AgentBinaries
+	cfg.RespondFromShell = uc.Daemon.RespondFromShell
 	cfg.Hosts = HostsFromConfig(uc)
 	// The path, not the table, is what lets the daemon follow later edits to
 	// [hosts]. Every real starter goes through here, so every real daemon
