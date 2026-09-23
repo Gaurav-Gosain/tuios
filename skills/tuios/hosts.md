@@ -12,7 +12,7 @@ tuios hosts test build                  # dial it and say what happened
 tuios hosts remove build                # drop it
 tuios hosts                             # every host and its link state
 tuios hosts tailnet                     # machines on a Tailscale tailnet
-tuios hosts add build2 --tailnet
+tuios hosts add gpu --tailnet           # the tailnet machine named gpu
 tuios ls --all-hosts
 tuios list-agents --all-hosts
 ```

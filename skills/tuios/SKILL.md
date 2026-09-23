@@ -36,8 +36,8 @@ TUIOS_PANE_GRANTS=admin
 
 `TUIOS_PANE_ID` is your own window, and `TUIOS_WINDOW_ID` is the same uuid.
 Pass it to `-w` whenever you mean yourself rather than whatever is focused. It
-is also your address when another agent wants to reach you. The CLI sends
-`TUIOS_PANE_TOKEN` for you; never pass it by hand.
+is also your address when another agent wants to reach you. The CLI presents
+`TUIOS_PANE_TOKEN` where the daemon needs it; never pass it by hand.
 
 `TMUX` and `TMUX_PANE` are not set in a tuios pane, even when tuios runs inside
 tmux, so do not drive panes with `tmux` here: use the tuios verbs. A tool that
