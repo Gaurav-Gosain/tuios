@@ -110,6 +110,11 @@ func BenchmarkWireTerminalStateApply(b *testing.B) {
 				if err := decodePayload(data, &payload); err != nil {
 					b.Fatal(err)
 				}
+				// The check TUIClient.GetTerminalState runs on receipt, so
+				// this is the client's whole cost.
+				if err := payload.State.checkPacked(); err != nil {
+					b.Fatal(err)
+				}
 				em := vt.NewEmulator(benchWireCols, benchWireRows)
 				ApplyTerminalState(em, payload.State)
 			}

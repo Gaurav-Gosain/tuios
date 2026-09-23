@@ -18,17 +18,22 @@ import (
 // The packed form is the same cells with the repetition taken out. Styles go in
 // a table once and each cell names its index, cells in one style are run
 // together, a plain letter is two bytes, and the blank tail of a row is left
-// off. The cells are the same on both sides: Pack and unpack round trip through
-// the [][]CellState form, so ApplyTerminalState reads a packed snapshot with
-// the same code as an unpacked one, and every fidelity test that covers the
-// cell form covers this one by running it through both.
+// off. The cells are the same on both sides: Pack and Unpack round trip
+// through the [][]CellState form, and ApplyTerminalState packs a snapshot that
+// arrived as cells before it reads it, so every fidelity test that covers the
+// cell form covers this one too.
 //
 // It is negotiated per request, with no protocol bump. A client that wants it
 // asks (GetTerminalStatePayload.Packed); a daemon that predates the field does
 // not see the request and answers with cells, which the client still reads;
 // and a client that predates it never asks, so a newer daemon answers it with
-// cells too. The client unpacks as soon as the reply is decoded, so nothing
-// past TUIClient.GetTerminalState sees anything but cells.
+// cells too.
+//
+// The client keeps the reply packed. ApplyTerminalState, the only reader of
+// the cells in production, walks the packed rows straight into the emulator:
+// unpacking first built every cell as a CellState and then turned each one
+// back into an emulator cell, which was most of what a restore allocated. A
+// reader that wants the cells, such as a test oracle, calls Unpack.
 
 // isBlankCell reports whether a cell is what a never-written cell looks like,
 // which is what a row's tail is trimmed down to. A wide rune's continuation is
@@ -59,12 +64,10 @@ func (st *TerminalState) isPacked() bool {
 	return len(st.Styles) > 0
 }
 
-// unpack restores the cell grids from the packed form, so every reader of a
-// snapshot sees the cells it has always read: TUIClient.GetTerminalState
-// unpacks before it returns, and ApplyTerminalState unpacks in case it is
-// handed a packed one directly. A malformed blob unpacks to no rows at all
-// rather than to a partial screen.
-func (st *TerminalState) unpack() error {
+// Unpack restores the cell grids from the packed form, for a reader that wants
+// Screen, Scrollback and MainScreen as cells. ApplyTerminalState does not need
+// it. A malformed blob is an error.
+func (st *TerminalState) Unpack() error {
 	if st == nil || !st.isPacked() {
 		return nil
 	}
@@ -79,6 +82,23 @@ func (st *TerminalState) unpack() error {
 		return err
 	}
 	st.PackedScreen, st.PackedScrollback, st.PackedMain, st.Styles = nil, nil, nil, nil
+	return nil
+}
+
+// checkPacked reports whether every packed grid decodes, without keeping the
+// cells. The client runs it on receipt, so a malformed snapshot fails the
+// request as it did when the client unpacked there, instead of being applied
+// up to its first bad byte.
+func (st *TerminalState) checkPacked() error {
+	if st == nil || !st.isPacked() {
+		return nil
+	}
+	nop := func(int, []packedCell) error { return nil }
+	for _, blob := range [][]byte{st.PackedScreen, st.PackedScrollback, st.PackedMain} {
+		if err := walkPacked(blob, len(st.Styles), nop); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -164,9 +184,9 @@ var packedBlank = packedCell{content: " ", width: 1}
 // allocation of its own.
 //
 // A malformed blob stops at the first bad byte with an error. Rows already
-// handed out stay handed out; the callers below treat an error as a snapshot
-// that carried no cells, which is what a snapshot from before the field
-// looked like.
+// handed out stay handed out, which is why the client runs checkPacked on
+// receipt: a request whose reply does not decode fails whole, before any row
+// of it reaches an emulator.
 func walkPacked(blob []byte, nStyles int, fn func(y int, cells []packedCell) error) error {
 	if blob == nil {
 		return nil

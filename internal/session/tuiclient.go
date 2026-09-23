@@ -1033,9 +1033,10 @@ func (c *TUIClient) GetTerminalState(ptyID string, maxScrollback, have int) (*Te
 		if err := resp.ParsePayload(&payload); err != nil {
 			return nil, err
 		}
-		// The cells were asked for packed and are unpacked here, so every
-		// reader of the state sees the cells it has always read.
-		if err := payload.State.unpack(); err != nil {
+		// The cells were asked for packed and stay packed: ApplyTerminalState
+		// reads them in that form. They are checked here, so a malformed
+		// snapshot fails the request rather than being half applied.
+		if err := payload.State.checkPacked(); err != nil {
 			return nil, fmt.Errorf("get terminal state: %w", err)
 		}
 		return payload.State, nil

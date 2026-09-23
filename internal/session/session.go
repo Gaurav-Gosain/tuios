@@ -2639,12 +2639,12 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	if t == nil || state == nil {
 		return
 	}
-	// A packed snapshot is the same cells in a smaller form (snapshot_pack.go).
-	// The client unpacks on receipt, so this is a no-op on the ordinary path
-	// and covers a caller handing over a packed one directly.
-	if err := state.unpack(); err != nil {
-		debugLog("[CLIENT] snapshot cells dropped: %v", err)
-	}
+	// The cells are read in their packed form only (snapshot_pack.go), which
+	// is how the client asks for them. A snapshot that arrived as cells, from
+	// a daemon older than the packed form, is packed here first. Each style in
+	// the table is resolved for t once, rather than once per cell.
+	state.Pack()
+	styles := resolveStyles(t, state.Styles)
 
 	// A snapshot too big for the emulator it is going into used to be taken
 	// silently, because writing a cell outside the buffer is a no-op: every row
@@ -2721,18 +2721,23 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	// sends a bounded window of its scrollback and a client keeps far more than
 	// that, so replacing the whole buffer would cut a long history down to the
 	// size of the window on every workspace switch.
-	if have := t.ScrollbackLen(); have == 0 {
-		for _, row := range state.Scrollback {
-			t.PushScrollbackLine(stateToLine(t, row))
+	//
+	// skip is how many of the rows sent are already held: none on an empty
+	// emulator, and otherwise all but the last missing ones.
+	skip := 0
+	if have := t.ScrollbackLen(); have > 0 {
+		missing := state.ScrollbackLen - have
+		skip = packedRowCount(state.PackedScrollback) - max(missing, 0)
+	}
+	if err := walkPacked(state.PackedScrollback, len(styles), func(y int, row []packedCell) error {
+		if y >= skip {
+			// A line of its own for every row: the ghostty terminal keeps what
+			// it is pushed until its next flush.
+			t.PushScrollbackLine(packedLine(row, styles, make(uv.Line, len(row))))
 		}
-	} else if missing := state.ScrollbackLen - have; missing > 0 {
-		rows := state.Scrollback
-		if missing < len(rows) {
-			rows = rows[len(rows)-missing:]
-		}
-		for _, row := range rows {
-			t.PushScrollbackLine(stateToLine(t, row))
-		}
+		return nil
+	}); err != nil {
+		debugLog("[CLIENT] snapshot scrollback dropped: %v", err)
 	}
 
 	// The alternate screen is restored the same way as the normal one. It used
@@ -2740,23 +2745,38 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	// repaint itself, which asks the guest to do the client's job: a program
 	// that does not redraw on SIGWINCH, or one that is between frames, leaves
 	// the pane blank.
-	var cell uv.Cell
-	if len(state.Screen) > 0 {
-		for y := 0; y < len(state.Screen) && y < state.Height; y++ {
-			if state.Screen[y] == nil {
-				continue
+	//
+	// grid writes one packed screen through set and reports whether it held
+	// any rows. The emulators copy what SetCell is handed, so one line serves
+	// every row.
+	var line uv.Line
+	grid := func(blob []byte, set func(x, y int, c *uv.Cell)) bool {
+		rows := false
+		err := walkPacked(blob, len(styles), func(y int, row []packedCell) error {
+			rows = true
+			if y >= state.Height {
+				return nil
 			}
-			for x := 0; x < len(state.Screen[y]) && x < state.Width; x++ {
-				cellState := &state.Screen[y][x]
+			if cap(line) < len(row) {
+				line = make(uv.Line, len(row))
+			}
+			line = packedLine(row, styles, line[:len(row)])
+			for x := 0; x < len(line) && x < state.Width; x++ {
 				// A wide rune's continuation column is empty and is written by
 				// SetCell from the lead cell's width, so skipping it is right.
-				if cellState.Content == "" {
+				if line[x].Content == "" {
 					continue
 				}
-				stateToCell(t, cellState, &cell)
-				t.SetCell(x, y, &cell)
+				set(x, y, &line[x])
 			}
+			return nil
+		})
+		if err != nil {
+			debugLog("[CLIENT] snapshot cells dropped: %v", err)
 		}
+		return rows
+	}
+	if grid(state.PackedScreen, t.SetCell) {
 		// The cursor was serialized and thrown away. Whatever came next was
 		// written from wherever this client's emulator happened to be left,
 		// which on a pane rebuilt from nothing is the top left corner.
@@ -2767,25 +2787,30 @@ func ApplyTerminalState(t vt.Terminal, state *TerminalState) {
 	// program reveals it, and the client had never been sent it: a pane where
 	// vim was open across a switch came back correct and went blank the moment
 	// vim exited, because the buffer underneath had nothing in it.
-	for y := 0; y < len(state.MainScreen) && y < state.Height; y++ {
-		for x := 0; x < len(state.MainScreen[y]) && x < state.Width; x++ {
-			cs := &state.MainScreen[y][x]
-			if cs.Content == "" {
-				continue
-			}
-			stateToCell(t, cs, &cell)
-			t.SetMainCell(x, y, &cell)
-		}
-	}
+	grid(state.PackedMain, t.SetMainCell)
 }
 
-// stateToLine converts one serialized scrollback row to a line for t. The
-// line is fresh each time: the ghostty terminal keeps what it is pushed until
-// its next flush, so one buffer cannot serve every row.
-func stateToLine(t vt.Terminal, row []CellState) uv.Line {
-	line := make(uv.Line, len(row))
-	for x := range row {
-		stateToCell(t, &row[x], &line[x])
+// wireStyle is one entry of a snapshot's style table, resolved for the
+// emulator the snapshot is being applied to.
+type wireStyle struct {
+	style uv.Style
+	link  uv.Link
+}
+
+// resolveStyles resolves a snapshot's style table for t.
+func resolveStyles(t vt.Terminal, styles []StyleState) []wireStyle {
+	out := make([]wireStyle, len(styles))
+	for i, ss := range styles {
+		out[i].style, out[i].link = styleFromWire(t, ss)
+	}
+	return out
+}
+
+// packedLine fills line, which is len(row) long, with one packed row.
+func packedLine(row []packedCell, styles []wireStyle, line uv.Line) uv.Line {
+	for x, pc := range row {
+		ws := &styles[pc.style]
+		line[x] = uv.Cell{Content: pc.content, Width: pc.width, Style: ws.style, Link: ws.link}
 	}
 	return line
 }
@@ -3132,16 +3157,6 @@ func CellStateOf(cell *uv.Cell) CellState {
 		Width:      cell.Width,
 		StyleState: styleToWire(cell.Style, cell.Link),
 	}
-}
-
-// stateToCell converts a CellState back to a VT cell for restoration into t,
-// writing it into cell. The emulators copy what SetCell is handed, so one cell
-// serves a whole snapshot; returning a fresh one was an allocation per cell,
-// eleven thousand of them for a screen and a million for a deep scrollback.
-func stateToCell(t vt.Terminal, cs *CellState, cell *uv.Cell) {
-	cell.Style, cell.Link = styleFromWire(t, cs.StyleState)
-	cell.Content = cs.Content
-	cell.Width = cs.Width
 }
 
 // Close terminates the PTY.

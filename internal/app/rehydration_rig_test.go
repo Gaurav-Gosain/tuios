@@ -291,6 +291,17 @@ func (r *rig) winByPTY(ptyID string) *terminal.Window {
 	return nil
 }
 
+// daemonCells reads the daemon's copy of a pane with its cells unpacked. The
+// client keeps a snapshot in the packed form ApplyTerminalState reads, so an
+// oracle that compares cells or text unpacks it first.
+func (r *rig) daemonCells(ptyID string, maxScrollback int) (*session.TerminalState, error) {
+	st, err := r.ctl.GetTerminalState(ptyID, maxScrollback, 0)
+	if err != nil || st == nil {
+		return st, err
+	}
+	return st, st.Unpack()
+}
+
 // ptySize reports the size the daemon has the pane at.
 func (r *rig) ptySize(ptyID string) (int, int) {
 	r.t.Helper()
@@ -344,7 +355,7 @@ func (r *rig) waitDaemonShows(ptyID, want string) {
 // whether the guest has got somewhere yet rather than to block until it does.
 func (r *rig) daemonShows(ptyID, want string) bool {
 	r.t.Helper()
-	st, err := r.ctl.GetTerminalState(ptyID, rigScrollbackOracle, 0)
+	st, err := r.daemonCells(ptyID, rigScrollbackOracle)
 	if err != nil || st == nil {
 		return false
 	}
@@ -362,7 +373,7 @@ func (r *rig) converge(ptyID string) {
 	r.t.Helper()
 	deadline := time.Now().Add(rigWait)
 	for time.Now().Before(deadline) {
-		st, err := r.ctl.GetTerminalState(ptyID, rigScrollbackOracle, 0)
+		st, err := r.daemonCells(ptyID, rigScrollbackOracle)
 		if err == nil && st != nil {
 			if clientText(r.winByPTY(ptyID)) == stateText(st) {
 				return

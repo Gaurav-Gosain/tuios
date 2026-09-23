@@ -54,9 +54,9 @@ func TestPackedRowsRoundTrip(t *testing.T) {
 	st := &TerminalState{Width: 4, Height: len(want), Screen: packedGrid(), Scrollback: packedGrid()}
 	got := throughWire(t, st, true)
 	if got.isPacked() {
-		// The wire form is unpacked on read, by ApplyTerminalState; a caller
-		// that wants the cells calls it the same way.
-		if err := got.unpack(); err != nil {
+		// The client keeps the wire form packed; a reader that wants the
+		// cells unpacks.
+		if err := got.Unpack(); err != nil {
 			t.Fatalf("unpack: %v", err)
 		}
 	}
@@ -101,11 +101,15 @@ func TestPackedRowsAreSmaller(t *testing.T) {
 
 // TestPackedRowsRejectCorruption keeps a bad blob from becoming a bad screen.
 // Every truncation of a valid blob, and a blob pointing past its style table,
-// must unpack to an error and no rows.
+// must unpack to an error and no rows, and fail the check the client runs on
+// receipt, so the request fails before any row of it is applied.
 func TestPackedRowsRejectCorruption(t *testing.T) {
 	st := &TerminalState{Screen: packedGrid()}
 	st.Pack()
 	good := st.PackedScreen
+	if err := st.checkPacked(); err != nil {
+		t.Fatalf("a valid snapshot failed the receipt check: %v", err)
+	}
 	for n := range len(good) {
 		rows, err := unpackRows(good[:n], st.Styles)
 		if err == nil && n > 0 {
@@ -114,6 +118,13 @@ func TestPackedRowsRejectCorruption(t *testing.T) {
 		if rows != nil {
 			t.Errorf("blob cut to %d bytes produced %d rows", n, len(rows))
 		}
+		cut := &TerminalState{Styles: st.Styles, PackedScreen: good[:n]}
+		if err := cut.checkPacked(); err == nil && n > 0 {
+			t.Errorf("blob cut to %d of %d bytes passed the receipt check", n, len(good))
+		}
+	}
+	if err := (&TerminalState{Styles: st.Styles[:1], PackedScreen: good}).checkPacked(); err == nil {
+		t.Error("a style index past the table passed the receipt check")
 	}
 	if _, err := unpackRows(good, st.Styles[:1]); err == nil {
 		t.Error("a style index past the table unpacked without error")
@@ -135,23 +146,26 @@ func TestSnapshotIsPackedOnlyOnRequest(t *testing.T) {
 	rig.run(t, "printf 'pac''ked\\n'", "packed", 5*time.Second)
 	rig.drain(200 * time.Millisecond)
 
-	// The client asks for the packed form and unpacks it before anyone else
-	// sees it, so what it returns is cells.
+	// The client asks for the packed form and keeps it packed: the one
+	// reader of its cells, ApplyTerminalState, reads that form directly.
 	st, err := rig.c.GetTerminalState(rig.ptyID, 0, 0)
 	if err != nil {
 		t.Fatalf("GetTerminalState: %v", err)
 	}
-	if st.isPacked() || len(st.Screen) == 0 {
-		t.Fatalf("the client returned styles=%d screen rows=%d; every reader expects cells", len(st.Styles), len(st.Screen))
-	}
-	if !strings.Contains(screenText(st), "packed") {
-		t.Fatalf("the snapshot did not carry the pane's text")
+	if !st.isPacked() || st.Screen != nil {
+		t.Fatalf("the client returned styles=%d screen rows=%d; the reply should stay packed", len(st.Styles), len(st.Screen))
 	}
 	em := vt.NewEmulator(st.Width, st.Height)
 	defer func() { _ = em.Close() }()
 	ApplyTerminalState(em, st)
 	if !screenContains(em, "packed") {
 		t.Fatalf("the snapshot did not restore the pane's text:\n%s", em.String())
+	}
+	if err := st.Unpack(); err != nil {
+		t.Fatalf("Unpack: %v", err)
+	}
+	if !strings.Contains(screenText(st), "packed") {
+		t.Fatalf("the snapshot did not carry the pane's text")
 	}
 
 	// On the wire, the same request is answered packed, and a request
@@ -175,7 +189,7 @@ func TestSnapshotIsPackedOnlyOnRequest(t *testing.T) {
 		if got := payload.State.isPacked(); got != tc.packed {
 			t.Fatalf("%s: the reply is packed=%v (styles=%d, screen rows=%d), want packed=%v", tc.name, got, len(payload.State.Styles), len(payload.State.Screen), tc.packed)
 		}
-		if err := payload.State.unpack(); err != nil {
+		if err := payload.State.Unpack(); err != nil {
 			t.Fatal(err)
 		}
 		if !bytes.Contains([]byte(screenText(payload.State)), []byte("packed")) {
@@ -232,7 +246,8 @@ type oldTerminalStateReply struct {
 //
 // A newer client asks a daemon that predates the field: the daemon reads the
 // request, does not see Packed, and answers with cells. A newer client reads
-// that answer: the cells arrive where they always did and unpacking is a
+// that answer: the cells arrive where they always did, ApplyTerminalState packs
+// them before it reads them, and unpacking is a
 // no-op, so the pane comes back.
 func TestOlderPeerReadsTheWire(t *testing.T) {
 	// Newer client, older daemon: the request still reads.
@@ -265,7 +280,22 @@ func TestOlderPeerReadsTheWire(t *testing.T) {
 	if got.State.isPacked() {
 		t.Fatalf("an answer carrying cells was read as packed (styles=%d)", len(got.State.Styles))
 	}
-	if err := got.State.unpack(); err != nil {
+	// The client applies such an answer by packing it first. The receipt
+	// check has nothing to check on it.
+	if err := got.State.checkPacked(); err != nil {
+		t.Fatalf("the receipt check failed an answer that carried cells: %v", err)
+	}
+	var applied TerminalStatePayload
+	if err := decodePayload(sent, &applied); err != nil {
+		t.Fatal(err)
+	}
+	em := vt.NewEmulator(4, len(rows))
+	defer func() { _ = em.Close() }()
+	ApplyTerminalState(em, applied.State)
+	if !screenContains(em, "hi") || !screenContains(em, "abc") || !screenContains(em, "日") {
+		t.Fatalf("an answer that carried cells did not restore the pane:\n%s", em.String())
+	}
+	if err := got.State.Unpack(); err != nil {
 		t.Fatalf("unpacking an answer that carried cells must do nothing: %v", err)
 	}
 	if len(got.State.Screen) != len(rows) {

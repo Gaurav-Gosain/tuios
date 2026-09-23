@@ -215,7 +215,7 @@ var rehydrationShapes = []paneShape{
 				`printf '\033[%d;1HAFLASTROW-END' $H`, "AFLASTROW-END")
 		},
 		check: func(t *testing.T, r *rig, ptyID string) {
-			st, err := r.ctl.GetTerminalState(ptyID, -1, 0)
+			st, err := r.daemonCells(ptyID, -1)
 			if err != nil || st == nil {
 				t.Fatalf("read the daemon's copy: %v", err)
 			}
@@ -428,7 +428,7 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 	t.Helper()
 
 	w := r.winByPTY(ptyID)
-	st, err := r.ctl.GetTerminalState(ptyID, rigScrollbackOracle, 0)
+	st, err := r.daemonCells(ptyID, rigScrollbackOracle)
 	if err != nil {
 		t.Fatalf("read the daemon's copy: %v", err)
 	}
