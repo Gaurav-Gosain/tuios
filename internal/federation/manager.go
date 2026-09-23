@@ -32,6 +32,12 @@ type Options struct {
 	// a person finds out which of those happened, which is the difference
 	// between three different fixes. Nil logs nothing.
 	Log func(format string, args ...any)
+	// OnStatus is called when a host's link changes state, with the host's
+	// name and the new state. It runs on the link's supervisor goroutine with
+	// no lock held, so it must return quickly: it is how the daemon learns
+	// that a host came up or went away without polling the listing. Nil
+	// reports nothing.
+	OnStatus func(host string, status Status)
 
 	// now is the clock, so tests can freeze it. Zero means time.Now.
 	now func() time.Time
@@ -122,6 +128,14 @@ type HostReport struct {
 	// them. It is the one number that separates a slow client from a dead
 	// machine, which would otherwise both read as a lost link.
 	Stalls int `json:"stalls,omitempty"`
+	// Events says how the hub follows the host's agents: "live" when it holds
+	// a stream of the host's agent and Inbox events, "polling" when the host's
+	// tuios is too old to stream them and listings are fetched on demand, and
+	// empty while the link is not up. The daemon fills it; the link layer
+	// knows nothing of events. EventsNote is the plain sentence that says
+	// why, when it is not live.
+	Events     string `json:"events,omitempty"`
+	EventsNote string `json:"events_note,omitempty"`
 }
 
 // Up reports whether this host can be asked anything right now.
@@ -393,6 +407,16 @@ func (m *Manager) Reports(ctx context.Context) []HostReport {
 		out = append(out, l.report())
 	}
 	return out
+}
+
+// Report snapshots one host without waiting for anything. ok is false for a
+// name the manager has no link for.
+func (m *Manager) Report(host string) (HostReport, bool) {
+	l := m.link(host)
+	if l == nil {
+		return HostReport{}, false
+	}
+	return l.report(), true
 }
 
 // Call runs one read verb on one host. An unknown name is ErrUnknownHost and a

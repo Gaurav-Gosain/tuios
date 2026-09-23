@@ -135,6 +135,7 @@ func (l *link) markSettled() { l.settledOnce.Do(func() { close(l.settled) }) }
 // is the opposite of what the wait is for.
 func (l *link) set(status Status, reason, detail string) {
 	l.mu.Lock()
+	changed := l.status != status
 	l.status = status
 	l.reason = reason
 	l.detail = detail
@@ -144,6 +145,12 @@ func (l *link) set(status Status, reason, detail string) {
 	l.mu.Unlock()
 	if status != StatusConnecting {
 		l.markSettled()
+	}
+	// Outside the lock, so a callback that reads the report cannot deadlock
+	// on it. Only a change is reported: a redial that fails the same way
+	// every backoff period is one fact, not one per attempt.
+	if changed && l.opts.OnStatus != nil {
+		l.opts.OnStatus(l.host.Name, status)
 	}
 }
 
