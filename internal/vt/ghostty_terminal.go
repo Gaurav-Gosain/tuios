@@ -529,9 +529,10 @@ func (t *GhosttyTerminal) refreshCachesLocked() {
 	t.cachedMouseSGR.Store(sgr)
 	t.cachedMousePx.Store(px)
 
+	alt47, _ := t.term.Mode(gh.ModeAltScreenLegacy)
 	alt1047, _ := t.term.Mode(gh.ModeAltScreen)
 	alt1049, _ := t.term.Mode(gh.ModeAltScreenSave)
-	isAlt := alt1047 || alt1049
+	isAlt := alt47 || alt1047 || alt1049
 	t.cachedAltScreen.Store(isAlt)
 	if !isAlt {
 		if t.pendingMainSbClear {

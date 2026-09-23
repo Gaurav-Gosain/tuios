@@ -251,6 +251,11 @@ func TestGhosttyDiffBasicSequences(t *testing.T) {
 		{"alt-screen", "main\x1b[?1049htop\x1b[?1049l"},
 		{"alt-screen-enter-keeps-cursor", "\x1b[2;3Hmain\x1b[?1049hX"},
 		{"alt-screen-1047-enter-keeps-cursor", "\x1b[2;3Hmain\x1b[?1047hX"},
+		{"alt-screen-47", "\x1b[2;3Hmain\x1b[?47hX"},
+		{"alt-screen-47-leave", "main\x1b[?47h\x1b[3;2Hgone\x1b[?47lX"},
+		{"alt-screen-1047-leave", "main\x1b[?1047h\x1b[3;2Hgone\x1b[?1047lX"},
+		{"alt-screen-47-reset-on-main", "\x1b[2;3Hab\x1b[?47lX"},
+		{"alt-screen-1047-reset-on-main", "\x1b[2;3Hab\x1b[?1047lX"},
 		{"scroll-region", "\x1b[2;4rA\r\nB\r\nC\r\nD\r\nE\x1b[r"},
 		{"origin-mode", "\x1b[2;4r\x1b[?6h\x1b[Hx\x1b[?6l\x1b[r"},
 		{"rep", "ab\x1b[3b"},
@@ -373,6 +378,24 @@ func TestGhosttyDiffModes(t *testing.T) {
 			t.Errorf("mode %d pure=%v ghostty=%v", num, pm[num], gm[num])
 		}
 	}
+}
+
+// TestGhosttyDiffAltScreenLegacy checks IsAltScreen under mode 47 on both
+// backends. libghostty switched screens for 47 all along, but the wrapper only
+// asked it about 1047 and 1049, so a program using 47 was reported as being on
+// the main screen, which is what decides mouse forwarding and which history
+// ScrollbackLen reads.
+func TestGhosttyDiffAltScreenLegacy(t *testing.T) {
+	p := newDiffPair(t, 20, 5)
+	p.write(t, []byte("main\x1b[?47h"))
+	if a, g := p.pure.IsAltScreen(), p.gh.IsAltScreen(); !a || !g {
+		t.Fatalf("after 47h: IsAltScreen pure=%v ghostty=%v, want both true", a, g)
+	}
+	p.write(t, []byte("\x1b[?47l"))
+	if a, g := p.pure.IsAltScreen(), p.gh.IsAltScreen(); a || g {
+		t.Fatalf("after 47l: IsAltScreen pure=%v ghostty=%v, want both false", a, g)
+	}
+	p.compareScreens(t, "after 47l")
 }
 
 // TestGhosttyDiffAltScreenScrollback pins the contract yazi's image preview

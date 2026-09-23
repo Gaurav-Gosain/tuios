@@ -75,6 +75,48 @@ func TestConform_AlternateScreen(t *testing.T) {
 			want: "main",
 		},
 		{
+			// Mode 47 is the original alternate screen, still smcup in older
+			// terminfo entries. Unhandled, the program draws over the main
+			// screen and the main screen never comes back.
+			name: "47 switches to the alternate screen",
+			in:   "main\x1b[?47hX",
+			want: "    X",
+		},
+		{
+			name: "leaving 47 brings the main screen back",
+			in:   "main\x1b[?47hX\x1b[?47l",
+			want: "main",
+		},
+		{
+			// Neither 47 nor 1047 saves the cursor. xterm and tmux keep one
+			// cursor across the switch, so leaving puts it where the
+			// alternate screen left it, not where the main screen last had it.
+			name:   "leaving 47 keeps the cursor the alternate screen had",
+			in:     "main\x1b[?47h\x1b[3;2H\x1b[?47l",
+			want:   "main",
+			cursor: "1,2",
+		},
+		{
+			name:   "leaving 1047 keeps the cursor the alternate screen had",
+			in:     "main\x1b[?1047h\x1b[3;2H\x1b[?1047l",
+			want:   "main",
+			cursor: "1,2",
+		},
+		{
+			// A program that sends rmcup defensively, with no smcup before it,
+			// must not have its cursor moved.
+			name:   "resetting 47 on the main screen leaves the cursor alone",
+			in:     "\x1b[2;3Hab\x1b[?47l",
+			want:   "\n  ab",
+			cursor: "4,1",
+		},
+		{
+			name:   "resetting 1047 on the main screen leaves the cursor alone",
+			in:     "\x1b[2;3Hab\x1b[?1047l",
+			want:   "\n  ab",
+			cursor: "4,1",
+		},
+		{
 			name:   "1048 saves and restores the cursor without switching",
 			in:     "\x1b[2;3H\x1b[?1048h\x1b[1;1H\x1b[?1048l",
 			cursor: "2,1",

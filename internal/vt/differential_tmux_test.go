@@ -147,6 +147,11 @@ func TestDifferential_AgainstTmux(t *testing.T) {
 		{"leaving the alternate screen", 10, 4, "main\x1b[?1049hgone\x1b[?1049l"},
 		{"entering 1049 keeps the cursor", 10, 4, "\x1b[2;3Hmain\x1b[?1049hX"},
 		{"entering 1047 keeps the cursor", 10, 4, "\x1b[2;3Hmain\x1b[?1047hX"},
+		{"entering 47", 10, 4, "\x1b[2;3Hmain\x1b[?47hX"},
+		{"leaving 47", 10, 4, "main\x1b[?47hgone\x1b[?47l"},
+		{"leaving 47 carries the cursor back", 10, 4, "main\x1b[?47h\x1b[3;2H\x1b[?47lX"},
+		{"leaving 1047 carries the cursor back", 10, 4, "main\x1b[?1047h\x1b[3;2H\x1b[?1047lX"},
+		{"resetting 47 on the main screen", 10, 4, "\x1b[2;3Hab\x1b[?47lX"},
 		{"save and restore the cursor", 10, 4, "\x1b[2;4H\x1b7\x1b[1;1H\x1b8X"},
 
 		// Text.

@@ -28,9 +28,10 @@ func (t *GhosttyTerminal) activeAltLiveLocked() bool {
 	if t.closed.Load() {
 		return false
 	}
+	legacy, _ := t.term.Mode(gh.ModeAltScreenLegacy)
 	a, _ := t.term.Mode(gh.ModeAltScreen)
 	b, _ := t.term.Mode(gh.ModeAltScreenSave)
-	return a || b
+	return legacy || a || b
 }
 
 func (t *GhosttyTerminal) scrollbackLenLocked() int {

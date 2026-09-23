@@ -759,7 +759,8 @@ func (e *Emulator) IsCursorHidden() bool {
 // This is important for mouse event forwarding: mouse events should only be forwarded
 // to applications when they are in alternate screen mode.
 func (e *Emulator) IsAltScreen() bool {
-	return e.isModeSet(ansi.ModeAltScreen) || e.isModeSet(ansi.ModeAltScreenSaveCursor)
+	return e.isModeSet(ansi.ModeAltScreen) || e.isModeSet(ansi.ModeAltScreenSaveCursor) ||
+		e.isModeSet(modeAltScreenLegacy)
 }
 
 // ActiveScreenIsAlt reports whether the active screen pointer currently

@@ -35,6 +35,10 @@ func (e *Emulator) handleMode(params ansi.Params, set, isAnsi bool) {
 	}
 }
 
+// modeAltScreenLegacy is DEC private mode 47, the original alternate screen.
+// ansi has no name for it.
+const modeAltScreenLegacy = ansi.DECMode(47)
+
 // setAltScreenMode sets the alternate screen mode.
 func (e *Emulator) setAltScreenMode(on bool) {
 	if (on && e.scr == &e.scrs[1]) || (!on && e.scr == &e.scrs[0]) {
@@ -104,8 +108,24 @@ func (e *Emulator) setMode(mode ansi.Mode, setting ansi.ModeSetting) {
 	switch mode {
 	case ansi.ModeTextCursorEnable:
 		e.scr.setCursorHidden(!setting.IsSet())
-	case ansi.ModeAltScreen:
-		e.setAltScreenMode(setting.IsSet())
+	case modeAltScreenLegacy, ansi.ModeAltScreen:
+		// 47 is the original alternate screen, and older terminfo entries
+		// still send "\e[?47h" for smcup. A terminal that ignores it draws a
+		// full-screen program over the primary screen and never gives the
+		// primary contents back.
+		//
+		// Neither 47 nor 1047 saves the cursor, so leaving carries the
+		// cursor back from the alternate screen, as xterm and tmux do, rather
+		// than returning to wherever the primary screen last had it. A reset
+		// while the primary screen is already up changes nothing, so a
+		// program that sends rmcup defensively does not move its own cursor.
+		if setting.IsSet() {
+			e.setAltScreenMode(true)
+		} else if e.scr == &e.scrs[1] {
+			pos := e.scrs[1].cur.Position
+			e.setAltScreenMode(false)
+			e.scr.setCursor(pos.X, pos.Y, false)
+		}
 	case ansi.ModeSaveCursor:
 		if setting.IsSet() {
 			e.saveCursor()
