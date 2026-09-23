@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -178,24 +177,47 @@ func (d *Daemon) verbBundleWorktree(cs *connState, params json.RawMessage) (any,
 	if _, err := os.Stat(info.Path); err != nil {
 		return nil, hintedVerbError(ErrVerbNotWorktree, "the worktree of "+sess.Name+" is gone: "+info.Path+" no longer exists", nil)
 	}
-	if strings.HasPrefix(info.Branch, "detached@") {
-		return nil, hintedVerbError(ErrVerbNotWorktree, "the worktree of "+sess.Name+" has a detached HEAD, so there is no branch to carry", &VerbHint{
+	return d.openBundle(cs, sess.Name, info, p.Full)
+}
+
+// liveHead reads the branch and commit the worktree's HEAD is on now. The
+// session's info.Branch is the branch the session was made on, and a managed
+// worktree session never refreshes it, so an agent that switched branch or
+// detached HEAD since would otherwise be carried as the old branch with a
+// head that is not on it.
+func liveHead(sessionName, path string) (branch, head string, verr *verbError) {
+	branch, err := worktree.CurrentBranch(path)
+	if err != nil {
+		return "", "", hintedVerbError(ErrVerbGitFailed, err.Error(), nil)
+	}
+	if branch == "" {
+		return "", "", hintedVerbError(ErrVerbNotWorktree, "the worktree of "+sessionName+" has a detached HEAD, so there is no branch to carry", &VerbHint{
 			Detail: "Check out a branch in the worktree first.",
 		})
 	}
-	return d.openBundle(cs, sess.Name, info, p.Full)
+	head, err = worktree.HeadCommit(path)
+	if err != nil {
+		return "", "", hintedVerbError(ErrVerbGitFailed, err.Error(), nil)
+	}
+	return branch, head, nil
 }
 
 // openBundle makes the transfer for a worktree and answers with its first
 // chunk.
+//
+// The branch bundled, the head reported and the commit the patch is made
+// against all come from the worktree's HEAD as git has it now, not from the
+// branch recorded on the session. HEAD is read again once the bundle and the
+// patch are written, and a HEAD that moved in between refuses the transfer,
+// so the three always agree.
 func (d *Daemon) openBundle(cs *connState, sessionName string, info *WorktreeInfo, full bool) (any, *verbError) {
-	head, err := worktree.HeadCommit(info.Path)
-	if err != nil {
-		return nil, hintedVerbError(ErrVerbGitFailed, err.Error(), nil)
+	branch, head, verr := liveHead(sessionName, info.Path)
+	if verr != nil {
+		return nil, verr
 	}
 	exclude := ""
 	if !full && info.Base != "" {
-		if mb, err := worktree.MergeBase(info.Path, info.Base, "HEAD"); err == nil {
+		if mb, err := worktree.MergeBase(info.Path, info.Base, head); err == nil {
 			exclude = mb
 		}
 	}
@@ -212,7 +234,7 @@ func (d *Daemon) openBundle(cs *connState, sessionName string, info *WorktreeInf
 	}()
 
 	bundlePath := filepath.Join(dir, "commits.bundle")
-	bundleErr := worktree.Bundle(info.Path, info.Branch, exclude, bundlePath)
+	bundleErr := worktree.Bundle(info.Path, branch, exclude, bundlePath)
 	switch {
 	case errors.Is(bundleErr, worktree.ErrEmptyBundle):
 		bundlePath = ""
@@ -223,6 +245,21 @@ func (d *Daemon) openBundle(cs *connState, sessionName string, info *WorktreeInf
 	changes, err := worktree.WorkingPatch(info.Path, patchPath)
 	if err != nil {
 		return nil, hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{Detail: "git could not read the uncommitted work. The worktree is as it was."})
+	}
+	// The agent in the worktree can commit or switch branch while the bundle
+	// and the patch are written. Either would leave a head that is not the
+	// bundled branch's tip, or a patch made against another commit.
+	if nowBranch, nowHead, verr := liveHead(sessionName, info.Path); verr != nil {
+		return nil, verr
+	} else if nowBranch != branch || nowHead != head {
+		return nil, hintedVerbError(ErrVerbGitFailed, "the worktree of "+sessionName+" moved from "+branch+" at "+head+" while its work was read", &VerbHint{
+			Detail: "Something in the worktree committed or switched branch. Nothing was changed. Try again.",
+		})
+	}
+	if tip, err := worktree.BranchCommit(info.Path, branch); err != nil || tip != head {
+		return nil, hintedVerbError(ErrVerbGitFailed, "branch "+branch+" is not at the worktree's HEAD "+head, &VerbHint{
+			Detail: "Something in the worktree moved the branch while its work was read. Nothing was changed. Try again.",
+		})
 	}
 
 	transferPath := filepath.Join(dir, "transfer")
@@ -257,7 +294,7 @@ func (d *Daemon) openBundle(cs *connState, sessionName string, info *WorktreeInf
 		"token":        token,
 		"repo":         info.Repo,
 		"origin_url":   origin,
-		"branch":       info.Branch,
+		"branch":       branch,
 		"base":         info.Base,
 		"base_commit":  exclude,
 		"head":         head,

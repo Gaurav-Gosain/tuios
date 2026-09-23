@@ -294,3 +294,36 @@ func TestValidBranch(t *testing.T) {
 		}
 	}
 }
+
+func TestCurrentBranchReadsHEADNow(t *testing.T) {
+	repo := testutil.GitRepo(t)
+	path := filepath.Join(t.TempDir(), "wt")
+	if _, err := Add(repo, path, "feat/one", ""); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := CurrentBranch(path); err != nil || b != "feat/one" {
+		t.Errorf("CurrentBranch = %q, %v; want feat/one", b, err)
+	}
+	testutil.Git(t, path, "checkout", "-q", "-b", "heads/two")
+	if b, err := CurrentBranch(path); err != nil || b != "heads/two" {
+		t.Errorf("after a switch CurrentBranch = %q, %v; want heads/two", b, err)
+	}
+	testutil.Git(t, path, "checkout", "-q", "--detach")
+	if b, err := CurrentBranch(path); err != nil || b != "" {
+		t.Errorf("detached CurrentBranch = %q, %v; want empty and no error", b, err)
+	}
+	if _, err := CurrentBranch(t.TempDir()); err == nil {
+		t.Error("CurrentBranch outside a repository reported no error")
+	}
+}
+
+func TestDeleteBranchRemovesABranch(t *testing.T) {
+	repo := testutil.GitRepo(t)
+	testutil.Git(t, repo, "branch", "gone")
+	if err := DeleteBranch(repo, "gone"); err != nil || BranchExists(repo, "gone") {
+		t.Errorf("DeleteBranch: %v, exists %v", err, BranchExists(repo, "gone"))
+	}
+	if err := DeleteBranch(repo, "-D"); err == nil {
+		t.Error("DeleteBranch accepted a name that reads as an option")
+	}
+}

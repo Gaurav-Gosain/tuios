@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
+	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
 // inRepoWithOrigin puts the test in a checkout whose origin is url, with a
@@ -195,5 +196,57 @@ func TestHostsAddKeepsReposRoot(t *testing.T) {
 	}
 	if hosts["build"].Addr != "new" || hosts["build"].ReposRoot != "~/src" {
 		t.Errorf("after hosts add: %+v, want the new address and the old repos_root", hosts["build"])
+	}
+}
+
+// TestLandBranchLeavesNothingBehindOnFailure covers a transfer whose head is
+// not the tip of the bundled branch, and one whose bundle git cannot read. A
+// failed pull must not leave the new branch, or every retry is refused with
+// "branch already exists here".
+func TestLandBranchLeavesNothingBehindOnFailure(t *testing.T) {
+	sender := testutil.GitRepo(t)
+	testutil.Git(t, sender, "checkout", "-q", "-b", "feat/x")
+	if err := os.WriteFile(filepath.Join(sender, "f"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, sender, "add", "f")
+	testutil.Git(t, sender, "commit", "-q", "-m", "x")
+	tip := strings.TrimSpace(testutil.Git(t, sender, "rev-parse", "HEAD"))
+	bundlePath := filepath.Join(t.TempDir(), "b")
+	testutil.Git(t, sender, "bundle", "create", "-q", bundlePath, "refs/heads/feat/x")
+	bundle, err := os.ReadFile(bundlePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiver := testutil.GitRepo(t)
+
+	cases := map[string]bundleReply{
+		// The far side named a head the bundled branch does not end at, as
+		// happened when it bundled a stale branch name.
+		"head is not the branch tip": {Branch: "feat/x", Head: strings.Repeat("1", 40), BundleBytes: int64(len(bundle)), Size: int64(len(bundle))},
+		// git cannot fetch from bytes that are not a bundle.
+		"bundle is not a bundle": {Branch: "feat/x", Head: tip, BundleBytes: 4, Size: 4},
+	}
+	for name, reply := range cases {
+		t.Run(name, func(t *testing.T) {
+			data := bundle
+			if reply.BundleBytes == 4 {
+				data = []byte("junk")
+			}
+			if err := landBranch(receiver, t.TempDir(), "build", "pulled", reply, data); err == nil {
+				t.Fatal("landBranch succeeded")
+			}
+			if worktree.BranchExists(receiver, "pulled") {
+				t.Error("the failed pull left branch pulled behind")
+			}
+		})
+	}
+
+	good := bundleReply{Branch: "feat/x", Head: tip, BundleBytes: int64(len(bundle)), Size: int64(len(bundle))}
+	if err := landBranch(receiver, t.TempDir(), "build", "pulled", good, bundle); err != nil {
+		t.Fatalf("a good transfer after the failed ones: %v", err)
+	}
+	if got, _ := worktree.BranchCommit(receiver, "pulled"); got != tip {
+		t.Errorf("pulled is at %s, want %s", got, tip)
 	}
 }

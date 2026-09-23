@@ -425,7 +425,11 @@ names `worktree pull`.
 **Pulling work back.** `worktree pull HOST:SESSION` copies a worktree session's
 work on another machine into a new worktree session here. Its commits cross as
 a git bundle and are fetched into a new branch of the repository you are in,
-named as there or by `--branch`. Its uncommitted work, untracked files
+named as there or by `--branch`. The branch carried is the one the worktree's
+HEAD is on now, so an agent that made its own branch there has that branch
+pulled. A worktree with a detached HEAD is refused. When the commits cannot be
+fetched, or the branch they make does not end where the other machine said,
+the new branch is removed again, so the pull can simply be run again. Its uncommitted work, untracked files
 included, crosses as a patch and is applied, uncommitted, in the new worktree.
 Only the commits past the worktree's base cross when this repository has the
 base commit, and the whole branch otherwise. A branch that already exists here

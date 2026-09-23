@@ -1862,7 +1862,9 @@ branch of the repository you are in, and the uncommitted work, untracked files
 included, applied uncommitted in the new worktree. Only the commits past the
 worktree's base cross when this repository has the base commit. A branch that
 already exists here is refused, so nothing is overwritten, and nothing on the
-other machine changes. `--branch` names the branch here.
+other machine changes. `--branch` names the branch here. The branch carried is
+the one the worktree's HEAD is on now, so a branch the agent made there is the
+one you get. A failed pull removes the branch it made, so run it again.
 
 `start-agent` works there too, with `-s HOST:SESSION`. The session is created
 when it does not exist, and arguments after `--` go to the agent. On another

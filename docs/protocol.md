@@ -1770,6 +1770,14 @@ has no bundle (`bundle_bytes: 0`). The reply carries `token`, `repo`,
 `bundle_bytes`, `patch_bytes`, `changes` (paths the patch touches), `size`,
 `sha256` of the whole transfer, and the first chunk.
 
+`branch` and `head` are what the worktree's HEAD is on when the call runs, not
+the branch the session was made on. An agent that made its own branch in the
+worktree has that branch carried. A detached HEAD is refused with
+`not_worktree`, since there is no branch to carry. HEAD is read again once the
+bundle and the patch are written, and if it moved in between, from a commit or
+a branch switch, the call answers `git_failed` and nothing is kept. Try again.
+The bundled branch always ends at `head`, and the patch is made against it.
+
 Every reply carries a chunk: `content` (base64, at most 4 MB before encoding),
 `offset`, `next` and `done`. Later calls pass `token` and `offset` set to the
 previous `next`. `release` with `token` ends a transfer early.

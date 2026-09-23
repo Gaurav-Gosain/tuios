@@ -30,6 +30,39 @@ func HeadCommit(path string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// CurrentBranch is the branch HEAD points at in the worktree at path, read
+// from git now. It is "" when HEAD is detached. A session records the branch
+// it was made on, and the agent in it can switch branch or detach since, so
+// anything that carries the worktree's work reads this instead.
+func CurrentBranch(path string) (string, error) {
+	out, err := run(path, "symbolic-ref", "-q", "HEAD")
+	if err != nil {
+		// symbolic-ref -q exits 1 with no output on a detached HEAD. Any
+		// other failure is a real one, so HEAD is read to tell them apart.
+		if _, herr := run(path, "rev-parse", "--verify", "-q", "HEAD"); herr == nil {
+			return "", nil
+		}
+		return "", err
+	}
+	ref := strings.TrimSpace(out)
+	branch, ok := strings.CutPrefix(ref, "refs/heads/")
+	if !ok {
+		return "", nil
+	}
+	return branch, nil
+}
+
+// DeleteBranch removes branch from the repository at dir, whatever it holds.
+// It is for undoing a branch this process just made. The branch must pass
+// ValidBranch, which refuses a leading hyphen.
+func DeleteBranch(dir, branch string) error {
+	if err := ValidBranch(branch); err != nil {
+		return err
+	}
+	_, err := run(dir, "branch", "-D", branch)
+	return err
+}
+
 // MergeBase is the full hash of the best common ancestor of a and b.
 func MergeBase(path, a, b string) (string, error) {
 	out, err := run(path, "merge-base", a, b)

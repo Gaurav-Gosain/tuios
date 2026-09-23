@@ -195,19 +195,8 @@ func runWorktreePull(target, repo, branch, name string, detach, jsonOutput bool)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
 
-	if first.BundleBytes > 0 {
-		bundlePath := filepath.Join(tmp, "commits.bundle")
-		if err := os.WriteFile(bundlePath, data[:first.BundleBytes], 0o600); err != nil {
-			return err
-		}
-		if err := worktree.FetchBundle(root, bundlePath, first.Branch, localBranch); err != nil {
-			return reportVerbError(fmt.Errorf("could not fetch the commits from %s: %w", host, err), jsonOutput)
-		}
-	} else if err := worktree.CreateBranch(root, localBranch, first.Head); err != nil {
-		return reportVerbError(fmt.Errorf("could not make branch %s at %s: %w", localBranch, first.Head, err), jsonOutput)
-	}
-	if got, err := worktree.BranchCommit(root, localBranch); err != nil || got != first.Head {
-		return reportVerbError(fmt.Errorf("branch %s is at %s here and %s on %s, so the pull did not carry the commits it said it would", localBranch, got, first.Head, host), jsonOutput)
+	if err := landBranch(root, tmp, host, localBranch, first, data); err != nil {
+		return reportVerbError(err, jsonOutput)
 	}
 
 	client, err := dialVerb()
@@ -272,6 +261,36 @@ func runWorktreePull(target, repo, branch, name string, detach, jsonOutput bool)
 		return nil
 	}
 	return runDaemonSession(made.Session, false)
+}
+
+// landBranch makes localBranch in the repository at root from a transfer:
+// fetched from the bundle, or made at the head when there were no commits to
+// carry. It then checks the branch is at the head the far side reported.
+//
+// localBranch did not exist when the pull began, so on any failure here the
+// branch is deleted again. A failed pull leaves nothing behind and can be run
+// again without a 'branch already exists' refusal.
+func landBranch(root, tmp, host, localBranch string, first bundleReply, data []byte) (err error) {
+	defer func() {
+		if err != nil && worktree.BranchExists(root, localBranch) {
+			_ = worktree.DeleteBranch(root, localBranch)
+		}
+	}()
+	if first.BundleBytes > 0 {
+		bundlePath := filepath.Join(tmp, "commits.bundle")
+		if err := os.WriteFile(bundlePath, data[:first.BundleBytes], 0o600); err != nil {
+			return err
+		}
+		if err := worktree.FetchBundle(root, bundlePath, first.Branch, localBranch); err != nil {
+			return fmt.Errorf("could not fetch the commits from %s: %w", host, err)
+		}
+	} else if err := worktree.CreateBranch(root, localBranch, first.Head); err != nil {
+		return fmt.Errorf("could not make branch %s at %s: %w", localBranch, first.Head, err)
+	}
+	if got, err := worktree.BranchCommit(root, localBranch); err != nil || got != first.Head {
+		return fmt.Errorf("branch %s is at %s here and %s on %s, so the pull did not carry the commits it said it would. Branch %s was removed again", localBranch, got, first.Head, host, localBranch)
+	}
+	return nil
 }
 
 // pullMaxBytes is the largest transfer a pull reads, the same cap the far
