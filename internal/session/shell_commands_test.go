@@ -145,6 +145,90 @@ func TestShellTrackFinishedEventCarriesTheCommand(t *testing.T) {
 	}
 }
 
+// TestShellTrackTellsPromptMarksOnly covers a shell whose integration marks its
+// prompts and not its commands, as bash before 4.4 does with the bash recipe.
+// Such a pane looks like one at a prompt while a command runs. A line run
+// typed that comes back to a prompt on a later row with no C shows it, and the
+// pane is then not at a prompt as far as anyone can tell. The cases that must
+// not count are a prompt redrawn in place and the prompt the line is read at.
+func TestShellTrackTellsPromptMarksOnly(t *testing.T) {
+	at := func(typ vt.SemanticMarkerType, row int) vt.SemanticMarker {
+		return vt.SemanticMarker{Type: typ, AbsLine: row, ExitCode: -1}
+	}
+	type step struct {
+		mark   vt.SemanticMarker
+		expect bool // run types a line before this mark
+	}
+	tests := []struct {
+		name         string
+		steps        []step
+		wantOnly     bool
+		wantPrompt   bool
+		wantCommands bool
+		wantEvents   int // prompt events
+	}{
+		{
+			name:       "a typed line comes back to a new prompt with no C",
+			steps:      []step{{mark: at(vt.MarkerPromptStart, 0)}, {mark: at(vt.MarkerCommandStart, 0)}, {mark: at(vt.MarkerPromptStart, 2), expect: true}},
+			wantOnly:   true,
+			wantEvents: 2,
+		},
+		{
+			name:       "a prompt redrawn in place is not a command",
+			steps:      []step{{mark: at(vt.MarkerPromptStart, 3)}, {mark: at(vt.MarkerCommandStart, 3)}, {mark: at(vt.MarkerPromptStart, 3), expect: true}},
+			wantPrompt: true,
+			wantEvents: 1,
+		},
+		{
+			name:       "the input row of a prompt of two rows is not a new prompt",
+			steps:      []step{{mark: at(vt.MarkerPromptStart, 0)}, {mark: at(vt.MarkerCommandStart, 1), expect: true}},
+			wantPrompt: true,
+			wantEvents: 1,
+		},
+		{
+			name: "a line typed after D is read at the prompt that follows",
+			steps: []step{
+				{mark: at(vt.MarkerCommandExecuted, 1)}, {mark: vt.SemanticMarker{Type: vt.MarkerCommandFinished, AbsLine: 2}},
+				{mark: at(vt.MarkerPromptStart, 3), expect: true}, {mark: at(vt.MarkerCommandStart, 3)},
+			},
+			wantPrompt:   true,
+			wantCommands: true,
+			wantEvents:   1,
+		},
+		{
+			name: "a C mark later shows the shell marks commands after all",
+			steps: []step{
+				{mark: at(vt.MarkerPromptStart, 0)}, {mark: at(vt.MarkerPromptStart, 2), expect: true},
+				{mark: at(vt.MarkerCommandExecuted, 3)}, {mark: vt.SemanticMarker{Type: vt.MarkerCommandFinished, AbsLine: 4}},
+			},
+			wantPrompt:   true,
+			wantCommands: true,
+			wantEvents:   2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var track shellTrack
+			prompts := 0
+			for _, s := range tt.steps {
+				if s.expect {
+					track.expect()
+				}
+				for _, ev := range track.note(s.mark, time.Unix(100, 0)) {
+					if ev.Type == EventPrompt {
+						prompts++
+					}
+				}
+			}
+			f := track.facts()
+			if f.PromptOnly != tt.wantOnly || f.AtPrompt != tt.wantPrompt || f.MarksCommands != tt.wantCommands || prompts != tt.wantEvents {
+				t.Fatalf("facts = %+v with %d prompt events, want prompt_only=%v at_prompt=%v marks_commands=%v and %d prompt events",
+					f, prompts, tt.wantOnly, tt.wantPrompt, tt.wantCommands, tt.wantEvents)
+			}
+		})
+	}
+}
+
 // TestLastFinishedCommandSkipsTheRunningOne holds last-command-output to the
 // command that finished: a command still running has a C with no D after it,
 // and reading from it would return output that is not done yet.

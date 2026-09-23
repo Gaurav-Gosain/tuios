@@ -596,7 +596,12 @@ where another agent's `run` has not ended yet, is refused with
 `not_at_prompt`, and a pane whose shell sends no marks with
 `no_shell_integration`; nothing is typed either way. `tuios doctor shell` says
 which panes mark their commands and prints the lines that turn the marks on for
-zsh and bash; fish 4 sends them by itself. `list-windows --json` shows
+zsh and bash (4.4 or newer; older bash, like macOS `/bin/bash`, marks prompts
+and never commands); fish 4 sends them by itself. A pane whose shell marks only
+its prompts shows `prompt_marks_only` in `list-windows` once a command has run
+there, and `run` refuses it with `no_shell_integration`; the first `run` in
+such a pane types, then fails at once with that error when the shell skips the
+mark. `list-windows --json` shows
 `at_prompt`, `command_seq`, `last_exit_code` and `last_cmdline` for every pane
 whose shell marks its commands, and nothing extra for one that does not, so you
 can tell before you try. A timeout does not stop the command: its error names

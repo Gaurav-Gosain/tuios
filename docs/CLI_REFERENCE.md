@@ -993,7 +993,11 @@ parses, so quote for the shell as you would when typing it.
 on stderr and exits `0`. A refusal exits `1`: `not_at_prompt` when a command is
 already running in the pane or another `run` there has not ended,
 `no_shell_integration` when its shell sends no marks. Nothing is typed in
-either case.
+either case. A shell that marks its prompts and not its commands (bash before
+4.4, which ignores the recipe's PS0) is found out by the first `run` in the
+pane: the line is typed, and when the shell draws a new prompt with no command
+mark, `run` fails at once with `no_shell_integration`. Every later `run` there
+is refused before typing.
 
 **Examples:**
 ```bash
@@ -2136,7 +2140,7 @@ them.
 | `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, and the MCP server entry it wrote, and nothing else |
 | `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id, and for the four harnesses with an MCP registration whether `tuios mcp` is registered (`--json`, with `reports` and `mcp`) |
 | `tuios mcp` | Serve tuios to an agent harness as an MCP server over stdio. Read-only by default and held to the session of the pane it runs in; `--write` adds the tools that type into panes, `--scope all` reaches every session. See [tuios mcp](#tuios-mcp) |
-| `tuios doctor shell` | Per pane: whether its shell marks its commands with OSC 133, which `tuios run`, `wait-for command-finished` and `capture-pane --last-command` need, and, when one does not, the lines that turn the marks on for your `$SHELL` (zsh and bash; fish 4 sends them itself) (`-s`, `--json`) |
+| `tuios doctor shell` | Per pane: whether its shell marks its commands with OSC 133, which `tuios run`, `wait-for command-finished` and `capture-pane --last-command` need, and, when one does not, the lines that turn the marks on for your `$SHELL` (zsh, and bash 4.4 or newer; fish 4 sends them itself). A pane that marks its prompts and ran a command without marking it is flagged as prompt marks only, and one that has not run a command yet is said to mark its prompts (`-s`, `--json`, with `command_mark_seen` and `prompt_marks_only`) |
 | `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes missing theirs, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
 | `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
 | `tuios stash put <file>` | Copy a file into the session store and print the stored path |

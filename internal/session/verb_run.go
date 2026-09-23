@@ -70,8 +70,12 @@ func shellFactsData(f ShellFacts) map[string]any {
 		return nil
 	}
 	out := map[string]any{
-		"at_prompt":   f.AtPrompt,
-		"command_seq": f.CommandSeq,
+		"at_prompt":      f.AtPrompt,
+		"command_seq":    f.CommandSeq,
+		"marks_commands": f.MarksCommands,
+	}
+	if f.PromptOnly {
+		out["prompt_marks_only"] = true
 	}
 	if f.Running != "" {
 		out["running_cmdline"] = f.Running
@@ -194,6 +198,16 @@ func noShellIntegration(window string) *verbError {
 	})
 }
 
+// promptMarksOnly is the refusal for a pane whose shell marks its prompts and
+// not its commands, so a running command looks like a prompt. what says what
+// happened to the command line.
+func promptMarksOnly(window, what string) *verbError {
+	return hintedVerbError(ErrVerbNoShellIntegration, "the shell in window "+echoName(window)+" sends prompt marks only: it ran a command without the OSC 133 C mark, so the daemon cannot tell a running command from a prompt", &VerbHint{
+		Command: "tuios doctor shell",
+		Detail:  what + " bash needs 4.4 or newer for the C mark (older bash ignores PS0), and a prompt theme that sends only A needs the full integration. Until then, type with send-text and wait for a marker the command prints.",
+	})
+}
+
 // verbRun types one command line at a pane's prompt, waits for the shell to
 // report it finished, and returns its exit status and output.
 func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError) {
@@ -285,6 +299,9 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 	}
 	defer pty.runClaim.Store(false)
 	facts = pty.ShellFacts()
+	if facts.PromptOnly {
+		return nil, promptMarksOnly(windowLabelFor(w), "Nothing was typed.")
+	}
 	if !facts.AtPrompt {
 		msg := "the shell in window " + echoName(windowLabelFor(w)) + " is not at its prompt"
 		if facts.Running != "" {
@@ -299,6 +316,8 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 
 	ctx, cancel := context.WithTimeout(d.ctx, timeout)
 	defer cancel()
+	pty.shell.expect()
+	defer pty.shell.stopExpecting()
 	if _, err := submitPrompt(ctx, pty, p.Command, harness.DefaultInputProfile()); err != nil {
 		return nil, newVerbError(ErrVerbInternal, err.Error())
 	}
@@ -327,6 +346,13 @@ func (d *Daemon) verbRun(cs *connState, params json.RawMessage) (any, *verbError
 				return nil, newVerbError(ErrVerbPTYNotFound, "the pane's shell exited before the command finished")
 			case EventCommandStarted:
 				started = true
+			case EventPrompt:
+				// A new prompt before the command was marked started: the
+				// shell ran the line without a C mark and will never report
+				// it finished. Say so now rather than at the timeout.
+				if !started && pty.ShellFacts().PromptOnly {
+					return nil, promptMarksOnly(windowLabelFor(w), "The command was typed and the shell has likely run it, but its exit status and output are not known.")
+				}
 			case EventCommandFinished:
 				if ev.CommandSeq <= baseline {
 					continue

@@ -121,6 +121,53 @@ func TestRunRefusesARunningPane(t *testing.T) {
 	}
 }
 
+// promptOnlyShell marks its prompts and sends the status, and never the C
+// that says a command started, which is what the bash recipe does on bash
+// before 4.4, where PS0 is ignored.
+const promptOnlyShell = `prompt() { printf '\033]133;A\007$ \033]133;B\007'; }
+prompt
+while IFS= read -r line; do
+  sh -c "$line"
+  printf '\033]133;D;%s\007' "$?"
+  prompt
+done`
+
+// TestRunRefusesAShellThatMarksOnlyPrompts covers a pane whose shell marks its
+// prompts and not its commands. Before any command it looks like any other
+// shell at a prompt, so the first run types. When the shell comes back to a
+// prompt without marking the command, run says so at once rather than at the
+// timeout, and after that the pane is refused before anything is typed.
+func TestRunRefusesAShellThatMarksOnlyPrompts(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	makeSessionWithWindow(t, d, "work")
+	c := dialVerb(t, sp)
+	cmd, _ := json.Marshal([]string{"sh", "-c", promptOnlyShell})
+	result(t, c.call(t, fmt.Sprintf(`{"id":1,"verb":"new-window","params":{"session":"work","name":"old-bash","command":%s,"focus":false}}`, cmd)))
+	waitForWindowField(t, c, "old-bash", "at_prompt", true)
+
+	start := time.Now()
+	resp := c.call(t, `{"id":1,"verb":"run","params":{"session":"work","window":"old-bash","command":"echo first","timeout":20000}}`)
+	if code := errCode(t, resp); code != ErrVerbNoShellIntegration {
+		t.Fatalf("run in a prompt-only pane: code %q, want %q (%v)", code, ErrVerbNoShellIntegration, resp)
+	}
+	if took := time.Since(start); took > 10*time.Second {
+		t.Fatalf("run took %v to notice the command was never marked, want well under its timeout", took)
+	}
+
+	w := waitForWindowField(t, c, "old-bash", "prompt_marks_only", true)
+	if w["at_prompt"] != false || w["marks_commands"] != false {
+		t.Fatalf("list-windows entry = %v, want at_prompt and marks_commands false", w)
+	}
+	resp = c.call(t, `{"id":1,"verb":"run","params":{"session":"work","window":"old-bash","command":"echo second","timeout":2000}}`)
+	if code := errCode(t, resp); code != ErrVerbNoShellIntegration {
+		t.Fatalf("a second run in a prompt-only pane: code %q, want %q (%v)", code, ErrVerbNoShellIntegration, resp)
+	}
+	res := result(t, c.call(t, `{"id":1,"verb":"capture-pane","params":{"session":"work","window":"old-bash"}}`))
+	if content, _ := res["content"].(string); containsLine(content, "echo second") {
+		t.Fatalf("run typed into a pane it knew does not mark commands:\n%s", content)
+	}
+}
+
 // TestRunOneAtATimeInAPane starts two runs in one pane at once. Both would
 // pass the prompt check before either command starts, and the shell would read
 // one line made of both. One run holds the pane, and the other is refused

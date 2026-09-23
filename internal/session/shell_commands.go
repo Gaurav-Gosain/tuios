@@ -30,6 +30,14 @@ import (
 // Nothing here guesses. A pane whose shell never sent a mark has no shell
 // facts at all, and the verbs that need them say so with no_shell_integration
 // rather than inventing an answer from the screen.
+//
+// A shell can also mark its prompts and never its commands: bash before 4.4
+// ignores the PS0 the bash recipe sends C from, and some prompt themes send A
+// alone. Its pane looks like one at a prompt even while a command runs. Before
+// any command that cannot be told from a shell that has not run one yet, so
+// run types its first line there. The tracker then watches for the C: when the
+// shell instead draws a new prompt on a later row, the pane is prompt-only,
+// at_prompt is false from then on, and run refuses it.
 
 // shellCmdlineMax bounds a command line as the daemon reports it, in bytes.
 // It goes to every subscriber and every hook, so it is cut, and likely secrets
@@ -68,6 +76,24 @@ type shellTrack struct {
 	lastCmdline  string
 	lastExit     *int
 	lastDuration time.Duration
+
+	// commands is true once the shell has sent a C mark. A shell whose
+	// integration marks only its prompts never sends one: bash older than
+	// 4.4 ignores the PS0 the bash recipe sends C from, and some prompt
+	// themes send A alone. Such a pane looks like one at a prompt forever.
+	commands bool
+	// promptLine is the row of the last A or B mark.
+	promptLine int
+	// expecting is set by run just before it types a line, with the prompt
+	// row it typed at. The shell has then read a command and must mark it
+	// with C before it draws its next prompt.
+	expecting     bool
+	expectingLine int
+	// promptOnly is true once a line run typed came back to a new prompt, on
+	// a later row, with no C before it: the shell ran a command and did not
+	// mark it. It stays true until a C mark shows the shell does mark
+	// commands after all.
+	promptOnly bool
 }
 
 // ShellFacts is what a pane's shell has said about its commands. Seen is false
@@ -87,6 +113,14 @@ type ShellFacts struct {
 	LastCmdline  string
 	LastExit     *int
 	LastDuration time.Duration
+	// MarksCommands is true once the shell has sent a C mark, so the daemon
+	// has seen it mark a command start.
+	MarksCommands bool
+	// PromptOnly is true when a command ran in the pane and the shell did
+	// not mark it: its integration sends prompt marks only. AtPrompt is then
+	// false, since the daemon cannot tell a prompt from a running command,
+	// and run refuses the pane.
+	PromptOnly bool
 }
 
 // facts returns the pane's shell facts.
@@ -94,11 +128,13 @@ func (t *shellTrack) facts() ShellFacts {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	f := ShellFacts{
-		Seen:         t.seen,
-		AtPrompt:     t.phase == shellPrompt || t.phase == shellFinished,
-		CommandSeq:   t.seq,
-		LastCmdline:  t.lastCmdline,
-		LastDuration: t.lastDuration,
+		Seen:          t.seen,
+		AtPrompt:      !t.promptOnly && (t.phase == shellPrompt || t.phase == shellFinished),
+		CommandSeq:    t.seq,
+		LastCmdline:   t.lastCmdline,
+		LastDuration:  t.lastDuration,
+		MarksCommands: t.commands,
+		PromptOnly:    t.promptOnly,
 	}
 	if t.phase == shellRunning {
 		f.Running = t.cmdline
@@ -124,10 +160,28 @@ func (t *shellTrack) note(m vt.SemanticMarker, now time.Time) []SessionEvent {
 		if t.phase == shellRunning {
 			out = append(out, t.finishLocked(nil, now))
 		}
-		if t.phase != shellPrompt {
+		newPrompt := t.phase != shellPrompt
+		if t.expecting {
+			switch {
+			case t.phase != shellPrompt, m.Type == vt.MarkerCommandStart:
+				// The prompt the line is read at is still being drawn:
+				// after a D, or the input row of a prompt of several rows.
+				t.expectingLine = max(t.expectingLine, m.AbsLine)
+			case m.AbsLine > t.expectingLine:
+				// A line run typed came back to a new prompt on a later
+				// row with no C: the shell ran it without marking it. A
+				// prompt redrawn in place, on a resize, stays on its row
+				// and proves nothing.
+				t.expecting = false
+				t.promptOnly = true
+				newPrompt = true
+			}
+		}
+		if newPrompt {
 			out = append(out, SessionEvent{Type: EventPrompt})
 		}
 		t.phase = shellPrompt
+		t.promptLine = m.AbsLine
 	case vt.MarkerCommandExecuted:
 		if t.phase == shellRunning {
 			// Two integrations at once, a shell's own and one from an rc
@@ -138,6 +192,7 @@ func (t *shellTrack) note(m vt.SemanticMarker, now time.Time) []SessionEvent {
 			}
 			out = append(out, t.finishLocked(nil, now))
 		}
+		t.commands, t.promptOnly, t.expecting = true, false, false
 		t.phase = shellRunning
 		t.cmdline = shellCmdline(m.CapturedText)
 		t.started = now
@@ -158,6 +213,23 @@ func (t *shellTrack) note(m vt.SemanticMarker, now time.Time) []SessionEvent {
 		t.phase = shellFinished
 	}
 	return out
+}
+
+// expect records that run is about to type a command line at the prompt, so
+// the next prompt without a C in between shows the shell does not mark its
+// commands.
+func (t *shellTrack) expect() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.expecting = true
+	t.expectingLine = t.promptLine
+}
+
+// stopExpecting ends what expect started, when the run call ends.
+func (t *shellTrack) stopExpecting() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.expecting = false
 }
 
 // finishLocked ends the running command. The caller holds mu.

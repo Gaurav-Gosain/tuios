@@ -675,7 +675,15 @@ no marks is unaffected by all of this. What changes for everyone else:
   does not know as an error has three more to ignore.
 - `list-windows` entries gain `at_prompt`, `command_seq`, `running_cmdline`,
   `last_cmdline`, `last_exit_code` and `last_duration_ms`, only for a window
-  whose shell has sent a mark. Other entries keep their shape exactly.
+  whose shell has sent a mark. Other entries keep their shape exactly. Such an
+  entry also carries `marks_commands`, true once the shell has sent the C mark
+  that starts a command, and `prompt_marks_only: true` once a line `run` typed
+  came back to a new prompt with no C: the shell marks its prompts only (bash
+  before 4.4 with the bash recipe, which ignores PS0, or a prompt theme that
+  sends only A). `at_prompt` is then false, since the daemon cannot tell a
+  prompt from a running command there, and `run` refuses the pane with
+  `no_shell_integration`. A subscriber sees one more `prompt` event in that
+  case: the new prompt that shows it.
 - `capture-pane` accepts the new source `last-command-output`, so its
   documented `accepted` set in `list-verbs` has three values. `wait-for`'s
   `source` was documented with the same list and never took the new value; it
@@ -772,7 +780,7 @@ catalog.
 | `timeout` | A wait-for condition did not match before its timeout elapsed. |
 | `not_ready` | The target agent was mid-turn, so the call declined to type at it. `resume-agent` raises it for a pane whose shell is not at its prompt. |
 | `not_resumable` | `resume-agent` found no conversation it can resume in the pane: none recorded, a harness with no `[resume]` command, an id that is not one plain shell token, or a pane on another machine. Nothing was typed. |
-| `no_shell_integration` | The pane's shell has sent no OSC 133 marks, so `run` cannot tell where a command starts and ends, and `capture-pane` with `last-command-output` has no finished command to read. Nothing was typed. |
+| `no_shell_integration` | The pane's shell has sent no OSC 133 marks, or marks its prompts and not its commands, so `run` cannot tell where a command starts and ends, and `capture-pane` with `last-command-output` has no finished command to read. Nothing was typed, except by a `run` that found out after typing, which says so. |
 | `not_at_prompt` | `run` typed nothing because a command is running in the pane. The message names it; the hint names the `wait-for command-finished` call that waits for it. |
 | `agent_blocked` | ask-agent declined to type at an agent on `needs_input`, because the text would answer its prompt. Nothing was typed. The hint names `capture-pane`. |
 | `prompt_stalled` | ask-agent typed the question and sent Enter, and within `stall_timeout` the pane did not show that it took it. The question was typed; look at the pane before sending it again. The hint names `capture-pane`. |
@@ -1232,7 +1240,13 @@ What it refuses, with nothing typed:
 
 - `no_shell_integration`: the shell has sent no mark. A pane that has not
   sent one yet gets three seconds to draw its first prompt, so a window
-  opened a moment ago is not refused for being slow to start.
+  opened a moment ago is not refused for being slow to start. The same code,
+  with a message that says "prompt marks only", refuses a pane whose shell
+  has run a command without the C mark (`prompt_marks_only` in
+  `list-windows`). A fresh pane cannot show that before a command runs, so the
+  first `run` there types; when the shell draws a new prompt with no C first,
+  that `run` returns this error at once rather than at its timeout, and says
+  the command was typed. bash needs 4.4 or newer for the bash recipe's C mark.
 - `not_at_prompt`: a command is running in the pane. The message names it, and
   the hint is the `wait-for command-finished` call with the pane's
   `command_seq`. Another `run` in the same pane that has not ended yet is

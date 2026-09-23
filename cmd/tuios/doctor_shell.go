@@ -20,6 +20,12 @@ type shellPane struct {
 	Marks    bool   `json:"marks_commands"`
 	AtPrompt bool   `json:"at_prompt"`
 	Commands uint64 `json:"command_seq"`
+	// CommandMarkSeen says the shell has sent the C mark that starts a
+	// command. nil means the daemon did not say, which an older one does not.
+	CommandMarkSeen *bool `json:"command_mark_seen,omitempty"`
+	// PromptOnly says a command ran with no C mark: the shell marks its
+	// prompts only, and run refuses the pane.
+	PromptOnly bool `json:"prompt_marks_only,omitempty"`
 }
 
 // doctorShellReport is what tuios doctor shell prints.
@@ -45,6 +51,8 @@ add-zsh-hook precmd _tuios_osc133_precmd
 add-zsh-hook preexec _tuios_osc133_preexec
 PS1+=$'%{\e]133;B\a%}'`,
 	"bash": `# ~/.bashrc: mark commands for tuios run (OSC 133)
+# Needs bash 4.4 or newer. Older bash, such as macOS /bin/bash 3.2, ignores
+# PS0, so it marks prompts and never commands, and run refuses the pane.
 PROMPT_COMMAND='printf "\e]133;D;%s\a\e]133;A\a" "$?"'${PROMPT_COMMAND:+";$PROMPT_COMMAND"}
 PS0='\e]133;C\a'
 PS1+='\[\e]133;B\a\]'`,
@@ -67,7 +75,9 @@ a command starts and ends, and its exit status, from those marks. A pane whose
 shell sends none is refused with no_shell_integration. When one is, this prints
 the lines that turn the marks on for your shell ($SHELL): zsh, bash and fish
 have a recipe. A pane counts once its shell has drawn one prompt with the marks
-on, so open a new pane after adding them.`,
+on, so open a new pane after adding them. A shell that marks its prompts and
+not its commands (bash before 4.4 ignores the recipe's PS0) is flagged as
+prompt marks only once a command has run there, and run refuses it.`,
 		Example: `  tuios doctor shell
   tuios doctor shell -s work --json`,
 		Args: cobra.NoArgs,
@@ -119,10 +129,12 @@ func liveShellPanes(only string) ([]shellPane, bool) {
 		}
 		var res struct {
 			Windows []struct {
-				ID         string  `json:"window_id"`
-				Name       string  `json:"display_name"`
-				AtPrompt   *bool   `json:"at_prompt"`
-				CommandSeq *uint64 `json:"command_seq"`
+				ID            string  `json:"window_id"`
+				Name          string  `json:"display_name"`
+				AtPrompt      *bool   `json:"at_prompt"`
+				CommandSeq    *uint64 `json:"command_seq"`
+				MarksCommands *bool   `json:"marks_commands"`
+				PromptOnly    bool    `json:"prompt_marks_only"`
 			} `json:"windows"`
 		}
 		if json.Unmarshal(raw, &res) != nil {
@@ -138,6 +150,7 @@ func liveShellPanes(only string) ([]shellPane, bool) {
 			if w.CommandSeq != nil {
 				p.Commands = *w.CommandSeq
 			}
+			p.CommandMarkSeen, p.PromptOnly = w.MarksCommands, w.PromptOnly
 			out = append(out, p)
 		}
 	}
@@ -153,7 +166,7 @@ func doctorShell(only string, panes func(string) ([]shellPane, bool), loginShell
 	}
 	r.Panes, r.DaemonRunning = panes(only)
 	for _, p := range r.Panes {
-		if !p.Marks {
+		if !p.Marks || p.PromptOnly {
 			r.Setup = shellSetups[r.Shell]
 			break
 		}
@@ -181,6 +194,11 @@ func printDoctorShell(w io.Writer, r doctorShellReport, asJSON bool) error {
 		case !p.Marks:
 			verdict = "no marks: run refuses it with no_shell_integration"
 			missing++
+		case p.PromptOnly:
+			verdict = "prompt marks only, it ran a command without marking it: run refuses it with no_shell_integration"
+			missing++
+		case p.CommandMarkSeen != nil && !*p.CommandMarkSeen:
+			verdict = "marks its prompts; no command has run yet to show it marks commands"
 		case !p.AtPrompt:
 			verdict = "marks its commands, running one now"
 		}

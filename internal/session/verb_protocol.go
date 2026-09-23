@@ -615,7 +615,7 @@ func init() {
 			handler:     (*Daemon).verbSessionInfo,
 		},
 		"list-windows": {
-			description: "List the windows in a session. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished.",
+			description: "List the windows in a session. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, marks_commands (the shell has sent a command-start mark), prompt_marks_only when it ran a command without one, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished.",
 			params:      []verbParam{sessionParam},
 			examples:    []string{`{"id":1,"verb":"list-windows","params":{"session":"work"}}`},
 			handler:     (*Daemon).verbListWindows,
@@ -831,7 +831,7 @@ func init() {
 			handler:  (*Daemon).verbSendText,
 		},
 		"run": {
-			description: "Type one command line at a pane's shell prompt, wait for the shell to report it finished, and return its exit code and output. Needs a shell that marks its commands with OSC 133; refuses with not_at_prompt when a command is already running there.",
+			description: "Type one command line at a pane's shell prompt, wait for the shell to report it finished, and return its exit code and output. Needs a shell that marks its commands with OSC 133, and refuses with no_shell_integration one that marks only its prompts; refuses with not_at_prompt when a command, or another run, is already running there.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
