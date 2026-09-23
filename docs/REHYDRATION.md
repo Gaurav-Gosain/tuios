@@ -298,9 +298,14 @@ Two things had to be true for that rule to hold, and neither was:
   request field is what keeps it compatible in both directions. A daemon that
   predates it does not see the request and answers with cells, which the client
   still reads; a client that predates it never asks. `TUIClient.GetTerminalState`
-  unpacks the reply as soon as it is decoded, so every reader of a snapshot,
-  `ApplyTerminalState` and every test that reads `Screen`, sees the cells it
-  always has. `TestWireCarriesTheWholeCell` runs every shape under both forms.
+  keeps the reply packed and only checks that every row decodes, so a malformed
+  snapshot still fails the request. `ApplyTerminalState` walks the packed rows
+  straight into the emulator, and packs a snapshot that arrived as cells first.
+  A reader that wants `Screen` as cells, which is only test oracles, calls
+  `Unpack`. The daemon packs a requested snapshot as it reads the rows
+  (`GetTerminalStatePacked`), and `TestDirectPackMatchesPack` holds that to the
+  same bytes as `GetTerminalState` followed by `Pack`.
+  `TestWireCarriesTheWholeCell` runs every shape under both forms.
 
 ## A resize is a point in the stream
 

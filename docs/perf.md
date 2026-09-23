@@ -1178,3 +1178,196 @@ by.
 | `NotificationTick` allocs | 340 | 38 | -88.8% |
 | `NotificationTick` B/op | 16.7 KiB | 2.1 KiB | -87.5% |
 | `IdleTick` | 0 render/tick, 0 work/tick, 296 B, 5 allocs | the same | `~` |
+
+## 2026-09 second profiling pass: daemon
+
+The output path from the daemon's PTY to a client's emulator, idle memory per
+pane, the render signal of a local pane, and the snapshot a workspace switch
+waits on. Six changes landed and one was measured and dropped.
+
+### Measurement conditions
+
+Apple M3 Pro (11 cores), macOS, Go 1.27.1. macOS has no `taskset`, so every run
+used `nice -n 15`. Other work shared the machine, with a load average of 4 to 9,
+so timings are quoted only where `benchstat` clears them. Allocation counts,
+bytes, frame and compose counts are exact or nearly so.
+
+Every comparison is two test binaries, the commit before the change and the
+change, built from `git archive` of each commit, run alternately (old, new, then
+new, old) for 6 to 10 rounds and compared with `benchstat`. Benchmarks run with
+`-test.cpu 1` and a fixed `-test.benchtime Nx`, except the in-process flood
+rigs noted below.
+
+The flood and state harnesses were scratch test files, not committed:
+
+- A 16 MiB flood, `yes 99x | head -c 16MiB`, through a real daemon and a
+  `TUIClient` with a wire-only handler, reporting process CPU (getrusage, which
+  covers daemon and client) per MB, frames per MB and allocations.
+- The same flood into a real client `terminal.Window` with its emulator, from
+  the `internal/app` rig, waiting until the end marker is on the client screen.
+- The ephemeral SSH and web servers flooded with 200,000 styled lines, with
+  CPU, composes and wire bytes counted in the server process.
+- Heap after GC held by 16 idle stream subscriptions and 16 idle daemon windows.
+
+The two flood rigs run at `-test.cpu 4`. At one P, daemon and client share it,
+the subscriber is starved, and gap resync drops most of the flood, which is an
+artifact of running both in one process.
+
+None of this was measured on Linux, where PTY reads are larger, so the frame
+counts there start lower and the first change gains less.
+
+### What moved
+
+**A flooding pane is sent at most one frame per millisecond**
+(`daemon_stream.go`). A macOS PTY read is about 330 bytes, and the stream
+goroutine drains faster than the reader fills, so a flood went out one wire
+frame per read: about 2,600 frames per MB, each a daemon write, a client read
+and several goroutine wakeups. `streamPTYOutput` now counts the bytes sent in
+the current 1 ms window. Once a window has carried 4096 bytes, the next chunk
+waits for the window to end and goes out with whatever queued meanwhile. Output
+under 4 KB per millisecond, and a resize, are never held.
+`stream_frame_gate_test.go` pins both sides: a flood is held to one frame per
+window, and a small echo, a byte after a quiet window and a resize go at once.
+
+| 16 MiB flood | before | after | |
+|---|---|---|---|
+| wire rig, frames per MB | 2,618 | 15.8 | -99.4% |
+| wire rig, CPU per MB | 44.5 ms | 34.8 ms | -21.8% (p=0.000) |
+| wire rig, allocations per op | 390.5k | 263.8k | -32% |
+| client window, CPU per MB | 72.1 ms | 55.0 ms | -23.7% (p=0.002) |
+| client window, allocations per MB | 23.4k | 14.7k | -37% |
+| client window, wall per MB | 17.0 ms | 15.7 ms | ~ (p=0.39) |
+
+Bytes allocated per MB in the client window rose 3.4%, since fewer and larger
+frames are read.
+
+The cap must not delay a keystroke. `TestLatencyEcho` (keystroke to a composed
+frame, 200 keystrokes a run, 6 runs a side) and `TestLatencyDaemonRoundTrip`
+showed no significant change at p50, p95 or p99:
+
+| p50 | before | after | |
+|---|---|---|---|
+| echo, 1 pane | 864 us | 763 us | ~ (p=0.13) |
+| echo, 4 panes | 804 us | 802 us | ~ (p=0.82) |
+| daemon round trip to the client emulator | 144 us | 206 us | ~ (p=0.13) |
+
+The spreads under this load were 18% to 70%, so these say the cap adds nothing
+measurable to a quiet pane, which is what the gate's design says too. The echo
+into a pane that is itself flooding can wait up to 1 ms, below the client's own
+8 ms coalescing interval.
+
+**The client no longer copies PTY output it already owns**
+(`window_io.go`). `WriteOutputAsync` copied every frame, but its one caller
+hands it a slice of a payload that `readMessageBody` allocates fresh for each
+frame and never touches again. The window now queues the slice and documents
+that it takes ownership; `TestPTYOutputHandlerOwnsItsBytes` pins the client side
+of that contract. `streamPTYOutput` also keeps a pending resize as a value, since
+taking the address of the receive variables made them escape.
+
+| 16 MiB flood | before | after | |
+|---|---|---|---|
+| client window, bytes allocated per MB | 3.70 MiB | 2.36 MiB | -36% (p=0.000) |
+| client window, allocations per MB | 12.3k | 6.4k | -48% |
+| wire rig, allocations per op | 233k | 111k | -52% |
+| CPU, both rigs | | | ~ |
+
+**The output batch buffers grow on first use.** `streamPTYOutput` and a
+window's `outputWriter` each made a 256 KiB batch buffer when their goroutine
+started, so every client and pane subscription on the daemon, and every daemon
+window on the client, held 256 KiB whether or not the pane ever printed. Both
+start from a nil slice now; the first output grows it and the capacity is kept.
+
+| heap after GC, per idle instance | before | after |
+|---|---|---|
+| daemon stream subscription | 415 KiB | 159 KiB |
+| client daemon window, 80x24 | 519 KiB | 262 KiB |
+
+The same to within 1 KiB in all 6 rounds: exactly the 256 KiB buffer. A 12 pane
+attach allocates 3 MiB less before its first frame.
+
+**A local pane signals the renderer through the coalescer**
+(`window.go`, `window_io.go`). A local PTY pane, which is every pane of an
+ephemeral SSH or web session and the fallback when the daemon cannot start,
+signalled `PTYDataChan` after every PTY read, so a flood composed one frame per
+read. It now starts the same `renderCoalescer` a daemon pane uses: the first
+output after a quiet spell signals at once, and a burst signals at most once per
+interval. `TestLocalPaneFloodSignalsAtTheCoalescerRate` counts the signals and
+checks the trailing one; with the old reader it counted 4,870 signals in 166 ms
+against a limit of 23.
+
+| ephemeral flood, 200k lines | before | after | |
+|---|---|---|---|
+| SSH, CPU | 1.68 s | 0.97 s | -42% (p=0.009) |
+| SSH, composes | 1,600 | 80 | -95% |
+| SSH, bytes allocated | 98.5 MiB | 9.3 MiB | -91% |
+| web, CPU | 1.55 s | 0.95 s | -39% (p=0.002) |
+| web, composes | 1,475 | 298 | -80% |
+| web, bytes allocated | 95.8 MiB | 19.1 MiB | -80% |
+
+Keystroke to render signal on a quiet local pane running `cat` (60 keys a run,
+8 runs a side): p50 34 us before and 45 us after, p90 86 and 97 us, neither
+significant (p=0.23, p=0.57). The coalescer adds at most one goroutine handoff.
+
+**A snapshot is applied straight from its packed form** (`session.go`,
+`snapshot_pack.go`, `tuiclient.go`). The client asked for packed cells, unpacked
+them into `[][]CellState`, and `ApplyTerminalState` then turned each `CellState`
+back into an emulator cell and resolved its style once per cell. The client now
+keeps the reply packed and only checks on receipt that every row decodes, so a
+malformed snapshot still fails the request. `ApplyTerminalState` resolves the
+style table once and walks the packed rows into the emulator. This replaces the
+2026-09 daemon and wire pass's "the client unpacks the reply as soon as it is
+decoded"; `Unpack` is kept, exported, for test oracles.
+
+`BenchmarkWireTerminalStateApply */apply` (decode, receipt check, apply), 207x55,
+6 rounds, all p <= 0.041:
+
+| | before | after | |
+|---|---|---|---|
+| packed palette, screen only | 1.57 ms, 2.77 MiB | 1.04 ms, 1.50 MiB | -34% |
+| packed palette, 1000 rows | 19.6 ms, 51.4 MiB | 12.0 ms, 26.7 MiB | -39% |
+| packed truecolor, screen only | 1.97 ms, 13.6k allocs | 1.15 ms, 3.6k allocs | -42% |
+| packed truecolor, 1000 rows | 24.1 ms, 228.6k allocs | 13.8 ms, 17.1k allocs | -43% |
+| packed gradient, screen only | 2.72 ms | 2.42 ms | -11% |
+
+The cost is on the path only a new client talking to an older daemon takes: a
+snapshot that arrives as cells is packed on receipt. Palette screen 2.14 to 2.45
+ms (+15%), and the every-cell-different gradient screen 2.63 to 6.14 ms.
+
+**The daemon packs a requested snapshot as it reads the rows**
+(`GetTerminalStatePacked`). A packed request made the daemon build the whole
+`[][]CellState` under `terminalMu` and then pack it. It now reads each row into
+one scratch row and packs it at once, in the order `Pack` packs the grids, so
+the style table and every byte on the wire are the same.
+`TestDirectPackMatchesPack` holds the two paths to identical results on
+randomized emulators; packing the main screen one step early makes it fail.
+
+| 207x55, 20x, 8 rounds | before | after | |
+|---|---|---|---|
+| packed reply, screen only | 701 us, 1,406 KiB | 444 us, 180 KiB | -37% (p=0.000) |
+| packed reply, 1000 rows | 18.7 ms, 50.4 MiB | 16.9 ms, 27.0 MiB | -9% (p=0.000) |
+| time under `terminalMu`, screen only (10 rounds) | 535 us | 437 us | -18% (p=0.000) |
+| time under `terminalMu`, 1000 rows (10 rounds) | 16.7 ms | 17.3 ms | ~ (p=0.19) |
+
+Wire bytes are identical. The 1000 row lock hold does not fall because packing
+now happens under the lock; the 194k allocations left in it are the vt
+scrollback building the cells it hands back.
+
+### Measured and deliberately not changed
+
+- **Skipping a resurrection save whose bytes have not changed.** Each idle
+  session rewrites its state file every 30 s, eight small writes and renames a
+  minute at four sessions. Skipping the write when the marshalled bytes match
+  what this saver last wrote, and the file still exists, costs a marshal and a
+  stat instead: 9.9 us against 165 us for the write (`-cpu 1`, 6 rounds). That
+  is about 5 us of CPU a second per session, and idle daemon CPU sits at the
+  resolution floor either way. It would also change what users see: the
+  "saved" column of `tuios ls` and the `LastActive` of a saved session come from
+  the file's mtime, and an idle live session would show "saved 3h ago" as if
+  saving had stopped. Not worth the visible change.
+
+### Invariants held
+
+`ProtocolVersion` and the wire form are unchanged: `TestDirectPackMatchesPack`
+compares bytes, and `TestOlderPeerReadsTheWire` now also applies an answer that
+carried cells and checks the pane comes back. The quiet-pane echo tests above
+are the check that no change here holds a keystroke.
