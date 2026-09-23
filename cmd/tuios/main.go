@@ -50,6 +50,12 @@ func main() {
 	// against a commit, and internal/app cannot read these vars itself.
 	app.SetBuildStamp(version, commit)
 
+	// Run through the `tmux` link that tuios tmux-shim installs, this binary
+	// is tmux: the shim answers, or hands the call to the real tmux.
+	if isTmuxName(os.Args[0]) {
+		os.Exit(runAsTmux(os.Args[1:]))
+	}
+
 	rootCmd := newRootCommand()
 
 	// Command failures are printed here rather than by fang, which would query
@@ -2775,6 +2781,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(newStashCommand())
 	rootCmd.AddCommand(newWorktreeCommand(), newFanCommand(), newStartAgentCommand())
 	rootCmd.AddCommand(newAgentHookCommand(), newIntegrationCommand(), newDoctorCommand(), newMCPCommand())
+	rootCmd.AddCommand(newTmuxCommand(), newTmuxShimCommand(), newTmuxPaneCommand())
 
 	return rootCmd
 }
