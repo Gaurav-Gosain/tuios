@@ -26,6 +26,7 @@ alongside the rest of the pane-driving surface.
 - [Selectors](#selectors)
 - [Answering a prompt without attaching](#answering-a-prompt-without-attaching)
 - [Harness integrations](#harness-integrations)
+- [Headless agents over a protocol](#headless-agents-over-a-protocol)
 - [Typing a prompt](#typing-a-prompt)
 - [Environment](#environment)
 - [Alerts](#alerts)
@@ -1290,7 +1291,9 @@ hold_seconds = 120                      # kept between 10 and 300
 
 The config file is watched, so a change applies to the next prompt. Then
 install the integration again (`tuios integration install claude-code`), since
-version 2 of it is the one that gives the hook time to wait.
+version 2 of it is the one that gives the hook time to wait. A pane
+`start-agent --protocol` opened needs none of this: see
+[Headless agents over a protocol](#headless-agents-over-a-protocol).
 
 What happens on a prompt:
 
@@ -1744,6 +1747,58 @@ gives that hook. With approvals off it returns as fast as any other hook.
 Wired alongside an installed integration it reports every event twice;
 `status` and `doctor` say so. See
 [integrations/claude-code](../integrations/claude-code/README.md).
+
+## Headless agents over a protocol
+
+Hooks, screen rules and transcripts read an agent that draws its own TUI.
+Some agents also speak a structured protocol, and for those tuios can be the
+client: `start-agent --protocol acp` (the Agent Client Protocol, version 1) or
+`--protocol codex` (the Codex app-server) runs the agent headless, and the
+pane shows the conversation as a plain transcript with a prompt line under it.
+
+```sh
+tuios start-agent --protocol acp 'opencode acp' --name helper --prompt 'List the TODOs.'
+tuios start-agent --protocol codex codex --name tests
+```
+
+The pane's process is `tuios agent-proto`. It knows the agent's state from the
+protocol itself, not from its screen, and reports it for its own pane with
+`set-agent-state`, source `report`, under the harness the manifest named (or
+`acp` or `codex` when none did):
+
+| What happened | Report |
+|---------------|--------|
+| The conversation opened | `idle` |
+| A prompt was sent | `working` |
+| The turn ended | `done`, with the reply's first line |
+| The turn was cancelled | `idle` |
+| The turn failed, or the agent refused | `errored`, with why |
+| The agent asked permission | `needs_input`, kind `approval`, with the request's line |
+| The permission was answered | `working`, only if still on `needs_input` |
+| The agent exited or did not start | `errored` |
+
+`start-agent` is ready on that report alone: `unknown` never counts for a
+protocol pane, whatever its harness. `list-agents` shows `protocol` for it.
+
+A permission is shown in the pane with a number key per answer, the agent's own
+words for each. When one line shows the whole request (a command whose input
+the title holds in full; never a diff, an edit, output, or input to a running
+command), `agent-proto` also holds it for the Inbox with `request-approval`,
+exactly as a hook would, except that a protocol pane needs no
+`[agents.approvals]`: choosing the protocol is the opt in. The Inbox offers
+allow once and deny, which mean exactly one call; the answers that allow more,
+such as ACP's `allow_always` or Codex's `acceptForSession`, are the pane's. The
+first answer wins: a key in the pane ends the hold, and the Inbox's answer is
+written into the pane with who gave it. A digit counts only once the question
+has been on screen for half a second, and a paste or Enter never answers.
+
+What the agent can do through tuios is nothing it could not do in its own TUI.
+`agent-proto` advertises no file system and no terminal capability, answers
+every request it does not handle with method not found (which Codex reads as
+not approved), starts the agent in a session of its own with no controlling
+terminal so it cannot write to the pane directly, and removes every escape
+sequence and control character from what the agent sends before it reaches the
+pane, so a reply cannot set the pane's state, title or clipboard.
 
 ## Typing a prompt
 

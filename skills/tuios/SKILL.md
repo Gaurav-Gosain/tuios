@@ -1838,9 +1838,49 @@ the person to answer. With `--prompt` the first prompt is typed once it is
 ready and checked the way `fan` checks it. `--repo` starts it in a
 repository's main checkout, and a session `-s` names that does not exist is
 created. The verb is `start-agent`, with `agent`, `args`, `name`, `cwd`,
-`repo`, `workspace`, `focus`, `prompt`, `ready_timeout` and `env`. On a session on another machine (`-s host:session`) the CLI sends no
+`repo`, `workspace`, `focus`, `prompt`, `ready_timeout`, `env` and
+`protocol`. On a session on another machine (`-s host:session`) the CLI sends no
 `PATH`, so the agent comes from that machine's `PATH`, and `env` is refused
 there.
+
+#### Headless, over a protocol: --protocol
+
+Some agents speak a structured protocol besides drawing a TUI. With
+`--protocol`, `start-agent` runs the agent headless over it and the pane shows
+the conversation as a plain transcript: prompts, replies, tool calls with
+their state as a word, plans, and diffs with their `+` and `-` kept.
+
+```sh
+tuios start-agent --protocol acp 'opencode acp' --name helper --prompt 'List the TODOs in this repository.'
+tuios start-agent --protocol codex codex --name tests
+tuios ask-agent -w helper 'which of those is the oldest?'
+```
+
+- `acp` is the Agent Client Protocol, version 1. Name the agent's ACP command
+  (`opencode acp`, or an adapter for another agent).
+- `codex` is the Codex app-server; `app-server` is added to the `codex`
+  command for you, and `--` args go after it.
+
+Everything else works as for any agent pane. `ask-agent`, `send-text` and
+`--prompt` type into the pane's prompt line. The pane program, `tuios
+agent-proto`, reports the pane's state itself (`idle` when the conversation is
+open, `working`, then `done` with the reply's first line or `errored` with
+why), so `start-agent` is ready on that report and `wait-for agent-state` works.
+`list-agents` shows `protocol` for the pane. `capture-pane` reads the
+transcript, which holds no escape sequence from the agent: they are removed
+before anything reaches the pane.
+
+A permission the agent asks for shows in the pane with a number key per
+answer, and the pane reads `needs_input` with kind `approval`. When one line
+shows the whole request (a command, not a diff or an edit), the Inbox holds it
+too, with no `[agents.approvals]` needed, and the person answers from either
+place; the first answer wins. The Inbox answer is the person's alone:
+`reply-approval` needs their attach nonce. The pane's keys are like any
+agent's own prompt: do not type a digit into a blocked pane. A paste answers
+nothing, and neither does a key in the first half second the question is up.
+The agent is offered no file system and no terminal by tuios: it acts
+under its own sandbox and approval settings. A daemon older than `protocol`
+refuses the parameter by name, so nothing starts in the wrong mode.
 
 ### Removing a worktree is the sharp edge
 

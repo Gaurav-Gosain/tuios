@@ -134,6 +134,7 @@ tuios/
 │   ├── release/            # Finds published releases and verifies a downloaded binary (tuios update)
 │   ├── netutil/            # Small network helpers the servers share
 │   ├── harness/            # Agent harness manifests and detection
+│   ├── agentproto/         # Headless agents over ACP and the Codex app-server: the pane program of start-agent --protocol
 │   ├── learn/              # Learn tuios: tour model, event contract, page commands
 │   ├── webshell/           # In-memory pty and fake shell for the browser build
 │   ├── hooks/              # Shell hooks on window/session/agent events

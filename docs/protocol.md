@@ -795,6 +795,26 @@ or from before `start-agent`, answers `unknown_verb`, and one from before
 `repo_url` answers `invalid_params` naming it; the CLI turns both into "tuios
 on HOST is too old".
 
+**start-agent can run an agent headless over a protocol.** `start-agent`
+takes the new param `protocol`, `acp` or `codex` (see
+[start-agent](#start-agent)). Without it nothing changes. What changes for an
+existing caller:
+
+- `request-approval` holds a permission for a pane `start-agent --protocol`
+  opened even when `[agents.approvals]` does not name the harness: choosing
+  the protocol is the opt in. Every other rule of the verb applies to it
+  unchanged, and every other pane is refused with `disabled` as before.
+- `list-agents` rows gain `protocol`: `acp` or `codex` for such a pane, empty
+  for every other.
+- A pane a protocol names is ready only on a state it reports. `unknown` is
+  never ready for it, whatever its harness, since its screen is a transcript
+  no manifest rule reads. Without `protocol` the wait is as before.
+- A daemon from before `protocol` refuses it with `invalid_params` naming it,
+  so an old daemon never starts the agent in its TUI instead.
+- The mark is the daemon's own, by window id, and nothing a caller sends sets
+  it. It is not saved: after a daemon restart a restored pane's approvals
+  follow `[agents.approvals]` like any other pane's.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -1729,7 +1749,8 @@ Params: `session`, `agent` (required, written as for `fan`), `args` (more
 argv after the agent's own words), `name` (the window's name, which
 `list-agents` shows and `-w` and `name:` take), `cwd`, `repo`, `repo_url`,
 `repos_root`, `clone`, `workspace`, `focus` (default false), `prompt`,
-`ready_timeout` (milliseconds, default 120000), `env` (the rules of `fan`).
+`ready_timeout` (milliseconds, default 120000), `env` (the rules of `fan`),
+`protocol` (`acp` or `codex`; see below).
 The agent is checked before a clone, so a missing agent does not cost one. A
 call that reaches the daemon
 over a host link is refused with `forbidden` when it carries `env`, since the
@@ -1752,6 +1773,56 @@ Response:
 exited), `session_closed` or `shutdown`, and `reason` says in words why a pane
 is not ready. `prompt_status` is `sent`, `stalled` or `not_sent` with a
 `prompt_note`, and absent without `prompt`.
+
+#### Headless agents: protocol
+
+With `protocol`, the agent runs headless over a structured protocol instead of
+in its own TUI, and the pane shows the conversation as a transcript:
+
+- `acp` is the [Agent Client Protocol](https://agentclientprotocol.com),
+  version 1: `initialize`, `session/new`, `session/prompt`, `session/cancel`,
+  `session/update` and `session/request_permission`. `agent` is the agent's
+  ACP command, such as `"opencode acp"`.
+- `codex` is the Codex app-server protocol, its v2 core: `initialize` and
+  `initialized`, `thread/start`, `turn/start`, `turn/interrupt`, the
+  `item/*` and `turn/completed` notifications, and
+  `item/commandExecution/requestApproval` and
+  `item/fileChange/requestApproval`. `app-server` is added to the agent's
+  words when neither they nor `args` name it, between the two, so `args` are
+  the app-server's own.
+
+The pane's process is this daemon's own binary, `tuios agent-proto --protocol
+P --harness H -- <agent argv>`, and it execs the agent's argv directly, with
+pipes for its stdin and stdout, in a session of its own with no controlling
+terminal. It advertises no file system and no terminal capability, and answers
+every request it does not handle (`fs/*`, `terminal/*`, MCP elicitations,
+dynamic tool calls) with method not found, so the agent can do nothing
+through tuios that it could not do in its own TUI. Everything it shows is
+cleaned of escape sequences and control characters before it reaches the pane.
+
+It reports the pane's state with `set-agent-state` under the harness the
+manifest named, or the protocol: `idle` once the conversation is open,
+`working` during a turn, `done` with the reply's first line, `errored` with
+why, and `needs_input` with kind `approval` and the request's line when the
+agent asks permission. The pane is ready on that report alone. A prompt from
+`prompt`, `ask-agent` or `send-text` is typed into its prompt line and sent as
+one turn.
+
+A permission is shown in the pane with a number key per answer. When its line
+is the whole request (see [request-approval](#request-approval): a command
+with nothing the line leaves out, not a diff, an edit or input to a running
+command), the pane program also holds it with `request-approval`, which a
+protocol pane may do without `[agents.approvals]`. The first answer wins: a key
+in the pane ends the hold by closing its connection, and a decision from the
+Inbox answers the agent and is written into the pane. The Inbox offers `once`
+and `deny` only, mapped to ACP's `allow_once` and `reject_once` or Codex's
+`accept` and `decline`; the other answers, which allow more than the one call,
+are the pane's. A digit answers only once the question has been on screen for
+half a second, and a paste never answers. Ctrl+C in the pane cancels the turn
+and answers the agent `cancelled` (Codex: `cancel`).
+
+The result gains `protocol`, and `command` is the agent's command, not the pane
+program's. `list-agents` shows `protocol` for the pane.
 
 ### bundle-worktree
 
@@ -2341,7 +2412,8 @@ that takes a decision back from its hook: Claude Code's `PermissionRequest`
 hook, and opencode or Kilo through the plugin tuios installs. The call does not
 answer until the person answers with `reply-approval` or the hold ends, and it
 is opt in: nothing is held unless `[agents.approvals]` in the config names the
-harness.
+harness, or the pane is one `start-agent` opened with `protocol` (see
+[Headless agents: protocol](#headless-agents-protocol)).
 
 ```toml
 [agents.approvals]

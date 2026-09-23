@@ -514,7 +514,7 @@ is ready for a prompt.
 
 **Usage:**
 ```bash
-tuios start-agent <agent> [-s [<host>:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--env NAME[=VALUE]]... [--json] [-- <args>...]
+tuios start-agent <agent> [-s [<host>:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--protocol acp|codex] [--env NAME[=VALUE]]... [--json] [-- <args>...]
 ```
 
 **Examples:**
@@ -547,6 +547,54 @@ Arguments after `--` are passed to the agent as an argv.
 
 ```bash
 tuios start-agent -s build:api claude --prompt 'Profile the build.' -- --model opus
+```
+
+`--protocol` runs the agent headless over a structured protocol instead of in
+its own TUI, and the pane shows the conversation as a transcript you type
+prompts into:
+
+```bash
+tuios start-agent --protocol acp 'opencode acp' --name helper --prompt 'List the TODOs.'
+tuios start-agent --protocol codex codex --name tests
+```
+
+`acp` is the Agent Client Protocol, version 1, for any agent command that
+speaks it. `codex` is the Codex app-server, and `app-server` is added to the
+`codex` command. The pane runs [`tuios agent-proto`](#tuios-agent-proto),
+which reports the agent's state itself, so the command returns once that
+report says idle. A permission the agent asks for is answered in the pane with
+a number key, or from the Inbox when one line shows the whole request, with no
+`[agents.approvals]` needed. A daemon older than `--protocol` refuses it by
+name.
+
+### `tuios agent-proto`
+
+The pane program of `start-agent --protocol`: run an agent headless over ACP
+or the Codex app-server, and show it as a transcript with a prompt line.
+
+**Usage:**
+```bash
+tuios agent-proto --protocol acp|codex [--harness <id>] [--cwd <dir>] -- <agent> [args...]
+```
+
+It starts the agent with pipes, in a session of its own with no controlling
+terminal, and offers it no file system and no terminal, so the agent acts
+under its own sandbox and approval settings. Everything the agent sends is
+cleaned of escape sequences before it is written. Type a prompt and press
+Enter to send it; a paste arrives as one prompt. Ctrl+C cancels a turn, and
+Ctrl+D on an empty line quits. A permission is shown with a number key per
+answer; a key counts once the question has been up for half a second, and a
+paste never answers one.
+
+Inside a tuios pane it reports the pane's state under `--harness` (default:
+the protocol): `idle`, `working`, `done` or `errored`, and `needs_input` with
+kind `approval` for a permission, which it also holds for the Inbox with
+`request-approval` when one line shows the whole request. Outside tuios it
+reports nothing and works the same. When the agent exits, the pane shows the
+end of its stderr and waits for Enter.
+
+```bash
+tuios agent-proto --protocol acp -- opencode acp
 ```
 
 ### `tuios kill-server`
@@ -2250,7 +2298,8 @@ them.
 | `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session. `--from human` from inside a pane is refused with `forbidden`: only the person at an attached client can send as `human` (see [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)). With `-s HOST:SESSION` and that host's link down, the message waits on this machine and goes when the link is back; the Inbox shows it under Waiting to send. `--select` sends one message to every agent pane a selector matches, after listing them: it asks at a terminal, and takes `--yes` or `--confirm TOKEN` otherwise |
 | `tuios read-agent-messages` | Read the messages agents have left in this session. Reading `-w human` from inside a pane is always a peek |
 | `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter. `--select` asks every agent pane a selector matches, at most 16 at once, after the same confirmation as `send-agent-message --select`; a pane on `needs_input` is refused in its own row |
-| `tuios start-agent <agent>` | Start an agent in a new pane and return once it shows it is at its prompt, optionally typing a first `--prompt`. `-s HOST:SESSION` starts it on another machine, in its checkout of the repository you are in. See [above](#tuios-start-agent) |
+| `tuios start-agent <agent>` | Start an agent in a new pane and return once it shows it is at its prompt, optionally typing a first `--prompt`. `-s HOST:SESSION` starts it on another machine, in its checkout of the repository you are in. `--protocol acp\|codex` runs it headless as a transcript. See [above](#tuios-start-agent) |
+| `tuios agent-proto --protocol P -- <agent>` | The pane program of `start-agent --protocol`: run an agent headless over ACP or the Codex app-server and show it as a transcript. See [above](#tuios-agent-proto) |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
 | `tuios explain-agent-screen` | Show what a harness's screen and title rules make of a pane: the tail, each rule's region and the text it read there, why each refusal refused (strings, patterns, nested groups), the title and last OSC 9;4 progress report, and which manifest file is in force |
 | `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, gemini-cli, opencode, kilo, amp, kimi and pi report state; antigravity, copilot, crush, cursor-agent, devin, droid, grok, hermes, qoder and qwen report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode; `--mcp-write` registers it with `--write`. See [Agent state](AGENT_STATE.md#harness-integrations) |
