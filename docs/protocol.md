@@ -768,7 +768,32 @@ takes the new params `agents`, `prompts` and `env`, and the new verb
   `prompt_ready_by`. Sessions of `fan_started` gain `agent` and `command`, and
   the top-level `command` is an absolute path when the caller sent a `PATH`.
 - The `tuios fan` CLI sends its `PATH` in `env`. Against a daemon from before
-  `env` it retries without it, unless `--env` was passed.
+  `env` it retries without it, unless `--env` was passed. `tuios fan --host`
+  sends no `env`, since a call over a link may not carry any, and refuses an
+  explicit `--env`.
+
+**A repository can be named by its origin URL.** `new-worktree`, `fan` and
+`start-agent` take the new params `repo_url`, `repos_root` and `clone` (see
+[new-worktree](#new-worktree)), so a caller on another machine can name a
+repository without a path. What changes:
+
+- `repo` is no longer required when `repo_url` is passed. Passing both is
+  `invalid_params`, and so is `repos_root` or `clone` without `repo_url`. A
+  call with `repo` alone is answered as before.
+- A `repo_url` that matches no checkout is the new code `repo_not_found`.
+- `fan`'s result gains `repo_root`, and both results gain `cloned: true` when
+  the call cloned the repository.
+- With `clone`, `fan` checks its agents before cloning, so a clone is not made
+  for a call that fails on an agent. Without `clone` the order is as it was:
+  the repository first.
+- `start-agent` also takes `repo` and `args`, creates a named session that
+  does not exist, and answers with `session_id`, `created_session`,
+  `workspace` and `cwd`.
+
+The new verb `bundle-worktree` changes no old one. A daemon from before it,
+or from before `start-agent`, answers `unknown_verb`, and one from before
+`repo_url` answers `invalid_params` naming it; the CLI turns both into "tuios
+on HOST is too old".
 
 ### list-verbs
 
@@ -855,6 +880,7 @@ catalog.
 | `not_worktree` | The session is not in a git worktree, so there is nothing to remove or diff. |
 | `worktree_dirty` | remove-worktree refused: the worktree holds uncommitted changes and neither `stash` nor `force` was passed. Nothing was removed. |
 | `git_failed` | A git command failed. The message is git's own. The repository is as it was. |
+| `repo_not_found` | No checkout on this machine has the origin `repo_url` names, and `clone` was not passed. Pass `clone`, a `repos_root`, or `repo` with the directory. |
 
 Codes are stable and additive: existing codes never change meaning, and a new
 code is only ever introduced for a condition that previously had none. A client
@@ -1513,14 +1539,32 @@ under `$XDG_DATA_HOME/tuios/worktrees/<repo>/<branch>`, and the session is
 named `<repo>-<branch>` with every slash in the branch turned into a hyphen. A
 branch that does not exist is created from `base`, or from HEAD.
 
-Params: `repo` (required, a directory inside the repository), `branch`
-(required), `base`, `name`, `command` (argv for the first window instead of a
-shell).
+Params: `repo` (a directory inside the repository, required unless
+`repo_url` is passed), `branch` (required), `base`, `name`, `command` (argv
+for the first window instead of a shell), `repo_url`, `repos_root`, `clone`.
+
+`repo_url` names the repository by its origin URL, for a caller on another
+machine where a path means nothing. The daemon finds its own checkout whose
+origin is the same repository, after folding the spellings git accepts for one
+remote (`https://github.com/o/r`, `git@github.com:o/r.git` and
+`ssh://git@github.com/o/r` are one repository). It looks under `repos_root`
+(absolute, or `~/` for the daemon's home) three levels deep, or when that is
+omitted under `~/src`, `~/dev`, `~/code`, `~/projects`, `~/repos`, `~/git`,
+`~/work`, `~/go/src`, the home itself one level deep, and
+`$XDG_DATA_HOME/tuios/repos`. Two checkouts of one origin are refused with
+`invalid_params`, the hint listing both, and none is `repo_not_found`. With
+`clone`, none is cloned into `repos_root` or `$XDG_DATA_HOME/tuios/repos`. A
+clone fetches only `https`, `ssh` and `git` URLs, or `user@host:path`: a local
+path, a `file` URL, a transport helper such as `ext::` or anything starting
+with a hyphen is refused before git runs, and git runs with
+`GIT_ALLOW_PROTOCOL=https:ssh:git`, no terminal prompt and ssh in batch mode.
+The result carries `cloned: true`.
 
 Request:
 
 ```json
 {"verb": "new-worktree", "params": {"repo": "/src/api", "branch": "feat/retry", "base": "main", "command": ["claude"]}}
+{"verb": "new-worktree", "params": {"repo_url": "git@github.com:acme/api.git", "repos_root": "~/src", "branch": "feat/retry"}}
 ```
 
 Response:
@@ -1624,9 +1668,11 @@ Params: `count` (1 to 16; required unless `prompts` sets it), `agent` (one
 agent for every session) or `agents` (a list, cycled across the sessions;
 one of the two is required), `prompt` (one for every session) or `prompts`
 (one per session, in order; `count` must equal its length when given), `repo`
-(required), `base`, `name` (branch stem), `ready_timeout` (milliseconds,
-default 600000), `env` (an object of variable names to values, on top of the
-daemon's environment; `PATH` in it is where the programs are looked up).
+(required unless `repo_url` is passed), `base`, `name` (branch stem),
+`ready_timeout` (milliseconds, default 600000), `env` (an object of variable
+names to values, on top of the daemon's environment; `PATH` in it is where the
+programs are looked up), and `repo_url`, `repos_root` and `clone` as for
+`new-worktree`. The result names the checkout used as `repo_root`.
 
 `env` rules: at most 64 variables, a value at most 32 KiB and all of them at
 most 256 KiB; a name is `[A-Za-z_][A-Za-z0-9_]*`; `TUIOS_` names, `TMUX` and
@@ -1670,10 +1716,22 @@ not ready for 30 seconds gets the same Inbox question as a held `fan` prompt.
 With `prompt`, the first prompt is typed once the agent is ready and checked
 the way `fan` checks it.
 
-Params: `session`, `agent` (required, written as for `fan`), `name` (the
-window's name, which `list-agents` shows and `-w` and `name:` take), `cwd`,
-`workspace`, `focus` (default false), `prompt`, `ready_timeout` (milliseconds,
-default 120000), `env` (the rules of `fan`). A call that reaches the daemon
+The session `session` names is created when it does not exist. With no
+`session`, the most recently active one is used, or a new one named after the
+harness or program when there is none. The pane starts in `cwd`, or in the
+main checkout of the repository `repo` or `repo_url` names (see
+[new-worktree](#new-worktree) for `repo_url`, `repos_root` and `clone`), or
+else in the focused pane's directory. Passing `cwd` and a repository is
+`invalid_params`. From another machine it is reached like every session verb,
+with a host-qualified session, and names the repository by `repo_url`.
+
+Params: `session`, `agent` (required, written as for `fan`), `args` (more
+argv after the agent's own words), `name` (the window's name, which
+`list-agents` shows and `-w` and `name:` take), `cwd`, `repo`, `repo_url`,
+`repos_root`, `clone`, `workspace`, `focus` (default false), `prompt`,
+`ready_timeout` (milliseconds, default 120000), `env` (the rules of `fan`).
+The agent is checked before a clone, so a missing agent does not cost one. A
+call that reaches the daemon
 over a host link is refused with `forbidden` when it carries `env`, since the
 variables describe the caller's machine. `tuios start-agent -s host:session`
 therefore sends no `env` unless `--env` was passed, and the agent is looked up
@@ -1682,15 +1740,76 @@ on the far machine's `PATH`.
 Response:
 
 ```json
-{"result": {"type": "agent_started", "session": "work", "window_id": "4be1c09a-...", "pty_id": "...",
- "name": "reviewer", "agent": "claude-code", "command": "claude", "ready": true, "ready_by": "idle",
- "state": "idle", "outcome": "ready", "prompt_status": "sent"}}
+{"result": {"type": "agent_started", "session": "work", "session_id": "...", "created_session": false,
+ "window_id": "4be1c09a-...", "pty_id": "...", "workspace": 1, "name": "reviewer", "agent": "claude-code",
+ "command": "claude", "cwd": "/src/api", "ready": true, "ready_by": "idle", "state": "idle",
+ "outcome": "ready", "prompt_status": "sent"}}
 ```
+
+`cloned` is true when the call cloned the repository.
 
 `outcome` is `ready`, `blocked`, `timeout`, `window_closed` (the program
 exited), `session_closed` or `shutdown`, and `reason` says in words why a pane
 is not ready. `prompt_status` is `sent`, `stalled` or `not_sent` with a
 `prompt_note`, and absent without `prompt`.
+
+### bundle-worktree
+
+Read a worktree session's work out in chunks, so it can cross a link that caps
+a reply line at 16 MB. `tuios worktree pull` is the caller. The transfer is the
+branch's commits as a git bundle, then the uncommitted work, untracked files
+included, as a binary patch against HEAD. The patch is read through a
+temporary index, so the worktree's own index is not touched.
+
+The first call names `session` and makes the transfer. Without `full`, the
+bundle holds only the commits past the merge base of HEAD and the worktree's
+`base`, and the reader must have `base_commit`. With `full`, or when the base
+is not known, it holds the whole branch. A branch with nothing past the base
+has no bundle (`bundle_bytes: 0`). The reply carries `token`, `repo`,
+`origin_url`, `branch`, `base`, `base_commit`, `head`, `full`,
+`bundle_bytes`, `patch_bytes`, `changes` (paths the patch touches), `size`,
+`sha256` of the whole transfer, and the first chunk.
+
+Every reply carries a chunk: `content` (base64, at most 4 MB before encoding),
+`offset`, `next` and `done`. Later calls pass `token` and `offset` set to the
+previous `next`. `release` with `token` ends a transfer early.
+
+A transfer is readable only by the connection that made it. It ends after its
+last chunk, on `release`, when that connection closes, or after ten minutes
+unread, and its files are removed each time. At most four are open on one
+daemon, and past that the call is `rate_limited`. A transfer is capped at
+512 MB.
+
+Request:
+
+```json
+{"verb": "bundle-worktree", "params": {"session": "api-fan-add-retry-2"}}
+{"verb": "bundle-worktree", "params": {"token": "3f...", "offset": 4194304}}
+```
+
+Response to the first call:
+
+```json
+{"result": {"type": "worktree_bundle", "session": "api-fan-add-retry-2", "token": "3f...", "repo": "api",
+ "origin_url": "git@github.com:acme/api.git", "branch": "fan/add-retry-2", "base": "main",
+ "base_commit": "9c1e...", "head": "b07a...", "full": false, "bundle_bytes": 2310, "patch_bytes": 812,
+ "changes": 2, "size": 3122, "sha256": "...", "content": "...", "offset": 0, "next": 3122, "done": true}}
+```
+
+### What a caller on another machine can do with these
+
+`start-agent`, `fan` and `new-worktree` with `repo_url` or `clone`, and
+`bundle-worktree`, grant a caller on a link or in a pane nothing it could not
+already do with `new-window` and a command: start a program in a directory of
+this machine, or read files there. Over a link they are held to the per-host
+link policy ([What a linked machine may do here](#what-a-linked-machine-may-do-here)):
+`start-agent`, `fan` and `new-worktree` need `open`, and a clone checks `open`
+again at the point it would run. `bundle-worktree` needs `write`, since it
+reads a worktree's files, and `write` already lets a machine type into a shell
+here and read any of them. What they add on their own is bounded: a clone
+fetches only network URLs, the search reads only `.git/config` files under the
+roots named above, and a transfer is only readable by the connection that made
+it.
 
 ### set-option
 

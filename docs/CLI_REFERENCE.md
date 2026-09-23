@@ -385,10 +385,11 @@ sessions under the repository and labels each by its branch.
 
 **Usage:**
 ```bash
-tuios worktree new <branch> [--repo <dir>] [--base <ref>] [--name <session>] [--agent <cli>] [--detach]
-tuios worktree ls [--repo <name>] [--group <stem>] [--json]
-tuios worktree rm <session> [--stash | --force] [--keep-session]
+tuios worktree new <branch> [--repo <dir>] [--base <ref>] [--name <session>] [--agent <cli>] [--host <host> [--clone]] [--detach]
+tuios worktree ls [--repo <name>] [--group <stem>] [--host <host>] [--json]
+tuios worktree rm [<host>:]<session> [--stash | --force] [--keep-session]
 tuios worktree diff <session> [--stat]
+tuios worktree pull <host>:<session> [--repo <dir>] [--branch <name>] [--name <session>] [--detach] [--json]
 ```
 
 **Examples:**
@@ -408,15 +409,47 @@ discards them, and is the only option that does. The branch is never deleted.
 A session whose worktree directory was removed under it shows `gone` in the
 listing and is kept.
 
+**On another machine.** `--host` runs `worktree new` and `worktree ls` on a
+machine from the `[hosts]` table, and `worktree rm` takes `HOST:SESSION`. Run
+them inside your checkout: the repository is sent as its origin URL, and the
+host finds its own checkout of it under `[hosts.NAME] repos_root` (set with
+`tuios hosts add NAME ADDR --repos-root ~/src`), or else under `~/src`,
+`~/dev`, `~/code`, `~/projects`, `~/repos`, `~/git`, `~/work` and `~/go/src`
+there. `--clone` clones it there when it has none; only https, ssh and git URLs
+are cloned. With `--host`, `--repo` names a directory on the host. A host whose
+tuios is too old for this is named, with what to upgrade.
+
+`worktree diff` reads files on this machine, so it refuses `HOST:SESSION` and
+names `worktree pull`.
+
+**Pulling work back.** `worktree pull HOST:SESSION` copies a worktree session's
+work on another machine into a new worktree session here. Its commits cross as
+a git bundle and are fetched into a new branch of the repository you are in,
+named as there or by `--branch`. Its uncommitted work, untracked files
+included, crosses as a patch and is applied, uncommitted, in the new worktree.
+Only the commits past the worktree's base cross when this repository has the
+base commit, and the whole branch otherwise. A branch that already exists here
+is refused and nothing is overwritten. A repository here whose origin differs
+from the one there is refused. Nothing on the other machine changes. When the
+patch does not apply, it is kept under the temporary directory and the command
+names it.
+
+```bash
+tuios worktree new feat/retry --host build --clone --detach
+tuios worktree ls --host build
+tuios worktree pull build:api-feat-retry --detach
+tuios worktree rm build:api-feat-retry --stash
+```
+
 ### `tuios fan`
 
 Fan a prompt out across several agents, each in its own worktree.
 
 **Usage:**
 ```bash
-tuios fan <count> --agent <agent>[,<agent>...] [--env NAME[=VALUE]]... [--repo <dir>] [--base <ref>] [--name <stem>] [--wait] <prompt>
+tuios fan <count> --agent <agent>[,<agent>...] [--env NAME[=VALUE]]... [--repo <dir>] [--base <ref>] [--name <stem>] [--host <host> [--clone]] [--wait] <prompt>
 tuios fan [<count>] --agent <agent>[,<agent>...] --prompt <prompt> --prompt <prompt>... [flags]
-tuios fan keep <session> [--stash | --force]
+tuios fan keep [<host>:]<session> [--stash | --force]
 ```
 
 **Flags:**
@@ -457,13 +490,27 @@ directly: nothing in it is expanded. `TUIOS_` variables, `TMUX` and
 does: a sibling with uncommitted changes is left in place unless `--stash` or
 `--force` is passed, and the command exits 1 to say so.
 
+`--host` runs the fan-out on another machine, in its checkout of the repository
+you are in, found and cloned the way `worktree new --host` does it. The agent
+must be installed there, and is looked up on that machine's `PATH`: yours is
+not sent, and `--env` is refused. The sessions show in the rail under the
+host. `fan keep HOST:SESSION` keeps one there, and `worktree pull
+HOST:SESSION` brings its work here.
+
+```bash
+tuios fan 3 --host build --agent claude 'Add a retry.'
+tuios worktree pull build:api-fan-add-retry-2
+tuios fan keep build:api-fan-add-retry-2 --stash
+```
+
 ### `tuios start-agent`
 
-Start an agent in a new pane and return once it is ready for a prompt.
+Start an agent in a new pane, here or on another machine, and return once it
+is ready for a prompt.
 
 **Usage:**
 ```bash
-tuios start-agent <agent> [-s <session>] [--name <name>] [--cwd <dir>] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--env NAME[=VALUE]]... [--json]
+tuios start-agent <agent> [-s [<host>:]<session>] [--name <name>] [--cwd <dir> | --repo <dir> | --clone] [--workspace <n>] [--focus] [--prompt <prompt>] [--ready-timeout <ms>] [--env NAME[=VALUE]]... [--json] [-- <args>...]
 ```
 
 **Examples:**
@@ -486,6 +533,17 @@ session is on this machine. For a session on another machine
 (`-s host:session`) it sends no `PATH`, and the agent is looked up on that
 machine's `PATH`. `--env` there is refused with `forbidden`, because
 variables do not cross machines.
+
+The session `-s` names is created when it does not exist. The agent starts in
+`--cwd`, or the main checkout of the repository `--repo` names, or else the
+focused pane's directory. With `-s HOST:SESSION` and neither, it starts in that
+machine's checkout of the repository you are in, found and cloned the way
+`worktree new --host` does it (`--clone` clones it there when it has none).
+Arguments after `--` are passed to the agent as an argv.
+
+```bash
+tuios start-agent -s build:api claude --prompt 'Profile the build.' -- --model opus
+```
 
 ### `tuios kill-server`
 
@@ -2188,7 +2246,7 @@ them.
 | `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session. `--from human` from inside a pane is refused with `forbidden`: only the person at an attached client can send as `human` (see [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)). With `-s HOST:SESSION` and that host's link down, the message waits on this machine and goes when the link is back; the Inbox shows it under Waiting to send. `--select` sends one message to every agent pane a selector matches, after listing them: it asks at a terminal, and takes `--yes` or `--confirm TOKEN` otherwise |
 | `tuios read-agent-messages` | Read the messages agents have left in this session. Reading `-w human` from inside a pane is always a peek |
 | `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter. `--select` asks every agent pane a selector matches, at most 16 at once, after the same confirmation as `send-agent-message --select`; a pane on `needs_input` is refused in its own row |
-| `tuios start-agent <agent>` | Start an agent in a new pane and return once it shows it is at its prompt, optionally typing a first `--prompt`. See [above](#tuios-start-agent) |
+| `tuios start-agent <agent>` | Start an agent in a new pane and return once it shows it is at its prompt, optionally typing a first `--prompt`. `-s HOST:SESSION` starts it on another machine, in its checkout of the repository you are in. See [above](#tuios-start-agent) |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
 | `tuios explain-agent-screen` | Show what a harness's screen and title rules make of a pane: the tail, each rule's region and the text it read there, why each refusal refused (strings, patterns, nested groups), the title and last OSC 9;4 progress report, and which manifest file is in force |
 | `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, gemini-cli, opencode, kilo, amp, kimi and pi report state; antigravity, copilot, crush, cursor-agent, devin, droid, grok, hermes, qoder and qwen report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode; `--mcp-write` registers it with `--write`. See [Agent state](AGENT_STATE.md#harness-integrations) |
@@ -2207,7 +2265,7 @@ them.
 | Command | What it does |
 |---------|--------------|
 | `tuios hosts` | List the machines in the `[hosts]` config table and the state of each link. A host whose tuios is too old to stream its agents is named below the table, with what to update: its agents are polled and what waits there is not in the Inbox. A host with mail waiting here for its link says how many |
-| `tuios hosts add <name> <addr>` | Add a machine. `--tailnet` takes the address from your tailnet; `--command`, `--ssh-option` and `--connect-timeout` tune the link |
+| `tuios hosts add <name> <addr>` | Add a machine. `--tailnet` takes the address from your tailnet; `--command`, `--ssh-option` and `--connect-timeout` tune the link; `--repos-root DIR` says where the host keeps its checkouts, for `fan --host`, `worktree new --host` and `start-agent -s HOST:SESSION`, and is kept when the host is added again without it, as its link policy fields are |
 | `tuios hosts remove <name>` | Remove a machine |
 | `tuios hosts test <name>` | Open one link to a host and report what happened |
 | `tuios hosts tailnet` | List the machines on your tailnet and which are offered as addresses |

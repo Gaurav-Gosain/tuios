@@ -18,6 +18,7 @@ what does and does not come back after each kind of interruption.
 - [Resurrection](#resurrection)
 - [The resurrect Command](#the-resurrect-command)
 - [Windows on Another Machine](#windows-on-another-machine)
+- [Agents and Worktrees on Another Machine](#agents-and-worktrees-on-another-machine)
 - [Global Sessions](#global-sessions)
 - [Machines on a Tailnet](#machines-on-a-tailnet)
 - [Where State Lives](#where-state-lives)
@@ -384,6 +385,33 @@ may do here](CONFIGURATION.md#what-another-machine-may-do-here) for the table,
   respawns a shell from saved state, and it does not redial a host to do it.
 - **A resurrected window runs a local shell.** The layout comes back and the
   pane in it is on this machine, whatever it said before.
+
+## Agents and Worktrees on Another Machine
+
+A hosted window keeps the window here and the process there, and ends when the
+link stays down past the far machine's `hosted_grace`. For agent work that
+should outlive the link for good, start the whole session on the other machine
+instead. `tuios fan --host build`, `tuios worktree new --host
+build` and `tuios start-agent -s build:SESSION` make the sessions on build,
+where they run and survive like any of build's sessions, and they show in the
+rail under build.
+
+The repository is named by the origin URL of the checkout you run the command
+in. build finds its own checkout of it under `repos_root` in `[hosts.build]`:
+
+```toml
+[hosts.build]
+addr = "gaurav@buildbox"
+repos_root = "~/src"   # a path on build, as build reads it
+```
+
+With no `repos_root`, build looks under `~/src`, `~/dev`, `~/code`,
+`~/projects`, `~/repos`, `~/git`, `~/work` and `~/go/src` there. `--clone`
+clones the repository there when build has none.
+
+`tuios worktree pull build:SESSION` brings a worktree session's commits and its
+uncommitted work into a new worktree session here, on a new branch. Nothing on
+build changes. See [CLI Reference](CLI_REFERENCE.md#tuios-worktree).
 
 ## Global Sessions
 

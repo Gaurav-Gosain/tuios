@@ -74,8 +74,9 @@ found nothing: `idle` says nothing needs you, and a pane that went quiet on a
 prompt no rule knows would be lying. A client that predates the state draws no
 glyph for it.
 
-`unknown` is a display state and not a ready one. `fan` waits for `idle` or
-`done`, `ask-agent` also takes `errored` and `none`, and neither types into an
+`unknown` is a display state and not a ready one. `fan` and `start-agent` wait
+for `idle` or `done`, `ask-agent` also takes `errored` and `none`, and none of
+them types into an
 `unknown` pane, because a quiet pane with nothing on its screen may be in the
 middle of a long tool call. A harness whose manifest reads its prompt box
 reaches `idle` instead (see [Screen rules](#screen-rules)); for any other, pass `force` to `ask-agent`, or
@@ -88,8 +89,15 @@ pane whose harness has no screen or title rule that reports `working` can show
 it by printing anything instead. For a harness that has one, output is not
 enough, because a TUI that read Enter as a newline redraws its input box too. A
 pane that shows none of this is stalled: `ask-agent` fails with
-`prompt_stalled` and `fan` records `prompt_status: stalled`. See
+`prompt_stalled`, `fan` records `prompt_status: stalled`, and `start-agent`
+answers `prompt_status: stalled`. See
 [protocol.md](protocol.md).
+
+`start-agent` starts one agent in a new pane, here or on another machine with
+`-s HOST:SESSION`, and types its first prompt through the same wait and the
+same check. On another machine the agent runs there and reports there: its
+state is that machine's, and reaches this one the way every host's agents do,
+in the rail, `list-agents --all-hosts` and the Inbox.
 
 State is daemon-owned per-window state. It rides the same versioned state sync
 every other window property uses, so it survives detach/reattach and reaches all
@@ -1729,7 +1737,7 @@ Wired alongside an installed integration it reports every event twice;
 
 ## Typing a prompt
 
-`ask-agent` and `fan` type a prompt the same way: the text as one paste,
+`ask-agent`, `fan` and `start-agent` type a prompt the same way: the text as one paste,
 bracketed (`ESC[200~` ... `ESC[201~`) when the pane has DECSET 2004 on, a short
 wait, then the submit key. What differs by harness is data in its manifest's
 `[input]` block:
