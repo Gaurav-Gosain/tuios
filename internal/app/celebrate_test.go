@@ -13,7 +13,6 @@ import (
 func celebrateTestOS(t *testing.T) *OS {
 	t.Helper()
 	withTheme(t, "catppuccin_mocha")
-	withTrueColorFrames(t)
 	win := newTestWindow(t, "celebrate", 70, 22)
 	win.WriteOutput([]byte("\x1b[38;2;200;200;200mhello from under the confetti\x1b[0m\r\n"))
 	win.MarkContentDirty()
