@@ -60,7 +60,7 @@ var StartProcess = func(p xpty.Pty, cmd *exec.Cmd) error {
 // On failure nothing is left open.
 func Spawn(width, height int, build func() *exec.Cmd, logf func(string, ...any)) (xpty.Pty, *exec.Cmd, error) {
 	for attempt := 1; ; attempt++ {
-		pty, err := xpty.NewPty(width, height)
+		pty, err := newPty(width, height)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create PTY: %w", err)
 		}

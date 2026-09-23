@@ -903,7 +903,7 @@ func (w *Window) waitForCmd() {
 		return
 	}
 	w.cmdWaitOnce.Do(func() {
-		_ = w.Cmd.Wait() // Best effort, ignore error
+		_ = waitProcess(w) // Best effort, ignore error
 	})
 }
 
