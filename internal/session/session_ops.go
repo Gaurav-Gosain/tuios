@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 
@@ -188,6 +189,9 @@ type NewWindowOptions struct {
 	// See WindowState.PopupWidth. They mean nothing unless Popup is set.
 	PopupWidth  string
 	PopupHeight string
+	// stdout, when set, is the process's standard output in place of the PTY.
+	// See createPTY. It is unexported: only the popup verb's capture sets it.
+	stdout *os.File
 }
 
 // AddDaemonWindowWith creates a daemon-owned window with explicit placement.
@@ -237,7 +241,7 @@ func (s *Session) AddDaemonWindowWith(opts NewWindowOptions, onExit func(ptyID s
 		cwd = s.inheritedCwd()
 	}
 
-	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, cwd, opts.Command, opts.Host, false, onExit)
+	pty, err := s.createPTY(windowID, ptyWidth, ptyHeight, cwd, opts.Command, opts.Host, false, onExit, opts.stdout)
 	if err != nil {
 		return WindowState{}, err
 	}

@@ -4,14 +4,14 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
-	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
 // handleInboxInput handles keyboard input while the Inbox is open. Every
 // action has a key: j and k move, space reads the prompt of an approval or a
 // question, enter goes to the item's pane (or opens its mail thread), 1, 2
 // and 3 answer an approval the Inbox is holding (allow once, always allow,
-// deny, the order of the harness's own menu), d dismisses, r replies to mail,
+// deny, the order of the harness's own menu), 1 to 9 pick the answer to a
+// question ask-human put to the person, d dismisses, r replies to mail,
 // y resumes a conversation a restart left, p passes on mail another machine
 // sent an agent here that the link policy held, f steps the kind filter, m opens
 // the whole mailbox, and esc or q closes.
@@ -26,12 +26,8 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.InboxPeek()
 	case "enter":
 		return o, o.InboxActivate()
-	case "1":
-		return o, o.InboxReplyApproval(session.ApprovalOnce)
-	case "2":
-		return o, o.InboxReplyApproval(session.ApprovalAlways)
-	case "3":
-		return o, o.InboxReplyApproval(session.ApprovalDeny)
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		return o, o.InboxNumber(int(msg.String()[0] - '0'))
 	case "d", "delete":
 		return o, o.InboxDismiss()
 	case "r":

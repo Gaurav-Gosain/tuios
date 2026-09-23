@@ -57,7 +57,14 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"refresh-dock#1":         {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},
 	"popup#0":                {errCode: ErrVerbNeedsClient, why: "a popup is a client window"},
 	"popup#1":                {errCode: ErrVerbNeedsClient, why: "a popup is a client window"},
-	"resolve-pane#0":         {errCode: ErrVerbWindowNotFound, why: "the example's pids are not the fixture's shells"},
+	"popup#2":                {errCode: ErrVerbNeedsClient, why: "a popup is a client window"},
+	// The question waits for an answer nobody in the fixture gives, and the
+	// request id is a placeholder. The round trip is proved in
+	// ask_human_test.go.
+	"ask-human#0":    {blocks: true, why: "nobody in the fixture answers the question"},
+	"ask-human#1":    {errCode: ErrVerbInvalidParams, why: "the example's request id is a placeholder"},
+	"answer-ask#0":   {errCode: ErrVerbNotHuman, why: "only a client attached right now may answer, and none is"},
+	"resolve-pane#0": {errCode: ErrVerbWindowNotFound, why: "the example's pids are not the fixture's shells"},
 	// The example's nonce is a placeholder, and no client is attached to
 	// issue a real one. The allowed path is proved in verb_attention_test.go.
 	"dismiss-attention#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may dismiss, and none is"},

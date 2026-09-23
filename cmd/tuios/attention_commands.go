@@ -34,6 +34,8 @@ type attentionRow struct {
 	// RequestID is set while a harness hook holds the approval for an answer
 	// from the Inbox.
 	RequestID string `json:"request_id"`
+	// Options are the answers a question ask-human put takes.
+	Options []string `json:"options"`
 	// Stale marks an item of a linked host whose link is down, last heard
 	// from at SeenAt (unix nanoseconds).
 	Stale  bool  `json:"stale"`
@@ -57,6 +59,8 @@ func attentionGroupTitle(kind string) string {
 		return "Approvals"
 	case session.AttentionQuestion:
 		return "Questions"
+	case session.AttentionAsk:
+		return "Asked you"
 	case session.AttentionMail:
 		return "Mail"
 	case session.AttentionErrored:
@@ -164,7 +168,15 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		if summary != "" {
 			fmt.Fprintf(w, "  %s", summary)
 		}
-		if it.RequestID != "" {
+		switch {
+		case it.Kind == session.AttentionAsk:
+			// The answers are what the question is; the keys are the Inbox's.
+			opts := make([]string, len(it.Options))
+			for i, o := range it.Options {
+				opts[i] = strconv.Itoa(i+1) + " " + plainLine(o)
+			}
+			fmt.Fprintf(w, "  (%s; answer in the Inbox)", strings.Join(opts, ", "))
+		case it.RequestID != "":
 			fmt.Fprintf(w, "  (%s)", attentionHeldNote)
 		}
 		if it.Stale {

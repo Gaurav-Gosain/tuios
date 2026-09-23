@@ -1336,6 +1336,8 @@ lists, scripts and restores like any other.`,
 	var popupCwd string
 	var popupWorkspace int
 	var popupJSON bool
+	var popupWait, popupCapture bool
+	var popupTimeout int
 	popupCmd := &cobra.Command{
 		Use:   "popup -- <command> [args...]",
 		Short: "Run a command in a floating pane that closes when it exits",
@@ -1348,13 +1350,23 @@ gum or any other full-screen program in it.
 Needs an attached client, because a popup is a thing on a screen. It is not
 tiled, it is not in the window cycle, and it cannot be minimized.
 
-The popup writes to its own screen, not to this command's output. To keep a
-selection, redirect inside the popup or send it to another pane.
+The popup writes to its own screen, not to this command's output. With --wait
+this command stays open until the popup's command exits, and exits with its
+status. --capture-stdout (which implies --wait) also sends the command's
+standard output here instead of into the popup: a picker such as fzf or gum
+draws on the terminal and prints only the choice, so the choice is what this
+command prints. Not on Windows.
 
 --width and --height take cells or a percentage of the pane region. A size
 larger than the region is cut down to the region. Neither has a short form: -w
 selects a window everywhere else, and -h is help.`,
-		Example: `  # Pick a file in a centred popup and keep the answer
+		Example: `  # Pick a file in a centred popup and use the answer
+  file=$(tuios popup --capture-stdout -- fzf)
+
+  # Wait for a popup and branch on its status
+  tuios popup --wait -- gum confirm "Deploy?" && ./deploy.sh
+
+  # Keep the answer in a file instead
   tuios popup -- sh -c 'ls | fzf > /tmp/pick'
 
   # Send the selection straight to the pane you came from
@@ -1379,9 +1391,15 @@ selects a window everywhere else, and -h is help.`,
 				workspace: popupWorkspace,
 				command:   args,
 				jsonOut:   popupJSON,
+				wait:      popupWait || popupCapture,
+				capture:   popupCapture,
+				timeout:   popupTimeout,
 			})
 		},
 	}
+	popupCmd.Flags().BoolVar(&popupWait, "wait", false, "Stay open until the command exits, and exit with its status")
+	popupCmd.Flags().BoolVar(&popupCapture, "capture-stdout", false, "Print the command's standard output here instead of in the popup (implies --wait)")
+	popupCmd.Flags().IntVar(&popupTimeout, "timeout", 0, "With --wait: milliseconds to wait (default: as long as the popup is open)")
 	popupCmd.Flags().StringVarP(&popupSession, "session", "s", "", "Target session (default: most recently active)")
 	// Spelled out, with no shorthands. -w is the window selector in every other
 	// tuios command and -h is cobra's help, so both of the short forms a reader
@@ -2684,7 +2702,7 @@ command in authorized_keys to make the policy a boundary:
 	rootCmd.AddCommand(setAgentStateCmd, setAgentMetaCmd, setAgentSessionCmd, newResumeAgentCommand(), getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)
 	rootCmd.AddCommand(listAgentsCmd, sendAgentMessageCmd, readAgentMessagesCmd, askAgentCmd, newListAttentionCommand(),
 		newPeekPromptCommand(), newRespondCommand())
-	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand(), newRunCommand())
+	rootCmd.AddCommand(sendTextCmd, newWindowCmd, waitForCmd, newSubscribeCommand(), newRunCommand(), newAskHumanCommand())
 	rootCmd.AddCommand(setSessionNameCmd, setSessionAccentCmd, setWorkspaceNameCmd)
 	rootCmd.AddCommand(splitWindowCmd, popupCmd, focusWindowCmd, moveWindowCmd, setWindowCmd)
 	rootCmd.AddCommand(selectWorkspaceCmd, listWorkspacesCmd, setLayoutCmd)

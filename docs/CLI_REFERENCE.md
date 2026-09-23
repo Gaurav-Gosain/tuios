@@ -669,8 +669,14 @@ fzf, gum or any other full-screen program in it.
 It needs an attached client, because a popup is a thing on a screen. The pane is
 not tiled, it is not in the window cycle, and it cannot be minimized.
 
-The popup writes to its own screen, not to this command's output. To keep a
-selection, redirect inside the popup or send it to another pane.
+The popup writes to its own screen, not to this command's output. With
+`--wait` this command stays open until the popup's command exits and exits
+with its status (130 when the popup was closed by hand). With
+`--capture-stdout`, which implies `--wait`, the command's standard output
+comes here instead of into the popup: a picker such as fzf or gum draws on the
+terminal and prints only the choice, so the choice is what this command
+prints. Capture is not supported on Windows. Without either, redirect inside
+the popup or send the selection to another pane.
 
 **Usage:**
 ```bash
@@ -687,6 +693,9 @@ Neither size flag has a short form: `-w` selects a window everywhere else, and
 - `--name <name>`: Name for the popup
 - `--cwd <dir>`: Directory to run the command in
 - `--workspace <n>`: Workspace to open the popup on
+- `--wait`: Stay open until the command exits, and exit with its status
+- `--capture-stdout`: Print the command's standard output here instead of in the popup (implies `--wait`)
+- `--timeout <ms>`: With `--wait`, milliseconds to wait before failing with `timeout`; the popup stays open (default: as long as it is open)
 - `--json`: Output result as JSON
 
 A size larger than the pane region is cut down to the region.
@@ -700,7 +709,13 @@ esc in window mode to close one by hand, or close it like any other pane.
 
 **Examples:**
 ```bash
-# Pick a file in a centred popup and keep the answer
+# Pick a file in a centred popup and use the answer
+file=$(tuios popup --capture-stdout -- fzf)
+
+# Wait for a confirmation and branch on it
+tuios popup --wait -- gum confirm "Deploy?" && ./deploy.sh
+
+# Keep the answer in a file instead
 tuios popup -- sh -c 'ls | fzf > /tmp/pick'
 
 # Send the selection straight to the pane you came from
@@ -714,6 +729,56 @@ tuios popup --width 90% --height 80% -- htop
 
 # Capture the popup's id for scripting
 tuios popup --json -- fzf | jq -r .window_id
+```
+
+### `tuios ask-human`
+
+Ask the person a question with a fixed set of answers, wait for them to pick
+one, and print it.
+
+**Usage:**
+```bash
+tuios ask-human [flags] <question> -o <answer> [-o <answer>...]
+tuios ask-human --request-id <id>
+```
+
+The question goes in the Inbox as an Asked you row. A client that shows the
+asking pane opens the Inbox on it at once, and the digits 1 to 9 pick an
+answer; from any other pane it waits there with the usual alert, and with
+nobody attached it waits for the next attach. Only the person at an attached
+client can answer; an agent cannot.
+
+When `--timeout` runs out first, the command exits `2` and the question stays.
+The answer is then mailed to the asking pane from `human`, marked
+`verified_human`, so `tuios wait-for agent-message` picks it up; or come back
+with `--request-id`. From inside a pane the question is asked as that pane,
+and naming another is refused.
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <id-or-name>`: The pane asking, where a late answer is mailed (default: your own pane; none from outside every pane)
+- `-o, --option <answer>`: An answer the person can pick; give 1 to 9, each one line of at most 60 bytes
+- `--timeout <ms>`: Milliseconds to wait for the answer (default: 120000, at most one hour)
+- `--no-wait`: Ask and return at once, exit `2`; the answer arrives as mail
+- `--request-id <id>`: Come back for a question already asked
+- `--json`: Output the result as JSON: `request_id`, `status`, `answer`, `answer_index`, `answered_by`, `verified_human`
+
+The question is one line of printable text, at most 160 bytes.
+
+**Exit status:** `0` with the answer alone on stdout; `2` when there is no
+answer yet; `1` when the question ended without one (dismissed, superseded by
+a newer question from the same pane, or its pane closed).
+
+**Examples:**
+```bash
+# Ask, and branch on the answer
+if [ "$(tuios ask-human 'Deploy to staging?' -o yes -o no)" = yes ]; then ./deploy.sh; fi
+
+# Ask and move on; the answer arrives as mail
+tuios ask-human 'Which region?' -o us -o eu --no-wait
+
+# Come back for an answer
+tuios ask-human --request-id 9f86d081884c7d65
 ```
 
 ### `tuios run-command`
@@ -1000,8 +1065,8 @@ tuios subscribe --hosts --types agent-state,host-changed
 List the Inbox: every approval and question an agent is blocked on, mail to
 you, errored agents, conversations a daemon restart left to resume, and
 finished turns nobody has looked at, in every session on the daemon and on
-every linked host it streams. Rows are grouped Approvals, Questions, Mail,
-Errored, Resume, Finished, oldest first, with how long each has waited, its
+every linked host it streams. Rows are grouped Approvals, Asked you, Questions,
+Mail, Errored, Resume, Finished, oldest first, with how long each has waited, its
 id, its session and pane, and what it said. The TUI's Inbox (prefix `i`) is
 the same list. A row of another machine names it,
 `build:api/claude`, and a row of a machine whose link is down ends in

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -280,6 +281,11 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 		Height    string   `json:"height"`
 		Command   []string `json:"command"`
 		Workspace int      `json:"workspace"`
+		// Wait keeps the call open until the command exits; CaptureStdout
+		// returns what it printed to standard output. See popup_wait.go.
+		Wait          bool `json:"wait"`
+		CaptureStdout bool `json:"capture_stdout"`
+		Timeout       int  `json:"timeout"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -290,6 +296,15 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 	}
 	if len(p.Command) == 0 || p.Command[0] == "" {
 		return nil, invalidParam("command", "a popup runs one command and closes when it exits, so name the command to run")
+	}
+	if p.CaptureStdout && !p.Wait {
+		return nil, invalidParam("capture_stdout", "capture_stdout returns the output when the command exits, so it needs wait")
+	}
+	if p.CaptureStdout && runtime.GOOS == "windows" {
+		return nil, invalidParam("capture_stdout", "capture_stdout is not supported on Windows, where the console carries the output. Redirect inside the popup instead")
+	}
+	if p.Timeout < 0 {
+		return nil, invalidParam("timeout", "timeout is milliseconds and cannot be negative")
 	}
 	if err := ValidatePopupSize(p.Width); err != nil {
 		return nil, invalidParam("width", err.Error())
@@ -322,7 +337,7 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 	}
 
 	onExit := func(ptyID string) { d.notifyPTYClosed(sess.ID, ptyID) }
-	win, err := sess.AddDaemonWindowWith(NewWindowOptions{
+	opts := NewWindowOptions{
 		Title:       p.Name,
 		Cwd:         p.Cwd,
 		Workspace:   p.Workspace,
@@ -332,7 +347,24 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 		Popup:       true,
 		PopupWidth:  p.Width,
 		PopupHeight: p.Height,
-	}, onExit)
+	}
+	var capture *popupCapture
+	if p.CaptureStdout {
+		r, w, err := os.Pipe()
+		if err != nil {
+			return nil, newVerbError(ErrVerbInternal, "cannot make a pipe for the popup's output: "+err.Error())
+		}
+		opts.stdout = w
+		capture = newPopupCapture(r)
+	}
+	win, err := sess.AddDaemonWindowWith(opts, onExit)
+	// The process holds its own copy of the write end once it has started,
+	// so the daemon's copy is closed here, and the read ends when the process
+	// and its children have closed theirs. On a failed start this also ends
+	// the read.
+	if opts.stdout != nil {
+		_ = opts.stdout.Close()
+	}
 	if err != nil {
 		return nil, newWindowErr(err, sess, p.Workspace)
 	}
@@ -340,6 +372,27 @@ func (d *Daemon) verbPopup(_ *connState, params json.RawMessage) (any, *verbErro
 	displayName := win.Title
 	if p.Name != "" {
 		displayName = p.Name
+	}
+	if p.Wait {
+		code, exited := d.waitPopupExit(sess, win, time.Duration(p.Timeout)*time.Millisecond)
+		if !exited {
+			return nil, hintedVerbError(ErrVerbTimeout, "the popup was still open when the wait ended", &VerbHint{
+				Command: "tuios wait-for window-exit -w " + win.ID,
+				Detail:  "The popup is still on the screen and its command still runs. Wait for it with the command shown, or raise timeout.",
+			})
+		}
+		res := map[string]any{
+			"type":      "popup_result",
+			"window_id": win.ID,
+			"name":      displayName,
+			"exit_code": code,
+		}
+		if capture != nil {
+			out, truncated := capture.finish()
+			res["stdout"] = out
+			res["stdout_truncated"] = truncated
+		}
+		return res, nil
 	}
 	return map[string]any{
 		"type":      "popup_opened",

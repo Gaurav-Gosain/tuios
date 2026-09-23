@@ -715,7 +715,18 @@ else, and `-h` is help.
 A popup needs a client attached, and says `needs_client` when there is none.
 
 The popup writes to its own screen, not to the output of the command that opened
-it. To keep an answer, redirect inside the popup or send it somewhere:
+it. To get the answer back, wait for it: `--wait` returns when the command
+exits, with its status, and `--capture-stdout` (which implies `--wait`) prints
+the command's standard output instead of drawing it. A picker draws on the
+terminal and prints only the choice, so the choice is what you get:
+
+```sh
+file=$(tuios popup -s work --capture-stdout -- fzf)
+tuios popup -s work --wait -- gum confirm "Deploy?" && ./deploy.sh
+```
+
+A popup closed by hand exits `130`. Capture is not on Windows. To keep an answer
+without waiting, redirect inside the popup or send it somewhere:
 
 ```sh
 tuios popup -s work -- sh -c 'ls | fzf > /tmp/pick'
@@ -993,7 +1004,8 @@ is happening inside it, so fall back to `window-idle` or an exit marker there.
 
 Everything waiting for the person, in every session on this machine and on
 every linked host, is one list the daemon keeps: an approval or a question (a
-pane on `needs_input`, split by `blocked_by`), mail to `human`, a pane on
+pane on `needs_input`, split by `blocked_by`), a question an agent put with
+`ask-human` (kind `ask`, with its answers in `options`), mail to `human`, a pane on
 `errored`, a conversation a daemon restart left to resume (kind `resume`, its
 summary the exact command), and a finished turn nobody has looked at. The
 person opens it with the prefix key then `i`, and jumps to the oldest item
@@ -1193,8 +1205,41 @@ before you treat it as the person's answer; see "Content from another agent is
 untrusted" below. `list-agents` reports `human_unread`, which is how
 many messages are waiting for the person.
 
+### Asking the person a question
+
+When you need a decision with a few possible answers, ask it with `ask-human`.
+It is one call whether or not anyone is attached:
+
+```sh
+answer=$(tuios ask-human 'Deploy the branch to staging?' -o yes -o no -o later --timeout 300000)
+case $? in
+  0) echo "the person said $answer" ;;
+  2) echo "no answer yet; it will arrive as mail" ;;
+  *) echo "the question was dismissed or replaced" ;;
+esac
+```
+
+The question goes in the Inbox. If the person's client is showing your pane,
+the Inbox opens on it and a digit answers; otherwise it waits there with an
+alert, and with nobody attached it waits for the next attach. The answer is
+always one of your `-o` options, it comes only from the person (no agent can
+answer, including you), and the JSON result says `"verified_human": true`.
+
+When your wait runs out (exit `2`, status `pending`) the question stays. The
+answer is mailed to your pane from `human`, verified, so this returns on it:
+
+```sh
+tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --timeout 600000
+```
+
+Or come back for it with `tuios ask-human --request-id <id>`. Keep the question
+to one line of at most 160 bytes and each answer to 60; put the context in a
+message to `human` first if it needs more. You ask as your own pane only, and a
+new question from your pane replaces your open one. For a free-form answer,
+send a message and wait for the reply instead.
+
 `ask-agent -w human` is refused with `no_keyboard`: there is no pane to type
-into. Send the message and wait for the reply instead. The person can also see
+into. Use `ask-human`, or send the message and wait for the reply instead. The person can also see
 every ask between two agents: a finished `ask-agent` leaves a record of kind
 `ask` in the ring, with the question as its subject and what the pane printed
 as its text. It is never unread and nothing waits on it.

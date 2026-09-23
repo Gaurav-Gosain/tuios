@@ -463,6 +463,11 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 			} else {
 				st.Items = append(st.Items, *it)
 			}
+			// A question about the pane in front of the person opens the
+			// Inbox on it, which is the popup: it needs no alert.
+			if ev.Action == session.AttentionOpened && m.inboxPopAsk(*it) {
+				continue
+			}
 			if ev.Action == session.AttentionOpened || more {
 				alert = append(alert, it.ID)
 			}
@@ -520,10 +525,32 @@ func (m *OS) inboxSeenUnderEyes(it session.AttentionItem) tea.Cmd {
 	return nil
 }
 
+// inboxPopAsk opens the Inbox on a question ask-human put to the person, when
+// it is about the pane this client shows. That is the popup: the person is
+// looking at the agent that asked, so the question comes to them. A question
+// about any other pane waits in the Inbox with an alert instead, so nobody
+// typing elsewhere has the keyboard taken away. The answer keys only work once
+// the question has been on screen for a moment (inboxAnswerSettle), so a key
+// already on its way to the pane does not answer it.
+func (m *OS) inboxPopAsk(it session.AttentionItem) bool {
+	if it.Kind != session.AttentionAsk || it.Window == "" || !m.inboxAttached(it) {
+		return false
+	}
+	w := m.GetFocusedWindow()
+	if w == nil || w.ID != it.Window {
+		return false
+	}
+	if !m.ShowInbox || m.Inbox.Peek != nil {
+		m.OpenInbox(session.AttentionAsk)
+	}
+	m.Inbox.SelectedID = it.ID
+	return true
+}
+
 // inboxAlertState is the agent state whose alert policy governs a kind.
 func inboxAlertState(kind string) string {
 	switch kind {
-	case session.AttentionApproval, session.AttentionQuestion:
+	case session.AttentionApproval, session.AttentionQuestion, session.AttentionAsk:
 		return "needs_input"
 	case session.AttentionErrored:
 		return "errored"
@@ -537,7 +564,15 @@ func inboxAlertState(kind string) string {
 // not in the attached session, whose alerts come from the state sync, and the
 // policy alerts on its kind.
 func (m *OS) inboxAlertable(it session.AttentionItem, policy config.AgentAlertPolicy) bool {
-	if m.inboxAttached(it) || it.Stale {
+	if it.Stale {
+		return false
+	}
+	// No agent state moves when a question is asked, so the state sync says
+	// nothing about it even in the attached session: the Inbox does.
+	if it.Kind == session.AttentionAsk {
+		return policy.Alerts(inboxAlertState(it.Kind))
+	}
+	if m.inboxAttached(it) {
 		return false
 	}
 	if it.Kind == session.AttentionMail {
@@ -580,7 +615,7 @@ func (m *OS) fireInboxAlerts(ids []string) {
 	}
 	var items []session.AttentionItem
 	for _, id := range ids {
-		if it, ok := m.inboxItem(id); ok && !m.inboxAttached(it) {
+		if it, ok := m.inboxItem(id); ok && (it.Kind == session.AttentionAsk || !m.inboxAttached(it)) {
 			items = append(items, it)
 		}
 	}
@@ -594,7 +629,7 @@ func (m *OS) fireInboxAlerts(ids []string) {
 	cue, cueState := sound.CueDone, "done"
 	for _, it := range items {
 		switch it.Kind {
-		case session.AttentionApproval, session.AttentionQuestion, session.AttentionMail:
+		case session.AttentionApproval, session.AttentionQuestion, session.AttentionMail, session.AttentionAsk:
 			sev, cue, cueState = "warning", sound.CueAttention, "needs_input"
 		case session.AttentionErrored:
 			if sev != "warning" {
@@ -647,6 +682,8 @@ func inboxKindWords(it session.AttentionItem) string {
 		return "can resume its conversation"
 	case session.AttentionOutbox:
 		return "mail waits to be sent"
+	case session.AttentionAsk:
+		return "asks you"
 	}
 	return it.Kind
 }
@@ -716,7 +753,7 @@ func (m *OS) inboxCounts(sessionName string) sidebarAgentCountInfo {
 			continue
 		}
 		switch it.Kind {
-		case session.AttentionApproval, session.AttentionQuestion, session.AttentionErrored:
+		case session.AttentionApproval, session.AttentionQuestion, session.AttentionErrored, session.AttentionAsk:
 			c.Blocked++
 			state := inboxAlertState(it.Kind)
 			if r := sessiontree.AgentRank(state, false); r > rank {
@@ -775,6 +812,8 @@ func inboxGroupTitle(kind string) string {
 		return "Approvals"
 	case session.AttentionQuestion:
 		return "Questions"
+	case session.AttentionAsk:
+		return "Asked you"
 	case session.AttentionMail:
 		return "Mail"
 	case session.AttentionErrored:
@@ -954,6 +993,14 @@ func (m *OS) InboxActivate() tea.Cmd {
 	if it.Kind == session.AttentionMail {
 		return m.inboxOpenMail(it, false)
 	}
+	if it.Kind == session.AttentionAsk {
+		// A question has no prompt in its pane to answer: going there leaves
+		// it waiting here. A question from outside every pane has no pane.
+		if it.Window != "" {
+			m.inboxJump(it)
+		}
+		return nil
+	}
 	var cmd tea.Cmd
 	if it.RequestID != "" {
 		// A held prompt shows nothing in its pane. Going there is choosing to
@@ -976,6 +1023,117 @@ type InboxApprovalRepliedMsg struct {
 	// line by the time the answer arrived, and nothing was answered.
 	Reason string
 	Err    error
+}
+
+// InboxNumber is a digit key in the Inbox list. On a question ask-human put,
+// it picks that answer. On a held approval 1, 2 and 3 are allow once, always
+// allow and deny, the order of the harness's own menu.
+func (m *OS) InboxNumber(n int) tea.Cmd {
+	if it, ok := m.inboxSelected(); ok && it.Kind == session.AttentionAsk {
+		return m.InboxAnswerAsk(n)
+	}
+	if n >= 1 && n <= len(inboxAnswerOrder) {
+		return m.InboxReplyApproval(inboxAnswerOrder[n-1].decision)
+	}
+	return nil
+}
+
+// InboxAnswerAsk answers the selected question with its nth option, counting
+// from 1. Like an approval, the question must have been on screen, as it is,
+// for a moment before a key answers it.
+func (m *OS) InboxAnswerAsk(n int) tea.Cmd {
+	it, ok := m.inboxSelected()
+	if !ok || it.Kind != session.AttentionAsk || it.RequestID == "" {
+		return nil
+	}
+	if n < 1 || n > len(it.Options) {
+		m.ShowNotification("This question takes 1 to "+strconv.Itoa(len(it.Options)), "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	if !inboxShowsWhole(it) {
+		m.ShowNotification("This question has characters this terminal cannot show, so it is not answered here", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	if !m.inboxAnswerSettled(it, time.Now()) {
+		m.ShowNotification("This question just appeared. Read it, then answer", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	return m.inboxAnswerAskCmd(it, it.Options[n-1])
+}
+
+// InboxAskAnsweredMsg is the answer to an answer-ask.
+type InboxAskAnsweredMsg struct {
+	Name   string
+	Answer string
+	// Standing is the answer that stands, an earlier one's when Applied is
+	// false.
+	Standing string
+	Applied  bool
+	Reason   string
+	Err      error
+}
+
+// inboxAnswerAskCmd is the answer-ask call, with this client's attach nonce,
+// which is what lets the daemon take the answer as the person's.
+func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string) tea.Cmd {
+	if m.DaemonClient == nil || m.AttachedHost != "" || it.Host != "" {
+		m.ShowNotification("Answering needs a client attached to this machine's daemon", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	nonce := m.DaemonClient.HumanNonce()
+	if nonce == "" {
+		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
+		return nil
+	}
+	if m.Inbox.replied == nil {
+		m.Inbox.replied = make(map[string]bool)
+	}
+	m.Inbox.replied[it.RequestID] = true
+	build := m.DaemonClient.ClientVersion()
+	name := inboxWho(it)
+	return func() tea.Msg {
+		client, err := session.DialVerbClientAs(build)
+		if err != nil {
+			return InboxAskAnsweredMsg{Name: name, Answer: answer, Err: err}
+		}
+		defer func() { _ = client.Close() }()
+		raw, err := client.CallWithTimeout("answer-ask", map[string]any{
+			"request_id":  it.RequestID,
+			"answer":      answer,
+			"human_nonce": nonce,
+			// The question the person read. The daemon answers nothing when
+			// it is not the one asked.
+			"question": it.Summary,
+		}, 5*time.Second)
+		if err != nil {
+			return InboxAskAnsweredMsg{Name: name, Answer: answer, Err: err}
+		}
+		var res struct {
+			Answer  string `json:"answer"`
+			Applied bool   `json:"applied"`
+			Reason  string `json:"reason"`
+		}
+		if err := json.Unmarshal(raw, &res); err != nil {
+			return InboxAskAnsweredMsg{Name: name, Answer: answer, Err: err}
+		}
+		return InboxAskAnsweredMsg{Name: name, Answer: answer, Standing: res.Answer, Applied: res.Applied, Reason: res.Reason}
+	}
+}
+
+// applyInboxAskAnswered says what became of an answer.
+func (m *OS) applyInboxAskAnswered(msg InboxAskAnsweredMsg) {
+	switch {
+	case msg.Err != nil:
+		m.ShowNotification("The answer did not go through: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
+	case !msg.Applied && msg.Reason == inboxReplyChanged:
+		m.ShowNotification(msg.Name+" is asking something else now, so nothing was answered. Read it again", "info", m.Settings.NotificationDuration*2)
+	case !msg.Applied && msg.Standing != "":
+		m.ShowNotification(msg.Name+" was already answered: "+printableTitle(msg.Standing), "info", m.Settings.NotificationDuration)
+	case !msg.Applied:
+		m.ShowNotification(msg.Name+"'s question ended before the answer: "+strings.ReplaceAll(msg.Reason, "_", " "), "info", m.Settings.NotificationDuration)
+	default:
+		m.ShowNotification(msg.Name+": "+printableTitle(msg.Answer), "success", m.Settings.NotificationDuration)
+	}
 }
 
 // InboxReplyApproval answers the selected held approval with decision: once,
@@ -1475,6 +1633,13 @@ func (m *OS) JumpToNextAttention() tea.Cmd {
 	if it.Kind == session.AttentionMail {
 		return m.inboxOpenMail(it, false)
 	}
+	if it.Kind == session.AttentionAsk {
+		// A question is answered in the Inbox, not in its pane.
+		m.OpenInbox(session.AttentionAsk)
+		m.Inbox.SelectedID = it.ID
+		m.clampInboxSelection()
+		return nil
+	}
 	m.inboxJump(it)
 	if len(todo) > 1 {
 		m.ShowNotification(strconv.Itoa(next+1)+" of "+strconv.Itoa(len(todo))+" waiting: "+inboxWho(it)+" "+inboxKindWords(it), "info", m.Settings.NotificationDuration)
@@ -1516,7 +1681,7 @@ func inboxKindGlyph(kind string) string {
 		switch kind {
 		case session.AttentionApproval:
 			return "!"
-		case session.AttentionQuestion:
+		case session.AttentionQuestion, session.AttentionAsk:
 			return "?"
 		case session.AttentionMail:
 			return "@"
@@ -1533,7 +1698,7 @@ func inboxKindGlyph(kind string) string {
 	switch kind {
 	case session.AttentionOutbox:
 		return "↑"
-	case session.AttentionApproval, session.AttentionQuestion:
+	case session.AttentionApproval, session.AttentionQuestion, session.AttentionAsk:
 		return agentStateIndicator("needs_input")
 	case session.AttentionMail:
 		return sidebarMailGlyph()

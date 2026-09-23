@@ -69,13 +69,19 @@ const (
 	// link is down, and deliveries that machine refused, one item per
 	// machine. See host_outbox.go.
 	AttentionOutbox = "outbox"
+	// AttentionAsk is a question an agent or a script put to the person with
+	// ask-human, with the answers it takes in Options. It closes when the
+	// person answers or dismisses it, or the asking pane closes. See
+	// ask_human.go.
+	AttentionAsk = "ask"
 )
 
 // AttentionKindNames lists the kinds in the order the Inbox groups them: what
 // blocks an agent first, then what an agent said, then what went wrong, then
 // what a restart left to bring back, then what finished, then mail still
-// waiting to leave. list-attention sorts by it.
-var AttentionKindNames = []string{AttentionApproval, AttentionQuestion, AttentionMail, AttentionErrored, AttentionResume, AttentionFinished, AttentionOutbox}
+// waiting to leave. list-attention sorts by it. An ask sits with the
+// approvals: something is waiting on the answer.
+var AttentionKindNames = []string{AttentionApproval, AttentionAsk, AttentionQuestion, AttentionMail, AttentionErrored, AttentionResume, AttentionFinished, AttentionOutbox}
 
 // Close reasons an attention event carries on its closing action.
 const (
@@ -243,6 +249,14 @@ type attentionStore struct {
 	// settledOrder is settled's ids oldest first, for its bound.
 	settledOrder []string
 
+	// asks are the questions ask-human put to the person, by request id, and
+	// askSettled how the most recent ones ended, for a caller that comes back
+	// for the answer. They live under mu with their items for the reason holds
+	// do. See ask_human.go.
+	asks            map[string]*askHold
+	askSettled      map[string]askOutcome
+	askSettledOrder []string
+
 	// hostItems are the items mirrored from linked hosts, keyed by their id
 	// here, which is the host's name, a colon and the host's own id. They are
 	// kept apart from items so nothing a host sends can evict an item of this
@@ -285,11 +299,16 @@ func attentionKey(kind, session, window string, thread uint64) string {
 	return class + "\x00" + session + "\x00" + window
 }
 
-// attentionItemKey is attentionKey for a whole item. An outbox item is about
-// a machine rather than a pane, so it is keyed by that.
+// attentionItemKey is the key an item is held under. An outbox item is about
+// a machine rather than a pane, so it is keyed by that. An ask is keyed by its
+// request rather than its pane, since a script outside every pane asks with no
+// pane at all. Everything else is attentionKey.
 func attentionItemKey(it *AttentionItem) string {
-	if it.Kind == AttentionOutbox {
+	switch it.Kind {
+	case AttentionOutbox:
 		return "outbox\x00" + it.ForHost
+	case AttentionAsk:
+		return "ask\x00" + it.Session + "\x00" + it.RequestID
 	}
 	return attentionKey(it.Kind, it.Session, it.Window, it.Thread)
 }
@@ -422,7 +441,11 @@ func (a *attentionStore) closeWithLocked(id, reason string, fill func(*Attention
 		return false
 	}
 	if it.RequestID != "" && reason != AttentionClosedAnswered {
-		a.endHoldLocked(it.RequestID, approvalOutcome{Reason: reason}, false)
+		if it.Kind == AttentionAsk {
+			a.endAskLocked(it.RequestID, askOutcome{Reason: reason})
+		} else {
+			a.endHoldLocked(it.RequestID, approvalOutcome{Reason: reason}, false)
+		}
 	}
 	delete(a.items, id)
 	delete(a.byKey, attentionItemKey(it))
@@ -572,6 +595,12 @@ func (a *attentionStore) closeWindow(sessionName, window string) {
 	defer a.mu.Unlock()
 	for _, kind := range []string{AttentionApproval, AttentionErrored, AttentionFinished, AttentionResume} {
 		a.closeKeyLocked(attentionKey(kind, sessionName, window, 0), AttentionClosedWindow)
+	}
+	// An ask from the pane has nobody to hand the answer to any more.
+	for _, id := range a.sortedIDsLocked() {
+		if it := a.items[id]; it.Kind == AttentionAsk && it.Session == sessionName && it.Window == window {
+			a.closeLocked(id, AttentionClosedWindow)
+		}
 	}
 }
 

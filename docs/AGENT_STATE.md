@@ -881,9 +881,10 @@ harness feeds it yet; a hook or a statusline command is where a feed goes. See
 ## The Inbox
 
 The Inbox is one list of everything waiting for you, in every session on the
-daemon: approvals and questions an agent is blocked on, mail an agent wrote to
-you, agents that errored, conversations a daemon restart left to resume, and
-finished turns you have not looked at. The daemon
+daemon: approvals and questions an agent is blocked on, questions an agent put
+to you with `ask-human`, mail an agent wrote to you, agents that errored,
+conversations a daemon restart left to resume, and finished turns you have not
+looked at. The daemon
 keeps it, so it is the same list in every client, in `tuios list-attention`,
 and in the `attention` events of `tuios subscribe`. See
 [list-attention](protocol.md#list-attention) for the fields and the rules for
@@ -908,7 +909,7 @@ Keys, after the prefix (`ctrl+b` by default):
 | Key | What it does |
 | --- | --- |
 | `i` | Open the Inbox. |
-| `o` | Go to the oldest item that needs you (approval, question, mail, errored, resume), switching session and workspace. The prefix stays armed, so `o` again goes to the next one, and past the last it starts over. Finished turns are left to the Inbox. |
+| `o` | Go to the oldest item that needs you (approval, ask, question, mail, errored, resume), switching session and workspace. A question an agent asked you opens the Inbox on it instead, since that is where it is answered. The prefix stays armed, so `o` again goes to the next one, and past the last it starts over. Finished turns are left to the Inbox. |
 | `M` | Open the Inbox on its mail. It used to open the mailbox; `m` in the Inbox does that now. |
 
 Inside the Inbox:
@@ -920,6 +921,7 @@ Inside the Inbox:
 | `enter` | Go to the item's pane, switching session and workspace. On mail, open the thread. On a held approval, give the prompt back to the pane first, so the harness shows it there. |
 | `space` | On an approval or a question, read the prompt without leaving the Inbox, and answer it from there. See [Answering a prompt without attaching](#answering-a-prompt-without-attaching). Not on a held approval, which has no prompt on the screen: answer that one with `1`, `2` or `3`. |
 | `1` / `2` / `3` | Answer the held approval under the cursor: allow once, always allow, deny. The same order as the harness's own menu. Only the keys the prompt offers work, and only once the prompt has been on screen as it is for 0.4 seconds. The whole prompt, and what `2` adds, is shown under the list. See [Approvals from the Inbox](#approvals-from-the-inbox). |
+| `1` to `9` | On a question an agent asked you (Asked you), pick that answer. The question and its numbered answers are shown under the list, and the keys work once it has been on screen as it is for 0.4 seconds. See [Questions an agent asks you](#questions-an-agent-asks-you). |
 | `r` | Reply to mail: the thread opens with its reply line. |
 | `y` | On a resume row: go to the pane and type the conversation's resume command there. |
 | `p` | On a row that says `held for NAME`: pass the mail another machine sent that agent on to it. See [Mail held from another machine](#mail-held-from-another-machine). |
@@ -928,8 +930,8 @@ Inside the Inbox:
 | `m` | Open the mailbox, with every thread including the ones between agents. |
 | `esc` / `q` | Close. |
 
-Rows are grouped under headings in words, Approvals, Questions, Mail, Errored,
-Resume, Finished, each with its count, and oldest first inside a group. A row carries
+Rows are grouped under headings in words, Approvals, Asked you, Questions, Mail,
+Errored, Resume, Finished, each with its count, and oldest first inside a group. A row carries
 its kind's glyph, the pane's name, what it said, and on the right its session
 and how long it has waited (`12m`, `3h`). The heading, the name and the wait are
 text, so nothing depends on colour, and the ASCII glyph set covers the marks.
@@ -942,11 +944,47 @@ another client or the daemon closed it first, also shows nothing, since the item
 is gone either way. Any other failure of `d` is shown.
 
 The rail's agents header counts the Inbox while the client is connected to it:
-approvals, questions and errored items are `blocked`, finished items are
+approvals, questions, asks and errored items are `blocked`, finished items are
 `done`, over every session on every machine, or only this session when the
 filter says `here`. An item of a machine whose link is down is not counted.
 Without the Inbox (an older daemon, or while reconnecting) the header counts its
 rows, as it did before.
+
+### Questions an agent asks you
+
+An agent, or any script, that needs a decision calls `tuios ask-human` with a
+question and its answers:
+
+```sh
+tuios ask-human 'Deploy the branch to staging?' -o yes -o no -o later
+```
+
+The question is an Asked you row in the Inbox, and the call waits for you:
+
+- When your client shows the pane that asked, the Inbox opens on the question
+  by itself. This is the popup: you are looking at the agent, so its question
+  comes to you. Press the answer's digit.
+- When the question comes from any other pane, nothing takes the keyboard. It
+  raises the usual alert (dock message, notification, sound, under
+  `[notifications.agent]` like a `needs_input`), and waits in the Inbox.
+- With nobody attached, it waits in the Inbox for the next attach.
+
+Only you can answer. The daemon takes an answer only from a client attached
+right now, with the nonce its attach carried, from a process outside every
+pane, the same proof `reply-approval` takes; an agent calling `answer-ask`
+gets `not_human`. The answer has to be one of the question's own answers, and
+the question has to be the one you read.
+
+When the agent's wait (two minutes by default) runs out first, the call returns
+`pending` and the question stays. Your answer, when you give it, is mailed to
+the asking pane from `human`, marked `verified_human`, where `wait-for
+agent-message` picks it up. `d` dismisses a question, and the call returns
+`dismissed`. A pane has one open question: asking another supersedes the
+first. Closing the pane ends its question.
+
+A question and each answer are one line of printable text, at most 160 and 60
+bytes, shown exactly as written. For anything longer, the agent writes you mail
+and asks the short question here. Questions do not survive a daemon restart.
 
 ### Other machines
 

@@ -1188,7 +1188,7 @@ func (s *Session) forgetBroadcastFingerprint() {
 // non-nil, is invoked with the PTY ID when the process exits; it is set before
 // the monitor goroutine starts so it is always visible to monitorExit.
 func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, "", nil, "", false, onExit)
+	return s.createPTY(windowID, width, height, "", nil, "", false, onExit, nil)
 }
 
 // RestorePTY creates a fresh PTY for a resurrected window. It behaves like
@@ -1197,14 +1197,19 @@ func (s *Session) CreatePTY(windowID string, width, height int, onExit func(ptyI
 // and a one-line banner is written to the terminal so the user can see the
 // process is a freshly respawned shell, not the original long-lived one.
 func (s *Session) RestorePTY(windowID string, width, height int, cwd string, onExit func(ptyID string)) (*PTY, error) {
-	return s.createPTY(windowID, width, height, cwd, nil, "", true, onExit)
+	return s.createPTY(windowID, width, height, cwd, nil, "", true, onExit, nil)
 }
 
 // command, when non-empty, is an argv exec'd as the PTY's process in place of
 // the shell. It is deliberately not persisted: a restored window respawns as a
 // shell, because silently rerunning a program the user ran once is not what
 // restoration promises.
-func (s *Session) createPTY(windowID string, width, height int, cwd string, command []string, host string, restored bool, onExit func(ptyID string)) (*PTY, error) {
+//
+// stdout, when non-nil, is the process's standard output instead of the PTY:
+// a popup's captured output goes to a pipe the daemon reads, while the program
+// still draws on the PTY through stderr or /dev/tty. It is only honoured for a
+// local process.
+func (s *Session) createPTY(windowID string, width, height int, cwd string, command []string, host string, restored bool, onExit func(ptyID string), stdout *os.File) (*PTY, error) {
 	s.ptysMu.Lock()
 	defer s.ptysMu.Unlock()
 
@@ -1251,6 +1256,9 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 				cmd = exec.Command(shell)
 			}
 			cmd.Env = s.buildEnv(windowID, restored)
+			if stdout != nil {
+				cmd.Stdout = stdout
+			}
 			// Start the shell in cwd when one was named and still exists; otherwise
 			// fall back to the shell's default (inherited) directory.
 			//
@@ -3467,6 +3475,14 @@ func (p *PTY) IsExited() bool {
 	p.exitedMu.RLock()
 	defer p.exitedMu.RUnlock()
 	return p.exited
+}
+
+// ExitStatus returns the process's exit status and whether it has exited. A
+// process ended by a signal reports -1.
+func (p *PTY) ExitStatus() (int, bool) {
+	p.exitedMu.RLock()
+	defer p.exitedMu.RUnlock()
+	return p.exitCode, p.exited
 }
 
 func (p *PTY) readOutput() {

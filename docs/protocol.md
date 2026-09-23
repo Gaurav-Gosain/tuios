@@ -688,6 +688,25 @@ no marks is unaffected by all of this. What changes for everyone else:
 - The new error codes `no_shell_integration` and `not_at_prompt` come only from
   the new verb `run` and the new capture source.
 
+**The Inbox has a seventh kind, `ask`.** The new verb `ask-human` puts a
+question to the person as an Inbox item, and the new verb `answer-ask` is how
+the person's client answers it (see [ask-human](#ask-human)). What changes for
+existing callers:
+
+- `list-attention` can return items of kind `ask`, and its `counts` object has
+  an `ask` key. The kinds sort approval, ask, question, mail, errored, resume,
+  finished; `ask` is new between the first two. `kinds` accepts `ask`.
+- `attention` events carry `ask` items, and the close reason `superseded` is
+  new: the pane asked a newer question.
+- An `ask` item from a pane closes when the pane closes (`window_closed`), like
+  a blocking item.
+- `popup` takes `wait`, `capture_stdout` and `timeout`. Without them it answers
+  exactly as before; with `wait` it answers `popup_result` instead of
+  `popup_opened`, when the command exits.
+- In the TUI's Inbox, the digit keys 1 to 9 pick an answer on an `ask` item.
+  On everything else, 1, 2 and 3 do what they did, and 4 to 9 do nothing, as
+  before.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -1091,7 +1110,20 @@ none.
 
 Params: `command` (required argv), `session` (optional), `width` and `height`
 (optional, cells such as `"60"` or a share of the pane region such as `"60%"`,
-default `"80%"` and `"60%"`), `name`, `cwd` and `workspace` (all optional).
+default `"80%"` and `"60%"`), `name`, `cwd` and `workspace` (all optional),
+`wait`, `capture_stdout` and `timeout` (optional, below).
+
+With `wait` the call stays open until the command exits, and answers with
+`{"type": "popup_result", "window_id", "name", "exit_code"}`. `exit_code` is
+-1 when a signal ended the command, which is how closing the popup by hand
+ends it. `capture_stdout` (which needs `wait`) gives the command a pipe the
+daemon owns as its standard output instead of the popup, and adds `stdout`
+(at most 1 MiB) and `stdout_truncated` to the answer. A picker such as fzf
+draws on the terminal and prints only the choice, so the choice is what comes
+back. It is refused on Windows. `timeout` bounds the wait in milliseconds; 0,
+the default, waits as long as the popup is open, and a wait that runs out
+fails with `timeout` and leaves the popup open. None of this grants anything:
+the caller picked the command, and what comes back is what it printed.
 
 The size the caller asks for is session state and the rectangle it resolves to
 is not. Each attached client centres the popup in its own pane region, the way
@@ -1789,6 +1821,7 @@ is grouped in this order, oldest first inside each group:
 | Kind | Opens when | Closes when |
 | --- | --- | --- |
 | `approval` | A pane goes to `needs_input` with `blocked_by` `approval`. | The pane leaves `needs_input`. |
+| `ask` | `ask-human` puts a question to the person. `summary` is the question, `options` its answers and `request_id` the question's id. | The person answers it (`answered`, with `answer` and `answered_by`) or dismisses it, the asking pane asks another (`superseded`) or closes. |
 | `question` | A pane goes to `needs_input` with any other `blocked_by`, or none. | The pane leaves `needs_input`. |
 | `mail` | A message to `human` lands in a thread. One item per thread; `count` is the unread messages. | The person's mail in the thread is read. |
 | `errored` | A pane goes to `errored`. | The pane leaves `errored`. |
@@ -1814,7 +1847,7 @@ sent.
 
 Params: `session` (optional; unlike most verbs, omitted means every session;
 without `host` it names a session on this machine), `kinds` (optional list,
-from `approval`, `question`, `mail`, `errored`, `resume`, `finished`, `outbox`), `host`
+from `approval`, `ask`, `question`, `mail`, `errored`, `resume`, `finished`, `outbox`), `host`
 (optional: `local` for this machine or a linked host's name; omitted means
 every machine; an unknown name is `unknown_host`).
 
@@ -2089,6 +2122,79 @@ older daemon answers `unknown_verb`, which the hook reads as no decision.
 `reply-approval` without `summary` answers as before, with no check of the
 line.
 
+### ask-human
+
+Put a question with a fixed set of answers to the person, and wait for the
+answer. The question is an `ask` item in the Inbox. A client the person holds
+that shows the asking pane opens the Inbox on it at once; anywhere else it
+waits there with the usual alert, and with nobody attached it waits for the
+next attach.
+
+Params:
+
+- `session` (optional).
+- `window` (optional): the pane asking, where a late answer is mailed. A caller
+  inside a pane asks as its own pane when it names none, and naming another is
+  `forbidden`. A caller outside every pane may name any pane, or none.
+- `question` (required unless `request_id`): one line of printable text, at
+  most 160 bytes, that the Inbox shows as written. Anything the Inbox would
+  cut, mask or rewrite is `invalid_params`.
+- `options` (required unless `request_id`): 1 to 9 answers, each one line of
+  printable text of at most 60 bytes, no two the same. The person picks one with
+  the digit keys.
+- `timeout` (optional int): milliseconds to wait, default 120000, at most one
+  hour. The question outlives the wait.
+- `wait` (optional bool, default true): false asks and answers `pending` at
+  once.
+- `request_id` (optional): come back for a question already asked: wait on it
+  again, or read how it ended. It takes no question or options, and a caller
+  inside a pane may come back only for its own pane's questions.
+
+Response:
+
+```json
+{"result": {"type": "human_answer", "request_id": "9f86d081884c7d65", "status": "answered", "answer": "no", "answer_index": 2, "answered_by": "client-1790155072046345000", "verified_human": true}}
+```
+
+`status` is `answered`, `pending` (the wait ended first), `dismissed`,
+`superseded` (the pane asked another question), `window_closed`,
+`session_closed`, `evicted` or `shutdown`. A `pending` question stays in the
+Inbox; the answer, when it comes, is mailed to the asking pane from `human`
+with `verified_human` set, so `wait-for agent-message` returns on it, and a
+call with `request_id` reads it. A question from no pane is only read that way.
+
+Refused over a link (`forbidden`): a question is put to the person at this
+machine's clients by something on this machine. At most 16 questions from no
+pane are open per session (`rate_limited`); a pane has one, and a new one
+supersedes it. Questions do not survive a daemon restart.
+
+### answer-ask
+
+Answer an `ask` item for the person. Only a client attached right now can,
+with `human_nonce` from its attach reply and from a process outside every pane,
+the proof `reply-approval` takes; anything else is `not_human`.
+
+Params: `request_id` (required), `answer` (required: one of the item's
+`options`, else `invalid_params` naming them), `human_nonce` (required),
+`question` (optional: the question the answer was picked from; when it is not
+the item's, nothing is answered and the reply says `applied: false`,
+`reason: changed`).
+
+Response:
+
+```json
+{"result": {"type": "ask_answered", "request_id": "9f86d081884c7d65", "answer": "no", "applied": true, "reason": "answered", "answered_by": "client-1790155072046345000"}}
+```
+
+The first answer wins. A later one gets `applied: false` with the answer that
+stands. The item closes with reason `answered`, carrying `answer` and
+`answered_by`, so every other client can say it was answered elsewhere.
+
+Wire compatibility: both verbs are new and the item fields are the ones an
+approval already uses. An older client lists an `ask` item under its own
+heading, or not at all, and cannot answer it; an older daemon answers
+`unknown_verb`.
+
 ### Following linked hosts
 
 A daemon with a `[hosts]` table follows the agents and the Inbox of every
@@ -2336,7 +2442,7 @@ Event types:
 | `session-created` | A session was created. | `session` |
 | `session-closed` | A session was terminated. | `session` |
 | `gap` | Some events were not delivered to this connection. `reason` says why (see below). A gap has no `seq`. | `reason`, `dropped`, `boot_id` |
-| `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `answered`, `window_closed`, `session_closed`, `evicted` or `host_removed`. An `answered` item also carries `answer` and `answered_by`; the close of a linked host's item never reads `answered` here. `session` and `window` are the item's, so the usual filters apply. An item of a linked host also sets `host`, and a subscriber that filters on a session, window or pane does not get it unless it subscribed with `hosts`. | `session`, `window`, `host`, `action`, `attention` |
+| `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `answered`, `superseded`, `window_closed`, `session_closed`, `evicted` or `host_removed`. An `answered` item also carries `answer` and `answered_by`; the close of a linked host's item never reads `answered` here. `session` and `window` are the item's, so the usual filters apply. An item of a linked host also sets `host`, and a subscriber that filters on a session, window or pane does not get it unless it subscribed with `hosts`. | `session`, `window`, `host`, `action`, `attention` |
 | `host-changed` | A linked host's link changed state, or what it holds changed: its sessions, windows or agents. List the hosts again to see what. See [Following linked hosts](#following-linked-hosts). | `host`, `status` |
 | `prompt` | A shell that marks its commands with OSC 133 shows its prompt after anything else: at start, or after a command. A prompt drawn again changes nothing and raises nothing. | `session`, `window`, `pty_id` |
 | `command-started` | A shell with OSC 133 marks started a command. `cmdline` is cut to 512 bytes, with likely secrets masked. | `session`, `window`, `pty_id`, `cmdline` |

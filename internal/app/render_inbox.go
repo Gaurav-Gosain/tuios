@@ -70,6 +70,13 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		// only answer the item under the cursor, which is the one shown.
 		detailFor = func(width int) []string { return inboxApprovalDetail(selected, width) }
 	}
+	if ok && selected.Kind == session.AttentionAsk && selected.RequestID != "" {
+		// A question is shown whole with its answers numbered, and the
+		// digit keys pick one, under the same rule as a held approval.
+		held = true
+		hints = inboxAskHints(selected)
+		detailFor = func(width int) []string { return inboxAskDetail(selected, width) }
+	}
 	m.noteInboxShown(selected, held && inboxShowsWhole(selected), time.Now())
 	rows := m.inboxRows()
 	if len(rows) == 0 {
@@ -341,6 +348,9 @@ func inboxAnswerKeys(it session.AttentionItem) string {
 	if it.RequestID == "" {
 		return ""
 	}
+	if it.Kind == session.AttentionAsk {
+		return inboxAskKeys(it)
+	}
 	var keys []string
 	for _, a := range inboxAnswerOrder {
 		if slices.Contains(it.Options, a.decision) {
@@ -381,7 +391,11 @@ func inboxApprovalDetail(it session.AttentionItem, width int) []string {
 // an ASCII-only terminal cannot draw, would make the line read as something
 // it does not say, so such a prompt is answered in the pane.
 func inboxShowsWhole(it session.AttentionItem) bool {
-	for _, line := range append([]string{it.Summary}, it.AlwaysScope...) {
+	lines := append([]string{it.Summary}, it.AlwaysScope...)
+	if it.Kind == session.AttentionAsk {
+		lines = append(lines, it.Options...)
+	}
+	for _, line := range lines {
 		if printableTitle(line) != line || strings.IndexFunc(line, func(r rune) bool { return !unicode.IsPrint(r) }) >= 0 {
 			return false
 		}
@@ -400,6 +414,53 @@ func inboxApprovalHints(it session.AttentionItem) []overlay.Hint {
 	}
 	return append(hints,
 		overlay.Hint{Key: overlay.EnterKey(), Label: "answer in pane"},
+		overlay.Hint{Key: "d", Label: "dismiss"},
+		overlay.Hint{Key: "esc", Label: "close"},
+	)
+}
+
+// inboxAskKeys is the digit keys that answer a question, such as "1-3".
+func inboxAskKeys(it session.AttentionItem) string {
+	switch n := min(len(it.Options), 9); n {
+	case 0:
+		return ""
+	case 1:
+		return "1"
+	default:
+		return "1-" + strconv.Itoa(n)
+	}
+}
+
+// inboxAskDetail is the question under the cursor in full, wrapped, then each
+// answer after the key that picks it.
+func inboxAskDetail(it session.AttentionItem, width int) []string {
+	width = max(width-2, 8)
+	if !inboxShowsWhole(it) {
+		return wrapPlain("  This question has characters this terminal cannot show, so it is not answered here.", width)
+	}
+	var lines []string
+	for _, l := range wrapPlain(printableTitle(it.Summary), width) {
+		lines = append(lines, "  "+l)
+	}
+	for i, o := range it.Options {
+		if i >= 9 {
+			break
+		}
+		for _, l := range wrapPlain(strconv.Itoa(i+1)+"  "+printableTitle(o), width-2) {
+			lines = append(lines, "    "+l)
+		}
+	}
+	return lines
+}
+
+// inboxAskHints are the hints for a question under the cursor: the digits
+// that pick an answer, then going to the pane that asked.
+func inboxAskHints(it session.AttentionItem) []overlay.Hint {
+	hints := []overlay.Hint{{Key: inboxAskKeys(it), Label: "answer"}}
+	if it.Window != "" {
+		hints = append(hints, overlay.Hint{Key: overlay.EnterKey(), Label: "go to pane"})
+	}
+	return append(hints,
 		overlay.Hint{Key: "d", Label: "dismiss"},
 		overlay.Hint{Key: "esc", Label: "close"},
 	)

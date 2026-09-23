@@ -2437,6 +2437,32 @@ func maybeCopyScreenshot(path, format string, req screenshotRequest) (bool, []st
 
 // popupOptions is the `tuios popup` command line, gathered so the runner reads
 // as one thing rather than as seven positional arguments.
+// defaultPopupCallTimeout is the read deadline of a popup call that does not
+// wait, the verb client's own default.
+const defaultPopupCallTimeout = 30 * time.Second
+
+// printPopupResult prints a waited popup's captured output as it was printed,
+// and returns the command's status as this process's.
+func printPopupResult(w io.Writer, raw json.RawMessage) error {
+	var res struct {
+		ExitCode int    `json:"exit_code"`
+		Stdout   string `json:"stdout"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	fmt.Fprint(w, res.Stdout)
+	if res.ExitCode != 0 {
+		code := res.ExitCode
+		if code < 0 {
+			// Ended by a signal, which is how closing the popup ends it.
+			code = 130
+		}
+		return &statusError{code: code}
+	}
+	return nil
+}
+
 type popupOptions struct {
 	session   string
 	name      string
@@ -2446,6 +2472,11 @@ type popupOptions struct {
 	workspace int
 	command   []string
 	jsonOut   bool
+	// wait keeps the call open until the command exits; capture returns its
+	// standard output; timeout bounds the wait in milliseconds, 0 for none.
+	wait    bool
+	capture bool
+	timeout int
 }
 
 // runPopup opens a popup and reports its id, which is the handle every later
@@ -2485,12 +2516,32 @@ func runPopup(o popupOptions) error {
 	if o.workspace != 0 {
 		params["workspace"] = o.workspace
 	}
-	raw, err := client.Call("popup", params)
+	callTimeout := defaultPopupCallTimeout
+	if o.wait {
+		params["wait"] = true
+		if o.capture {
+			params["capture_stdout"] = true
+		}
+		if o.timeout > 0 {
+			params["timeout"] = o.timeout
+		}
+		// The daemon answers when the popup's command exits, which is when
+		// the person is done with it. With no timeout there is no bound worth
+		// guessing, so the call waits a day.
+		callTimeout = 24 * time.Hour
+		if o.timeout > 0 {
+			callTimeout = time.Duration(o.timeout)*time.Millisecond + 10*time.Second
+		}
+	}
+	raw, err := client.CallWithTimeout("popup", params, callTimeout)
 	if err != nil {
 		return reportVerbError(explainVerbError("popup", err), o.jsonOut)
 	}
 	if o.jsonOut {
 		return printVerbResult(raw, o.jsonOut)
+	}
+	if o.wait {
+		return printPopupResult(os.Stdout, raw)
 	}
 	var res struct {
 		WindowID string `json:"window_id"`
