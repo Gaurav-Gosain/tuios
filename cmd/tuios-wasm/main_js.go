@@ -1,21 +1,12 @@
 //go:build js && wasm
 
-// Command tuios-wasm runs tuios entirely in a browser tab. There is no server
-// and no daemon: panes run the in-memory fake shell from internal/webshell, and
-// the page owns the terminal renderer.
+// Command tuios-wasm runs tuios entirely in a browser tab, for the guided tour
+// at tuios.gaurav.zip/learn. There is no server and no daemon: panes run the
+// in-memory fake shell from internal/webshell, the page owns the terminal
+// renderer, and internal/learn reports what the person does.
 //
 // The page talks to it through one global object, `tuios`, which the program
-// sets before it starts:
-//
-//	tuios.onOutput(fn)   fn(Uint8Array): bytes for the terminal renderer
-//	tuios.onEvent(fn)    fn(object): what the user did, for a guided tour
-//	tuios.input(data)    keyboard and mouse bytes, a string or a Uint8Array
-//	tuios.resize(c, r)   the renderer's size in cells
-//	tuios.state()        the current state as an object
-//	tuios.command(name, ...args)  drive the app from the page (see runCommand)
-//
-// Output written before onOutput is registered is held and delivered to the
-// first callback, so the page can register after start.
+// sets before it starts. README.md documents it in full.
 package main
 
 import (
@@ -25,18 +16,18 @@ import (
 	"syscall/js"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/xpty"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/input"
+	"github.com/Gaurav-Gosain/tuios/internal/learn"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 )
 
-// jsBridge holds the callbacks the page registered.
+// jsBridge holds the callbacks the page registered. Output and events that
+// arrive before a callback is registered are held and delivered to it.
 type jsBridge struct {
 	mu       sync.Mutex
 	output   js.Value
@@ -116,30 +107,11 @@ func main() {
 	ptyspawn.NewGuestPty = func(width, height int) (xpty.Pty, error) {
 		return webshell.NewPty(width, height), nil
 	}
-	webshell.SetEventSink(func(e webshell.Event) {
-		ev := map[string]any{"type": e.Type}
-		if e.WindowID != "" {
-			ev["windowId"] = e.WindowID
-		}
-		data := map[string]any{}
-		for k, v := range e.Data {
-			data[k] = v
-		}
-		ev["data"] = data
-		bridge.emit(ev)
-	})
 
 	cols, rows := 120, 36
 	if v := js.Global().Get("tuiosInitialSize"); v.Truthy() {
 		cols, rows = v.Index(0).Int(), v.Index(1).Int()
 	}
-
-	// The compositor serializes its canvas with lipgloss.Sprint, which
-	// downsamples to lipgloss.Writer's profile. That profile is detected from
-	// os.Stdout, which in the browser is not a terminal, so every colour was
-	// stripped from any frame the compositor drew (two panes, an overlay, the
-	// prefix). The page's renderer is truecolor.
-	lipgloss.Writer.Profile = colorprofile.TrueColor
 
 	cfg := config.DefaultConfig()
 	// A browser tab has no desktop notifications. Left on, the default warns
@@ -151,6 +123,8 @@ func main() {
 	seed := config.AppearanceFrom(cfg, config.Overrides{})
 	osModel := app.NewOS(app.OSOptions{
 		Client:          app.ClientBrowser,
+		LearnMode:       true,
+		GuestApps:       learn.LauncherApps(),
 		ConfigReadOnly:  true,
 		KeybindRegistry: config.NewKeybindRegistry(cfg),
 		UserConfig:      cfg,
@@ -164,29 +138,31 @@ func main() {
 		},
 	})
 
+	var prog *tea.Program
+	send := func(msg tea.Msg) {
+		// A js.Func must not block, and Send blocks until the program's loop
+		// takes the message.
+		go prog.Send(msg)
+	}
+	model := learn.New(osModel, func(e learn.Event) { bridge.emit(e.ToMap()) }, send)
+
 	inputPipe := newInputPipe()
-	model := newObserved(osModel, bridge.emit)
 	// The transport's own options: the page's input, the output writer, and
 	// the size, the three things sip's MakeOptions supplies for a served
-	// session. Environment and colour profile need no option: the environment
-	// set above (with CLICOLOR_FORCE) makes Bubble Tea detect truecolor on a
-	// writer that is not a terminal. The size has to be an option: with no
-	// TTY to ask, Bubble Tea otherwise starts at 0x0 and reports that after
-	// any WindowSizeMsg sent before Run.
+	// session. The size has to be an option: with no TTY to ask, Bubble Tea
+	// otherwise starts at 0x0 and reports that after any WindowSizeMsg sent
+	// before Run.
 	opts := append(app.ProgramOptions(),
 		tea.WithInput(inputPipe),
 		tea.WithOutput(bridge),
 		tea.WithWindowSize(cols, rows),
 		// Last, so it replaces the filter ProgramOptions set: that one only
-		// recognises *app.OS, and the program runs the observing wrapper.
-		tea.WithFilter(func(m tea.Model, msg tea.Msg) tea.Msg {
-			if o, ok := m.(*observed); ok {
-				return app.FilterMouseMotion(o.OS, msg)
-			}
-			return msg
-		}),
+		// recognises *app.OS, and the program runs the tour's model. This one
+		// unwraps it, turns a quit into a note, and runs the same motion
+		// filter.
+		tea.WithFilter(learn.Filter),
 	)
-	prog := tea.NewProgram(model, opts...)
+	prog = tea.NewProgram(model, opts...)
 
 	api := js.Global().Get("Object").New()
 	api.Set("onOutput", js.FuncOf(func(_ js.Value, args []js.Value) any {
@@ -231,14 +207,12 @@ func main() {
 		}
 		c, r := args[0].Int(), args[1].Int()
 		if c > 0 && r > 0 {
-			// A js.Func must not block, and Send blocks until the program's
-			// loop takes the message, which it cannot do before Run.
-			go prog.Send(tea.WindowSizeMsg{Width: c, Height: r})
+			send(tea.WindowSizeMsg{Width: c, Height: r})
 		}
 		return nil
 	}))
 	api.Set("state", js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		return js.ValueOf(model.lastState().toJS())
+		return js.ValueOf(model.State().ToMap())
 	}))
 	api.Set("command", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) == 0 {
@@ -248,8 +222,21 @@ func main() {
 		for i, a := range args {
 			strs[i] = a.String()
 		}
-		go prog.Send(commandMsg{name: strs[0], args: strs[1:]})
+		send(learn.CommandMsg{Name: strs[0], Args: strs[1:]})
 		return nil
+	}))
+	api.Set("actions", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		return js.ValueOf(stringMap(learn.Actions()))
+	}))
+	api.Set("unavailable", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		return js.ValueOf(stringMap(app.LearnUnavailableActions()))
+	}))
+	api.Set("commands", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		out := make([]any, len(learn.Commands))
+		for i, c := range learn.Commands {
+			out[i] = c
+		}
+		return js.ValueOf(out)
 	}))
 	js.Global().Set("tuios", api)
 	if ready := js.Global().Get("onTuiosReady"); ready.Type() == js.TypeFunction {
@@ -261,6 +248,14 @@ func main() {
 		return
 	}
 	bridge.emit(map[string]any{"type": "exit", "data": map[string]any{}})
+}
+
+func stringMap(m map[string]string) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 // inputPipe is what Bubble Tea reads the page's input from.

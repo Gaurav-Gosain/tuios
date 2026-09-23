@@ -61,14 +61,14 @@ const t0 = performance.now();
 window.tuiosTimings = {};
 const mark = (name) => { if (!(name in tuiosTimings)) tuiosTimings[name] = Math.round(performance.now() - t0); };
 
-// A tiny track to prove step detection. Each step names the event that
-// completes it; the real site would load tracks from data. Every step has to
-// change the screen visibly, so a step whose key would otherwise change
-// nothing sets the scene first in start, which runs when the step becomes
-// current.
+// A small track to try the event contract (see README.md). Each step names
+// the event that completes it; the docs site loads its tracks from data.
+// Every step has to change the screen visibly, so a step whose key would
+// otherwise change nothing sets the scene first in start, which runs when the
+// step becomes current.
 const steps = [
   { html: 'Press <kbd>n</kbd> to open a terminal window', done: (e) => e.type === 'window.open' },
-  { html: 'Press <kbd>i</kbd> to type in it, then run <kbd>ls</kbd>', done: (e) => e.type === 'shell.command' && e.data.command === 'ls' },
+  { html: 'Press <kbd>i</kbd> to type in it, then run <kbd>ls</kbd>', done: (e) => e.type === 'shell.command' && e.data.command === 'ls' && e.data.exitCode === 0 },
   { html: 'Open another: <kbd>Ctrl+B</kbd> then <kbd>c</kbd>', done: (e) => e.type === 'window.open' && e.state.totalWindows >= 2 },
   {
     // tuios starts tiled, so the page turns tiling off and spreads the
@@ -78,6 +78,7 @@ const steps = [
     start: () => setTimeout(() => tuios.command('cascade'), 900),
     done: (e) => e.type === 'tiling' && e.data.to === true,
   },
+  { html: 'Run <kbd>claude</kbd>, and say <kbd>y</kbd> when it asks', done: (e) => e.type === 'agent' && e.data.to === 'done' },
   { html: 'Workspace 2: <kbd>Ctrl+B</kbd> <kbd>w</kbd> <kbd>2</kbd>', done: (e) => e.type === 'workspace' && e.data.to === 2 },
 ];
 let current = 0;
@@ -128,13 +129,29 @@ function isReloadKey(e) {
   return (e.ctrlKey || e.metaKey) && !e.altKey && (e.code === 'KeyR' || e.key === 'r' || e.key === 'R');
 }
 
+// The server picks .br or .gz by Accept-Encoding and names the file
+// tuios.wasm. A static host that cannot set Content-Encoding serves no
+// tuios.wasm at all, and then the page fetches the gzip file and unpacks it
+// itself.
+async function loadWasm(importObject) {
+  let res = await fetch('tuios.wasm');
+  if (!res.ok) {
+    const gz = await fetch('tuios.wasm.gz');
+    if (!gz.ok) throw new Error('no tuios.wasm and no tuios.wasm.gz');
+    res = new Response(gz.body.pipeThrough(new DecompressionStream('gzip')),
+      { headers: { 'content-type': 'application/wasm' } });
+  }
+  return WebAssembly.instantiateStreaming(res, importObject);
+}
+
 (async function main() {
   const term = new WebTerm.WebTerm({
     fontFamily: 'JetBrainsMono Nerd Font Mono',
     fontSize: 14,
+    // build.sh writes woff2 when it has fonttools, and the TTF otherwise.
     fonts: [
-      { source: 'url(fonts/JetBrainsMonoNerdFontMono-Regular.ttf)', weight: '400', style: 'normal' },
-      { source: 'url(fonts/JetBrainsMonoNerdFontMono-Bold.ttf)', weight: '700', style: 'normal' },
+      { source: "url(fonts/JetBrainsMonoNerdFontMono-Regular.woff2) format('woff2'), url(fonts/JetBrainsMonoNerdFontMono-Regular.ttf) format('truetype')", weight: '400', style: 'normal' },
+      { source: "url(fonts/JetBrainsMonoNerdFontMono-Bold.woff2) format('woff2'), url(fonts/JetBrainsMonoNerdFontMono-Bold.ttf) format('truetype')", weight: '700', style: 'normal' },
     ],
     renderer: { prefer: new URLSearchParams(location.search).get('renderer') || 'webgl' },
     theme: { background: '#11111b' },
@@ -146,8 +163,7 @@ function isReloadKey(e) {
 
   // Start the wasm download while the fonts load.
   const go = new Go();
-  const wasm = WebAssembly.instantiateStreaming(fetch('tuios.wasm'), go.importObject)
-    .then((r) => { mark('wasmCompiled'); return r; });
+  const wasm = loadWasm(go.importObject).then((r) => { mark('wasmCompiled'); return r; });
 
   await term.open(document.getElementById('terminal'));
   mark('terminalOpen');
