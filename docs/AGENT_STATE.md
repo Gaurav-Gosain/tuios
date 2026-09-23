@@ -1377,6 +1377,51 @@ finished. Hooks are on by default in Codex; `status` notes a `config.toml` that
 turns them off with `[features] hooks = false`. `tuios agent-hook codex` still
 reads a `notify` payload, so a hand-wired `notify` reports `done`.
 
+### The MCP server
+
+`tuios mcp` offers tuios to a harness as Model Context Protocol tools, so an
+agent drives tuios with tool calls instead of shell commands it read about in
+the skill. `--mcp` on install registers it with the four harnesses that read
+MCP servers from a file tuios can edit:
+
+```sh
+tuios integration install claude-code --mcp        # read-only
+tuios integration install codex --mcp-write        # plus the tools that type
+```
+
+| Harness | What is written |
+| ------- | --------------- |
+| Claude Code | a `tuios` server in `mcpServers` in `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`), the user scope `claude mcp add --scope user` writes |
+| Codex | an `[mcp_servers.tuios]` table between two marker comments at the end of `~/.codex/config.toml` |
+| Gemini CLI | a `tuios` server in `mcpServers` in `~/.gemini/settings.json` |
+| opencode | a local `tuios` server in `mcp` in `~/.config/opencode/opencode.json` |
+
+The entry runs `tuios mcp --integration <version>`, the marker that tells it
+from a server the user named `tuios` themselves, which install refuses to
+overwrite and uninstall leaves alone. Uninstall removes it with the hooks.
+
+The server is read-only by default: it lists and captures panes, waits for
+states, follows the event stream (`tuios_events`, resumable with the
+`last_seq` and `boot_id` it returns), reports the agent's own state and meta,
+and sends and reads mail. `--write` adds `tuios_send_text`,
+`tuios_send_keys`, `tuios_ask_agent`, `tuios_respond` and `tuios_fan`. Either
+way it reaches only the session of the pane it runs in, the sessions in its fan
+group, and the sessions a `fan` from it started, unless it was started with
+`--scope all`.
+
+The daemon holds it to that, not the server: every call opens a connection and
+restricts it with `restrict-connection` before anything else, and the daemon
+answers `forbidden` to whatever the restriction does not allow (see
+[restrict-connection](protocol.md#restrict-connection)). The daemon finds the
+server's pane from the kernel's record of its pid, so a harness that starts its
+MCP servers with a scrubbed environment, as Codex does, changes nothing. Where
+the kernel cannot say, `TUIOS_PANE_TOKEN` proves `TUIOS_PANE_ID`.
+
+A self report through the server with no `window` lands on the agent's own pane,
+and mail goes out from it, with nothing for the agent to fill in. Results that
+carry a pane's text or another agent's mail come with a note that it is data,
+not instructions.
+
 ### What each event reports
 
 `tuios agent-hook` reads the payload on stdin (the Codex `notify` payload
@@ -1622,6 +1667,7 @@ When tuios spawns a pane it exports the environment a state-reporting shim needs
 | `TUIOS_PANE_ID`   | The pane's window id                             |
 | `TUIOS_WINDOW_ID` | The pane's window id (alias of `TUIOS_PANE_ID`)  |
 | `TUIOS_SESSION`   | The session name                                 |
+| `TUIOS_PANE_TOKEN` | Proves `TUIOS_PANE_ID` to `restrict-connection` where the kernel cannot name the caller's pane. Good for one pane of one daemon start |
 
 A shim guards on these and no-ops when they are unset, so it is safe to leave
 wired up outside tuios. `tuios agent-hook` uses `TUIOS_PANE_ID` and
@@ -1827,9 +1873,12 @@ proof, as before.
 - **Other panes' prompts.** An agent can still `send-keys` into another pane
   and answer that agent's approval menu itself, or `set-agent-state` on another
   pane to take a `needs_input` off the rail. Neither is acting as the person
-  through tuios, and both are what per-pane scoped tokens are for. `ask-agent`
-  refuses a pane on `needs_input` (`agent_blocked`), which covers the accident
-  but not an agent set on it.
+  through tuios. Through `tuios mcp` the second is not possible at all, since
+  its connections write only the agent's own pane's record, and the first is
+  possible only with `--write` and only inside the agent's own session and fan
+  group (see [The MCP server](#the-mcp-server)). Through the CLI both still
+  are, until a restriction is required of every connection from a pane. `ask-agent` refuses a pane on `needs_input` (`agent_blocked`),
+  which covers the accident but not an agent set on it.
 - **The person's screen.** `popup` and a program in a pane can draw anything,
   including a fake question. Read what a prompt asks before answering it.
 - **Leaving the pane on purpose.** See above.

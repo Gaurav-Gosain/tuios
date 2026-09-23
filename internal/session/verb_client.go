@@ -61,6 +61,12 @@ func DialVerbClientAs(clientVersion string) (*VerbClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get socket path: %w", err)
 	}
+	return DialVerbClientAt(socketPath, clientVersion)
+}
+
+// DialVerbClientAt is DialVerbClientAs on the socket at socketPath, for a
+// caller that found the daemon's socket some other way than GetSocketPath.
+func DialVerbClientAt(socketPath, clientVersion string) (*VerbClient, error) {
 	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to daemon: %w", err)

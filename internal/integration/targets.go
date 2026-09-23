@@ -571,6 +571,9 @@ type Status struct {
 	BinaryPath      string   `json:"binary_path,omitempty"`
 	TuiosOnPath     bool     `json:"tuios_on_path"`
 	Notes           []string `json:"notes,omitempty"`
+	// MCP is the MCP server registration, for a harness tuios can register
+	// one with. See mcp.go.
+	MCP *MCPStatus `json:"mcp,omitempty"`
 }
 
 var versionRe = regexp.MustCompile(`TUIOS_INTEGRATION_VERSION=(\d+)|` + managedMarker + ` (\d+)`)
@@ -588,6 +591,10 @@ func parseVersion(s string) int {
 // runs, so an install pointing at another binary reads as not current.
 func (t *Target) Status(env Env, tuios string) Status {
 	st := Status{Harness: t.ID, Name: t.Name, Path: t.Path(env), Reports: t.Reports, WantVersion: t.Version, Binary: t.Binary}
+	if t.SupportsMCP() {
+		m := t.MCPState(env, tuios)
+		st.MCP = &m
+	}
 	if fi, err := os.Stat(t.ConfigDir(env)); err == nil && fi.IsDir() {
 		st.ConfigDirExists = true
 	}

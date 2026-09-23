@@ -85,12 +85,20 @@ beside it with a .tuios.bak suffix, and later rewrites leave that copy alone.`,
 }
 
 func newIntegrationInstallCommand() *cobra.Command {
-	var all bool
+	var all, mcp, mcpWrite bool
 	var command string
 	cmd := &cobra.Command{
 		Use:   "install [harness...]",
 		Short: "Write tuios's hook entries into a harness's configuration",
+		Long: `Write tuios's hook entries into a harness's configuration.
+
+With --mcp, also register tuios mcp as an MCP server named tuios, for the
+harnesses that read MCP servers from a file tuios can edit: ` + strings.Join(integration.MCPHarnessIDs(), ", ") + `.
+The server is read-only and reaches only the session of the pane the harness
+runs in. --mcp-write registers it with --write, which adds the tools that
+type into panes.`,
 		Example: `  tuios integration install claude-code
+  tuios integration install claude-code --mcp
   tuios integration install --all`,
 		ValidArgsFunction: completeIntegrationHarness,
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -98,6 +106,16 @@ func newIntegrationInstallCommand() *cobra.Command {
 			targets, err := integrationTargets(env, args, all, true)
 			if err != nil {
 				return err
+			}
+			if mcpWrite {
+				mcp = true
+			}
+			if mcp && !all {
+				for _, t := range targets {
+					if !t.SupportsMCP() {
+						return fmt.Errorf("tuios cannot register an MCP server with %s. It can with %s", t.Name, strings.Join(integration.MCPHarnessIDs(), ", "))
+					}
+				}
 			}
 			if len(targets) == 0 {
 				fmt.Println("No supported harness has a configuration directory here. Run the harness once, then install.")
@@ -123,6 +141,11 @@ func newIntegrationInstallCommand() *cobra.Command {
 				for _, n := range res.Notes {
 					fmt.Printf("  note: %s\n", n)
 				}
+				if mcp && t.SupportsMCP() && err == nil {
+					if !installMCPFor(t, env, command, mcpWrite) {
+						failed = append(failed, t.ID+" (mcp)")
+					}
+				}
 			}
 			if len(failed) > 0 {
 				return fmt.Errorf("install failed for %s", strings.Join(failed, ", "))
@@ -132,7 +155,31 @@ func newIntegrationInstallCommand() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&all, "all", false, "Install for every supported harness whose configuration directory exists")
 	cmd.Flags().StringVar(&command, "command", "tuios", "Program the hooks run, when tuios is not on the harness's PATH")
+	cmd.Flags().BoolVar(&mcp, "mcp", false, "Also register tuios mcp, read-only, as an MCP server named tuios")
+	cmd.Flags().BoolVar(&mcpWrite, "mcp-write", false, "Register tuios mcp with --write, which adds the tools that type into panes. Implies --mcp")
 	return cmd
+}
+
+// installMCPFor registers the MCP server with one harness and says what it did.
+func installMCPFor(t *integration.Target, env integration.Env, command string, write bool) bool {
+	res, err := t.InstallMCP(env, command, write)
+	switch {
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "%s: MCP server: %v\n", t.Name, err)
+		return false
+	case res.Changed:
+		fmt.Printf("%s: MCP server registered in %s", t.Name, res.Path)
+		if res.Backup != "" {
+			fmt.Printf(" (previous copy in %s)", res.Backup)
+		}
+		fmt.Println()
+	default:
+		fmt.Printf("%s: MCP server already registered and current in %s\n", t.Name, res.Path)
+	}
+	for _, n := range res.Notes {
+		fmt.Printf("  note: %s\n", n)
+	}
+	return true
 }
 
 func newIntegrationUninstallCommand() *cobra.Command {
@@ -160,6 +207,16 @@ func newIntegrationUninstallCommand() *cobra.Command {
 					printOtherPaths(res)
 				default:
 					fmt.Printf("%s: nothing of tuios's installed\n", t.Name)
+				}
+				if t.SupportsMCP() {
+					mres, merr := t.UninstallMCP(env)
+					switch {
+					case merr != nil:
+						fmt.Fprintf(os.Stderr, "%s: MCP server: %v\n", t.Name, merr)
+						failed = append(failed, t.ID+" (mcp)")
+					case mres.Changed:
+						fmt.Printf("%s: MCP server removed from %s\n", t.Name, mres.Path)
+					}
 				}
 			}
 			if len(failed) > 0 {
@@ -240,9 +297,34 @@ func printIntegrationStatus(w io.Writer, statuses []integration.Status, asJSON b
 	}
 	for _, s := range statuses {
 		fmt.Fprintf(w, "%-12s %s\n", s.Harness, integrationVerdict(s))
+		if v := mcpVerdict(s); v != "" {
+			fmt.Fprintf(w, "%-12s mcp: %s\n", "", v)
+		}
 		for _, n := range s.Notes {
 			fmt.Fprintf(w, "%-12s note: %s\n", "", n)
 		}
 	}
 	return nil
+}
+
+// mcpVerdict says whether the MCP server is registered, "" when it is not and
+// nothing is in its way, so the report stays short for the common case.
+func mcpVerdict(s integration.Status) string {
+	m := s.MCP
+	if m == nil {
+		return ""
+	}
+	mode := "read-only"
+	if m.Write {
+		mode = "--write"
+	}
+	switch {
+	case m.Installed && m.Current:
+		return fmt.Sprintf("registered, %s, current (v%d)", mode, m.Version)
+	case m.Installed:
+		return "registered, out of date: run tuios integration install " + s.Harness + " --mcp"
+	case m.Foreign:
+		return "a server named tuios is registered that tuios did not write; left alone"
+	}
+	return ""
 }

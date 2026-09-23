@@ -2010,9 +2010,10 @@ them.
 | `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
 | `tuios explain-agent-screen` | Show what a harness's screen and title rules make of a pane: the tail, each rule's region and the text it read there, why each refusal refused (strings, patterns, nested groups), the title and last OSC 9;4 progress report, and which manifest file is in force |
-| `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, gemini-cli, opencode, kilo, amp, kimi and pi report state; antigravity, copilot, crush, cursor-agent, devin, droid, grok, hermes, qoder and qwen report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). See [Agent state](AGENT_STATE.md#harness-integrations) |
-| `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, and nothing else |
-| `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id (`--json`, with `reports`) |
+| `tuios integration install [harness...]` | Write tuios's managed hook entries or plugin into a harness's configuration: claude-code, codex, gemini-cli, opencode, kilo, amp, kimi and pi report state; antigravity, copilot, crush, cursor-agent, devin, droid, grok, hermes, qoder and qwen report the session id only (`--all` for every harness that has run here, `--command` for a tuios not on PATH). `--mcp` also registers `tuios mcp` as an MCP server named tuios with claude-code, codex, gemini-cli and opencode; `--mcp-write` registers it with `--write`. See [Agent state](AGENT_STATE.md#harness-integrations) |
+| `tuios integration uninstall [harness...]` | Remove the hook entries tuios wrote, and the MCP server entry it wrote, and nothing else |
+| `tuios integration status [harness...]` | Say whether each integration is installed and current, and whether it reports state or the session id, and for the four harnesses with an MCP registration whether `tuios mcp` is registered (`--json`, with `reports` and `mcp`) |
+| `tuios mcp` | Serve tuios to an agent harness as an MCP server over stdio. Read-only by default and held to the session of the pane it runs in; `--write` adds the tools that type into panes, `--scope all` reaches every session. See [tuios mcp](#tuios-mcp) |
 | `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes missing theirs, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
 | `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
 | `tuios stash put <file>` | Copy a file into the session store and print the stored path |
@@ -2154,6 +2155,60 @@ COUNT=$(tuios capture-pane | grep -c 'test-marker-12345')
 if [ "$COUNT" -ge 2 ]; then
     echo "command ran"
 fi
+```
+
+---
+
+### `tuios mcp`
+
+Serve tuios to an agent harness as a Model Context Protocol server over stdin
+and stdout. The harness starts it; nobody runs it by hand.
+
+```bash
+tuios mcp [--write] [--scope own|all]
+```
+
+**Flags:**
+
+- `--write`: Also list the tools that type into panes: `tuios_send_text`,
+  `tuios_send_keys`, `tuios_ask_agent`, `tuios_respond` and `tuios_fan`
+- `--scope`: `own` (the default) reaches only the session of the pane the
+  server runs in, its fan group, and the sessions a `fan` from it started.
+  `all` reaches every session, for a harness that runs outside tuios
+
+**Tools, by default:** `tuios_list_agents`, `tuios_list_windows`,
+`tuios_get_agent_state`, `tuios_capture_pane`, `tuios_peek_prompt`,
+`tuios_wait_for`, `tuios_read_agent_messages`, `tuios_send_agent_message`,
+`tuios_set_agent_state`, `tuios_set_agent_meta` and `tuios_events`. Each is a
+daemon verb, and its input schema is generated from the verb table, so it takes
+the verb's own parameters. `tuios_events` follows the event stream: it returns
+what happened since `after_seq`, or waits up to `wait_ms` for the next events,
+and answers with the `last_seq` and `boot_id` to pass to the next call.
+
+**How it is held to its grant:** every tool call opens its own connection to
+the daemon and calls `restrict-connection` on it first, so the daemon refuses
+what the flags do not grant, with `forbidden`. The server finds its pane from
+the kernel's record of its pid, and where the kernel cannot say, from
+`TUIOS_PANE_ID` and `TUIOS_PANE_TOKEN`. A server with `--scope own` that runs
+in no pane reaches nothing. A daemon too old to know `restrict-connection` runs
+nothing, and the tool says to restart it. Text read from a pane or a message is
+marked as data, not instructions. See [restrict-connection](protocol.md#restrict-connection).
+
+The daemon's socket is `TUIOS_SOCKET` when the harness passes it, else the one
+`tuios` always uses. A harness that starts its MCP servers without
+`XDG_RUNTIME_DIR` still finds a daemon under `/run/user/<uid>` on Linux.
+
+**Registering it:**
+
+```bash
+# Hooks and the read-only MCP server
+tuios integration install claude-code --mcp
+
+# With the tools that type into panes
+tuios integration install codex --mcp-write
+
+# By hand, in Claude Code
+claude mcp add --scope user tuios -- tuios mcp
 ```
 
 ---
