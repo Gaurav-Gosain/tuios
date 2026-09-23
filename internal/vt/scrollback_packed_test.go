@@ -3,10 +3,12 @@ package vt
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"image/color"
 	"math/rand"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 	"unsafe"
 
@@ -345,6 +347,7 @@ func (sb *Scrollback) encodeLineReference(buf []byte, cells uv.Line, width int) 
 	buf = binary.AppendUvarint(buf, uint64(width))
 	var style packedStyle
 	var link uv.Link
+	sb.lineLinks = sb.lineLinks[:0]
 	for i := range cells {
 		c := &cells[i]
 		if st := sb.packStyle(&c.Style); st != style {
@@ -357,8 +360,7 @@ func (sb *Scrollback) encodeLineReference(buf []byte, cells uv.Line, width int) 
 		}
 		if c.Link != link {
 			link = c.Link
-			buf = append(buf, sbLink)
-			buf = binary.AppendUvarint(buf, uint64(sb.packLink(link)))
+			buf = sb.appendLink(buf, link)
 		}
 		if c.Width != 1 {
 			buf = append(buf, sbCell, uint8(max(0, min(c.Width, 255))))
@@ -427,5 +429,130 @@ func TestScrollbackRingGrowsAsLinesArrive(t *testing.T) {
 	}
 	if got := sb.Line(0)[0].Content; got != "x" {
 		t.Fatalf("oldest line is %q, want x", got)
+	}
+}
+
+// TestScrollbackForgetsWhatItEvicts holds a full ring to its size when every
+// line carries something new: a hyperlink to a different file and a
+// multi-rune cluster, which is what an agent or a compiler printing
+// file:line links emits. Links and clusters used to be interned for the life
+// of the pane, so the ring let go of its lines and kept everything they
+// pointed at, about 150 bytes a link.
+func TestScrollbackForgetsWhatItEvicts(t *testing.T) {
+	const ring, pushed = 1000, 50000
+	url := func(i int) string { return fmt.Sprintf("file:///home/user/project/pkg/file_%d.go", i) }
+	line := make(uv.Line, 80)
+	sb := NewScrollback(ring)
+	push := func(i int) {
+		for x := range line {
+			line[x] = uv.EmptyCell
+		}
+		link := uv.Link{URL: url(i)}
+		for x, r := range fmt.Sprintf("pkg/file_%d.go:1", i) {
+			line[x] = uv.Cell{Content: string(r), Width: 1, Link: link}
+		}
+		line[len(line)-2] = uv.Cell{Content: fmt.Sprintf("é%c", 'a'+rune(i%26)), Width: 1}
+		sb.PushLine(line)
+	}
+	for i := range ring {
+		push(i)
+	}
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	for i := ring; i < pushed; i++ {
+		push(i)
+	}
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	runtime.KeepAlive(sb)
+	if grew := int64(after.HeapAlloc) - int64(before.HeapAlloc); grew > 256<<10 {
+		t.Fatalf("a full ring of %d lines grew by %d bytes over %d more pushes, want it flat", ring, grew, pushed-ring)
+	}
+	if got := sb.Line(ring - 1)[0].Link.URL; got != url(pushed-1) {
+		t.Fatalf("newest line links to %q, want %q", got, url(pushed-1))
+	}
+}
+
+// TestScrollbackWritesALinkOncePerLine checks that a line going in and out of
+// the same link writes the link's text once and refers back to it after,
+// and that the cells of one link decode sharing its strings.
+func TestScrollbackWritesALinkOncePerLine(t *testing.T) {
+	long := uv.Link{URL: "https://example.test/" + strings.Repeat("p", 500), Params: "id=1"}
+	other := uv.Link{URL: "https://other.test/"}
+	line := make(uv.Line, 60)
+	for x := range line {
+		line[x] = uv.Cell{Content: "x", Width: 1}
+		switch x % 3 {
+		case 0:
+			line[x].Link = long
+		case 1:
+			line[x].Link = other
+		}
+	}
+	sb := NewScrollback(4)
+	sb.PushLine(line)
+	if stored := len(sb.lines[0]); stored > len(long.URL)+len(other.URL)+300 {
+		t.Errorf("line stores %d bytes, want each link's text written once", stored)
+	}
+	got := sb.Line(0)
+	if !reflect.DeepEqual(got, line) {
+		t.Fatalf("line did not round trip:\n got %#v\nwant %#v", got, line)
+	}
+	if unsafe.StringData(got[0].Link.URL) != unsafe.StringData(got[57].Link.URL) {
+		t.Error("the cells of one link decode to separate copies of its URL")
+	}
+}
+
+// TestScrollbackDropsAnOversizedLink bounds what one link costs the ring. A
+// line writes each link it uses, so a guest leaving a link of megabytes open
+// would otherwise store a copy with every line it printed after.
+func TestScrollbackDropsAnOversizedLink(t *testing.T) {
+	for _, tc := range []struct {
+		link uv.Link
+		kept bool
+	}{
+		{uv.Link{URL: strings.Repeat("u", maxStoredLinkURL)}, true},
+		{uv.Link{URL: strings.Repeat("u", maxStoredLinkURL+1)}, false},
+		{uv.Link{URL: "u", Params: strings.Repeat("p", maxStoredLinkParams)}, true},
+		{uv.Link{URL: "u", Params: strings.Repeat("p", maxStoredLinkParams+1)}, false},
+	} {
+		sb := NewScrollback(4)
+		sb.PushLine(uv.Line{{Content: "a", Width: 1, Link: tc.link}, {Content: "b", Width: 1, Link: tc.link}, {Content: "c", Width: 1}})
+		got := sb.Line(0)
+		for x, c := range got {
+			want := tc.link
+			if !tc.kept || x == 2 {
+				want = uv.Link{}
+			}
+			if c.Link != want || c.Content != string(rune('a'+x)) {
+				t.Errorf("URL %d, params %d bytes: cell %d is %q with a %d-byte link, want %d", len(tc.link.URL), len(tc.link.Params), x, c.Content, len(c.Link.URL), len(want.URL))
+			}
+		}
+	}
+}
+
+// TestScrollbackDecodesEveryTruncationSafely cuts a stored line holding links,
+// back references and clusters at every byte, and decodes and walks each
+// prefix. A record cut short has to stop the decoder, not index past it.
+func TestScrollbackDecodesEveryTruncationSafely(t *testing.T) {
+	a, b := uv.Link{URL: "https://a.test/", Params: "id=a"}, uv.Link{URL: "https://b.test/"}
+	line := uv.Line{
+		{Content: "x", Width: 1, Link: a}, {Content: "é", Width: 1, Link: b},
+		{Content: "漢", Width: 2, Link: a}, {Content: "", Width: 0, Link: a},
+		{Content: "\xff", Width: 1}, {Content: "👍🏽", Width: 2, Link: b}, {Content: "", Width: 0, Link: b},
+	}
+	sb := NewScrollback(4)
+	sb.PushLine(line)
+	whole := sb.lines[0]
+	if got := sb.decodeLine(whole); !reflect.DeepEqual(got, line) {
+		t.Fatalf("line did not round trip:\n got %#v\nwant %#v", got, line)
+	}
+	for n := range len(whole) {
+		cut := whole[:n]
+		_ = sb.decodeLine(cut)
+		for x := range len(line) + 1 {
+			_, _ = storedCellWidth(cut, x)
+		}
 	}
 }

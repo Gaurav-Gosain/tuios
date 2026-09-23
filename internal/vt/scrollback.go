@@ -54,18 +54,24 @@ type Scrollback struct {
 	// argument is the number of lines dropped.
 	onTrim func(int)
 
-	// Intern tables for what the encoding does not write inline: grapheme
-	// clusters of more than one rune, hyperlinks, and colour values of a type
-	// the packer does not know. Each is capped at internCap entries; past
-	// the cap a cell degrades (first rune only, no link, colour reduced to
-	// RGB) rather than growing without bound on a guest that manufactures
-	// distinct values.
-	graphemes   []string
-	graphemeIdx map[string]uint32
-	links       []uv.Link
-	linkIdx     map[uv.Link]uint32
-	colors      []color.Color
-	colorIdx    map[color.Color]uint32
+	// Intern table for colour values of a type the packer does not know. It
+	// is capped at internCap entries; past the cap a colour is reduced to RGB
+	// rather than the table growing without bound on a guest that
+	// manufactures distinct values. Only colour types no emulator path
+	// produces reach it.
+	//
+	// Grapheme clusters and hyperlinks are written inline in the lines that
+	// use them, so they go when the line does. They used to be interned here
+	// too, in tables nothing pruned: a pane printing a link to a different
+	// file on every line, as agents and compilers do, grew by about 150 bytes
+	// a link for its whole life, whatever the ring had let go of.
+	colors   []color.Color
+	colorIdx map[color.Color]uint32
+
+	// lineLinks is encodeLine's list of the links written so far in the line
+	// it is encoding, so a link the line returns to is written as a
+	// reference instead of again.
+	lineLinks []uv.Link
 
 	// cache holds decoded lines by index for the current generation. Every
 	// mutation bumps gen, which empties it on the next read. It is capped at
@@ -81,9 +87,19 @@ type Scrollback struct {
 	gen      uint64
 }
 
-// internCap bounds each intern table. Past it, the packer degrades the cell
-// instead of adding an entry.
+// internCap bounds the colour intern table. Past it, the packer degrades the
+// colour instead of adding an entry.
 const internCap = 1 << 20
+
+// maxStoredLinkURL and maxStoredLinkParams bound a hyperlink the ring keeps,
+// at the limits VTE applies to OSC 8. A line writes each link it uses once,
+// so without a bound a guest could leave one link of several megabytes open
+// and have every line it prints afterwards store a copy. A longer link
+// scrolls into the ring without its link.
+const (
+	maxStoredLinkURL    = 2083
+	maxStoredLinkParams = 256
+)
 
 // cacheCap bounds the decoded-line cache: a few screens of rows.
 const cacheCap = 256
@@ -102,15 +118,17 @@ const (
 	// (see packColor), then the attribute byte and the underline style byte.
 	// It applies to every cell after it.
 	sbStyle = 0xFF
-	// sbLink starts a link change: a uvarint that is 0 for no link and
-	// otherwise 1+index into Scrollback.links.
+	// sbLink starts a link change: a uvarint that is 0 for no link, 1 for a
+	// link new to this line, whose URL and params follow as strings (see
+	// appendString), and 2+k for the k-th link new to this line, counting
+	// from zero.
 	sbLink = 0xFE
 	// sbCell starts a cell of some width other than one: the width as a
 	// byte, then the cell's content token.
 	sbCell = 0xFD
-	// sbGrapheme is a content token: a uvarint index into
-	// Scrollback.graphemes follows. At the top level it is a cell of width
-	// one.
+	// sbGrapheme is a content token for a cell that is not one valid rune: a
+	// string (see appendString) follows. At the top level it is a cell of
+	// width one.
 	sbGrapheme = 0xFC
 	// sbEmpty is the content token for the empty string, which is what a
 	// wide cell's spacer holds. At the top level it is a cell of width one.
@@ -260,6 +278,8 @@ func (sb *Scrollback) encodeLine(buf []byte, cells uv.Line, width int) []byte {
 	buf = binary.AppendUvarint(buf, uint64(width))
 	var style packedStyle
 	var link uv.Link
+	clear(sb.lineLinks)
+	sb.lineLinks = sb.lineLinks[:0]
 	for i := range cells {
 		c := &cells[i]
 		if style == (packedStyle{}) && link == (uv.Link{}) && isPlainASCIICell(c) {
@@ -279,8 +299,7 @@ func (sb *Scrollback) encodeLine(buf []byte, cells uv.Line, width int) []byte {
 		}
 		if c.Link != link {
 			link = c.Link
-			buf = append(buf, sbLink)
-			buf = binary.AppendUvarint(buf, uint64(sb.packLink(link)))
+			buf = sb.appendLink(buf, link)
 		}
 		if c.Width != 1 {
 			buf = append(buf, sbCell, uint8(max(0, min(c.Width, 255))))
@@ -290,8 +309,94 @@ func (sb *Scrollback) encodeLine(buf []byte, cells uv.Line, width int) []byte {
 	return buf
 }
 
+// appendLink appends a link token for l to the line encodeLine is writing: a
+// reference when the line has used l before, and l itself when it has not.
+// A link past the stored bounds is written as no link.
+func (sb *Scrollback) appendLink(buf []byte, l uv.Link) []byte {
+	buf = append(buf, sbLink)
+	if l == (uv.Link{}) || len(l.URL) > maxStoredLinkURL || len(l.Params) > maxStoredLinkParams {
+		return append(buf, 0)
+	}
+	for k := range sb.lineLinks {
+		if sb.lineLinks[k] == l {
+			return binary.AppendUvarint(buf, uint64(2+k))
+		}
+	}
+	sb.lineLinks = append(sb.lineLinks, l)
+	buf = append(buf, 1)
+	buf = appendString(buf, l.URL)
+	return appendString(buf, l.Params)
+}
+
+// appendString appends s as a uvarint length and its bytes.
+func appendString(buf []byte, s string) []byte {
+	buf = binary.AppendUvarint(buf, uint64(len(s)))
+	return append(buf, s...)
+}
+
+// readString reads a string appendString wrote at i and returns its bytes,
+// which alias data, and the index after it.
+func readString(data []byte, i int) ([]byte, int, bool) {
+	if i >= len(data) {
+		return nil, i, false
+	}
+	n, m := binary.Uvarint(data[i:])
+	if m <= 0 || n > uint64(len(data)-i-m) {
+		return nil, i, false
+	}
+	i += m
+	return data[i : i+int(n)], i + int(n), true
+}
+
+// readLink reads the body of a link token at i, given the links new to the
+// line before it, and returns the link, the line's links with a new one
+// appended, and the index after it.
+func readLink(data []byte, i int, seen []uv.Link) (uv.Link, []uv.Link, int, bool) {
+	k, m := binary.Uvarint(data[i:])
+	if m <= 0 {
+		return uv.Link{}, seen, i, false
+	}
+	i += m
+	switch {
+	case k == 0:
+		return uv.Link{}, seen, i, true
+	case k == 1:
+		url, i, ok := readString(data, i)
+		if !ok {
+			return uv.Link{}, seen, i, false
+		}
+		params, i, ok := readString(data, i)
+		if !ok {
+			return uv.Link{}, seen, i, false
+		}
+		l := uv.Link{URL: string(url), Params: string(params)}
+		return l, append(seen, l), i, true
+	case k-2 < uint64(len(seen)):
+		return seen[k-2], seen, i, true
+	}
+	return uv.Link{}, seen, i, false
+}
+
+// skipLink returns the index after the body of a link token at i.
+func skipLink(data []byte, i int) (int, bool) {
+	k, m := binary.Uvarint(data[i:])
+	if m <= 0 {
+		return i, false
+	}
+	i += m
+	if k != 1 {
+		return i, true
+	}
+	var ok bool
+	if _, i, ok = readString(data, i); !ok {
+		return i, false
+	}
+	_, i, ok = readString(data, i)
+	return i, ok
+}
+
 // appendContent appends the content token for s: the rune itself when s is
-// exactly one valid rune, otherwise an interned index or the empty marker.
+// exactly one valid rune, otherwise the empty marker or the string whole.
 func (sb *Scrollback) appendContent(buf []byte, s string) []byte {
 	if len(s) == 1 && s[0] < utf8.RuneSelf {
 		// Nearly every cell of a text screen, and the whole of a plain log.
@@ -304,25 +409,8 @@ func (sb *Scrollback) appendContent(buf []byte, s string) []byte {
 	if size == len(s) && !(r == utf8.RuneError && size == 1) {
 		return append(buf, s...)
 	}
-	if sb.graphemeIdx == nil {
-		sb.graphemeIdx = make(map[string]uint32)
-	}
-	if i, ok := sb.graphemeIdx[s]; ok {
-		buf = append(buf, sbGrapheme)
-		return binary.AppendUvarint(buf, uint64(i))
-	}
-	if len(sb.graphemes) >= internCap {
-		// Table full: keep the first rune.
-		if r == utf8.RuneError && size == 1 {
-			return append(buf, ' ')
-		}
-		return utf8.AppendRune(buf, r)
-	}
-	sb.graphemes = append(sb.graphemes, s)
-	i := uint32(len(sb.graphemes) - 1)
-	sb.graphemeIdx[s] = i
 	buf = append(buf, sbGrapheme)
-	return binary.AppendUvarint(buf, uint64(i))
+	return appendString(buf, s)
 }
 
 func (sb *Scrollback) packStyle(s *uv.Style) packedStyle {
@@ -347,33 +435,6 @@ func (sb *Scrollback) unpackStyle(st packedStyle) uv.Style {
 		Underline:      uv.Underline(st.underline),
 		Attrs:          st.attrs,
 	}
-}
-
-// packLink returns 0 for no link and otherwise 1+index into links.
-func (sb *Scrollback) packLink(l uv.Link) uint32 {
-	if l.URL == "" && l.Params == "" {
-		return 0
-	}
-	if sb.linkIdx == nil {
-		sb.linkIdx = make(map[uv.Link]uint32)
-	}
-	if i, ok := sb.linkIdx[l]; ok {
-		return i + 1
-	}
-	if len(sb.links) >= internCap {
-		return 0
-	}
-	sb.links = append(sb.links, l)
-	i := uint32(len(sb.links) - 1)
-	sb.linkIdx[l] = i
-	return i + 1
-}
-
-func (sb *Scrollback) unpackLink(v uint64) uv.Link {
-	if v == 0 || v > uint64(len(sb.links)) {
-		return uv.Link{}
-	}
-	return sb.links[v-1]
 }
 
 // packColor packs the colour types the emulator produces into an integer and
@@ -489,6 +550,7 @@ func (sb *Scrollback) decodeLine(data []byte) uv.Line {
 	x := 0
 	var style uv.Style
 	var link uv.Link
+	var links []uv.Link
 	i := n
 	for i < len(data) && x < len(line) {
 		switch data[i] {
@@ -502,13 +564,11 @@ func (sb *Scrollback) decodeLine(data []byte) uv.Line {
 			}
 			style = sb.unpackStyle(st)
 		case sbLink:
-			v, m := binary.Uvarint(data[i+1:])
-			if m <= 0 {
+			var ok bool
+			link, links, i, ok = readLink(data, i+1, links)
+			if !ok {
 				i = len(data)
-				break
 			}
-			i += 1 + m
-			link = sb.unpackLink(v)
 		case sbCell:
 			if i+1 >= len(data) {
 				i = len(data)
@@ -572,11 +632,11 @@ func (sb *Scrollback) readContent(data []byte, i int) (string, int, bool) {
 	case sbEmpty:
 		return "", i + 1, true
 	case sbGrapheme:
-		v, m := binary.Uvarint(data[i+1:])
-		if m <= 0 || v >= uint64(len(sb.graphemes)) {
+		s, next, ok := readString(data, i+1)
+		if !ok {
 			return "", i, false
 		}
-		return sb.graphemes[v], i + 1 + m, true
+		return string(s), next, true
 	case sbStyle, sbLink, sbCell:
 		return "", i, false
 	}
@@ -600,11 +660,11 @@ func skipContent(data []byte, i int) (int, bool) {
 	case sbEmpty:
 		return i + 1, true
 	case sbGrapheme:
-		_, m := binary.Uvarint(data[i+1:])
-		if m <= 0 {
+		_, next, ok := readString(data, i+1)
+		if !ok {
 			return i, false
 		}
-		return i + 1 + m, true
+		return next, true
 	case sbStyle, sbLink, sbCell:
 		return i, false
 	}
@@ -696,11 +756,9 @@ func storedCellWidth(data []byte, x int) (int, bool) {
 			}
 			continue
 		case sbLink:
-			_, m := binary.Uvarint(data[i+1:])
-			if m <= 0 {
+			if i, ok = skipLink(data, i+1); !ok {
 				return 0, false
 			}
-			i += 1 + m
 			continue
 		}
 		w := 1

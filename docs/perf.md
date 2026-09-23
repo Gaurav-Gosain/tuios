@@ -1483,3 +1483,39 @@ fails if the skip is keyed on the wrong token.
 | `RealResizeLog` (12k ASCII lines, 160 to 60 columns and back) | 3.68 ms | 0.36 ms | -90.2% (p<0.001) |
 | `RealResize` (6k mixed-script plus 4k log lines, 160 to 100 and back) | 6.45 ms | 4.37 ms | -32.3% (p<0.001) |
 | `uni`, `EmulatorWriteHeavyOutput/colored-log` | | | `~`, allocations unchanged |
+
+**Scrollback links and clusters live in their lines** (`scrollback.go`). The
+ring interned hyperlinks and multi-rune clusters in per-pane tables that
+nothing pruned, not eviction and not `Clear`, capped only at 1M entries each.
+A pane printing a link to a different file on every line, as agents and
+compilers printing `file:line` do, grew by about 150 bytes per link for its
+whole life, in the daemon and in every client, whatever the ring had let go
+of. A link is now written into the line that uses it: its URL and params the
+first time the line uses it, and a one-byte reference to that when the line
+comes back to it, so a line alternating between two links pays for each once.
+A cluster is written as its bytes. Both go when the line does. The colour
+table stays, because only a colour type no emulator path makes reaches it.
+
+A line writes each link it uses, so a guest that leaves one enormous link open
+would store a copy in every line it prints after. The ring therefore keeps a
+link only up to the limits VTE applies to OSC 8, 2083 bytes of URL and 256 of
+params; a longer one scrolls in without its link. The interned table dropped
+links past its cap in the same way.
+
+`TestScrollbackForgetsWhatItEvicts` pushes 49,000 lines, each with a new link
+and cluster, through a full 1000-line ring: the heap grew 7.2 MB before and
+stays flat now. `TestScrollbackWritesALinkOncePerLine`,
+`TestScrollbackDropsAnOversizedLink` and
+`TestScrollbackDecodesEveryTruncationSafely` cover the back reference, the
+bound, and a record cut at every byte.
+
+| Live heap of a 207x55 pane | before | after |
+|---|---|---|
+| 10k lines, one unique OSC 8 link each | 3.88 MiB | 2.78 MiB |
+| 100k lines, one unique OSC 8 link each | 17.93 MiB | 2.78 MiB (flat) |
+| plain log, colored log, full-width truecolor | | unchanged |
+
+CPU per op is `~` on a replay of 30,000 linked lines, `uni`, the plain and
+colored log floods, the short-line and long-line scrolls and `RealResize`, and
+the linked replay allocates 14% fewer bytes. The cells of one link still
+decode sharing its strings.
