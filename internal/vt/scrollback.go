@@ -1,6 +1,7 @@
 package vt
 
 import (
+	"bytes"
 	"encoding/binary"
 	"image/color"
 	"reflect"
@@ -643,6 +644,12 @@ func (sb *Scrollback) Clear() {
 // blankWideRunesCutByTheEdge clears a double-width rune that a narrowing
 // resize leaves in what is now the last column of a scrollback line, for the
 // reason Screen.blankWideRunesCutByTheEdge gives.
+//
+// encodeLine writes a width other than one only behind an sbCell token, and
+// sbCell is a byte UTF-8 never uses. So a line without that byte holds no wide
+// cell and is not walked, which on a resize over a long plain log is nearly
+// every line. The byte can also turn up inside a uvarint or a style, which
+// only sends that line down the walk.
 func (sb *Scrollback) blankWideRunesCutByTheEdge(newWidth int) {
 	x := newWidth - 1
 	if x < 0 {
@@ -650,6 +657,9 @@ func (sb *Scrollback) blankWideRunesCutByTheEdge(newWidth int) {
 	}
 	for i := range sb.Len() {
 		slot := sb.slot(i)
+		if bytes.IndexByte(sb.lines[slot], sbCell) < 0 {
+			continue
+		}
 		w, ok := storedCellWidth(sb.lines[slot], x)
 		if !ok || w <= 1 {
 			continue

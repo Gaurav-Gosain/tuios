@@ -1465,3 +1465,21 @@ table still takes a combining mark from the next write.
 On the real streams the gain is allocation and GC work rather than measured
 CPU: this benchmark process has a small heap, and the collector's share grows
 with the heap of a real client.
+
+**A narrowing resize skips scrollback lines with no wide cell**
+(`scrollback.go`). `Scrollback.blankWideRunesCutByTheEdge` walked every stored
+line token by token to the new last column on every width change, so dragging
+a split border paid for the whole history on every step, in the client and
+the daemon. With 10k lines of scrollback it was 86% of a resize. A wide cell
+is only ever stored behind an `sbCell` byte, which UTF-8 never uses, so a line
+without that byte is now skipped after one `bytes.IndexByte`. The byte can
+also appear inside a uvarint, which only sends that line down the old walk.
+`TestBlankWideRunesCutByTheEdgeSkipsOnlyNarrowLines` holds the result to the
+full walk over random lines whose colours and links contain the byte, and
+fails if the skip is keyed on the wrong token.
+
+| CPU per op | before | after | |
+|---|---|---|---|
+| `RealResizeLog` (12k ASCII lines, 160 to 60 columns and back) | 3.68 ms | 0.36 ms | -90.2% (p<0.001) |
+| `RealResize` (6k mixed-script plus 4k log lines, 160 to 100 and back) | 6.45 ms | 4.37 ms | -32.3% (p<0.001) |
+| `uni`, `EmulatorWriteHeavyOutput/colored-log` | | | `~`, allocations unchanged |

@@ -163,6 +163,80 @@ func TestBlankWideRunesCutByTheEdgeOnPackedLines(t *testing.T) {
 	}
 }
 
+// blankWideRunesCutByTheEdgeReference is blankWideRunesCutByTheEdge without
+// its skip of lines that hold no sbCell byte: every line is walked to x.
+func (sb *Scrollback) blankWideRunesCutByTheEdgeReference(newWidth int) {
+	x := newWidth - 1
+	if x < 0 {
+		return
+	}
+	for i := range sb.Len() {
+		slot := sb.slot(i)
+		w, ok := storedCellWidth(sb.lines[slot], x)
+		if !ok || w <= 1 {
+			continue
+		}
+		line := sb.decodeLine(sb.lines[slot])
+		line[x].Content = " "
+		line[x].Width = 1
+		line[x].Link = uv.Link{}
+		n := len(line)
+		for n > 0 && isBlankCell(&line[n-1]) {
+			n--
+		}
+		sb.lines[slot] = sb.encodeLine(sb.lines[slot][:0], line[:n], len(line))
+	}
+}
+
+// TestBlankWideRunesCutByTheEdgeSkipsOnlyNarrowLines holds the resize path,
+// which does not walk a line without an sbCell byte, to the full walk. The
+// skip is only right while every wide cell is stored behind sbCell, so this
+// fails if an encoding change ever stores one some other way. The lines mix
+// wide and zero-width cells, graphemes, links and styles over indexed
+// colours whose uvarints contain the sbCell byte.
+func TestBlankWideRunesCutByTheEdgeSkipsOnlyNarrowLines(t *testing.T) {
+	rng := rand.New(rand.NewSource(7))
+	colors := []color.Color{nil, ansi.BasicColor(3), ansi.IndexedColor(0xFD), ansi.TrueColor(0xFDFDFD), oddColor{0xFD}}
+	contents := []string{"a", "é", "漢", "🇬🇧", "", "e\u0301", "─", " "}
+	for round := range 200 {
+		const ring = 30
+		got, want := NewScrollback(ring), NewScrollback(ring)
+		for range 40 {
+			width := 1 + rng.Intn(40)
+			line := make(uv.Line, width)
+			for x := range line {
+				line[x] = uv.EmptyCell
+			}
+			for x := range rng.Intn(width + 1) {
+				c := uv.Cell{Content: contents[rng.Intn(len(contents))], Width: 1}
+				switch c.Content {
+				case "漢", "🇬🇧":
+					c.Width = 2
+				case "":
+					c.Width = 0
+				}
+				if rng.Intn(3) == 0 {
+					c.Style = uv.Style{Fg: colors[rng.Intn(len(colors))], Bg: colors[rng.Intn(len(colors))]}
+				}
+				if rng.Intn(6) == 0 {
+					c.Link = uv.Link{URL: "https://x.test/\xfd"}
+				}
+				line[x] = c
+			}
+			got.PushLine(line)
+			want.PushLine(line)
+		}
+		newWidth := 1 + rng.Intn(40)
+		got.blankWideRunesCutByTheEdge(newWidth)
+		want.blankWideRunesCutByTheEdgeReference(newWidth)
+		for i := range want.Len() {
+			if g, w := got.Line(i), want.Line(i); !reflect.DeepEqual(g, w) {
+				t.Fatalf("round %d, width %d, line %d:\n got %#v\nwant %#v", round, newWidth, i, g, w)
+			}
+		}
+	}
+}
+
 // TestPackedScrollbackHoldsALineForItsContent is the reason for the packing:
 // a thousand short lines on a wide terminal used to cost width times 112
 // bytes each, 23 MB at 207 columns; packed and trimmed they cost about the
