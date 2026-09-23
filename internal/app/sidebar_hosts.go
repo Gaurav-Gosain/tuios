@@ -47,6 +47,11 @@ const (
 	hostRefreshActive = 5 * time.Second
 	// hostRefreshIdle is the poll interval with no consumer on screen.
 	hostRefreshIdle = 30 * time.Second
+	// hostRefreshPushed is the backstop poll while the daemon pushes every
+	// change to every host that is up. The push is what keeps the rail
+	// current; this only catches what no event covers, such as a client
+	// attaching on the host.
+	hostRefreshPushed = time.Minute
 )
 
 // FederationSnapshot is what the daemon last said about the configured hosts,
@@ -92,6 +97,11 @@ type FederationHostsMsg struct {
 	Snapshot FederationSnapshot
 	// Configured is how many hosts the daemon holds. Zero stops the polling.
 	Configured int
+	// Pushed says the daemon pushes every change to every host that is up:
+	// it says events_push in list-hosts, and each such host's events are
+	// live. The rail then waits for the push instead of polling. A host whose
+	// tuios is too old to stream, or a daemon too old to push, keeps the poll.
+	Pushed bool
 }
 
 // FederationRefreshTickMsg re-arms the poll.
@@ -125,6 +135,9 @@ func (m *OS) federationRefreshPlan() (after time.Duration, refresh bool) {
 	// not already say.
 	if !m.federationPolling {
 		return hostRefreshIdle, false
+	}
+	if m.federationPushed {
+		return hostRefreshPushed, true
 	}
 	if m.SidebarActive() || m.ShowSessionSwitcher {
 		return hostRefreshActive, true
@@ -180,8 +193,13 @@ func refreshFederationCmd() tea.Cmd {
 		// state.
 		msg := FederationHostsMsg{}
 		lastOK := map[string]int64{}
-		for _, h := range hostStatusReports(client) {
+		reports, pushes := hostStatusReports(client)
+		msg.Pushed = pushes
+		for _, h := range reports {
 			lastOK[h.Host] = h.LastOK
+			if h.Status == federation.StatusUp && h.Events != "live" {
+				msg.Pushed = false
+			}
 		}
 		for _, h := range res.Hosts {
 			if h.Host != federation.LocalHostName {
@@ -204,26 +222,30 @@ func refreshFederationCmd() tea.Cmd {
 	}
 }
 
-// hostStatusReports fetches the last-contact times the session listing does not
-// carry. A failure here costs the rail a relative time and nothing else.
-func hostStatusReports(client *session.VerbClient) []federation.HostReport {
+// hostStatusReports fetches the last-contact times and the event modes the
+// session listing does not carry, and whether the daemon pushes host changes. A
+// failure here costs the rail a relative time and its push, and it polls as it
+// always did.
+func hostStatusReports(client *session.VerbClient) ([]federation.HostReport, bool) {
 	raw, err := client.Call("list-hosts", nil)
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	var res struct {
-		Hosts []federation.HostReport `json:"hosts"`
+		Hosts      []federation.HostReport `json:"hosts"`
+		EventsPush bool                    `json:"events_push"`
 	}
 	if json.Unmarshal(raw, &res) != nil {
-		return nil
+		return nil, false
 	}
-	return res.Hosts
+	return res.Hosts, res.EventsPush
 }
 
 // applyFederationSnapshot stores a snapshot the poll returned. It runs on the
 // Update goroutine and does no I/O.
 func (m *OS) applyFederationSnapshot(msg FederationHostsMsg) {
 	m.federationPolling = msg.Configured > 0
+	m.federationPushed = msg.Pushed
 	m.FederationHosts = msg.Snapshot.Hosts
 	m.federationGen++
 }
@@ -240,10 +262,12 @@ func (m *OS) attachedMachine() string {
 // hostGroupNodes turns the stored snapshot into the rows of every machine but
 // the attached one: one header per machine, then that machine's sessions.
 //
-// A host that is not up contributes its header alone, carrying the reason. That
-// is section 7's rule on screen: the machine is still listed, greyed, with when
-// it was last seen, rather than disappearing and leaving the user to wonder
-// whether they imagined configuring it.
+// A host that is not up keeps its header, carrying the reason or when it was
+// last seen, and the rows of its last listing, which the daemon keeps and marks
+// stale. That is section 7's rule on screen: the machine is still listed,
+// greyed, rather than disappearing and leaving the user to wonder whether they
+// imagined configuring it or what was running there. Its rows are muted and
+// wear no agent glyph, and are not targets.
 //
 // Each machine's sessions keep that daemon's creation order, overlaid with the
 // order the user dragged them into while attached there, so a machine's rows
@@ -812,6 +836,23 @@ func hostStatusLabel(status string) string {
 	}
 }
 
+// hostDownLabel is the header word of a host that is not up. A machine that
+// dropped off the network after answering says when it was last heard from,
+// "seen 3m ago", since its rows under the header are that moment's listing. A
+// machine that answered and refused says why instead, because that is a thing
+// to fix: no daemon, no tuios, or the version.
+func hostDownLabel(status string, lastOK int64, now time.Time) string {
+	label := hostStatusLabel(status)
+	switch federation.Status(status) {
+	case federation.StatusNoDaemon, federation.StatusNoBinary, federation.StatusIncompatible, federation.StatusConnecting:
+		return label
+	}
+	if lastOK > 0 {
+		return inboxSeen(lastOK*int64(time.Second), now)
+	}
+	return label
+}
+
 // sidebarHostRow draws a machine's group header.
 //
 //	▾ local                +
@@ -838,7 +879,7 @@ func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, 
 	case !up:
 		// A host that is not up says why, in the slot the add control would take.
 		// An unreachable machine has nothing to add a session to.
-		label := hostStatusLabel(node.HostStatus)
+		label := hostDownLabel(node.HostStatus, node.HostLastOK, time.Now())
 		right = sidebarStyle(rowBg, pal.FgMute).Render(label)
 		rightW = lipgloss.Width(label)
 	case blocked > 0:

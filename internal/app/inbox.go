@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -536,7 +537,7 @@ func inboxAlertState(kind string) string {
 // not in the attached session, whose alerts come from the state sync, and the
 // policy alerts on its kind.
 func (m *OS) inboxAlertable(it session.AttentionItem, policy config.AgentAlertPolicy) bool {
-	if m.inboxAttached(it) {
+	if m.inboxAttached(it) || it.Stale {
 		return false
 	}
 	if it.Kind == session.AttentionMail {
@@ -608,7 +609,7 @@ func (m *OS) fireInboxAlerts(ids []string) {
 	}
 	if policy.Dock {
 		m.ShowNotificationFrom(text, sev, m.Settings.NotificationDuration,
-			NotifTarget{SessionID: first.Session, WindowID: first.Window})
+			NotifTarget{Host: inboxItemMachine(first), SessionID: first.Session, WindowID: first.Window})
 	}
 	var seq []byte
 	if policy.Notify && !m.BrowserClient {
@@ -699,12 +700,14 @@ func inboxAlertText(items []session.AttentionItem) string {
 // inboxCounts is the Inbox as the rail's agents header counts it: items that
 // block an agent or report an error are blocked, finished items are done, and
 // worst is the most urgent state among the blocked. session narrows it to one
-// session, empty for all.
+// session on this machine, empty for every session on every machine. An item
+// of a machine that cannot be reached is not counted: it is what that machine
+// said last, and a figure drawn from it would report a moment that has passed.
 func (m *OS) inboxCounts(sessionName string) sidebarAgentCountInfo {
 	var c sidebarAgentCountInfo
 	rank := 0
 	for _, it := range m.Inbox.Items {
-		if it.Host != "" || (sessionName != "" && it.Session != sessionName) {
+		if it.Stale || (sessionName != "" && (it.Host != "" || it.Session != sessionName)) {
 			continue
 		}
 		switch it.Kind {
@@ -723,8 +726,9 @@ func (m *OS) inboxCounts(sessionName string) sidebarAgentCountInfo {
 
 // sidebarHeaderCounts is the agents header's readout. With a live Inbox it
 // counts the Inbox, which sees every session on this machine whether or not the
-// rail lists it, plus the rows of other machines, which the Inbox does not hold
-// yet. Without one it counts the rows, as it always has.
+// rail lists it and every linked host the daemon streams, plus any agent rows
+// of other machines the rail holds. Without one it counts the rows, as it
+// always has.
 func (m *OS) sidebarHeaderCounts(agents []sidebarAgentEntry) sidebarAgentCountInfo {
 	if !m.Inbox.Live || m.AttachedHost != "" {
 		return sidebarAgentCounts(agents)
@@ -1126,10 +1130,38 @@ func inboxDecisionWords(decision string) string {
 	return decision
 }
 
-// inboxJump lands on an item's pane.
+// inboxItemMachine is the machine an item is on, as attachedMachine names it.
+func inboxItemMachine(it session.AttentionItem) string {
+	if it.Host == "" {
+		return federation.LocalHostName
+	}
+	return it.Host
+}
+
+// inboxReach attaches the machine and the session an item is on, when the
+// client is on another machine, and reports whether the client is now on the
+// item's machine. A machine that cannot be reached says so, with when it was
+// last heard from, and nothing is given up.
+func (m *OS) inboxReach(it session.AttentionItem) bool {
+	target := inboxItemMachine(it)
+	if target == m.attachedMachine() {
+		return true
+	}
+	if it.Stale || !m.hostIsUp(target) {
+		m.ShowNotification(printableTitle(target)+" cannot be reached ("+inboxSeen(it.SeenAt, time.Now())+")", "warning", m.Settings.NotificationWarningDuration)
+		return false
+	}
+	if err := m.SwitchToHostSession(target, it.Session, false); err != nil {
+		m.ShowNotification(hostAttachRefusal(target, err), "error", m.Settings.NotificationDuration*3)
+		return false
+	}
+	return true
+}
+
+// inboxJump lands on an item's pane, attaching its machine first when it is on
+// another one.
 func (m *OS) inboxJump(it session.AttentionItem) {
-	if it.Host != "" || m.AttachedHost != "" {
-		m.ShowNotification("That pane is on another machine; attach there to reach it", "info", m.Settings.NotificationDuration)
+	if !m.inboxReach(it) {
 		return
 	}
 	if it.Window == "" {
@@ -1181,8 +1213,13 @@ func (m *OS) InboxReply() tea.Cmd {
 // line when reply is set. A thread in another session waits for that
 // session's mail to load.
 func (m *OS) inboxOpenMail(it session.AttentionItem, reply bool) tea.Cmd {
-	if it.Host != "" || m.AttachedHost != "" {
-		m.ShowNotification("That mail is on another machine; attach there to read it", "info", m.Settings.NotificationDuration)
+	if inboxItemMachine(it) != m.attachedMachine() {
+		// Attaching the machine lands on the session and loads its mail, so
+		// the thread opens once that has arrived.
+		if !m.inboxReach(it) {
+			return nil
+		}
+		m.Inbox.pendingThread, m.Inbox.pendingReply = it.Thread, reply
 		return nil
 	}
 	if it.Session != m.sidebarCurrentSessionID() {
@@ -1337,7 +1374,7 @@ func (m *OS) applyInboxDismissed(msg InboxDismissedMsg) {
 // which is what the next-attention key visits. A finished turn is news, not a
 // request, so it is left to the Inbox.
 func inboxNeedsYou(it session.AttentionItem) bool {
-	return it.Kind != session.AttentionFinished && it.Host == ""
+	return it.Kind != session.AttentionFinished && !it.Stale
 }
 
 // JumpToNextAttention goes to the oldest item that needs the person, in Inbox
@@ -1397,6 +1434,15 @@ func inboxWait(since int64, now time.Time) string {
 	default:
 		return strconv.Itoa(int(d.Hours())/24) + "d"
 	}
+}
+
+// inboxSeen is when a machine that cannot be reached was last heard from, as
+// the Inbox and the rail say it: "seen 3m ago", or "offline" when it never was.
+func inboxSeen(seenAt int64, now time.Time) string {
+	if seenAt <= 0 {
+		return "offline"
+	}
+	return "seen " + inboxWait(seenAt, now) + " ago"
 }
 
 // inboxKindGlyph is the mark an item row wears for its kind. The group

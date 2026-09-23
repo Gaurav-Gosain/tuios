@@ -117,8 +117,16 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 	if overlay.UseASCII() {
 		sep = " . "
 	}
+	// An item from a machine whose link is down is what that machine said
+	// last. It says so in words, when it was last heard from, and is drawn in
+	// the muted ink so the eye passes over it; the words carry it without
+	// colour.
+	when := inboxWait(it.Since, now)
+	if it.Stale {
+		when = inboxSeen(it.SeenAt, now)
+	}
 	right := overlay.Style(bg).Foreground(pal.FgMute).Render(inboxWhere(it)+sep) +
-		overlay.Style(bg).Foreground(pal.FgDim).Render(inboxWait(it.Since, now))
+		overlay.Style(bg).Foreground(pal.FgDim).Render(when)
 
 	glyph := inboxKindGlyph(it.Kind) + " "
 	who := inboxWho(it)
@@ -143,7 +151,11 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 	if selected {
 		whoColor = pal.Fg
 	}
-	left := overlay.Style(bg).Foreground(inboxKindColor(it.Kind, pal)).Render(glyph) +
+	glyphColor := inboxKindColor(it.Kind, pal)
+	if it.Stale {
+		whoColor, glyphColor = pal.FgMute, pal.FgMute
+	}
+	left := overlay.Style(bg).Foreground(glyphColor).Render(glyph) +
 		overlay.Style(bg).Foreground(whoColor).Bold(true).Render(overlay.Truncate(who, whoW))
 	if summaryW >= 2 {
 		left += overlay.Style(bg).Foreground(pal.FgDim).Render("  " + overlay.Truncate(summary, summaryW))

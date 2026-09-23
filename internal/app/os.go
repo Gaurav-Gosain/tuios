@@ -894,6 +894,10 @@ type OS struct {
 	// starts true so the first poll happens, and the first answer turns it off
 	// for a daemon with no hosts, which is the default install.
 	federationPolling bool
+	// federationPushed is true while the daemon streams every host that is
+	// up and pushes each change, so the rail's poll drops to a slow backstop.
+	// See FederationHostsMsg.Pushed.
+	federationPushed bool
 	// federationTickGen is the generation of the host poll timer now armed. A
 	// tick from an older generation is dropped, so the snapshot's re-arm and
 	// the tick's own re-arm cannot leave two loops running.
@@ -1390,6 +1394,10 @@ type Notification struct {
 // absent: it is resolved from live state at jump time, because a stored index
 // goes stale the moment the window is moved.
 type NotifTarget struct {
+	// Host is the machine the session is on, as attachedMachine names it, when
+	// the message names one: the Inbox's alerts do. Empty means the machine
+	// the client is attached to, which is every other message.
+	Host      string
 	SessionID string
 	WindowID  string
 	// Thread, when set, is the mail thread the message is about: activating
