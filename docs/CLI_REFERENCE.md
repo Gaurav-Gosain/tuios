@@ -332,7 +332,7 @@ tuios ls [flags]
 
 **Flags:**
 - `--json`: Output as JSON. Saved sessions carry `"saved": true`
-- `--all-hosts`: Also list the sessions on every host in the `[hosts]` table. A host that does not answer gets a row saying so and never fails the command
+- `--all-hosts`: Also list the sessions on every host in the `[hosts]` table. A host that does not answer gets a row saying so and never fails the command. Its sessions from when it last answered follow, under "As of ..., when it last answered", and are not counted in the total
 - `--host <name>`: List the sessions on one host (`local` means this machine)
 
 With no daemon running, `tuios ls` lists the sessions saved on disk instead,
@@ -916,6 +916,7 @@ tuios subscribe [flags]
 - `--after-seq <n>`: Replay the retained events after this seq before streaming live
 - `--boot-id <id>`: The `boot_id` the `--after-seq` came with, so a daemon restart shows as a gap. Needs `--after-seq`
 - `--count <n>`: Exit after printing this many events, gap lines included (default: run until the stream ends)
+- `--hosts`: Also print the `agent-state`, `session-created` and `session-closed` events of every linked host, each with `host` set. Without it, the only events about other machines are `attention` for their Inbox items and `host-changed`, and only when no `--session` or `--window` is given
 
 To resume after a disconnect, pass the `seq` of the last event you printed and
 its `boot_id`. The daemon keeps the last 4096 events, apart from `output`
@@ -942,15 +943,22 @@ tuios subscribe --types bell --count 1
 
 # Follow the Inbox: every item that opens, changes or closes
 tuios subscribe --types attention
+
+# Every agent on every machine, and every host coming or going
+tuios subscribe --hosts --types agent-state,host-changed
 ```
 
 ### `tuios list-attention`
 
 List the Inbox: every approval and question an agent is blocked on, mail to
 you, errored agents, conversations a daemon restart left to resume, and
-finished turns nobody has looked at, in every session on the daemon. Rows are
-grouped Approvals, Questions, Mail, Errored, Resume, Finished, oldest first,
-with how long each has waited, its id, its session and pane, and what it said. The TUI's Inbox (prefix `i`) is the same list.
+finished turns nobody has looked at, in every session on the daemon and on
+every linked host it streams. Rows are grouped Approvals, Questions, Mail,
+Errored, Resume, Finished, oldest first, with how long each has waited, its
+id, its session and pane, and what it said. The TUI's Inbox (prefix `i`) is
+the same list. A row of another machine names it,
+`build:api/claude`, and a row of a machine whose link is down ends in
+`[unreachable, seen 5m ago]`: it is what that machine said last.
 
 An item closes by itself when what opened it stops being true. Dismissing one
 is for the person at an attached client and is done from the Inbox; there is
@@ -968,7 +976,8 @@ tuios list-attention [flags]
 ```
 
 **Flags:**
-- `-s, --session <name>`: Only this session (default: every session)
+- `-s, --session <name>`: Only this session on this machine, or on `--host` (default: every session)
+- `--host <name>`: Only this machine: `local`, or a linked host by name (default: every machine)
 - `--kind <kind>`: Only these kinds, repeatable or comma-separated: `approval`, `question`, `mail`, `errored`, `resume`, `finished`
 - `--json`: Output the verb result as JSON
 
@@ -979,6 +988,9 @@ tuios list-attention
 
 # Only what blocks an agent
 tuios list-attention --kind approval --kind question
+
+# Only what waits on the build host
+tuios list-attention --host build
 
 # The oldest approval's pane, for a script
 tuios list-attention --json --kind approval | jq -r '.items[0].window'
@@ -1985,8 +1997,8 @@ them.
 
 | Command | What it does |
 |---------|--------------|
-| `tuios list-agents` | List the agent panes in a session and what each is doing |
-| `tuios list-attention` | List the Inbox: what is waiting for you in every session (see below) |
+| `tuios list-agents` | List the agent panes in a session and what each is doing. `--all-sessions` lists every session on this machine, each row named `session/name`; `--all-hosts` lists every session on every host, with a SESSION column, and a host that is down shows the rows it last gave |
+| `tuios list-attention` | List the Inbox: what is waiting for you in every session, on this machine and on every linked host (see below). `--host` narrows it to one machine |
 | `tuios peek-prompt` | Show the prompt an agent is blocked on, its options and the answers it takes, without attaching |
 | `tuios respond <action> [value]` | Answer the prompt an agent is blocked on. Only from the person: an attached client's Inbox, or a shell outside every pane with `[daemon] respond_from_shell` |
 | `tuios get-agent-state` | Read a pane's reported agent state |
@@ -2011,7 +2023,7 @@ them.
 
 | Command | What it does |
 |---------|--------------|
-| `tuios hosts` | List the machines in the `[hosts]` config table and the state of each link |
+| `tuios hosts` | List the machines in the `[hosts]` config table and the state of each link. A host whose tuios is too old to stream its agents is named below the table, with what to update: its agents are polled and what waits there is not in the Inbox |
 | `tuios hosts add <name> <addr>` | Add a machine. `--tailnet` takes the address from your tailnet; `--command`, `--ssh-option` and `--connect-timeout` tune the link |
 | `tuios hosts remove <name>` | Remove a machine |
 | `tuios hosts test <name>` | Open one link to a host and report what happened |

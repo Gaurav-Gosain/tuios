@@ -478,6 +478,83 @@ an existing caller:
   [respond](#respond): the hook keeps the prompt off the pane, so there is
   nothing to read. The TUI says to answer with `1`, `2` or `3` instead.
 
+**The Inbox and the host listings cover every machine.** A daemon with a
+`[hosts]` table now keeps one stream per linked host over the link: it lists
+the host's Inbox, then subscribes to the host's `attention`, `agent-state`,
+`agent-message`, session and window events from the position the listing was
+current to, resuming with `after_seq` after a redial and listing again after a
+`gap` (see [Following linked hosts](#following-linked-hosts)). What changes for
+an existing caller:
+
+- `list-attention` also lists the items of every linked host, with `host` set
+  and an id of the form `host:id`, and `counts` counts them. It used to list
+  this machine's items only. A caller that wants the old answer passes the new
+  param `host: "local"`. `session` without `host` still names a session on this
+  machine, so a far session of the same name is not in it.
+- Items gain `stale` and `seen_at`: while a host's link is down its items stay,
+  with `stale: true` and when the host was last heard from, and the item is
+  updated (an `attention` event with action `update`) each time the mark
+  changes.
+- A host item never carries `request_id`, `expires` or `always_scope`, and
+  `options` is display only: a held approval is answered on the machine that
+  holds it, so `reply-approval` never sees a host item's id.
+- `dismiss-attention` accepts a host item's id. It hides the item on this
+  daemon only, until the host changes it, and marks nothing on the host; the
+  result carries `host`. A dismiss is the person's fact, and a second hub or a
+  client on the host still sees the item.
+- `attention` events of a host item carry `host`. A subscriber that names a
+  `session`, `window` or `pane` does not get them, because it reads those
+  names as this machine's; one that names none does.
+- `subscribe` takes the new param `hosts`. With it, the `agent-state`,
+  `session-created` and `session-closed` events of linked hosts are delivered
+  too, each with `host` set and only its identifying fields, and `session` and
+  `window` match events of other machines. Without it nothing relayed from a
+  host is delivered, so an existing subscriber sees what it saw.
+- The new event type `host-changed` (in `EventTypeNames` and the accepted set
+  of `types`) says a host's link changed state or what the host holds changed.
+  It carries `host` and `status` and nothing else. `subscribe` with no `types`
+  filter delivers it.
+- `list-hosts` gains `events_push: true` at the top and, per host, `events`
+  (`live`, `polling`, or empty while the link is not up) and `events_note`,
+  which says why a host is polled: its tuios is too old to have an Inbox or to
+  resume its stream, and the note names the update.
+- `list-host-agents` lists every session on each host, where it used to list
+  only the host's most recently active one. Each row gains `session`, and the
+  rows gain `agent_state_at`, `cwd`, `blocked_by`, `completion_seq` and
+  `finished_unread`. The entry's `session` is set only when every row is in the
+  same session. Hosts are asked at once rather than one after another. A host
+  that predates `all_sessions` on `list-agents` is asked session by session.
+- `list-host-sessions` and `list-host-agents` answer for a host that did not
+  answer with the rows it last gave, with `stale: true` and `fetched_at` (unix
+  seconds), beside the `error` it always had. Both gain `events`.
+- `list-agents` takes the new param `all_sessions`, and every row gains
+  `session`.
+- The `MsgHostsChanged` push to attached clients gains `Changed`, the hosts
+  whose link, sessions or agents changed. The daemon now sends it on such a
+  change too, not only when the `[hosts]` table changes. An older client reads
+  it as it always did, as a reason to list the hosts once.
+
+**A pane on another machine reports to the daemon that holds its window.**
+`open-pane` takes the new param `window`, the asking daemon's id for the
+window, and then returns `calls_token`; the asking daemon opens the new verb
+`pane-calls` with it (see [Reports from a pane on another
+machine](#reports-from-a-pane-on-another-machine)). What changes:
+
+- A hosted pane's process gets `TUIOS_PANE_ID`, the owner's window id. It used
+  to get none.
+- On the machine running the process, `set-agent-state`, `set-agent-meta`,
+  `set-agent-session` and `wait-for` (condition `agent-message`) with `window`
+  set to a hosted pane's id or window id, `read-agent-messages` with `to` set
+  to it, and `send-agent-message` with `from` set to it are no longer answered
+  there. They are sent to the owner and its answer is returned. A caller that
+  is not in that pane gets `forbidden`, and when the owner is too old to take
+  the call, `protocol_mismatch`. Such a call used to fail there with
+  `window_not_found` or `session_not_found`.
+- The `session` param of `open-pane` was documented as exported as
+  `TUIOS_SESSION`. It is exported as `TUIOS_SESSION_REMOTE`, as it has been
+  since hosted panes stopped exporting `TUIOS_SESSION`; the description now
+  says so.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -1420,8 +1497,9 @@ answers the verb with `unknown_verb`.
 ### list-attention
 
 List the Inbox: everything waiting for the person, in every session on this
-daemon. Each item is one of six kinds, and the list is grouped in this order,
-oldest first inside each group:
+daemon and on every linked host it follows (see [Following linked
+hosts](#following-linked-hosts)). Each item is one of six kinds, and the list
+is grouped in this order, oldest first inside each group:
 
 | Kind | Opens when | Closes when |
 | --- | --- | --- |
@@ -1448,9 +1526,11 @@ way. None of this is an `agent-state` event, since the state did not change,
 and no hook fires for it; only the `attention` event with action `updated` is
 sent.
 
-Params: `session` (optional; unlike most verbs, omitted means every session),
-`kinds` (optional list, from `approval`, `question`, `mail`, `errored`,
-`resume`, `finished`).
+Params: `session` (optional; unlike most verbs, omitted means every session;
+without `host` it names a session on this machine), `kinds` (optional list,
+from `approval`, `question`, `mail`, `errored`, `resume`, `finished`), `host`
+(optional: `local` for this machine or a linked host's name; omitted means
+every machine; an unknown name is `unknown_host`).
 
 Response:
 
@@ -1458,8 +1538,9 @@ Response:
 {"result": {"type": "attention_list", "items": [{"id": "17", "kind": "approval", "session": "fan-3", "window": "3f2a9c1e", "workspace": 1, "harness": "claude-code", "name": "claude", "summary": "approve Bash: go test ./...", "since": 1790142942055373000, "seq": 41}], "counts": {"approval": 1, "question": 0, "mail": 0, "errored": 0, "resume": 0, "finished": 0}, "total": 1, "seq": 1180, "boot_id": "9f2c41d07a3e8b65"}}
 ```
 
-Item fields: `id` (stable, never reused on this machine), `kind`, `host` (empty
-for this machine; a hub will fill it for items from linked hosts), `session`,
+Item fields: `id` (stable, never reused on this machine; an item of a linked
+host is `host:id`, the host's own id after the colon), `kind`, `host` (empty
+for this machine, the host's name for an item of a linked host), `session`,
 `window`, `workspace`, `harness`, `name`, `summary`, `options` (the decisions
 `reply-approval` takes, set only while a hook holds the item), `request_id` and
 `expires` (the held request and when its hold ends, in unix nanoseconds; see
@@ -1468,7 +1549,9 @@ for this machine; a hub will fill it for items from linked hosts), `session`,
 `since`
 (unix nanoseconds, when the item started waiting; an update keeps it), `seq`
 (the Inbox revision of the item's last change), `thread` and `count` (mail),
-`completion_seq` (finished).
+`completion_seq` (finished), `stale` and `seen_at` (an item of a host whose
+link is down: what the host said last, and when this daemon last heard from
+it, in unix nanoseconds).
 
 `summary` is text an agent wrote. The daemon keeps it to one line, removes
 control characters, masks what looks like a credential (`TOKEN=...`,
@@ -1518,6 +1601,10 @@ Dismissing a `finished` item marks the pane's turns seen. Dismissing a `mail`
 item marks the person's unread mail in the thread read. The other kinds only
 leave the list; the pane's agent state is not touched, and a later transition
 opens a new item.
+
+An item of a linked host is hidden on this daemon and nothing else: nothing on
+the host is marked, and the item comes back when the host changes it. The
+result then carries `host`.
 
 Response:
 
@@ -1711,6 +1798,85 @@ older daemon answers `unknown_verb`, which the hook reads as no decision.
 `reply-approval` without `summary` answers as before, with no check of the
 line.
 
+### Following linked hosts
+
+A daemon with a `[hosts]` table follows the agents and the Inbox of every
+linked host. For each host whose link is up it opens one connection over the
+link, calls `list-attention` with `host: "local"` there, and subscribes to
+`attention`, `agent-state`, `agent-message`, `session-created`,
+`session-closed`, `window-created` and `window-closed` from the listing's `seq`
+and `boot_id`. From then on:
+
+- The host's own items are mirrored into this Inbox (see
+  [list-attention](#list-attention)). Items the host mirrors from its own
+  hosts are not passed on: they are that machine's to report.
+- A burst of the host's agent and session events refreshes a cache of the
+  host's `list-sessions` and `list-agents` answers, then publishes
+  `host-changed` and pushes `MsgHostsChanged` to the attached clients.
+- With `subscribe` `hosts: true`, a subscriber also receives the host's
+  `agent-state`, `session-created` and `session-closed` events, with `host`
+  set, `session` and `window` cut to 128 bytes, and nothing else from the
+  host's event.
+
+When the link drops, the host's items are marked `stale` with `seen_at`, and
+`list-host-sessions` and `list-host-agents` answer from the cache with `stale`
+and `fetched_at`. On a redial the stream resumes from the last `seq` it
+delivered; a `gap` from the host, or a host that restarted, lists again.
+
+A host whose tuios has no `list-attention` or no resumable stream is followed
+by polling, as every host was before: `list-hosts` reports `events: "polling"`
+with an `events_note` that names the update, and the tuios client keeps its
+poll for it.
+
+Everything a host sends is data from another machine. Lines are bounded to 1
+MiB, an item's kind must be one this build knows and its id a short token,
+its text is cleaned and cut as a local summary is, a host holds at most 256
+items here, apart from this machine's so it cannot evict one of them, and the
+cache keeps at most 512 sessions and 2048 agent rows per host. Nothing a host
+sends runs a command, types into a pane, fires a hook or marks anything on
+this machine.
+
+### Reports from a pane on another machine
+
+A window's process can run on another machine (`new-window` with `host`). Its
+reports travel back over a connection the owner opened, since the link is
+dialled one way:
+
+1. The owner sends `window`, its window id, with `open-pane`. The far daemon
+   exports it to the process as `TUIOS_PANE_ID` and returns `calls_token`.
+2. The owner calls `pane-calls` with `pane` and `token` on a new connection.
+   After the reply the connection carries requests from the far daemon,
+   `{"id":1,"verb":"set-agent-state","params":{...}}`, one per line, and the
+   owner answers each with `{"id":1,"result":{...}}` or
+   `{"id":1,"error":{...}}`, in any order.
+3. On the far machine, a call of `set-agent-state`, `set-agent-meta` or
+   `set-agent-session` with `window`, `read-agent-messages` with `to`,
+   `send-agent-message` with `from`, or `wait-for` with condition
+   `agent-message` and `window`, set to the pane's id or window id, is sent to
+   the owner, and the owner's answer is the answer.
+
+How the grant is held to that:
+
+- The far daemon forwards only for a caller that runs in the pane: the pane's
+  process, a descendant of it, or a process on the pane's terminal, by the pid
+  the kernel gave for the connection. Anyone else naming the pane gets
+  `forbidden`. A platform that does not give the pid forwards nothing.
+- Only the verbs above cross; `wait-for` for anything but `agent-message` is
+  `forbidden`.
+- The owner runs each request as the window itself: `session` and the
+  addressing param are overwritten with the window's own, `transcript_path`,
+  `harness_pid`, `human_nonce`, `from_host` and `any_session` are dropped,
+  `send-agent-message` from anyone but the window is `forbidden`, and the call
+  runs as a caller inside a pane, so it cannot act as the person. A far daemon
+  that writes its own requests gets no more than the pane's process would.
+- `pane-calls` needs the token, which only the owner saw. At most 16 calls per
+  pane are in flight, and lines are bounded to 1 MiB.
+
+An owner from before this sends no `window`, and the far daemon exports no
+`TUIOS_PANE_ID` and answers a call naming the pane id with
+`protocol_mismatch`. A far daemon from before this returns no `calls_token`,
+and the owner opens no channel.
+
 ## Event stream
 
 The daemon can push events instead of a caller polling. A connection that issues
@@ -1746,7 +1912,8 @@ Event types:
 | `session-created` | A session was created. | `session` |
 | `session-closed` | A session was terminated. | `session` |
 | `gap` | Some events were not delivered to this connection. `reason` says why (see below). A gap has no `seq`. | `reason`, `dropped`, `boot_id` |
-| `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `answered`, `window_closed`, `session_closed` or `evicted`. An `answered` item also carries `answer` and `answered_by`. `session` and `window` are the item's, so the usual filters apply. | `session`, `window`, `action`, `attention` |
+| `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `answered`, `window_closed`, `session_closed`, `evicted` or `host_removed`. An `answered` item also carries `answer` and `answered_by`; the close of a linked host's item never reads `answered` here. `session` and `window` are the item's, so the usual filters apply. An item of a linked host also sets `host`, and a subscriber that filters on a session, window or pane does not get it unless it subscribed with `hosts`. | `session`, `window`, `host`, `action`, `attention` |
+| `host-changed` | A linked host's link changed state, or what it holds changed: its sessions, windows or agents. List the hosts again to see what. See [Following linked hosts](#following-linked-hosts). | `host`, `status` |
 
 ### What fires when
 
@@ -1808,6 +1975,12 @@ Params:
 - `after_seq` (optional): resume. Replay the retained events with a higher
   `seq` before streaming live. `0` replays everything the daemon still holds.
 - `boot_id` (optional, needs `after_seq`): the boot id `after_seq` came with.
+- `hosts` (optional): also deliver the `agent-state`, `session-created` and
+  `session-closed` events this daemon relays from its linked hosts, each with
+  `host` set, and let `session` and `window` match events of other machines.
+  Without it, an event about another machine reaches only a subscriber that
+  names no session, window or pane, and only an `attention` or `host-changed`
+  event. See [Following linked hosts](#following-linked-hosts).
 
 Request:
 

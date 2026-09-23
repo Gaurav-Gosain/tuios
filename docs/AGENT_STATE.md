@@ -942,10 +942,43 @@ is gone either way. Any other failure of `d` is shown.
 
 The rail's agents header counts the Inbox while the client is connected to it:
 approvals, questions and errored items are `blocked`, finished items are
-`done`, over every session or only this one when the filter says `here`. Rows
-from other machines are added from the rail, since the Inbox holds this
-machine's items only. Without the Inbox (an older daemon, or while reconnecting)
-the header counts its rows, as it did before.
+`done`, over every session on every machine, or only this session when the
+filter says `here`. An item of a machine whose link is down is not counted.
+Without the Inbox (an older daemon, or while reconnecting) the header counts its
+rows, as it did before.
+
+### Other machines
+
+With hosts in the `[hosts]` table, the Inbox is the whole fleet's. The daemon
+follows each linked host's Inbox and agents over the link as they change (see
+[Following linked hosts](protocol.md#following-linked-hosts)), so an agent
+that blocks on `build` is a row here, reading `build:api` on the right, and
+raises the same dock message, notification and sound a local one does, naming
+the machine. Enter on it attaches that session on `build` in this client and
+lands on the pane; on mail it opens the thread there. The prefix then `o`
+visits it like any other. `tuios list-attention` lists it as
+`build:api/claude`, with the id `build:17`.
+
+When a host's link drops, its rows stay, drawn in the muted ink, with
+`seen 3m ago` in place of the wait. They are what that machine said last, so
+they raise no alert, are not counted, are skipped by `o`, and enter on one says
+the machine cannot be reached rather than trying. The rail keeps the host's
+sessions under its header the same way, muted with no agent glyph, and the
+header says `seen 3m ago` where it used to say `offline`. A host that answers
+and refuses keeps its reason (`no daemon`, `no tuios`, `version`). When the
+link comes back the stream resumes where it stopped and the marks clear.
+
+Dismissing a row of another machine with `d` hides it here and marks nothing
+on that machine: whether you have dealt with something is a fact about you,
+and a second hub, or a client attached on that machine, still sees it. It
+comes back when that agent changes it.
+
+The rail no longer polls a host the daemon streams. The daemon pushes each
+change to the attached clients, and the rail lists the hosts again on the
+push, with one listing a minute as a backstop. A host whose tuios is too old
+to stream its agents is polled as before, every 5 seconds with the rail open
+and 30 without, and `tuios hosts` names it with what to update; what waits on
+it is not in the Inbox until it is updated.
 
 Who can clear it: `dismiss-attention` needs the nonce the daemon issued in a
 client's attach reply, which the Inbox sends and an agent in a pane does not
@@ -958,10 +991,11 @@ person's inbox with `read-agent-messages --to human` marks the mail read, and
 the mail item follows it, but only from outside every pane: from a pane that
 read is a peek.
 
-What it does not do yet: items on linked hosts are not in this machine's Inbox,
-and a client attached to a session on another machine sees this machine's
-Inbox and cannot dismiss or answer from it. `tuios peek-prompt` and
-`tuios respond` reach a pane on another machine by `HOST:SESSION:WINDOW`.
+What it does not do yet: a client attached to a session on another machine
+sees this machine's Inbox and cannot dismiss or answer from it, and the Inbox
+does not answer an item of a linked host, with the peek or with `1`, `2` and
+`3`. `tuios peek-prompt` and `tuios respond` reach a pane on another machine
+by `HOST:SESSION:WINDOW`.
 
 ## Answering a prompt without attaching
 
@@ -1593,6 +1627,35 @@ wired up outside tuios. `tuios agent-hook` uses `TUIOS_PANE_ID` and
 One variable goes the other way: `TUIOS_AGENT` is set by you, on a wrapper, to
 name the harness it runs. See [Behind a wrapper](#behind-a-wrapper).
 
+### A pane on another machine
+
+A window whose process runs on another machine (`tuios new-window NAME --host
+HOST`) exports `TUIOS_PANE_ID`, the window's id on the machine that holds the
+window, and `TUIOS_PANE_HOSTED=1`, and no `TUIOS_SOCKET` or `TUIOS_SESSION`.
+Hooks and shims work there unchanged: `tuios agent-hook` and `tuios
+set-agent-state -w "$TUIOS_PANE_ID"` reach the daemon on the machine the
+process runs on, which sends the report to the daemon that holds the window
+over the link, and that window takes the state, its Inbox row and its alerts.
+Reading and sending mail as the pane, and `wait-for agent-message` on it, work
+the same way. See [Reports from a pane on another
+machine](protocol.md#reports-from-a-pane-on-another-machine).
+
+What limits it:
+
+- Only a process in that pane is forwarded for, judged by the pid the kernel
+  gives for its connection: the pane's process, what it started, or a process
+  on the pane's terminal. Any other caller naming the pane is refused with
+  `forbidden`.
+- The daemon holding the window runs each report as that window and nothing
+  else. It ignores the session and window the report names, drops the
+  transcript path and harness pid (they name things on the other machine),
+  refuses a send from anyone but the window, and treats the caller as inside a
+  pane, so it can never speak as the person.
+- A machine holding the window from before this sends no window id, the pane
+  gets no `TUIOS_PANE_ID`, and a report naming the pane is answered with
+  `protocol_mismatch`. The agent is still detected from the side that holds the
+  window, as before.
+
 ## Alerts
 
 A state change can raise a notification, an audible cue or a bell, a clickable
@@ -1700,6 +1763,9 @@ proof, as before.
 | An agent in a hub pane attaching through the link to this machine | The hub vouches only for a caller outside its panes, in the stream's open frame, which the caller cannot write. The proxy here dials the link-human socket only for a vouched stream. An attach through the plain link socket gets no nonce. |
 | An agent in a pane on this machine dialing the link-human socket itself | The same pane check runs on that socket, against the process that dialed it. |
 | A hub from before this check | It vouches for nothing, so no attach through it verifies here. |
+| An agent in a pane on another machine reporting through the link | It reaches only its own window: the machine holding the window rewrites every report to that window and runs it as a caller inside a pane, so `from human` is refused and reading the person's mail is a peek. |
+| A process on the far machine reporting as a hosted pane it is not in | Refused with `forbidden` there, by the pid the kernel gives. The channel the reports travel on needs a token only the machine holding the window saw. |
+| A linked host writing Inbox items into this machine | Items are only displayed. Their text is cleaned and cut, a host holds at most 256 rows apart from this machine's, and nothing it sends runs a command, types into a pane or marks anything here. Dismissing one hides it here only. |
 
 ### What this does not cover
 

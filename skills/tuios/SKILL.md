@@ -54,12 +54,27 @@ animation frames reach the terminal. There is no socket to talk to, so guard on
 `TUIOS_ENV` and degrade quietly when it is unset.
 
 A pane whose process runs on another machine (`tuios new-window NAME --host
-HOST`, see Other machines) has `TUIOS_PANE_HOSTED=1`, `TUIOS_HOST` and
+HOST`, see Other machines) has `TUIOS_PANE_HOSTED=1`, `TUIOS_HOST`,
 `TUIOS_SESSION_REMOTE`, the session's name on the machine that holds the
-window. It has no `TUIOS_ENV`, `TUIOS_SOCKET`, `TUIOS_PANE_ID` or
-`TUIOS_SESSION`, because nothing on the machine it runs on reaches the daemon
-that holds the window. An agent in such a pane cannot report its state or read
-its mail. Its state is still detected from the side that holds the window.
+window, and `TUIOS_PANE_ID`, the window's id there. It has no `TUIOS_ENV`,
+`TUIOS_SOCKET` or `TUIOS_SESSION`. Report and read mail the usual way, naming
+yourself with `$TUIOS_PANE_ID`, and the daemon on the machine you run on sends
+the call to the machine that holds your window:
+
+```sh
+tuios set-agent-state -w "$TUIOS_PANE_ID" needs_input --kind approval -m 'approve Bash: make deploy'
+tuios read-agent-messages -w "$TUIOS_PANE_ID" --unread
+tuios send-agent-message -w human --from "$TUIOS_PANE_ID" 'deployed'
+tuios wait-for agent-message -w "$TUIOS_PANE_ID" --timeout 600000
+```
+
+Only these cross: `set-agent-state`, `set-agent-meta`, `set-agent-session`,
+`read-agent-messages` and `send-agent-message` naming `$TUIOS_PANE_ID`, and
+`wait-for agent-message` on it. They always act as your own window: another
+window, another session or `human` is refused or ignored. Everything else you
+run talks to the machine you are on. With no `TUIOS_PANE_ID`, the machine that
+holds the window is too old for this; your state is then only detected from
+that side.
 
 ## Addressing things
 
@@ -148,8 +163,17 @@ tuios hosts remove build                # drop it
 
 tuios hosts                             # every host and its link state
 tuios ls --all-hosts
-tuios list-agents --all-hosts
+tuios list-agents --all-hosts           # every session on every host
+tuios list-agents --all-sessions        # every session on this machine
 ```
+
+The daemon follows each host's agents and Inbox over the link as they change,
+so `tuios list-attention` and the person's Inbox cover every machine (see The
+Inbox below), and `tuios subscribe --hosts` streams other machines' agent-state
+and session events with `host` set. While a host's link is down its rows stay
+listed, marked `stale` with when it was last heard from. `tuios hosts` names a
+host whose tuios is too old to stream: its agents are polled instead and what
+waits there is not in the Inbox.
 
 `hosts add` also takes `--command PATH` to run a given tuios binary on the host,
 `--ssh-option ARG` (repeat it) for extra ssh arguments such as a jump host, and
@@ -911,18 +935,23 @@ is happening inside it, so fall back to `window-idle` or an exit marker there.
 
 ### What the person sees: the Inbox
 
-Everything waiting for the person, in every session, is one list the daemon
-keeps: an approval or a question (a pane on `needs_input`, split by
-`blocked_by`), mail to `human`, a pane on `errored`, a conversation a daemon
-restart left to resume (kind `resume`, its summary the exact command), and a
-finished turn nobody has looked at. The person opens it with the prefix key then `i`, and jumps to
-the oldest item with the prefix key then `o`. You can read the same list:
+Everything waiting for the person, in every session on this machine and on
+every linked host, is one list the daemon keeps: an approval or a question (a
+pane on `needs_input`, split by `blocked_by`), mail to `human`, a pane on
+`errored`, a conversation a daemon restart left to resume (kind `resume`, its
+summary the exact command), and a finished turn nobody has looked at. The
+person opens it with the prefix key then `i`, and jumps to the oldest item
+with the prefix key then `o`. You can read the same list:
 
 ```sh
 tuios list-attention
 tuios list-attention --kind approval --kind question
+tuios list-attention --host build
 tuios list-attention --json
 ```
+
+A row of another machine reads `build:api/claude`, its id is `build:17`, and
+while that machine's link is down it ends in `[unreachable, seen 5m ago]`.
 
 ```
 Approvals
