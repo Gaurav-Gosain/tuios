@@ -1780,10 +1780,15 @@ func (d *Daemon) dispatchVerbLine(cs *connState, line []byte) error {
 	}
 
 	result, verr := entry.handler(d, cs, req.Params)
+	replyFailed := cs.replyFailed
+	cs.replyFailed = nil
 	if verr != nil {
 		return d.writeVerbError(cs, req.ID, req.Verb, verr)
 	}
 	if err := d.writeVerbResponse(cs, &verbResponse{ID: req.ID, Result: result}); err != nil {
+		if replyFailed != nil {
+			replyFailed()
+		}
 		return err
 	}
 	// A subscribe verb stashes its fresh subscription for the streamer, which must

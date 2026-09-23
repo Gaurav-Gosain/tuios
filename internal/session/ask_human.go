@@ -27,6 +27,9 @@ import (
 //     human, marked verified_human, so wait-for agent-message picks it up. A
 //     caller with no pane calls ask-human again with the request id to wait
 //     for it or read it.
+//   - When the caller goes away while it waits, which the daemon learns only
+//     when the reply cannot be written, an answer to a question from a pane
+//     is mailed there the same way (askReply).
 //
 // Who may do what, and how it is enforced:
 //
@@ -335,7 +338,7 @@ func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verb
 		if p.Question != "" || len(p.Options) > 0 {
 			return nil, invalidParam("request_id", "request_id comes back for a question already asked, so it takes no question or options")
 		}
-		return d.rejoinAsk(p.RequestID, fromPane, own, wait, timeout)
+		return d.rejoinAsk(cs, p.RequestID, fromPane, own, wait, timeout)
 	}
 
 	if !askLineShown(p.Question, attentionMaxSummary) {
@@ -390,12 +393,12 @@ func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verb
 	if !wait {
 		return askResult(hold.id, askOutcome{}), nil
 	}
-	return d.awaitAsk(hold, timeout), nil
+	return d.awaitAsk(cs, hold, timeout), nil
 }
 
 // rejoinAsk is ask-human with a request id: wait on the question again, or
 // read how it ended.
-func (d *Daemon) rejoinAsk(requestID string, fromPane bool, own string, wait bool, timeout time.Duration) (any, *verbError) {
+func (d *Daemon) rejoinAsk(cs *connState, requestID string, fromPane bool, own string, wait bool, timeout time.Duration) (any, *verbError) {
 	window, known := d.attention.askPane(requestID)
 	if !known {
 		return nil, hintedVerbError(ErrVerbInvalidParams, "no question was asked under request "+echoName(requestID), &VerbHint{
@@ -422,27 +425,46 @@ func (d *Daemon) rejoinAsk(requestID string, fromPane bool, own string, wait boo
 		d.attention.leaveAsk(hold)
 		return askResult(requestID, askOutcome{}), nil
 	}
-	return d.awaitAsk(hold, timeout), nil
+	return d.awaitAsk(cs, hold, timeout), nil
 }
 
 // awaitAsk blocks on an open question until it ends or timeout passes.
-func (d *Daemon) awaitAsk(hold *askHold, timeout time.Duration) map[string]any {
+func (d *Daemon) awaitAsk(cs *connState, hold *askHold, timeout time.Duration) map[string]any {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
 	case out := <-hold.done:
-		return askResult(hold.id, out)
+		return d.askReply(cs, hold, out)
 	case <-timer.C:
 	case <-d.ctx.Done():
 		if out, ended := d.attention.leaveAsk(hold); ended {
-			return askResult(hold.id, out)
+			return d.askReply(cs, hold, out)
 		}
 		return askResult(hold.id, askOutcome{Reason: askEndShutdown})
 	}
 	if out, ended := d.attention.leaveAsk(hold); ended {
-		return askResult(hold.id, out)
+		return d.askReply(cs, hold, out)
 	}
 	return askResult(hold.id, askOutcome{})
+}
+
+// askReply is the reply to a waiting call whose question ended with out.
+//
+// The call cannot tell whether its caller is still there: the connection is
+// read only between calls, so a caller killed while it waited, for example by
+// a tool that stops a command after two minutes, is noticed only when its
+// reply is written. When the person answered a question from a pane and that
+// write fails, the answer is mailed to the pane instead, the way an answer
+// nobody waits for is, so it is never lost with the caller.
+func (d *Daemon) askReply(cs *connState, hold *askHold, out askOutcome) map[string]any {
+	if out.Reason == AskAnswered && hold.window != "" && cs != nil {
+		h := askHold{id: hold.id, session: hold.session, window: hold.window, question: hold.question}
+		cs.replyFailed = func() {
+			LogBasic("Question %s: the caller left before its answer, mailing it to the pane", hold.id)
+			d.mailAskAnswer(h, out)
+		}
+	}
+	return askResult(hold.id, out)
 }
 
 // verbAnswerAsk answers a question for the person.

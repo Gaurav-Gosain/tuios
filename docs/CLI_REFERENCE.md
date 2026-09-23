@@ -752,7 +752,10 @@ When `--timeout` runs out first, the command exits `2` and the question stays.
 The answer is then mailed to the asking pane from `human`, marked
 `verified_human`, so `tuios wait-for agent-message` picks it up; or come back
 with `--request-id`. From inside a pane the question is asked as that pane,
-and naming another is refused.
+and naming another is refused. An answer to a call that was killed while it
+waited is mailed the same way. A caller whose tool stops commands after a
+while (two minutes for many agent harnesses) keeps `--timeout` below that, or
+asks with `--no-wait` and waits with `tuios wait-for agent-message`.
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)

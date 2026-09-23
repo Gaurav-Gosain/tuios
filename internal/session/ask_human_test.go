@@ -145,6 +145,43 @@ func TestAskHumanLateAnswerIsMailedToThePane(t *testing.T) {
 	}
 }
 
+// TestAskHumanAnswerOutlivesAKilledCaller covers a caller that goes away while
+// it waits, as a command a tool kills after two minutes does. The call still
+// holds the question when the person answers, and the reply cannot be
+// written, so the answer is mailed to the asking pane instead of being lost.
+func TestAskHumanAnswerOutlivesAKilledCaller(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	_, a, _ := twoWindowSession(t, d, "work")
+	c := dialVerb(t, sp)
+
+	asker := dialVerb(t, sp)
+	asker.send(t, `{"id":1,"verb":"ask-human","params":{"session":"work","window":"`+a+`","question":"Rebase?","options":["rebase","merge"],"timeout":20000}}`)
+	item := awaitAskItem(t, c)
+	id, _ := item["request_id"].(string)
+	_ = asker.conn.Close()
+
+	tui := attachTUI(t, sp, "work")
+	if res := result(t, answerAskCall(t, c, id, "rebase", tui.HumanNonce())); res["applied"] != true {
+		t.Fatalf("answer-ask = %v, want applied", res)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		msgs := result(t, c.call(t, `{"id":1,"verb":"read-agent-messages","params":{"session":"work","to":"`+a+`"}}`))
+		if list, _ := msgs["messages"].([]any); len(list) > 0 {
+			m := list[0].(map[string]any)
+			if len(list) != 1 || m["from"] != AgentInboxHuman || m["text"] != "rebase" || m["verified_human"] != true {
+				t.Fatalf("inbox of the asking pane = %v, want the one answer from human, verified", list)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the answer to a killed caller's question never reached the asking pane")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // TestAskHumanFromAPaneAsksOnlyAsThatPane holds a pane to its own questions:
 // it cannot have an answer mailed into another agent's inbox, and it cannot
 // come back for another pane's question.

@@ -2162,6 +2162,10 @@ Response:
 Inbox; the answer, when it comes, is mailed to the asking pane from `human`
 with `verified_human` set, so `wait-for agent-message` returns on it, and a
 call with `request_id` reads it. A question from no pane is only read that way.
+When the caller goes away while it waits, the daemon learns so only when it
+cannot write the reply. If that reply was the person's answer to a question
+from a pane, the answer is mailed to the pane the same way, so an agent whose
+tool killed the call still gets it.
 
 Refused over a link (`forbidden`): a question is put to the person at this
 machine's clients by something on this machine. At most 16 questions from no

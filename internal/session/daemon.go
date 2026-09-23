@@ -290,6 +290,12 @@ type connState struct {
 	// another machine's daemon.
 	takeover func(br *bufio.Reader)
 
+	// replyFailed, when a verb sets it, runs if writing that verb's reply
+	// fails, which is how a call that waited learns its caller is gone.
+	// ask-human sets it so an answer is mailed rather than lost. It is
+	// cleared after every reply.
+	replyFailed func()
+
 	// viaLink says this connection was accepted on the link socket, which
 	// only the proxy on this machine dials, for a stream that came in over a
 	// hub's link. It is a fact about the connection, not a claim in any

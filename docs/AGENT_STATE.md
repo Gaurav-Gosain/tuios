@@ -978,7 +978,9 @@ the question has to be the one you read.
 When the agent's wait (two minutes by default) runs out first, the call returns
 `pending` and the question stays. Your answer, when you give it, is mailed to
 the asking pane from `human`, marked `verified_human`, where `wait-for
-agent-message` picks it up. `d` dismisses a question, and the call returns
+agent-message` picks it up. The same happens when the call was killed while
+it waited, as a harness does to a command that runs past its limit. `d`
+dismisses a question, and the call returns
 `dismissed`. A pane has one open question: asking another supersedes the
 first. Closing the pane ends its question.
 

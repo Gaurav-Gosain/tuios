@@ -1211,7 +1211,7 @@ When you need a decision with a few possible answers, ask it with `ask-human`.
 It is one call whether or not anyone is attached:
 
 ```sh
-answer=$(tuios ask-human 'Deploy the branch to staging?' -o yes -o no -o later --timeout 300000)
+answer=$(tuios ask-human 'Deploy the branch to staging?' -o yes -o no -o later --timeout 90000)
 case $? in
   0) echo "the person said $answer" ;;
   2) echo "no answer yet; it will arrive as mail" ;;
@@ -1231,6 +1231,12 @@ answer is mailed to your pane from `human`, verified, so this returns on it:
 ```sh
 tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --timeout 600000
 ```
+
+Keep `--timeout` below the time your tool gives a command (two minutes for
+many harnesses). To wait longer, ask with `--no-wait` and then run the
+`wait-for agent-message` above, in steps your tool allows: the answer is mail
+either way. If your tool kills the call while it waits, an answer given after
+that is still mailed to your pane.
 
 Or come back for it with `tuios ask-human --request-id <id>`. Keep the question
 to one line of at most 160 bytes and each answer to 60; put the context in a
