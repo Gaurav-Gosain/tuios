@@ -130,3 +130,34 @@ func (m *OS) DockWorkspaceHoverAt(x, y int) bool {
 	m.dockWorkspaceTooltipTrack(ws)
 	return ws > 0
 }
+
+// dockHoverChangesAt reports whether a motion to (x, y) would change what the
+// dock shows: which session control is lit, or which dock label is pending or
+// up. It resolves the targets the motion handler resolves, DockSessionHoverAt
+// and then DockWorkspaceHoverAt, from the same hit lists, so a motion it turns
+// down is one the handler would have answered by writing the state it already
+// had. The motion filter asks this so a pointer crossing bare band, or moving
+// inside one control, does not compose a frame per cell identical to the last.
+// TestDockHoverChangesAtAgreesWithTheHandler holds the two together.
+func (m *OS) dockHoverChangesAt(x, y int) bool {
+	a := m.DockSessionActionAt(x, y)
+	if a != m.dockSessionHover {
+		return true
+	}
+	src, key := tooltipNone, 0
+	if a != DockSessionNone {
+		src, key = tooltipDockSession, int(a)
+	} else if ws := m.DockWorkspacePillAt(x, y); ws > 0 && m.workspacePillClipped(ws) {
+		src, key = tooltipDockWorkspace, ws
+	}
+	switch {
+	case src == tooltipNone:
+		// Nothing to arm: the handler drops a dock label and leaves any other.
+		return m.Tooltip.Source == tooltipDockSession || m.Tooltip.Source == tooltipDockWorkspace
+	case !m.tooltipsEnabled(src):
+		// tooltipTrack clears whatever label is pending or up.
+		return m.Tooltip.Source != tooltipNone
+	default:
+		return m.Tooltip.Source != src || m.Tooltip.Key != key
+	}
+}

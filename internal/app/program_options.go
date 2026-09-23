@@ -273,9 +273,12 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 	// band. Neither had a clause here, so on every client the motion was
 	// dropped before the handler that tracks them ran: the hover and both
 	// labels were dead unless some other clause happened to pass the event.
-	// One event per cell crossed while over the band, and one more after the
-	// pointer leaves it, which is the event that clears the reveal.
-	if movedCell && (m.InDockBand(mouse.Y) || m.DockHoverActive()) {
+	// A motion over the band, or the one that leaves it with something lit,
+	// passes when it would change the lit control or the label: onto a
+	// control, from one to the next, or off one. Passing every cell of the
+	// band composed a full frame per cell crossed on bare bar, each identical
+	// to the last.
+	if movedCell && (m.InDockBand(mouse.Y) || m.DockHoverActive()) && m.dockHoverChangesAt(mouse.X, mouse.Y) {
 		return msg
 	}
 

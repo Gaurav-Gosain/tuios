@@ -230,23 +230,34 @@ func TestMotionFilterRecordsThePointerItDrops(t *testing.T) {
 // TestMotionFilterPassesTheDockBand. The dock's session controls brighten under
 // the pointer and a clipped workspace pill says its name, both off motion over
 // the band, and no clause let that motion through: the hover and the labels
-// were dead on every client. One event per cell over the band, and one more
-// after the pointer leaves it, so the reveal clears.
+// were dead on every client. The filter passes a motion that changes what the
+// dock shows, and only that: one onto a control, one off it, and nothing for
+// the cells of bare band between, each of which composed a frame identical to
+// the last.
 //
-// Negative control: remove the dock clause and this fails.
+// Negative control: remove the dock clause and the first assertion fails;
+// drop dockHoverChangesAt from it, so every cell of the band passes again, and
+// the bare-band assertion fails.
 func TestMotionFilterPassesTheDockBand(t *testing.T) {
 	o := filterOS(t)
 	o.Settings.Links = config.LinksOff
+	o.dockSessionHits = []dockSessionHit{{X0: 60, X1: 62, Y: 39, Action: DockSessionLeave}}
 	overDock := tea.MouseMotionMsg{X: 60, Y: 39}
 	if !o.InDockBand(overDock.Y) {
 		t.Fatalf("row %d is not the dock band; the fixture moved", overDock.Y)
 	}
 	if FilterMouseMotion(o, overDock) == nil {
-		t.Error("motion over the dock band was dropped; its controls can never brighten")
+		t.Error("motion onto a dock control was dropped; it can never brighten")
 	}
 	o.LastMouseX, o.LastMouseY = overDock.X, overDock.Y
 	if FilterMouseMotion(o, overDock) != nil {
 		t.Error("a motion inside the same dock cell passed")
+	}
+
+	bareBand := tea.MouseMotionMsg{X: 45, Y: 39}
+	o.LastMouseX, o.LastMouseY = 46, 39
+	if FilterMouseMotion(o, bareBand) != nil {
+		t.Error("motion across bare dock band passed; each cell composes an unchanged frame")
 	}
 
 	// The pointer leaves the band with a control still lit: that one event
@@ -260,5 +271,71 @@ func TestMotionFilterPassesTheDockBand(t *testing.T) {
 	o.LastMouseX, o.LastMouseY = overDock.X, overDock.Y
 	if FilterMouseMotion(o, offDock) != nil {
 		t.Error("motion off the dock with nothing lit passed; the CPU guard is gone")
+	}
+}
+
+// TestDockHoverChangesAtAgreesWithTheHandler holds the filter's prediction to
+// what the motion handler does. The filter drops a dock motion when
+// dockHoverChangesAt says the hover would not change, so a case where it says
+// no and the handler would have changed something is a control that never
+// lights or a label that never arms or never clears.
+//
+// It walks every cell of the dock row from every hover state the dock can be
+// in (nothing lit, each control lit, each label pending, a label from another
+// surface) with tooltips on and off, runs DockSessionHoverAt and
+// DockWorkspaceHoverAt as the handler does, and compares.
+//
+// Negative control: making dockHoverChangesAt ignore the tooltip, or answer
+// from the session controls alone, fails this.
+func TestDockHoverChangesAtAgreesWithTheHandler(t *testing.T) {
+	o := filterOS(t)
+	const row = 39
+	o.WorkspaceNames = map[int]string{2: "a workspace name far too long for its pill", 3: "ok"}
+	if !o.workspacePillClipped(2) || o.workspacePillClipped(3) {
+		t.Fatal("setup: workspace 2 must clip and 3 must not")
+	}
+	o.dockWorkspaceHits = []dockWorkspaceHit{
+		{X0: 40, X1: 46, Y: row, Workspace: 2},
+		{X0: 47, X1: 51, Y: row, Workspace: 3},
+		{X0: 52, X1: 55, Y: row, Workspace: 0}, // the "+" tab
+	}
+	o.dockSessionHits = []dockSessionHit{
+		{X0: 110, X1: 112, Y: row, Action: DockSessionLeave},
+		{X0: 113, X1: 115, Y: row, Action: DockSessionClose},
+	}
+
+	hovers := []DockSessionAction{DockSessionNone, DockSessionLeave, DockSessionClose}
+	tips := []tooltipState{
+		{},
+		{Source: tooltipDockSession, Key: int(DockSessionLeave)},
+		{Source: tooltipDockSession, Key: int(DockSessionClose), Shown: true},
+		{Source: tooltipDockWorkspace, Key: 2},
+		{Source: tooltipDockWorkspace, Key: 3},
+		{Source: tooltipRailStrip, Key: 5},
+	}
+	checked := 0
+	for _, enabled := range []bool{true, false} {
+		for _, pillTips := range []bool{true, false} {
+			o.Settings.Tooltips, o.Settings.DockWorkspaceTooltip = enabled, pillTips
+			for _, hover := range hovers {
+				for _, tip := range tips {
+					for x := range 120 {
+						o.dockSessionHover, o.Tooltip = hover, tip
+						predicted := o.dockHoverChangesAt(x, row)
+						o.DockSessionHoverAt(x, row)
+						o.DockWorkspaceHoverAt(x, row)
+						changed := o.dockSessionHover != hover || o.Tooltip != tip
+						if predicted != changed {
+							t.Errorf("tooltips=%v pill tooltips=%v lit=%d tooltip=%+v x=%d: predicted change %v, handler changed %v",
+								enabled, pillTips, hover, tip, x, predicted, changed)
+						}
+						checked++
+					}
+				}
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("nothing was checked")
 	}
 }

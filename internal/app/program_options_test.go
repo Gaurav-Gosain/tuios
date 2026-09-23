@@ -219,3 +219,41 @@ func BenchmarkPointerSweep(b *testing.B) {
 		}
 	}
 }
+
+// TestPointerSweepOverTheDockPassesOnlyItsTargets is BenchmarkPointerSweep's
+// chrome row held as an assertion. A pointer swept along the dock passes the
+// filter when it reaches or leaves a control or a clipped pill, and not for
+// the cells of bare bar between, each of which composed a whole frame
+// identical to the last: one frame per cell crossed, on every served client.
+//
+// Negative control: passing every motion over the dock band again, as the
+// filter did before dockHoverChangesAt, fails this with one pass per cell.
+func TestPointerSweepOverTheDockPassesOnlyItsTargets(t *testing.T) {
+	o := sweepOS(t)
+	o.View()
+	const row = 39
+	if !o.InDockBand(row) {
+		t.Fatalf("setup: row %d is not the dock band", row)
+	}
+	targets := len(o.dockSessionHits)
+	for _, h := range o.dockWorkspaceHits {
+		if h.Workspace > 0 && o.workspacePillClipped(h.Workspace) {
+			targets++
+		}
+	}
+	passed := 0
+	for x := range o.Width {
+		msg := FilterMouseMotion(o, tea.MouseMotionMsg{X: x, Y: row})
+		if msg == nil {
+			continue
+		}
+		passed++
+		o.Update(msg)
+		o.View()
+	}
+	// Onto and off each target, and the one motion that leaves the last.
+	if limit := 2*targets + 1; passed > limit {
+		t.Errorf("a sweep across %d dock cells passed %d motions; %d targets allow at most %d",
+			o.Width, passed, targets, limit)
+	}
+}

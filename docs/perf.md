@@ -1122,3 +1122,32 @@ hairline to take the new rule colour.
 
 The CPU this saves is about 3% of a frame, below what this machine resolves;
 the allocations are exact.
+
+**The dock band passes a motion only when the dock's hover would change**
+(`program_options.go`, `tooltip_dock.go`). The motion filter passed every cell
+a pointer crossed on the dock row, bare bar included, so a sweep along it
+composed one full frame per cell on every served client, each identical to the
+last: 1.000 frames per event on `BenchmarkPointerSweep/chrome/filtered`. The
+clause now also asks `dockHoverChangesAt`, which resolves the control and the
+clipped pill under the pointer from the hit lists the handler reads and
+compares them with the lit control and the label. Onto a control, from one to
+another and off one still pass. `TestDockHoverChangesAtAgreesWithTheHandler`
+walks every dock cell from every hover state, with tooltips on and off, and
+requires the prediction to match what `DockSessionHoverAt` and
+`DockWorkspaceHoverAt` then do. `TestPointerSweepOverTheDockPassesOnlyItsTargets`
+holds the sweep to two passes per target.
+
+| `PointerSweep/chrome/filtered` | before | after | |
+|---|---|---|---|
+| frames/event | 1.000 | 0 | |
+| time per event | 206 us | 66 ns | -99.97% (p=0.000) |
+| allocs/op | 205 | 2 | -99.0% |
+| B/op | 20,326 | 80 | -99.6% |
+| `PointerSweep/content/filtered` | | | unchanged |
+
+CPU per op on the new side is below the resolution of `/usr/bin/time`: the
+whole 20,000-event process takes under 10 ms, so the time row is the
+benchmark's own ns/op over the same alternating rounds. The profiling pass
+measured the served end of it, an in-process SSH and web server with a client
+sweeping the dock row, at 256 us to 52 us of server CPU per event over SSH and
+276 us to 102 us over the web.
