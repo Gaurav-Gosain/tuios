@@ -158,6 +158,7 @@ and the rail's `u` clears only this client's seen marks.
 On a risky approval (one a [risk rule](AGENT_STATE.md#risk-rules) matched),
 `1` and `2` allow only on a second press of the same key within 3 seconds, and
 so do `a`, `A` and a digit in the peek; any other key resets the first press.
+The line the first press shows names the time it lapses.
 On a plan, `1` approves, `2` approves and accepts edits for the session, and
 `3` keeps it planning; `1` and `2` work once the plan's last line has been
 shown. The digits are not bindings.

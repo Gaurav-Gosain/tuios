@@ -27,6 +27,11 @@ import (
 func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg := &DaemonConfig{}
 	if uc == nil {
+		// No file was read, which is not the same as a file turning the
+		// risk rules off: the approval table's defaults stand, the shipped
+		// rules among them, so a protocol pane's held call is still marked.
+		// Fail closed.
+		cfg.Approvals = ApprovalPolicyFromConfig(config.ApprovalsConfig{})
 		return cfg
 	}
 	if GetDebugLevel() == DebugOff && uc.Daemon.LogLevel != "" {

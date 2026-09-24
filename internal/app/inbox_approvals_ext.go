@@ -132,6 +132,13 @@ func (m *OS) inboxArm(key string, it session.AttentionItem, now time.Time) bool 
 	return false
 }
 
+// inboxArmedUntil says when the armed press lapses, as a clock time: nothing
+// redraws the line when it does, so it names the time rather than implying
+// the press is still waiting.
+func (m *OS) inboxArmedUntil() string {
+	return "by " + m.Inbox.approvals.armed.at.Add(inboxRiskPressWindow).Format("15:04:05")
+}
+
 // inboxArmedFor reports whether a press on it is waiting for its second, and
 // which key it was.
 func (m *OS) inboxArmedFor(it session.AttentionItem, now time.Time) (string, bool) {
@@ -385,7 +392,7 @@ func (m *OS) inboxPlanMoreBelow(it session.AttentionItem) int {
 // inboxPlanDetail is the plan under the cursor: who asks, the plan's lines
 // behind a bar that marks them as the agent's text, what 2 also sets, and how
 // much is left to read. Drawing the window that holds the last line records
-// the plan as read to its end.
+// the plan as read to its end, when the panel fits the screen whole.
 func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 	width = max(width-2, 8)
 	pv := &m.Inbox.approvals.plan
@@ -415,12 +422,6 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 	window := m.inboxPlanWindow()
 	pv.scroll = clampInt(pv.scroll, 0, max(len(body)-window, 0))
 	end := min(pv.scroll+window, len(body))
-	if end >= len(body) {
-		if pv.seenEnd == nil {
-			pv.seenEnd = make(map[string]bool)
-		}
-		pv.seenEnd[inboxPlanKey(it)] = true
-	}
 	if len(body) <= window {
 		head += ", " + strconv.Itoa(len(body)) + " lines, all shown"
 	} else {
@@ -437,8 +438,30 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 	}
 	if more := len(body) - end; more > 0 {
 		add("  ", m.inboxKeyOr(config.ActionInboxDetailDown, "J")+"/"+m.inboxKeyOr(config.ActionInboxDetailUp, "K")+" scroll, "+strconv.Itoa(more)+" more below. 1 approves once the end has been shown.")
+		return lines
 	}
+	// The window holds the last line. It has been read only if the panel
+	// fits the screen: on one too short, the panel is squeezed past its
+	// minimum and the bottom of the detail is cut off.
+	if !m.inboxDetailFits(len(lines)) {
+		add("  ", "The screen is too short to show the whole plan. Enter answers it in the pane.")
+		return lines
+	}
+	if pv.seenEnd == nil {
+		pv.seenEnd = make(map[string]bool)
+	}
+	pv.seenEnd[inboxPlanKey(it)] = true
 	return lines
+}
+
+// inboxDetailFits reports whether the Inbox panel, with n detail lines under
+// the list, fits the screen whole: the panel's chrome, the scroll line, the
+// rule and lines of the detail, and the fewest rows the list is squeezed to.
+// The key hints are not counted, since the panel drops them before anything
+// else. An unknown screen size is read as not fitting.
+func (m *OS) inboxDetailFits(n int) bool {
+	rh := m.GetRenderHeight()
+	return rh > 0 && panelChromeRows+1+n+1+minPanelRows <= rh
 }
 
 // inboxRiskLines names each rule a risky item matched and why.
@@ -455,10 +478,8 @@ func inboxRiskLines(it session.AttentionItem, width int) []string {
 // inboxRiskWhy is what a rule guards against, for a shipped rule, and where
 // it came from for one of the person's.
 func inboxRiskWhy(name string) string {
-	for _, r := range risk.Builtin() {
-		if r.Name == name {
-			return r.Why
-		}
+	if why, ok := risk.Why(name); ok {
+		return why
 	}
 	return "a rule in your config"
 }
@@ -551,7 +572,7 @@ func (m *OS) inboxDetailExtras(it session.AttentionItem) (detail func(width int)
 				if press == "" {
 					press = inboxDecisionKey(key)
 				}
-				for _, l := range wrapPlain("Press "+press+" again to allow "+printableTitle(inboxRiskTarget(it)), max(width-2, 8)) {
+				for _, l := range wrapPlain("Press "+press+" again "+m.inboxArmedUntil()+" to allow "+printableTitle(inboxRiskTarget(it)), max(width-2, 8)) {
 					lines = append(lines, "  "+l)
 				}
 			}
@@ -628,7 +649,7 @@ func (m *OS) inboxPeekRiskGate(p *inboxPeek, action, value string) ([]string, bo
 		if press == "" {
 			press = "it"
 		}
-		p.Note = "Risky: " + strings.Join(cur.Risk, ", ") + ". Press " + press + " again to allow " + printableTitle(inboxRiskTarget(cur)) + "."
+		p.Note = "Risky: " + strings.Join(cur.Risk, ", ") + ". Press " + press + " again " + m.inboxArmedUntil() + " to allow " + printableTitle(inboxRiskTarget(cur)) + "."
 		return nil, false
 	}
 	return slices.Clone(cur.Risk), true

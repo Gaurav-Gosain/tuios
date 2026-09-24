@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
 
 // TestEveryDaemonKeyReachesTheDaemon walks the [daemon] section by reflection
@@ -75,5 +76,22 @@ func TestHostsAndHooksReachTheDaemon(t *testing.T) {
 	}
 	if got.Hooks == nil {
 		t.Error("the hook table did not reach the daemon; a detached session runs none")
+	}
+}
+
+// TestDaemonConfigFromNilAsksForNothing: no file, no settings, and the
+// daemon's own defaults and TUIOS_* environment stand. The one exception is
+// the approval table, whose defaults include the shipped risk rules: a daemon
+// that read no file still marks a risky call.
+//
+// Negative control: returning the zero config for nil leaves no risk rules.
+func TestDaemonConfigFromNilAsksForNothing(t *testing.T) {
+	got := DaemonConfigFromUser(nil)
+	if len(got.Approvals.Risk) != len(risk.Builtin()) || !got.Approvals.Plans || got.Approvals.PanesMayAllow || len(got.Approvals.Enabled) != 0 {
+		t.Errorf("a nil config gave the approval policy %+v, want the table's defaults", got.Approvals)
+	}
+	got.Approvals = ApprovalPolicy{}
+	if !reflect.DeepEqual(got, &DaemonConfig{}) {
+		t.Errorf("a nil config produced %+v, want the zero value besides approvals", got)
 	}
 }

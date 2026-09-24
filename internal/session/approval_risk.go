@@ -31,7 +31,8 @@ import (
 //   - on every needs_input report of kind approval, on the line the pane
 //     reported, for an approval nobody holds. tuios's own hooks report
 //     "approve <Tool>: <what>", which is read as that tool and argument; any
-//     other line is read as a command.
+//     other line is read as a command. The line is clipped, so a clipped one
+//     is also marked cut short.
 //
 // respond, the peek's key presses, takes risk_ack under the same rule for its
 // approving actions, and refuses them from a pane with the respond grant
@@ -80,13 +81,22 @@ func (a *attentionStore) riskOfCall(tool, target, line, root string) []risk.Hit 
 
 // riskOfLine matches the rules against the line a pane reported for its
 // approval. A plan's line is its title, which is not a command.
+//
+// The hooks clip that line to integration.MaxMessage, so a risky part past
+// the cut is not there to match. A clipped line is marked cut short on top of
+// whatever the rules found, which holds the allow to two presses and keeps a
+// pane with the respond grant from allowing it: fail closed.
 func (a *attentionStore) riskOfLine(line, root string) []risk.Hit {
 	set := a.risk.Load()
 	if set == nil || len(set.rules) == 0 || strings.HasPrefix(line, integration.PlanSummaryPrefix) {
 		return nil
 	}
 	tool, text := risk.ParseSummary(line)
-	return risk.Match(set.rules, risk.Call{Tool: tool, Text: text, Root: root, Home: set.home})
+	hits := risk.Match(set.rules, risk.Call{Tool: tool, Text: text, Root: root, Home: set.home})
+	if integration.Clipped(line) {
+		hits = append(hits, risk.CutShortHit)
+	}
+	return hits
 }
 
 // riskOn is the risk marked on a pane's blocking item, for respond.

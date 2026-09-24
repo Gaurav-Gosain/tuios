@@ -65,6 +65,13 @@ func Clip(s string) string {
 	return strings.TrimSpace(string(r[:MaxMessage-3])) + "..."
 }
 
+// Clipped reports whether s reads as a line Clip cut short: as long as Clip
+// leaves one and ending in the dots it adds. A line that happens to end so is
+// read as clipped too, which errs toward reading less into it.
+func Clipped(s string) bool {
+	return strings.HasSuffix(s, "...") && utf8.RuneCountInString(s) >= MaxMessage-1
+}
+
 // ToolSummary names a tool call the way a person reads an approval prompt: the
 // tool, then the one argument that says what it will do. The keys are the ones
 // Claude Code's tool_input carries (command for Bash, file_path for the file

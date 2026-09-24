@@ -981,6 +981,10 @@ caller that sends nothing new is answered as before:
   types never sees it. Nothing publishes it yet.
 - The error codes `not_repo`, `no_notes`, `queue_full` and
   `risk_unacknowledged` are in the catalog.
+- An `approval` item's `risk` can name `cut short`: the line nobody holds was
+  clipped, so the rules could not read all of it. An allow acknowledges it in
+  `risk_ack` like any rule. A daemon started with no config file at all marks
+  approvals with the shipped rules, where it used to mark nothing.
 
 **The activity ring is built.** `agent-activity` answers (see
 [agent-activity](#agent-activity)) instead of `internal`, and these older
@@ -3304,7 +3308,9 @@ matches. They run on a held call's `tool` and `target` when the hook names
 them, else on its `summary`, and on the line of every `approval` item nobody
 holds (tuios's own hooks report `approve <Tool>: <what>`, which is read as that
 tool and argument; any other line is read as a command). The names of the rules
-that matched are the item's `risk`.
+that matched are the item's `risk`. That line is clipped, so a clipped one also
+carries `cut short` in `risk`, which is acknowledged like a rule. A daemon that
+read no config file uses the shipped rules.
 
 - `reply-approval` with `once` or `always` on an item with `risk` must carry
   `risk_ack` naming exactly those rules, in any order. Otherwise the call is

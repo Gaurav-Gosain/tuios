@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	"github.com/Gaurav-Gosain/tuios/internal/risk"
 )
 
@@ -158,6 +159,12 @@ func TestUnheldApprovalIsMarkedFromItsLine(t *testing.T) {
 		{"sudo rm -rf build", []string{risk.RuleRecursiveDelete, risk.RuleSudo}},
 		{"Claude needs your permission to use Bash", nil},
 		{"plan: Remove sudo from the scripts", nil},
+		// The hooks clip a long line, and what was cut may be the risky
+		// part: a clipped line is marked cut short, beside any rule it
+		// matched before the cut.
+		{integration.Clip("approve Bash: echo " + strings.Repeat("x", integration.MaxMessage) + " && rm -rf ~"), []string{risk.RuleCutShort}},
+		{integration.Clip("approve Bash: git push -f && echo " + strings.Repeat("x", integration.MaxMessage)), []string{risk.RuleForcePush, risk.RuleCutShort}},
+		{"approve Bash: echo wait...", nil},
 	} {
 		setAgentState(t, c, "work", a, "needs_input", "approval", tc.line)
 		items := waitAttention(t, c, "the item for "+tc.line, func(items []map[string]any) bool {

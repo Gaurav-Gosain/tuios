@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -106,8 +107,12 @@ func TestInboxRiskyApprovalTakesTwoPresses(t *testing.T) {
 	if err := term.SendKeys("1"); err != nil {
 		t.Fatalf("first press: %v", err)
 	}
-	if err := term.WaitForText("Press 1 again to allow rm -rf build/", uiTimeout); err != nil {
+	if err := term.WaitForText(" to allow rm -rf build/", uiTimeout); err != nil {
 		t.Fatalf("the first press did not say what the second does: %v\n%s", err, term.Snapshot())
+	}
+	// The line names when the press lapses, since nothing redraws it then.
+	if snap := term.Snapshot(); !regexp.MustCompile(`Press 1 again by \d\d:\d\d:\d\d to allow rm -rf build/`).MatchString(snap) {
+		t.Fatalf("the first press does not say until when the second is taken:\n%s", snap)
 	}
 	select {
 	case err := <-hook.exited:

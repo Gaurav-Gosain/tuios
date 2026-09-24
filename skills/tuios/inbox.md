@@ -154,7 +154,8 @@ is held too, as a row of kind `plan` the person reads whole before `1` works;
 deny's message.
 
 A call that matches a risk rule (a recursive delete, a force push, a pipe to a
-shell, a write outside the worktree, and the like) carries `risk`. The person
+shell, a write outside the worktree, and the like) carries `risk`, and so
+does an unheld approval whose line was clipped (`cut short`). The person
 allows it only with a second press. With the `respond` grant you may deny a
 risky prompt with `tuios respond`, and an allow is refused with `forbidden`.
 

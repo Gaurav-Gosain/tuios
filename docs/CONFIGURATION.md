@@ -159,7 +159,7 @@ panes_may_allow = false           # a pane with the respond grant may not allow 
 
 [[agents.approvals.risk.rule]]
 name = "kubectl apply"
-tools = ["Bash", "bash", "shell"]
+tools = ["Bash"]
 pattern = '\bkubectl\s+(apply|delete)\b'
 
 [agents.recap]
@@ -179,7 +179,11 @@ max = 8
   rule: `builtin` keeps the shipped rules (default true), each `rule` adds one
   with a name, the tools it applies to (empty for every tool) and an RE2
   `pattern`, matched against each command of a shell call and the whole text
-  of any other. A rule with no name or a pattern that does not compile is
+  of any other. Naming one shell tool, such as `Bash`, covers every shell
+  tool, including `execute`, the word a protocol pane's line uses for a
+  command, and a line with no tool; naming one file tool, such as `Write`,
+  covers every file tool, including a protocol pane's `edit`. A daemon that
+  could read no config file at all still uses the shipped rules. A rule with no name or a pattern that does not compile is
   ignored, with a warning. An allow of a risky approval takes a second press
   of the same key in the Inbox, and the daemon refuses one that does not name
   the rules. `panes_may_allow` lets a pane holding the `respond` grant allow a

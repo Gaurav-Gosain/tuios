@@ -95,8 +95,9 @@ func TestRiskyApprovalAllowsOnTheSecondPress(t *testing.T) {
 	if cmd := m.InboxNumber(1); cmd != nil {
 		t.Fatal("ASSERTION: the first press of 1 on a risky approval sent an answer")
 	}
-	if plain := drawn(m); !strings.Contains(plain, "Press 1 again to allow rm -rf build/") {
-		t.Errorf("the first press does not say what the second does:\n%s", plain)
+	until := m.Inbox.approvals.armed.at.Add(inboxRiskPressWindow).Format("15:04:05")
+	if plain := drawn(m); !strings.Contains(plain, "Press 1 again by "+until+" to allow rm -rf build/") {
+		t.Errorf("the first press does not say what the second does and until when:\n%s", plain)
 	}
 	press(m, "1")
 	cmd := m.InboxNumber(1)
@@ -366,8 +367,8 @@ func TestRiskyPeekAllowsOnTheSecondPress(t *testing.T) {
 	if cmd := m.InboxAnswer(harness.ActionApprove, ""); cmd != nil {
 		t.Fatal("ASSERTION: the first a on a risky prompt answered it")
 	}
-	if !strings.Contains(m.Inbox.Peek.Note, "Press a again") {
-		t.Errorf("note %q", m.Inbox.Peek.Note)
+	if until := m.Inbox.approvals.armed.at.Add(inboxRiskPressWindow).Format("15:04:05"); !strings.Contains(m.Inbox.Peek.Note, "Press a again by "+until+" to allow") {
+		t.Errorf("note %q does not say until when the second press is taken", m.Inbox.Peek.Note)
 	}
 	press(m, "a")
 	run(t, m, m.InboxAnswer(harness.ActionApprove, ""))
@@ -406,5 +407,75 @@ func TestRailSaysRiskyAndPlan(t *testing.T) {
 	}
 	if word, lifted := sidebarAgentNeed("needs_input", false, "plan", "plan: Refactor"); word != "plan" || !lifted {
 		t.Errorf("the need word is %q (lifted %v), want plan lifted off the message", word, lifted)
+	}
+}
+
+// TestPlanOnAShortScreenIsNotReadToTheEnd: on a screen too short for the
+// panel, the panel is squeezed past its minimum and the bottom of the detail
+// is cut off, so drawing the window with the plan's last line does not count
+// as reading it. 1 stays refused, the detail says to answer in the pane, and
+// at a height that fits the same plan is read and approved.
+//
+// Negative control: with the fit check removed from inboxPlanDetail, the
+// first 1 on the short screen sends the approve.
+func TestPlanOnAShortScreenIsNotReadToTheEnd(t *testing.T) {
+	it, text := planItem(3)
+	m, r := approvalsOS(t, it)
+	m.Height = 12
+	r.plan, r.sha = text, it.PlanSHA
+	fetchPlan(t, m)
+	plain := drawn(m)
+	if !strings.Contains(plain, "too short to show the whole plan") {
+		t.Errorf("the short screen does not say the plan cannot be shown whole:\n%s", plain)
+	}
+	settleShown(m)
+	press(m, "1")
+	if cmd := m.InboxNumber(1); cmd != nil {
+		t.Fatal("ASSERTION: 1 approved a plan drawn on a screen too short to show it")
+	}
+	if m.inboxPlanReadToEnd(it) {
+		t.Error("the plan is recorded as read to its end on a screen too short to show it")
+	}
+
+	m.Height = 24
+	if plain := drawn(m); strings.Contains(plain, "too short") {
+		t.Errorf("a screen that fits still says it is too short:\n%s", plain)
+	}
+	settleShown(m)
+	press(m, "1")
+	cmd := m.InboxNumber(1)
+	if cmd == nil {
+		t.Fatalf("1 on a plan read to its end sent nothing: %q", lastNote(m))
+	}
+	cmd()
+	if got := r.replies(); len(got) != 1 || got[0]["plan_sha"] != it.PlanSHA {
+		t.Fatalf("the approve sent %v", got)
+	}
+}
+
+// TestInboxDetailFits pins the arithmetic: chrome, the scroll line, the rule
+// and lines of the detail, and the list's minimum rows.
+func TestInboxDetailFits(t *testing.T) {
+	m, _ := approvalsOS(t)
+	m.Height = panelChromeRows + 1 + 5 + 1 + minPanelRows
+	if !m.inboxDetailFits(5) {
+		t.Error("a detail that exactly fits is read as not fitting")
+	}
+	if m.inboxDetailFits(6) {
+		t.Error("a detail one line too long is read as fitting")
+	}
+}
+
+// TestInboxRiskWhySaysCutShort: the cut short mark the daemon puts on a
+// clipped line reads as what it means, not as a rule in the person's config.
+func TestInboxRiskWhySaysCutShort(t *testing.T) {
+	if got := inboxRiskWhy(risk.RuleCutShort); got != risk.CutShortHit.Why {
+		t.Errorf("inboxRiskWhy(cut short) = %q", got)
+	}
+	if got := inboxRiskWhy(risk.RuleSudo); got != "runs as root" {
+		t.Errorf("inboxRiskWhy(sudo) = %q", got)
+	}
+	if got := inboxRiskWhy("kubectl apply"); got != "a rule in your config" {
+		t.Errorf("inboxRiskWhy(custom) = %q", got)
 	}
 }

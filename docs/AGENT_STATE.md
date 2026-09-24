@@ -1777,8 +1777,10 @@ An approval whose command matches a risk rule is marked risky: its row reads
 `risky:` before the line, the rail's need word is `risky`, and the detail under
 the list names each rule and why. `1` and `2` then allow it only on a second
 press of the same key within 3 seconds; the first press says
-`Press 1 again to allow rm -rf build/` and sends nothing. Any other key, a
-cursor move or the item changing resets it. `3` and `d` deny with one press.
+`Press 1 again by 14:03:07 to allow rm -rf build/` and sends nothing. The time
+is when the first press lapses: nothing redraws the line then, so after it a
+press of `1` only starts over. Any other key, a cursor move or the item
+changing resets it. `3` and `d` deny with one press.
 The peek holds `a`, `A` and a digit to the same rule on a risky prompt.
 
 The daemon enforces this, not only the Inbox: an allow of a risky call must
@@ -1788,9 +1790,14 @@ call from the Inbox at all; answer it in the pane. A pane holding the `respond`
 grant may deny a risky prompt and never allow one, unless
 `panes_may_allow = true`.
 
-The shipped rules, each matched against every command of a shell call (split on
-`;`, `&&`, `||`, `|`, `&` and newlines, and followed into `$( )`, backticks and
-`sh -c`), after `sudo`, `env` and similar wrappers:
+The shipped rules, each matched against every command of a shell call, after
+`sudo`, `env` and similar wrappers. A call is split on `;`, `&&`, `||`, `|`,
+`&`, newlines and a subshell's `(` and `)`, and followed into `$( )`,
+backticks, `<( )` and `>( )`, a shell's command line (`sh -c`, and a flag
+cluster holding `c`, such as `bash -lc` or `sh -ec`) and `eval`. The words
+that can come before a command without being it (`{`, `}`, `!`, `if`, `then`,
+`elif`, `else`, `while`, `until`, `do`) are skipped, so `if true; then rm -rf
+x; fi` and `(cd build && rm -rf out)` read as `rm`:
 
 | Rule | Matches |
 | --- | --- |
@@ -1799,7 +1806,7 @@ The shipped rules, each matched against every command of a shell call (split on
 | hard reset | `git reset --hard` |
 | clean | `git clean -f`, `-fd`, `-fx` |
 | discard changes | `git checkout -- .`, `git checkout .`, `git restore .` |
-| pipe to shell | `curl` or `wget` piped to `sh`, `bash`, `zsh`, `python`, `node`, or to anything under `sudo` |
+| pipe to shell | `curl` or `wget` piped to `sh`, `bash`, `zsh`, `python`, `node`, or to anything under `sudo`; or run by a shell, `eval` or `source` through a substitution, as in `bash <(curl ...)`, `sh -c "$(curl ...)"` and `eval "$(curl ...)"` |
 | sudo | any command under `sudo` or `doas` |
 | disk | `dd of=`, `mkfs`, a redirect to `/dev/sd*`, `/dev/nvme*` and the like |
 | wide permissions | `chmod -R 777`, `chown -R` on `/` or `~` |
@@ -1816,15 +1823,28 @@ panes_may_allow = false   # a pane with the respond grant may not allow a risky 
 
 [[agents.approvals.risk.rule]]
 name = "kubectl apply"
-tools = ["Bash", "bash", "shell"]   # empty: every tool
+tools = ["Bash"]   # empty: every tool
 pattern = '\bkubectl\s+(apply|delete)\b'   # RE2, matched per command
 ```
+
+A rule's `tools` are the names the harness gives its tools, compared without
+case. Naming any one shell tool (`Bash`, `bash`, `shell`, `exec_command`,
+`local_shell`, `run_shell_command`, `execute`, `terminal`) covers them all and
+a line with no tool, since harnesses name the same tool differently: a
+protocol pane's line reads `approve execute: <command>` for a command and
+`approve edit: <path>` for a file change. Naming any one file tool (`Write`,
+`Edit`, `MultiEdit`, `NotebookEdit`, `write`, `edit`, `multiedit`, `patch`,
+`write_file`, `replace`) likewise covers them all.
 
 The rules are read from the file and again when it changes, and cannot be set
 with `set-option`, so a pane cannot switch them off through tuios. An approval
 nobody holds is matched on its line: tuios's own hooks report
 `approve <Tool>: <what>`, read as that tool and argument; any other line is
-read as a command.
+read as a command. That line is clipped to 100 characters, so a risky part
+past the cut is not there to match. A clipped line is therefore marked
+`cut short` besides whatever the rules found: the allow takes the second
+press, and a pane with the `respond` grant cannot give it. A held call is
+matched on the whole command the hook sends, not on the line.
 
 The rules are a speed bump, not a sandbox. A command written to hide what it
 does (a variable holding `rm`, an alias, a script file) passes them. The
@@ -1848,7 +1868,9 @@ the cursor on it the plan is shown whole under the list, scrolled with `J` and
 | `n` | Keep planning, with a reason you type, which Claude reads. |
 
 `1` and `2` work only once the plan's last line has been on screen, and 0.4
-seconds after that. The answer names the digest of the plan that was shown
+seconds after that. On a screen too short to hold the whole Inbox panel, whose
+bottom is then cut off, the last line does not count as shown: the detail says
+so, and Enter answers the plan in the pane. The answer names the digest of the plan that was shown
 (`plan_sha`), and the daemon refuses an approve for any other plan. Note the
 order: `1` is the safest approval, which differs from Claude Code's own menu on
 purpose. Turn plans off, and keep approvals, with `hold_plans = false` under
