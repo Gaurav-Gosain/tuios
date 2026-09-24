@@ -159,11 +159,30 @@ func (m *OS) RestoreAttachedSession(state *session.SessionState) {
 		m.LogInfo("Restore complete, %d windows", len(m.Windows))
 	} else {
 		m.LogInfo("No existing state to restore")
+		m.adoptEmptySessionVersion(state)
 	}
 
 	// The session is now whole: state restored, PTYs wired, layout applied. A
 	// hook that inspects the session here sees what the user is about to see.
 	m.FireAttached()
+}
+
+// adoptEmptySessionVersion records the daemon state version of a session that
+// arrived with no windows, which RestoreFromState is not run for.
+//
+// Every push this client makes echoes the version back as BaseVersion, and the
+// daemon reads a BaseVersion of 0 as a client that predates versioning and takes
+// its push as sent. A client that attached to an empty session never recorded
+// the version, so its first pushes said 0: a window the daemon created in the
+// meantime (tuios new-window from a script, say) was missing from them, and the
+// push that was taken as sent removed it. A session switch to an empty session
+// kept the previous session's version instead, which is a number about a
+// different session.
+func (m *OS) adoptEmptySessionVersion(state *session.SessionState) {
+	m.DaemonStateVersion = 0
+	if state != nil {
+		m.DaemonStateVersion = state.Version
+	}
 }
 
 // rehydrateWindows wires the restored windows to their daemon PTYs and lays

@@ -1566,6 +1566,7 @@ func (m *OS) rebuildForSession(state *session.SessionState, savedWidth, savedHei
 	m.SubscribedPTYs = make(map[string]bool)
 
 	if state == nil || len(state.Windows) == 0 {
+		m.adoptEmptySessionVersion(state)
 		return
 	}
 
