@@ -214,7 +214,7 @@ var rehydrationShapes = []paneShape{
 		arrange: func(r *rig, ptyID string) {
 			r.feedPTY(ptyID, `H=$(stty size | cut -d' ' -f1); printf '\033[?1049h\033[H\033[2J'; `+
 				`i=1; while [ $i -lt $H ]; do printf '\033[%d;1HAFROW-%d' $i $i; i=$((i+1)); done; `+
-				`printf '\033[%d;1HAFLASTROW-END' $H`, "AFLASTROW-END")
+				`printf '\033[%d;1HAFLAST''ROW-END' $H`, "AFLASTROW-END")
 		},
 		check: func(t *testing.T, r *rig, ptyID string) {
 			st, err := r.daemonCells(ptyID, -1)

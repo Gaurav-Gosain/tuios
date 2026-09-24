@@ -13,7 +13,7 @@ func TestSaturatedSwitchNoResize(t *testing.T) {
 	r.feedPTY(ptyID, `printf 'SA''T-READY\n'`, "SAT-READY")
 	r.feedPTY(ptyID, `A=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; `+
 		`i=1; while [ $i -le 20000 ]; do echo "SAT-$i-$A$A$A$A-END"; i=$((i+1)); done; `+
-		`echo SAT-DONE`, "SAT-DONE")
+		`echo SAT-""DONE`, "SAT-DONE")
 	r.settle()
 
 	r.m.SwitchToWorkspace(2)
