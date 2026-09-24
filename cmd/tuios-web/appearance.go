@@ -1,6 +1,9 @@
 package main
 
 import (
+	_ "embed"
+	"encoding/base64"
+
 	"github.com/Gaurav-Gosain/sip"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	tint "github.com/lrstanley/bubbletint/v2"
@@ -8,6 +11,16 @@ import (
 
 // webTitle is what the browser tab says before a session names itself.
 const webTitle = "tuios"
+
+// faviconSVG is the tab icon: Tilly's head, the tuios mark drawn for 16 and
+// 32 px (assets/brand/mark-32.svg). It goes to the page as a data: URI, so it
+// needs no route of its own and ships inside the binary like sip's assets.
+//
+//go:embed favicon.svg
+var faviconSVG []byte
+
+// webFavicon is faviconSVG as the data: URI sip hands the page.
+var webFavicon = "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString(faviconSVG)
 
 // sipColor turns one theme colour into the colour sip hands the browser.
 //
@@ -88,7 +101,8 @@ func browserTheme(t *tint.Tint) sip.Theme {
 // Those follow on the next page load.
 func browserAppearance() sip.Appearance {
 	return sip.Appearance{
-		Title: webTitle,
-		Theme: browserTheme(theme.Current()),
+		Title:   webTitle,
+		Favicon: webFavicon,
+		Theme:   browserTheme(theme.Current()),
 	}
 }

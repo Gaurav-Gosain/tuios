@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
+	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/sip"
@@ -150,6 +153,28 @@ func TestBrowserAppearanceNamesTheTab(t *testing.T) {
 	}
 	if browserAppearance().IsZero() {
 		t.Error("the appearance reads as unset, so sip sends no options blob and the tab keeps sip's name")
+	}
+}
+
+// TestBrowserAppearanceCarriesTheIcon checks the tab icon reaches the page as
+// a data: URI sip accepts. sip refuses a bad favicon URL at startup, so a
+// broken one would be a tuios-web that does not serve.
+func TestBrowserAppearanceCarriesTheIcon(t *testing.T) {
+	useTheme(t, "")
+	a := browserAppearance()
+	const prefix = "data:image/svg+xml;base64,"
+	if !strings.HasPrefix(a.Favicon, prefix) {
+		t.Fatalf("the favicon is %.40q, want a %q URI", a.Favicon, prefix)
+	}
+	svg, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(a.Favicon, prefix))
+	if err != nil {
+		t.Fatalf("the favicon does not decode: %v", err)
+	}
+	if !bytes.Contains(svg, []byte("<svg")) {
+		t.Errorf("the favicon decodes to %d bytes with no <svg element", len(svg))
+	}
+	if err := a.Validate(); err != nil {
+		t.Errorf("sip refuses the appearance: %v", err)
 	}
 }
 
