@@ -1,6 +1,6 @@
 # tuios in the browser
 
-This is the build behind [tuios.gaurav.zip/learn](https://tuios.gaurav.zip/learn):
+This is the build behind [tuios.dev/learn](https://tuios.dev/learn):
 the real tuios compiled to WebAssembly, running in a browser tab with no
 server. Every pane runs a small fake shell (`internal/webshell`), and
 `internal/learn` reports what the person does so a lesson can react.

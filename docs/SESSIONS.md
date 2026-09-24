@@ -109,7 +109,7 @@ manipulates windows. There is no per-client permission tier, so share a session
 only with people you would hand the keyboard to. Local clients are gated by the
 socket's Unix permissions (same user only), SSH clients by SSH authentication,
 and web clients by whatever stands in front of `tuios-web`. See
-[Multi-client sessions](https://tuios.gaurav.zip/docs/sessions) on the site for
+[Multi-client sessions](https://tuios.dev/docs/sessions) on the site for
 the full picture.
 
 ### In-app session switching

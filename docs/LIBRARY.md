@@ -144,7 +144,7 @@ tuios.WithHideWindowButtons(true)
 
 How the window controls are drawn: `"pill"` (glyphs on a filled pill) or
 `"dots"` (macOS traffic lights, which name themselves on hover). See
-[the configuration reference](https://tuios.gaurav.zip/docs/configuration).
+[the configuration reference](https://tuios.dev/docs/configuration).
 
 ```go
 tuios.WithWindowButtonStyle("dots")
@@ -154,7 +154,7 @@ tuios.WithWindowButtonStyle("dots")
 
 Which end of the title bar the window controls sit on: `"left"` (default, the
 way macOS does it) or `"right"`. See
-[the configuration reference](https://tuios.gaurav.zip/docs/configuration).
+[the configuration reference](https://tuios.dev/docs/configuration).
 
 ```go
 tuios.WithWindowButtonPosition("left")

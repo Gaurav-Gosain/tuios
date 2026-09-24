@@ -1,4 +1,4 @@
-// Package learn runs tuios as the guided tour at tuios.gaurav.zip/learn. It
+// Package learn runs tuios as the guided tour at tuios.dev/learn. It
 // wraps the real app model, reports what the person did as a stream of
 // events a lesson can check steps against, and takes commands from the page
 // that set the scene for a step.

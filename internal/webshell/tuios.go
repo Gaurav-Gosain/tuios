@@ -32,7 +32,7 @@ func cmdTuios(s *shell, args []string, _ string) int {
 	if printSample(t, sub) {
 		return 0
 	}
-	t.Print(yellow + "tuios " + sub + reset + " needs a real machine. Install tuios to try it: " + bold + "tuios.gaurav.zip" + reset + "\r\n")
+	t.Print(yellow + "tuios " + sub + reset + " needs a real machine. Install tuios to try it: " + bold + "tuios.dev" + reset + "\r\n")
 	return 0
 }
 

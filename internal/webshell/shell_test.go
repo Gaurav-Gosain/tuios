@@ -537,7 +537,7 @@ func TestTuiosSamples(t *testing.T) {
 	for _, sub := range []string{"ls", "fan", "worktree", "list-agents", "send-agent-message", "list-verbs", "list-hooks", "attach"} {
 		g.send("tuios " + sub + "\r")
 		out := g.waitFor(markInput)
-		if !strings.Contains(out, "On a real machine") || !strings.Contains(out, "tuios.gaurav.zip/docs/") {
+		if !strings.Contains(out, "On a real machine") || !strings.Contains(out, "tuios.dev/docs/") {
 			t.Errorf("tuios %s printed no sample: %q", sub, out)
 		}
 	}

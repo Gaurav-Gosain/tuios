@@ -22,10 +22,10 @@ Built on the Charm stack (Bubble Tea v2, Lipgloss v2), TUIOS features event-driv
 
 ## Documentation
 
-Full documentation is available at **[tuios-docs](https://tuios.gaurav.zip)** (hosted) or in the [`docs/`](./docs/) folder.
+Full documentation is available at **[tuios.dev](https://tuios.dev)** (hosted) or in the [`docs/`](./docs/) folder.
 
 ### Quick Links
-- **[Getting Started](https://tuios.gaurav.zip/docs/getting-started)**: Install and first session
+- **[Getting Started](https://tuios.dev/docs/getting-started)**: Install and first session
 - **[Keybindings](docs/KEYBINDINGS.md)**: Default keys and how to rebind them
 - **[BSP Tiling](docs/BSP_TILING.md)**: Tiling with preselection and split control
 - **[Layout Modes](docs/LAYOUT_MODES.md)**: BSP, master-stack and scrolling layouts, aggregate view, multifocus

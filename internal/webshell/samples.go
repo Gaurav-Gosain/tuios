@@ -6,7 +6,7 @@ import "strings"
 // shown in the demo so a lesson about it has something to look at. The text
 // follows the docs page it links to.
 type sample struct {
-	doc  string // the docs page, under tuios.gaurav.zip/docs/
+	doc  string // the docs page, under tuios.dev/docs/
 	text string
 }
 
@@ -63,6 +63,6 @@ func printSample(t *TTY, sub string) bool {
 	}
 	t.Print(dim + "On a real machine, this prints:" + reset + "\r\n")
 	t.Print(strings.ReplaceAll(s.text, "\n", "\r\n") + "\r\n")
-	t.Print(dim + "More: " + reset + cyan + "tuios.gaurav.zip/docs/" + s.doc + reset + "\r\n")
+	t.Print(dim + "More: " + reset + cyan + "tuios.dev/docs/" + s.doc + reset + "\r\n")
 	return true
 }

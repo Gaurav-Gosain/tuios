@@ -1,4 +1,4 @@
-# Builds tuios for the browser, the files behind tuios.gaurav.zip/learn, and
+# Builds tuios for the browser, the files behind tuios.dev/learn, and
 # uploads them as the learn-web artifact. It runs on pull requests too, so the
 # js/wasm build cannot quietly stop compiling.
 name: learn-web

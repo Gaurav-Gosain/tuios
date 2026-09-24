@@ -1,6 +1,6 @@
 # Configuration
 
-The configuration reference lives on the docs site: https://tuios.gaurav.zip/docs/configuration
+The configuration reference lives on the docs site: https://tuios.dev/docs/configuration
 
 It covers the whole `config.toml`: the `[appearance]` table and its `sidebar`, `scrollbar`, dock, and window-button options, `[notifications.agent]`, all 19 `[keybindings]` sections, `[daemon]`, `[startup]`, `[tape]`, `[screenshot]`, `[hooks]`, and `[debug]`, along with what hot-reloads and what needs a restart.
 

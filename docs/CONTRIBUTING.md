@@ -1,6 +1,6 @@
 # Contributing
 
-The full guide (setup, PR process, code style, testing) lives on the docs site: https://tuios.gaurav.zip/docs/contributing
+The full guide (setup, PR process, code style, testing) lives on the docs site: https://tuios.dev/docs/contributing
 
 For working in this tree, [AGENTS.md](../AGENTS.md) is the orientation document: package map, build and test commands, and the testing infrastructure.
 

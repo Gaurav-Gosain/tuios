@@ -4,7 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// Learn mode is the guided tour at tuios.gaurav.zip/learn, where tuios runs as
+// Learn mode is the guided tour at tuios.dev/learn, where tuios runs as
 // WebAssembly in a browser tab with a fake shell in every pane (see
 // cmd/tuios-wasm). Two things differ from a normal session there:
 //

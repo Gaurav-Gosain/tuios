@@ -1,7 +1,7 @@
 //go:build js && wasm
 
 // Command tuios-wasm runs tuios entirely in a browser tab, for the guided tour
-// at tuios.gaurav.zip/learn. There is no server and no daemon: panes run the
+// at tuios.dev/learn. There is no server and no daemon: panes run the
 // in-memory fake shell from internal/webshell, the page owns the terminal
 // renderer, and internal/learn reports what the person does.
 //

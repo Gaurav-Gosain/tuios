@@ -1,6 +1,6 @@
 # Hooks
 
-The docs site has the same reference: https://tuios.gaurav.zip/docs/hooks
+The docs site has the same reference: https://tuios.dev/docs/hooks
 
 Ten events, each running a shell command with `TUIOS_*` environment variables carrying the facts. This page lists every event and every variable. Hooks are read once at startup from the `[hooks]` table.
 

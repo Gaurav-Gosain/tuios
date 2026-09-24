@@ -65,7 +65,7 @@ PKG_CONFIG_PATH="$PWD/.ghostty-vt/native/pkgconfig" \
 ### Browser build (Learn tuios)
 
 `cmd/tuios-wasm` is tuios compiled to WebAssembly for the guided tour at
-tuios.gaurav.zip/learn: the real app in Learn mode, with a fake shell
+tuios.dev/learn: the real app in Learn mode, with a fake shell
 (`internal/webshell`) in every pane and an event stream for lessons
 (`internal/learn`). Browser-only code is behind `js` build tags or in those
 three directories, so the native build is unchanged. The page API and event
