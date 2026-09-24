@@ -1848,3 +1848,51 @@ The extra allocations are in emitting the frame: painted cells carry a
 background SGR that bare ones do not. A pane whose layer string did not change
 is copied with its paint, which is why the all-dirty compositor numbers, whose
 strings are identical from frame to frame, do not move.
+
+## 2026-09 agent detection poll
+
+The daemon reads the foreground process of every pane every two seconds, to
+mark and clear agents nobody reported. It was the one idle cost that grew with
+the pane count, and it did its reads while holding the session's state write
+lock: three sysctls a pane on darwin, so every writer in the session (a client
+state sync, a `set-agent-state`, a window closing) queued behind them on every
+tick, and each tick built a lifecycle snapshot whether or not anything changed.
+
+### What changed
+
+- The scan lists its panes under the read lock, reads their foreground
+  processes with no session lock held, and works out under the read lock what
+  the readings would change. An idle tick stops there: no write lock, no
+  version bump, no snapshot. The write lock is taken only to apply a change,
+  and the apply re-checks each window against the PTY that was read.
+- A pane that holds no agent and has printed nothing since its last read is
+  read only every fifth tick (`agentDetectQuietBound`, 10 s at the default
+  interval). Output makes it due on the next tick, and so does never having
+  been read. A pane that holds an agent is read every tick, so the miss count
+  and the clearing of an exited agent keep their timing. An agent started with
+  no output at all is found within 10 s; one started by typing its command,
+  which echoes, within one tick as before.
+
+### Numbers
+
+Idle daemon CPU, measured with the audit's script: a detached daemon with plain
+zsh panes, daemon CPU time over 120 s at nice 10, on the maintainer's Mac. The
+resolution is 10 ms per reading, so treat these as orders of magnitude.
+
+| Panes | Before | After | Autodetect off (audit) |
+| --- | --- | --- | --- |
+| 8 | 50 ms/min | 15 ms/min | 20 ms/min |
+| 32 | 95 ms/min | 25 to 30 ms/min | 10 ms/min |
+
+Lock hold, from `BenchmarkAgentDetectScanLockWait`: real panes running real
+shells, every pane read on every scan (no backoff), scans spaced 2 ms apart
+while a writer polls the state lock. Three runs of 300 scans each:
+
+| Panes | Scan | Writer wait before: max, mean | Writer wait after: max, mean |
+| --- | --- | --- | --- |
+| 8 | 0.28 ms | 0.9 to 1.7 ms, 8.6 to 9.1 µs | 43 to 56 µs, 0.05 µs |
+| 32 | 1.0 to 1.2 ms | 2.0 to 7.7 ms, 31 to 54 µs | 65 to 111 µs, 0.07 to 0.13 µs |
+
+The scan costs what it did; it no longer holds the write lock while it runs,
+and an idle scan never takes it. The remaining writer wait is scheduling noise
+of the polling goroutine.

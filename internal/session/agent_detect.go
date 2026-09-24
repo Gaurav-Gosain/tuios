@@ -552,84 +552,265 @@ const agentDetectMissLimit = 6
 // It never sets any state other than working (on appearance) or none (on
 // disappearance): a process name cannot honestly distinguish working from waiting
 // or idle, so it does not pretend to.
+//
+// Every pane is read. The daemon's poll goes through scanAgentDetection, which
+// backs off panes that have been quiet.
 func (s *Session) applyAgentDetection(
 	resolve func(ptyID string) (foregroundInfo, bool),
 	identify func(foregroundInfo) (detection, bool),
 ) int {
-	changed := 0
+	return s.scanAgentDetection(resolve, identify, nil)
+}
+
+// detectReading is what one pane's foreground read found, taken with no session
+// lock held. ptyID is the PTY the read was taken for, so a window whose PTY was
+// swapped while the read ran is not judged on a read of the old one.
+type detectReading struct {
+	ptyID   string
+	info    foregroundInfo
+	running bool
+	det     detection
+	isAgent bool
+}
+
+// detectOutcome counts what a detection pass changes. changed is agent states,
+// labels the row label and shell pid that ride the same read, and bookkeeping
+// the claim map alone: a miss counted, a sighting noted, a claim on a window
+// that is gone. Only the first two reach clients.
+type detectOutcome struct {
+	changed     int
+	labels      int
+	bookkeeping bool
+}
+
+// scanAgentDetection is applyAgentDetection in the three steps that keep the
+// foreground reads off the session lock:
+//
+//  1. Under the read lock, list the panes to read.
+//  2. With no lock held, read each pane's foreground process and identify it.
+//     This is the expensive part: three sysctls a pane on darwin, a few procfs
+//     reads on Linux, and a process-group walk behind a wrapper.
+//  3. Under the read lock, work out what the readings would change. When
+//     nothing would, which is every tick of an idle session, stop there: no
+//     write lock, no version bump, no snapshot, nothing sent to clients. When
+//     only the claim bookkeeping moves, take the write lock for that alone.
+//     Otherwise apply through mutateState, which re-runs the pass against the
+//     state as it is by then, so a window closed or re-pointed while the reads
+//     ran is skipped rather than written to.
+//
+// due, when not nil, is asked about each pane that holds no agent (no state,
+// no claim, no harness pid) and decides whether to read it this tick; see
+// PTY.detectScanDue. A pane that holds an agent is read every tick, so the miss
+// count and the clearing of an exited agent keep their timing.
+func (s *Session) scanAgentDetection(
+	resolve func(ptyID string) (foregroundInfo, bool),
+	identify func(foregroundInfo) (detection, bool),
+	due func(ptyID string) bool,
+) int {
+	type target struct {
+		windowID, ptyID string
+		holdsAgent      bool
+	}
+	s.stateMu.RLock()
+	targets := make([]target, 0, len(s.state.Windows))
+	for i := range s.state.Windows {
+		w := &s.state.Windows[i]
+		if w.PTYID == "" {
+			continue
+		}
+		_, claimed := s.agentClaims[w.ID]
+		holdsAgent := w.AgentState != AgentStateNone || claimed || s.agentHarnessPIDs[w.ID] != 0
+		targets = append(targets, target{w.ID, w.PTYID, holdsAgent})
+	}
+	s.stateMu.RUnlock()
+
+	readings := make(map[string]detectReading, len(targets))
+	for _, t := range targets {
+		// Asked outside the state lock: due looks the PTY up, and the PTY map
+		// has a lock of its own.
+		if due != nil && !t.holdsAgent && !due(t.ptyID) {
+			continue
+		}
+		info, running := resolve(t.ptyID)
+		det, isAgent := identify(info)
+		readings[t.windowID] = detectReading{ptyID: t.ptyID, info: info, running: running, det: det, isAgent: isAgent}
+	}
+
 	shell := agentBaseName(s.getShell())
+	now := time.Now().UnixNano()
+
+	s.stateMu.RLock()
+	dry := s.detectionPass(s.state, readings, shell, now, false)
+	s.stateMu.RUnlock()
+	if dry.changed == 0 && dry.labels == 0 {
+		if !dry.bookkeeping {
+			return 0
+		}
+		s.stateMu.Lock()
+		// Checked again under the write lock: a report may have landed since
+		// the read, and a pass that would now change state has to go through
+		// mutateState to reach the clients.
+		if again := s.detectionPass(s.state, readings, shell, now, false); again.changed == 0 && again.labels == 0 {
+			s.detectionPass(s.state, readings, shell, now, true)
+			s.stateMu.Unlock()
+			return 0
+		}
+		s.stateMu.Unlock()
+	}
+
+	changed := 0
 	_ = s.mutateState(func(st *SessionState) error {
-		// Counted apart from the agent states this returns: a pane starting or
-		// leaving a command has to reach the clients, but it is not a state change.
-		labels := 0
-		live := make(map[string]struct{}, len(st.Windows))
-		now := time.Now().UnixNano()
-		for i := range st.Windows {
-			w := &st.Windows[i]
-			// Recorded before the PTY check: live is what the claim sweep below
-			// keeps, and a window with no PTY still exists and may hold a claim from
-			// a source other than the detector.
-			live[w.ID] = struct{}{}
-			if w.PTYID == "" {
-				continue
-			}
-			info, running := resolve(w.PTYID)
-			// The row label rides this poll rather than one of its own: the
-			// process was read for the agent check either way.
-			if cmd := foregroundCommand(info, running, shell); cmd != w.ForegroundCmd {
+		out := s.detectionPass(st, readings, shell, now, true)
+		changed = out.changed
+		if out.changed == 0 && out.labels == 0 {
+			// Nothing moved after all: skip the version bump and client push.
+			return errNoAgentDetectChange
+		}
+		return nil
+	})
+	return changed
+}
+
+// detectionPass reconciles each window with its reading. With write false it
+// changes nothing and only counts, which is what lets scanAgentDetection decide
+// under the read lock that there is nothing to do. With write true it applies,
+// and the caller holds the write lock. A window with no reading this tick, or
+// whose PTY is no longer the one that was read, is left as it is.
+func (s *Session) detectionPass(st *SessionState, readings map[string]detectReading, shell string, now int64, write bool) detectOutcome {
+	var out detectOutcome
+	live := make(map[string]struct{}, len(st.Windows))
+	for i := range st.Windows {
+		w := &st.Windows[i]
+		// Recorded before the PTY check: live is what the claim sweep below
+		// keeps, and a window with no PTY still exists and may hold a claim from
+		// a source other than the detector.
+		live[w.ID] = struct{}{}
+		if w.PTYID == "" {
+			continue
+		}
+		r, ok := readings[w.ID]
+		if !ok || r.ptyID != w.PTYID {
+			continue
+		}
+		info, running := r.info, r.running
+		// The row label rides this poll rather than one of its own: the
+		// process was read for the agent check either way. Counted apart from
+		// the agent states: a pane starting or leaving a command has to reach
+		// the clients, but it is not a state change.
+		if cmd := foregroundCommand(info, running, shell); cmd != w.ForegroundCmd {
+			if write {
 				w.ForegroundCmd = cmd
-				labels++
 			}
-			// The shell's pid rides the same poll, for the same reason and at the
-			// same price: the resolver already held it. It is counted with the
-			// labels rather than the agent states because it is not one, but it
-			// still has to reach the clients, which is what a pane needs before
-			// its reported directory can be checked. See WindowState.ShellPID.
-			if info.shellPID != w.ShellPID {
+			out.labels++
+		}
+		// The shell's pid rides the same poll, for the same reason and at the
+		// same price: the resolver already held it. It is counted with the
+		// labels rather than the agent states because it is not one, but it
+		// still has to reach the clients, which is what a pane needs before
+		// its reported directory can be checked. See WindowState.ShellPID.
+		if info.shellPID != w.ShellPID {
+			if write {
 				w.ShellPID = info.shellPID
-				labels++
 			}
-			det, isAgent := identify(info)
-			detected := running && isAgent
-			claim := s.agentClaims[w.ID]
-			owned := claim.auto
-			// Noted whoever owns the claim, and before the switch, because
-			// most of its branches do nothing for a claim the detector does
-			// not own. It is what lets the exit be acted on later.
-			if detected && !claim.sawProcess {
-				claim.sawProcess = true
+			out.labels++
+		}
+		det := r.det
+		detected := running && r.isAgent
+		claim := s.agentClaims[w.ID]
+		owned := claim.auto
+		// Noted whoever owns the claim, and before the switch, because
+		// most of its branches do nothing for a claim the detector does
+		// not own. It is what lets the exit be acted on later.
+		if detected && !claim.sawProcess {
+			claim.sawProcess = true
+			out.bookkeeping = true
+			if write {
 				s.setAgentClaim(w.ID, claim)
 			}
-			switch {
-			case detected && !owned:
-				// Take ownership only if no state is set, so a manual report wins.
-				if w.AgentState == AgentStateNone {
-					w.AgentState = AgentStateWorking
-					clearAgentNote(w)
-					w.AgentHarness = det.harness
-					w.AgentStateAt = now
-					s.setAgentClaim(w.ID, agentClaim{
-						source: AgentSourceDetect, harness: det.harness, identity: det.tier, auto: true,
-					})
-					changed++
+		}
+		switch {
+		case detected && !owned:
+			// Take ownership only if no state is set, so a manual report wins.
+			if w.AgentState == AgentStateNone {
+				out.changed++
+				if !write {
+					continue
 				}
-			case detected && owned:
-				// Still here. A miss count from an editor it opened is forgotten.
-				if claim.misses != 0 {
+				w.AgentState = AgentStateWorking
+				clearAgentNote(w)
+				w.AgentHarness = det.harness
+				w.AgentStateAt = now
+				s.setAgentClaim(w.ID, agentClaim{
+					source: AgentSourceDetect, harness: det.harness, identity: det.tier, auto: true,
+				})
+			}
+		case detected && owned:
+			// Still here. A miss count from an editor it opened is forgotten.
+			if claim.misses != 0 {
+				out.bookkeeping = true
+				if write {
 					claim.misses = 0
 					s.setAgentClaim(w.ID, claim)
 				}
-			case !detected && owned:
-				if running && !info.atShell() && claim.misses+1 < agentDetectMissLimit {
-					// Another program holds the foreground. Count it and wait: an
-					// agent that opened an editor is still an agent.
+			}
+		case !detected && owned:
+			if running && !info.atShell() && claim.misses+1 < agentDetectMissLimit {
+				// Another program holds the foreground. Count it and wait: an
+				// agent that opened an editor is still an agent.
+				out.bookkeeping = true
+				if write {
 					claim.misses++
 					s.setAgentClaim(w.ID, claim)
+				}
+				continue
+			}
+			// Agent gone from the foreground: relinquish and clear. The
+			// harness pid goes too: the process it named has exited, so a
+			// harness started next in this pane is not a nested run of it.
+			out.changed++
+			if !write {
+				continue
+			}
+			delete(s.agentClaims, w.ID)
+			delete(s.agentHarnessPIDs, w.ID)
+			w.AgentState = AgentStateNone
+			clearAgentNote(w)
+			w.AgentHarness = ""
+			w.AgentMeta = nil
+			w.AgentStateAt = now
+
+		case !detected && !owned && w.AgentState != AgentStateNone:
+			// A claim the detector never took, on a pane that is back at
+			// its shell with nothing running in it.
+			//
+			// Most agents report their own state, so the detector never
+			// owns the claim and its clearing branch above never runs. The
+			// reporter is the agent, and an agent that has exited cannot
+			// retract anything, so the last thing it said stood for as
+			// long as the pane lived: quit an agent and it kept its row in
+			// the agent list, with the harness it used to be running.
+			//
+			// Only for a pane that is genuinely idle at its shell. A pane
+			// running something else is left alone, because an agent that
+			// opened an editor is still an agent, which is the same
+			// argument the miss count above makes.
+			//
+			// An explicit report is not cleared. set-agent-state is a
+			// person or a script saying something about a pane, and a pane
+			// sitting at a prompt is exactly where somebody might want to
+			// leave a note. Everything else here was inferred, and an
+			// inference about an agent that is not there is wrong.
+			//
+			// And only where a real agent process was seen. Without that
+			// this swept away any state on any pane sitting at a shell,
+			// including a screen rule's reading of a pane that has never
+			// run an agent binary, which is how an unhooked harness is
+			// exercised.
+			if running && info.atShell() && claim.sawProcess && claim.source != AgentSourceReport {
+				out.changed++
+				if !write {
 					continue
 				}
-				// Agent gone from the foreground: relinquish and clear. The
-				// harness pid goes too: the process it named has exited, so a
-				// harness started next in this pane is not a nested run of it.
 				delete(s.agentClaims, w.ID)
 				delete(s.agentHarnessPIDs, w.ID)
 				w.AgentState = AgentStateNone
@@ -637,71 +818,35 @@ func (s *Session) applyAgentDetection(
 				w.AgentHarness = ""
 				w.AgentMeta = nil
 				w.AgentStateAt = now
-				changed++
-
-			case !detected && !owned && w.AgentState != AgentStateNone:
-				// A claim the detector never took, on a pane that is back at
-				// its shell with nothing running in it.
-				//
-				// Most agents report their own state, so the detector never
-				// owns the claim and its clearing branch above never runs. The
-				// reporter is the agent, and an agent that has exited cannot
-				// retract anything, so the last thing it said stood for as
-				// long as the pane lived: quit an agent and it kept its row in
-				// the agent list, with the harness it used to be running.
-				//
-				// Only for a pane that is genuinely idle at its shell. A pane
-				// running something else is left alone, because an agent that
-				// opened an editor is still an agent, which is the same
-				// argument the miss count above makes.
-				//
-				// An explicit report is not cleared. set-agent-state is a
-				// person or a script saying something about a pane, and a pane
-				// sitting at a prompt is exactly where somebody might want to
-				// leave a note. Everything else here was inferred, and an
-				// inference about an agent that is not there is wrong.
-				//
-				// And only where a real agent process was seen. Without that
-				// this swept away any state on any pane sitting at a shell,
-				// including a screen rule's reading of a pane that has never
-				// run an agent binary, which is how an unhooked harness is
-				// exercised.
-				if running && info.atShell() && claim.sawProcess && claim.source != AgentSourceReport {
-					delete(s.agentClaims, w.ID)
-					delete(s.agentHarnessPIDs, w.ID)
-					w.AgentState = AgentStateNone
-					clearAgentNote(w)
-					w.AgentHarness = ""
-					w.AgentMeta = nil
-					w.AgentStateAt = now
-					changed++
-				}
 			}
 		}
-		// Drop claims on windows that no longer exist so the map cannot grow
-		// without bound. This touches only in-memory bookkeeping, never state, so
-		// it does not count as a change.
-		for id := range s.agentClaims {
-			if _, ok := live[id]; !ok {
-				delete(s.agentClaims, id)
-				// A window that went away must not leave a held state behind for
-				// the settle sweep to publish against nothing.
-				s.dropAgentHold(id)
-				s.idle.forget(id)
+	}
+	// Drop claims on windows that no longer exist so the map cannot grow
+	// without bound. This touches only in-memory bookkeeping, never state, so
+	// it does not count as a change.
+	for id := range s.agentClaims {
+		if _, ok := live[id]; !ok {
+			out.bookkeeping = true
+			if !write {
+				break
 			}
+			delete(s.agentClaims, id)
+			// A window that went away must not leave a held state behind for
+			// the settle sweep to publish against nothing.
+			s.dropAgentHold(id)
+			s.idle.forget(id)
 		}
-		for id := range s.agentHarnessPIDs {
-			if _, ok := live[id]; !ok {
-				delete(s.agentHarnessPIDs, id)
+	}
+	for id := range s.agentHarnessPIDs {
+		if _, ok := live[id]; !ok {
+			out.bookkeeping = true
+			if !write {
+				break
 			}
+			delete(s.agentHarnessPIDs, id)
 		}
-		if changed == 0 && labels == 0 {
-			// Nothing moved: skip the version bump and client push.
-			return errNoAgentDetectChange
-		}
-		return nil
-	})
-	return changed
+	}
+	return out
 }
 
 // reconcileAgentOnOutput settles the agent state of the window backed by ptyID

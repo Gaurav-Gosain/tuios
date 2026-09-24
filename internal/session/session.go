@@ -721,6 +721,12 @@ type PTY struct {
 	// throttling it the same way.
 	lastScreenScan atomic.Int64
 
+	// lastDetectScan is the unix-nano time the detection poll last read this
+	// pane's foreground process, and detectSkips how many ticks have passed
+	// over it since. Only the poll's goroutine touches them. See detectScanDue.
+	lastDetectScan atomic.Int64
+	detectSkips    atomic.Int32
+
 	// screenSettle is the one-shot that scans the screen after a pane goes quiet.
 	// It is a timer rather than a ticker so a silent pane costs nothing, which is
 	// the rule the whole daemon is built to.

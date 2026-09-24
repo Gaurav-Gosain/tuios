@@ -234,6 +234,46 @@ const defaultAgentStallTimeout = 30 * time.Second
 // timescale, and a per-pane /proc read every couple of seconds is cheap.
 const defaultAgentDetectInterval = 2 * time.Second
 
+// agentDetectQuietBound is the longest a quiet pane goes between two reads of
+// its foreground process. A pane that has printed nothing since it was last
+// read, and holds no agent, is read only every few ticks: nothing a person
+// starts in it goes unechoed, so output is what says it is worth reading
+// again, and this bound covers a program started with no output at all. At the
+// default two-second tick it is every fifth tick. See PTY.detectScanDue.
+const agentDetectQuietBound = 10 * time.Second
+
+// detectQuietTicks is how many ticks a quiet pane waits between reads at the
+// given poll interval: agentDetectQuietBound in ticks, and never less than one,
+// so a poll slower than the bound reads every pane every tick.
+func detectQuietTicks(interval time.Duration) int32 {
+	if interval <= 0 {
+		return 1
+	}
+	n := int32(agentDetectQuietBound / interval)
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
+// detectScanDue reports whether the detection poll should read this pane's
+// foreground process on this tick, and records the read if so. A pane that has
+// produced output since its last read is due at once: typing a command echoes
+// it, a program starting or exiting prints, a title change is output. A pane
+// never read before is due at once, since a pane opened on a silent program
+// has no output to flag it. A pane that has been silent is due every
+// quietTicks ticks. now is taken before the read, so output that lands while
+// the read runs makes the next tick due.
+func (p *PTY) detectScanDue(now int64, quietTicks int32) bool {
+	last := p.lastDetectScan.Load()
+	if last == 0 || p.lastOutput.Load() > last || p.detectSkips.Add(1) >= quietTicks {
+		p.lastDetectScan.Store(now)
+		p.detectSkips.Store(0)
+		return true
+	}
+	return false
+}
+
 // pendingRequest tracks a routed command awaiting its result, with the time it
 // was created so cleanupLoop can expire stale entries.
 //
@@ -1523,6 +1563,7 @@ func (d *Daemon) agentMonitor() {
 	}
 	ticker := time.NewTicker(d.agentDetectInterval)
 	defer ticker.Stop()
+	quietTicks := detectQuietTicks(d.agentDetectInterval)
 
 	for {
 		select {
@@ -1530,8 +1571,13 @@ func (d *Daemon) agentMonitor() {
 			return
 		case <-ticker.C:
 			reg := d.agentMatcher.registry
+			now := time.Now().UnixNano()
 			for _, sess := range d.manager.AllSessions() {
-				sess.applyAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyDetail)
+				due := func(ptyID string) bool {
+					pty := sess.GetPTY(ptyID)
+					return pty == nil || pty.detectScanDue(now, quietTicks)
+				}
+				sess.scanAgentDetection(d.foregroundResolver(sess), d.agentMatcher.identifyDetail, due)
 				// The transcript joins ride this tick rather than one of their
 				// own. It runs only for a pane already known to be running a
 				// harness that has a transcript and that has no join yet, so a
