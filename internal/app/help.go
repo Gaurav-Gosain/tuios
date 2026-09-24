@@ -86,11 +86,14 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 		},
 		{
 			Name: "Modes",
-			Bindings: generateCategoryBindings(registry, "Modes", []string{
+			// The list keys ride along here rather than in a tab of their own:
+			// the strip is one row wide at a desktop width, and there is no
+			// room for another tab on it.
+			Bindings: append(generateCategoryBindings(registry, "Modes", []string{
 				"enter_terminal_mode", "enter_window_mode",
 				"terminal_exit_mode",
 				"toggle_help", "quit",
-			}),
+			}), generateListBindings()...),
 		},
 		{
 			Name:     "Debug",
@@ -440,6 +443,27 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		HelpBinding{Keys: []string{"hover a clipped row"}, Description: "Scroll its text past the edge to read the rest", Category: cat},
 		HelpBinding{Keys: []string{"wheel"}, Description: "Scroll the rail", Category: cat},
 	)
+}
+
+// generateListBindings is the keys every list and panel shares (see
+// internal/listnav) and the settings page's own. They are fixed keys of the
+// panels rather than registry actions, so they are written out here. They are
+// listed in the Modes section; see GetHelpCategories.
+func generateListBindings() []HelpBinding {
+	const cat = "Modes"
+	return []HelpBinding{
+		{Keys: []string{"up", "down"}, Description: "Lists: move; at either end, wrap round", Category: cat},
+		{Keys: []string{"home", "end"}, Description: "Lists: first / last row", Category: cat},
+		{Keys: []string{"pgup", "pgdown"}, Description: "Lists: a page, stopping at the ends", Category: cat},
+		{Keys: []string{"g", "G"}, Description: "Lists: first / last row, with no filter", Category: cat},
+		{Keys: []string{"ctrl+u"}, Description: "Lists: clear a typed filter", Category: cat},
+		{Keys: []string{"wheel"}, Description: "Lists: scroll the list under the pointer", Category: cat},
+		{Keys: []string{"/"}, Description: "Settings: search every tab", Category: cat},
+		{Keys: []string{"1-9"}, Description: "Settings: go to that tab", Category: cat},
+		{Keys: []string{"backspace"}, Description: "Settings: reset the row to its default", Category: cat},
+		{Keys: []string{"ctrl+z"}, Description: "Settings: undo the last change", Category: cat},
+		{Keys: []string{"tab"}, Description: "Settings search: go to the row's tab", Category: cat},
+	}
 }
 
 // generateCopyModeBindings generates copy mode keybindings

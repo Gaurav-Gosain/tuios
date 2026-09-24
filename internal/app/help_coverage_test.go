@@ -147,6 +147,26 @@ func TestGestureRowsFitTheHelpPanel(t *testing.T) {
 	}
 }
 
+// TestHelpDocumentsTheListKeys: the keys every list shares and the settings
+// page's own are written into the Modes section, which is the only place the
+// help can show keys that are not registry actions without a tab of their own.
+func TestHelpDocumentsTheListKeys(t *testing.T) {
+	cat := helpSection(t, "Modes")
+	want := map[string]bool{"home": false, "pgup": false, "ctrl+z": false, "/": false}
+	for _, b := range cat.Bindings {
+		for _, k := range b.Keys {
+			if _, ok := want[k]; ok {
+				want[k] = true
+			}
+		}
+	}
+	for k, seen := range want {
+		if !seen {
+			t.Errorf("the help does not list %q", k)
+		}
+	}
+}
+
 // TestHelpSectionsHaveTabLabels checks a new section cannot ship without a short
 // tab label. Without one the strip falls back to the full category name, which
 // is what pushes the tabs onto a second row.

@@ -6,6 +6,55 @@ Every binding lives in one of the 22 sections under `[keybindings]` in `config.t
 
 To inspect your own effective bindings, use the binary rather than any document: `tuios keybinds list`, `tuios keybinds doctor` for conflicts, `tuios keybinds explain <key>` for everything one key does, or the in-app keybind manager on `Ctrl+B k`.
 
+## Lists and panels
+
+Every list in the TUI moves the same way: the command palette, the launcher,
+the settings page, the Inbox, the mailbox, the keybind manager, the theme,
+glyph and effect pickers, the session, workspace, layout and machine pickers,
+the window picker, the quit and context menus, the dock and rail editors and
+the tape manager.
+
+| Keys | What it does |
+|---|---|
+| `up`, `down`, `ctrl+p`, `ctrl+n` | Move one row. Up on the first row goes to the last, and down on the last to the first |
+| `home`, `end` | The first or last row |
+| `pgup`, `pgdown` | A page up or down, stopping at the ends |
+| `k`, `j`, `g`, `G` | Up, down, first and last, in a list with no filter to type into |
+| `ctrl+u` | Clear a typed filter |
+| wheel | Scroll the list under the pointer, stopping at the ends |
+
+Set `appearance.wrap_lists = false` to stop at the ends instead of wrapping.
+The close-session and file confirmations never wrap, so up from Cancel cannot
+land on the answer that deletes.
+
+## Settings
+
+`,` in window-management mode, or `ctrl+b ,`, opens the settings page. It
+reopens on the tab, row and search it was left on.
+
+| Keys | What it does |
+|---|---|
+| `left`, `right`, `h`, `l` | Change the row's value |
+| `enter`, `space` | Toggle, cycle, or open the row's picker or editor |
+| `tab`, `shift+tab`, `[`, `]` | Next or previous tab, wrapping |
+| `1` to `9` | Go to that tab |
+| `/`, or a letter the page does not use | Search every tab |
+| `backspace`, `delete` | Reset the row to its default |
+| `ctrl+z` | Undo the last change made on the page |
+| `esc`, `q` | Close |
+
+A row changed from its default carries a dot after its name, and its
+description says what the default is.
+
+The search ranks every row of every tab by its name, its config key, its value
+and its description, with the letters that matched lit, and each result names
+its tab. In the search, `up` and `down` move through the results, `left`,
+`right` and `enter` act on the row where it is, `tab` goes to the row on its
+own tab, `delete` resets it, and `esc` clears the search and puts the page back
+where it was; a second `esc` closes it. The command palette reaches the same
+rows by name (`settings: pane background`), and `tuios list-options --search`
+runs the same search from a shell.
+
 ## The Inbox
 
 Everything waiting for you in every session is one list, the Inbox. See
