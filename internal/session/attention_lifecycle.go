@@ -369,6 +369,16 @@ func (a *attentionStore) rememberUndoLocked(it AttentionItem, reason string) {
 		return u.item.ID == it.ID || now.Sub(u.at) >= attentionUndoWindow
 	})
 	it.RequestID, it.Options, it.Expires, it.AlwaysScope = "", nil, 0, nil
+	// A restored item of this machine has no hold, so, as when a hold ends
+	// (endHoldLocked), a plan comes back as the pane's approval, with no plan
+	// to serve and no deny to type a reason for. Another machine's item is
+	// that machine's to describe.
+	if it.Host == "" {
+		if it.Kind == AttentionPlan {
+			it.Kind = AttentionApproval
+		}
+		it.DenyMessage, it.PlanLines, it.PlanSHA = false, 0, ""
+	}
 	it.Closed = ""
 	a.undo = append(a.undo, attentionUndo{item: it, reason: reason, at: now})
 	if len(a.undo) > attentionUndoMax {
