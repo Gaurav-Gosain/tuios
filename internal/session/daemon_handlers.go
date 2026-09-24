@@ -50,6 +50,11 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	})
 }
 
+// attachSnapshotTaken runs in handleAttach between the state snapshot and the
+// reply that carries it. It is nil outside tests, which use it to land a state
+// change in that window on purpose.
+var attachSnapshotTaken func()
+
 func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	var payload AttachPayload
 	if err := msg.ParsePayload(&payload); err != nil {
@@ -172,7 +177,15 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// matches the effective size, skipped the stamp, and was handed whatever
 	// dimensions the last client to sync happened to be. A local client joining
 	// a browser session therefore came up rendering at the browser's width.
+	//
+	// promised is read first: a push that lands between the two reads is in the
+	// snapshot and makes the check after the reply send one state too many,
+	// which is harmless, where the other order would miss it.
+	promised := session.canonicalFingerprint()
 	state := session.GetState()
+	if attachSnapshotTaken != nil {
+		attachSnapshotTaken()
+	}
 	state.Width = effectiveWidth
 	state.Height = effectiveHeight
 
@@ -228,6 +241,22 @@ func (d *Daemon) handleAttach(cs *connState, msg *Message) error {
 	// repair it directly. This runs after the reply, so it cannot race it,
 	// which is the whole reason the repair is here rather than left to a
 	// broadcast.
+	//
+	// The state is the same case. A state push from another client that lands
+	// between the snapshot above and the reply is applied, and its broadcast
+	// skips this client because it is not in the broadcast set yet. The reply
+	// then carries the older state and nothing ever sends the newer one: the
+	// broadcast is not repeated for a state already sent. A client joining a
+	// session whose first client had just pushed its pane geometry kept its own
+	// geometry for good, and the two ran the same PTYs at different sizes.
+	if session.canonicalFingerprint() != promised {
+		LogBasic("Session %s state moved while %s was attaching; telling it directly",
+			session.Name, cs.clientID)
+		_ = d.sendMessage(cs, MsgStateSync, &StateSyncPayload{
+			State:       session.GetState(),
+			TriggerType: "update",
+		})
+	}
 	if w, h := session.Size(); w > 0 && h > 0 {
 		if r := session.LayoutReserve(); w != effectiveWidth || h != effectiveHeight || r != effectiveReserve {
 			LogBasic("Session %s moved to %dx%d chrome %+v while %s was attaching; telling it directly",

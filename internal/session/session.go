@@ -1564,6 +1564,16 @@ func (s *Session) PTYCount() int {
 	return len(s.ptys)
 }
 
+// canonicalFingerprint fingerprints the state as the daemon and its clients
+// have written it, without the live facts GetState fills in on the way out.
+// Those move on their own, and a comparison that is meant to notice a write
+// must not fire on a pane printing a new title.
+func (s *Session) canonicalFingerprint() uint64 {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	return StateFingerprint(s.state)
+}
+
 // GetState returns the current session state.
 func (s *Session) GetState() *SessionState {
 	s.stateMu.RLock()
