@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -362,13 +364,33 @@ func (r *rig) typeAtPrompt(ptyID, command string) {
 			if err == nil && st != nil {
 				screen = fmt.Sprintf("cursor %d,%d\n%s", st.CursorX, st.CursorY, stateText(st))
 			}
-			r.t.Fatalf("timed out waiting for the shell's prompt before typing %q (err %v); the daemon's screen:\n%s", command, err, screen)
+			r.t.Fatalf("timed out waiting for the shell's prompt before typing %q (err %v); the daemon's screen:\n%s\nthis process's children:\n%s",
+				command, err, screen, childProcesses())
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	if err := r.ctl.WritePTY(ptyID, []byte(command+"\n")); err != nil {
 		r.t.Fatalf("write pty: %v", err)
 	}
+}
+
+// childProcesses lists the processes this test binary started, which is where
+// the in-process daemon's shells are, with their state and what they are
+// waiting in. A shell that never printed its prompt is one of them.
+func childProcesses() string {
+	out, err := exec.Command("ps", "-A", "-o", "pid=,ppid=,pgid=,stat=,wchan=,etime=,command=").Output()
+	if err != nil {
+		return "(ps: " + err.Error() + ")"
+	}
+	self := strconv.Itoa(os.Getpid())
+	var b strings.Builder
+	for _, line := range strings.Split(string(out), "\n") {
+		if f := strings.Fields(line); len(f) > 1 && f[1] == self {
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
 }
 
 // atPrompt reports whether the daemon's copy of the pane has the cursor just
