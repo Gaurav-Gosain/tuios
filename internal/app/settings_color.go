@@ -360,10 +360,14 @@ func colorSwatch(c, ground color.Color) string {
 		Render(colorSwatchGlyph())
 }
 
-// colorSwatchGlyph is the two-cell outline a low-contrast swatch wears.
+// colorSwatchGlyph is the two-cell outline a low-contrast swatch wears: a
+// left eighth block in the first cell and a right eighth block in the second,
+// so the two lines sit on the chip's outer edges and frame the fill between
+// them. The other order puts both lines in the middle, where they read as one
+// bar.
 func colorSwatchGlyph() string {
 	if overlay.UseASCII() {
 		return "[]"
 	}
-	return "▕▏"
+	return "\u258f\u2595"
 }
