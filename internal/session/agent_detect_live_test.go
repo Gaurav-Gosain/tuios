@@ -48,16 +48,25 @@ func TestExplainAgentDetectOnRealPanes(t *testing.T) {
 
 	winID := sess.GetState().Windows[0].ID
 	typeCommand(t, c, winID, script)
+	// Waited for until the arguments are readable as well as the name. Linux
+	// names a process at exec a little before it publishes its arguments, and
+	// a read in between sees comm build.sh with no argv at all, so there is no
+	// word in it to explain away. That read is the process mid-exec, not the
+	// one this test asks about.
 	res := explainUntil(t, c, winID, func(res map[string]any) bool {
 		proc, _ := res["process"].(map[string]any)
-		return proc != nil && strings.Contains(proc["comm"].(string), "build")
+		if proc == nil || !strings.Contains(proc["comm"].(string), "build") {
+			return false
+		}
+		argv, _ := proc["argv"].([]any)
+		return len(argv) > 0
 	})
 	if res["matched"] != false {
 		t.Fatalf("a script in a checkout named crush was called an agent: %v", res["verdict"])
 	}
 	ignored, _ := res["ignored"].([]any)
 	if len(ignored) == 0 || !strings.Contains(ignored[0].(string), `"crush"`) {
-		t.Fatalf("the explanation did not name the word that did not count: %v", res["ignored"])
+		t.Fatalf("the explanation did not name the word that did not count: %v; full answer: %v", res["ignored"], res)
 	}
 	verdict, _ := res["verdict"].(string)
 	if !strings.HasPrefix(verdict, "This pane does not run an agent.") {
@@ -72,8 +81,7 @@ func TestExplainAgentDetectOnRealPanes(t *testing.T) {
 	// Interrupt it and start the wrapped agent. The interrupt is the raw byte,
 	// written to the pane the way a terminal would, so no key name has to be
 	// right for this test to be about detection.
-	sendText(t, c, winID, "\x03")
-	explainUntil(t, c, winID, func(res map[string]any) bool { return res["matched"] == false && res["group"] == nil })
+	interruptToPrompt(t, c, winID)
 	typeCommand(t, c, winID, "sh -c '"+fake+" 60; true'")
 	res = explainUntil(t, c, winID, func(res map[string]any) bool {
 		return res["matched"] == true
@@ -93,6 +101,33 @@ func TestExplainAgentDetectOnRealPanes(t *testing.T) {
 		t.Fatalf("confidence = %v identity = %v, want strong from a manifest", res["confidence"], res["identity"])
 	}
 	sendText(t, c, winID, "\x03")
+}
+
+// interruptToPrompt sends the interrupt byte until the pane is back at its
+// shell prompt.
+//
+// One interrupt is not enough to rely on. The script is a shell running sleep,
+// and an interrupt that lands after the script has started and before it has
+// forked sleep reaches only the script's shell. A shell waiting for a command
+// defers an interrupt until the command ends, so the script's shell then runs
+// sleep in full and the pane stays busy for its whole minute: the name and
+// the arguments of the script are visible to the gate before that fork, so
+// the gate cannot rule it out. A second interrupt reaches sleep.
+func interruptToPrompt(t *testing.T, c *verbConn, winID string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		sendText(t, c, winID, "\x03")
+		wait := time.Now().Add(time.Second)
+		for time.Now().Before(wait) {
+			res := result(t, c.call(t, `{"id":1,"verb":"explain-agent-detect","params":{"session":"work","window":"`+winID+`"}}`))
+			if v, _ := res["verdict"].(string); strings.HasPrefix(v, "This pane is at its shell prompt.") {
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	t.Fatal("the pane never came back to its shell prompt after an interrupt")
 }
 
 func typeCommand(t *testing.T, c *verbConn, winID, cmd string) {
