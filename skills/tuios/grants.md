@@ -29,9 +29,11 @@ what you hold. So `tuios agent-hook` works in every pane.
 
 What you type into a pane runs with that pane's grants. So without `admin`,
 typing into any pane but your own (`send-text`, `send-keys`, `run`,
-`ask-agent`) is refused when the target holds a grant you do not, and when the
-target is on `needs_input` unless you hold `respond`, because keys typed there
-answer its prompt. Your keys always go to the target's terminal, never to the
+`ask-agent`, `queue`) is refused when the target holds a grant you do not, and
+when the target is on `needs_input` unless you hold `respond`, because keys
+typed there answer its prompt. A message you queue is checked against your
+grants again when it is typed, and dropped if they no longer cover the
+target. Your keys always go to the target's terminal, never to the
 window manager.
 
 ## A refusal

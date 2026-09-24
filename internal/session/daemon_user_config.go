@@ -72,6 +72,8 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// The daemon computes the activity recap, so it reads what a test run
 	// looks like.
 	cfg.RecapTestPatterns = uc.Agents.Recap.Resolved().TestPatterns
+	// The daemon holds every pane's delivery queue, so it bounds them.
+	cfg.QueueMax = uc.Agents.Queue.MaxEntries()
 	return cfg
 }
 

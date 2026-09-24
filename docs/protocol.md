@@ -1050,6 +1050,33 @@ who calls two of them, and a client that draws metadata now has some to draw:
 - The opencode and Kilo plugin is version 3, so `integration status` reads a
   version 2 install as out of date until it is installed again.
 
+**The delivery queue is built.** `queue-prompt`, `list-queued` and
+`cancel-queued` now work (see
+[The delivery queue](#the-delivery-queue)), and no longer answer "not built
+yet". What changes for a caller that uses none of them: nothing, since a pane
+has no queue until something is queued. For one that does:
+
+- `queue-prompt` for a pane that runs no agent tuios knows of is
+  `invalid_params`, and for `human` it is `no_keyboard`. A `human_nonce` that
+  does not verify is `not_human`, not a quiet fall back to the caller's own
+  name.
+- `list-queued` with no window lists every pane of the session, not the
+  focused one, and its entries gain `session`, `window`, `name` and `from`.
+  Its result has `type` `queued_prompts` and `session`.
+- `cancel-queued` with an `id` and no window finds the entry in any pane of
+  the session. `id` together with `all` is `invalid_params`. An entry being
+  typed, or one the caller may not drop, is `forbidden`; an id that is not
+  queued is `invalid_params`. Its result has `type` `queue_cancelled`.
+- `get-agent-state` and `list-agents` report `queued` as the pane's queue
+  length, and the synced window state carries a non-zero `agent_queued` while
+  something waits. A client that does not know the field drops it.
+- An Inbox question may carry the summary "your queued message was typed but
+  NAME did not take it: look at the pane", on the pane's blocking key, for a
+  queued message the agent showed no sign of taking. It is an ordinary
+  `question` item and closes like one.
+- `[agents.queue] max` is read at start and again when the config file
+  changes.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -3362,10 +3389,11 @@ resume; read the ring instead.
 ### Agent review, triage and queue verbs
 
 These verbs are registered with their parameters, scope and link capability,
-and answer `internal` ("not built yet") until their work lands.
-`agent-activity` has landed (see [agent-activity](#agent-activity)). `list-verbs`
-describes each one's parameters and result. What is fixed now is who may call
-them:
+and answer `internal` ("not built yet") until their work lands. These have
+landed: `agent-activity` (see [agent-activity](#agent-activity)) and the
+delivery queue's three (see [The delivery queue](#the-delivery-queue)).
+`list-verbs` describes each one's parameters and result. What is fixed now is
+who may call them:
 
 | Verb | What it does | A pane without `admin` | Over a link | The person only |
 | --- | --- | --- | --- | --- |
@@ -3386,6 +3414,54 @@ A connection restricted with `restrict-connection` is held the same way: with
 `read_only`, `review-note`, `send-review`, `queue-prompt`, `cancel-queued`
 and `verify-fan` are refused, and `keep-fan` and `mark-attention` are refused
 on any restricted connection.
+
+### The delivery queue
+
+`queue-prompt`, `list-queued` and `cancel-queued` are built. A queued message
+is typed as a prompt once the agent in the pane has been at rest for a
+second: `idle` or `done`, or `unknown` for a harness whose rules can never
+show idle. One message is typed per rest, never over a pane on
+`needs_input`, and never twice. [AGENT_STATE.md](AGENT_STATE.md#queued-messages)
+describes the whole lifecycle.
+
+`queue-prompt` params: `session`, `window` (default the focused window; it
+must run an agent, and `human` is `no_keyboard`), `text` (required, at most
+16 KiB), `human_nonce`, `from`.
+
+```json
+{"id":1,"verb":"queue-prompt","params":{"session":"work","window":"build","text":"make the backoff jitter configurable"}}
+{"id":1,"result":{"type":"prompt_queued","id":"q3","position":1,"queued":1,"delivering":false}}
+```
+
+`delivering` is true when the entry is next and the agent is at rest now, so
+it is typed within about a second. Errors: `queue_full` when the pane already
+holds `[agents.queue] max` entries, `no_keyboard`, `not_human` for a nonce
+that does not verify, `forbidden`, `invalid_params`.
+
+`list-queued` params: `session`, `window` (omit it to list every pane of the
+session). Each entry has `id`, `session`, `window`, `name`, `at` (Unix
+nanoseconds), `by`, `from` when given, `preview` (the first line, at most 80
+characters, control characters left out) and `state` (`waiting`,
+`delivering` or `stalled`), next first within each pane.
+
+`cancel-queued` params: `session`, `window`, and `id` or `all`, and
+`human_nonce`. It answers `cancelled` (the ids dropped) and `queued` (what the
+pane holds now).
+
+Who queued an entry, `by`, is the daemon's own reading of the connection:
+`human` only with a live `human_nonce`, `link:HOST` over a link (the peer the
+link-peer handshake named, `*` for none), the pane's window id for a process
+in a pane, and `shell` for anything else. What each is held to:
+
+| Origin | At `queue-prompt` | When it is typed | May drop with `cancel-queued` |
+| --- | --- | --- | --- |
+| `human` | the nonce | nothing more | every entry |
+| a pane | `write`, and the typing rules of `send-text` | its grants as they are then, against the target; a refusal drops the entry | only its own |
+| `link:HOST` | `write` in its `[hosts]` policy | the policy as it is then; a refusal drops the entry | only its own |
+| `shell` | nothing new | nothing new | every entry but `human`'s |
+
+For every entry the pane is checked for `needs_input` right before it is
+typed. An entry being typed cannot be dropped.
 
 ## Event stream
 

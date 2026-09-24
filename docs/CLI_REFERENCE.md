@@ -1494,6 +1494,58 @@ tuios respond -w review --prompt-id 75f8b9fadb5b5dfc approve
 tuios respond -w review choose 2
 ```
 
+### `tuios queue`
+
+Queue a message for the agent in a pane. It is typed as a prompt once the
+agent has been at rest (`idle` or `done`) for a second, one message per rest,
+and never over a prompt the agent is waiting on. If the agent is at rest now,
+it is typed right away. The daemon then waits for the agent to show it took
+the message, the way `fan` waits for its first prompt. A message the agent
+shows no sign of taking is marked `stalled`, is never typed again, and opens a
+question in the Inbox; it holds the messages behind it until the agent next
+works or you drop it.
+
+A pane holds at most `[agents.queue] max` messages (8 by default) of at most
+16 KiB each. The queue lives in the daemon's memory, so a daemon restart drops
+it, and so do the pane closing and the agent leaving the pane. From inside a
+pane the message is checked like `send-text` when it is queued, and against
+the pane's grants again when it is typed. See
+[Queued messages](AGENT_STATE.md#queued-messages).
+
+**Usage:**
+```bash
+tuios queue [flags] TEXT...
+tuios queue ls [-w <window>] [flags]
+tuios queue rm ID | --all -w <window> [flags]
+```
+
+**Flags:**
+- `-s, --session <name>`: Target session (default: most recently active)
+- `-w, --window <target>`: The agent's pane, by name or ID, or `HOST:SESSION:WINDOW` (default: the focused pane; for `ls`, every pane of the session)
+- `--all` (`rm`): Drop every message queued for the pane that you may drop
+- `--json`: Output the verb result as JSON
+
+The words of `TEXT` are joined with spaces. To queue a message that reads
+`ls` or `rm`, put `--` before it. `ls` prints one line per message: its id,
+state (`waiting`, `delivering` or `stalled`), who queued it (`human` from the
+Inbox, `shell` from outside every pane, a pane's id, or `link:HOST`), its age,
+the pane, and the message's first line. `rm` from inside a pane drops only
+what that pane queued, and from a shell every message but the ones you queued
+from the Inbox, which only the attached client can drop.
+
+**Examples:**
+```bash
+# Reply to the agent in the build pane once it finishes its turn
+tuios queue -w build 'make the backoff jitter configurable'
+
+# What waits, and drop one message
+tuios queue ls
+tuios queue rm q3
+
+# Everything queued for one pane
+tuios queue rm --all -w build
+```
+
 ### `tuios set-agent-state`
 
 Report a pane's agent state so the session can show which panes need
@@ -2502,6 +2554,7 @@ them.
 | `tuios send-agent-message <text>` | Leave a message in another agent's inbox, or post a notice to the session. `--from human` from inside a pane is refused with `forbidden`: only the person at an attached client can send as `human` (see [Who can act as the person](AGENT_STATE.md#who-can-act-as-the-person)). With `-s HOST:SESSION` and that host's link down, the message waits on this machine and goes when the link is back; the Inbox shows it under Waiting to send. `--select` sends one message to every agent pane a selector matches, after listing them: it asks at a terminal, and takes `--yes` or `--confirm TOKEN` otherwise |
 | `tuios read-agent-messages` | Read the messages agents have left in this session. Reading `-w human` from inside a pane is always a peek |
 | `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter. `--select` asks every agent pane a selector matches, at most 16 at once, after the same confirmation as `send-agent-message --select`; a pane on `needs_input` is refused in its own row |
+| `tuios queue <text>` | Leave a message for an agent that is typed as a prompt when it comes to rest, never over a prompt it waits on and never twice. `queue ls` lists what waits, `queue rm ID` or `queue rm --all -w PANE` drops it. See [`tuios queue`](#tuios-queue) |
 | `tuios start-agent <agent>` | Start an agent in a new pane and return once it shows it is at its prompt, optionally typing a first `--prompt`. `-s HOST:SESSION` starts it on another machine, in its checkout of the repository you are in. `--protocol acp\|codex` runs it headless as a transcript. See [above](#tuios-start-agent) |
 | `tuios agent-proto --protocol P -- <agent>` | The pane program of `start-agent --protocol`: run an agent headless over ACP or the Codex app-server and show it as a transcript. See [above](#tuios-agent-proto) |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |
@@ -2584,11 +2637,14 @@ them, however it was made:
 | `respond` | Answer another pane's prompt with `respond`, without the person, and type into a pane waiting on a prompt |
 | `admin` | Everything else, as every pane could before grants, such as `run-command` and `attach`. Includes `read`, `write` and `fan`, never `respond` |
 
-A pane without `admin` types (`send-text`, `send-keys`, `run`, `ask-agent`)
-into another pane only when that pane holds nothing it does not, since what
-it types runs with the target's grants, and into a pane on `needs_input` only
-when it holds `respond`. Its `send-keys` go to the target's terminal, never
-through an attached client, so they cannot drive the window manager.
+A pane without `admin` types (`send-text`, `send-keys`, `run`, `ask-agent`,
+`queue`) into another pane only when that pane holds nothing it does not,
+since what it types runs with the target's grants, and into a pane on
+`needs_input` only when it holds `respond`. A message it queues is checked
+again against its grants as they are when the message is typed, and dropped
+if they no longer cover the target. Its `send-keys` go to the target's
+terminal, never through an attached client, so they cannot drive the window
+manager.
 
 A pane holds the grants it was started with (`--grants` on `start-agent`,
 `fan` and `new-window`), the ones `set-pane-grants` gave it, or else the

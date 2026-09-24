@@ -167,6 +167,10 @@ type Daemon struct {
 	// value is ready. See verb_bundle_worktree.go.
 	bundles bundleStore
 
+	// queue holds the messages waiting to be typed to an agent when it comes
+	// to rest. Its zero value is ready. See agent_queue.go.
+	queue agentQueues
+
 	// promptStallOverride replaces promptStallDefault when set. Only tests set
 	// it, to keep a stall test from waiting five seconds. See prompt_gate.go.
 	promptStallOverride time.Duration
@@ -539,6 +543,9 @@ type DaemonConfig struct {
 	// under which such a pane holds admin, what every pane held before
 	// grants existed. See pane_grants.go.
 	Permissions config.ResolvedPermissions
+	// QueueMax is [agents.queue] max: how many messages one pane's delivery
+	// queue holds. Zero means the default. See agent_queue.go.
+	QueueMax int
 }
 
 // NewDaemon creates a new daemon instance.
@@ -568,6 +575,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.SetRecapTestPatterns(cfg.RecapTestPatterns)
 	d.SetLinkPolicies(cfg.LinkPolicies)
 	d.manager.SetPanePermissions(cfg.Permissions)
+	d.SetQueueMax(cfg.QueueMax)
 	d.outbox = newHostOutbox(d)
 	// The socket path is read through a closure rather than copied, because the
 	// line below may still change it and the stash root is derived from it.
@@ -770,6 +778,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// The event goes out before the Inbox change it causes, so a
 		// subscriber sees the transition and then the item it opened.
 		defer d.attention.noteSessionEvent(name, ev)
+		d.noteQueueEvent(name, ev)
 		d.events.publish(streamEvent{
 			Type:       ev.Type,
 			Session:    name,
@@ -807,6 +816,8 @@ func (d *Daemon) onSessionDeleted(s *Session) {
 	d.activity.forgetSession(s.ID)
 	// And nothing in it is waiting for anybody any more.
 	d.attention.closeSession(s.Name)
+	// And no message waits for an agent in it.
+	d.forgetQueuedSession(s.Name)
 	// And its stashed files go with it. This is the lifetime the stash promises,
 	// and it runs on the manager's delete hook, so every path that kills a
 	// session takes the files with it.

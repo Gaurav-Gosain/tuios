@@ -68,9 +68,9 @@ func (d *Daemon) stopHostsWatch() {
 }
 
 // onConfigReload runs on the watcher goroutine. It applies the [hosts] table,
-// appearance.preferred_shell, the [agents.approvals] and [agents.permissions]
-// tables and [agents.recap] test_patterns, and reads nothing else out of the
-// file. A new
+// appearance.preferred_shell, the [agents.approvals], [agents.permissions]
+// and [agents.queue] tables and [agents.recap] test_patterns, and reads
+// nothing else out of the file. A new
 // approval policy applies to the next request; a hold already running keeps
 // the length it started with. A new permission default applies to the next
 // call from every pane that holds the default.
@@ -83,6 +83,7 @@ func (d *Daemon) onConfigReload(cfg *config.UserConfig, err error) {
 	d.SetApprovalPolicy(ApprovalPolicyFromConfig(cfg.Agents.Approvals))
 	d.SetRecapTestPatterns(cfg.Agents.Recap.Resolved().TestPatterns)
 	d.manager.SetPanePermissions(PanePermissionsFromConfig(cfg.Agents.Permissions))
+	d.SetQueueMax(cfg.Agents.Queue.MaxEntries())
 	// A policy change applies to the next call on every link, including links
 	// already open, so tightening it does not wait for a reconnect.
 	d.SetLinkPolicies(cfg.Hosts)

@@ -37,6 +37,7 @@ Not one of these is a timeout. Retrying one unchanged fails the same way.
 | `loop_refused` | You addressed yourself, or would close a cycle of asks. Restructure. |
 | `rate_limited` | Stop sending. Two agents are probably answering each other. |
 | `no_keyboard` | `human` has no pane. Use `ask-human` or mail to `human`. |
+| `queue_full` | The pane already holds `[agents.queue] max` queued messages. Wait for the agent to take them, or drop one with `tuios queue rm`. |
 | `forbidden` | Your pane's grants (`tuios --skill grants`), a link's policy on another machine, or sending as `human` from a pane. The message names what was needed. Tell the person; do not look for another way. |
 | `not_human` | Only the person may do this: `dismiss-attention`, `respond` (unless your pane holds `respond`) and `reply-approval`. Change your own state, or ask the person. |
 | `prompt_changed` | The prompt moved or was answered before `respond` landed. Nothing was pressed. |

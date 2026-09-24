@@ -187,7 +187,11 @@ max = 8
   reads `test_patterns` for `tuios agent-log --recap` and the
   `agent-activity` verb, and picks up a change when the file is saved.
 - `[agents.queue]` bounds the messages waiting to be typed to one agent when
-  it comes to rest: `max`, 8 by default, at most 64.
+  it comes to rest (`tuios queue`, `queue-prompt`): `max`, 8 by default, at
+  most 64. A message queued past it is refused with `queue_full`. The daemon
+  reads it at start and again when the file changes; a queue already longer
+  keeps what it holds. The queue is built: see
+  [AGENT_STATE.md](AGENT_STATE.md#queued-messages).
 
 One rail option goes with them: `appearance.sidebar.agent_rest_fold`, how long
 an agent row rests (idle, unknown, or done and already seen) before the rail

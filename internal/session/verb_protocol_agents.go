@@ -216,19 +216,19 @@ func agentWorkVerbs() map[string]verbEntry {
 
 		// verb_queue.go
 		"queue-prompt": {
-			description: "Queue a message for the agent in a pane, typed as a prompt the moment the agent comes to rest, and never over a prompt it is waiting on. A queue holds at most [agents.queue] max messages, and dies with the daemon. It types into the pane, so a pane may queue only for a pane that holds nothing it does not, and its entry is checked against its grants again when it is typed.",
+			description: "Queue a message for the agent in a pane, typed as a prompt once the agent has been at rest for a second, and never over a prompt it is waiting on. One entry is typed per rest, and the prompt gate waits for the agent to show it took it; an entry it did not take is marked stalled, never typed again, and opens an Inbox question. A queue holds at most [agents.queue] max messages, and dies with the daemon, the pane, or the agent leaving the pane. It types into the pane, so a pane may queue only for a pane that holds nothing it does not, and its entry is checked against its grants again when it is typed. Who queued it (by) comes from the connection: human only with a live human_nonce, the pane's id for a pane, link:HOST over a link, shell otherwise.",
 			params: []verbParam{
 				sessionParam,
-				windowParam,
+				{Name: "window", Type: "string", Description: "The agent's window, by id or name. Omit to target the focused window. It must run an agent tuios knows of; human is refused with no_keyboard."},
 				{Name: "text", Type: "string", Required: true, Description: "The message, at most 16 KiB."},
-				humanNonce,
-				{Name: "from", Type: "string", Description: "The window the message is from. From a pane, its own; omit it there."},
+				{Name: "human_nonce", Type: "string", Description: "The attached client's nonce, to queue as the person (by human). One that does not verify is refused with not_human."},
+				{Name: "from", Type: "string", Description: "The window the message is from. From a pane, its own; omit it there. human needs human_nonce."},
 			},
 			returns: []verbParam{
 				{Name: "id", Type: "string", Description: "The entry, which cancel-queued takes."},
 				{Name: "position", Type: "int", Description: "Its place in the queue, 1 for next."},
 				{Name: "queued", Type: "int", Description: "How many entries the queue holds now."},
-				{Name: "delivering", Type: "bool", Description: "Whether it is being typed now."},
+				{Name: "delivering", Type: "bool", Description: "True when it is next and the agent is at rest now, so it is typed within about a second rather than after the agent's turn."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"queue-prompt","params":{"session":"work","window":"build","text":"make the backoff jitter configurable"}}`,
@@ -236,13 +236,14 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbQueuePrompt,
 		},
 		"list-queued": {
-			description: "List the messages waiting in a pane's delivery queue.",
+			description: "List the messages waiting in a pane's delivery queue, or in every pane of the session.",
 			params: []verbParam{
 				sessionParam,
-				windowParam,
+				{Name: "window", Type: "string", Description: "Window id or name. Omit to list every pane of the session."},
 			},
 			returns: []verbParam{
-				{Name: "entries", Type: "[]object", Description: "id, at, by, preview (the first 80 characters) and state (waiting, delivering or stalled) per entry, next first."},
+				{Name: "session", Type: "string", Description: "The session listed."},
+				{Name: "entries", Type: "[]object", Description: "id, session, window, name, at (Unix nanoseconds), by (human, shell, the queueing pane's window id, or link:HOST), from when given, preview (the first line, at most 80 characters) and state (waiting, delivering or stalled) per entry, next first within each pane."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"list-queued","params":{"session":"work","window":"build"}}`,
@@ -250,20 +251,21 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbListQueued,
 		},
 		"cancel-queued": {
-			description: "Drop messages from a pane's delivery queue before they are typed. The person may drop any entry; a pane may drop only the entries it queued.",
+			description: "Drop messages from a pane's delivery queue before they are typed. The person, with a live human_nonce, may drop any entry; a pane only the entries it queued; a linked machine only the entries it queued; a caller outside every pane every entry but the person's. An entry being typed cannot be dropped. Dropping a stalled entry closes its Inbox question and lets the entries behind it be typed.",
 			params: []verbParam{
 				sessionParam,
-				windowParam,
+				{Name: "window", Type: "string", Description: "Window id or name. With all, omit it to target the focused window. With id, omit it to find the entry in any pane of the session."},
 				{Name: "id", Type: "string", Description: "The entry to drop."},
-				{Name: "all", Type: "bool", Description: "Drop every entry the caller may drop.", Default: "false"},
-				humanNonce,
+				{Name: "all", Type: "bool", Description: "Drop every entry of the window the caller may drop.", Default: "false"},
+				{Name: "human_nonce", Type: "string", Description: "The attached client's nonce, to drop as the person. One that does not verify is refused with not_human."},
 			},
 			returns: []verbParam{
 				{Name: "cancelled", Type: "[]string", Description: "The entries dropped."},
-				{Name: "queued", Type: "int", Description: "How many entries the queue holds now."},
+				{Name: "queued", Type: "int", Description: "How many entries the pane's queue holds now."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"cancel-queued","params":{"session":"work","window":"build","all":true}}`,
+				`{"id":1,"verb":"cancel-queued","params":{"session":"work","id":"q3"}}`,
 			},
 			handler: (*Daemon).verbCancelQueued,
 		},

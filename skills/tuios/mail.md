@@ -250,5 +250,20 @@ tuios read-agent-messages -s work -w "$TUIOS_PANE_ID" --unread
 ```
 
 The second shape works only if the reviewer reads its inbox. The first works
-against any agent. To message or ask many panes at once, use a selector
+against any agent.
+
+To hand a busy agent its next instruction without blocking, and without
+relying on it reading mail, queue it. The daemon types it as a prompt once the
+agent has been at rest for a second, never over a prompt it waits on, and
+never twice:
+
+```sh
+tuios queue -s work -w review 'when you are done, also check the retry path'
+tuios queue ls -s work
+tuios queue rm -s work q3        # changed your mind; only what you queued
+```
+
+A message the agent did not take is marked `stalled`, opens a question in the
+person's Inbox, and is not typed again. The queue dies with the daemon, the
+pane, or the agent leaving the pane. To message or ask many panes at once, use a selector
 (`tuios --skill fleet`).

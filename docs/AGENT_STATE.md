@@ -1711,7 +1711,9 @@ built, so their rules are fixed before any of them does anything:
 - **Richer rows and queued replies** (`agent-activity`, `queue-prompt`,
   `list-queued`, `cancel-queued`): a message queued for a busy agent is typed
   when it comes to rest, and the rail shows how many wait (`queued` in
-  `get-agent-state` and `list-agents`).
+  `get-agent-state` and `list-agents`). The queue itself is built, with
+  `tuios queue`: see [Queued messages](#queued-messages). The rail figure and
+  the reply editor are not yet.
 - **Safer approvals** (`get-approval`, `risk_ack` and `plan_sha`): a new
   Inbox kind, `plan`, for a plan an agent in plan mode asks you to approve,
   which shares the pane's blocking item with its approval, so it closes when
@@ -2250,7 +2252,7 @@ pane, so a reply cannot set the pane's state, title or clipboard.
 
 ## Typing a prompt
 
-`ask-agent`, `fan` and `start-agent` type a prompt the same way: the text as one paste,
+`ask-agent`, `fan`, `start-agent` and the delivery queue type a prompt the same way: the text as one paste,
 bracketed (`ESC[200~` ... `ESC[201~`) when the pane has DECSET 2004 on, a short
 wait, then the submit key. What differs by harness is data in its manifest's
 `[input]` block:
@@ -2294,6 +2296,87 @@ values come from:
 Kitty keyboard flags 1 and 5 (disambiguate, and report alternate keys) leave
 Enter as a carriage return, which is why the two measured harnesses that push
 them still take one.
+
+## Queued messages
+
+A message for an agent that is in the middle of a turn has nowhere good to go:
+typed now, it lands in the middle of the turn, and `ask-agent` blocks its
+caller until the agent is done. The delivery queue holds it in the daemon and
+types it the moment the agent comes to rest.
+
+```bash
+tuios queue -w build 'make the backoff jitter configurable'
+tuios queue ls
+tuios queue rm q3
+```
+
+The verbs are `queue-prompt`, `list-queued` and `cancel-queued`
+([protocol.md](protocol.md#agent-review-triage-and-queue-verbs)).
+
+**When it is typed.** Nothing polls. The daemon acts on the agent-state
+changes it already sees, and a pane with nothing queued costs nothing. A
+message is typed when:
+
+- the pane is at rest the way `fan` judges a fresh agent ready: `idle` or
+  `done`, and `unknown` only for a harness whose rules can never show idle;
+- it has been at rest for a second, so a message does not land in the moment
+  an agent flickers to idle between two tool calls;
+- after an earlier message, the rest was reached after that message was
+  typed: one message per rest, and the next waits for the next rest.
+
+It is typed the way `fan` types its first prompt (see
+[Typing a prompt](#typing-a-prompt)), and the daemon then waits for the agent
+to show it took it: a state change, a finished turn, or, for a harness whose
+rules cannot show working, new output. Taken, the message leaves the queue.
+Not taken within the stall window (5 seconds), it is marked `stalled` and is
+never typed again, so text is never typed twice, and the Inbox gets a
+question on the pane: "your queued message was typed but api did not take
+it: look at the pane". A stalled message holds the ones behind it until the
+pane next shows `working` (the agent took it late, or you dealt with the
+pane), which drops it, or until you drop it with `tuios queue rm`.
+
+**What ends a queue.** It lives in the daemon's memory only. A daemon restart
+drops every queue, since the conversation a message was for ended with the
+process. A queue is also dropped when its pane closes, when the agent leaves
+the pane (state `none`), and when its session ends, and a message a pane
+queued is dropped when that pane closes. A pane holds at most
+`[agents.queue] max` messages (8 by default), each at most 16 KiB; one more is
+refused with `queue_full`.
+
+**The count.** Each pane's window state carries `agent_queued`, the length of
+its queue, and `get-agent-state` and `list-agents` report it as `queued`. It
+is daemon-owned, like the agent state: a client never sets it.
+
+**Who may do what.** Who queued a message is decided by the daemon from the
+connection, never from a parameter, and `list-queued` shows it as `by`:
+
+- `human`: the Inbox, with the nonce of a client attached now. A nonce that
+  does not verify is refused with `not_human`, and a process inside a pane can
+  never use one. Nothing more is checked when it is typed: you consented, as
+  when you type.
+- A pane's window id: a process in a pane. At queue time it is held like
+  `send-text` (see [Typing into another pane](#typing-into-another-pane)): the
+  `write` grant, a target in its own session (or fan group with `fan`) that
+  holds nothing it does not, and not on `needs_input` without `respond`. When
+  the message is typed, the pane's grants as they are then are checked against
+  the target again, and a message they no longer cover is dropped, logged, and
+  never typed. A pane can queue only as itself: `from` naming another window
+  is refused.
+- `link:HOST`: a machine linked to this one, which needs `write` in its
+  `[hosts]` policy. The policy is read again when the message is typed, so
+  taking `write` away drops what that machine queued.
+- `shell`: a process outside every pane, such as your own shell or a script.
+  It is held to nothing new, now or when typed.
+
+Whoever queued it, the daemon refuses to type over a prompt: the pane is
+checked for `needs_input` right before the message is typed, so a queued
+message can never answer an approval or a question.
+
+`cancel-queued` drops messages before they are typed. You, with the nonce, may
+drop any. A pane may drop only what it queued, a linked machine only what it
+queued, and a shell every message but yours. A message being typed cannot be
+dropped. Dropping a stalled message closes its Inbox question and lets the
+ones behind it be typed at the next rest.
 
 ## Environment
 
@@ -2575,7 +2658,7 @@ What a pane types into another pane runs with whatever that pane may do. A
 shell on the open default holds `admin`, so text typed into it could run
 `tuios set-pane-grants` and widen the pane that typed it. So a pane without
 `admin` is held to two more rules when it types into any pane but its own,
-with `send-text`, `send-keys`, `run` or `ask-agent`:
+with `send-text`, `send-keys`, `run`, `ask-agent` or `queue-prompt`:
 
 - The target must hold nothing the caller does not. A pane holding `read` and
   `write` types into a sibling that holds `read` and `write` too, or less, and
