@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -591,8 +592,8 @@ func (p *ptyTarget) spliceHolds() (witness, witness, bool) {
 
 func (p *ptyTarget) checkDaemon() []fuzz.Violation {
 	if _, err := daemonInfo(p.base, p.current); err != nil {
-		return one("daemon-reachable", "session-info for %q failed after %s: %v",
-			p.current, p.last, err)
+		return one("daemon-reachable", "session-info for %q failed after %s: %v\n%s",
+			p.current, p.last, err, daemonLogTail(p.base, 60))
 	}
 	wl, err := daemonWindows(p.base, p.current)
 	if err != nil {
@@ -865,6 +866,22 @@ func (p *ptyTarget) note(rule, format string, args ...any) {
 		Rule:   rule,
 		Detail: fmt.Sprintf(format, args...),
 	})
+}
+
+// daemonLogTail is the end of the daemon log under base, for a violation that
+// says the daemon went away. The log is under a TempDir that is gone by the
+// time anyone reads the report, and a daemon that crashed wrote its reason
+// there and nowhere else.
+func daemonLogTail(base string, lines int) string {
+	data, err := os.ReadFile(filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "daemon.log"))
+	if err != nil {
+		return "(no daemon log: " + err.Error() + ")"
+	}
+	all := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(all) > lines {
+		all = all[len(all)-lines:]
+	}
+	return "daemon log tail:\n" + strings.Join(all, "\n")
 }
 
 func one(rule, format string, args ...any) []fuzz.Violation {
