@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image"
 	"image/color"
 	"os"
 	"runtime/debug"
@@ -73,6 +74,16 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	// rest of the layout is drawn at all. See the skip in the loop below.
 	zoomCovers := m.zoomCoversRegion(zoomedWindow)
 
+	// The pane background's rectangles are this frame's, so last frame's go
+	// first. With the option off nothing is recorded and nothing is cleared.
+	paintGround := m.paneGround().on()
+	if paintGround {
+		if m.paneContentRects == nil {
+			m.paneContentRects = make(map[string]image.Rectangle, len(m.Windows))
+		}
+		clear(m.paneContentRects)
+	}
+
 	// Precompute the set of windows with an active (incomplete) animation once
 	// per frame instead of rescanning m.Animations for every window, which was
 	// O(windows*animations).
@@ -128,6 +139,13 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 
 		if !isVisible {
 			continue
+		}
+
+		// Where this pane's content sits, for the pane background the
+		// compositor paints under it. Recorded for every pane drawn, whichever
+		// branch below supplies its layer.
+		if paintGround {
+			m.paneContentRects[window.ID] = paneContentRect(window)
 		}
 
 		isFullyVisible := window.X >= leftMargin && window.Y >= topMargin &&
@@ -673,6 +691,14 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	// The celebration is a pass over the canvas too, for the second or so it
 	// is on screen.
 	if m.celebration.active() {
+		return nil, false
+	}
+	// The pane background is painted on the parsed cells of a pane's layer,
+	// and the fast path builds no layer. Falling back is what a lone
+	// fullscreen pane pays for a painted ground: the compositor with one
+	// cached layer, which copies rather than parses on a frame where nothing
+	// in the pane changed.
+	if m.paneGround().on() {
 		return nil, false
 	}
 	if m.panesBorderless() {

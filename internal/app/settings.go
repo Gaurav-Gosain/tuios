@@ -341,12 +341,12 @@ func (m *OS) settingsCategories() []settingsCategory {
 			custom("appearance.scroll_column_width", m.scrollColumnWidthItem()),
 			opt("appearance.scroll_column_max"),
 			opt("appearance.dim_unfocused"),
+			opt("appearance.pane_background"),
 			opt("appearance.panel_padding"),
 			opt("appearance.zen_mode"),
 			opt("appearance.links"),
 			opt("appearance.session_colors"),
 			opt("appearance.session_border"),
-			opt("appearance.global_session"),
 		}),
 	}
 
@@ -376,6 +376,11 @@ func (m *OS) settingsCategories() []settingsCategory {
 			// sit: the registry already calls it a sidebar option, it counts paths
 			// for the rail's git section, and Appearance had no room for it.
 			opt("appearance.git_dirty"),
+			// Moved here from Appearance when the pane background row joined it,
+			// which would otherwise have made Appearance scroll at a desktop
+			// height. It decides which sessions the rail offers, so it is a rail
+			// option in all but its key, like git_dirty above.
+			opt("appearance.global_session"),
 		}),
 	}
 

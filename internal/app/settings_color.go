@@ -81,6 +81,18 @@ var colorSettings = []colorSetting{
 		effective:  scrollbarTintColor,
 		namedColor: scrollbarTintKeywordColor,
 	},
+	{
+		Path:  "appearance.pane_background",
+		Label: "Pane background",
+		Desc:  "Behind pane content. off: your terminal shows through. theme: the theme's background",
+		Unset: "(off)",
+		apply: func(m *OS, v string) {
+			m.Settings.PaneBackground = v
+			m.MarkAllDirty()
+		},
+		effective:  paneBackgroundColor,
+		namedColor: paneBackgroundKeywordColor,
+	},
 
 	// [appearance.selection]: the marks a pane paints over its own output.
 	//
@@ -226,6 +238,25 @@ func scrollbarTintKeywordColor(keyword string, ground color.Color) color.Color {
 	default:
 		return scrollbarQuietInk(ground, scrollbarQuietThumbContrast)
 	}
+}
+
+// paneBackgroundColor is the colour the pane background is painting, for the
+// row's swatch and the picker's seed.
+func paneBackgroundColor(ground color.Color, s *config.Settings) color.Color {
+	if hex, ok := s.PaneBackgroundHex(); ok {
+		return lipgloss.Color(hex)
+	}
+	return paneBackgroundKeywordColor(s.PaneBackgroundResolved(), ground)
+}
+
+// paneBackgroundKeywordColor is the colour one keyword paints. off paints
+// nothing, and the terminal's own background is not a colour tuios can know,
+// so the picker's ground stands in for it; theme with no theme set is off.
+func paneBackgroundKeywordColor(keyword string, ground color.Color) color.Color {
+	if keyword == config.PaneBackgroundTheme && theme.CurrentThemeID() != "" {
+		return theme.TerminalBg()
+	}
+	return ground
 }
 
 // lookupColorSetting finds the colour setting at a registry path.

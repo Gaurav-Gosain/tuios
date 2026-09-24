@@ -231,7 +231,10 @@ func (m *OS) ScreenshotWindow(index int) tea.Cmd {
 		return nil
 	}
 	win := m.Windows[index]
-	palette := m.shotPalette()
+	// A pane on its own is drawn on the ground the pane background paints. A
+	// region capture is not: it reads the composed frame, whose pane cells
+	// already carry the paint and whose chrome does not.
+	palette := capture.WithPaneBackground(m.shotPalette(), m.Settings.PaneBackgroundResolved(), theme.CurrentThemeID())
 	grid := windowGrid(win, palette, m.screenshotSettings().Cursor)
 	if grid == nil {
 		m.ShowNotification("That window has no screen to capture.", "warning", m.Settings.NotificationDuration)
@@ -423,6 +426,7 @@ func (m *OS) screenshotSettings() capture.Settings {
 		cfg = m.UserConfig.Screenshot
 	}
 	s := capture.SettingsFrom(cfg, theme.CurrentThemeID(), theme.ActiveGlyphSetID())
+	s.PaneBackground = m.Settings.PaneBackgroundResolved()
 	if caps := m.hostCaps(); caps != nil {
 		s.HostFontFamily, s.HostBoldFamily = caps.FontFamily, caps.BoldFontFamily
 		// The shape of a cell, from the terminal that owns it. Without it the
@@ -473,6 +477,11 @@ func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool) tea.Cmd
 	return func() tea.Msg {
 		msg := screenshotResultMsg{capture: serial, format: settings.Format, grid: grid}
 		palette, paletteWarn := capture.Palette(settings.ThemeID)
+		if !plain {
+			// A window capture's backdrop is washed from the pane's ground, so
+			// it is the painted one when there is one.
+			palette = capture.WithPaneBackground(palette, settings.PaneBackground, settings.ThemeID)
+		}
 		frame, warnings := capture.Frame(settings, palette, plain)
 		if paletteWarn != "" {
 			// The no-theme notice rides with the rest of the warnings rather

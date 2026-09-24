@@ -113,6 +113,18 @@ func dimCell(dst, src *uv.Cell, fg, bg color.Color, t float64) *uv.Cell {
 	return dst
 }
 
+// paneDimGround is the pair an unfocused pane's cells are dimmed toward. A
+// painted pane background is the pane's own background, so it is what the dim
+// carries toward when one is set, theme or not. Its foreground may be nil (a
+// colour literal with no theme), and dimCell then leaves default-coloured text
+// alone, as it does untheme. With no pane background it is dimGround.
+func (m *OS) paneDimGround() (fg, bg color.Color) {
+	if g := m.paneGround(); g.on() {
+		return g.fg, g.bg
+	}
+	return dimGround()
+}
+
 // dimGround is the pair a dimmed cell is carried toward: the pane's own
 // background, and the foreground standing in for a cell that named none. Both
 // are nil when no theme is set, which is what leaves those cells alone.

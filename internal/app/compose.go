@@ -73,6 +73,10 @@ type cellLayer struct {
 	spill []bool
 	blank uv.Line
 	gen   uint64
+	// fillRect and fillKey are the pane background painted into buf, if any,
+	// so a change of either reparses. See pane_background.go.
+	fillRect image.Rectangle
+	fillKey  string
 }
 
 // wideMargin is the room past a layer's right edge that a head cell on the
@@ -93,15 +97,24 @@ func (cl *cellLayer) WidthMethod() uv.WidthMethod {
 //
 // w and h are the layer's own measurements, taken once by lipgloss.NewLayer;
 // the Compositor measured the string again, twice, on every frame.
-func (cl *cellLayer) update(content string, w, h int) {
-	if cl.content == content && cl.w >= 0 {
+//
+// fill is the pane background to paint into the parsed cells, and is part of
+// what the cells are keyed on: a pane whose string did not change but whose
+// ground did (the option was switched, the theme changed, the pane moved under
+// a clip) is parsed again rather than copied with the old paint.
+func (cl *cellLayer) update(content string, w, h int, fill layerFill) {
+	if cl.content == content && cl.w >= 0 && cl.fillRect == fill.rect && cl.fillKey == fill.ground.key {
 		return
 	}
 	cl.content = content
 	cl.w, cl.h = w, h
+	cl.fillRect, cl.fillKey = fill.rect, fill.ground.key
 	cl.buf.Resize(cl.w+wideMargin, cl.h)
 	cl.blank = clearLines(cl.buf.Lines, cl.blank)
 	uv.NewStyledString(content).Draw(&cellLayerScreen{cl}, uv.Rect(0, 0, cl.w, cl.h))
+	if fill.ground.on() && !fill.rect.Empty() {
+		paintPaneGround(cl.buf.Lines, fill.rect, fill.ground)
+	}
 	cl.spill = slices.Grow(cl.spill[:0], cl.h)[:cl.h]
 	for row, line := range cl.buf.Lines {
 		cl.spill[row] = false
@@ -240,18 +253,33 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer) {
 		return layerZ(a.layer) - layerZ(b.layer)
 	})
 
+	// The pane background, resolved once for the frame. Off, it is the zero
+	// ground and no layer below looks anything up.
+	ground := m.paneGround()
+
 	area := canvas.Bounds()
 	for _, cl := range ordered {
 		if cl.layer == nil || !cl.bounds.Overlaps(area) {
 			continue
 		}
 		if cl.cells != nil {
+			// A pane's layer carries its content rectangle, recorded by
+			// GetCanvas under the pane's id, which is the layer's id. Taken
+			// relative to where the layer landed, so a pane clipped at the
+			// edge of the region paints only the part of it that is drawn.
+			var fill layerFill
+			if ground.on() {
+				if r, ok := m.paneContentRects[cl.layer.GetID()]; ok {
+					fill.rect = r.Sub(cl.bounds.Min).Intersect(image.Rect(0, 0, cl.layer.Width(), cl.layer.Height()))
+					fill.ground = ground
+				}
+			}
 			// Parsed here, in draw order, and not when the layers were
 			// collected: two layers on one frame that share an id share the
 			// cellLayer too, and each has to hold its own cells at the moment
 			// it is drawn. Nothing on the frame today shares an id, and
 			// nothing enforces that either.
-			cl.cells.update(cl.layer.GetContent(), cl.layer.Width(), cl.layer.Height())
+			cl.cells.update(cl.layer.GetContent(), cl.layer.Width(), cl.layer.Height(), fill)
 			cl.cells.blit(canvas, cl.bounds.Min.X, cl.bounds.Min.Y)
 			continue
 		}

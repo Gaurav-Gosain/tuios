@@ -4,6 +4,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"image"
 	"image/color"
 	"os"
 	"regexp"
@@ -432,6 +433,12 @@ type OS struct {
 	layerCells     map[string]*cellLayer
 	composeGen     uint64
 	composeScratch []composedLayer
+	// paneGroundCache is the resolved pane background and the setting and
+	// theme it was resolved from. paneContentRects is each pane layer's
+	// content rectangle on this frame, in screen cells, filled only while a
+	// pane background is on. See pane_background.go.
+	paneGroundCache  paneGroundMemo
+	paneContentRects map[string]image.Rectangle
 	// scrollbarRects is where each pane's scrollbar was drawn on the last frame,
 	// keyed by window ID. Recorded by the renderer, read by input.
 	scrollbarRects map[string]ScrollbarRect

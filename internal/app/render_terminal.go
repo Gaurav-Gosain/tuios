@@ -536,10 +536,16 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		dimT         float64
 	)
 	if dim > 0 {
-		if dimFg, dimBg = dimGround(); dimBg != nil {
+		if dimFg, dimBg = m.paneDimGround(); dimBg != nil {
 			dimT = dimBlend(&m.Settings)
 		}
 	}
+
+	// The pane background, for the two things drawn here against it rather
+	// than on it: the fake cursor and the copy sweep. The ground itself is
+	// painted by the compositor; see pane_background.go.
+	ground := m.paneGround()
+	var groundScratch uv.Cell
 
 	// Set false by any row the cell loop could not fill to exactly maxX columns.
 	gridExact := true
@@ -763,6 +769,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				// on it read as gold on black rather than as the pane getting
 				// brighter.
 				cellBg := theme.TerminalBg()
+				if ground.on() {
+					cellBg = ground.bg
+				}
 				if cell != nil && cell.Style.Bg != nil {
 					cellBg = cell.Style.Bg
 				}
@@ -870,6 +879,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				styleCell := cell
 				if dimT > 0 {
 					styleCell = dimCell(&dimScratch, cell, dimFg, dimBg, dimT)
+				}
+				if isCursorPos {
+					styleCell = paneGroundCell(&groundScratch, styleCell, ground)
 				}
 				currentStyle, currentPrefix, currentSuffix = buildCellStyleCachedANSI(styleCell, isCursorPos)
 				currentStyleCached = true

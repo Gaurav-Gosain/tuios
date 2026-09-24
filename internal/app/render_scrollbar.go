@@ -347,6 +347,14 @@ func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int
 	if m.Settings.ScrollbarStyle == config.ScrollbarStyleTrack {
 		ground = pal.Surface
 		base = base.Background(pal.Surface)
+	} else if g := m.paneGround(); g.on() {
+		// The thin bar floats over the pane, and its layer replaces the cells
+		// under it, so on a painted pane it carries the paint itself: a cell
+		// with no background here would cut a column of the terminal's own
+		// background through the pane. The ink is measured against the same
+		// ground for the same reason.
+		ground = g.bg
+		base = base.Background(g.bg)
 	}
 	thumbColor, trackColor := m.scrollbarInk(window, focused, ground)
 	trackInk := base.Foreground(trackColor)
