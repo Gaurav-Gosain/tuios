@@ -40,8 +40,15 @@ func TestRowShowsNowOnlyWhileWorking(t *testing.T) {
 	if !strings.Contains(row, "Bash: go test") {
 		t.Fatalf("working row = %q, want what it is doing now", row)
 	}
-	if strings.Contains(row, "editing files") || strings.Contains(row, "backoff") {
-		t.Errorf("working row = %q, want neither the message nor the prompt beside now", row)
+	if strings.Contains(row, "backoff") {
+		t.Errorf("working row = %q, want no prompt beside now", row)
+	}
+	// A short now and a short message, so the rail's width would leave room
+	// for the message if the row kept it.
+	row, _ = richRow(t, sessiontree.WindowInput{AgentState: "working", Harness: "claude-code", Message: "wip",
+		Meta: []sessiontree.MetaToken{{Key: "now", Value: "Edit"}}})
+	if !strings.Contains(row, "Edit") || strings.Contains(row, "wip") {
+		t.Errorf("working row = %q, want now and not the message beside it", row)
 	}
 
 	// With nothing running now, the message is the line again.
@@ -70,8 +77,10 @@ func TestRowAtRestSaysNothing(t *testing.T) {
 	if strings.Contains(row, "Added retry") {
 		t.Errorf("seen finished row = %q, want no message at rest", row)
 	}
-	row, _ = richRow(t, sessiontree.WindowInput{AgentState: "idle", Harness: "claude-code", Message: "waiting for input"})
-	if strings.Contains(row, "waiting for input") {
+	// A short message, which the rail has room for, so only the rule keeps it
+	// off the row.
+	row, _ = richRow(t, sessiontree.WindowInput{AgentState: "idle", Harness: "claude-code", Message: "wip"})
+	if strings.Contains(row, "wip") {
 		t.Errorf("idle row = %q, want no message at rest", row)
 	}
 }
