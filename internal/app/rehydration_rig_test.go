@@ -388,7 +388,11 @@ func (r *rig) atPrompt(ptyID string) bool {
 		}
 	}
 	if !strings.HasSuffix(before.String(), "$ ") {
-		return false
+		// bash redraws its prompt when the pane is resized under it, and a
+		// redraw caught by an attach's resize can leave the row reading "$ $"
+		// with the cursor at its start. The shell is at its prompt all the same.
+		text := stateRow(row)
+		return strings.Contains(text, "$") && strings.Trim(text, "$ ") == ""
 	}
 	for x := st.CursorX; x < len(row); x++ {
 		if c := row[x].Content; c != "" && c != " " {
