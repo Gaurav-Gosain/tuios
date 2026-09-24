@@ -186,8 +186,15 @@ func TestAClientAttachingIsStillToldItsSessionDied(t *testing.T) {
 
 		// The kill runs against the attach, so it lands somewhere inside the
 		// handshake rather than politely after it.
+		// deleted closes when DeleteSession returns. The client hears of the
+		// death from the delete hook, before the session's final resurrection
+		// save and the removal of its state file, so each round waits for the
+		// whole delete. Otherwise the last round's save can land in the
+		// resurrection directory while the test's cleanup removes it.
 		killed := make(chan struct{})
+		deleted := make(chan struct{})
 		go func() {
+			defer close(deleted)
 			close(killed)
 			_ = d.manager.DeleteSession(name)
 		}()
@@ -196,6 +203,7 @@ func TestAClientAttachingIsStillToldItsSessionDied(t *testing.T) {
 			// Attaching to a session that was already gone is a clean refusal
 			// and not what this is about.
 			<-killed
+			<-deleted
 			_ = c.Close()
 			continue
 		}
@@ -205,8 +213,10 @@ func TestAClientAttachingIsStillToldItsSessionDied(t *testing.T) {
 		case <-ended:
 		case <-time.After(5 * time.Second):
 			_ = c.Close()
+			<-deleted
 			t.Fatalf("round %d: attached to a session that died without telling it", round)
 		}
+		<-deleted
 		_ = c.Close()
 	}
 }
