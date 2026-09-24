@@ -284,8 +284,21 @@ func (m *OS) applyZoomRectAnimated(w *terminal.Window, deferring, animate bool) 
 	// before it places a pane. Retired even when the box already matches: the
 	// snap is heading somewhere else regardless.
 	m.CancelSnapAnimation(w)
+	// The box is partitioned the way the layout partitions a tile, so the pane
+	// gets the border allowance a tile would get. It was left at whatever the
+	// pane already had, which is right for a pane the layout placed before it
+	// was zoomed and wrong for one that first appeared zoomed: a window a sync
+	// created with the zoom already on had never been tiled, kept the bordered
+	// default under shared borders, and ran its guest two columns and two rows
+	// smaller than every client that had seen it tiled first. Each client then
+	// announced its own size for the same PTY.
+	borderChanged := false
+	if borderless := m.panesBorderless(); !w.IsFloating && w.Tiled != borderless {
+		w.Tiled = borderless
+		borderChanged = true
+	}
 	x, y, width, height := m.zoomRect()
-	if w.X == x && w.Y == y && w.Width == width && w.Height == height {
+	if !borderChanged && w.X == x && w.Y == y && w.Width == width && w.Height == height {
 		return
 	}
 	if animate && !deferring {
