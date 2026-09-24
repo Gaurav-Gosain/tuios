@@ -329,6 +329,8 @@ func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, 
 	if verr != nil {
 		return nil, verr
 	}
+	// Resolved now, while the directory is there to resolve.
+	notesRoot := canonRoot(info.Path)
 
 	out := map[string]any{
 		"type":        "worktree_removed",
@@ -383,6 +385,8 @@ func (d *Daemon) verbRemoveWorktree(_ *connState, params json.RawMessage) (any, 
 		}
 		out["discarded"] = discard
 	}
+	// The notes on the worktree's changes go with it.
+	d.reviewNotes.dropRoot(notesRoot)
 
 	out["session_killed"] = false
 	if !p.KeepSession {

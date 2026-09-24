@@ -124,6 +124,7 @@ dies with the daemon. `tuios --skill mail` has the whole contract.
 | `tuios start-agent claude --name reviewer` | One agent in a new pane beside you, returning once it is ready. `--protocol acp` or `codex` runs it headless |
 | `tuios worktree ls`, `tuios worktree diff`, `tuios fan keep SESSION` | Watch them, read what one changed, keep one and remove the rest without losing uncommitted work |
 | `tuios fan compare SESSION`, `tuios fan verify SESSION -- CMD`, `tuios fan diff A B` | Every attempt side by side with its changes and last check, one check run in all of them, and what two did differently |
+| `tuios review [SESSION]`, `tuios review note FILE:LINE 'TEXT'`, `tuios review send` | What the agent in a pane changed against its base, notes on its lines, and the notes sent to it as one message when it rests. See [Reviewing an agent's changes](#reviewing-an-agents-changes) |
 | `--select 'group:fan/retry needs:you'` | Address every agent pane a selector matches, on `list-agents`, `list-attention`, `wait-for`, `send-agent-message` and `ask-agent` |
 | `--grants read,write` | On `fan`, `start-agent` and `new-window`: what the new panes may do |
 
@@ -1909,7 +1910,9 @@ built, so their rules are fixed before any of them does anything:
 
 - **Reviewing a pane's changes** (`review-diff`, `review-note`,
   `send-review`), and comparing the attempts of a fan (`compare-fan`,
-  `verify-fan`, `keep-fan`).
+  `verify-fan`, `keep-fan`). The review verbs are built, with `tuios review`:
+  see [Reviewing an agent's changes](#reviewing-an-agents-changes). The
+  review overlay in the client is not yet.
 - **Triage in the Inbox** (`mark-attention`): snooze, wake, mark unread and
   undo. A snoozed item closes with the reason `snoozed` and opens again with
   the same id. This one is built: see
@@ -2612,6 +2615,111 @@ message was typed, since its text may still sit in the input box. Linked
 machines are told apart by the name their link gave; two that gave none each
 drop only what they queued on the same connection. A pane on another machine,
 whose calls arrive through its report channel, may neither queue nor drop.
+
+## Reviewing an agent's changes
+
+When an agent finishes, you read what it changed, leave notes on the lines
+you want changed, and send the notes back as one message.
+
+```bash
+tuios review api-fan-retry-2              # the diff, with notes under their lines
+tuios review note -s api-fan-retry-2 api/retry.go:42 'log the attempt number here too'
+tuios review notes -s api-fan-retry-2
+tuios review send -s api-fan-retry-2      # typed when the agent comes to rest
+```
+
+The verbs are `review-diff`, `review-note` and `send-review`
+([protocol.md](protocol.md#review-diff)).
+
+**What is diffed.** The pane's repository: the session's worktree when the
+pane is in it, else the repository holding the pane's directory. The diff
+runs from a base, in this order: the `base` you name; the base the worktree
+was made from (`fan`, `worktree new`), or for one tuios made from `HEAD` the
+main checkout's branch, as `compare-fan` counts it; the merge base with the
+branch's upstream; else `HEAD`, which shows only what is not committed. A named or
+recorded base is taken through its merge base with `HEAD`, so a base that
+moved on since the branch left it does not show its own commits as removed.
+`uncommitted` asks for `HEAD` directly. `against` names another attempt of the
+same fan and diffs the two attempts with each other instead.
+
+Committed and uncommitted work show together, untracked files included (status
+`U`) and ignored files left out. The working state is written as a git tree
+through a temporary copy of the worktree's index, so the repository's index,
+its files and what the agent staged are never changed; the objects the tree
+needs are loose objects that `git gc` collects. A diff stops at 400 files,
+2 MiB of text or 5000 lines in one file, and the files past a limit are
+listed with their counts only (`truncated`). Binary files have counts only.
+All the git calls of one diff are bounded at 10 seconds together, and nothing
+runs until a diff is asked for. The repository is read on the machine the
+daemon runs on: `tuios review HOST:SESSION` asks the daemon on that machine,
+and a pane of a session here whose process runs on another machine is refused
+with `not_repo`.
+
+**Notes.** A note sits on a line (`FILE:LINE`, on the new side, or with
+`side: old` on a removed line numbered as in the base) or on a whole hunk (by
+its header). It keeps the text of its line, filled in from the file when the
+caller gives none, and every `review-diff` finds the line again: the same text
+within 50 lines of where it was, else the nearest match in the file. White
+space at the ends of a line, and a change in indentation, do not count. A
+note whose line is gone is marked `outdated`, and is found again if the line
+comes back. A note on a hunk moves to the hunk with the same header, else the
+one that holds its line.
+
+Notes are held by the daemon, so every client and the CLI see the same ones.
+They are kept per worktree and per pane, at most 200 on a worktree and 1000
+bytes each, and saved to `review/notes.json` under the state directory,
+readable by you only. A restart keeps the notes of panes that came back. A
+pane closing drops its notes, and so does removing its worktree
+(`remove-worktree`, `worktree rm`, `fan keep`).
+
+**Sending.** `send-review` composes the pane's unsent notes (or the ones named
+with `ids`, sent before or not) into one message and hands it to the delivery
+queue ([Queued messages](#queued-messages)): typed now if the agent is at rest,
+else when it next comes to rest, and never over a prompt. With `now` it is sent
+only when the agent is at rest with nothing queued, and otherwise refused with
+`not_ready` or `agent_blocked`. The notes are marked `sent_at` when they are
+queued. The agent receives:
+
+```
+Review notes on your changes (vs origin/main), from the person:
+
+1. api/retry.go:42, on "if err == nil {"
+   log the attempt number here too
+2. api/retry.go:100-105 (hunk "@@ -88,4 +100,6 @@")
+   wrap with context
+
+Address each note, then say which you changed.
+```
+
+Notes are ordered by file, then line. A quoted line is cut to 120 characters
+with control characters left out and anything shaped like a secret masked,
+and a note's text keeps its lines with every other control character left
+out, so nothing in it can end the paste it is typed in. A message longer than
+16 KiB is refused: send fewer notes at a time with `ids`.
+
+**Who may do what.** Who wrote a note, and who sent a message, is the daemon's
+reading of the connection, never a parameter, as for the queue:
+
+- `human` only with the nonce of a client attached now. A process in a pane
+  can never use one, so a pane cannot write a note that reads as yours, and
+  the message says "from the person" only when you sent it. From a pane it
+  says "from pane NAME", from a linked machine "from a caller on HOST", and
+  from a shell "from a script".
+- A pane without `admin` reads a diff only in its own session and fan group
+  (`read`), and `against` names a session it must reach too. It writes notes
+  with `write`, in the same reach. It sends notes only into a pane that holds
+  nothing it does not and is not on `needs_input` unless it holds `respond`,
+  and the queue checks its grants again when the message is typed.
+- A note is changed or removed only by whoever may speak for its author: you
+  any note, a pane or a linked machine only the notes it wrote, and a shell
+  every note but yours. `clear` removes what the caller may remove and keeps
+  the rest.
+- Over a link, all three need `write`, because a diff carries file contents
+  and the other two write. A pane on another machine, whose calls arrive
+  through its report channel, may neither write notes nor send them.
+
+The diff is the repository's text and the notes are whoever wrote them, so
+`review-diff` marks its answer `untrusted`.
 
 ## Environment
 

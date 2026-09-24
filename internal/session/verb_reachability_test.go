@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
 // This file answers for the socket what the reachability table answers for the
@@ -185,14 +187,10 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"run#0": {errCode: ErrVerbNoShellIntegration, slow: true, why: "no shell in the fixture marks its commands"},
 	"run#1": {errCode: ErrVerbNoShellIntegration, slow: true, why: "no shell in the fixture marks its commands"},
 
-	// The agent work's verbs are registered ahead of their handlers, which
-	// answer internal until they land (notBuilt). Each row goes when its
-	// verb is built: the test fails on a row whose example starts to work.
-	"review-diff#0": {errCode: ErrVerbInternal, why: "review-diff is not built yet"},
-	"review-diff#1": {errCode: ErrVerbInternal, why: "review-diff is not built yet"},
-	"review-note#0": {errCode: ErrVerbInternal, why: "review-note is not built yet"},
-	"review-note#1": {errCode: ErrVerbInternal, why: "review-note is not built yet"},
-	"send-review#0": {errCode: ErrVerbInternal, why: "send-review is not built yet"},
+	// The fixture's panes sit in a throwaway repository with no fan and no
+	// agent. The review verbs are proved in verb_review_test.go.
+	"review-diff#0": {errCode: ErrVerbSessionNotFound, why: "api-fan-retry-2 does not exist here"},
+	"send-review#0": {errCode: ErrVerbInvalidParams, why: "the fixture's build window runs no agent"},
 	// The fixture has no agent panes, so there is nothing to queue for,
 	// and so no entry to drop. The queue is proved in agent_queue_test.go.
 	"queue-prompt#0":  {errCode: ErrVerbInvalidParams, why: "the fixture's build window runs no agent"},
@@ -240,6 +238,10 @@ func TestEveryVerbExampleReachesItsHandler(t *testing.T) {
 	for _, env := range []string{"HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"} {
 		t.Setenv(env, t.TempDir())
 	}
+	// The fixture's panes start in the test's directory. A throwaway
+	// repository there, rather than wherever the test binary runs, gives the
+	// review examples the same repository on every machine.
+	t.Chdir(testutil.GitRepo(t))
 	d, socketPath := startTestDaemon(t)
 
 	names := make([]string, 0, len(verbRegistry))

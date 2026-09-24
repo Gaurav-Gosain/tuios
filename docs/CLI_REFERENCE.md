@@ -1600,6 +1600,76 @@ tuios queue rm q3
 tuios queue rm --all -w build
 ```
 
+### `tuios review`
+
+Show what the agent in a pane changed, leave notes on its lines, and send the
+notes to the agent. The diff is the pane's worktree against the base it was
+made from, or for a plain repository against the merge base with its upstream
+branch, else only what is not committed. Committed and uncommitted work show
+together, untracked files included and ignored files left out. It is read by
+the daemon through a temporary git index, so the repository, its index and its
+files are not changed. See
+[Reviewing an agent's changes](AGENT_STATE.md#reviewing-an-agents-changes).
+
+**Usage:**
+```bash
+tuios review [SESSION] [-w <window>] [--base <ref> | --against <session> | --uncommitted] [--stat] [--path <path>]... [--context <n>] [--json]
+tuios review note [-w <window>] FILE:LINE TEXT... [--side old]
+tuios review note [-w <window>] --hunk '<header>' FILE TEXT...
+tuios review note --edit ID TEXT... | --remove ID
+tuios review notes [-w <window>] [--clear] [--json]
+tuios review send [-w <window>] [--id ID]... [--now] [--json]
+```
+
+**Flags:**
+- `-s, --session <name>`: Target session, also accepted as the argument (default: this pane's, else the most recently active)
+- `-w, --window <target>`: The pane, by name or ID, or `HOST:SESSION:WINDOW` (default: the focused pane)
+- `--base <ref>`: Diff against this branch, tag or commit, through its merge base with `HEAD`
+- `--against <session>`: Diff against another attempt of the same fan
+- `--uncommitted`: Only what is not committed yet
+- `--stat`: The list of changed files with their counts, without the diff
+- `--path <path>`: Only this path, relative to the repository root. Repeatable
+- `--context <n>`: Lines of context around each change, 0 to 20 (default 3)
+- `--side old` (`note`): `LINE` is a removed line, numbered as in the base
+- `--hunk <header>` (`note`): The note is on the whole hunk with this header
+- `--edit <id>`, `--remove <id>` (`note`): Change or drop a note
+- `--clear` (`notes`): Remove every note you may remove
+- `--id <id>` (`send`): Send only this note, sent before or not. Repeatable
+- `--now` (`send`): Send only if the agent is at rest with nothing queued; never queue
+- `--json`: Output the verb result as JSON
+
+`tuios review` prints a heading, one line per changed file (its status `A`,
+`M`, `D`, `R`, or `U` for untracked, and its counts), then each file's hunks
+with both line numbers and the notes under the lines they are on. A diff stops
+at 400 files, 2 MiB of text or 5000 lines in one file; files past that show
+their counts only.
+
+A note keeps its line's text and follows it when the file changes; one whose
+line is gone is marked outdated. `review notes` lists each note's id, place,
+author (`human`, `shell`, a pane, or `link:HOST`), state and text. From inside
+a pane only the notes that pane wrote can be edited or removed; from a shell,
+any but the ones left from the attached client.
+
+`review send` sends the unsent notes as one message through the delivery
+queue ([`tuios queue`](#tuios-queue)): typed when the agent is at rest, never
+over a prompt. The message says who sent it: "a script" from a shell, the pane
+from inside one, and "the person" only from the attached client.
+
+**Examples:**
+```bash
+# What the agent in the focused pane changed
+tuios review
+
+# A fan attempt against its base, or against another attempt
+tuios review api-fan-retry-2
+tuios review api-fan-retry-2 --against api-fan-retry
+
+# Leave two notes and send them
+tuios review note -s api-fan-retry-2 api/retry.go:42 'log the attempt number here too'
+tuios review note -s api-fan-retry-2 --hunk '@@ -88,4 +100,6 @@' api/retry.go 'wrap with context'
+tuios review send -s api-fan-retry-2
+```
+
 ### `tuios set-agent-state`
 
 Report a pane's agent state so the session can show which panes need
@@ -2609,6 +2679,7 @@ them.
 | `tuios read-agent-messages` | Read the messages agents have left in this session. Reading `-w human` from inside a pane is always a peek |
 | `tuios ask-agent <text>` | Ask another agent a question and wait for its answer. Fails with `prompt_stalled` when the target shows no sign of taking the question within `--stall-timeout` (5000 ms) of Enter. `--select` asks every agent pane a selector matches, at most 16 at once, after the same confirmation as `send-agent-message --select`; a pane on `needs_input` is refused in its own row |
 | `tuios queue <text>` | Leave a message for an agent that is typed as a prompt when it comes to rest, never over a prompt it waits on and never twice. `queue ls` lists what waits, `queue rm ID` or `queue rm --all -w PANE` drops it. See [`tuios queue`](#tuios-queue) |
+| `tuios review [SESSION]` | Show what the agent in a pane changed against its base, with the notes left on it. `review note FILE:LINE TEXT` leaves one, `review notes` lists them, `review send` sends the unsent ones to the agent as one queued message. See [`tuios review`](#tuios-review) |
 | `tuios start-agent <agent>` | Start an agent in a new pane and return once it shows it is at its prompt, optionally typing a first `--prompt`. `-s HOST:SESSION` starts it on another machine, in its checkout of the repository you are in. `--protocol acp\|codex` runs it headless as a transcript. See [above](#tuios-start-agent) |
 | `tuios agent-proto --protocol P -- <agent>` | The pane program of `start-agent --protocol`: run an agent headless over ACP or the Codex app-server and show it as a transcript. See [above](#tuios-agent-proto) |
 | `tuios explain-agent-detect` | Show what the agent detector sees in a pane |

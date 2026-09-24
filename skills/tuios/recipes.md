@@ -16,6 +16,8 @@ tuios worktree ls --group fan/retry
 tuios fan compare api-fan-retry
 tuios fan verify api-fan-retry -- go test ./...
 tuios worktree diff api-fan-retry-2 --stat
+tuios review note -s api-fan-retry-2 api/retry.go:42 'log the attempt number here too'
+tuios review send -s api-fan-retry-2
 tuios fan keep api-fan-retry-2 --stash
 ```
 

@@ -945,7 +945,8 @@ built yet in this daemon" until their work lands: `review-diff`,
 `mark-attention`, `agent-activity`, `queue-prompt`, `list-queued`,
 `cancel-queued` and `get-approval` (see
 [Agent review, triage and queue verbs](#agent-review-triage-and-queue-verbs)).
-`get-approval` is built (see [get-approval](#get-approval)).
+`get-approval` is built (see [get-approval](#get-approval)), and so are the
+three review verbs (see [review-diff](#review-diff)).
 `mark-attention` checks the person's nonce first, so a caller without one gets
 `not_human` as it will once built. The older verbs change as follows, and a
 caller that sends nothing new is answered as before:
@@ -1153,6 +1154,27 @@ caller of the older verbs and for a subscriber:
   passed while the daemon was down wakes on start. An older daemon reading
   the file lists them as open.
 - `not_human` is raised by `mark-attention` as by `dismiss-attention`.
+
+**Reviewing is built.** `review-diff`, `review-note` and `send-review` answer
+instead of `internal` (see [review-diff](#review-diff),
+[review-note](#review-note) and [send-review](#send-review)). What changes for
+an existing caller:
+
+- `remove-worktree`, and so `keep-fan` and `tuios worktree rm`, drop the
+  review notes kept on the worktree they remove, whether or not the directory
+  was still there. Their answers are unchanged.
+- A window closing drops the review notes kept for that pane. Nothing is
+  published for it.
+- The daemon keeps a new file, `review/notes.json` under the state directory
+  (mode 0600), beside `attention/items.json`. An older daemon ignores it.
+- `send-review`'s result, as `list-verbs` described it before it was built,
+  named `delivered`. It carries `delivering` instead, with `queue-prompt`'s
+  meaning, and gains `ids` and `queued`: the message is typed by the delivery
+  queue, so the answer can only say whether it is next and the agent at rest.
+- `review-diff`'s result gains `session`, `window`, `uncommitted`,
+  `against_tree` and `notes` beyond what `list-verbs` listed before it was
+  built, and `review-note`'s gains `session`, `window`, `worktree`, `id` and
+  `removed`.
 
 ### list-verbs
 
@@ -2359,6 +2381,140 @@ and answers the agent `cancelled` (Codex: `cancel`).
 
 The result gains `protocol`, and `command` is the agent's command, not the pane
 program's. `list-agents` shows `protocol` for the pane.
+
+### review-diff
+
+What the agent in a pane changed. The pane is `window` (default the focused
+one) of `session`, and the repository is the session's worktree when the pane
+is in it, else the repository holding the pane's directory; none is
+`not_repo`, and so is a pane whose process runs on another machine. The
+working state, committed or not, untracked files included and ignored files
+left out, is written as a git tree through a temporary copy of the worktree's
+index, so its index, its files and what the agent staged are not changed.
+Every git call of one diff together is bounded at 10 seconds (`git_failed`
+past it). [AGENT_STATE.md](AGENT_STATE.md#reviewing-an-agents-changes) has the
+whole contract.
+
+Params: `session`, `window`, `base` (a ref; omit for the worktree's recorded
+base, else the merge base with the upstream, else `HEAD`), `against` (another
+session of the same fan: the two attempts diffed with each other; not with
+`base` or `uncommitted`), `uncommitted` (only what is not committed, against
+`HEAD`), `paths` (at most 256, relative, each taken literally), `context` (0
+to 20, default 3). A `base` that does not resolve, or reads as an option, is
+`invalid_params`, and so is an `against` that is not another attempt of the
+fan. A named or recorded base is taken through its merge base with `HEAD`.
+
+```json
+{"verb": "review-diff", "params": {"session": "api-fan-retry-2"}}
+```
+
+```json
+{"result": {"type": "review_diff", "session": "api-fan-retry-2", "window": "4be1c09a-...",
+ "repo_root": "/src/api", "worktree": "/home/u/.local/share/tuios/worktrees/api/fan-retry-2",
+ "base": "main", "base_sha": "1a760e8f...", "uncommitted": false, "tree_sha": "9d0c...",
+ "files": [
+  {"path": "api/retry.go", "status": "M", "added": 12, "removed": 1, "hunks": [
+   {"header": "@@ -40,7 +40,19 @@ func Do(ctx context.Context", "old_start": 40, "old_lines": 7, "new_start": 40, "new_lines": 19,
+    "lines": [{"op": "context", "old": 40, "new": 40, "text": "\tfor attempt := 0; ; attempt++ {"},
+              {"op": "delete", "old": 41, "text": "\t\tif err := f(); err == nil {"},
+              {"op": "add", "new": 41, "text": "\t\terr := f()"}]}]},
+  {"path": "docs/retry.md", "status": "U", "added": 9, "removed": 0, "hunks": []}],
+ "totals": {"files": 2, "added": 21, "removed": 1}, "truncated": false,
+ "notes": [], "untrusted": true}}
+```
+
+`status` is `A`, `M`, `D`, `R` (with `old_path`) or `U` (untracked: new and
+not yet added to git). A line's `op` is `context`, `add` or `delete`, with
+`old` and `new` its numbers on each side, and `no_newline` on the last line
+of a side without one. Past 400 files, 2 MiB of diff text, or 5000 lines in
+one file, a file carries its counts with `truncated` and no hunks, and the
+diff says `truncated`. A binary file has `binary` and counts only. With
+`against`, `base` and `base_sha` are empty and `against` and `against_tree`
+name the other attempt.
+
+Every call finds the pane's notes again in the diff it read and returns them
+as `notes`, as `review-note` lists them. The answer is marked `untrusted`: the
+text is the repository's.
+
+A pane without `admin` reads its own session and fan group, and the session
+`against` names must be in its reach too. Over a link it needs `write`, since
+it returns file contents.
+
+### review-note
+
+Keep the notes on a pane's changes. They are held by the daemon per worktree
+and per pane: at most 200 on a worktree, 1000 bytes each, saved across a
+restart for the panes that come back, and dropped with the pane or the
+worktree.
+
+Params: `action` (required: `add`, `edit`, `remove`, `list`, `clear`),
+`session`, `window`, and:
+
+- `add`: `path` (relative to the repository root), then `line` (from 1) with
+  `side` (`new`, the default, or `old` for a removed line numbered as in the
+  base) and `quote` (the line's text; omit it and the daemon reads it from the
+  file, new side), or `hunk`, a hunk header, for a note on the whole hunk;
+  `text`.
+- `edit`: `id`, `text`. The note becomes the caller's and unsent again.
+- `remove`: `id`. `clear`: every note the caller may remove.
+- `human_nonce`: with a live nonce the note is the person's (`by: human`). A
+  nonce that does not verify is `not_human`.
+
+```json
+{"verb": "review-note", "params": {"action": "add", "session": "work", "window": "build", "path": "api/retry.go", "line": 42, "text": "log the attempt number here too"}}
+```
+
+```json
+{"result": {"type": "review_notes", "session": "work", "window": "4be1c09a-...", "worktree": "/src/api", "id": "n3",
+ "notes": [{"id": "n3", "path": "api/retry.go", "side": "new", "line": 42, "quote": "if err == nil {",
+  "text": "log the attempt number here too", "by": "shell", "at": 1790000000000000000}]}}
+```
+
+A note carries `id`, `path`, `side`, `line`, `quote` or `hunk_header`,
+`text`, `by` (`human`, a pane's window id, `shell`, or `link:HOST`), `at`,
+`sent_at` once sent, and `outdated` when its line could not be found again.
+Notes are listed by path, then line.
+
+Who may change a note: the person any note, a pane or a linked machine only
+the notes it wrote, a caller outside every pane every note but the person's.
+Another's note is `forbidden`. A pane needs `write` and reaches its own
+session and fan group; over a link it needs `write`. A pane on another machine
+calling through its report channel is `forbidden`.
+
+### send-review
+
+Send a pane's unsent notes, or the ones `ids` names (sent or not), to its
+agent as one message through the delivery queue (see
+[The delivery queue](#the-delivery-queue)). The pane must run an agent
+(`invalid_params` otherwise). The notes are marked `sent_at` when queued.
+
+Params: `session`, `window`, `ids`, `now` (send only when the agent is at
+rest with nothing queued: `not_ready` for a busy one, `agent_blocked` for one
+on `needs_input`, and nothing is queued), `human_nonce`.
+
+```json
+{"verb": "send-review", "params": {"session": "work", "window": "build", "human_nonce": "<from the attach reply>"}}
+```
+
+```json
+{"result": {"type": "review_sent", "session": "work", "window": "4be1c09a-...", "notes": 2, "ids": ["n3", "n4"],
+ "queued_id": "q7", "position": 1, "queued": 1, "delivering": true}}
+```
+
+The message reads "Review notes on your changes (vs BASE), from SENDER:",
+then one numbered entry per note (`path:line`, `on "quote"` cut to 120
+characters, or the hunk's range and header; `outdated` said when it is), the
+note's text indented under it, and "Address each note, then say which you
+changed." The sender is "the person" only with a live `human_nonce`, "pane
+NAME" from a pane, "a caller on HOST" over a link, and "a script" otherwise.
+BASE is the base of the pane's last `review-diff`. A message over 16 KiB is
+`invalid_params`. Errors: `no_notes` when nothing is unsent, `queue_full`,
+`not_human`, `forbidden`.
+
+It types into the pane, so it is held like `queue-prompt`: a pane needs
+`write`, may send only to a pane that holds nothing it does not and is not on
+`needs_input` unless it holds `respond`, and is checked again when the
+message is typed. Over a link it needs `write`.
 
 ### compare-fan
 
@@ -3762,7 +3918,8 @@ and answer `internal` ("not built yet") until their work lands. These have
 landed: `agent-activity` (see [agent-activity](#agent-activity)), the
 delivery queue's three (see [The delivery queue](#the-delivery-queue)),
 `compare-fan`, `verify-fan` and `keep-fan`, which have sections of their own,
-and `mark-attention` (see [mark-attention](#mark-attention)). `list-verbs`
+`mark-attention` (see [mark-attention](#mark-attention)), and the three
+review verbs (see [review-diff](#review-diff)). `list-verbs`
 describes each one's parameters and result. What is fixed now is who may call
 them:
 

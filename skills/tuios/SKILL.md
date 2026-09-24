@@ -269,7 +269,7 @@ Print one with `tuios --skill <topic>`:
 | `state` | Reporting state, harness hooks, metadata, sources and precedence, detection, resuming after a restart |
 | `inbox` | The person's Inbox, `ask-human`, reading a blocked prompt, approvals answered from the Inbox |
 | `mail` | Messages between agents, threads, attachments, the stash, `ask-agent` in full, loops, trust |
-| `fleet` | Selectors, worktrees, `fan`, `start-agent`, headless agents over ACP or the Codex app-server |
+| `fleet` | Selectors, worktrees, `fan`, comparing and reviewing attempts, `start-agent`, headless agents over ACP or the Codex app-server |
 | `hosts` | Other machines: hosts, remote sessions, hosted panes, agents and worktrees there |
 | `events` | The event stream (`subscribe`), resuming it, `list-verbs` and the raw socket |
 | `mcp` | tuios as an MCP server: setup, tools, scope |

@@ -60,26 +60,12 @@ func TestAgentWorkVerbsAreClassifiedAsThePlanSays(t *testing.T) {
 	}
 }
 
-// TestAgentWorkVerbsAnswerNotBuilt: a registered verb whose handler has not
-// landed says so, with the internal code and a message naming the verb, and
-// does nothing.
-func TestAgentWorkVerbsAnswerNotBuilt(t *testing.T) {
+// TestAgentWorkVerbsCheckTheirParams: each verb refuses a parameter out of its
+// contract before it does anything.
+func TestAgentWorkVerbsCheckTheirParams(t *testing.T) {
 	d, sp := startTestDaemon(t)
 	_, a, _ := twoWindowSession(t, d, "work")
 	c := dialVerb(t, sp)
-	for verb, params := range map[string]map[string]any{
-		"review-diff": {"session": "work", "window": a},
-		"review-note": {"action": "list", "session": "work", "window": a},
-		"send-review": {"session": "work", "window": a},
-	} {
-		resp := callP(c, t, verb, params)
-		mustRefuse(t, resp, ErrVerbInternal, verb+" before it is built")
-		if msg := resp["error"].(map[string]any)["message"].(string); !strings.Contains(msg, verb) || !strings.Contains(msg, "not built yet") {
-			t.Errorf("%s says %q, want it to name itself as not built", verb, msg)
-		}
-	}
-	// The parameter checks run before the stub, so the contract is already
-	// what the handlers will enforce.
 	mustRefuse(t, callP(c, t, "review-note", map[string]any{"action": "shout"}), ErrVerbInvalidParams, "an unknown note action")
 	mustRefuse(t, callP(c, t, "review-diff", map[string]any{"context": 21}), ErrVerbInvalidParams, "context past 20")
 	mustRefuse(t, callP(c, t, "verify-fan", map[string]any{"command": " "}), ErrVerbInvalidParams, "an empty check")
@@ -112,18 +98,21 @@ func TestMarkAttentionIsThePersonsOnly(t *testing.T) {
 // for verify-fan, types only into panes that hold nothing it does not, and
 // cannot keep a fan or touch the Inbox.
 func TestAgentWorkVerbsAreHeldToPaneGrants(t *testing.T) {
+	// The panes start outside any repository, so the review verbs answer
+	// not_repo past the grant check without reading one.
+	t.Chdir(t.TempDir())
 	d, sp, a1, a2, b1 := scopeFixture(t)
 	setStrict(d)
 	d.approvalPeer = func(*connState) (bool, string) { return true, a1 }
 	c := dialVerb(t, sp)
 
-	// Its own session: the grant check passes and the stub answers.
+	// Its own session: the grant check passes and the handler answers.
 	for verb, params := range map[string]map[string]any{
 		"review-diff": {"window": a2},
 		"review-note": {"action": "list", "window": a2},
 		"send-review": {"window": a2},
 	} {
-		mustRefuse(t, callP(c, t, verb, params), ErrVerbInternal, verb+" in the pane's own session")
+		wantReached(t, verb+" in the pane's own session", callP(c, t, verb, params))
 	}
 	// agent-activity is built: the grant check passes and it answers.
 	result(t, callP(c, t, "agent-activity", map[string]any{"window": a2}))
@@ -168,7 +157,7 @@ func TestAgentWorkVerbsAreHeldToPaneGrants(t *testing.T) {
 	} {
 		wantForbidden(t, verb+" with only read", callP(c, t, verb, params))
 	}
-	mustRefuse(t, callP(c, t, "review-diff", map[string]any{"window": a2}), ErrVerbInternal, "review-diff with read")
+	wantReached(t, "review-diff with read", callP(c, t, "review-diff", map[string]any{"window": a2}))
 }
 
 // TestQueuedTypingIsHeldToTheTarget: queue-prompt and send-review type into a
@@ -228,6 +217,7 @@ func TestRestrictedConnectionsAndAgentWorkVerbs(t *testing.T) {
 // read the counts and states and not the diff, and a machine that may open
 // but not write cannot run a check.
 func TestAgentWorkVerbsAreHeldToTheLinkPolicy(t *testing.T) {
+	t.Chdir(t.TempDir())
 	d, sp := startTestDaemon(t)
 	_, a, _ := twoWindowSession(t, d, "work")
 	d.SetLinkPolicies(map[string]config.HostConfig{
@@ -259,7 +249,7 @@ func TestAgentWorkVerbsAreHeldToTheLinkPolicy(t *testing.T) {
 
 	// The default grants write and not respond.
 	anon := dialLink(t, sp)
-	mustRefuse(t, callP(anon, t, "review-diff", map[string]any{"session": "work", "window": a}), ErrVerbInternal, "review-diff with the default policy")
+	wantReached(t, "review-diff with the default policy", callP(anon, t, "review-diff", map[string]any{"session": "work", "window": a}))
 	mustRefuse(t, callP(anon, t, "mark-attention", map[string]any{"id": "1", "action": "wake", "human_nonce": "x"}),
 		ErrVerbForbidden, "mark-attention with the default policy")
 }

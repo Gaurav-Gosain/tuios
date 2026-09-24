@@ -130,6 +130,29 @@ each attempt left the base, so they hold still when main moves on.
 grant and `compare-fan` needs `read`, and both reach only your own fan group.
 `fan diff` shows what the second attempt's files hold that the first's do not.
 
+### Reviewing an attempt and sending it notes
+
+```sh
+tuios review api-fan-add-retry-backoff-http-2
+tuios review api-fan-add-retry-backoff-http-2 --against api-fan-add-retry-backoff-http
+tuios review note -s api-fan-add-retry-backoff-http-2 api/retry.go:42 'log the attempt number here too'
+tuios review notes -s api-fan-add-retry-backoff-http-2
+tuios review send -s api-fan-add-retry-backoff-http-2
+```
+
+`tuios review` (the `review-diff` verb) is the diff of a pane's worktree
+against the base it was made from, committed and uncommitted work together,
+untracked files included, read without touching its index or files. Its
+answer is marked `untrusted`: it is the repository's text. `review note`
+(`review-note`) leaves a note on a line, or with `--hunk` on a hunk; the note
+keeps the line's text and follows it as the file changes, or is marked
+outdated when the line is gone. `review send` (`send-review`) sends the unsent
+notes to the agent as one message through the delivery queue, typed when it
+comes to rest. From a pane, `review-diff` needs `read` in your own session and
+fan group, `review-note` and `send-review` need `write`, and you may change or
+remove only the notes you wrote. The message says it is from your pane, never
+from the person.
+
 ## One agent beside you: start-agent
 
 `start-agent` opens a pane with an agent in the session you are in and returns

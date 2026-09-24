@@ -174,6 +174,11 @@ type Daemon struct {
 	// to rest. Its zero value is ready. See agent_queue.go.
 	queue agentQueues
 
+	// reviewNotes holds the review notes left on panes' changes. Its zero
+	// value is ready; Start loads what the last daemon saved. See
+	// review_notes.go.
+	reviewNotes reviewNoteStore
+
 	// promptStallOverride replaces promptStallDefault when set. Only tests set
 	// it, to keep a stall test from waiting five seconds. See prompt_gate.go.
 	promptStallOverride time.Duration
@@ -782,6 +787,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// subscriber sees the transition and then the item it opened.
 		defer d.attention.noteSessionEvent(name, ev)
 		d.noteQueueEvent(name, ev)
+		d.reviewNotes.noteSessionEvent(ev)
 		d.events.publish(streamEvent{
 			Type:       ev.Type,
 			Session:    name,
@@ -921,6 +927,8 @@ func (d *Daemon) Start() error {
 	// Mail still waiting for another machine comes back with its Inbox items,
 	// and goes when that machine's link comes up.
 	d.outbox.load(outboxPath())
+	// Review notes come back for the panes that came back.
+	d.reviewNotes.load(reviewNotesPath(), func(window string) bool { return d.sessionOfWindow(window) != "" })
 
 	// The resume offers the restore found are opened only now, after the saved
 	// Inbox items took their ids, so an offer never shares an id with one.
@@ -1037,6 +1045,7 @@ func (d *Daemon) shutdown() error {
 		// panes, and a pane closing on shutdown is not the person dealing
 		// with what was waiting in it.
 		d.attention.saveNowAndFreeze()
+		d.reviewNotes.saveNowAndFreeze()
 
 		if d.listener != nil {
 			_ = d.listener.Close()
