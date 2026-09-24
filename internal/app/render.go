@@ -971,6 +971,13 @@ func (m *OS) flushGraphicsForView() {
 	// hide: RefreshAllPlacements uses the window's scrollback offset to
 	// reposition images so they scroll naturally with the terminal content.
 	//
+	// Capture mode is not a reason either. It is not an overlay that covers
+	// the panes: it draws a hint strip and a marquee over them, and the panes
+	// are what it captures. Hiding the images there took the picture out of
+	// the very pane the user was aiming at. The kitty images are cropped
+	// around its chrome instead, below. The preview panel that follows a
+	// capture is opaque, so it does hide them like any other panel.
+	//
 	// A resize hides for the same reason an overlay does: an image is drawn in
 	// host cells, and while the layout is moving under it the guest has not
 	// been told the new size yet, so it smears across the panes for the length
@@ -980,11 +987,15 @@ func (m *OS) flushGraphicsForView() {
 		m.ShowWorkspaceSwitcher || m.ShowLayoutPicker || m.ShowHostPicker || m.ShowQuitMenu || m.ShowScrollbackBrowser ||
 		m.ShowLogs || m.ShowCacheStats || m.ShowAggregateView ||
 		m.ShowSettings || m.ShowThemePicker || m.ShowKeybindManager || m.ShowAccentPicker || m.ShowTapeManager || m.ShowTapeReview ||
-		m.Capture.Active || m.ShotPreview.Open
+		m.ShotPreview.Open
 	if m.KittyPassthrough != nil {
 		// Self-placed remote video images are hidden/dropped here, not by
 		// HideAllPlacements (they are not in `placements`).
 		m.KittyPassthrough.SetOverlayActive(hideImages)
+		// Chrome that leaves the panes showing. Set every frame, and nil
+		// once capture mode closes, so the images get their full rectangle
+		// back on the next refresh.
+		m.KittyPassthrough.SetChromeOccluders(m.captureOccluders())
 	}
 
 	// The launcher's own icons run past the hide above rather than through it.
@@ -1000,21 +1011,28 @@ func (m *OS) flushGraphicsForView() {
 	// same as the launcher's icons, so it runs past hideImages rather than
 	// through it.
 	m.flushScreenshotGraphicsForFrame()
+	// A sixel image is pixels written into the host's cells, with no crop
+	// and no delete. Capture mode's marquee drawn over one would punch holes
+	// in it that nothing repaints, so sixel images still go for the length of
+	// the mode.
+	hideSixel := hideImages || m.Capture.Active
+	if hideSixel && m.SixelPassthrough != nil && m.SixelPassthrough.PlacementCount() > 0 {
+		m.SixelPassthrough.HideAllPlacements()
+		// Flush the clear commands
+		data := m.SixelPassthrough.FlushPending()
+		if len(data) > 0 {
+			m.WriteHost(data)
+		}
+	}
 	if hideImages {
 		if m.KittyPassthrough != nil && m.KittyPassthrough.HasPlacements() {
 			m.KittyPassthrough.HideAllPlacements()
 		}
-		if m.SixelPassthrough != nil && m.SixelPassthrough.PlacementCount() > 0 {
-			m.SixelPassthrough.HideAllPlacements()
-			// Flush the clear commands
-			data := m.SixelPassthrough.FlushPending()
-			if len(data) > 0 {
-				m.WriteHost(data)
-			}
-		}
 	} else {
 		m.GetKittyGraphicsCmd()
-		m.GetSixelGraphicsCmd()
+		if !hideSixel {
+			m.GetSixelGraphicsCmd()
+		}
 		m.RefreshTextSizing()
 		m.FlushTextSizing()
 	}

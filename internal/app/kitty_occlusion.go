@@ -112,31 +112,30 @@ func subtractRect(r, b cellRect) []cellRect {
 // two strips.
 //
 // dst is reused across frames. The answer is empty when the image is covered,
-// and nil with ok false when the decomposition ran past maxVisibleSlices, which
-// tells the caller to fall back to the single largest rectangle.
-func clearRegion(dst []cellRect, r cellRect, blockers []cellRect) ([]cellRect, bool) {
+// and nil with ok false when the decomposition ran past limit pieces, which
+// tells the caller to fall back to the single largest rectangle. limit is
+// maxVisibleSlices unless chrome over the panes adds blockers of its own.
+func clearRegion(dst []cellRect, r cellRect, blockers []cellRect, limit int) ([]cellRect, bool) {
 	dst = append(dst[:0], r)
 	for _, b := range blockers {
 		if len(dst) == 0 {
 			return dst, true
 		}
-		n := 0
-		for _, piece := range dst {
-			for _, part := range subtractRect(piece, b) {
-				if n >= maxVisibleSlices {
+		// The pieces this blocker leaves are appended after the current ones
+		// and then moved down. Writing them over the current pieces in place
+		// is not safe: one piece can split into several, which overwrote the
+		// pieces after it before they were read, and the region came back
+		// with some parts lost and others repeated.
+		n := len(dst)
+		for i := range n {
+			for _, part := range subtractRect(dst[i], b) {
+				if len(dst)-n >= limit {
 					return nil, false
 				}
-				// Compact in place: the pieces a blocker produces are always at
-				// or after the piece they came from.
-				if n < len(dst) {
-					dst[n] = part
-				} else {
-					dst = append(dst, part)
-				}
-				n++
+				dst = append(dst, part)
 			}
 		}
-		dst = dst[:n]
+		dst = dst[:copy(dst, dst[n:])]
 	}
 	return dst, true
 }

@@ -123,6 +123,12 @@ type KittyPassthrough struct {
 	// frame cannot redraw over the overlay; see SetOverlayActive.
 	overlayActive bool
 
+	// chromeOccluders are the rectangles of chrome drawn over every pane that
+	// is not an opaque overlay, such as capture mode's hint strip and marquee.
+	// Every image is cropped around them the way it is cropped around a higher
+	// window; see SetChromeOccluders.
+	chromeOccluders []cellRect
+
 	// remoteVideo tracks self-placed remote video streams by (windowID ->
 	// hostImageID -> state). These images are placed by the frame stream (a=T),
 	// not by the normal placements map, but RefreshAllPlacements still needs

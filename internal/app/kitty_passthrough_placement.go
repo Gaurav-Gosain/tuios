@@ -203,6 +203,11 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			) {
 				visible = false
 			}
+			// This path has no crop, so chrome over any part of the frame
+			// hides it, the same rule as a higher window above.
+			if visible && kp.overlapsChrome(cellRect{newHostX, newHostY, showCols, showRows}) {
+				visible = false
+			}
 
 			// Record the desired geometry BEFORE emitting, so the async frame
 			// writer's write-time read and its post-write convergence check
@@ -285,7 +290,16 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		// dragged refreshes on every frame, and the answer cannot differ
 		// between two images in the same pane.
 		blockers := kp.occludersAboveInto(kp.occluderScratch[:0], info.WindowZ, allWindows, windowID)
+		// Chrome drawn over every pane, such as capture mode's marquee, is a
+		// blocker for every image whatever its window's z.
+		blockers = append(blockers, kp.chromeOccluders...)
 		kp.occluderScratch = blockers[:0]
+		// A marquee is four thin edges, and cutting an image around all four
+		// takes more slices than one window over it does. Each blocker gets
+		// room for the pieces it can add, so a marquee dragged across an
+		// image keeps the whole picture outside its edges rather than falling
+		// back to the largest single rectangle.
+		sliceLimit := maxVisibleSlices + 3*len(kp.chromeOccluders)
 		// Reused for every image in this window, and across frames.
 		slices := kp.sliceScratch[:0]
 
@@ -456,7 +470,7 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			slices = slices[:0]
 			if anyPartVisible {
 				whole := cellRect{newHostX, newHostY, imageCellWidth, imageCellHeight}
-				region, exact := clearRegion(kp.regionScratch[:0], whole, blockers)
+				region, exact := clearRegion(kp.regionScratch[:0], whole, blockers, sliceLimit)
 				kp.regionScratch = region
 				if !exact {
 					// Too many pieces to draw one placement each. The largest
@@ -596,6 +610,31 @@ func (kp *KittyPassthrough) SetOverlayActive(active bool) {
 		kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 		kp.flushToHost()
 	}
+}
+
+// SetChromeOccluders sets the chrome drawn over the panes that images must be
+// cropped around, and is called every frame. Nil means none.
+//
+// This is for chrome that leaves the panes showing, such as capture mode's
+// hint strip and marquee. Hiding every image for it, the way an opaque overlay
+// does, takes the picture away from the very pane the user is aiming at. A
+// kitty image is painted by the host over the finished frame, so an image left
+// whole would paint over the chrome instead. Cropping it around the chrome
+// rectangles, like around a higher window, keeps both.
+func (kp *KittyPassthrough) SetChromeOccluders(rects []cellRect) {
+	kp.mu.Lock()
+	defer kp.mu.Unlock()
+	kp.chromeOccluders = append(kp.chromeOccluders[:0], rects...)
+}
+
+// overlapsChrome reports whether a rectangle touches any chrome occluder.
+func (kp *KittyPassthrough) overlapsChrome(r cellRect) bool {
+	for _, c := range kp.chromeOccluders {
+		if r.overlaps(c) {
+			return true
+		}
+	}
+	return false
 }
 
 // deleteOnePlacement removes the image and all its placements from graphics memory.

@@ -304,12 +304,44 @@ func TestClearRegionCapsTheDecomposition(t *testing.T) {
 	for i := range 6 {
 		blockers = append(blockers, cellRect{X: i*6 + 2, Y: 2, W: 2, H: 36})
 	}
-	if _, ok := clearRegion(nil, img, blockers); ok {
+	if _, ok := clearRegion(nil, img, blockers, maxVisibleSlices); ok {
 		t.Error("a decomposition past the cap reported success instead of asking for the fallback")
 	}
 	// One blocker stays well inside the cap.
-	if got, ok := clearRegion(nil, img, blockers[:1]); !ok || len(got) == 0 {
+	if got, ok := clearRegion(nil, img, blockers[:1], maxVisibleSlices); !ok || len(got) == 0 {
 		t.Errorf("one blocker should decompose, got %+v ok=%v", got, ok)
+	}
+}
+
+// TestClearRegionKeepsEveryPiece covers a second blocker landing on a region
+// the first one already split. The pieces used to be rewritten in place, and a
+// piece that split into several overwrote the ones after it before they were
+// read: parts of the image went missing and others were placed twice.
+func TestClearRegionKeepsEveryPiece(t *testing.T) {
+	img := cellRect{X: 0, Y: 0, W: 20, H: 8}
+	// Two short bars, the first splitting the image into four pieces and the
+	// second cutting the band below it.
+	blockers := []cellRect{{X: 5, Y: 2, W: 3, H: 1}, {X: 12, Y: 5, W: 3, H: 1}}
+	got, ok := clearRegion(nil, img, blockers, 20)
+	if !ok {
+		t.Fatal("decomposition ran past a generous limit")
+	}
+	area := 0
+	for i, a := range got {
+		area += a.area()
+		for _, b := range blockers {
+			if a.overlaps(b) {
+				t.Fatalf("piece %+v overlaps blocker %+v", a, b)
+			}
+		}
+		for _, c := range got[i+1:] {
+			if a.overlaps(c) {
+				t.Fatalf("pieces %+v and %+v overlap", a, c)
+			}
+		}
+	}
+	if want := img.area() - 3 - 3; area != want {
+		t.Fatalf("pieces cover %d cells, want %d: %+v", area, want, got)
 	}
 }
 

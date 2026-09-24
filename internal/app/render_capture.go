@@ -43,6 +43,43 @@ func (m *OS) renderCaptureMode() []*lipgloss.Layer {
 	if !m.Capture.Active {
 		return nil
 	}
+	// Every window a click can aim at, for CaptureWindowAt to read.
+	for _, idx := range m.captureVisibleWindows() {
+		w := m.Windows[idx]
+		m.captureHits = append(m.captureHits, captureHit{
+			Index: idx, X0: w.X, Y0: w.Y, X1: w.X + w.Width, Y1: w.Y + w.Height,
+		})
+	}
+	return m.captureLayers()
+}
+
+// captureOccluders returns the cells capture mode draws over the panes, one
+// rectangle per layer, or nil when capture mode is not open.
+//
+// Capture mode leaves the panes showing, images included, because they are
+// what is being captured. A kitty image is painted by the host over the
+// finished frame, though, so an image under the hint strip or the marquee
+// would paint over them. The passthrough crops every image around these
+// rectangles instead, the same way it crops one around a higher window.
+//
+// They are read off the layers themselves, so what is cropped around is
+// exactly what is drawn.
+func (m *OS) captureOccluders() []cellRect {
+	if !m.Capture.Active {
+		return nil
+	}
+	var out []cellRect
+	for _, l := range m.captureLayers() {
+		if l.Width() > 0 && l.Height() > 0 {
+			out = append(out, cellRect{l.GetX(), l.GetY(), l.Width(), l.Height()})
+		}
+	}
+	return out
+}
+
+// captureLayers builds capture mode's layers. It has no side effects, so the
+// graphics flush can ask what is drawn without redoing the hit bookkeeping.
+func (m *OS) captureLayers() []*lipgloss.Layer {
 	pal := theme.UI()
 	var layers []*lipgloss.Layer
 
@@ -66,12 +103,6 @@ func (m *OS) renderCaptureMode() []*lipgloss.Layer {
 
 	// The window under the pointer or the keyboard cursor, lifted so "click
 	// captures this" is visible before the click.
-	for _, idx := range m.captureVisibleWindows() {
-		w := m.Windows[idx]
-		m.captureHits = append(m.captureHits, captureHit{
-			Index: idx, X0: w.X, Y0: w.Y, X1: w.X + w.Width, Y1: w.Y + w.Height,
-		})
-	}
 	if !m.Capture.Dragging && m.Capture.Hover >= 0 && m.Capture.Hover < len(m.Windows) {
 		if w := m.Windows[m.Capture.Hover]; w != nil {
 			layers = append(layers, m.captureOutline(pal, w.X, w.Y, w.Width, w.Height, "")...)
