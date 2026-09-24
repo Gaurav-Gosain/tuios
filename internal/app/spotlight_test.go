@@ -192,10 +192,21 @@ func TestSpotlightAllocatesNothing(t *testing.T) {
 		t.Fatalf("restoring the canvas allocates %.0f times; the measurement below would not be the pass's", base)
 	}
 
+	// AllocsPerRun counts every allocation in the process, so a goroutine an
+	// earlier test left winding down is charged to the pass: a full package
+	// run in a loaded container measured 2 per frame this way. The least of
+	// three measurements is taken. An allocation the pass makes itself is in
+	// every one of them, so this still fails for any pass that allocates.
 	allocs := testing.AllocsPerRun(20, func() {
 		s.apply(canvas, realCols/2, realRows/2, 10, 60, true)
 		spotlightRestore(canvas, fg, bg)
 	})
+	for range 2 {
+		allocs = min(allocs, testing.AllocsPerRun(20, func() {
+			s.apply(canvas, realCols/2, realRows/2, 10, 60, true)
+			spotlightRestore(canvas, fg, bg)
+		}))
+	}
 	if allocs != 0 {
 		t.Errorf("the pass allocated %.0f times per frame; it must allocate none", allocs)
 	}
