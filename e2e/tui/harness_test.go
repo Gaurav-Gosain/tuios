@@ -93,6 +93,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -350,6 +351,14 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 		*o.logPath = logPath
 	}
 
+	// Registered before StartT, so it runs after tuitest's own teardown and
+	// can say what that teardown could not kill. See logSurvivors.
+	t.Cleanup(func() {
+		if t.Failed() {
+			logSurvivors(t, base)
+		}
+	})
+
 	opts := []tuitest.Option{
 		tuitest.WithSize(cols, rows),
 		tuitest.WithTerm("xterm-256color"),
@@ -361,6 +370,56 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 		opts = append(opts, tuitest.WithOutputMirror(o.out))
 	}
 	return tuitest.StartT(t, argv, opts...)
+}
+
+// logSurvivors names every process still running in the isolation root base,
+// with the state and the kernel wait channel it is in.
+//
+// tuitest fails a test whose teardown left a process running, and names it by
+// pid alone: "ptyproc: 1 process(es) survived teardown: [4364]". That has
+// happened on CI runners in several tests that pass everything else, and never
+// on a machine anyone could look at while it happened. A pid says nothing once
+// the runner is gone. The name, the state and the wait channel say which
+// process it was and what it was stuck in, which is what deciding between a
+// leak in tuios and a slow exit on a loaded runner needs.
+//
+// Every process the suite starts runs in workDirIn(base) or below it, so the
+// working directory finds them. A daemon this client did not start is still
+// running at this point by design and is listed too; its parent pid tells it
+// apart. Linux only: it reads /proc.
+func logSurvivors(t *testing.T, base string) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		return
+	}
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if _, err := strconv.Atoi(e.Name()); err != nil {
+			continue
+		}
+		dir := filepath.Join("/proc", e.Name())
+		cwd, err := os.Readlink(filepath.Join(dir, "cwd"))
+		if err != nil || !strings.HasPrefix(cwd, base) {
+			continue
+		}
+		var fields []string
+		if status, err := os.ReadFile(filepath.Join(dir, "status")); err == nil {
+			for _, line := range strings.Split(string(status), "\n") {
+				for _, key := range []string{"Name:", "State:", "PPid:", "Threads:"} {
+					if strings.HasPrefix(line, key) {
+						fields = append(fields, strings.Join(strings.Fields(line), " "))
+					}
+				}
+			}
+		}
+		wchan, _ := os.ReadFile(filepath.Join(dir, "wchan"))
+		cmdline, _ := os.ReadFile(filepath.Join(dir, "cmdline"))
+		t.Logf("still running in %s after the client's teardown: pid %s, %s, wchan %q, argv %q", base, e.Name(),
+			strings.Join(fields, ", "), wchan, strings.ReplaceAll(string(cmdline), "\x00", " "))
+	}
 }
 
 // attachIn starts a client attached to an existing daemon session and returns
