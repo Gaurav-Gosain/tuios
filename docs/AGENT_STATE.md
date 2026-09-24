@@ -1033,6 +1033,21 @@ also shows how long it has waited: at the right edge of the first line when the
 rail is wide enough for the elapsed column, and after the need word otherwise
 (`approval 12m`, or `waiting 12m` when the message stands in for the word).
 
+A row says how long only once the pane has been in its state for five minutes;
+before that the age is left off, because a fresh `<1m` on every row said nothing
+the mark did not. The row under the keyboard cursor or the pointer shows its
+age at any size, and so does the hover tooltip.
+
+On a rail 30 columns wide or narrower (the shipped rail is 24), a pane running
+an agent is listed once, in the agents section, where its note line has room
+to say what it wants. The terminals section keeps the panes that run no agent,
+and the focused pane's focus mark moves to its agents row. Before this an
+agent at 24 columns was listed three times: its terminals row, its agents row,
+and that row's note line. A wider rail lists agent panes in both sections as
+before, and so does a peek at another session, which asks to see its panes. A
+rail too short to draw the agents section (under 8 lines) keeps every pane in
+terminals.
+
 Every in-flight state draws the one working glyph, `●`, whichever source
 reported it (a hook, an OSC 9;4 progress report, a screen rule or the process
 detector). What the agent is doing goes on the second line, from its message.

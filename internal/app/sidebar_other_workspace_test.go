@@ -53,6 +53,7 @@ func fgSeq(c color.Color) string {
 // one does not, and the digit costs the row no width.
 func TestOtherWorkspaceWindowRowCarriesItsDigit(t *testing.T) {
 	m := spreadTestOS(t, 120, 40, "left")
+	wideRail(m)
 	m.SidebarHoverActive = false
 	m.FocusedWindow = -1 // the focused pane draws a pill, which is a different row
 

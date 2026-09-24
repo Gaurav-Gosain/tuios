@@ -58,7 +58,7 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 		tk.Text = sidebarStateWords(e.State)
 	case "elapsed":
 		if variant == sidebarVariantFull {
-			tk.Text = agentElapsed(e.State, e.StateAt, now)
+			tk.Text = railAgentAge(e.State, e.StateAt, now)
 			if tk.Text != "" {
 				tk.Number = now.Sub(time.Unix(0, e.StateAt)).Minutes()
 				tk.HasNumber = true
@@ -183,7 +183,7 @@ func (m *OS) sidebarAgentNeedText(e sidebarAgentEntry, variant int, now time.Tim
 	if variant == sidebarVariantFull && m.Settings.SidebarAgentRow.Has("elapsed") {
 		return word
 	}
-	wait := agentElapsed(e.State, e.StateAt, now)
+	wait := railAgentAge(e.State, e.StateAt, now)
 	switch {
 	case wait == "":
 		return word

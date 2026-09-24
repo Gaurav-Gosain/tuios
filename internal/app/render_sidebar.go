@@ -386,6 +386,22 @@ func agentElapsed(state string, stateAt int64, now time.Time) string {
 	}
 }
 
+// railAgeFloor is how long a pane has to have been in its state before its
+// rail row says how long. "<1m" sat on nearly every row, working and done ones
+// included, where a fresh age says nothing the mark does not; an age starts to
+// matter once a wait has gone on for a while.
+const railAgeFloor = 5 * time.Minute
+
+// railAgentAge is agentElapsed for a rail row: blank until the pane has been
+// in its state for railAgeFloor. The row under the cursor or the pointer
+// shows the age at any size (sidebarAgentRow), and so do the tooltips.
+func railAgentAge(state string, stateAt int64, now time.Time) string {
+	if stateAt > 0 && now.Sub(time.Unix(0, stateAt)) < railAgeFloor {
+		return ""
+	}
+	return agentElapsed(state, stateAt, now)
+}
+
 // sidebarAgentEntry is one pane running an agent, flattened out of the session
 // tree for the agents section.
 type sidebarAgentEntry struct {
@@ -416,6 +432,10 @@ type sidebarAgentEntry struct {
 	Foreign bool
 	// Host is the machine the pane's session is on, empty for this one.
 	Host string
+	// Focused marks the attached session's focused pane. On a compact rail the
+	// terminals section leaves agent panes to this section, so the focus mark
+	// goes on this row.
+	Focused bool
 }
 
 // sidebarTerminalEntry is one pane of the session the terminals section is
@@ -1260,15 +1280,22 @@ func (m *OS) sidebarPanelLinesForTree(tree sessiontree.Tree) ([]string, int) {
 	// whatever the last reply left behind. Nothing here stats, opens or spawns.
 	files := m.sidebarFileRows()
 
+	// A peeked session with no panes says so, or the section would read as "the
+	// attached session has no panes". Decided before the compact rule below
+	// takes the agent panes out, which leaves a session of agents with no
+	// terminal rows but not with no panes.
+	emptyPeek := peeking && len(terminals) == 0
+	// A peek is a request to see that session's panes, so it lists them all.
+	if !peeking && sidebarCompactAgents(w, height, len(agents), &m.Settings) {
+		terminals = sidebarTerminalsWithoutAgents(terminals, agents)
+	}
+
 	nS := len(sessionRows)
 	nT := len(terminals)
 	nA := len(agents)
 	if emptyFilter {
 		nA = 1
 	}
-	// A peeked session with no panes says so, or the section would read as "the
-	// attached session has no panes".
-	emptyPeek := peeking && nT == 0
 	if emptyPeek {
 		nT = 1
 	}
@@ -2003,6 +2030,38 @@ func (m *OS) sidebarTerminals(sessions []sessiontree.Node, sessionID string) []s
 	return out
 }
 
+// sidebarCompactWidth is the widest rail the compact rule applies to. The
+// shipped rail is 24 columns, and at that width a pane running an agent was
+// listed three times: its terminals row, its agents row, and that row's note
+// line, which was the only one of the three with room to say what it wanted.
+const sidebarCompactWidth = 30
+
+// sidebarCompactAgents reports whether a rail of width w lists each agent pane
+// once, in the agents section, and leaves it out of the terminals section.
+// Only when both sections are in the layout and the agents section will be
+// drawn: a rail too short for it (under 8 lines) keeps every pane in
+// terminals, so a pane never drops off the rail altogether.
+func sidebarCompactAgents(w, height, agents int, s *config.Settings) bool {
+	return w <= sidebarCompactWidth && height >= 8 && agents > 0 &&
+		sidebarLayoutHas(sidebarSectionAgents, s) && sidebarLayoutHas(sidebarSectionTerminals, s)
+}
+
+// sidebarTerminalsWithoutAgents is the terminals list less the panes the
+// agents section lists.
+func sidebarTerminalsWithoutAgents(terminals []sidebarTerminalEntry, agents []sidebarAgentEntry) []sidebarTerminalEntry {
+	listed := make(map[string]bool, len(agents))
+	for _, a := range agents {
+		listed[a.WindowID] = true
+	}
+	out := terminals[:0:0]
+	for _, t := range terminals {
+		if !listed[t.WindowID] {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // sidebarAgents flattens every pane running an agent, across every session.
 // Sessions with known windows contribute: the attached one from live state,
 // others from the cached listing, so agents elsewhere surface here marked
@@ -2036,6 +2095,7 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 				WindowIndex:  idx,
 				Foreign:      !s.IsCurrent,
 				Host:         s.Host,
+				Focused:      s.IsCurrent && win.IsCurrent,
 			})
 		}
 	}
@@ -2655,6 +2715,11 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	}
 
 	plan := m.sidebarAgentTokensFor(e, variant, tall, time.Now())
+	// The row under the cursor or the pointer says how long at any age; the
+	// rest wait for railAgeFloor.
+	if st.lit() && plan.Right.Name == "elapsed" && plan.Right.Text == "" && variant == sidebarVariantFull {
+		plan.Right.Text = agentElapsed(e.State, e.StateAt, time.Now())
+	}
 	name := plan.Name.Text
 	// A row whose list leaves the name out still needs one thing to be the
 	// row: the name is what every other token is about.
@@ -2730,6 +2795,11 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 		if tint := m.agentIdentityTint(e, railGround(rowBg)); tint != nil {
 			gutter = sidebarStyle(rowBg, tint).Render(accentMark())
 		}
+	}
+	// On a compact rail this is the pane's only row, so it carries the focus
+	// mark the terminals row would have.
+	if e.Focused && m.GetSidebarWidth() <= sidebarCompactWidth && sidebarLayoutHas(sidebarSectionTerminals, &m.Settings) {
+		gutter = sidebarGutterTinted(true, e.State, m.sessionTint(e.SessionID, railGround(rowBg)), rowBg, pal, &m.Settings)
 	}
 	nameRoom := max(avail-shownW-afterW, 1)
 	body := shown +

@@ -84,6 +84,7 @@ func TestSidebarEdgeResizeClampAndPersist(t *testing.T) {
 // and idles entirely when the hovered row fits.
 func TestSidebarMarqueeOnlyHoveredTruncatedRow(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
+	wideRail(m)
 	top := m.GetTopMargin()
 
 	render := func() []string {

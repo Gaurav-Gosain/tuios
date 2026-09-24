@@ -105,6 +105,7 @@ func TestRailDrawsThreeSectionsInOrder(t *testing.T) {
 // ones elsewhere carry the tag: "here" is not information.
 func TestRailTerminalsShowEveryWorkspace(t *testing.T) {
 	m, tree := sectionsTestOS(t, 120, 30)
+	wideRail(m)
 	lines := railPlain(t, m, tree)
 
 	terminals := lineOf(lines, " terminals")

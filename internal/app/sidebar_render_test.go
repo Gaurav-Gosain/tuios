@@ -37,6 +37,13 @@ func sidebarTestOS(t *testing.T, w, h int, pos string) *OS {
 	return m
 }
 
+// wideRail widens the rail past sidebarCompactWidth, for a test about the
+// terminals section's own rows whose fixture panes run agents: on a compact
+// rail those panes are listed in the agents section alone.
+func wideRail(m *OS) {
+	m.SidebarWidthPref = sidebarCompactWidth + 4
+}
+
 // spreadTestOS is sidebarTestOS with its windows spread over workspaces 1, 2
 // and 4, which is what gives a terminal row something to tag: a pane not on
 // the current workspace names the one it is on.

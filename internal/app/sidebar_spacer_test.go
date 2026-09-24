@@ -21,6 +21,7 @@ func spacerFrame(t *testing.T, spec string, height int) []string {
 	dir := fileViewTree(t)
 	withSections(t, spec)
 	m := sidebarTestOS(t, 120, height, "left")
+	wideRail(m)
 	openFilesOn(t, m, dir)
 	lines, _ := m.sidebarPanelLines()
 	out := make([]string, len(lines))

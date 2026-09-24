@@ -35,6 +35,7 @@ func TestSessionRowShowsWindowCount(t *testing.T) {
 // the workspace a pane sits on has to read as something else.
 func TestWorkspaceDigitIsNotABareDigit(t *testing.T) {
 	m := spreadTestOS(t, 120, 40, "left")
+	wideRail(m)
 	m.SidebarHoverActive = false
 	m.FocusedWindow = -1 // the focused pane draws a chip, which is a different row
 
