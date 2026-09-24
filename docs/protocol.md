@@ -937,18 +937,13 @@ drew: glow's pager then showed a blank screen and ignored keys. With no client
 attached nothing changes. A client that does not place the window within the
 second leaves the answer as it was, `unplaced: true`.
 
-**The agent review, triage, queue and approval work is registered ahead of
-its handlers.** Twelve verbs are listed by `list-verbs` with their parameters,
-scope and link capability, and answer `internal` with a message ending "is not
-built yet in this daemon" until their work lands: `review-diff`,
-`review-note`, `send-review`, `compare-fan`, `verify-fan`, `keep-fan`,
-`mark-attention`, `agent-activity`, `queue-prompt`, `list-queued`,
-`cancel-queued` and `get-approval` (see
+**The agent review, triage, queue and approval verbs.** Twelve verbs are
+new: `review-diff`, `review-note`, `send-review`, `compare-fan`,
+`verify-fan`, `keep-fan`, `mark-attention`, `agent-activity`,
+`queue-prompt`, `list-queued`, `cancel-queued` and `get-approval` (see
 [Agent review, triage and queue verbs](#agent-review-triage-and-queue-verbs)).
-`get-approval` is built (see [get-approval](#get-approval)), and so are the
-three review verbs (see [review-diff](#review-diff)).
-`mark-attention` checks the person's nonce first, so a caller without one gets
-`not_human` as it will once built. The older verbs change as follows, and a
+Every one is built; none answers `internal` with "not built yet" any more.
+The older verbs change as follows, and a
 caller that sends nothing new is answered as before:
 
 - `request-approval` takes `kind` (`approval` or `plan`), `plan`, `tool`,
@@ -3964,13 +3959,13 @@ resume; read the ring instead.
 
 ### Agent review, triage and queue verbs
 
-These verbs are registered with their parameters, scope and link capability,
-and answer `internal` ("not built yet") until their work lands. These have
-landed: `agent-activity` (see [agent-activity](#agent-activity)), the
-delivery queue's three (see [The delivery queue](#the-delivery-queue)),
-`compare-fan`, `verify-fan` and `keep-fan`, which have sections of their own,
-`mark-attention` (see [mark-attention](#mark-attention)), and the three
-review verbs (see [review-diff](#review-diff)). `list-verbs`
+Every one of these verbs is built: `agent-activity` (see
+[agent-activity](#agent-activity)), the delivery queue's three (see
+[The delivery queue](#the-delivery-queue)), `compare-fan`, `verify-fan` and
+`keep-fan`, which have sections of their own, `mark-attention` (see
+[mark-attention](#mark-attention)), `get-approval` (see
+[get-approval](#get-approval)) and the three review verbs (see
+[review-diff](#review-diff)). `list-verbs`
 describes each one's parameters and result. What is fixed now is who may call
 them:
 

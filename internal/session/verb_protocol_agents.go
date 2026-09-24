@@ -9,8 +9,7 @@ package session
 // type into a pane, their place in typingVerbs (pane_grants.go), so the tests
 // that hold those tables to the registry pass from the start and no later
 // change has to touch them. The handlers live in the files named beside each
-// verb. Until the work behind a verb has landed, its handler checks its
-// parameters and answers internal with "not built yet" (notBuilt).
+// verb.
 
 // Accepted values of the parameters below, named once so list-verbs and the
 // handlers read the same list.
@@ -26,15 +25,6 @@ var (
 	// activityEvents are the entries set-agent-state's activity reports.
 	activityEvents = []string{"prompt", "tool", "tool_done", "tool_failed", "turn_end"}
 )
-
-// notBuilt is the answer of a verb, or of a parameter of an older verb, whose
-// work has not landed in this build. Nothing was done.
-func notBuilt(what string) *verbError {
-	return hintedVerbError(ErrVerbInternal, what+" is not built yet in this daemon", &VerbHint{
-		Verb:   "list-verbs",
-		Detail: "The verb is registered so its scope and link policy are fixed, and its handler has not landed. Nothing was done.",
-	})
-}
 
 // agentWorkVerbs are the registry entries of the verbs above.
 func agentWorkVerbs() map[string]verbEntry {

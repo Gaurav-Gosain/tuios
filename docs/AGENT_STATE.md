@@ -2037,9 +2037,9 @@ with `write`, and only into a pane that holds nothing it does not and is not
 waiting on a prompt unless it holds `respond`; runs a check in a fan only with
 `fan`; and never keeps a fan or changes the Inbox, which only you can, with the
 nonce your attached client holds. Over a link, a diff needs `write` because it
-carries file contents, and changing the Inbox needs `respond`. Until a piece
-lands its verbs answer `internal` ("not built yet") and its keys do what they
-did before they were bound. [protocol.md](protocol.md#agent-review-triage-and-queue-verbs)
+carries file contents, and changing the Inbox needs `respond`. Every verb is
+built; until a piece of the TUI lands its keys do what they did before they
+were bound. [protocol.md](protocol.md#agent-review-triage-and-queue-verbs)
 has the table.
 
 ### Resuming after a restart
