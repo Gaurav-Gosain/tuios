@@ -1,17 +1,26 @@
 package app
 
-import "testing"
+import (
+	"image/color"
+	"strings"
+	"testing"
 
-// TestColorSwatchGlyphFramesTheChip is the regression test for a low-contrast
-// swatch drawn as one bar in the middle of the chip. The outline has to open
-// with the left eighth block and close with the right one, so its lines sit on
-// the outer edges.
-func TestColorSwatchGlyphFramesTheChip(t *testing.T) {
-	got := []rune(colorSwatchGlyph())
-	if len(got) != 2 {
-		t.Fatalf("colorSwatchGlyph() = %q, want two cells", string(got))
-	}
-	if got[0] != '▏' || got[1] != '▕' {
-		t.Fatalf("colorSwatchGlyph() = %q, want the left eighth block then the right eighth block", string(got))
+	"github.com/charmbracelet/x/ansi"
+)
+
+// TestColorSwatchIsOnlyFill is the regression test for a low-contrast swatch
+// drawn with an outline glyph, which read as a bar through the chip. A swatch
+// is two painted cells with no glyph, whatever the contrast with its ground.
+func TestColorSwatchIsOnlyFill(t *testing.T) {
+	ground := color.RGBA{0x1e, 0x1e, 0x2e, 0xff}
+	for _, c := range []color.Color{
+		color.RGBA{0x1e, 0x1e, 0x2e, 0xff}, // the ground itself
+		color.RGBA{0x11, 0x11, 0x1b, 0xff}, // close to it
+		color.RGBA{0xcb, 0xa6, 0xf7, 0xff}, // far from it
+	} {
+		got := ansi.Strip(colorSwatch(c, ground))
+		if got != "  " || strings.ContainsAny(got, "▏▕[]") {
+			t.Errorf("colorSwatch(%v) prints %q, want two blank painted cells", c, got)
+		}
 	}
 }

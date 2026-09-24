@@ -340,34 +340,14 @@ func colorSettingItem(path string) settingItem {
 }
 
 // colorSwatch is the mark a colour is shown as outside the picker: two cells
-// painted in it, with a hairline of its own lifted ink around nothing at all
-// when the colour is too close to the ground to see.
+// painted in it and nothing else.
 //
-// A swatch is a mark, so it answers to MarkFloor rather than to the text floor.
-// Painting the cells and stopping there is what makes a dark border colour on a
-// dark panel a two-cell hole, which reads as a missing swatch rather than as a
-// dark one. The glyph is drawn in the colour lifted to the mark floor when the
-// fill alone cannot be seen, so the swatch always has an edge.
+// A colour close to the ground it sits on, such as the theme background on a
+// dark settings panel, reads as a gap, and that is the honest picture of it:
+// painted there, it would look just like that. The value printed beside the
+// swatch names it either way. An outline drawn with box glyphs to make such a
+// swatch findable read as a stray bar through the chip in most fonts, so there
+// is none.
 func colorSwatch(c, ground color.Color) string {
-	if theme.ContrastRatio(c, ground) >= theme.MarkFloor {
-		return overlay.Style(accentPaint(c)).Render("  ")
-	}
-	// Too close to the ground to show as a fill. Draw it as an outlined chip
-	// instead: the fill is still the colour, and the edge is that colour lifted
-	// until it clears the floor, so the swatch keeps a findable shape.
-	return overlay.Style(accentPaint(c)).
-		Foreground(theme.ReadableAt(c, ground, theme.MarkFloor)).
-		Render(colorSwatchGlyph())
-}
-
-// colorSwatchGlyph is the two-cell outline a low-contrast swatch wears: a
-// left eighth block in the first cell and a right eighth block in the second,
-// so the two lines sit on the chip's outer edges and frame the fill between
-// them. The other order puts both lines in the middle, where they read as one
-// bar.
-func colorSwatchGlyph() string {
-	if overlay.UseASCII() {
-		return "[]"
-	}
-	return "\u258f\u2595"
+	return overlay.Style(accentPaint(c)).Render("  ")
 }
