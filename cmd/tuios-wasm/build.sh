@@ -33,8 +33,15 @@ brotli -q 11 -f -o "$out/tuios.wasm.br" "$out/tuios.wasm"
 cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$out/"
 
 # The renderer is sip's webterm bundle (xterm.js with the WebGL addon), from
-# the sip version go.mod already pins.
+# the sip version go.mod already pins. The js build does not import sip, so
+# nothing has downloaded it yet on a cold module cache, and go list -m would
+# print an empty directory. Download it first.
+go mod download github.com/Gaurav-Gosain/sip
 sip=$(go list -m -f '{{.Dir}}' github.com/Gaurav-Gosain/sip)
+if [ -z "$sip" ] || [ ! -f "$sip/static/webterm.js" ]; then
+	echo "build.sh: sip's webterm bundle not found (sip dir: '$sip')" >&2
+	exit 1
+fi
 cp "$sip/static/webterm.js" "$sip/static/webterm.css" "$sip/static/xterm.css" "$out/"
 
 if command -v pyftsubset >/dev/null 2>&1; then

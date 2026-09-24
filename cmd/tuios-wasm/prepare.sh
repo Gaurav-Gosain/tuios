@@ -28,6 +28,11 @@ export GOWORK=off
 cd "$root"
 mkdir -p "$out"
 
+# go list -m prints an empty directory for a module that is not in the module
+# cache yet, which is the case on a cold cache such as a fresh CI runner, so
+# the two modules copied below are downloaded first.
+go mod download charm.land/bubbletea/v2 github.com/creack/pty
+
 bt=$(go list -m -f '{{.Dir}}' charm.land/bubbletea/v2)
 rm -rf "$out/bubbletea"
 cp -R "$bt" "$out/bubbletea"
