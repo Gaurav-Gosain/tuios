@@ -57,7 +57,7 @@ func keybindGlyphs() keybindMarks {
 	if overlay.UseASCII() {
 		return keybindMarks{dead: "x", unbound: "-", clash: "!", ok: " ", live: "<<", bullet: "-"}
 	}
-	return keybindMarks{dead: "✕", unbound: "○", clash: "▲", ok: " ", live: "◀", bullet: "·"}
+	return keybindMarks{dead: "✕", unbound: "○", clash: "▲", ok: " ", live: "◂", bullet: "·"}
 }
 
 // keybindChrome is which of the body's non-row lines a given screen has room
@@ -554,7 +554,7 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 				Render("  " + glyphs.ok + " written to config as " + bindAction))
 		case bindAction != "":
 			add(overlay.Style(bg).Foreground(overlay.Readable(pal.Accent, bg)).
-				Render("  ⏎ bind it to " + bindAction + "   esc  leave it alone"))
+				Render("  " + overlay.EnterKey() + " bind it to " + bindAction + "   esc  leave it alone"))
 		case !fate.Free:
 			// The offer only appears for a key tuios actually holds. Printing it
 			// for a free key would invite a gesture that does nothing and read

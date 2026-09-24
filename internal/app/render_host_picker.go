@@ -29,7 +29,7 @@ func (m *OS) renderHostPicker() (string, overlay.Geometry, []overlayRowHit) {
 		Scroll:     &m.HostPickerScroll,
 		EmptyMsg:   "No machine matches",
 		Hints: []overlay.Hint{
-			{Key: "⏎", Label: "open"},
+			{Key: overlay.EnterGlyph, Label: "open"},
 			{Key: "esc", Label: "cancel"},
 		},
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {

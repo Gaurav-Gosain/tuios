@@ -38,26 +38,25 @@ func agentMailLinkGlyph() string {
 	return "⇄"
 }
 
-// agentMailGlyph is the mark a row wears for its kind.
-func agentMailGlyph(kind string) string {
+// agentMailWho is how a thread row names who wrote to whom. The kind is said
+// in words rather than with a mark of its own: the marks it used ("!" and "?"
+// in ASCII) were already needs-you and unknown, and a notice with no sender
+// read as "someone -> all".
+func agentMailWho(th agentMailThread) string {
+	arrow := " → "
 	if overlay.UseASCII() {
-		switch kind {
-		case "notice":
-			return "!"
-		case "ask":
-			return "?"
-		default:
-			return "@"
-		}
+		arrow = " -> "
 	}
-	switch kind {
-	case "notice":
-		return "◆"
+	switch th.Kind {
 	case "ask":
-		return "?"
-	default:
-		return "✉"
+		return th.From + " asks " + th.To
+	case "notice":
+		if th.Anonymous {
+			return "Notice to " + th.To
+		}
+		return "Notice from " + th.From + " to " + th.To
 	}
+	return th.From + arrow + th.To
 }
 
 // renderAgentMail renders the mail overlay: the list of threads, or the open
@@ -140,12 +139,8 @@ func (m *OS) agentMailThreadRow(th agentMailThread, selected bool, rowBg color.C
 		right = overlay.Style(rowBg).Foreground(pal.Accent).Render("new  ") + right
 	}
 
-	arrow := " → "
-	if overlay.UseASCII() {
-		arrow = " -> "
-	}
-	who := th.From + arrow + th.To
-	glyph := agentMailGlyph(th.Kind) + " "
+	who := agentMailWho(th)
+	glyph := sidebarMailGlyph() + " "
 	if th.Link {
 		glyph = agentMailLinkGlyph() + " "
 	}

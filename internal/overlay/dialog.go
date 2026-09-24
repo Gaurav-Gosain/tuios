@@ -73,7 +73,22 @@ func EnterKey() string {
 	if UseASCII() {
 		return "enter"
 	}
-	return "↵"
+	return EnterGlyph
+}
+
+// EnterGlyph is the one glyph the return key is drawn with. A footer built
+// once, before the terminal's glyph mode is known, names the key with it, and
+// every hint strip draws it through hintKey, so it becomes "enter" in ASCII
+// mode like a key named with EnterKey.
+const EnterGlyph = "↵"
+
+// hintKey is what a hint's key draws as: the return key as EnterKey draws it,
+// anything else as written.
+func hintKey(k string) string {
+	if k == EnterGlyph {
+		return EnterKey()
+	}
+	return k
 }
 
 // SigilMark is the one-cell marker fronting an input field or the row a cursor
@@ -117,7 +132,7 @@ func hintStrip(hints []Hint, bg color.Color, pal Palette) (string, int) {
 		if i > 0 {
 			w += 2
 		}
-		parts = append(parts, keyStyle.Render(h.Key)+labelStyle.Render(" "+h.Label))
+		parts = append(parts, keyStyle.Render(hintKey(h.Key))+labelStyle.Render(" "+h.Label))
 		w += hintWidth(h)
 	}
 	return strings.Join(parts, labelStyle.Render("  ")), w

@@ -23,7 +23,7 @@ var sectionEditorHints = []overlay.Hint{
 	{Key: "↑↓", Label: "select"},
 	{Key: "⇧↑↓", Label: "move"},
 	{Key: "←→", Label: "share"},
-	{Key: "⏎", Label: "on/off"},
+	{Key: overlay.EnterGlyph, Label: "on/off"},
 	{Key: "r", Label: "reset"},
 	{Key: "u", Label: "undo"},
 	{Key: "esc", Label: "close"},

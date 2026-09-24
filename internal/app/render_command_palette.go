@@ -27,7 +27,7 @@ const (
 // helper so both measure the same panel.
 var paletteHints = []overlay.Hint{
 	{Key: "↑↓", Label: "move"},
-	{Key: "⏎", Label: "run"},
+	{Key: overlay.EnterGlyph, Label: "run"},
 	// The state filter is a token typed into the search field rather than a key,
 	// so the footer is the only place it can announce itself.
 	{Key: "@", Label: "state"},
@@ -160,7 +160,7 @@ func paletteRow(item CommandPaletteItem, selected bool, pal overlay.Palette, wid
 	}
 	name := overlay.Truncate(printableTitle(item.Name), max(width-2-tagW-shortcutW-1, 1))
 	left := overlay.Style(bg).Foreground(theme.Readable(pal.Accent, bg)).Bold(true).Render(marker) +
-		tag + paletteRowName(name, item.AgentState, item.Match, bg, nameColor, selected, pal)
+		tag + paletteRowName(name, item.AgentState, item.AgentSeen, item.Match, bg, nameColor, selected, pal)
 
 	gap := max(width-lipgloss.Width(left)-shortcutW, 1)
 	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + shortcut
@@ -172,9 +172,9 @@ func paletteRow(item CommandPaletteItem, selected bool, pal overlay.Palette, wid
 //
 // match holds offsets into the untruncated name, so any that fall past the
 // truncation simply never come up.
-func paletteRowName(name, agentState string, match []int, bg, nameColor color.Color, selected bool, pal overlay.Palette) string {
+func paletteRowName(name, agentState string, doneSeen bool, match []int, bg, nameColor color.Color, selected bool, pal overlay.Palette) string {
 	nameStyle := overlay.Style(bg).Foreground(nameColor).Bold(selected)
-	glyph := agentStateIndicator(agentState)
+	glyph, glyphColor := agentMark(agentState, doneSeen, pal)
 	glyphAt := -1
 	if glyph != "" {
 		glyphAt = strings.Index(name, glyph)
@@ -206,7 +206,7 @@ func paletteRowName(name, agentState string, match []int, bg, nameColor color.Co
 		if i == glyphAt {
 			flush()
 			hot = false
-			out.WriteString(overlay.Style(bg).Foreground(agentGlyphColor(agentState, pal)).Bold(true).Render(glyph))
+			out.WriteString(overlay.Style(bg).Foreground(glyphColor).Bold(true).Render(glyph))
 			i += len(glyph)
 			continue
 		}

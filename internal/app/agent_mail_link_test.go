@@ -33,7 +33,7 @@ func TestMailFromAnotherMachineIsMarkedInTheList(t *testing.T) {
 	if !strings.Contains(plain, "⇄ ORCHESTRATOR @ laptop → you") {
 		t.Fatalf("ASSERTION: the list does not mark the thread from another machine with its machine and the link mark:\n%s", plain)
 	}
-	if !strings.Contains(plain, "✉ build → you") {
+	if !strings.Contains(plain, "@ build → you") {
 		t.Fatalf("ASSERTION: the local thread lost its own mark:\n%s", plain)
 	}
 

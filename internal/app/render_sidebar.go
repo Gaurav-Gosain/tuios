@@ -584,8 +584,8 @@ func sidebarGlyph(state string, doneSeen bool, bg color.Color, pal overlay.Palet
 // draws idle's hollow circle. Unread and read used to differ only in colour,
 // which a monochrome terminal, a capture, or a colour-blind reader cannot
 // see, and a finished pane that has been reviewed is at rest in every sense
-// the rail cares about. The title bar keeps the done glyph, because it has no
-// unread bit to show.
+// the rail cares about. Every other surface draws through agentMark, which
+// applies the same rule, so a read finished pane looks the same everywhere.
 func sidebarGlyphState(state string, doneSeen bool) string {
 	if state == "done" && doneSeen {
 		return "idle"
@@ -919,12 +919,12 @@ func (m *OS) sidebarAgentsControls(cw, headerW int, pal overlay.Palette, hoverX 
 	return out, spans
 }
 
-// sidebarMailGlyph is the mark unread mail wears on the rail.
+// sidebarMailGlyph is the mark mail wears everywhere: the rail's header and
+// rows, the mailbox and the Inbox. "@" in both glyph modes. The envelope it
+// replaced is an emoji code point that terminals falling back to an emoji font
+// drew as a colour picture, often two cells wide in a one-cell slot.
 func sidebarMailGlyph() string {
-	if overlay.UseASCII() {
-		return "@"
-	}
-	return "✉"
+	return "@"
 }
 
 // sidebarMailToken is the agents header's mail token and whether it is live:

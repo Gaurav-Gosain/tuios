@@ -283,6 +283,12 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 	// left edge now that there is no fill to open.
 	lead := inked.Render(notifCap(s.msg.Type, &m.Settings))
 	mark := inked.Render(" " + notifGlyph(s.msg.Type, &m.Settings))
+	if glyph, fg := agentMark(s.msg.AgentState, false, theme.UI()); glyph != "" {
+		// A message about an agent wears that state's mark in that state's
+		// colour, the same one the rail and the title bar draw, so the dock
+		// does not say "needs you" in a shape used nowhere else.
+		mark = lipgloss.NewStyle().Foreground(theme.ReadableAt(fg, bg, theme.MarkFloor)).Render(" " + glyph)
+	}
 
 	budget := notifBudget(renderWidth)
 	if avail > 0 {

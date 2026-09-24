@@ -34,7 +34,7 @@ func (m *OS) renderWorkspaceSwitcher() (string, overlay.Geometry, []overlayRowHi
 		Scroll:     &m.WorkspaceSwitcherScroll,
 		EmptyMsg:   "No workspace matches",
 		Hints: []overlay.Hint{
-			{Key: "⏎", Label: "go"},
+			{Key: overlay.EnterGlyph, Label: "go"},
 			{Key: "ctrl+r", Label: "rename"},
 			{Key: "esc", Label: "close"},
 		},

@@ -69,7 +69,7 @@ func (m *OS) renderAggregateView() (string, overlay.Geometry, []overlayRowHit) {
 		Scroll:     &m.AggregateViewScroll,
 		EmptyMsg:   empty,
 		Hints: []overlay.Hint{
-			{Key: "⏎", Label: "jump"},
+			{Key: overlay.EnterGlyph, Label: "jump"},
 			{Key: "esc", Label: "close"},
 		},
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
@@ -111,9 +111,10 @@ func (m *OS) aggregateViewRow(item AggregateViewItem, selected bool, rowBg color
 	// The focused pane is marked in the accent rather than with the asterisk it
 	// used to wear jammed against its name, which read as part of the name.
 	mark, markW := pad+pad, 2
-	if state := item.Window.AgentState; agentStateIndicator(state) != "" {
-		mark = overlay.Style(rowBg).Foreground(agentGlyphColor(state, pal)).
-			Bold(sidebarAttention(state)).Render(agentStateIndicator(state)) + pad
+	state, seen := m.railAgentState(item.Window.ID, item.Window.AgentState, item.Window.AgentCompletionSeq)
+	if glyph, glyphColor := agentMark(state, seen, pal); glyph != "" {
+		mark = overlay.Style(rowBg).Foreground(glyphColor).
+			Bold(sidebarAttention(state)).Render(glyph) + pad
 	} else if item.IsFocused {
 		mark = overlay.Style(rowBg).Foreground(pal.Accent).Render(accentMark()) + pad
 	}

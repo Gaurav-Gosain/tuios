@@ -100,7 +100,9 @@ func TestStripStaysSilentWithNoAgents(t *testing.T) {
 		" ·" + rule,
 		"+t" + rule,
 		"▎·" + rule,
-		" ■" + rule, // the finished pane the group itself drops
+		// The finished pane the group itself drops. It has been looked at, so
+		// it wears idle's circle here as it does on every other surface.
+		" ○" + rule,
 	}
 	for i, w := range want {
 		if lines[i] != w {

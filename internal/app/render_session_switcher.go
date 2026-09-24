@@ -62,7 +62,7 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 		Scroll:     &m.SessionSwitcherScroll,
 		EmptyMsg:   empty,
 		Hints: []overlay.Hint{
-			{Key: "⏎", Label: "switch"},
+			{Key: overlay.EnterGlyph, Label: "switch"},
 			{Key: "ctrl+r", Label: "rename"},
 			{Key: "ctrl+d", Label: "delete"},
 			{Key: "esc", Label: "close"},
@@ -80,8 +80,8 @@ func (m *OS) renderSessionSwitcher() (string, overlay.Geometry, []overlayRowHit)
 func (m *OS) sessionSwitcherRow(item sessiontree.Node, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 	// Right half first: it is fixed-width, so the label gets whatever is left.
 	right := overlay.Style(rowBg).Foreground(pal.FgMute).Render(panePlural(item.WindowCount))
-	if glyph := agentStateIndicator(item.AgentState); glyph != "" {
-		right += overlay.Style(rowBg).Foreground(agentGlyphColor(item.AgentState, pal)).
+	if glyph, glyphColor := agentMark(item.AgentState, item.DoneSeen, pal); glyph != "" {
+		right += overlay.Style(rowBg).Foreground(glyphColor).
 			Bold(sidebarAttention(item.AgentState)).Render(" " + glyph)
 	}
 	if item.IsCurrent {

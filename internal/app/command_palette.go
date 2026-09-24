@@ -82,6 +82,9 @@ type CommandPaletteItem struct {
 	// glyph (sessionPaletteLabel), so the renderer can color the glyph without
 	// putting ANSI into Name, which the fuzzy filter matches raw.
 	AgentState string
+	// AgentSeen is the unread bit behind a done AgentState: true once the
+	// person has looked at the pane, which draws idle's mark (agentMark).
+	AgentSeen bool
 	// Keybind marks a row that names one action to rebind. Those rows are
 	// reached only behind the "#" token and are hidden from every other query,
 	// which is what keeps a few hundred of them out of a list of twenty

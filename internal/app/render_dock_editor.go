@@ -19,7 +19,7 @@ const (
 var dockEditorHints = []overlay.Hint{
 	{Key: "↑↓", Label: "select"},
 	{Key: "⇧↑↓", Label: "move"},
-	{Key: "⏎", Label: "add/remove"},
+	{Key: overlay.EnterGlyph, Label: "add/remove"},
 	{Key: "r", Label: "reset"},
 	{Key: "u", Label: "undo"},
 	{Key: "esc", Label: "close"},

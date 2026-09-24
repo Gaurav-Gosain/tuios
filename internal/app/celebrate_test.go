@@ -26,7 +26,7 @@ func celebrateTestOS(t *testing.T) *OS {
 // celebrateGlyphCount counts the particle glyphs a frame contains.
 func celebrateGlyphCount(frame string) int {
 	n := 0
-	for _, g := range []string{"✦", "✧", "•", "▪", "▫", "▘", "▝", "▗", "▖", "▀", "▐", "▄", "▌"} {
+	for _, g := range []string{"✦", "✧", "•", "◆", "◇", "▘", "▝", "▗", "▖", "▀", "▐", "▄", "▌"} {
 		n += strings.Count(frame, g)
 	}
 	return n

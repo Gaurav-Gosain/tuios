@@ -241,8 +241,8 @@ func (m *OS) CycleSession(delta int) {
 // sessionPaletteLabel formats a "Session: " or "Window: " palette row, folding
 // in the agent-state glyph the same way the window title bar does, so the
 // palette and the title bar never disagree about what a glyph means.
-func sessionPaletteLabel(prefix, name, agentState string) string {
-	if glyph := agentStateIndicator(agentState); glyph != "" {
+func sessionPaletteLabel(prefix, name, agentState string, doneSeen bool) string {
+	if glyph := agentStateIndicator(sidebarGlyphState(agentState, doneSeen)); glyph != "" {
 		return prefix + glyph + " " + name
 	}
 	return prefix + name
@@ -300,10 +300,11 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 		if isRemoteNode(s) {
 			host, name := s.Host, remoteSessionName(s)
 			items = append(items, CommandPaletteItem{
-				Name:       sessionPaletteLabel("Session: ", name+" @ "+host, s.AgentState),
+				Name:       sessionPaletteLabel("Session: ", name+" @ "+host, s.AgentState, s.DoneSeen),
 				Shortcut:   "another machine",
 				Category:   "Sessions",
 				AgentState: s.AgentState,
+				AgentSeen:  s.DoneSeen,
 				Action: func(m *OS) (*OS, tea.Cmd) {
 					m.sidebarLeaveForJump()
 					m.openRemoteSession(host, name)
@@ -316,9 +317,10 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 		sessionName := s.ID
 		isCurrent := s.IsCurrent
 		items = append(items, CommandPaletteItem{
-			Name:       sessionPaletteLabel("Session: ", sessionName, s.AgentState),
+			Name:       sessionPaletteLabel("Session: ", sessionName, s.AgentState, s.DoneSeen),
 			Category:   "Sessions",
 			AgentState: s.AgentState,
+			AgentSeen:  s.DoneSeen,
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				if isCurrent {
 					m.ShowNotification("Already on this session", "info", m.Settings.NotificationDuration)
@@ -340,10 +342,11 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 				label, warn = sessionName+"/"+w.Title, "switches session"
 			}
 			items = append(items, CommandPaletteItem{
-				Name:       sessionPaletteLabel("Window: ", label, w.AgentState),
+				Name:       sessionPaletteLabel("Window: ", label, w.AgentState, w.DoneSeen),
 				Shortcut:   warn,
 				Category:   "Sessions",
 				AgentState: w.AgentState,
+				AgentSeen:  w.DoneSeen,
 				Action: func(m *OS) (*OS, tea.Cmd) {
 					m.sidebarLeaveForJump()
 					if !isCurrent {

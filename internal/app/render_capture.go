@@ -96,7 +96,7 @@ func (m *OS) captureHintStrip(pal overlay.Palette) string {
 	}
 	if m.Capture.Keyboard {
 		hints = []overlay.Hint{
-			{Key: "enter", Label: "capture window"},
+			{Key: overlay.EnterKey(), Label: "capture window"},
 			{Key: "tab", Label: "next window"},
 			{Key: "f", Label: "full screen"},
 			{Key: "esc", Label: "cancel"},

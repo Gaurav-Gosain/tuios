@@ -64,7 +64,7 @@ const shotPreviewExtraRows = 6
 // is worse than a key that is not there.
 func (m *OS) shotPreviewHints() []overlay.Hint {
 	p := &m.ShotPreview
-	hints := []overlay.Hint{{Key: "enter", Label: "done"}}
+	hints := []overlay.Hint{{Key: overlay.EnterGlyph, Label: "done"}}
 	if !p.Pending {
 		if p.CopyLabel != "" {
 			hints = append(hints, overlay.Hint{Key: "c", Label: p.CopyLabel})

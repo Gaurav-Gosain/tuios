@@ -31,7 +31,7 @@ const (
 // discovered, and it is the reason it does not need to be a setting.
 var launcherHints = []overlay.Hint{
 	{Key: "↑↓", Label: "move"},
-	{Key: "⏎", Label: "run"},
+	{Key: overlay.EnterGlyph, Label: "run"},
 	{Key: "⇥", Label: "type it out"},
 	{Key: "esc", Label: "close"},
 }
@@ -220,5 +220,5 @@ func launcherDetail(e applist.Entry) string {
 // accent. It is the palette's own name renderer with no agent-state glyph to
 // splice in, kept shared so the two lists highlight a match identically.
 func launcherRowName(name string, match []int, bg, nameColor color.Color, selected bool, pal overlay.Palette) string {
-	return paletteRowName(name, "", match, bg, nameColor, selected, pal)
+	return paletteRowName(name, "", false, match, bg, nameColor, selected, pal)
 }

@@ -25,7 +25,7 @@ func (m *OS) renderLayoutPicker() (string, overlay.Geometry, []overlayRowHit) {
 			Title: "Save layout",
 			Width: width,
 			Body:  input,
-			Hints: []overlay.Hint{{Key: "⏎", Label: "save"}, {Key: "esc", Label: "cancel"}},
+			Hints: []overlay.Hint{{Key: overlay.EnterGlyph, Label: "save"}, {Key: "esc", Label: "cancel"}},
 		}
 		content, geo := panel.Render(pal)
 		return content, geo, nil
@@ -48,7 +48,7 @@ func (m *OS) renderLayoutPicker() (string, overlay.Geometry, []overlayRowHit) {
 		Scroll:     &m.LayoutPickerScroll,
 		EmptyMsg:   "No saved layouts",
 		Hints: []overlay.Hint{
-			{Key: "⏎", Label: "apply"},
+			{Key: overlay.EnterGlyph, Label: "apply"},
 			{Key: "ctrl+d", Label: "delete"},
 			{Key: "esc", Label: "close"},
 		},

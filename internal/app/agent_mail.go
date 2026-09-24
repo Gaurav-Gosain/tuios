@@ -130,6 +130,9 @@ type agentMailThread struct {
 	// the list can tell mail from this machine from mail that came over a
 	// link without opening either.
 	Link bool
+	// Anonymous is true when the thread's first message named no sender, as a
+	// broadcast notice can.
+	Anonymous bool
 }
 
 // agentMailFromLink reports whether a message arrived from another machine.
@@ -506,6 +509,8 @@ func (m *OS) agentMailThreads() []agentMailThread {
 				From:    agentMailSender(mm),
 				To:      agentMailName(mm.To, mm.ToLabel, true),
 				Subject: agentMailSummary(mm),
+
+				Anonymous: mm.From == "" && mm.FromLabel == "",
 			}
 			byThread[mm.ThreadID] = th
 			order = append(order, mm.ThreadID)

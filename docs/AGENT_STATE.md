@@ -933,22 +933,44 @@ counts as seen.
 
 ## Indicator
 
-tuios draws a one-cell glyph in each window's title:
+tuios draws a one-cell mark for each pane's state. It is the same mark, in the
+same colour, on every surface that shows a state: the rail and its collapsed
+strip, the window title, the command palette, the session switcher, the
+aggregate view, the Inbox and the dock's notifications.
 
-| State         | Indicator |
-| ------------- | --------- |
-| `working`     | `●`       |
-| `needs_input` | `▲`       |
-| `idle`        | `○`       |
-| `done`        | `■`       |
-| `errored`     | `×`       |
-| `unknown`     | `□`       |
-| `none`        | (nothing) |
+| State                     | Mark      | Colour   | `--ascii-only` |
+| ------------------------- | --------- | -------- | -------------- |
+| `working`                 | `●`       | info     | `*`            |
+| `needs_input` (needs you) | `▲`       | warning  | `!`            |
+| `done`, not yet looked at | `■`       | success  | `#`            |
+| `done`, looked at         | `○`       | muted    | `o`            |
+| `idle`                    | `○`       | muted    | `o`            |
+| `errored`                 | `×`       | error    | `x`            |
+| `unknown`                 | `□`       | muted    | `?`            |
+| `none`                    | (nothing) |          |                |
 
-The glyphs are distinct shapes rather than the same shape in different colors, so
-the state reads at a glance and survives a monochrome capture. The indicator
-shows even for a window with no name. With `--ascii-only` the glyphs are `*`,
-`!`, `o`, `#`, `x` and `?`.
+The marks are distinct shapes rather than the same shape in different colours,
+so the state reads at a glance and survives a monochrome capture. None of them
+is an emoji code point, and each is one cell wide. The mark shows even for a
+window with no name.
+
+Every mark is East Asian Ambiguous width, so a terminal that draws ambiguous
+characters two cells wide (common with CJK locales) should run with
+`--ascii-only` (or `appearance.ascii_only`, or the `ascii` glyph set). The
+ASCII forms keep one meaning per character: mail is `@`, a thread from another
+machine `~`, an Inbox item to resume `>` and mail waiting to be sent `^`, and
+none of those is a state's mark.
+
+The dock's notifications about an agent wear the state's mark in its colour.
+They used to wear a Nerd Font severity icon, a different shape for the same
+state that showed as a box without a patched font. Other notifications keep
+their severity icon.
+
+Mail is marked `@` in both modes: on the rail's agents header and rows, in the
+mailbox and in the Inbox. It was the envelope U+2709, an emoji code point that
+a terminal falling back to an emoji font drew as a colour picture. The mailbox
+says a thread's kind in words ("docs asks api", "Notice to all") rather than
+with a mark of its own.
 
 This table used to say `unknown` draws nothing. It has drawn `□` since the state
 was given a glyph, because a pane with an agent in it that drew nothing read as
@@ -984,10 +1006,11 @@ The collapsed strip lists its agents in the same order as the section.
 ### What a row says without colour
 
 Colour is never the only signal. Every state has its own glyph (the table
-above), and a finished pane you have looked at draws `○`, idle's glyph, in the
-rail, where it used to draw `■` in a muted colour: read and unread finished
-panes differed only in ink. The title bar still draws `■`, because it has no
-unread bit to show.
+above), and a finished pane you have looked at draws `○`, idle's glyph, where it
+used to draw `■` in a muted colour: read and unread finished panes differed only
+in ink. The title bar, the palette, the session switcher and the aggregate view
+follow the same rule; they drew `■` for a read finished pane until the agent UI
+polish pass.
 
 The row's second line carries a word for what the row needs, the `need` token:
 `approval` or `question` when a screen rule read the prompt (the kind is taken

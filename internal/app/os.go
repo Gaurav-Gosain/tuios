@@ -1395,6 +1395,12 @@ type Notification struct {
 	// error is sticky by default: nothing carrying a failure should vanish on a
 	// timer the user did not start.
 	Sticky bool
+
+	// AgentState is the agent state a message announces, empty for every other
+	// message. The dock draws that state's own mark and colour for it
+	// (agentMark), the one the rail and the title bar draw, rather than a
+	// Nerd Font severity icon that said the same thing in a different shape.
+	AgentState string
 }
 
 // NotifTarget names the pane a message came from. The workspace is deliberately

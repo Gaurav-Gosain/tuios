@@ -172,3 +172,30 @@ func TestDialogCursorIsReverseVideo(t *testing.T) {
 		t.Errorf("the cursor is not one cell: %q", c)
 	}
 }
+
+// TestEnterIsDrawnOneWay: a hint that names the return key with EnterGlyph,
+// even one built once before the glyph mode was known, draws as EnterKey
+// does, so an ASCII terminal reads "enter" in every footer, and the width a
+// footer is budgeted at is the width it draws.
+func TestEnterIsDrawnOneWay(t *testing.T) {
+	t.Cleanup(func() { SetASCII(false) })
+	hints := []Hint{{Key: EnterGlyph, Label: "run"}, {Key: "esc", Label: "close"}}
+	for _, ascii := range []bool{false, true} {
+		SetASCII(ascii)
+		want := "↵ run"
+		if ascii {
+			want = "enter run"
+		}
+		strip := stripSGR(HintStrip(hints, charmtone.Pepper, dialogTestPalette()))
+		if !strings.Contains(strip, want) {
+			t.Errorf("ascii=%v: hint strip %q does not draw %q", ascii, strip, want)
+		}
+		rows := footerRows(hints, charmtone.Pepper, dialogTestPalette(), 80)
+		if len(rows) != 1 || !strings.Contains(stripSGR(rows[0]), want) {
+			t.Errorf("ascii=%v: footer %q does not draw %q", ascii, rows, want)
+		}
+		if got, w := hintWidth(hints[0]), lipgloss.Width(want); got != w {
+			t.Errorf("ascii=%v: hint budgeted at %d cells, drawn at %d", ascii, got, w)
+		}
+	}
+}

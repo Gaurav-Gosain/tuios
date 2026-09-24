@@ -23,8 +23,8 @@ func TestASetChangesTheGlyphsTheChromeIsDrawnWith(t *testing.T) {
 	if got := Global.GetRailFocusMark(); got != "█" {
 		t.Errorf("rail focus = %q, want heavy's █", got)
 	}
-	if got := Global.GetRailBullet(); got != "▪" {
-		t.Errorf("rail bullet = %q, want heavy's ▪", got)
+	if got := Global.GetRailBullet(); got != "•" {
+		t.Errorf("rail bullet = %q, want heavy's •", got)
 	}
 	// heavy says nothing about the collapse arrow, so the built-in stands.
 	if got := Global.GetRailCollapseGlyph(); got != "«" {

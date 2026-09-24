@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/shot"
 )
 
@@ -301,7 +302,7 @@ func TestPreviewFooterOffersOnlyWorkingKeys(t *testing.T) {
 	for _, h := range m.shotPreviewHints() {
 		keys[h.Key] = true
 	}
-	for _, want := range []string{"enter", "c", "o", "r", "esc"} {
+	for _, want := range []string{overlay.EnterGlyph, "c", "o", "r", "esc"} {
 		if !keys[want] {
 			t.Errorf("a local client did not offer %q", want)
 		}

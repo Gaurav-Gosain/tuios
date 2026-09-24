@@ -72,6 +72,28 @@ func agentStateIndicator(state string) string {
 	}
 }
 
+// agentMark is the mark and the colour one pane's agent state wears, and every
+// surface that shows a state draws it from here: the rail and its strip, the
+// title bars, the palette, the session switcher, the aggregate view, the Inbox
+// and the dock. One shape per state and one colour per state, so a state reads
+// the same wherever it is seen and a monochrome capture still tells them apart.
+//
+// doneSeen folds in the unread bit. A finished pane the person has looked at
+// draws idle's hollow circle in the muted ink, because it is at rest in every
+// sense that matters; an unread one keeps the filled square in the success
+// colour. The two used to differ only in colour on some surfaces and in shape
+// on others.
+func agentMark(state string, doneSeen bool, pal overlay.Palette) (string, color.Color) {
+	return agentStateIndicator(sidebarGlyphState(state, doneSeen)), sidebarStateColor(state, doneSeen, pal)
+}
+
+// windowMarkState is the state whose mark a pane's title bar draws: the rail's
+// reading of the pane, with the unread bit folded in, so a title bar and the
+// rail row beside it never disagree.
+func (m *OS) windowMarkState(w *terminal.Window) string {
+	return sidebarGlyphState(m.railAgentState(w.ID, w.AgentState, w.AgentCompletionSeq))
+}
+
 // badgeStyle is the ink a window's title badge is written in. The colour is
 // picked against the badge's own fill rather than fixed at black: the fill is
 // the border colour, which follows the theme, and black on a theme's dark red
@@ -205,6 +227,13 @@ func isDefaultTitle(title, windowID string) bool {
 // position is the window's 1-based place in its workspace, used by the {index}
 // placeholder of appearance.window_title_format.
 func getWindowTitle(window *terminal.Window, position int, maxWidth int, s *config.Settings) string {
+	return windowTitleText(window, window.AgentState, position, maxWidth, s)
+}
+
+// windowTitleText is getWindowTitle with the state whose mark the title wears
+// given explicitly: the render passes windowMarkState, which knows whether a
+// finished pane has been looked at.
+func windowTitleText(window *terminal.Window, markState string, position int, maxWidth int, s *config.Settings) string {
 	// Titles reach the badge as chrome, so launder the same decorative junk the
 	// sidebar and palette drop; our own state glyph is added below, untouched.
 	windowName := ""
@@ -223,7 +252,7 @@ func getWindowTitle(window *terminal.Window, position int, maxWidth int, s *conf
 
 	// The agent-state indicator shows even for a window with no name, so a pane
 	// running an agent is always marked.
-	indicator := agentStateIndicator(window.AgentState)
+	indicator := agentStateIndicator(markState)
 
 	// A pane whose shell is on another machine says so. This is not decoration
 	// and it is not optional: two panes side by side look identical, and the
@@ -340,9 +369,10 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 		titleMaxWidth = width
 	}
 
+	markState := m.windowMarkState(window)
 	windowName := ""
 	if titlePos != "hidden" {
-		windowName = getWindowTitle(window, position, titleMaxWidth, &m.Settings)
+		windowName = windowTitleText(window, markState, position, titleMaxWidth, &m.Settings)
 	}
 
 	borderStyle := style.Foreground(color)
@@ -352,7 +382,7 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 	// are the ones it drew on.
 	badge := ""
 	if titlePos == "top" && windowName != "" {
-		badge = windowTitleBadge(windowName, window.AgentState, color, &m.Settings)
+		badge = windowTitleBadge(windowName, markState, color, &m.Settings)
 	}
 	row := layoutBorderRow(badge, buttons, width, color, true, &m.Settings)
 	topBorder = row.text
@@ -372,7 +402,7 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 	}
 
 	if titlePos == "bottom" && windowName != "" {
-		bottomBorder = renderTitleBadge(windowName, window.AgentState, width, color, false, &m.Settings)
+		bottomBorder = renderTitleBadge(windowName, markState, width, color, false, &m.Settings)
 	} else if scrollIndicator != "" {
 		// Bottom border with scrollback position indicator on the right
 		indicatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24")).Bold(true)

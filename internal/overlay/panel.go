@@ -126,7 +126,7 @@ func HintRowCount(hints []Hint, width int) int {
 
 // hintWidth is the rendered width of one hint: the key, a space, and the label.
 func hintWidth(h Hint) int {
-	return lipgloss.Width(h.Key) + 1 + lipgloss.Width(h.Label)
+	return lipgloss.Width(hintKey(h.Key)) + 1 + lipgloss.Width(h.Label)
 }
 
 // tabGap is the single bg-colored column between two tabs.
@@ -342,7 +342,7 @@ func footerRows(hints []Hint, bg color.Color, pal Palette, width int) []string {
 	var cur []string
 	curW := 0
 	for _, h := range hints {
-		part := keyStyle.Render(h.Key) + labelStyle.Render(" "+h.Label)
+		part := keyStyle.Render(hintKey(h.Key)) + labelStyle.Render(" "+h.Label)
 		w := lipgloss.Width(part)
 		if curW > 0 && curW+sepW+w > width {
 			rows = append(rows, strings.Join(cur, sep))

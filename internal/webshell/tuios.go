@@ -50,7 +50,7 @@ func tuiosTape(s *shell, args []string) int {
 			return s.fail("tuios: no tape at " + args[1] + ". Try " + bold + "tuios tape list" + reset)
 		}
 		name := path.Base(p)
-		t.Print(green + "▶" + reset + " Playing " + bold + name + reset + ". Sit back.\r\n")
+		t.Print(green + ">" + reset + " Playing " + bold + name + reset + ". Sit back.\r\n")
 		t.Emit(EventTapePlay, map[string]any{"name": name, "script": script})
 		return 0
 	case "list", "ls", "":

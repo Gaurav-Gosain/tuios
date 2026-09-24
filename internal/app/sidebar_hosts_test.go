@@ -104,8 +104,12 @@ func TestSidebarDrawsHostGroups(t *testing.T) {
 			t.Errorf("ASSERTION: the rail does not show %q:\n%s", want, text)
 		}
 	}
-	if strings.Contains(text, "@ ") {
-		t.Errorf("ASSERTION: the rail still marks a machine with @:\n%s", text)
+	// "@" is the mail mark now, so the header's mail token may carry one; what
+	// must not come back is a machine written as "@ host" after a name.
+	for _, host := range []string{"local", "build", "workstation"} {
+		if strings.Contains(text, "@ "+host) {
+			t.Errorf("ASSERTION: the rail still marks a machine with @:\n%s", text)
+		}
 	}
 
 	// Local first is the rule: this machine's header, then its session, then

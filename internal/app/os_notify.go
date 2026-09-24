@@ -200,17 +200,23 @@ func notificationLifetime(notifType string, requested time.Duration, s *config.S
 // from notifType exactly as it always did, and duration is now a floor rather
 // than the whole answer (see notificationLifetime).
 func (m *OS) ShowNotification(message, notifType string, duration time.Duration) {
-	m.showNotification(message, notifType, duration, nil)
+	m.showNotification(message, notifType, "", duration, nil)
 }
 
 // ShowNotificationFrom is ShowNotification for a message that came from a pane.
 // The message becomes clickable and gains a keyboard jump; everything else about
 // it is identical.
 func (m *OS) ShowNotificationFrom(message, notifType string, duration time.Duration, target NotifTarget) {
-	m.showNotification(message, notifType, duration, &target)
+	m.showNotification(message, notifType, "", duration, &target)
 }
 
-func (m *OS) showNotification(message, notifType string, duration time.Duration, target *NotifTarget) {
+// showAgentNotification is ShowNotificationFrom for a message announcing an
+// agent state: the dock marks it with that state's own mark.
+func (m *OS) showAgentNotification(message, notifType, agentState string, duration time.Duration, target NotifTarget) {
+	m.showNotification(message, notifType, agentState, duration, &target)
+}
+
+func (m *OS) showNotification(message, notifType, agentState string, duration time.Duration, target *NotifTarget) {
 	// Always log, even for a message that will not be shown: the log viewer is
 	// where a message that was dropped or has already expired is read.
 	switch notifType {
@@ -255,6 +261,8 @@ func (m *OS) showNotification(message, notifType string, duration time.Duration,
 		Duration:  effective,
 		Sticky:    sticky,
 		Target:    target,
+
+		AgentState: agentState,
 	})
 
 	if len(m.Notifications) > maxLiveNotifications {

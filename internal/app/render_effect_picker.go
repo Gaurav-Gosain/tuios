@@ -35,7 +35,7 @@ const (
 var effectPickerHints = []overlay.Hint{
 	{Key: "type", Label: "filter"},
 	{Key: "↑↓", Label: "preview"},
-	{Key: "⏎", Label: "apply"},
+	{Key: overlay.EnterGlyph, Label: "apply"},
 	{Key: "esc", Label: "cancel"},
 }
 

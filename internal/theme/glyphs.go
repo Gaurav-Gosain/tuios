@@ -172,7 +172,7 @@ var builtinGlyphSets = map[string]*GlyphSet{
 			MiddleLeft: "┣", MiddleRight: "┫",
 		},
 		Rule: "━", Focus: "█", Attention: "█",
-		Bullet: "▪", ScrollbarThumb: "█", ScrollbarTrack: "│",
+		Bullet: "•", ScrollbarThumb: "█", ScrollbarTrack: "│",
 	},
 	// Nothing outside 7-bit ASCII, for a terminal or a font that cannot be
 	// trusted with more. It is what --ascii-only draws, said as a set so that a

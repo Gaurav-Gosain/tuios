@@ -637,8 +637,8 @@ func (m *OS) sidebarStripAgentCell(e sidebarAgentEntry, cw int, pal overlay.Pale
 // read as one object at two cells wide.
 func stripStateMark(state string, doneSeen bool, pal overlay.Palette, bg color.Color, lit bool, s *config.Settings) string {
 	mark, markFg := s.GetRailBullet(), stripRestingInk(lit, pal)
-	if g := agentStateIndicator(state); g != "" && s.SidebarShowGlyphs {
-		mark, markFg = g, sidebarStateColor(state, doneSeen, pal)
+	if g, fg := agentMark(state, doneSeen, pal); g != "" && s.SidebarShowGlyphs {
+		mark, markFg = g, fg
 	}
 	return sidebarStyle(bg, markFg).Render(mark)
 }

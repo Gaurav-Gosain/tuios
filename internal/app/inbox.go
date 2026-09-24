@@ -691,7 +691,7 @@ func (m *OS) fireInboxAlerts(ids []string) {
 		}
 	}
 	if policy.Dock {
-		m.ShowNotificationFrom(text, sev, m.Settings.NotificationDuration,
+		m.showAgentNotification(text, sev, inboxAlertMarkState(items, sev), m.Settings.NotificationDuration,
 			NotifTarget{Host: inboxItemMachine(first), SessionID: first.Session, WindowID: first.Window})
 	}
 	var seq []byte
@@ -705,6 +705,26 @@ func (m *OS) fireInboxAlerts(ids []string) {
 	if policy.PlaysAudio() {
 		sound.Play(sound.Request{Cue: cue, File: policy.CueFile(cueState), Cooldown: policy.SoundCooldown})
 	}
+}
+
+// inboxAlertMarkState is the agent state whose mark the dock draws for a
+// burst of Inbox alerts at severity sev: the state that severity stands for.
+// Mail is not an agent state, so a burst of mail alone keeps the severity
+// mark and reports no state.
+func inboxAlertMarkState(items []session.AttentionItem, sev string) string {
+	switch sev {
+	case "error":
+		return "errored"
+	case "success":
+		return "done"
+	case "warning":
+		for _, it := range items {
+			if it.Kind != session.AttentionMail && inboxAlertState(it.Kind) == "needs_input" {
+				return "needs_input"
+			}
+		}
+	}
+	return ""
 }
 
 // applyInboxAlertDue raises the alerts whose settle window ran out, for the
@@ -1731,37 +1751,25 @@ func inboxSeen(seenAt int64, now time.Time) string {
 
 // inboxKindGlyph is the mark an item row wears for its kind. The group
 // heading already says the kind in words; the mark is for the eye.
+//
+// A kind that stands for an agent state wears that state's mark, in both
+// glyph modes, so an approval here is the same mark as the pane's row on the
+// rail. The ASCII forms of the other kinds are chosen not to collide with any
+// state's: finished used to be "*", which is working's.
 func inboxKindGlyph(kind string) string {
-	if overlay.UseASCII() {
-		switch kind {
-		case session.AttentionApproval:
-			return "!"
-		case session.AttentionQuestion, session.AttentionAsk:
-			return "?"
-		case session.AttentionMail:
-			return "@"
-		case session.AttentionErrored:
-			return "x"
-		case session.AttentionResume:
-			return ">"
-		case session.AttentionOutbox:
-			return "^"
-		default:
-			return "*"
-		}
-	}
 	switch kind {
 	case session.AttentionOutbox:
+		if overlay.UseASCII() {
+			return "^"
+		}
 		return "↑"
-	case session.AttentionApproval, session.AttentionQuestion, session.AttentionAsk:
-		return agentStateIndicator("needs_input")
 	case session.AttentionMail:
 		return sidebarMailGlyph()
-	case session.AttentionErrored:
-		return agentStateIndicator("errored")
 	case session.AttentionResume:
+		if overlay.UseASCII() {
+			return ">"
+		}
 		return "↻"
-	default:
-		return agentStateIndicator("done")
 	}
+	return agentStateIndicator(inboxAlertState(kind))
 }

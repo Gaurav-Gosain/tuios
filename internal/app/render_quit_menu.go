@@ -29,7 +29,7 @@ func (m *OS) renderQuitMenu() (string, overlay.Geometry, []overlayRowHit) {
 		Scroll:     &m.QuitMenuScroll,
 		EmptyMsg:   "Nothing to quit",
 		Hints: []overlay.Hint{
-			{Key: "⏎", Label: "run"},
+			{Key: overlay.EnterGlyph, Label: "run"},
 			{Key: "q", Label: "default"},
 			{Key: "esc", Label: "cancel"},
 		},
