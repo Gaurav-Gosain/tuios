@@ -317,7 +317,9 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 		sessionName := s.ID
 		isCurrent := s.IsCurrent
 		items = append(items, CommandPaletteItem{
-			Name:       sessionPaletteLabel("Session: ", sessionName, s.AgentState, s.DoneSeen),
+			// The rail's title for the session, so a session reads by one name
+			// here and there; the action still switches by its identity.
+			Name:       sessionPaletteLabel("Session: ", s.Title, s.AgentState, s.DoneSeen),
 			Category:   "Sessions",
 			AgentState: s.AgentState,
 			AgentSeen:  s.DoneSeen,
@@ -339,7 +341,7 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 			if !isCurrent {
 				// Qualified by session, the way the rail's own agent rows qualify a
 				// pane that lives elsewhere, and marked with what selecting it costs.
-				label, warn = sessionName+"/"+w.Title, "switches session"
+				label, warn = s.Title+"/"+w.Title, "switches session"
 			}
 			items = append(items, CommandPaletteItem{
 				Name:       sessionPaletteLabel("Window: ", label, w.AgentState, w.DoneSeen),

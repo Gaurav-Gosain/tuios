@@ -350,7 +350,7 @@ func (m *OS) applyInboxResponded(msg InboxRespondedMsg) tea.Cmd {
 	case "prompt":
 		text += "; the prompt is gone"
 	default:
-		text += "; it is " + strings.ReplaceAll(msg.Res.State, "_", " ") + " now"
+		text += "; it is " + sidebarStateWords(msg.Res.State) + " now"
 	}
 	m.Inbox.Peek = nil
 	m.ShowNotification(text, "info", m.Settings.NotificationDuration)

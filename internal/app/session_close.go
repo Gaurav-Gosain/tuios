@@ -37,7 +37,7 @@ const (
 type sessionToll struct {
 	Panes   int
 	Working int // agents mid-task
-	Blocked int // agents waiting on the user
+	Blocked int // agents that need the user: needs_input or errored
 }
 
 // sessionToll counts the live session. Panes are every window this client
@@ -48,14 +48,22 @@ func (m *OS) sessionToll() sessionToll {
 		if w == nil {
 			continue
 		}
-		switch w.AgentState {
-		case string(session.AgentStateWorking):
-			t.Working++
-		case string(session.AgentStateNeedsInput):
-			t.Blocked++
-		}
+		t.count(w.AgentState)
 	}
 	return t
+}
+
+// count adds one pane's state. "Needs you" is the rail's definition,
+// sidebarAttention: a pane on needs_input or errored. It counted needs_input
+// alone, so the dialog and the rail's header said "needs you" of different
+// sets.
+func (t *sessionToll) count(state string) {
+	switch {
+	case state == string(session.AgentStateWorking):
+		t.Working++
+	case sidebarAttention(state):
+		t.Blocked++
+	}
 }
 
 // SessionTollFor counts any session by identity. Another session's panes are
@@ -76,12 +84,7 @@ func (m *OS) SessionTollFor(sessionID string) sessionToll {
 	}
 	for _, w := range m.DaemonClient.SessionWindows(sessionID) {
 		t.Panes++
-		switch w.AgentState {
-		case string(session.AgentStateWorking):
-			t.Working++
-		case string(session.AgentStateNeedsInput):
-			t.Blocked++
-		}
+		t.count(w.AgentState)
 	}
 	return t
 }
@@ -102,7 +105,7 @@ func (t sessionToll) Line() string {
 		if t.Working > 0 {
 			blocked = strconv.Itoa(t.Blocked)
 		}
-		parts = append(parts, blocked+" waiting on you")
+		parts = append(parts, blocked+" "+agentNeedsYou(t.Blocked))
 	}
 	if t.Working == 0 && t.Blocked == 0 {
 		parts = append(parts, "no agent working")
@@ -127,7 +130,7 @@ func (m *OS) sessionCloseQuestion() string {
 	if name == "" {
 		return "Close this session?"
 	}
-	return "Close " + printableTitle(m.SessionLabel(name)) + "?"
+	return "Close " + printableTitle(m.sessionTitle(name)) + "?"
 }
 
 // sessionCloseTarget is the session the open dialog is about, resolved: the one

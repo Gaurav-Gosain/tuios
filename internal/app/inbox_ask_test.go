@@ -39,7 +39,7 @@ func TestInboxOpensOnAQuestionFromThePaneInFront(t *testing.T) {
 	if m.ShowInbox {
 		t.Fatal("a question from a pane the person is not looking at took the keyboard")
 	}
-	if n := lastNote(m); !strings.Contains(n, "asks you") {
+	if n := lastNote(m); !strings.Contains(n, "has a question") {
 		t.Fatalf("a question from another pane raised no alert: %q", n)
 	}
 }
@@ -73,7 +73,7 @@ func TestInboxAnswersAQuestionWithItsDigits(t *testing.T) {
 	}
 	out, _, _ := m.renderInbox()
 	plain := ansi.Strip(out)
-	for _, want := range []string{"Asked you", "[1-3] Deploy to staging?", "2  no", "3  later", "answer"} {
+	for _, want := range []string{"Questions", "[1-3] Deploy to staging?", "2  no", "3  later", "answer"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("the question does not show %q:\n%s", want, plain)
 		}
@@ -108,7 +108,7 @@ func TestAQuestionDoesNotPopUnderSomeonesHands(t *testing.T) {
 		if m.ShowInbox {
 			t.Fatal("a question popped while the person was typing into its pane")
 		}
-		if n := lastNote(m); !strings.Contains(n, "asks you") {
+		if n := lastNote(m); !strings.Contains(n, "has a question") {
 			t.Fatalf("a question that did not pop raised no alert: %q", n)
 		}
 		m.Inbox.paneKeyAt = time.Now().Add(-time.Minute)
@@ -127,7 +127,7 @@ func TestAQuestionDoesNotPopUnderSomeonesHands(t *testing.T) {
 		if m.Inbox.SelectedID != "7" || !m.Inbox.poppedAt.IsZero() {
 			t.Fatalf("a question moved the cursor of an open Inbox to %q", m.Inbox.SelectedID)
 		}
-		if n := lastNote(m); !strings.Contains(n, "asks you") {
+		if n := lastNote(m); !strings.Contains(n, "has a question") {
 			t.Fatalf("a question that did not pop raised no alert: %q", n)
 		}
 	})

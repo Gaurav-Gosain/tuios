@@ -74,7 +74,7 @@ tokens = ["need", "name", "message"]
 		sessiontree.WindowInput{ID: "ffffffff6666", Title: "docs", AgentState: "working", Message: "reading", StateAt: at},
 	)
 	lines, _ := m.sidebarPanelLinesForTree(tree)
-	if row := stripANSIForTrace(railAgentRow(m, lines, "dddddddd4444")); !strings.Contains(row, "needs input 12m") {
+	if row := stripANSIForTrace(railAgentRow(m, lines, "dddddddd4444")); !strings.Contains(row, "needs you 12m") {
 		t.Errorf("blocked row = %q, want the need and the wait", row)
 	}
 	// A reported message stands in for the word, and the wait stays.
@@ -95,12 +95,12 @@ func TestAgentRowNeedWords(t *testing.T) {
 		seen           bool
 		want           string
 	}{
-		{"needs_input", "", false, "needs input"},
+		{"needs_input", "", false, "needs you"},
 		{"needs_input", "question: which branch?", false, "question"},
 		{"needs_input", "approval: rm -rf build", false, "approval"},
 		{"needs_input", "awaiting approval", false, ""},
 		{"errored", "", false, "errored"},
-		{"done", "", false, "finished"},
+		{"done", "", false, "done"},
 		{"done", "", true, ""},
 		{"working", "", false, ""},
 		{"idle", "", false, ""},

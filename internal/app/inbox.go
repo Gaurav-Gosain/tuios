@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -434,7 +435,7 @@ func (m *OS) announceResumes(items []session.AttentionItem) {
 	if len(fresh) == 0 {
 		return
 	}
-	text := inboxWhere(fresh[0]) + ": " + inboxWho(fresh[0]) + " " + inboxKindWords(fresh[0])
+	text := m.inboxWhere(fresh[0]) + ": " + inboxWho(fresh[0]) + " " + inboxKindWords(fresh[0])
 	if len(fresh) > 1 {
 		text = strconv.Itoa(len(fresh)) + " agent conversations can be resumed"
 	}
@@ -672,7 +673,7 @@ func (m *OS) fireInboxAlerts(ids []string) {
 	}
 	session.SortAttention(items)
 	first := items[0]
-	text := inboxAlertText(items)
+	text := m.inboxAlertText(items)
 	sev := "info"
 	cue, cueState := sound.CueDone, "done"
 	for _, it := range items {
@@ -738,20 +739,18 @@ func inboxKindWords(it session.AttentionItem) string {
 	switch it.Kind {
 	case session.AttentionApproval:
 		return "needs approval"
-	case session.AttentionQuestion:
+	case session.AttentionQuestion, session.AttentionAsk:
 		return "has a question"
 	case session.AttentionErrored:
 		return "errored"
 	case session.AttentionFinished:
-		return "finished"
+		return sidebarStateWords("done")
 	case session.AttentionMail:
 		return "wrote to you"
 	case session.AttentionResume:
 		return "can resume its conversation"
 	case session.AttentionOutbox:
 		return "mail waits to be sent"
-	case session.AttentionAsk:
-		return "asks you"
 	}
 	return it.Kind
 }
@@ -768,24 +767,24 @@ func inboxWho(it session.AttentionItem) string {
 }
 
 // inboxWhere is the session an item is in, with its machine when it is not
-// this one.
-func inboxWhere(it session.AttentionItem) string {
+// this one. A session of this machine is named as the rail names it
+// (sessionTitle); another machine's session keeps the name that machine sent.
+func (m *OS) inboxWhere(it session.AttentionItem) string {
 	if it.Kind == session.AttentionOutbox {
 		return "for " + printableTitle(it.ForHost)
 	}
-	where := printableTitle(it.Session)
 	if it.Host != "" {
-		where = printableTitle(it.Host) + ":" + where
+		return printableTitle(it.Host) + ":" + printableTitle(it.Session)
 	}
-	return where
+	return printableTitle(m.sessionTitle(it.Session))
 }
 
 // inboxAlertText is the dock line for a burst: one item in full, naming its
 // session, or a count and the sessions for several.
-func inboxAlertText(items []session.AttentionItem) string {
+func (m *OS) inboxAlertText(items []session.AttentionItem) string {
 	if len(items) == 1 {
 		it := items[0]
-		text := inboxWhere(it) + ": " + inboxWho(it) + " " + inboxKindWords(it)
+		text := m.inboxWhere(it) + ": " + inboxWho(it) + " " + inboxKindWords(it)
 		if note := printableTitle(it.Summary); note != "" {
 			text += agentAlertSep() + note
 		}
@@ -794,7 +793,7 @@ func inboxAlertText(items []session.AttentionItem) string {
 	var sessions []string
 	seen := map[string]bool{}
 	for _, it := range items {
-		where := inboxWhere(it)
+		where := m.inboxWhere(it)
 		if !seen[where] {
 			seen[where] = true
 			sessions = append(sessions, where)
@@ -874,14 +873,17 @@ type inboxRow struct {
 
 // inboxGroupTitle is the heading a kind's rows sit under. It is words, so the
 // grouping reads without colour.
+//
+// A question an agent's prompt asks and one put with ask-human are the same
+// thing to the person, a question to answer with a digit, so both sit under
+// Questions. They were two groups, "Questions" and "Asked you". Finished
+// turns sit under Done, the word every other surface uses for the state.
 func inboxGroupTitle(kind string) string {
-	switch kind {
+	switch inboxGroupKey(kind) {
 	case session.AttentionApproval:
 		return "Approvals"
 	case session.AttentionQuestion:
 		return "Questions"
-	case session.AttentionAsk:
-		return "Asked you"
 	case session.AttentionMail:
 		return "Mail"
 	case session.AttentionErrored:
@@ -889,11 +891,27 @@ func inboxGroupTitle(kind string) string {
 	case session.AttentionResume:
 		return "Resume"
 	case session.AttentionFinished:
-		return "Finished"
+		return "Done"
 	case session.AttentionOutbox:
 		return "Waiting to send"
 	}
 	return kind
+}
+
+// inboxGroupKey is the group a kind's rows are listed under: its own, except
+// that an ask-human question is a question.
+func inboxGroupKey(kind string) string {
+	if kind == session.AttentionAsk {
+		return session.AttentionQuestion
+	}
+	return kind
+}
+
+// inboxFilterAdmits reports whether the Inbox's kind filter shows a kind. The
+// Questions filter shows both kinds of question; a filter on ask alone, which
+// is what a question popping the Inbox opens with, shows only those.
+func inboxFilterAdmits(filter, kind string) bool {
+	return filter == "" || filter == kind || filter == inboxGroupKey(kind)
 }
 
 // inboxRows is the overlay's lines: each kind's heading and its items, oldest
@@ -902,22 +920,23 @@ func (m *OS) inboxRows() []inboxRow {
 	st := &m.Inbox
 	var rows []inboxRow
 	for i := 0; i < len(st.Items); {
-		kind := st.Items[i].Kind
+		group := inboxGroupKey(st.Items[i].Kind)
 		j := i
-		for j < len(st.Items) && st.Items[j].Kind == kind {
+		for j < len(st.Items) && inboxGroupKey(st.Items[j].Kind) == group {
 			j++
 		}
-		if st.Filter == "" || st.Filter == kind {
-			var items []inboxRow
-			for k := i; k < j; k++ {
-				if m.inboxItemSelected(st.Items[k]) {
-					items = append(items, inboxRow{item: &st.Items[k]})
-				}
+		var items []inboxRow
+		for k := i; k < j; k++ {
+			if inboxFilterAdmits(st.Filter, st.Items[k].Kind) && m.inboxItemSelected(st.Items[k]) {
+				items = append(items, inboxRow{item: &st.Items[k]})
 			}
-			if len(items) > 0 {
-				rows = append(rows, inboxRow{heading: inboxGroupTitle(kind), count: len(items)})
-				rows = append(rows, items...)
-			}
+		}
+		if len(items) > 0 {
+			// Two kinds can share a group, each sorted oldest first by the
+			// daemon; the group as a whole is kept oldest first too.
+			slices.SortStableFunc(items, func(a, b inboxRow) int { return cmp.Compare(a.item.Since, b.item.Since) })
+			rows = append(rows, inboxRow{heading: inboxGroupTitle(group), count: len(items)})
+			rows = append(rows, items...)
 		}
 		i = j
 	}
@@ -1043,6 +1062,13 @@ func (m *OS) InboxCycleFilter() {
 		next = session.AttentionKindNames[0]
 	} else if i := session.AttentionKindRank(st.Filter); i+1 < len(session.AttentionKindNames) {
 		next = session.AttentionKindNames[i+1]
+	}
+	// A question put with ask-human is shown under Questions, so the filter
+	// steps over it and Questions shows both.
+	if next == session.AttentionAsk {
+		if i := session.AttentionKindRank(next); i+1 < len(session.AttentionKindNames) {
+			next = session.AttentionKindNames[i+1]
+		}
 	}
 	st.Filter = next
 	st.Selected, st.SelectedID = 0, ""

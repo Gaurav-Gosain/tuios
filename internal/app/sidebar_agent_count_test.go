@@ -33,7 +33,7 @@ func TestAgentsHeaderCountsBlockedAndDone(t *testing.T) {
 	if !strings.Contains(header, want) {
 		t.Fatalf("agents header = %q, want it to carry %q", header, want)
 	}
-	if strings.Index(header, "1 blocked") > strings.Index(header, "all") {
+	if strings.Index(header, "1 needs you") > strings.Index(header, "all") {
 		t.Fatalf("the count follows the filter token: %q", header)
 	}
 
@@ -42,7 +42,7 @@ func TestAgentsHeaderCountsBlockedAndDone(t *testing.T) {
 	m.SidebarAgentFilter = sidebarAgentsSession
 	lines, _ = m.sidebarPanelLinesForTree(tree)
 	header = railAgentsHeader(t, lines)
-	if strings.Contains(header, "blocked") || !strings.Contains(header, "1 done") {
+	if strings.Contains(header, "needs you") || !strings.Contains(header, "1 done") {
 		t.Fatalf("with the filter on the header = %q, want \"1 done\" alone", header)
 	}
 
@@ -56,8 +56,8 @@ func TestAgentsHeaderCountsBlockedAndDone(t *testing.T) {
 	}
 	lines, _ = m.sidebarPanelLinesForTree(tree)
 	header = railAgentsHeader(t, lines)
-	if strings.Contains(header, "done") || !strings.Contains(header, "1 blocked") {
-		t.Fatalf("with the done pane seen the header = %q, want \"1 blocked\" alone", header)
+	if strings.Contains(header, "done") || !strings.Contains(header, "1 needs you") {
+		t.Fatalf("with the done pane seen the header = %q, want \"1 needs you\" alone", header)
 	}
 
 	// A section with nothing to count says nothing.

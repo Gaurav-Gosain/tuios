@@ -47,11 +47,11 @@ func (m *OS) markAgentSeen(windowID string) {
 func agentTransitionNotice(to string) (string, string) {
 	switch to {
 	case "needs_input":
-		return "needs input", "warning"
+		return sidebarStateWords(to), "warning"
 	case "errored":
 		return "errored", "error"
 	case "done":
-		return "finished", "success"
+		return sidebarStateWords(to), "success"
 	case "working":
 		return "working", "info"
 	case "idle":

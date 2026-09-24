@@ -39,9 +39,13 @@ func TestSessionCloseDialogCountsLiveState(t *testing.T) {
 		{"idle", []string{"", "", ""}, "3 panes, no agent working"},
 		{"one working", []string{"", "working", ""}, "3 panes, 1 agent still working"},
 		{"two working", []string{"working", "working", ""}, "3 panes, 2 agents still working"},
-		{"one blocked", []string{"", "needs_input", ""}, "3 panes, 1 agent waiting on you"},
-		{"both", []string{"working", "needs_input", ""}, "3 panes, 1 agent still working, 1 waiting on you"},
-		{"idle agents are not working", []string{"idle", "done", "errored"}, "3 panes, no agent working"},
+		{"one blocked", []string{"", "needs_input", ""}, "3 panes, 1 agent needs you"},
+		{"two blocked", []string{"needs_input", "needs_input", ""}, "3 panes, 2 agents need you"},
+		{"both", []string{"working", "needs_input", ""}, "3 panes, 1 agent still working, 1 needs you"},
+		// errored wants the person as needs_input does, the rail's definition
+		// of "needs you", so the dialog counts it with them.
+		{"errored needs you", []string{"idle", "done", "errored"}, "3 panes, 1 agent needs you"},
+		{"idle agents are not working", []string{"idle", "done", ""}, "3 panes, no agent working"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := sessionCloseOS(t)

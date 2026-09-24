@@ -55,7 +55,7 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 	case "name":
 		tk.Text = sidebarAgentName(e)
 	case "state":
-		tk.Text = strings.ReplaceAll(e.State, "_", " ")
+		tk.Text = sidebarStateWords(e.State)
 	case "elapsed":
 		if variant == sidebarVariantFull {
 			tk.Text = agentElapsed(e.State, e.StateAt, now)
@@ -231,7 +231,7 @@ func sidebarAgentNeed(state string, doneSeen bool, kind, message string) (string
 			return kind, false
 		}
 		if message == "" {
-			return "needs input", false
+			return sidebarStateWords(state), false
 		}
 	case "errored":
 		if message == "" {
@@ -239,7 +239,7 @@ func sidebarAgentNeed(state string, doneSeen bool, kind, message string) (string
 		}
 	case "done":
 		if !doneSeen && message == "" {
-			return "finished", false
+			return sidebarStateWords(state), false
 		}
 	}
 	return "", false

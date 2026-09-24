@@ -162,7 +162,7 @@ func TestInboxRowsGroupAndSkipHeadings(t *testing.T) {
 	}})
 	m.OpenInbox("")
 	rows := m.inboxRows()
-	if len(rows) != 5 || rows[0].heading != "Approvals" || rows[0].count != 2 || rows[3].heading != "Finished" {
+	if len(rows) != 5 || rows[0].heading != "Approvals" || rows[0].count != 2 || rows[3].heading != "Done" {
 		t.Fatalf("rows %+v", rows)
 	}
 	if it, _ := m.inboxSelected(); it.ID != "2" {
@@ -182,7 +182,8 @@ func TestInboxRowsGroupAndSkipHeadings(t *testing.T) {
 		t.Errorf("moving to the top landed on %s", it.ID)
 	}
 
-	for _, want := range []string{session.AttentionApproval, session.AttentionAsk, session.AttentionQuestion, session.AttentionMail, session.AttentionErrored, session.AttentionResume, session.AttentionFinished, session.AttentionOutbox, ""} {
+	// Ask is stepped over: Questions shows both kinds of question.
+	for _, want := range []string{session.AttentionApproval, session.AttentionQuestion, session.AttentionMail, session.AttentionErrored, session.AttentionResume, session.AttentionFinished, session.AttentionOutbox, ""} {
 		m.InboxCycleFilter()
 		if m.Inbox.Filter != want {
 			t.Fatalf("filter %q, want %q", m.Inbox.Filter, want)
@@ -191,6 +192,43 @@ func TestInboxRowsGroupAndSkipHeadings(t *testing.T) {
 	m.Inbox.Filter = session.AttentionFinished
 	if rows := m.inboxRows(); len(rows) != 2 || rows[1].item.ID != "3" {
 		t.Errorf("the finished filter shows %+v", rows)
+	}
+}
+
+// TestInboxQuestionsAreOneGroup: a question an agent's prompt asks and one put
+// with ask-human sit under one Questions heading, oldest first across both.
+// They were two groups, "Questions" and "Asked you".
+func TestInboxQuestionsAreOneGroup(t *testing.T) {
+	m := inboxOS(t, zeroSettle())
+	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{
+		item("1", session.AttentionAsk, "a", "w1", "", 20),
+		item("2", session.AttentionQuestion, "a", "w2", "", 10),
+		item("3", session.AttentionQuestion, "a", "w3", "", 30),
+	}})
+	m.OpenInbox("")
+	rows := m.inboxRows()
+	if len(rows) != 4 || rows[0].heading != "Questions" || rows[0].count != 3 {
+		t.Fatalf("rows %+v, want one Questions heading over three items", rows)
+	}
+	var order []string
+	for _, r := range rows[1:] {
+		order = append(order, r.item.ID)
+	}
+	if strings.Join(order, ",") != "2,1,3" {
+		t.Errorf("questions in order %v, want oldest first across both kinds: 2,1,3", order)
+	}
+	plain := ansi.Strip(func() string { s, _, _ := m.renderInbox(); return s }())
+	if strings.Contains(plain, "Asked you") {
+		t.Errorf("the Inbox still draws an Asked you group:\n%s", plain)
+	}
+
+	m.Inbox.Filter = session.AttentionQuestion
+	if rows := m.inboxRows(); len(rows) != 4 {
+		t.Errorf("the Questions filter shows %d rows, want both kinds", len(rows))
+	}
+	m.Inbox.Filter = session.AttentionAsk
+	if rows := m.inboxRows(); len(rows) != 2 || rows[1].item.ID != "1" {
+		t.Errorf("a filter on ask-human questions alone shows %+v", rows)
 	}
 }
 

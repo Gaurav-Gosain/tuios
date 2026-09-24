@@ -36,6 +36,29 @@ func TestPrintAttentionListGroupsAndCleans(t *testing.T) {
 	}
 }
 
+// TestPrintAttentionListHeadingsMatchTheInbox: an ask-human question and an
+// agent's question share the Questions heading, and a finished turn is under
+// Done, as in the TUI's Inbox. They were "Asked you" and "Finished".
+func TestPrintAttentionListHeadingsMatchTheInbox(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	raw, _ := json.Marshal(map[string]any{"items": []map[string]any{
+		{"id": "1", "kind": "ask", "session": "a", "name": "script", "summary": "deploy?", "since": now.UnixNano()},
+		{"id": "2", "kind": "question", "session": "a", "name": "claude", "summary": "which branch?", "since": now.UnixNano()},
+		{"id": "3", "kind": "finished", "session": "a", "name": "codex", "summary": "", "since": now.UnixNano()},
+	}})
+	var out bytes.Buffer
+	if err := printAttentionList(&out, raw, now); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if strings.Count(got, "Questions\n") != 1 || !strings.Contains(got, "Done\n") {
+		t.Errorf("want one Questions heading and a Done heading:\n%s", got)
+	}
+	if strings.Contains(got, "Asked you") || strings.Contains(got, "Finished") {
+		t.Errorf("an old heading is back:\n%s", got)
+	}
+}
+
 // TestPrintAttentionListSaysAnApprovalIsHeld: a held approval's pane shows no
 // prompt, so the row says where to answer it, and an approval nothing holds
 // says nothing more.

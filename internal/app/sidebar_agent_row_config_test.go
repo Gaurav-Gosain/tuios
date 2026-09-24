@@ -64,13 +64,13 @@ tokens = ["name", "state", "host"]
 	lines, _ := m.sidebarPanelLinesForTree(tree)
 	row := stripANSIForTrace(railAgentRow(m, lines, "dddddddd4444"))
 	sep := sidebarAgentSep()
-	if !strings.Contains(row, "server"+sep+"needs input") {
+	if !strings.Contains(row, "server"+sep+"needs you") {
 		t.Fatalf("row = %q, want the state after the name", row)
 	}
 	if strings.Contains(row, "api/") || strings.Contains(row, "codex") || strings.Contains(row, "awaiting") {
 		t.Fatalf("row = %q still carries tokens the list left out", row)
 	}
-	if strings.Contains(row, "needs input"+sep) {
+	if strings.Contains(row, "needs you"+sep) {
 		t.Fatalf("row = %q carries a separator for the empty host token", row)
 	}
 	// With message out of the list no row is tall.

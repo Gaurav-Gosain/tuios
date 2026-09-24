@@ -182,7 +182,7 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 	if it.Stale {
 		when = inboxSeen(it.SeenAt, now)
 	}
-	right := overlay.Style(bg).Foreground(pal.FgMute).Render(inboxWhere(it)+sep) +
+	right := overlay.Style(bg).Foreground(pal.FgMute).Render(m.inboxWhere(it)+sep) +
 		overlay.Style(bg).Foreground(pal.FgDim).Render(when)
 
 	glyph := inboxKindGlyph(it.Kind) + " "
@@ -255,9 +255,9 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 	}
 	what := inboxKindWords(it)
 	if pk != nil && !pk.Blocked {
-		what = "is " + strings.ReplaceAll(pk.State, "_", " ") + " now, not waiting on a prompt"
+		what = "is " + sidebarStateWords(pk.State) + " now, not waiting on a prompt"
 	}
-	add(pal.Fg, inboxWho(it)+" in "+inboxWhere(it)+" "+what+sepWord()+"waited "+inboxWait(since, now))
+	add(pal.Fg, inboxWho(it)+" in "+m.inboxWhere(it)+" "+what+sepWord()+"waited "+inboxWait(since, now))
 	if p.Note != "" {
 		add(pal.Warning, p.Note)
 	}

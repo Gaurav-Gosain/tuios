@@ -52,6 +52,24 @@ func (m *OS) SessionLabel(name string) string {
 	return name
 }
 
+// sessionTitle is the one name a session is shown by in every view: the rail's
+// title for it (sessiontree.BuildSession), which is its display name, else the
+// directory of its focused pane when tuios made the name up, else the name.
+// The rail said "demo" while the Inbox, the peek, the dock's alerts, the
+// palette and the close dialog said "session-0" for the same session.
+//
+// It is for showing only. Never use it as a key: the daemon addresses a
+// session by its name.
+func (m *OS) sessionTitle(name string) string {
+	if display := m.SessionLabel(name); display != name && display != "" {
+		return display
+	}
+	if dir, _ := m.sessionPlace(name); dir != "" {
+		return dir
+	}
+	return name
+}
+
 // sessionPlace is where a session is, as the rail shows it: the directory label
 // for its focused pane and the git branch there, both from the daemon's listing
 // and both empty until the listing has said. The directory is offered only for

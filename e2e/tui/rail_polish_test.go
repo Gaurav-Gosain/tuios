@@ -79,7 +79,7 @@ func TestBlockedAgentAlertCarriesTheQuestion(t *testing.T) {
 	// its width, so both are matched on their opening words.
 	const question = "approval: Do you want to make this edit"
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Contains(s.Text(), "REVIEW needs input · "+question)
+		return strings.Contains(s.Text(), "REVIEW needs you · "+question)
 	}, uiTimeout); err != nil {
 		t.Fatalf("the toast never carried the question the agent asked: %v\n%s", err, term.Snapshot())
 	}
@@ -136,7 +136,7 @@ func TestFocusingAPaneScrollsTheRailToItsRow(t *testing.T) {
 }
 
 // TestAgentsHeaderShowsBlockedAndDone (issue 167): with one pane blocked and
-// one finished unread, the expanded agents header says "1 blocked · 1 done".
+// one finished unread, the expanded agents header says "1 needs you · 1 done".
 //
 // Negative control: with the count argument to sidebarAgentsControls cut to
 // an empty readout, the header carries the tokens alone and the wait fails.
@@ -165,7 +165,7 @@ func TestAgentsHeaderShowsBlockedAndDone(t *testing.T) {
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		row := screenRowOf(s, "agents")
-		return row >= 0 && strings.Contains(s.Line(row), "1 blocked · 1 done")
+		return row >= 0 && strings.Contains(s.Line(row), "1 needs you · 1 done")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the agents header never counted the blocked and done panes: %v\n%s", err, term.Snapshot())
 	}

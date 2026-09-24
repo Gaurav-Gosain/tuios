@@ -90,7 +90,11 @@ func sidebarTooltipBadgeLabel(info sidebarStripBadgeInfo) string {
 	if info.Count == 0 {
 		return ""
 	}
-	return strconv.Itoa(info.Count) + " " + plural("agent", info.Count) + " " + sidebarStateWords(info.State)
+	words := sidebarStateWords(info.State)
+	if info.State == "needs_input" {
+		words = agentNeedsYou(info.Count)
+	}
+	return strconv.Itoa(info.Count) + " " + plural("agent", info.Count) + " " + words
 }
 
 // sidebarTooltipSessionLabel is what a session cell says in words: the two
@@ -167,21 +171,36 @@ func sidebarTooltipAgentLabel(e sidebarAgentEntry) string {
 	return label
 }
 
-// sidebarStateWords is the human phrasing of an agent state, for the one place
-// the rail spells a state out instead of drawing it.
+// sidebarStateWords is the one phrase for each agent state, wherever tuios
+// spells a state out rather than drawing its mark: the rail's tooltips and
+// need token, the dock's alerts, the Inbox, the close dialog and the header
+// count. needs_input is "needs you" and done is "done"; they were "need input",
+// "needs input", "waiting on you", "blocked" and "finished" in different
+// places. unknown says so rather than passing for idle.
 func sidebarStateWords(state string) string {
 	switch state {
 	case "needs_input":
-		return "need input"
+		return "needs you"
 	case "errored":
 		return "errored"
 	case "working":
 		return "working"
 	case "done":
 		return "done"
+	case "unknown":
+		return "unknown"
 	default:
 		return "idle"
 	}
+}
+
+// agentNeedsYou is "needs you" agreeing with a count of agents: "1 agent
+// needs you", "2 agents need you". It was "1 agent need input".
+func agentNeedsYou(n int) string {
+	if n == 1 {
+		return "needs you"
+	}
+	return "need you"
 }
 
 // plural appends an s past one, so the label reads as a sentence.

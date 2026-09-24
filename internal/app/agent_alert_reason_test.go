@@ -19,7 +19,7 @@ func TestAgentAlertCarriesTheReason(t *testing.T) {
 	if len(m.Notifications) != 1 {
 		t.Fatalf("raised %d dock messages, want 1", len(m.Notifications))
 	}
-	want := "w-1 needs input · approval: Do you want to make this edit to main.go?"
+	want := "w-1 needs you · approval: Do you want to make this edit to main.go?"
 	if got := m.Notifications[0].Message; got != want {
 		t.Fatalf("dock toast = %q, want %q", got, want)
 	}
@@ -30,7 +30,7 @@ func TestAgentAlertCarriesTheReason(t *testing.T) {
 	m.Notifications = nil
 	m.Windows[1].AgentState = "working"
 	m.noteAgentState(m.Windows[1], "needs_input")
-	if got := m.Notifications[0].Message; got != "w-2 needs input" {
+	if got := m.Notifications[0].Message; got != "w-2 needs you" {
 		t.Fatalf("a pane with no message alerted with %q, want the headline alone", got)
 	}
 }

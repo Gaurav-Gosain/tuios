@@ -918,7 +918,7 @@ tuios ask-human [flags] <question> -o <answer> [-o <answer>...]
 tuios ask-human --request-id <id>
 ```
 
-The question goes in the Inbox as an Asked you row. A client that shows the
+The question goes in the Inbox as a row under Questions. A client that shows the
 asking pane opens the Inbox on it at once, unless the person is typing into
 the pane or has an overlay open, and the digits 1 to 9 pick an answer once it
 has been on screen for a moment; from any other pane it waits there with the usual alert, and with
@@ -1265,8 +1265,9 @@ tuios subscribe --hosts --types agent-state,host-changed
 List the Inbox: every approval and question an agent is blocked on, mail to
 you, errored agents, conversations a daemon restart left to resume, and
 finished turns nobody has looked at, in every session on the daemon and on
-every linked host it streams. Rows are grouped Approvals, Asked you, Questions,
-Mail, Errored, Resume, Finished, oldest first, with how long each has waited, its
+every linked host it streams. Rows are grouped Approvals, Questions (an
+agent's own and those put with `ask-human`), Mail, Errored, Resume, Done,
+oldest first, with how long each has waited, its
 id, its session and pane, and what it said. The TUI's Inbox (prefix `i`) is
 the same list. A row of another machine names it,
 `build:api/claude`, and a row of a machine whose link is down ends in

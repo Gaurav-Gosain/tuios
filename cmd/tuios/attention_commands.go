@@ -52,15 +52,15 @@ type attentionRow struct {
 // person knows the pane shows no prompt and where to answer it.
 const attentionHeldNote = "held: answer in the Inbox"
 
-// attentionGroupTitle is the heading a kind's rows sit under.
+// attentionGroupTitle is the heading a kind's rows sit under, the TUI Inbox's
+// heading for it: a question put with ask-human sits under Questions with an
+// agent's own, and a finished turn under Done.
 func attentionGroupTitle(kind string) string {
 	switch kind {
 	case session.AttentionApproval:
 		return "Approvals"
-	case session.AttentionQuestion:
+	case session.AttentionQuestion, session.AttentionAsk:
 		return "Questions"
-	case session.AttentionAsk:
-		return "Asked you"
 	case session.AttentionMail:
 		return "Mail"
 	case session.AttentionErrored:
@@ -68,7 +68,7 @@ func attentionGroupTitle(kind string) string {
 	case session.AttentionResume:
 		return "Resume"
 	case session.AttentionFinished:
-		return "Finished"
+		return "Done"
 	case session.AttentionOutbox:
 		return "Waiting to send"
 	}
@@ -137,14 +137,14 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		fmt.Fprintln(w, "Nothing is waiting for you.")
 		return nil
 	}
-	kind := ""
+	heading := ""
 	for _, it := range res.Items {
-		if it.Kind != kind {
-			if kind != "" {
+		if title := attentionGroupTitle(it.Kind); title != heading {
+			if heading != "" {
 				fmt.Fprintln(w)
 			}
-			kind = it.Kind
-			fmt.Fprintf(w, "%s\n", attentionGroupTitle(kind))
+			heading = title
+			fmt.Fprintf(w, "%s\n", heading)
 		}
 		where := plainLine(it.Session)
 		if it.Host != "" {

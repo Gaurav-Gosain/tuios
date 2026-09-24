@@ -74,7 +74,7 @@ func TestAskHumanPopsUpOnThePaneInFront(t *testing.T) {
 		"Deploy to staging?", "-o", "yes", "-o", "no")
 
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Asked you 1", "[1-2] Deploy to staging?", "2  no", "answer")
+		return screenHas(s, "Questions 1", "[1-2] Deploy to staging?", "2  no", "answer")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the question never came up on the client showing the pane: %v\n%s", err, term.Snapshot())
 	}
@@ -118,7 +118,7 @@ func TestAskHumanPopIgnoresKeysTypedForThePane(t *testing.T) {
 	asked := startAskHuman(t, base, "-s", "e2e-ctrlp", "-w", "0", "--timeout", "60000",
 		"Squash the commits?", "-o", "yes", "-o", "no")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Asked you 1", "[1-2] Squash the commits?")
+		return screenHas(s, "Questions 1", "[1-2] Squash the commits?")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the question never came up on the client showing the pane: %v\n%s", err, term.Snapshot())
 	}
@@ -174,7 +174,7 @@ func TestAskHumanAnswerReachesAKilledCaller(t *testing.T) {
 		t.Fatalf("open the Inbox: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Asked you 1", "Tag the release?")
+		return screenHas(s, "Questions 1", "Tag the release?")
 	}, uiTimeout); err != nil {
 		_ = cmd.Process.Kill()
 		t.Fatalf("the Inbox never listed the question: %v\n%s", err, term.Snapshot())
@@ -269,7 +269,7 @@ func TestAskHumanWaitsInTheInboxWhenNobodyIsThere(t *testing.T) {
 		t.Fatalf("open the Inbox: %v", err)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Asked you 1", "Merge the branch?")
+		return screenHas(s, "Questions 1", "Merge the branch?")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never listed the question from the detached session: %v\n%s", err, term.Snapshot())
 	}

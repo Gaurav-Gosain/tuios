@@ -729,12 +729,13 @@ func sidebarAgentCounts(agents []sidebarAgentEntry) sidebarAgentCountInfo {
 	return c
 }
 
-// words is the readout in full: "2 blocked · 1 done", leaving out a figure
-// that is zero and saying nothing when both are.
+// words is the readout in full: "2 need you · 1 done", leaving out a figure
+// that is zero and saying nothing when both are. It said "blocked", a word no
+// other surface used for these panes.
 func (c sidebarAgentCountInfo) words() string {
 	var parts []string
 	if c.Blocked > 0 {
-		parts = append(parts, strconv.Itoa(c.Blocked)+" blocked")
+		parts = append(parts, strconv.Itoa(c.Blocked)+" "+agentNeedsYou(c.Blocked))
 	}
 	if c.Done > 0 {
 		parts = append(parts, strconv.Itoa(c.Done)+" done")
@@ -745,7 +746,7 @@ func (c sidebarAgentCountInfo) words() string {
 // The count's three forms, longest first. A rail takes the first that fits
 // beside the controls.
 const (
-	countWords   = iota // "2 blocked · 1 done"
+	countWords   = iota // "2 need you · 1 done"
 	countGlyphs         // "2▲ 1●", the strip badge's language
 	countBlocked        // "2▲", the alarm alone, which is all the strip badge counts
 )
@@ -796,7 +797,7 @@ func (c sidebarAgentCountInfo) render(form int, hover bool, pal overlay.Palette)
 	return strings.Join(parts, " ")
 }
 
-// sidebarAttentionCounts is the one predicate behind every "N blocked" and "N
+// sidebarAttentionCounts is the one predicate behind every "N need you" and "N
 // done" the rail prints: a state wanting a human counts as blocked, and a
 // finished pane nobody has looked at counts as done.
 func sidebarAttentionCounts(state string, doneSeen bool) (blocked, done bool) {
@@ -812,7 +813,7 @@ func sidebarAttentionCounts(state string, doneSeen bool) (blocked, done bool) {
 // Returns nothing when the header has no room for both tokens: half a control
 // is half a click target.
 //
-// count is the section's "2 blocked · 1 done" readout, drawn in muted ink in
+// count is the section's "2 need you · 1 done" readout, drawn in muted ink in
 // front of the two controls when the header has room for a third element. It
 // gives way in steps: the words go first, for the strip badge's glyph form
 // with both figures; then the done figure goes, leaving the alarm alone,
