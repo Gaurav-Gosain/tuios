@@ -76,6 +76,10 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 			Bindings: generateSidebarBindings(registry, s),
 		},
 		{
+			Name:     HelpCategoryAgents,
+			Bindings: generateAgentBindings(registry, s),
+		},
+		{
 			Name:     "Copy Mode",
 			Bindings: generateCopyModeBindings(s),
 		},
@@ -110,6 +114,70 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 	}
 
 	return filteredCategories
+}
+
+// HelpCategoryAgents is the section gathering every key that deals with
+// agents: the prefix chords that reach the Inbox, the rail's agent controls,
+// the palette's state filter, and the keys inside the Inbox, its prompt and
+// the mailbox. They were spread over Prefix and Rail, where the same letter
+// means different things, and the Inbox's own keys were in no section.
+const HelpCategoryAgents = "Agents"
+
+// generateAgentBindings lists the Agents section. Every key is read from the
+// config, chord included, so a rebound key shows as it is bound.
+func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
+	const cat = HelpCategoryAgents
+	presses := config.PressesByAction(registry)
+	var bindings []HelpBinding
+	add := func(keys []string, desc string) {
+		var live []string
+		for _, k := range keys {
+			if k = strings.TrimSpace(k); k != "" {
+				live = append(live, k)
+			}
+		}
+		if len(live) > 0 {
+			bindings = append(bindings, HelpBinding{Keys: live, Description: desc, Category: cat})
+		}
+	}
+	for _, action := range []string{"prefix_inbox", "prefix_next_attention", "prefix_mail", "prefix_jump_notif"} {
+		desc := config.ActionDescriptions[action]
+		add(presses[action], desc)
+	}
+	if keys := presses["command_palette"]; len(keys) > 0 {
+		add([]string{keys[0] + ", @"}, "Palette: panes running an agent; @n needs you, @w working, @d done, @i idle, @e errored, @a needs you or errored")
+	}
+	railKey := func(action string) []string {
+		var out []string
+		for _, k := range registry.GetSidebarKeys(action) {
+			out = append(out, "rail "+k)
+		}
+		return out
+	}
+	add(railKey("agents_filter"), "Rail agents: all sessions, or this one")
+	add(railKey("agents_sort"), "Rail agents: needs you, priority, or recency")
+	add(railKey("mail"), "Rail: the mailbox of the pane under the cursor")
+
+	inbox := func(action, desc string) {
+		add(registry.GetInboxKeys(action), desc)
+	}
+	add([]string{"1-9"}, "Inbox: answer a held approval or a question by its number")
+	inbox(config.ActionInboxPeek, "Inbox: read an approval's or a question's prompt and answer it")
+	inbox(config.ActionInboxGo, "Inbox: go to the item's pane, or open its mail")
+	inbox(config.ActionInboxDismiss, "Inbox: dismiss the item")
+	inbox(config.ActionInboxReply, "Inbox: reply to mail")
+	inbox(config.ActionInboxResume, "Inbox: resume a conversation a restart left")
+	inbox(config.ActionInboxPassOn, "Inbox: pass held mail on to its agent")
+	inbox(config.ActionInboxFilter, "Inbox: show one kind, then the next")
+	inbox(config.ActionInboxSelect, "Inbox: narrow the list with a selector")
+	inbox(config.ActionInboxMailbox, "Inbox: open the whole mailbox")
+	inbox(config.ActionPeekApprove, "Prompt: approve")
+	inbox(config.ActionPeekApproveAlways, "Prompt: approve and do not ask again")
+	inbox(config.ActionPeekDeny, "Prompt: deny")
+	inbox(config.ActionPeekType, "Prompt: type an answer")
+	inbox(config.ActionMailReply, "Mailbox: reply in the open thread")
+	inbox(config.ActionMailFocusPane, "Mailbox: go to the pane that last wrote")
+	return bindings
 }
 
 // HelpCategorySidebar is the name of the section listing the rail's keys, used
@@ -531,6 +599,7 @@ var helpTabNames = map[string]string{
 	"BSP":               "BSP",
 	"Mouse":             "Mouse",
 	"Sidebar":           "Rail",
+	"Agents":            "Agents",
 	"Copy Mode":         "Copy",
 	"Modes":             "Modes",
 	"Debug":             "Debug",

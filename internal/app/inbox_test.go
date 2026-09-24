@@ -342,7 +342,7 @@ func TestInboxReplyOpensTheThreadWithItsReplyLine(t *testing.T) {
 func TestPaletteOpensTheInbox(t *testing.T) {
 	m := inboxOS(t, zeroSettle())
 	m.OpenCommandPalette()
-	m.CommandPaletteQuery = "Inbox: what is waiting"
+	m.CommandPaletteQuery = "Inbox, what is waiting"
 	m.CommandPaletteSelected = 0
 	m.ActivateCommandPalette()
 	if !m.ShowInbox {

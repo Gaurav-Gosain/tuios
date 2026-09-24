@@ -224,7 +224,7 @@ func TestARoutedKeyReplyIsAClaim(t *testing.T) {
 		keys []string
 		want string
 	}{
-		{[]string{"--raw", "open mailbox"}, "Mail: open mailbox"},
+		{[]string{"--raw", "open mailbox"}, "Agents: open mailbox"},
 		{[]string{"Enter"}, "may I delete build/?"},
 		{[]string{"Enter"}, "reply yes to approve"},
 		{[]string{"r"}, "reply:"},

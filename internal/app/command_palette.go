@@ -5,8 +5,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
+
+// paletteCategoryAgents is the palette's section for the agent entries.
+const paletteCategoryAgents = "Agents"
 
 // ConfigReloadedMsg carries a config parsed by the file watcher goroutine so it
 // can be applied on the Bubble Tea goroutine. The watcher must not touch the
@@ -714,28 +718,44 @@ func GetCommandPaletteItems(s *config.Settings) []CommandPaletteItem {
 			// for the person, and the place to answer one.
 			// It was "Mail: open inbox" on prefix+M; the Inbox is its own thing
 			// now, and prefix+M opens it on its mail.
-			Name:     "Mail: open mailbox",
-			Category: "Session",
+			//
+			// The agent rows lead with "Agents:" so typing "agent" finds them.
+			// It found "Window management mode", which fuzzy-matches the
+			// letters, and nothing to do with agents. Each keeps the word its
+			// overlay is called by (Inbox, mailbox), so those still find them.
+			Name:     "Agents: open mailbox",
+			Category: paletteCategoryAgents,
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				return m, m.OpenAgentMail()
 			},
 		},
 		{
 			// The Inbox: everything waiting for the person, in every session.
-			Name:     "Inbox: what is waiting for you",
+			Name:     "Agents: Inbox, what is waiting for you",
 			Shortcut: "prefix+i",
-			Category: "Session",
+			Category: paletteCategoryAgents,
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				m.OpenInbox("")
 				return m, nil
 			},
 		},
 		{
-			Name:     "Inbox: go to the oldest waiting",
+			Name:     "Agents: go to the oldest waiting",
 			Shortcut: "prefix+o",
-			Category: "Session",
+			Category: paletteCategoryAgents,
 			Action: func(m *OS) (*OS, tea.Cmd) {
 				return m, m.JumpToNextAttention()
+			},
+		},
+		{
+			// prefix+M had no palette row; "open mailbox" above opens a
+			// different view, every thread rather than mail for you.
+			Name:     "Agents: Inbox, mail for you",
+			Shortcut: "prefix+M",
+			Category: paletteCategoryAgents,
+			Action: func(m *OS) (*OS, tea.Cmd) {
+				m.OpenInbox(session.AttentionMail)
+				return m, nil
 			},
 		},
 		{
