@@ -621,8 +621,14 @@ func (m *OS) reviewDiffLines(width, paneH int, pal overlay.Palette) []string {
 	if focus < r.scroll {
 		r.scroll = focus
 	}
-	if focus >= r.scroll+paneH {
-		r.scroll = focus - paneH + 1
+	// The notes on the cursor's line come into view with it, so a cursor
+	// moved down onto a noted line shows the note, not only the line.
+	end := focus
+	for end+1 < len(rows) && rows[end+1].kind == reviewRowNote && end+1-focus < paneH {
+		end++
+	}
+	if end >= r.scroll+paneH {
+		r.scroll = min(end-paneH+1, focus)
 	}
 	r.scroll = max(min(r.scroll, len(rows)-paneH), 0)
 

@@ -487,6 +487,32 @@ func TestReviewCursorAndScrollStayInBounds(t *testing.T) {
 	}
 }
 
+// TestReviewCursorBringsItsNoteIntoView: moving the cursor down onto a line
+// on the bottom row scrolls far enough to show the note under it, and the
+// cursor line stays on screen.
+func TestReviewCursorBringsItsNoteIntoView(t *testing.T) {
+	m, f := reviewOS(t)
+	m.Width, m.Height = 80, 24
+	var lines []review.Line
+	for i := 1; i <= 60; i++ {
+		lines = append(lines, review.Line{Op: "add", New: i, Text: fmt.Sprintf("line %d", i)})
+	}
+	f.diff["files"] = []review.File{{Path: "big.go", Status: "A", Added: 60, Hunks: []review.Hunk{{Header: "@@ -0,0 +1,60 @@", NewStart: 1, NewLines: 60, Lines: lines}}}}
+	f.notes = []review.Note{{ID: "n1", Path: "big.go", Side: "new", Line: 30, Text: "a long note that wraps onto a second row at this width, so both rows must show", By: "human"}}
+	openReviewed(t, m)
+	var text []string
+	for m.review.cursor < 30 {
+		m.ReviewMove(1)
+		text = reviewFrameText(t, m)
+	}
+	if rowWith(text, "line 30") < 0 {
+		t.Fatalf("the cursor line is not on screen:\n%s", strings.Join(text, "\n"))
+	}
+	if rowWith(text, "must show") < 0 {
+		t.Errorf("the note under the cursor line is off screen:\n%s", strings.Join(text, "\n"))
+	}
+}
+
 // TestReviewTruncatedAndBinaryFiles: a file past a limit and a binary file
 // show a placeholder with their counts, not an empty column.
 func TestReviewTruncatedAndBinaryFiles(t *testing.T) {
