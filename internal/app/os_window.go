@@ -219,6 +219,7 @@ func (m *OS) FocusWindow(i int) *OS {
 	// Ahead of the already-focused early return: focusing IS the look, whether
 	// or not it moves focus.
 	m.markFocusedAgentSeen(i)
+	m.refoldAgentsOnPaneFocus()
 
 	// A jump from the sidebar or palette can target a window on another
 	// workspace, which is invisible until we go there. Switch first, handing the
@@ -236,6 +237,10 @@ func (m *OS) FocusWindow(i int) *OS {
 	}
 
 	oldFocused := m.FocusedWindow
+	// Leaving an agent pane is when the person looked away from it.
+	if oldFocused >= 0 && oldFocused < len(m.Windows) {
+		m.markAgentSeenAt(m.Windows[oldFocused])
+	}
 
 	// ATOMIC: Set focus and Z-index in one operation
 	m.FocusedWindow = i

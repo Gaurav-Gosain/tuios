@@ -243,9 +243,30 @@ func (m *OS) sidebarFoldAgents(agents []sidebarAgentEntry, now time.Time) []side
 }
 
 // SidebarUnfoldAgents shows the rows the fold took, until the rail lets go of
-// the keyboard.
+// the keyboard. A click can unfold them while the rail does not have the
+// keyboard, and then there is no letting go to wait for: they fold again on
+// a click outside the rail or when a pane is focused
+// (RefoldAgentsAfterClickAway, refoldAgentsOnPaneFocus).
 func (m *OS) SidebarUnfoldAgents() {
 	m.sidebarAgentsUnfolded = true
+	m.sidebarCache.invalidate()
+}
+
+// RefoldAgentsAfterClickAway folds the rows at rest again after a click
+// outside the rail, when the rail does not have the keyboard: the pointer's
+// way of letting go of it.
+func (m *OS) RefoldAgentsAfterClickAway() {
+	m.refoldAgentsOnPaneFocus()
+}
+
+// refoldAgentsOnPaneFocus folds the rows at rest again when a pane takes the
+// focus while the rail does not have the keyboard: the end of an unfold a
+// click made. With the keyboard on the rail, ExitSidebarFocus does it.
+func (m *OS) refoldAgentsOnPaneFocus() {
+	if !m.sidebarAgentsUnfolded || m.SidebarFocused {
+		return
+	}
+	m.sidebarAgentsUnfolded = false
 	m.sidebarCache.invalidate()
 }
 

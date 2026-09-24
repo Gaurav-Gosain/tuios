@@ -1,6 +1,8 @@
 package app
 
 import (
+	"time"
+
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
@@ -111,6 +113,33 @@ func (m *OS) markFocusedAgentSeen(i int) {
 		m.markAgentSeen(w.ID)
 	}
 	m.markAgentSeenSeq(w.ID, w.AgentCompletionSeq)
+	m.markAgentSeenAt(w)
+}
+
+// agentSeenAtNow is the clock markAgentSeenAt reads. A test replaces it.
+var agentSeenAtNow = func() int64 { return time.Now().UnixNano() }
+
+// markAgentSeenAt records that the user had an agent pane in front of them
+// now. Called as focus enters and as it leaves such a pane, so for a pane
+// out of view the value is when the user looked away. Only a pane an agent
+// has reported on counts: a plain shell pane writes nothing, which keeps
+// focus changes free for someone with no agents.
+func (m *OS) markAgentSeenAt(w *terminal.Window) {
+	if w == nil || w.ID == "" || (w.AgentState == "" && w.AgentCompletionSeq == 0) {
+		return
+	}
+	if m.SidebarAgentSeenAt == nil {
+		m.SidebarAgentSeenAt = make(map[string]int64, 1)
+	}
+	m.SidebarAgentSeenAt[w.ID] = agentSeenAtNow()
+	m.saveSidebarState()
+}
+
+// agentAwaySince is when this client's user last had the pane in front of
+// them, and false when they never have. The away recap starts here.
+func (m *OS) agentAwaySince(windowID string) (int64, bool) {
+	at, ok := m.SidebarAgentSeenAt[windowID]
+	return at, ok && at > 0
 }
 
 // markAgentSeenSeq records that a pane was looked at with seq turns finished.

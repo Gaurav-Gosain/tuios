@@ -314,10 +314,17 @@ type attentionStore struct {
 	// wakeAt is when it fires.
 	wakeTimer *time.Timer
 	wakeAt    int64
+	// wakeGen counts the timers set, so a timer that fires after it was
+	// replaced can tell (see armWakeLocked).
+	wakeGen uint64
 	// undo is the person's last closes, newest last, for restore.
 	undo []attentionUndo
 	// now is the clock, replaced in tests.
 	now func() time.Time
+	// beforeRestore, set only by tests, runs once as restore starts, before
+	// it takes mu for the reopen: the moment a pane's transition could slip
+	// through. Read and cleared under mu.
+	beforeRestore func()
 }
 
 func newAttentionStore(publish func(streamEvent), currentSeq func() uint64) *attentionStore {

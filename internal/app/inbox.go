@@ -124,6 +124,10 @@ type InboxState struct {
 // InboxSnapshotMsg is a fresh listing from the watcher.
 type InboxSnapshotMsg struct {
 	Items []session.AttentionItem
+	// NoMark says the daemon's list-verbs, probed as the watch started, did
+	// not list mark-attention: an older daemon. False when it did, or when
+	// the probe could not tell.
+	NoMark bool
 }
 
 // InboxEventsMsg is a batch of attention events from the watcher.
@@ -304,7 +308,13 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	}, 5*time.Second); err != nil {
 		return false, err
 	}
-	if !inboxSend(ctx, out, InboxSnapshotMsg{Items: listing.Items}) {
+	// Once per watch, which is once per attach and once per reconnect, so a
+	// daemon restarted with a newer tuios is noticed: whether the person's
+	// snooze, undo and unread can be sent to it.
+	supported, known := probeMarkAttention(func(verb string, params map[string]any) ([]byte, error) {
+		return client.CallWithTimeout(verb, params, 5*time.Second)
+	})
+	if !inboxSend(ctx, out, InboxSnapshotMsg{Items: listing.Items, NoMark: known && !supported}) {
 		return true, ctx.Err()
 	}
 
@@ -429,6 +439,7 @@ func (m *OS) applyInboxSnapshot(msg InboxSnapshotMsg) {
 	session.SortAttention(st.Items)
 	st.Live = true
 	st.Unsupported = false
+	st.life.noMark = msg.NoMark
 	m.inboxChanged()
 	m.announceResumes(st.Items)
 }

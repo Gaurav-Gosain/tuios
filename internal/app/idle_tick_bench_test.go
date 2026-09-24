@@ -74,3 +74,61 @@ func TestIdleTickSkipsScans(t *testing.T) {
 		t.Fatalf("Ticks did not advance past %d", ticks)
 	}
 }
+
+// foldConfiguredIdleOS is idleOS with the rail on and the fold of agent rows
+// at rest configured, on a clock that moves a minute every read, and no agent
+// ever seen: the setup of someone with no agents who kept the defaults.
+func foldConfiguredIdleOS(tb testing.TB) *OS {
+	tb.Helper()
+	m := idleOS(tb, 3)
+	m.Settings.SidebarEnabled = true
+	m.Settings.SidebarAgentRestFold = time.Hour
+	clock := time.Unix(1_800_000_000, 0)
+	prev := sidebarFoldClock
+	sidebarFoldClock = func() time.Time {
+		clock = clock.Add(time.Minute)
+		return clock
+	}
+	tb.Cleanup(func() { sidebarFoldClock = prev })
+	return m
+}
+
+// BenchmarkIdleTickFoldConfigured is BenchmarkIdleTick with the rail on and
+// the agent fold configured but no agent present. The fold must add nothing
+// to the idle path: no scan, no frame, whatever the clock does.
+func BenchmarkIdleTickFoldConfigured(b *testing.B) {
+	m := foldConfiguredIdleOS(b)
+	m.Update(TickerMsg(time.Now()))
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		m.Update(TickerMsg(time.Now()))
+	}
+	b.StopTimer()
+
+	_, work, render := m.TickStats()
+	b.ReportMetric(float64(work)/float64(b.N), "work/tick")
+	b.ReportMetric(float64(render)/float64(b.N), "render/tick")
+}
+
+// TestIdleTickFoldConfiguredWithoutAgents guards the zero-agent promise of
+// the fold: with it configured and minutes passing, idle ticks with no agent
+// ever seen do no scan work and draw no frame.
+func TestIdleTickFoldConfiguredWithoutAgents(t *testing.T) {
+	m := foldConfiguredIdleOS(t)
+	for range 5 {
+		m.Update(TickerMsg(time.Now()))
+	}
+	_, work0, render0 := m.TickStats()
+	for range 100 {
+		m.Update(TickerMsg(time.Now()))
+	}
+	_, work, render := m.TickStats()
+	if work != work0 || render != render0 {
+		t.Fatalf("idle ticks with the fold configured and no agent did %d work and drew %d frames", work-work0, render-render0)
+	}
+	if m.SidebarAgentsSeen {
+		t.Fatal("idle ticks marked an agent seen")
+	}
+}

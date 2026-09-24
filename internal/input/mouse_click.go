@@ -69,8 +69,12 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// A click outside the rail is intent to leave it: the pane the user clicked
 	// wins over keyboard rail focus. Rail focus is cleared here so the click below
 	// focuses the pane normally.
+	// The same click ends an unfold of the rail's rows at rest that a click
+	// made while the rail did not have the keyboard.
 	if o.SidebarFocused {
 		o.ExitSidebarFocus()
+	} else {
+		o.RefoldAgentsAfterClickAway()
 	}
 
 	// Check if click is in the dock area (always reserved).

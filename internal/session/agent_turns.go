@@ -180,3 +180,20 @@ func (s *Session) finishedUnread(w *WindowState) bool {
 	defer s.stateMu.RUnlock()
 	return w.CompletionSeq > s.completionSeen[w.ID]
 }
+
+// withWindowState runs fn with the stored state of one window, holding the
+// state lock for reading, so no change to the window lands until fn returns.
+// A session's events reach the daemon's sink under this lock, so fn may take
+// a lock the sink takes after it (the Inbox's), and must not call back into
+// the session.
+func (s *Session) withWindowState(windowID string, fn func(w WindowState, found bool)) {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	for i := range s.state.Windows {
+		if s.state.Windows[i].ID == windowID {
+			fn(s.state.Windows[i], true)
+			return
+		}
+	}
+	fn(WindowState{}, false)
+}

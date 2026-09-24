@@ -292,12 +292,29 @@ func (a *attentionStore) armWakeLocked() {
 		a.wakeTimer.Stop()
 		a.wakeTimer = nil
 	}
+	// A timer whose Stop came too late, because it fired while this caller
+	// held mu, finds a newer generation and does nothing. Without it, that
+	// late fire would drop the timer set here and arm another, and two
+	// would run.
+	a.wakeGen++
 	a.wakeAt = next
 	if next == 0 {
 		return
 	}
 	delay := time.Duration(next - a.clock().UnixNano())
-	a.wakeTimer = time.AfterFunc(max(delay, 0), a.wakeDue)
+	gen := a.wakeGen
+	a.wakeTimer = time.AfterFunc(max(delay, 0), func() { a.wakeFired(gen) })
+}
+
+// wakeFired is the wake timer of generation gen firing. A timer replaced
+// since it was set does nothing: the one that replaced it is the timer.
+func (a *attentionStore) wakeFired(gen uint64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if gen != a.wakeGen {
+		return
+	}
+	a.wakeDueLocked()
 }
 
 // wakeDue wakes every timed snooze whose time has come and sets the timer for
@@ -305,7 +322,16 @@ func (a *attentionStore) armWakeLocked() {
 func (a *attentionStore) wakeDue() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.wakeDueLocked()
+}
+
+// wakeDueLocked is wakeDue for a caller holding mu.
+func (a *attentionStore) wakeDueLocked() {
+	if a.wakeTimer != nil {
+		a.wakeTimer.Stop()
+	}
 	a.wakeTimer, a.wakeAt = nil, 0
+	a.wakeGen++
 	now := a.clock().UnixNano()
 	var due []string
 	for _, m := range []map[string]*AttentionItem{a.snoozed, a.hostSnoozed} {
@@ -372,6 +398,13 @@ func (a *attentionStore) undoEntryLocked(id string) (attentionUndo, bool) {
 // dismissed one comes back unless something newer took its place, or, for
 // another machine's item, that machine changed or closed it since.
 func (a *attentionStore) restore(id string) (AttentionItem, *verbError) {
+	a.mu.Lock()
+	hook := a.beforeRestore
+	a.beforeRestore = nil
+	a.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	u, ok := a.undoEntryLocked(id)
@@ -655,22 +688,35 @@ func (d *Daemon) markAttentionRestore(p markAttentionParams) (any, *verbError) {
 		return nil, invalidParam("id", "nothing dismissed or snoozed in the last 10 seconds has id "+echoName(p.ID))
 	}
 	var sess *Session
+	var it AttentionItem
+	var verr *verbError
 	if u.item.Host == "" && u.reason == AttentionClosedDismissed {
 		sess = d.manager.GetSession(u.item.Session)
 		if sess == nil {
 			return nil, invalidParam("id", "the session of item "+echoName(p.ID)+" ended")
 		}
 		if u.item.Window != "" && u.item.Kind != AttentionMail {
-			w, found := findWindowState(sess.GetState(), u.item.Window)
-			if !found {
-				return nil, invalidParam("id", "the pane of item "+echoName(p.ID)+" closed")
-			}
-			if want := attentionKindState(u.item.Kind); want != "" && w.AgentState.Name() != want {
-				return nil, invalidParam("id", "the pane moved on since: it is "+w.AgentState.Name()+" now")
-			}
+			// The check and the reopen happen under the session's state lock,
+			// the lock a transition holds while the Inbox hears of it. A pane
+			// that left the state between a check and a later reopen would
+			// leave the item open with nothing left to close it.
+			sess.withWindowState(u.item.Window, func(w WindowState, found bool) {
+				if !found {
+					verr = invalidParam("id", "the pane of item "+echoName(p.ID)+" closed")
+					return
+				}
+				if want := attentionKindState(u.item.Kind); want != "" && w.AgentState.Name() != want {
+					verr = invalidParam("id", "the pane moved on since: it is "+w.AgentState.Name()+" now")
+					return
+				}
+				it, verr = d.attention.restore(p.ID)
+			})
+		} else {
+			it, verr = d.attention.restore(p.ID)
 		}
+	} else {
+		it, verr = d.attention.restore(p.ID)
 	}
-	it, verr := d.attention.restore(p.ID)
 	if verr != nil {
 		return nil, verr
 	}

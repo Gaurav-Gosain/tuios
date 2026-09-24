@@ -1736,7 +1736,9 @@ Rows long at rest fold: agent rows that have been idle, unknown, or done and
 already seen for longer than `appearance.sidebar.agent_rest_fold` (an hour by
 default) become one muted line at the end of the agents section, `+3 at rest`,
 with their names under it when the section has room. `enter` on it or a
-click shows them until the rail lets go of the keyboard. A row that needs
+click shows them until the rail lets go of the keyboard, or, for a click
+while the rail did not have the keyboard, until a click outside the rail or
+a pane is focused. A row that needs
 you, a turn you have not seen, a working agent, the pane you are in and one
 with messages queued never fold, and one row alone does not.
 
@@ -1748,9 +1750,23 @@ cannot hide, reorder or bring back what you read. Snoozing another machine's
 item hides it on this one only, like a dismiss, and `u` on the rail acts on
 this machine's panes.
 
+Attached to an older daemon, one whose `list-verbs` has no `mark-attention`,
+the client finds that out once per attach and leaves these keys out: the
+Inbox footer offers no `z`; `z`, `u` and `S` do what an unbound key does, a
+dismiss does not say `u undoes`, and `u` on the rail clears only this
+client's seen marks. The keys come back once the daemon is restarted with a
+newer tuios.
+
+Away since: the client also records, per agent pane, when you last had it in
+front of you (`agent_seen_at` in `sidebar.json`, by window id, beside the
+seen turn counts). It is written as the focus enters and as it leaves a pane
+an agent has reported on, never for a plain shell, so for a pane out of view
+it is when you looked away. It is where "while you were away" starts.
+
 None of it costs anything without agents: the one timer that wakes snoozed
-items exists only while something is snoozed with a time, and the fold reads
-the state stamps the rail already has.
+items exists only while something is snoozed with a time, the fold reads
+the state stamps the rail already has, and a focus change between plain
+shells records nothing.
 
 ### Review, triage, replies and safer approvals (being built)
 

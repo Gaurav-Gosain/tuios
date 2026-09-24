@@ -3074,11 +3074,17 @@ and `until_change` (true).
   forgets the look again, like `unread`; restored `mail` comes back as a row,
   and its messages stay read. An approval, question, plan or error comes back
   only while the pane is still in the state it was about, and nothing comes
-  back over a newer item about the same thing.
+  back over a newer item about the same thing. The check and the reopen are
+  one step: a transition that arrives during a restore lands after it and
+  closes the restored item as it would any other.
 
 An item of a linked host is snoozed on this daemon only, like a dismiss:
 nothing on the host changes, and the item wakes when the host changes it or
 its time comes. `unread` does not reach another machine's panes.
+
+A client finds out whether a daemon has this verb by asking `list-verbs` for
+it once per attach; tuios's own client hides its snooze, undo and unread keys
+from a daemon that does not.
 
 Only the person can: the call is refused to a pane without `admin`
 (`forbidden`), needs `respond` over a link, and carries the nonce, checked as

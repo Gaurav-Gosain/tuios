@@ -198,7 +198,9 @@ an agent row rests (idle, unknown, or done and already seen) before the rail
 folds it into one line, as a duration such as `1h` (the default) or `off`. The
 settings page shows it on its Sidebar tab once an agent has been seen. The
 fold is one muted `+3 at rest` line at the end of the agents section; `enter`
-or a click on it shows the rows until the rail lets go of the keyboard. It
+or a click on it shows the rows until the rail lets go of the keyboard, or,
+when the rail did not have the keyboard, until a click outside the rail or a
+pane is focused. It
 takes two rows or more, and never a row that needs you, a finished turn not
 yet seen, a working agent, the pane you are in, or one with messages queued.
 

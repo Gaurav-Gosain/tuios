@@ -191,3 +191,48 @@ func TestRailMarksAFinishedTurnUnread(t *testing.T) {
 	saveFrame(t, term, "rail-marked-unread")
 	alive(t, term, "after marking a finished turn unread from the rail")
 }
+
+// TestAClickedFoldFoldsAgainOnPaneFocus: agent rows long at rest fold into
+// one "+N at rest" line. A click on it opens them while the rail does not
+// have the keyboard, so there is no letting go of the keyboard to wait for:
+// they fold again on a click outside the rail.
+//
+// Negative control: without the refold on a click away, the rows stay open
+// after the click on the pane and the last wait times out.
+func TestAClickedFoldFoldsAgainOnPaneFocus(t *testing.T) {
+	base := t.TempDir()
+	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nagent_rest_fold = \"1s\"\n")
+	killDaemon(t, base)
+	for _, name := range []string{"e2e-fold", "e2e-fa", "e2e-fb", "e2e-fc"} {
+		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
+			t.Fatalf("create %s: %v\n%s", name, err, out)
+		}
+	}
+	for _, name := range []string{"e2e-fa", "e2e-fb", "e2e-fc"} {
+		if out, err := tuiosCLI(t, base, "set-agent-state", "-s", name, "idle", "--harness", "claude-code"); err != nil {
+			t.Fatalf("set-agent-state idle in %s: %v\n%s", name, err, out)
+		}
+	}
+	// Past the one second threshold before the client draws its first rail.
+	time.Sleep(1500 * time.Millisecond)
+
+	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-fold"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	waitText(t, term, "the fold line", "+3 at rest")
+	saveFrame(t, term, "rail-fold-closed")
+
+	row, col := findText(t, term, "+3 at rest")
+	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "at rest") }, uiTimeout); err != nil {
+		t.Fatalf("a click on the fold did not open it: %v\n%s", err, term.Snapshot())
+	}
+	saveFrame(t, term, "rail-fold-open")
+
+	// A click in the pane, outside the rail, and the rows fold again.
+	cols, rows := term.Screen().Size()
+	mouseClick(t, term, cols-20, rows/2, tuitest.MouseLeft, 0)
+	waitText(t, term, "the fold after a pane was focused", "+3 at rest")
+	alive(t, term, "after opening and closing the fold with the mouse")
+}

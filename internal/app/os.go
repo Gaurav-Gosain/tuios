@@ -1073,7 +1073,9 @@ type OS struct {
 	// section resorts itself on live agent state. See sidebar_anchor.go.
 	sidebarAgentAnchor sidebarScrollAnchor
 	// sidebarAgentsUnfolded shows the agent rows at rest that the section
-	// otherwise folds into one line, until the rail loses the keyboard. See
+	// otherwise folds into one line, until the rail loses the keyboard, or,
+	// for an unfold a click made without it, until a click outside the rail
+	// or a pane is focused. See
 	// sidebarFoldAgents.
 	sidebarAgentsUnfolded bool
 	// sidebarReveal is what the last frame was drawn for, so a focus change
@@ -1198,6 +1200,12 @@ type OS struct {
 	// pane at rest whose count has moved past it finished a turn nobody here
 	// has looked at, and the rail draws it as finished and unread.
 	SidebarAgentSeenSeq map[string]uint64
+	// SidebarAgentSeenAt is, by window ID, when this client's user last had an
+	// agent pane in front of them (Unix nanoseconds). It is written when focus
+	// enters or leaves an agent pane, so for a pane not in front of the user it
+	// is the moment they looked away: where "while you were away" starts.
+	// Persisted beside SidebarAgentSeenSeq, and per client for the same reason.
+	SidebarAgentSeenAt map[string]int64
 	// sidebarStateSocket is the daemon socket the persisted window-keyed maps
 	// were written against, and the guard on pruning them: window IDs mean
 	// nothing outside the daemon that issued them.

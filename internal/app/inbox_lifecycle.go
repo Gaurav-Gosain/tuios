@@ -78,10 +78,52 @@ type inboxLifecycle struct {
 	undo []inboxUndoEntry
 	// walk is the ctrl+b O walk in progress.
 	walk inboxFinishedWalk
-	// asked are the items (by id, or by window for an unread) this client
-	// just asked the daemon to open, with when, so their open raises no
-	// alert.
+	// asked are the items (by id, or by "unread:" and the window for an
+	// unread) this client just asked the daemon to open, with when, so their
+	// open raises no alert.
 	asked map[string]time.Time
+	// noMark is set when the daemon holding the Inbox was found without
+	// mark-attention: its list-verbs, probed once per watch, did not list
+	// it, or a mark came back unknown_verb. The keys that need the verb are
+	// then not offered and do what an unbound key does, and a dismiss does
+	// not offer an undo it could not make. False means supported or not yet
+	// known, which is what a client with a newer daemon, or a test with a
+	// fake caller, should see.
+	noMark bool
+}
+
+// inboxMarkSupported reports whether the daemon holding the Inbox can take
+// mark-attention, as far as this client knows.
+func (m *OS) inboxMarkSupported() bool {
+	return !m.Inbox.life.noMark
+}
+
+// probeMarkAttention asks a daemon's list-verbs whether it has
+// mark-attention. known is false when the probe itself failed for a reason
+// that says nothing about the verb, and the caller then assumes nothing.
+func probeMarkAttention(call func(verb string, params map[string]any) ([]byte, error)) (supported, known bool) {
+	raw, err := call("list-verbs", map[string]any{"verb": "mark-attention"})
+	if err != nil {
+		var callErr *session.VerbCallError
+		if errors.As(err, &callErr) && (callErr.Code == session.ErrVerbUnknownVerb || callErr.Code == session.ErrVerbInvalidParams) {
+			return false, true
+		}
+		return false, false
+	}
+	var res struct {
+		Verbs []struct {
+			Verb string `json:"verb"`
+		} `json:"verbs"`
+	}
+	if json.Unmarshal(raw, &res) != nil {
+		return false, false
+	}
+	for _, v := range res.Verbs {
+		if v.Verb == "mark-attention" {
+			return true, true
+		}
+	}
+	return false, true
 }
 
 // inboxAskedWindow is how long an item this client asked to open is kept
@@ -104,10 +146,16 @@ func (m *OS) noteInboxAsked(key string) {
 }
 
 // inboxAskedFor reports, once, whether this client asked for an item that
-// opened: woke or restored it by id, or marked its pane unread.
+// opened: woke or restored it by id, or marked its pane unread. An unread
+// asks for the pane's finished item only, so another kind opening on the
+// same pane, an approval say, still alerts.
 func (m *OS) inboxAskedFor(it session.AttentionItem) bool {
 	life := &m.Inbox.life
-	for _, key := range []string{it.ID, "window:" + it.Window} {
+	keys := []string{it.ID}
+	if it.Kind == session.AttentionFinished && it.Window != "" {
+		keys = append(keys, inboxUnreadKey(it.Window))
+	}
+	for _, key := range keys {
 		if at, ok := life.asked[key]; ok {
 			delete(life.asked, key)
 			if time.Since(at) < inboxAskedWindow {
@@ -116,6 +164,25 @@ func (m *OS) inboxAskedFor(it session.AttentionItem) bool {
 		}
 	}
 	return false
+}
+
+// inboxUnreadKey is the asked key of an unread sent for a pane.
+func inboxUnreadKey(windowID string) string { return "unread:" + windowID }
+
+// settleInboxUnreadAsk is the answer to an unread arriving. The daemon names
+// the item it opened or marked. One already in the list was marked in place
+// and its update raised no alert, so there is nothing left to keep quiet; one
+// not yet in the list is still to open, and is kept quiet by its id. Either
+// way the pane's key goes, so it cannot silence a later item on that pane.
+func (m *OS) settleInboxUnreadAsk(windowID, id string) {
+	life := &m.Inbox.life
+	if windowID != "" {
+		delete(life.asked, inboxUnreadKey(windowID))
+	}
+	if id == "" || slices.ContainsFunc(m.Inbox.Items, func(it session.AttentionItem) bool { return it.ID == id }) {
+		return
+	}
+	m.noteInboxAsked(id)
 }
 
 // inboxUndoEntry is one close u can restore.
@@ -137,6 +204,8 @@ type InboxMarkedMsg struct {
 	Action string
 	ID     string
 	Who    string
+	// Window is the pane an unread was for.
+	Window string
 	// Words say what was done, for the dock: "for an hour".
 	Words string
 	Err   error
@@ -223,13 +292,14 @@ func (m *OS) inboxMarkCmd(params map[string]any, who, words string) tea.Cmd {
 		}
 	case "unread":
 		if w, _ := params["window"].(string); w != "" {
-			m.noteInboxAsked("window:" + w)
+			m.noteInboxAsked(inboxUnreadKey(w))
 		}
 	}
+	window, _ := params["window"].(string)
 	call := m.inboxCaller()
 	return func() tea.Msg {
 		raw, err := call("mark-attention", params, 5*time.Second)
-		msg := InboxMarkedMsg{Action: action, Who: who, Words: words, Err: err}
+		msg := InboxMarkedMsg{Action: action, Who: who, Words: words, Window: window, Err: err}
 		if err == nil {
 			msg.ID = markedID(raw)
 		}
@@ -242,10 +312,14 @@ func (m *OS) applyInboxMarked(msg InboxMarkedMsg) {
 	if msg.Err != nil {
 		var callErr *session.VerbCallError
 		if errors.As(msg.Err, &callErr) && callErr.Code == session.ErrVerbUnknownVerb {
+			m.Inbox.life.noMark = true
 			m.ShowNotification("This daemon cannot snooze or mark Inbox items. Restart it with a newer tuios: tuios kill-server", "error", m.Settings.NotificationDuration*2)
 			return
 		}
 		m.ShowNotification(inboxMarkFailWords(msg.Action)+": "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
+		if msg.Action == "unread" {
+			m.settleInboxUnreadAsk(msg.Window, "")
+		}
 		return
 	}
 	switch msg.Action {
@@ -257,6 +331,7 @@ func (m *OS) applyInboxMarked(msg InboxMarkedMsg) {
 	case "restore":
 		m.ShowNotification("Restored "+msg.Who, "success", m.Settings.NotificationDuration)
 	case "unread":
+		m.settleInboxUnreadAsk(msg.Window, msg.ID)
 		m.ShowNotification("Marked "+msg.Who+" unread", "info", m.Settings.NotificationDuration)
 	}
 }
@@ -306,7 +381,7 @@ func (m *OS) rememberInboxUndo(id, who string) {
 // machine was discarded and a question put with ask-human was answered as
 // dismissed, so neither comes back.
 func (m *OS) noteInboxDismissed(id, kind, who string) {
-	if kind == session.AttentionOutbox || kind == session.AttentionAsk {
+	if kind == session.AttentionOutbox || kind == session.AttentionAsk || !m.inboxMarkSupported() {
 		return
 	}
 	m.rememberInboxUndo(id, who)
@@ -316,6 +391,9 @@ func (m *OS) noteInboxDismissed(id, kind, who string) {
 // InboxSnooze starts a snooze of the selected item: the footer offers the
 // four lengths and the next digit picks one. On a snoozed item it wakes it.
 func (m *OS) InboxSnooze() (tea.Cmd, bool) {
+	if !m.inboxMarkSupported() {
+		return nil, false
+	}
 	it, ok := m.inboxSelected()
 	if !ok {
 		return nil, true
@@ -403,6 +481,9 @@ func inboxSnoozeHints() []overlay.Hint {
 // InboxUndo reopens the item dismissed or snoozed last, within 10 seconds.
 // Pressed again it reopens the one before.
 func (m *OS) InboxUndo() (tea.Cmd, bool) {
+	if !m.inboxMarkSupported() {
+		return nil, false
+	}
 	life := &m.Inbox.life
 	now := time.Now()
 	life.undo = slices.DeleteFunc(life.undo, func(u inboxUndoEntry) bool { return now.Sub(u.at) >= inboxUndoWindow })
@@ -420,6 +501,9 @@ func (m *OS) InboxUndo() (tea.Cmd, bool) {
 
 // InboxToggleSnoozed shows or hides the snoozed items under the list.
 func (m *OS) InboxToggleSnoozed() (tea.Cmd, bool) {
+	if !m.inboxMarkSupported() {
+		return nil, false
+	}
 	life := &m.Inbox.life
 	if !life.ShowSnoozed && len(life.Snoozed) == 0 {
 		m.ShowNotification("Nothing is snoozed", "info", m.Settings.NotificationDuration)
@@ -592,7 +676,9 @@ func (m *OS) SidebarAgentUnread(sessionID, windowID string) (tea.Cmd, bool) {
 	who := printableTitle(label)
 	// The daemon is asked whenever there is one: it holds the pane's turn
 	// count, which this client's copy of another session can trail.
-	if !m.IsDaemonSession || (m.Inbox.call == nil && (m.DaemonClient == nil || m.AttachedHost != "")) {
+	// A daemon without mark-attention has no unread to set; the marks this
+	// client cleared are the whole of it there.
+	if !m.IsDaemonSession || !m.inboxMarkSupported() || (m.Inbox.call == nil && (m.DaemonClient == nil || m.AttachedHost != "")) {
 		m.ShowNotification("Marked "+who+" unread", "info", m.Settings.NotificationDuration)
 		return nil, true
 	}
@@ -603,6 +689,9 @@ func (m *OS) SidebarAgentUnread(sessionID, windowID string) (tea.Cmd, bool) {
 // Inbox opens on the item with the four lengths in its footer, and closes
 // again once one is picked.
 func (m *OS) SidebarAgentSnooze(sessionID, windowID string) (tea.Cmd, bool) {
+	if !m.inboxMarkSupported() {
+		return nil, false
+	}
 	var found *session.AttentionItem
 	for i := range m.Inbox.Items {
 		it := &m.Inbox.Items[i]

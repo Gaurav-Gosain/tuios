@@ -220,6 +220,8 @@ func (m *OS) inboxRowHints(it session.AttentionItem, ok bool) []overlay.Hint {
 		// Snooze is offered where it works, and a snoozed item offers to
 		// wake on the same key.
 		switch {
+		case !m.inboxMarkSupported():
+			// A daemon without mark-attention cannot snooze or wake.
 		case it.SnoozedUntil != 0:
 			hints = append(hints, m.keyHints(config.ActionInboxSnooze, "wake")...)
 		case inboxSnoozeRefusal(it) == "":

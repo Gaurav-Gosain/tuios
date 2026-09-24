@@ -131,7 +131,10 @@ after `ctrl+b` in terminal mode, the key typed into the focused pane, with no
 repeat window opened. `ctrl+b O` also does that until an agent has been seen,
 so a person who runs none keeps typing `O` into the pane. The prefix menu and
 the help overlay list them only once an agent has been seen, like the rest of
-the Agents section.
+the Agents section. Attached to a daemon without `mark-attention` (an older
+one, found by asking its `list-verbs` once per attach), the Inbox's `z`, `u`
+and `S` and the rail's `z` are not offered and do what an unbound key does,
+and the rail's `u` clears only this client's seen marks.
 
 | Keys | Where | What it does |
 | --- | --- | --- |
@@ -145,7 +148,7 @@ the Agents section.
 | `J`, `K`, `ctrl+d`, `ctrl+u` | Inbox | Scroll the detail under the list, such as a long plan |
 | `u` | rail agent row | Mark the pane's finished turn unread, for every client (not the pane in front of you) |
 | `z` | rail agent row | Snooze the pane's Inbox item: the Inbox opens on it with the four lengths |
-| `enter` | rail `+N at rest` line | Show the agent rows folded as at rest, until the rail lets go of the keyboard |
+| `enter` | rail `+N at rest` line | Show the agent rows folded as at rest, until the rail lets go of the keyboard (after a click with the rail not focused, until a click outside the rail or a pane is focused) |
 | `r` | rail agent row | Reply to the agent |
 | `v` | rail agent row | Review the pane's changes |
 | `x` | rail agent row | Drop the newest queued message |
