@@ -17,8 +17,12 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same branch or pull request supersedes the run in
+# progress. The event is part of the group so that a push to main cannot cancel
+# the nightly race build, which is what happened when the group was the ref
+# alone.
 concurrency:
-  group: go-test-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -40,6 +44,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          # setup-go keys its module and build cache on this file alone, and
+          # the first job to save a key keeps it. This job owns the plain go.sum
+          # key, so its native build cache is the one the release reuses. The
+          # other workflows add their own file to the path to get a key of
+          # their own instead of racing for this one.
           cache-dependency-path: go.sum
 
       - name: Formatting

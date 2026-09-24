@@ -5,13 +5,23 @@ on:
     tags:
       - "v*.*.*"
 
+# Both jobs write to the GitHub release. Nothing in .goreleaser.yml publishes a
+# package or image (the dockers section is commented out, and the image is
+# docker-publish.yml's job), so the token no longer carries packages: write.
+# The Homebrew tap and the AUR use their own secrets.
 permissions:
   contents: write
-  packages: write
+
+# One release per tag, and never cancelled halfway: a half-published release
+# is worse than a slow one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -27,13 +37,15 @@ jobs:
           # above, which is slower and makes the pin a lie.
           go-version-file: go.mod
 
+      # setup-zig has no release on the Node 24 runtime yet, so the runner
+      # warns that it forces it onto Node 24. It works there.
       - name: Set up Zig
-        uses: mlugg/setup-zig@v2
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.16.0
 
       - name: Cache libghostty-vt
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .ghostty-vt
           key: ghostty-vt-${{ hashFiles('scripts/ghostty-lib.sh') }}-linux-windows
@@ -45,7 +57,7 @@ jobs:
           done
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v7
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
           version: "~> v2"
@@ -61,6 +73,7 @@ jobs:
   ghostty-darwin:
     runs-on: macos-14
     needs: goreleaser
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -73,12 +86,12 @@ jobs:
           go-version-file: go.mod
 
       - name: Set up Zig
-        uses: mlugg/setup-zig@v2
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.16.0
 
       - name: Cache libghostty-vt
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .ghostty-vt
           key: ghostty-vt-${{ hashFiles('scripts/ghostty-lib.sh') }}-darwin
@@ -90,11 +103,14 @@ jobs:
           set -eu
           version="${GITHUB_REF_NAME#v}"
           ldflags="-s -w -X main.version=${version} -X main.commit=${GITHUB_SHA} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ) -X main.builtBy=goreleaser"
-          for pair in "arm64 aarch64-macos" "amd64 x86_64-macos"; do
-            set -- $pair
-            arch="$1"; target="$2"
+          for pair in arm64:aarch64-macos amd64:x86_64-macos; do
+            arch="${pair%%:*}"
+            target="${pair#*:}"
             ./scripts/ghostty-lib.sh "$target"
-            CGO_ENABLED=1 GOARCH="$arch"               CC="$PWD/scripts/zigcc/$target"               PKG_CONFIG_PATH="$PWD/.ghostty-vt/$target/pkgconfig"               go build -tags ghostty -trimpath -ldflags "$ldflags" -o tuios ./cmd/tuios
+            CGO_ENABLED=1 GOARCH="$arch" \
+              CC="$PWD/scripts/zigcc/$target" \
+              PKG_CONFIG_PATH="$PWD/.ghostty-vt/$target/pkgconfig" \
+              go build -tags ghostty -trimpath -ldflags "$ldflags" -o tuios ./cmd/tuios
             tar czf "tuios-ghostty_${version}_Darwin_${arch}.tar.gz" tuios README.md LICENSE*
             rm tuios
           done

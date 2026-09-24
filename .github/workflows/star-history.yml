@@ -15,6 +15,12 @@ on:
 permissions:
   contents: write
 
+# A manual run while the weekly one is going would race it to push. The second
+# waits instead of cancelling the first halfway through a commit.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   redraw:
     runs-on: ubuntu-latest

@@ -13,6 +13,12 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same branch or pull request supersedes the run in
+# progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e-tui:
     runs-on: ubuntu-latest

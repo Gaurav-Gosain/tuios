@@ -13,13 +13,22 @@ on:
         required: true
         type: string
 
+# It pushes the updated tuios.nix straight to main and opens no pull request,
+# so it needs contents: write and nothing more.
 permissions:
   contents: write
-  pull-requests: write
+
+# A tag push and the release it publishes both start this workflow. Running
+# them one after the other, rather than side by side, keeps them from racing
+# each other to push to main; the second then finds nothing to commit.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 jobs:
   update-nix:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -27,28 +36,35 @@ jobs:
           ref: main
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
+      # The tag reaches the shell through the environment rather than being
+      # pasted into the script, so a dispatched tag cannot inject a command.
       - name: Extract version from tag
         id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           # Get the tag from push event, release event, or manual input
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.tag }}"
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            VERSION="${{ github.ref_name }}"
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            VERSION="$INPUT_TAG"
+          elif [ "$EVENT" = "push" ]; then
+            VERSION="$REF_NAME"
           else
-            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="$RELEASE_TAG"
           fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Update tuios.nix version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
           # Update version in tuios.nix
           sed -i "s/version = \"v[0-9]*\.[0-9]*\.[0-9]*\";/version = \"${VERSION}\";/" tuios.nix
 
@@ -79,12 +95,12 @@ jobs:
           fi
 
           echo "Extracted hash: $HASH"
-          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
 
       - name: Update tuios.nix hash
+        env:
+          HASH: ${{ steps.hash.outputs.hash }}
         run: |
-          HASH="${{ steps.hash.outputs.hash }}"
-
           # Update the vendor hash (use | as delimiter to avoid issues with / in hash)
           sed -i "s|vendorHash = pkgs.lib.fakeHash;|vendorHash = \"${HASH}\";|" tuios.nix
 
@@ -99,12 +115,20 @@ jobs:
       - name: Commit and push changes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
+          # The second of the two runs a release starts finds main already
+          # updated, and an empty commit would fail the job.
+          if git diff --quiet -- tuios.nix; then
+            echo "tuios.nix is already at ${VERSION}"
+            exit 0
+          fi
+
           git add tuios.nix
-          git commit -m "chore: update nix package to ${{ steps.version.outputs.version }}"
+          git commit -m "chore: update nix package to ${VERSION}"
 
           # Push using the GitHub token
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/Gaurav-Gosain/tuios.git HEAD:main
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/Gaurav-Gosain/tuios.git" HEAD:main

@@ -3,14 +3,32 @@
 # js/wasm build cannot quietly stop compiling.
 name: learn-web
 
+# cmd/tuios-wasm imports internal/app, which pulls in almost every package
+# under internal/ and pkg/ (go list -deps shows 33 of them under GOOS=js), so
+# the filter is those trees as a whole. What it leaves out is what the js build
+# never reads: cmd/tuios, cmd/tuios-web, e2e, docs and the rest of the repo.
 on:
   push:
     branches: [main]
+    paths: &learn-web-paths
+      - "go.mod"
+      - "go.sum"
+      - "internal/**"
+      - "pkg/**"
+      - "cmd/tuios-wasm/**"
+      - ".github/workflows/learn-web.yml"
   pull_request:
+    paths: *learn-web-paths
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# A newer push to the same branch or pull request supersedes the run in
+# progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -25,6 +43,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          # The workflow file is in the key so the js/wasm build cache is kept
+          # apart from the native one the unit tests save under go.sum alone.
+          cache-dependency-path: |
+            go.sum
+            .github/workflows/learn-web.yml
 
       - name: Tools for compressing the wasm and the fonts
         run: |
@@ -46,7 +69,7 @@ jobs:
           PLAYWRIGHT_CORE="$RUNNER_TEMP/pw/node_modules/playwright-core/index.mjs" \
             node cmd/tuios-wasm/smoke.mjs learn-web "$RUNNER_TEMP/smoke.png"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: learn-web
           path: learn-web/

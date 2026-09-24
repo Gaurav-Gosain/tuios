@@ -1,0 +1,15 @@
+# Keeps the actions the workflows use current. Third-party actions are pinned
+# to a commit with the release in a comment, and Dependabot updates both. All
+# updates come as one weekly pull request so a week of releases is one review.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      github-actions:
+        patterns:
+          - "*"
