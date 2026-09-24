@@ -39,6 +39,21 @@ func TestSettingsSlashSearchesAndEscBacksOut(t *testing.T) {
 	}
 }
 
+// TestSettingsBackspaceInTheSearchNeverResets: backspace edits the query, and
+// running the query out keeps the search open rather than falling through to
+// the tab view, where backspace resets a row.
+func TestSettingsBackspaceInTheSearchNeverResets(t *testing.T) {
+	o := listKeysOS(t)
+	o.OpenSettings()
+	o = typeKeys(o, "x")
+	for range 3 {
+		o, _ = handleSettingsInput(tea.KeyPressMsg{Code: tea.KeyBackspace}, o)
+	}
+	if !o.SettingsSearchOpen() || o.SettingsSearchQuery() != "" {
+		t.Errorf("after backspaces search=%v query=%q, want an open, empty search", o.SettingsSearchOpen(), o.SettingsSearchQuery())
+	}
+}
+
 // TestSettingsNumberKeysPickATab: 3 goes to the third tab, and in the search
 // a digit is text.
 func TestSettingsNumberKeysPickATab(t *testing.T) {

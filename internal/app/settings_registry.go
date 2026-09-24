@@ -289,9 +289,10 @@ func (m *OS) registryItem(path string) settingItem {
 	}
 
 	item := settingItem{
-		Path:  path,
-		Label: settingLabel(path),
-		Desc:  o.Description,
+		Path:    path,
+		Label:   settingLabel(path),
+		Desc:    o.Description,
+		derived: true,
 	}
 
 	switch {
@@ -300,6 +301,7 @@ func (m *OS) registryItem(path string) settingItem {
 		// the colour in force rather than the value stored.
 		coloured := colorSettingItem(path)
 		coloured.Path = path
+		coloured.derived = true
 		return coloured
 
 	case o.Type == config.OptionBool:

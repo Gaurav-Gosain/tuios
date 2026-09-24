@@ -32,6 +32,10 @@ func handleSettingsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SettingsPrevCategory()
 	case "/":
 		o.SettingsSearchStart("")
+	case "backspace", "delete":
+		return o, o.SettingsResetSelected()
+	case "ctrl+z":
+		return o, o.SettingsUndo()
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		// The first nine tabs by number, in the order the strip draws them.
 		o.SettingsSetCategory(int(msg.String()[0] - '1'))
@@ -85,6 +89,11 @@ func handleSettingsSearchInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 		return o, o.SettingsAdjust(1)
 	case "tab":
 		o.SettingsSearchJump()
+	case "delete":
+		// Backspace edits the query here, so resetting a result is delete.
+		return o, o.SettingsResetSelected()
+	case "ctrl+z":
+		return o, o.SettingsUndo()
 	case "backspace":
 		o.SettingsSearchBackspace()
 	case "ctrl+u":

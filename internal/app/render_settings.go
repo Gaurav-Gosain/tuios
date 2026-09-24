@@ -173,7 +173,7 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		} else {
 			desc := ""
 			if len(items) > 0 {
-				desc = items[m.SettingsSelected].Desc
+				desc = joinSentences(items[m.SettingsSelected].Desc, m.settingsDefaultNote(items[m.SettingsSelected]))
 			}
 			if len(items) > visible {
 				// Say where in the category the selection is, so a scrolled-off
@@ -312,6 +312,16 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 	// The label yields to the control: the control is the part the row is for.
 	// A search result's tab name yields to both, and goes first.
 	avail := max(width-lipgloss.Width(control)-3, 1)
+	// A row changed from its default carries a dot after its name, so a page
+	// of changes can be read at a glance and a stray one found.
+	changed := ""
+	if m.settingDiffers(item) {
+		changed = " •"
+		if overlay.UseASCII() {
+			changed = " *"
+		}
+		avail = max(avail-lipgloss.Width(changed), 1)
+	}
 	tag := ""
 	if ex.tag != "" {
 		tag = "  " + ex.tag
@@ -322,6 +332,9 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 	label := overlay.Truncate(item.Label, avail)
 	left := overlay.Style(bg).Foreground(theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)).Bold(true).Render(marker) +
 		launcherRowName(label, ex.match, bg, labelColor, selected, pal)
+	if changed != "" {
+		left += overlay.Style(bg).Foreground(theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)).Render(changed)
+	}
 	if tag != "" {
 		left += overlay.Style(bg).Foreground(pal.FgMute).Render(tag)
 	}

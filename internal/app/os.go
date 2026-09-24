@@ -983,6 +983,9 @@ type OS struct {
 	SettingsEditBuffer string // in-progress text for the setting being edited
 	// settingsSearch is the search line over every tab. See settings_search.go.
 	settingsSearch settingsSearchState
+	// settingsUndo is the changes made on the settings page, newest last, so
+	// ctrl+z can take them back one at a time. See settings_reset.go.
+	settingsUndo []settingsUndoEntry
 	// wheelMoving is set while the mouse wheel moves a list, which never wraps
 	// at the ends. See listWraps.
 	wheelMoving bool

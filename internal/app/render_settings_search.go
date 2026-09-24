@@ -87,7 +87,23 @@ func (m *OS) settingsSearchDescription(items []settingItem, hits []settingsHit, 
 	}
 	out := []string{overlay.Style(bg).Render("  ") + first}
 	if n > 1 {
-		out = append(out, settingsDescription(item.Desc, width, n-1, pal)...)
+		out = append(out, settingsDescription(joinSentences(item.Desc, m.settingsDefaultNote(item)), width, n-1, pal)...)
 	}
 	return out
+}
+
+// joinSentences puts note after text, closing text with a full stop first
+// when it has none, so a description and the line added to it read as two
+// sentences.
+func joinSentences(text, note string) string {
+	switch {
+	case note == "":
+		return text
+	case text == "":
+		return note
+	}
+	if !strings.HasSuffix(text, ".") {
+		text += "."
+	}
+	return text + " " + note
 }

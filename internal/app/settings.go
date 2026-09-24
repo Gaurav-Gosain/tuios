@@ -76,6 +76,14 @@ type settingItem struct {
 	// slider spans.
 	setNum         func(m *OS, v int)
 	numMin, numMax int
+	// derived is set on a row built from its registry entry, whose value is
+	// the config's and nothing else's. Those are the rows that can say how
+	// they differ from the default, be reset to it, and be undone, because
+	// writing the path back is the whole of the change. A hand-written row
+	// moves state of its own beside the config (the keycast overlay, the
+	// session's pane geometry), and writing its path alone would leave that
+	// state behind.
+	derived bool
 }
 
 // settingsCategory groups related settings under a tab.
@@ -978,7 +986,7 @@ func (m *OS) SettingsAdjust(dir int) tea.Cmd {
 	if item.Control == controlString || item.adjust == nil {
 		return nil
 	}
-	item.adjust(m, dir)
+	m.settingsRecord(item, func() { item.adjust(m, dir) })
 	return m.persistSettings()
 }
 
@@ -1162,17 +1170,20 @@ func (m *OS) SettingsEditCommit() tea.Cmd {
 	items := m.settingsCurrentItems()
 	if len(items) > 0 {
 		item := items[m.SettingsSelected]
-		switch {
-		case m.settingsRowTakesANumber(item):
-			// A buffer that is not a number leaves the setting alone. The
-			// alternative is writing a zero for a typo, which for a scrollback
-			// of ten thousand lines is a keystroke that throws the lot away.
-			if v, err := strconv.Atoi(value); err == nil {
-				item.setNum(m, clampInt(v, item.numMin, item.numMax))
+		m.settingsRecord(item, func() {
+			switch {
+			case m.settingsRowTakesANumber(item):
+				// A buffer that is not a number leaves the setting alone. The
+				// alternative is writing a zero for a typo, which for a
+				// scrollback of ten thousand lines is a keystroke that throws
+				// the lot away.
+				if v, err := strconv.Atoi(value); err == nil {
+					item.setNum(m, clampInt(v, item.numMin, item.numMax))
+				}
+			case item.setStr != nil:
+				item.setStr(m, value)
 			}
-		case item.setStr != nil:
-			item.setStr(m, value)
-		}
+		})
 	}
 	m.SettingsEditing = false
 	m.SettingsEditBuffer = ""
