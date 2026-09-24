@@ -181,7 +181,11 @@ func (d *Daemon) screenshotSettings(sess *Session, themeOverride string) (captur
 	}
 	glyphs := sessOption(sess, "appearance.glyphs")
 	s := capture.SettingsFrom(cfg, themeID, glyphs)
-	s.PaneBackground = sessOption(sess, "appearance.pane_background")
+	// The pane's own option wins, and unset follows the default for every
+	// surface, the same precedence the client paints by.
+	s.PaneBackground = config.ResolveBackground(
+		sessOption(sess, "appearance.pane_background"),
+		sessOption(sess, "appearance.background"))
 	return s, nil
 }
 

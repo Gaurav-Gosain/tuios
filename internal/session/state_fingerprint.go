@@ -70,6 +70,10 @@ func StateFingerprint(s *SessionState) uint64 {
 	num(s.ResurrectionVersion)
 	num(s.Version)
 	num(s.BaseVersion)
+	// The daemon acts on these rather than a peer: they are what its emulators
+	// answer OSC 11 and OSC 10 with, so a push that changes them has news.
+	str(s.PaneReportBg)
+	str(s.PaneReportFg)
 
 	// Windows are ordered, and the order is meaningful (it is the z-order the
 	// peer rebuilds its list in), so they are hashed as they stand.

@@ -458,6 +458,16 @@ type SessionState struct {
 	// the daemon records them verbatim so a later get-option can read them back
 	// and an attached TUI can apply the ones it understands.
 	Options map[string]string `json:"options,omitempty"`
+	// PaneReportBg and PaneReportFg are the ground the pushing client paints
+	// behind pane content (appearance.pane_background) and the ink it gives
+	// default-coloured text there, as #rrggbb. The daemon's emulators answer a
+	// program's OSC 11 and OSC 10 queries with them, because it is the daemon's
+	// emulator that answers and only the client knows what it draws. Empty
+	// means nothing is painted, which keeps the emulator's own answer; an older
+	// client never sends them and gets exactly that. The last client to push
+	// wins, as it does for the rest of what a client owns here.
+	PaneReportBg string `json:"pane_report_bg,omitempty"`
+	PaneReportFg string `json:"pane_report_fg,omitempty"`
 	// PaneGeometry is the session's agreed intra-box layout arithmetic: the
 	// inputs that decide how the panes' box is partitioned and how much of each
 	// rectangle a guest may draw in. See PaneGeometryState for why it is session
@@ -834,6 +844,12 @@ type Session struct {
 	// PTYs managed by this session
 	ptys   map[string]*PTY
 	ptysMu sync.RWMutex
+	// reportBg and reportFg are the colours every emulator in the session
+	// answers OSC 11 and OSC 10 with, from the last client push, and the
+	// strings they were read from. Guarded by ptysMu, so a pane created while
+	// they change cannot miss them. See applyReportColors.
+	reportBgHex, reportFgHex string
+	reportBg, reportFg       color.Color
 
 	// The last directory read out of each PTY's process, and when. See
 	// liveCwds: GetState is on the render path and reading a process
@@ -1455,6 +1471,10 @@ func (s *Session) createPTY(windowID string, width, height int, cwd string, comm
 		}
 	}
 
+	// Before the goroutines start, so the emulator needs no lock yet.
+	if s.reportBg != nil || s.reportFg != nil {
+		terminal.SetReportColors(s.reportFg, s.reportBg)
+	}
 	s.ptys[id] = pty
 
 	// Start VT writer goroutine (single, persistent)
