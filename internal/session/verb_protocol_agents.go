@@ -76,7 +76,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbReviewDiff,
 		},
 		"review-note": {
-			description: "Keep the review notes on a pane's changes: add one on a line or a hunk, edit, remove, list or clear them. Notes are held by the daemon per worktree, so every client and the CLI see the same ones, and follow their line as the diff moves. A note is the person's only with a live human_nonce.",
+			description: "Keep the review notes on a pane's changes: add one on a line or a hunk, edit, remove, list or clear them. Notes are held by the daemon per worktree, so every client and the CLI see the same ones, and follow their line as the diff moves. A note is the person's only with a live human_nonce, and a pane without admin adds or edits notes only on panes it could type into.",
 			params: []verbParam{
 				{Name: "action", Type: "string", Required: true, Description: "What to do.", Accepted: reviewNoteActions},
 				sessionParam,
@@ -96,6 +96,7 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "worktree", Type: "string", Description: "The worktree the notes are kept on."},
 				{Name: "id", Type: "string", Description: "The note added or edited."},
 				{Name: "removed", Type: "int", Description: "How many notes remove or clear dropped."},
+				{Name: "kept", Type: "int", Description: "clear only: how many of the pane's notes were left because this caller may not change them (the person's, or another pane's or machine's)."},
 				{Name: "notes", Type: "[]object", Description: "The pane's notes after the call, by path then line: id, path, side, line, quote, hunk_header, text, by, at, sent_at and outdated."},
 			},
 			examples: []string{
@@ -105,7 +106,7 @@ func agentWorkVerbs() map[string]verbEntry {
 			handler: (*Daemon).verbReviewNote,
 		},
 		"send-review": {
-			description: "Send a pane's unsent review notes to its agent as one message, through the delivery queue: typed now when the agent is at rest, else when it next comes to rest. The message says it is from the person only with a live human_nonce. It types into the pane, so a pane may send only to a pane that holds nothing it does not.",
+			description: "Send a pane's unsent review notes to its agent as one message, through the delivery queue: typed now when the agent is at rest, else when it next comes to rest. The message says it is from the person only with a live human_nonce, and labels each note written by someone other than the sender with its author. It types into the pane, so a pane may send only to a pane that holds nothing it does not, and a note whose author may not type there now is withheld.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
@@ -120,6 +121,8 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "position", Type: "int", Description: "Its place in the pane's queue, 1 for next."},
 				{Name: "queued", Type: "int", Description: "How many messages the pane's queue holds now."},
 				{Name: "delivering", Type: "bool", Description: "The message is next and the agent is at rest, so it is typed within about a second."},
+				{Name: "withheld", Type: "[]string", Description: "Notes left out, not sent and not marked: their author (a pane, or a linked machine) may not type into this pane now, or the pane that wrote them is gone. Absent when none."},
+				{Name: "withheld_reason", Type: "string", Description: "Why the first withheld note was left out. Absent when none."},
 			},
 			examples: []string{
 				`{"id":1,"verb":"send-review","params":{"session":"work","window":"build","human_nonce":"<from the attach reply>"}}`,

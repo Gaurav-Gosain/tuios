@@ -67,15 +67,31 @@ func reviewNotesPath() string {
 
 // canonRoot is a worktree root as notes are keyed by it: symbolic links
 // resolved, so a path read from a process and one recorded at creation name
-// the same key.
+// the same key. A path that no longer exists, such as a worktree whose
+// directory was deleted, resolves through its nearest ancestor that does, so
+// it still names the key its notes were stored under while it existed.
 func canonRoot(p string) string {
 	if p == "" {
 		return ""
 	}
+	p = filepath.Clean(p)
 	if real, err := filepath.EvalSymlinks(p); err == nil {
 		return real
 	}
-	return filepath.Clean(p)
+	var rest []string
+	dir := p
+	for {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return p
+		}
+		rest = append(rest, filepath.Base(dir))
+		dir = parent
+		if real, err := filepath.EvalSymlinks(dir); err == nil {
+			slices.Reverse(rest)
+			return filepath.Join(append([]string{real}, rest...)...)
+		}
+	}
 }
 
 // countLocked is how many notes a worktree holds. It holds mu.
@@ -163,14 +179,14 @@ func (s *reviewNoteStore) edit(root, window, id, text, by string, may func(revie
 
 // remove drops the notes of the pane that match: every one when id is empty,
 // else the one with that id. Notes may refuses are kept. It returns how many
-// went and whether any match was refused.
-func (s *reviewNoteStore) remove(root, window, id string, may func(review.Note) bool) (removed int, found, refused bool) {
+// went, whether any matched, and how many matches were refused and kept.
+func (s *reviewNoteStore) remove(root, window, id string, may func(review.Note) bool) (removed int, found bool, refused int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := reviewKey(root, window)
 	p := s.panes[key]
 	if p == nil {
-		return 0, false, false
+		return 0, false, 0
 	}
 	kept := p.Notes[:0]
 	for _, n := range p.Notes {
@@ -180,7 +196,7 @@ func (s *reviewNoteStore) remove(root, window, id string, may func(review.Note) 
 		}
 		found = true
 		if !may(n) {
-			refused = true
+			refused++
 			kept = append(kept, n)
 			continue
 		}

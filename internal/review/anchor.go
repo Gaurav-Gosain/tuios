@@ -15,9 +15,9 @@ func Anchor(lines []string, line int, quote string) (int, bool) {
 	if quote == "" {
 		return line, line >= 1 && line <= len(lines)
 	}
-	want := normalizeLine(quote)
+	want := quoteKey(quote)
 	match := func(n int) bool {
-		return n >= 1 && n <= len(lines) && normalizeLine(lines[n-1]) == want
+		return n >= 1 && n <= len(lines) && quoteKey(lines[n-1]) == want
 	}
 	for d := 0; d <= AnchorWindow; d++ {
 		if match(line - d) {
@@ -62,6 +62,32 @@ func AnchorHunk(hunks []Hunk, side, header string, line int) (Hunk, bool) {
 		}
 	}
 	return Hunk{}, false
+}
+
+// quoteKey is a line or a quote as Anchor compares them: cleaned the way a
+// quote is kept (CleanQuote), then normalized. A quote is stored cleaned and
+// cut to TextMax bytes, so a file line is cut the same way before it is
+// compared, and a line longer than TextMax, or one holding a control
+// character, still finds its note. CleanQuote gives its own output back
+// unchanged, so a stored quote keys the same as the line it came from.
+func quoteKey(s string) string {
+	if len(s) > TextMax || hasControl(s) {
+		s = CleanQuote(s)
+	}
+	return normalizeLine(s)
+}
+
+// hasControl reports whether s holds a byte CleanQuote would change other
+// than white space: a control character, or anything that is not ASCII, since
+// C1 controls and invalid UTF-8 are left out too.
+func hasControl(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < 0x20 && c != '\t' && c != '\n' && c != '\r') || c >= 0x7f {
+			return true
+		}
+	}
+	return false
 }
 
 // normalizeLine is a line as quotes are compared: white space at either end

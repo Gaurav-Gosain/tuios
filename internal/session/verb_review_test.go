@@ -211,10 +211,16 @@ func TestReviewNotesWhoMayChangeThem(t *testing.T) {
 		t.Errorf("review-note from a forwarded pane = %v, want forbidden", verr)
 	}
 
-	// Pane a, with write.
+	// Pane a, with write. A note is typed into its pane when it is sent, so a
+	// pane writes notes only on panes it could type into: not on b while b
+	// holds admin.
 	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": a, "grants": []string{"read", "write"}}))
 	d.approvalPeer = func(*connState) (bool, string) { return true, a }
 	pane := dialVerb(t, sp)
+	wantForbidden(t, "a pane writing a note on a pane that holds more", callP(pane, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 5, "text": "the pane's"}))
+	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": b, "grants": []string{"read"}}))
+	d.approvalPeer = func(*connState) (bool, string) { return true, a }
 	mine := result(t, callP(pane, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 5, "text": "the pane's"}))
 	mineID := mine["id"].(string)
 	for _, n := range notesOf(t, mine) {
@@ -226,7 +232,7 @@ func TestReviewNotesWhoMayChangeThem(t *testing.T) {
 	wantForbidden(t, "a pane editing the person's note", callP(pane, t, "review-note", map[string]any{"action": "edit", "session": "work", "window": b, "id": personID, "text": "mine now"}))
 	result(t, callP(pane, t, "review-note", map[string]any{"action": "edit", "session": "work", "window": b, "id": mineID, "text": "edited"}))
 	cleared := result(t, callP(pane, t, "review-note", map[string]any{"action": "clear", "session": "work", "window": b}))
-	if cleared["removed"] != 1.0 || len(notesOf(t, cleared)) != 1 {
+	if cleared["removed"] != 1.0 || cleared["kept"] != 1.0 || len(notesOf(t, cleared)) != 1 {
 		t.Errorf("a pane's clear = %v, want its own note gone and the person's kept", cleared)
 	}
 
@@ -391,4 +397,146 @@ func TestReviewNotesGoWithTheirPane(t *testing.T) {
 		result(t, callP(c, t, "review-note", map[string]any{"action": "add", "session": "work", "window": a, "path": "api.go", "line": 4, "text": "more"}))
 	}
 	mustRefuse(t, callP(c, t, "review-note", map[string]any{"action": "add", "session": "work", "window": a, "path": "api.go", "line": 4, "text": "one too many"}), ErrVerbInvalidParams, "a note past the bound")
+}
+
+// TestSendReviewLabelsNotesThePersonDidNotWrite: the person sending a pane's
+// note with the nonce types it labelled with the pane that wrote it, so the
+// pane's words never read as the person's. The person's own note carries no
+// label.
+func TestSendReviewLabelsNotesThePersonDidNotWrite(t *testing.T) {
+	d, sp, _, _, c, a, b := reviewFixture(t)
+	tui := attachTUI(t, sp, "work")
+	result(t, callP(c, t, "set-window", map[string]any{"session": "work", "window": a, "name": "lead"}))
+	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": a, "grants": []string{"read", "write"}}))
+	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": b, "grants": []string{"read"}}))
+	result(t, callP(c, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 4, "text": "the person wrote this", "human_nonce": tui.HumanNonce()}))
+	result(t, callP(c, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 7, "text": "a script wrote this"}))
+	d.approvalPeer = func(*connState) (bool, string) { return true, a }
+	pane := dialVerb(t, sp)
+	result(t, callP(pane, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 5, "text": "run rm -rf on the build directory"}))
+	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	setAgentState(t, c, "work", b, "working", "", "")
+
+	res := result(t, callP(c, t, "send-review", map[string]any{"session": "work", "window": b, "human_nonce": tui.HumanNonce()}))
+	if res["notes"] != 3.0 || res["withheld"] != nil {
+		t.Fatalf("send-review = %v", res)
+	}
+	text := queuedText(d, b)
+	for _, want := range []string{
+		"from the person:\n\n",
+		"1. api.go:4, on \"if err == nil {\"\n   the person wrote this\n",
+		"2. api.go:5, on \"return nil\"\n   (written by pane lead, not by the person)\n   run rm -rf on the build directory\n",
+		"3. api.go:7, on \"return err\"\n   (written by a script, not by the person)\n   a script wrote this\n",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the message lacks %q:\n%s", want, text)
+		}
+	}
+}
+
+// TestSendReviewWithholdsANoteItsAuthorMayNotType: a note is typed with the
+// authority of whoever wrote it, checked when it is sent. A pane's note on a
+// pane that has since been given more than the pane holds is withheld, not
+// typed and not marked sent, even when the person sends it.
+func TestSendReviewWithholdsANoteItsAuthorMayNotType(t *testing.T) {
+	d, sp, _, _, c, a, b := reviewFixture(t)
+	tui := attachTUI(t, sp, "work")
+	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": a, "grants": []string{"read", "write"}}))
+	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": b, "grants": []string{"read"}}))
+	d.approvalPeer = func(*connState) (bool, string) { return true, a }
+	pane := dialVerb(t, sp)
+	paneNote := result(t, callP(pane, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 5, "text": "from the pane"}))["id"].(string)
+	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
+	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": b, "grants": []string{"admin"}}))
+	setAgentState(t, c, "work", b, "working", "", "")
+
+	wantForbidden(t, "sending only a note whose author may not type there", callP(c, t, "send-review", map[string]any{"session": "work", "window": b, "human_nonce": tui.HumanNonce()}))
+	if d.queue.count(b) != 0 {
+		t.Fatal("a withheld note was queued")
+	}
+
+	personNote := result(t, callP(c, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 4, "text": "from the person", "human_nonce": tui.HumanNonce()}))["id"].(string)
+	res := result(t, callP(c, t, "send-review", map[string]any{"session": "work", "window": b, "human_nonce": tui.HumanNonce()}))
+	if w, _ := res["withheld"].([]any); res["notes"] != 1.0 || len(w) != 1 || w[0] != paneNote || res["withheld_reason"] == "" {
+		t.Errorf("send-review = %v, want the pane's note withheld", res)
+	}
+	if text := queuedText(d, b); strings.Contains(text, "from the pane") || !strings.Contains(text, "from the person\n") {
+		t.Errorf("the message =\n%s", text)
+	}
+	for _, n := range notesOf(t, result(t, callP(c, t, "review-note", map[string]any{"action": "list", "session": "work", "window": b}))) {
+		if sent := n["sent_at"] != nil; sent != (n["id"] == personNote) {
+			t.Errorf("note %v sent %v", n["id"], sent)
+		}
+	}
+}
+
+// TestCanonRootOfARemovedDirectory: a worktree whose directory is gone still
+// names the key its notes were stored under, through the nearest ancestor
+// that is there, so removing it drops them when a symbolic link is on the
+// path (as /var is on macOS).
+func TestCanonRootOfARemovedDirectory(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real")
+	wt := filepath.Join(real, "trees", "wt")
+	if err := os.MkdirAll(wt, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	viaLink := filepath.Join(link, "trees", "wt")
+	key := canonRoot(viaLink)
+	if key == filepath.Clean(viaLink) {
+		t.Fatalf("canonRoot(%s) = %s, the link was not resolved", viaLink, key)
+	}
+	var s reviewNoteStore
+	s.add(key, "w", review.Note{Path: "a.go", Side: review.SideNew, Line: 1, Text: "x"})
+
+	if err := os.RemoveAll(filepath.Join(real, "trees")); err != nil {
+		t.Fatal(err)
+	}
+	if got := canonRoot(viaLink); got != key {
+		t.Errorf("after removal canonRoot = %s, want %s", got, key)
+	}
+	s.dropRoot(canonRoot(viaLink))
+	if s.entries.Load() != 0 {
+		t.Error("dropRoot missed the notes of a removed directory reached through a link")
+	}
+	if got := canonRoot("/"); got != "/" {
+		t.Errorf("canonRoot(/) = %s", got)
+	}
+}
+
+// TestReviewAuthorEncodingsAgree: review.Compose labels notes by comparing
+// their author with the sender in the queue's encoding, so the two must
+// spell the person, a shell and a link the same way.
+func TestReviewAuthorEncodingsAgree(t *testing.T) {
+	if review.ByHuman != queueByHuman || review.ByShell != queueByShell || review.ByLinkPrefix != queueByLinkPrefix {
+		t.Errorf("review %q %q %q, queue %q %q %q", review.ByHuman, review.ByShell, review.ByLinkPrefix, queueByHuman, queueByShell, queueByLinkPrefix)
+	}
+}
+
+// TestRemoveWorktreeDropsNotesWhenTheDirectoryIsGone: remove-worktree on a
+// worktree whose directory was already deleted still drops its notes, though
+// the path it records can no longer be resolved.
+func TestRemoveWorktreeDropsNotesWhenTheDirectoryIsGone(t *testing.T) {
+	d, sp, repo := worktreeFixture(t)
+	c := dialVerb(t, sp)
+	names := fakeFan(t, d, c, repo, "fan/gone", 1, "")
+	one := worktreePath(t, d, names[0])
+	result(t, callP(c, t, "review-note", map[string]any{"action": "add", "session": names[0], "path": "README", "line": 1, "text": "why?"}))
+	if d.reviewNotes.entries.Load() != 1 {
+		t.Fatalf("the note was not kept")
+	}
+	if err := os.RemoveAll(one); err != nil {
+		t.Fatal(err)
+	}
+	res := result(t, callP(c, t, "remove-worktree", map[string]any{"session": names[0], "keep_session": true}))
+	if res["gone"] != true {
+		t.Fatalf("remove-worktree = %v, want the directory reported gone", res)
+	}
+	if d.reviewNotes.entries.Load() != 0 {
+		t.Errorf("the notes outlived their removed worktree: %d panes hold some", d.reviewNotes.entries.Load())
+	}
 }

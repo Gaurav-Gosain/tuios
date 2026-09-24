@@ -1173,8 +1173,24 @@ an existing caller:
   queue, so the answer can only say whether it is next and the agent at rest.
 - `review-diff`'s result gains `session`, `window`, `uncommitted`,
   `against_tree` and `notes` beyond what `list-verbs` listed before it was
-  built, and `review-note`'s gains `session`, `window`, `worktree`, `id` and
-  `removed`.
+  built, and `review-note`'s gains `session`, `window`, `worktree`, `id`,
+  `removed`, and on `clear` `kept`, the count of notes left because the
+  caller may not change them.
+- A pane without `admin` may `add` or `edit` a note only on a pane it could
+  type into itself (one that holds nothing it does not), since a note is typed
+  into its pane when it is sent. Elsewhere it is `forbidden`.
+- `send-review` labels every note written by someone other than the sender
+  with its author ("(written by pane NAME, not by the person)"), and withholds
+  a note whose author may not type into the pane now, or whose pane is gone:
+  it is not typed and not marked sent, and the result lists it in `withheld`
+  with `withheld_reason`. When every note picked is withheld it is
+  `forbidden` and nothing is queued. Before this, a pane's note sent by the
+  person was typed under the header "from the person" with nothing to tell it
+  apart.
+- A pane whose process runs on another machine is `not_repo`, and its hint
+  now points at `tuios worktree pull` instead of a `HOST:SESSION` review:
+  reviewing a session on a linked machine is not supported yet, and
+  `tuios review` refuses a `HOST:` target before it dials.
 
 ### list-verbs
 
@@ -2456,7 +2472,8 @@ Params: `action` (required: `add`, `edit`, `remove`, `list`, `clear`),
   file, new side), or `hunk`, a hunk header, for a note on the whole hunk;
   `text`.
 - `edit`: `id`, `text`. The note becomes the caller's and unsent again.
-- `remove`: `id`. `clear`: every note the caller may remove.
+- `remove`: `id`. `clear`: every note the caller may remove; `kept` in the
+  result counts the ones left because the caller may not change them.
 - `human_nonce`: with a live nonce the note is the person's (`by: human`). A
   nonce that does not verify is `not_human`.
 
@@ -2478,8 +2495,11 @@ Notes are listed by path, then line.
 Who may change a note: the person any note, a pane or a linked machine only
 the notes it wrote, a caller outside every pane every note but the person's.
 Another's note is `forbidden`. A pane needs `write` and reaches its own
-session and fan group; over a link it needs `write`. A pane on another machine
-calling through its report channel is `forbidden`.
+session and fan group; over a link it needs `write`. A note is typed into its
+pane when it is sent, so a pane without `admin` may add or edit notes only on
+itself or a pane that holds nothing it does not, the rule `send-text` follows;
+elsewhere it is `forbidden`. A pane on another machine calling through its
+report channel is `forbidden`.
 
 ### send-review
 
@@ -2507,6 +2527,17 @@ characters, or the hunk's range and header; `outdated` said when it is), the
 note's text indented under it, and "Address each note, then say which you
 changed." The sender is "the person" only with a live `human_nonce`, "pane
 NAME" from a pane, "a caller on HOST" over a link, and "a script" otherwise.
+A note written by someone other than the sender carries a line under its
+place naming its author, "(written by pane NAME)", with ", not by the
+person" when the person sends it, so no pane's note reads as the person's.
+
+Each note is typed with the authority of whoever wrote it, checked as it is
+now: a note by a pane that no longer holds `write` reach to the session, or
+may not type into the pane (it holds more than the author), or whose pane is
+gone, and a note by a linked machine whose link may no longer write, is
+withheld. It is left out, not marked sent, and listed in `withheld` with
+`withheld_reason`. When every note picked is withheld the call is `forbidden`
+and nothing is queued. Editing a note makes it the editor's.
 BASE is the base of the pane's last `review-diff`. A message over 16 KiB is
 `invalid_params`. Errors: `no_notes` when nothing is unsent, `queue_full`,
 `not_human`, `forbidden`.
@@ -3926,8 +3957,8 @@ them:
 | Verb | What it does | A pane without `admin` | Over a link | The person only |
 | --- | --- | --- | --- | --- |
 | `review-diff` | The diff of what the agent in a pane changed, against its base or a fan sibling, marked `untrusted` | `read`, own session and fan group | `write` (file contents) | no |
-| `review-note` | Add, edit, remove, list or clear review notes on a pane's changes | `write` | `write` | a note is the person's only with a live `human_nonce` |
-| `send-review` | Send the unsent notes to the agent through the delivery queue | `write`, and a typing verb: the target holds nothing the caller does not, and is not on `needs_input` unless the caller holds `respond` | `write` | "from the person" only with a live `human_nonce` |
+| `review-note` | Add, edit, remove, list or clear review notes on a pane's changes | `write`; `add` and `edit` only on a pane the caller could type into | `write` | a note is the person's only with a live `human_nonce` |
+| `send-review` | Send the unsent notes to the agent through the delivery queue | `write`, and a typing verb: the target holds nothing the caller does not, and is not on `needs_input` unless the caller holds `respond` | `write` | "from the person" only with a live `human_nonce`; a note by anyone else is labelled with its author, and withheld when its author may not type there now |
 | `compare-fan` | One row per attempt of a fan: branch, agent, state, changes, last check | `read`, own fan group | `list` | no |
 | `verify-fan` | Run one check with `sh -c` in a window named `verify` in every attempt; the window holds no grants | `fan`, own fan group | `open` and `write` | no |
 | `keep-fan` | Keep one attempt and remove the others, refusing a dirty one without `stash` or `force` | refused | `write` | admin or the person |

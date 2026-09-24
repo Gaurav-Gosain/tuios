@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -40,6 +41,16 @@ import (
 //   - Who wrote a note, and who sent a message, is the daemon's reading of the
 //     connection (reviewAuthor), never a parameter: human only with a live
 //     human_nonce (verifyAnyHumanNonce, which refuses any process in a pane).
+//   - A note is typed into its pane when it is sent, whoever sends it, so a
+//     pane without admin may add or edit a note only on a pane it could type
+//     into itself (reviewNoteTargetRefusal, the typingRefusal rule). When the
+//     notes are sent, each one's author is held to that rule again as its
+//     grants are now (reviewNoteAuthorRefusal), and a note whose author may
+//     no longer type there, or whose pane is gone, is withheld: not typed and
+//     not marked sent. The person's nonce never carries a pane's words.
+//   - The message labels every note written by someone other than its sender
+//     with its author (review.Compose), so a pane's note sent by the person
+//     never reads as the person's.
 //   - A note is changed or removed only by whoever may speak for its author:
 //     the person any note, a pane its own, a linked machine its own, and a
 //     caller outside every pane every note but the person's.
@@ -99,8 +110,8 @@ func (d *Daemon) reviewTarget(sessionName, window string) (*Session, WindowState
 	target := state.Windows[idx]
 	if target.Host != "" {
 		return nil, WindowState{}, reviewRepo{}, hintedVerbError(ErrVerbNotRepo, "window "+shortWindowID(target.ID)+" runs on "+echoName(target.Host)+", and its repository is there, not here", &VerbHint{
-			Command: "tuios review " + target.Host + ":<session>",
-			Detail:  "Nothing was read. The daemon on that machine reads its repository: name a session there with HOST:SESSION.",
+			Command: "tuios worktree pull " + target.Host + ":<session>",
+			Detail:  "Nothing was read. Reviewing a pane on another machine is not supported yet: attach to that machine and review it there, or bring its work here with tuios worktree pull and review that.",
 		})
 	}
 	cwd := target.Cwd
@@ -477,6 +488,11 @@ func (d *Daemon) verbReviewNote(cs *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
+	if p.Action == "add" || p.Action == "edit" {
+		if verr := d.reviewNoteTargetRefusal(cs, target); verr != nil {
+			return nil, verr
+		}
+	}
 	out := map[string]any{"type": "review_notes", "session": sess.Name, "window": target.ID, "worktree": repo.root}
 
 	switch p.Action {
@@ -506,16 +522,16 @@ func (d *Daemon) verbReviewNote(cs *connState, params json.RawMessage) (any, *ve
 		switch {
 		case !found:
 			return nil, reviewNoteMissingError(p.ID)
-		case refused:
+		case refused > 0:
 			return nil, reviewNoteRefusedError("remove", p.ID)
 		}
 		out["removed"] = 1
 	case "clear":
 		removed, _, refused := d.reviewNotes.remove(repo.root, target.ID, "", author.mayTouch)
 		out["removed"] = removed
-		if refused {
-			out["kept"] = "notes this caller may not speak for were kept"
-		}
+		// The notes clear matched and left alone, because this caller may
+		// not speak for their author. Always present on clear, 0 for none.
+		out["kept"] = refused
 	}
 	notes, _ := d.reviewNotes.list(repo.root, target.ID)
 	out["notes"] = notes
@@ -621,6 +637,28 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 			}
 		}
 	}
+	// A note is typed with the sender's authority, so each author is held to
+	// what it may type into this pane now. The rest are withheld.
+	var withheld []string
+	withheldWhy := ""
+	allowed := picked[:0:0]
+	for _, n := range picked {
+		if why := d.reviewNoteAuthorRefusal(n.By, sess, target); why != "" {
+			withheld = append(withheld, n.ID)
+			if withheldWhy == "" {
+				withheldWhy = why
+			}
+			continue
+		}
+		allowed = append(allowed, n)
+	}
+	picked = allowed
+	if len(picked) == 0 && len(withheld) > 0 {
+		return nil, hintedVerbError(ErrVerbForbidden, "every note picked was withheld: "+withheldWhy, &VerbHint{
+			Verb:   "review-note",
+			Detail: "Nothing was sent. A note is typed into the pane with the authority of whoever wrote it, and its author may not type into window " + shortWindowID(target.ID) + " now. Edit the note to make it yours, or remove it.",
+		})
+	}
 	if len(picked) == 0 {
 		return nil, hintedVerbError(ErrVerbNoNotes, "window "+shortWindowID(target.ID)+" has no unsent review notes", &VerbHint{
 			Verb:    "review-note",
@@ -640,6 +678,8 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 		Base:       base,
 		Notes:      picked,
 		CleanQuote: func(s string) string { return attentionText(s, 4*review.QuoteMax) },
+		SenderBy:   e.by,
+		Author:     d.reviewAuthorName,
 	})
 	if len(e.text) > queueMaxText {
 		return nil, invalidParam("ids", "the "+strconv.Itoa(len(picked))+" notes make a message longer than "+strconv.Itoa(queueMaxText)+" bytes; send fewer at a time with ids")
@@ -664,7 +704,7 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 		ids[i] = n.ID
 	}
 	d.reviewNotes.markSent(repo.root, target.ID, ids, time.Now().UnixNano())
-	return map[string]any{
+	out := map[string]any{
 		"type":       "review_sent",
 		"session":    sess.Name,
 		"window":     target.ID,
@@ -674,7 +714,98 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 		"position":   res.Position,
 		"queued":     res.Queued,
 		"delivering": res.Delivering,
-	}, nil
+	}
+	if len(withheld) > 0 {
+		out["withheld"] = withheld
+		out["withheld_reason"] = withheldWhy
+	}
+	return out, nil
+}
+
+// reviewNoteTargetRefusal holds a pane without admin that adds or edits a note
+// to the panes it could type into itself. A note is typed into its pane when
+// it is sent, possibly by the person, so without this a pane with write could
+// have its words typed into a pane holding more than it does. The pane is not
+// held to the needs_input rule here: nothing is typed now, and the queue never
+// types over a prompt.
+func (d *Daemon) reviewNoteTargetRefusal(cs *connState, target WindowState) *verbError {
+	pa := d.paneAuthority(cs)
+	if pa == nil || pa.hosted || pa.grants.Has(GrantAdmin) {
+		return nil
+	}
+	if why := d.typingRefusal(pa, target, true); why != "" {
+		return grantForbidden("review-note", pa, why+". A note is typed into its pane when it is sent")
+	}
+	return nil
+}
+
+// reviewNoteAuthorRefusal says why a note written by by may not be typed into
+// target now, or "" when it may. The person and a caller outside every pane
+// are held to nothing. A linked machine is held to its link policy as it is
+// now. A pane is held to its grants as they are now, the way the delivery
+// queue holds the pane that queued an entry: its write reach and the
+// typingRefusal rule. A pane that is gone can no longer be held to anything,
+// so its notes are refused.
+func (d *Daemon) reviewNoteAuthorRefusal(by string, sess *Session, target WindowState) string {
+	switch {
+	case by == queueByHuman || by == queueByShell:
+		return ""
+	case strings.HasPrefix(by, queueByLinkPrefix):
+		peer := strings.TrimPrefix(by, queueByLinkPrefix)
+		if peer == "*" {
+			peer = ""
+		}
+		var hosts linkPolicyTable
+		if t := d.linkPolicies.Load(); t != nil {
+			hosts = *t
+		}
+		if !config.LinkPolicyFor(hosts, peer).Allows(config.LinkAllowWrite) {
+			return "the link from " + firstNonEmpty(printableClaim(peer, 40), "a machine that gave no name") + " that wrote a note may no longer write here"
+		}
+		return ""
+	case strings.HasPrefix(by, "hosted:"):
+		if !d.manager.grants.defaults().Has(GrantAdmin) {
+			return "a note was written by a pane that runs here for another machine, and the default grants no longer reach any session"
+		}
+		return ""
+	}
+	session := d.sessionOfWindow(by)
+	if session == "" {
+		return "window " + shortWindowID(by) + " that wrote a note is gone, so what it may type cannot be checked"
+	}
+	g, explicit := d.manager.grants.effective(by)
+	if g.Has(GrantAdmin) {
+		return ""
+	}
+	pa := &paneAuth{window: by, session: session, grants: g, explicit: explicit}
+	if why := d.paneWriteReach(pa, sess.Name); why != "" {
+		return "window " + shortWindowID(by) + " that wrote a note holds " + g.String() + " now: " + why
+	}
+	if why := d.typingRefusal(pa, target, true); why != "" {
+		return "window " + shortWindowID(by) + " that wrote a note holds " + g.String() + " now: " + why
+	}
+	return ""
+}
+
+// reviewAuthorName names the author of a note in a message: a pane by its
+// window's label, else review.AuthorName.
+func (d *Daemon) reviewAuthorName(by string) string {
+	switch {
+	case by == queueByHuman || by == queueByShell || strings.HasPrefix(by, queueByLinkPrefix):
+		return review.AuthorName(by)
+	case strings.HasPrefix(by, "hosted:"):
+		return "a pane on another machine"
+	}
+	if sn := d.sessionOfWindow(by); sn != "" {
+		if s := d.manager.GetSession(sn); s != nil {
+			if w, ok := findWindowState(s.GetState(), by); ok {
+				if name := printableClaim(windowLabelOf(w), 40); name != "" {
+					return "pane " + name
+				}
+			}
+		}
+	}
+	return "pane " + shortWindowID(by)
 }
 
 // reviewSender names who a message of notes is from, as its header says it.

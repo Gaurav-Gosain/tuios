@@ -84,6 +84,45 @@ past that are listed with their counts only.`,
 	return cmd
 }
 
+// dialReviewTarget is dialTarget for the review commands, which work on this
+// machine's sessions only. Reviewing a session on a linked machine is left out
+// for now, as worktree diff leaves it out: the diff is of files there, so the
+// person attaches there or brings the work here with worktree pull. The
+// refusal comes before anything is dialled.
+func dialReviewTarget(sessionName, window string) (*verbTarget, error) {
+	if err := reviewTargetRefusal(sessionName, window); err != nil {
+		return nil, err
+	}
+	return dialTarget(sessionName, window)
+}
+
+// reviewTargetRefusal is why the review commands refuse the target, nil when
+// it is on this machine. It dials nothing.
+func reviewTargetRefusal(sessionName, window string) error {
+	host, sess, _, err := resolveTarget(sessionName, window)
+	if err != nil {
+		return err
+	}
+	if host != "" {
+		return reviewHostError(host, sess)
+	}
+	return nil
+}
+
+// reviewHostError is the refusal of a review command naming a session on
+// another machine.
+func reviewHostError(host, sess string) error {
+	name := host + ":" + sess
+	if sess == "" {
+		name = host + ":<session>"
+	}
+	return &diagnosticError{
+		What:  fmt.Sprintf("review works on this machine's sessions, and %s is on %s.", name, host),
+		Cause: "reviewing a session on a linked machine is not supported yet.",
+		Fix:   fmt.Sprintf("attach to %s and run 'tuios review' there, or run 'tuios worktree pull %s' to bring its work here and review it.", host, name),
+	}
+}
+
 // reviewOptions are the diff flags of tuios review.
 type reviewOptions struct {
 	base, against string
@@ -109,7 +148,7 @@ type reviewDiffResult struct {
 }
 
 func runReview(w io.Writer, sessionName, window string, o reviewOptions, jsonOutput bool) error {
-	t, err := dialTarget(sessionName, window)
+	t, err := dialReviewTarget(sessionName, window)
 	if err != nil {
 		return err
 	}
@@ -395,7 +434,7 @@ remove.`,
 }
 
 func runReviewNote(w io.Writer, sessionName, window string, params map[string]any, jsonOutput bool) error {
-	t, err := dialTarget(sessionName, window)
+	t, err := dialReviewTarget(sessionName, window)
 	if err != nil {
 		return err
 	}
@@ -501,7 +540,7 @@ one. It says "from the person" only when sent from the attached client.`,
 }
 
 func runReviewSend(w io.Writer, sessionName, window string, ids []string, now, jsonOutput bool) error {
-	t, err := dialTarget(sessionName, window)
+	t, err := dialReviewTarget(sessionName, window)
 	if err != nil {
 		return err
 	}
@@ -524,15 +563,25 @@ func runReviewSend(w io.Writer, sessionName, window string, ids []string, now, j
 		return printVerbResultOn(t, raw, true)
 	}
 	var res struct {
-		Notes      int    `json:"notes"`
-		QueuedID   string `json:"queued_id"`
-		Position   int    `json:"position"`
-		Delivering bool   `json:"delivering"`
+		Notes      int      `json:"notes"`
+		QueuedID   string   `json:"queued_id"`
+		Position   int      `json:"position"`
+		Delivering bool     `json:"delivering"`
+		Withheld   []string `json:"withheld"`
+		Reason     string   `json:"withheld_reason"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Fprintf(w, "%d review %s in one message. %s\n", res.Notes, pluralWord(res.Notes, "note", "notes"),
 		describeQueued(res.QueuedID, window, res.Position, res.Delivering)+t.on())
+	if len(res.Withheld) > 0 {
+		ids := make([]string, len(res.Withheld))
+		for i, id := range res.Withheld {
+			ids[i] = plainLine(id)
+		}
+		fmt.Fprintf(w, "Withheld %s %s: %s. Edit a note to make it yours, or remove it.\n",
+			pluralWord(len(ids), "note", "notes"), strings.Join(ids, ", "), plainLine(res.Reason))
+	}
 	return nil
 }

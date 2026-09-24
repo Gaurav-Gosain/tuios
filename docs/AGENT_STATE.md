@@ -2651,9 +2651,11 @@ needs are loose objects that `git gc` collects. A diff stops at 400 files,
 listed with their counts only (`truncated`). Binary files have counts only.
 All the git calls of one diff are bounded at 10 seconds together, and nothing
 runs until a diff is asked for. The repository is read on the machine the
-daemon runs on: `tuios review HOST:SESSION` asks the daemon on that machine,
-and a pane of a session here whose process runs on another machine is refused
-with `not_repo`.
+daemon runs on. Reviewing a session on a linked machine is not supported yet:
+`tuios review HOST:SESSION` is refused before anything is dialled, and a pane
+of a session here whose process runs on another machine is refused with
+`not_repo`. Attach to that machine and review there, or bring the work here
+with `tuios worktree pull HOST:SESSION` and review that.
 
 **Notes.** A note sits on a line (`FILE:LINE`, on the new side, or with
 `side: old` on a removed line numbered as in the base) or on a whole hunk (by
@@ -2705,15 +2707,24 @@ reading of the connection, never a parameter, as for the queue:
   the message says "from the person" only when you sent it. From a pane it
   says "from pane NAME", from a linked machine "from a caller on HOST", and
   from a shell "from a script".
+- A note written by someone other than the sender carries its author under
+  its place in the message: "(written by pane NAME, not by the person)" when
+  you send a pane's note. Each note is also typed with its author's authority
+  as it is now: a note by a pane that may not type into the agent's pane now
+  (it holds more than the pane), or whose pane is gone, and one by a linked
+  machine that may no longer write, is withheld, not sent and not marked
+  sent. Edit such a note to make it yours, or remove it.
 - A pane without `admin` reads a diff only in its own session and fan group
   (`read`), and `against` names a session it must reach too. It writes notes
-  with `write`, in the same reach. It sends notes only into a pane that holds
-  nothing it does not and is not on `needs_input` unless it holds `respond`,
-  and the queue checks its grants again when the message is typed.
+  with `write`, in the same reach, and adds or edits them only on a pane it
+  could type into (one that holds nothing it does not), since a note is typed
+  there when it is sent. It sends notes only into a pane that holds nothing it
+  does not and is not on `needs_input` unless it holds `respond`, and the
+  queue checks its grants again when the message is typed.
 - A note is changed or removed only by whoever may speak for its author: you
   any note, a pane or a linked machine only the notes it wrote, and a shell
   every note but yours. `clear` removes what the caller may remove and keeps
-  the rest.
+  the rest, and says how many it kept.
 - Over a link, all three need `write`, because a diff carries file contents
   and the other two write. A pane on another machine, whose calls arrive
   through its report channel, may neither write notes nor send them.

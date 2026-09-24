@@ -1623,7 +1623,7 @@ tuios review send [-w <window>] [--id ID]... [--now] [--json]
 
 **Flags:**
 - `-s, --session <name>`: Target session, also accepted as the argument (default: this pane's, else the most recently active)
-- `-w, --window <target>`: The pane, by name or ID, or `HOST:SESSION:WINDOW` (default: the focused pane)
+- `-w, --window <target>`: The pane, by name or ID (default: the focused pane)
 - `--base <ref>`: Diff against this branch, tag or commit, through its merge base with `HEAD`
 - `--against <session>`: Diff against another attempt of the same fan
 - `--uncommitted`: Only what is not committed yet
@@ -1653,7 +1653,16 @@ any but the ones left from the attached client.
 `review send` sends the unsent notes as one message through the delivery
 queue ([`tuios queue`](#tuios-queue)): typed when the agent is at rest, never
 over a prompt. The message says who sent it: "a script" from a shell, the pane
-from inside one, and "the person" only from the attached client.
+from inside one, and "the person" only from the attached client. A note
+written by someone else says who wrote it. A note whose author may not type
+into the pane now, or whose pane is gone, is withheld and listed after the
+summary. From inside a pane, notes can be added only on a pane you could type
+into.
+
+The review commands work on this machine's sessions. A `HOST:SESSION` or
+`HOST:SESSION:WINDOW` target is refused: attach to that machine and review
+there, or bring the work here with
+[`tuios worktree pull`](#tuios-worktree) and review that.
 
 **Examples:**
 ```bash

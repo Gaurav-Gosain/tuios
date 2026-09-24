@@ -27,6 +27,42 @@ type Message struct {
 	// QuoteMax characters. The daemon passes the cleaning it gives every
 	// agent-authored text, which masks what looks like a secret.
 	CleanQuote func(string) string
+	// SenderBy is the sender in a note's By encoding: ByHuman, ByShell, a
+	// pane's window id, or ByLinkPrefix and a host. A note whose By is set
+	// and differs from it is labelled with its author, so a note one caller
+	// wrote never reads as the sender's words.
+	SenderBy string
+	// Author names a note's author for that label, from its By. When nil,
+	// or when it returns "", AuthorName is used.
+	Author func(by string) string
+}
+
+// Who wrote a note, in Note.By.
+const (
+	// ByHuman is the person, proved by the attached client's nonce.
+	ByHuman = "human"
+	// ByShell is a caller outside every pane.
+	ByShell = "shell"
+	// ByLinkPrefix, then the host, is a caller on a linked machine.
+	ByLinkPrefix = "link:"
+)
+
+// AuthorName is how a message names the author by: "the person", "a
+// script", "a caller on HOST", or "pane ID" for a pane's window id.
+func AuthorName(by string) string {
+	switch {
+	case by == ByHuman:
+		return "the person"
+	case by == ByShell:
+		return "a script"
+	case strings.HasPrefix(by, ByLinkPrefix):
+		host := oneLine(strings.TrimPrefix(by, ByLinkPrefix), 40)
+		if host == "" || host == "*" {
+			return "a caller on a linked machine"
+		}
+		return "a caller on " + host
+	}
+	return "pane " + oneLine(by, 40)
 }
 
 // SortNotes orders notes the way they are listed and sent: by path, then
@@ -48,8 +84,9 @@ func SortNotes(notes []Note) {
 
 // Compose writes notes as the one message the agent receives: a header
 // naming who sent them, one numbered entry per note with where it is and the
-// line it quotes, and a closing request. The same notes always give the same
-// text.
+// line it quotes, and a closing request. A note written by someone other than
+// the sender says who wrote it, under its place. The same notes always give
+// the same text.
 func Compose(m Message) string {
 	notes := slices.Clone(m.Notes)
 	SortNotes(notes)
@@ -65,6 +102,13 @@ func Compose(m Message) string {
 	fmt.Fprintf(&b, ", from %s:\n\n", from)
 	for i, n := range notes {
 		fmt.Fprintf(&b, "%d. %s\n", i+1, location(n, m.CleanQuote))
+		if n.By != "" && n.By != m.SenderBy {
+			fmt.Fprintf(&b, "   (written by %s", m.authorName(n.By))
+			if m.SenderBy == ByHuman {
+				b.WriteString(", not by the person")
+			}
+			b.WriteString(")\n")
+		}
 		for _, line := range strings.Split(CleanText(n.Text), "\n") {
 			b.WriteString("   ")
 			b.WriteString(line)
@@ -73,6 +117,16 @@ func Compose(m Message) string {
 	}
 	b.WriteString("\nAddress each note, then say which you changed.")
 	return b.String()
+}
+
+// authorName is how the message names the author by.
+func (m Message) authorName(by string) string {
+	if m.Author != nil {
+		if name := oneLine(m.Author(by), 80); name != "" {
+			return name
+		}
+	}
+	return AuthorName(by)
 }
 
 // location is where a note is, as its entry's first line says it.

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -157,5 +158,31 @@ func TestPrintReviewCleansWhatItPrints(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "against main (0123456)") || !strings.Contains(out.String(), "> note n1 (human): see[31m this") {
 		t.Errorf("output =\n%s", out.String())
+	}
+}
+
+// TestReviewRefusesASessionOnAnotherMachine: reviewing a session on a linked
+// machine is out of scope, so the review commands refuse a HOST: target
+// before they dial anything (dialReviewTarget checks reviewTargetRefusal
+// first), and point at attaching there or worktree pull. The test calls the
+// check only, so a regression cannot make it dial a daemon.
+func TestReviewRefusesASessionOnAnotherMachine(t *testing.T) {
+	for _, c := range []struct{ session, window string }{
+		{"build:api", ""},
+		{"", "build:api:0"},
+	} {
+		err := reviewTargetRefusal(c.session, c.window)
+		var de *diagnosticError
+		if !errors.As(err, &de) {
+			t.Fatalf("reviewTargetRefusal(%q, %q) = %v, want a diagnostic", c.session, c.window, err)
+		}
+		if !strings.Contains(de.Fix, "tuios worktree pull build:api") || !strings.Contains(de.What, "build") {
+			t.Errorf("refusal = %+v", de)
+		}
+	}
+	for _, local := range []struct{ session, window string }{{"api", ""}, {"", "build"}, {"local:api", ""}} {
+		if err := reviewTargetRefusal(local.session, local.window); err != nil {
+			t.Errorf("reviewTargetRefusal(%q, %q) = %v, want nil for this machine", local.session, local.window, err)
+		}
 	}
 }

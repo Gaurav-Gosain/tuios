@@ -150,8 +150,11 @@ outdated when the line is gone. `review send` (`send-review`) sends the unsent
 notes to the agent as one message through the delivery queue, typed when it
 comes to rest. From a pane, `review-diff` needs `read` in your own session and
 fan group, `review-note` and `send-review` need `write`, and you may change or
-remove only the notes you wrote. The message says it is from your pane, never
-from the person.
+remove only the notes you wrote. You may add notes only on a pane you could
+type into (one that holds nothing you do not). The message says it is from
+your pane, never from the person, and when the person sends your note it is
+labelled as written by your pane. Review works on this machine's sessions
+only: for a session on another machine, use `tuios worktree pull HOST:SESSION`.
 
 ## One agent beside you: start-agent
 

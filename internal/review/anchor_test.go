@@ -112,3 +112,68 @@ func TestCleanText(t *testing.T) {
 		t.Errorf("CleanText = %q", got)
 	}
 }
+
+// TestAnchorFindsALongLineAgain: a quote is kept cut to TextMax bytes, so a
+// line longer than that, or one holding a control character, must still
+// match the quote kept from it, in place and after it moved.
+func TestAnchorFindsALongLineAgain(t *testing.T) {
+	for name, line := range map[string]string{
+		"ascii":   "\t" + strings.Repeat("x := call(a, b) ", 100),
+		"unicode": strings.Repeat("é", 800),
+		"control": "fmt.Println(\"\x1b[31mred\")",
+	} {
+		t.Run(name, func(t *testing.T) {
+			quote := CleanQuote(line)
+			if CleanQuote(quote) != quote {
+				t.Fatalf("CleanQuote is not stable on its own output")
+			}
+			lines := numbered(20, map[int]string{5: line})
+			if got, ok := Anchor(lines, 5, quote); !ok || got != 5 {
+				t.Errorf("in place: Anchor = %d, %v", got, ok)
+			}
+			lines = numbered(20, map[int]string{9: line})
+			if got, ok := Anchor(lines, 5, quote); !ok || got != 9 {
+				t.Errorf("moved: Anchor = %d, %v", got, ok)
+			}
+		})
+	}
+}
+
+// TestComposeLabelsNotesTheSenderDidNotWrite: a note whose author is not the
+// sender says who wrote it, so a pane's note sent by the person does not read
+// as the person's.
+func TestComposeLabelsNotesTheSenderDidNotWrite(t *testing.T) {
+	notes := []Note{
+		{ID: "n1", Path: "a.go", Side: SideNew, Line: 1, Text: "mine", By: ByHuman},
+		{ID: "n2", Path: "a.go", Side: SideNew, Line: 2, Text: "the pane's", By: "w-1234"},
+		{ID: "n3", Path: "a.go", Side: SideNew, Line: 3, Text: "a link's", By: ByLinkPrefix + "build"},
+		{ID: "n4", Path: "a.go", Side: SideNew, Line: 4, Text: "a script's", By: ByShell},
+	}
+	got := Compose(Message{From: "the person", SenderBy: ByHuman, Notes: notes,
+		Author: func(by string) string {
+			if by == "w-1234" {
+				return "pane lead"
+			}
+			return ""
+		}})
+	for _, want := range []string{
+		"1. a.go:1\n   mine\n",
+		"2. a.go:2\n   (written by pane lead, not by the person)\n   the pane's\n",
+		"3. a.go:3\n   (written by a caller on build, not by the person)\n   a link's\n",
+		"4. a.go:4\n   (written by a script, not by the person)\n   a script's\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the message lacks %q:\n%s", want, got)
+		}
+	}
+
+	// Sent by the pane that wrote n2: its own note is not labelled, the
+	// person's is.
+	got = Compose(Message{From: "pane lead", SenderBy: "w-1234", Notes: notes[:2]})
+	if !strings.Contains(got, "1. a.go:1\n   (written by the person)\n   mine\n") || !strings.Contains(got, "2. a.go:2\n   the pane's\n") {
+		t.Errorf("a pane's message =\n%s", got)
+	}
+	if AuthorName(ByLinkPrefix+"*") != "a caller on a linked machine" || AuthorName("w-9") != "pane w-9" {
+		t.Errorf("AuthorName = %q, %q", AuthorName(ByLinkPrefix+"*"), AuthorName("w-9"))
+	}
+}
