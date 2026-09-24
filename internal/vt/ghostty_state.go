@@ -208,6 +208,15 @@ func (t *GhosttyTerminal) SetThemeColors(fg, bg, cur color.Color, ansiPalette [1
 	t.markAllDirtyLocked()
 }
 
+// SetReportColors mirrors the pure emulator: the colours an OSC 10 and OSC 11
+// query is answered with while the guest has not set its own. Nothing drawn
+// depends on them, so no cache is dropped.
+func (t *GhosttyTerminal) SetReportColors(fg, bg color.Color) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.reportFg, t.reportBg = fg, bg
+}
+
 func (t *GhosttyTerminal) refreshPaletteClaimsLocked() {
 	t.paletteClaimed = false
 	for i := range 16 {
@@ -321,9 +330,9 @@ func (t *GhosttyTerminal) handleDefaultColorOSC(number int, parts [][]byte) {
 			var c color.Color
 			switch number {
 			case 10:
-				c = firstColor(t.guestFg, t.defaultFg, color.White)
+				c = firstColor(t.guestFg, t.reportFg, t.defaultFg, color.White)
 			case 11:
-				c = firstColor(t.guestBg, t.defaultBg, color.Black)
+				c = firstColor(t.guestBg, t.reportBg, t.defaultBg, color.Black)
 			case 12:
 				c = firstColor(t.guestCur, t.defaultCur, color.White)
 			default:

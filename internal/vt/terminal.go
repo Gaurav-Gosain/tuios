@@ -88,6 +88,11 @@ type Terminal interface {
 
 	// Colors.
 	SetThemeColors(fg, bg, cur color.Color, ansiPalette [16]color.Color)
+	// SetReportColors sets the colours an OSC 10 and OSC 11 query is answered
+	// with while the guest has not set its own: the ground the pane is really
+	// drawn on, when that is not the default. A nil colour keeps the default
+	// answer. Nothing is drawn differently; it only changes the answer.
+	SetReportColors(fg, bg color.Color)
 	PaletteColor(i int) color.Color
 	IndexedColor(i int) color.Color
 

@@ -78,8 +78,11 @@ type GhosttyTerminal struct {
 	// Theme state, mirroring the pure emulator's resolution rules.
 	defaultFg, defaultBg, defaultCur color.Color
 	guestFg, guestBg, guestCur       color.Color
-	themePal                         [16]color.Color
-	paletteClaimed                   bool
+	// reportFg and reportBg answer an OSC 10 or 11 query while the guest has
+	// not set its own colour. See SetReportColors.
+	reportFg, reportBg color.Color
+	themePal           [16]color.Color
+	paletteClaimed     bool
 	// colors holds guest OSC 4 palette overrides, exactly as the pure
 	// emulator keeps them.
 	colors [256]color.Color

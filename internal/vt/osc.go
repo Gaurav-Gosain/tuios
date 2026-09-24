@@ -96,8 +96,10 @@ func (e *Emulator) handleDefaultColor(cmd int, data []byte) {
 	cb := func(c color.Color) {
 		switch cmd {
 		case 10, 110: // Foreground color
+			e.guestFg = c != nil
 			e.SetForegroundColor(c)
 		case 11, 111: // Background color
+			e.guestBg = c != nil
 			e.SetBackgroundColor(c)
 		case 12, 112: // Cursor color
 			e.SetCursorColor(c)
@@ -113,12 +115,12 @@ func (e *Emulator) handleDefaultColor(cmd int, data []byte) {
 			var xrgb ansi.XRGBColor
 			switch cmd {
 			case 10: // Query foreground color
-				xrgb.Color = e.ForegroundColor()
+				xrgb.Color = e.reportedForeground()
 				if xrgb.Color != nil {
 					_, _ = io.WriteString(e.pipe, ansi.SetForegroundColor(xrgb.String()))
 				}
 			case 11: // Query background color
-				xrgb.Color = e.BackgroundColor()
+				xrgb.Color = e.reportedBackground()
 				if xrgb.Color != nil {
 					_, _ = io.WriteString(e.pipe, ansi.SetBackgroundColor(xrgb.String()))
 				}

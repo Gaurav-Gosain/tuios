@@ -65,6 +65,11 @@ type Emulator struct {
 	// terminal default colors.
 	defaultFg, defaultBg, defaultCur color.Color
 	fgColor, bgColor, curColor       color.Color
+	// reportFg and reportBg answer an OSC 10 or 11 query while the guest has
+	// not set its own colour, which guestFg and guestBg record. See
+	// SetReportColors.
+	reportFg, reportBg color.Color
+	guestFg, guestBg   bool
 
 	// Terminal modes. Written only by the PTY reader goroutine (via setMode,
 	// RestoreModes, resetModes) but read from the input/render goroutine
@@ -1328,6 +1333,30 @@ func (e *Emulator) SetBackgroundColor(c color.Color) {
 // SetDefaultBackgroundColor sets the terminal's default background color.
 func (e *Emulator) SetDefaultBackgroundColor(c color.Color) {
 	e.defaultBg = c
+}
+
+// SetReportColors sets the colours an OSC 10 and OSC 11 query is answered with
+// while the guest has not set its own. A nil colour keeps the default answer.
+func (e *Emulator) SetReportColors(fg, bg color.Color) {
+	e.reportFg, e.reportBg = fg, bg
+}
+
+// reportedForeground is the answer to an OSC 10 query: the guest's own colour
+// when it set one, the reported colour when there is one, and the default
+// otherwise.
+func (e *Emulator) reportedForeground() color.Color {
+	if !e.guestFg && e.reportFg != nil {
+		return e.reportFg
+	}
+	return e.ForegroundColor()
+}
+
+// reportedBackground is reportedForeground for OSC 11.
+func (e *Emulator) reportedBackground() color.Color {
+	if !e.guestBg && e.reportBg != nil {
+		return e.reportBg
+	}
+	return e.BackgroundColor()
 }
 
 // CursorColor returns the terminal's cursor color. This returns nil if the
