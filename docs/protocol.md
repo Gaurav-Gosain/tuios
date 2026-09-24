@@ -2327,11 +2327,15 @@ program's. `list-agents` shows `protocol` for the pane.
 
 The attempts of a fan side by side: one row per session of the fan, in the
 order fan made them. Name any session of the fan; a worktree session that is
-not part of a fan is `invalid_params`, with the fan sessions there are in the
-hint, and a session that is not a worktree is `not_worktree`.
+not part of a fan is `invalid_params`, with the fan sessions the caller
+reaches in the hint (a pane without `admin` sees none outside its own reach),
+and a session that is not a worktree is `not_worktree`.
 
 Params: `session`, `changes` (default true: count each attempt's changes,
-which runs a few git calls per sibling, each bounded at 10 seconds).
+which runs a few git calls per sibling: the merge base, a snapshot of the
+working state, the diff, the ahead count and `git status`. All of one
+sibling's calls together are bounded at 10 seconds, and a sibling that passes
+it reports the row without counts, with `note` saying so).
 
 Each row carries `session`, `branch`, `path`, `agent` (as the fan named it),
 `harness`, `state` (rolled up over the session's windows), `prompt_status`,
@@ -2340,11 +2344,15 @@ and:
 - `files`, `added`, `removed`: what the attempt changed against its base,
   committed and uncommitted work together, untracked files included and
   ignored files left out. The working state is read through a temporary
-  index, so the worktree's own index and files are not touched. The base is
-  the fan's `base`, or for a fan made from `HEAD`, where the attempt's branch
-  left the main checkout's `HEAD`. `ahead` counts its commits past the base,
-  `dirty` says whether it holds uncommitted work, and `base_sha` is the
-  commit counted from. All are omitted with `changes` false, and when git
+  index that starts as a copy of the worktree's own, so git's stat cache
+  holds and the worktree's own index and files are not touched. The counts
+  run from `base_sha`: the merge base of the attempt's `HEAD` and the fan's
+  `base`, or for a fan made from `HEAD`, of the attempt's `HEAD` and the main
+  checkout's `HEAD`. Counting from the merge base rather than the base's tip
+  means a base that moves on (a fetch, or another attempt merged into it)
+  does not change a row. When no merge base resolves, the counts run from the
+  base's tip and `base_sha` is omitted. `ahead` counts the attempt's commits
+  past `base_sha`, and `dirty` says whether it holds uncommitted work. All are omitted with `changes` false, and when git
   could not count, in which case `note` says why.
 - `verify`: the last `verify-fan` check, as the worktree record holds it.
 - `last_command`: the newest command a shell in the session finished, from
@@ -2395,7 +2403,8 @@ reaches clients with the ordinary state push and which `compare-fan` reports.
 - `timeout_ms` fails a check that runs longer and closes its window; the
   record's `note` says it timed out. Without it a check runs until it ends.
 - A check still running in a session is stopped, and its window closed,
-  before the new one starts.
+  before the new one starts. So is the window a failed check left open, so
+  running a check again does not pile up windows waiting for enter.
 - A session whose worktree directory is gone is skipped, and `skipped` says
   so. When nothing could be started the call is `internal`, with the reasons
   in the hint.

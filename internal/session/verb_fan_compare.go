@@ -35,9 +35,10 @@ import (
 // sibling the caller could not name itself is left out of the rows and gets
 // no check.
 
-// fanGitTimeout bounds the git calls one sibling's row costs. A repository
-// slow enough to pass it reports the row without counts rather than holding
-// the verb.
+// fanGitTimeout bounds all the git calls one sibling's row costs, together:
+// the merge base, the snapshot, the diff, the ahead count and the status. A
+// repository slow enough to pass it reports the row without the counts it did
+// not reach rather than holding the verb.
 const fanGitTimeout = 10 * time.Second
 
 // fanVerifyMaxCommand bounds a verify command. It is a shell line a person or
@@ -48,8 +49,10 @@ const fanVerifyMaxCommand = 4096
 const fanVerifyWindow = "verify"
 
 // fanTarget resolves a session of a fan: its session and record, or the
-// refusal for a session that is not a worktree or not part of a fan.
-func (d *Daemon) fanTarget(name string) (*Session, *WorktreeInfo, *verbError) {
+// refusal for a session that is not a worktree or not part of a fan. The
+// refusal's hint names only the fan sessions the caller on cs reaches, so a
+// pane held to its own reach learns no other session's name from it.
+func (d *Daemon) fanTarget(cs *connState, name string) (*Session, *WorktreeInfo, *verbError) {
 	sess, info, verr := d.worktreeTarget(name)
 	if verr != nil {
 		return nil, nil, verr
@@ -57,7 +60,7 @@ func (d *Daemon) fanTarget(name string) (*Session, *WorktreeInfo, *verbError) {
 	if info.Group == "" {
 		var fans []string
 		for _, s := range d.manager.AllSessions() {
-			if wt := s.Worktree(); wt != nil && wt.Group != "" {
+			if wt := s.Worktree(); wt != nil && wt.Group != "" && d.callerReachesSession(cs, s.Name) {
 				fans = append(fans, s.Name)
 			}
 		}
@@ -168,7 +171,7 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
-	_, info, verr := d.fanTarget(p.Session)
+	_, info, verr := d.fanTarget(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -190,7 +193,9 @@ func (d *Daemon) verbCompareFan(cs *connState, params json.RawMessage) (any, *ve
 		wg.Add(1)
 		go func(row *fanCompareRow, wt *WorktreeInfo) {
 			defer wg.Done()
-			fanRowChanges(row, wt)
+			ctx, cancel := context.WithTimeout(d.ctx, fanGitTimeout)
+			defer cancel()
+			fanRowChanges(ctx, row, wt)
 		}(&rows[i], s.Worktree())
 	}
 	wg.Wait()
@@ -259,38 +264,43 @@ func (d *Daemon) fanRow(s *Session) fanCompareRow {
 	return row
 }
 
-// fanRowChanges fills in a row's counts against the sibling's base: its
-// recorded base, or where its branch left the main checkout's HEAD.
-func fanRowChanges(row *fanCompareRow, wt *WorktreeInfo) {
+// fanRowChanges fills in a row's counts against the sibling's base: where its
+// branch left the fan's recorded base, or the main checkout's HEAD for a fan
+// with no base. The counts run from that merge base, which is BaseSHA, not
+// from the base's tip, so a base that moves on (a fetch, or one attempt merged
+// into it) does not change the other rows. Every git call here runs under
+// ctx, which the caller bounds with fanGitTimeout.
+func fanRowChanges(ctx context.Context, row *fanCompareRow, wt *WorktreeInfo) {
 	if wt == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), fanGitTimeout)
-	defer cancel()
 	base := wt.Base
 	if base == "" {
-		head, err := worktree.HeadCommit(wt.RepoRoot)
-		if err == nil {
-			base, err = worktree.MergeBase(wt.Path, "HEAD", head)
-		}
+		head, err := worktree.HeadCommitCtx(ctx, wt.RepoRoot)
 		if err != nil {
 			row.Note = "no base to count from: " + err.Error()
 			return
 		}
+		base = head
 	}
-	if sha, err := worktree.MergeBase(wt.Path, "HEAD", base); err == nil {
+	from := base
+	if sha, err := worktree.MergeBaseCtx(ctx, wt.Path, "HEAD", base); err == nil && sha != "" {
 		row.BaseSHA = sha
+		from = sha
+	} else if ctx.Err() != nil {
+		row.Note = err.Error()
+		return
 	}
-	n, err := worktree.WorkingNumstat(ctx, wt.Path, base)
+	n, err := worktree.WorkingNumstat(ctx, wt.Path, from)
 	if err != nil {
 		row.Note = err.Error()
 		return
 	}
 	row.Files, row.Added, row.Removed = &n.Files, &n.Added, &n.Removed
-	if ahead, err := worktree.Ahead(wt.Path, base); err == nil {
+	if ahead, err := worktree.AheadCtx(ctx, wt.Path, from); err == nil {
 		row.Ahead = &ahead
 	}
-	if c, err := worktree.Changes(wt.Path); err == nil {
+	if c, err := worktree.ChangesCtx(ctx, wt.Path); err == nil {
 		dirty := c > 0
 		row.Dirty = &dirty
 	}
@@ -299,9 +309,21 @@ func fanRowChanges(row *fanCompareRow, wt *WorktreeInfo) {
 // fanVerifyReport is a session's recorded check as it is reported: a check
 // recorded as running that no watcher of this daemon runs was ended by a
 // restart, and reads as failed with no exit status.
+//
+// The watcher writes a finished record and takes its run out of the table in
+// one step under the session's state lock, so a record read before that step
+// and a table read after it are the check finishing, not a restart. The record
+// is read again to tell them apart.
 func (d *Daemon) fanVerifyReport(s *Session, v *FanVerify) *FanVerify {
 	if v == nil || v.State != VerifyRunning || d.fanVerifies.running(s.ID) {
 		return v
+	}
+	if wt := s.worktreeListing(); wt != nil && wt.Verify != nil {
+		now := wt.Verify
+		if now.State != VerifyRunning || (now.StartedAt != v.StartedAt && d.fanVerifies.running(s.ID)) {
+			return now
+		}
+		v = now
 	}
 	cp := *v
 	cp.State = VerifyFailed
@@ -339,7 +361,7 @@ func (d *Daemon) verbVerifyFan(cs *connState, params json.RawMessage) (any, *ver
 	if verr != nil {
 		return nil, verr
 	}
-	_, info, verr := d.fanTarget(p.Session)
+	_, info, verr := d.fanTarget(cs, p.Session)
 	if verr != nil {
 		return nil, verr
 	}
@@ -405,11 +427,17 @@ read -r _
 exit "$s"`
 
 // startFanVerify opens the verify window in one sibling and watches it. A
-// check still running there from before is stopped and its window closed.
+// check still running there from before is stopped and its window closed, and
+// so is the window an earlier failed check left open, so re-running a check
+// does not pile up windows waiting for enter.
 func (d *Daemon) startFanVerify(sess *Session, dir, command string, env []string, timeout time.Duration) error {
-	if prev := d.fanVerifies.take(sess.ID); prev != nil {
+	prev, failedWindow := d.fanVerifies.take(sess.ID)
+	if prev != nil {
 		prev.halt()
 		_, _ = sess.CloseDaemonWindow(prev.window)
+	}
+	if failedWindow != "" {
+		_, _ = sess.CloseDaemonWindow(failedWindow)
 	}
 
 	var (
@@ -521,9 +549,6 @@ func (d *Daemon) watchFanVerify(sess *Session, run *fanVerifyRun, rec *FanVerify
 	case <-d.ctx.Done():
 		return
 	}
-	if !d.fanVerifies.finish(sess.ID, run) {
-		return
-	}
 	done := *rec
 	done.Exit = code
 	done.FinishedAt = time.Now().UnixNano()
@@ -532,8 +557,23 @@ func (d *Daemon) watchFanVerify(sess *Session, run *fanVerifyRun, rec *FanVerify
 	if code != nil && *code == 0 && note == "" {
 		done.State = VerifyPassed
 	}
-	sess.setFanVerify(&done)
-	if done.State == VerifyPassed || note != "" {
+	keptOpen := done.State == VerifyFailed && note == ""
+	// The record is written and the run taken out of the table in one step,
+	// under the state lock, so no reader sees the run gone with the record
+	// still running, and a newer check that took the run first keeps its own
+	// record.
+	current := false
+	_ = sess.mutateState(func(st *SessionState) error {
+		current = d.fanVerifies.finish(sess.ID, run, keptOpen)
+		if current && st.Worktree != nil {
+			st.Worktree.Verify = &done
+		}
+		return nil
+	})
+	if !current {
+		return
+	}
+	if !keptOpen {
 		// A passed check's window has already ended on its own; closing it
 		// here takes it out of a session no client is attached to. A timed
 		// out one is ended here.
@@ -551,11 +591,13 @@ func (s *Session) setFanVerify(v *FanVerify) {
 	})
 }
 
-// fanVerifyRuns holds the check running in each fan session, by session id.
-// The zero value is ready.
+// fanVerifyRuns holds the check running in each fan session, and the window a
+// failed check left open there, by session id. The zero value is ready. Its
+// lock is taken inside a session's state lock and never the other way round.
 type fanVerifyRuns struct {
-	mu   sync.Mutex
-	runs map[string]*fanVerifyRun
+	mu     sync.Mutex
+	runs   map[string]*fanVerifyRun
+	failed map[string]string
 }
 
 // fanVerifyRun is one running check: its window, and the channel that stops
@@ -578,24 +620,34 @@ func (t *fanVerifyRuns) put(session string, run *fanVerifyRun) {
 	t.runs[session] = run
 }
 
-// take removes and returns the session's check, nil for none.
-func (t *fanVerifyRuns) take(session string) *fanVerifyRun {
+// take removes and returns the session's check, nil for none, and the window
+// a failed check left open there, "" for none.
+func (t *fanVerifyRuns) take(session string) (*fanVerifyRun, string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	run := t.runs[session]
 	delete(t.runs, session)
-	return run
+	window := t.failed[session]
+	delete(t.failed, session)
+	return run, window
 }
 
 // finish removes run when it is still the session's check, and reports
-// whether it was.
-func (t *fanVerifyRuns) finish(session string, run *fanVerifyRun) bool {
+// whether it was. keptOpen records run's window as the one its failure left
+// open, for the next check to close.
+func (t *fanVerifyRuns) finish(session string, run *fanVerifyRun, keptOpen bool) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.runs[session] != run {
 		return false
 	}
 	delete(t.runs, session)
+	if keptOpen {
+		if t.failed == nil {
+			t.failed = make(map[string]string)
+		}
+		t.failed[session] = run.window
+	}
 	return true
 }
 
@@ -654,7 +706,7 @@ func (d *Daemon) verbKeepFan(cs *connState, params json.RawMessage) (any, *verbE
 		// The session and its verify window are gone with the worktree, so a
 		// check still running there has nothing left to record into. One in a
 		// sibling left in place runs on.
-		if run := d.fanVerifies.take(s.ID); run != nil {
+		if run, _ := d.fanVerifies.take(s.ID); run != nil {
 			run.halt()
 		}
 		out, _ := res.(map[string]any)

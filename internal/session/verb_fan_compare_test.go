@@ -1,6 +1,9 @@
 package session
 
 import (
+	"context"
+	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -411,5 +414,170 @@ func TestFanOrderPutsTenAfterNine(t *testing.T) {
 	want := []string{"api-fan", "api-fan-2", "api-fan-3", "api-fan-9", "api-fan-10"}
 	if !slices.Equal(names, want) {
 		t.Errorf("order = %v, want %v", names, want)
+	}
+}
+
+// TestCompareFanCountsDoNotMoveWithTheBase: the counts run from where each
+// attempt left the base, not from the base's tip, so a commit on main after
+// the fan started, and one attempt merged into main, leave the other rows as
+// they were.
+func TestCompareFanCountsDoNotMoveWithTheBase(t *testing.T) {
+	d, sp, repo := worktreeFixture(t)
+	c := dialVerb(t, sp)
+	names := fakeFan(t, d, c, repo, "fan/retry", 2, "")
+	one, two := worktreePath(t, d, names[0]), worktreePath(t, d, names[1])
+	writeIn(t, one, "one.txt", "a\nb\n")
+	testutil.Git(t, one, "add", "one.txt")
+	testutil.Git(t, one, "commit", "-q", "-m", "one")
+	writeIn(t, two, "two.txt", "x\n")
+
+	counts := func() map[string]string {
+		t.Helper()
+		out := map[string]string{}
+		for _, r := range rowsOf(t, result(t, callP(c, t, "compare-fan", map[string]any{"session": names[0]}))) {
+			out[r["session"].(string)] = fmt.Sprintf("files %v added %v removed %v ahead %v base %v note %v",
+				r["files"], r["added"], r["removed"], r["ahead"], r["base_sha"], r["note"])
+		}
+		return out
+	}
+	before := counts()
+	forked := testutil.Git(t, repo, "rev-parse", "main")
+	if !strings.Contains(before[names[1]], "files 1 added 1 removed 0 ahead 0 base "+forked) {
+		t.Fatalf("second row before = %s", before[names[1]])
+	}
+
+	// main moves on after the fan started.
+	writeIn(t, repo, "later.txt", "l1\nl2\nl3\n")
+	testutil.Git(t, repo, "add", "later.txt")
+	testutil.Git(t, repo, "commit", "-q", "-m", "later")
+	if after := counts(); !maps.Equal(after, before) {
+		t.Errorf("a commit on main changed the counts:\nbefore %v\nafter  %v", before, after)
+	}
+
+	// The first attempt is merged into main, the usual step before keep. The
+	// second attempt's row is as it was.
+	testutil.Git(t, repo, "merge", "-q", "--no-edit", "fan/retry")
+	if after := counts(); after[names[1]] != before[names[1]] {
+		t.Errorf("merging a sibling changed the second row:\nbefore %s\nafter  %s", before[names[1]], after[names[1]])
+	}
+}
+
+// TestCompareFanRefusalNamesOnlyFansThePaneReaches: a pane that names a
+// worktree session outside any fan gets a hint listing the fan sessions it
+// reaches, and no name of a fan it could not reach.
+func TestCompareFanRefusalNamesOnlyFansThePaneReaches(t *testing.T) {
+	d, sp, repo := worktreeFixture(t)
+	c := dialVerb(t, sp)
+	caller := makeSessionWithWindow(t, d, "lead")
+	makeSessionWithWindow(t, d, "other")
+	mine := fakeFan(t, d, c, repo, "fan/mine", 1, "lead")
+	theirs := fakeFan(t, d, c, repo, "fan/theirs", 2, "other")
+	solo := newWorktreeCall(t, c, repo, "solo", nil)["session"].(string)
+	sess := d.manager.GetSession(solo)
+	info := sess.Worktree()
+	info.LaunchedFrom = "lead"
+	if err := sess.SetWorktree(info); err != nil {
+		t.Fatal(err)
+	}
+
+	setStrict(d, "read", "fan")
+	window := caller.GetState().Windows[0].ID
+	d.approvalPeer = func(*connState) (bool, string) { return true, window }
+	pane := dialVerb(t, sp)
+
+	for verb, params := range map[string]map[string]any{
+		"compare-fan": {"session": solo},
+		"verify-fan":  {"session": solo, "command": "true"},
+	} {
+		resp := callP(pane, t, verb, params)
+		mustRefuse(t, resp, ErrVerbInvalidParams, verb+" from a pane on a worktree that is not a fan")
+		hint, _ := resp["error"].(map[string]any)["hint"].(map[string]any)
+		var avail []string
+		if raw, _ := hint["available"].([]any); raw != nil {
+			for _, a := range raw {
+				avail = append(avail, a.(string))
+			}
+		}
+		if !slices.Equal(avail, mine) {
+			t.Errorf("%s hint names %v, want only %v", verb, avail, mine)
+		}
+		for _, name := range theirs {
+			if slices.Contains(avail, name) {
+				t.Errorf("%s hint leaks %s, a fan session the pane does not reach", verb, name)
+			}
+		}
+	}
+}
+
+// TestAVerifyFinishingDuringARead reads as finished: a compare that read the
+// record while the check ran, and the table after the check finished, reports
+// the finished record rather than a restart.
+func TestAVerifyFinishingDuringARead(t *testing.T) {
+	d, sp, repo := worktreeFixture(t)
+	c := dialVerb(t, sp)
+	names := fakeFan(t, d, c, repo, "fan/retry", 1, "")
+	sess := d.manager.GetSession(names[0])
+	running := &FanVerify{Command: "go test ./...", State: VerifyRunning, StartedAt: 7}
+	code := 0
+	sess.setFanVerify(&FanVerify{Command: "go test ./...", State: VerifyPassed, StartedAt: 7, FinishedAt: 9, Exit: &code})
+	got := d.fanVerifyReport(sess, running)
+	if got == nil || got.State != VerifyPassed || got.Note != "" {
+		t.Errorf("report = %+v, want the passed record", got)
+	}
+}
+
+// TestVerifyFanClosesTheWindowAFailedCheckLeftOpen: running a check again
+// after a failure closes the window the failure kept open, so the windows do
+// not pile up.
+func TestVerifyFanClosesTheWindowAFailedCheckLeftOpen(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the check runs with sh")
+	}
+	d, sp, repo := worktreeFixture(t)
+	c := dialVerb(t, sp)
+	names := fakeFan(t, d, c, repo, "fan/retry", 1, "")
+
+	var last int64
+	for round := range 3 {
+		result(t, callP(c, t, "verify-fan", map[string]any{"session": names[0], "command": "exit 3"}))
+		deadline := time.Now().Add(15 * time.Second)
+		for {
+			v := d.manager.GetSession(names[0]).Worktree().Verify
+			if v != nil && v.StartedAt != last && v.State == VerifyFailed {
+				last = v.StartedAt
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("round %d: the check never failed: %+v", round, v)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		if n := len(verifyWindows(d, names[0])); n != 1 {
+			t.Errorf("round %d: %d verify windows open, want the latest failure's only", round, n)
+		}
+	}
+}
+
+// TestFanRowChangesRunsEveryGitCallUnderTheBound: a row whose time is up runs
+// no git at all, the merge base and the base lookup included, and says why it
+// has no counts.
+func TestFanRowChangesRunsEveryGitCallUnderTheBound(t *testing.T) {
+	d, sp, repo := worktreeFixture(t)
+	c := dialVerb(t, sp)
+	names := fakeFan(t, d, c, repo, "fan/retry", 1, "")
+	wt := d.manager.GetSession(names[0]).Worktree()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, base := range []string{"main", ""} {
+		info := *wt
+		info.Base = base
+		var row fanCompareRow
+		fanRowChanges(ctx, &row, &info)
+		if row.BaseSHA != "" || row.Files != nil || row.Ahead != nil || row.Dirty != nil {
+			t.Errorf("base %q: a row past its bound ran git: %+v", base, row)
+		}
+		if !strings.Contains(row.Note, "context canceled") {
+			t.Errorf("base %q: note = %q, want the bound named", base, row.Note)
+		}
 	}
 }
