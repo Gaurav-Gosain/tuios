@@ -1105,7 +1105,9 @@ client now calls three it did not:
   at all, so every `human` entry the client queues was typed at its keyboard.
 - `list-queued` and then `cancel-queued` with `human_nonce` for `x` on a rail
   agent row with messages queued, dropping the newest entry not being typed.
-  An undo is a new `queue-prompt` with the same text.
+  An undo is a new `queue-prompt` with the same text. Neither is sent for a
+  key from `send-keys`, `run-command` or a tape, so every `human` drop and
+  undo the client sends was pressed at its keyboard too.
 - `agent-activity` with `recap` and `since` (when the person last had the
   pane in front of them) for the Inbox's Finished detail and for the dock
   line when the person comes back to a pane. Nothing polls it.

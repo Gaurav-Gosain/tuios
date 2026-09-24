@@ -2715,7 +2715,8 @@ a line under the Inbox list:
 typed within a second or so, and otherwise the row says `1 queued` and it is
 typed the moment the agent comes to rest. From the rail the Inbox opens with
 the line and closes again when you send or cancel. On a pane waiting on a
-prompt, `r` says so and opens nothing: `api is waiting on a prompt. Answer it
+prompt, or with an `ask-human` question open (the rail draws both as waiting
+on you), `r` says so and opens nothing: `api is waiting on a prompt. Answer it
 first (space to peek).` A pane on another machine is replied to from a client
 attached there.
 
@@ -2729,7 +2730,10 @@ Who may do what: the reply carries this client's attach nonce, so the daemon
 records it as `human`, and a nonce that does not verify is refused with
 `not_human`; a process in a pane can never use one. A reply that any key from
 `send-keys` or a tape touched is not sent at all, since a message queued as
-you is typed without a check of whoever drove the keys. Nothing new is
+you is typed without a check of whoever drove the keys. For the same reason
+`x` and `u` on a rail row from `send-keys` or a tape do nothing to the queue
+and the dock says so: both act as you, with the nonce. The drop stays, so
+your own `u` within the 10 seconds still puts it back. Nothing new is
 allowed: the daemon still refuses to type over a prompt, right before it
 types.
 

@@ -156,7 +156,7 @@ and the rail's `u` clears only this client's seen marks.
 | `r` | Inbox, on a finished or errored item | Reply to the agent: a line under the list, queued with `enter` and typed when the agent is at rest |
 | `r` | rail agent row | Reply to the agent, the same line in the Inbox; refused while the pane waits on a prompt |
 | `v` | rail agent row | Review the pane's changes |
-| `x` | rail agent row with messages queued | Drop the newest queued message still waiting; `u` on the row within 10 seconds queues it again. On a row with nothing queued, `x` opens the rail's menu as before |
+| `x` | rail agent row with messages queued | Drop the newest queued message still waiting; `u` on the row within 10 seconds queues it again. On a row with nothing queued, `x` opens the rail's menu as before. From `send-keys` or a tape, neither `x` nor the undo touches the queue, since both act as the person |
 
 On a risky approval (one a [risk rule](AGENT_STATE.md#risk-rules) matched),
 `1` and `2` allow only on a second press of the same key within 3 seconds, and

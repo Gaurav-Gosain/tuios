@@ -336,3 +336,59 @@ func TestFinishedFooterOffersReply(t *testing.T) {
 		t.Error("a finished item's footer does not offer reply")
 	}
 }
+
+// TestReplyRefusedOnAnAskingPane: a pane with an ask-human question open
+// reads as waiting on you on the rail, so r refuses it as it refuses a pane
+// on a prompt, whatever the agent state the pane reported.
+func TestReplyRefusedOnAnAskingPane(t *testing.T) {
+	m, q := replyOS(t, askItem("1", "here", "w-2", "yes", "no"))
+	m.Windows[1].AgentState = "working"
+	m.Windows[1].CustomName = "api"
+	cmd, handled := m.SidebarAgentReply("here", "w-2")
+	if !handled || cmd != nil || m.InboxReplyOpen() {
+		t.Fatalf("r on an asking pane: handled %v, editor %v", handled, m.InboxReplyOpen())
+	}
+	if n := lastNotice(m); !strings.Contains(n.Message, "waiting on a prompt") {
+		t.Errorf("the dock said %q", n.Message)
+	}
+	if len(q.calls) != 0 {
+		t.Errorf("a refused reply called %v", q.calls)
+	}
+}
+
+// TestQueueKeysFromSendKeysAreRefused: x and u act on the queue as the
+// person, with the attach nonce, so a key from send-keys or a tape does
+// neither, and the drop stays for the person's own u.
+func TestQueueKeysFromSendKeysAreRefused(t *testing.T) {
+	m, q := replyOS(t)
+	m.Windows[1].AgentState = "working"
+	m.Windows[1].CustomName = "api"
+	m.Windows[1].AgentQueued = 1
+	q.entries = []map[string]any{{"id": "q7", "state": "waiting"}}
+
+	m.ProcessingRemoteKeys = true
+	cmd, handled := m.SidebarAgentCancelQueued("here", "w-2")
+	m.ProcessingRemoteKeys = false
+	if !handled || cmd != nil || len(q.calls) != 0 {
+		t.Fatalf("x from send-keys: handled %v, command %v, calls %v", handled, cmd != nil, q.calls)
+	}
+	if n := lastNotice(m); !strings.Contains(n.Message, "send-keys") {
+		t.Errorf("the dock said %q", n.Message)
+	}
+
+	m.Inbox.reply.dropped = &inboxReplyDrop{session: "here", window: "w-2", who: "api", text: "put back", at: time.Now()}
+	m.ProcessingRemoteKeys = true
+	cmd, handled = m.sidebarAgentUndoDrop("here", "w-2")
+	m.ProcessingRemoteKeys = false
+	if !handled || cmd != nil || len(q.calls) != 0 {
+		t.Fatalf("u from send-keys: handled %v, command %v, calls %v", handled, cmd != nil, q.calls)
+	}
+	cmd, ok := m.sidebarAgentUndoDrop("here", "w-2")
+	if !ok || cmd == nil {
+		t.Fatal("the person's u after a refused one did not undo the drop")
+	}
+	runMsg(t, m, cmd)
+	if p, _ := q.last("queue-prompt"); p["text"] != "put back" || p["human_nonce"] != "nonce-1" {
+		t.Errorf("the undo queued %v", p)
+	}
+}

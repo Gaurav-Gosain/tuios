@@ -33,13 +33,19 @@ import (
 // A key that did not come from the keyboard never sends: a draft send-keys
 // touched is refused, as the deny reason and the mail reply refuse one, since
 // a queued message from the person is typed without any check of the grants
-// of whoever drove the keys.
+// of whoever drove the keys. For the same reason such a key never drops a
+// queued message with x or undoes a drop with u: both act as the person, with
+// the attach nonce.
 
 // inboxReplyMax bounds a reply, the daemon's bound for one queued message.
 const inboxReplyMax = 16 << 10
 
 // inboxReplyTimeout bounds one queue verb call.
 const inboxReplyTimeout = 5 * time.Second
+
+// inboxRemoteQueueRefusal is what the dock says when a key that did not come
+// from the keyboard tries to drop a queued message or undo a drop.
+const inboxRemoteQueueRefusal = "A key from send-keys does not change the queue: only keys from your keyboard queue or drop a message as you"
 
 // inboxReplySentMax is how many sent replies this client keeps the text of,
 // so a drop of one can be undone.
@@ -141,9 +147,13 @@ func (m *OS) inboxReplyAgent(it session.AttentionItem) (cmd tea.Cmd, ok bool) {
 // prompt: a reply queued for it would sit until the prompt is answered, and
 // the person should answer the prompt first.
 func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter bool) bool {
-	if state, _, _, ok := m.railPane(sessionID, windowID); ok && state == "needs_input" {
-		m.ShowNotification(who+" is waiting on a prompt. Answer it first ("+m.inboxKeyOr(config.ActionInboxPeek, "space")+" to peek).", "info", m.Settings.NotificationDuration)
-		return false
+	// The state the rail draws, so a pane with an ask-human question open
+	// is refused like one on a prompt, as its row reads.
+	if state, seq, _, ok := m.railPane(sessionID, windowID); ok {
+		if drawn, _ := m.railAgentState(windowID, state, seq); drawn == "needs_input" {
+			m.ShowNotification(who+" is waiting on a prompt. Answer it first ("+m.inboxKeyOr(config.ActionInboxPeek, "space")+" to peek).", "info", m.Settings.NotificationDuration)
+			return false
+		}
 	}
 	if !m.inboxCanMark("Replying") {
 		return false
@@ -373,6 +383,13 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 	if !m.inboxReplySupported() || m.railQueued(sessionID, windowID) == 0 {
 		return nil, false
 	}
+	// Dropping a message cancels it as the person, with the attach nonce,
+	// which may take back a message the person queued. Only keys from the
+	// keyboard do that.
+	if m.ProcessingRemoteKeys {
+		m.ShowNotification(inboxRemoteQueueRefusal, "error", m.Settings.NotificationDuration)
+		return nil, true
+	}
 	if !m.inboxCanMark("Dropping a queued message") {
 		return nil, true
 	}
@@ -472,6 +489,13 @@ func (m *OS) sidebarAgentUndoDrop(sessionID, windowID string) (tea.Cmd, bool) {
 	d := st.dropped
 	if d == nil || time.Since(d.at) >= inboxUndoWindow || d.window != windowID || (sessionID != "" && d.session != sessionID) {
 		return nil, false
+	}
+	// The undo queues the text as the person, with the attach nonce, so a
+	// key from send-keys or a tape must not do it, as InboxReplySend
+	// refuses one. The drop stays, for the person's own u.
+	if m.ProcessingRemoteKeys {
+		m.ShowNotification(inboxRemoteQueueRefusal, "error", m.Settings.NotificationDuration)
+		return nil, true
 	}
 	st.dropped = nil
 	nonce := m.inboxNonce()

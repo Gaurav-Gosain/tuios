@@ -17,6 +17,7 @@ import (
 //   - a working agent's rail row says what it is doing now (Bash: go test);
 //   - r on its rail row opens the reply editor, enter queues the reply as the
 //     person, and the row says 1 queued while the agent works;
+//   - x on the row drops the reply and u a moment later queues it again;
 //   - when the turn ends the reply is typed, and once the agent takes it the
 //     queued figure goes;
 //   - after the person was away from the pane (agents.recap away = 1s) and a
@@ -24,7 +25,9 @@ import (
 //
 // Negative control: with the reply keys answering "not handled", r on the row
 // renames the pane and the wait for the editor times out; without the return
-// hook in markFocusedAgentSeen, the wait for the recap line times out.
+// hook in markFocusedAgentSeen, the wait for the recap line times out;
+// without the undo in the agent row's u, u marks the row unread and the wait
+// for the queued figure after the undo times out.
 func TestRichRowReplyAndRecap(t *testing.T) {
 	base := t.TempDir()
 	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\n\n[agents.recap]\naway = \"1s\"\n")
@@ -83,6 +86,27 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 	out, err := tuiosCLI(t, base, "queue", "ls", "-s", "e2e-rows")
 	if err != nil || !strings.Contains(out, "human") || !strings.Contains(out, "echo r9c1e") {
 		t.Fatalf("tuios queue ls = %q (%v), want the person's reply waiting", out, err)
+	}
+
+	// x on the same row drops the reply, and u a moment later queues it
+	// again, as the person.
+	if err := term.SendKeys("x"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the drop in the dock", "Dropped 1 queued message", "u undoes")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "1 queued") }, uiTimeout); err != nil {
+		t.Fatalf("the queued figure stayed after x dropped the reply: %v\n%s", err, term.Snapshot())
+	}
+	if out, err := tuiosCLI(t, base, "queue", "ls", "-s", "e2e-rows"); err != nil || strings.Contains(out, "echo r9c1e") {
+		t.Fatalf("tuios queue ls = %q (%v) after x, want the reply gone", out, err)
+	}
+	if err := term.SendKeys("u"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the queued figure after the undo", "1 queued")
+	out, err = tuiosCLI(t, base, "queue", "ls", "-s", "e2e-rows")
+	if err != nil || !strings.Contains(out, "human") || !strings.Contains(out, "echo r9c1e") {
+		t.Fatalf("tuios queue ls = %q (%v) after u, want the reply waiting again as the person", out, err)
 	}
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
