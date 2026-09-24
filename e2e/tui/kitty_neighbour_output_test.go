@@ -138,7 +138,14 @@ func TestKittyPlacementSurvivesNeighbourOutput(t *testing.T) {
 	time.Sleep(400 * time.Millisecond)
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo IMAGEPANE", "IMAGEPANE", shellTimeout)
-	typeLine(t, term, "while :; do cat "+frame+"; sleep 0.05; done")
+	// The loops run in a shell without job control. The pane's interactive
+	// shell gives each command it starts its own process group, and bash
+	// sometimes fails that and says "sh: child setpgid (...): Operation not
+	// permitted" inside the loop. That line moves the cursor, and with it the
+	// image, down the pane, which is a real change of placement that has
+	// nothing to do with the neighbour. exec replaces the prompt's shell with
+	// one that only runs the loop and never touches process groups.
+	typeLine(t, term, noJobControl("while :; do cat "+frame+"; sleep 0.05; done"))
 	leaveTerminalMode(t, term)
 
 	stream.mark("image-only")
@@ -149,7 +156,7 @@ func TestKittyPlacementSurvivesNeighbourOutput(t *testing.T) {
 	time.Sleep(400 * time.Millisecond)
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo TEXTPANE", "TEXTPANE", shellTimeout)
-	typeLine(t, term, "while :; do seq 1 60; sleep 0.05; done")
+	typeLine(t, term, noJobControl("while :; do seq 1 60; sleep 0.05; done"))
 	leaveTerminalMode(t, term)
 
 	stream.mark("neighbour-busy")
@@ -186,6 +193,14 @@ func TestKittyPlacementSurvivesNeighbourOutput(t *testing.T) {
 				phase, got, quiet)
 		}
 	}
+}
+
+// noJobControl wraps an endless loop so it runs in a non-interactive shell that
+// replaces the pane's own, where no command is put in a process group of its
+// own and the shell has no job control messages to print. The loop must not
+// contain a single quote.
+func noJobControl(loop string) string {
+	return "exec sh -c '" + loop + "'"
 }
 
 // typeLine types a command and runs it without waiting for output, for the
