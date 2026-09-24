@@ -465,7 +465,10 @@ func (d *Daemon) noteQueueEvent(sessionName string, ev SessionEvent) {
 		switch ev.State {
 		case AgentStateNone.Name():
 			// The agent left the pane, and the conversation the messages
-			// were for went with it.
+			// were for went with it. An entry being typed goes too, and the
+			// queue with it, so the delivery that finishes later finds the
+			// queue gone and records no stamp, as when the pane closes.
+			pq.delivering = false
 			gone := q.removeLocked(ev.Window, pq, func(*queueEntry) bool { return true })
 			if len(gone) > 0 {
 				LogBasic("Dropped %d queued for window %s: the agent left the pane", len(gone), shortWindowID(ev.Window))

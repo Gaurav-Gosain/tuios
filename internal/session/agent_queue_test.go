@@ -617,3 +617,37 @@ func TestQueueRefusesAForwardedPane(t *testing.T) {
 		t.Fatalf("list-queued = %v, want the shell's entry still there", got)
 	}
 }
+
+// TestQueueAgentLeavingMidTypeLeavesNoStamp: an agent that leaves the pane
+// while an entry is being typed drops the queue, and the delivery that
+// finishes afterwards records no stamp, as for a pane that closes or a
+// session that ends while the gate waits.
+func TestQueueAgentLeavingMidTypeLeavesNoStamp(t *testing.T) {
+	d, _, sess, c, _, b := queueFixture(t)
+	setAgentState(t, c, "work", b, "idle", "", "")
+	var once sync.Once
+	d.queue.beforeType = func(window string) {
+		once.Do(func() {
+			if _, _, err := sess.ApplyAgentReport(window, AgentReport{State: AgentStateNone}); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	result(t, callP(c, t, "queue-prompt", map[string]any{"session": "work", "window": b, "text": "echo left-$((20+1))"}))
+	eventually(t, "the entry is typed", 5*time.Second, func() bool { return paneShows(t, d, sess, b, "left-21") })
+	eventually(t, "the delivery finishes", 5*time.Second, func() bool {
+		d.queue.mu.Lock()
+		defer d.queue.mu.Unlock()
+		pq := d.queue.panes[b]
+		return pq == nil || !pq.delivering
+	})
+	d.queue.mu.Lock()
+	_, stamped := d.queue.typed[b]
+	d.queue.mu.Unlock()
+	if stamped || d.queue.stamped.Load() != 0 {
+		t.Fatal("a delivery that finished after the agent left stamped the pane")
+	}
+	if n := d.queue.count(b); n != 0 {
+		t.Fatalf("the queue holds %d after the agent left", n)
+	}
+}
