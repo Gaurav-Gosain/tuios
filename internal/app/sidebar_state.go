@@ -62,6 +62,12 @@ type sidebarStateFile struct {
 	// they existed needs no migration.
 	AgentsFilter string `json:"agents_filter,omitempty"`
 	AgentsSort   string `json:"agents_sort,omitempty"`
+	// AgentsSeen records that an agent has run where this client could see
+	// it. The agent entries of the prefix menu and the palette, and the agent
+	// rows of the Alerts settings, wait for it (see agentsSeen). Absent means
+	// not yet, which is right for a file written before it existed: the next
+	// agent sets it.
+	AgentsSeen bool `json:"agents_seen,omitempty"`
 	// Collapsed is the rail folded to its glyph strip. Absent means expanded,
 	// which is what every file written before the toggle existed says.
 	Collapsed bool `json:"collapsed,omitempty"`
@@ -116,6 +122,7 @@ func (m *OS) loadSidebarState() {
 		m.SidebarAgentSeenSeq = st.AgentSeenSeq
 	}
 	m.SidebarAgentFilter, m.SidebarAgentSort = st.AgentsFilter, st.AgentsSort
+	m.SidebarAgentsSeen = st.AgentsSeen
 	m.SidebarCollapsed = st.Collapsed
 	if st.SectionSplit >= sidebarSplitMin && st.SectionSplit <= sidebarSplitMax {
 		m.SidebarSectionSplit = st.SectionSplit
@@ -183,6 +190,7 @@ func (m *OS) saveSidebarState() {
 		AgentSeenSeq:     m.SidebarAgentSeenSeq,
 		AgentsFilter:     m.SidebarAgentFilter,
 		AgentsSort:       m.SidebarAgentSort,
+		AgentsSeen:       m.SidebarAgentsSeen,
 		Collapsed:        m.SidebarCollapsed,
 		SectionSplit:     m.SidebarSectionSplit,
 		ReposCollapsed:   collapsedRepoList(m.SidebarCollapsedRepos),

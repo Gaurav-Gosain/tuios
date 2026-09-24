@@ -454,28 +454,23 @@ func (m *OS) settingsCategories() []settingsCategory {
 	// [notifications] is nineteen options and was none of the page. An alert
 	// that fires when it should not is the setting people go looking for first,
 	// and until now the only place to change it was the file.
+	//
+	// The agent rows sit under their own heading row, after the alerts every
+	// message has, and are folded under it until an agent has been seen: they
+	// were fourteen of the tab's eighteen rows for a person who runs none.
+	alertRows := []settingsRow{
+		opt("notifications.duration"),
+		opt("notifications.warning_duration"),
+		opt("notifications.error_duration"),
+		opt("notifications.error_sticky"),
+		custom("", m.agentAlertsGroupItem()),
+	}
+	if m.agentAlertsOpen() {
+		alertRows = append(alertRows, agentAlertRows...)
+	}
 	notifications := settingsCategory{
-		Name: "Alerts",
-		Items: m.resolveRows([]settingsRow{
-			opt("notifications.duration"),
-			opt("notifications.warning_duration"),
-			opt("notifications.error_duration"),
-			opt("notifications.error_sticky"),
-			opt("notifications.agent.enabled"),
-			opt("notifications.agent.notify"),
-			opt("notifications.agent.dock"),
-			opt("notifications.agent.sound"),
-			opt("notifications.agent.sound_mode"),
-			opt("notifications.agent.sound_cooldown_seconds"),
-			opt("notifications.agent.settle_seconds"),
-			opt("notifications.agent.suppress_focused"),
-			opt("notifications.agent.quiet_hours"),
-			opt("notifications.agent.states.working"),
-			opt("notifications.agent.states.idle"),
-			opt("notifications.agent.states.done"),
-			opt("notifications.agent.states.needs_input"),
-			opt("notifications.agent.states.errored"),
-		}),
+		Name:  "Alerts",
+		Items: m.resolveRows(alertRows),
 	}
 
 	startup := settingsCategory{
@@ -743,6 +738,55 @@ func (m *OS) showKeysItem() settingItem {
 			m.ShowKeys = v
 			m.setOption("debug.show_key_events", strconv.FormatBool(v))
 		})
+}
+
+// agentAlertRows are the Alerts tab's rows about agents, under the heading row
+// agentAlertsGroupItem draws.
+var agentAlertRows = []settingsRow{
+	opt("notifications.agent.enabled"),
+	opt("notifications.agent.notify"),
+	opt("notifications.agent.dock"),
+	opt("notifications.agent.sound"),
+	opt("notifications.agent.sound_mode"),
+	opt("notifications.agent.sound_cooldown_seconds"),
+	opt("notifications.agent.settle_seconds"),
+	opt("notifications.agent.suppress_focused"),
+	opt("notifications.agent.quiet_hours"),
+	opt("notifications.agent.states.working"),
+	opt("notifications.agent.states.idle"),
+	opt("notifications.agent.states.done"),
+	opt("notifications.agent.states.needs_input"),
+	opt("notifications.agent.states.errored"),
+}
+
+// agentAlertsOpen reports whether the Alerts tab shows its agent rows: as
+// the person last set the heading row, and otherwise once an agent has been
+// seen.
+func (m *OS) agentAlertsOpen() bool {
+	if m.settingsAgentsOpen != nil {
+		return *m.settingsAgentsOpen
+	}
+	return m.agentsSeen()
+}
+
+// agentAlertsGroupItem is the heading row over the agent alerts: it names the
+// group and folds or unfolds it. It is not an option; nothing is written.
+func (m *OS) agentAlertsGroupItem() settingItem {
+	return settingItem{
+		Label:   "Agents",
+		Desc:    "Alerts about agents: which states alert, and how. Folded until an agent has run here; change this row to show or hide them.",
+		Control: controlEnum,
+		value: func(m *OS) string {
+			if m.agentAlertsOpen() {
+				return "shown"
+			}
+			return strconv.Itoa(len(agentAlertRows)) + " hidden"
+		},
+		adjust: func(m *OS, _ int) {
+			open := !m.agentAlertsOpen()
+			m.settingsAgentsOpen = &open
+		},
+	}
 }
 
 // spotlightItem is the beam toggle. Hand-written because the live state is a

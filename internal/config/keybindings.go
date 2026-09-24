@@ -6,6 +6,26 @@ type Keybinding struct {
 	Description string
 }
 
+// The prefix menu's agent lines. Named so IsAgentPrefixKeybinding can find
+// them by what they say rather than by a key a config may have moved.
+const (
+	whichKeyInbox         = "Inbox"
+	whichKeyOldestWaiting = "Oldest waiting (repeat: next)"
+	whichKeyInboxMail     = "Inbox: mail"
+)
+
+// IsAgentPrefixKeybinding reports whether a prefix menu line is one that only
+// means something to a person running agents: the Inbox, the oldest waiting
+// item, and the Inbox on its mail. The client leaves them out of the menu
+// until an agent has been seen; the keys work either way.
+func IsAgentPrefixKeybinding(k Keybinding) bool {
+	switch k.Description {
+	case whichKeyInbox, whichKeyOldestWaiting, whichKeyInboxMail:
+		return true
+	}
+	return false
+}
+
 // GetPrefixKeybindings returns keybindings for the prefix overlay.
 // isDaemonSession indicates whether we're running in daemon mode (affects detach/quit descriptions).
 func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybinding {
@@ -94,9 +114,9 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"b", "Toggle sidebar"},
 			{"e", "Focus/leave sidebar"},
 			{"j", "Jump to newest message"},
-			{"i", "Inbox"},
-			{"o", "Oldest waiting (repeat: next)"},
-			{"M", "Inbox: mail"},
+			{"i", whichKeyInbox},
+			{"o", whichKeyOldestWaiting},
+			{"M", whichKeyInboxMail},
 			{"X", "Close session"},
 		}
 

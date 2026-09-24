@@ -68,6 +68,11 @@ var settingsUIExcluded = map[string]string{
 // in this file, how a person reaches it.
 func TestSettingsPanelReachesEveryOption(t *testing.T) {
 	m := &OS{Settings: config.Global, Width: 120, Height: 40}
+	// The Alerts tab folds its agent rows under a heading row until an agent
+	// has been seen. Folded is one change on that row away, so it counts as
+	// reachable; the rows are read unfolded.
+	open := true
+	m.settingsAgentsOpen = &open
 
 	reached := map[string]string{}
 	for _, cat := range m.settingsCategories() {

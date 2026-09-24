@@ -56,7 +56,7 @@ func handleLeftKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 func handleRightKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// Help menu category navigation
 	if o.ShowHelp && !o.HelpSearchMode {
-		categories := app.GetHelpCategories(o.KeybindRegistry, &o.Settings)
+		categories := o.HelpCategories()
 		if o.HelpCategory < len(categories)-1 {
 			o.HelpCategory++
 		}

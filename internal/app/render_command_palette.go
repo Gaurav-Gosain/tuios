@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"image/color"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -34,6 +35,19 @@ var paletteHints = []overlay.Hint{
 	{Key: "esc", Label: "close"},
 }
 
+// paletteStateHint is the index of the "@ state" hint in paletteHints.
+const paletteStateHint = 2
+
+// paletteFooter is the palette's footer for this client: the "@ state" hint
+// waits until an agent has been seen, since the filter it announces lists
+// agent panes and there are none. Typing "@" works either way.
+func (m *OS) paletteFooter() []overlay.Hint {
+	if m.agentsSeen() {
+		return paletteHints
+	}
+	return slices.Delete(slices.Clone(paletteHints), paletteStateHint, paletteStateHint+1)
+}
+
 // paletteLayout returns the palette's fitted inner width and visible row count.
 // The keyboard navigation uses the same numbers as the renderer so the
 // selection cannot scroll out of the rows actually drawn.
@@ -41,7 +55,7 @@ func (m *OS) paletteLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(paletteInnerWidth)
 	// Body lines that are not command rows: the search input, its rule, and the
 	// match count.
-	rows, hints = m.panelBody(paletteMaxVisible, 3, width, nil, paletteHints)
+	rows, hints = m.panelBody(paletteMaxVisible, 3, width, nil, m.paletteFooter())
 	return width, rows, hints
 }
 

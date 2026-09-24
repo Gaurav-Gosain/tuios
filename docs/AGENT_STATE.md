@@ -986,6 +986,26 @@ This table used to say `unknown` draws nothing. It has drawn `□` since the sta
 was given a glyph, because a pane with an agent in it that drew nothing read as
 a pane with no agent.
 
+## Before the first agent
+
+A person who never runs an agent is not shown controls for one. Until an agent
+has been seen, the client leaves out:
+
+- the Inbox lines of the prefix menu (`i`, `o`, `M`);
+- the palette's "Agents: ..." entries and its `@ state` hint;
+- the help overlay's Agents section;
+- the agent rows of the Alerts settings, folded under an "Agents" row that
+  says how many it holds and unfolds them when changed.
+
+Nothing is removed: every key, the palette's `@` filter and every option work
+the same before and after. An agent counts as seen once any pane in any session
+this client can see has an agent state or a named harness, the Inbox holds an
+item, mail arrives, or `tuios integration install` has put tuios's hooks into a
+harness on this machine (read once at start). The client remembers it in its
+rail state (`agents_seen` in `sidebar.json`), so the controls stay once they
+have appeared. The rail's agents section already stayed hidden until an agent
+existed.
+
 ## The rail's agents section
 
 The agents section of the session rail lists every pane running an agent, in

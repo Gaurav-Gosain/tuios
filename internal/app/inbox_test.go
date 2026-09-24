@@ -341,6 +341,8 @@ func TestInboxReplyOpensTheThreadWithItsReplyLine(t *testing.T) {
 // TestPaletteOpensTheInbox is the route in from the palette.
 func TestPaletteOpensTheInbox(t *testing.T) {
 	m := inboxOS(t, zeroSettle())
+	// The agent entries wait until an agent has been seen.
+	m.SidebarAgentsSeen = true
 	m.OpenCommandPalette()
 	m.CommandPaletteQuery = "Inbox, what is waiting"
 	m.CommandPaletteSelected = 0

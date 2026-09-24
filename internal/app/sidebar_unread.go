@@ -76,6 +76,7 @@ func (m *OS) noteAgentState(w *terminal.Window, to string) {
 	}
 	from := w.AgentState
 	w.AgentState = to
+	m.noteAgentsSeen()
 	focused := m.GetFocusedWindow() == w
 
 	switch {

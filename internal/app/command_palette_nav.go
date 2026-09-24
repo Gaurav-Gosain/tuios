@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -19,6 +21,11 @@ func (m *OS) allPaletteItems() []CommandPaletteItem {
 // never per frame.
 func (m *OS) rebuildPaletteItems() {
 	static := GetCommandPaletteItems(&m.Settings)
+	// The agent entries wait until an agent has been seen, like the prefix
+	// menu's Inbox lines. Their prefix keys work either way.
+	if !m.agentsSeen() {
+		static = slices.DeleteFunc(static, func(it CommandPaletteItem) bool { return it.Category == paletteCategoryAgents })
+	}
 	items := make([]CommandPaletteItem, 0,
 		len(static)+len(m.PaletteSessionItems)+len(m.PaletteKeybindItems))
 	items = append(items, static...)

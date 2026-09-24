@@ -1112,6 +1112,15 @@ type OS struct {
 	// unrecognised value reads back as the default.
 	SidebarAgentFilter string
 	SidebarAgentSort   string
+	// SidebarAgentsSeen is set, and persisted, once an agent has run where
+	// this client could see it. See agentsSeen.
+	SidebarAgentsSeen bool
+	// agentIntegrationInstalled is set when a harness has tuios's hooks
+	// installed, read once at start off the UI goroutine. See agentsSeen.
+	agentIntegrationInstalled bool
+	// settingsAgentsOpen is the Alerts tab's agent group opened or closed by
+	// hand; nil follows agentsSeen.
+	settingsAgentsOpen *bool
 	// SidebarCollapsed is the rail folded down to its glyph strip. It is one of
 	// the two states the user can put the rail in (the other is the stored
 	// width, which a drag on the edge still sets freely); the responsive

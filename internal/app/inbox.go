@@ -390,8 +390,10 @@ func (m *OS) handleInboxWatch(msg inboxWatchMsg) tea.Cmd {
 	switch inner := msg.msg.(type) {
 	case InboxSnapshotMsg:
 		m.applyInboxSnapshot(inner)
+		m.noteAgentsSeen()
 	case InboxEventsMsg:
 		cmd = m.applyInboxEvents(inner)
+		m.noteAgentsSeen()
 	case InboxDownMsg:
 		m.applyInboxDown(inner)
 		if inner.Unsupported {

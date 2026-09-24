@@ -329,6 +329,12 @@ func (m *OS) Init() tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 
+	// Whether an agent integration is installed, which counts as having seen
+	// an agent for the chrome that waits for one. Read once.
+	if cmd := m.checkAgentIntegrationCmd(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
 	// The Inbox: everything waiting for the person in every session, kept
 	// current by the daemon's attention events.
 	if cmd := m.startInboxWatch(); cmd != nil {
@@ -1706,7 +1712,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// here and nowhere else, so the mirror is only ever touched on this
 		// goroutine.
 		m.noteAgentMail(msg.Payload)
+		m.noteAgentsSeen()
 		return m, ListenForClientEvents(m.ClientEventChan)
+
+	case agentIntegrationMsg:
+		m.agentIntegrationInstalled = true
+		return m, nil
 
 	case AgentMailLoadMsg:
 		// A session switch asked for the new session's ring. The read runs in

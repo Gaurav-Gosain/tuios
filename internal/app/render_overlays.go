@@ -575,7 +575,7 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			bindings = config.GetPrefixKeybindings("layout")
 		} else {
 			title = "Prefix"
-			bindings = config.GetPrefixKeybindings("", m.IsDaemonSession)
+			bindings = m.prefixMenuBindings()
 		}
 
 		// The overlay spends four rows on a blank pad above and below, the title

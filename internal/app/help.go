@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -116,6 +117,18 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 	return filteredCategories
 }
 
+// HelpCategories is the help overlay's sections for this client. The Agents
+// section waits until an agent has been seen, like the prefix menu's Inbox
+// lines: its keys mean nothing before, and the tab strip is one row wide
+// without it.
+func (m *OS) HelpCategories() []HelpCategory {
+	cats := GetHelpCategories(m.KeybindRegistry, &m.Settings)
+	if m.agentsSeen() {
+		return cats
+	}
+	return slices.DeleteFunc(cats, func(c HelpCategory) bool { return c.Name == HelpCategoryAgents })
+}
+
 // HelpCategoryAgents is the section gathering every key that deals with
 // agents: the prefix chords that reach the Inbox, the rail's agent controls,
 // the palette's state filter, and the keys inside the Inbox, its prompt and
@@ -195,7 +208,7 @@ func (m *OS) OpenHelpAtCategory(name string) {
 	m.HelpSearchMode = false
 	m.HelpSearchQuery = ""
 	m.HelpCategory = -1
-	for i, cat := range GetHelpCategories(m.KeybindRegistry, &m.Settings) {
+	for i, cat := range m.HelpCategories() {
 		if cat.Name == name {
 			m.HelpCategory = i
 			return
@@ -619,7 +632,7 @@ func helpTabLabel(name string) string {
 
 // RenderHelpMenu renders the keybindings overlay on the shared panel grammar.
 func (m *OS) RenderHelpMenu() (string, overlay.Geometry) {
-	categories := GetHelpCategories(m.KeybindRegistry, &m.Settings)
+	categories := m.HelpCategories()
 	if len(categories) == 0 {
 		return "", overlay.Geometry{}
 	}
