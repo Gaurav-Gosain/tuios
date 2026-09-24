@@ -188,111 +188,18 @@ func parseWorkspaceArg(args []string) (int, error) {
 }
 
 // keysToBytes translates a send-keys request into the raw bytes to write to a
-// PTY. literal or raw modes pass the text through unchanged. Otherwise the input
-// is split on spaces/commas and each token is mapped to its terminal byte
-// sequence (named keys, ctrl+X, alt+X, or a literal character). WM-level tokens
-// (the prefix) have no headless meaning and produce an error.
+// PTY whose application has not turned on application cursor keys. literal or
+// raw modes pass the text through unchanged. Otherwise the input is parsed by
+// parseSendKeys; the prefix has no headless meaning and is an error.
 func keysToBytes(keys string, literal, raw bool) ([]byte, error) {
 	if literal || raw {
 		return []byte(keys), nil
 	}
-
-	normalized := strings.ReplaceAll(keys, ",", " ")
-	tokens := strings.Fields(normalized)
-	if len(tokens) == 0 {
-		return nil, fmt.Errorf("no valid keys in sequence: %s", keys)
+	parsed, err := parseSendKeys(keys, 1)
+	if err != nil {
+		return nil, err
 	}
-
-	var out []byte
-	for _, tok := range tokens {
-		b, err := keyTokenToBytes(tok)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, b...)
-	}
-	return out, nil
-}
-
-// namedKeyBytes maps a special key name (case-insensitive) to its byte sequence.
-var namedKeyBytes = map[string]string{
-	"enter":     "\r",
-	"return":    "\r",
-	"space":     " ",
-	"tab":       "\t",
-	"escape":    "\x1b",
-	"esc":       "\x1b",
-	"backspace": "\x7f",
-	"delete":    "\x1b[3~",
-	"del":       "\x1b[3~",
-	"up":        "\x1b[A",
-	"down":      "\x1b[B",
-	"right":     "\x1b[C",
-	"left":      "\x1b[D",
-	"home":      "\x1b[H",
-	"end":       "\x1b[F",
-	"pageup":    "\x1b[5~",
-	"pagedown":  "\x1b[6~",
-	"insert":    "\x1b[2~",
-	"f1":        "\x1bOP",
-	"f2":        "\x1bOQ",
-	"f3":        "\x1bOR",
-	"f4":        "\x1bOS",
-	"f5":        "\x1b[15~",
-	"f6":        "\x1b[17~",
-	"f7":        "\x1b[18~",
-	"f8":        "\x1b[19~",
-	"f9":        "\x1b[20~",
-	"f10":       "\x1b[21~",
-	"f11":       "\x1b[23~",
-	"f12":       "\x1b[24~",
-}
-
-// keyTokenToBytes converts one send-keys token to its terminal byte sequence.
-func keyTokenToBytes(tok string) ([]byte, error) {
-	lower := strings.ToLower(tok)
-
-	if tok == "PREFIX" || tok == "$PREFIX" {
-		return nil, fmt.Errorf("the prefix key only works with an attached client. Attach one and retry")
-	}
-
-	if b, ok := namedKeyBytes[lower]; ok {
-		return []byte(b), nil
-	}
-
-	// ctrl+X: control byte for letters, and common punctuation.
-	if after, ok := strings.CutPrefix(lower, "ctrl+"); ok {
-		if len(after) == 1 {
-			c := after[0]
-			switch {
-			case c >= 'a' && c <= 'z':
-				return []byte{c & 0x1f}, nil
-			case c == ' ' || c == '@':
-				return []byte{0x00}, nil
-			case c == '[':
-				return []byte{0x1b}, nil
-			case c == '\\':
-				return []byte{0x1c}, nil
-			case c == ']':
-				return []byte{0x1d}, nil
-			}
-		}
-		return nil, fmt.Errorf("unsupported ctrl combination %q", tok)
-	}
-
-	// alt+X: ESC followed by the key/character.
-	if after, ok := strings.CutPrefix(lower, "alt+"); ok {
-		if b, ok := namedKeyBytes[after]; ok {
-			return append([]byte{0x1b}, []byte(b)...), nil
-		}
-		if len(after) >= 1 {
-			return append([]byte{0x1b}, []byte(after)...), nil
-		}
-		return nil, fmt.Errorf("unsupported alt combination %q", tok)
-	}
-
-	// Any other single-token string is sent as literal characters.
-	return []byte(tok), nil
+	return sendKeysBytes(parsed, false)
 }
 
 // resolvePTYForTarget resolves a window target (name/ID, or empty for the
@@ -324,16 +231,51 @@ func (d *Daemon) resolvePTYForTarget(sess *Session, target string) (*PTY, error)
 // sendKeysDaemonSide writes a send-keys request straight to the target window's
 // PTY, with no TUI client involved.
 func (d *Daemon) sendKeysDaemonSide(sess *Session, target, keys string, literal, raw bool) error {
-	pty, err := d.resolvePTYForTarget(sess, target)
-	if err != nil {
-		return err
+	_, err := d.writeKeysToWindow(sess, target, keys, literal, raw, nil)
+	return err
+}
+
+// writeKeysToWindow writes keys to the terminal of the window target names,
+// or of the focused window when target is empty, and returns the window it
+// wrote to. parsed is the sequence parseSendKeys made of keys, or nil to parse
+// it here; literal and raw write keys as they are. Named keys are encoded for
+// the pane's current modes, so an arrow reaches an application that turned on
+// application cursor keys as the SS3 form it asked for.
+func (d *Daemon) writeKeysToWindow(sess *Session, target, keys string, literal, raw bool, parsed []sendKey) (WindowState, error) {
+	state := sess.GetState()
+	resolved := target
+	if resolved == "" {
+		id, err := focusedWindowID(state)
+		if err != nil {
+			return WindowState{}, err
+		}
+		resolved = id
 	}
-	data, err := keysToBytes(keys, literal, raw)
+	idx, err := findWindowStateIndex(state.Windows, resolved)
 	if err != nil {
-		return err
+		return WindowState{}, err
+	}
+	win := state.Windows[idx]
+	pty, err := d.resolvePTYForTarget(sess, win.ID)
+	if err != nil {
+		return win, err
+	}
+	var data []byte
+	switch {
+	case literal || raw:
+		data = []byte(keys)
+	default:
+		if parsed == nil {
+			if parsed, err = parseSendKeys(keys, 1); err != nil {
+				return win, err
+			}
+		}
+		if data, err = sendKeysBytes(parsed, pty.ApplicationCursorKeysOn()); err != nil {
+			return win, err
+		}
 	}
 	_, err = pty.Write(data)
-	return err
+	return win, err
 }
 
 // buildWindowListData builds the window-list result map from session state. It

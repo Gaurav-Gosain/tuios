@@ -980,16 +980,26 @@ func init() {
 			handler:     (*Daemon).verbCloseWindow,
 		},
 		"send-keys": {
-			description: "Send parsed key tokens to a window.",
+			description: "Send keys to a window's program: Up, PageDown, ctrl+c. With a window they go to that window's terminal; without one, to an attached client (the window manager) or else the focused window.",
 			params: []verbParam{
 				sessionParam,
 				windowParam,
-				{Name: "keys", Type: "string", Required: true, Description: `Key sequence, e.g. "ctrl+b,n" or "Hello World".`},
+				{Name: "keys", Type: "string", Required: true, Description: `Keys split on spaces and commas, e.g. "Down Down PageDown" or "ctrl+c". A key is a name (Enter Tab BTab Space Escape Backspace Up Down Right Left Home End PageUp PageDown Insert Delete F1-F12, case-insensitive, also as arrow-up, KEY_UP, <Up>, PgDn), one character, a name or character after ctrl+, alt+ or shift+ (or tmux C-, M-, S-), an escape sequence written \e[A, or PREFIX for the leader key.`},
 				{Name: "literal", Type: "bool", Description: "Send the keys to the PTY without parsing them as key names.", Default: "false"},
 				{Name: "raw", Type: "bool", Description: "Treat every character as its own key instead of splitting on spaces and commas.", Default: "false"},
+				{Name: "repeat", Type: "int", Description: "Send the whole sequence this many times, 1 to 1000.", Default: "1"},
 			},
-			examples: []string{`{"id":1,"verb":"send-keys","params":{"session":"work","keys":"ls,Enter"}}`},
-			handler:  (*Daemon).verbSendKeys,
+			returns: []verbParam{
+				{Name: "sent_to", Type: "string", Description: "window when the keys were written to a window's terminal, client when an attached client took them as the person's keys."},
+				{Name: "window_id", Type: "string", Description: "The window the keys were written to, when sent_to is window."},
+				{Name: "window", Type: "string", Description: "That window's name, or its title when it has no name."},
+				{Name: "keys", Type: "int", Description: "How many keys were sent, counting repeats."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"send-keys","params":{"session":"work","window":"review","keys":"Down","repeat":5}}`,
+				`{"id":1,"verb":"send-keys","params":{"session":"work","window":"build","keys":"ctrl+c"}}`,
+			},
+			handler: (*Daemon).verbSendKeys,
 		},
 		"send-text": {
 			description: "Send literal text to a window's PTY.",

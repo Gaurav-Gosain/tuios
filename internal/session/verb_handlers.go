@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/harness"
 	"github.com/google/uuid"
@@ -98,6 +99,11 @@ func mapResolveErr(err error, sess *Session) *verbError {
 			Verb:    "list-windows",
 			Command: "tuios list-windows --json",
 			Detail:  "the window target matched no window. A window is addressable by its id, a unique id prefix, the index list-windows prints, or its exact name.",
+		}
+		if strings.Contains(msg, "ambiguous window") {
+			// The code stays window_not_found, which callers already handle:
+			// the target did not name one window. The detail says why.
+			hint.Detail = "the window target matched more than one window, listed in the message. Pass the id, or give the windows different names with set-window --name."
 		}
 		if sess != nil {
 			hint.Available = windowTargets(sess.GetState())
@@ -298,6 +304,14 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		displayName = p.Name
 	}
 
+	// With a client attached, answer once the client has placed the window
+	// and sized its terminal. A program started in the pane straight after
+	// the call otherwise starts at the nominal size and gets a resize while
+	// it draws, which some programs (glow's pager) never recover from.
+	if win.Unplaced && d.findTUIClient(sess.ID) != nil {
+		win.Unplaced = !d.awaitPlacement(sess, win.ID, win.PTYID, newWindowPlaceWait)
+	}
+
 	// The result says where the window went, not just that one was made. A
 	// caller that asked for a workspace has to be able to confirm it without a
 	// second call, and unplaced is the honest answer to "what size is it": the
@@ -314,6 +328,50 @@ func (d *Daemon) verbNewWindow(cs *connState, params json.RawMessage) (any, *ver
 		// the shape it has always had.
 		"host": win.Host,
 	}, nil
+}
+
+// newWindowPlaceWait bounds how long new-window waits for an attached client
+// to place the window it made. A client places a window on its next frame, so
+// the limit is only reached when the client is stuck; the call then answers
+// unplaced, as it did before it waited at all.
+const newWindowPlaceWait = time.Second
+
+// placeSettle is how long, after the client placed a window, new-window waits
+// for the pane's terminal to take the new size. The client sends the size
+// after the geometry, so the two land a moment apart.
+const placeSettle = 250 * time.Millisecond
+
+// awaitPlacement waits until an attached client has placed a window (cleared
+// Unplaced) and then, briefly, until the pane's terminal size changes from the
+// nominal one it was created with. It reports whether the window was placed.
+func (d *Daemon) awaitPlacement(sess *Session, windowID, ptyID string, limit time.Duration) bool {
+	var pty *PTY
+	var cols, rows int
+	if ptyID != "" {
+		if pty = sess.GetPTY(ptyID); pty != nil {
+			cols, rows = pty.Size()
+		}
+	}
+	deadline := time.Now().Add(limit)
+	for time.Now().Before(deadline) {
+		w, ok := findWindowState(sess.GetState(), windowID)
+		if !ok {
+			return false
+		}
+		if w.Unplaced {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		settle := time.Now().Add(placeSettle)
+		for pty != nil && time.Now().Before(settle) {
+			if c, r := pty.Size(); c != cols || r != rows {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		return true
+	}
+	return false
 }
 
 // verbPopup opens a popup: a floating pane that runs one command and closes
@@ -520,33 +578,71 @@ func (d *Daemon) verbSendKeys(cs *connState, params json.RawMessage) (any, *verb
 		Keys    string `json:"keys"`
 		Literal bool   `json:"literal"`
 		Raw     bool   `json:"raw"`
+		Repeat  int    `json:"repeat"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
 	if p.Keys == "" {
-		return nil, invalidParam("keys", `keys is required, e.g. "ls,Enter" or "ctrl+c"`)
+		return nil, invalidParam("keys", `keys is required, e.g. "Down" or "ctrl+c"`)
 	}
+	if p.Repeat < 0 || p.Repeat > maxSendKeysRepeat {
+		return nil, invalidParam("repeat", fmt.Sprintf("repeat must be between 1 and %d, got %d", maxSendKeysRepeat, p.Repeat))
+	}
+	repeat := max(p.Repeat, 1)
 	sess, verr := d.resolveVerbSession(p.Session)
 	if verr != nil {
 		return nil, verr
+	}
+
+	// Parse before anything is sent, so a misspelled key fails whole on either
+	// route instead of arriving as its letters.
+	var parsed []sendKey
+	if !p.Literal && !p.Raw {
+		var err error
+		if parsed, err = parseSendKeys(p.Keys, repeat); err != nil {
+			return nil, sendKeysParseError(err, sess, p.Window)
+		}
 	}
 
 	if verr := d.recheckTyping(cs, "send-keys", sess, p.Window); verr != nil {
 		return nil, verr
 	}
 
-	// Route to the TUI when attached so window-manager keys (the prefix) are
-	// honored; otherwise write the parsed bytes straight to the target PTY. A
-	// pane without admin always gets the second: window-manager keys would let
-	// it do what only admin may (paneTypesRaw).
-	if tui := d.findTUIClient(sess.ID); tui != nil && !paneTypesRaw(cs) {
+	// Where the keys go. Keys for a named window go to that window's
+	// terminal, attached or not: the attached client reads keys as the
+	// person's and hands them to the focused window, which is not the one
+	// the caller named. With no window, an attached client gets them, so the
+	// prefix and the window manager's keys work the way the person's do. A
+	// pane without admin always writes to a terminal: window-manager keys
+	// would let it do what only admin may (paneTypesRaw).
+	tui := d.findTUIClient(sess.ID)
+	if p.Window != "" && hasPrefixKey(parsed) && tui != nil && !paneTypesRaw(cs) {
+		return nil, hintedVerbError(ErrVerbInvalidParams,
+			fmt.Sprintf("PREFIX goes to the window manager, which acts on the focused window, not on window %q", p.Window),
+			&VerbHint{
+				Param:   "window",
+				Command: "tuios focus-window " + p.Window,
+				Detail:  "Leave out the window to send window-manager keys, after focus-window if they should act on a particular window. Keys for a program in a window take no PREFIX.",
+			})
+	}
+	if p.Window == "" && !p.Literal && tui != nil && !paneTypesRaw(cs) {
+		keys := p.Keys
+		count := len(parsed)
+		if p.Raw {
+			keys = strings.Repeat(p.Keys, repeat)
+			count = utf8.RuneCountInString(keys)
+		} else {
+			canonical, err := sendKeysCanonical(parsed)
+			if err != nil {
+				return nil, invalidParam("keys", err.Error())
+			}
+			keys = canonical
+		}
 		res, err := d.routeToTUISync(tui, uuid.New().String(), &RemoteCommandPayload{
-			CommandType:  "send_keys",
-			Keys:         p.Keys,
-			Literal:      p.Literal,
-			Raw:          p.Raw,
-			WindowTarget: p.Window,
+			CommandType: "send_keys",
+			Keys:        keys,
+			Raw:         p.Raw,
 		}, routedVerbTimeout)
 		if err != nil {
 			return nil, newVerbError(ErrVerbCommandFailed, err.Error())
@@ -554,13 +650,64 @@ func (d *Daemon) verbSendKeys(cs *connState, params json.RawMessage) (any, *verb
 		if !res.Success {
 			return nil, newVerbError(ErrVerbCommandFailed, res.Message)
 		}
-		return map[string]any{"type": "ok"}, nil
+		return map[string]any{"type": "ok", "sent_to": "client", "keys": count}, nil
 	}
 
-	if err := d.sendKeysDaemonSide(sess, p.Window, p.Keys, p.Literal, p.Raw); err != nil {
+	keys := p.Keys
+	if (p.Literal || p.Raw) && repeat > 1 {
+		keys = strings.Repeat(p.Keys, repeat)
+	}
+	win, err := d.writeKeysToWindow(sess, p.Window, keys, p.Literal, p.Raw, parsed)
+	if err != nil {
+		var unknown errUnknownKey
+		if errors.As(err, &unknown) || strings.Contains(err.Error(), "prefix key") || strings.Contains(err.Error(), "unsupported") {
+			return nil, sendKeysParseError(err, sess, p.Window)
+		}
+		if errors.Is(err, errPaneReconnecting) {
+			return nil, ptyWriteError(err)
+		}
 		return nil, mapResolveErr(err, sess)
 	}
-	return map[string]any{"type": "ok"}, nil
+	count := len(parsed)
+	if parsed == nil {
+		count = utf8.RuneCountInString(keys)
+	}
+	return map[string]any{
+		"type":      "ok",
+		"sent_to":   "window",
+		"window_id": win.ID,
+		"window":    windowDisplayName(win),
+		"keys":      count,
+	}, nil
+}
+
+// sendKeysParseError is the verb error for keys that do not parse, naming the
+// window they were meant for so a caller driving several can tell which call
+// failed.
+func sendKeysParseError(err error, sess *Session, target string) *verbError {
+	msg := err.Error()
+	if target != "" {
+		msg = fmt.Sprintf("send-keys to window %q: %s", target, msg)
+	}
+	hint := &VerbHint{
+		Param:    "keys",
+		Accepted: KeyNames(),
+		Command:  "tuios send-keys --help",
+		Detail:   "A key is one of the names listed, a single character, or either of those after ctrl+, alt+ or shift+. Keys are split on spaces and commas; text to type goes through send-text.",
+	}
+	var unknown errUnknownKey
+	if errors.As(err, &unknown) {
+		hint.DidYouMean = unknown.didYouMean
+	}
+	return hintedVerbError(ErrVerbInvalidParams, msg, hint)
+}
+
+// windowDisplayName is the name a window shows: its custom name, else its title.
+func windowDisplayName(w WindowState) string {
+	if w.CustomName != "" {
+		return w.CustomName
+	}
+	return w.Title
 }
 
 func (d *Daemon) verbSendText(cs *connState, params json.RawMessage) (any, *verbError) {

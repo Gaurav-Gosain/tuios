@@ -1144,7 +1144,16 @@ func (m *OS) startRemoteSendKeys(keys string, literal bool, raw bool, windowTarg
 		if err != nil {
 			return nil, err
 		}
-		return nil, m.SendToWindow(windowID, []byte(keys))
+		if err := m.SendToWindow(windowID, []byte(keys)); err != nil {
+			return nil, err
+		}
+		// Nothing follows to report the result for this path, unlike the
+		// parsed one whose last key does, so report it here. Without this the
+		// daemon waited out its timeout on a send that had worked.
+		if m.DaemonClient != nil && requestID != "" {
+			_ = m.DaemonClient.SendCommandResult(requestID, true, "keys sent")
+		}
+		return nil, nil
 	}
 
 	// Parse and synthesize TUIOS key events

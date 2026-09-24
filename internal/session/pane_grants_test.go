@@ -844,10 +844,18 @@ func TestAttachedClientAnswersGetWindowAndNeverAPanesKeys(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	// The person's keys still go through the client.
+	// The person's keys with no window still go through the client. Keys for
+	// a named window go to that window's terminal, whoever sends them, since
+	// the client would hand them to the focused window instead.
 	d.approvalPeer = func(*connState) (bool, string) { return false, "" }
 	person := dialVerb(t, sp)
 	result(t, callP(person, t, "send-keys", map[string]any{"session": "a", "window": a2, "keys": "Enter"}))
+	select {
+	case p := <-routed:
+		t.Errorf("send-keys for a named window was routed to the client: %+v", p)
+	case <-time.After(200 * time.Millisecond):
+	}
+	result(t, callP(person, t, "send-keys", map[string]any{"session": "a", "keys": "Enter"}))
 	select {
 	case p := <-routed:
 		if p.CommandType != "send_keys" {

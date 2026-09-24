@@ -1,0 +1,286 @@
+package session
+
+import (
+	"encoding/json"
+	"errors"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestParseSendKeysSpellings(t *testing.T) {
+	tests := []struct {
+		name      string
+		keys      string
+		appCursor bool
+		want      string
+	}{
+		{name: "Up", keys: "Up", want: "\x1b[A"},
+		{name: "lower case", keys: "up", want: "\x1b[A"},
+		{name: "upper case", keys: "UP", want: "\x1b[A"},
+		{name: "arrow-up", keys: "arrow-up", want: "\x1b[A"},
+		{name: "ArrowUp", keys: "ArrowUp", want: "\x1b[A"},
+		{name: "up-arrow", keys: "up-arrow", want: "\x1b[A"},
+		{name: "curses KEY_UP", keys: "KEY_UP", want: "\x1b[A"},
+		{name: "vim <Up>", keys: "<Up>", want: "\x1b[A"},
+		{name: "escape written \\e", keys: `\e[A`, want: "\x1b[A"},
+		{name: "escape written \\x1b", keys: `\x1b[A`, want: "\x1b[A"},
+		{name: "escape written \\033", keys: `\033[A`, want: "\x1b[A"},
+		{name: "escape written ^[", keys: `^[[A`, want: "\x1b[A"},
+		{name: "escape byte itself", keys: "\x1b[A", want: "\x1b[A"},
+		{name: "Down in application cursor mode", keys: "Down", appCursor: true, want: "\x1bOB"},
+		{name: "Home in application cursor mode", keys: "Home", appCursor: true, want: "\x1bOH"},
+		{name: "PageDown", keys: "PageDown", want: "\x1b[6~"},
+		{name: "PgDn", keys: "PgDn", want: "\x1b[6~"},
+		{name: "Page_Down", keys: "Page_Down", want: "\x1b[6~"},
+		{name: "KEY_NPAGE", keys: "KEY_NPAGE", want: "\x1b[6~"},
+		{name: "PgUp", keys: "PgUp", want: "\x1b[5~"},
+		{name: "page-up", keys: "page-up", want: "\x1b[5~"},
+		{name: "Enter", keys: "Enter", want: "\r"},
+		{name: "Return", keys: "Return", want: "\r"},
+		{name: "Esc", keys: "Esc", want: "\x1b"},
+		{name: "BSpace", keys: "BSpace", want: "\x7f"},
+		{name: "BTab", keys: "BTab", want: "\x1b[Z"},
+		{name: "shift+Tab", keys: "shift+Tab", want: "\x1b[Z"},
+		{name: "F1", keys: "F1", want: "\x1bOP"},
+		{name: "f5", keys: "f5", want: "\x1b[15~"},
+		{name: "ctrl+c", keys: "ctrl+c", want: "\x03"},
+		{name: "Ctrl+C", keys: "Ctrl+C", want: "\x03"},
+		{name: "tmux C-c", keys: "C-c", want: "\x03"},
+		{name: "caret ^C", keys: "^C", want: "\x03"},
+		{name: "ctrl+b is a byte for the window", keys: "ctrl+b", want: "\x02"},
+		{name: "alt+b", keys: "alt+b", want: "\x1bb"},
+		{name: "tmux M-b", keys: "M-b", want: "\x1bb"},
+		{name: "shift+a", keys: "shift+a", want: "A"},
+		{name: "ctrl+Up", keys: "ctrl+Up", want: "\x1b[1;5A"},
+		{name: "shift+Down", keys: "shift+Down", want: "\x1b[1;2B"},
+		{name: "alt+PageDown", keys: "alt+PageDown", want: "\x1b[6;3~"},
+		{name: "ctrl+Space", keys: "ctrl+Space", want: "\x00"},
+		{name: "sequence with spaces and commas", keys: "Down Down,PageDown", want: "\x1b[B\x1b[B\x1b[6~"},
+		{name: "single characters", keys: "q j G /", want: "qjG/"},
+		{name: "a lower-case word is typed", keys: "ls,Enter", want: "ls\r"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			keys, err := parseSendKeys(tc.keys, 1)
+			if err != nil {
+				t.Fatalf("parseSendKeys(%q): %v", tc.keys, err)
+			}
+			got, err := sendKeysBytes(keys, tc.appCursor)
+			if err != nil {
+				t.Fatalf("sendKeysBytes(%q): %v", tc.keys, err)
+			}
+			if string(got) != tc.want {
+				t.Errorf("%q gave %q, want %q", tc.keys, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseSendKeysRepeat(t *testing.T) {
+	keys, err := parseSendKeys("Down Up", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := sendKeysBytes(keys, false)
+	if want := strings.Repeat("\x1b[B\x1b[A", 3); string(got) != want {
+		t.Errorf("repeat 3 gave %q, want %q", got, want)
+	}
+	for _, n := range []int{-1, maxSendKeysRepeat + 1} {
+		if _, err := parseSendKeys("Down", n); err == nil {
+			t.Errorf("repeat %d was accepted", n)
+		}
+	}
+}
+
+func TestParseSendKeysRejectsWhatLooksLikeAKey(t *testing.T) {
+	tests := []struct {
+		keys, didYouMean string
+	}{
+		{keys: "Dwon", didYouMean: "Down"},
+		{keys: "KEY_FOO"},
+		{keys: "arrow-diagonal"},
+		{keys: "<Upp>", didYouMean: "Up"},
+		{keys: "F13", didYouMean: "F1"},
+		{keys: "ctrl+Uup", didYouMean: "Up"},
+		{keys: "Pagedwn", didYouMean: "PageDown"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.keys, func(t *testing.T) {
+			_, err := parseSendKeys("Down "+tc.keys, 1)
+			var unknown errUnknownKey
+			if !errors.As(err, &unknown) {
+				t.Fatalf("%q: got %v, want an unknown key error", tc.keys, err)
+			}
+			if unknown.didYouMean != tc.didYouMean {
+				t.Errorf("%q: did you mean %q, want %q", tc.keys, unknown.didYouMean, tc.didYouMean)
+			}
+		})
+	}
+	for _, bad := range []string{"ctrl+shift", "ctrl+1", "ctrl+"} {
+		if _, err := parseSendKeys(bad, 1); err == nil {
+			t.Errorf("%q was accepted", bad)
+		}
+	}
+}
+
+func TestSendKeysCanonicalForTheClient(t *testing.T) {
+	keys, err := parseSendKeys("arrow-down KEY_UP PgDn C-c BTab PREFIX q ls", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := sendKeysCanonical(keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "Down Up PageDown ctrl+c shift+Tab PREFIX q ls"; got != want {
+		t.Errorf("canonical %q, want %q", got, want)
+	}
+	escape, _ := parseSendKeys(`\e[A`, 1)
+	if _, err := sendKeysCanonical(escape); err == nil {
+		t.Error("an escape sequence was handed to the client")
+	}
+}
+
+// echoWindow opens a window whose terminal echoes every byte it is sent, with
+// control bytes made visible (ESC as ^[), so a test can see which keys reached
+// which window.
+func echoWindow(t *testing.T, d *Daemon, sess *Session, name, setup string) {
+	t.Helper()
+	script := "stty icanon echo echoctl; " + setup + "cat >/dev/null"
+	if _, err := d.executeDaemonCommand(sess, "NewWindow", []string{name, "/bin/sh", "-c", script}, func(string) {}); err != nil {
+		t.Fatalf("NewWindow %s: %v", name, err)
+	}
+}
+
+// waitScreen waits for a window's screen to contain want.
+func waitScreen(t *testing.T, d *Daemon, sess *Session, window, want string) string {
+	t.Helper()
+	pty, err := d.resolvePTYForTarget(sess, window)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	var content string
+	for time.Now().Before(deadline) {
+		content = pty.CaptureContent(false, false)
+		if strings.Contains(content, want) {
+			return content
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("window %s never showed %q; screen:\n%s", window, want, content)
+	return content
+}
+
+// TestVerbSendKeysReachesTheNamedWindowOnly sends an arrow to one of two
+// windows by name and checks that only that window read it, in the form its
+// cursor key mode asks for, and that the result names the window.
+func TestVerbSendKeysReachesTheNamedWindowOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the echo program is /bin/sh and od")
+	}
+	d, sess := newTestDaemonSession(t)
+	echoWindow(t, d, sess, "left", "")
+	// The right window turns on application cursor keys first, as less does.
+	echoWindow(t, d, sess, "right", `printf '\033[?1h'; `)
+	time.Sleep(300 * time.Millisecond)
+
+	params, _ := json.Marshal(map[string]any{"session": sess.Name, "window": "right", "keys": "Down", "repeat": 2})
+	res, verr := d.verbSendKeys(nil, params)
+	if verr != nil {
+		t.Fatalf("send-keys: %v", verr)
+	}
+	m := res.(map[string]any)
+	if m["sent_to"] != "window" || m["window"] != "right" || m["keys"] != 2 {
+		t.Errorf("result %v, want sent_to window, window right, keys 2", m)
+	}
+	screen := waitScreen(t, d, sess, "right", "^[OB^[OB")
+	if strings.Contains(screen, "^[[B") {
+		t.Errorf("right window got the CSI form under application cursor keys:\n%s", screen)
+	}
+	left, _ := d.resolvePTYForTarget(sess, "left")
+	if got := left.CaptureContent(false, false); strings.Contains(got, "B") {
+		t.Errorf("left window read keys sent to right:\n%s", got)
+	}
+
+	// A misspelled key sends nothing and says which window it was for.
+	params, _ = json.Marshal(map[string]any{"session": sess.Name, "window": "left", "keys": "Down Dwon"})
+	_, verr = d.verbSendKeys(nil, params)
+	if verr == nil || verr.Code != ErrVerbInvalidParams || !strings.Contains(verr.Message, `"left"`) || !strings.Contains(verr.Message, "Dwon") {
+		t.Fatalf("misspelled key: got %v, want invalid_params naming the window and the key", verr)
+	}
+	if verr.Hint == nil || verr.Hint.DidYouMean != "Down" {
+		t.Errorf("misspelled key hint %+v, want did_you_mean Down", verr.Hint)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if got := left.CaptureContent(false, false); strings.Contains(got, "B") {
+		t.Errorf("a refused sequence still reached the window:\n%s", got)
+	}
+
+	// The CSI form reaches the window that did not ask for SS3.
+	params, _ = json.Marshal(map[string]any{"session": sess.Name, "window": "left", "keys": "arrow-up"})
+	if _, verr := d.verbSendKeys(nil, params); verr != nil {
+		t.Fatalf("send-keys arrow-up: %v", verr)
+	}
+	waitScreen(t, d, sess, "left", "^[[A")
+}
+
+// TestWindowNameBeatsTitle checks a name given to a window is found even when
+// another window's program has put the same word in its title, and that two
+// windows with one name are an error that lists both.
+func TestWindowNameBeatsTitle(t *testing.T) {
+	windows := []WindowState{
+		{ID: "aaaaaaaa-1", Title: "docs"},
+		{ID: "bbbbbbbb-2", CustomName: "docs", Title: "zsh"},
+	}
+	idx, err := findWindowStateIndex(windows, "docs")
+	if err != nil || idx != 1 {
+		t.Fatalf("docs resolved to %d, %v; want the named window, 1", idx, err)
+	}
+	windows = append(windows, WindowState{ID: "cccccccc-3", CustomName: "docs"})
+	_, err = findWindowStateIndex(windows, "docs")
+	if err == nil || !strings.Contains(err.Error(), "bbbbbbbb") || !strings.Contains(err.Error(), "cccccccc") {
+		t.Fatalf("two windows named docs: got %v, want an error listing both", err)
+	}
+}
+
+// TestNewWindowWaitsForTheClientToPlaceIt checks the wait new-window makes
+// with a client attached: it returns once the client has placed the window,
+// and gives up, reporting it unplaced, when no client ever does. A program
+// started before the client sized the pane got a resize while it drew, and
+// glow's pager drew a blank screen for good.
+func TestNewWindowWaitsForTheClientToPlaceIt(t *testing.T) {
+	d, sess := newTestDaemonSession(t)
+	win, err := sess.AddDaemonWindowWith(NewWindowOptions{Name: "docs"}, func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !win.Unplaced {
+		t.Fatal("a window the daemon made is not marked unplaced")
+	}
+	if d.awaitPlacement(sess, win.ID, win.PTYID, 100*time.Millisecond) {
+		t.Error("awaitPlacement reported a window nobody placed as placed")
+	}
+
+	// A client places it a moment later, as an attached one does.
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		_ = sess.mutateState(func(state *SessionState) error {
+			for i := range state.Windows {
+				if state.Windows[i].ID == win.ID {
+					state.Windows[i].Unplaced = false
+				}
+			}
+			return nil
+		})
+	}()
+	start := time.Now()
+	if !d.awaitPlacement(sess, win.ID, win.PTYID, 2*time.Second) {
+		t.Fatal("awaitPlacement never saw the window placed")
+	}
+	if took := time.Since(start); took > time.Second {
+		t.Errorf("awaitPlacement took %v after the window was placed", took)
+	}
+}

@@ -75,22 +75,31 @@ func findWindowStateIndex(windows []WindowState, target string) (int, error) {
 		return prefixIdx, nil
 	}
 	if prefixCount > 1 {
-		return -1, fmt.Errorf("ambiguous window ID prefix %q matches %d windows", target, prefixCount)
+		return -1, fmt.Errorf("ambiguous window ID prefix %q matches %d windows: %s. Use more of the id", target, prefixCount,
+			describeWindows(windows, func(w WindowState) bool { return strings.HasPrefix(w.ID, target) }))
 	}
 
-	// Exact CustomName, then Title.
-	nameIdx, nameCount := -1, 0
-	for i := range windows {
-		if windows[i].CustomName == target || windows[i].Title == target {
-			nameIdx = i
-			nameCount++
+	// Exact name. A name given with set-window or new-window wins over a
+	// title, which the program in the window sets and can change at any time,
+	// so a window's own name cannot be shadowed by another window's title.
+	for _, byName := range []func(w WindowState) bool{
+		func(w WindowState) bool { return w.CustomName == target },
+		func(w WindowState) bool { return w.Title == target },
+	} {
+		nameIdx, nameCount := -1, 0
+		for i := range windows {
+			if byName(windows[i]) {
+				nameIdx = i
+				nameCount++
+			}
 		}
-	}
-	if nameCount == 1 {
-		return nameIdx, nil
-	}
-	if nameCount > 1 {
-		return -1, fmt.Errorf("ambiguous window name %q matches %d windows", target, nameCount)
+		if nameCount == 1 {
+			return nameIdx, nil
+		}
+		if nameCount > 1 {
+			return -1, fmt.Errorf("ambiguous window name %q matches %d windows: %s. Use the id, or rename one with set-window --name", target, nameCount,
+				describeWindows(windows, byName))
+		}
 	}
 
 	return -1, fmt.Errorf("no window found matching %q", target)
@@ -562,4 +571,21 @@ func (s *Session) SetDaemonWindowMinimized(target string, minimized bool) error 
 		state.Windows[idx].Minimized = minimized
 		return nil
 	})
+}
+
+// describeWindows lists the windows match accepts as index, short id and name,
+// for an error that has to say which windows a target could have meant.
+func describeWindows(windows []WindowState, match func(WindowState) bool) string {
+	var parts []string
+	for i := range windows {
+		if !match(windows[i]) {
+			continue
+		}
+		name := windows[i].CustomName
+		if name == "" {
+			name = windows[i].Title
+		}
+		parts = append(parts, fmt.Sprintf("%d %s (%s)", i, shortWindowID(windows[i].ID), name))
+	}
+	return strings.Join(parts, ", ")
 }

@@ -333,7 +333,7 @@ var verbsWithNoDocumentedResult = map[string]bool{
 	"capture-pane": true, "close-window": true, "explain-agent-detect": true,
 	"explain-agent-screen": true, "get-agent-state": true, "hello": true,
 	"kill-session": true, "list-sessions": true, "list-verbs": true,
-	"list-windows": true, "resize": true, "send-keys": true, "send-text": true,
+	"list-windows": true, "resize": true, "send-text": true,
 	"session-info": true, "set-session-accent": true,
 	"set-session-name": true, "set-workspace-name": true,
 	"set-workspace-order": true, "unsubscribe": true,
