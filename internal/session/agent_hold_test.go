@@ -31,7 +31,7 @@ func TestAgentLoudness(t *testing.T) {
 // something quieter and then takes it back inside the hold window produces one
 // transition, not two. The pane never visits the state that was withdrawn.
 func TestAgentHoldCollapsesAFlap(t *testing.T) {
-	sess, id := bareSessionWithWindow(t)
+	sess, id := agentPaneWithWindow(t)
 	now := time.Now()
 
 	// The agent starts working. Louder than none, so it is published at once.
@@ -71,7 +71,7 @@ func TestAgentHoldCollapsesAFlap(t *testing.T) {
 // veto: a quieter state that keeps being true is published once its window has
 // elapsed.
 func TestAgentHoldPublishesAStateThatStands(t *testing.T) {
-	sess, id := bareSessionWithWindow(t)
+	sess, id := agentPaneWithWindow(t)
 	now := time.Now()
 
 	sess.applyAgentProgressAt(id, vt.ProgressIndeterminate, now)
@@ -91,7 +91,7 @@ func TestAgentHoldPublishesAStateThatStands(t *testing.T) {
 // clears its progress bar once and then says nothing still gets its state
 // published rather than held forever.
 func TestAgentHoldSettlesWhenTheSourceGoesSilent(t *testing.T) {
-	sess, id := bareSessionWithWindow(t)
+	sess, id := agentPaneWithWindow(t)
 	now := time.Now()
 
 	sess.applyAgentProgressAt(id, vt.ProgressIndeterminate, now)
@@ -134,7 +134,7 @@ func TestAgentHoldSettlesWhenTheSourceGoesSilent(t *testing.T) {
 // It uses real time on purpose: the defect was the absence of a caller, and a
 // test that passes the clock in cannot see that.
 func TestAgentHoldPublishesItselfWithNoOneToCallIt(t *testing.T) {
-	sess, id := bareSessionWithWindow(t)
+	sess, id := agentPaneWithWindow(t)
 
 	sess.applyAgentProgress(id, vt.ProgressIndeterminate)
 	sess.applyAgentProgress(id, vt.ProgressClear)
@@ -157,7 +157,7 @@ func TestAgentHoldPublishesItselfWithNoOneToCallIt(t *testing.T) {
 // errored are published the instant they are seen, however quiet the pane was,
 // because a late "the agent is waiting on you" is the expensive mistake.
 func TestAgentHoldNeverDelaysAStateThatWantsAHuman(t *testing.T) {
-	sess, id := bareSessionWithWindow(t)
+	sess, id := agentPaneWithWindow(t)
 	now := time.Now()
 
 	sess.applyAgentProgressAt(id, vt.ProgressClear, now)

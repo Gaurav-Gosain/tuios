@@ -825,9 +825,9 @@ rules made of it beside the screen half, which is the way to write one.
 A title rule may set `region = "osc_progress"` to read the pane's last OSC 9;4
 progress report instead of its title, written as herdr keeps it: `4;<state>` for
 the states whose percentage means nothing (0 remove, 3 indeterminate) and
-`4;<state>;<percent>` for the others (1 set, 2 error, 4 paused). Every pane
-already gets the sequence's published meaning (a bar is working, clearing it is
-idle, the error state is errored, paused is needs_input). A harness that uses
+`4;<state>;<percent>` for the others (1 set, 2 error, 4 paused). Every agent's
+pane already gets the sequence's published meaning (a bar is working, clearing
+it is idle, the error state is errored, paused is needs_input). A harness that uses
 the sequence its own way, say indeterminate progress for "waiting on you", gets
 its own reading: when a report arrives from a pane whose manifest has
 `osc_progress` rules and one of them matches the report, the pane's title block
@@ -836,6 +836,16 @@ When none matches, the published meaning applies, so a manifest names only the
 reports it reads differently. No bundled manifest has one: herdr's progress
 rules for Grok, Kiro, Qwen Code and Claude Code agree with the published
 meaning.
+
+The sequence counts as agent state only on a pane already known to hold an
+agent: one with a state from any source, a harness named on it, or a harness
+process recorded in it. Package managers, build tools and downloaders draw
+their progress bars with the same sequence, and on its own it says a program
+is busy, not that an agent is there. So a plain shell pane that emits OSC 9;4
+gets no state mark, no silence timer and no Inbox entry. The report is still
+kept on the pane, where `osc_progress` rules read it. An agent that is
+detected a moment after its first report picks up the next one; a harness that
+reports only through the sequence is recognised by its process, as any other.
 
 ## Notification rules
 

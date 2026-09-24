@@ -65,8 +65,37 @@ func (s *Session) applyPaneProgress(ptyID, windowID string, state vt.ProgressSta
 	s.applyAgentProgress(windowID, state)
 }
 
+// progressTarget reports a window's agent state, whether the window exists, and
+// whether it is known to hold an agent, which is what an OSC 9;4 report needs
+// before it may say anything about agent state.
+//
+// Plenty of programs that are not agents draw a progress bar with the sequence:
+// package managers, build tools, downloaders. Read on its own terms it turned a
+// plain shell pane into an agent, with a state mark, a silence timer and Inbox
+// entries its owner never asked for. So the sequence is believed about an agent
+// only once something else has said an agent is there: a state already on the
+// pane (a report, a hook, the foreground-process detector, a screen rule), a
+// harness named on it, a claim held for it, or a harness process recorded in
+// it. The sequence is still parked on the pane either way (see
+// storeAgentProgress), so a manifest's osc_progress rules can read it.
+func (s *Session) progressTarget(windowID string) (current AgentState, exists, agentPane bool) {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	for i := range s.state.Windows {
+		w := &s.state.Windows[i]
+		if w.ID != windowID {
+			continue
+		}
+		_, claimed := s.agentClaims[w.ID]
+		agentPane = w.AgentState != AgentStateNone || w.AgentHarness != "" || claimed || s.agentHarnessPIDs[w.ID] != 0
+		return w.AgentState, true, agentPane
+	}
+	return AgentStateNone, false, false
+}
+
 // applyAgentProgress records an OSC 9;4 progress report against a window as an
-// AgentSourceOSC claim. It runs on the PTY read goroutine, off the terminal lock
+// AgentSourceOSC claim, when the window is known to hold an agent (see
+// progressTarget); on any other pane it does nothing. It runs on the PTY read goroutine, off the terminal lock
 // the VT callback that parked the report was holding.
 //
 // It goes through ApplyAgentReport, so the ranking decides: an in-band sequence
@@ -84,8 +113,8 @@ func (s *Session) applyAgentProgressAt(windowID string, state vt.ProgressState, 
 	if !ok {
 		return
 	}
-	current, exists := s.windowAgentState(windowID)
-	if !exists {
+	current, exists, agentPane := s.progressTarget(windowID)
+	if !exists || !agentPane {
 		return
 	}
 	// A harness that clears its progress bar between two steps of one task would

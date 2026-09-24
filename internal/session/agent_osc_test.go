@@ -1,6 +1,7 @@
 package session
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -30,11 +31,39 @@ func TestAgentStateForProgress(t *testing.T) {
 	}
 }
 
-// TestAgentProgressDrivesState proves an OSC 9;4 report moves a pane through
-// working, needs_input and idle, which is the whole point of reading the
-// sequence: it is a state feed the harness emits about itself.
-func TestAgentProgressDrivesState(t *testing.T) {
+// agentPaneWithWindow is bareSessionWithWindow with a harness named on the
+// window, which is what an OSC 9;4 report needs before it may drive agent
+// state (see progressTarget). No state is set: the pane is attributed to an
+// agent and the agent has not said anything yet.
+func agentPaneWithWindow(t *testing.T) (*Session, string) {
+	t.Helper()
 	sess, id := bareSessionWithWindow(t)
+	attributeHarness(t, sess, id, "claude-code")
+	return sess, id
+}
+
+// attributeHarness names a harness on a window without setting a state.
+func attributeHarness(t *testing.T, sess *Session, windowID, harnessID string) {
+	t.Helper()
+	err := sess.mutateState(func(st *SessionState) error {
+		for i := range st.Windows {
+			if st.Windows[i].ID == windowID {
+				st.Windows[i].AgentHarness = harnessID
+				return nil
+			}
+		}
+		return fmt.Errorf("window %s not found", windowID)
+	})
+	if err != nil {
+		t.Fatalf("attribute harness: %v", err)
+	}
+}
+
+// TestAgentProgressDrivesState proves an OSC 9;4 report moves an agent's pane
+// through working, needs_input and idle, which is the whole point of reading
+// the sequence: it is a state feed the harness emits about itself.
+func TestAgentProgressDrivesState(t *testing.T) {
+	sess, id := agentPaneWithWindow(t)
 	now := time.Now()
 
 	sess.applyAgentProgressAt(id, vt.ProgressIndeterminate, now)
@@ -87,6 +116,89 @@ func TestAgentProgressOutranksDetectorAndYieldsToReport(t *testing.T) {
 	sess.applyAgentProgress(id, vt.ProgressIndeterminate)
 	if got := agentStateOf(t, sess, id); got != AgentStateDone {
 		t.Fatalf("progress over a reported pane = %q, want done (unchanged)", got)
+	}
+}
+
+// TestPlainPaneProgressIsNotAnAgent is the regression test for a progress bar
+// making an agent out of a shell. A package manager or a build tool that draws
+// its bar with OSC 9;4 turned a plain pane into an agent: a state mark on the
+// rail, a silence timer, and an Inbox entry when the bar went to its warning
+// state. The sequence says a program is busy, not that an agent is there.
+func TestPlainPaneProgressIsNotAnAgent(t *testing.T) {
+	sess, id := bareSessionWithWindow(t)
+	now := time.Now()
+	for _, state := range []vt.ProgressState{
+		vt.ProgressIndeterminate, vt.ProgressNormal, vt.ProgressWarning, vt.ProgressError, vt.ProgressClear,
+	} {
+		sess.applyAgentProgressAt(id, state, now)
+		if got := agentStateOf(t, sess, id); got != AgentStateNone {
+			t.Fatalf("a plain pane after progress state %d has agent state %q, want none", state, got)
+		}
+	}
+	if n := sess.settleAgentHolds(now.Add(time.Hour)); n != 0 {
+		t.Fatalf("settle published %d states for a plain pane, want 0", n)
+	}
+	if got := agentStateOf(t, sess, id); got != AgentStateNone {
+		t.Fatalf("a plain pane after settling has agent state %q, want none", got)
+	}
+}
+
+// TestPlainPaneProgressReachesNoInbox runs the same case through the daemon,
+// the way a pane's output reaches it: the emulator parks the report and the
+// output handler applies it. A plain pane gets no agent state and nothing in
+// the Inbox, while the same report on a pane attributed to a harness still
+// reaches both, so the gate is about the pane and not about the sequence.
+func TestPlainPaneProgressReachesNoInbox(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	sess, plain, agent := twoWindowSession(t, d, "bars")
+	c := dialVerb(t, sp)
+	attributeHarness(t, sess, agent, "claude-code")
+
+	feedProgress := func(windowID string) {
+		t.Helper()
+		ptyID := ptyIDOfWindow(t, sess, windowID)
+		pty := sess.GetPTY(ptyID)
+		feedVT(t, pty, "\x1b]9;4;4;30\x07")
+		state, ok := pty.takeAgentProgress()
+		if !ok {
+			t.Fatal("the emulator parked no progress report")
+		}
+		sess.applyPaneProgress(ptyID, windowID, state, d.agentMatcher.registry)
+	}
+
+	feedProgress(plain)
+	feedProgress(agent)
+
+	// The attributed pane is the positive control: once its item is in the
+	// Inbox, the plain pane has had the same chance to put one there.
+	items := waitAttention(t, c, "the attributed pane's warning", hasItemFor(agent))
+	for _, it := range items {
+		if it["window"] == plain {
+			t.Fatalf("a plain pane's progress bar put %v in the Inbox", it)
+		}
+	}
+	if got := agentStateOf(t, sess, plain); got != AgentStateNone {
+		t.Fatalf("a plain pane's progress bar gave it agent state %q, want none", got)
+	}
+	if got := agentStateOf(t, sess, agent); got != AgentStateNeedsInput {
+		t.Fatalf("an attributed pane's warning = %q, want needs_input", got)
+	}
+	// The report is still readable on the plain pane, for anything that shows
+	// progress as progress.
+	if got := sess.GetPTY(ptyIDOfWindow(t, sess, plain)).ProgressText(); got != "4;4;30" {
+		t.Fatalf("the plain pane's progress text = %q, want 4;4;30", got)
+	}
+}
+
+// hasItemFor holds when any Inbox item is about the window.
+func hasItemFor(window string) func([]map[string]any) bool {
+	return func(items []map[string]any) bool {
+		for _, it := range items {
+			if it["window"] == window {
+				return true
+			}
+		}
+		return false
 	}
 }
 
