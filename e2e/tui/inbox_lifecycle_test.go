@@ -55,7 +55,11 @@ func TestInboxSnoozeUndoAndWake(t *testing.T) {
 	if err := term.SendKeys("S"); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "the snoozed group", "Snoozed 1", "build failed on main", "z wake")
+	// The snoozed row ends with when it wakes. An hour's snooze taken
+	// after 23:00 wakes tomorrow, so that reads "until Fri 00:29" instead
+	// of "until 00:29", and the longer label cuts the message short. Match
+	// the part of the message that shows at either width.
+	waitText(t, term, "the snoozed group", "Snoozed 1", "build failed on", "until ", "z wake")
 	saveFrame(t, term, "inbox-snoozed-shown")
 	if err := term.SendKeys("z"); err != nil {
 		t.Fatal(err)
