@@ -49,7 +49,7 @@ func hostItemID(host, id string) string { return host + ":" + id }
 var hostCloseReasons = []string{
 	AttentionClosedResolved, AttentionClosedSeen, AttentionClosedRead,
 	AttentionClosedDismissed, AttentionClosedWindow, AttentionClosedSession,
-	AttentionClosedEvicted,
+	AttentionClosedEvicted, AttentionClosedSnoozed,
 }
 
 // sanitizeHostItem turns an item a host sent into the item mirrored here, or
@@ -96,6 +96,18 @@ func sanitizeHostItem(host string, in AttentionItem, now time.Time) (AttentionIt
 			break
 		}
 		out.Options = append(out.Options, attentionText(o, 80))
+	}
+	// The host's risk marks and the length of its plan are shown here as the
+	// host gave them. They are display only: an item of another machine is
+	// never answered from this one.
+	for i, r := range in.Risk {
+		if i == hostAttentionMaxOptions {
+			break
+		}
+		out.Risk = append(out.Risk, attentionText(r, 64))
+	}
+	if in.Kind == AttentionPlan {
+		out.PlanLines = min(max(in.PlanLines, 0), 1<<20)
 	}
 	return out, true
 }

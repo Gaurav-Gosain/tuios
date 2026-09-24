@@ -104,6 +104,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateSection("terminal_mode", cfg.Keybindings.TerminalMode)
 	validateSection("sidebar", cfg.Keybindings.Sidebar)
 	validateSection("sidebar_files", cfg.Keybindings.SidebarFiles)
+	validateSection("sidebar_agents", cfg.Keybindings.SidebarAgents)
 	validateSection("inbox", cfg.Keybindings.Inbox)
 	validateSection("inbox_peek", cfg.Keybindings.InboxPeek)
 	validateSection("mail", cfg.Keybindings.Mail)
@@ -118,6 +119,7 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateResumeAgents(cfg, result)
 	validateLinkPolicies(cfg, result)
 	validatePanePermissions(cfg, result)
+	validateAgentWork(cfg, result)
 
 	// Validate the notifications section (warn on a duration that would put a
 	// message back under the accessibility floor)
@@ -320,6 +322,13 @@ func validateAppearanceEnums(cfg *UserConfig, result *ValidationResult) {
 		result.Warnings = append(result.Warnings, ValidationError{
 			Field:   "appearance.sidebar.agent_row",
 			Message: problem,
+		})
+	}
+	if _, ok := ParseAgentRestFold(cfg.Appearance.Sidebar.AgentRestFold); !ok {
+		result.Warnings = append(result.Warnings, ValidationError{
+			Field:   "appearance.sidebar",
+			Key:     "agent_rest_fold",
+			Message: fmt.Sprintf("'%s' is not a duration such as 1h, or off; read as 1h", cfg.Appearance.Sidebar.AgentRestFold),
 		})
 	}
 	checkEnum("sidebar.folder_click", cfg.Appearance.Sidebar.FolderClick, SidebarFolderClicks)

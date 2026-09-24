@@ -9,6 +9,8 @@ the prompts only the person may answer.
 ## What is in it
 
 - an approval or a question: a pane on `needs_input`, split by `blocked_by`
+- a plan an agent in plan mode asks the person to approve (kind `plan`),
+  once plans are held; its pane still reads `blocked_by` approval
 - a question an agent asked with `ask-human` (kind `ask`)
 - mail to `human`
 - a pane on `errored`

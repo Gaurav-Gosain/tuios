@@ -424,6 +424,8 @@ type sidebarAgentEntry struct {
 	// Meta is what the pane reported about its agent through set-agent-meta,
 	// in the order the pane holds it. The meta and $key row tokens draw it.
 	Meta []sessiontree.MetaToken
+	// Queued is how many messages wait in the pane's delivery queue.
+	Queued int
 	// SessionLabel is what to print for SessionID: the session's display name
 	// when it has one. Identity keys the row, the label only fronts it.
 	SessionLabel string
@@ -2092,6 +2094,7 @@ func (m *OS) sidebarAgents(sessions []sessiontree.Node) []sidebarAgentEntry {
 				Message:      win.Message,
 				AgentKind:    win.AgentKind,
 				Meta:         win.Meta,
+				Queued:       win.Queued,
 				WindowIndex:  idx,
 				Foreign:      !s.IsCurrent,
 				Host:         s.Host,
@@ -2733,6 +2736,11 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// duration is the part nothing else carries. A pane waiting twenty minutes
 	// on input reads very differently from one that just asked.
 	label, labelW := plan.Right.Text, lipgloss.Width(plan.Right.Text)
+	// Messages waiting to be typed to the agent take the elapsed time's
+	// place. See inbox_reply.go.
+	if queued := m.sidebarAgentQueuedFigure(e); queued != "" {
+		label, labelW = queued, lipgloss.Width(queued)
+	}
 	// Mail waiting in this pane's inbox, after the elapsed time: it is the one
 	// thing about an agent that nothing on its screen shows.
 	mail, mailW := "", 0

@@ -90,6 +90,7 @@ var settingLabels = map[string]string{
 	"appearance.sidebar.folder_click":         "Click a folder",
 	"appearance.sidebar.file_actions":         "File actions",
 	"appearance.sidebar.file_delete":          "Delete sends to",
+	"appearance.sidebar.agent_rest_fold":      "Fold agents at rest after",
 	"appearance.dock_workspace_tab_format":    "Workspace tab format",
 	"appearance.zoom_size":                    "Zoom size",
 	"appearance.zoom_animation":               "Zoom animates",

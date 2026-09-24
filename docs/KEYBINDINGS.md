@@ -2,7 +2,7 @@
 
 The keybinding reference lives on the docs site: https://tuios.dev/docs/keybindings
 
-Every binding lives in one of the 22 sections under `[keybindings]` in `config.toml` and is rebindable; the site page lists each section's defaults, the prefix chords, copy mode, and the key syntax.
+Every binding lives in one of the 23 sections under `[keybindings]` in `config.toml` and is rebindable; the site page lists each section's defaults, the prefix chords, copy mode, and the key syntax.
 
 To inspect your own effective bindings, use the binary rather than any document: `tuios keybinds list`, `tuios keybinds doctor` for conflicts, `tuios keybinds explain <key>` for everything one key does, or the in-app keybind manager on `Ctrl+B k`.
 
@@ -118,6 +118,41 @@ the rules `2` adds, are shown under the list, and only once it has been on
 screen as it is for 0.4 seconds. `space` does not open a held approval: the
 hook keeps its prompt off the pane until the Inbox answers, so there is
 nothing on the screen to read.
+
+### Review, triage and replies
+
+These keys are bound for the agent review, triage, reply and approval work.
+Each one is being built: until its work lands, a key does what it did before
+it was bound (nothing in the Inbox, and the rail's own binding on an agent
+row). The prefix menu and the help overlay list them only once an agent has
+been seen, like the rest of the Agents section.
+
+| Keys | Where | What it does |
+| --- | --- | --- |
+| `ctrl+b v` | anywhere | Review the focused pane's changes |
+| `ctrl+b O` | anywhere | Go to the newest finished turn nobody has seen; `O` again, inside the repeat window, goes to the next older one |
+| `v` | Inbox | Review the changes in the item's pane |
+| `z`, then `1` to `4` | Inbox | Snooze the item: 15 minutes, 1 hour, until 9:00 tomorrow, or until it changes |
+| `u` | Inbox | Undo the last dismiss or snooze, within 10 seconds |
+| `S` | Inbox | Show or hide snoozed items |
+| `n` | Inbox | Deny a held approval or a plan with a reason (`3` stays the plain deny) |
+| `J`, `K`, `ctrl+d`, `ctrl+u` | Inbox | Scroll the detail under the list, such as a long plan |
+| `u` | rail agent row | Mark the pane's finished turn unread |
+| `z` | rail agent row | Snooze the pane's Inbox item |
+| `r` | rail agent row | Reply to the agent |
+| `v` | rail agent row | Review the pane's changes |
+| `x` | rail agent row | Drop the newest queued message |
+
+The Inbox's keys are `inbox_review`, `inbox_snooze`, `inbox_undo`,
+`inbox_show_snoozed`, `inbox_deny_reason`, `inbox_detail_down` and
+`inbox_detail_up` in `[keybindings.inbox]`, and the prefix chords are
+`prefix_review` and `prefix_next_finished` in `[keybindings.prefix_mode]`.
+The agent rows' keys are a section of their own,
+`[keybindings.sidebar_agents]` (`agent_unread`, `agent_snooze`,
+`agent_reply`, `agent_review`, `agent_cancel_queued`). It is consulted before
+the rail's own keys and only while the cursor is on an agent row, the way
+`[keybindings.sidebar_files]` is on a file row, so `r` and `x` mean the agent
+on an agent row and keep renaming and opening the menu on every other row.
 
 ## macOS
 

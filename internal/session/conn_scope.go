@@ -201,6 +201,26 @@ var verbScopes = map[string]scopeKind{
 	// From the host targeting work: reading a worktree's files out is for
 	// the person's own CLI (worktree pull), not a restricted caller.
 	"bundle-worktree": scopeDeny,
+
+	// From the agent review, triage, queue and approval work
+	// (verb_protocol_agents.go). Reads of one session and its fan group: a
+	// pane's diff, a fan's comparison, an agent's activity, its queue and a
+	// held approval. Writes: review notes, the queue, and sending notes,
+	// which types. verify-fan starts a window in each attempt, which is a
+	// launch. keep-fan removes worktrees and mark-attention is the person's
+	// act on the Inbox, so neither is for a restricted caller.
+	"review-diff":    scopeRead,
+	"compare-fan":    scopeRead,
+	"agent-activity": scopeRead,
+	"list-queued":    scopeRead,
+	"get-approval":   scopeRead,
+	"review-note":    scopeWrite,
+	"send-review":    scopeWrite,
+	"queue-prompt":   scopeWrite,
+	"cancel-queued":  scopeWrite,
+	"verify-fan":     scopeLaunch,
+	"keep-fan":       scopeDeny,
+	"mark-attention": scopeDeny,
 }
 
 // verbRestrictConnection narrows what this connection may do from now on.

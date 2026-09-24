@@ -156,6 +156,26 @@ var verbCapabilities = map[string][]string{
 	"answer-ask":            {config.LinkAllowRespond},
 
 	"open-host-connection": {capRelay},
+
+	// The agent review, triage, queue and approval work. compare-fan,
+	// agent-activity, list-queued and get-approval return states, counts and
+	// text an agent wrote, which list reaches. review-diff returns file
+	// contents, which write already reaches through a shell and list must
+	// not, as bundle-worktree does. verify-fan opens a window and runs a
+	// command in it, so it needs open and write. mark-attention is the
+	// person's act, like dismiss-attention.
+	"compare-fan":    {config.LinkAllowList},
+	"agent-activity": {config.LinkAllowList},
+	"list-queued":    {config.LinkAllowList},
+	"get-approval":   {config.LinkAllowList},
+	"review-diff":    {config.LinkAllowWrite},
+	"review-note":    {config.LinkAllowWrite},
+	"send-review":    {config.LinkAllowWrite},
+	"queue-prompt":   {config.LinkAllowWrite},
+	"cancel-queued":  {config.LinkAllowWrite},
+	"keep-fan":       {config.LinkAllowWrite},
+	"verify-fan":     {config.LinkAllowOpen, config.LinkAllowWrite},
+	"mark-attention": {config.LinkAllowRespond},
 }
 
 // msgCapabilities is what each binary message needs on a link connection.

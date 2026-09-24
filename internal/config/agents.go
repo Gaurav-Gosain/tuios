@@ -21,6 +21,12 @@ type AgentsConfig struct {
 	// Permissions is the [agents.permissions] table: what a process in a
 	// pane may do through tuios. See pane_grants.go.
 	Permissions PermissionsConfig `toml:"permissions,omitempty"`
+	// Recap is the [agents.recap] table: the summary of what an agent did
+	// while the person was away. See agents_work.go.
+	Recap RecapConfig `toml:"recap,omitempty"`
+	// Queue is the [agents.queue] table: messages waiting to be typed to an
+	// agent when it comes to rest. See agents_work.go.
+	Queue QueueConfig `toml:"queue,omitempty"`
 }
 
 // ApprovalsConfig is the [agents.approvals] table: which harnesses hand their
@@ -41,4 +47,11 @@ type ApprovalsConfig struct {
 	// keeps it between 10 and 300, and the Claude Code hook tuios installs
 	// allows 310 seconds, so a hold never outlives the hook.
 	HoldSeconds int `toml:"hold_seconds,omitempty"`
+	// HoldPlans also hands a plan an agent in plan mode asks to have
+	// approved to the Inbox, for the harnesses Enabled names. Unset means
+	// true: a plan follows enabled. See PlansHeld.
+	HoldPlans *bool `toml:"hold_plans,omitempty"`
+	// Risk is the [agents.approvals.risk] table: the rules that mark an
+	// approval risky. See RiskConfig.
+	Risk RiskConfig `toml:"risk,omitempty"`
 }

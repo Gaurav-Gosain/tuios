@@ -38,7 +38,7 @@ type sectionMaps struct {
 	prefix, windowPrefix, minimizePrefix, workspacePrefix map[string]string
 	debugPrefix, tapePrefix, layoutPrefix                 map[string]string
 	terminalMode, global, script, sidebar, sidebarFiles   map[string]string
-	inbox, inboxPeek, mail                                map[string]string
+	sidebarAgents, inbox, inboxPeek, mail                 map[string]string
 }
 
 // NewKeybindRegistry creates a new keybind registry from config
@@ -87,6 +87,7 @@ func (r *KeybindRegistry) buildMappings() {
 		script:          r.sectionKeyMap(kb.Script),
 		sidebar:         r.sectionKeyMap(kb.Sidebar),
 		sidebarFiles:    r.sectionKeyMap(kb.SidebarFiles),
+		sidebarAgents:   r.sectionKeyMap(kb.SidebarAgents),
 		inbox:           r.sectionKeyMap(kb.Inbox),
 		inboxPeek:       r.sectionKeyMap(kb.InboxPeek),
 		mail:            r.sectionKeyMap(kb.Mail),
@@ -205,6 +206,19 @@ func (r *KeybindRegistry) GetSidebarAction(key string) string {
 // share each mean the thing the row under the cursor is.
 func (r *KeybindRegistry) GetSidebarFilesAction(key string) string {
 	return r.lookupKey(key, r.sections.sidebarFiles)
+}
+
+// GetSidebarAgentsAction returns the action name for a key among the agent
+// rows' own binds. Consulted before GetSidebarAction, and only while the
+// rail's cursor is on an agent row.
+func (r *KeybindRegistry) GetSidebarAgentsAction(key string) string {
+	return r.lookupKey(key, r.sections.sidebarAgents)
+}
+
+// GetSidebarAgentsKeys is GetKeys for the agent rows' binds, for the help
+// overlay.
+func (r *KeybindRegistry) GetSidebarAgentsKeys(action string) []string {
+	return r.config.Keybindings.SidebarAgents[action]
 }
 
 // GetInboxAction returns the action a key runs in the Inbox's list.
@@ -357,7 +371,7 @@ func PressesByAction(r *KeybindRegistry) map[string][]string {
 // no chord that would say so.
 func contextOnlyScope(scope string) bool {
 	switch scope {
-	case ScopeSidebar, ScopeSidebarFiles, ScopeScript, ScopeInbox, ScopeInboxPeek, ScopeMail:
+	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeScript, ScopeInbox, ScopeInboxPeek, ScopeMail:
 		return true
 	}
 	return false
@@ -395,22 +409,38 @@ var ActionDescriptions = map[string]string{
 
 	// The Inbox, the prompt open over it, and the mailbox. Each acts only
 	// while its overlay is up.
-	"inbox_down":          "Inbox: next item",
-	"inbox_up":            "Inbox: previous item",
-	"inbox_page_down":     "Inbox: ten items down",
-	"inbox_page_up":       "Inbox: ten items up",
-	"inbox_first":         "Inbox: first item",
-	"inbox_last":          "Inbox: last item",
-	"inbox_go":            "Inbox: go to the item's pane, or open its mail",
-	"inbox_peek":          "Inbox: read the prompt here and answer it",
-	"inbox_dismiss":       "Inbox: dismiss the item",
-	"inbox_reply":         "Inbox: reply to the mail",
-	"inbox_resume":        "Inbox: resume the conversation in its pane",
-	"inbox_pass_on":       "Inbox: pass held mail on to the agent it was for",
-	"inbox_filter":        "Inbox: show one kind, then the next",
-	"inbox_select":        "Inbox: narrow the list with a selector",
-	"inbox_mailbox":       "Inbox: open the whole mailbox",
-	"inbox_close":         "Inbox: close",
+	"inbox_down":         "Inbox: next item",
+	"inbox_up":           "Inbox: previous item",
+	"inbox_page_down":    "Inbox: ten items down",
+	"inbox_page_up":      "Inbox: ten items up",
+	"inbox_first":        "Inbox: first item",
+	"inbox_last":         "Inbox: last item",
+	"inbox_go":           "Inbox: go to the item's pane, or open its mail",
+	"inbox_peek":         "Inbox: read the prompt here and answer it",
+	"inbox_dismiss":      "Inbox: dismiss the item",
+	"inbox_reply":        "Inbox: reply to the mail",
+	"inbox_resume":       "Inbox: resume the conversation in its pane",
+	"inbox_pass_on":      "Inbox: pass held mail on to the agent it was for",
+	"inbox_filter":       "Inbox: show one kind, then the next",
+	"inbox_select":       "Inbox: narrow the list with a selector",
+	"inbox_mailbox":      "Inbox: open the whole mailbox",
+	"inbox_close":        "Inbox: close",
+	"inbox_review":       "Inbox: review the changes in the item's pane",
+	"inbox_snooze":       "Inbox: snooze the item, then 1 to 4 for how long",
+	"inbox_undo":         "Inbox: undo the last dismiss or snooze",
+	"inbox_show_snoozed": "Inbox: show or hide snoozed items",
+	"inbox_deny_reason":  "Inbox: deny the approval or plan with a reason",
+	"inbox_detail_down":  "Inbox: scroll the detail down",
+	"inbox_detail_up":    "Inbox: scroll the detail up",
+
+	// The rail's agent rows. They act only while the cursor is on an agent
+	// row, and a key they share with a rail binding keeps its rail meaning on
+	// every other row.
+	"agent_unread":        "Agents: mark the pane's finished turn unread",
+	"agent_snooze":        "Agents: snooze the pane's Inbox item",
+	"agent_reply":         "Agents: reply to the agent",
+	"agent_review":        "Agents: review the pane's changes",
+	"agent_cancel_queued": "Agents: drop the newest queued message",
 	"peek_approve":        "Inbox prompt: approve",
 	"peek_approve_always": "Inbox prompt: approve and do not ask again",
 	"peek_deny":           "Inbox prompt: deny",
@@ -605,6 +635,8 @@ var ActionDescriptions = map[string]string{
 	"prefix_mail":               "Open the Inbox on its mail",
 	"prefix_inbox":              "Open the Inbox",
 	"prefix_next_attention":     "Jump to the oldest item needing you",
+	"prefix_review":             "Review the focused pane's changes",
+	"prefix_next_finished":      "Jump to the newest unseen finished turn",
 	"prefix_session_switcher":   "Open the session switcher",
 	"prefix_workspace_switcher": "Open the workspace switcher",
 	"prefix_layout":             "Enter layout prefix",

@@ -376,6 +376,11 @@ func (m *OS) sidebarSignature() uint64 {
 				mixS(t.Value)
 			}
 		}
+		// The queue's length is drawn at the row's right edge. A pane with
+		// nothing queued folds nothing, like the meta.
+		if w.AgentQueued > 0 {
+			mixI(w.AgentQueued)
+		}
 		// The agents section prints the age of the state, so the row changes on a
 		// minute boundary with no other input moving. Folding the whole timestamp
 		// would rebuild the rail on every frame; the minute bucket rebuilds it at

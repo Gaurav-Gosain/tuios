@@ -67,7 +67,7 @@ var settingsUIExcluded = map[string]string{
 // fails here, so an option cannot be added in future without someone deciding,
 // in this file, how a person reaches it.
 func TestSettingsPanelReachesEveryOption(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40, SidebarAgentsSeen: true}
 	// The Alerts tab folds its agent rows under a heading row until an agent
 	// has been seen. Folded is one change on that row away, so it counts as
 	// reachable; the rows are read unfolded.
@@ -124,7 +124,7 @@ func TestSettingsPanelReachesEveryOption(t *testing.T) {
 // A row that renders and does nothing is the failure the derived rows were
 // meant to make impossible, and it is not visible from a screenshot.
 func TestSettingsRowsAreUsable(t *testing.T) {
-	m := &OS{Settings: config.Global, Width: 120, Height: 40}
+	m := &OS{Settings: config.Global, Width: 120, Height: 40, SidebarAgentsSeen: true}
 	for _, cat := range m.settingsCategories() {
 		for _, item := range cat.Items {
 			name := cat.Name + "/" + item.Label

@@ -267,6 +267,8 @@ func (d *Daemon) agentRows(sess *Session, all bool, unread map[string]int, now i
 			// acp or codex for an agent start-agent runs headless over a
 			// protocol, empty for every other pane.
 			"protocol": d.paneProtocol(w.ID),
+			// How many messages wait in the pane's delivery queue.
+			"queued": w.AgentQueued,
 		})
 	}
 	return agents

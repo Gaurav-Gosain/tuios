@@ -66,6 +66,9 @@ type Node struct {
 	// Meta is the pane's agent metadata (model, context, a summary), in the
 	// order the pane holds it. Display only, never rolled up.
 	Meta []MetaToken
+	// Queued is how many messages wait in the pane's delivery queue to be
+	// typed when its agent comes to rest. Never rolled up.
+	Queued int
 	// Workspace is the workspace a window node sits on, or 0 when unknown. On a
 	// session node it is the workspace that session is showing, which is what
 	// decides which of its panes count as "here".
@@ -157,6 +160,8 @@ type WindowInput struct {
 	// Meta is what the pane reported about its agent through set-agent-meta,
 	// in the order the pane holds it. Nil for none.
 	Meta []MetaToken
+	// Queued is how many messages wait in the pane's delivery queue.
+	Queued int
 	// Focused marks the currently focused window in its session.
 	Focused bool
 	// Workspace is the workspace the pane sits on, or 0 when the caller does
@@ -307,6 +312,7 @@ func BuildSession(s SessionInput) Node {
 			Message:    w.Message,
 			AgentKind:  w.AgentKind,
 			Meta:       w.Meta,
+			Queued:     w.Queued,
 			IsCurrent:  w.Focused,
 			Workspace:  w.Workspace,
 			Host:       w.Host,

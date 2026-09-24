@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"slices"
@@ -1279,6 +1280,7 @@ func init() {
 				{Name: "transcript_path", Type: "string", Description: "The transcript file the harness is writing, as a hook reports it. For a harness whose manifest has a transcript reader, the window is joined to this exact file instead of a searched one. Kept in daemon memory only."},
 				{Name: "if_state", Type: "string", Description: "Comma-separated states. The report applies only when the window is in one of them now, and is otherwise refused with reason if_state.", Accepted: AgentStateNames},
 				{Name: "harness_pid", Type: "int", Description: "The pid of the harness process that ran the hook. With agent_session_id, a different session from the same harness process is a new conversation in that process (/clear or /resume, even after an interrupted turn that never reported Stop), so it takes the pane over instead of being refused as foreign_session. Kept in daemon memory only."},
+				{Name: "activity", Type: "object", Description: "One hook event of the pane's own agent, for its activity ring: event (prompt, tool, tool_done, tool_failed or turn_end), tool, target, text, files, ok and model. It is recorded whenever the report passes the identity guard, whether or not the state applies. Display only. A hook sends it only to a daemon whose list-verbs lists it."},
 			},
 			returns: []verbParam{
 				{Name: "state", Type: "string", Description: "The state the window shows after the call, which is the reported one only when applied is true."},
@@ -1434,7 +1436,7 @@ func init() {
 				{Name: "select", Type: "string", Description: selectorSyntax + " Keeps only the panes it matches, in every session unless session is also given. The answer then carries the confirm token a write by the same selector takes."},
 			},
 			returns: []verbParam{
-				{Name: "agents", Type: "[]object", Description: "One entry per pane: session, window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, completion_seq, finished_unread, agent_session_id, meta, group, protocol. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it. meta is the set-agent-meta keys, key to value. group is the fan-out group of the pane's session, empty outside one. protocol is acp or codex for an agent start-agent runs headless over that protocol, empty for every other pane."},
+				{Name: "agents", Type: "[]object", Description: "One entry per pane: session, window_id, name, state, message, agent_state_at, source, harness_id, foreground, cwd, workspace, focused, unread, ready, blocked_by, needs_you, confidence, completion_seq, finished_unread, agent_session_id, meta, group, protocol, queued. queued is how many messages wait in the pane's delivery queue. ready is whether ask-agent would type at the pane now: true for idle, done, errored and none, false for working, needs_input and unknown. blocked_by is approval or question for a pane on needs_input, empty when the source did not say and for every other state. completion_seq counts the turns the pane finished; finished_unread is true while it is at rest after a turn no attached client has focused it since. agent_session_id is the harness's own conversation id, as a hook reported it. meta is the set-agent-meta keys, key to value. group is the fan-out group of the pane's session, empty outside one. protocol is acp or codex for an agent start-agent runs headless over that protocol, empty for every other pane."},
 				{Name: "total", Type: "int", Description: "How many panes are listed."},
 				{Name: "select", Type: "string", Description: "The selector as parsed, when one was given."},
 				{Name: "confirm", Type: "string", Description: "With select, and without all or session: the token for exactly the listed panes, which send-agent-message and ask-agent take as confirm to write to them."},
@@ -1513,15 +1515,16 @@ func init() {
 			handler:  (*Daemon).verbReleaseAgentMessage,
 		},
 		"list-attention": {
-			description: "List the Inbox: everything in every session waiting for the person, on this machine and on every linked host. An item is an approval or a question (a pane on needs_input), a question put with ask-human (kind ask), mail to human, a pane on errored, or a finished turn nobody has looked at. Items are grouped in that order, oldest first inside each group. Every change to the list is an attention event on subscribe.",
+			description: "List the Inbox: everything in every session waiting for the person, on this machine and on every linked host. An item is an approval, a plan to approve or a question (a pane on needs_input), a question put with ask-human (kind ask), mail to human, a pane on errored, or a finished turn nobody has looked at. Items are grouped in that order, oldest first inside each group. Every change to the list is an attention event on subscribe.",
 			params: []verbParam{
 				{Name: "session", Type: "string", Description: "Only list items in this session. Omit for every session. Unlike most verbs, an omitted session does not mean the most recently active one. Without host it names a session on this machine."},
 				{Name: "kinds", Type: "[]string", Description: "Only list these kinds. Omit for all of them.", Accepted: AttentionKindNames},
 				{Name: "host", Type: "string", Description: "Only list items of this machine: \"local\" for this one, or a linked host by name. Omit for every machine."},
 				{Name: "select", Type: "string", Description: selectorSyntax + " Keeps the items it matches. An item's state is the one its kind stands for: needs_input for an approval or a question, errored, and done for finished; mail and resume have none. group and cwd are known only for items of this machine."},
+				{Name: "include_snoozed", Type: "bool", Description: "Also list the items the person snoozed, each with snoozed_until.", Default: "false"},
 			},
 			returns: []verbParam{
-				{Name: "items", Type: "[]object", Description: "One entry per item: id, kind, host, session, window, workspace, harness, name, summary, options, request_id, expires, always_scope, since, seq, thread, count, completion_seq, stale, seen_at. request_id, expires and always_scope are set only on an approval a hook holds on this machine (see request-approval); options is then the decisions reply-approval takes. An ask item carries request_id and options too: the question's id and its answers, which answer-ask takes. since is when the item started waiting, in unix nanoseconds. seq is the Inbox revision of its last change. summary is one line, with control characters removed, likely secrets masked and at most 160 bytes. thread is the mail thread, and count is the unread messages it stands for (mail) or the turns (finished). host is empty for this machine; an item of a linked host has an id of the form host:id. stale is true for an item of a host whose link is down, and seen_at is when that host was last heard from, in unix nanoseconds."},
+				{Name: "items", Type: "[]object", Description: "One entry per item: id, kind, host, session, window, workspace, harness, name, summary, options, request_id, expires, always_scope, since, seq, thread, count, completion_seq, stale, seen_at. request_id, expires and always_scope are set only on an approval a hook holds on this machine (see request-approval); options is then the decisions reply-approval takes. An ask item carries request_id and options too: the question's id and its answers, which answer-ask takes. since is when the item started waiting, in unix nanoseconds. seq is the Inbox revision of its last change. summary is one line, with control characters removed, likely secrets masked and at most 160 bytes. thread is the mail thread, and count is the unread messages it stands for (mail) or the turns (finished). host is empty for this machine; an item of a linked host has an id of the form host:id. stale is true for an item of a host whose link is down, and seen_at is when that host was last heard from, in unix nanoseconds. Additive fields, each absent when unset: snoozed_until on a snoozed item listed with include_snoozed (unix nanoseconds, -1 for until it changes), marked_unread on a finished item the person reopened, risk (the risk rules an approval matched), deny_message (the harness takes a reason with a deny), and plan_lines and plan_sha on a plan item."},
 				{Name: "counts", Type: "object", Description: "Open items per kind over the whole Inbox, every machine included, before the session, kinds and host filters. Every kind is present."},
 				{Name: "total", Type: "int", Description: "How many items are listed."},
 				{Name: "seq", Type: "int", Description: "The event seq the answer is current to. Subscribe with after_seq set to it and the boot_id below, and every attention event after the listing is replayed."},
@@ -1591,6 +1594,7 @@ func init() {
 				{Name: "prompt_id", Type: "string", Description: "The prompt_id peek-prompt gave. With it, a prompt that changed since the peek is refused rather than answered. Without it, whatever prompt is on the pane now is answered."},
 				{Name: "human_nonce", Type: "string", Description: "The nonce from the attach reply of a client attached now. The Inbox sends its own."},
 				{Name: "timeout", Type: "int", Description: "Milliseconds to wait for the pane to leave needs_input after the answer, at most 30000.", Default: "5000"},
+				{Name: "risk_ack", Type: "[]string", Description: "For an approving action on a prompt that matched risk rules: exactly the rules it matched. A deny needs none."},
 			},
 			returns: []verbParam{
 				{Name: "window", Type: "string", Description: "The window id."},
@@ -1614,6 +1618,11 @@ func init() {
 				{Name: "options", Type: "[]string", Description: "The decisions the harness can take. Omit for once and deny. always is dropped unless always_scope shows what it adds.", Accepted: approvalDecisions},
 				{Name: "summary", Type: "string", Required: true, Description: "The line the person answers from: the whole request, as the hook reported it. The held item shows it for as long as the hold runs. Nothing is held (reason not_shown) when the Inbox could not show it as it is: longer than 160 bytes, with a control or format character, whitespace it would collapse, or text it would mask."},
 				{Name: "always_scope", Type: "[]string", Description: "What always allows from now on, one rule per line, shown beside the key. Required for always to be offered: one to four lines, each shown as it is."},
+				{Name: "kind", Type: "string", Description: "What is held: approval for a tool call, plan for a plan an agent in plan mode asks to have approved.", Accepted: approvalKinds, Default: "approval"},
+				{Name: "plan", Type: "string", Description: "With kind plan: the plan's text, at most 32 KiB. get-approval serves it while the hold runs."},
+				{Name: "tool", Type: "string", Description: "The tool the call is for, as the harness names it (Bash, Edit), which the risk rules match on."},
+				{Name: "target", Type: "string", Description: "What the tool acts on: the command line, or the path."},
+				{Name: "deny_message", Type: "bool", Description: "Whether the harness passes a reason with a deny to its model, so the Inbox may offer to type one.", Default: "false"},
 			},
 			returns: []verbParam{
 				{Name: "request_id", Type: "string", Description: "The hold's id, empty when nothing was held."},
@@ -1635,6 +1644,8 @@ func init() {
 				{Name: "message", Type: "string", Description: "The reason for a deny, which the harness passes to the model. One line, at most 500 bytes."},
 				{Name: "human_nonce", Type: "string", Required: true, Description: "The nonce the daemon issued in an attach reply, for a client attached now over the same kind of connection. The TUI sends its own."},
 				{Name: "summary", Type: "string", Description: "The item's summary the decision was made from. When given and the hold is now on another line, nothing is answered: applied is false with reason changed, and the hold runs on. The TUI always sends it."},
+				{Name: "risk_ack", Type: "[]string", Description: "For once or always on an item that matched risk rules: exactly the item's risk list, which says the person saw them. Without it such an allow is refused with risk_unacknowledged. A deny needs none."},
+				{Name: "plan_sha", Type: "string", Description: "For a plan item: the plan_sha of the plan that was shown. An answer without it, or for another plan, is not applied."},
 			},
 			returns: []verbParam{
 				{Name: "request_id", Type: "string", Description: "The hold that was answered."},
@@ -1827,6 +1838,9 @@ func init() {
 			handler: (*Daemon).verbStashGet,
 		},
 	}
+	// The verbs of the agent review, triage, queue and approval work, kept in
+	// a file of their own. See verb_protocol_agents.go.
+	maps.Copy(verbRegistry, agentWorkVerbs())
 }
 
 // detectJSONClient inspects the first byte of the connection without consuming

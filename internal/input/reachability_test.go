@@ -147,6 +147,9 @@ func reachSections(t *testing.T) []bindingSection {
 		// The files section is read first, and only while the cursor is on a row
 		// of the listing.
 		{name: "sidebar_files", binds: k.SidebarFiles, modes: windowMode, newOS: reachFilesOS},
+		// The agent rows' keys are read first too, and only while the cursor is
+		// on an agent row.
+		{name: "sidebar_agents", binds: k.SidebarAgents, modes: windowMode, newOS: reachAgentsOS},
 		// The Inbox, the prompt open over it and the mailbox own the keyboard
 		// while they are up, in either mode.
 		{name: "inbox", binds: k.Inbox, modes: bothModes, newOS: reachInboxOS},
@@ -208,6 +211,9 @@ func TestEveryDefaultBindingReachesItsAction(t *testing.T) {
 				for _, key := range sec.binds[action] {
 					name := sec.name + "/" + modeName(mode) + "/" + action + "/" + key
 					t.Run(name, func(t *testing.T) {
+						if unit, pending := pendingActions[action]; pending {
+							t.Skipf("%s is bound ahead of its work (%s)", action, unit)
+						}
 						o := sec.newOS(t)
 						o.Mode = mode
 						if sec.leader {
@@ -227,6 +233,94 @@ func TestEveryDefaultBindingReachesItsAction(t *testing.T) {
 			}
 		}
 	}
+}
+
+// pendingActions are the actions bound ahead of their work: the review,
+// triage, reply and approval keys, whose handlers answer "not handled" until
+// the unit named here lands, so pressing the key does what an unbound key did
+// and records no action. TestPendingActionsStillDoNothing holds the list in
+// both directions: an action here that starts to run fails it, and moves out
+// of this list into the table above.
+var pendingActions = map[string]string{
+	config.ActionInboxReview:       "review overlay",
+	config.ActionInboxSnooze:       "Inbox lifecycle",
+	config.ActionInboxUndo:         "Inbox lifecycle",
+	config.ActionInboxShowSnoozed:  "Inbox lifecycle",
+	config.ActionInboxDenyReason:   "safer approvals",
+	config.ActionInboxDetailDown:   "safer approvals",
+	config.ActionInboxDetailUp:     "safer approvals",
+	config.ActionAgentUnread:       "Inbox lifecycle",
+	config.ActionAgentSnooze:       "Inbox lifecycle",
+	config.ActionAgentReply:        "rows and replies",
+	config.ActionAgentReview:       "review overlay",
+	config.ActionAgentCancelQueued: "rows and replies",
+}
+
+// TestPendingActionsStillDoNothing presses every key of a pending action the
+// way the table above would, and asserts that the action is not recorded and
+// that the key did what it did before it was bound: nothing in the Inbox, and
+// the rail's own binding on an agent row.
+func TestPendingActionsStillDoNothing(t *testing.T) {
+	for _, sec := range reachSections(t) {
+		for _, action := range sortedActions(sec.binds) {
+			if _, pending := pendingActions[action]; !pending {
+				continue
+			}
+			for _, key := range sec.binds[action] {
+				t.Run(sec.name+"/"+action+"/"+key, func(t *testing.T) {
+					o := sec.newOS(t)
+					o.Mode = app.WindowManagementMode
+					before := len(o.RecentActions())
+					o = pressKey(t, o, key)
+					got := o.RecentActions()
+					for _, a := range got[before:] {
+						if a == action {
+							t.Fatalf("%s ran on %s: it is built now, so take it out of pendingActions", action, key)
+						}
+					}
+					// On an agent row the rail's own binding for the key runs,
+					// as it did before the agent rows had keys of their own.
+					if sec.name == "sidebar_agents" {
+						if rail := o.KeybindRegistry.GetSidebarAction(key); rail != "" && (len(got) == before || got[len(got)-1] != rail) {
+							t.Errorf("%s on an agent row did not fall through to the rail's %s (actions run: %v)", key, rail, got[before:])
+						}
+					}
+				})
+			}
+		}
+	}
+	bound := map[string]bool{}
+	for _, sec := range reachSections(t) {
+		for action := range sec.binds {
+			bound[action] = true
+		}
+	}
+	for action := range pendingActions {
+		if !bound[action] {
+			t.Errorf("pendingActions names %q, which no section binds", action)
+		}
+	}
+}
+
+// reachAgentsOS gives the rail the keyboard with the cursor on an agent row,
+// which is the only state the agent rows' keys answer in.
+func reachAgentsOS(t *testing.T) *app.OS {
+	t.Helper()
+	o := railOS(t)
+	o.Windows[0].AgentState = "done"
+	o.Windows[0].AgentHarness = "claude-code"
+	o.ExitSidebarFocus()
+	o.EnterSidebarFocus()
+	o.View()
+	for range 64 {
+		if o.SidebarCursorOnAgent() {
+			return o
+		}
+		o.SidebarCursorMove(1)
+		o.View()
+	}
+	t.Fatal("the rail's cursor never reached the agent row")
+	return nil
 }
 
 // TestReachabilityTableCoversEveryBindingSection stops the table from going
@@ -505,7 +599,7 @@ func modeName(m app.Mode) string {
 func TestEveryDescribedActionIsHandled(t *testing.T) {
 	handled := map[string]bool{app.HoldModeAction: true}
 	k := config.DefaultConfig().Keybindings
-	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail} {
+	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail, k.SidebarAgents} {
 		for action := range section {
 			handled[action] = true
 		}

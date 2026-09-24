@@ -1602,6 +1602,40 @@ attach nonce, checked the way `dismiss-attention` is (see
 `ask-agent` or keystroke routed through the protocol can. The hold itself may
 be requested only for the caller's own pane, and never over a link.
 
+### Review, triage, replies and safer approvals (being built)
+
+The daemon already knows the shape of four pieces of work that are being
+built, so their rules are fixed before any of them does anything:
+
+- **Reviewing a pane's changes** (`review-diff`, `review-note`,
+  `send-review`), and comparing the attempts of a fan (`compare-fan`,
+  `verify-fan`, `keep-fan`).
+- **Triage in the Inbox** (`mark-attention`): snooze, wake, mark unread and
+  undo. A snoozed item closes with the reason `snoozed` and opens again with
+  the same id.
+- **Richer rows and queued replies** (`agent-activity`, `queue-prompt`,
+  `list-queued`, `cancel-queued`): a message queued for a busy agent is typed
+  when it comes to rest, and the rail shows how many wait (`queued` in
+  `get-agent-state` and `list-agents`).
+- **Safer approvals** (`get-approval`, `risk_ack` and `plan_sha`): a new
+  Inbox kind, `plan`, for a plan an agent in plan mode asks you to approve,
+  which shares the pane's blocking item with its approval, so it closes when
+  the pane leaves `needs_input`, and risk rules that mark an approval risky.
+  The risk rules are a speed bump, not a sandbox: an obfuscated command can
+  avoid a pattern, and the harness's permission system stays the boundary.
+
+Who may do what is settled now, whatever is built. A pane without the `admin`
+grant reads a diff, a comparison, an activity ring, a queue or a held approval
+only in its own session and fan group; writes notes and queues messages only
+with `write`, and only into a pane that holds nothing it does not and is not
+waiting on a prompt unless it holds `respond`; runs a check in a fan only with
+`fan`; and never keeps a fan or changes the Inbox, which only you can, with the
+nonce your attached client holds. Over a link, a diff needs `write` because it
+carries file contents, and changing the Inbox needs `respond`. Until a piece
+lands its verbs answer `internal` ("not built yet") and its keys do what they
+did before they were bound. [protocol.md](protocol.md#agent-review-triage-and-queue-verbs)
+has the table.
+
 ### Resuming after a restart
 
 A daemon restart ends every program in every pane, agents included. The

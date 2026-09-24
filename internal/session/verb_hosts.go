@@ -154,6 +154,8 @@ type remoteAgentRow struct {
 	// Group is the fan-out group of the pane's session. A host from before
 	// selectors sends none, so a group: term matches none of its rows.
 	Group string `json:"group,omitempty"`
+	// Queued is how many messages wait in the pane's delivery queue there.
+	Queued int `json:"queued,omitempty"`
 }
 
 // selectorTarget is what a selector reads from a row of host.

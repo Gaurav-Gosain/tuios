@@ -71,6 +71,13 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 		hints = m.inboxAskHints(selected)
 		detailFor = func(width int) []string { return inboxAskDetail(selected, width) }
 	}
+	if ok {
+		// A plan, a risky approval or a finished turn's recap draws its own
+		// detail and keys. See inbox_approvals_ext.go.
+		if detail, extraHints, drawn := m.inboxDetailExtras(selected); drawn {
+			detailFor, hints = detail, extraHints
+		}
+	}
 	m.noteInboxShown(selected, held && inboxShowsWhole(selected), time.Now())
 	rows := m.inboxRows()
 	if len(rows) == 0 {
@@ -291,6 +298,9 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 		// Mail another machine sent an agent here, held for the person by
 		// the link policy. Said in words: who it was for, and the key.
 		summary = "[held for " + printableTitle(it.HeldFor) + ", p passes on] " + summary
+	}
+	if extra := m.inboxRowExtras(it); extra != "" {
+		summary = extra + summary
 	}
 
 	avail := max(width-lipgloss.Width(right)-lipgloss.Width(glyph)-4, 1)

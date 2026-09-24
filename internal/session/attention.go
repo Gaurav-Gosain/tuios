@@ -74,14 +74,21 @@ const (
 	// person answers or dismisses it, or the asking pane closes. See
 	// ask_human.go.
 	AttentionAsk = "ask"
+	// AttentionPlan is a plan an agent in plan mode asks the person to
+	// approve before it starts editing, held by the harness hook like an
+	// approval. It shares the pane's blocking key with approval and question,
+	// so it closes when the pane leaves needs_input, and the pane's
+	// blocked_by stays approval for every consumer that reads it.
+	AttentionPlan = "plan"
 )
 
 // AttentionKindNames lists the kinds in the order the Inbox groups them: what
 // blocks an agent first, then what an agent said, then what went wrong, then
 // what a restart left to bring back, then what finished, then mail still
-// waiting to leave. list-attention sorts by it. An ask sits with the
-// approvals: something is waiting on the answer.
-var AttentionKindNames = []string{AttentionApproval, AttentionAsk, AttentionQuestion, AttentionMail, AttentionErrored, AttentionResume, AttentionFinished, AttentionOutbox}
+// waiting to leave. list-attention sorts by it. A plan follows the approvals
+// it is a larger kind of, and an ask sits with them: something is waiting on
+// the answer.
+var AttentionKindNames = []string{AttentionApproval, AttentionPlan, AttentionAsk, AttentionQuestion, AttentionMail, AttentionErrored, AttentionResume, AttentionFinished, AttentionOutbox}
 
 // Close reasons an attention event carries on its closing action.
 const (
@@ -106,6 +113,10 @@ const (
 	// AttentionClosedHostRemoved: the item came from a linked host that was
 	// taken out of the [hosts] table.
 	AttentionClosedHostRemoved = "host_removed"
+	// AttentionClosedSnoozed: the person snoozed the item. It opens again
+	// with the same id and since when the snooze ends or its fact changes.
+	// A client that predates snoozing reads it as any other close.
+	AttentionClosedSnoozed = "snoozed"
 )
 
 // Actions an attention event carries.
@@ -210,6 +221,26 @@ type AttentionItem struct {
 	Stale  bool  `json:"stale,omitempty"`
 	SeenAt int64 `json:"seen_at,omitempty"`
 
+	// SnoozedUntil is when a snoozed item opens again, in unix nanoseconds,
+	// set on an item listed with include_snoozed. -1 means it waits until its
+	// fact changes. Zero on an item that is not snoozed.
+	SnoozedUntil int64 `json:"snoozed_until,omitempty"`
+	// MarkedUnread is set on a finished item the person reopened with mark
+	// unread after looking at the pane.
+	MarkedUnread bool `json:"marked_unread,omitempty"`
+	// Risk names the risk rules an approval's command matched, set on an
+	// approval or plan item whose request did. An allow from the Inbox then
+	// needs risk_ack naming exactly these. See internal/risk.
+	Risk []string `json:"risk,omitempty"`
+	// DenyMessage is set when the harness takes a reason with a deny, so the
+	// Inbox can offer to type one.
+	DenyMessage bool `json:"deny_message,omitempty"`
+	// PlanLines and PlanSHA describe a plan item's text, which is served by
+	// get-approval rather than carried here: how many lines it has, and the
+	// digest an answer names so it applies only to the plan that was shown.
+	PlanLines int    `json:"plan_lines,omitempty"`
+	PlanSHA   string `json:"plan_sha,omitempty"`
+
 	// remoteSeq is the Seq the machine the item came from gave it, for an
 	// item mirrored from a linked host. It orders that machine's changes,
 	// which can reach this daemon out of order around a relisting.
@@ -291,7 +322,7 @@ func attentionPath() string {
 func attentionKey(kind, session, window string, thread uint64) string {
 	class := kind
 	switch kind {
-	case AttentionApproval, AttentionQuestion:
+	case AttentionApproval, AttentionQuestion, AttentionPlan:
 		class = "block"
 	case AttentionMail:
 		return "mail\x00" + session + "\x00" + strconv.FormatUint(thread, 10)
@@ -423,7 +454,10 @@ func attentionSame(a, b AttentionItem) bool {
 		a.CompletionSeq == b.CompletionSeq && a.Window == b.Window &&
 		a.RequestID == b.RequestID && a.Expires == b.Expires && a.Stale == b.Stale &&
 		a.HeldID == b.HeldID && a.HeldFor == b.HeldFor && a.ForHost == b.ForHost &&
-		slices.Equal(a.Options, b.Options) && slices.Equal(a.AlwaysScope, b.AlwaysScope)
+		slices.Equal(a.Options, b.Options) && slices.Equal(a.AlwaysScope, b.AlwaysScope) &&
+		a.SnoozedUntil == b.SnoozedUntil && a.MarkedUnread == b.MarkedUnread &&
+		slices.Equal(a.Risk, b.Risk) && a.DenyMessage == b.DenyMessage &&
+		a.PlanLines == b.PlanLines && a.PlanSHA == b.PlanSHA
 }
 
 // closeLocked closes the item with this id, if it is open. The caller holds mu.

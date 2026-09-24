@@ -58,7 +58,40 @@ type WorktreeInfo struct {
 	// exists. The session is kept, because a shell whose directory was removed
 	// under it still runs and an agent in it may still have something to say.
 	Gone bool `json:"gone,omitempty"`
+	// Verify is the last check verify-fan ran in this session, nil when none
+	// has run. It is saved with the session, so a compare after a restart
+	// still says what the last check found. Additive: an older client drops
+	// it. Replaced whole, never edited in place, so a copy of the info can
+	// share it. See verb_fan_compare.go.
+	Verify *FanVerify `json:"verify,omitempty"`
 }
+
+// FanVerify is one verify-fan check in one fan sibling: the command, and what
+// became of it.
+type FanVerify struct {
+	// Command is the command as the caller gave it, which the daemon ran with
+	// sh -c in a window named verify.
+	Command string `json:"command"`
+	// State is running, passed or failed.
+	State string `json:"state"`
+	// Exit is the command's exit status once it finished, nil while it runs
+	// or when the process reported none.
+	Exit *int `json:"exit,omitempty"`
+	// StartedAt and FinishedAt are unix nanoseconds. FinishedAt is zero while
+	// the command runs.
+	StartedAt  int64 `json:"started_at,omitempty"`
+	FinishedAt int64 `json:"finished_at,omitempty"`
+}
+
+// Verify states, as the wire carries them.
+const (
+	VerifyRunning = "running"
+	VerifyPassed  = "passed"
+	VerifyFailed  = "failed"
+)
+
+// VerifyStateNames lists the verify states.
+var VerifyStateNames = []string{VerifyRunning, VerifyPassed, VerifyFailed}
 
 // Prompt statuses, as the wire carries them.
 const (

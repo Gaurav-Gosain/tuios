@@ -49,7 +49,7 @@ daemon runs needs `tuios kill-server` to take effect.
 | **Spacing** | ground between panes, padding inside overlay panels | `appearance.gap`, `appearance.panel_padding` |
 | **Composition** | what a window title, a workspace tab and the clock carry | `window_title_format`, `dock_workspace_tab_format`, `clock_format` |
 
-The 164 options above are scalars, and spacing and composition are set with them
+The 165 options above are scalars, and spacing and composition are set with them
 like any other. Colour and shape are names from an open set, each standing for a
 file in a directory, so each has a verb of its own.
 

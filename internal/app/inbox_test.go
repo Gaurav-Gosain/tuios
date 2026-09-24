@@ -190,7 +190,7 @@ func TestInboxRowsGroupAndSkipHeadings(t *testing.T) {
 	}
 
 	// Ask is stepped over: Questions shows both kinds of question.
-	for _, want := range []string{session.AttentionApproval, session.AttentionQuestion, session.AttentionMail, session.AttentionErrored, session.AttentionResume, session.AttentionFinished, session.AttentionOutbox, ""} {
+	for _, want := range []string{session.AttentionApproval, session.AttentionPlan, session.AttentionQuestion, session.AttentionMail, session.AttentionErrored, session.AttentionResume, session.AttentionFinished, session.AttentionOutbox, ""} {
 		m.InboxCycleFilter()
 		if m.Inbox.Filter != want {
 			t.Fatalf("filter %q, want %q", m.Inbox.Filter, want)

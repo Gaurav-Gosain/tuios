@@ -407,6 +407,11 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.global_session"),
 		}),
 	}
+	// How long an agent row rests before it folds means nothing until an
+	// agent has run, so the row waits for one like the other agent rows.
+	if m.agentsSeen() {
+		sidebar.Items = append(sidebar.Items, m.resolveRows([]settingsRow{opt("appearance.sidebar.agent_rest_fold")})...)
+	}
 
 	// The marks a pane paints over its own output, in the order a person meets
 	// them: the selection first, then the search, then the copy mode cursor.

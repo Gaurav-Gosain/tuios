@@ -182,6 +182,11 @@ type WindowState struct {
 	// when the agent leaves the pane. Additive: an older peer drops it and a
 	// state without it reads as "the pane said nothing". See agent_meta.go.
 	AgentMeta []AgentMetaToken `json:"agent_meta,omitempty"`
+	// AgentQueued is how many messages wait in the pane's delivery queue to be
+	// typed when its agent comes to rest (queue-prompt). Daemon-owned like
+	// AgentMeta and never set by a client. Additive: zero, which is what an
+	// older daemon sends, means nothing is queued. See verb_queue.go.
+	AgentQueued int `json:"agent_queued,omitempty"`
 	// Popup marks a transient floating pane that runs one command and closes
 	// when the command exits. It is session state, not a client's own, for the
 	// two reasons IsFloating and Zoomed are: a peer that does not know the pane
@@ -2214,6 +2219,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			AgentKind:     agentBlockedBy(*w),
 			CompletionSeq: w.CompletionSeq,
 			AgentMeta:     w.AgentMeta,
+			AgentQueued:   w.AgentQueued,
 			ForegroundCmd: fg,
 			Workspace:     w.Workspace,
 		})

@@ -561,6 +561,9 @@ type SidebarConfig struct {
 	// TOML and read by ParseSidebarAgentRow, so a wrong value in it is a
 	// warning rather than a config file that will not load.
 	AgentRow map[string]any `toml:"agent_row"`
+	// AgentRestFold is how long an agent row rests before the rail folds it
+	// into one line: a duration, or off (default: 1h).
+	AgentRestFold string `toml:"agent_rest_fold"`
 }
 
 // Tape autorun modes. See TapeConfig.Autorun.
@@ -614,6 +617,9 @@ type KeybindingsConfig struct {
 	// cursor is on a row of the files section. See
 	// getDefaultSidebarFilesKeybinds for why they are not in Sidebar.
 	SidebarFiles map[string][]string `toml:"sidebar_files"`
+	// SidebarAgents binds are looked up before Sidebar, and only while the
+	// rail's cursor is on an agent row. See getDefaultSidebarAgentsKeybinds.
+	SidebarAgents map[string][]string `toml:"sidebar_agents"`
 	// Inbox binds are live while the Inbox is open and its selector line is
 	// not, through GetInboxAction. The digits 1 to 9 are not in it: they
 	// answer a held approval or a question by its number, which is the number
@@ -675,12 +681,13 @@ func DefaultConfig() *UserConfig {
 			Sidebar: SidebarConfig{
 				// A fresh pointer per call, so a caller that flips it in place
 				// cannot change the next DefaultConfig.
-				Enabled:     new(true),
-				Position:    DefaultSidebarPosition,
-				Width:       SidebarDefaultWidth,
-				Sections:    SidebarDefaultSections,
-				FolderClick: SidebarFolderClickNavigate,
-				FileDelete:  SidebarFileDeleteTrash,
+				Enabled:       new(true),
+				Position:      DefaultSidebarPosition,
+				Width:         SidebarDefaultWidth,
+				Sections:      SidebarDefaultSections,
+				FolderClick:   SidebarFolderClickNavigate,
+				FileDelete:    SidebarFileDeleteTrash,
+				AgentRestFold: "1h",
 			},
 		},
 		Daemon: DaemonConfig{
@@ -884,6 +891,11 @@ func DefaultConfig() *UserConfig {
 				// only way into it. The prefix stays armed after it, so o o o
 				// walks everything waiting.
 				"prefix_next_attention": {"o"},
+				// v reviews what the focused pane's agent changed. O is o's
+				// twin: the newest finished turn nobody has seen, and the
+				// prefix stays armed so O O O walks back through them.
+				"prefix_review":        {"v"},
+				"prefix_next_finished": {"O"},
 			},
 			WindowPrefix: map[string][]string{
 				"window_prefix_new":    {"n"},
@@ -970,12 +982,13 @@ func DefaultConfig() *UserConfig {
 				"resize_height_80": {"shift+8"},
 				"resize_height_90": {"shift+9"},
 			},
-			TerminalMode: getDefaultTerminalModeKeybinds(),
-			Sidebar:      getDefaultSidebarKeybinds(),
-			SidebarFiles: getDefaultSidebarFilesKeybinds(),
-			Inbox:        getDefaultInboxKeybinds(),
-			InboxPeek:    getDefaultInboxPeekKeybinds(),
-			Mail:         getDefaultMailKeybinds(),
+			TerminalMode:  getDefaultTerminalModeKeybinds(),
+			Sidebar:       getDefaultSidebarKeybinds(),
+			SidebarFiles:  getDefaultSidebarFilesKeybinds(),
+			SidebarAgents: getDefaultSidebarAgentsKeybinds(),
+			Inbox:         getDefaultInboxKeybinds(),
+			InboxPeek:     getDefaultInboxPeekKeybinds(),
+			Mail:          getDefaultMailKeybinds(),
 			Global: map[string][]string{
 				// ctrl+p is fish's history-back and vim's keyword completion, and
 				// alt+space is readline's set-mark. Both are taken on purpose and
@@ -1061,6 +1074,20 @@ const (
 	ActionInboxMailbox  = "inbox_mailbox"
 	ActionInboxClose    = "inbox_close"
 
+	// The Inbox's review, triage and approval keys.
+	ActionInboxReview       = "inbox_review"
+	ActionInboxSnooze       = "inbox_snooze"
+	ActionInboxUndo         = "inbox_undo"
+	ActionInboxShowSnoozed  = "inbox_show_snoozed"
+	ActionInboxDenyReason   = "inbox_deny_reason"
+	ActionInboxDetailDown   = "inbox_detail_down"
+	ActionInboxDetailUp     = "inbox_detail_up"
+	ActionAgentUnread       = "agent_unread"
+	ActionAgentSnooze       = "agent_snooze"
+	ActionAgentReply        = "agent_reply"
+	ActionAgentReview       = "agent_review"
+	ActionAgentCancelQueued = "agent_cancel_queued"
+
 	ActionPeekApprove       = "peek_approve"
 	ActionPeekApproveAlways = "peek_approve_always"
 	ActionPeekDeny          = "peek_deny"
@@ -1100,6 +1127,32 @@ func getDefaultInboxKeybinds() map[string][]string {
 		ActionInboxSelect:   {"/"},
 		ActionInboxMailbox:  {"m"},
 		ActionInboxClose:    {"esc", "q"},
+		// Review, triage and approvals. z snoozes and waits for a digit; u
+		// undoes a dismiss or snooze made a moment ago; S shows what is
+		// snoozed; n denies with a reason, where 3 stays the plain deny; J
+		// and K scroll a long detail such as a plan.
+		ActionInboxReview:      {"v"},
+		ActionInboxSnooze:      {"z"},
+		ActionInboxUndo:        {"u"},
+		ActionInboxShowSnoozed: {"S"},
+		ActionInboxDenyReason:  {"n"},
+		ActionInboxDetailDown:  {"J", "ctrl+d"},
+		ActionInboxDetailUp:    {"K", "ctrl+u"},
+	}
+}
+
+// getDefaultSidebarAgentsKeybinds returns the keys of the rail's agent rows,
+// live only while the rail owns the keyboard and the cursor is on an agent
+// row. They are consulted before the rail's own, like the files section's, so
+// r and x mean the agent on an agent row and keep their rail meaning (rename,
+// the destructive menu) everywhere else.
+func getDefaultSidebarAgentsKeybinds() map[string][]string {
+	return map[string][]string{
+		ActionAgentUnread:       {"u"},
+		ActionAgentSnooze:       {"z"},
+		ActionAgentReply:        {"r"},
+		ActionAgentReview:       {"v"},
+		ActionAgentCancelQueued: {"x"},
 	}
 }
 
@@ -1661,6 +1714,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.SidebarFileDelete = sb.FileDelete
 	}
 	s.SidebarAgentRow = ParseSidebarAgentRow(sb.AgentRow)
+	// Assigned whatever the file says, so a value removed from it goes back
+	// to the default. A bad value reads as the default and validation says so.
+	s.SidebarAgentRestFold, _ = ParseAgentRestFold(sb.AgentRestFold)
 	if sb.Tooltips != nil {
 		s.Tooltips = *sb.Tooltips
 	}
@@ -2213,6 +2269,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	if cfg.Keybindings.SidebarFiles == nil {
 		cfg.Keybindings.SidebarFiles = make(map[string][]string)
 	}
+	if cfg.Keybindings.SidebarAgents == nil {
+		cfg.Keybindings.SidebarAgents = make(map[string][]string)
+	}
 	if cfg.Keybindings.Inbox == nil {
 		cfg.Keybindings.Inbox = make(map[string][]string)
 	}
@@ -2261,6 +2320,9 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	// before they existed has no sidebar_files section, and left unfilled the
 	// listing would have no way to create, rename or delete anything.
 	fillMapDefaults(cfg.Keybindings.SidebarFiles, defaultCfg.Keybindings.SidebarFiles)
+	// The agent rows' keys are newer still, and every config before them has
+	// no sidebar_agents section.
+	fillMapDefaults(cfg.Keybindings.SidebarAgents, defaultCfg.Keybindings.SidebarAgents)
 	// The Inbox, its peek and the mailbox had their keys written into the
 	// input path before these sections existed, so every config written
 	// before them has none and has to get the keys it always had.
@@ -2304,6 +2366,7 @@ func keybindSectionPairs(cfg, defaultCfg *UserConfig) []keybindSection {
 		{c.TerminalMode, d.TerminalMode},
 		{c.Sidebar, d.Sidebar},
 		{c.SidebarFiles, d.SidebarFiles},
+		{c.SidebarAgents, d.SidebarAgents},
 		{c.Inbox, d.Inbox},
 		{c.InboxPeek, d.InboxPeek},
 		{c.Mail, d.Mail},

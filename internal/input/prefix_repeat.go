@@ -44,6 +44,8 @@ var repeatablePrefixActions = map[string]bool{
 	// Each press goes to the next item waiting for the person, so a run of
 	// presses walks the Inbox without opening it.
 	"prefix_next_attention": true,
+	// The same for the newest finished turn nobody has seen, walking back.
+	"prefix_next_finished": true,
 }
 
 // armIfRepeatable keeps the prefix live when the command just run is one worth

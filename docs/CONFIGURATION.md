@@ -140,6 +140,58 @@ run `tuios integration install claude-code` (or `opencode`, `kilo`) again after
 upgrading. [AGENT_STATE.md](AGENT_STATE.md#approvals-from-the-inbox) says how
 a prompt is held, answered and handed back.
 
+## Plans, risk rules, the recap and the queue
+
+These tables configure the agent review, triage, reply and approval work,
+which is being built. The daemon reads and checks them now; a table whose work
+has not landed changes nothing yet. Every value has a default, so a file
+without them behaves as the defaults say. Like `[agents.approvals]`, they are
+file-plane config: not in `list-options`, and `set-option` cannot change
+them, so a pane cannot switch a risk rule off through tuios.
+
+```toml
+[agents.approvals]
+hold_plans = true                 # a plan follows enabled
+
+[agents.approvals.risk]
+builtin = true                    # keep the shipped rules
+panes_may_allow = false           # a pane with the respond grant may not allow a risky call
+
+[[agents.approvals.risk.rule]]
+name = "kubectl apply"
+tools = ["Bash", "bash", "shell"]
+pattern = '\bkubectl\s+(apply|delete)\b'
+
+[agents.recap]
+mode = "toast"                    # toast, inbox or off
+away = "10m"
+test_patterns = ["go test", "pytest"]
+
+[agents.queue]
+max = 8
+```
+
+- `hold_plans` also hands a plan an agent in plan mode asks to have approved
+  to the Inbox, for the harnesses `enabled` names. Unset is true.
+- `[agents.approvals.risk]` marks an approval risky when its command matches a
+  rule: `builtin` keeps the shipped rules (default true), each `rule` adds one
+  with a name, the tools it applies to (empty for every tool) and an RE2
+  `pattern`. A rule with no name or a pattern that does not compile is
+  ignored, with a warning. `panes_may_allow` lets a pane holding the `respond`
+  grant allow a risky call; it is off, so only you can.
+- `[agents.recap]` is the summary of what an agent did while you were away:
+  `mode` says where it is shown (`toast` in the dock when you come back to the
+  pane, and in the Inbox; `inbox` only in the Inbox; `off` only in
+  `agent-log`), `away` how long you must have been away for the dock to show
+  it, and `test_patterns` which commands count as a test run.
+- `[agents.queue]` bounds the messages waiting to be typed to one agent when
+  it comes to rest: `max`, 8 by default, at most 64.
+
+One rail option goes with them: `appearance.sidebar.agent_rest_fold`, how long
+an agent row rests (idle, unknown, or done and already seen) before the rail
+folds it into one line, as a duration such as `1h` (the default) or `off`. The
+settings page shows it on its Sidebar tab once an agent has been seen.
+
 ## What a pane may do
 
 Every pane holds grants that say what a process in it may do through tuios:

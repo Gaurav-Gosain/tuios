@@ -31,6 +31,10 @@ func (d *Daemon) verbListAttention(_ *connState, params json.RawMessage) (any, *
 		Kinds   []string `json:"kinds"`
 		Host    string   `json:"host"`
 		Select  string   `json:"select"`
+		// IncludeSnoozed also lists snoozed items. Nothing can snooze an
+		// item until mark-attention is built, so there are none to add and
+		// the listing is the same either way.
+		IncludeSnoozed bool `json:"include_snoozed"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -92,7 +96,7 @@ func AttentionSelectorTarget(it AttentionItem) SelectorTarget {
 		Harness: it.Harness,
 	}
 	switch it.Kind {
-	case AttentionApproval, AttentionQuestion:
+	case AttentionApproval, AttentionQuestion, AttentionPlan:
 		t.State, t.NeedsYou = AgentStateNeedsInput.Name(), true
 	case AttentionErrored:
 		t.State, t.NeedsYou = AgentStateErrored.Name(), true

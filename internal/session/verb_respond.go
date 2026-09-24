@@ -394,9 +394,16 @@ func (d *Daemon) verbRespond(cs *connState, params json.RawMessage) (any, *verbE
 		PromptID   string `json:"prompt_id"`
 		HumanNonce string `json:"human_nonce"`
 		Timeout    int    `json:"timeout"`
+		// RiskAck acknowledges a risky prompt, which nothing marks until the
+		// risk rules are built. A call that sets it is refused and presses
+		// nothing.
+		RiskAck []string `json:"risk_ack"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
+	}
+	if len(p.RiskAck) > 0 {
+		return nil, notBuilt("respond with risk_ack")
 	}
 	if !isAnswerAction(p.Action) {
 		return nil, hintedVerbError(ErrVerbInvalidParams, "action: "+echoName(p.Action)+" is not an answer", &VerbHint{

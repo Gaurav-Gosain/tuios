@@ -69,7 +69,12 @@ const (
 	EventPrompt          = "prompt"
 	EventCommandStarted  = "command-started"
 	EventCommandFinished = "command-finished"
-	EventSubscribed      = "subscribed" // subscribe ack result type
+	// EventAgentActivity is one entry of an agent pane's activity ring: a
+	// prompt, a tool call, a tool result or the end of a turn, as its hooks
+	// reported them. It is chatty, so it reaches only a subscriber that names
+	// it in types. See agent_activity.go.
+	EventAgentActivity = "agent-activity"
+	EventSubscribed    = "subscribed" // subscribe ack result type
 )
 
 // defaultEventQueue bounds a subscriber's per-connection event queue. When it is
@@ -260,8 +265,18 @@ func (f eventFilter) match(ev streamEvent) bool {
 	if len(f.types) > 0 && !f.types[ev.Type] {
 		return false
 	}
+	// An opt-in type reaches only a filter that names it, so a subscriber
+	// written before it existed, which names no types, never sees it.
+	if len(f.types) == 0 && optInEventTypes[ev.Type] {
+		return false
+	}
 	return true
 }
+
+// optInEventTypes are the event types a subscription receives only when its
+// types filter names them. They arrive at the speed an agent works rather
+// than the speed a person does.
+var optInEventTypes = map[string]bool{EventAgentActivity: true}
 
 // admitsOutput reports whether the filter lets output events through, which
 // decides whether a resume can be exact: output events are not kept for replay.

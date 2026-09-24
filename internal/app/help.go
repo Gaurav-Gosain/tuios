@@ -156,7 +156,7 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 			bindings = append(bindings, HelpBinding{Keys: live, Description: desc, Category: cat})
 		}
 	}
-	for _, action := range []string{"prefix_inbox", "prefix_next_attention", "prefix_mail", "prefix_jump_notif"} {
+	for _, action := range []string{"prefix_inbox", "prefix_next_attention", "prefix_next_finished", "prefix_review", "prefix_mail", "prefix_jump_notif"} {
 		desc := config.ActionDescriptions[action]
 		add(presses[action], desc)
 	}
@@ -173,6 +173,18 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	add(railKey("agents_filter"), "Rail agents: all sessions, or this one")
 	add(railKey("agents_sort"), "Rail agents: needs you, priority, or recency")
 	add(railKey("mail"), "Rail: the mailbox of the pane under the cursor")
+	agentRowKey := func(action string) []string {
+		var out []string
+		for _, k := range registry.GetSidebarAgentsKeys(action) {
+			out = append(out, "rail "+k)
+		}
+		return out
+	}
+	add(agentRowKey(config.ActionAgentReply), "Rail agent row: reply to the agent")
+	add(agentRowKey(config.ActionAgentReview), "Rail agent row: review the pane's changes")
+	add(agentRowKey(config.ActionAgentUnread), "Rail agent row: mark its finished turn unread")
+	add(agentRowKey(config.ActionAgentSnooze), "Rail agent row: snooze its Inbox item")
+	add(agentRowKey(config.ActionAgentCancelQueued), "Rail agent row: drop the newest queued message")
 
 	inbox := func(action, desc string) {
 		add(registry.GetInboxKeys(action), desc)
@@ -187,6 +199,11 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	inbox(config.ActionInboxFilter, "Inbox: show one kind, then the next")
 	inbox(config.ActionInboxSelect, "Inbox: narrow the list with a selector")
 	inbox(config.ActionInboxMailbox, "Inbox: open the whole mailbox")
+	inbox(config.ActionInboxReview, "Inbox: review the changes in the item's pane")
+	inbox(config.ActionInboxSnooze, "Inbox: snooze the item, then 1 to 4 for how long")
+	inbox(config.ActionInboxUndo, "Inbox: undo the last dismiss or snooze")
+	inbox(config.ActionInboxShowSnoozed, "Inbox: show or hide snoozed items")
+	inbox(config.ActionInboxDenyReason, "Inbox: deny an approval or a plan with a reason")
 	inbox(config.ActionPeekApprove, "Prompt: approve")
 	inbox(config.ActionPeekApproveAlways, "Prompt: approve and do not ask again")
 	inbox(config.ActionPeekDeny, "Prompt: deny")
@@ -539,6 +556,8 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 		"prefix_workspace_switcher",
 		"prefix_toggle_sidebar", "prefix_explore",
 		"prefix_jump_notif", "prefix_mail", "prefix_inbox", "prefix_next_attention",
+		// prefix_review and prefix_next_finished are listed only in the
+		// Agents section, which waits for an agent to have been seen.
 	}
 
 	// Debug commands are deliberately not listed here. They used to be, built

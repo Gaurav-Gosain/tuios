@@ -602,7 +602,7 @@ func (m *OS) InboxPopSettling() bool {
 // inboxAlertState is the agent state whose alert policy governs a kind.
 func inboxAlertState(kind string) string {
 	switch kind {
-	case session.AttentionApproval, session.AttentionQuestion, session.AttentionAsk:
+	case session.AttentionApproval, session.AttentionPlan, session.AttentionQuestion, session.AttentionAsk:
 		return "needs_input"
 	case session.AttentionErrored:
 		return "errored"
@@ -681,7 +681,7 @@ func (m *OS) fireInboxAlerts(ids []string) {
 	cue, cueState := sound.CueDone, "done"
 	for _, it := range items {
 		switch it.Kind {
-		case session.AttentionApproval, session.AttentionQuestion, session.AttentionMail, session.AttentionAsk:
+		case session.AttentionApproval, session.AttentionPlan, session.AttentionQuestion, session.AttentionMail, session.AttentionAsk:
 			sev, cue, cueState = "warning", sound.CueAttention, "needs_input"
 		case session.AttentionErrored:
 			if sev != "warning" {
@@ -742,6 +742,8 @@ func inboxKindWords(it session.AttentionItem) string {
 	switch it.Kind {
 	case session.AttentionApproval:
 		return "needs approval"
+	case session.AttentionPlan:
+		return "has a plan to approve"
 	case session.AttentionQuestion, session.AttentionAsk:
 		return "has a question"
 	case session.AttentionErrored:
@@ -823,7 +825,7 @@ func (m *OS) inboxCounts(sessionName string) sidebarAgentCountInfo {
 			continue
 		}
 		switch it.Kind {
-		case session.AttentionApproval, session.AttentionQuestion, session.AttentionErrored, session.AttentionAsk:
+		case session.AttentionApproval, session.AttentionPlan, session.AttentionQuestion, session.AttentionErrored, session.AttentionAsk:
 			c.Blocked++
 			state := inboxAlertState(it.Kind)
 			if r := sessiontree.AgentRank(state, false); r > rank {
@@ -885,6 +887,8 @@ func inboxGroupTitle(kind string) string {
 	switch inboxGroupKey(kind) {
 	case session.AttentionApproval:
 		return "Approvals"
+	case session.AttentionPlan:
+		return "Plans"
 	case session.AttentionQuestion:
 		return "Questions"
 	case session.AttentionMail:
@@ -1462,6 +1466,9 @@ func (m *OS) InboxReply() tea.Cmd {
 		return nil
 	}
 	if it.Kind != session.AttentionMail {
+		if cmd, ok := m.inboxReplyAgent(it); ok {
+			return cmd
+		}
 		m.ShowNotification(m.inboxKeyOr(config.ActionInboxReply, "r")+" replies to mail. Enter goes to the pane.", "info", m.Settings.NotificationDuration)
 		return nil
 	}

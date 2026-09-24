@@ -975,8 +975,16 @@ func (d *Daemon) verbSetAgentState(_ *connState, params json.RawMessage) (any, *
 		TranscriptPath string `json:"transcript_path"`
 		IfState        string `json:"if_state"`
 		HarnessPID     int    `json:"harness_pid"`
+		// Activity is one hook event for the pane's activity ring. Its shape
+		// is checked here; the ring that records it is not built yet, and
+		// the report's state part is handled as if it were absent, so a hook
+		// that sends it never loses the state it reports.
+		Activity *AgentActivityReport `json:"activity"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
+		return nil, verr
+	}
+	if verr := checkActivityReport(p.Activity); verr != nil {
 		return nil, verr
 	}
 	if p.State == "" {
@@ -1220,6 +1228,8 @@ func (d *Daemon) verbGetAgentState(_ *connState, params json.RawMessage) (any, *
 		"agent_session_id": w.AgentSessionID,
 		// meta is what set-agent-meta recorded, key to value.
 		"meta": agentMetaMap(w.AgentMeta, time.Now().UnixNano()),
+		// queued is how many messages wait in the pane's delivery queue.
+		"queued": w.AgentQueued,
 	}, nil
 }
 

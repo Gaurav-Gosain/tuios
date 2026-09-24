@@ -675,6 +675,11 @@ var optionSpecs = []Option{
 		Accepted:    SidebarFileDeletes, Default: SidebarFileDeleteTrash,
 	},
 	{
+		Path: "appearance.sidebar.agent_rest_fold", Type: OptionString, Section: "sidebar",
+		Description: "How long an agent row rests (idle, unknown, or done and seen) before the rail folds it into one line: a duration such as 1h, or off",
+		Default:     "1h",
+	},
+	{
 		Path: "appearance.sidebar.workspaces", Type: OptionString, Section: "sidebar",
 		Description: "Workspace chip band the rail used to draw",
 		Default:     "",

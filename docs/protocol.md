@@ -937,6 +937,49 @@ drew: glow's pager then showed a blank screen and ignored keys. With no client
 attached nothing changes. A client that does not place the window within the
 second leaves the answer as it was, `unplaced: true`.
 
+**The agent review, triage, queue and approval work is registered ahead of
+its handlers.** Twelve verbs are listed by `list-verbs` with their parameters,
+scope and link capability, and answer `internal` with a message ending "is not
+built yet in this daemon" until their work lands: `review-diff`,
+`review-note`, `send-review`, `compare-fan`, `verify-fan`, `keep-fan`,
+`mark-attention`, `agent-activity`, `queue-prompt`, `list-queued`,
+`cancel-queued` and `get-approval` (see
+[Agent review, triage and queue verbs](#agent-review-triage-and-queue-verbs)).
+`mark-attention` checks the person's nonce first, so a caller without one gets
+`not_human` as it will once built. The older verbs change as follows, and a
+caller that sends nothing new is answered as before:
+
+- `request-approval` takes `kind` (`approval` or `plan`), `plan`, `tool`,
+  `target` and `deny_message`. A call that sets `kind` to `plan` or any of the
+  other four answers `internal`, holds nothing, and the hook gives the prompt
+  back to the pane. An unknown `kind` is `invalid_params`.
+- `reply-approval` takes `risk_ack` and `plan_sha`, and `respond` takes
+  `risk_ack`. A call that sets one answers `internal` and answers nothing;
+  `reply-approval` checks the nonce before that.
+- `set-agent-state` takes `activity`, one hook event for the pane's activity
+  ring. Its `event` must be one of `prompt`, `tool`, `tool_done`,
+  `tool_failed` or `turn_end`, or the call is `invalid_params` and nothing is
+  applied. A valid one is not recorded yet, and the state part of the report
+  applies exactly as without it.
+- `list-attention` takes `include_snoozed`. Nothing can be snoozed yet, so it
+  lists what the plain call lists. `kinds` accepts the new kind `plan`, which
+  sorts right after `approval`.
+- Attention items gain `snoozed_until`, `marked_unread`, `risk`,
+  `deny_message`, `plan_lines` and `plan_sha`, each omitted when unset, and a
+  close may carry the new reason `snoozed`. An item mirrored from a linked
+  host keeps that host's `risk` and `plan_lines`, display only.
+- `get-agent-state` and every `list-agents` entry gain `queued`, the length of
+  the pane's delivery queue, 0 until the queue is built. The synced window
+  state gains `agent_queued`, omitted when zero and taken from the daemon's
+  own state on every client push.
+- A worktree's record gains `verify`, the last `verify-fan` check in it,
+  omitted when none has run.
+- The event type `agent-activity` exists and is opt-in: a subscription
+  receives it only when its `types` names it, so a subscriber that names no
+  types never sees it. Nothing publishes it yet.
+- The error codes `not_repo`, `no_notes`, `queue_full` and
+  `risk_unacknowledged` are in the catalog.
+
 ### list-verbs
 
 `list-verbs` is the discovery entry point. It returns every verb with its full
@@ -1023,6 +1066,10 @@ catalog.
 | `worktree_dirty` | remove-worktree refused: the worktree holds uncommitted changes and neither `stash` nor `force` was passed. Nothing was removed. |
 | `git_failed` | A git command failed. The message is git's own. The repository is as it was. |
 | `repo_not_found` | No checkout on this machine has the origin `repo_url` names, and `clone` was not passed. Pass `clone`, a `repos_root`, or `repo` with the directory. |
+| `not_repo` | No git repository is under the pane or session named, so there is nothing to review. Nothing was read. |
+| `no_notes` | `send-review` found no unsent review notes for the pane. Nothing was typed. |
+| `queue_full` | The pane's delivery queue holds `[agents.queue] max` messages. Nothing was queued. |
+| `risk_unacknowledged` | An allow for an approval that matched risk rules came without `risk_ack` naming exactly those rules. Nothing was answered. |
 
 Codes are stable and additive: existing codes never change meaning, and a new
 code is only ever introduced for a condition that previously had none. A client
@@ -3060,11 +3107,12 @@ the one before. The configuration is in
 | Capability | Verbs |
 | --- | --- |
 | none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
-| `list` | `list-*`, `session-info`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir` |
+| `list` | `list-*`, `session-info`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `compare-fan`, `agent-activity`, `get-approval` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `close-window`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway) |
-| `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `close-window`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `resize`, `set-option`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `review-diff` (it returns file contents), `review-note`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan` |
+| `open` and `write` | `verify-fan` |
+| `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `mark-attention` |
 | every one | `open-host-connection`, `set-pane-grants` (whose handler refuses a link caller anyway) |
 
 Binary messages: `MsgList`, the PTY subscribe messages, `MsgGetTerminalState`,
@@ -3128,6 +3176,33 @@ while the message was held is `window_not_found`.
 
 Result: `held_id`, `message_id`, `to`, `to_name`, `thread_id`.
 
+### Agent review, triage and queue verbs
+
+These verbs are registered with their parameters, scope and link capability,
+and answer `internal` ("not built yet") until their work lands. `list-verbs`
+describes each one's parameters and result. What is fixed now is who may call
+them:
+
+| Verb | What it does | A pane without `admin` | Over a link | The person only |
+| --- | --- | --- | --- | --- |
+| `review-diff` | The diff of what the agent in a pane changed, against its base or a fan sibling, marked `untrusted` | `read`, own session and fan group | `write` (file contents) | no |
+| `review-note` | Add, edit, remove, list or clear review notes on a pane's changes | `write` | `write` | a note is the person's only with a live `human_nonce` |
+| `send-review` | Send the unsent notes to the agent through the delivery queue | `write`, and a typing verb: the target holds nothing the caller does not, and is not on `needs_input` unless the caller holds `respond` | `write` | "from the person" only with a live `human_nonce` |
+| `compare-fan` | One row per attempt of a fan: branch, agent, state, changes, last check | `read`, own fan group | `list` | no |
+| `verify-fan` | Run one check with `sh -c` in a window named `verify` in every attempt; the window holds no grants | `fan`, own fan group | `open` and `write` | no |
+| `keep-fan` | Keep one attempt and remove the others, refusing a dirty one without `stash` or `force` | refused | `write` | admin or the person |
+| `mark-attention` | Snooze, wake, mark unread or restore an Inbox item | refused | `respond` | yes: `human_nonce` from a live attach, never from inside a pane |
+| `agent-activity` | The pane's ring of hook events, and a recap of it, marked `untrusted` | `read`, own session and fan group | `list` | no |
+| `queue-prompt` | Queue a message, typed when the agent comes to rest and never over a prompt | `write`, and a typing verb as for `send-review`; checked again against the caller's grants when typed | `write` | "by the person" only with a live `human_nonce` |
+| `list-queued` | The messages waiting in a pane's queue | `read` | `list` | no |
+| `cancel-queued` | Drop queued messages; a pane drops only what it queued | `write` | `write` | the person's entries need a live `human_nonce` |
+| `get-approval` | A held approval or plan whole, with its risk rules, marked `untrusted` | `read`; its `session` is the pane's own unless named | `list` | no |
+
+A connection restricted with `restrict-connection` is held the same way: with
+`read_only`, `review-note`, `send-review`, `queue-prompt`, `cancel-queued`
+and `verify-fan` are refused, and `keep-fan` and `mark-attention` are refused
+on any restricted connection.
+
 ## Event stream
 
 The daemon can push events instead of a caller polling. A connection that issues
@@ -3163,11 +3238,12 @@ Event types:
 | `session-created` | A session was created. | `session` |
 | `session-closed` | A session was terminated. | `session` |
 | `gap` | Some events were not delivered to this connection. `reason` says why (see below). A gap has no `seq`. | `reason`, `dropped`, `boot_id` |
-| `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `answered`, `superseded`, `window_closed`, `session_closed`, `evicted` or `host_removed`. An `answered` item also carries `answer` and `answered_by`; the close of a linked host's item never reads `answered` here. `session` and `window` are the item's, so the usual filters apply. An item of a linked host also sets `host`, and a subscriber that filters on a session, window or pane does not get it unless it subscribed with `hosts`. | `session`, `window`, `host`, `action`, `attention` |
+| `attention` | An Inbox item opened, changed or closed. `action` is `open`, `update` or `close`, and `attention` is the item as `list-attention` returns it. On `close` the item carries `closed`: `resolved`, `seen`, `read`, `dismissed`, `answered`, `superseded`, `window_closed`, `session_closed`, `evicted`, `host_removed` or `snoozed` (the person snoozed it; it opens again with the same id). An `answered` item also carries `answer` and `answered_by`; the close of a linked host's item never reads `answered` here. `session` and `window` are the item's, so the usual filters apply. An item of a linked host also sets `host`, and a subscriber that filters on a session, window or pane does not get it unless it subscribed with `hosts`. | `session`, `window`, `host`, `action`, `attention` |
 | `host-changed` | A linked host's link changed state, or what it holds changed: its sessions, windows or agents. List the hosts again to see what. See [Following linked hosts](#following-linked-hosts). | `host`, `status` |
 | `prompt` | A shell that marks its commands with OSC 133 shows its prompt after anything else: at start, or after a command. A prompt drawn again changes nothing and raises nothing. | `session`, `window`, `pty_id` |
 | `command-started` | A shell with OSC 133 marks started a command. `cmdline` is cut to 512 bytes, with likely secrets masked. | `session`, `window`, `pty_id`, `cmdline` |
 | `command-finished` | That command finished. `exit_code` is absent when the shell sent no status; a prompt with no finish mark ends the command that way. `command_seq` counts the pane's finished commands. | `session`, `window`, `pty_id`, `cmdline`, `exit_code`, `duration_ms`, `command_seq` |
+| `agent-activity` | One entry of an agent pane's activity ring. Opt-in: only a subscription whose `types` names it receives it. Nothing publishes it until the activity ring is built. | `session`, `window` |
 
 ### What fires when
 

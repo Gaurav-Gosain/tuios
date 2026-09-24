@@ -12,15 +12,18 @@ const (
 	whichKeyInbox         = "Inbox"
 	whichKeyOldestWaiting = "Oldest waiting (repeat: next)"
 	whichKeyInboxMail     = "Inbox: mail"
+	whichKeyReview        = "Review changes"
+	whichKeyNewestDone    = "Newest finished (repeat: older)"
 )
 
 // IsAgentPrefixKeybinding reports whether a prefix menu line is one that only
 // means something to a person running agents: the Inbox, the oldest waiting
-// item, and the Inbox on its mail. The client leaves them out of the menu
-// until an agent has been seen; the keys work either way.
+// item, the Inbox on its mail, reviewing a pane's changes and the newest
+// finished turn. The client leaves them out of the menu until an agent has
+// been seen; the keys work either way.
 func IsAgentPrefixKeybinding(k Keybinding) bool {
 	switch k.Description {
-	case whichKeyInbox, whichKeyOldestWaiting, whichKeyInboxMail:
+	case whichKeyInbox, whichKeyOldestWaiting, whichKeyInboxMail, whichKeyReview, whichKeyNewestDone:
 		return true
 	}
 	return false
@@ -117,6 +120,8 @@ func GetPrefixKeybindings(prefixType string, isDaemonSession ...bool) []Keybindi
 			{"i", whichKeyInbox},
 			{"o", whichKeyOldestWaiting},
 			{"M", whichKeyInboxMail},
+			{"O", whichKeyNewestDone},
+			{"v", whichKeyReview},
 			{"X", "Close session"},
 		}
 

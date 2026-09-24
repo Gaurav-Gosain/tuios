@@ -149,6 +149,11 @@ type Settings struct {
 	// can delete from by mistake.
 	SidebarFileActions bool
 
+	// SidebarAgentRestFold is how long an agent row rests (idle, unknown, or
+	// done and seen) before the rail folds it into one line with the others.
+	// Zero never folds. From appearance.sidebar.agent_rest_fold.
+	SidebarAgentRestFold time.Duration
+
 	// SidebarFileDelete is where a deleted file goes: the trash, or nowhere.
 	SidebarFileDelete string
 
@@ -622,6 +627,7 @@ func DefaultSettings() Settings {
 		SidebarFileActions:          true,
 		SidebarFileDelete:           SidebarFileDeleteTrash,
 		SidebarAgentRow:             DefaultSidebarAgentRow(),
+		SidebarAgentRestFold:        DefaultAgentRestFold,
 		Tooltips:                    true,
 		SessionColors:               true,
 		SessionBorder:               false,

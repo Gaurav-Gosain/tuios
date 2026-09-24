@@ -56,6 +56,8 @@ func (d *ActionDispatcher) registerPrefixHandlers() {
 	d.Register("prefix_mail", handlePrefixMail)
 	d.Register("prefix_inbox", handlePrefixInbox)
 	d.Register("prefix_next_attention", handlePrefixNextAttention)
+	d.Register("prefix_review", handlePrefixReview)
+	d.Register("prefix_next_finished", handlePrefixNextFinished)
 	d.Register("prefix_detach", handlePrefixDetach)
 	d.Register("prefix_close_session", handlePrefixCloseSession)
 	d.Register("prefix_exit_mode", handlePrefixExitMode)
@@ -377,6 +379,14 @@ func handlePrefixInbox(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handlePrefixNextAttention(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.JumpToNextAttention()
+}
+
+func handlePrefixReview(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.ReviewFocusedPane()
+}
+
+func handlePrefixNextFinished(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	return o, o.JumpToNewestFinished()
 }
 
 func handlePrefixSessionSwitcher(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {

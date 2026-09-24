@@ -21,8 +21,9 @@ is wrong when you are not the focused pane.
 
 `get-agent-state` and `list-agents` also report `needs_you` (true for
 `needs_input` and `errored`), `blocked_by` (`approval` or `question`, from
-`--kind`), `completion_seq` (turns the pane has finished) and `finished_unread`
-(true while a pane rests after a turn nobody has looked at since).
+`--kind`), `completion_seq` (turns the pane has finished), `finished_unread`
+(true while a pane rests after a turn nobody has looked at since) and `queued`
+(messages waiting to be typed to the agent when it comes to rest).
 
 Facts that are not a state (model, context use, a one-line summary) go in
 metadata. The rail draws it under your row. It is display only. `key=` removes a

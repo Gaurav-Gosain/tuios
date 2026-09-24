@@ -649,11 +649,17 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 // prompt the target shows, and the respond grant is the person's consent to
 // that. fan and start-agent type only into the panes they start, which never
 // hold more than their caller (launchGrants).
+//
+// queue-prompt and send-review type later, through the delivery queue. They
+// are held here at the call the same way, and the queue checks the caller's
+// grants against the target again when it types.
 var typingVerbs = map[string]bool{
-	"send-text": true,
-	"send-keys": true,
-	"ask-agent": true,
-	"run":       true,
+	"send-text":    true,
+	"send-keys":    true,
+	"ask-agent":    true,
+	"run":          true,
+	"queue-prompt": true,
+	"send-review":  true,
 }
 
 // holdTypingTarget holds a typing call from a pane without admin to the pane

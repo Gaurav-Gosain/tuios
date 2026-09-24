@@ -68,6 +68,7 @@ const (
 	SectionTerminalMode     = "terminal_mode"
 	SectionSidebar          = "sidebar"
 	SectionSidebarFiles     = "sidebar_files"
+	SectionSidebarAgents    = "sidebar_agents"
 	SectionInbox            = "inbox"
 	SectionInboxPeek        = "inbox_peek"
 	SectionMail             = "mail"
@@ -82,6 +83,7 @@ const (
 	ScopeTerminalMode   = "terminal"
 	ScopeSidebar        = "sidebar"
 	ScopeSidebarFiles   = "sidebar.files"
+	ScopeSidebarAgents  = "sidebar.agents"
 	ScopeInbox          = "inbox"
 	ScopeInboxPeek      = "inbox.peek"
 	ScopeMail           = "mail"
@@ -143,6 +145,15 @@ func Scopes(leader string) []Scope {
 			// be reporting a fault that does not exist.
 			ID: ScopeSidebarFiles, Name: "Sidebar files",
 			Sections: []string{SectionSidebarFiles},
+			Reaches:  ReachModal,
+		},
+		{
+			// A scope of its own for the files section's reason: these keys
+			// are consulted only while the cursor is on an agent row, so r
+			// replying to the agent there and renaming a pane elsewhere is a
+			// resolution, not a collision.
+			ID: ScopeSidebarAgents, Name: "Sidebar agents",
+			Sections: []string{SectionSidebarAgents},
 			Reaches:  ReachModal,
 		},
 		{
@@ -250,6 +261,8 @@ func (k *KeybindingsConfig) section(name string) map[string][]string {
 		return k.Sidebar
 	case SectionSidebarFiles:
 		return k.SidebarFiles
+	case SectionSidebarAgents:
+		return k.SidebarAgents
 	case SectionInbox:
 		return k.Inbox
 	case SectionInboxPeek:

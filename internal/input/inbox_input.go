@@ -40,6 +40,16 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if action == "" {
 		return o, nil
 	}
+	// The review, triage and approval keys say whether they did anything,
+	// and one that did not is not recorded as run: until its work lands it
+	// does what an unbound key did.
+	if app.InboxWorkActions[action] {
+		cmd, handled := o.InboxWorkAction(action)
+		if handled {
+			o.NoteAction(action)
+		}
+		return o, cmd
+	}
 	o.NoteAction(action)
 	switch action {
 	case config.ActionInboxSelect:

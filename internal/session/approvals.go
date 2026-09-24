@@ -438,6 +438,15 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 		Options []string `json:"options"`
 		Summary string   `json:"summary"`
 		Scope   []string `json:"always_scope"`
+		// The fields a hook sends for risk rules, plans and deny reasons.
+		// Until those are built a request that sets any of them is refused,
+		// so the hook gives the prompt back to the pane rather than having
+		// half of what it asked for held.
+		Kind        string `json:"kind"`
+		Plan        string `json:"plan"`
+		Tool        string `json:"tool"`
+		Target      string `json:"target"`
+		DenyMessage bool   `json:"deny_message"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -446,6 +455,12 @@ func (d *Daemon) verbRequestApproval(cs *connState, params json.RawMessage) (any
 		return nil, hintedVerbError(ErrVerbForbidden, "request-approval is refused over a link: an approval is held by the hook of a pane on this machine", &VerbHint{
 			Detail: "Nothing was held. Run the hook on the machine the pane is on.",
 		})
+	}
+	if p.Kind != "" && !slices.Contains(approvalKinds, p.Kind) {
+		return nil, invalidParam("kind", "kind is approval or plan", approvalKinds...)
+	}
+	if p.Kind == AttentionPlan || p.Plan != "" || p.Tool != "" || p.Target != "" || p.DenyMessage {
+		return nil, notBuilt("request-approval with kind, plan, tool, target or deny_message")
 	}
 	harnessID := canonicalHarness(p.Harness)
 	if harnessID == "" {
@@ -548,6 +563,11 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 		// Summary is the line the decision was made from. When it is set
 		// and the hold is on another line, nothing is answered.
 		Summary string `json:"summary"`
+		// RiskAck and PlanSHA answer risky items and plans, which nothing
+		// holds until they are built. A reply that sets either is refused
+		// and answers nothing.
+		RiskAck []string `json:"risk_ack"`
+		PlanSHA string   `json:"plan_sha"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -565,6 +585,9 @@ func (d *Daemon) verbReplyApproval(cs *connState, params json.RawMessage) (any, 
 			Param:  "human_nonce",
 			Detail: "Nothing was answered. Only a client attached right now can answer an approval, by passing the nonce its attach reply carried. An agent never can.",
 		})
+	}
+	if len(p.RiskAck) > 0 || p.PlanSHA != "" {
+		return nil, notBuilt("reply-approval with risk_ack or plan_sha")
 	}
 	requestID := p.RequestID
 	if requestID == "" {

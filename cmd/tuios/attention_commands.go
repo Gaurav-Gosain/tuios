@@ -59,6 +59,8 @@ func attentionGroupTitle(kind string) string {
 	switch kind {
 	case session.AttentionApproval:
 		return "Approvals"
+	case session.AttentionPlan:
+		return "Plans"
 	case session.AttentionQuestion, session.AttentionAsk:
 		return "Questions"
 	case session.AttentionMail:

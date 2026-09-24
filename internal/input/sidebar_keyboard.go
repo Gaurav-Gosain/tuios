@@ -50,6 +50,19 @@ func HandleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		}
 	}
 
+	// The agent rows' own keys, the same way: consulted only while the cursor
+	// is on an agent row, and a key whose action did nothing falls through to
+	// the rail's binding for it, so r and x keep renaming and opening the menu
+	// until reply and cancel are built.
+	if o.SidebarCursorOnAgent() {
+		if act := lookupAction(msg, o.KeybindRegistry.GetSidebarAgentsAction); act != "" {
+			if cmd, handled := o.SidebarAgentAction(act); handled {
+				o.NoteAction(act)
+				return o, cmd
+			}
+		}
+	}
+
 	action := lookupAction(msg, o.KeybindRegistry.GetSidebarAction)
 	if action == "" {
 		// A global bind, on a key the rail does not bind itself.
