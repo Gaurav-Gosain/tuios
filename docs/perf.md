@@ -1934,3 +1934,62 @@ allocations are again in emitting the frame, where painted cells carry a
 background SGR. The compositor rows do not move beyond noise because a layer
 whose string and grounds did not change is copied with its paint; the variance
 on the "off" compositor rows is the machine, not the option.
+
+## 2026-09 backgrounds on the fullscreen fast path
+
+The fast path for a lone pane that fills the region stood down whenever the
+pane, window chrome or dock background was on, because the paint lived only in
+the compositor. It now paints the same rule into its own frame string
+(`internal/app/background_fast.go`): the text and escape sequences are copied
+through, and the ground's colour SGR is inserted in front of text the pen
+leaves without a colour of its own. Which surface a character lands on is
+decided by row and by the first and last character of a content row (the
+border glyphs), so nothing is measured. A bare reset while a painted colour
+is in force is rewritten as a reset of every attribute but that colour, so the
+ground is not set again after every styled run; each colour SGR the host
+parses boxes a colour, which is an allocation per frame on the client. The
+colour sequences are formatted when a ground is resolved and the buffer is
+kept, so the paint allocates only the frame string, which the unpainted path
+allocates too. `TestFastPathPaintMatchesTheCompositor` renders the same pane
+through both paths under eleven background settings and nine pane states
+(focused, dock top, bottom and hidden, window mode, unfocused, dimmed, zen,
+copy mode cursor and selection, scrolled back with a scrollbar) and requires
+identical cells.
+
+Measured on an M3 Pro at 207x55, `-cpu 4`, the test binaries of the benchmark
+commit and of this change interleaved old, new, new, old for eight rounds a
+side, compared with `benchstat`; the machine was busy, so times carry wide
+spreads and are quoted only where p is small. Allocation counts are exact.
+
+| | old | new | allocs/op old to new |
+|---|---|---|---|
+| keystroke, fullscreen, all off | 1.33 ms | 1.42 ms (p=0.20) | 1134 to 1134 |
+| keystroke, fullscreen, all on | 2.08 ms | 1.52 ms (-27%, p=0.005) | 1310 to 1142 |
+| keystroke, fullscreen, pane only (`BenchmarkPaneBackground`) | 1.96 ms | 1.45 ms (-26%, p=0.000) | 1302 to 1188 |
+| keystroke, 4 panes and rail, all on | 1.87 ms | 1.86 ms | 1117 to 1117 |
+| keystroke, 9 panes and rail, all on | 1.75 ms | 1.81 ms | 1109 to 1109 |
+
+With everything off, allocations per op are identical on all forty benchmarks
+run (`BenchmarkKeystrokeFrame`, `BenchmarkKeystrokeFrameTiled`,
+`BenchmarkCompositorGetCanvas`, `BenchmarkRenderTerminalUnfocused`,
+`BenchmarkBackgrounds`, `BenchmarkPaneBackground`), bytes per op within 0.2%,
+and no time moved by a significant amount (p between 0.2 and 1.0).
+
+What is left over "off" is not in the compose. Counted on their own, the
+compose allocations of a keystroke frame are equal with everything off and
+everything on, for the fullscreen pane and for 1, 4 and 9 composed panes. The
+rest is the host parsing colour SGRs: the fullscreen frame with every surface
+one colour carries 8 more than off; a pane-only ground carries one change of
+background per content row, where the border meets the pane (54 more); and a
+composed frame starts every row from a bare pen (`frameRenderer.renderLine`,
+which matches ultraviolet byte for byte), so it names the ground once per row
+(about 60 more). Carrying the pen across rows would remove the last of these,
+but changes the frame format for every consumer and was not done.
+`PaneBackground/on/panes-9` gained 2 allocations for a reason unrelated to the
+paint: `fullscreenFastWindow` no longer returns before `GetVisibleWindows`
+when the pane background is on, so it pays what the "off" frame always paid.
+
+The one-pane rows of `BenchmarkBackgrounds` before this change (`panes-1`)
+were never on the fast path: that fixture has the rail on, which takes the
+fast path away with or without a background. The `fullscreen` rows were added
+to measure the case this change is about.
