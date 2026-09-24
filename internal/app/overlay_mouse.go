@@ -318,6 +318,9 @@ func (m *OS) setOverlayTab(kind string, i int) {
 		m.HelpCategory = i
 		m.HelpScrollOffset = 0
 	case "settings":
+		// A tab clicked during a search is a request for that tab, so the
+		// search gives way to it.
+		m.settingsSearch = settingsSearchState{}
 		m.SettingsCategory = i
 		m.SettingsSelected = 0
 		m.SettingsScroll = 0

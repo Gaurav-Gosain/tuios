@@ -1,0 +1,64 @@
+package input
+
+import (
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/app"
+)
+
+func typeKeys(o *app.OS, s string) *app.OS {
+	for _, r := range s {
+		o, _ = handleSettingsInput(press(string(r)), o)
+	}
+	return o
+}
+
+// TestSettingsSlashSearchesAndEscBacksOut is the key rule: / opens the search,
+// letters type into it (j included), esc clears the search and a second esc
+// closes the panel.
+func TestSettingsSlashSearchesAndEscBacksOut(t *testing.T) {
+	o := listKeysOS(t)
+	o.OpenSettings()
+	o, _ = handleSettingsInput(press("/"), o)
+	if !o.SettingsSearchOpen() {
+		t.Fatal("/ did not open the search")
+	}
+	o = typeKeys(o, "jump")
+	if got := o.SettingsSearchQuery(); got != "jump" {
+		t.Errorf("the query is %q, want jump: letters in the search are text", got)
+	}
+	o, _ = handleSettingsInput(press("esc"), o)
+	if o.SettingsSearchOpen() || !o.ShowSettings {
+		t.Fatalf("the first esc left search=%v panel=%v, want the search closed and the panel open",
+			o.SettingsSearchOpen(), o.ShowSettings)
+	}
+	o, _ = handleSettingsInput(press("esc"), o)
+	if o.ShowSettings {
+		t.Error("the second esc did not close the panel")
+	}
+}
+
+// TestSettingsTypingALetterSearches: a letter the page does not use starts a
+// search with it, and a letter it does use keeps its meaning.
+func TestSettingsTypingALetterSearches(t *testing.T) {
+	o := listKeysOS(t)
+	o.OpenSettings()
+	o, _ = handleSettingsInput(press("j"), o)
+	if o.SettingsSearchOpen() || o.SettingsSelected != 1 {
+		t.Fatalf("j searched=%v selected=%d; j moves down on the tab view", o.SettingsSearchOpen(), o.SettingsSelected)
+	}
+	o = typeKeys(o, "pane")
+	if !o.SettingsSearchOpen() || o.SettingsSearchQuery() != "pane" {
+		t.Errorf("typing pane gave search=%v query=%q, want a search for pane", o.SettingsSearchOpen(), o.SettingsSearchQuery())
+	}
+	// Down moves through the results, and a ctrl chord does not type.
+	o, _ = handleSettingsInput(tea.KeyPressMsg{Code: tea.KeyDown}, o)
+	if o.SettingsSelected != 1 {
+		t.Errorf("down in the results left row %d", o.SettingsSelected)
+	}
+	o, _ = handleSettingsInput(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl}, o)
+	if o.SettingsSearchQuery() != "pane" {
+		t.Errorf("ctrl+a changed the query to %q", o.SettingsSearchQuery())
+	}
+}

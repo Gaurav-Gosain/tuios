@@ -11,6 +11,9 @@ func handleSettingsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SettingsEditActive() {
 		return handleSettingsEditInput(msg, o)
 	}
+	if o.SettingsSearchOpen() {
+		return handleSettingsSearchInput(msg, o)
+	}
 	if listKey(msg.String(), true, o.SettingsPageRows(), o.SettingsMove) {
 		return o, nil
 	}
@@ -27,6 +30,67 @@ func handleSettingsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.SettingsNextCategory()
 	case "shift+tab", "[":
 		o.SettingsPrevCategory()
+	case "/":
+		o.SettingsSearchStart("")
+	default:
+		// A letter no key on this page answers to starts a search with it, so
+		// a person can type the name of the setting they came for. The letters
+		// the page does use keep their meaning; / always opens the search.
+		if startsSettingsSearch(msg) {
+			o.SettingsSearchStart(msg.Text)
+		}
+	}
+	return o, nil
+}
+
+// startsSettingsSearch reports whether a key typed on the tab view begins a
+// search: a single letter carrying text and no modifier beyond shift. The keys
+// the tab view already answers to (h, j, k, l, g, G, q) never reach here,
+// because the switch above takes them first.
+func startsSettingsSearch(msg tea.KeyPressMsg) bool {
+	if msg.Mod&^tea.ModShift != 0 {
+		return false
+	}
+	r := []rune(msg.Text)
+	if len(r) != 1 {
+		return false
+	}
+	return (r[0] >= 'a' && r[0] <= 'z') || (r[0] >= 'A' && r[0] <= 'Z')
+}
+
+// handleSettingsSearchInput handles keys while the search line is open. Every
+// printable key is part of the query. The list keys move through the results,
+// the left and right arrows change the row under the cursor and enter
+// activates it, all in place, exactly as they would on its own tab. Tab goes to
+// the row on its own tab. Esc closes the search and puts the tab view back
+// where it was; the next esc closes the panel.
+func handleSettingsSearchInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	key := msg.String()
+	if listKey(key, false, o.SettingsPageRows(), o.SettingsMove) {
+		return o, nil
+	}
+	switch key {
+	case "esc":
+		o.SettingsSearchClose()
+	case "ctrl+c":
+		o.CloseSettings()
+	case "enter":
+		return o, o.SettingsActivate()
+	case "left":
+		return o, o.SettingsAdjust(-1)
+	case "right":
+		return o, o.SettingsAdjust(1)
+	case "tab":
+		o.SettingsSearchJump()
+	case "backspace":
+		o.SettingsSearchBackspace()
+	case "ctrl+u":
+		o.SettingsSearchSetQuery("")
+	default:
+		q := o.SettingsSearchQuery()
+		if changed, _ := editFilterQuery(msg, &q, false); changed {
+			o.SettingsSearchSetQuery(q)
+		}
 	}
 	return o, nil
 }

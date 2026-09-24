@@ -37,7 +37,26 @@ var settingsHints = []overlay.Hint{
 	{Key: "↑↓", Label: "move"},
 	{Key: "←→", Label: "change"},
 	{Key: "tab", Label: "section"},
+	{Key: "/", Label: "search"},
 	{Key: "esc", Label: "close"},
+}
+
+// settingsSearchHints is the footer while the search line is open. Tab goes to
+// the row's own tab rather than the next one, and esc clears the search before
+// it closes anything.
+var settingsSearchHints = []overlay.Hint{
+	{Key: "↑↓", Label: "move"},
+	{Key: "←→", Label: "change"},
+	{Key: "tab", Label: "go to tab"},
+	{Key: "esc", Label: "clear search"},
+}
+
+// currentSettingsHints is the footer for the panel as it is now.
+func (m *OS) currentSettingsHints() []overlay.Hint {
+	if m.settingsSearch.open {
+		return settingsSearchHints
+	}
+	return settingsHints
 }
 
 // settingsLayout returns the fitted inner width, the number of setting rows that
@@ -51,17 +70,23 @@ func (m *OS) settingsLayout(tabs []string, itemCount int) (width, rows int, hint
 	width = m.panelWidth(settingsMaxInnerWidth)
 	preferred := max(itemCount, settingsVisibleRows)
 	rh := m.GetRenderHeight()
+	footer := m.currentSettingsHints()
+	// The search line is a body line above the rows.
+	search := 0
+	if m.settingsSearch.open {
+		search = 1
+	}
 
 	for n := settingsDescLines; n > 0; n-- {
 		// Body lines that are not setting rows: the blank above the box, then
 		// the box itself.
-		extra := n + 1
-		rows, hints = m.panelBody(preferred, extra, width, tabs, settingsHints)
+		extra := n + 1 + search
+		rows, hints = m.panelBody(preferred, extra, width, tabs, footer)
 		if rh <= 0 || rows+extra+panelChrome(0, width, tabs, hints) <= rh {
 			return width, rows, hints, n
 		}
 	}
-	rows, hints = m.panelBody(preferred, 0, width, tabs, settingsHints)
+	rows, hints = m.panelBody(preferred, search, width, tabs, footer)
 	return width, rows, hints, 0
 }
 
@@ -73,9 +98,14 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		return "", overlay.Geometry{}, nil
 	}
 	m.SettingsCategory = clampInt(m.SettingsCategory, 0, len(cats)-1)
-	cat := cats[m.SettingsCategory]
-	if len(cat.Items) > 0 {
-		m.SettingsSelected = clampInt(m.SettingsSelected, 0, len(cat.Items)-1)
+	searching := m.settingsSearch.open
+	items := cats[m.SettingsCategory].Items
+	var hits []settingsHit
+	if searching {
+		items, hits = m.settingsSearchRows(cats)
+	}
+	if len(items) > 0 {
+		m.SettingsSelected = clampInt(m.SettingsSelected, 0, len(items)-1)
 	} else {
 		m.SettingsSelected = 0
 	}
@@ -87,13 +117,27 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 	for i, c := range cats {
 		tabs[i] = c.Name
 	}
+	// While searching, the strip lights the tab the selected result lives on,
+	// so the strip says where a row is as the cursor moves through them.
+	activeTab := m.SettingsCategory
+	if searching && len(hits) > 0 {
+		activeTab = hits[m.SettingsSelected].cat
+	}
 
-	width, visible, hints, descLines := m.settingsLayout(tabs, len(cat.Items))
+	width, visible, hints, descLines := m.settingsLayout(tabs, len(items))
 	// A category with more settings than fit scrolls; the selection stays in
 	// view so the arrow keys can always reach every setting.
-	m.SettingsScroll = scrollWindow(m.SettingsScroll, m.SettingsSelected, len(cat.Items), visible)
+	m.SettingsScroll = scrollWindow(m.SettingsScroll, m.SettingsSelected, len(items), visible)
 	start := m.SettingsScroll
-	end := min(start+visible, len(cat.Items))
+	end := min(start+visible, len(items))
+
+	var lines []string
+	// rowsAt is the body line the first setting row is drawn on.
+	rowsAt := 0
+	if searching {
+		lines = append(lines, m.settingsSearchLine(len(hits), width, pal))
+		rowsAt = 1
+	}
 
 	// Build each row and remember its control width so the hit rects can be
 	// derived from the panel geometry afterward.
@@ -102,29 +146,42 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		stepless bool
 		idx      int
 	}
-	var lines []string
 	infos := make([]rowInfo, 0, end-start)
 	for i := start; i < end; i++ {
-		line, control, stepless := m.settingsRow(cat.Items[i], i == m.SettingsSelected, pal, width)
+		var extra settingsRowExtra
+		if searching {
+			extra.tag = cats[hits[i].cat].Name
+			if hits[i].field == settingsFieldLabel {
+				extra.match = hits[i].pos
+			}
+		}
+		line, control, stepless := m.settingsRow(items[i], i == m.SettingsSelected, pal, width, extra)
 		lines = append(lines, line)
 		infos = append(infos, rowInfo{control: control, stepless: stepless, idx: i})
 	}
-	for len(lines) < visible {
+	if searching && len(items) == 0 {
+		lines = append(lines, settingsSearchEmpty(m.settingsSearch.query, width, pal))
+	}
+	for len(lines) < visible+rowsAt {
 		lines = append(lines, overlay.Style(bg).Render(" "))
 	}
 
 	if descLines > 0 {
-		desc := ""
-		if len(cat.Items) > 0 {
-			desc = cat.Items[m.SettingsSelected].Desc
-		}
-		if len(cat.Items) > visible {
-			// Say where in the category the selection is, so a scrolled-off setting
-			// is discoverable rather than simply missing.
-			desc = lipgloss.Sprintf("(%d/%d) ", m.SettingsSelected+1, len(cat.Items)) + desc
-		}
 		lines = append(lines, overlay.Style(bg).Render(" "))
-		lines = append(lines, settingsDescription(desc, width, descLines, pal)...)
+		if searching {
+			lines = append(lines, m.settingsSearchDescription(items, hits, cats, width, descLines, pal)...)
+		} else {
+			desc := ""
+			if len(items) > 0 {
+				desc = items[m.SettingsSelected].Desc
+			}
+			if len(items) > visible {
+				// Say where in the category the selection is, so a scrolled-off
+				// setting is discoverable rather than simply missing.
+				desc = lipgloss.Sprintf("(%d/%d) ", m.SettingsSelected+1, len(items)) + desc
+			}
+			lines = append(lines, settingsDescription(desc, width, descLines, pal)...)
+		}
 	}
 
 	// A session that cannot write the config file says so in the title rather
@@ -140,7 +197,7 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 		Title:     title,
 		Width:     width,
 		Tabs:      tabs,
-		ActiveTab: m.SettingsCategory,
+		ActiveTab: activeTab,
 		Body:      strings.Join(lines, "\n"),
 		Hints:     hints,
 	}
@@ -150,7 +207,7 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 	// control sits right-aligned in the inner area.
 	rows := make([]overlayRowHit, 0, len(infos))
 	for i, info := range infos {
-		rowY := geo.BodyY + i
+		rowY := geo.BodyY + rowsAt + i
 		full := overlay.Rect{X0: 0, Y0: rowY, X1: geo.Width, Y1: rowY + 1}
 		ctrlW := lipgloss.Width(info.control)
 		ctrlX := geo.BodyX + geo.InnerWidth - ctrlW
@@ -205,7 +262,14 @@ func settingsDescription(desc string, width, n int, pal overlay.Palette) []strin
 
 // settingsRow renders a single setting and returns the row string, its control
 // string (for hit-rect sizing), and whether the control is a boolean toggle.
-func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, width int) (string, string, bool) {
+//
+// extra carries what a search result shows beyond the row itself: the label
+// characters the query matched, and the tab the row lives on.
+func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, width int, extra ...settingsRowExtra) (string, string, bool) {
+	var ex settingsRowExtra
+	if len(extra) > 0 {
+		ex = extra[0]
+	}
 	bg := pal.Surface
 	marker := "  "
 	if selected {
@@ -246,9 +310,21 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 		labelColor = pal.FgDim
 	}
 	// The label yields to the control: the control is the part the row is for.
-	label := overlay.Truncate(item.Label, max(width-lipgloss.Width(control)-3, 1))
+	// A search result's tab name yields to both, and goes first.
+	avail := max(width-lipgloss.Width(control)-3, 1)
+	tag := ""
+	if ex.tag != "" {
+		tag = "  " + ex.tag
+		if lipgloss.Width(item.Label)+lipgloss.Width(tag) > avail {
+			tag = ""
+		}
+	}
+	label := overlay.Truncate(item.Label, avail)
 	left := overlay.Style(bg).Foreground(theme.ReadableAt(pal.Accent, bg, theme.MarkFloor)).Bold(true).Render(marker) +
-		overlay.Style(bg).Foreground(labelColor).Bold(selected).Render(label)
+		launcherRowName(label, ex.match, bg, labelColor, selected, pal)
+	if tag != "" {
+		left += overlay.Style(bg).Foreground(pal.FgMute).Render(tag)
+	}
 
 	gap := max(width-lipgloss.Width(left)-lipgloss.Width(control), 1)
 	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + control, control, stepless

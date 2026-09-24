@@ -978,6 +978,8 @@ type OS struct {
 	SettingsScroll     int    // scroll offset within the active category
 	SettingsEditing    bool   // true while a text setting is being edited inline
 	SettingsEditBuffer string // in-progress text for the setting being edited
+	// settingsSearch is the search line over every tab. See settings_search.go.
+	settingsSearch settingsSearchState
 	// wheelMoving is set while the mouse wheel moves a list, which never wraps
 	// at the ends. See listWraps.
 	wheelMoving bool

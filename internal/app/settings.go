@@ -837,6 +837,7 @@ func (m *OS) OpenSettings() {
 	m.SettingsScroll = 0
 	m.SettingsEditing = false
 	m.SettingsEditBuffer = ""
+	m.settingsSearch = settingsSearchState{}
 }
 
 // OpenSettingsAt opens the settings overlay on the named category, for the
@@ -862,6 +863,9 @@ func (m *OS) CloseSettings() {
 
 // settingsCurrentItems returns the items in the active category, clamping the
 // category and selection indices.
+//
+// While the search line is open the items are the rows it found, from every
+// tab, so every action on "the selected row" acts on the row found.
 func (m *OS) settingsCurrentItems() []settingItem {
 	cats := m.settingsCategories()
 	if len(cats) == 0 {
@@ -869,6 +873,9 @@ func (m *OS) settingsCurrentItems() []settingItem {
 	}
 	m.SettingsCategory = clampInt(m.SettingsCategory, 0, len(cats)-1)
 	items := cats[m.SettingsCategory].Items
+	if m.settingsSearch.open {
+		items, _ = m.settingsSearchRows(cats)
+	}
 	if len(items) > 0 {
 		m.SettingsSelected = clampInt(m.SettingsSelected, 0, len(items)-1)
 	} else {
