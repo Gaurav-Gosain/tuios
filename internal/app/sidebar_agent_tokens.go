@@ -248,7 +248,8 @@ func sidebarAgentNeed(state string, doneSeen bool, kind, message string) (string
 // sidebarPromptKind reports whether kind is one of the prompt kinds a need
 // word can name.
 func sidebarPromptKind(kind string) bool {
-	return kind == harness.PromptKindApproval || kind == harness.PromptKindQuestion
+	return kind == harness.PromptKindApproval || kind == harness.PromptKindQuestion ||
+		kind == inboxWordPlan || kind == inboxWordRisky
 }
 
 // sidebarAgentMessageRest is a message with the prompt kind in front of it

@@ -26,8 +26,14 @@ func handleInboxInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.InboxPopSettling() {
 		return o, nil
 	}
+	// A risky allow's first press waits for the same key again; any other
+	// key resets it.
+	o.InboxKeyPressed(msg.String())
 	if o.InboxPeeking() {
 		return handleInboxPeekInput(msg, o)
+	}
+	if o.InboxReasonOpen() {
+		return handleInboxReasonInput(msg, o)
 	}
 	if o.InboxSelecting() {
 		return handleInboxSelectInput(msg, o)
@@ -108,6 +114,25 @@ func overlayKeys(o *app.OS) *config.KeybindRegistry {
 		return o.KeybindRegistry
 	}
 	return defaultOverlayKeys()
+}
+
+// handleInboxReasonInput handles keyboard input while the reason line for a
+// deny is open: every printable key is text, enter denies with it, backspace
+// deletes, and esc closes the line and denies nothing.
+func handleInboxReasonInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	switch key := msg.String(); key {
+	case "esc":
+		o.InboxReasonCancel()
+	case "enter":
+		return o, o.InboxReasonSend()
+	case "backspace":
+		o.InboxReasonBackspace()
+	case "space":
+		o.InboxReasonType(" ")
+	default:
+		o.InboxReasonType(msg.Text)
+	}
+	return o, nil
 }
 
 // handleInboxSelectInput handles keyboard input while the selector line is

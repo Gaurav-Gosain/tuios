@@ -1759,6 +1759,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyInboxApprovalReplied(msg)
 		return m, nil
 
+	case InboxApprovalDetailMsg:
+		m.applyInboxApprovalDetail(msg)
+		return m, nil
+
 	case InboxAskAnsweredMsg:
 		m.applyInboxAskAnswered(msg)
 		return m, nil

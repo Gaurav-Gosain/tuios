@@ -261,6 +261,12 @@ func (m *OS) InboxAnswer(action, value string) tea.Cmd {
 		p.Err = "This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon."
 		return nil
 	}
+	// An allow of a risky call takes a second press of the same key, and
+	// carries the rules it matched. See inbox_approvals_ext.go.
+	ack, send := m.inboxPeekRiskGate(p, action, value)
+	if !send {
+		return nil
+	}
 	p.Sending = true
 	p.Err, p.Note = "", ""
 	params := map[string]any{
@@ -273,6 +279,9 @@ func (m *OS) InboxAnswer(action, value string) tea.Cmd {
 	}
 	if value != "" {
 		params["value"] = value
+	}
+	if len(ack) > 0 {
+		params["risk_ack"] = ack
 	}
 	call, gen := m.inboxCaller(), p.gen
 	return func() tea.Msg {

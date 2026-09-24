@@ -9,8 +9,13 @@ the prompts only the person may answer.
 ## What is in it
 
 - an approval or a question: a pane on `needs_input`, split by `blocked_by`
-- a plan an agent in plan mode asks the person to approve (kind `plan`),
-  once plans are held; its pane still reads `blocked_by` approval
+- a plan an agent in plan mode asks the person to approve (kind `plan`,
+  with `plan_lines` and `plan_sha`); its pane still reads `blocked_by`
+  approval. The `get-approval` verb reads the plan text
+  while it is held. Only the person approves it, from the Inbox
+- an approval whose command matched a risk rule carries `risk`, the rule
+  names. The Inbox allows it on a second press; an agent with the `respond`
+  grant may deny it and never allow it
 - a question an agent asked with `ask-human` (kind `ask`)
 - mail to `human`
 - a pane on `errored`
@@ -143,7 +148,15 @@ integration does all of this.
 
 Only a call the person can read whole on one line is held: a short shell
 command, a file read, a fetch. An edit, an MCP tool, or a long or multi-line
-command is answered in the pane as before.
+command is answered in the pane as before. A Claude Code plan (`ExitPlanMode`)
+is held too, as a row of kind `plan` the person reads whole before `1` works;
+`3` or a typed reason keeps you planning, and the reason reaches you as the
+deny's message.
+
+A call that matches a risk rule (a recursive delete, a force push, a pipe to a
+shell, a write outside the worktree, and the like) carries `risk`. The person
+allows it only with a second press. With the `respond` grant you may deny a
+risky prompt with `tuios respond`, and an allow is refused with `forbidden`.
 
 What it means for you:
 

@@ -1249,7 +1249,9 @@ Inside the Inbox:
 | `g` / `G` | First and last item. |
 | `enter` | Go to the item's pane, switching session and workspace. On mail, open the thread. On a held approval, give the prompt back to the pane first, so the harness shows it there. |
 | `space` | On an approval or a question, read the prompt without leaving the Inbox, and answer it from there. See [Answering a prompt without attaching](#answering-a-prompt-without-attaching). Not on a held approval, which has no prompt on the screen: answer that one with `1`, `2` or `3`. |
-| `1` / `2` / `3` | Answer the held approval under the cursor: allow once, always allow, deny. The same order as the harness's own menu. Only the keys the prompt offers work, and only once the prompt has been on screen as it is for 0.4 seconds. The whole prompt, and what `2` adds, is shown under the list. See [Approvals from the Inbox](#approvals-from-the-inbox). |
+| `1` / `2` / `3` | Answer the held approval under the cursor: allow once, always allow, deny. The same order as the harness's own menu. Only the keys the prompt offers work, and only once the prompt has been on screen as it is for 0.4 seconds. The whole prompt, and what `2` adds, is shown under the list. On a risky approval, `1` and `2` need a second press of the same key within 3 seconds. On a plan they are approve and approve with accept edits, and work once the plan's last line has been shown; `3` keeps it planning. See [Approvals from the Inbox](#approvals-from-the-inbox), [Risk rules](#risk-rules) and [Plans](#plans). |
+| `n` | On a held approval or plan whose harness takes a reason: deny, or keep planning, with a reason you type on the `Reason:` line. `enter` sends it, `esc` drops it. See [Deny with a reason](#deny-with-a-reason). |
+| `J` / `K`, `ctrl+d` / `ctrl+u` | Scroll a plan shown under the list. |
 | `1` to `9` | On a question put with `ask-human`, pick that answer. The question and its numbered answers are shown under the list, and the keys work once it has been on screen as it is for 0.4 seconds. See [Questions an agent asks you](#questions-an-agent-asks-you). |
 | `r` | Reply to mail: the thread opens with its reply line. |
 | `y` | On a resume row: go to the pane and type the conversation's resume command there. |
@@ -1685,8 +1687,9 @@ What is supported:
 | Claude Code | `PermissionRequest` hook output (`hookSpecificOutput.decision`) | once and deny, and always when every `permission_suggestions` entry is a rule tuios can show |
 | opencode, Kilo | The plugin posts the reply to opencode's permission route | once and deny, and always when the request lists its `always` patterns |
 
-Claude Code's `AskUserQuestion` and `ExitPlanMode` are not held: their answer
-is a choice or a plan, not yes or no, and stays in Claude Code's own dialog.
+Claude Code's `AskUserQuestion` is not held: its answer is a choice, not yes or
+no, and stays in Claude Code's own dialog. `ExitPlanMode` is held as a plan:
+see [Plans](#plans).
 Codex is not held either: its `PermissionRequest` hook runs before its own
 reviewer decides whether to ask at all, so holding it would ask you about calls
 Codex would have settled itself.
@@ -1768,6 +1771,112 @@ items exists only while something is snoozed with a time, the fold reads
 the state stamps the rail already has, and a focus change between plain
 shells records nothing.
 
+### Risk rules
+
+An approval whose command matches a risk rule is marked risky: its row reads
+`risky:` before the line, the rail's need word is `risky`, and the detail under
+the list names each rule and why. `1` and `2` then allow it only on a second
+press of the same key within 3 seconds; the first press says
+`Press 1 again to allow rm -rf build/` and sends nothing. Any other key, a
+cursor move or the item changing resets it. `3` and `d` deny with one press.
+The peek holds `a`, `A` and a digit to the same rule on a risky prompt.
+
+The daemon enforces this, not only the Inbox: an allow of a risky call must
+name exactly the rules it matched (`risk_ack`), or it is refused and nothing is
+answered. A client older than the rules sends none, so it cannot allow a risky
+call from the Inbox at all; answer it in the pane. A pane holding the `respond`
+grant may deny a risky prompt and never allow one, unless
+`panes_may_allow = true`.
+
+The shipped rules, each matched against every command of a shell call (split on
+`;`, `&&`, `||`, `|`, `&` and newlines, and followed into `$( )`, backticks and
+`sh -c`), after `sudo`, `env` and similar wrappers:
+
+| Rule | Matches |
+| --- | --- |
+| recursive delete | `rm` with both `-r` (or `-R`, `--recursive`) and `-f` (or `--force`), in any order |
+| force push | `git push` with `--force`, `-f`, `--force-with-lease`, or a `+` refspec |
+| hard reset | `git reset --hard` |
+| clean | `git clean -f`, `-fd`, `-fx` |
+| discard changes | `git checkout -- .`, `git checkout .`, `git restore .` |
+| pipe to shell | `curl` or `wget` piped to `sh`, `bash`, `zsh`, `python`, `node`, or to anything under `sudo` |
+| sudo | any command under `sudo` or `doas` |
+| disk | `dd of=`, `mkfs`, a redirect to `/dev/sd*`, `/dev/nvme*` and the like |
+| wide permissions | `chmod -R 777`, `chown -R` on `/` or `~` |
+| database | `DROP TABLE`, `DROP DATABASE`, `TRUNCATE TABLE`, in any case |
+| infrastructure | `terraform apply` or `destroy`, `kubectl delete`, `docker system prune`, `npm publish`, `cargo publish` |
+| outside the worktree | a redirect, `tee`, `cp`, `mv`, `ln`, `install`, `rm`, `touch`, `sed -i` and the like naming an absolute or `~` path outside the pane's worktree root (else its working directory), or a `Write` or `Edit` approval of such a path. `/dev/null` and the terminal are not outside |
+
+Add your own, or turn the shipped ones off, in the config:
+
+```toml
+[agents.approvals.risk]
+builtin = true            # keep the shipped rules
+panes_may_allow = false   # a pane with the respond grant may not allow a risky call
+
+[[agents.approvals.risk.rule]]
+name = "kubectl apply"
+tools = ["Bash", "bash", "shell"]   # empty: every tool
+pattern = '\bkubectl\s+(apply|delete)\b'   # RE2, matched per command
+```
+
+The rules are read from the file and again when it changes, and cannot be set
+with `set-option`, so a pane cannot switch them off through tuios. An approval
+nobody holds is matched on its line: tuios's own hooks report
+`approve <Tool>: <what>`, read as that tool and argument; any other line is
+read as a command.
+
+The rules are a speed bump, not a sandbox. A command written to hide what it
+does (a variable holding `rm`, an alias, a script file) passes them. The
+harness's own permission system stays the boundary; the rules make an allow of
+a dangerous call take two deliberate presses.
+
+### Plans
+
+With approvals on for Claude Code, a plan it asks you to approve when it leaves
+plan mode (its `ExitPlanMode` tool) is held too, under its own group, Plans,
+between Approvals and the questions. The row is the plan's title and length,
+`Refactor the retry loop (14 lines)`, and the rail's need word is `plan`. With
+the cursor on it the plan is shown whole under the list, scrolled with `J` and
+`K`:
+
+| Key | What it does |
+| --- | --- |
+| `1` | Approve. Claude Code leaves plan mode and still asks before each edit. |
+| `2` | Approve and accept edits for this session. Offered only when Claude Code suggests exactly that mode change, and the line under the plan says so. `bypassPermissions` and `auto` are never offered. |
+| `3` | Keep planning. |
+| `n` | Keep planning, with a reason you type, which Claude reads. |
+
+`1` and `2` work only once the plan's last line has been on screen, and 0.4
+seconds after that. The answer names the digest of the plan that was shown
+(`plan_sha`), and the daemon refuses an approve for any other plan. Note the
+order: `1` is the safest approval, which differs from Claude Code's own menu on
+purpose. Turn plans off, and keep approvals, with `hold_plans = false` under
+`[agents.approvals]`.
+
+A plan is held only when its text fits (32 KiB) and it carries nothing but the
+plan and its file. One whose `allowedPrompts` asks for command permissions,
+which Claude Code before 2.1.205 granted with the plan, is answered in the
+pane. When the hold ends without an answer the item is the pane's approval
+again, and Claude Code shows its own dialog.
+
+What the hook prints for an approve is the `PermissionRequest` decision with
+`behavior: allow` and `updatedInput` set to the plan's input as it came:
+Claude Code marks `ExitPlanMode` as a tool that needs the user, and it takes an
+allow for such a tool only with `updatedInput` (checked against the hooks
+reference and the 2.1.281 build). `2` adds one permission update,
+`{"type": "setMode", "mode": "acceptEdits", "destination": "session"}`.
+
+### Deny with a reason
+
+`n` on a held approval or plan opens a `Reason:` line under it. `enter` denies
+with what you typed, which the hook hands to the model as the deny's message;
+an empty line sends the default ("The user denied this from the tuios Inbox.").
+It is offered where the harness passes a reason on: Claude Code, opencode and
+Kilo. The reason is cleaned and cut to 500 bytes, only you can send it (it is
+a `reply-approval` with your attach nonce), and it reaches only the hold it
+answers. A reason typed by `send-keys` is never sent.
+
 ### Review, triage, replies and safer approvals (being built)
 
 The daemon already knows the shape of four pieces of work that are being
@@ -1792,6 +1901,10 @@ built, so their rules are fixed before any of them does anything:
   the pane leaves `needs_input`, and risk rules that mark an approval risky.
   The risk rules are a speed bump, not a sandbox: an obfuscated command can
   avoid a pattern, and the harness's permission system stays the boundary.
+  `get-agent-state` and `list-agents`).
+- **Safer approvals** (`get-approval`, `risk_ack` and `plan_sha`) are built:
+  see [Risk rules](#risk-rules), [Plans](#plans) and
+  [Deny with a reason](#deny-with-a-reason).
 
 The activity ring behind `agent-activity` has landed: see
 [What the agent has been doing](#what-the-agent-has-been-doing).
@@ -2058,6 +2171,9 @@ status line feed held back (see above).
 | `UserPromptSubmit`, `PreToolUse` | `working`, with the prompt's first line or the tool call as activity |
 | `PermissionRequest` | `needs_input`, kind `approval`, message `approve <tool>: <command or path>`. With approvals on, then waits for an answer from the Inbox (see [Approvals from the Inbox](#approvals-from-the-inbox)) |
 | `PostToolUse`, `PostToolUseFailure`, `PermissionDenied`, `ElicitationResult` | `working`, only if the pane is `needs_input`. The first two also carry the tool's result as activity, which is kept whether or not the state applies |
+| `UserPromptSubmit`, `PreToolUse` | `working` |
+| `PermissionRequest` | `needs_input`, kind `approval`, message `approve <tool>: <command or path>`, or `plan: <the plan's title>` for `ExitPlanMode`. With approvals on, then waits for an answer from the Inbox (see [Approvals from the Inbox](#approvals-from-the-inbox) and [Plans](#plans)) |
+| `PostToolUse`, `PostToolUseFailure`, `PermissionDenied`, `ElicitationResult` | `working`, only if the pane is `needs_input` |
 | `Notification` `permission_prompt` | `needs_input`, kind `approval` |
 | `Notification` `elicitation_dialog`, `elicitation_url_dialog`, `agent_needs_input` | `needs_input`, kind `question` |
 | `Notification` `idle_prompt` | `idle`, only if the pane is `working` or `unknown` |

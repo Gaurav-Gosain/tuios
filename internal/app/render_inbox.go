@@ -56,7 +56,7 @@ func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 	}
 	selected, ok := m.inboxSelected()
 	hints := m.inboxRowHints(selected, ok)
-	held := ok && selected.Kind == session.AttentionApproval && selected.RequestID != ""
+	held := ok && inboxHeld(selected)
 	if held {
 		hints = m.inboxApprovalHints(selected)
 		// The row cuts the line to fit, so the held prompt is shown whole
@@ -327,7 +327,15 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 	if summary == "" {
 		summary = inboxKindWords(it)
 	}
-	if keys := inboxAnswerKeys(it); keys != "" {
+	if extra := m.inboxRowExtras(it); extra != "" {
+		// "risky: ", said in front of the line and after the keys.
+		summary = extra + summary
+	}
+	if it.Kind == session.AttentionPlan {
+		// A plan is its title and length; its keys are in the footer once
+		// it is under the cursor.
+		summary = inboxPlanRowText(it)
+	} else if keys := inboxAnswerKeys(it); keys != "" {
 		// Said in text, so a held approval reads as answerable here without
 		// colour: the keys that answer it, in front of what it asks.
 		summary = "[" + keys + "] " + summary
@@ -336,9 +344,6 @@ func (m *OS) inboxItemRow(it session.AttentionItem, selected bool, bg color.Colo
 		// Mail another machine sent an agent here, held for the person by
 		// the link policy. Said in words: who it was for, and the key.
 		summary = "[held for " + printableTitle(it.HeldFor) + ", p passes on] " + summary
-	}
-	if extra := m.inboxRowExtras(it); extra != "" {
-		summary = extra + summary
 	}
 
 	avail := max(width-lipgloss.Width(right)-lipgloss.Width(glyph)-4, 1)

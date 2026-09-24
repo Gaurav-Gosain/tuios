@@ -103,6 +103,12 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		return o, nil
 	}
 
+	// The Inbox reads a plan's text when one comes under the cursor, which
+	// any input can do. It costs a comparison when nothing needs reading.
+	if o.ShowInbox {
+		cmd = tea.Batch(cmd, o.InboxApprovalFetch())
+	}
+
 	// Sync state to daemon after any input that might have changed state
 	// This ensures state persists across reconnects without explicit save
 	if o.IsDaemonSession {

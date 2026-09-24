@@ -172,13 +172,20 @@ max = 8
 ```
 
 - `hold_plans` also hands a plan an agent in plan mode asks to have approved
-  to the Inbox, for the harnesses `enabled` names. Unset is true.
+  to the Inbox, for the harnesses `enabled` names (Claude Code's
+  `ExitPlanMode`). Unset is true. See
+  [Plans](AGENT_STATE.md#plans).
 - `[agents.approvals.risk]` marks an approval risky when its command matches a
   rule: `builtin` keeps the shipped rules (default true), each `rule` adds one
   with a name, the tools it applies to (empty for every tool) and an RE2
-  `pattern`. A rule with no name or a pattern that does not compile is
-  ignored, with a warning. `panes_may_allow` lets a pane holding the `respond`
-  grant allow a risky call; it is off, so only you can.
+  `pattern`, matched against each command of a shell call and the whole text
+  of any other. A rule with no name or a pattern that does not compile is
+  ignored, with a warning. An allow of a risky approval takes a second press
+  of the same key in the Inbox, and the daemon refuses one that does not name
+  the rules. `panes_may_allow` lets a pane holding the `respond` grant allow a
+  risky call; it is off, so only you can. The shipped rules are listed under
+  [Risk rules](AGENT_STATE.md#risk-rules). They are a speed bump, not a
+  sandbox.
 - `[agents.recap]` is the summary of what an agent did while you were away:
   `mode` says where it is shown (`toast` in the dock when you come back to the
   pane, and in the Inbox; `inbox` only in the Inbox; `off` only in

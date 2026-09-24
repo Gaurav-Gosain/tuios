@@ -205,7 +205,9 @@ func (m *OS) paneAsk(windowID string) (session.AttentionItem, bool) {
 func (m *OS) paneAskNote(windowID, message, kind string) (string, string) {
 	it, ok := m.paneAsk(windowID)
 	if !ok || message != "" {
-		return message, kind
+		// A plan or a risky call says so in the need word. See
+		// inbox_approvals_ext.go.
+		return message, m.paneApprovalWord(windowID, kind)
 	}
 	return it.Summary, harness.PromptKindQuestion
 }

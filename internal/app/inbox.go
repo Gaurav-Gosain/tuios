@@ -119,6 +119,9 @@ type InboxState struct {
 	// life is the snoozed items, the snooze picker, undo and the walk of
 	// finished turns. See inbox_lifecycle.go.
 	life inboxLifecycle
+	// approvals is the state of the safer approvals: a risky allow's first
+	// press, the reason line, and the plan shown. See inbox_approvals_ext.go.
+	approvals inboxApprovalState
 }
 
 // InboxSnapshotMsg is a fresh listing from the watcher.
@@ -427,7 +430,7 @@ func (m *OS) handleInboxWatch(msg inboxWatchMsg) tea.Cmd {
 	case nil:
 		return nil
 	}
-	return tea.Batch(cmd, listenForInbox(m.inboxEvents))
+	return tea.Batch(cmd, m.InboxApprovalFetch(), listenForInbox(m.inboxEvents))
 }
 
 // applyInboxSnapshot replaces the mirror with a fresh listing.
@@ -1276,7 +1279,7 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 	if !ok {
 		return nil
 	}
-	if it.Kind != session.AttentionApproval || it.RequestID == "" {
+	if !inboxHeld(it) {
 		m.ShowNotification("1, 2 and 3 answer an approval the Inbox is holding. Enter goes to the pane.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
@@ -1290,6 +1293,11 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 	}
 	if !m.inboxAnswerSettled(it, time.Now()) {
 		m.ShowNotification("This prompt just changed. Read it, then answer", "info", m.Settings.NotificationDuration)
+		return nil
+	}
+	// A risky allow takes a second press, and a plan is approved only once
+	// it has been read to its end. See inbox_approvals_ext.go.
+	if m.inboxApprovalGate(it, decision) {
 		return nil
 	}
 	return m.inboxReplyCmd(it, decision)
@@ -1313,6 +1321,7 @@ func inboxShownKey(it session.AttentionItem) string {
 	return strings.Join([]string{
 		it.ID, it.RequestID, it.Summary,
 		strings.Join(it.Options, ","), strings.Join(it.AlwaysScope, "\n"),
+		it.Kind, strings.Join(it.Risk, ","), it.PlanSHA,
 	}, "\x00")
 }
 
@@ -1340,11 +1349,18 @@ func (m *OS) inboxAnswerSettled(it session.AttentionItem, now time.Time) bool {
 // inboxReplyCmd is the reply-approval call, with this client's attach nonce,
 // which is what lets the daemon take the answer as the person's.
 func (m *OS) inboxReplyCmd(it session.AttentionItem, decision string) tea.Cmd {
-	if m.DaemonClient == nil || m.AttachedHost != "" {
+	return m.inboxReplyCmdWith(it, decision, "")
+}
+
+// inboxReplyCmdWith is inboxReplyCmd with the reason for a deny. An allow of
+// a risky call carries the rules the person saw, and an allow of a plan the
+// digest of the plan they read (inboxReplyExtras).
+func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message string) tea.Cmd {
+	if (m.DaemonClient == nil && m.Inbox.call == nil) || m.AttachedHost != "" {
 		m.ShowNotification("Answering needs a client attached to this machine's daemon", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	nonce := m.DaemonClient.HumanNonce()
+	nonce := m.inboxNonce()
 	if nonce == "" {
 		m.ShowNotification("This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon", "error", m.Settings.NotificationDuration*2)
 		return nil
@@ -1353,22 +1369,24 @@ func (m *OS) inboxReplyCmd(it session.AttentionItem, decision string) tea.Cmd {
 		m.Inbox.replied = make(map[string]bool)
 	}
 	m.Inbox.replied[it.RequestID] = true
-	build := m.DaemonClient.ClientVersion()
+	call := m.inboxCaller()
 	name := inboxWho(it)
+	params := map[string]any{
+		"request_id":  it.RequestID,
+		"decision":    decision,
+		"human_nonce": nonce,
+		// The line the person read. The daemon answers nothing when the
+		// hold is on another one.
+		"summary": it.Summary,
+	}
+	for k, v := range inboxReplyExtras(it, decision) {
+		params[k] = v
+	}
+	if message != "" && decision == session.ApprovalDeny {
+		params["message"] = message
+	}
 	return func() tea.Msg {
-		client, err := session.DialVerbClientAs(build)
-		if err != nil {
-			return InboxApprovalRepliedMsg{Name: name, Decision: decision, Err: err}
-		}
-		defer func() { _ = client.Close() }()
-		raw, err := client.CallWithTimeout("reply-approval", map[string]any{
-			"request_id":  it.RequestID,
-			"decision":    decision,
-			"human_nonce": nonce,
-			// The line the person read. The daemon answers nothing when
-			// the hold is on another one.
-			"summary": it.Summary,
-		}, 5*time.Second)
+		raw, err := call("reply-approval", params, 5*time.Second)
 		if err != nil {
 			return InboxApprovalRepliedMsg{Name: name, Decision: decision, Err: err}
 		}

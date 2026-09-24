@@ -124,8 +124,10 @@ nothing on the screen to read.
 These keys are bound for the agent review, triage, reply and approval work.
 The triage keys work: `ctrl+b O`, `z`, `u` and `S` in the Inbox, and `u` and
 `z` on a rail agent row (see
-[Snoozing, undo and unread](AGENT_STATE.md#snoozing-undo-and-unread)). The
-rest are being built: until its work lands, a key does what it did before it
+[Snoozing, undo and unread](AGENT_STATE.md#snoozing-undo-and-unread)), and so
+do the approval keys: `n`, `J`, `K`, `ctrl+d` and `ctrl+u` in the Inbox (see
+[Deny with a reason](AGENT_STATE.md#deny-with-a-reason)). The rest are being
+built: until its work lands, a key does what it did before it
 was bound: nothing in the Inbox, the rail's own binding on an agent row, and
 after `ctrl+b` in terminal mode, the key typed into the focused pane, with no
 repeat window opened. `ctrl+b O` also does that until an agent has been seen,
@@ -144,7 +146,7 @@ and the rail's `u` clears only this client's seen marks.
 | `z`, then `1` to `4` | Inbox | Snooze the item: 15 minutes, 1 hour, until 9:00 tomorrow, or until it changes; any other key cancels. On a snoozed item, wake it |
 | `u` | Inbox | Undo the last dismiss or snooze, within 10 seconds |
 | `S` | Inbox | Show or hide snoozed items |
-| `n` | Inbox | Deny a held approval or a plan with a reason (`3` stays the plain deny) |
+| `n` | Inbox | Deny a held approval, or keep a plan planning, with a reason you type (`3` stays the plain deny) |
 | `J`, `K`, `ctrl+d`, `ctrl+u` | Inbox | Scroll the detail under the list, such as a long plan |
 | `u` | rail agent row | Mark the pane's finished turn unread, for every client (not the pane in front of you) |
 | `z` | rail agent row | Snooze the pane's Inbox item: the Inbox opens on it with the four lengths |
@@ -152,6 +154,13 @@ and the rail's `u` clears only this client's seen marks.
 | `r` | rail agent row | Reply to the agent |
 | `v` | rail agent row | Review the pane's changes |
 | `x` | rail agent row | Drop the newest queued message |
+
+On a risky approval (one a [risk rule](AGENT_STATE.md#risk-rules) matched),
+`1` and `2` allow only on a second press of the same key within 3 seconds, and
+so do `a`, `A` and a digit in the peek; any other key resets the first press.
+On a plan, `1` approves, `2` approves and accepts edits for the session, and
+`3` keeps it planning; `1` and `2` work once the plan's last line has been
+shown. The digits are not bindings.
 
 The Inbox's keys are `inbox_review`, `inbox_snooze`, `inbox_undo`,
 `inbox_show_snoozed`, `inbox_deny_reason`, `inbox_detail_down` and
