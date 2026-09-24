@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -50,6 +52,9 @@ type rig struct {
 	// keepExits leaves WindowExitChan undrained, which is what an Update
 	// goroutine that is busy elsewhere looks like from the read loop.
 	keepExits bool
+	// producing is the file a guest started by the resized-while-producing
+	// shape keeps writing for as long as it exists.
+	producing string
 }
 
 // keepExits is the newRig option that leaves window exits queued.
@@ -374,14 +379,39 @@ func (r *rig) converge(ptyID string) {
 	deadline := time.Now().Add(rigWait)
 	for time.Now().Before(deadline) {
 		st, err := r.daemonCells(ptyID, rigScrollbackOracle)
+		// The client may hold less history than the daemon, which is what
+		// compareSides allows too, so agreement is the client's text being the
+		// daemon's tail. Waiting for the two to be equal spent the whole
+		// deadline on every route that rebuilds a pane with more history than
+		// the snapshot carries.
 		if err == nil && st != nil {
-			if clientText(r.winByPTY(ptyID)) == stateText(st) {
+			if strings.HasSuffix("\n"+stateText(st), "\n"+clientText(r.winByPTY(ptyID))) {
 				return
 			}
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// latestRPLine is the highest line number the resized-while-producing guest
+// has on the daemon's copy of the pane, or zero before its first line.
+func (r *rig) latestRPLine(ptyID string) int {
+	r.t.Helper()
+	st, err := r.daemonCells(ptyID, rigScrollbackOracle)
+	if err != nil || st == nil {
+		r.t.Fatalf("read the daemon's copy: %v", err)
+	}
+	latest := 0
+	for _, m := range rpLine.FindAllStringSubmatch(stateText(st), -1) {
+		if n, err := strconv.Atoi(m[1]); err == nil && n > latest {
+			latest = n
+		}
+	}
+	return latest
+}
+
+// rpLine matches the start of a line the resized-while-producing guest wrote.
+var rpLine = regexp.MustCompile(`RP-([0-9]+)-A`)
 
 // settle waits for the client to stop changing, so a comparison is taken after
 // every byte in flight has been applied on both sides. The client emulator is

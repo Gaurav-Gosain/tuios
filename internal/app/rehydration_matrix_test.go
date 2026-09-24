@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -284,8 +286,19 @@ var rehydrationShapes = []paneShape{
 			// Lines longer than the pane at every width it is taken through, so
 			// each one is a wrap decision, and started rather than waited for so
 			// the resizes below land among them.
+			//
+			// The guest runs until finish removes its go-ahead file, not for a
+			// fixed number of lines. A fixed count raced the resizes: on a
+			// Linux runner dash wrote twenty thousand lines in less time than
+			// the resize loop takes, so the guest was done before the first
+			// resize landed and the case failed without reaching the seam.
+			r.producing = filepath.Join(r.t.TempDir(), "producing")
+			if err := os.WriteFile(r.producing, nil, 0o600); err != nil {
+				r.t.Fatal(err)
+			}
 			r.startPTY(ptyID, `A=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; `+
-				`i=1; while [ $i -le 20000 ]; do echo "RP-$i-$A$A$A$A-END"; i=$((i+1)); done`)
+				`i=1; while [ -e '`+r.producing+`' ]; do echo "RP-$i-$A$A$A$A-END"; i=$((i+1)); done; `+
+				`echo RP-""STOPPED`)
 			// Resized only once the pane is known to be producing. A resize
 			// that lands before the guest has said anything settles on both
 			// sides before the first byte and tests nothing.
@@ -299,12 +312,16 @@ var rehydrationShapes = []paneShape{
 			// enough to prove the guest has only just started is also the first
 			// to be evicted. Waiting for one that is already gone spends the
 			// whole deadline and reports a timeout instead of a divergence.
-			r.waitDaemonShows(ptyID, "RP-")
+			// The gate is text only a produced line has: the RP-READY line
+			// above matches "RP-", and the shell's echo of the command has "$"
+			// after every dash, so neither can open it.
+			r.waitDaemonShows(ptyID, "-AAAAAAAAAA")
 			// Resized repeatedly, the way dragging a border over a pane that is
 			// producing does. One resize settles on both sides in about the time
 			// it takes the daemon to read a message; a run of them keeps the
 			// daemon a width behind for as long as the drag lasts, which is the
 			// state the two copies can disagree in.
+			before := r.latestRPLine(ptyID)
 			full := w.Width
 			for range 40 {
 				w.Resize(max(full/3, 6), w.Height)
@@ -312,17 +329,24 @@ var rehydrationShapes = []paneShape{
 				w.Resize(full, w.Height)
 				time.Sleep(2 * time.Millisecond)
 			}
-			// The seam only exists while the guest is producing. If it got all
-			// the way to the end first, the resizes landed on output that was
+			// The seam only exists while the guest is producing. If nothing was
+			// produced across the resizes, they landed on output that was
 			// already laid out and settled, and the case proves nothing. That
 			// is worth a failure rather than a pass, because the pass would be
 			// indistinguishable from a real one.
-			if r.daemonShows(ptyID, "RP-20000-") {
-				r.t.Fatal("the guest finished before the resizes landed, so this run never reached the seam")
+			if after := r.latestRPLine(ptyID); after <= before {
+				r.t.Fatalf("the guest produced nothing while the resizes landed (line %d before, %d after), so this run never reached the seam",
+					before, after)
 			}
-		},
-		finish: func(r *rig, ptyID string) {
-			r.waitDaemonShows(ptyID, "RP-20000-")
+			// Stopped here rather than after the route. The guest writes as
+			// fast as the machine lets it, and left running it floods the pane
+			// for as long as the comparison waits for things to settle. A
+			// client that falls that far behind drops output by design, which
+			// is a different question from the one this shape asks.
+			if err := os.Remove(r.producing); err != nil {
+				r.t.Fatal(err)
+			}
+			r.waitDaemonShows(ptyID, "RP-STOPPED")
 		},
 	},
 	{
