@@ -110,7 +110,9 @@ func TestSkillListsEveryErrorCode(t *testing.T) {
 func TestSkillIsHonestAboutRestoringConfig(t *testing.T) {
 	var unrestorable []string
 	for _, opt := range config.Options() {
-		if opt.Default == "" && len(opt.Accepted) > 0 && !slices.Contains(opt.Accepted, "") {
+		// A colour option takes empty whatever its keyword list says (empty is
+		// how it is unset), so an empty default is one it can be set back to.
+		if opt.Default == "" && len(opt.Accepted) > 0 && !slices.Contains(opt.Accepted, "") && !opt.Color {
 			unrestorable = append(unrestorable, opt.Path)
 		}
 	}
