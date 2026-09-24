@@ -77,9 +77,11 @@ An agent in a container or a VM is invisible to process detection. Set
 `TUIOS_AGENT` to its harness id on the wrapper, as in
 `TUIOS_AGENT=claude-code docker run -it box claude`.
 
-A harness that emits OSC 9;4 progress reports needs no wiring: setting a bar is
-`working`, clearing it `idle`, the error state `errored`, and the warning state
-`needs_input`. A desktop notification (OSC 9, OSC 777 or OSC 99) from a
+A harness tuios recognises that emits OSC 9;4 progress reports needs no more
+wiring: setting a bar is `working`, clearing it `idle`, the error state
+`errored`, and the warning state `needs_input`. Progress drives state only on a
+pane already known to hold an agent (a detected harness, `TUIOS_AGENT`, or any
+report), so a build tool's progress bar in a plain shell never makes it one. A desktop notification (OSC 9, OSC 777 or OSC 99) from a
 recognised harness is read through that harness's notification rules, and every
 notification is published on `subscribe` as a `notification` event.
 
