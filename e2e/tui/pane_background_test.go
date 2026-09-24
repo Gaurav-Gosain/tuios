@@ -62,7 +62,7 @@ func TestPaneBackgroundFromTheSettingsPanel(t *testing.T) {
 	}
 	programRed := red.Bg
 
-	openSettings(t, term)
+	openBackgrounds(t, term)
 	clickSettingsRow(t, term, "Pane background")
 	if err := term.WaitForText("pane background", uiTimeout); err != nil {
 		t.Fatalf("the colour picker did not open on the pane background row: %v\n%s", err, term.Snapshot())
@@ -82,12 +82,15 @@ func TestPaneBackgroundFromTheSettingsPanel(t *testing.T) {
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if err := term.WaitForText("#123456", uiTimeout); err != nil {
+	// The picker's own field shows the hex before enter lands, so what is
+	// waited for is the row itself carrying it, which only an apply does.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		y := findRow(s, "Pane background")
+		return y >= 0 && strings.Contains(s.Line(y), "#123456")
+	}, uiTimeout); err != nil {
 		t.Fatalf("the row does not carry the applied colour: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.SendKeys(tuitest.Esc); err != nil {
-		t.Fatalf("close settings: %v", err)
-	}
+	closeBackgrounds(t, term)
 
 	want := tuitest.Color{Kind: tuitest.ColorRGB, R: 0x12, G: 0x34, B: 0x56}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -107,8 +110,9 @@ func TestPaneBackgroundFromTheSettingsPanel(t *testing.T) {
 		t.Log("no border glyph on the marker row, so the border was not checked")
 	}
 
-	// Clearing puts the pane back on the terminal's own background.
-	openSettings(t, term)
+	// Clearing puts the pane back on the terminal's own background: unset, it
+	// follows All surfaces, which is off.
+	openBackgrounds(t, term)
 	clickSettingsRow(t, term, "Pane background")
 	if err := term.WaitForText("pane background", uiTimeout); err != nil {
 		t.Fatalf("the picker did not reopen: %v\n%s", err, term.Snapshot())
@@ -116,12 +120,13 @@ func TestPaneBackgroundFromTheSettingsPanel(t *testing.T) {
 	if err := term.SendKeys("x"); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
-	if err := term.WaitForText("(off)", uiTimeout); err != nil {
-		t.Fatalf("the row does not read as off after clearing: %v\n%s", err, term.Snapshot())
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		row := findRow(s, "Pane background")
+		return row >= 0 && strings.Contains(s.Line(row), "(all surfaces)")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the row does not read as following All surfaces after clearing: %v\n%s", err, term.Snapshot())
 	}
-	if err := term.SendKeys(tuitest.Esc); err != nil {
-		t.Fatalf("close settings: %v", err)
-	}
+	closeBackgrounds(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		_, blank, _, _, ok := paneBgCells(s)
 		return ok && blank.Bg.Kind == tuitest.ColorDefault
