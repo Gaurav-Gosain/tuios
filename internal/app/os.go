@@ -439,6 +439,9 @@ type OS struct {
 	// pane or chrome background is on. See background.go.
 	groundCache      [surfaceCount]groundMemo
 	paneContentRects map[string]image.Rectangle
+	// fastPaint is the buffer the fullscreen fast path paints its frame into
+	// while a background it draws is on. See background_fast.go.
+	fastPaint fastPainter
 	// scrollbarRects is where each pane's scrollbar was drawn on the last frame,
 	// keyed by window ID. Recorded by the renderer, read by input.
 	scrollbarRects map[string]ScrollbarRect

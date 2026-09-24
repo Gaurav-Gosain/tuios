@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"strings"
@@ -60,6 +61,11 @@ import (
 // The paint is kept with the parsed cells, so a layer that did not change
 // since the last frame is copied as before and pays nothing. With every option
 // off, the cost is the string comparisons that find them off.
+//
+// The one frame that is not composed is a lone pane filling the region, which
+// the fullscreen fast path hands to the host as a string without parsing it.
+// That path paints the same rule into its string instead: see
+// background_fast.go.
 
 // surface is one of the places a background can be set on its own.
 type surface uint8
@@ -102,6 +108,11 @@ type ground struct {
 	// whether the paint it holds is the paint this frame wants without
 	// comparing colours.
 	key string
+	// bgSGR and fgSGR are bg and fg as the SGR sequences that set them, empty
+	// for a colour that is not painted. The fullscreen fast path paints with
+	// these, so they are formatted once here and never per frame. See
+	// background_fast.go.
+	bgSGR, fgSGR string
 }
 
 // on reports whether anything is painted.
@@ -197,7 +208,18 @@ func resolveGround(setting, themeID string) ground {
 		}
 	}
 	g.key = setting + "\x00" + themeID
+	g.bgSGR = sgrColor(48, g.bg)
+	if g.fg != nil {
+		g.fgSGR = sgrColor(38, g.fg)
+	}
 	return g
+}
+
+// sgrColor is the SGR sequence that sets a truecolor foreground (38) or
+// background (48).
+func sgrColor(which int, c color.Color) string {
+	r, g, b, _ := c.RGBA()
+	return fmt.Sprintf("\x1b[%d;2;%d;%d;%dm", which, r>>8, g>>8, b>>8)
 }
 
 // solidColor copies a colour into a plain RGBA value, so a cell painted with it

@@ -384,8 +384,9 @@ func TestWindowChromeBackgroundPaintsTheSharedBorderLine(t *testing.T) {
 }
 
 // The fast path draws the pane, its border and the dock without the
-// compositor, so painting any of them takes it away. The desktop and the rail
-// do not: a pane that fills the region leaves no desktop showing.
+// compositor, and paints their backgrounds into its frame string, so no
+// background takes it away. TestFastPathPaintMatchesTheCompositor holds the
+// cells it paints to the compositor's.
 func TestBackgroundsAndTheFullscreenFastPath(t *testing.T) {
 	withTheme(t, "")
 	for _, tc := range []struct {
@@ -396,10 +397,10 @@ func TestBackgroundsAndTheFullscreenFastPath(t *testing.T) {
 		{name: "all off", set: func(*config.Settings) {}, fast: true},
 		{name: "desktop", set: func(s *config.Settings) { s.DesktopBackground = surfaceHex }, fast: true},
 		{name: "sidebar", set: func(s *config.Settings) { s.SidebarBackground = surfaceHex }, fast: true},
-		{name: "pane", set: func(s *config.Settings) { s.PaneBackground = surfaceHex }},
-		{name: "window chrome", set: func(s *config.Settings) { s.WindowChromeBackground = surfaceHex }},
-		{name: "dock", set: func(s *config.Settings) { s.DockBackground = surfaceHex }},
-		{name: "all surfaces", set: func(s *config.Settings) { s.Background = surfaceHex }},
+		{name: "pane", set: func(s *config.Settings) { s.PaneBackground = surfaceHex }, fast: true},
+		{name: "window chrome", set: func(s *config.Settings) { s.WindowChromeBackground = surfaceHex }, fast: true},
+		{name: "dock", set: func(s *config.Settings) { s.DockBackground = surfaceHex }, fast: true},
+		{name: "all surfaces", set: func(s *config.Settings) { s.Background = surfaceHex }, fast: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := keystrokeOS(t, 1, 80, 24)

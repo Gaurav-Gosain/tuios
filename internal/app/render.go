@@ -708,17 +708,6 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if m.celebration.active() {
 		return nil, false
 	}
-	// The backgrounds are painted on the parsed cells of each layer, and the
-	// fast path builds no layer. Falling back is what a lone fullscreen pane
-	// pays for a painted ground on anything the fast path draws: the pane, its
-	// border and the dock. The compositor then runs with cached layers, which
-	// copy rather than parse on a frame where nothing in them changed. The
-	// desktop and the rail keep the fast path: a pane that fills the region
-	// leaves no desktop showing, and a rail already takes it away.
-	if m.surfaceGround(surfacePane).on() || m.surfaceGround(surfaceChrome).on() ||
-		(m.surfaceGround(surfaceDock).on() && m.Settings.DockbarPosition != "hidden") {
-		return nil, false
-	}
 	if m.panesBorderless() {
 		return nil, false
 	}
@@ -755,7 +744,22 @@ func (m *OS) fullscreenFastWindow() (*terminal.Window, bool) {
 	if window.X != 0 || window.Y != topMargin || window.Width != rw || window.Height != usableH {
 		return nil, false
 	}
+	// The pane, chrome and dock backgrounds are painted into the frame string
+	// by paintFullscreenFrame, which needs the pane's content to be the whole
+	// box or the box less a one cell frame. The desktop and the rail need
+	// nothing: a pane that fills the region leaves no desktop showing, and a
+	// rail already takes the fast path away. See background_fast.go.
+	if m.fastPathPaints() && !fastPaintFits(window) {
+		return nil, false
+	}
 	return window, true
+}
+
+// fastPathPaints reports whether a background the fullscreen fast path draws
+// is on: the pane's, the window chrome's, or a shown dock's.
+func (m *OS) fastPathPaints() bool {
+	return m.surfaceGround(surfacePane).on() || m.surfaceGround(surfaceChrome).on() ||
+		(m.surfaceGround(surfaceDock).on() && m.Settings.DockbarPosition != "hidden")
 }
 
 // buildFullscreenFrame renders the window box and stacks it with the dock,
@@ -798,6 +802,13 @@ func (m *OS) buildFullscreenFrame(window *terminal.Window) string {
 	// rewinding the window a frame. Keep CachedContent for the render fast path.
 	window.CachedLayer = nil
 
+	if m.fastPathPaints() {
+		var dockStr string
+		if m.Settings.DockbarPosition != "hidden" {
+			dockStr, _ = m.renderDockString()
+		}
+		return m.paintFullscreenFrame(window, boxContent, dockStr, m.Settings.DockbarPosition)
+	}
 	if m.Settings.DockbarPosition == "hidden" {
 		return boxContent
 	}

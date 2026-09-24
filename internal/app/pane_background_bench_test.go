@@ -86,8 +86,8 @@ func BenchmarkBackgrounds(b *testing.B) {
 // BenchmarkPaneBackground is the keystroke frame and the compositor with the
 // pane background off and on, so the cost of the option is read off one run.
 // "off" is the number the rest of the render benchmarks already hold; "on" is
-// what painting adds. panes-1 is a lone pane that fills the screen, which with
-// the option off takes the fullscreen fast path and with it on is composed.
+// what painting adds. panes-1 is a lone pane that fills the screen, which
+// takes the fullscreen fast path with the option off and on.
 func BenchmarkPaneBackground(b *testing.B) {
 	for _, setting := range []string{config.PaneBackgroundOff, "#1e1e2e"} {
 		name := "off"
@@ -105,8 +105,8 @@ func BenchmarkPaneBackground(b *testing.B) {
 					w := m.Windows[0]
 					w.X, w.Y, w.Width, w.Height = 0, m.GetTopMargin(), m.GetRenderWidth(), m.GetUsableHeight()
 					w.MarkPositionDirty()
-					if _, ok := m.fullscreenFastWindow(); ok != (setting == config.PaneBackgroundOff) {
-						b.Fatalf("fast path eligibility %v with pane background %q", ok, setting)
+					if _, ok := m.fullscreenFastWindow(); !ok {
+						b.Fatalf("fast path not taken with pane background %q", setting)
 					}
 				}
 				sink := newFrameSink(realCols, realRows)
