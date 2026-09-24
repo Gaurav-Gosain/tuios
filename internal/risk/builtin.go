@@ -20,7 +20,27 @@ const (
 	RuleDatabase        = "database"
 	RuleInfrastructure  = "infrastructure"
 	RuleOutsideWorktree = "outside the worktree"
+	// RuleCutShort is not a rule of its own: the daemon marks an approval
+	// with it when the only line it has for the call was cut short, so the
+	// rules could not read the rest. See CutShortHit.
+	RuleCutShort = "cut short"
 )
+
+// CutShortHit is the mark for a call whose line was cut short.
+var CutShortHit = Hit{Rule: RuleCutShort, Why: "the line was too long to read whole, so a risky part may be hidden"}
+
+// Why is what a shipped rule, or the cut short mark, guards against.
+func Why(name string) (string, bool) {
+	if name == RuleCutShort {
+		return CutShortHit.Why, true
+	}
+	for _, r := range Builtin() {
+		if r.Name == name {
+			return r.Why, true
+		}
+	}
+	return "", false
+}
 
 // Builtin returns the rules tuios ships, in the order the Inbox lists them.
 func Builtin() []Rule {
@@ -157,19 +177,27 @@ func discardChanges(c command, _ Call) bool {
 var pipeTargets = []string{"sh", "bash", "zsh", "dash", "ksh", "fish", "python", "python3", "node"}
 
 func pipeToShell(c command, _ Call) bool {
+	// A download a shell or eval runs as its script or command line:
+	// bash <(curl x), sh -c "$(curl x)", eval "$(wget -O- x)".
+	if slices.ContainsFunc(c.fedBy, isDownload) {
+		return true
+	}
 	// sudo in the target seat counts whatever it runs: a download piped to
 	// sudo tee is still a download written with privilege.
 	if !slices.Contains(pipeTargets, c.name()) && !c.sudo {
 		return false
 	}
-	for _, prev := range c.pipedFrom {
-		if len(prev) == 0 {
-			continue
-		}
-		switch baseName(prev[0]) {
-		case "curl", "wget":
-			return true
-		}
+	return slices.ContainsFunc(c.pipedFrom, isDownload)
+}
+
+// isDownload reports whether argv runs curl or wget.
+func isDownload(argv []string) bool {
+	if len(argv) == 0 {
+		return false
+	}
+	switch baseName(argv[0]) {
+	case "curl", "wget":
+		return true
 	}
 	return false
 }

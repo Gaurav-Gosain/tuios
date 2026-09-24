@@ -52,7 +52,9 @@ type Rule struct {
 	// Why says in a few words what the rule guards against.
 	Why string
 	// Tools limits the rule to these tool names, compared without case.
-	// Empty applies it to every tool.
+	// Empty applies it to every tool. Naming any one of ShellTools covers
+	// them all and a call with no tool; naming any one of FileTools covers
+	// them all.
 	Tools []string
 	// command reads one command of a shell call. Nil for a rule that does
 	// not read commands.
@@ -96,13 +98,25 @@ func containsFold(list []string, s string) bool {
 	return slices.ContainsFunc(list, func(x string) bool { return strings.EqualFold(x, s) })
 }
 
-// appliesTo reports whether a rule reads calls of this tool.
+// appliesTo reports whether a rule reads calls of this tool. A rule that
+// names one shell tool reads every call whose text is a command line, since
+// harnesses name the same tool differently (Bash, shell, and execute on a
+// protocol pane's line) and a line with no tool is read as a command. Naming
+// one file tool likewise covers every file tool.
 func (r Rule) appliesTo(tool string) bool {
-	return len(r.Tools) == 0 || containsFold(r.Tools, tool)
+	switch {
+	case len(r.Tools) == 0 || containsFold(r.Tools, tool):
+		return true
+	case isShell(tool):
+		return slices.ContainsFunc(r.Tools, func(t string) bool { return containsFold(ShellTools, t) })
+	case isFile(tool):
+		return slices.ContainsFunc(r.Tools, isFile)
+	}
+	return false
 }
 
 // maxDepth bounds how deep Match follows a command inside a command: a
-// command substitution, or sh -c.
+// command substitution, a process substitution, sh -c or eval.
 const maxDepth = 4
 
 // maxText bounds the text Match reads. A longer command is read up to it.
