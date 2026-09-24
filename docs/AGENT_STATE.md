@@ -1175,6 +1175,13 @@ The question is a row under Questions in the Inbox, and the call waits for you:
   `[notifications.agent]` like a `needs_input`), and waits in the Inbox.
 - With nobody attached, it waits in the Inbox for the next attach.
 
+While the question is open, the pane that asked reads as needing you on every
+surface: the `▲` mark on the rail and its title bar, a row in the rail's agents
+section carrying the question, and a match for `@n` in the palette. Asking
+changes no agent state on the daemon (`list-agents` is unchanged); the client
+draws it from the open Inbox item, and the pane goes back to its own state
+once the question is answered or dismissed.
+
 Only you can answer. The daemon takes an answer only from a client attached
 right now, with the nonce its attach carried, from a process outside every
 pane, the same proof `reply-approval` takes; an agent calling `answer-ask`

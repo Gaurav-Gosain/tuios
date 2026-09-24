@@ -26,50 +26,37 @@ import (
 // apart in one cell. Every surface that shows agent state goes through this
 // function, so the rail, the title bars and the palette can never disagree.
 func agentStateIndicator(state string) string {
-	if overlay.UseASCII() {
-		switch session.AgentState(state) {
-		case session.AgentStateWorking:
-			return "*"
-		case session.AgentStateNeedsInput:
-			return "!"
-		case session.AgentStateIdle:
-			return "o"
-		case session.AgentStateDone:
-			return "#"
-		case session.AgentStateErrored:
-			return "x"
-		case session.AgentStateUnknown:
-			return "?"
-		default:
-			return ""
-		}
-	}
-	switch session.AgentState(state) {
-	case session.AgentStateWorking:
-		return "●"
-	case session.AgentStateNeedsInput:
-		return "▲"
-	case session.AgentStateIdle:
-		return "○"
-	case session.AgentStateDone:
-		return "■"
-	case session.AgentStateErrored:
-		return "×"
-	case session.AgentStateUnknown:
-		// An agent is there and the daemon cannot say what it is doing. It
-		// drew nothing at all before, which read as no agent, and that is the
-		// common case rather than an edge: the stall timer writes this state
-		// for any agent with no screen rules to read, which is every agent
-		// matched by name alone.
-		//
-		// A hollow square rather than a question mark: the row already names
-		// the agent, so the question is about the state and not about whether
-		// anything is there. It reads as the same family as idle's hollow
-		// circle, which is the nearest thing to what it means.
-		return "□"
-	default:
+	m, ok := agentStateMarks[session.AgentState(state)]
+	if !ok {
 		return ""
 	}
+	if overlay.UseASCII() {
+		return m.ascii
+	}
+	return m.glyph
+}
+
+// agentStateMarks is the symbol set: each state's mark, and the ASCII form it
+// takes on a terminal that cannot draw more. It is the one table, so the
+// title sanitiser's list of our own marks (chromeGlyphs) is read from it and
+// cannot fall behind it.
+var agentStateMarks = map[session.AgentState]struct{ glyph, ascii string }{
+	session.AgentStateWorking:    {"●", "*"},
+	session.AgentStateNeedsInput: {"▲", "!"},
+	session.AgentStateIdle:       {"○", "o"},
+	session.AgentStateDone:       {"■", "#"},
+	session.AgentStateErrored:    {"×", "x"},
+	// An agent is there and the daemon cannot say what it is doing. It drew
+	// nothing at all before, which read as no agent, and that is the common
+	// case rather than an edge: the stall timer writes this state for any
+	// agent with no screen rules to read, which is every agent matched by
+	// name alone.
+	//
+	// A hollow square rather than a question mark: the row already names the
+	// agent, so the question is about the state and not about whether
+	// anything is there. It reads as the same family as idle's hollow circle,
+	// which is the nearest thing to what it means.
+	session.AgentStateUnknown: {"□", "?"},
 }
 
 // agentMark is the mark and the colour one pane's agent state wears, and every

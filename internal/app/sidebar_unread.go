@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/Gaurav-Gosain/tuios/internal/harness"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
@@ -133,11 +135,47 @@ func (m *OS) agentFinishedUnread(windowID, state string, seq uint64) bool {
 	return seq > m.SidebarAgentSeenSeq[windowID]
 }
 
-// railAgentState is the state and unread bit the rail draws for a pane: an
-// unread finished turn reads as an unread done, and anything else as itself.
+// railAgentState is the state and unread bit the rail draws for a pane: a
+// pane with an ask-human question open reads as needs_input, an unread
+// finished turn as an unread done, and anything else as itself.
 func (m *OS) railAgentState(windowID, state string, seq uint64) (string, bool) {
+	if _, ok := m.paneAsk(windowID); ok {
+		return "needs_input", false
+	}
 	if m.agentFinishedUnread(windowID, state, seq) {
 		return "done", false
 	}
 	return state, m.agentSeen(windowID)
+}
+
+// paneAsk is the ask-human question a pane of this machine has open in the
+// Inbox, if it has one.
+//
+// Asking moves no agent state: ask-human is often run by a script with no
+// agent in the pane at all. So the question was in the Inbox and the dock,
+// and the pane that asked it had no mark on the rail, no row in the agents
+// section and no match for "@n" in the palette. Every surface that reads a
+// pane's state through railAgentState now reads it as needs_input while the
+// question is open, which is what it is: the pane is waiting for the person.
+func (m *OS) paneAsk(windowID string) (session.AttentionItem, bool) {
+	if windowID == "" {
+		return session.AttentionItem{}, false
+	}
+	for _, it := range m.Inbox.Items {
+		if it.Kind == session.AttentionAsk && it.Host == "" && !it.Stale && it.Window == windowID {
+			return it, true
+		}
+	}
+	return session.AttentionItem{}, false
+}
+
+// paneAskNote is what the rail's row for a pane says when the pane has an
+// ask-human question open and reported nothing of its own: the question, as a
+// question.
+func (m *OS) paneAskNote(windowID, message, kind string) (string, string) {
+	it, ok := m.paneAsk(windowID)
+	if !ok || message != "" {
+		return message, kind
+	}
+	return it.Summary, harness.PromptKindQuestion
 }

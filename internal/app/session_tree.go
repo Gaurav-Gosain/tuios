@@ -68,6 +68,7 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 			continue
 		}
 		state, seen := m.railAgentState(w.ID, w.AgentState, w.AgentCompletionSeq)
+		message, kind := m.paneAskNote(w.ID, w.AgentMessage, w.AgentKind)
 		windows = append(windows, sessiontree.WindowInput{
 			ID:         w.ID,
 			Title:      m.railTitleShown(w),
@@ -75,8 +76,8 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 			DoneSeen:   seen,
 			StateAt:    w.AgentStateAt,
 			Harness:    w.AgentHarness,
-			Message:    w.AgentMessage,
-			AgentKind:  w.AgentKind,
+			Message:    message,
+			AgentKind:  kind,
 			Meta:       w.AgentMeta,
 			Focused:    i == m.FocusedWindow,
 			Workspace:  w.Workspace,
@@ -116,6 +117,7 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 	windows := make([]sessiontree.WindowInput, 0, len(summaries))
 	for _, w := range summaries {
 		state, seen := m.railAgentState(w.ID, w.AgentState, w.CompletionSeq)
+		message, kind := m.paneAskNote(w.ID, w.AgentMessage, w.AgentKind)
 		windows = append(windows, sessiontree.WindowInput{
 			ID: w.ID,
 			// The daemon folds a custom name into Title and withholds a command
@@ -125,8 +127,8 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 			DoneSeen:   seen,
 			StateAt:    w.AgentStateAt,
 			Harness:    w.AgentHarness,
-			Message:    w.AgentMessage,
-			AgentKind:  w.AgentKind,
+			Message:    message,
+			AgentKind:  kind,
 			Meta:       agentMetaFromWire(nil, w.AgentMeta),
 			Workspace:  w.Workspace,
 		})

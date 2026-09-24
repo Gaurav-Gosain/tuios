@@ -485,11 +485,19 @@ func sidebarFit(s string, cw int, bg color.Color) string {
 }
 
 // chromeGlyphs are the symbol codepoints we draw ourselves: the agent-state
-// indicators. They sit inside the decorative blocks printableTitle strips, so
-// they are named rather than kept by range.
-var chromeGlyphs = map[rune]bool{
-	'●': true, '▲': true, '○': true, '■': true, // agentStateIndicator
-}
+// marks. They sit inside the decorative blocks printableTitle strips, so they
+// are named rather than kept by range. Read off agentStateMarks rather than
+// listed: the list was written by hand and left out unknown's "□", so the
+// palette's row for an agent in that state lost its mark.
+var chromeGlyphs = func() map[rune]bool {
+	out := make(map[rune]bool, len(agentStateMarks))
+	for _, m := range agentStateMarks {
+		for _, r := range m.glyph {
+			out[r] = true
+		}
+	}
+	return out
+}()
 
 // printableTitle strips what a terminal cannot be trusted to render out of a
 // title before it is shown as chrome (sidebar rows, the window title badge, the
