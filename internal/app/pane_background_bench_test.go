@@ -10,14 +10,39 @@ import (
 // BenchmarkBackgrounds is the keystroke frame and the compositor with every
 // background off and with appearance.background painting every surface, the
 // rail and the dock included, so the cost of painting everything is read off
-// one run. The panes-1 case with everything on is composed, since the fast
-// path stands down for a painted pane, border or dock.
+// one run. The panes-N cases have the rail on, so they are all composed;
+// fullscreen is a lone pane over the whole region with the rail off and the
+// dock on, which is the shape the fullscreen fast path takes.
 func BenchmarkBackgrounds(b *testing.B) {
 	for _, setting := range []string{config.BackgroundOff, "#1e1e2e"} {
 		name := "off"
 		if setting != config.BackgroundOff {
 			name = "all"
 		}
+		b.Run(name+"/keystroke/fullscreen", func(b *testing.B) {
+			m := keystrokeOS(b, 1, realCols, realRows)
+			m.Settings.Background = setting
+			m.Settings.SidebarEnabled = false
+			m.Settings.DockbarPosition = "bottom"
+			w := m.Windows[0]
+			w.X, w.Y, w.Width, w.Height = 0, m.GetTopMargin(), m.GetRenderWidth(), m.GetUsableHeight()
+			w.Resize(w.Width, w.Height)
+			fillWindow(b, w, w.ContentWidth(), w.ContentHeight())
+			w.MarkPositionDirty()
+			sink := newFrameSink(realCols, realRows)
+			w.MarkContentDirty()
+			sink.emit(m.composeFrame())
+			i := 0
+			b.ReportAllocs()
+			for b.Loop() {
+				w.LockIO()
+				_, _ = w.Terminal.Write(fmt.Appendf(nil, "\x1b[2;3H%c", 'a'+byte(i%26)))
+				w.UnlockIO()
+				w.MarkContentDirty()
+				sink.emit(m.composeFrame())
+				i++
+			}
+		})
 		for _, n := range []int{1, 4, 9} {
 			b.Run(fmt.Sprintf("%s/keystroke/panes-%d", name, n), func(b *testing.B) {
 				m := keystrokeOS(b, n, realCols, realRows)
