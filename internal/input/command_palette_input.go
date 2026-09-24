@@ -9,6 +9,10 @@ import (
 func handleCommandPaletteInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	keyStr := msg.String()
 
+	if listKey(keyStr, false, o.PalettePageRows(), o.PaletteMove) {
+		return o, nil
+	}
+
 	switch keyStr {
 	case "esc":
 		o.CloseCommandPalette()
@@ -16,14 +20,6 @@ func handleCommandPaletteInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 
 	case "enter":
 		return o, o.ActivateCommandPalette()
-
-	case "up", "ctrl+p":
-		o.PaletteMove(-1)
-		return o, nil
-
-	case "down", "ctrl+n":
-		o.PaletteMove(1)
-		return o, nil
 
 	default:
 		if changed, _ := editFilterQuery(msg, &o.CommandPaletteQuery, true); changed {

@@ -13,12 +13,15 @@ import (
 // which in a daemon session is Detach, so the old "qq" muscle memory that used
 // to kill a session now safely detaches it.
 func handleQuitMenuKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if listKey(msg.String(), true, listPage, o.QuitMenuMove) {
+		return o, nil
+	}
 	switch msg.String() {
 	case "esc", "n", "ctrl+c":
 		o.CloseQuitMenu()
-	case "up", "k", "shift+tab":
+	case "shift+tab":
 		o.QuitMenuMove(-1)
-	case "down", "j", "tab":
+	case "tab":
 		o.QuitMenuMove(1)
 	case "enter", "space":
 		return o, o.QuitMenuActivate(o.QuitMenuSelected)

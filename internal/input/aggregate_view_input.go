@@ -9,6 +9,13 @@ import (
 
 // handleAggregateViewInput handles keyboard input when the aggregate view is open.
 func handleAggregateViewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	// The selection moves and the renderer scrolls to keep it in view, which is
+	// how every other list overlay works. This used to carry a hardcoded twelve
+	// rows of its own, so on any screen not showing twelve the list scrolled at
+	// the wrong time or not at all.
+	if listKey(msg.String(), false, listPage, o.AggregateViewMove) {
+		return o, nil
+	}
 	switch msg.String() {
 	case "esc", "ctrl+c":
 		o.ShowAggregateView = false
@@ -19,18 +26,6 @@ func handleAggregateViewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 
 	case "enter":
 		o.AggregateViewJump(o.AggregateViewSelected)
-		return o, nil
-
-	// The selection moves and the renderer scrolls to keep it in view, which is
-	// how every other list overlay works. This used to carry a hardcoded twelve
-	// rows of its own, so on any screen not showing twelve the list scrolled at
-	// the wrong time or not at all.
-	case "up", "ctrl+p":
-		o.AggregateViewMove(-1)
-		return o, nil
-
-	case "down", "ctrl+n":
-		o.AggregateViewMove(1)
 		return o, nil
 
 	case "backspace":

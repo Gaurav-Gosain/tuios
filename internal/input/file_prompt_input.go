@@ -20,11 +20,10 @@ func handleFilePromptInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, nil
 	}
 	if o.FileConfirmOpen() {
+		if listKey(key, true, listPage, o.FileConfirmMove) {
+			return o, nil
+		}
 		switch key {
-		case "up", "k", "ctrl+p":
-			o.FileConfirmMove(-1)
-		case "down", "j", "ctrl+n":
-			o.FileConfirmMove(1)
 		case "tab":
 			o.FileConfirmMove(1)
 		case "enter":

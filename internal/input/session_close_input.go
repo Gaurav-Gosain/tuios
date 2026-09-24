@@ -9,13 +9,12 @@ import (
 // one-key yes: the answer is a selection and then enter, which is what makes a
 // dialog that always appears still worth appearing.
 func handleSessionCloseInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if listKey(msg.String(), true, listPage, o.SessionCloseMove) {
+		return o, nil
+	}
 	switch msg.String() {
 	case "esc", "q":
 		o.CloseSessionClose()
-	case "up", "k":
-		o.SessionCloseMove(-1)
-	case "down", "j":
-		o.SessionCloseMove(1)
 	case "enter", "space":
 		return o, o.SessionCloseActivate(o.SessionCloseSelected)
 	}

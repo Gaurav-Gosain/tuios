@@ -9,6 +9,9 @@ import (
 // The arrows select, shifted arrows move the selected component (and carry it
 // into the next region off the end of its own), Enter adds or removes.
 func handleDockEditorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if listKey(msg.String(), true, listPage, o.DockEditorMove) {
+		return o, nil
+	}
 	switch keyStr := msg.String(); keyStr {
 	case "esc":
 		// Closes, keeping the layout. Every edit here was applied and saved as
@@ -16,10 +19,6 @@ func handleDockEditorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CloseDockEditor()
 	case "enter", "space":
 		return o, o.DockEditorToggle()
-	case "up", "ctrl+p", "k":
-		o.DockEditorMove(-1)
-	case "down", "ctrl+n", "j":
-		o.DockEditorMove(1)
 	case "shift+up", "K":
 		return o, o.DockEditorShift(-1)
 	case "shift+down", "J":

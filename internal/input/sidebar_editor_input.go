@@ -12,6 +12,9 @@ import (
 // Enter puts a section on the rail or takes it off. The left and right arrows
 // are the one addition, and they walk the share.
 func handleSectionEditorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if listKey(msg.String(), true, listPage, o.SectionEditorMove) {
+		return o, nil
+	}
 	switch keyStr := msg.String(); keyStr {
 	case "esc":
 		// Closes, keeping the layout. Every edit here was applied and saved as
@@ -19,10 +22,6 @@ func handleSectionEditorInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd)
 		o.CloseSectionEditor()
 	case "enter", "space":
 		return o, o.SectionEditorToggle()
-	case "up", "ctrl+p", "k":
-		o.SectionEditorMove(-1)
-	case "down", "ctrl+n", "j":
-		o.SectionEditorMove(1)
 	case "shift+up", "K":
 		return o, o.SectionEditorShift(-1)
 	case "shift+down", "J":

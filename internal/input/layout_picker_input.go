@@ -66,6 +66,10 @@ func handleLayoutSaveInput(keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
 func handleLayoutLoadInput(msg tea.KeyPressMsg, keyStr string, o *app.OS) (*app.OS, tea.Cmd) {
 	filtered := app.FilterLayoutTemplates(o.LayoutPickerItems, o.LayoutPickerQuery)
 
+	if listKey(keyStr, false, listPage, o.LayoutPickerMove) {
+		return o, nil
+	}
+
 	switch keyStr {
 	case "esc":
 		o.ShowLayoutPicker = false
@@ -84,14 +88,6 @@ func handleLayoutLoadInput(msg tea.KeyPressMsg, keyStr string, o *app.OS) (*app.
 			o.LayoutPickerScroll = 0
 			o.ShowNotification("Layout applied: "+selected.Name, "success", o.Settings.NotificationDuration)
 		}
-		return o, nil
-
-	case "up", "ctrl+p":
-		o.LayoutPickerMove(-1)
-		return o, nil
-
-	case "down", "ctrl+n":
-		o.LayoutPickerMove(1)
 		return o, nil
 
 	case "backspace":

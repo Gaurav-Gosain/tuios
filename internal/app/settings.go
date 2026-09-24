@@ -891,6 +891,9 @@ func (m *OS) SettingsMove(delta int) {
 	m.SettingsSelected = m.listStep(m.SettingsSelected, delta, len(items))
 }
 
+// SettingsRowCount is how many rows the list shows now.
+func (m *OS) SettingsRowCount() int { return len(m.settingsCurrentItems()) }
+
 // SettingsPageRows is how many rows a page key moves the settings list by:
 // the rows the panel shows.
 func (m *OS) SettingsPageRows() int {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -593,13 +594,11 @@ func (m *OS) HandleTapeManagerInput(key string) bool {
 		}
 
 	case TapeManagerList:
+		if motion := listnav.Keys(key, true); motion != listnav.None {
+			m.TapeManagerMove(listnav.Delta(motion, 10))
+			return true
+		}
 		switch key {
-		case "up", "k":
-			m.TapeManagerSelectPrev()
-			return true
-		case "down", "j":
-			m.TapeManagerSelectNext()
-			return true
 		case "enter":
 			if len(m.TapeManager.Files) > 0 {
 				m.TapeManagerPlaySelected()

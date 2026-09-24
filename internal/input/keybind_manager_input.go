@@ -29,22 +29,14 @@ func handleKeybindManagerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 		return o, nil
 	}
 
-	// Keys that mean the same thing on every tab.
+	// Keys that mean the same thing on every tab. The tabs without a filter
+	// can spend letters on movement too.
+	if listKey(msg.String(), o.KeybindTab != app.KeybindTabBindings, listPage, o.KeybindMove) {
+		return o, nil
+	}
 	switch msg.String() {
 	case "esc", "ctrl+c":
 		o.CloseKeybindManager()
-		return o, nil
-	case "up", "ctrl+p":
-		o.KeybindMove(-1)
-		return o, nil
-	case "down", "ctrl+n":
-		o.KeybindMove(1)
-		return o, nil
-	case "pgup":
-		o.KeybindMove(-10)
-		return o, nil
-	case "pgdown":
-		o.KeybindMove(10)
 		return o, nil
 	case "tab":
 		o.KeybindStepTab(1)
@@ -90,10 +82,6 @@ func handleKeybindManagerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd
 	switch msg.String() {
 	case "q":
 		o.CloseKeybindManager()
-	case "k":
-		o.KeybindMove(-1)
-	case "j":
-		o.KeybindMove(1)
 	case "l", "right", "]":
 		o.KeybindStepTab(1)
 	case "h", "left", "[":

@@ -31,6 +31,10 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		return o, nil
 	}
 
+	if listKey(keyStr, false, listPage, o.SessionSwitcherMove) {
+		return o, nil
+	}
+
 	switch keyStr {
 	case "esc":
 		o.ShowSessionSwitcher = false
@@ -60,14 +64,6 @@ func handleSessionSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cm
 		o.SessionSwitcherQuery = ""
 		o.SessionSwitcherSelected = 0
 		o.SessionSwitcherScroll = 0
-		return o, nil
-
-	case "up", "ctrl+p":
-		o.SessionSwitcherMove(-1)
-		return o, nil
-
-	case "down", "ctrl+n":
-		o.SessionSwitcherMove(1)
 		return o, nil
 
 	case "backspace":

@@ -14,6 +14,10 @@ func handleWorkspaceSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.
 	keyStr := msg.String()
 	filtered := app.FilterWorkspaceItems(o.WorkspaceSwitcherItems, o.WorkspaceSwitcherQuery)
 
+	if listKey(keyStr, false, listPage, func(d int) { o.WorkspaceSwitcherMove(d, len(filtered)) }) {
+		return o, nil
+	}
+
 	switch keyStr {
 	case "esc":
 		o.CloseWorkspaceSwitcher()
@@ -22,14 +26,6 @@ func handleWorkspaceSwitcherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.
 	case "enter":
 		// Same entry point as the mouse click, so the two cannot drift.
 		o.WorkspaceSwitcherActivate(o.WorkspaceSwitcherSelected)
-		return o, nil
-
-	case "up", "ctrl+p":
-		o.WorkspaceSwitcherMove(-1, len(filtered))
-		return o, nil
-
-	case "down", "ctrl+n":
-		o.WorkspaceSwitcherMove(1, len(filtered))
 		return o, nil
 
 	case "ctrl+r":

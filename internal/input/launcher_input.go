@@ -13,6 +13,9 @@ import (
 // expressible under the legacy keyboard encoding, and because Tab already means
 // "give me the rest of this to finish".
 func handleLauncherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	if listKey(msg.String(), false, o.LauncherPageRows(), o.LauncherMove) {
+		return o, o.LauncherIconWork()
+	}
 	switch msg.String() {
 	case "esc":
 		o.CloseLauncher()
@@ -24,13 +27,6 @@ func handleLauncherInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	case "tab":
 		return o, o.LauncherType(o.LauncherSelected)
 
-	case "up", "ctrl+p":
-		o.LauncherMove(-1)
-		return o, o.LauncherIconWork()
-
-	case "down", "ctrl+n":
-		o.LauncherMove(1)
-		return o, o.LauncherIconWork()
 	}
 
 	// A space is a legitimate character in a program name, so it types rather

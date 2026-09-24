@@ -11,13 +11,12 @@ func handleSettingsInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.SettingsEditActive() {
 		return handleSettingsEditInput(msg, o)
 	}
+	if listKey(msg.String(), true, o.SettingsPageRows(), o.SettingsMove) {
+		return o, nil
+	}
 	switch msg.String() {
 	case "esc", "q", "ctrl+c":
 		o.CloseSettings()
-	case "up", "k":
-		o.SettingsMoveUp()
-	case "down", "j":
-		o.SettingsMoveDown()
 	case "left", "h":
 		return o, o.SettingsAdjust(-1)
 	case "right", "l":

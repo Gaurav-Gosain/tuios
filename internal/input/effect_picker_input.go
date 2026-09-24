@@ -13,15 +13,15 @@ import (
 // move returns a command: the preview is an animation, so a move that starts
 // one has a first frame to schedule.
 func handleEffectPickerInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+	var moved tea.Cmd
+	if listKey(msg.String(), false, listPage, func(d int) { moved = o.EffectPickerMove(d) }) {
+		return o, moved
+	}
 	switch keyStr := msg.String(); keyStr {
 	case "esc":
 		o.CancelEffectPicker()
 	case "enter":
 		return o, o.EffectPickerApplySelection()
-	case "up", "ctrl+p":
-		return o, o.EffectPickerMove(-1)
-	case "down", "ctrl+n":
-		return o, o.EffectPickerMove(1)
 	case "backspace":
 		return o, o.EffectPickerBackspace()
 	case "ctrl+u":
