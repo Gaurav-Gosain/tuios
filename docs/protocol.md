@@ -1023,15 +1023,30 @@ who calls two of them, and a client that draws metadata now has some to draw:
 - A protocol pane (`tuios agent-proto`, what `start-agent --protocol` runs)
   calls `set-agent-meta` for its own pane with the source `protocol` and the
   keys `model`, `context`, `cost` and `plan`, each only when its value
-  changes. It also calls `set-agent-state` with `activity` for each prompt,
-  tool call and finished turn, with `state` `working` and `if_state`
-  `working`, so the call changes no state; it sends these only to a daemon
-  whose `list-verbs` lists `activity` for `set-agent-state`, and sends
-  nothing extra to an older one.
+  changes, and all of them again at the start of each turn, so values a
+  restarted daemon or a clear to `none` lost come back. It also calls
+  `set-agent-state` with `activity` for each prompt, tool call and finished
+  turn. `state` is the state the pane last reported (`working` during a
+  turn, the turn's end state for `turn_end`) and `if_state` is `none`: the
+  daemon records the activity and refuses the state part on every pane that
+  has a state, so the call restamps no `agent_state_at`, rewrites no
+  message and pushes no state. Only a pane whose state was lost mid-turn
+  (`none`, after a restart or a clear) gets its state back from it. These
+  calls and the metadata go on a connection of their own, off the pane's
+  input loop. It sends activity only to a daemon whose `list-verbs` lists
+  `activity` for `set-agent-state`, and nothing extra to an older one.
+- An ACP protocol pane whose agent names its model in `session/new`
+  `models` now says so in the transcript's first line: `connected to
+  opencode 1.2 (Claude Sonnet 4)` where it said `connected to opencode 1.2`.
+  A Codex pane said it before, and still does.
 - `tuios agent-statusline` (Claude Code's status line, opt in, and the
   opencode and Kilo plugin) calls `set-agent-meta` for its own pane with the
   source `statusline` and the keys `model`, `context` and `cost`, at most once
-  every 15 seconds per pane while they change, and never with a TTL.
+  every 15 seconds per pane while they change, and never with a TTL. What
+  the interval held back is sent at the end of the turn: by Claude Code's
+  `Stop` hook (`tuios agent-hook claude-code`, which then calls
+  `set-agent-meta` for its own pane as well as `set-agent-state`), and by
+  the opencode plugin's `--turn-end`.
 - The opencode and Kilo plugin is version 3, so `integration status` reads a
   version 2 install as out of date until it is installed again.
 

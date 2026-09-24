@@ -78,6 +78,36 @@ func TestStatusLineFeedReachesTheRail(t *testing.T) {
 	alive(t, term, "after the status line feed")
 }
 
+// TestStatusLineTurnEndSendsHeldValues runs the real status line wrapper
+// twice in quick succession, so the interval holds the second run's values
+// back, and then the real Claude Code Stop hook. The held context and cost
+// reach the pane at the turn end, not at the next turn.
+//
+// Negative control: with the flushAtTurnEnd call taken out of agentHook, the
+// pane keeps the first run's values and the wait fails.
+func TestStatusLineTurnEndSendsHeldValues(t *testing.T) {
+	_, base := attachClientBase(t)
+	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-ctrlp", "working", "--harness", "claude-code"); err != nil {
+		t.Fatalf("set-agent-state: %v\n%s", err, out)
+	}
+	first := `{"session_id":"s1","model":{"display_name":"Opus"},"context_window":{"used_percentage":10},"cost":{"total_cost_usd":0.1}}`
+	last := `{"session_id":"s1","model":{"display_name":"Opus"},"context_window":{"used_percentage":64},"cost":{"total_cost_usd":2.5}}`
+	line := "printf '%s' '" + first + "' | " + tuiosBin + " agent-statusline claude-code; " +
+		"printf '%s' '" + last + "' | " + tuiosBin + " agent-statusline claude-code; echo HELD-DONE\n"
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", line); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	waitCapture(t, base, "e2e-ctrlp", "0", "HELD-DONE")
+	waitMeta(t, base, map[string]string{"context": "10%", "cost": "$0.10"}, "-s", "e2e-ctrlp")
+
+	stop := "printf '%s' '{\"hook_event_name\":\"Stop\",\"session_id\":\"s1\"}' | " + tuiosBin + " agent-hook claude-code; echo STOP-DONE\n"
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-ctrlp", stop); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	waitCapture(t, base, "e2e-ctrlp", "0", "STOP-DONE")
+	waitMeta(t, base, map[string]string{"context": "64%", "cost": "$2.50"}, "-s", "e2e-ctrlp")
+}
+
 // TestProtocolPaneFeedsMeta runs an ACP agent headless and checks that what
 // it says about its model, context window, cost and plan lands on the pane's
 // agent metadata: the model from session/new, and the rest from the plan and

@@ -149,12 +149,21 @@ func runAgentProto(o agentProtoOptions, argv []string) int {
 
 // paneReporter reports the session's state for the pane it runs in, and its
 // metadata and activity.
+//
+// State reports are made on the pane's loop and wait for the daemon, in
+// order. Metadata and activity come from the session's feed goroutine and go
+// on a connection of their own, so a slow call of theirs never holds a state
+// report, and through it the pane's input and render loop.
 type paneReporter struct {
 	session, window, harness string
 	dial                     func() (*session.VerbClient, error)
 
 	mu     sync.Mutex
 	client *session.VerbClient
+
+	// feedMu guards feedClient and activity, used only by the feed.
+	feedMu     sync.Mutex
+	feedClient *session.VerbClient
 	// activity is whether the daemon's set-agent-state takes activity:
 	// unknown until it has been asked, once.
 	activity activitySupport
@@ -172,13 +181,23 @@ const (
 // protoMetaSource is the set-agent-meta source a protocol pane writes under.
 const protoMetaSource = "protocol"
 
+// activityIfState is the if_state an activity report carries: its state
+// part applies only to a pane whose state is none.
+const activityIfState = "none"
+
 func (r *paneReporter) close() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.client != nil {
 		_ = r.client.Close()
 		r.client = nil
 	}
+	r.mu.Unlock()
+	r.feedMu.Lock()
+	if r.feedClient != nil {
+		_ = r.feedClient.Close()
+		r.feedClient = nil
+	}
+	r.feedMu.Unlock()
 }
 
 // Report sends set-agent-state on a connection kept for reports, dialled
@@ -208,24 +227,24 @@ func (r *paneReporter) Report(ctx context.Context, state, kind, message, ifState
 	return nil
 }
 
-// call runs one verb on the connection kept for reports, dialled again after
-// a failure. Callers hold r.mu.
-func (r *paneReporter) call(ctx context.Context, verb string, params map[string]any) (json.RawMessage, error) {
-	if r.client == nil {
+// feedCall runs one verb on the feed's connection, dialled again after a
+// failure. Callers hold r.feedMu.
+func (r *paneReporter) feedCall(ctx context.Context, verb string, params map[string]any) (json.RawMessage, error) {
+	if r.feedClient == nil {
 		c, err := r.dial()
 		if err != nil {
 			return nil, err
 		}
-		r.client = c
+		r.feedClient = c
 	}
 	timeout := time.Until(deadlineOr(ctx, 2*time.Second))
-	raw, err := r.client.CallWithTimeout(verb, params, timeout)
+	raw, err := r.feedClient.CallWithTimeout(verb, params, timeout)
 	if err != nil {
 		var verr *session.VerbCallError
 		if !errors.As(err, &verr) {
 			// The connection itself failed: dial again next time.
-			_ = r.client.Close()
-			r.client = nil
+			_ = r.feedClient.Close()
+			r.feedClient = nil
 		}
 		return nil, err
 	}
@@ -236,9 +255,9 @@ func (r *paneReporter) call(ctx context.Context, verb string, params map[string]
 // the pane's metadata, under the protocol source. set-agent-meta is scoped to
 // the caller's own pane.
 func (r *paneReporter) SetMeta(ctx context.Context, tokens map[string]string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	_, err := r.call(ctx, "set-agent-meta", map[string]any{
+	r.feedMu.Lock()
+	defer r.feedMu.Unlock()
+	_, err := r.feedCall(ctx, "set-agent-meta", map[string]any{
 		"session": r.session,
 		"window":  r.window,
 		"tokens":  tokens,
@@ -247,15 +266,18 @@ func (r *paneReporter) SetMeta(ctx context.Context, tokens map[string]string) er
 	return err
 }
 
-// ReportActivity sends one activity with set-agent-state. Its state part is
-// working, only if the pane is working already, so it changes no state. A
+// ReportActivity sends one activity with set-agent-state. set-agent-state
+// needs a state, and this one's is the state the pane last reported, with
+// if_state none: the daemon records the activity and refuses the state part
+// on every pane that has a state, so the call restamps nothing and pushes no
+// state. Only a pane whose state was lost mid-turn (none) gets it back. A
 // daemon whose set-agent-state does not list activity is sent nothing: an
 // older daemon would ignore the field and apply the report.
 func (r *paneReporter) ReportActivity(ctx context.Context, a agentproto.Activity) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.feedMu.Lock()
+	defer r.feedMu.Unlock()
 	if r.activity == activityUnknown {
-		raw, err := r.call(ctx, "list-verbs", map[string]any{"verb": "set-agent-state"})
+		raw, err := r.feedCall(ctx, "list-verbs", map[string]any{"verb": "set-agent-state"})
 		var verr *session.VerbCallError
 		if errors.As(err, &verr) {
 			// A daemon that answers but cannot say is taken not to.
@@ -282,11 +304,15 @@ func (r *paneReporter) ReportActivity(ctx context.Context, a agentproto.Activity
 	if a.OK != nil {
 		act["ok"] = *a.OK
 	}
-	_, err := r.call(ctx, "set-agent-state", map[string]any{
+	state := a.State
+	if state == "" {
+		state = "working"
+	}
+	_, err := r.feedCall(ctx, "set-agent-state", map[string]any{
 		"session":  r.session,
 		"window":   r.window,
-		"state":    "working",
-		"if_state": "working",
+		"state":    state,
+		"if_state": activityIfState,
 		"harness":  r.harness,
 		"activity": act,
 	})

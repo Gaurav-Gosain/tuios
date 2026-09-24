@@ -3,10 +3,12 @@ package agentproto
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"maps"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -147,7 +149,7 @@ func TestSessionActivity(t *testing.T) {
 	if r := rep.next(t); r.state != "working" {
 		t.Fatalf("report %+v", r)
 	}
-	if a := rep.nextActivity(t); a.Event != ActivityPrompt || a.Text != "run the tests" {
+	if a := rep.nextActivity(t); a.Event != ActivityPrompt || a.Text != "run the tests" || a.State != "working" {
 		t.Errorf("prompt activity %+v", a)
 	}
 	cmd := Tool{ID: "c1", Kind: "execute", Title: "go test ./...", Status: ToolPending, Input: map[string]string{"command": "go test ./..."}}
@@ -161,9 +163,9 @@ func TestSessionActivity(t *testing.T) {
 	s.Emit(edit)
 
 	want := []Activity{
-		{Event: ActivityTool, Tool: "Bash", Target: "go test ./..."},
-		{Event: ActivityToolFailed, Tool: "Bash", Target: "go test ./..."},
-		{Event: ActivityToolDone, Tool: "Edit", Target: "a.go, b.go"},
+		{Event: ActivityTool, Tool: "Bash", Target: "go test ./...", State: "working"},
+		{Event: ActivityToolFailed, Tool: "Bash", Target: "go test ./...", State: "working"},
+		{Event: ActivityToolDone, Tool: "Edit", Target: "a.go, b.go", State: "working"},
 	}
 	for i, w := range want {
 		got := rep.nextActivity(t)
@@ -181,13 +183,178 @@ func TestSessionActivity(t *testing.T) {
 	if r := rep.next(t); r.state != "done" {
 		t.Fatalf("report %+v", r)
 	}
-	if a := rep.nextActivity(t); a.Event != ActivityTurnEnd || a.Text != "All green." {
+	if a := rep.nextActivity(t); a.Event != ActivityTurnEnd || a.Text != "All green." || a.State != "done" {
 		t.Errorf("turn end %+v", a)
 	}
 	select {
 	case a := <-rep.activities:
 		t.Errorf("extra activity %+v", a)
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+// slowReporter is a feedReporter whose activity and metadata calls wait
+// until the test lets them go, like a daemon that has stopped answering.
+type slowReporter struct {
+	*feedReporter
+	gate chan struct{}
+}
+
+func (r *slowReporter) SetMeta(ctx context.Context, tokens map[string]string) error {
+	<-r.gate
+	return r.feedReporter.SetMeta(ctx, tokens)
+}
+
+func (r *slowReporter) ReportActivity(ctx context.Context, a Activity) error {
+	<-r.gate
+	return r.feedReporter.ReportActivity(ctx, a)
+}
+
+// TestSessionActivityOffTheLoop: activity and metadata calls a slow daemon
+// holds do not hold the pane. The turn still ends and is reported while
+// every tool call's activity waits, and the activity arrives in order once
+// the daemon answers.
+func TestSessionActivityOffTheLoop(t *testing.T) {
+	agent := newFakeAgent()
+	rep := &slowReporter{
+		feedReporter: &feedReporter{fakeReporter: newFakeReporter(), metas: make(chan map[string]string, 64), activities: make(chan Activity, 64)},
+		gate:         make(chan struct{}),
+	}
+	in, keys := io.Pipe()
+	scr := &screen{}
+	s := &Session{Agent: agent, Events: NewEvents(), In: in, Out: scr, Reporter: rep}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() {
+		cancel()
+		_ = keys.Close()
+	}()
+	go s.Run(ctx)
+	if r := rep.next(t); r.state != "idle" {
+		t.Fatalf("first report %+v", r)
+	}
+	if _, err := io.WriteString(keys, "go\r"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-agent.prompts:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the prompt was not sent while the daemon was slow")
+	}
+	if r := rep.next(t); r.state != "working" {
+		t.Fatalf("report %+v", r)
+	}
+	for i := range 5 {
+		id := string(rune('a' + i))
+		s.Emit(Tool{ID: id, Kind: "execute", Status: ToolRunning, Input: map[string]string{"command": "true"}})
+		s.Emit(Tool{ID: id, Kind: "execute", Status: ToolDone, Input: map[string]string{"command": "true"}})
+	}
+	s.Emit(Usage{ContextUsed: 1, ContextSize: 2})
+	// Events are handled in order: once this is on screen, so is every tool
+	// call, and the turn can end.
+	s.Emit(Text{Text: "all handled\n"})
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(scr.text(), "all handled") {
+		if time.Now().After(deadline) {
+			t.Fatal("the pane stopped handling events while the daemon was slow")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	agent.ends <- TurnResult{Stop: StopFinished}
+	if r := rep.next(t); r.state != "done" {
+		t.Fatalf("report %+v, want done while the activity waits", r)
+	}
+	close(rep.gate)
+	want := []string{ActivityPrompt}
+	for range 5 {
+		want = append(want, ActivityTool, ActivityToolDone)
+	}
+	want = append(want, ActivityTurnEnd)
+	for i, w := range want {
+		if a := rep.nextActivity(t); a.Event != w {
+			t.Fatalf("activity %d = %s, want %s", i, a.Event, w)
+		}
+	}
+	if m := rep.nextMeta(t); m["context"] != "50%" {
+		t.Errorf("metadata %v", m)
+	}
+}
+
+// failingMeta fails its first calls, then takes them.
+type failingMeta struct {
+	mu    sync.Mutex
+	fails int
+	got   chan map[string]string
+}
+
+func (m *failingMeta) SetMeta(_ context.Context, tokens map[string]string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.fails > 0 {
+		m.fails--
+		return errors.New("the daemon is gone")
+	}
+	m.got <- maps.Clone(tokens)
+	return nil
+}
+
+// TestFeedRetriesAFailedCall: values a failed call did not deliver are sent
+// again, without waiting for them to change.
+func TestFeedRetriesAFailedCall(t *testing.T) {
+	m := &failingMeta{fails: 2, got: make(chan map[string]string, 8)}
+	f := newFeed(m, nil, 10*time.Millisecond)
+	defer f.stop()
+	f.setMeta(map[string]string{"model": "o5", "plan": "1/3"})
+	select {
+	case got := <-m.got:
+		if !reflect.DeepEqual(got, map[string]string{"model": "o5", "plan": "1/3"}) {
+			t.Errorf("retried %v", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the failed call was not tried again")
+	}
+}
+
+// TestFeedResyncSendsEveryKey: after resync, unchanged values go again, so
+// a daemon that lost them (a restart, a clear to none) gets them back.
+func TestFeedResyncSendsEveryKey(t *testing.T) {
+	m := &failingMeta{got: make(chan map[string]string, 8)}
+	f := newFeed(m, nil, 0)
+	defer f.stop()
+	all := map[string]string{"model": "o5", "context": "42%"}
+	f.setMeta(all)
+	next := func() map[string]string {
+		t.Helper()
+		select {
+		case got := <-m.got:
+			return got
+		case <-time.After(5 * time.Second):
+			t.Fatal("nothing sent")
+			return nil
+		}
+	}
+	if got := next(); !reflect.DeepEqual(got, all) {
+		t.Fatalf("first %v", got)
+	}
+	f.setMeta(all)
+	f.resync()
+	if got := next(); !reflect.DeepEqual(got, all) {
+		t.Errorf("after resync %v, want every key", got)
+	}
+}
+
+// TestSessionResyncsMetaAtTurnStart: each turn sends the metadata again,
+// changed or not.
+func TestSessionResyncsMetaAtTurnStart(t *testing.T) {
+	f := startFeedSession(t, "o5")
+	if m := f.rep.nextMeta(t); m["model"] != "o5" {
+		t.Fatalf("first metadata %v", m)
+	}
+	if _, err := io.WriteString(f.keys, "go\r"); err != nil {
+		t.Fatal(err)
+	}
+	<-f.agent.prompts
+	if m := f.rep.nextMeta(t); !reflect.DeepEqual(m, map[string]string{"model": "o5"}) {
+		t.Errorf("metadata at the turn's start %v, want the model again", m)
 	}
 }
 

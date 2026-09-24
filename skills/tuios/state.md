@@ -42,7 +42,9 @@ and `set-agent-meta` refuses them. `now` is cleared whenever the pane leaves
 tuios feeds `model`, `context`, `cost` and `plan` itself where it can: from a
 protocol pane (source `protocol`), from the opencode plugin, and from Claude
 Code's status line once the person opts in (source `statusline`). Leave those
-keys to the feed; write your own keys beside them.
+keys to the feed; write your own keys beside them. The status line values are
+sent at most every 15 seconds during a turn, and the turn's last values when
+it ends.
 
 ```sh
 tuios integration install claude-code --statusline                        # opt in

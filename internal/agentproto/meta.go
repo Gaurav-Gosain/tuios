@@ -6,6 +6,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -34,6 +36,11 @@ type Activity struct {
 	Text string
 	// OK is whether a finished tool call succeeded, nil when unknown.
 	OK *bool
+	// State is the state the pane last reported for itself: working during
+	// a turn, and the turn's end state for turn_end. The report puts it back
+	// only on a pane whose state is none, one that lost its state mid-turn.
+	// Empty means working.
+	State string
 }
 
 // Activity events.
@@ -47,8 +54,10 @@ const (
 
 // ActivityReporter is a Reporter that also reports activity.
 type ActivityReporter interface {
-	// ReportActivity reports one activity. It changes no state: the state
-	// part it carries applies only to a pane already working.
+	// ReportActivity reports one activity. It changes the state of no pane
+	// that has one: its state part is a.State if the pane's state is none,
+	// so the daemon records the activity and refuses the state part on
+	// every pane that kept its state.
 	ReportActivity(ctx context.Context, a Activity) error
 }
 
@@ -144,62 +153,177 @@ func clip(s string) string {
 	return ansi.Truncate(oneLine(clean(s)), maxActivityText, "...")
 }
 
-// metaFeed sends metadata on its own goroutine, so a slow daemon never holds
-// the pane. Only the newest values wait: a burst of updates becomes one call,
-// and each call sends only the keys that changed since the last one sent.
-type metaFeed struct {
-	r    MetaReporter
-	next chan map[string]string
+// feed sends metadata and activity on a goroutine of its own, so a slow
+// daemon never holds the pane's input and render loop.
+//
+// Activity waits in order, at most maxQueuedActivity of it: when the daemon
+// falls that far behind, the oldest is dropped. Metadata waits as the pane's
+// values as they stand now, so a burst of updates becomes one call, and each
+// call sends only the keys that changed since the last one the daemon took.
+//
+// What was sent is forgotten when a call fails and when resync is called, and
+// then every key goes again. A failed call is tried again after
+// feedRetryAfter, up to feedRetries times in a row, and the Session calls resync at each turn start, so values
+// the daemon lost (a restart, or a clear to none) come back without waiting
+// for the agent to change them.
+type feed struct {
+	meta MetaReporter
+	act  ActivityReporter
+	wake chan struct{}
 	done chan struct{}
+	// exited is closed when run returns.
+	exited chan struct{}
+
+	mu   sync.Mutex
+	want map[string]string
+	acts []Activity
+	// forget says the next pass sends every key, not only the changed ones.
+	forget bool
+	// retry is set while a failed metadata call waits to be tried again,
+	// retryAfter later.
+	retry      *time.Timer
+	retryAfter time.Duration
 }
 
-func newMetaFeed(r MetaReporter) *metaFeed {
-	f := &metaFeed{r: r, next: make(chan map[string]string, 1), done: make(chan struct{})}
+// maxQueuedActivity bounds the activity waiting for a slow daemon.
+const maxQueuedActivity = 64
+
+// feedRetryAfter is how long a failed metadata call waits before it is tried
+// again, and feedRetries how many times in a row. After that the values go
+// with the next change or the next turn.
+const (
+	feedRetryAfter = 5 * time.Second
+	feedRetries    = 3
+)
+
+// newFeed starts a feed for whichever of meta and act is not nil. It returns
+// nil when both are. retryAfter is feedRetryAfter when zero.
+func newFeed(meta MetaReporter, act ActivityReporter, retryAfter time.Duration) *feed {
+	if meta == nil && act == nil {
+		return nil
+	}
+	if retryAfter <= 0 {
+		retryAfter = feedRetryAfter
+	}
+	f := &feed{meta: meta, act: act, wake: make(chan struct{}, 1), done: make(chan struct{}), exited: make(chan struct{}), retryAfter: retryAfter}
 	go f.run()
 	return f
 }
 
-// push hands the feed the pane's metadata as it stands now.
-func (f *metaFeed) push(all map[string]string) {
-	snap := maps.Clone(all)
-	for {
-		select {
-		case f.next <- snap:
-			return
-		default:
-		}
-		// Drop the older values waiting, if they are still there.
-		select {
-		case <-f.next:
-		default:
-		}
+func (f *feed) poke() {
+	select {
+	case f.wake <- struct{}{}:
+	default:
 	}
 }
 
-func (f *metaFeed) run() {
+// setMeta hands the feed the pane's metadata as it stands now.
+func (f *feed) setMeta(all map[string]string) {
+	if f.meta == nil {
+		return
+	}
+	f.mu.Lock()
+	f.want = maps.Clone(all)
+	f.mu.Unlock()
+	f.poke()
+}
+
+// activity queues one activity.
+func (f *feed) activity(a Activity) {
+	if f.act == nil {
+		return
+	}
+	f.mu.Lock()
+	if len(f.acts) >= maxQueuedActivity {
+		f.acts = f.acts[1:]
+	}
+	f.acts = append(f.acts, a)
+	f.mu.Unlock()
+	f.poke()
+}
+
+// resync makes the next pass send every metadata key again.
+func (f *feed) resync() {
+	f.mu.Lock()
+	f.forget = true
+	f.mu.Unlock()
+	f.poke()
+}
+
+func (f *feed) run() {
+	defer close(f.exited)
 	sent := map[string]string{}
+	failures := 0
 	for {
 		select {
 		case <-f.done:
 			return
-		case all := <-f.next:
-			diff := map[string]string{}
-			for k, v := range all {
-				if sent[k] != v {
-					diff[k] = v
-				}
-			}
-			if len(diff) == 0 {
-				continue
+		case <-f.wake:
+		}
+		f.mu.Lock()
+		acts := f.acts
+		f.acts = nil
+		want := f.want
+		if f.forget {
+			clear(sent)
+			f.forget = false
+		}
+		f.mu.Unlock()
+		for _, a := range acts {
+			select {
+			case <-f.done:
+				return
+			default:
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), reportTimeout)
-			err := f.r.SetMeta(ctx, diff)
+			_ = f.act.ReportActivity(ctx, a)
 			cancel()
-			if err == nil {
-				maps.Copy(sent, diff)
+		}
+		diff := map[string]string{}
+		for k, v := range want {
+			if sent[k] != v {
+				diff[k] = v
 			}
 		}
+		if len(diff) == 0 {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), reportTimeout)
+		err := f.meta.SetMeta(ctx, diff)
+		cancel()
+		if err == nil {
+			maps.Copy(sent, diff)
+			failures = 0
+			continue
+		}
+		// The daemon may have taken some of it, or be gone: send it all
+		// next time, and try again even if nothing changes.
+		clear(sent)
+		failures++
+		if failures > feedRetries {
+			continue
+		}
+		f.mu.Lock()
+		if f.retry == nil {
+			f.retry = time.AfterFunc(f.retryAfter, func() {
+				f.mu.Lock()
+				f.retry = nil
+				f.mu.Unlock()
+				f.poke()
+			})
+		}
+		f.mu.Unlock()
 	}
 }
 
-func (f *metaFeed) stop() { close(f.done) }
+// stop ends the feed. What is still waiting is not sent.
+func (f *feed) stop() {
+	close(f.done)
+	<-f.exited
+	f.mu.Lock()
+	if f.retry != nil {
+		f.retry.Stop()
+		f.retry = nil
+	}
+	f.mu.Unlock()
+}

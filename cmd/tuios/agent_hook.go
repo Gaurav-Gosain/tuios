@@ -68,6 +68,10 @@ type agentHookIO struct {
 	// holdMax bounds the wait for an answer from the Inbox. Zero means
 	// agentHookHoldMax.
 	holdMax time.Duration
+	// stampDir is where agent-statusline keeps each pane's last values. A
+	// turn end sends what it held back (flushStatusLine). Nil skips that.
+	stampDir func() (string, error)
+	now      func() time.Time
 }
 
 func newAgentHookCommand() *cobra.Command {
@@ -104,6 +108,10 @@ tool name), which the daemon keeps in the pane's activity ring for
 sent, with likely secrets masked. A Stop's done report says the first line of
 what the agent said last.
 
+A report that ends a turn (done or errored) also sends what the pane's status
+line feed (tuios agent-statusline) held back, with set-agent-meta for the same
+pane, so the turn's last context and cost reach the rail.
+
 It always exits 0, prints nothing a harness would read as an answer (Gemini
 CLI gets an empty JSON object), and gives up after 500ms when the daemon is
 slow or gone. Use --explain to see on stderr what it decided and why.
@@ -135,6 +143,8 @@ given.`,
 				},
 				self:       integration.SelfProcess,
 				harnessPID: integration.HarnessPID,
+				stampDir:   statusLineStampDir,
+				now:        time.Now,
 			})
 			return nil
 		},
@@ -170,6 +180,9 @@ type agentHookOutcome struct {
 	// Hold is what happened to a prompt the Inbox could answer, when the
 	// hook asked for one.
 	Hold *approvalTrace `json:"hold,omitempty"`
+	// StatusLineFlushed says the turn end sent values the pane's status line
+	// feed had held back.
+	StatusLineFlushed bool `json:"status_line_flushed,omitempty"`
 }
 
 // approvalTrace is the Inbox half of a hook run, for --explain.
@@ -377,7 +390,34 @@ func agentHook(o agentHookOptions, args []string, hio agentHookIO) agentHookOutc
 	}
 	out.Applied, out.State, out.Reason = &res.Applied, res.State, res.Reason
 	out.ActivityRecorded = res.ActivityRecorded
+	out.StatusLineFlushed = flushAtTurnEnd(out, res, client, hio)
 	return out
+}
+
+// flushAtTurnEnd sends what the pane's status line feed held back when this
+// report ends a turn, since the status line does not run again until the
+// conversation changes. A report the identity guard refused is a nested
+// run's, and its turn is not the pane's.
+func flushAtTurnEnd(out agentHookOutcome, res hookReportResult, client verbCaller, hio agentHookIO) bool {
+	if hio.stampDir == nil || out.Report == nil {
+		return false
+	}
+	if st := out.Report.State; st != "done" && st != "errored" {
+		return false
+	}
+	if res.Reason == "foreign_session" || res.Reason == "foreign_harness" {
+		return false
+	}
+	dir, err := hio.stampDir()
+	if err != nil {
+		return false
+	}
+	now := time.Now
+	if hio.now != nil {
+		now = hio.now
+	}
+	sent, _ := flushStatusLine(client, out.Session, out.Window, dir, now())
+	return sent
 }
 
 // resolveHookPane finds the pane to report for: the --window flag, then

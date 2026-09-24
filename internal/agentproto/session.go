@@ -75,10 +75,14 @@ type Session struct {
 	shownAt time.Time
 	hold    context.CancelFunc
 	holds   chan holdResult
-	// meta is the pane's agent metadata as the agent last stated it, and
-	// feed sends it, when the Reporter is a MetaReporter.
+	// meta is the pane's agent metadata as the agent last stated it. feed
+	// sends it, when the Reporter is a MetaReporter, and the activity, when
+	// it is an ActivityReporter, off the pane's loop.
 	meta map[string]string
-	feed *metaFeed
+	feed *feed
+	// feedRetry is how long a failed metadata call waits to be tried again,
+	// feedRetryAfter when zero. Tests shorten it.
+	feedRetry time.Duration
 	// toolPhase is how far each tool call of the turn has been reported as
 	// activity: 1 started, 2 ended.
 	toolPhase map[string]int
@@ -126,8 +130,9 @@ func (s *Session) Run(ctx context.Context) int {
 	if s.Settle <= 0 {
 		s.Settle = defaultSettle
 	}
-	if mr, ok := s.Reporter.(MetaReporter); ok {
-		s.feed = newMetaFeed(mr)
+	mr, _ := s.Reporter.(MetaReporter)
+	ar, _ := s.Reporter.(ActivityReporter)
+	if s.feed = newFeed(mr, ar, s.feedRetry); s.feed != nil {
 		defer s.feed.stop()
 	}
 	keys := make(chan []key, 64)
@@ -425,6 +430,11 @@ func (s *Session) startTurn(ctx context.Context, text string, turns chan turnRes
 	s.reply.Reset()
 	s.write(s.r.prompt(text))
 	s.report("working", "", "", "")
+	// Metadata the daemon lost since the last turn (a restart, or a clear
+	// to none) comes back with the turn, not only when a value changes.
+	if s.feed != nil && len(s.meta) > 0 {
+		s.feed.resync()
+	}
 	s.toolPhase = nil
 	s.activity(Activity{Event: ActivityPrompt, Text: firstLine(text)})
 	go func() {
@@ -449,15 +459,18 @@ func (s *Session) endTurn(t turnResult) {
 		res = TurnResult{Stop: StopFailed, Detail: t.err.Error()}
 	}
 	s.write(s.r.turnEnd(res))
+	endState := "done"
 	switch res.Stop {
 	case StopFailed, StopRefused:
-		s.report("errored", "", oneLine(firstOf(res.Detail, "turn "+res.Stop)), "")
+		endState = "errored"
+		s.report(endState, "", oneLine(firstOf(res.Detail, "turn "+res.Stop)), "")
 	case StopCancelled:
-		s.report("idle", "", "", "")
+		endState = "idle"
+		s.report(endState, "", "", "")
 	default:
-		s.report("done", "", firstLine(s.reply.String()), "")
+		s.report(endState, "", firstLine(s.reply.String()), "")
 	}
-	end := Activity{Event: ActivityTurnEnd, Text: firstLine(s.reply.String())}
+	end := Activity{Event: ActivityTurnEnd, Text: firstLine(s.reply.String()), State: endState}
 	if res.Stop != StopFinished {
 		end.Text = oneLine(firstOf(res.Detail, "turn "+res.Stop))
 	}
@@ -480,7 +493,7 @@ func (s *Session) setMeta(tokens map[string]string) {
 		}
 	}
 	if changed && s.feed != nil {
-		s.feed.push(s.meta)
+		s.feed.setMeta(s.meta)
 	}
 }
 
@@ -516,15 +529,17 @@ func (s *Session) toolActivity(t Tool) {
 	}
 }
 
-// activity reports one activity, when the Reporter takes activity.
+// activity hands one activity to the feed, when the Reporter takes activity.
+// It is sent off the pane's loop, so a slow daemon does not hold the pane at
+// every tool call.
 func (s *Session) activity(a Activity) {
-	ar, ok := s.Reporter.(ActivityReporter)
-	if !ok {
+	if s.feed == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), reportTimeout)
-	defer cancel()
-	_ = ar.ReportActivity(ctx, a)
+	if a.State == "" {
+		a.State = "working"
+	}
+	s.feed.activity(a)
 }
 
 // firstLine is the first non-empty line of s, cleaned and clipped for a state

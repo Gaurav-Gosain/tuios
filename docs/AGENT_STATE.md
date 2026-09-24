@@ -1143,9 +1143,9 @@ unchanged. Uninstall puts your command back. See
 A feed writes only for its own pane (`set-agent-meta` is limited to the
 caller's own pane, from inside one), and only when a value changes: the status
 line at most once every 15 seconds per pane while values change (a model
-change, context use crossing 80% and the end of an opencode turn go at once),
-and a protocol pane once per change. Nothing polls. The values stay display
-only.
+change, context use crossing 80% and the end of a turn go at once), and a
+protocol pane once per change and once more at each turn's start. Nothing
+polls. The values stay display only.
 
 ### What the agent has been doing
 
@@ -1955,10 +1955,20 @@ daemon after 300ms, exits 0 whatever goes wrong on the tuios side (with
 status line under a `TUIOS_AGENT` naming another harness. Its throttle state
 is a small file per pane beside the daemon's socket (mode 0600).
 
+Claude Code runs the status line only while the conversation changes, so the
+last run of a turn is usually one the 15 second interval holds back. The
+wrapper keeps what it held in the same file, and the `Stop` hook
+(`tuios agent-hook claude-code`) sends it when the turn ends, so the rail, the
+Inbox and the peek show the turn's final context and cost, not values from up
+to 15 seconds before it ended. A status line run after the `Stop` goes at once
+for the same reason.
+
 ### What each event reports
 
 `tuios agent-hook` reads the payload on stdin (the Codex `notify` payload
-arrives as the last argument) and sends one `set-agent-state`, or nothing.
+arrives as the last argument) and sends one `set-agent-state`, or nothing. A
+report that ends a turn also sends, with `set-agent-meta`, what the pane's
+status line feed held back (see above).
 
 | Claude Code event | Reports |
 | ----------------- | ------- |
@@ -2196,12 +2206,23 @@ The `usage_update` shape is the ACP schema's (release 0.11: `used` and `size`
 in tokens, and an optional `cost` of `{amount, currency}` marked unstable),
 which is what opencode's ACP agent sends. Every field is read on its own, so a
 missing or changed field costs only that key. A Codex pane now shows the
-turn's plan in the transcript, as an ACP pane always has.
+turn's plan in the transcript, as an ACP pane always has, and an ACP pane
+whose agent names its model now shows it in the first line, `connected to
+opencode 1.2 (Claude Sonnet 4)`, as a Codex pane always has. Every key is sent
+again at the start of each turn, so values the daemon lost (a restart, or a
+clear to `none`) come back without waiting for the agent to change them, and a
+call that failed is tried again a few times.
 
 Each prompt, tool call (once as it starts, once as it ends) and finished turn
-also goes to the daemon as `set-agent-state` activity, with the state part
-`working` only if the pane is already working, so it changes no state. It is
-sent only to a daemon whose `set-agent-state` lists `activity`.
+also goes to the daemon as `set-agent-state` activity. Its state part is the
+state the pane last reported, with `if_state` `none`: the daemon records the
+activity and refuses the state part on any pane that has a state, so it
+changes no state, keeps the time the pane entered it (the rail's elapsed time)
+and pushes nothing. Only a pane whose state was lost mid-turn gets it back.
+Activity and metadata go from a goroutine of their own on a connection of
+their own, so a slow daemon never holds the pane's typing or its state
+reports. Activity is sent only to a daemon whose `set-agent-state` lists
+`activity`.
 
 A permission is shown in the pane with a number key per answer, the agent's own
 words for each. When one line shows the whole request (a command whose input

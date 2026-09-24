@@ -199,6 +199,143 @@ func TestAgentStatusLineThrottle(t *testing.T) {
 	}
 }
 
+// claudeStatus is a Claude Code status line payload for conversation s1.
+func claudeStatus(model string, ctx, cost float64) string {
+	p, _ := json.Marshal(map[string]any{
+		"session_id":     "s1",
+		"model":          map[string]any{"display_name": model},
+		"context_window": map[string]any{"used_percentage": ctx},
+		"cost":           map[string]any{"total_cost_usd": cost},
+	})
+	return string(p)
+}
+
+// TestAgentStatusLineHeldValuesReachTheTurnEnd: a change the interval held
+// back is kept in the stamp, and the turn end sends it. Claude Code runs the
+// status line only while the conversation changes, so without this the
+// turn's last context and cost stayed unsent until the next turn.
+func TestAgentStatusLineHeldValuesReachTheTurnEnd(t *testing.T) {
+	r := newStatusLineRig(t)
+	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 10, 0.10))
+	r.now = r.now.Add(3 * time.Second)
+	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 20, 0.40))
+	r.now = r.now.Add(3 * time.Second)
+	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 30, 0.90))
+	if n := len(r.daemon.metaCalls()); n != 1 {
+		t.Fatalf("%d calls, want the first only", n)
+	}
+	stampPath := filepath.Join(r.dir, statusLineStampName("work", "w1"))
+	st := readStatusLineStamp(stampPath)
+	if st == nil || st.Pending["context"] != "30%" || st.Pending["cost"] != "$0.90" {
+		t.Fatalf("stamp %+v, want the held values pending", st)
+	}
+
+	// The turn ends: the held values go, once.
+	r.now = r.now.Add(time.Second)
+	sent, err := flushStatusLine(r.daemon, "work", "w1", r.dir, r.now)
+	if err != nil || !sent {
+		t.Fatalf("flush sent=%v err=%v", sent, err)
+	}
+	calls := r.daemon.metaCalls()
+	if len(calls) != 2 {
+		t.Fatalf("%d calls after the turn end", len(calls))
+	}
+	tokens, _ := calls[1]["tokens"].(map[string]any)
+	if tokens["context"] != "30%" || tokens["cost"] != "$0.90" || calls[1]["source"] != "statusline" || calls[1]["window"] != "w1" {
+		t.Errorf("turn end call %v", calls[1])
+	}
+	if sent, _ := flushStatusLine(r.daemon, "work", "w1", r.dir, r.now); sent {
+		t.Error("a second turn end sent the same values again")
+	}
+	// The status line runs once more after the turn with the same values:
+	// nothing to send.
+	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 30, 0.90))
+	if n := len(r.daemon.metaCalls()); n != 2 {
+		t.Errorf("%d calls, want no call for values the turn end sent", n)
+	}
+}
+
+// TestAgentStatusLineChangeAfterTheTurnEndGoesAtOnce: a status line run
+// after the turn ended carries the turn's last values, so it is not held,
+// and the interval applies again after it.
+func TestAgentStatusLineChangeAfterTheTurnEndGoesAtOnce(t *testing.T) {
+	r := newStatusLineRig(t)
+	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 10, 0.10))
+	r.now = r.now.Add(2 * time.Second)
+	if _, err := flushStatusLine(r.daemon, "work", "w1", r.dir, r.now); err != nil {
+		t.Fatal(err)
+	}
+	r.now = r.now.Add(time.Second)
+	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 12, 0.20))
+	if n := len(r.daemon.metaCalls()); n != 2 {
+		t.Fatalf("%d calls, want the run after the turn end sent", n)
+	}
+	r.now = r.now.Add(time.Second)
+	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 14, 0.30))
+	if n := len(r.daemon.metaCalls()); n != 2 {
+		t.Errorf("%d calls, want the interval back once a report went", n)
+	}
+}
+
+// TestAgentStatusLinePendingRidesTheNextReport: a key only a held run
+// named goes with the next report that is due.
+func TestAgentStatusLinePendingRidesTheNextReport(t *testing.T) {
+	r := newStatusLineRig(t)
+	r.run(agentStatusLineOptions{}, "claude-code", `{"session_id":"s1","model":{"display_name":"Opus"}}`)
+	r.now = r.now.Add(time.Second)
+	r.run(agentStatusLineOptions{}, "claude-code", `{"session_id":"s1","model":{"display_name":"Opus"},"cost":{"total_cost_usd":2}}`)
+	r.now = r.now.Add(statusLineInterval)
+	r.run(agentStatusLineOptions{}, "claude-code", `{"session_id":"s1","model":{"display_name":"Opus"},"context_window":{"used_percentage":5}}`)
+	calls := r.daemon.metaCalls()
+	if len(calls) != 2 {
+		t.Fatalf("%d calls", len(calls))
+	}
+	tokens, _ := calls[1]["tokens"].(map[string]any)
+	if tokens["cost"] != "$2.00" || tokens["context"] != "5%" {
+		t.Errorf("due report %v, want the held cost with it", tokens)
+	}
+	if st := readStatusLineStamp(filepath.Join(r.dir, statusLineStampName("work", "w1"))); st == nil || len(st.Pending) != 0 {
+		t.Errorf("stamp %+v, want nothing pending after a report", st)
+	}
+}
+
+// TestAgentHookStopFlushesTheStatusLine: Claude Code's Stop hook sends what
+// the pane's status line held back.
+func TestAgentHookStopFlushesTheStatusLine(t *testing.T) {
+	r := newStatusLineRig(t)
+	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 10, 0.10))
+	r.now = r.now.Add(time.Second)
+	r.run(agentStatusLineOptions{}, "claude-code", claudeStatus("Opus", 60, 3.10))
+
+	h := &hookRun{env: map[string]string{"TUIOS_PANE_ID": "w1", "TUIOS_SESSION": "work"}, stampDir: r.dir}
+	h.run(t, agentHookOptions{}, `{"hook_event_name":"Stop","session_id":"s1"}`, "claude-code")
+	var meta []map[string]any
+	for _, c := range h.daemon.calls {
+		if c.verb == "set-agent-meta" {
+			meta = append(meta, c.params)
+		}
+	}
+	if len(meta) != 1 {
+		t.Fatalf("set-agent-meta calls %v, stderr %s", meta, h.stderr.String())
+	}
+	tokens, _ := meta[0]["tokens"].(map[string]any)
+	if tokens["context"] != "60%" || tokens["cost"] != "$3.10" {
+		t.Errorf("tokens %v", tokens)
+	}
+	if !strings.Contains(h.stderr.String(), `"status_line_flushed":true`) {
+		t.Errorf("explain output: %s", h.stderr.String())
+	}
+
+	// A prompt is no turn end.
+	h2 := &hookRun{env: h.env, stampDir: r.dir}
+	h2.run(t, agentHookOptions{}, `{"hook_event_name":"UserPromptSubmit","session_id":"s1","prompt":"go"}`, "claude-code")
+	for _, c := range h2.daemon.calls {
+		if c.verb == "set-agent-meta" {
+			t.Errorf("a prompt flushed the status line: %v", c.params)
+		}
+	}
+}
+
 func TestStatusLineDue(t *testing.T) {
 	at := time.Unix(1_800_000_000, 0)
 	prev := &statusLineStamp{Session: "s1", Values: map[string]string{"model": "Opus", "context": "42%", "cost": "$1.00"}, At: at.UnixMilli()}
@@ -236,6 +373,16 @@ func TestStatusLineDue(t *testing.T) {
 	}
 	if due, _ := statusLineDue(prev, v("Opus", "42%", "$1.00", "s1"), at.Add(time.Second), true); due {
 		t.Error("unchanged values at the end of a turn were sent")
+	}
+	// A turn that ended after the last report sends a change at once.
+	rested := *prev
+	rested.RestAt = at.Add(time.Second).UnixMilli()
+	if due, _ := statusLineDue(&rested, v("Opus", "42%", "$1.10", "s1"), at.Add(2*time.Second), false); !due {
+		t.Error("a change after the turn ended was held")
+	}
+	rested.RestAt = at.Add(-time.Second).UnixMilli()
+	if due, _ := statusLineDue(&rested, v("Opus", "42%", "$1.10", "s1"), at.Add(2*time.Second), false); due {
+		t.Error("a turn end before the last report let a change through")
 	}
 }
 

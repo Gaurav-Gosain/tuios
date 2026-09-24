@@ -101,8 +101,11 @@ terminal and parent processes, as for agent-hook. It calls only
 set-agent-meta, for that pane. It reports at most once every 15 seconds per
 pane while the values change (a model change, context use crossing 80%, or
 anything with --turn-end goes at once), and not at all while they stay the same, except once every 10
-minutes so a restarted daemon gets them back. The last values sent are kept
-beside the daemon's socket, in statusline-<session>-<pane>.json. It reads at
+minutes so a restarted daemon gets them back. What the interval holds back is
+kept and sent by the next run that is due, or at the end of the turn: the
+Claude Code Stop hook (tuios agent-hook) sends it, and a run after the Stop
+goes at once. The last values sent and the held ones are kept beside the
+daemon's socket, in statusline-<session>-<pane>.json. It reads at
 most 1 MiB of stdin, gives up on the daemon after 300ms, and exits 0 whatever
 goes wrong on the tuios side.`,
 		Example: `  # What the Claude Code status line runs
@@ -286,6 +289,13 @@ func reportStatusLine(o agentStatusLineOptions, harness string, payload []byte, 
 	}
 	if due, why := statusLineDue(prev, values, now(), o.turnEnd); !due {
 		out.Skip = why
+		// A change held back by the interval is kept as pending, so the
+		// end of the turn can send it: Claude Code runs the status line
+		// only while the conversation changes, and the last values of a
+		// turn are usually the ones held.
+		if stampPath != "" && statusLineChanged(prev, values) {
+			writeStatusLinePending(stampPath, prev, values)
+		}
 		return out
 	}
 
@@ -295,9 +305,18 @@ func reportStatusLine(o agentStatusLineOptions, harness string, payload []byte, 
 			return out
 		}
 	}
+	tokens := values.Tokens()
+	if prev != nil && prev.Session == values.Session {
+		// What a held run saw and this payload leaves out goes too.
+		for k, v := range prev.Pending {
+			if _, ok := tokens[k]; !ok {
+				tokens[k] = v
+			}
+		}
+	}
 	params := map[string]any{
 		"window": out.Window,
-		"tokens": values.Tokens(),
+		"tokens": tokens,
 		"source": integration.StatusLineSource,
 	}
 	if out.Session != "" {
@@ -309,7 +328,7 @@ func reportStatusLine(o agentStatusLineOptions, harness string, payload []byte, 
 	}
 	out.Sent = true
 	if stampPath != "" {
-		writeStatusLineStamp(stampPath, prev, values, now())
+		writeStatusLineStamp(stampPath, prev, values.Session, tokens, now())
 	}
 	return out
 }
@@ -320,6 +339,26 @@ type statusLineStamp struct {
 	Values  map[string]string `json:"values"`
 	// At is when they were sent, in Unix milliseconds.
 	At int64 `json:"at"`
+	// Pending is what a run the interval held back saw and did not send.
+	// The next run that is due sends it, and so does the harness's turn
+	// end (flushStatusLine).
+	Pending map[string]string `json:"pending,omitempty"`
+	// RestAt is when the harness's turn last ended, in Unix milliseconds. A
+	// change after a turn ended and before the next report goes at once.
+	RestAt int64 `json:"rest_at,omitempty"`
+}
+
+// statusLineChanged reports whether values differ from what was last sent.
+func statusLineChanged(prev *statusLineStamp, values integration.StatusLineValues) bool {
+	if prev == nil || values.Session != prev.Session {
+		return true
+	}
+	for k, v := range values.Tokens() {
+		if prev.Values[k] != v {
+			return true
+		}
+	}
+	return false
 }
 
 // statusLineDue says whether values should be sent now, given what was sent
@@ -338,14 +377,7 @@ func statusLineDue(prev *statusLineStamp, values integration.StatusLineValues, n
 		return true, ""
 	}
 	next := values.Tokens()
-	changed := false
-	for k, v := range next {
-		if prev.Values[k] != v {
-			changed = true
-			break
-		}
-	}
-	if !changed {
+	if !statusLineChanged(prev, values) {
 		if since >= statusLineRefresh {
 			return true, ""
 		}
@@ -358,6 +390,11 @@ func statusLineDue(prev *statusLineStamp, values integration.StatusLineValues, n
 		return true, ""
 	}
 	if since >= statusLineInterval || turnEnd {
+		return true, ""
+	}
+	if prev.RestAt != 0 && prev.RestAt >= prev.At {
+		// The turn ended after the last report: the values a run after
+		// the end brings are the turn's last, so they go now.
 		return true, ""
 	}
 	return false, "changed, but reported " + since.Round(time.Millisecond).String() + " ago"
@@ -411,13 +448,91 @@ func readStatusLineStamp(path string) *statusLineStamp {
 }
 
 // writeStatusLineStamp records what was sent, merged over what was sent
-// before, since a payload that leaves a field out does not clear it.
-func writeStatusLineStamp(path string, prev *statusLineStamp, values integration.StatusLineValues, now time.Time) {
-	st := statusLineStamp{Session: values.Session, Values: map[string]string{}, At: now.UnixMilli()}
-	if prev != nil && prev.Session == values.Session {
+// before, since a payload that leaves a field out does not clear it. Nothing
+// is pending after a send.
+func writeStatusLineStamp(path string, prev *statusLineStamp, convo string, sent map[string]string, now time.Time) {
+	st := statusLineStamp{Session: convo, Values: map[string]string{}, At: now.UnixMilli()}
+	if prev != nil && prev.Session == convo {
 		maps.Copy(st.Values, prev.Values)
+		st.RestAt = prev.RestAt
 	}
-	maps.Copy(st.Values, values.Tokens())
+	maps.Copy(st.Values, sent)
+	saveStatusLineStamp(path, st)
+}
+
+// writeStatusLinePending records values a run was not due to send, over
+// what earlier held runs left. The stamp's time is left alone, so the
+// interval still counts from the last report.
+func writeStatusLinePending(path string, prev *statusLineStamp, values integration.StatusLineValues) {
+	st := statusLineStamp{Session: values.Session, Values: map[string]string{}, Pending: map[string]string{}}
+	if prev != nil {
+		st.At, st.RestAt = prev.At, prev.RestAt
+		if prev.Session == values.Session {
+			maps.Copy(st.Values, prev.Values)
+			maps.Copy(st.Pending, prev.Pending)
+		}
+	}
+	next := values.Tokens()
+	if prev != nil && prev.Session == values.Session {
+		same := true
+		for k, v := range next {
+			if prev.Pending[k] != v {
+				same = false
+				break
+			}
+		}
+		if same {
+			// Already recorded: a status line runs several times a
+			// second, and the file need not be written for each.
+			return
+		}
+	}
+	maps.Copy(st.Pending, next)
+	saveStatusLineStamp(path, st)
+}
+
+// flushStatusLine is the harness's turn end for its status line feed: what a
+// run held back for the pane is sent now, and the stamp records that the
+// turn ended, so the first change after it goes at once too. A pane with no
+// stamp has no status line feed and is left alone. It reports whether
+// set-agent-meta was called and answered.
+func flushStatusLine(client verbCaller, sessionName, window, dir string, now time.Time) (bool, error) {
+	if dir == "" || window == "" {
+		return false, nil
+	}
+	path := filepath.Join(dir, statusLineStampName(sessionName, window))
+	st := readStatusLineStamp(path)
+	if st == nil {
+		return false, nil
+	}
+	sent := false
+	if len(st.Pending) > 0 {
+		params := map[string]any{
+			"window": window,
+			"tokens": st.Pending,
+			"source": integration.StatusLineSource,
+		}
+		if sessionName != "" {
+			params["session"] = sessionName
+		}
+		if _, err := client.Call("set-agent-meta", params); err != nil {
+			return false, err
+		}
+		if st.Values == nil {
+			st.Values = map[string]string{}
+		}
+		maps.Copy(st.Values, st.Pending)
+		st.Pending = nil
+		st.At = now.UnixMilli()
+		sent = true
+	}
+	st.RestAt = now.UnixMilli()
+	saveStatusLineStamp(path, *st)
+	return sent, nil
+}
+
+// saveStatusLineStamp writes a stamp file, 0600, replaced whole.
+func saveStatusLineStamp(path string, st statusLineStamp) {
 	data, err := json.Marshal(st)
 	if err != nil {
 		return

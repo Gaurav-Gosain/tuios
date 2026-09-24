@@ -71,6 +71,8 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 		// Both kinds of daemon apply the report. The old one never looks at
 		// the hook fields, so if_state does not stop it.
 		return json.RawMessage(`{"applied":true,"state":"` + p["state"].(string) + `"}`), nil
+	case "set-agent-meta":
+		return json.RawMessage(`{"type":"agent_meta_set"}`), nil
 	case "set-agent-session":
 		if f.old {
 			break
@@ -97,6 +99,8 @@ type hookRun struct {
 	stderr   bytes.Buffer
 	dialed   bool
 	dialWait time.Duration
+	// stampDir, when set, is agent-statusline's stamp directory.
+	stampDir string
 }
 
 func (h *hookRun) run(t *testing.T, o agentHookOptions, payload string, args ...string) {
@@ -105,11 +109,16 @@ func (h *hookRun) run(t *testing.T, o agentHookOptions, payload string, args ...
 		h.daemon = &fakeDaemon{}
 	}
 	o.explain = true
+	var stampDir func() (string, error)
+	if h.stampDir != "" {
+		stampDir = func() (string, error) { return h.stampDir, nil }
+	}
 	runAgentHook(o, args, agentHookIO{
-		stdin:  strings.NewReader(payload),
-		stdout: &h.stdout,
-		stderr: &h.stderr,
-		getenv: func(k string) string { return h.env[k] },
+		stampDir: stampDir,
+		stdin:    strings.NewReader(payload),
+		stdout:   &h.stdout,
+		stderr:   &h.stderr,
+		getenv:   func(k string) string { return h.env[k] },
 		dial: func() (verbCaller, error) {
 			h.dialed = true
 			time.Sleep(h.dialWait)

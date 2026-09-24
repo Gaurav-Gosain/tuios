@@ -618,10 +618,14 @@ under the source `protocol`, each key only when its value changes: `model`
 context of the model's window, from Codex's `thread/tokenUsage/updated` or
 ACP's `usage_update`), `cost` (the session's cost from ACP's `usage_update`;
 Codex sends none) and `plan` (steps done of the plan's steps, `3/7`). Every
-field is optional: one the agent does not send is not written. Each prompt,
-tool call and finished turn also goes to the daemon as `set-agent-state`
-activity, when the daemon's `set-agent-state` lists that parameter. A Codex
-pane now shows the turn's plan in the transcript, as an ACP pane does.
+field is optional: one the agent does not send is not written, and every key
+is sent again at the start of each turn. Each prompt, tool call and finished
+turn also goes to the daemon as `set-agent-state` activity, when the daemon's
+`set-agent-state` lists that parameter; the activity changes no state (its
+`if_state` is `none`). Both are sent off the pane's input loop. A Codex pane
+now shows the turn's plan in the transcript, as an ACP pane does, and an ACP
+pane whose agent names its model shows it in the first line, `connected to
+opencode 1.2 (Claude Sonnet 4)`, as a Codex pane does.
 
 ```bash
 tuios agent-proto --protocol acp -- opencode acp
@@ -658,9 +662,11 @@ pane, at most once every 15 seconds while the values change, and not at all
 while they stay the same. A model change, context use crossing 80%, and a
 change passed with `--turn-end` (the opencode plugin passes it when the
 session goes idle) go at once, and unchanged values are sent again after 10
-minutes so a daemon that restarted gets them back. The last values sent are
-kept in `statusline-<session>-<pane>.json` (mode 0600) beside the daemon's
-socket. It reads at most 1 MiB of stdin, gives up on the daemon after 300ms
+minutes so a daemon that restarted gets them back. The last values sent, and
+any the interval held back, are kept in `statusline-<session>-<pane>.json`
+(mode 0600) beside the daemon's socket. Held values go with the next run that
+is due, or when the turn ends: Claude Code's `Stop` hook (`tuios agent-hook
+claude-code`) sends them, and a run after the `Stop` goes at once. It reads at most 1 MiB of stdin, gives up on the daemon after 300ms
 (`--timeout`), and exits 0 whatever goes wrong on the tuios side.
 
 ```bash
@@ -2506,7 +2512,7 @@ them.
 | `tuios mcp` | Serve tuios to an agent harness as an MCP server over stdio. Read-only by default and held to the session of the pane it runs in; `--write` adds the tools that type into panes, `--scope all` reaches every session. See [tuios mcp](#tuios-mcp) |
 | `tuios doctor shell` | Per pane: whether its shell marks its commands with OSC 133, which `tuios run`, `wait-for command-finished` and `capture-pane --last-command` need, and, when one does not, the lines that turn the marks on for your `$SHELL` (zsh, and bash 4.4 or newer; fish 4 sends them itself). A pane that marks its prompts and ran a command without marking it is flagged as prompt marks only, and one that has not run a command yet is said to mark its prompts (`-s`, `--json`, with `command_mark_seen` and `prompt_marks_only`) |
 | `tuios doctor agents` | Per harness: on PATH or not, integration installed and current or not, what it reports, the recognised harnesses with no integration and why, the running agent panes missing theirs, and the harness manifests loaded from the user manifest directory, which of them replace a bundled one, and the files there that failed to load (`--json`) |
-| `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). For Claude Code and Codex the prompt, tool and Stop events also carry the event as activity for [`tuios agent-log`](#tuios-agent-log), and a `Stop` reports `done` with the first line of what the agent said last. `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
+| `tuios agent-hook <harness> [event]` | What an installed hook runs: read the hook payload on stdin and report the pane's state, or for a session integration only its conversation id (`set-agent-session`). For Claude Code and Codex the prompt, tool and Stop events also carry the event as activity for [`tuios agent-log`](#tuios-agent-log), and a `Stop` reports `done` with the first line of what the agent said last. A report that ends a turn also sends what the pane's `agent-statusline` feed held back (`set-agent-meta`). `--explain` prints the decision to stderr. With `[agents.approvals]` naming the harness, a permission prompt (Claude Code `PermissionRequest`, opencode or Kilo `permission.asked`) then waits for an answer from the Inbox and prints the harness's decision, or nothing when there is none. See [Agent state](AGENT_STATE.md#harness-integrations) and [Approvals from the Inbox](AGENT_STATE.md#approvals-from-the-inbox) |
 | `tuios agent-statusline <harness>` | What the Claude Code status line `integration install --statusline` writes runs, and what the opencode and Kilo plugins run for the model and cost: write the model, context use and cost on stdin to the pane's agent metadata. `--then CMD` chains to your own status line. See [above](#tuios-agent-statusline) |
 | `tuios tmux-shim [-- command]` | Run a command (your shell when none is given) with a `tmux` on PATH that answers in this tuios session, so a tool that drives tmux, such as Claude Code agent teams (`tuios tmux-shim -- env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude`), opens its panes here. Off until you run it. `--log FILE` moves the log of calls the shim could not answer from `$XDG_STATE_HOME/tuios/tmux-shim.log`; `--log-all` records every call. Not on Windows. See [The tmux shim](TMUX_SHIM.md) |
 | `tuios tmux <tmux arguments>` | The shim asked for by name: answer one tmux command line in the caller's session (`tuios tmux display-message -p '#{pane_id}'`). A tmux session is the tuios session, a window `@N` is workspace N, a pane `%N` is a tuios window. See [The tmux shim](TMUX_SHIM.md#commands) for the commands it answers |
